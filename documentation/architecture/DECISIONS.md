@@ -23964,6 +23964,22 @@ Both typechecks, `check-decision-ids`, `check-folder-docs`, `check-api-drift`
 and `check-docs-fresh --strict` exit 0. `frontend/src` did not move, so
 `docs/` was not rebuilt.
 
+## D243
+
+**An escalation can be sent again, in both directions.** A raise HQ did not answer stayed `undelivered`, and migration 261 called that retryable, but nothing retried it. A retry after a lost response would also have inserted a second HQ row, because `recordEscalation` had no idempotency key. The other way, HQ's answer push was returned on the response and not stored, so HQ could not tell later whether it arrived or send that same decision again. Task 341.
+
+**What shipped.** The branch generates a `raise_key` before it calls HQ, stores it on its row, and sends it. HQ stores it under a partial unique index on `(branch_code, raise_key)` where the key is not null. The insert is `ON CONFLICT DO NOTHING` and returns the uid already stored. `POST /api/branch/escalations/:id/retry` sends that same row again. It is not suspension-gated: escalating is how a frozen branch gets out (D107, D112). The raised list has a Retry control.
+
+HQ stores `push_ok`, `push_reason`, `push_at`, and the name that was pushed (`answered_by_name`), because the row had only the user id and a later lookup could send a different name. `POST /api/admin/escalations/:uid/resend` pushes that stored decision. It does not read a new answer. HQ Support shows Send again beside an answer that did not arrive. Nothing sends either of these on a schedule.
+
+**Migration 288** is additive ALTERs and the two partial unique indexes. No `BEGIN`/`COMMIT`. Both tables are in the one file because HQ and a branch run the same list.
+
+### VERIFIED
+
+- The same `raise_key` returns one uid and one row. A suspended branch retries an undelivered row with that same key and does not insert a second local row. The retry handler does not call `requireBranchNotSuspended`.
+- Send again, given a different answer in the body, pushes the stored text and leaves the row's answer as it was. `push_ok` is written.
+- Three mutations, each restored sha256-identical, each a non-zero exit and one `not ok`. Dropping the unique index makes the keyed insert fail (the `ON CONFLICT` target is gone). Letting send again read a new answer from the body pushes that text. Skipping the stored-decision check lets a resend of an open row through.
+
 ## D247
 
 **Deactivating an administrator now takes demote's bar: a TOTP-minted
@@ -24262,6 +24278,353 @@ merged (`f2a69e92`):
 `docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
 edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
 `check-folder-docs` and `check-api-drift` exit 0.
+
+## D249
+
+**The binding-agreement role override is described for the first time and
+tightened. It is a change out of `exploring` and nothing else. It takes
+demote's bar, tells the person on their own feed, is one audit row that names
+them, and does the two assign-role steps an assigned account needs.** Task 401.
+
+**No migration, no new route.** `user_role_review` and `onboarding_progress`
+already exist.
+
+### THE OVERRIDE, WHICH NO DECISION HAD DESCRIBED
+
+`PATCH /api/admin/users/:userId/role` (`routes/admin.ts`) refuses to move an
+account out of `exploring`. That move belongs to the Exploring queue's
+assign-role (`routes/admin_exploring.ts`), which requires a completed binding
+envelope. Since #549 a Super Admin could pass `override_reason` to assign the
+role anyway. It was added because every signup lands in `exploring`, and an
+admin with no way to correct a role is its own failure. D99 covered only the
+terms half, and no entry described the override. This is that entry.
+
+### THE DEFECTS
+
+- **It was recorded only as free text.** The override appended
+  " — BINDING-AGREEMENT OVERRIDE by super admin. Reason: …" to the admin's
+  `role_changed` row. That was the only record, and there was no
+  `admin_audit_log` row, so Security's Target column had no subject.
+- **The person was not told.** Their `your_role_changed` row read "Your role
+  was changed from exploring to founder by <name>", the same as a routine
+  change.
+- **It was mislabelled.** It keyed on a reason being PRESENT, not on the old
+  role. A Super Admin who sent a reason with founder→partner stamped
+  "BINDING-AGREEMENT OVERRIDE" on an ordinary change. A plain admin who sent
+  one was refused `super_admin_required` for a change they could make without
+  it.
+- **It asked for no authenticator or step-up.** Demote, the same class of act,
+  asks for both. The H20 card said so.
+- **It skipped what assign-role does.** No `user_role_review` stamp, so the
+  Exploring queue went on reading the account as waiting. No onboarding
+  restart, so a founder or investor landed on a shell with nothing behind it.
+
+### WHAT CHANGED
+
+- **An override is a change out of `exploring` with a reason**
+  (`isOverride = fromExploring && reason.length > 0`).
+  - A reason on any other change is carried as that change's reason
+    (`. Reason: …` on both rows), never labelled an override.
+  - It no longer needs the Super Admin, because refusing a change *with* a
+    reason that is allowed *without* one guarded nothing.
+- **It is decided below the admin promotion and demotion guards.** It used to
+  be validated above them, when a reason alone made an override, and a test
+  says the order is what kept it from minting or demoting an admin. That
+  property still holds by construction: `role === 'admin'` is refused first
+  for every request, and an `exploring` target is never an admin. The three
+  "cannot" tests pin it.
+- **Demote's bar.** The Super Admin, `requireFactor(c, 'totp')`,
+  `requireStepUp(c)`, then a reason of at least 10 characters, all before the
+  write.
+- **The person is told.** Their row reads "…without a completed binding
+  agreement: a Super Admin override. Reason: …".
+- **One audit row per override.** `logAdminAction('role_override', {
+  target_user_id, from, to, reason })`, dynamically imported, as in D247.
+- **assign-role's two account steps, and not its third.**
+  - `user_role_review` is stamped as assign-role stamps it (`role_confirmed`,
+    `assigned_role`, `assigned_by_user_id`, `assigned_at`). It is an upsert,
+    because an overridden account may have no review row, and assign-role's
+    UPDATE never meets that case since it requires an envelope.
+  - A founder or investor gets the onboarding restart assign-role runs.
+  - The Spin-Out Lab auto-start is left to assign-role. It enrols a company
+    in a programme, and an override reason does not establish that the
+    company belongs there.
+  - Each of these writes is best-effort, per D111.
+- **The page.** The Role override dialog says it asks for an authenticator
+  and a step-up (the prompt is `request()`'s), and that the person's own
+  activity will say it was an override and why. The H20 card's note, "No
+  authenticator or step-up is asked", now names the bar, what the override
+  does and does not start, and the audit row.
+- **The cool-off** pauses this route (D248), so a freshly recovered holder
+  cannot override during it.
+
+### FILED, NOT BUILT: THE GUARD ON LEAVING A SIGNED ROLE
+
+Once a role backed by a completed binding envelope lands, any admin can change
+it with a plain confirm and no reason. The recommendation was that such a
+change go through the override's door: the Super Admin, a reason, and a
+record. **It is a product decision, because of branches.** `hydrateSuperAdmin`
+answers 0 on a branch, and a branch's D1 is its own, so under that rule nobody
+on a branch could change a signed member's role except through SQL.
+
+The override has the same property today, but it covers only the holding
+state, and this rule would reach every signed member. The choices for the
+owner:
+- HQ-only, as recommended;
+- the branch's principal admin standing in for the Super Admin on a branch;
+- a reason and a record for everyone, with no tier change.
+
+It is reported to the coordinator rather than built. The session's task-filing
+tool was unavailable when this was written.
+
+### PINS
+
+`admin_role_override.test.ts` is re-aimed, never loosened:
+- **The audit-line pin** (the old :237–251) keeps every assertion. It now also
+  requires the person's row to name the override and the reason, and exactly
+  one `role_override` audit row with `target_user_id`. Its message "the only
+  place it was going" is corrected, since the reason now goes to three places.
+- **"An already-assigned user is unaffected by a reason being present"** (the
+  old :263–268) checked only the role while the route mislabelled the change.
+  It now requires no OVERRIDE on either row, the reason carried on both, and
+  no `role_override` row.
+- **The Super Admin's successful overrides, and the short-reason 400,** now
+  send a TOTP-minted, just-stepped-up session. The fixture reads
+  `user_sessions`, `admin_audit_log` and `onboarding_progress` from the
+  baseline, and the error handler is replicated from `util/authErrors.ts`.
+
+### VERIFIED
+
+Three new worker tests:
+- an override stamps the review as assign-role does, and restarts a founder's
+  onboarding;
+- the override takes demote's bar: a bare JWT → 403 `TOTP required`, an
+  hour-old step-up → 403 `step_up_required`, and nothing changes;
+- a reason on an ordinary change is not an override, so a plain admin may
+  send one.
+
+Two new frontend tests:
+- in `hq_team_h20.test.mjs`, the card is held to the route: the override's
+  definition, its bar before the write, the person's sentence, the audit row,
+  no Lab start, and the review and onboarding writes with their conditions;
+- in `admin_role_override.test.mjs`, the dialog says what the route now asks
+  and that the person is told.
+
+**Mutation checks: fourteen runs, all caught in the end,** each alone and
+restored from a sha256-verified snapshot:
+- **Against the worker tests, 6 of 6:**
+  - the brief's four:
+    - label a non-exploring change an override;
+    - drop the person's sentence;
+    - key the audit row `user_id` (the D159 guard fails too);
+    - skip the `user_role_review` stamp;
+  - two extras: drop demote's bar from the override, and skip the onboarding
+    restart.
+- **The same six against the frontend pin, 6 of 6.**
+- **Two against the frontend tests alone, 2 of 2:** the card's old note
+  restored, and the dialog's new sentence removed.
+
+**Two escaped at first, and the assertion was fixed.** The stamp and the
+onboarding restart, each disabled with an `if (false)`, passed the first draft
+of the frontend pin, which did not read those writes. The card claims both, so
+the pin now reads each write with its condition, and both mutations are
+caught. The worker tests caught them from the start.
+
+**Full suite:** `npm run test:drift` on Node 22 exits 0 with D248 beneath it:
+- frontend 3185 (two new);
+- worker 4197 passed with 3 skipped (three new, over 4194);
+- retention 48.
+
+`docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
+edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
+`check-folder-docs` and `check-api-drift` exit 0.
+
+## D250
+
+**A scheduled Telegram or X post is sent (task 329).** Both consoles let a Super
+Admin schedule a post: `POST /posts/:id/schedule` sets `status='scheduled'` and
+`scheduled_for`, and the UI offers it. Nothing ever sent one. A send existed
+only inside the two `/send` route handlers, so a scheduled post sat at
+'scheduled' for ever. The scheduled handler now sends it, through the same
+function the Send button calls.
+
+**Migration 290** adds `scheduled_by` to `telegram_posts` and `x_posts`. The
+column is declared in the same commit in the two runtime bootstraps
+(`services/telegramSchema.ts` and `services/xSchema.ts`, D235).
+`check-runtime-schema-declared` and `check-schema-pair-drift` both pass.
+
+### ONE SEND PER CONSOLE, FOR THE CLICK AND THE CLOCK
+
+`sendTelegramPost` and `sendXPost` are the `/send` handlers' bodies, extracted
+unchanged except for `c.env`→`env` and returning `{ status, body }`. The route
+is now three lines around the call. The enabled check, the claim, the lint, the
+send and the record are defined once.
+
+The two modes differ in three places and nowhere else:
+
+- **The claim.**
+  - A click claims draft, scheduled or failed.
+  - The clock claims only a row still `'scheduled'` AND due:
+    `datetime(scheduled_for) <= datetime(?)`, bound to D239's tick minute.
+  - So two overlapping ticks send once, and a row an admin moved out of
+    'scheduled' between the sweep's read and the claim is not sent.
+- **A refusal.**
+  - A click answers the admin, who is there. The row is left as it was, or
+    returned to draft.
+  - The clock has nobody to answer. A row left 'scheduled' would be refused
+    again every minute, so the row becomes **'failed' with its reason** in
+    `send_error`, and a `*_scheduled_send_refused` audit row is written.
+  - The console's own Send is the retry.
+- **The PII override.** Only a click can carry one.
+
+**X NOW CHECKS ITS ACCOUNT.** D216 gave Telegram's send the channel's `enabled`
+check. X's send never looked at `x_accounts.enabled`, so it posted through a
+disabled account. The shared `sendXPost` refuses before the claim, with
+`account_disabled`, for a click and the clock alike.
+
+### WHAT EACH REFUSAL DOES TO A SCHEDULED POST
+
+Each one ends as **'failed', with the reason, not retried, not dropped**:
+
+| refusal | recorded as |
+| --- | --- |
+| disabled Telegram channel / disabled X account | `channel_disabled` / `account_disabled`, with the sentence the click shows |
+| channel with no `chat_id` | `channel_missing_chat_id` |
+| PII lint | `pii_linter_blocked: …`. A scheduled send cannot carry an override, so the admin sends it by hand with a reason. |
+| X's daily cap | `daily_cap_reached: the account had used N of its M posts today…` |
+| provider error (Telegram, X, a missing media object) | the provider's message, exactly as the click records it |
+
+A cap refusal could have waited for the next day. It does not, because a post
+scheduled for a moment that silently moves to tomorrow is a post nobody asked
+for.
+
+### WHO THE CLOCK'S SEND IS RECORDED AS
+
+The admin who scheduled it. The schedule route writes `scheduled_by` (migration
+290); `created_by` records who drafted the post, which can be someone else. A
+row with no `scheduled_by`, meaning one scheduled before 290, falls back to
+`created_by`. Production held no scheduled row when 290 was written, so no row
+takes that fallback today.
+
+The alternative was to read the scheduler from the `*_post_scheduled` audit row.
+It was not taken: that means a join on free JSON, for a fact the send needs on
+every tick. Every clock-sent audit row carries `via: 'clock'`.
+
+### THE SWEEP (`services/scheduledPosts.ts`)
+
+Every minute, on D239's clock, **gated on `hqCadences`**. Both consoles are
+Super-Admin-only and the bot credentials are HQ's, so a branch has nothing to
+send. Each step is its own statement:
+
+1. **A row stuck in 'sending'** for `STALE_SENDING_MINUTES` becomes 'failed',
+   with a reason. That is 30 minutes: twice Cloudflare's 15-minute limit on a
+   scheduled invocation, so no live send can still own the row. It is **never
+   re-sent**, because a send that died after Telegram or X accepted it would
+   post twice. It is compared as `datetime(updated_at) <= datetime(?)`.
+2. **A 'scheduled' row whose `scheduled_for` SQLite cannot read**
+   (`datetime()` is NULL) becomes 'failed', quoting the value. It is never
+   skipped for ever.
+3. **Due rows** are those with `datetime(scheduled_for) <= datetime(?)`,
+   oldest first, heads only for X.
+4. **At most `SEND_CAP_PER_TICK` (10) sends a tick**, each under
+   `withDeadline(…, 25 s)`. The rest are counted and logged, and go on the next
+   tick. A send that times out keeps running. If its row is still 'sending',
+   step 1 fails it later; nothing re-sends it.
+
+Each table's three statements are complete SQL literals rather than a template
+with the table name interpolated, so `check-sql-prepare` has nothing new to
+review.
+
+### ONE STORED FORMAT
+
+`scheduled_for` is now stored as ISO 8601 UTC with a Z (`toISOString()`) on
+every write path: both schedule routes already did this, and both PUT routes now
+do too. Before, the PUT routes stored whatever string `Date.parse` accepted.
+
+Every comparison is `datetime()` on both sides, which reads ISO with a Z, the
+SQL format and an explicit offset alike. The test covers all three, plus one
+string it cannot read.
+
+**Measured read-only in production before choosing** (2026-09-24, counts only):
+`telegram_posts` held 19 rows, all 'draft', none with a `scheduled_for`;
+`x_posts` held none. No stored row needs anything. **No index:** the tables are
+that small.
+
+### THE GUARD
+
+`scheduled_for` joins `TTL_COLUMN` in `check-timestamp-comparisons.mjs`, in the
+commit that first compares it. That alone would guard nothing here, because
+`TTL_COLUMN`'s pattern only matches a comparison against a clock literal
+(`CURRENT_TIMESTAMP` or `datetime('now')`), and the sweep binds its clock as
+`?`. So a second, deliberately narrow list, `BOUND_CLOCK_COLUMN`
+(`scheduled_for` only), also refuses a bare `scheduled_for <= ?`.
+
+It was not widened to every TTL column: measured, that would flag 16 existing
+comparisons against bound values whose format each call site controls, in files
+this change does not hold.
+
+### THE CONTROLS
+
+A scheduled post now says "Goes out within a minute of <local time> (<UTC>
+UTC), sent by the scheduler." A failed post in the Telegram composer shows "Not
+sent: <reason>". X already showed `send_error`.
+
+Both consoles also filled their time input wrongly, and that is fixed. Telegram
+seeded its datetime-local input with the first 16 characters of the stored UTC
+string. X's prompt, labelled "local time", pre-filled the UTC clock. Both now
+use `toLocalInput` (`frontend/src/lib/scheduledPost.js`). Only the schedule
+controls in `AdminX.jsx` are touched; the send handler's error matches are
+another session's.
+
+### HOW IT IS HELD
+
+`cloudflare-worker/test/scheduled_posts_d250.test.ts` (new, 12 tests) runs on
+real node:sqlite. The consoles' own bootstraps build the tables, and Telegram
+and X are stubbed on `fetch` with every send counted. It covers:
+
+- a due post is sent once and marked sent, and a later one is untouched;
+- the clock is recorded as `scheduled_by`;
+- two overlapping ticks send once;
+- the clock claims only a still-'scheduled' row;
+- a disabled channel, and a disabled X account, refuse both the clock and the
+  click;
+- the ISO-with-Z, SQL and offset formats each come due at 10:00, and an
+  unreadable one fails with its value;
+- a stale 'sending' row fails and is not re-sent, and a fresh one is left
+  alone;
+- PII lint and the X cap fail a scheduled post, and it is not retried;
+- the sweep runs under `hqCadences`;
+- the routes store one format and record `scheduled_by`.
+
+`frontend/test/scheduled_post_controls_d250.test.mjs` (new, 5 tests) covers
+the helpers and both consoles' wiring. The local-time test pins
+`TZ=America/New_York`: CI runs in UTC, where a helper that returned the UTC
+clock would pass.
+
+Every mutation was run both ways (a named `not ok` with a non-zero exit, then a
+sha256-checked restore that passes). **13 mutations, all caught.**
+
+The five the brief required:
+
+1. the claim's status conjunct, dropped on Telegram and on X;
+2. a bare comparison in the due read, in the Telegram claim and in the X claim;
+3. `scheduled_for` removed from `TTL_COLUMN`;
+4. the enabled check, dropped on Telegram and on X;
+5. a stale 'sending' row re-sent.
+
+Four more on the controls:
+
+1. `toLocalInput` returning UTC;
+2. X's prompt defaulting to UTC again;
+3. the failed note dropped;
+4. the "within a minute" promise dropped.
+
+**One mutation escaped first, and the fix was to the assertion.** Dropping X's
+claim conjunct passed the overlapping-ticks test, because whether two
+concurrent sweeps both reach the claim depends on how they interleave. The
+deterministic test, where the clock is handed a due row that is no longer
+'scheduled', was added for that reason. It catches the mutation on both
+consoles.
 
 ## D254
 

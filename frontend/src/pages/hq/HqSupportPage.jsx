@@ -441,11 +441,10 @@ const hhmm = (iso) => (typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2
 /**
  * What happened, as two facts that stay two (D112's header): HQ recorded the
  * decision, and the branch did or did not receive it. A push that failed is
- * stated with its reason and no "try again" — recording again replaces the
- * decision rather than resending it, and nothing re-sends a stored one on its
- * own (#341), so a retry button would promise a mechanism that does not exist.
+ * stated with its reason. Nothing sends it again on its own. Send again
+ * re-pushes the decision already stored — not a new one (D243).
  */
-export function RecordedOutcome({ rec }) {
+export function RecordedOutcome({ rec, onResend }) {
   const code = rec.branch_code;
   const at = hhmm(rec.answered_at);
   const p = rec.pushed;
@@ -457,8 +456,16 @@ export function RecordedOutcome({ rec }) {
   } else {
     delivery = (
       <span data-delivery="not_sent" className="text-amber-800 dark:text-amber-300">
-        Not on {code}: {p.reason || 'no reason was given.'} Nothing sends it again on its own; recording it again
-        replaces the decision and sends the new one.
+        Not on {code}: {p.reason || 'no reason was given.'} Nothing sends it again on its own.
+        {onResend && (
+          <button
+            type="button"
+            className="ml-2 underline font-semibold"
+            onClick={() => onResend(rec.uid)}
+          >
+            Send again
+          </button>
+        )}
       </span>
     );
   }
@@ -474,18 +481,20 @@ export function RecordedOutcome({ rec }) {
 }
 
 /** This session's decisions. Nothing here is read back from a store. */
-export function RecordedList({ recorded }) {
+export function RecordedList({ recorded, onResend }) {
   if (!recorded?.length) return null;
   return (
     <div className="mt-3" data-testid="hq-support-recorded">
       <Card>
         <h2 className="text-[13.5px] font-extrabold tracking-tight">Recorded this session</h2>
         <p className="mt-1 text-[10.5px] leading-relaxed text-axal-faint">
-          Shown until you leave this page: the board keeps each decision, and whether it reached the branch is not
-          stored against it.
+          Shown until you leave this page. The board keeps each decision, and whether the last push reached the
+          branch is stored on that row. Send again sends that stored decision, not a new one.
         </p>
         <ul className="mt-2 grid gap-1.5">
-          {recorded.map((r) => <RecordedOutcome key={`${r.uid}-${r.answered_at || 'unstamped'}`} rec={r} />)}
+          {recorded.map((r) => (
+            <RecordedOutcome key={`${r.uid}-${r.answered_at || 'unstamped'}`} rec={r} onResend={onResend} />
+          ))}
         </ul>
       </Card>
     </div>
@@ -745,7 +754,7 @@ export const SUPPORT_UNAVAILABLE = [
   ['Tickets filed on a branch host', 'Once a licence has a branch, its administrators file on that branch’s host, into its own database, and no branch call returns tickets. The matrix marks those cells “On the branch”.'],
   ['A ticket’s queue as filed', 'A ticket is sorted by its requester’s standing now. Nothing stamps it when it is filed, so an administrator demoted since has moved queue.'],
   ['A ticket SLA', 'Tickets carry no due date, so their ages show without a band. Only escalations have one.'],
-  ['Whether an answer arrived, later', 'The board keeps each decision. Whether it reached the branch is shown once, when you record it, and nothing sends a stored decision again on its own.'],
+  ['A push that has not been tried', 'A decision recorded before the push was stored has no outcome on its row. Send again is offered where this page still shows that decision.'],
   ['Support under the overlay', 'Out of scope. Viewing as a branch scopes Home and Team; this page reads HQ’s escalation board and HQ’s own tickets, not one branch’s database.'],
 ];
 
@@ -831,7 +840,16 @@ export default function HqSupportPage() {
           <QueueCard {...ticketCardProps(ready, failed, 'admin_product')} onRetry={load} />
         </div>
         <FootingLine tickets={ready?.tickets} />
-        <RecordedList recorded={recorded} />
+        <RecordedList
+          recorded={recorded}
+          onResend={(uid) => {
+            api.escalationResend(uid).then((res) => {
+              setRecorded((prev) => prev.map((r) => (r.uid === uid ? { ...r, pushed: res?.pushed } : r)));
+            }, (e) => {
+              reportError('hq-support:resend', e);
+            });
+          }}
+        />
 
         <div className="mt-4 grid gap-3 lg:grid-cols-[1.3fr_1fr]">
           <TenantMatrix matrix={ready?.matrix} failed={failed} onRetry={load} />
@@ -842,7 +860,7 @@ export default function HqSupportPage() {
         workspace="Support"
         role="super_admin"
         stance="Read-only, except answering an escalation"
-        note="Escalations, both ticket queues, the tenant × queue matrix and the mirror strip are read from HQ's own stores in one request. The one action here records HQ's answer to an escalation, with its reason, and sends it to the branch."
+        note="Escalations, both ticket queues, the tenant × queue matrix and the mirror strip are read from HQ's own stores in one request. Recording an answer sends it to the branch. Send again resends the decision already stored."
         coverage={coverage}
         coverageNote={coverage.length ? undefined : (failed ? 'The Support read could not be completed.' : 'Loading…')}
         unavailable={SUPPORT_UNAVAILABLE}

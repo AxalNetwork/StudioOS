@@ -230,6 +230,42 @@ test('D248: the target is told, Extend has a reason and a ceiling, and the card 
   assert.match(method, /body: JSON\.stringify\(\{ reason: why \}\)/, 'the reason is not sent');
 });
 
+test('D249: the role override takes demote\'s bar, tells the person, and the card says so only while the route does', () => {
+  const plain = text(PLAIN);
+  assert.ok(!plain.includes('No authenticator or step-up is asked'), 'the card still says the override asks for no authenticator');
+  assert.match(plain, /The Super Admin alone: your authenticator, a fresh step-up and a typed reason of at least 10 characters\. Only a change out of Exploring is an override, and the person’s own activity says it was one, and why\./);
+  assert.match(plain, /the Spin-Out Lab is left to the Exploring queue\./);
+  assert.match(plain, /in the audit log as an override naming the person\./);
+
+  const route = codeOnly(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin.ts'), 'utf8'));
+  const start = route.indexOf("admin.patch('/users/:userId/role'");
+  assert.ok(start >= 0, 'the role route is gone');
+  const end = route.indexOf('\nadmin.', start + 1);
+  const h = route.slice(start, end > start ? end : route.length);
+  assert.match(h, /const isOverride = fromExploring && reason\.length > 0;/,
+    'an override is no longer a change out of exploring with a reason');
+  assert.match(h, /if \(isOverride\) \{\s*if \(!isSuperAdmin\(adminUser as any\)\) \{/);
+  const factor = h.indexOf("await requireFactor(c, 'totp');");
+  const stepUp = h.indexOf('await requireStepUp(c);');
+  const write = h.indexOf('UPDATE users SET role');
+  assert.ok(factor > 0 && factor < stepUp && stepUp < write, 'the override\'s authenticator and step-up are not checked before the write');
+  assert.match(h, /without a completed binding agreement: a Super Admin override\. Reason: \$\{reason\}/,
+    'the person\'s own row no longer says it was an override');
+  assert.match(h, /logAdminAction\(c\.env, adminUser\.id, adminUser\.email, 'role_override', \{\s*target_user_id: rows\[0\]\.id,/,
+    'the override is no longer one audit row naming the person');
+  assert.doesNotMatch(h, /startLab/, 'the override starts the Spin-Out Lab, which D249 leaves to assign-role');
+  // The card says a founder or investor starts their onboarding, and the
+  // Exploring queue reads the account as assigned: both are held to the
+  // writes, conditions included. The first draft of this test did not read
+  // them, and an `if (false)` in front of either passed it (D249 records it).
+  const ov = h.slice(h.indexOf('  if (isOverride) {\n    try {\n      await ensureExploringSchema(c.env);'));
+  assert.ok(ov.length > 0, 'the override\'s own writes are gone');
+  assert.match(ov, /^  if \(isOverride\) \{\s*try \{\s*await ensureExploringSchema\(c\.env\);\s*await c\.env\.DB\.prepare\(\s*`INSERT INTO user_role_review/,
+    'the override no longer stamps user_role_review');
+  assert.match(ov, /if \(role === 'founder' \|\| role === 'investor'\) \{\s*try \{\s*await c\.env\.DB\.prepare\(\s*`INSERT INTO onboarding_progress/,
+    'the override no longer starts a founder\'s or investor\'s onboarding, which the card says it does');
+});
+
 test('D247: deactivating an administrator takes demote\'s bar, and the card says so only while the route asks for it', () => {
   // The card said the Super Admin closed an administrator's account with "no
   // authenticator, step-up or reason asked" — true until D247. It now says the

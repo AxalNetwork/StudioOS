@@ -416,7 +416,9 @@ r.put('/posts/:id', async (c) => {
   if ('scheduled_for' in body) {
     const v = body.scheduled_for ? String(body.scheduled_for) : null;
     if (v && Number.isNaN(Date.parse(v))) return c.json({ error: 'invalid_scheduled_for' }, 400);
-    sets.push('scheduled_for = ?'); args.push(v);
+    // D250 — ONE STORED FORMAT: ISO 8601 UTC with a Z, whatever string
+    // Date.parse accepted. It used to be stored verbatim.
+    sets.push('scheduled_for = ?'); args.push(v ? new Date(Date.parse(v)).toISOString() : null);
   }
   if (sets.length === 0) return c.json({ error: 'no_fields' }, 400);
   sets.push("updated_at = datetime('now')");
@@ -506,9 +508,12 @@ r.post('/posts/:id/schedule', async (c) => {
   const at = Date.parse(ts);
   if (!Number.isFinite(at)) return c.json({ error: 'invalid_scheduled_for' }, 400);
   if (at < Date.now() - 60_000) return c.json({ error: 'scheduled_in_past' }, 400);
+  // D250 — `scheduled_by` names who the scheduled send is recorded as
+  // (migration 290): the admin who scheduled it, not whoever drafted it.
   await c.env.DB.prepare(
-    `UPDATE telegram_posts SET status = 'scheduled', scheduled_for = ?, updated_at = datetime('now') WHERE id = ?`,
-  ).bind(new Date(at).toISOString(), id).run();
+    `UPDATE telegram_posts SET status = 'scheduled', scheduled_for = ?, scheduled_by = ?, send_error = NULL,
+            updated_at = datetime('now') WHERE id = ?`,
+  ).bind(new Date(at).toISOString(), admin.id, id).run();
   await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'telegram_post_scheduled', postId: id, channelId: post.channel_id, extra: { scheduled_for: new Date(at).toISOString() } });
   return c.json({ ok: true, scheduled_for: new Date(at).toISOString() });
 });
@@ -516,46 +521,107 @@ r.post('/posts/:id/schedule', async (c) => {
 r.post('/posts/:id/send', async (c) => {
   const admin = await requireSuperAdmin(c);
   await ensureTelegramSchema(c.env);
-  const id = Number(c.req.param('id'));
-  const post: any = await loadPost(c.env, id);
-  if (!post) return c.json({ error: 'not_found' }, 404);
-  if (post.status === 'sent') return c.json({ error: 'already_sent' }, 409);
-  if (post.status === 'sending') return c.json({ error: 'send_in_progress' }, 409);
-  if (!post.chat_id) return c.json({ error: 'channel_missing_chat_id' }, 400);
-  // D216 (#328): a disabled channel is switched off, and a draft written while
-  // it was on does not switch it back. Refused before the claim, so the draft
-  // stays a draft and its own sentence says which fact stopped it.
-  if (!post.channel_enabled) {
-    return c.json({
-      error: 'channel_disabled',
-      message: 'This channel is disabled, so nothing is sent through it. Enable the channel first, or move the draft to another channel.',
-    }, 409);
-  }
-
-  // Compare-and-set: atomically transition draft|scheduled|failed -> sending
-  // so two concurrent /send calls cannot both pass the precheck and double-
-  // post the same draft (architect-flagged race).
-  const claim = await c.env.DB.prepare(
-    `UPDATE telegram_posts
-        SET status = 'sending', updated_at = datetime('now')
-      WHERE id = ? AND status IN ('draft', 'scheduled', 'failed')`,
-  ).bind(id).run();
-  if (!claim.meta || (claim.meta as { changes?: number }).changes !== 1) {
-    return c.json({ error: 'already_sending_or_sent' }, 409);
-  }
-
   const reqBody: any = await c.req.json().catch(() => ({}));
   const overrideReason = reqBody.override_reason ? String(reqBody.override_reason).trim() : null;
+  const out = await sendTelegramPost(c.env, Number(c.req.param('id')), {
+    actor: { id: admin.id, email: admin.email }, mode: 'click', overrideReason,
+  });
+  return c.json(out.body, out.status as any);
+});
 
-  // Helper: roll back the 'sending' claim on early-exit failure so the
-  // draft remains editable. Best-effort — only revert if still 'sending'.
+/**
+ * D250 — THE ONE TELEGRAM SEND, for the console's click and the scheduled
+ * sweep alike. Extracted from the `/send` handler, so the enabled check, the
+ * claim, the PII lint, the send and the record are defined once.
+ *
+ * THE TWO MODES DIFFER IN THREE PLACES, and nowhere else:
+ *   · the claim. A click claims draft|scheduled|failed. The clock claims only
+ *     a row still 'scheduled' AND due (`datetime(scheduled_for) <=
+ *     datetime(?)`, the tick's own minute), so two overlapping ticks send once.
+ *   · a refusal. A click that is refused leaves the row as it was (or back to
+ *     draft) and answers the admin, who is there. The clock has nobody to
+ *     answer, and a row left 'scheduled' would be refused again every minute,
+ *     so a refused scheduled post becomes 'failed' with its reason. The
+ *     console's own Send is the retry.
+ *   · the PII override. Only a click can carry one. A scheduled post the lint
+ *     blocks fails with the lint's reason.
+ * The actor is whoever the audit names: the clicking admin, or, for the
+ * clock, the admin who scheduled the post (`scheduled_by`, migration 290).
+ */
+export type SendMode = 'click' | 'clock';
+export interface SendOpts {
+  actor: { id: number; email: string };
+  mode: SendMode;
+  overrideReason?: string | null;
+  /** The clock's minute (`YYYY-MM-DD HH:MM:SS`). Required for mode 'clock'. */
+  dueBy?: string;
+}
+export async function sendTelegramPost(
+  env: Env, id: number, opts: SendOpts,
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const { actor, mode } = opts;
+  const overrideReason = opts.overrideReason ?? null;
+  const post: any = await loadPost(env, id);
+  if (!post) return { status: 404, body: { error: 'not_found' } };
+  if (post.status === 'sent') return { status: 409, body: { error: 'already_sent' } };
+  if (post.status === 'sending') return { status: 409, body: { error: 'send_in_progress' } };
+
+  // A refusal the clock records on the row; the click just answers.
+  const refuse = async (status: number, body: Record<string, unknown>) => {
+    if (mode === 'clock') {
+      const reason = String(body.message || body.error).slice(0, 500);
+      try {
+        await env.DB.prepare(
+          `UPDATE telegram_posts SET status = 'failed', send_error = ?, updated_at = datetime('now')
+            WHERE id = ? AND status IN ('scheduled', 'sending')`,
+        ).bind(reason, id).run();
+      } catch {}
+      await writeAudit(env, {
+        adminId: actor.id, adminEmail: actor.email, action: 'telegram_scheduled_send_refused',
+        postId: id, channelId: post.channel_id, extra: { code: body.error, reason },
+      });
+    }
+    return { status, body };
+  };
+
+  if (!post.chat_id) return refuse(400, { error: 'channel_missing_chat_id', message: 'The channel has no chat_id, so nothing can be sent to it.' });
+  // D216 (#328): a disabled channel is switched off, and a draft written while
+  // it was on does not switch it back. Refused before the claim, so a clicked
+  // draft stays a draft and its own sentence says which fact stopped it.
+  if (!post.channel_enabled) {
+    return refuse(409, {
+      error: 'channel_disabled',
+      message: 'This channel is disabled, so nothing is sent through it. Enable the channel first, or move the draft to another channel.',
+    });
+  }
+
+  // Compare-and-set: atomically transition the row to 'sending' so two
+  // concurrent sends cannot both pass the precheck and double-post it.
+  const claim = mode === 'clock'
+    ? await env.DB.prepare(
+      `UPDATE telegram_posts
+          SET status = 'sending', updated_at = datetime('now')
+        WHERE id = ? AND status = 'scheduled'
+          AND datetime(scheduled_for) <= datetime(?)`,
+    ).bind(id, opts.dueBy ?? '').run()
+    : await env.DB.prepare(
+      `UPDATE telegram_posts
+          SET status = 'sending', updated_at = datetime('now')
+        WHERE id = ? AND status IN ('draft', 'scheduled', 'failed')`,
+    ).bind(id).run();
+  if (!claim.meta || (claim.meta as { changes?: number }).changes !== 1) {
+    return { status: 409, body: { error: 'already_sending_or_sent' } };
+  }
+
+  // Roll back the 'sending' claim on an early exit. Best-effort, and only a
+  // row still 'sending'. A click returns to draft; the clock records failed.
   const releaseClaim = async (next: 'draft' | 'failed' = 'draft', err?: string) => {
     try {
-      await c.env.DB.prepare(
+      await env.DB.prepare(
         `UPDATE telegram_posts
             SET status = ?, send_error = ?, updated_at = datetime('now')
           WHERE id = ? AND status = 'sending'`,
-      ).bind(next, err ? err.slice(0, 500) : null, id).run();
+      ).bind(mode === 'clock' ? 'failed' : next, err ? err.slice(0, 500) : null, id).run();
     } catch {}
   };
 
@@ -565,23 +631,31 @@ r.post('/posts/:id/send', async (c) => {
   // reusable per-channel and broadcast to public audiences, so they must
   // pass the same gate as body_md.
   const wireBodyForLint = appendSignature(post.body_md, post.channel_signature);
-  const lint = await lintForSend(c.env, wireBodyForLint, post.audience);
+  const lint = await lintForSend(env, wireBodyForLint, post.audience);
   if (!lint.ok) {
-    if (!overrideReason || overrideReason.length < 8) {
-      await releaseClaim('draft');
-      return c.json({
-        error: 'pii_linter_blocked',
-        code: 'pii_linter_blocked',
-        message: 'PII linter blocked the send. Provide override_reason (≥8 chars) to proceed.',
-        findings: lint.findings,
-      }, 422);
+    if (mode === 'clock' || !overrideReason || overrideReason.length < 8) {
+      const message = mode === 'clock'
+        ? 'The PII linter blocked this scheduled post. A scheduled send cannot carry an override; open it and send it by hand with a reason.'
+        : 'PII linter blocked the send. Provide override_reason (≥8 chars) to proceed.';
+      await releaseClaim('draft', mode === 'clock' ? `pii_linter_blocked: ${message}` : undefined);
+      if (mode === 'clock') {
+        await writeAudit(env, {
+          adminId: actor.id, adminEmail: actor.email, action: 'telegram_scheduled_send_refused',
+          postId: id, channelId: post.channel_id,
+          extra: { code: 'pii_linter_blocked', kinds: lint.findings.map((f) => f.kind) },
+        });
+      }
+      return {
+        status: 422,
+        body: { error: 'pii_linter_blocked', code: 'pii_linter_blocked', message, findings: lint.findings },
+      };
     }
     // Record the override on the post itself + audit row.
-    await c.env.DB.prepare(
+    await env.DB.prepare(
       `UPDATE telegram_posts SET override_reason = ?, override_findings = ?, updated_at = datetime('now') WHERE id = ?`,
     ).bind(overrideReason.slice(0, 1000), JSON.stringify(lint.findings), id).run();
-    await writeAudit(c.env, {
-      adminId: admin.id, adminEmail: admin.email,
+    await writeAudit(env, {
+      adminId: actor.id, adminEmail: actor.email,
       action: 'telegram_pii_override',
       postId: id, channelId: post.channel_id,
       extra: { reason: overrideReason.slice(0, 200), findings_count: lint.findings.length, kinds: lint.findings.map((f) => f.kind) },
@@ -595,32 +669,32 @@ r.post('/posts/:id/send', async (c) => {
     // Per-channel human signature appended at send time only (body_md stays
     // clean in storage so the sig can be edited retroactively per-channel).
     const wireBody = appendSignature(post.body_md, post.channel_signature);
-    if (post.media_r2_key && c.env.FILES) {
-      const obj = await c.env.FILES.get(post.media_r2_key);
+    if (post.media_r2_key && env.FILES) {
+      const obj = await env.FILES.get(post.media_r2_key);
       if (!obj) {
         await releaseClaim('failed', 'media_missing');
-        return c.json({ error: 'media_missing' }, 410);
+        return { status: 410, body: { error: 'media_missing' } };
       }
       const bytes = new Uint8Array(await obj.arrayBuffer());
       const filename = post.media_r2_key.split('/').pop() || 'media';
       const sendFn = post.media_kind === 'document' ? sendDocument : sendPhoto;
-      const sent = await sendFn(c.env, post.chat_id, bytes, filename, wireBody);
+      const sent = await sendFn(env, post.chat_id, bytes, filename, wireBody);
       msgId = sent.message_id;
       try {
-        const chat = await getChat(c.env, post.chat_id);
+        const chat = await getChat(env, post.chat_id);
         chatLink = buildTelegramLink(chat, msgId);
       } catch { /* link is best-effort */ }
     } else {
-      const sent = await sendMessage(c.env, post.chat_id, wireBody);
+      const sent = await sendMessage(env, post.chat_id, wireBody);
       msgId = sent.message_id;
       try {
-        const chat = await getChat(c.env, post.chat_id);
+        const chat = await getChat(env, post.chat_id);
         chatLink = buildTelegramLink(chat, msgId);
       } catch {}
     }
 
     const bodyHash = await sha256Hex(post.body_md);
-    await c.env.DB.prepare(
+    await env.DB.prepare(
       `UPDATE telegram_posts
           SET status = 'sent',
               sent_at = datetime('now'),
@@ -631,33 +705,33 @@ r.post('/posts/:id/send', async (c) => {
               updated_at = datetime('now')
         WHERE id = ?`,
     ).bind(msgId ?? null, chatLink, bodyHash, id).run();
-    await writeAudit(c.env, {
-      adminId: admin.id, adminEmail: admin.email,
+    await writeAudit(env, {
+      adminId: actor.id, adminEmail: actor.email,
       action: 'telegram_post_sent',
       postId: id, channelId: post.channel_id, bodyHash,
-      extra: { message_id: msgId, link: chatLink, had_override: !!overrideReason },
+      extra: { message_id: msgId, link: chatLink, had_override: !!overrideReason, via: mode },
     });
-    return c.json({ ok: true, message_id: msgId, link: chatLink });
+    return { status: 200, body: { ok: true, message_id: msgId, link: chatLink } };
   } catch (e) {
     const { body, status } = telegramErrorPayload(e);
     try {
       // Only flip out of 'sending' (the row we own). A concurrent finalizer
       // shouldn't exist, but the guard keeps this idempotent.
-      await c.env.DB.prepare(
+      await env.DB.prepare(
         `UPDATE telegram_posts
             SET status = 'failed', send_error = ?, updated_at = datetime('now')
           WHERE id = ? AND status = 'sending'`,
       ).bind(String((body as any).message || (body as any).code).slice(0, 500), id).run();
     } catch {}
-    await writeAudit(c.env, {
-      adminId: admin.id, adminEmail: admin.email,
+    await writeAudit(env, {
+      adminId: actor.id, adminEmail: actor.email,
       action: 'telegram_post_send_failed',
       postId: id, channelId: post.channel_id,
-      extra: { code: (body as any).code },
+      extra: { code: (body as any).code, via: mode },
     });
-    return c.json(body, status);
+    return { status, body: body as Record<string, unknown> };
   }
-});
+}
 
 // ----------------------------- AGGREGATOR -----------------------------
 

@@ -13,6 +13,7 @@ import {
   ShieldAlert, Link2, Wifi, Undo2, Clock,
 } from 'lucide-react';
 import { adminX as api } from '../../lib/api';
+import { toLocalInput, scheduledNote } from '../../lib/scheduledPost';
 import { useToast } from '../../components/useToast';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 
@@ -568,9 +569,9 @@ function PostsTab({ posts, accounts, onReload, toast, mode }) {
                   {!p.thread_continuation_of && ['draft', 'approved', 'scheduled', 'failed'].includes(p.status) && (
                     <button
                       onClick={async () => {
-                        const def = p.scheduled_for
-                          ? new Date(p.scheduled_for).toISOString().slice(0, 16)
-                          : new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16);
+                        // D250 — the prompt says local time, so the default is local
+                        // too; it used to pre-fill the UTC clock.
+                        const def = toLocalInput(p.scheduled_for || new Date(Date.now() + 60 * 60 * 1000).toISOString());
                         const v = window.prompt('Schedule for (YYYY-MM-DDTHH:MM, local time):', def);
                         if (!v) return;
                         const iso = new Date(v).toISOString();
@@ -586,6 +587,12 @@ function PostsTab({ posts, accounts, onReload, toast, mode }) {
                     >
                       <Clock size={12} /> {p.status === 'scheduled' ? 'Reschedule' : 'Schedule'}
                     </button>
+                  )}
+                  {/* D250 — when the scheduler will actually send it. */}
+                  {p.status === 'scheduled' && scheduledNote(p.scheduled_for) && (
+                    <span className="basis-full text-xs text-gray-500" data-testid="x-scheduled-note">
+                      {scheduledNote(p.scheduled_for)}
+                    </span>
                   )}
                   {p.status !== 'sent' && p.status !== 'sending' && (
                     <button onClick={() => startEdit(p)} className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded flex items-center gap-1">

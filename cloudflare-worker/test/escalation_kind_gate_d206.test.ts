@@ -109,7 +109,7 @@ function hqDb() {
   for (const t of ['territory_licences', 'licence_territories', 'licence_seats']) {
     db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   }
-  for (const m of ['258_licence_deployments', '259_hq_escalations', '259_licence_contracts', '279_licence_kind']) {
+  for (const m of ['258_licence_deployments', '259_hq_escalations', '259_licence_contracts', '261_branch_escalations', '279_licence_kind', '288_escalation_delivery']) {
     run(db, migration(m));
   }
   const lic = db.prepare(
@@ -174,7 +174,9 @@ function branchDb(opts: { kind?: string | null; status?: string; copy?: boolean;
       ).run(opts.status ?? 'active', opts.kind === undefined ? 'white_label' : opts.kind);
     }
   }
+  run(db, migration('259_hq_escalations'));
   run(db, migration('261_branch_escalations'));
+  run(db, migration('288_escalation_delivery'));
   return db;
 }
 

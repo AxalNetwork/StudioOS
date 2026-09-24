@@ -2000,9 +2000,11 @@ admin.patch('/users/:userId/role', async (c) => {
   const body: any = await c.req.json().catch(() => ({}));
   const role = c.req.query('role') || body.role;
 
-  // An override is REQUESTED by supplying a reason, and granted only below.
-  const overrideReason = String(body.override_reason ?? '').trim();
-  const wantsOverride = overrideReason.length > 0;
+  // D249 — the reason, whatever change it rides on. It arrives as
+  // `override_reason`, the key the SPA has always sent. It is an OVERRIDE only
+  // when the change is out of `exploring` (decided below, once the target is
+  // read); on any other change it is simply that change's reason.
+  const reason = String(body.override_reason ?? '').trim().slice(0, 500);
   // Task #9 follow-up — 'exploring' is a valid destination role so admins
   // can move a user (e.g. a partner) back into the holding state for
   // re-review, from the same dropdown used for founder/partner/investor.
@@ -2010,37 +2012,6 @@ admin.patch('/users/:userId/role', async (c) => {
     return c.json({ error: `Invalid role: ${role}` }, 400);
   }
 
-  // Validated HERE, above the admin promotion/demotion guards below, so that an
-  // override can never reach them: minting or removing an admin stays SQL-only
-  // whatever reason is supplied. That ordering is the whole reason the override
-  // is a narrow door rather than a wide one, and a test asserts it.
-  if (wantsOverride) {
-    // NO EXPLICIT HYDRATE HERE, and that is checked rather than assumed. This
-    // block first called `hydrateSuperAdmin(c.env, adminUser)` on the theory
-    // that `requireAdmin` leaves the flag unset — it does not: `getCurrentUser`
-    // hydrates it from the `super_admins` side table on every request
-    // (`auth.ts`), which is why `requireSuperAdmin` itself only calls
-    // `isSuperAdmin` and why the two impersonation guards above hydrate their
-    // TARGET (a raw `SELECT *` row) and not the caller. Removing the redundant
-    // read changed no test in either direction, which is what said it was
-    // redundant. The ordering inside `getCurrentUser` is the load-bearing part:
-    // the side table's answer is written over whatever `SELECT *` returned, so a
-    // database still carrying the first version of migration 199's
-    // `users.is_super_admin` column cannot elevate every admin
-    // (`admin_role_override.test.ts` drives exactly that database).
-    if (!isSuperAdmin(adminUser as any)) {
-      return c.json({
-        error: 'Only a super admin can override the binding-agreement requirement.',
-        code: 'super_admin_required',
-      }, 403);
-    }
-    if (overrideReason.length < 10) {
-      return c.json({
-        error: 'An override reason of at least 10 characters is required — it is the line someone reads in the audit later.',
-        code: 'override_reason_too_short',
-      }, 400);
-    }
-  }
   // Security policy: admin promotion is NOT allowed via this endpoint, so a
   // compromised admin session cannot mint peers to entrench access.
   //
@@ -2083,24 +2054,64 @@ admin.patch('/users/:userId/role', async (c) => {
   // admin could bypass the signed binding agreement requirement simply by
   // using the Users table dropdown instead of the Exploring Users queue.
   //
-  // THAT BYPASS NOW EXISTS, DELIBERATELY, AND IS NOT SILENT. A super admin may
-  // pass `override_reason` to assign the role anyway — because an admin with no
-  // way to correct a role at all is its own failure mode, and every new signup
-  // lands in `exploring` (routes/auth.ts), so this gate covers most of the user
-  // table. What keeps it narrow: it is super-admin only, it needs a reason of
-  // real length, the reason is written into the `role_changed` audit line, and
-  // it is validated above the admin promotion/demotion guards so it can never
-  // mint an admin. An unreasoned request is still refused exactly as before,
-  // and /admin/exploring keeps its strict rule for the normal path.
-  if (String(rows[0].role).toLowerCase() === 'exploring' && role !== 'exploring' && !wantsOverride) {
+  // THAT BYPASS EXISTS, DELIBERATELY: THE BINDING-AGREEMENT OVERRIDE (#549,
+  // first described by D249). A super admin may pass a reason to assign the
+  // role anyway — because an admin with no way to correct a role at all is its
+  // own failure mode, and every new signup lands in `exploring`
+  // (routes/auth.ts), so this gate covers most of the user table.
+  //
+  // D249 — WHAT AN OVERRIDE IS, AND WHAT IT NOW TAKES.
+  //  · It is a change OUT OF `exploring` with a reason, and nothing else. Until
+  //    D249 it was keyed on a reason being present, so a reason sent with
+  //    founder→partner stamped "BINDING-AGREEMENT OVERRIDE" on an ordinary
+  //    change. A reason on any other change is carried as that change's reason.
+  //  · It is decided HERE, below the admin promotion and demotion guards, and
+  //    that cannot turn it into escalation: `role === 'admin'` is refused above
+  //    for every request, and an `exploring` target is by definition not an
+  //    admin, so an override can neither mint nor demote one. (It was validated
+  //    above those guards when a reason alone made one.)
+  //  · It takes demote's bar — the Super Admin, a TOTP-minted session and a
+  //    fresh step-up — and a reason of at least 10 characters. It is the same
+  //    class of act: a role change the normal path would refuse.
+  //  · NO EXPLICIT HYDRATE on the caller: `getCurrentUser` writes the
+  //    `super_admins` side table's answer over whatever `SELECT *` returned, so
+  //    a database still carrying the first version of migration 199's
+  //    `users.is_super_admin` column cannot elevate every admin
+  //    (`admin_role_override.test.ts` drives exactly that database).
+  const oldRole = rows[0].role;
+  const fromExploring = String(oldRole).toLowerCase() === 'exploring' && role !== 'exploring';
+  if (fromExploring && !reason) {
     await sql.end();
     return c.json({
       error: 'This user is in the exploring holding state. Assign their final role from the Exploring Users queue (requires a signed binding agreement).',
       code: 'use_exploring_assign_role',
     }, 409);
   }
+  const isOverride = fromExploring && reason.length > 0;
+  if (isOverride) {
+    if (!isSuperAdmin(adminUser as any)) {
+      await sql.end();
+      return c.json({
+        error: 'Only a super admin can override the binding-agreement requirement.',
+        code: 'super_admin_required',
+      }, 403);
+    }
+    try {
+      await requireFactor(c, 'totp');
+      await requireStepUp(c);
+    } catch (e) {
+      await sql.end();
+      throw e;
+    }
+    if (reason.length < 10) {
+      await sql.end();
+      return c.json({
+        error: 'An override reason of at least 10 characters is required — it is the line someone reads in the audit later.',
+        code: 'override_reason_too_short',
+      }, 400);
+    }
+  }
 
-  const oldRole = rows[0].role;
   if (role === 'exploring') await ensureExploringSchema(c.env);
   await sql`UPDATE users SET role = ${role} WHERE id = ${userId}`;
 
@@ -2134,6 +2145,48 @@ admin.patch('/users/:userId/role', async (c) => {
     const { seedObligations } = await import('../services/trust');
     await seedObligations(c.env, userId, role, { pruneStaleForRole: true });
   } catch (e) { console.error('[admin] trust re-seed failed', e); }
+  // D249 — AN OVERRIDE DOES WHAT assign-role DOES THAT THE ACCOUNT NEEDS.
+  //  · `user_role_review` is stamped as assign-role stamps it — role_confirmed,
+  //    assigned_role, by, at — so the Exploring queue reads the account as
+  //    assigned rather than still waiting. An upsert, because an account can be
+  //    overridden before any review row exists; assign-role's UPDATE cannot
+  //    meet that case, since it requires an envelope.
+  //  · A founder or investor gets their onboarding wizard, the SQL assign-role
+  //    runs. Moved into either role without it, the account lands on a shell
+  //    with nothing behind it.
+  //  · The Spin-Out Lab auto-start is LEFT to assign-role: it enrols a company
+  //    in a programme, and an override reason does not establish that the
+  //    company belongs there.
+  // Each write is best-effort: the role has changed, and a stamp that fails
+  // must not turn a recorded change into a failed request (D111).
+  if (isOverride) {
+    try {
+      await ensureExploringSchema(c.env);
+      await c.env.DB.prepare(
+        `INSERT INTO user_role_review (user_id, role_confirmed, assigned_role, assigned_by_user_id, assigned_at, updated_at)
+         VALUES (?, 1, ?, ?, datetime('now'), datetime('now'))
+         ON CONFLICT(user_id) DO UPDATE SET
+           role_confirmed = 1,
+           assigned_role = excluded.assigned_role,
+           assigned_by_user_id = excluded.assigned_by_user_id,
+           assigned_at = excluded.assigned_at,
+           updated_at = excluded.updated_at`,
+      ).bind(userId, role, adminUser.id).run();
+    } catch (e) { console.error('[admin/role-override] review stamp failed', (e as Error).message); }
+    if (role === 'founder' || role === 'investor') {
+      try {
+        await c.env.DB.prepare(
+          `INSERT INTO onboarding_progress (user_id, flow, step, total_steps, completed_at, updated_at)
+           VALUES (?, ?, 0, 0, NULL, datetime('now'))
+           ON CONFLICT(user_id) DO UPDATE SET
+             flow = excluded.flow,
+             step = 0,
+             completed_at = NULL,
+             updated_at = datetime('now')`,
+        ).bind(userId, role).run();
+      } catch (e) { console.error('[admin/role-override] onboarding reset failed', (e as Error).message); }
+    }
+  }
   // Epic 11 — actor on both rows is email_hash, never the plaintext.
   const roleAdminHash = await hashEmail(adminUser.email);
   const roleTargetHash = await hashEmail(rows[0].email);
@@ -2143,13 +2196,28 @@ admin.patch('/users/:userId/role', async (c) => {
   // label map, and a reader missed in that sweep would show role changes while
   // hiding precisely the overrides — the opposite of the point. Marking the
   // details keeps it visible in every view that already renders a role change.
-  const overrideNote = wantsOverride
-    ? ` — BINDING-AGREEMENT OVERRIDE by super admin. Reason: ${overrideReason}`
-    : '';
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('role_changed', ${`Admin ${adminUser.name} changed ${rows[0].name}'s role from ${oldRole} to ${role}${overrideNote}`}, ${roleAdminHash}, ${adminUser.id})`;
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('your_role_changed', ${`Your role was changed from ${oldRole} to ${role} by ${adminUser.name}`}, ${roleTargetHash}, ${rows[0].id})`;
+  // D249 — and the audit log gets its own row (below), which names the target.
+  const because = isOverride
+    ? ` — BINDING-AGREEMENT OVERRIDE by super admin. Reason: ${reason}`
+    : (reason ? `. Reason: ${reason}` : '');
+  // D249 — THE PERSON IS TOLD WHAT HAPPENED. Their row said only "Your role was
+  // changed from X to Y by <name>", so an override read as a routine change on
+  // the one feed they can see.
+  const theirs = isOverride
+    ? `Your role was changed from ${oldRole} to ${role} by ${adminUser.name} without a completed binding agreement: a Super Admin override. Reason: ${reason}`
+    : `Your role was changed from ${oldRole} to ${role} by ${adminUser.name}${reason ? `. Reason: ${reason}` : ''}`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('role_changed', ${`Admin ${adminUser.name} changed ${rows[0].name}'s role from ${oldRole} to ${role}${because}`}, ${roleAdminHash}, ${adminUser.id})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('your_role_changed', ${theirs}, ${roleTargetHash}, ${rows[0].id})`;
   await sql.end();
-  return c.json({ message: `Role updated to ${role}`, user_id: userId, role });
+  // D249 — one audit row per override, naming the account. Imported here, not
+  // at the top: services/adminAudit.ts imports from this file.
+  if (isOverride) {
+    const { logAdminAction } = await import('../services/adminAudit');
+    await logAdminAction(c.env, adminUser.id, adminUser.email, 'role_override', {
+      target_user_id: rows[0].id, from: oldRole, to: role, reason,
+    });
+  }
+  return c.json({ message: `Role updated to ${role}`, user_id: userId, role, override: isOverride });
 });
 
 admin.patch('/users/:userId/toggle-active', async (c) => {

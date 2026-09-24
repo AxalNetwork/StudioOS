@@ -273,6 +273,10 @@ function RoleDropdown({ user, onRoleChange, canOverride = false }) {
  *
  * Ten characters is the same bar the support-session dialog uses, for the same
  * reason — "ok" is not an explanation anybody can act on later.
+ *
+ * D249 — the route also asks for your authenticator and a fresh step-up (the
+ * step-up prompt is request()'s), and tells the person: their own activity
+ * says the role was assigned by override, and why. The dialog says both.
  */
 function RoleOverrideDialog({ target, nextRole, busy, onCancel, onConfirm }) {
   const [reason, setReason] = useState('');
@@ -290,6 +294,10 @@ function RoleOverrideDialog({ target, nextRole, busy, onCancel, onConfirm }) {
           <strong className="text-gray-800 dark:text-gray-200">{target.name || target.email}</strong> is in the
           Exploring holding state. Normally their role is assigned from the Exploring queue, after they
           sign the binding agreement. This skips that.
+        </p>
+        <p className="mt-2 text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400">
+          It asks for your authenticator and a fresh step-up. Their own activity will say the role was
+          assigned by override, and why.
         </p>
 
         <dl className="mt-4 space-y-2 rounded-lg border border-gray-200 p-3 text-[12px] dark:border-gray-700">

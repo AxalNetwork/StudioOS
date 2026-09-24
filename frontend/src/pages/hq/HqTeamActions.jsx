@@ -30,6 +30,11 @@ import { Card } from '../../ui';
  * the act demote's bar. The note says what the route now requires, and the
  * test reads the route for the three checks so the sentence cannot outlive them.
  *
+ * AND ONE MORE CHANGED WITH ITS ROUTE: the role override said "No authenticator
+ * or step-up is asked", which was true until D249 gave it demote's bar. The
+ * note now names the bar, and says the person is told and what the override
+ * does and does not start.
+ *
  * ONE ROW IS NOT HQ'S, AND IT SAYS SO RATHER THAN MOVING. "View as a role shell"
  * is offered to every admin — HQ, the holder and a branch admin alike — by the
  * shell's own picker, and it changes nothing but this browser's chrome. The
@@ -95,9 +100,9 @@ export const HQ_ONLY_ACTIONS = [
     key: 'role_override',
     name: 'Role override on a binding agreement',
     hq: true,
-    gate: 'The Super Admin alone, with a typed reason of at least 10 characters. No authenticator or step-up is asked.',
+    gate: 'The Super Admin alone: your authenticator, a fresh step-up and a typed reason of at least 10 characters. Only a change out of Exploring is an override, and the person’s own activity says it was one, and why. A founder or investor starts their onboarding; the Spin-Out Lab is left to the Exploring queue.',
     where: 'The Role picker on an Exploring account’s row in the directory below.',
-    recorded: 'Yes — as a role change carrying the reason.',
+    recorded: 'Yes — as a role change carrying the reason, and in the audit log as an override naming the person.',
   },
 ];
 

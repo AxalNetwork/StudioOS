@@ -178,20 +178,20 @@ const REC = {
   answered_at: '2026-09-23T10:15:00.000Z',
 };
 
-test('a decision that did not reach the branch is recorded, not sent, and offers no retry', () => {
-  const html = render(RecordedOutcome, { rec: { ...REC, pushed: {
-    ok: false, reason: 'No branch Worker is bound for fr, so the decision is recorded at HQ and was not sent.',
-  } } });
+test('a decision that did not reach the branch says so, and Send again is beside that answer', () => {
+  const html = render(RecordedOutcome, {
+    rec: { ...REC, pushed: {
+      ok: false, reason: 'No branch Worker is bound for fr, so the decision is recorded at HQ and was not sent.',
+    } },
+    onResend: () => {},
+  });
   const t = renderedText(html);
   assert.match(t, /Recorded at HQ at 10:15 UTC as answered\./);
   assert.match(t, /Not on fr: No branch Worker is bound for fr/);
-  assert.match(t, /Nothing sends it again on its own; recording it again\s+replaces the decision and sends the new one\./);
-  // No "yet": nothing will deliver it later on its own (#341).
+  assert.match(t, /Nothing sends it again on its own\./);
+  assert.match(html, /<button[^>]*>Send again<\/button>/);
   assert.doesNotMatch(t, /\byet\b/);
-  // Recording again REPLACES the decision; a button that said "retry" would
-  // promise a resend that does not exist.
-  assert.doesNotMatch(html, /<button/);
-  assert.doesNotMatch(t, /try again|retry|resend/i);
+  assert.doesNotMatch(t, /try again|retry/i);
 });
 
 test('a delivered decision says the branch received it; an unreported one says so', () => {
@@ -227,7 +227,8 @@ test('the session list says it is only for this session, and why', () => {
   const t = renderedText(render(RecordedList, { recorded: [{ ...REC, pushed: { ok: true } }] }));
   assert.match(t, /Recorded this session/);
   assert.match(t, /Shown until you leave this page/);
-  assert.match(t, /whether it reached the branch is not\s+stored against it/);
+  assert.match(t, /whether the last push reached the branch is stored on that row/);
+  assert.match(t, /Send again sends that stored decision, not a new one/);
 });
 
 // ───────────────────────────────────────────────────────── the queue rows ──
@@ -267,7 +268,8 @@ test('without `decide` the rows stay plain text, as the queue draws on its own',
 
 test('the page wires the panel, keeps the session list, and reloads quietly after a decision', () => {
   assert.ok(CODE.includes('escalationCardProps(ready, failed, decide)'), 'the escalation card is drawn without its panels');
-  assert.ok(CODE.includes('<RecordedList recorded={recorded} />'), 'the session list is not drawn');
+  assert.ok(CODE.includes('<RecordedList'), 'the session list is not drawn');
+  assert.match(CODE, /<RecordedList\s+recorded=\{recorded\}\s+onResend=\{/);
   const at = CODE.indexOf('const onRecorded = useCallback(');
   assert.ok(at > 0);
   const fn = CODE.slice(at, CODE.indexOf('}, [fetchSupport]);', at));
@@ -281,9 +283,10 @@ test('the rail says the page acts, once, and the old refusal is gone', () => {
   assert.ok(!SUPPORT_UNAVAILABLE.some(([t]) => /Answering an escalation/.test(t)), 'the rail still says no screen answers');
   assert.doesNotMatch(CODE, /nothing calls it/);
   assert.ok(CODE.includes('stance="Read-only, except answering an escalation"'));
-  assert.match(CODE, /The one action here records HQ's answer to an escalation, with its reason, and sends it to the branch\./);
-  assert.ok(SUPPORT_UNAVAILABLE.some(([t, d]) => /arrived/.test(t) && /nothing sends a stored decision again/.test(d)),
-    'the rail does not say that delivery is shown once and never re-sent');
+  assert.match(CODE, /Recording an answer sends it to the branch\. Send again resends the decision already stored\./);
+  assert.ok(CODE.includes('api.escalationResend(uid)'), 'Send again does not call the resend route');
+  assert.ok(!CODE.includes('escalationResend(uid,') && !CODE.includes('escalationResend(uid, '),
+    'Send again forwards a new answer');
 });
 
 // ─────────────────────────────────────────────────── HQ Home's answer link ──
