@@ -110,6 +110,14 @@ test('the reason is required in substance, not just in shape', () => {
     + 'the audit that the super admin never wrote');
 });
 
+test('D249: the dialog says what the route now asks, and that the person is told', () => {
+  const rendered = dialog().replace(/\s[a-zA-Z-]+="[^"]*"/g, '');
+  assert.match(rendered, /It asks for your authenticator and a fresh step-up\./,
+    'the dialog does not say the override now asks for an authenticator and a step-up');
+  assert.match(rendered, /Their own activity will say the role was\s+assigned by override, and why\./,
+    'the dialog does not say the person is told');
+});
+
 test('the dialog says what is being skipped and that it is recorded', () => {
   // An override the operator does not understand is not an informed one. Read as
   // rendered children with attribute values stripped, so moving the sentences

@@ -1708,6 +1708,24 @@ export default {
             else if (p.deleted) console.info(`[cron] security_events pruned=${p.deleted}`);
           } catch (e) { console.error('[cron] security_events prune failed', e); }
         }
+        // D250 — SCHEDULED TELEGRAM AND X POSTS ARE SENT. Both consoles have
+        // offered "Schedule" since they were built and nothing sent a
+        // scheduled post; it sat at 'scheduled' for ever. EVERY MINUTE, on
+        // D239's clock (the tick's scheduled minute), because a post is
+        // scheduled to the minute. GATED ON `hqCadences`: both consoles are
+        // Super-Admin-only and the bot credentials are HQ's, so a branch has
+        // nothing to send. The send is the console's own (services/
+        // scheduledPosts.ts says why), and the sweep never throws past this.
+        if (hqCadences) {
+          try {
+            const { sweepScheduledPosts } = await import('./services/scheduledPosts');
+            const p = await sweepScheduledPosts(env, now);
+            if (p.due || p.stale_failed || p.unreadable_failed || p.errors.length) {
+              console.info(`[cron] scheduled posts due=${p.due} sent=${p.sent} refused_or_failed=${p.refused_or_failed} stale_failed=${p.stale_failed} unreadable_failed=${p.unreadable_failed} left_for_next_tick=${p.left_for_next_tick}`);
+              if (p.errors.length) console.warn('[cron] scheduled posts errors', p.errors.slice(0, 5));
+            }
+          } catch (e) { console.error('[cron] scheduled posts sweep failed', e); }
+        }
         // D237 — cron_run_history keeps 30 days, and always each trigger's
         // newest row (the reasons and the batch cap are in
         // util/cronHistory.ts). NOT GATED ON `hqCadences`, on the D122
