@@ -45,9 +45,12 @@ r.get('/escalations', async (c) => {
     }
 
     let items: unknown[] = [];
+    let complete = true;
     let available = true;
     try {
-      items = await listEscalations(c.env, { status, kind, limit: 100 });
+      const listed = await listEscalations(c.env, { status, kind, limit: 100 });
+      items = listed.items;
+      complete = listed.complete;
     } catch { available = false; }
 
     return c.json({
@@ -56,6 +59,7 @@ r.get('/escalations', async (c) => {
         reason: 'The hq_escalations table could not be read on this database (migration 259).',
       }),
       items,
+      ...(available ? { complete } : {}),
       kinds: ESCALATION_KINDS,
       statuses: ESCALATION_STATUSES,
     });

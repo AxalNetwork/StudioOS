@@ -1,0 +1,32 @@
+{
+  "note": "Runtime DDL in cloudflare-worker/src that check-runtime-schema-declared.mjs records rather than fails. `refused` lists objects a runtime CREATE names that no migration declares and that SQLite refuses on the fresh build; each entry is re-proved on every run, so the day a refusal stops (a column added, a quote fixed) the entry fails as `refusal-changed` and the object must be declared or its statement deleted. `opaque` counts statements per file that the check cannot expand, each read by hand. The check refuses stale entries in both directions: a ledger of known gaps is only worth reading if every line is still true (D235).",
+  "resolve_with": "node --no-warnings scripts/check-runtime-schema-declared.mjs",
+  "refused": {
+    "index:idx_cc_deal": {
+      "refusal": "no such column: deal_id",
+      "reason": "routes/legalcap.ts:90 indexes a capital_calls shape that is not the one every database has. The winning capital_calls definition (baseline and production) has no deal_id; this is the known capital_calls collision already on sqlite-table-collisions-baseline.json. Absent from production, measured read-only 2026-09-24."
+    },
+    "index:idx_cc_syn": {
+      "refusal": "no such column: syndicate_id",
+      "reason": "routes/legalcap.ts:91, the same capital_calls collision: the live shape has no syndicate_id. Absent from production, measured read-only 2026-09-24."
+    },
+    "index:uq_cc_idem": {
+      "refusal": "no such column: created_by",
+      "reason": "routes/legalcap.ts:127, the same capital_calls collision: the live shape has no created_by. Absent from production, measured read-only 2026-09-24."
+    },
+    "table:metric_anomalies": {
+      "refusal": "default value of column [created_at] is not constant",
+      "reason": "integrations/providers/stripe.ts:310 writes DEFAULT (datetime(\"now\")) with double quotes, which SQLite refuses with or without double-quoted string literals enabled. No migration declares the table and nothing reads it, so whether it should exist is a store decision rather than a two-character fix. Absent from production, measured read-only 2026-09-24."
+    },
+    "index:idx_metric_anomalies_project": {
+      "refusal": "no such table: main.metric_anomalies",
+      "reason": "integrations/providers/stripe.ts:319 indexes metric_anomalies, which the statement above cannot create. It stands or falls with that table."
+    }
+  },
+  "opaque": {
+    "cloudflare-worker/src/util/usersRoleRebuild.ts": {
+      "statements": 4,
+      "reason": "The atomic rebuild of users under its own name, in one batch: copy to a temporary table, DROP users, re-create users from a DDL string built at runtime, copy back, drop the temporary table. The temporary name exists only inside the batch and users exists before and after it, so the rebuild changes a column constraint, never the set of object names step 9 compares."
+    }
+  }
+}

@@ -68,9 +68,7 @@ async function ensureFinancialsModelSchema(env: Env): Promise<void> {
           + ` updated_at TEXT NOT NULL DEFAULT (datetime('now'))`
           + `)`,
       );
-      try { await env.DB.exec(
-        `CREATE INDEX IF NOT EXISTS idx_financial_models_project ON financial_models(project_id)`,
-      ); } catch (e) { void e; }
+      // No second index on project_id: the UNIQUE above already is one (D235).
     } else {
       const required: Array<[string, string]> = [
         ['assumptions_json', `TEXT NOT NULL DEFAULT '{}'`],

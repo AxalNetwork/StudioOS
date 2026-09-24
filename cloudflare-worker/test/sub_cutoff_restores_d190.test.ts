@@ -486,28 +486,36 @@ test('partners.accepting_intros: the opt-out toggle 500s without 278, and stores
   assert.equal(on.body?.accepting_intros, 1, 'the toggle cannot be turned back on');
 });
 
-// ── 4 · the two this migration deliberately leaves alone ──────────────────
+// ── 4 · the two this migration left to their bootstraps, which D235 declares ─
 
-test('referral_attributions and admin_publications SELF-HEAL, which is why 278 skips them', async () => {
-  const db = freshDb();
-  const has = (t: string) => (db.prepare(
+test('referral_attributions and admin_publications are declared (D235), and their bootstraps still heal', async () => {
+  // 278 skipped both because each has a runtime bootstrap. D235 corrects that:
+  // the bootstrap heals a missing table, and the first time admin_publications'
+  // ran in production it created a name the fresh build lacked and failed
+  // deploy step 9 on every main deploy after #757. Migration 287 declares both.
+  // So the fresh build HAS them — and the bootstrap stays what it should always
+  // have been, a safety net for a database that is missing a DECLARED object,
+  // which the second half proves on a build without 287.
+  const has = (d: InstanceType<typeof DatabaseSync>, t: string) => (d.prepare(
     "SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = ?",
   ).get(t) as any).n === 1;
+  const declared = freshDb();
+  assert.equal(has(declared, 'referral_attributions'), true,
+    'a fresh build lacks referral_attributions, so a bootstrap is its only declaration again — '
+    + 'the shape that failed deploy step 9 (D235)');
+  assert.equal(has(declared, 'admin_publications'), true,
+    'a fresh build lacks admin_publications, so a bootstrap is its only declaration again (D235)');
 
-  assert.equal(has('referral_attributions'), false,
-    'referral_attributions is on a fresh build. Its ledger entry says a fresh build lacks it, '
-    + 'and that entry is what keeps the gap visible — if the build gained it, the entry is '
-    + 'stale and the guard will say so.');
-  assert.equal(has('admin_publications'), false,
-    'admin_publications is on a fresh build, so its ledger entry is stale');
+  const db = freshDb(['287_runtime_schema_declared.sql']);
+  assert.equal(has(db, 'referral_attributions'), false, 'the build without 287 must lack the table for the heal to mean anything');
+  assert.equal(has(db, 'admin_publications'), false, 'the build without 287 must lack the table for the heal to mean anything');
 
   const env = envFor(db) as any;
   const { ensureAttributionSchema } = await import('../src/services/referralAttribution.ts');
   await ensureAttributionSchema(env);
-  assert.equal(has('referral_attributions'), true,
-    'ensureAttributionSchema did not create the table. The ledger entry\'s correction rests on '
-    + 'this bootstrap working; if it does not, referral attribution really does record nothing '
-    + 'and belongs in a migration after all.');
+  assert.equal(has(db, 'referral_attributions'), true,
+    'ensureAttributionSchema did not create the table on a database missing it, so the safety net '
+    + 'D235 keeps behind migration 287 is gone.');
 
   // admin_publications' bootstrap is module-private, so it is driven through a
   // handler — which is the honest test anyway: what matters is that a READER
@@ -521,8 +529,7 @@ test('referral_attributions and admin_publications SELF-HEAL, which is why 278 s
     `the publications list did not answer 200 (${listed.status}: ${JSON.stringify(listed.body)}). `
     + 'This test is about whether a READER creates the table, so a gate or a routing miss has to '
     + 'fail as itself rather than read as a bootstrap that did not run.');
-  assert.equal(has('admin_publications'), true,
-    'a reader ran and admin_publications still does not exist. Its ledger entry says the table '
-    + 'self-heals through ensureSchema, awaited by all six handlers; if that is false the entry '
-    + 'is wrong a second time and the table needs a migration.');
+  assert.equal(has(db, 'admin_publications'), true,
+    'a reader ran on a database missing admin_publications and it still does not exist: '
+    + 'ensureSchema, awaited by all six handlers, is the safety net D235 keeps behind migration 287.');
 });

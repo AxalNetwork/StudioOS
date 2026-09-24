@@ -63,6 +63,52 @@ const MIGRATIONS = 'cloudflare-worker/sql/migrations';
 const ENGINE_OWNED = /^(_cf_[A-Z]|sqlite_)/;
 
 /**
+ * The post-cutoff migrations, as this check applies them: every numbered file
+ * above `BASELINE_CUTOFF`, in filename order, whole.
+ *
+ * EXPORTED SO THERE IS ONE LIST. `check-runtime-schema-declared.mjs` answers a
+ * question about exactly the database this step builds — can a runtime
+ * bootstrap create a name it lacks? — and a second copy of "which files, in
+ * which order" is how the two would come to build different databases while
+ * each reported success about its own.
+ */
+export function postCutoffMigrations(root = process.cwd()) {
+  return readdirSync(resolve(root, MIGRATIONS))
+    .filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF)
+    .sort()
+    .map((name) => ({ name, sql: readFileSync(resolve(root, MIGRATIONS, name), 'utf8') }));
+}
+
+/**
+ * The database the repo's schema story builds: the baseline, then each later
+ * migration whole and in order, in the same SQLite engine D1 is.
+ *
+ * Returns the database rather than its names so a second reader can keep
+ * working ON it — the runtime-schema guard executes the worker's own DDL
+ * against exactly this build. `dqs` turns on double-quoted string literals,
+ * which that guard wants as a deliberately permissive engine (a statement this
+ * build refuses with them on is refused with them off too); this step leaves
+ * them off, which is the stricter reading.
+ */
+export function buildFresh(sql, later = [], { dqs = false } = {}) {
+  const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: dqs });
+  db.exec('PRAGMA foreign_keys = ON;');
+  db.exec(sql);
+  for (const migration of later) db.exec(migration);
+  return db;
+}
+
+/** A database's schema-object names as `type:name`, engine-owned ones excluded. */
+export function objectNames(db) {
+  const rows = db.prepare(
+    "SELECT type, name FROM sqlite_master WHERE type IN ('table','index','trigger','view')",
+  ).all();
+  return new Set(
+    rows.filter((r) => !ENGINE_OWNED.test(r.name)).map((r) => `${r.type}:${r.name}`),
+  );
+}
+
+/**
  * Every object name the repo's schema story creates, by building it.
  *
  * `later` is the post-cutoff migrations, applied in order on top of the
@@ -71,16 +117,7 @@ const ENGINE_OWNED = /^(_cf_[A-Z]|sqlite_)/;
  * first one.
  */
 export function baselineObjects(sql, later = []) {
-  const db = new DatabaseSync(':memory:');
-  db.exec('PRAGMA foreign_keys = ON;');
-  db.exec(sql);
-  for (const migration of later) db.exec(migration);
-  const rows = db.prepare(
-    "SELECT type, name FROM sqlite_master WHERE type IN ('table','index','trigger','view')",
-  ).all();
-  return new Set(
-    rows.filter((r) => !ENGINE_OWNED.test(r.name)).map((r) => `${r.type}:${r.name}`),
-  );
+  return objectNames(buildFresh(sql, later));
 }
 
 /**
@@ -159,10 +196,7 @@ function liveObjects() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const later = readdirSync(resolve(process.cwd(), MIGRATIONS))
-    .filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF)
-    .sort()
-    .map((n) => readFileSync(resolve(process.cwd(), MIGRATIONS, n), 'utf8'));
+  const later = postCutoffMigrations().map((m) => m.sql);
   const baseline = baselineObjects(readFileSync(resolve(process.cwd(), BASELINE), 'utf8'), later);
   const live = liveObjects();
   const { missing, extra, ok } = compareObjects(baseline, live);
@@ -183,6 +217,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       '\nTHE DEPLOYED WORKER AND THE DATABASE ARE FINE. What has broken is the\n' +
       "repo's ability to rebuild the schema it operates: a new environment would\n" +
       'not come up matching production. Usual causes, in order of likelihood:\n' +
+      '  · a runtime `CREATE … IF NOT EXISTS` in cloudflare-worker/src created an\n' +
+      '    object no migration declares — the first request to reach it did (D235:\n' +
+      '    admin_publications, 2026-09-24). Declare it in a new migration, copied\n' +
+      '    from the runtime statement; check-runtime-schema-declared.mjs exists so\n' +
+      '    this is caught before a merge rather than here, after a deploy;\n' +
       '  · something was applied to production by hand and never written down;\n' +
       '  · a migration above the cutoff does not do what production shows;\n' +
       "  · schema_baseline.sql was edited rather than re-dumped (that is exactly\n" +

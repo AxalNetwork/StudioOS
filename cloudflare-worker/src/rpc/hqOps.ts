@@ -37,7 +37,7 @@ export const ESCALATION_KINDS = ['moderation', 'content', 'seat_increase', 'othe
 export type EscalationKind = (typeof ESCALATION_KINDS)[number];
 
 /** Hours a kind gets before it is past SLA, per the subsidiary canvas's bands. */
-const SLA_HOURS: Record<EscalationKind, number> = {
+export const SLA_HOURS: Record<EscalationKind, number> = {
   moderation: 24,
   content: 72,
   seat_increase: 72,
@@ -526,9 +526,16 @@ export type EscalationAnswer = {
   pushed_at: string;
 };
 
-/** The states HQ can move an escalation to. `open` is the write-time default. */
+/**
+ * The table's vocabulary. `open` is the write-time default. `withdrawn` is
+ * the branch taking its own request back. GET filters on this list. HQ's
+ * own decisions are `HQ_DECISION_STATUSES`.
+ */
 export const ESCALATION_STATUSES = ['open', 'answered', 'declined', 'withdrawn'] as const;
 export type EscalationStatus = (typeof ESCALATION_STATUSES)[number];
+
+/** What HQ may store as its own decision. Not `open`, and not `withdrawn`. */
+export const HQ_DECISION_STATUSES = ['answered', 'declined'] as const;
 
 /**
  * Record HQ's decision on one escalation.
@@ -568,14 +575,12 @@ export async function answerEscalation(
   }
 
   const status = String(input?.status ?? 'answered').trim().toLowerCase();
-  if (!(ESCALATION_STATUSES as readonly string[]).includes(status)) {
-    throw new Error(`answerEscalation: status must be one of ${ESCALATION_STATUSES.join(', ')}`);
-  }
-  // An answer that left the row 'open' would show as decided at HQ and
-  // undecided on the branch, which is the one inconsistency this pair of
-  // tables can produce.
+  // Checked before the decision list so this sentence stays the refusal.
   if (status === 'open') {
     throw new Error('answerEscalation: an answered escalation cannot stay open');
+  }
+  if (!(HQ_DECISION_STATUSES as readonly string[]).includes(status)) {
+    throw new Error(`answerEscalation: status must be one of ${HQ_DECISION_STATUSES.join(', ')}`);
   }
 
   const name = String(input?.answered_by_name ?? '').trim().slice(0, 200);
@@ -613,10 +618,12 @@ export async function answerEscalation(
  */
 export async function listEscalations(
   env: Env,
-  filter: { status?: string; kind?: string; branch_code?: string; limit?: number } = {},
-): Promise<Array<EscalationRow & { sla: 'ok' | 'due_soon' | 'past' }>> {
+  filter: { status?: string; kind?: string; limit?: number } = {},
+): Promise<{ items: Array<EscalationRow & { sla: 'ok' | 'due_soon' | 'past' }>; complete: boolean }> {
   requireHq(env);
   const cap = Math.max(1, Math.min(200, Number(filter.limit) || 50));
+  // One past the ceiling. If it comes back, the list was cut and the extra
+  // row is not returned, so a caller cannot print the cap as the count.
 
   // FOUR LITERAL STATEMENTS RATHER THAN AN ASSEMBLED `WHERE`. The same rule
   // D111's PATCH handler follows and for the same reason: a `${…}` inside
@@ -638,30 +645,32 @@ export async function listEscalations(
               status, due_at, created_at, answer, answered_at
          FROM hq_escalations WHERE status = ? AND kind = ?
         ORDER BY created_at ASC LIMIT ?`,
-    ).bind(status, kind, cap).all<EscalationRow>();
+    ).bind(status, kind, cap + 1).all<EscalationRow>();
   } else if (kind) {
     rows = await env.DB.prepare(
       `SELECT uid, branch_code, kind, subject, subject_ref, detail, raised_by_name,
               status, due_at, created_at, answer, answered_at
          FROM hq_escalations WHERE kind = ?
         ORDER BY created_at ASC LIMIT ?`,
-    ).bind(kind, cap).all<EscalationRow>();
+    ).bind(kind, cap + 1).all<EscalationRow>();
   } else if (status) {
     rows = await env.DB.prepare(
       `SELECT uid, branch_code, kind, subject, subject_ref, detail, raised_by_name,
               status, due_at, created_at, answer, answered_at
          FROM hq_escalations WHERE status = ?
         ORDER BY created_at ASC LIMIT ?`,
-    ).bind(status, cap).all<EscalationRow>();
+    ).bind(status, cap + 1).all<EscalationRow>();
   } else {
     rows = await env.DB.prepare(
       `SELECT uid, branch_code, kind, subject, subject_ref, detail, raised_by_name,
               status, due_at, created_at, answer, answered_at
          FROM hq_escalations
         ORDER BY created_at ASC LIMIT ?`,
-    ).bind(cap).all<EscalationRow>();
+    ).bind(cap + 1).all<EscalationRow>();
   }
 
   const now = Date.now();
-  return (rows.results || []).map((r) => ({ ...r, sla: slaBand(r.due_at, now) }));
+  const all = (rows.results || []).map((r) => ({ ...r, sla: slaBand(r.due_at, now) }));
+  const complete = all.length <= cap;
+  return { items: complete ? all : all.slice(0, cap), complete };
 }
