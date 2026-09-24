@@ -367,7 +367,7 @@ function AdminRow({ row, ladderReadable, licencesReadable, open, onOpen, onCance
   );
 }
 
-export default function HqTeamTable({ reloadKey = 0 }) {
+export default function HqTeamTable({ reloadKey = 0, onLoaded }) {
   const [data, setData] = useState(undefined); // undefined = loading, null = unreadable
   const [error, setError] = useState(null);
   const [typed, setTyped] = useState('');
@@ -408,6 +408,14 @@ export default function HqTeamTable({ reloadKey = 0 }) {
   }, [asked, viewAs]);
 
   useEffect(() => { load(); }, [load, reloadKey]);
+
+  // D221 — the page's rail reports what THIS table read rather than asking the
+  // server a second time: two reads of one roster can disagree, and a rail that
+  // says "4 administrators" beside a table showing 3 is the tile-vs-table
+  // defect D128 ended. Loading is not reported; unreadable is, as `null`.
+  useEffect(() => {
+    if (data !== undefined && typeof onLoaded === 'function') onLoaded(data);
+  }, [data, onLoaded]);
 
   if (data === undefined) {
     return (
