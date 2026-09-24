@@ -663,7 +663,7 @@ test('the roster comes out in the deck\'s own order, read by the deck\'s own rea
   const env = { DB: makeD1(db), ENVIRONMENT: 'development' } as any;
   const deck = await loadNetworkProfiles(env);
   const active = body.roster.rows.filter((r: any) => r.active);
-  assert.deepEqual(active.map((r: any) => r.name), deck.map((d) => d.name),
+  assert.deepEqual(active.map((r: any) => r.name), deck.rows.map((d) => d.name),
     'the panel and the deck read the roster in different orders');
   assert.deepEqual(active.map((r: any) => r.name), ['Mia', 'Adam', 'Zoe', 'Bea', 'Bea']);
   // Archived rows come after every active one, and are never the deck's.
@@ -704,7 +704,7 @@ test('a row with no name inside the profile cap is drawn nameless and frees a na
   const namedHere = body.roster.rows
     .filter((r: any) => (r.reach === 'profile' && r.name) || r.reach === 'named')
     .map((r: any) => r.name);
-  assert.deepEqual(namedHere, deckMentorNames(deck), 'the panel names a different eight than the deck');
+  assert.deepEqual(namedHere, deckMentorNames(deck.rows), 'the panel names a different eight than the deck');
 });
 
 test('"Role on decks" is exactly what the slide prints, and only for a row it draws', async () => {

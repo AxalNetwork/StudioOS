@@ -22431,3 +22431,63 @@ A row that existed only in `cf_dlq_mirror` was counted on Platform and missing o
 - `npm run test:drift` exits 1. Frontend: **3088** tests, **3088** pass, including `ok 903` through `ok 906`. Worker: **4015** tests, **4011** pass, **1** fail, **3** skipped. The new worker tests are `ok 1485` through `ok 1488`. The only `not ok` is `capital_call_ledger.test.ts:204`, "a retry after a partial write fills only the gap": expected 1, actual 0. That file is not in this change. The same assertion failed on the D219 run. npm stops there, so the later drift steps were run on their own and exited 0.
 
 **285 is still the next free migration.**
+
+## D225
+
+**A failed roster read is not an empty roster.** `loadNetworkProfiles`
+(`cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts`) fed the Demo
+Day deck's Team & Network slide. It first ran
+`ensureNetworkProfilesSchema` on every read — turning "no table" into
+"empty table" in development/preview — and then swallowed any other error
+behind a bare `catch { return [] }`. So an unreadable `network_profiles`
+table drew the same "no advisors" state as a genuinely empty roster, on a
+deck founders show investors, with no way to tell the two apart.
+
+**What shipped.** `loadNetworkProfiles` now answers
+`{ rows, available, reason }` — the same shape `services/supportQueues.ts`
+and `services/operatorSwitches.ts` already use for "a store that could not
+be read reports itself instead of reading as empty." It no longer calls
+`ensureNetworkProfilesSchema`: that stays a write-path bootstrap only
+(`routes/admin_network_profiles.ts` and `routes/network_public.ts` already
+call it on their own paths), so a read never silently creates the table it
+failed to read. `fillAxalSpinoutDemoDay`'s `mentor_network.body` now says
+*"Network roster unreadable: \<reason\>"* instead of falling through to the
+zero-roster copy; every other reader of the roster (`profiles`,
+`skill_coverage`, `network`, `mentors`) is unchanged — they already treated
+`[]` correctly, and `rows` is `[]` in both the empty and the unreadable
+case, so only the body copy tells them apart.
+
+**Left alone.** `DECK_ROSTER_PROFILES` / `DECK_ROSTER_NAMES`
+(`deckRoster.ts`) and every other deck section. `network_public.ts`'s own
+`ensureNetworkProfilesSchema` call, which is a write-adjacent public route,
+not this read path.
+
+**No migration.** No `/api/*` method and no `frontend/src` change, so
+`check-api-drift` has nothing to say and `docs/` is not rebuilt.
+
+### VERIFIED
+
+- `cloudflare-worker/test/network_roster_read_d225.test.ts`: **5** tests
+  against real `node:sqlite` (schema from `schema_baseline.sql`, not a
+  hand-written fixture) plus one fake-env pipeline test, exit 0. Table
+  present: rows in display order, `available: true`, no `reason`. Table
+  present but empty: `available: true`, `rows: []` — the empty case, not
+  the unreadable one. Table dropped: `available: false`, `rows: []`, a
+  reason naming the table. A dropped table stays dropped across the read —
+  no `CREATE TABLE` is ever prepared or exec'd by `loadNetworkProfiles`, and
+  the table is still missing afterward. The full `fillAxalSpinoutDemoDay`
+  pipeline, given an env that throws "no such table" on `network_profiles`,
+  produces `mentor_network.body` naming the roster unreadable, not the
+  empty-roster copy.
+- `cloudflare-worker/test/content_studio_d214.test.ts`'s two direct callers
+  of `loadNetworkProfiles` were updated to the new `{ rows }` shape and
+  still pass (32/32); `content_studio_d214.test.ts`'s own roster reader in
+  `admin_content.ts` is a separate SELECT with its own `available`/`reason`
+  handling and needed no change.
+- `cd cloudflare-worker && npx --no-install tsc --noEmit` exits 0.
+- Two mutations, each restored byte-identical from a saved copy: (1)
+  reinstating the `ensureNetworkProfilesSchema` call and swallowing the
+  error back into `{ rows: [], available: true }` — caught by two of the
+  five new tests failing. Restored, all five pass again.
+
+**285 is still the next free migration.**
