@@ -470,7 +470,7 @@ test('every listed escalation carries an SLA band derived on read, never stored'
   const env = { DB: makeD1(db), JWT_SECRET } as any;
   await recordEscalation(env, 'fr', { kind: 'moderation', subject: 'Due in 24h' });
 
-  const rows = await listEscalations(env, {});
+  const rows = (await listEscalations(env, {})).items;
   assert.equal(rows.length, 1);
   assert.ok(['ok', 'due_soon', 'past'].includes(rows[0].sla));
   // The band is a function of the date and NOW — proven by asking for a band

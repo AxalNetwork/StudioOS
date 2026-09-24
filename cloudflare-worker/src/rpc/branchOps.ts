@@ -747,9 +747,10 @@ export async function applyEscalationAnswer(
     String(a.answer ?? '').slice(0, 4000),
     String(a.answered_by_name ?? '').slice(0, 200) || null,
     String(a.answered_at ?? ''),
-    // HQ's vocabulary is wider than the branch's — 'declined' and 'withdrawn'
-    // are both decided as far as this lane is concerned, and inventing two more
-    // local states would mean the CHECK constraint and HQ's list drifting.
+    // The branch stores two states. A pushed status other than 'open' is
+    // decided here, including a 'withdrawn' an older HQ might still send.
+    // That word is the branch taking its request back, not one of HQ's
+    // decisions; collapsing it keeps this CHECK from growing a second list.
     String(a.status ?? '') === 'open' ? 'open' : 'answered',
     String(a.pushed_at ?? ''), nowIso(), uid,
   ).run();

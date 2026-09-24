@@ -1445,13 +1445,20 @@ export default {
       let cronSummary: string[] = [];
       let cronError: string | null = null;
 
+      // D239 — EVERY GATE BELOW ASKS "WHICH SCHEDULED MINUTE IS THIS?", so it
+      // reads the event's own time, fixed BEFORE the queue drain. It read the
+      // wall clock AFTER the drain until D239, so a drain that crossed a
+      // minute boundary made the tick look at the next minute: the 03:00
+      // tick finishing its drain at 03:01 skipped every 03:00 block, and
+      // nothing recorded it. The wall clock stays for stamps of the sweep's
+      // own acts (D122's rule; the classification is in D239's entry).
+      const now = new Date(Number.isFinite(event.scheduledTime) ? event.scheduledTime : Date.now());
       try {
         const r = await processQueueBatch(env, 25);
         if (r.processed || r.failed) {
           console.info(`[cron] drain processed=${r.processed} failed=${r.failed}`);
           cronSummary.push(`drain processed=${r.processed} failed=${r.failed}`);
         }
-        const now = new Date();
         // D106 — PLATFORM CONTENT IS HQ'S WORK, AND N BRANCHES MUST NOT EACH
         // DO IT. Four cadences below fetch from the open internet or send a
         // platform-wide digest: the Founder Signals refresh, the whole
@@ -2173,7 +2180,11 @@ export default {
         if (now.getUTCMinutes() % 15 === 0) {
           try {
             const { sweepWatchlistReminders } = await import('./services/watchlistReminders');
-            const r = await sweepWatchlistReminders(env, now);
+            // D239 — the WALL clock, on purpose: `now` here decides whether a
+            // reminder is due by now and stamps `reminded_at`, the moment the
+            // reminder was actually sent. Neither asks which minute this is;
+            // the block's own gate above already did.
+            const r = await sweepWatchlistReminders(env, new Date());
             if (r.sent > 0) {
               console.info(`[cron] watchlist reminders candidates=${r.candidates} sent=${r.sent}`);
             }

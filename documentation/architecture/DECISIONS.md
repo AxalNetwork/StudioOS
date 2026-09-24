@@ -23099,6 +23099,43 @@ row; converting them, if ever wanted, is the owner's call.
 
 **285 is still the next free migration.**
 
+## D231
+
+**Two escalation contracts were stated and not kept.** `listEscalations`
+declared `branch_code` on its filter and none of its four statements bound
+it. Nothing calls that filter. `answerEscalation`, which is HQ's PATCH,
+accepted `withdrawn`. Withdrawing is the branch taking its request back.
+
+**What shipped.** `branch_code` is gone from the filter type. No branch
+filter was added. `HQ_DECISION_STATUSES` is `['answered', 'declined']`, and
+`answerEscalation` validates against it. `open` is still refused first, with
+the sentence "an answered escalation cannot stay open". The route's existing
+map answers 400 `bad_status`. `ESCALATION_STATUSES` stays the table's
+vocabulary, including `withdrawn`, because GET filters on it.
+`applyEscalationAnswer` is unchanged: anything other than `open` still
+becomes `answered` on the branch. Its comment no longer calls `withdrawn`
+one of HQ's decisions. The SPA already offers only `answered` and `declined`.
+
+**`slaBand(null)` stays `'ok'`.** `SLA_HOURS` is a `Record` of every
+escalation kind, and `recordEscalation` writes `due_at` from it as ISO, so
+a row this writer stores is never null and never unparseable. A null clock
+can only come from a hand-written row. HQ Home and HQ Support would draw
+that band as "on time". A fourth band was not added. A test fails the day a
+kind is added to `ESCALATION_KINDS` without hours in `SLA_HOURS`.
+
+**No migration. No new route.**
+
+### VERIFIED
+
+- `cloudflare-worker/test/escalation_contracts_d231.test.ts` covers the
+  refused withdrawal, the unchanged row, no push, `answered` and `declined`,
+  GET `?status=withdrawn`, every kind's SLA hours, and a filter type that
+  names no unread key.
+- Four mutations, each restored from a snapshot and checked by sha256.
+  Accepting `withdrawn`, deleting `moderation`'s hours, returning a cut list
+  as complete, and printing the capped length each exited non-zero with a
+  `not ok` line.
+
 ## D232
 
 **Four dead symbols, re-grepped and removed.** The first three are `api.js`
@@ -23245,6 +23282,30 @@ signature gained a parameter, not a new export.
 - `node scripts/check-decision-ids.mjs` exits 0 (D1 through D233).
 
 **285 is still the next free migration.**
+
+## D234
+
+**"Submitted for approval" stopped at 100 and still printed 100.**
+`GET /api/admin/escalations` listed at most 100 rows and did not say when
+there were more. HQ Content rendered `laneItems.length`.
+
+**What shipped.** `listEscalations` reads one past its limit and returns
+`complete: false` when that extra row exists. The extra row is not in
+`items`. The route returns `complete` beside `items`. The page shows the
+count only when `complete` is true. A cut read renders "Not counted", with
+the reason that the read stopped at its ceiling.
+
+**No migration. No new route.** `docs/` was rebuilt because `frontend/src` moved.
+
+### VERIFIED
+
+- The worker test asks for `limit: 1` with two rows and gets one item and
+  `complete: false`. A complete read of two rows returns `complete: true`.
+- `frontend/test/hq_content_platform_h6.test.mjs` pins `submittedFigure`: it
+  returns the length only when `lane.complete === true`, and otherwise null.
+  The tile renders "Not counted" when the read was cut. Returning the capped
+  length failed that test (non-zero exit, one `not ok` line) and was restored
+  by sha256.
 
 ## D235 — a runtime bootstrap is a safety net for a declared object, never the only declaration
 
@@ -23543,6 +23604,82 @@ a name `infra.ts` no longer imports. It was caught, but by a crash, not by the
 list the route returned. It was re-run as a real hard-coding, `triggersFor({}
 as any)`, and that version fails on the list itself. That re-run is the sixth
 mutation above.
+
+## D239
+
+**The scheduled handler's gates now read the event's own time (task 326).**
+Every block in `scheduled()` gates on "which minute is this?", and the clock
+they read was taken with `new Date()` AFTER `processQueueBatch`. When a drain
+crossed a minute boundary, the tick then looked at the next minute. The 03:00
+tick that finished its drain at 03:01 skipped every 03:00 block, and nothing
+recorded it: the cron row still said `completed`. The gate clock is now
+`new Date(event.scheduledTime)`, fixed BEFORE the drain. If `scheduledTime` is
+not a number it falls back to `Date.now()`. It is still named `now`, so the
+gate patterns `branch_licence_copy.test.ts` pins are unchanged.
+
+**No migration.**
+
+### EVERY CONSUMER OF `now`, CLASSIFIED BY D122'S RULE
+
+D122's rule is that a stamp records the moment the thing it represents
+happened. A gate asks which scheduled minute this is, so it reads
+`scheduledTime`. A row that stamps the sweep's own act may keep the wall clock.
+
+| consumer | what `now` decides | clock |
+| --- | --- | --- |
+| every block condition (`now.getUTCHours()/Minutes()/Day()/Date()/Month()`) | which minute's blocks run | **scheduled** |
+| `runCohortTimingTick(env, now)` | its own `% 15 === 1` materialisation gate, and which windows are due | **scheduled** |
+| `runCohortApplicationsTick(env, now)` | the Delaware year-month and which windows are due | **scheduled** |
+| `renewalSweep(env, now)` | the days-left buckets that choose a reminder | **scheduled** |
+| `currentPeriod(now)` (benchmarks) | which quarter is published | **scheduled** |
+| `sendMarketIntelDigests(env, now)` | `isDigestWindow` (weekly/monthly), and `last_sent_at` | **scheduled** (see below) |
+| `sweepEventReminders(env, now)` | the hours-until buckets (its candidate SQL uses `datetime('now')`, unchanged) | **scheduled** |
+| `sweepWatchlistReminders(env, …)` | whether a reminder is due by now, and the `reminded_at` stamp | **wall clock**, `new Date()` |
+
+`cronStartedAt` (the cron row's `started_at`) and the D237 prune's cutoff are
+not in the table. They never read `now`, and both keep the wall clock.
+
+**One compromise, recorded rather than hidden.** `sendMarketIntelDigests`
+takes one `Date` for two jobs: its digest-window gate and the `last_sent_at`
+stamp it writes after sending. The gate is the one a boundary-crossing drain
+breaks, since a skipped digest is a missed email. So it gets the scheduled
+minute, and `last_sent_at` records that minute rather than the wall clock
+second, which is at most the drain's length earlier. Splitting the parameter
+would change a service outside this task.
+
+### HOW IT IS HELD
+
+`cloudflare-worker/test/cron_scheduled_time_d239.test.ts` (new, 5 tests)
+drives the **real** `scheduled()`. It bundles `src/index.ts` with esbuild, the
+bundler Wrangler uses. Node's type stripping cannot load the worker's module
+graph, because several files import a type as a value. The bundle maps
+`cloudflare:*` to a stub and loads `*.md?raw` as text. `Date` is mocked, and the
+stub database moves the clock while the drain reads the queue. The tests:
+
+- The 03:00 tick whose drain ends at 03:01 still runs the 03:00 block
+  (`Jobs.cleanup`).
+- The same tick with a quick drain runs it too (the control).
+- A 03:00 tick delivered late, at 03:01:05, still runs it. Gating on the wall
+  clock read before the drain would get this wrong too.
+- A tick scheduled for 03:01 does not run it.
+- Read from source:
+  - the gate clock is set from `scheduledTime` before the drain;
+  - `now` is declared once;
+  - no block condition reads `new Date()`;
+  - the watchlist sweep's wall clock stays.
+
+Five mutations were each run both ways: break the code, see a named test fail
+with a non-zero exit, restore from a sha256-checked snapshot, see it pass.
+
+1. The gate clock taken after the drain again (the old code) — fails the
+   boundary test itself.
+2. The gate clock read before the drain but from the wall clock.
+3. The watchlist sweep moved onto the scheduled clock.
+4. The 03:00 gate alone reverted to the wall clock.
+5. The 04:50 gate alone reverted to the wall clock.
+
+The fifth was caught only by the source guard. That guard was added once it
+was clear the behavioural tests drive only the 03:00 block.
 
 ## D240
 
