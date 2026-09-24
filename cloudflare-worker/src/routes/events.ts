@@ -104,13 +104,19 @@ function intParam(v: string | undefined): number | null {
 // Task #7 — light track→event-type affinity for /suggested. The assessment
 // `track` is a game slug (e.g. 'founder_origin_v1'); we key off its prefix so
 // new tracks degrade gracefully to the default set.
-function preferredEventTypes(track: string | null | undefined): Set<string> {
+export function preferredEventTypes(track: string | null | undefined): Set<string> {
   const t = String(track || '').toLowerCase();
   if (t.startsWith('founder')) return new Set(['demo_day', 'workshop', 'office_hours']);
   // 'lp_briefing' joins this set with the type itself — an LP briefing is the
   // event an investor most wants suggested, and until now there was no type
   // for one. See services/eventTypes.ts.
-  if (t.startsWith('investor')) return new Set(['demo_day', 'lp_briefing', 'conference', 'webinar']);
+  // D256 — the investor/LP assessment track's own game slug is
+  // 'thesis_lab_v1' (assessmentSchema.ts's INVESTOR_TRACK), not
+  // 'investor_*'; this prefix matched nothing for it and it fell to the
+  // default set until this line was added.
+  if (t.startsWith('investor') || t.startsWith('thesis')) {
+    return new Set(['demo_day', 'lp_briefing', 'conference', 'webinar']);
+  }
   if (t.startsWith('partner')) return new Set(['conference', 'meetup', 'social']);
   if (t.startsWith('operator')) return new Set(['workshop', 'webinar', 'office_hours']);
   return new Set(['demo_day', 'workshop', 'meetup']);
