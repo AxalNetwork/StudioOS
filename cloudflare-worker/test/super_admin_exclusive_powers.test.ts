@@ -35,26 +35,28 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 
 import admin from '../src/routes/admin.ts';
 import monitoringAnalytics from '../src/routes/monitoring_analytics.ts';
+import { AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, stepUpRefusalBody } from '../src/util/authErrors.ts';
 
 const app = new Hono<any>();
 app.route('/', admin);
 // `requireAdmin` / `requireSuperAdmin` refuse by throwing; the status comes from
 // `app.onError` in index.ts, which is not in the chain for a directly dispatched
-// sub-app. Replicated so a refusal is not asserted as a 500.
+// sub-app. Replicated from the ONE table index.ts reads (util/authErrors.ts), so
+// a refusal is not asserted as a 500 — and D247's factor and step-up refusals
+// answer here exactly as they do in production.
 app.onError((err: any, c) => {
-  const status = ({
-    Unauthorized: 401,
-    'Admin required': 403,
-    'Super admin required': 403,
-    'HQ only': 403,
-  } as Record<string, 401 | 403>)[String(err?.message || '')];
-  if (status) return c.json({ detail: err.message }, status);
+  const msg = String(err?.message || '');
+  if (msg === STEP_UP_REQUIRED) return c.json(stepUpRefusalBody(err), 403);
+  const status = AUTH_ERROR_STATUSES[msg];
+  if (status) return c.json({ detail: msg }, status);
   throw err;
 });
 
@@ -87,6 +89,27 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
   };
 }
 
+const BASELINE = readFileSync(
+  resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8',
+);
+/** One table's CREATE TABLE, verbatim from the baseline. A literal search, never a built regex. */
+function ddl(name: string): string {
+  const at = `\n${BASELINE}`.indexOf(`\nCREATE TABLE ${name} (`);
+  assert.ok(at >= 0, `${name} is no longer defined in schema_baseline.sql`);
+  const end = BASELINE.indexOf(');', at);
+  assert.ok(end > at, `${name}'s definition in the baseline is unterminated`);
+  return BASELINE.slice(at, end + 2);
+}
+
+/**
+ * D247 — the sessions the write bar reads. `totp-<id>` is TOTP-minted and
+ * stepped up just now; `stale-<id>` is TOTP-minted but its step-up is an hour
+ * old, past STEP_UP_TTL_MINUTES; `sms-<id>` was never a TOTP session at all.
+ */
+const FRESH = (id: number) => `totp-${id}`;
+const STALE = (id: number) => `stale-${id}`;
+const SMS = (id: number) => `sms-${id}`;
+
 function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(`
@@ -99,36 +122,69 @@ function freshDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, details TEXT, actor TEXT, user_id INTEGER
     );
   `);
+  db.exec(ddl('user_sessions'));
+  db.exec(ddl('admin_audit_log'));
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)');
   u.run(SUPER, 'admin', 'Sue', 'sue@axal.example');
   u.run(PLAIN, 'admin', 'Pat', 'pat@axal.example');
   u.run(OTHER_ADMIN, 'admin', 'Otto', 'otto@axal.example');
   u.run(MEMBER, 'founder', 'Fran', 'fran@example.com');
   db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(SUPER);
+  const sess = db.prepare(
+    `INSERT INTO user_sessions (jti, user_id, factor, created_at, last_step_up_at) VALUES (?, ?, ?, ?, ?)`,
+  );
+  for (const id of [SUPER, PLAIN]) {
+    sess.run(FRESH(id), id, 'totp', null, null);
+    sess.run(STALE(id), id, 'totp', null, null);
+    sess.run(SMS(id), id, 'sms', null, null);
+  }
+  // Bound values are literals, so the timestamps are set in SQL, where
+  // datetime() is evaluated: fresh is now, stale is an hour ago.
+  db.exec(`UPDATE user_sessions SET created_at = datetime('now'), last_step_up_at = datetime('now') WHERE jti LIKE 'totp-%'`);
+  db.exec(`UPDATE user_sessions SET created_at = datetime('now', '-60 minutes'), last_step_up_at = datetime('now', '-60 minutes') WHERE jti LIKE 'stale-%'`);
+  db.exec(`UPDATE user_sessions SET created_at = datetime('now') WHERE jti LIKE 'sms-%'`);
   return db;
 }
 
 const env = (db: InstanceType<typeof DatabaseSync>) =>
   ({ JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db) });
 
-async function token(userId: number): Promise<string> {
-  return new SignJWT({ user_id: userId, role: 'admin' })
+/** A bare JWT — no session behind it — unless a session id is given. */
+async function token(userId: number, jti?: string): Promise<string> {
+  return new SignJWT({ user_id: userId, role: 'admin', ...(jti ? { jti } : {}) })
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
     .sign(new TextEncoder().encode(JWT_SECRET));
 }
 
+/**
+ * PATCH toggle-active. With no options it sends what the SPA sent before D247:
+ * a bare JWT and no body. `session` names the user_sessions row the JWT is
+ * bound to; `reason` sends `{ reason }`.
+ */
 async function toggleActive(
   e: any, actor: number, targetId: number,
+  opts: { session?: string; reason?: string } = {},
 ): Promise<{ status: number; body: any }> {
+  const headers: Record<string, string> = { Authorization: `Bearer ${await token(actor, opts.session)}` };
+  if (opts.reason !== undefined) headers['Content-Type'] = 'application/json';
   const res = await app.request(
     `/users/${targetId}/toggle-active`,
-    { method: 'PATCH', headers: { Authorization: `Bearer ${await token(actor)}` } },
+    {
+      method: 'PATCH', headers,
+      body: opts.reason !== undefined ? JSON.stringify({ reason: opts.reason }) : undefined,
+    },
     e,
   );
   let body: any = null;
   try { body = await res.json(); } catch { /* empty */ }
   return { status: res.status, body };
 }
+
+const REASON = 'Licence terminated on 2026-09-20; account closed per the notice.';
+const auditRows = (db: InstanceType<typeof DatabaseSync>) =>
+  db.prepare('SELECT admin_user_id, action, viewed_user_id, filters_json FROM admin_audit_log ORDER BY id').all() as any[];
+const activity = (db: InstanceType<typeof DatabaseSync>) =>
+  db.prepare('SELECT action, details, user_id FROM activity_logs ORDER BY id').all() as any[];
 
 const activeOf = (db: InstanceType<typeof DatabaseSync>, id: number): number =>
   Number((db.prepare('SELECT is_active FROM users WHERE id = ?').get(id) as any)?.is_active);
@@ -153,11 +209,95 @@ test('the super admin can deactivate an admin', async () => {
   // THE OTHER DIRECTION, AND IT IS NOT OPTIONAL. "The super admin has the
   // capacity to ban and close admin accounts" — a guard that also stopped HQ
   // would break the tier it exists to protect.
+  //
+  // D247 — re-aimed, not loosened. This sent a bare JWT and no body, and
+  // passed because the route asked for nothing. It now sends what demote
+  // requires — a TOTP-minted session stepped up just now, and a reason — and
+  // the refusals below prove each of the three is required, not decorative.
   const db = freshDb();
-  const r = await toggleActive(env(db), SUPER, OTHER_ADMIN);
-  assert.equal(r.status, 200);
+  const r = await toggleActive(env(db), SUPER, OTHER_ADMIN, { session: FRESH(SUPER), reason: REASON });
+  assert.equal(r.status, 200, `the super admin was refused: ${JSON.stringify(r.body)}`);
   assert.equal(r.body?.is_active, false);
   assert.equal(activeOf(db, OTHER_ADMIN), 0);
+});
+
+/* ------------------------------------------------------------------ *
+ * D247 — an admin target takes demote's bar                           *
+ * ------------------------------------------------------------------ */
+
+test('D247: the reason reaches both activity rows and one audit row that names the target', async () => {
+  const db = freshDb();
+  const r = await toggleActive(env(db), SUPER, OTHER_ADMIN, { session: FRESH(SUPER), reason: REASON });
+  assert.equal(r.status, 200);
+  const rows = activity(db);
+  const admin = rows.find((x) => x.action === 'user_toggled');
+  const subject = rows.find((x) => x.action === 'account_status_changed');
+  assert.ok(admin && subject, 'a side of the toggle was not recorded');
+  assert.ok(String(admin.details).endsWith(`Reason: ${REASON}`), `the admin's row lost the reason: ${admin.details}`);
+  assert.ok(String(subject.details).endsWith(`Reason: ${REASON}`), `the target's row lost the reason: ${subject.details}`);
+  assert.equal(subject.user_id, OTHER_ADMIN, 'the target\'s row is not on the target');
+  const audit = auditRows(db);
+  assert.equal(audit.length, 1, 'one deactivation must write exactly one audit row');
+  assert.equal(audit[0].action, 'admin_account_deactivated');
+  assert.equal(audit[0].admin_user_id, SUPER);
+  assert.equal(audit[0].viewed_user_id, OTHER_ADMIN,
+    'the audit row has no subject — Security\'s Target column would be blank (D159)');
+  assert.equal(JSON.parse(audit[0].filters_json).reason, REASON, 'the audit row lost the reason');
+});
+
+test('D247: no TOTP-minted session → 403, and nothing changes', async () => {
+  const db = freshDb();
+  for (const session of [undefined, SMS(SUPER)]) {
+    const r = await toggleActive(env(db), SUPER, OTHER_ADMIN, { session, reason: REASON });
+    assert.equal(r.status, 403, `${session ?? 'a bare JWT'} deactivated an admin with no authenticator`);
+    assert.equal(r.body?.detail, 'TOTP required');
+  }
+  assert.equal(activeOf(db, OTHER_ADMIN), 1);
+  assert.equal(auditRows(db).length, 0);
+  assert.equal(activity(db).filter((x) => x.action === 'user_toggled').length, 0);
+});
+
+test('D247: a stale step-up → 403 step_up_required, and nothing changes', async () => {
+  const db = freshDb();
+  const r = await toggleActive(env(db), SUPER, OTHER_ADMIN, { session: STALE(SUPER), reason: REASON });
+  assert.equal(r.status, 403, 'an hour-old step-up closed an administrator account');
+  assert.equal(r.body?.code, 'step_up_required');
+  assert.equal(activeOf(db, OTHER_ADMIN), 1);
+  assert.equal(auditRows(db).length, 0);
+});
+
+test('D247: a reason shorter than 10 characters → 400, and nothing is written', async () => {
+  const db = freshDb();
+  // Checked after EVERY attempt, not once at the end. The first draft checked
+  // once, and a mutation that moved the reason check below the write escaped
+  // it: four refused toggles flip the account four times and land it back
+  // where it started. Each 400 must leave the account exactly as it was.
+  for (const reason of [undefined, '', '         ', '123456789']) {
+    const r = await toggleActive(env(db), SUPER, OTHER_ADMIN, { session: FRESH(SUPER), reason });
+    assert.equal(r.status, 400, `${JSON.stringify(reason)} was accepted as a reason`);
+    assert.equal(r.body?.code, 'reason_too_short');
+    assert.equal(activeOf(db, OTHER_ADMIN), 1,
+      `${JSON.stringify(reason)}: the account was toggled before the reason was checked — a 400 over a completed write is not a guard`);
+  }
+  assert.equal(auditRows(db).length, 0);
+  assert.equal(activity(db).length, 0);
+  const ok = await toggleActive(env(db), SUPER, OTHER_ADMIN, { session: FRESH(SUPER), reason: '1234567890' });
+  assert.equal(ok.status, 200, 'ten characters is the floor, and it was refused');
+});
+
+test('D247: a non-admin target still toggles with no authenticator, step-up or reason', async () => {
+  // The everyday act D132 kept. The bar is on the TARGET's role, so a founder
+  // stays one click away for every admin — HQ included — and leaves no audit
+  // row, because nothing about it is admin-over-admin.
+  const db = freshDb();
+  for (const actor of [SUPER, PLAIN]) {
+    const r = await toggleActive(env(db), actor, MEMBER);
+    assert.equal(r.status, 200, `actor ${actor} was asked for something to toggle a founder: ${JSON.stringify(r.body)}`);
+  }
+  assert.equal(activeOf(db, MEMBER), 1, 'two toggles should leave the founder where they started');
+  assert.equal(auditRows(db).length, 0);
+  assert.ok(activity(db).every((x) => !String(x.details).includes('Reason:')),
+    'a founder toggle was given a reason nobody typed');
 });
 
 test('a subsidiary admin still manages their own territory\'s members', async () => {
@@ -202,9 +342,16 @@ test('reactivating an admin is the same power as deactivating one', async () => 
   assert.equal(refused.status, 403, 'a peer must not reactivate an admin HQ closed');
   assert.equal(activeOf(db, OTHER_ADMIN), 0);
 
-  const allowed = await toggleActive(env(db), SUPER, OTHER_ADMIN);
+  // D247 — re-opening is on the same bar as closing, so HQ brings the session
+  // and the reason here too, and the audit row says which way it went.
+  const bare = await toggleActive(env(db), SUPER, OTHER_ADMIN);
+  assert.equal(bare.status, 403, 'HQ re-opened an administrator account with no authenticator');
+  assert.equal(activeOf(db, OTHER_ADMIN), 0);
+
+  const allowed = await toggleActive(env(db), SUPER, OTHER_ADMIN, { session: FRESH(SUPER), reason: REASON });
   assert.equal(allowed.status, 200);
   assert.equal(activeOf(db, OTHER_ADMIN), 1);
+  assert.deepEqual(auditRows(db).map((a) => a.action), ['admin_account_reactivated']);
 });
 
 /* ------------------------------------------------------------------ *

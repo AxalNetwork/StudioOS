@@ -23963,3 +23963,129 @@ sha256-verified snapshot:
 Both typechecks, `check-decision-ids`, `check-folder-docs`, `check-api-drift`
 and `check-docs-fresh --strict` exit 0. `frontend/src` did not move, so
 `docs/` was not rebuilt.
+
+## D247
+
+**Deactivating an administrator now takes demote's bar: a TOTP-minted
+session, a fresh step-up and a typed reason of at least 10 characters. The
+reason reaches both activity rows, and the act is recorded through
+`logAdminAction` with the account as its target.** Task 398.
+
+**No migration, no new route.** `adminToggleActive` gains an optional reason.
+
+### THE DEFECT
+
+`PATCH /api/admin/users/:userId/toggle-active` (`routes/admin.ts`) closes or
+re-opens an account. D132 made an administrator target the Super Admin's
+alone. That was the only bar:
+- no authenticator and no step-up;
+- no reason, because the body was never read;
+- two `activity_logs` rows, `user_toggled` and `account_status_changed`,
+  neither carrying a reason;
+- no `admin_audit_log` row, so Security's Target column had no subject.
+
+Demote, the sibling act, takes `requireSuperAdminWriteBar` (TOTP, step-up,
+then the holder) and a reason of at least 10 characters. Closing an
+administrator's account silences them as surely as demoting them, so the
+weaker bar was the one an attacker holding a stale HQ session would use.
+
+### WHAT CHANGED
+
+- **The order of checks.**
+  - `requireAdmin` stays first. It is D135's freeze gate, and the compliance
+    ladder's write probe is this route (`compliance_ladder_d135.test.ts`).
+  - Then the self-refusal, then D132's admin-target refusal. Both answer
+    without the new checks.
+  - Then, for an administrator target only: `requireFactor(c, 'totp')`,
+    `requireStepUp(c)`, and the reason. All of them come before the write, so
+    a refused toggle changes nothing.
+- **Both directions.** The route toggles, and re-opening an account HQ closed
+  is the same power as closing it, so re-opening asks for all three too.
+- **A non-admin target is unchanged, on purpose.** Any admin may disable and
+  re-enable a founder in their own territory with one click. That is the
+  everyday act D132 kept, and a reason prompt there would put friction on the
+  common case to guard the rare one.
+- **The record.**
+  - Both activity rows end `Reason: …`. The target's row still says "by an
+    Axal admin" and does not name the admin.
+  - `logAdminAction` writes `admin_account_deactivated` or
+    `admin_account_reactivated` with `{ target_user_id, reason, is_active }`,
+    so Security's Target column names the account and `reasonFrom` lifts the
+    reason. It is imported dynamically, because `services/adminAudit.ts`
+    imports `ensureAdminAuditLogTable` from `routes/admin.ts`.
+  - **One act shows as two lines under Security's "All actions":** the
+    `user_toggled` suspension line (which the Suspensions filter reads, and
+    which now carries the reason) and the audit line (which names the target).
+    The feed does not de-duplicate across stores, and this entry states it
+    rather than hiding either.
+- **The page.** `handleToggleActive` takes the row, not its id.
+  - On an administrator's row it asks for the reason with `window.prompt`,
+    the idiom Demote already uses on the licence's Administrators tab.
+    Cancelling sends nothing.
+  - `adminToggleActive(userId, reason)` sends a body only when there is a
+    reason, the shape `adminUpdateRole` uses.
+  - The step-up prompt is `request()`'s existing one.
+- **The H20 card.** The Deactivate note said "no authenticator, step-up or
+  reason asked", which was true. It now names the three checks and says that
+  re-opening asks for them again. The Recorded column adds the audit log.
+
+### PINS
+
+- `super_admin_exclusive_powers.test.ts`: "the super admin can deactivate an
+  admin" and the reactivation test sent a bare JWT with no session, no TOTP
+  and no body. They are re-aimed, not loosened: they now send a TOTP-minted,
+  just-stepped-up session and a reason, and the reactivation test first
+  proves a bare JWT is refused. The fixture reads `user_sessions` and
+  `admin_audit_log` from `schema_baseline.sql`. The error handler is
+  replicated from `util/authErrors.ts`, the one table `index.ts` reads.
+- `hq_team_h20.test.mjs`: the row pin `handleToggleActive(u.id)` becomes
+  `handleToggleActive(u)`. The drawer's two pins match unchanged.
+- `admin_role_override.test.mjs` slices `api.js` from `adminUpdateRole:` to
+  `adminToggleActive:`. `adminToggleActive` still follows it directly, so the
+  slice still bounds `adminUpdateRole`. D247's comment above the method falls
+  inside the slice and contains none of the patterns it checks.
+
+### VERIFIED
+
+Five new worker tests in `super_admin_exclusive_powers.test.ts`:
+- the reason reaches both activity rows, and exactly one audit row names the
+  target and carries the reason;
+- a bare JWT and an SMS-minted session → 403 `TOTP required`, nothing written;
+- a step-up an hour old → 403 `step_up_required`, nothing written;
+- no reason, an empty one, spaces, and 9 characters → 400 `reason_too_short`.
+  The account is unchanged after each attempt, and 10 characters passes;
+- a founder toggles for both HQ and a plain admin with no session and no
+  reason, and no audit row is written.
+
+One new frontend test in `hq_team_h20.test.mjs`. It reads the handler for the
+order requireAdmin < the D132 refusal < factor < step-up < reason < write <
+audit, and reads the page and `api.js` for the prompt and the forwarded reason.
+
+**Mutation checks: twelve runs, all caught in the end,** each alone and
+restored from a sha256-verified snapshot:
+- the brief's five, against the worker tests:
+  - drop `requireStepUp` for an admin target;
+  - accept a 9-character reason;
+  - move the reason check after the write;
+  - key the audit row `user_id` (the D159 guard and the new audit test both
+    fail);
+  - demand a reason for a non-admin target;
+- the first three again, against the frontend pin alone;
+- four against the frontend pin alone: no prompt on an admin row, the typed
+  reason not sent, `api.js` not forwarding it, and the card's note reverted.
+
+**One escaped, and the assertion was fixed, not the code.** Moving the reason
+check below the write passed the first draft of the short-reason test. That
+draft sent four short reasons and checked the account once, at the end, and
+four refused toggles flip it four times and land it where it started. The
+test now checks the account after every attempt, and the mutation is caught.
+
+**Full suite:** `npm run test:drift` on Node 22 exits 0 on `main` at
+`de6b143c`:
+- frontend 3181 (one new);
+- worker 4186 passed with 3 skipped (five new, over `main`'s 4181);
+- retention 48.
+
+`docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
+edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
+`check-folder-docs` and `check-api-drift` exit 0.

@@ -24,6 +24,12 @@ import { Card } from '../../ui';
  * route does, and the test that held it false now holds it true — against the
  * route's own two notices, so the sentence cannot outlive them.
  *
+ * ONE OF THIS CARD'S OWN NOTES WAS TRUE AND WEAK, AND IS NOW STRONGER. The
+ * Deactivate note said the Super Admin could close an administrator's account
+ * with no authenticator, step-up or reason asked — accurately, until D247 gave
+ * the act demote's bar. The note says what the route now requires, and the
+ * test reads the route for the three checks so the sentence cannot outlive them.
+ *
  * ONE ROW IS NOT HQ'S, AND IT SAYS SO RATHER THAN MOVING. "View as a role shell"
  * is offered to every admin — HQ, the holder and a branch admin alike — by the
  * shell's own picker, and it changes nothing but this browser's chrome. The
@@ -64,10 +70,10 @@ export const HQ_ONLY_ACTIONS = [
     key: 'demote_deactivate',
     name: 'Demote or deactivate an Admin',
     hq: true,
-    gate: 'Demote: your authenticator, a fresh step-up and a typed reason. Deactivate: the Super Admin alone, with no authenticator, step-up or reason asked. Neither reaches an admin whose account lives on a branch database.',
+    gate: 'Demote: your authenticator, a fresh step-up and a typed reason. Deactivate: the Super Admin alone, with the same three — your authenticator, a fresh step-up and a typed reason of at least 10 characters — and re-opening the account asks for them again. Neither reaches an admin whose account lives on a branch database.',
     where: 'Demote on the licence’s Administrators tab; deactivate with Disable on the directory below.',
     link: 'licences',
-    recorded: 'Yes — a demotion as a role change, a deactivation as a suspension.',
+    recorded: 'Yes — a demotion as a role change; a deactivation as a suspension, and in the audit log with the account and the reason.',
   },
   {
     key: 'transfer',

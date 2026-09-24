@@ -18,6 +18,10 @@
  * and is held the other way — the card says it, and the route's two notices are
  * read to prove the sentence is still earned.
  *
+ * ONE OF THE CARD'S OWN NOTES CHANGED WITH ITS ROUTE: D247 put deactivating an
+ * administrator on demote's bar, so "no authenticator, step-up or reason
+ * asked" became the three the route now checks, and the route is read for them.
+ *
  * RENDERED, NOT MATCHED. `HqTeamActions` is pure over one prop, so both of its
  * states are rendered with renderToStaticMarkup; the account drawer's footer is
  * rendered too, with and without each handler. The Users table itself loads in
@@ -173,6 +177,52 @@ test('D241: "both parties notified" is now true, and the card says so only while
     'a notice is sent before the write is known to have moved the elevation');
 });
 
+test('D247: deactivating an administrator takes demote\'s bar, and the card says so only while the route asks for it', () => {
+  // The card said the Super Admin closed an administrator's account with "no
+  // authenticator, step-up or reason asked" — true until D247. It now says the
+  // route asks for all three, and the route is read for them, in order: after
+  // the D132 refusal (which answers without them) and before the write.
+  const plain = text(PLAIN);
+  assert.ok(!plain.includes('no authenticator, step-up or reason asked'),
+    'the card still says deactivating an administrator asks for nothing');
+  assert.match(plain, /Deactivate: the Super Admin alone, with the same three — your authenticator, a fresh step-up and a typed reason of at least 10 characters — and re-opening the account asks for them again\./);
+  assert.match(plain, /a deactivation as a suspension, and in the audit log with the account and the reason\./);
+
+  const route = codeOnly(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin.ts'), 'utf8'));
+  const start = route.indexOf("admin.patch('/users/:userId/toggle-active'");
+  assert.ok(start >= 0, 'the toggle-active route is gone');
+  const end = route.indexOf('\nadmin.', start + 1);
+  const handler = route.slice(start, end > start ? end : route.length);
+  const at = (needle) => {
+    const i = handler.indexOf(needle);
+    assert.ok(i >= 0, `the toggle-active handler no longer contains ${needle}`);
+    return i;
+  };
+  const gate = at('const adminUser = await requireAdmin(c);');
+  const refusal = at("code: 'super_admin_required'");
+  const factor = at("await requireFactor(c, 'totp');");
+  const stepUp = at('await requireStepUp(c);');
+  const short = at('if (reason.length < 10)');
+  const write = at('UPDATE users SET is_active');
+  const audit = at('await logAdminAction(');
+  assert.ok(gate < refusal, 'requireAdmin (D135\'s freeze gate) is no longer the first check');
+  assert.ok(refusal < factor && factor < stepUp && stepUp < short && short < write,
+    'the authenticator, the step-up and the reason are not all checked between the D132 refusal and the write');
+  assert.ok(write < audit, 'the audit row is written before the act it records');
+  assert.match(handler, /if \(adminTarget\) \{\s*try \{\s*await requireFactor\(c, 'totp'\);/,
+    'the bar is no longer scoped to an administrator target');
+
+  // The page asks for the reason on an administrator's row, and forwards what
+  // was typed.
+  assert.match(ADMIN, /if \(user\.role === 'admin'\) \{\s*reason = window\.prompt\(/,
+    'the directory no longer asks for a reason before toggling an administrator');
+  assert.match(ADMIN, /await api\.adminToggleActive\(user\.id, reason\)/, 'the typed reason is not sent');
+  const method = API.slice(API.indexOf('adminToggleActive:'), API.indexOf('adminSetAccessLevel:'));
+  assert.match(method, /adminToggleActive: \(userId, reason\) =>/, 'adminToggleActive takes no reason');
+  assert.match(method, /\.\.\.\(reason \? \{ body: JSON\.stringify\(\{ reason \}\) \} : \{\}\)/,
+    'the api method does not forward the reason as typed');
+});
+
 test('the HQ-only card: five rows, the role shell marked as every admin\'s, the count stated from the data', () => {
   assert.ok(PLAIN.includes('data-testid="hq-team-actions-hq"'), 'the HQ-only card is not drawn on HQ');
   const rowAt = (key) => PLAIN.indexOf(`data-testid="hq-team-action-${key}"`);
@@ -270,7 +320,10 @@ test('the directory draws View As and Disable only inside the one guard, on the 
   assert.equal(count(ADMIN, guard), 1, 'the row guard is missing or doubled');
   const g = ADMIN.indexOf(guard);
   const close = ADMIN.indexOf('</>', g);
-  for (const call of ['handleImpersonate(u)', 'handleToggleActive(u.id)']) {
+  // D247 — the toggle takes the ROW, not its id, because an admin row asks for
+  // a reason and the handler has to see the role to know. The count still
+  // pins one call from the directory.
+  for (const call of ['handleImpersonate(u)', 'handleToggleActive(u)']) {
     assert.equal(count(ADMIN, call), 1, `${call} is called from more than one place in the directory`);
     const at = ADMIN.indexOf(call);
     assert.ok(at > g && at < close, `${call} is drawn outside the guard`);

@@ -2053,7 +2053,8 @@ admin.patch('/users/:userId/toggle-active', async (c) => {
   const rows = await sql`SELECT * FROM users WHERE id = ${userId}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'User not found' }, 404); }
   if (rows[0].id === adminUser.id) { await sql.end(); return c.json({ error: 'Cannot deactivate yourself' }, 400); }
-  // D132 — AN ADMIN TARGET IS THE SUPER ADMIN'S ALONE, and this closes a door
+  // D132 — AN ADMIN TARGET IS THE SUPER ADMIN'S ALONE (and, since D247, on
+  // demote's bar: see below), and this closes a door
   // the role route already shut. `/users/:userId/role` refuses to demote an
   // existing admin with its own reason: *"prevents one admin from quietly
   // silencing another."* Deactivating an admin silences them exactly as
@@ -2075,7 +2076,8 @@ admin.patch('/users/:userId/toggle-active', async (c) => {
   // legitimately needs. If per-branch admin STAFF ever ships (S6 draws
   // "Staff & roles [Yours]"), this guard is the line to revisit: co-staff of one
   // subsidiary are not the "another admin" the policy is about.
-  if (rows[0].role === 'admin' && !isSuperAdmin(adminUser as any)) {
+  const adminTarget = rows[0].role === 'admin';
+  if (adminTarget && !isSuperAdmin(adminUser as any)) {
     await sql.end();
     return c.json({
       error: 'Only a super admin can deactivate an admin account.',
@@ -2083,15 +2085,63 @@ admin.patch('/users/:userId/toggle-active', async (c) => {
     }, 403);
   }
 
+  // D247 — AN ADMIN TARGET TAKES DEMOTE'S BAR. Closing an administrator's
+  // account silences them as surely as demoting them, and demote asks for a
+  // TOTP-minted session, a fresh step-up and a typed reason. This asked for
+  // none of the three. They are checked here — after the two refusals above,
+  // which answer without them, and before the write, so a refused toggle
+  // changes nothing. `requireAdmin` stays the first line: it is D135's freeze
+  // gate, and the compliance ladder's write probe is this route.
+  //
+  // A NON-ADMIN TARGET IS UNCHANGED, on purpose. Any admin may disable and
+  // re-enable a founder in their own territory with one click; that is the
+  // everyday act D132 kept, and a reason prompt on it would be friction on
+  // the common case to guard the rare one. Both directions are covered for an
+  // admin target, because the route toggles: re-opening an account HQ closed
+  // is the same power as closing it.
+  let reason = '';
+  if (adminTarget) {
+    try {
+      await requireFactor(c, 'totp');
+      await requireStepUp(c);
+    } catch (e) {
+      await sql.end();
+      throw e;
+    }
+    const body: any = await c.req.json().catch(() => ({}));
+    reason = String(body?.reason ?? '').trim().slice(0, 500);
+    if (reason.length < 10) {
+      await sql.end();
+      return c.json({
+        error: 'A reason of at least 10 characters is required — closing or re-opening an administrator account is the line someone reads in the audit later.',
+        code: 'reason_too_short',
+      }, 400);
+    }
+  }
+
   const newActive = !rows[0].is_active;
+  const verb = newActive ? 'activated' : 'deactivated';
+  const because = reason ? `. Reason: ${reason}` : '';
   await sql`UPDATE users SET is_active = ${newActive} WHERE id = ${userId}`;
   // Epic 11 — actor on both rows is email_hash, never the plaintext.
   const tgAdminHash = await hashEmail(adminUser.email);
   const tgTargetHash = await hashEmail(rows[0].email);
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_toggled', ${`Admin ${adminUser.name} ${newActive ? 'activated' : 'deactivated'} user ${rows[0].name}`}, ${tgAdminHash}, ${adminUser.id})`;
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('account_status_changed', ${`Your account was ${newActive ? 'activated' : 'deactivated'} by an Axal admin`}, ${tgTargetHash}, ${rows[0].id})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_toggled', ${`Admin ${adminUser.name} ${verb} user ${rows[0].name}${because}`}, ${tgAdminHash}, ${adminUser.id})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('account_status_changed', ${`Your account was ${verb} by an Axal admin${because}`}, ${tgTargetHash}, ${rows[0].id})`;
   await sql.end();
-  return c.json({ message: `User ${newActive ? 'activated' : 'deactivated'}`, is_active: newActive });
+  // D247 — Security's feed names who and why. `user_toggled` above already
+  // reaches its Suspensions filter, but as a sentence with no subject column
+  // and, until now, no reason. The audit row carries `viewed_user_id`, so the
+  // Target column names the account and `reasonFrom` lifts the reason.
+  // Imported here, not at the top: services/adminAudit.ts imports
+  // `ensureAdminAuditLogTable` from this file, so a static import is a cycle.
+  if (adminTarget) {
+    const { logAdminAction } = await import('../services/adminAudit');
+    await logAdminAction(c.env, adminUser.id, adminUser.email,
+      newActive ? 'admin_account_reactivated' : 'admin_account_deactivated',
+      { target_user_id: rows[0].id, reason, is_active: newActive });
+  }
+  return c.json({ message: `User ${verb}`, is_active: newActive });
 });
 
 // ---------------------------------------------------------------------------
