@@ -21802,3 +21802,51 @@ What the forty broke, by area:
 No migration, so there is nothing to read back from production D1.
 
 **285 is still the next free migration, and D214 the next decision.**
+
+## D217
+
+**`cd cloudflare-worker && npm run deploy` shipped the live worker without
+applying migrations.** `cloudflare-worker/package.json`'s own `deploy` script
+was `wrangler deploy --config ../wrangler.toml` — no `--env production`, no
+`predeploy` hook. `npm` fires `pre`/`post` hooks only for `npm run <script>`
+run from the package that declares them; wrangler invoked from inside
+`cloudflare-worker/` never sees the root's `predeploy`
+(`node scripts/migrate-d1.mjs --remote`) at all. And because `wrangler.toml`'s
+top-level `name` and its `[env.production]` `name` are both `studioos`, the
+missing `--env production` did not send this to some harmless sandbox
+environment — it deployed to the *same* live worker, just with the top-level
+binding, var and route set instead of the `[env.production]` one, ahead of
+whatever schema its code expected.
+
+**Adding `--env production` to that script alone would not have fixed it.**
+It would have picked the right binding set, but the migration step is a
+`predeploy` hook on the *root* package, not on `cloudflare-worker`'s — a
+deploy invoked from inside `cloudflare-worker/` skips it regardless of which
+env flag is passed. Fixing only the flag would have quieted the visible half
+of the footgun (wrong config) while leaving the real one (skipped
+migrations) intact and harder to notice, since the deploy would now look
+correct.
+
+The fix instead makes `cloudflare-worker/package.json`'s `deploy` script
+`cd .. && npm run deploy`: it delegates to the root `deploy` script, which
+carries both `predeploy` (`migrate-d1.mjs --remote`) and `--env production`.
+There is now one real deploy command, reachable from either directory, and
+running it from `cloudflare-worker/` can no longer skip the migration or
+target the wrong environment. `documentation/operations/DEPLOY.md` §1.1 and
+`frontend/test/deploy_runbook.test.mjs` are updated to match; nothing else
+changed. **No migration**, so **285 is still free**. **No route, no
+`api.js` method and no `frontend/src` change**, so `check-api-drift` has
+nothing to say and `docs/` is not rebuilt.
+
+### VERIFIED
+
+- `cloudflare-worker/package.json`'s `deploy` script is exactly
+  `cd .. && npm run deploy`.
+- The re-aimed assertion in `frontend/test/deploy_runbook.test.mjs` fails
+  against the old `wrangler deploy --config ../wrangler.toml` script and
+  passes against the new one.
+- `npm run test:drift` exits 0.
+- `check-decision-ids` reads **D1 through D217** (D213–D216 land elsewhere;
+  this decision is D217), and exits 0.
+
+**285 is still the next free migration.**
