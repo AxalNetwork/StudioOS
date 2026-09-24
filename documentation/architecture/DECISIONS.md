@@ -22023,34 +22023,54 @@ target, fires with no confirmation, and two api methods have no caller).
     It was withdrawn, not counted as caught, and re-aimed at the defect its name
     describes — archived rows sorted by display order filling the fifty-row list
     and pushing the deck's rows off it — which a new test catches.
+- **Code scanning found two helpers in my own tests written wrongly**, after
+  the drift suite had passed them. Both are fixed in the test, at the
+  mechanism; nothing was suppressed.
+  - *The visible-text decoder decoded twice.* It was a chain that turned
+    `&amp;` into `&` before turning `&lt;` into `<`, so text a reader sees as
+    `&lt;` — which React writes as `&amp;lt;` — came back as `<` (CodeQL
+    js/double-escaping). It is one replace over a five-entry table now, which
+    never re-reads its own output. No existing assertion had noticed, because
+    no rendered sentence held an escaped entity, so a new test renders one
+    through React and holds the helper to it. The mutation run shows that test
+    is the only one that sees the old chain.
+  - *The label test escaped only the first "&".* It encoded the label to match
+    the canvas with a `replace` that reached one occurrence (CodeQL
+    js/incomplete-sanitization; Semgrep's detect-replaceall-sanitization named
+    the same line). It decodes the canvas once instead, so text is compared
+    with text. The old version would have failed a correct label that carries
+    two ampersands against a canvas that drew it exactly — shown, not argued:
+    with both sides changed to "ADVISORS & PARTNERS & FRIENDS", the old
+    assertion fails and the new one passes.
 
 ### VERIFIED
 
 `npm run test:drift` exits **0**, read as the exit code from a redirected log,
-on the tree pushed: D214 applied onto `main` at `4144afa67`, which already
-carries D215, D217, D218 and D219. Counts:
+on the tree pushed: D214 merged with `main` at `5cb4dc005`, which carries D215
+through D219. Counts:
 
-- frontend **3118**, `main`'s suite plus the twenty-nine tests in
+- frontend **3119**, `main`'s suite plus the thirty tests in
   `hq_content_h18_h19.test.mjs` and the five in
   `spinout_deck_label_d214.test.mjs`;
-- worker **4043** — 4040 pass plus the same 3 pre-existing
+- worker **4048** — 4045 pass plus the same 3 pre-existing
   environment-gated skips — `main`'s suite plus the thirty-two tests in
   `content_studio_d214.test.ts`;
 - retention **48**, `main`'s own — D214 adds none;
 - zero `not ok`.
 
-All sixty-six new tests were confirmed **by name** in the log. No existing test
-was edited. The same run also exited 0 on the four earlier bases D214 was
-landed on while other sessions' PRs merged — `main` at `4913d8196`, at
-`8400a29fb` once D217 had landed, at `d0bf170ad` once D215 had, and at
-`e54dcbaa5` once D219 had — with D214's own sixty-six tests passing each time.
-D214 was re-applied rather than rebased each time, so what was verified is the
-tree that was pushed; the pull request's own CI runs the suite again on the
-merge.
+All sixty-seven new tests were confirmed **by name** in the log. No test that
+predates D214 was edited. The same run also exited 0 on the five earlier bases
+D214 was landed on while other sessions' PRs merged — `main` at `4913d8196`, at
+`8400a29fb` once D217 had landed, at `d0bf170ad` once D215 had, at `e54dcbaa5`
+once D219 had, and at `4144afa67` once D218 had — with D214's own tests passing
+each time. Until the pull request opened, D214 was re-applied rather than
+rebased, so what was verified is the tree that was pushed. Once it was open,
+D216's landing was merged in instead, so no pushed commit was rewritten. The
+pull request's own CI runs the suite again on the merge.
 
 Every guard ran as a step of that same run and exited 0: both typechecks,
 `lint:undef`, `check-api-drift` (no new method), `check-folder-docs`,
-`check-decision-ids` (218 decisions, D1 → **D219**, D214 filed between D213
+`check-decision-ids` (219 decisions, D1 → **D219**, D214 filed between D213
 and D215),
 `check-unused-imports`, `check-react-hook-imports`, `check-frontend-logging`,
 `check-dark-mode`, `check-sql-prepare`, `check-sqlite-columns`,
@@ -22074,7 +22094,11 @@ caught only on a non-zero exit **and** a `not ok`, and restored every file
 byte-identical by sha256. The first run's four escapes are under CORRECTIONS
 WHILE BUILDING: three weak assertions, each fixed in the test rather than the
 code, and one equivalent mutation, withdrawn and re-aimed. W13b was added for
-publications. The second run took 183 seconds.
+publications. The second run took 183 seconds. The two code-scanning fixes
+under CORRECTIONS WHILE BUILDING had a run of their own, **8 of 8** as
+expected: four mutations of the text decoder, each caught by the new test
+alone; the label moved off the canvas's name, caught; and a correct
+two-ampersand label, which the new assertion passes and the old one failed.
 
 What the forty-two broke, by area:
 
@@ -22110,8 +22134,8 @@ What the forty-two broke, by area:
 
 No migration, so there is nothing to read back from production D1. **285 is
 still the next free migration** — none of the other sessions' open PRs adds
-one. D215 to D220 are held by the other sessions, and D215, D217, D218 and
-D219 have landed, so **the next decision this session takes is D221.**
+one. D215 through D219 have landed and D220 is still held by another session,
+so **the next decision this session takes is D221.**
 
 ## D215
 

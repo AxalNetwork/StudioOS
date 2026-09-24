@@ -47,10 +47,20 @@ const render = (C, props) => renderToStaticMarkup(
   React.createElement(MemoryRouter, null, React.createElement(C, props)),
 );
 const count = (hay, needle) => hay.split(needle).length - 1;
-/** Visible text, tags stripped — what a reader sees. */
+/** The five entities renderToStaticMarkup writes into text, each to its character. */
+const ENTITY = { '&#x27;': "'", '&quot;': '"', '&amp;': '&', '&lt;': '<', '&gt;': '>' };
+/**
+ * Visible text, tags stripped — what a reader sees.
+ *
+ * ONE PASS, SO EACH ENTITY IS DECODED ONCE. The first version was a chain that
+ * decoded `&amp;` before `&lt;`, so text a reader sees as `&lt;` (rendered as
+ * `&amp;lt;`) came back as `<` — the same character decoded twice (CodeQL
+ * js/double-escaping). A single replace never re-reads its own output, so the
+ * order of the table cannot matter. The first test below holds it to that.
+ */
 const text = (html) => html
   .replace(/<[^>]+>/g, ' ')
-  .replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  .replace(/&(?:#x27|quot|amp|lt|gt);/g, (entity) => ENTITY[entity])
   .replace(/\s+/g, ' ');
 const hrefs = (html) => [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1].replaceAll('&amp;', '&'));
 
@@ -193,6 +203,18 @@ const ROSTER = {
   nominations: { recorded: false, reason: 'Nothing records who put a person on the roster.' },
   branch_rule: 'A branch authors its own roster in its own database, and its decks read that one.',
 };
+
+// ─────────────────────────────────────────────────────────── the helper ──
+
+test('the visible-text helper decodes each entity once, as React encoded it', () => {
+  // React's own escaping, not a hand-written string: this is exactly what the
+  // helper is given. A reader of this paragraph sees a literal "&lt;" — so an
+  // assertion about that text must see it too, never a "<".
+  const html = renderToStaticMarkup(
+    React.createElement('p', null, `AT&T writes &lt; for < and "it's"`),
+  );
+  assert.equal(text(html).trim(), `AT&T writes &lt; for < and "it's"`);
+});
 
 // ──────────────────────────────────────────── the artboards and the page ──
 

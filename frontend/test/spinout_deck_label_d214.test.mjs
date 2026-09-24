@@ -93,12 +93,14 @@ test('no label repeats its own word — the defect the mentor→advisor rename l
 
 test('the label is the canvas’s own name for the roster the deck draws from', () => {
   const [label] = labelsIn(WORKER);
-  const canvas = readFileSync(resolve(ROOT, CANVAS), 'utf8');
-  // "ADVISORS & PARTNERS" → "Advisors &amp; Partners", as the canvas encodes it.
-  const drawn = label
-    .toLowerCase()
-    .replace(/\b[a-z]/g, (c) => c.toUpperCase())
-    .replace('&', '&amp;');
+  // The canvas writes "&" as "&amp;". It is decoded here, once, so text is
+  // compared with text. The first version escaped the LABEL instead, with a
+  // replace that reached only the first "&" (CodeQL js/incomplete-sanitization),
+  // so a correct label carrying two would have failed against a canvas that
+  // drew it exactly.
+  const canvas = readFileSync(resolve(ROOT, CANVAS), 'utf8').replaceAll('&amp;', '&');
+  // "ADVISORS & PARTNERS" → "Advisors & Partners", as H19 · C4 draws it.
+  const drawn = label.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
   assert.ok(canvas.includes(`${drawn} — deck roster`),
     `H19 names the roster "${drawn} — deck roster"; the deck heading no longer matches it`);
 });
