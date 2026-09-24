@@ -61,6 +61,7 @@ import {
   hashToken, generateToken,
 } from '../auth';
 import { hashEmail } from '../util/hashEmail';
+import { clientIp } from '../util/clientIp';
 import { recordSecurityEvent } from '../services/securityEvents';
 import { hasTotpConfigured } from '../services/authTotp';
 import { hasSmsConfigured, loadSms, markSmsUsed } from '../services/authSms';
@@ -93,11 +94,6 @@ function inHours(h: number): string { return new Date(Date.now() + h * 3600 * 10
 function inMin(m: number): string { return new Date(Date.now() + m * 60 * 1000).toISOString(); }
 function inDays(d: number): string { return new Date(Date.now() + d * 86400 * 1000).toISOString(); }
 
-function clientIp(c: any): string {
-  return (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '')
-    .split(',')[0].trim().slice(0, 64) || 'unknown';
-}
-
 /**
  * D200 — a refused recovery step is recorded in security_events (kind
  * `recovery`, one factor per layer), subject hashed and network bucketed. It
@@ -106,7 +102,7 @@ function clientIp(c: any): string {
  * transition and activity_logs already hold it.
  */
 function recoveryRefusal(c: any, factor: string, detail: string, subject?: { email?: string; userId?: number }) {
-  return recordSecurityEvent(c.env, { kind: 'recovery', factor, outcome: 'refused', detail, ip: clientIp(c), ...subject });
+  return recordSecurityEvent(c.env, { kind: 'recovery', factor, outcome: 'refused', detail, ip: clientIp(c.req.raw), ...subject });
 }
 
 async function rate(env: Env, key: string, max: number, windowSec: number): Promise<boolean> {
@@ -237,7 +233,7 @@ async function createTicket(
      VALUES (?, ?, 'open', ?, ?, ?, ?)`,
   ).bind(
     userId, layer,
-    clientIp(c),
+    clientIp(c.req.raw),
     (c.req.header('user-agent') || '').slice(0, 500),
     JSON.stringify(stateWithLookup),
     inHours(TICKET_TTL_HOURS),
@@ -349,7 +345,7 @@ async function mintRecoverySession(
   const jti = crypto.randomUUID();
   const jwtToken = await createJWT(c.env, user.id, user.email, user.role, undefined, jti);
   const ua = (c.req.header('user-agent') || '').slice(0, 500);
-  const ip = clientIp(c);
+  const ip = clientIp(c.req.raw);
   try {
     await c.env.DB.prepare(
       `INSERT INTO user_sessions (user_id, jti, user_agent, ip, factor, assurance_level)
@@ -369,7 +365,7 @@ async function mintRecoverySession(
  * SAME shape with everything false so a probe can't differentiate.
  */
 recover.post('/start', async (c) => {
-  if (!(await rate(c.env, `recover-start-ip:${clientIp(c)}`, 30, 60))) {
+  if (!(await rate(c.env, `recover-start-ip:${clientIp(c.req.raw)}`, 30, 60))) {
     return c.json({ error: 'Too many requests' }, 429);
   }
   const body = await readJson(c);
@@ -422,7 +418,7 @@ recover.post('/start', async (c) => {
 // ─────────────────────────────────────────────── Layer 1a — backup code
 
 recover.post('/backup-code', async (c) => {
-  if (!(await rate(c.env, `recover-bc-ip:${clientIp(c)}`, 10, 300))) {
+  if (!(await rate(c.env, `recover-bc-ip:${clientIp(c.req.raw)}`, 10, 300))) {
     return c.json({ error: 'Too many requests' }, 429);
   }
   const body = await readJson(c);
@@ -472,7 +468,7 @@ recover.post('/backup-code', async (c) => {
   // so unexpected backup-code use is loud.
   await setCoolOffAndAssurance(c.env, user.id);
   const { id: ticketId } = await createTicket(c.env, user.id, 'backup_code',
-    { ip: clientIp(c), ua: (c.req.header('user-agent') || '').slice(0, 200) }, c);
+    { ip: clientIp(c.req.raw), ua: (c.req.header('user-agent') || '').slice(0, 200) }, c);
   await transitionTicket(c.env, ticketId, user,
     { status: 'resolved', assurance: 'full', resolved: true },
     { template: 'auth_recovery_resolved' });
@@ -495,7 +491,7 @@ recover.post('/backup-code', async (c) => {
 
 recover.post('/sms/start', async (c) => {
   if (!(await isGcipConfigured(c.env))) return c.json({ error: 'sms_unavailable' }, 503);
-  if (!(await rate(c.env, `recover-sms-ip:${clientIp(c)}`, 10, 60))) {
+  if (!(await rate(c.env, `recover-sms-ip:${clientIp(c.req.raw)}`, 10, 60))) {
     return c.json({ error: 'Too many requests' }, 429);
   }
   const body = await readJson(c);
@@ -601,7 +597,7 @@ recover.post('/sms/verify', async (c) => {
 // ─────────────────────────────────────────────── Layer 2d — email magic
 
 recover.post('/email/start', async (c) => {
-  if (!(await rate(c.env, `recover-email-ip:${clientIp(c)}`, 5, 300))) {
+  if (!(await rate(c.env, `recover-email-ip:${clientIp(c.req.raw)}`, 5, 300))) {
     return c.json({ error: 'Too many requests' }, 429);
   }
   const body = await readJson(c);
@@ -636,7 +632,7 @@ recover.get('/email/verify', async (c) => {
   const token = String(c.req.query('token') || '');
   const ticketId = Number(c.req.query('ticket') || 0);
   if (!token || !ticketId) return c.json({ error: 'invalid_link' }, 400);
-  if (!(await rate(c.env, `recover-email-verify-ip:${clientIp(c)}`, 10, 300))) {
+  if (!(await rate(c.env, `recover-email-verify-ip:${clientIp(c.req.raw)}`, 10, 300))) {
     return c.json({ error: 'Too many requests' }, 429);
   }
   const tokenHash = await hashToken(token);
@@ -681,7 +677,7 @@ recover.get('/email/verify', async (c) => {
 // ─────────────────────────────────── Layer 3f — trusted-contact 2-of-2
 
 recover.post('/trusted-contact/start', async (c) => {
-  if (!(await rate(c.env, `recover-tc-ip:${clientIp(c)}`, 10, 300))) {
+  if (!(await rate(c.env, `recover-tc-ip:${clientIp(c.req.raw)}`, 10, 300))) {
     return c.json({ error: 'Too many requests' }, 429);
   }
   const body = await readJson(c);
@@ -873,7 +869,7 @@ recover.post('/kyc/start', async (c) => {
 // ─────────────────────────────────────── Layer 4 — admin manual (multi-sig)
 
 recover.post('/admin/escalate', async (c) => {
-  if (!(await rate(c.env, `recover-admin-ip:${clientIp(c)}`, 5, 3600))) {
+  if (!(await rate(c.env, `recover-admin-ip:${clientIp(c.req.raw)}`, 5, 3600))) {
     return c.json({ error: 'Too many requests' }, 429);
   }
   const body = await readJson(c);
@@ -1005,7 +1001,7 @@ recover.post('/admin/deny', async (c) => {
 });
 
 recover.get('/ticket/:id', async (c) => {
-  if (!(await rate(c.env, `recover-ticket-ip:${clientIp(c)}`, 60, 300))) {
+  if (!(await rate(c.env, `recover-ticket-ip:${clientIp(c.req.raw)}`, 60, 300))) {
     return c.json({ error: 'Too many requests' }, 429);
   }
   const id = Number(c.req.param('id') || 0);
