@@ -14,6 +14,7 @@ import { Unrecorded } from '../ui';
 // the territory badge uses, so the two cannot disagree about which
 // deployment this is.
 import { branchOfUser } from '../lib/shellRole';
+import { REFUND_REASON_MIN, refundReasonOk } from '../lib/refundReason';
 import TrustScoreBadge from '../components/TrustScoreBadge';
 // Task #1 — embedded as a tab inside Admin Console so admins land on
 // the network roster via /admin?tab=network-profiles. The standalone
@@ -4512,7 +4513,7 @@ function BillingPanel() {
   const headerCls = 'px-4 py-3 border-b border-gray-200 flex items-center gap-2 flex-wrap dark:border-gray-800';
 
   // --- Refund state ---
-  const [refForm, setRefForm] = useState({ target: '', amount: '', reason: '', target_user_id: '', override: false });
+  const [refForm, setRefForm] = useState({ target: '', amount: '', reason: '', stripe_reason: '', target_user_id: '', override: false });
   const [refBusy, setRefBusy] = useState(false);
   const [refResult, setRefResult] = useState(null);
   const setRef = (k, v) => setRefForm((f) => ({ ...f, [k]: v }));
@@ -4522,13 +4523,15 @@ function BillingPanel() {
     if (refBusy) return;
     const target = refForm.target.trim();
     if (!target) { showToast({ kind: 'err', msg: 'Enter a PaymentIntent (pi_…) or Charge (ch_…) id' }); return; }
+    if (!refundReasonOk(refForm.reason)) { showToast({ kind: 'err', msg: `Write the reason for this refund (at least ${REFUND_REASON_MIN} characters)` }); return; }
     setRefBusy(true);
     setRefResult(null);
     try {
       const body = {};
       if (target.startsWith('ch_')) body.charge = target; else body.payment_intent = target;
       if (refForm.amount) body.amount = Math.round(Number(refForm.amount) * 100);
-      if (refForm.reason) body.reason = refForm.reason;
+      body.reason = refForm.reason.trim();
+      if (refForm.stripe_reason) body.stripe_reason = refForm.stripe_reason;
       if (refForm.target_user_id) body.target_user_id = Number(refForm.target_user_id);
       if (refForm.override) body.override_policy = true;
       const r = await api.adminBillingRefund(body);
@@ -4623,7 +4626,7 @@ function BillingPanel() {
         <div className={headerCls}>
           <RefreshCw size={16} className="text-gray-600" />
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Issue Refund</h3>
-          <span className="text-xs text-gray-500">Reverses the referral commission automatically</span>
+          <span className="text-xs text-gray-500">Reverses the referral commission automatically · HQ's super admin only, after a step-up</span>
         </div>
         <form onSubmit={issueRefund} className="p-4 grid gap-3 sm:grid-cols-2">
           <label className="text-xs text-gray-600 dark:text-gray-400 sm:col-span-2">
@@ -4634,9 +4637,16 @@ function BillingPanel() {
             Amount (leave blank for full)
             <input className={inputCls} type="number" step="0.01" min="0" placeholder="e.g. 49.00" value={refForm.amount} onChange={(e) => setRef('amount', e.target.value)} data-testid="refund-amount" />
           </label>
+          {/* D224 — the written reason is required, and the Stripe category is
+              separate from it: "duplicate" says what Stripe files the refund
+              under, not why HQ issued it. */}
+          <label className="text-xs text-gray-600 dark:text-gray-400 sm:col-span-2">
+            Reason (required, at least {REFUND_REASON_MIN} characters)
+            <textarea className={inputCls} rows={2} required minLength={REFUND_REASON_MIN} placeholder="Why this money goes back" value={refForm.reason} onChange={(e) => setRef('reason', e.target.value)} data-testid="refund-reason" />
+          </label>
           <label className="text-xs text-gray-600 dark:text-gray-400">
-            Reason
-            <select className={inputCls} value={refForm.reason} onChange={(e) => setRef('reason', e.target.value)}>
+            Stripe category (optional)
+            <select className={inputCls} value={refForm.stripe_reason} onChange={(e) => setRef('stripe_reason', e.target.value)}>
               <option value="">—</option>
               <option value="requested_by_customer">Requested by customer</option>
               <option value="duplicate">Duplicate</option>
