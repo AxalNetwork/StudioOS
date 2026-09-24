@@ -23240,6 +23240,99 @@ signature gained a parameter, not a new export.
 
 **285 is still the next free migration.**
 
+## D237
+
+**`cron_run_history` gets a retention sweep (task 327). It keeps 30 days of
+rows, and ALWAYS the newest row of every trigger. Nothing ever deleted from the
+table. Production, measured read-only on 2026-09-24: 152,331 rows, 108,976 of
+them older than 30 days, and 0 rows in ISO format.**
+
+**No migration**, so 290 is not used. EXPLAIN QUERY PLAN on the baseline's
+table and index:
+
+| statement | plan |
+| --- | --- |
+| keep list, `SELECT DISTINCT trigger_name` | covering-index scan of `idx_crh_trigger_time` |
+| keep list, one newest-row read per trigger | index seek on `trigger_name` |
+| the delete | primary-key lookups, over a covering-index scan of candidates |
+
+The candidate predicate is `datetime()` on the column, so no index could serve
+it with a range seek, whatever the index. The covering index is scanned instead,
+and the scan stops at the batch LIMIT. A new index would buy nothing.
+
+### THE SWEEP (`util/cronHistory.ts`, `pruneCronRunHistory`, beside the writer)
+
+- **Keeps each trigger's newest row, however old.** It uses the same statement
+  `latestRunPerTrigger` reads (now one shared `NEWEST_ROW_SQL`), including its
+  ceiling. So the row it protects is exactly the row Platform's "Cron triggers
+  firing" and the Cron tab read, and a future-dated row cannot take that slot.
+  The weekly trigger (`0 9 * * 2`) whose last row is 40 days old keeps that row
+  and does not read "never fired".
+- **The keep list is built before anything is deleted.** If it cannot be built,
+  nothing is deleted.
+- **Compares `datetime(started_at) < datetime(?)`**, with `datetime()` on both
+  sides. An ISO stamp is therefore read by its time and not by where `T` sorts.
+- **Deletes in bounded batches.** Each statement deletes at most 500 rows, by
+  id from a LIMITed subquery. A sweep runs at most 50 statements, so 25,000
+  rows. The first run meets about 109,000 rows and clears them over five daily
+  runs. After that, a day adds far fewer rows than the cap.
+- **Never throws,** because a failed prune must not fail the tick.
+
+**Why 30 days** (also stated in the file header). Two things read the table:
+
+- `latestRunPerTrigger` reads only each trigger's newest row, which is always
+  kept.
+- The Cron tab pages the raw list, 100 rows at a time. 30 days is some 450
+  pages.
+
+Nothing reads a row by age beyond that, and nothing totals the table over time.
+
+### THE CRON BLOCK (`index.ts`)
+
+The block runs daily at 03:45, a minute no other block uses. It has its own
+try/catch and the `[cron]` prefix. It is **not** gated on `hqCadences`, on the
+D122 precedent: each deployment writes its own table and prunes its own.
+`branch_licence_copy.test.ts` now pins it in the ungated list, anchored on its
+import.
+
+### THE COUNT IS NO LONGER ALL-TIME
+
+`GET /api/infra/cron-history` still returns `COUNT(*)` as `total`. It now also
+sends `retention_days`. The Cron tab reads "N run(s) in the last 30 days (older
+runs are pruned; each trigger's newest run is kept)" instead of a bare "N
+run(s)".
+
+### HOW IT IS HELD
+
+`cloudflare-worker/test/cron_history_retention_d237.test.ts` (new, 8 tests)
+builds the table from the baseline's own DDL and index. It covers:
+
+- the window, with the boundary row kept;
+- the weekly trigger's aged-out newest row, read back through
+  `latestRunPerTrigger` and `triggerState`;
+- a future-dated row;
+- an ISO row one hour past the cutoff;
+- the batch size and cap, plus a second sweep that finishes the job;
+- an unreadable keep list;
+- the sweep's comparisons, read from source;
+- the route and Cron tab label.
+
+`branch_licence_copy.test.ts` gains the ungated pin.
+
+Nine mutations were each run both ways: the code was broken, a named test
+failed with a non-zero exit, the file was restored from a sha256-checked
+snapshot, and the test passed. None escaped. The nine:
+
+1. dropping the keep-newest rule;
+2. a bare `started_at < ?` comparison;
+3. an unLIMITed delete;
+4. deleting when the keep list failed;
+5. a keep list that ignores the ceiling;
+6. an ignored cap;
+7. the block gated on `hqCadences`;
+8. `retention_days` dropped from the route;
+9. the all-time label restored on the Cron tab.
+
 ## D240
 
 **The one-holder ceiling is now enforced by the write itself. Two overlapping
