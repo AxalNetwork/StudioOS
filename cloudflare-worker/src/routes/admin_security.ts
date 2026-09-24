@@ -361,11 +361,22 @@ const DATA_ACCESS_LIMIT = 12;
  *   admin_impersonate, admin_impersonate_extend — the same events, thinner:
  *   `impersonation_sessions` carries the reason and the end time, so the
  *   session row is read instead and these would double every entry.
+ *
+ * D259 ADDED `hq_branch_support_session`: HQ opening a support session on a
+ * BRANCH account. That row's `details` names the branch and the branch-local
+ * account id, which means nothing in HQ's `users`, so this arm (which renders
+ * `details` as the Target) is the one that can show whose session it was. The
+ * audit arm shows the same act with a blank Target and the reason, so under
+ * "All actions" it reads as two lines, stated in D259 rather than hidden.
+ *
+ * NO COMMENT INSIDE THE ARRAY: `admin_governance.test.ts` counts its quote
+ * marks to check the IN-list below, and an apostrophe in prose there miscounts.
  */
 const ACTOR_SIDE_ACTIONS = [
   'role_changed', 'user_toggled',
   'kyc_approved_by_admin', 'kyc_bypass_granted', 'kyc_rejected_by_admin', 'kyc_document_access',
   'contract_resent', 'contract_voided',
+  'hq_branch_support_session',
 ];
 
 /** Suspension, in each of the two stores that records one. */
@@ -476,12 +487,12 @@ const FEED_AUDIT_EXPORTS_SQL = `SELECT a.id, a.action, a.report_type, a.format, 
     WHERE a.action LIKE '%export%'
     ORDER BY a.exported_at DESC, a.id DESC LIMIT ?`;
 
-/** Eight placeholders, one per entry in ACTOR_SIDE_ACTIONS. */
+/** Nine placeholders, one per entry in ACTOR_SIDE_ACTIONS (D259 added the ninth). */
 const FEED_ACTIVITY_ACTOR_SIDE_SQL = `SELECT l.id, l.action, l.details, l.created_at, l.user_id,
           u.name AS actor_name, u.email AS actor_email
      FROM activity_logs l
      LEFT JOIN users u ON u.id = l.user_id
-    WHERE l.action IN (?, ?, ?, ?, ?, ?, ?, ?)
+    WHERE l.action IN (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ORDER BY l.created_at DESC, l.id DESC LIMIT ?`;
 
 /** One placeholder, one per entry in SUSPENSION_ACTIVITY_ACTIONS. */

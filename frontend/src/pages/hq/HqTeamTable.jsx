@@ -39,6 +39,21 @@ import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
  * no source branch, so they carry no Move button — a control that can only
  * refuse is the lie D134 named. With no branch provisioned there is one group
  * and no Move anywhere, which the footnote states.
+ *
+ * D259 — SUPPORT, THE OTHER HALF OF H4 ON A BRANCH ACCOUNT. D120 built
+ * `POST /api/admin/branches/:code/support-session` and the branch's redeem
+ * screen, and nothing in the SPA ever called the open route, so HQ could not
+ * reach a branch account's session at all. The control sits on the same
+ * branch hit as Move, under two conditions that are each the route's own:
+ *  · NOT UNDER THE VIEW-AS OVERLAY. The overlay reads one branch and the
+ *    scoped note promises nothing here can be acted on (D153).
+ *  · ONLY ON AN ACTIVE ACCOUNT. The branch refuses a deactivated one; a button
+ *    that can only refuse is the lie D134 named.
+ * The route answers `open_url`, a one-time code on the BRANCH's host, and that
+ * URL is opened exactly as given: this page never builds one, because the
+ * hostname convention and the code are the server's. The person is not told —
+ * the branch writes its own record, and no notice reaches them yet — and the
+ * form says so before anyone presses Begin.
  */
 
 const RUNG = {
@@ -71,13 +86,32 @@ const LICENCE_TONE = {
  * source branch, so the control is on a branch hit, never on the HQ table.
  * The route needs TOTP and a recent step-up; a refusal is shown, not swallowed.
  */
-function MoveHit({ hit, from, destinations, onMoved }) {
+/**
+ * D259 — a refusal in words. `request()` puts the route's machine code in
+ * `message` and the whole body in `data`; every refusal this route writes
+ * (409 `hq_rpc_secret_unset`, `branch_not_bound`, `branch_refused` with the
+ * branch's own reason, 423 during a recovery cool-off) carries a sentence in
+ * `data.message`, so that is what the operator reads.
+ */
+function supportRefusal(ex) {
+  const d = ex?.data;
+  if (d && typeof d.message === 'string' && d.message) return d.message;
+  return ex?.message || 'The support session could not be opened.';
+}
+
+export function MoveHit({ hit, from, destinations, onMoved, viewAs }) {
   const [open, setOpen] = useState(false);
   const [to, setTo] = useState(destinations[0] || '');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [done, setDone] = useState(null);
+  const [supportOpen, setSupportOpen] = useState(false);
+  const [supportReason, setSupportReason] = useState('');
+  const [supportBusy, setSupportBusy] = useState(false);
+  const [supportErr, setSupportErr] = useState('');
+  const [supportUrl, setSupportUrl] = useState(null);
+  const canSupport = !viewAs && Number(hit.is_active) === 1;
   if (done) {
     return (
       <li className="py-1.5 text-[12px] text-axal-muted">
@@ -92,6 +126,11 @@ function MoveHit({ hit, from, destinations, onMoved }) {
         <span className="truncate text-axal-ink dark:text-white">{hit.name || hit.email}</span>
         <span className="flex shrink-0 items-center gap-2 text-[11.5px] text-axal-faint">
           <span>{hit.role} · {Number(hit.is_active) === 1 ? 'active' : 'deactivated'}</span>
+          {canSupport && (
+            <button type="button" className="font-bold text-axal-violet dark:text-violet-300" data-testid="hq-team-support-toggle" onClick={() => setSupportOpen((v) => !v)}>
+              Support
+            </button>
+          )}
           {destinations.length > 0 && Number(hit.is_active) === 1 && (
             <button type="button" className="font-bold text-axal-violet dark:text-violet-300" onClick={() => setOpen((v) => !v)}>
               Move
@@ -99,6 +138,50 @@ function MoveHit({ hit, from, destinations, onMoved }) {
           )}
         </span>
       </div>
+      {canSupport && supportOpen && (
+        <form
+          className="mt-2 grid gap-2 rounded-lg border border-axal-hairline bg-axal-ground p-2"
+          data-testid="hq-team-support"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setSupportErr('');
+            setSupportBusy(true);
+            try {
+              const res = await api.hqSupportSession(from, hit.id, supportReason.trim());
+              // The URL the ROUTE built, opened as given. `noopener` makes
+              // window.open return null whether or not a tab opened, so the
+              // same URL is also shown as a link below.
+              window.open(res.open_url, '_blank', 'noopener');
+              setSupportUrl(res.open_url);
+            } catch (ex) {
+              reportError('hq-team-support', ex);
+              setSupportErr(supportRefusal(ex));
+            } finally {
+              setSupportBusy(false);
+            }
+          }}
+        >
+          <p className="text-[11px] leading-relaxed text-axal-muted">
+            Opens a support session on {hit.name || hit.email}&rsquo;s account on {from}, in a new tab on that
+            branch&rsquo;s own site. It needs your authenticator and a fresh step-up. The person is not told:
+            the branch records the session, and no notice reaches them yet.
+          </p>
+          <label className="text-[11px] text-axal-muted">
+            Reason (at least 10 characters). It is recorded here and on the branch.
+            <textarea className="mt-1 block w-full rounded-md border border-axal-hairline bg-white px-2 py-1 text-[12px] dark:bg-gray-900" rows={2} value={supportReason} onChange={(e) => setSupportReason(e.target.value)} />
+          </label>
+          {supportErr && <p className="text-[11.5px] text-rose-700 dark:text-rose-300" data-testid="hq-team-support-refused">{supportErr}</p>}
+          {supportUrl && (
+            <p className="text-[11.5px] text-axal-muted" data-testid="hq-team-support-opened">
+              Opened in a new tab. The link works once, within five minutes. If no tab opened,{' '}
+              <a className="font-bold text-axal-violet underline dark:text-violet-300" href={supportUrl} target="_blank" rel="noopener noreferrer">open the session</a>.
+            </p>
+          )}
+          <button type="submit" disabled={supportBusy || supportReason.trim().length < 10} className="justify-self-start rounded-md bg-axal-violet px-3 py-1 text-[11.5px] font-bold text-white disabled:opacity-50">
+            {supportBusy ? 'Opening…' : 'Begin'}
+          </button>
+        </form>
+      )}
       {open && (
         <form
           className="mt-2 grid gap-2 rounded-lg border border-axal-hairline bg-axal-ground p-2"
@@ -580,6 +663,7 @@ export default function HqTeamTable({ reloadKey = 0, onLoaded }) {
                   from={b.code}
                   destinations={branches.map((x) => x.code).filter((code) => code && code !== b.code)}
                   onMoved={load}
+                  viewAs={viewAs}
                 />
               ))}
             </ul>
@@ -608,7 +692,8 @@ export default function HqTeamTable({ reloadKey = 0, onLoaded }) {
         Moving an account between branches closes it where it lives and re-invites it where it is
         going — records stay put. Move appears on a branch hit only when another branch code exists.
         It needs a step-up and TOTP; a refusal names the reason. HQ-held rows have no source branch,
-        so they are not movable from this table.
+        so they are not movable from this table. Support opens a session on an active branch account,
+        on that branch&rsquo;s own site, with the same step-up and a reason; the person is not told yet.
       </p>
     </Card>
   );

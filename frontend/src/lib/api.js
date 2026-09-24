@@ -2357,7 +2357,6 @@ export const api = {
   adminCohortReview: (cycleId) => request(`/admin/cohort/review${cycleId ? `?cycle_id=${cycleId}` : ''}`),
   adminCohortGrace: (payload) => request('/admin/cohort/grace', { method: 'POST', body: JSON.stringify(payload) }),
   adminCohortOverride: (payload) => request('/admin/cohort/override', { method: 'POST', body: JSON.stringify(payload) }),
-  adminCohortImpersonationAudit: () => request('/admin/cohort/impersonation-audit'),
   adminCohortApplications: () => request('/admin/cohort/applications'),
   adminCohortAppSettings: (payload) => request('/admin/cohort/applications/settings', { method: 'POST', body: JSON.stringify(payload) }),
   adminCohortApplicantDecide: (applicantId, payload) => request(`/admin/cohort/applications/${applicantId}/decide`, { method: 'POST', body: JSON.stringify(payload) }),
@@ -3344,6 +3343,15 @@ export const api = {
     request(`/admin/branches/${encodeURIComponent(code)}/accounts/${encodeURIComponent(userId)}/move`, {
       method: 'POST',
       body: JSON.stringify(data || {}),
+    }),
+  // D259 — HQ opens a support session on an account that lives on a branch
+  // (D120). The route answers the one-time `open_url` on the branch's host;
+  // the caller opens that URL as given and never builds one. TOTP and a recent
+  // step-up are the route's (request() handles the step-up challenge).
+  hqSupportSession: (code, userId, reason) =>
+    request(`/admin/branches/${encodeURIComponent(code)}/support-session`, {
+      method: 'POST',
+      body: JSON.stringify({ target_user_id: userId, reason }),
     }),
   // The BRANCH side, under its own prefix. Live only on a branch Worker; on HQ
   // these answer 403 because HQ has no HQ to escalate to.
