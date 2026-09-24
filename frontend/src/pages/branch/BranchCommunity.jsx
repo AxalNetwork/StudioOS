@@ -33,7 +33,8 @@ import BranchZone from './BranchZone';
  * `network_public.ts`'s single photo-blob proxy, and the only other reader in
  * the whole worker is `services/decks/axalSpinoutDemoDay.ts`. There is no
  * member-facing list endpoint at all — what the table feeds is the Demo Day
- * deck's Mentors & Network slide, so the card says that rather than letting the
+ * deck's Team & Network slide ("Mentors & Network" until D214 — no deck has a
+ * slide by that name), so the card says that rather than letting the
  * name imply a directory that does not exist.
  *
  * NO FETCH HERE, DELIBERATELY. Four counts would each be a second read of a
@@ -81,7 +82,7 @@ export const COMMUNITY_CONSOLES = [
     scope: 'Yours to author',
     what: 'Create, edit, reorder and set a photo. It is not a member directory — nothing '
       + 'serves these to members except the photo itself, and what they feed is the Demo Day '
-      + "deck's Mentors & Network slide.",
+      + "deck's Team & Network slide.",
   },
 ];
 

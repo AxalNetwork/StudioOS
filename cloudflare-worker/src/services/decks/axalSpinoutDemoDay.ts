@@ -52,14 +52,22 @@ import { simulate, type Inputs, type SimulateResult } from '../captable';
 import { ensureCapTableVariantColumn } from '../captableSchema';
 import { ensureCompetitorSchema } from '../competitorSchema';
 import { bindingKey } from '../../util/schemaBootstrap';
+import { deckMentorNames, deckProfiles } from './deckRoster';
 
 /**
  * Task #1 — Load admin-managed mentor/partner network profiles.
  *
- * Returns the active roster ordered by display_order so the Spin-Out
- * deck's Mentors & Network slide reflects the real Axal network instead
- * of synthesising rows from advisor_answers. Falls back to an empty
- * array on schema/DB errors so the deck still renders.
+ * Returns the active roster ordered by display_order so the deck's
+ * `mentor_network` section reflects the real Axal network instead of
+ * synthesising rows from advisor_answers. What a slide draws of it is the
+ * Team & Network advisor block (spinoutDeckData.ts), capped by the two
+ * constants in `deckRoster.ts`. Falls back to an empty array on schema/DB
+ * errors so the deck still renders — which means a roster that could not be
+ * read reads as an empty one here (filed, not fixed, in D214).
+ *
+ * `id` breaks the tie two rows with one display_order and one name would
+ * otherwise leave to the engine, so the order HQ's Content page marks is the
+ * order the deck reads (D214).
  *
  * Shape matches the `NetworkProfile[]` contract consumed by the deck
  * adapter (frontend/src/decks/templates/axal_spinout_demoday_app.tsx).
@@ -82,7 +90,7 @@ export async function loadNetworkProfiles(env: Env): Promise<NetworkProfileRow[]
       `SELECT id, name, kind, role, company, bio, linkedin_url, photo_r2_key, skills_json
          FROM network_profiles
         WHERE is_active = 1
-        ORDER BY display_order ASC, name ASC`,
+        ORDER BY display_order ASC, name ASC, id ASC`,
     ).all<any>()).results || [];
     return rows.map((r) => {
       let skills: string[] = [];
@@ -1126,7 +1134,7 @@ export async function fillAxalSpinoutDemoDay(
   // Falls back to an empty array if the table is empty so the slide
   // renders its dashed-skeleton state rather than synthesised noise.
   const networkRoster = await networkProfilesPromise;
-  const profiles = networkRoster.slice(0, 6).map((np) => ({
+  const profiles = deckProfiles(networkRoster).map((np) => ({
     name: np.name || DASH,
     role: np.role || '',
     bio: np.bio || '',
@@ -1366,7 +1374,7 @@ export async function fillAxalSpinoutDemoDay(
       // advisor_answers via signalsFromText — that produced the
       // "Lead, Lead" fragment regression. They come from the
       // admin-managed roster directly.
-      mentors: networkRoster.map((p) => p.name).filter(Boolean).slice(0, 8),
+      mentors: deckMentorNames(networkRoster),
       network_signals: networkBreakdown.map((b) => `${b.category}: ${b.count}`),
       profiles,
       skill_coverage: skillCoverage,
