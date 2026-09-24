@@ -13,6 +13,7 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { dlqDepth } from './deadLetters';
 import { MIRROR_KIND } from './auditMirror';
+import { branchOf } from '../util/branch';
 import {
   aeLoggedRequestPredicate, foldDailyActives,
   type ActiveFold, type WeekAxis,
@@ -792,10 +793,12 @@ export function aeDataset(env: Env): string {
  * branch's "This deployment" zone report it, so the two cannot disagree about
  * what "can read Analytics Engine here" means. It is a fact about secrets, not
  * about the binding: every Worker can WRITE the dataset through `ANALYTICS`
- * with no credential at all, which is why a branch writes to it and — while
- * these two are unset on it — cannot read it back.
+ * with no credential at all. A branch cannot read it back even when these
+ * two are set: that read stays at HQ (D230). On HQ, the two secrets are
+ * what makes the read possible.
  */
 export function aeReadable(env: Env): boolean {
+  if (branchOf(env)) return false;
   return Boolean(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_AE_API_TOKEN);
 }
 
