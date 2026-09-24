@@ -24718,6 +24718,59 @@ been read as zero; it listed 15 files. They were all main moving on (#776,
 merged after the restart); `03b22044` was byte-identical to #772's squash on
 main, so nothing was lost. The check is now read before the push, not after.
 
+## D252
+
+**Tasks 351 and 333: the deploy's upload keeps the generation production is serving.**
+
+**What went wrong.** The deploy rebuilds `docs/` from source and uploads that
+build (CLAUDE.md fact 4). With no ledger, which is every CI run, the build
+seeds retention with the *committed shells'* generation (D183). But production
+serves the generation the **last deploy** uploaded. That is not necessarily
+the committed one, because `docs/` is committed by hand. So a client holding
+the shell production served a minute ago could ask for hashes the new upload
+had dropped. Separately (task 333), when a ledger *does* exist, the seed never
+runs at all. A window full of other rebuilds then pushed the seeded generation
+out, so it was computed and then thrown away.
+
+**What changed.**
+- **The rebuild stays.** In the production deploy only, the build step passes
+  `--seed-committed-tree` (`SEED_COMMITTED_TREE_FLAG`). `seedFilesFor` then
+  returns `null`, and the planner falls back to `prevFiles`: every committed
+  asset, which holds every generation still committed.
+- **It is a flag, never `CI`.** Every CI job and the PR preview set `CI`, and
+  none of them uploads to production. A test sets `CI=true` without the flag
+  and still expects the generation.
+- **An explicit seed joins the kept set after the window trim.** Only a
+  non-empty `seedFiles` passed by the caller does. The `prevFiles` fallback
+  never joins it, because keeping the whole tree on every build is D183's
+  high-water mark.
+
+**Why D183's growth guard still holds.** The deploy never commits its build
+back, so seeding the committed tree there cannot grow `docs/assets`. Local and
+CI builds still seed the bounded generation, and `check-docs-assets-closure`'s
+1800-file ceiling is untouched.
+
+**The alternative, recorded and not built: seed from production's shells.**
+Fetching the live shells from `axal.vc` and walking their chunk graph would
+name *exactly* the serving generation. It was not built for three reasons:
+- it makes the build depend on the network and on production being up;
+- an unreachable host needs a fallback anyway, which is this one;
+- the committed tree already contains what production serves whenever `docs/`
+  was committed with the source it deployed.
+
+**Tests (`npm run test:retention`, 48 → 52).**
+- A stale ledger plus `seedFiles` PREV keeps and restores all of PREV.
+- No seed plus a stale ledger keeps only the window, as before.
+- The deploy flag seeds the committed tree, and its absence does not, even under `CI`.
+- Only `cloudflare-worker-deploy.yml` passes the flag.
+
+**Mutations: 3 run, 3 caught.** Each exited non-zero with a named `not ok` and
+passed again after a sha256-checked restore:
+- dropping the seed union;
+- unioning the `prevFiles` fallback (caught by three existing window tests
+  as well as the new one);
+- keying the switch on `CI`.
+
 ## D254
 
 **The persona taxonomy exists four times, and two of the three canonical

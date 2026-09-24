@@ -27,7 +27,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generationFrom } from './lib/assetGeneration.mjs';
-import { planAssetRetention } from './lib/assetRetention.mjs';
+import { planAssetRetention, seedFilesFor, SEED_COMMITTED_TREE_FLAG } from './lib/assetRetention.mjs';
 import { sourceTreeHash } from './lib/sourceTreeHash.mjs';
 
 const RETAIN_BUILDS = Number(process.env.ASSET_RETAIN_BUILDS || 3);
@@ -127,9 +127,17 @@ if (newFiles.length === 0) {
   process.exit(1);
 }
 
+// The production deploy passes SEED_COMMITTED_TREE_FLAG (D252): there the seed
+// is every committed asset, because the generation production serves is the
+// last deploy's, not necessarily the committed shells'.
+const seedFiles = seedFilesFor({ argv: process.argv.slice(2), prevGeneration });
+if (seedFiles === null) {
+  console.log(`[build] ${SEED_COMMITTED_TREE_FLAG}: seeding all ${prevFiles.length} committed asset(s)`);
+}
+
 const plan = planAssetRetention({
   prevFiles,
-  seedFiles: prevGeneration,
+  seedFiles,
   newFiles,
   ledgerBuilds,
   retainBuilds: RETAIN_BUILDS,
