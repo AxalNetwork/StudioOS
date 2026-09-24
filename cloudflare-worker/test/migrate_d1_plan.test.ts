@@ -425,7 +425,11 @@ test('the deploy workflow applies migrations before it deploys the worker', () =
   // above both steps.
   const src = workflow('cloudflare-worker-deploy.yml');
   const migrate = src.search(/^\s+run: node scripts\/migrate-d1\.mjs --remote\s*$/m);
-  const deploy = src.search(/^\s+run: npx --no-install wrangler deploy\b/m);
+  // D251 — the deploy runs inside a bounded retry loop, so its invocation is
+  // an `if npx … wrangler deploy` line in a `run: |` block rather than a
+  // one-line `run:`. Still a code line (not the header's prose), still the
+  // one that ships HQ, and still searched for position.
+  const deploy = src.search(/^\s+if npx --no-install wrangler deploy --config \.\.\/wrangler\.toml --env production\b/m);
   assert.ok(migrate > -1, 'the deploy must run the migration runner');
   assert.ok(deploy > -1, 'the deploy step must still be there');
   assert.ok(migrate < deploy, 'and run it BEFORE the worker ships, or the worker starts ahead of its schema');
