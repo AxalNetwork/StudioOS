@@ -310,3 +310,139 @@ test('the Security feed joins the column the transfer now fills', () => {
   assert.ok(route.includes("from '../services/adminAudit'"),
     'the holder console no longer records through logAdminAction');
 });
+
+/* ------------------------------------------------------------------ *
+ * 3. D240 — two overlapping transfers                                 *
+ * ------------------------------------------------------------------ */
+
+const CONTENDER = 804;
+/** A second eligible administrator, so two transfers can name different successors. */
+function withContender(db: InstanceType<typeof DatabaseSync>) {
+  db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)')
+    .run(CONTENDER, 'admin', 'Cam Contender', 'cam@axal.example');
+  return db;
+}
+
+/**
+ * An env whose D1 parks THIS request at its batch and runs `competitor` there
+ * first — after this request has passed the write bar AND read the holder set,
+ * before it writes. That is the window D240 closes: both requests have read
+ * the set before either writes, so no read can tell them apart and only the
+ * write can. `racingEnv` above lands its competitor one step earlier, at the
+ * holder read; both windows are driven.
+ *
+ * The competitor is a WHOLE request through the real route, not a hand-typed
+ * copy of its writes, so what lands in the gap is what production would land.
+ */
+function racingBatchEnv(db: InstanceType<typeof DatabaseSync>, competitor: () => Promise<void>) {
+  const base = makeD1(db);
+  const state = { fired: 0 };
+  const e = {
+    JWT_SECRET, ENVIRONMENT: 'development',
+    DB: {
+      ...base,
+      async batch(stmts: any[]) {
+        if (state.fired === 0) { state.fired += 1; await competitor(); }
+        return base.batch(stmts);
+      },
+    },
+  } as any;
+  return { e, state };
+}
+
+test('D240: two overlapping transfers leave exactly one holder, and the loser moves nothing', async () => {
+  // A→B and A→C, both past the gate and the holder read before either writes.
+  // Before D240 each batch wrote its own successor: {B, C}, two holders.
+  const db = withContender(freshDb());
+  let first: { status: number; body: any } | null = null;
+  const { e, state } = racingBatchEnv(db, async () => {
+    first = await call(superAdmins, db, HOLDER, `/${SUCCESSOR}?transfer=1`, { reason: HANDOVER });
+  });
+  const second = await call(superAdmins, db, HOLDER, `/${CONTENDER}?transfer=1`, { reason: HANDOVER }, e);
+
+  assert.equal(state.fired, 1, 'the competing transfer never ran in the gap, so nothing raced');
+  assert.equal(first!.status, 200, `the first transfer failed: ${JSON.stringify(first!.body)}`);
+  assert.deepEqual(holderIds(db), [SUCCESSOR], 'two overlapping transfers did not leave exactly the first successor');
+  assert.equal(second.status, 409, `the losing transfer was answered as a success: ${JSON.stringify(second.body)}`);
+  assert.equal(second.body?.code, 'holder_changed');
+  assert.match(second.body?.error, /nothing was moved/);
+  assert.deepEqual(second.body?.holders, [SUCCESSOR], 'the refusal does not say who holds it now');
+
+  // Only the first transfer is on the record: two rows, neither about C.
+  const rows = auditRows(db);
+  assert.equal(rows.length, 2, `the losing transfer wrote audit rows: ${JSON.stringify(rows)}`);
+  assert.ok(!rows.some((r: any) => r.viewed_user_id === CONTENDER), 'a transfer that moved nothing named C as a recipient');
+});
+
+test('D240: the same race landing at the holder read is refused the same way', async () => {
+  // The earlier window: the competitor has landed by the time the set is read,
+  // so the reads see B holding and let the request through to the write —
+  // which is where it must be stopped. The competitor here is its two writes,
+  // which is all `racingEnv`'s synchronous hook can land.
+  const db = withContender(freshDb());
+  // The competitor lands ONCE, at the first holder read. The route reads the
+  // set a second time on a refusal, to say who holds it now; that read must
+  // see the landed state, not a second copy of the competitor.
+  let fired = 0;
+  const e = racingEnv(db, () => {
+    fired += 1;
+    if (fired > 1) return;
+    db.prepare('INSERT INTO super_admins (user_id, granted_by_user_id) VALUES (?, ?)').run(SUCCESSOR, HOLDER);
+    db.prepare('DELETE FROM super_admins WHERE user_id = ?').run(HOLDER);
+  });
+  const r = await call(superAdmins, db, HOLDER, `/${CONTENDER}?transfer=1`, { reason: HANDOVER }, e);
+  assert.ok(fired >= 1, 'the shim never saw the holder read, so it interleaved nothing');
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body?.code, 'holder_changed');
+  assert.deepEqual(holderIds(db), [SUCCESSOR], 'a request whose caller no longer held the elevation granted it anyway');
+  assert.equal(auditRows(db).length, 0, 'a transfer that moved nothing was recorded as a change');
+});
+
+test('D240: a double-click is answered as the transfer it repeats, not as a failure', async () => {
+  // The same transfer sent twice. The second finds the caller gone and the
+  // successor holding — the end state the operator asked for — so it gets the
+  // `already` answer a transfer to a current holder gets, and writes nothing.
+  const db = freshDb();
+  let first: { status: number; body: any } | null = null;
+  const { e, state } = racingBatchEnv(db, async () => {
+    first = await call(superAdmins, db, HOLDER, `/${SUCCESSOR}?transfer=1`, { reason: HANDOVER });
+  });
+  const second = await call(superAdmins, db, HOLDER, `/${SUCCESSOR}?transfer=1`, { reason: HANDOVER }, e);
+  assert.equal(state.fired, 1);
+  assert.equal(first!.status, 200);
+  assert.equal(second.status, 200, `a repeated transfer read as a failure: ${JSON.stringify(second.body)}`);
+  assert.equal(second.body?.already, true, 'the repeat is not answered as already done');
+  assert.equal(second.body?.holder?.id, SUCCESSOR);
+  assert.equal(second.body?.transferred_from, undefined, 'the repeat claims to have moved the elevation itself');
+  assert.deepEqual(holderIds(db), [SUCCESSOR]);
+  assert.equal(auditRows(db).length, 2, 'the repeat wrote audit rows of its own');
+});
+
+test('D240: a successor who stops being eligible mid-flight takes nothing from the caller', async () => {
+  // The grant cannot land (the successor is no longer an administrator), so the
+  // caller's row must stay. This is the case the DELETE's own condition exists
+  // for: without it the batch would drop the caller and leave nobody holding.
+  const db = freshDb();
+  const { e, state } = racingBatchEnv(db, async () => {
+    db.prepare("UPDATE users SET role = 'founder' WHERE id = ?").run(SUCCESSOR);
+  });
+  const r = await call(superAdmins, db, HOLDER, `/${SUCCESSOR}?transfer=1`, { reason: HANDOVER }, e);
+  assert.equal(state.fired, 1);
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body?.code, 'successor_changed', 'the refusal blames the holder, who did not change');
+  assert.deepEqual(holderIds(db), [HOLDER], 'a grant that did not land still took the caller\'s elevation');
+  assert.equal(auditRows(db).length, 0);
+});
+
+test('D240: a plain transfer through the racing env still lands, audited once each way', async () => {
+  // The control for the four above: with nothing in the gap, the conditioned
+  // writes still move the elevation, so the refusals are about the race.
+  const db = freshDb();
+  const { e, state } = racingBatchEnv(db, async () => { /* nothing competes */ });
+  const r = await call(superAdmins, db, HOLDER, `/${SUCCESSOR}?transfer=1`, { reason: HANDOVER }, e);
+  assert.equal(state.fired, 1);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body?.transferred_from, HOLDER);
+  assert.deepEqual(holderIds(db), [SUCCESSOR]);
+  assert.deepEqual(auditRows(db).map((x: any) => x.action), ['super_admin_grant', 'super_admin_revoke']);
+});
