@@ -512,6 +512,21 @@ test('every branch zone can NAME its branch, which is S12 rule 1 (D151)', () => 
     'the branch name is derived in lib/shellRole.js once, never re-derived in a page');
 });
 
+test('coverage lines are strings, not arrays (D226)', () => {
+  // WorkerRail prints each coverage line as one string, so an array like
+  // ['Cohort cycles', '12 most recent'] renders as "Cohort cycles12 most recent"
+  // with no separator. Every branch page builds coverage from conditional pushes,
+  // and each push must be a single string, not a pair.
+  const BranchPrograms = codeOnlyJsx(read('frontend/src/pages/branch/BranchPrograms.jsx'));
+  const declared = BranchPrograms.indexOf('const coverage');
+  const region = BranchPrograms.slice(declared, BranchPrograms.indexOf('<BranchZone', declared));
+  // Reject the shape [['label', 'value']], which pushed arrays. Accept
+  // ['label: value'], which joined them. An arrow function or template string
+  // in a push argument makes it a string. A [ followed by a " or ' inside a
+  // push makes it an array.
+  assert.doesNotMatch(region, /coverage\.push\s*\(\s*\[/, 'coverage must push strings, not arrays like ["label", "value"]');
+});
+
 test('the benchmark the rail cites carries WHEN HQ computed it (D151)', () => {
   // S12 rule 3, verbatim: "It points at the copy it does have — HQ pushes one
   // anonymised median with a timestamp. The rail may cite that, AND SAYS WHEN
