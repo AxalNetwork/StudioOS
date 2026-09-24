@@ -5,6 +5,7 @@ import {
   ExternalLink, ShieldAlert,
 } from 'lucide-react';
 import { adminTelegram as api } from '../../lib/api';
+import { toLocalInput, scheduledNote, failedNote } from '../../lib/scheduledPost';
 import { useToast } from '../../components/useToast';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 
@@ -475,7 +476,7 @@ function ComposeTab({ channels, toast, editingId, setEditingId, onSent }) {
       setLintResult(null);
       setOverrideReason('');
       setShowOverride(false);
-      setScheduleAt(found?.scheduled_for || '');
+      setScheduleAt(toLocalInput(found?.scheduled_for));
     } catch (e) {
       setPost(null);
       toast.error(e?.body?.error || e?.body?.message || 'Load draft failed');
@@ -698,13 +699,24 @@ function ComposeTab({ channels, toast, editingId, setEditingId, onSent }) {
           <div className="flex-1" />
           <input
             type="datetime-local"
-            value={scheduleAt ? scheduleAt.slice(0, 16) : ''}
+            value={scheduleAt || ''}
             onChange={(e) => setScheduleAt(e.target.value)}
             className="text-sm px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800"
           />
           <button onClick={schedule} disabled={busy || !scheduleAt} className="text-sm px-3 py-1.5 rounded border border-slate-300 dark:border-slate-600 inline-flex items-center gap-1">
             <Calendar className="w-3 h-3" /> Schedule
           </button>
+          {/* D250 — the scheduler's promise and a failure's reason, beside the controls. */}
+          {post?.status === 'scheduled' && scheduledNote(post.scheduled_for) && (
+            <span className="basis-full text-xs text-slate-500" data-testid="telegram-scheduled-note">
+              {scheduledNote(post.scheduled_for)}
+            </span>
+          )}
+          {post?.status === 'failed' && (
+            <span className="basis-full text-xs text-red-600 dark:text-red-300" data-testid="telegram-failed-note">
+              {failedNote(post.send_error)}
+            </span>
+          )}
           <button
             onClick={send}
             disabled={busy}

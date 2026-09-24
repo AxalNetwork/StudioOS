@@ -70,6 +70,17 @@ export async function ensureTelegramSchema(env: Env): Promise<void> {
         "('axal-partners', 'Axal Operating Partners', 'partners', 1)," +
         "('axal-alumni', 'Axal Alumni', 'alumni', 1)",
     );
+    // D250 — who scheduled the post (migration 290). Same PRAGMA pattern as
+    // the signature column: a safety net for the declared column, not its
+    // only declaration (D235).
+    try {
+      const cols = await env.DB.prepare("PRAGMA table_info('telegram_posts')").all<{ name: string }>();
+      if (!(cols.results || []).some((c) => String(c.name) === 'scheduled_by')) {
+        await env.DB.exec("ALTER TABLE telegram_posts ADD COLUMN scheduled_by INTEGER REFERENCES users(id)");
+      }
+    } catch (e) {
+      console.warn('[telegramSchema] scheduled_by column ensure failed:', (e as Error).message);
+    }
     READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[telegramSchema] ensure failed:', (e as Error).message);

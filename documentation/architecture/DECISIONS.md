@@ -24422,3 +24422,190 @@ caught. The worker tests caught them from the start.
 `docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
 edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
 `check-folder-docs` and `check-api-drift` exit 0.
+
+## D250
+
+**A scheduled Telegram or X post is sent (task 329).** Both consoles let a Super
+Admin schedule a post: `POST /posts/:id/schedule` sets `status='scheduled'` and
+`scheduled_for`, and the UI offers it. Nothing ever sent one. A send existed
+only inside the two `/send` route handlers, so a scheduled post sat at
+'scheduled' for ever. The scheduled handler now sends it, through the same
+function the Send button calls.
+
+**Migration 290** adds `scheduled_by` to `telegram_posts` and `x_posts`. The
+column is declared in the same commit in the two runtime bootstraps
+(`services/telegramSchema.ts` and `services/xSchema.ts`, D235).
+`check-runtime-schema-declared` and `check-schema-pair-drift` both pass.
+
+### ONE SEND PER CONSOLE, FOR THE CLICK AND THE CLOCK
+
+`sendTelegramPost` and `sendXPost` are the `/send` handlers' bodies, extracted
+unchanged except for `c.env`→`env` and returning `{ status, body }`. The route
+is now three lines around the call. The enabled check, the claim, the lint, the
+send and the record are defined once.
+
+The two modes differ in three places and nowhere else:
+
+- **The claim.**
+  - A click claims draft, scheduled or failed.
+  - The clock claims only a row still `'scheduled'` AND due:
+    `datetime(scheduled_for) <= datetime(?)`, bound to D239's tick minute.
+  - So two overlapping ticks send once, and a row an admin moved out of
+    'scheduled' between the sweep's read and the claim is not sent.
+- **A refusal.**
+  - A click answers the admin, who is there. The row is left as it was, or
+    returned to draft.
+  - The clock has nobody to answer. A row left 'scheduled' would be refused
+    again every minute, so the row becomes **'failed' with its reason** in
+    `send_error`, and a `*_scheduled_send_refused` audit row is written.
+  - The console's own Send is the retry.
+- **The PII override.** Only a click can carry one.
+
+**X NOW CHECKS ITS ACCOUNT.** D216 gave Telegram's send the channel's `enabled`
+check. X's send never looked at `x_accounts.enabled`, so it posted through a
+disabled account. The shared `sendXPost` refuses before the claim, with
+`account_disabled`, for a click and the clock alike.
+
+### WHAT EACH REFUSAL DOES TO A SCHEDULED POST
+
+Each one ends as **'failed', with the reason, not retried, not dropped**:
+
+| refusal | recorded as |
+| --- | --- |
+| disabled Telegram channel / disabled X account | `channel_disabled` / `account_disabled`, with the sentence the click shows |
+| channel with no `chat_id` | `channel_missing_chat_id` |
+| PII lint | `pii_linter_blocked: …`. A scheduled send cannot carry an override, so the admin sends it by hand with a reason. |
+| X's daily cap | `daily_cap_reached: the account had used N of its M posts today…` |
+| provider error (Telegram, X, a missing media object) | the provider's message, exactly as the click records it |
+
+A cap refusal could have waited for the next day. It does not, because a post
+scheduled for a moment that silently moves to tomorrow is a post nobody asked
+for.
+
+### WHO THE CLOCK'S SEND IS RECORDED AS
+
+The admin who scheduled it. The schedule route writes `scheduled_by` (migration
+290); `created_by` records who drafted the post, which can be someone else. A
+row with no `scheduled_by`, meaning one scheduled before 290, falls back to
+`created_by`. Production held no scheduled row when 290 was written, so no row
+takes that fallback today.
+
+The alternative was to read the scheduler from the `*_post_scheduled` audit row.
+It was not taken: that means a join on free JSON, for a fact the send needs on
+every tick. Every clock-sent audit row carries `via: 'clock'`.
+
+### THE SWEEP (`services/scheduledPosts.ts`)
+
+Every minute, on D239's clock, **gated on `hqCadences`**. Both consoles are
+Super-Admin-only and the bot credentials are HQ's, so a branch has nothing to
+send. Each step is its own statement:
+
+1. **A row stuck in 'sending'** for `STALE_SENDING_MINUTES` becomes 'failed',
+   with a reason. That is 30 minutes: twice Cloudflare's 15-minute limit on a
+   scheduled invocation, so no live send can still own the row. It is **never
+   re-sent**, because a send that died after Telegram or X accepted it would
+   post twice. It is compared as `datetime(updated_at) <= datetime(?)`.
+2. **A 'scheduled' row whose `scheduled_for` SQLite cannot read**
+   (`datetime()` is NULL) becomes 'failed', quoting the value. It is never
+   skipped for ever.
+3. **Due rows** are those with `datetime(scheduled_for) <= datetime(?)`,
+   oldest first, heads only for X.
+4. **At most `SEND_CAP_PER_TICK` (10) sends a tick**, each under
+   `withDeadline(…, 25 s)`. The rest are counted and logged, and go on the next
+   tick. A send that times out keeps running. If its row is still 'sending',
+   step 1 fails it later; nothing re-sends it.
+
+Each table's three statements are complete SQL literals rather than a template
+with the table name interpolated, so `check-sql-prepare` has nothing new to
+review.
+
+### ONE STORED FORMAT
+
+`scheduled_for` is now stored as ISO 8601 UTC with a Z (`toISOString()`) on
+every write path: both schedule routes already did this, and both PUT routes now
+do too. Before, the PUT routes stored whatever string `Date.parse` accepted.
+
+Every comparison is `datetime()` on both sides, which reads ISO with a Z, the
+SQL format and an explicit offset alike. The test covers all three, plus one
+string it cannot read.
+
+**Measured read-only in production before choosing** (2026-09-24, counts only):
+`telegram_posts` held 19 rows, all 'draft', none with a `scheduled_for`;
+`x_posts` held none. No stored row needs anything. **No index:** the tables are
+that small.
+
+### THE GUARD
+
+`scheduled_for` joins `TTL_COLUMN` in `check-timestamp-comparisons.mjs`, in the
+commit that first compares it. That alone would guard nothing here, because
+`TTL_COLUMN`'s pattern only matches a comparison against a clock literal
+(`CURRENT_TIMESTAMP` or `datetime('now')`), and the sweep binds its clock as
+`?`. So a second, deliberately narrow list, `BOUND_CLOCK_COLUMN`
+(`scheduled_for` only), also refuses a bare `scheduled_for <= ?`.
+
+It was not widened to every TTL column: measured, that would flag 16 existing
+comparisons against bound values whose format each call site controls, in files
+this change does not hold.
+
+### THE CONTROLS
+
+A scheduled post now says "Goes out within a minute of <local time> (<UTC>
+UTC), sent by the scheduler." A failed post in the Telegram composer shows "Not
+sent: <reason>". X already showed `send_error`.
+
+Both consoles also filled their time input wrongly, and that is fixed. Telegram
+seeded its datetime-local input with the first 16 characters of the stored UTC
+string. X's prompt, labelled "local time", pre-filled the UTC clock. Both now
+use `toLocalInput` (`frontend/src/lib/scheduledPost.js`). Only the schedule
+controls in `AdminX.jsx` are touched; the send handler's error matches are
+another session's.
+
+### HOW IT IS HELD
+
+`cloudflare-worker/test/scheduled_posts_d250.test.ts` (new, 12 tests) runs on
+real node:sqlite. The consoles' own bootstraps build the tables, and Telegram
+and X are stubbed on `fetch` with every send counted. It covers:
+
+- a due post is sent once and marked sent, and a later one is untouched;
+- the clock is recorded as `scheduled_by`;
+- two overlapping ticks send once;
+- the clock claims only a still-'scheduled' row;
+- a disabled channel, and a disabled X account, refuse both the clock and the
+  click;
+- the ISO-with-Z, SQL and offset formats each come due at 10:00, and an
+  unreadable one fails with its value;
+- a stale 'sending' row fails and is not re-sent, and a fresh one is left
+  alone;
+- PII lint and the X cap fail a scheduled post, and it is not retried;
+- the sweep runs under `hqCadences`;
+- the routes store one format and record `scheduled_by`.
+
+`frontend/test/scheduled_post_controls_d250.test.mjs` (new, 5 tests) covers
+the helpers and both consoles' wiring. The local-time test pins
+`TZ=America/New_York`: CI runs in UTC, where a helper that returned the UTC
+clock would pass.
+
+Every mutation was run both ways (a named `not ok` with a non-zero exit, then a
+sha256-checked restore that passes). **13 mutations, all caught.**
+
+The five the brief required:
+
+1. the claim's status conjunct, dropped on Telegram and on X;
+2. a bare comparison in the due read, in the Telegram claim and in the X claim;
+3. `scheduled_for` removed from `TTL_COLUMN`;
+4. the enabled check, dropped on Telegram and on X;
+5. a stale 'sending' row re-sent.
+
+Four more on the controls:
+
+1. `toLocalInput` returning UTC;
+2. X's prompt defaulting to UTC again;
+3. the failed note dropped;
+4. the "within a minute" promise dropped.
+
+**One mutation escaped first, and the fix was to the assertion.** Dropping X's
+claim conjunct passed the overlapping-ticks test, because whether two
+concurrent sweeps both reach the claim depends on how they interleave. The
+deterministic test, where the clock is handed a due row that is no longer
+'scheduled', was added for that reason. It catches the mutation on both
+consoles.

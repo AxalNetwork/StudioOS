@@ -29,6 +29,17 @@ export async function ensureXSchema(env: Env): Promise<void> {
     await env.DB.exec(
       "CREATE INDEX IF NOT EXISTS idx_x_posts_thread ON x_posts(thread_continuation_of, thread_position)",
     );
+    // D250 — who scheduled the post (migration 290). Same PRAGMA pattern as
+    // the signature column: a safety net for the declared column, not its
+    // only declaration (D235).
+    try {
+      const cols = await env.DB.prepare("PRAGMA table_info('x_posts')").all<{ name: string }>();
+      if (!(cols.results || []).some((c) => String(c.name) === 'scheduled_by')) {
+        await env.DB.exec("ALTER TABLE x_posts ADD COLUMN scheduled_by INTEGER REFERENCES users(id)");
+      }
+    } catch (e) {
+      console.warn('[xSchema] scheduled_by column ensure failed:', (e as Error).message);
+    }
     READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[xSchema] ensure failed:', (e as Error).message);

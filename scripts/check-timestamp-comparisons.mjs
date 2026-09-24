@@ -64,7 +64,19 @@ const problems = [];
 // against the clock — HQ Support's mirror strip counts the last 24 hours of
 // attempts. The name is matched as a suffix, so it covers that column without
 // naming its table.
-const TTL_COLUMN = '(?:expires_at|valid_until|confirm_expires_at|starts_at|start_at|respond_by|due_at|occurred_at|attempted_at)';
+// `scheduled_for` joined with D250, in the commit that gives it its first
+// comparison: the scheduled-post sweep reads Telegram and X rows due by the
+// tick's minute. The column has held ISO strings, SQL strings and strings
+// with an offset, so it is exactly the column this guard exists for.
+const TTL_COLUMN = '(?:expires_at|valid_until|confirm_expires_at|starts_at|start_at|respond_by|due_at|occurred_at|attempted_at|scheduled_for)';
+// D250 — A COLUMN COMPARED AGAINST A BOUND CLOCK. The sweep binds its clock as
+// `?`, so the clock-literal pattern below could never see a bare comparison
+// of `scheduled_for`. For the columns listed here the guard also refuses a
+// bare `?` comparand. The list is deliberately narrow: widening it to every
+// TTL column would flag 16 existing comparisons against bound values whose
+// format each call site controls, and those are not this change's to re-open.
+const BOUND_CLOCK_COLUMN = '(?:scheduled_for)';
+const BARE_BOUND = new RegExp(`(?<!datetime\\()\\b[a-z_]*\\.?${BOUND_CLOCK_COLUMN}\\s*[<>]=?\\s*\\?`);
 // A bare column on the left of a comparison against the clock. The negative
 // lookbehind lets `datetime(expires_at)` through and nothing else.
 const BARE_TTL = new RegExp(
@@ -98,6 +110,8 @@ function walk(dir) {
       if (isComment(line)) return;
       if (CT_COMPARED.test(line)) {
         problems.push(`${rel}:${i + 1}  CURRENT_TIMESTAMP is compared — use datetime(column) vs datetime('now')`);
+      } else if (BARE_BOUND.test(line)) {
+        problems.push(`${rel}:${i + 1}  a timestamp column is compared bare against a bound clock — wrap both: datetime(${BARE_BOUND.exec(line)[0].split(/\s*[<>]/)[0].trim()}) <= datetime(?)`);
       } else if (BARE_TTL.test(line)) {
         problems.push(`${rel}:${i + 1}  a timestamp column is compared bare — wrap it: datetime(${BARE_TTL.exec(line)[0].split(/\s*[<>]/)[0].trim()})`);
       }
