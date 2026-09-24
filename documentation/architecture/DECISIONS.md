@@ -21404,3 +21404,130 @@ The re-run caught all eight in 44 seconds. By area:
 
 D211 adds no migration, so nothing is owed in D1. **285 is still the next free
 migration, and D212 the next decision.**
+
+## D212
+
+**The owner's permission rules for Claude Code sessions move from one checkout
+into the repository. `.claude/settings.local.json` is the personal, untracked
+scope. In a cloud session it sits in a container that is reclaimed when the
+session ends, and the next session re-clones the repository without it. So the
+rules the owner set held for exactly one session. They are now
+`.claude/settings.json`, which every Claude Code session in a checkout of this
+repository reads. Three tools that the owner's server-wide allow rules approved
+without a prompt now ask first.**
+
+#374. **No migration**, so **285 is still free**. **No route, no `api.js`
+method and no `frontend/src` change**, so `check-api-drift` has nothing to say
+and `docs/` is not rebuilt. The file configures the coding agent, not the
+platform: nothing that runs on axal.vc reads it. **Nothing retires.**
+
+### WHAT THE FILE SAYS
+
+Three rule lists. Across settings scopes (user, project, local) the lists
+merge rather than replace. A tool matched by more than one list takes the
+strictest: **deny beats ask, and ask beats allow**. So a rule here can narrow
+what another scope allows, and nothing here can loosen another scope's deny.
+
+- **allow — three whole servers**: GitHub, the Cloudflare developer platform
+  and Claude Code Remote. Every tool on those servers runs without a prompt
+  unless a deny or ask rule names it.
+- **deny — eighteen tools, in three groups.**
+  - *GitHub, eight.* `merge_pull_request` and `enable_pr_auto_merge`: merging
+    to `main` deploys production (`cloudflare-worker-deploy.yml` runs on every
+    push to `main`), and merging is the owner's. `pull_request_review_write`:
+    an agent does not approve or submit reviews, its own PRs included.
+    `push_files`, `create_or_update_file` and `delete_file`: these commit
+    through the API, bypassing the local checkout where the suite, the
+    typechecks and the lease-pinned push run. `create_repository` and
+    `fork_repository`: a new repository is out of scope.
+  - *Cloudflare, nine.* Creating or deleting a D1 database. Production is
+    `studioos-db`, whose EU jurisdiction is set on the account rather than in
+    any config (D167). A branch database is created by `branch-provision.yml`
+    with the residency its licence asks for. Creating, updating or deleting a
+    KV namespace: `TOKENS` and `RATE_LIMITS` hold sessions and rate limits.
+    Creating or deleting an R2 bucket: `studioos-files`,
+    `studioos-publications` and `studioos-backups` hold documents and the D1
+    backups. Editing or deleting a Hyperdrive config: the platform has none.
+    `wrangler.toml` and the worker source never name Hyperdrive, and this
+    rule keeps it that way until a decision says otherwise.
+  - *Claude Code Remote, one.* `create_session`: starting another cloud
+    session.
+- **ask — three tools**, explained below.
+
+### WHY THOSE THREE ASK RATHER THAN DENY
+
+Each is in the same class as a denied tool, and each is also needed for
+routine work. An `ask` rule keeps it usable and puts a person in front of
+every call.
+
+1. **`d1_database_query` runs any SQL against production D1**, writes and
+   deletes included. It is also how a migration is verified after its deploy:
+   D209's VERIFIED section records the read-only `schema_migrations`
+   read-backs of 283 and 284, for example. A deny would end those reads, so
+   each statement prompts instead.
+2. **`actions_run_trigger` can dispatch any workflow that has a
+   `workflow_dispatch` trigger**, and eleven do. They include:
+   - the production deploy, `cloudflare-worker-deploy.yml`;
+   - `d1-migrate.yml`, whose `apply` mode writes production D1 when no branch
+     is named;
+   - `branch-provision.yml`, which creates Cloudflare resources and deploys a
+     Worker;
+   - `dr-drill.yml`.
+
+   Today the GitHub integration this session uses lacks `actions: write`, and
+   a dispatch answers 403 (`Resource not accessible by integration`). If that
+   permission is ever granted, every dispatch prompts from the first one.
+3. **`update_pull_request` can undraft or close a PR, or change its base
+   branch.** Undrafting is the owner's, as is merging. The same tool is how an
+   agent corrects a PR body, which it does on every PR it opens, so it asks
+   rather than refuses.
+
+### WHY THE FILE IS COMMITTED
+
+The owner chose between two homes for the rules: keep them local, or commit
+them. Two facts decided it.
+
+- **The local file does not last.** It was written at 22:50:32Z on 2026-09-23
+  and excluded from git (`.git/info/exclude`), in a container reclaimed when
+  the session ends.
+- **A committed file does last, and applies to every Claude Code session in
+  any checkout of this repository, not only the owner's.** That wider reach is
+  the point. The rules describe what an agent may do to this repository and
+  its production, whoever's session it is.
+
+**The local file stays.** It carries the same rules, and lists that repeat
+across scopes merge, so the duplicate costs nothing.
+
+**What the file does not govern.**
+- The Cloudflare tools reach this session through a claude.ai connector. That
+  connector's own per-tool settings live on claude.ai, account-wide, and are
+  not written here.
+- The file binds Claude Code only. It does not restrict a person, a GitHub
+  Action, or any other tool holding the same credentials.
+
+### DELIBERATELY NOT TESTED
+
+Whether each ask rule prompts. Proving it would mean running a production SQL
+statement, dispatching a workflow or editing a PR only to watch a prompt
+appear. The first real migration read-back after this merges will show it.
+
+### VERIFIED
+
+- **`npm run test:drift` exits 0**, read as the exit code from a redirected
+  log: frontend **3058**, worker **3970** (3967 pass plus the same 3
+  environment-gated skips), retention **47**, zero `not ok`. The counts are
+  D211's, unchanged. That is expected: this PR adds no code a test could
+  reach.
+- **The file is the owner's rules plus the three asks, checked by a Python
+  comparison against a snapshot of the owner's JSON** taken before the ask
+  rules were added. `allow` (3) and `deny` (18) are equal to it as ordered
+  lists; `ask` is exactly the three tools above; none of the three is also
+  denied; and the project file equals the local one key for key. So the two
+  scopes cannot disagree about what they say.
+- **The file is tracked and nothing ignores it.** `git check-ignore` is silent
+  on `.claude/settings.json` and `git ls-files .claude/` lists that one file.
+  The local file is still excluded, by `.git/info/exclude:19`, so it cannot
+  ride into a commit.
+- `check-decision-ids` reads **D1 through D212**.
+
+**285 is still the next free migration, and D213 the next decision.**
