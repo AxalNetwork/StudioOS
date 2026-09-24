@@ -22778,6 +22778,113 @@ not this read path.
 
 **285 is still the next free migration.**
 
+## D227
+
+**The Integration keys console follows where a key lives. Rotate and Remove
+are offered for a key held as a Worker secret, which is where every save puts
+it. A key table that does not answer reads Unknown instead of offering
+Configure. A connected-users count that could not be read is never shown as
+0. The save dialog says what a save actually does.**
+
+This follows D223, which put every secret write here behind the holder's bar.
+**No migration**, so **285 is still free**. **No new route and no `api.js`
+method.** `GET /api/admin/integration-keys` gains `db_readable`,
+`unreadable_reason` and each key's `state`, and every field it had stays.
+
+### THE THREE DEFECTS
+
+1. **A saved key could not be rotated or removed from the console.**
+   - `PUT` promotes the pair to Worker secrets and deletes the database row, so
+     from then on the key reads `source: 'env'`.
+   - Rotate and Remove appeared only for `source === 'db'`. Remove on an env
+     key refused and pointed at `wrangler secret delete`.
+   - The routes had always gone through the Cloudflare secrets API wherever
+     the key lived; only the page withheld the buttons.
+2. **An unanswered key table read as "not configured".**
+   `listProviderKeyStatus` caught a failed read of `provider_oauth_keys` and
+   carried on, so every key without a Worker secret read `unconfigured`, and
+   the console offered Configure over whatever the table might hold. D213
+   had built the honest reader (`readProviderKeyStatus`'s `db_readable`, and
+   `keyStateOf`'s `unreadable`) and filed this defect rather than change the
+   console's payload.
+3. **An unreadable count read as 0.** `active_integrations` was
+   `counts.get(pk) ?? 0` even when the `integrations` read had failed. The
+   Remove confirmation quotes that number as how many users it will
+   disconnect, and at 0 it asked only "Remove Slack keys?".
+
+The dialog said "Encrypted at rest. Only the secret hash is ever logged."
+That described the database store the console no longer writes, and a hash
+that nothing records.
+
+### WHAT CHANGED
+
+- **The console's list carries D213's read.** `listProviderKeyStatus` still
+  runs `ensureSchema` first, as it always has, and now returns `db_readable`
+  and each key's `state` from `keyStateOf`. The route adds
+  `unreadable_reason` when the table did not answer.
+- **`active_integrations` is `null` when the count could not be read.** A
+  provider absent from a GROUP BY that did answer is still a measured `0`.
+  D213's Platform payload does not carry this field, so it does not move.
+- **The rotate's database fallback is refused for a key held as a Worker
+  secret** (`keyHeldAsWorkerSecret`). The fallback exists for a Worker with no
+  Cloudflare API token. For an env-held key it would rotate a stale row that
+  the Worker secret overrides (`loadOauthCreds`), answer "ok", and change
+  nothing a user's connection reads. It now answers 503
+  `cloudflare_api_token_missing` and writes one `failed` audit row. A
+  database-only key still rotates there.
+- **The page** (`lib/integrationKeys.js`, pure):
+  - `keyActionsFor(state)` offers Rotate and Remove for `env` and `db`,
+    Configure for `unset`, and nothing for `unreadable` or any state it does
+    not recognise. The holder check from D223 still wraps every button.
+  - An `unreadable` key shows `Unknown` with the worker's reason.
+  - `connectedUsersLine` and `removeConfirmText` name an unread count as
+    unread.
+  - `SAVE_EFFECT` says what a save does: it writes Worker secrets through the
+    Cloudflare API, removes any database copy, never shows a value again, and
+    audits only the variable names. Running Worker instances keep the old
+    values until they restart.
+  - The banner no longer says env vars "take precedence over keys configured
+    here", because a save now writes exactly those.
+  - An env row names its two variables. It used to print a literal
+    `</code> + <code>` between them, because the markup was a string passed to
+    `join`.
+
+### VERIFIED
+
+- **`npm run test:drift` exits 0** on Node 22 (`EXIT=0` read from the redirected
+  log): frontend **3160**, worker **4110** pass with the same **3**
+  environment-gated skips, retention **48**, zero `not ok`. D223's merged run
+  was 3154 and 4102. `docs/` was rebuilt with the root `npm run build`
+  (retention ledger moved aside), and `check-docs-fresh --strict` exits 0.
+- `cloudflare-worker/test/integration_keys_d227.test.ts` drives the real
+  router over a real sqlite database cut from the baseline, with `fetch`
+  recorded and a D1 wrapper that can refuse one query by pattern. It checks:
+  - `unset` for a measured absence, and `env` and `db` where the key is held;
+  - `unreadable`, never `unset`, when the key table refuses, while a Worker
+    secret still reads `env`;
+  - a `null` count when `integrations` refuses, and a measured `0` when it
+    answers;
+  - rotating an env-held key PUTs `SLACK_CLIENT_SECRET`, and removing one
+    DELETEs both variables;
+  - with no Cloudflare token, a stale row under a Worker secret is left
+    unchanged and the audit row reads `failed`, while a database-only key
+    still rotates there, encrypted.
+- `frontend/test/integration_keys_d227.test.mjs` puts every state through
+  `lib/integrationKeys.js` and checks that the panel and dialog use it.
+- **Mutation checks, each alone, restored from saved copies.** Each of these
+  fails a named test:
+  - dropping the Worker-secret guard on the fallback;
+  - computing `state` as if the table had answered;
+  - `null` back to `0`;
+  - `db_readable` hard-coded to true;
+  - `env` losing its actions;
+  - an unknown state offering Configure;
+  - an unread count printed as 0;
+  - the old dialog sentence;
+  - Remove gated on `source === 'db'` again.
+
+**285 is still the next free migration.**
+
 ## D228
 
 **A screen sets a promo ceiling now. `api.promoCeilingSet` and its route, `PUT
