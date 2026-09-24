@@ -94,7 +94,8 @@ function seedUsers(db: InstanceType<typeof DatabaseSync>) {
 /** HQ: the ledger, one provisioned branch. */
 function hqDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  db.exec(USERS); db.exec(DEPLOYMENTS); db.exec(MIG_259);
+  db.exec(USERS); db.exec(DEPLOYMENTS); db.exec(MIG_259); db.exec(MIG_261);
+  db.exec(read('cloudflare-worker/sql/migrations/288_escalation_delivery.sql'));
   seedUsers(db);
   db.prepare(
     `INSERT INTO licence_deployments (licence_uid, code, hostname, worker_name, d1_name)
@@ -113,7 +114,8 @@ function branchDb(licenceStatus = 'active') {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(USERS);
   db.exec('CREATE TABLE branch_licence (id INTEGER PRIMARY KEY, status TEXT, pushed_at TEXT);');
-  db.exec(MIG_261);
+  db.exec(MIG_259); db.exec(MIG_261);
+  db.exec(read('cloudflare-worker/sql/migrations/288_escalation_delivery.sql'));
   seedUsers(db);
   db.prepare('INSERT INTO branch_licence (id, status, pushed_at) VALUES (1,?,?)')
     .run(licenceStatus, '2026-09-15T00:00:00Z');

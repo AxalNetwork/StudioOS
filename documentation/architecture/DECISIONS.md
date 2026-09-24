@@ -23964,6 +23964,22 @@ Both typechecks, `check-decision-ids`, `check-folder-docs`, `check-api-drift`
 and `check-docs-fresh --strict` exit 0. `frontend/src` did not move, so
 `docs/` was not rebuilt.
 
+## D243
+
+**An escalation can be sent again, in both directions.** A raise HQ did not answer stayed `undelivered`, and migration 261 called that retryable, but nothing retried it. A retry after a lost response would also have inserted a second HQ row, because `recordEscalation` had no idempotency key. The other way, HQ's answer push was returned on the response and not stored, so HQ could not tell later whether it arrived or send that same decision again. Task 341.
+
+**What shipped.** The branch generates a `raise_key` before it calls HQ, stores it on its row, and sends it. HQ stores it under a partial unique index on `(branch_code, raise_key)` where the key is not null. The insert is `ON CONFLICT DO NOTHING` and returns the uid already stored. `POST /api/branch/escalations/:id/retry` sends that same row again. It is not suspension-gated: escalating is how a frozen branch gets out (D107, D112). The raised list has a Retry control.
+
+HQ stores `push_ok`, `push_reason`, `push_at`, and the name that was pushed (`answered_by_name`), because the row had only the user id and a later lookup could send a different name. `POST /api/admin/escalations/:uid/resend` pushes that stored decision. It does not read a new answer. HQ Support shows Send again beside an answer that did not arrive. Nothing sends either of these on a schedule.
+
+**Migration 288** is additive ALTERs and the two partial unique indexes. No `BEGIN`/`COMMIT`. Both tables are in the one file because HQ and a branch run the same list.
+
+### VERIFIED
+
+- The same `raise_key` returns one uid and one row. A suspended branch retries an undelivered row with that same key and does not insert a second local row. The retry handler does not call `requireBranchNotSuspended`.
+- Send again, given a different answer in the body, pushes the stored text and leaves the row's answer as it was. `push_ok` is written.
+- Three mutations, each restored sha256-identical, each a non-zero exit and one `not ok`. Dropping the unique index makes the keyed insert fail (the `ON CONFLICT` target is gone). Letting send again read a new answer from the body pushes that text. Skipping the stored-decision check lets a resend of an open row through.
+
 ## D247
 
 **Deactivating an administrator now takes demote's bar: a TOTP-minted

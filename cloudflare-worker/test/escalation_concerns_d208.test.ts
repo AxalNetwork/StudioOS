@@ -110,7 +110,11 @@ function branchDb(opts: {
     `INSERT INTO branch_licence (id, licence_uid, licence_ref, status, kind, pushed_at)
      VALUES (1, 'lic_fr', 'AXL-001', 'active', ?, ?)`,
   ).run(opts.kind === undefined ? 'subsidiary' : opts.kind, PUSHED);
-  if (opts.lane !== false) run(db, migration('261_branch_escalations'));
+  if (opts.lane !== false) {
+    run(db, migration('259_hq_escalations'));
+    run(db, migration('261_branch_escalations'));
+    run(db, migration('288_escalation_delivery'));
+  }
   if (opts.templates !== false) run(db, migration('268_branch_templates'));
   if (opts.articles !== false) db.exec(stripForeignKeys(tableFromBaseline(BASELINE, 'articles')));
   return db;
@@ -152,7 +156,7 @@ const lane = (db: InstanceType<typeof DatabaseSync>) =>
 function hqDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(stripForeignKeys(tableFromBaseline(BASELINE, 'territory_licences')));
-  for (const m of ['258_licence_deployments', '259_hq_escalations', '279_licence_kind']) run(db, migration(m));
+  for (const m of ['258_licence_deployments', '259_hq_escalations', '261_branch_escalations', '279_licence_kind', '288_escalation_delivery']) run(db, migration(m));
   db.prepare(
     `INSERT INTO territory_licences (id, uid, licence_ref, legal_entity_name, brand_name, status, kind)
      VALUES (1, 'lic_fr', 'AXL-001', 'Axal VC France SAS', 'Axal VC France', 'active', 'subsidiary')`,
