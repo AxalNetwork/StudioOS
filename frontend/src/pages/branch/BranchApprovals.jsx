@@ -428,6 +428,7 @@ export default function BranchApprovals({ user }) {
   const [detail, setDetail] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
+  const [retryingId, setRetryingId] = useState(null);
 
   const load = useCallback(() => {
     setLane(null);
@@ -645,9 +646,29 @@ export default function BranchApprovals({ user }) {
                     branch holds this row and HQ does not — nothing may count
                     it as an escalation HQ has. */}
                 {it.status === 'undelivered' && (
-                  <p className="mt-2 text-[11.5px] leading-relaxed text-red-700 dark:text-red-300">
-                    This has not reached HQ, so it is not on their queue. {it.delivery_error}
-                  </p>
+                  <div className="mt-2">
+                    <p className="text-[11.5px] leading-relaxed text-red-700 dark:text-red-300">
+                      This has not reached HQ, so it is not on their queue. {it.delivery_error}
+                    </p>
+                    <button
+                      type="button"
+                      className="mt-2 rounded-lg border border-red-300 px-2.5 py-1 text-[11px] font-bold text-red-800 hover:bg-red-50 disabled:opacity-50 dark:border-red-500/40 dark:text-red-200"
+                      disabled={retryingId === it.id}
+                      onClick={() => {
+                        setRetryingId(it.id);
+                        api.branchEscalationRetry(it.id).then(() => {
+                          setRetryingId(null);
+                          load();
+                        }, (e) => {
+                          reportError('branch-escalation-retry', e);
+                          setRetryingId(null);
+                          load();
+                        });
+                      }}
+                    >
+                      {retryingId === it.id ? 'Sending…' : 'Retry'}
+                    </button>
+                  </div>
                 )}
 
                 {/* `bg-white dark:bg-slate-900`, not an `axal-` token: the

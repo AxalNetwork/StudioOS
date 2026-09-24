@@ -3,6 +3,7 @@
  *
  *   GET   /api/admin/escalations          the board, filterable by status/kind
  *   PATCH /api/admin/escalations/:uid     the decision, and the push that carries it
+ *   POST  /api/admin/escalations/:uid/resend   send the stored decision again (D243)
  *
  * WHY THE ANSWER AND THE PUSH ARE TWO FACTS. HQ deciding and the branch
  * receiving are different events, and a route that reported them as one would
@@ -29,6 +30,52 @@ import { mirrorBranchAction } from '../services/auditMirror';
 const r = new Hono<{ Bindings: Env }>();
 
 const str = (v: unknown, max = 500): string => String(v ?? '').trim().slice(0, max);
+
+type Pushed = { ok: boolean; reason?: string };
+
+/**
+ * Send a decision that is already stored. The payload is the caller's; this
+ * does not read a new answer off a request (D243).
+ */
+async function deliverAnswer(
+  env: Env, branchCode: string, answer: Record<string, unknown>,
+): Promise<Pushed> {
+  let pushed: Pushed = {
+    ok: false,
+    reason: `No branch Worker is bound for ${branchCode}, so the decision is recorded `
+      + 'at HQ and was not sent.',
+  };
+  const binding = branchByCode(env, branchCode);
+  if (binding) {
+    try {
+      const res = await (binding.stub as any).applyEscalationAnswer({
+        ...answer,
+        pushed_at: new Date().toISOString(),
+      });
+      pushed = res && typeof res === 'object' && 'ok' in res
+        ? res as Pushed
+        : { ok: true };
+    } catch (e) {
+      pushed = { ok: false, reason: `The branch did not accept the decision: ${(e as Error).message}` };
+    }
+  }
+  await env.DB.prepare(
+    `UPDATE hq_escalations SET push_ok = ?, push_reason = ?, push_at = ?, updated_at = ? WHERE uid = ?`,
+  ).bind(
+    pushed.ok ? 1 : 0,
+    pushed.ok ? null : (pushed.reason || null),
+    new Date().toISOString(),
+    new Date().toISOString(),
+    String(answer.hq_uid ?? ''),
+  ).run();
+  mirrorBranchAction(
+    env,
+    'escalation_answered',
+    !binding ? 'not_deployed' : (pushed.ok ? 'ok' : 'failed'),
+    branchCode,
+  );
+  return pushed;
+}
 
 // GET /api/admin/escalations?status=&kind=
 r.get('/escalations', async (c) => {
@@ -99,44 +146,45 @@ r.patch('/escalations/:uid', async (c) => {
     // THE PUSH IS REPORTED, NEVER THROWN. See the header.
     //
     // D205 — THE REASON SAYS WHAT HAPPENED, NOT WHAT MIGHT. It used to end "and
-    // will reach the branch when a binding exists", which nothing makes true:
-    // no route or sweep re-sends a stored decision once a binding appears
-    // (#341). It was harmless while no screen showed it; HQ Support now does,
-    // and it adds "nothing sends it again" itself, once, for every reason a
-    // push can fail — so it is not said here as well.
-    let pushed: { ok: boolean; reason?: string } = {
-      ok: false,
-      reason: `No branch Worker is bound for ${decided.row.branch_code}, so the decision is recorded `
-        + 'at HQ and was not sent.',
-    };
-    const binding = branchByCode(c.env, decided.row.branch_code);
-    if (binding) {
-      try {
-        const res = await (binding.stub as any).applyEscalationAnswer({
-          ...decided.answer,
-          pushed_at: new Date().toISOString(),
-        });
-        // The branch answers `{ok:false, reason}` when it holds no row for this
-        // uid — a real state, not an exception, and one an operator should see
-        // rather than a generic success.
-        pushed = res && typeof res === 'object' && 'ok' in res
-          ? res as { ok: boolean; reason?: string }
-          : { ok: true };
-      } catch (e) {
-        pushed = { ok: false, reason: `The branch did not accept the decision: ${(e as Error).message}` };
-      }
-    }
-    // D163 — one call for both arms. No binding is `not_deployed`; a binding
-    // that answered is its own verdict. HQ's ledger already holds the decision
-    // either way, which is why this records only whether it TRAVELLED.
-    mirrorBranchAction(
-      c.env,
-      'escalation_answered',
-      !binding ? 'not_deployed' : (pushed.ok ? 'ok' : 'failed'),
-      decided.row.branch_code,
-    );
+    // will reach the branch when a binding exists". D243 stores the outcome and
+    // a person can send the stored decision again; nothing sends it on its own.
+    // The branch answers `{ok:false, reason}` when it holds no row for this
+    // uid — a real state, not an exception.
+    const pushed = await deliverAnswer(c.env, decided.row.branch_code, decided.answer);
 
     return c.json({ ...decided.row, pushed });
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /api/admin/escalations/:uid/resend
+// The stored decision, again. The body is not an answer: a new decision is the
+// PATCH, and this route must not become a second way to write one (D243).
+r.post('/escalations/:uid/resend', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    const uid = str(c.req.param('uid'), 80);
+    const row = await c.env.DB.prepare(
+      `SELECT uid, branch_code, kind, subject, status, answer, answered_by_name, answered_at
+         FROM hq_escalations WHERE uid = ?`,
+    ).bind(uid).first<{
+      uid: string; branch_code: string; kind: string; subject: string; status: string;
+      answer: string | null; answered_by_name: string | null; answered_at: string | null;
+    }>();
+    if (!row) return c.json({ error: 'not_found' }, 404);
+    if (!row.answer || (row.status !== 'answered' && row.status !== 'declined')) {
+      return c.json({
+        error: 'no_decision',
+        message: 'There is no stored decision to send again. Record one first.',
+      }, 400);
+    }
+    const pushed = await deliverAnswer(c.env, row.branch_code, {
+      hq_uid: row.uid,
+      answer: row.answer,
+      answered_by_name: row.answered_by_name || 'Axal VC HQ',
+      answered_at: row.answered_at,
+      status: row.status,
+    });
+    return c.json({ ...row, pushed });
   } catch (e) { return mapError(c, e); }
 });
 

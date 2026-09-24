@@ -3313,6 +3313,9 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(data || {}),
     }),
+  // D243 — send the stored decision again. No body: a new answer is the PATCH.
+  escalationResend: (uid) =>
+    request(`/admin/escalations/${encodeURIComponent(uid)}/resend`, { method: 'POST' }),
   // D121 — move an account from one provisioned branch to another. Needs TOTP
   // and a recent step-up; the page says so when the server refuses.
   hqMoveAccount: (code, userId, data) =>
@@ -3355,6 +3358,9 @@ export const api = {
   branchDeployment: () => request('/branch/deployment'),
   branchEscalate: (data) =>
     request('/branch/escalations', { method: 'POST', body: JSON.stringify(data || {}) }),
+  // D243 — an undelivered raise, again. Not a new item, and not gated on a freeze.
+  branchEscalationRetry: (id) =>
+    request(`/branch/escalations/${encodeURIComponent(id)}/retry`, { method: 'POST' }),
   licenceCreate: (data) => request('/admin/licences', { method: 'POST', body: JSON.stringify(data || {}) }),
   licenceSetTerritories: (uid, countries) =>
     request(`/admin/licences/${encodeURIComponent(uid)}/territories`, { method: 'PUT', body: JSON.stringify({ countries }) }),
