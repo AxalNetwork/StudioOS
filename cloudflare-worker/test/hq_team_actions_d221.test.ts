@@ -36,6 +36,8 @@ const HOLDER = 801;
 const SUCCESSOR = 802;
 const MEMBER = 803;
 const REASON = 'Ticket 5120 — the branch admin asked for help with their seats';
+// D248 — Extend asks for its own reason, at least 10 characters.
+const EXTEND_REASON = 'Still on the same ticket; the fix needs one more step.';
 const HANDOVER = 'Guillaume steps back from operations; Sam runs HQ from October';
 
 function coerce(a: any[]): any[] {
@@ -177,7 +179,7 @@ test('the holder can still extend a session they opened on an administrator', as
   // defect wearing the same status code.
   const db = freshDb();
   const id = await openOnAdmin(db);
-  const r = await call(admin, db, HOLDER, `/impersonate-sessions/${id}/extend`);
+  const r = await call(admin, db, HOLDER, `/impersonate-sessions/${id}/extend`, { reason: EXTEND_REASON });
   assert.equal(r.status, 200, `the holder was refused: ${JSON.stringify(r.body)}`);
   assert.ok(typeof r.body?.token === 'string' && r.body.token.length > 20, 'no token was minted');
 });
@@ -192,7 +194,7 @@ test('an account that handed the elevation on cannot extend a session on an admi
   // and this test would stop seeing the guard it exists for.
   db.prepare('DELETE FROM super_admins WHERE user_id = ?').run(HOLDER);
   const before = actions(db).length;
-  const r = await call(admin, db, HOLDER, `/impersonate-sessions/${id}/extend`);
+  const r = await call(admin, db, HOLDER, `/impersonate-sessions/${id}/extend`, { reason: EXTEND_REASON });
   assert.equal(r.status, 403, 'an account that can no longer open this session extended it');
   assert.equal(r.body?.code, 'super_admin_required', 'the refusal does not name the line crossed');
   assert.equal(r.body?.token, undefined, 'a token was minted on a refused extension');
@@ -206,7 +208,7 @@ test('extending a session on an ordinary account is unchanged', async () => {
   db.prepare('DELETE FROM super_admins').run();
   const open = await call(admin, db, SUCCESSOR, `/impersonate/${MEMBER}?context=${encodeURIComponent(REASON)}`);
   assert.equal(open.status, 200, `a plain admin could not open a session on a founder: ${JSON.stringify(open.body)}`);
-  const r = await call(admin, db, SUCCESSOR, `/impersonate-sessions/${open.body.impersonation_session_id}/extend`);
+  const r = await call(admin, db, SUCCESSOR, `/impersonate-sessions/${open.body.impersonation_session_id}/extend`, { reason: EXTEND_REASON });
   assert.equal(r.status, 200, 'the new guard refuses an ordinary extension');
 });
 

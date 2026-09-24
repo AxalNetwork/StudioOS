@@ -91,7 +91,8 @@ test('the reason reaches the worker as the column it fills', () => {
     'the reason is not sent as `context`, the column impersonation_sessions has');
   // The DEFINITION, not the name. `/adminImpersonateExtend/` also matches
   // `adminImpersonateExtendXX`, so renaming the method away escaped it.
-  assert.match(API, /adminImpersonateExtend:\s*async \(sessionId\) =>/,
+  // D248 — the method takes the reason Extend now requires.
+  assert.match(API, /adminImpersonateExtend:\s*async \(sessionId, reason\) =>/,
     'the extend method is gone or renamed');
   assert.match(API, /\/admin\/impersonate-sessions\/\$\{sessionId\}\/extend/,
     'extend no longer calls the route that mints the fresh token');

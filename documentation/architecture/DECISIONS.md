@@ -24089,3 +24089,176 @@ test now checks the account after every attempt, and the mutation is caught.
 `docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
 edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
 `check-folder-docs` and `check-api-drift` exit 0.
+
+## D248
+
+**A support session now tells the person it opens on. Extend asks for its own
+reason, stops at a ceiling of two hours measured from when the session opened,
+and is recorded where Security reads. The recovery cool-off pauses Extend but
+not End, and D248 decides which other admin-over-admin writes it pauses.**
+Task 397.
+
+**No migration.** `impersonation_sessions.started_at` already exists. The
+target's notice goes through `notify()`, and nothing in `App.jsx` changes.
+
+### THE DEFECTS
+
+- **The person was never told.** None of the three impersonation handlers
+  (open, Extend, End) called `notify()`. No row reached the target's own feed
+  either, because `routes/activity.ts` reads `user_id = me OR actor = my
+  email` and the `admin_impersonate` row is on the admin. Someone could act as
+  you for thirty minutes, extendable, and nothing on your side said so.
+- **Extend asked for no reason and had no ceiling.** Nothing read
+  `started_at`. An HQ session whose tab was closed keeps `ended_at` NULL for
+  ever, since the sweep skips HQ rows by design
+  (`util/supportSessionSweep.ts`). So Extend could revive a session days old,
+  on a reason typed days ago.
+- **Extend's only record was invisible.** It was an `admin_impersonate_extend`
+  activity row, which Security's feed excludes on purpose
+  (`admin_security.ts`), and it carried no reason.
+- **Extend was outside the cool-off.** `COOL_OFF_PREFIXES` had
+  `/api/admin/impersonate`, registered as `p` and `${p}/*`. That reaches
+  `/api/admin/impersonate/42` but not `/api/admin/impersonate-sessions/7/extend`.
+  A freshly recovered account could not open a session, but could extend one
+  it already held.
+
+### WHAT CHANGED
+
+- **Open tells the target.**
+  - `tellOfSupportSession` sends one `security` notice, in the app and by
+    email, after every refusal and after the grant. It says who, the typed
+    reason, thirty minutes, and the two-hour ceiling, and links to
+    `/account/security`, where "sign out everywhere" ends the session's token.
+  - It is best-effort and reported as `target_notified`, never thrown, per
+    D111's rule. `tellOfTransfer` (D241) is the same shape.
+  - Nothing is added to `App.jsx`: the notice reaches the target through the
+    inbox and email.
+- **Extend asks for a reason** of at least 10 characters (`reason` in the
+  JSON body), and refuses with 400 `extend_reason_required`.
+- **Extend has a ceiling.** `IMPERSONATION_CEILING_MINUTES = 120` is exported
+  from `auth.ts` beside the 30-minute expiry.
+  - An extension that would carry the session past `started_at + ceiling` is
+    refused with 409 `support_session_ceiling`. So no token minted for a
+    session outlives two hours from its start.
+  - An unreadable `started_at` is refused too: the safe answer to "how long
+    has this been open?" is not "no time".
+  - **Why two hours:** it is the first thirty minutes and three extensions.
+    Past that, the work is a new visit, and a new visit is a new session, with
+    a new reason and a new notice to the person. The number is a judgement,
+    not a measurement.
+  - A refused extension writes nothing: no token, no activity row, no audit
+    row, and `ended_at` untouched.
+- **Extend is recorded** through `logAdminAction('admin_impersonate_extend',
+  { target_user_id, reason, impersonation_session_id, minutes, started_at })`.
+  Security's audit arm shows it with the target and the reason. That call's
+  activity row replaces the hand-written one.
+- **The cool-off, by route, not by prefix.** `recoveryCoolOff` refuses every
+  method, GETs included, and `${p}/*` covers every sibling under `p`. So the
+  new `COOL_OFF_ROUTES` holds exact Hono patterns, registered without the
+  wildcard. Each call:
+
+  | Route | Paused | Why |
+  |---|---|---|
+  | `/api/admin/impersonate-sessions/:id/extend` | **yes** | thirty more minutes as someone else |
+  | `/api/admin/impersonate-sessions/:id/end` | no | the safe direction; a recovered owner may need to close a session someone else opened |
+  | `/api/admin/super-admins/:userId` (grant, revoke, transfer) | **yes** | it was not on the list, so a freshly recovered holder could hand the platform on during cool-off |
+  | `/api/admin/super-admins` (GET, the holder list) | no | a read |
+  | `/api/admin/users/:userId/toggle-active` | **yes** | closing an administrator's account (D247) |
+  | `/api/admin/users/:userId/role` | **yes** | a role change, the binding-agreement override included (D249) |
+  | `/api/admin/security/force-reauth` | no | it ends sessions and grants nothing; it is the containment tool a recovered owner is most likely to need |
+
+- **The Extend button needs no `App.jsx` change.** The bar belongs to
+  Session 1 this wave, and it calls `api.adminImpersonateExtend(id)` with no
+  reason. The method now takes `(sessionId, reason)`. When the reason is
+  absent it asks with the same `window.prompt` idiom Demote uses. A cancelled
+  prompt sends nothing and returns null, which the bar reads as "no new
+  expiry". Moving the prompt into the bar itself is Session 1's call.
+- **The H20 card.**
+  - "Extend adds 30 more with no new reason" and "The person is not told"
+    were true, and now describe the new behaviour.
+  - The ceiling is stated from `SUPPORT_SESSION_CEILING_HOURS`, which a test
+    holds equal to the Worker's constant, because the SPA cannot import
+    Worker code.
+  - "An extension is not in the feed" became "each extension, with its
+    reason, in the audit log".
+  - The canvas's "banner both sides see" stays on the false list: a notice is
+    not a banner.
+
+### PINS
+
+- `hq_team_h20.test.mjs:148` ("The person is not told…") is re-aimed to the
+  sentence that replaced it.
+- `support_session_h4.test.mjs` pinned `adminImpersonateExtend: async
+  (sessionId) =>`. It is re-aimed to `(sessionId, reason)`.
+- `territory_licences.test.mjs` pins the cool-off list. It gains a test
+  covering `COOL_OFF_ROUTES`:
+  - the four entries are present, registered without a wildcard;
+  - no parent prefix (`impersonate-sessions`, `super-admins`, `users`,
+    `security`) is on the prefix list;
+  - the route list names neither End nor force re-auth.
+- `hq_team_actions_d221.test.ts` and `admin_impersonation_session.test.ts`
+  drove Extend with no body. Each Extend call now sends a reason. Nothing they
+  assert is loosened.
+
+### VERIFIED
+
+`cloudflare-worker/test/impersonation_d248.test.ts` bundles `index.ts` the way
+Wrangler does (esbuild, the D239 precedent) and drives every request through
+the real `fetch`. Its database is `buildFresh(schema_baseline.sql + every later
+migration)`, the build the deploy's step 9 uses (D235). The cool-off's table
+comes from migration 277, which a baseline-only fixture would lack. Eight
+tests:
+
+- Opening a session sends the target exactly one `security` notice, naming
+  who, why, thirty minutes and the ceiling. The admin gets none.
+- A refused open (a short reason, or a peer on an admin) tells nobody.
+- An inbox that refuses every write still opens the session, and reports
+  `target_notified: false`.
+- Extend writes one audit row naming the target, the reason and the session.
+- Extend with no reason, an empty one, spaces, or 9 characters → 400, and no
+  token, activity row or audit row.
+- Extend on a session opened three days ago, or 100 minutes ago → 409, and
+  nothing written. One opened 80 minutes ago is extended.
+- During the cool-off, Extend → 423 `recovery_cool_off_active` from the
+  middleware, while End → 200 and stamps `ended_at`.
+- During the cool-off, the elevation writes, toggle-active and the role route
+  → 423, and nothing changes. The holder list and force re-auth are not paused.
+
+**Two fixture facts, recorded because both surprised the first draft:**
+- **Access-log rows.** The observability middleware writes an `http_post`
+  access-log row for every request, refused ones included. "Nothing written"
+  therefore means nothing from the route, and the helper excludes `http_*`.
+- **Sealed start times.** D156's trigger seals `impersonation_sessions.started_at`
+  against UPDATE, so the ceiling tests insert back-dated sessions rather than
+  rewriting one. That seal is what makes the ceiling trustworthy.
+
+**Mutation checks: sixteen runs, all caught in the end,** each alone and
+restored from a sha256-verified snapshot:
+- The brief's five against the bundled-worker test, plus one extra, caught 6
+  of 6:
+  - drop the notify call;
+  - accept an Extend with no reason;
+  - measure the ceiling from now instead of `started_at`;
+  - remove the Extend registration;
+  - let the cool-off cover End, by adding the `impersonate-sessions` prefix;
+  - (extra) drop toggle-active from the cool-off.
+- The same six against the frontend pins caught 6 of 6.
+- Four more against the frontend pins alone caught 4 of 4: the "not told"
+  sentence restored, the card's ceiling drifting from the Worker's, Extend
+  asking for no reason, and the reason not sent.
+
+**One escaped at first, and the assertion was fixed.** "Accept an Extend with
+no reason", done as `if (false)` in front of the refusal, passed the first
+frontend pin, which looked only for the `extend_reason_required` string. The
+pin now reads the `reason.length < 10` check itself, and the mutation is
+caught. The worker test caught it from the start.
+
+**Full suite:** `npm run test:drift` on Node 22 exits 0 on `main` with D247
+merged (`f2a69e92`):
+- frontend 3183 (two new);
+- worker 4194 passed with 3 skipped (eight new, over 4186);
+- retention 48.
+
+`docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
+edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
+`check-folder-docs` and `check-api-drift` exit 0.

@@ -99,6 +99,29 @@ function getSecretKey(env: Env) {
  */
 export const IMPERSONATION_EXPIRY_MINUTES = 30;
 
+/**
+ * D248 — the most a support session may last, extensions included, measured
+ * from `impersonation_sessions.started_at`: two hours, the first thirty
+ * minutes and three extensions.
+ *
+ * WHY A CEILING AT ALL. Extend minted a fresh thirty minutes on any session
+ * whose `ended_at` was NULL, and nothing read `started_at`. An HQ session whose
+ * tab was closed keeps `ended_at` NULL for ever — the support-session sweep
+ * skips HQ rows by design (util/supportSessionSweep.ts) — so Extend could
+ * revive a session days old, on a reason typed days ago.
+ *
+ * WHY TWO HOURS. The session exists to fix one thing in someone's account.
+ * Two hours of continuous access is already long for that; past it, the work
+ * is a new visit, and a new visit is a new session: a new reason, and a new
+ * notice to the person whose account it is (D248 tells them on open). The
+ * number is a judgement, stated here and on the H20 card, not a measured
+ * limit.
+ *
+ * An extension that would carry the session past this is refused, so no
+ * token minted for a session ever outlives `started_at + ceiling`.
+ */
+export const IMPERSONATION_CEILING_MINUTES = 120;
+
 export async function createJWT(
   env: Env,
   userId: number,
