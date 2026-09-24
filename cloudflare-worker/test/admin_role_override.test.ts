@@ -15,9 +15,17 @@
  *   - the reason reaches the `role_changed` audit line, so an override is
  *     legible afterwards instead of indistinguishable from a routine change;
  *   - and it CANNOT mint or remove an admin, which stays SQL-only. That last
- *     one is the assertion that matters most: the override is validated above
- *     those guards precisely so it can never reach them, and an ordering change
- *     that looked harmless would otherwise turn this into admin escalation.
+ *     one is the assertion that matters most. Since D249 the override is
+ *     decided below those guards, and the reason it still cannot reach them is
+ *     that it only exists for an `exploring` target, which is never an admin —
+ *     the three "cannot" tests at the end hold that, whatever the ordering.
+ *
+ * D249 added four facts, each pinned below: an override is a change OUT OF
+ * `exploring` and nothing else (a reason on founder→partner is that change's
+ * reason, not an override); it takes demote's bar (a TOTP-minted session and a
+ * fresh step-up); the person's own row says it was an override, and why; and
+ * it is one `role_override` audit row naming them, with `user_role_review`
+ * stamped and a founder's onboarding restarted, as assign-role does.
  *
  * Real SQLite via the shim below, for the reason `_d1_sqlite.mjs` gives: the
  * route's own SQL with its own binds decides what happens, and `getSQL` is a
@@ -29,20 +37,36 @@ import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import admin from '../src/routes/admin.ts';
+import { AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, stepUpRefusalBody } from '../src/util/authErrors.ts';
 
 // `requireAdmin` refuses by throwing; the status comes from `app.onError` in
-// index.ts, which is not in the chain for a directly dispatched sub-app. The
-// entries this file needs are replicated so a refusal is not asserted as a 500.
+// index.ts, which is not in the chain for a directly dispatched sub-app. It is
+// replicated from the ONE table index.ts reads, so a refusal — D249's factor
+// and step-up included — is not asserted as a 500.
 const app = new Hono<any>();
 app.route('/', admin);
 app.onError((err: any, c) => {
-  const status = ({ Unauthorized: 401, 'Admin required': 403 } as Record<string, 401 | 403>)[
-    String(err?.message || '')
-  ];
-  if (status) return c.json({ detail: err.message }, status);
+  const msg = String(err?.message || '');
+  if (msg === STEP_UP_REQUIRED) return c.json(stepUpRefusalBody(err), 403);
+  const status = AUTH_ERROR_STATUSES[msg];
+  if (status) return c.json({ detail: msg }, status);
   throw err;
 });
+
+const BASELINE = readFileSync(
+  resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8',
+);
+/** One table's CREATE TABLE, verbatim from the baseline. A literal search, never a built regex. */
+function ddl(name: string): string {
+  const at = `\n${BASELINE}`.indexOf(`\nCREATE TABLE ${name} (`);
+  assert.ok(at >= 0, `${name} is no longer defined in schema_baseline.sql`);
+  const end = BASELINE.indexOf(');', at);
+  assert.ok(end > at, `${name}'s definition in the baseline is unterminated`);
+  return BASELINE.slice(at, end + 2);
+}
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const SUPER = 1;        // an admin who IS elevated
@@ -90,6 +114,12 @@ function freshDb() {
       assigned_by_user_id INTEGER, assigned_at TEXT, binding_envelope_id INTEGER, updated_at TEXT
     );
   `);
+  // D249 — the write bar reads user_sessions; the override writes one audit
+  // row and restarts a founder's onboarding.
+  for (const t of ['user_sessions', 'admin_audit_log', 'onboarding_progress']) db.exec(ddl(t));
+  db.exec(`INSERT INTO user_sessions (jti, user_id, factor, created_at, last_step_up_at)
+           VALUES ('totp-1', 1, 'totp', datetime('now'), datetime('now')),
+                  ('stale-1', 1, 'totp', datetime('now', '-60 minutes'), datetime('now', '-60 minutes'))`);
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)');
   u.run(SUPER, 'admin', 'Sue', 'sue@axal.example');
   u.run(PLAIN, 'admin', 'Pat', 'pat@axal.example');
@@ -127,17 +157,22 @@ function staleColumnDb() {
 const env = (db: InstanceType<typeof DatabaseSync>) =>
   ({ JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db) });
 
-async function token(userId: number, role: string): Promise<string> {
-  return new SignJWT({ user_id: userId, role })
+async function token(userId: number, role: string, jti?: string): Promise<string> {
+  return new SignJWT({ user_id: userId, role, ...(jti ? { jti } : {}) })
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
     .sign(new TextEncoder().encode(JWT_SECRET));
 }
 
+/** D249 — the super admin's TOTP-minted session, stepped up just now. */
+const FRESH = 'totp-1';
+/** The same kind of session, stepped up an hour ago. */
+const STALE = 'stale-1';
+
 async function setRole(
-  e: any, actor: number, targetId: number, role: string, overrideReason?: string,
+  e: any, actor: number, targetId: number, role: string, overrideReason?: string, session?: string,
 ): Promise<{ status: number; body: any }> {
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${await token(actor, 'admin')}`,
+    Authorization: `Bearer ${await token(actor, 'admin', session)}`,
     'Content-Type': 'application/json',
   };
   const res = await app.request(
@@ -156,6 +191,11 @@ const roleOf = (db: InstanceType<typeof DatabaseSync>, id: number): string =>
 const auditLines = (db: InstanceType<typeof DatabaseSync>): string[] =>
   (db.prepare("SELECT details FROM activity_logs WHERE action = 'role_changed'").all() as any[])
     .map((r) => String(r.details));
+/** The person's own row — the one their activity feed shows them. */
+const theirLines = (db: InstanceType<typeof DatabaseSync>): Array<{ details: string; user_id: number }> =>
+  db.prepare("SELECT details, user_id FROM activity_logs WHERE action = 'your_role_changed'").all() as any[];
+const overrideAudit = (db: InstanceType<typeof DatabaseSync>) =>
+  db.prepare("SELECT admin_user_id, viewed_user_id, filters_json FROM admin_audit_log WHERE action = 'role_override'").all() as any[];
 
 const GOOD_REASON = 'Signed on paper, countersigned copy filed in Drive';
 
@@ -200,14 +240,16 @@ test('the real elevation still reads through that same column', async () => {
   // reaching `isSuperAdmin` at all, the test above would pass for the wrong
   // reason and nobody could override anything.
   const db = staleColumnDb();
-  const r = await setRole(env(db), SUPER, EXPLORER, 'founder', GOOD_REASON);
+  const r = await setRole(env(db), SUPER, EXPLORER, 'founder', GOOD_REASON, FRESH);
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(roleOf(db, EXPLORER), 'founder');
 });
 
 test('a reason under ten characters is not a reason', async () => {
+  // D249 — sent from a stepped-up session, so the 400 is the reason's and not
+  // the write bar's.
   const db = freshDb();
-  const r = await setRole(env(db), SUPER, EXPLORER, 'founder', 'ok');
+  const r = await setRole(env(db), SUPER, EXPLORER, 'founder', 'ok', FRESH);
   assert.equal(r.status, 400);
   assert.equal(r.body?.code, 'override_reason_too_short');
   assert.equal(roleOf(db, EXPLORER), 'exploring');
@@ -229,25 +271,71 @@ test('whitespace is not length', async () => {
 
 test('a super admin with a reason assigns the role', async () => {
   const db = freshDb();
-  const r = await setRole(env(db), SUPER, EXPLORER, 'founder', GOOD_REASON);
+  const r = await setRole(env(db), SUPER, EXPLORER, 'founder', GOOD_REASON, FRESH);
   assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body?.override, true);
   assert.equal(roleOf(db, EXPLORER), 'founder');
 });
 
 test('the audit line carries the override and its reason', async () => {
   // The whole argument for allowing this is that it is legible afterwards. An
   // override recorded as a routine role change would be worse than no override.
+  // D249 — re-aimed, not loosened: the role_changed line keeps every assertion
+  // it had, and the record now also reaches the person's own row and one
+  // audit row that names them. The reason is no longer "the only place it was
+  // going", so that message is corrected, not the assertion.
   const db = freshDb();
-  await setRole(env(db), SUPER, EXPLORER, 'founder', GOOD_REASON);
+  await setRole(env(db), SUPER, EXPLORER, 'founder', GOOD_REASON, FRESH);
 
   const lines = auditLines(db);
   assert.equal(lines.length, 1, `expected one role_changed line, got ${lines.length}`);
   assert.match(lines[0], /OVERRIDE/,
     'the audit line does not mark this as an override, so it reads as routine');
-  assert.ok(lines[0].includes(GOOD_REASON),
-    'the typed reason is not in the audit line, which is the only place it was going');
+  assert.ok(lines[0].includes(GOOD_REASON), 'the typed reason is not in the admin\'s role_changed line');
   assert.match(lines[0], /from exploring to founder/,
     'the audit line no longer names both roles');
+
+  const theirs = theirLines(db);
+  assert.equal(theirs.length, 1);
+  assert.equal(theirs[0].user_id, EXPLORER, 'the person\'s row is not on the person');
+  assert.match(theirs[0].details, /without a completed binding agreement: a Super Admin override\./,
+    'the person\'s own row does not say it was an override');
+  assert.ok(theirs[0].details.endsWith(`Reason: ${GOOD_REASON}`), 'the person\'s own row does not say why');
+
+  const audit = overrideAudit(db);
+  assert.equal(audit.length, 1, `one override must write exactly one role_override audit row, got ${audit.length}`);
+  assert.equal(audit[0].admin_user_id, SUPER);
+  assert.equal(audit[0].viewed_user_id, EXPLORER, 'the audit row has no subject (D159: target_user_id)');
+  const d = JSON.parse(audit[0].filters_json);
+  assert.deepEqual([d.from, d.to, d.reason], ['exploring', 'founder', GOOD_REASON]);
+});
+
+test('D249: an override stamps the review as assign-role does, and restarts a founder\'s onboarding', async () => {
+  const db = freshDb();
+  const r = await setRole(env(db), SUPER, EXPLORER, 'founder', GOOD_REASON, FRESH);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const review = db.prepare('SELECT role_confirmed, assigned_role, assigned_by_user_id, assigned_at FROM user_role_review WHERE user_id = ?').get(EXPLORER) as any;
+  assert.ok(review, 'no user_role_review row — the Exploring queue still reads the account as waiting');
+  assert.equal(review.role_confirmed, 1);
+  assert.equal(review.assigned_role, 'founder');
+  assert.equal(review.assigned_by_user_id, SUPER);
+  assert.ok(review.assigned_at, 'assigned_at was not stamped');
+  const ob = db.prepare('SELECT flow, step, completed_at FROM onboarding_progress WHERE user_id = ?').get(EXPLORER) as any;
+  assert.deepEqual(ob && [ob.flow, ob.step, ob.completed_at], ['founder', 0, null],
+    'a founder moved in by override has no onboarding wizard to land on');
+});
+
+test('D249: the override takes demote\'s bar — no TOTP session, or a stale step-up, is refused and changes nothing', async () => {
+  const db = freshDb();
+  const bare = await setRole(env(db), SUPER, EXPLORER, 'founder', GOOD_REASON);
+  assert.equal(bare.status, 403, 'an override went through with no authenticator');
+  assert.equal(bare.body?.detail, 'TOTP required');
+  const stale = await setRole(env(db), SUPER, EXPLORER, 'founder', GOOD_REASON, STALE);
+  assert.equal(stale.status, 403, 'an override went through on an hour-old step-up');
+  assert.equal(stale.body?.code, 'step_up_required');
+  assert.equal(roleOf(db, EXPLORER), 'exploring');
+  assert.equal(auditLines(db).length, 0);
+  assert.equal(overrideAudit(db).length, 0);
 });
 
 test('a routine role change is not marked as an override', async () => {
@@ -261,10 +349,34 @@ test('a routine role change is not marked as an override', async () => {
 });
 
 test('an already-assigned user is unaffected by a reason being present', async () => {
+  // D249 — this drove founder→partner with a reason and checked only the
+  // role, while the route stamped "BINDING-AGREEMENT OVERRIDE" on the line: an
+  // ordinary change labelled an override, because the label keyed on a reason
+  // being present. It is re-aimed at what the label means now. The reason is
+  // carried as the change's own reason, on both rows, and nothing says override.
   const db = freshDb();
   const r = await setRole(env(db), SUPER, FOUNDER, 'partner', GOOD_REASON);
   assert.equal(r.status, 200);
+  assert.equal(r.body?.override, false);
   assert.equal(roleOf(db, FOUNDER), 'partner');
+  const [line] = auditLines(db);
+  assert.doesNotMatch(line, /OVERRIDE/, 'an ordinary change with a reason is labelled an override');
+  assert.ok(line.endsWith(`. Reason: ${GOOD_REASON}`), 'the reason sent with an ordinary change was dropped');
+  const [theirs] = theirLines(db);
+  assert.doesNotMatch(theirs.details, /override/i, 'the person is told an ordinary change was an override');
+  assert.ok(theirs.details.endsWith(`. Reason: ${GOOD_REASON}`));
+  assert.equal(overrideAudit(db).length, 0, 'an ordinary change wrote a role_override audit row');
+});
+
+test('D249: a reason on an ordinary change is not an override, so a plain admin may send one', async () => {
+  // The Super Admin requirement belongs to the override. A plain admin could
+  // always make founder→partner without a reason; refusing the same change
+  // WITH one guarded nothing, and only punished writing down why.
+  const db = freshDb();
+  const r = await setRole(env(db), PLAIN, FOUNDER, 'partner', GOOD_REASON);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(roleOf(db, FOUNDER), 'partner');
+  assert.equal(overrideAudit(db).length, 0);
 });
 
 /* ------------------------------------------------------------------ *

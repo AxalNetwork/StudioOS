@@ -24262,3 +24262,163 @@ merged (`f2a69e92`):
 `docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
 edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
 `check-folder-docs` and `check-api-drift` exit 0.
+
+## D249
+
+**The binding-agreement role override is described for the first time and
+tightened. It is a change out of `exploring` and nothing else. It takes
+demote's bar, tells the person on their own feed, is one audit row that names
+them, and does the two assign-role steps an assigned account needs.** Task 401.
+
+**No migration, no new route.** `user_role_review` and `onboarding_progress`
+already exist.
+
+### THE OVERRIDE, WHICH NO DECISION HAD DESCRIBED
+
+`PATCH /api/admin/users/:userId/role` (`routes/admin.ts`) refuses to move an
+account out of `exploring`. That move belongs to the Exploring queue's
+assign-role (`routes/admin_exploring.ts`), which requires a completed binding
+envelope. Since #549 a Super Admin could pass `override_reason` to assign the
+role anyway. It was added because every signup lands in `exploring`, and an
+admin with no way to correct a role is its own failure. D99 covered only the
+terms half, and no entry described the override. This is that entry.
+
+### THE DEFECTS
+
+- **It was recorded only as free text.** The override appended
+  " — BINDING-AGREEMENT OVERRIDE by super admin. Reason: …" to the admin's
+  `role_changed` row. That was the only record, and there was no
+  `admin_audit_log` row, so Security's Target column had no subject.
+- **The person was not told.** Their `your_role_changed` row read "Your role
+  was changed from exploring to founder by <name>", the same as a routine
+  change.
+- **It was mislabelled.** It keyed on a reason being PRESENT, not on the old
+  role. A Super Admin who sent a reason with founder→partner stamped
+  "BINDING-AGREEMENT OVERRIDE" on an ordinary change. A plain admin who sent
+  one was refused `super_admin_required` for a change they could make without
+  it.
+- **It asked for no authenticator or step-up.** Demote, the same class of act,
+  asks for both. The H20 card said so.
+- **It skipped what assign-role does.** No `user_role_review` stamp, so the
+  Exploring queue went on reading the account as waiting. No onboarding
+  restart, so a founder or investor landed on a shell with nothing behind it.
+
+### WHAT CHANGED
+
+- **An override is a change out of `exploring` with a reason**
+  (`isOverride = fromExploring && reason.length > 0`).
+  - A reason on any other change is carried as that change's reason
+    (`. Reason: …` on both rows), never labelled an override.
+  - It no longer needs the Super Admin, because refusing a change *with* a
+    reason that is allowed *without* one guarded nothing.
+- **It is decided below the admin promotion and demotion guards.** It used to
+  be validated above them, when a reason alone made an override, and a test
+  says the order is what kept it from minting or demoting an admin. That
+  property still holds by construction: `role === 'admin'` is refused first
+  for every request, and an `exploring` target is never an admin. The three
+  "cannot" tests pin it.
+- **Demote's bar.** The Super Admin, `requireFactor(c, 'totp')`,
+  `requireStepUp(c)`, then a reason of at least 10 characters, all before the
+  write.
+- **The person is told.** Their row reads "…without a completed binding
+  agreement: a Super Admin override. Reason: …".
+- **One audit row per override.** `logAdminAction('role_override', {
+  target_user_id, from, to, reason })`, dynamically imported, as in D247.
+- **assign-role's two account steps, and not its third.**
+  - `user_role_review` is stamped as assign-role stamps it (`role_confirmed`,
+    `assigned_role`, `assigned_by_user_id`, `assigned_at`). It is an upsert,
+    because an overridden account may have no review row, and assign-role's
+    UPDATE never meets that case since it requires an envelope.
+  - A founder or investor gets the onboarding restart assign-role runs.
+  - The Spin-Out Lab auto-start is left to assign-role. It enrols a company
+    in a programme, and an override reason does not establish that the
+    company belongs there.
+  - Each of these writes is best-effort, per D111.
+- **The page.** The Role override dialog says it asks for an authenticator
+  and a step-up (the prompt is `request()`'s), and that the person's own
+  activity will say it was an override and why. The H20 card's note, "No
+  authenticator or step-up is asked", now names the bar, what the override
+  does and does not start, and the audit row.
+- **The cool-off** pauses this route (D248), so a freshly recovered holder
+  cannot override during it.
+
+### FILED, NOT BUILT: THE GUARD ON LEAVING A SIGNED ROLE
+
+Once a role backed by a completed binding envelope lands, any admin can change
+it with a plain confirm and no reason. The recommendation was that such a
+change go through the override's door: the Super Admin, a reason, and a
+record. **It is a product decision, because of branches.** `hydrateSuperAdmin`
+answers 0 on a branch, and a branch's D1 is its own, so under that rule nobody
+on a branch could change a signed member's role except through SQL.
+
+The override has the same property today, but it covers only the holding
+state, and this rule would reach every signed member. The choices for the
+owner:
+- HQ-only, as recommended;
+- the branch's principal admin standing in for the Super Admin on a branch;
+- a reason and a record for everyone, with no tier change.
+
+It is reported to the coordinator rather than built. The session's task-filing
+tool was unavailable when this was written.
+
+### PINS
+
+`admin_role_override.test.ts` is re-aimed, never loosened:
+- **The audit-line pin** (the old :237–251) keeps every assertion. It now also
+  requires the person's row to name the override and the reason, and exactly
+  one `role_override` audit row with `target_user_id`. Its message "the only
+  place it was going" is corrected, since the reason now goes to three places.
+- **"An already-assigned user is unaffected by a reason being present"** (the
+  old :263–268) checked only the role while the route mislabelled the change.
+  It now requires no OVERRIDE on either row, the reason carried on both, and
+  no `role_override` row.
+- **The Super Admin's successful overrides, and the short-reason 400,** now
+  send a TOTP-minted, just-stepped-up session. The fixture reads
+  `user_sessions`, `admin_audit_log` and `onboarding_progress` from the
+  baseline, and the error handler is replicated from `util/authErrors.ts`.
+
+### VERIFIED
+
+Three new worker tests:
+- an override stamps the review as assign-role does, and restarts a founder's
+  onboarding;
+- the override takes demote's bar: a bare JWT → 403 `TOTP required`, an
+  hour-old step-up → 403 `step_up_required`, and nothing changes;
+- a reason on an ordinary change is not an override, so a plain admin may
+  send one.
+
+Two new frontend tests:
+- in `hq_team_h20.test.mjs`, the card is held to the route: the override's
+  definition, its bar before the write, the person's sentence, the audit row,
+  no Lab start, and the review and onboarding writes with their conditions;
+- in `admin_role_override.test.mjs`, the dialog says what the route now asks
+  and that the person is told.
+
+**Mutation checks: fourteen runs, all caught in the end,** each alone and
+restored from a sha256-verified snapshot:
+- **Against the worker tests, 6 of 6:**
+  - the brief's four:
+    - label a non-exploring change an override;
+    - drop the person's sentence;
+    - key the audit row `user_id` (the D159 guard fails too);
+    - skip the `user_role_review` stamp;
+  - two extras: drop demote's bar from the override, and skip the onboarding
+    restart.
+- **The same six against the frontend pin, 6 of 6.**
+- **Two against the frontend tests alone, 2 of 2:** the card's old note
+  restored, and the dialog's new sentence removed.
+
+**Two escaped at first, and the assertion was fixed.** The stamp and the
+onboarding restart, each disabled with an `if (false)`, passed the first draft
+of the frontend pin, which did not read those writes. The card claims both, so
+the pin now reads each write with its condition, and both mutations are
+caught. The worker tests caught them from the start.
+
+**Full suite:** `npm run test:drift` on Node 22 exits 0 with D248 beneath it:
+- frontend 3185 (two new);
+- worker 4197 passed with 3 skipped (three new, over 4194);
+- retention 48.
+
+`docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
+edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
+`check-folder-docs` and `check-api-drift` exit 0.
