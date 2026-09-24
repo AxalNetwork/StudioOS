@@ -25290,3 +25290,81 @@ was rebuilt.
 - `node scripts/check-api-drift.mjs` and `node scripts/check-folder-docs.mjs`
   both exit 0.
 - `node scripts/check-decision-ids.mjs` exits 0 (D1 through D256).
+
+## D257
+
+**Event-badge awards have never actually landed on a freshly built
+database.** `services/eventBadges.ts`'s `grantBadge` does
+`INSERT OR IGNORE INTO user_badges (user_id, badge_slug, source) VALUES
+(?, ?, 'event')`, and `user_badges.badge_slug` is
+`REFERENCES assessment_badges(slug)`. The three rows that FK needs —
+`event_demo_day_presenter`, `event_networker`, `event_founding_attendee` —
+are seeded by migration 112, which sits below
+`scripts/lib/migrationPlan.mjs`'s `BASELINE_CUTOFF = 219`. `migrate-d1
+--bootstrap` marks a sub-cutoff migration applied without running it, and
+`schema_baseline.sql` (a production dump taken before 112 landed) carries
+`assessment_badges`' shape but none of its data. So on every freshly built
+database — i.e. every branch — the three rows are simply absent, and every
+`awardCheckinBadges` / `awardAgendaSpeakerBadge` call fails its foreign
+key. Both functions wrap their entire body in try/catch and only
+`console.warn` (badges are explicitly "never a precondition for check-in /
+agenda success"), so the failure never surfaces: the badge and its XP
+reward are silently never granted, exactly the "reports no error and
+writes nothing" shape D187's M6 and D190 named for other sub-cutoff gaps.
+
+**What shipped.**
+
+- New `cloudflare-worker/sql/migrations/292_restore_event_badges_seed.sql`
+  re-runs migration 112's `INSERT OR IGNORE INTO assessment_badges` for
+  the three event-kind rows verbatim — same columns, same values,
+  idempotent on the slug whether or not 112 actually ran.
+- New `cloudflare-worker/test/event_badges_restored_d257.test.ts`, in the
+  shape of `sub_cutoff_restores_d190.test.ts`: builds a fresh database
+  twice off disk (baseline + every migration above the cutoff), once
+  skipping 292; drives the real, exported `awardCheckinBadges` (not a
+  mock, not a direct INSERT) for both the Founding Attendee and Networker
+  thresholds. Without 292 the call does not throw (best-effort by design)
+  but grants no badge and bumps no XP; with 292 both land, a re-run does
+  not double-bump XP (the `INSERT OR IGNORE` first-grant-only guard), and
+  a user who crosses both thresholds in one call gets both rewards.
+
+**Left alone, on purpose.** Migrations 108/110 also seed 26 other
+`assessment_badges` rows (`archetype` and `milestone` kind — the
+assessment-play badge wall). Those are **not** re-landed here: nothing in
+the current codebase awards them — the player/award code for archetype
+and milestone badges is gone (confirmed by D256, which found the same
+"nothing reads this" state for the tracks those badges belong to).
+Re-seeding them would restore inert rows that no code path can ever
+insert into `user_badges`, not fix a bug; doing so is a separate, larger
+call about whether that badge wall is coming back at all, which this task
+does not make.
+
+**No `frontend/src` change**, so no `docs/` rebuild. No new route or
+`api.js` method, so `check-api-drift` has nothing to say. `292` only does
+`INSERT OR IGNORE` — no runtime `CREATE`/bootstrap counterpart —
+so `check-runtime-schema-declared` (D235) has nothing new to check either.
+
+### VERIFIED
+
+- `cloudflare-worker/test/event_badges_restored_d257.test.ts`: **4**
+  tests, exit 0. The fixture explicitly asserts `PRAGMA foreign_keys = 1`
+  rather than assuming `node:sqlite`'s default. A fresh build has all
+  three seed rows with 292 applied and none without it. Founding
+  Attendee and Networker both fail silently (no badge, no XP, no throw)
+  without 292 and both land — badge row, correct `xp_reward`, no
+  double-bump on a repeat call — with it.
+- Three mutations, each restored byte-identical from a saved copy:
+  dropping the `event_founding_attendee` row from 292 (caught — tests 2
+  through 4 fail); turning `enableForeignKeyConstraints` off in the test
+  fixture (caught — the fixture's own FK-enforcement assertion fails
+  first, then the reader tests, confirming the assertion is load-bearing
+  rather than decorative); renaming a slug in 292 so it no longer matches
+  `eventBadges.ts`'s exported constants (caught). All restored via `cp`
+  from `/tmp` backups (no `git checkout`), all 4 pass again.
+- `cd cloudflare-worker && npx tsc --noEmit` and
+  `npx tsc --noEmit -p frontend/tsconfig.json` both exit 0.
+- `node scripts/check-sql-migrations.mjs`, `check-sqlite-dialect.mjs`,
+  `check-sql-prepare.mjs`, `check-timestamp-comparisons.mjs`,
+  `check-runtime-schema-declared.mjs`, `check-api-drift.mjs`,
+  `check-folder-docs.mjs` all exit 0.
+- `node scripts/check-decision-ids.mjs` exits 0 (D1 through D257).
