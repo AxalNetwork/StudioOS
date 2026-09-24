@@ -22401,3 +22401,33 @@ The cofounder order is the defect. Cloudflare appends to an incoming `X-Forwarde
 - `npm run test:drift` exits 1. The worker half reports **4006** tests, **4002** pass, **1** fail, **3** skipped. The only `not ok` is `capital_call_ledger.test.ts:204`, "a retry after a partial write fills only the gap": expected 1, actual 0. That file is not in this change, and the same assertion fails when run alone. The five new tests appear in that log by name (`ok 1219` through `ok 1223`).
 
 **285 is still the next free migration.**
+
+## D220
+
+**One dead-letter backlog, and a failed read is Unreadable rather than zero.**
+
+The backlog lives in `dead_letter_queue` and `cf_dlq_mirror`. `dlqDepth` in `cloudflare-worker/src/services/deadLetters.ts` already sums both, and names the table when either cannot be read. HQ Platform already used it. Four other readers did not:
+
+- `services/analyticsReports.ts` `loadTechnical` counted `dead_letter_queue` only, and `.catch(() => [{ c: 0 }])` turned a failed read of that table, and of `queue_jobs`, into 0. The Technical tab printed both figures as plain stats.
+- The management CSV wrote `queue_depth ?? 0` and `dlq_count ?? 0`.
+- The report HTML printed `String(t?.dlq_count)`, so a missing value became the words null or undefined.
+- `models/jobs.ts` `Jobs.stats` counted the last 7 days of `dead_letter_queue` only and returned `dlq_7d ?? 0`. The infrastructure card printed `DLQ 7d`.
+
+A row that existed only in `cf_dlq_mirror` was counted on Platform and missing on Technical. A table that could not be read was shown as 0.
+
+**What shipped.** `loadTechnical` and `Jobs.stats` take the backlog from `dlqDepth`. The one-table counts are gone. `dlq_count` is `number | null`, with `dlq_reason` when the read failed. Pending `queue_jobs` stays its own figure (`queue_depth`), and a failed read of that table is null plus `queue_depth_reason`, never 0. The management CSV keeps the row, leaves the value empty, and adds a trailing `note` column with the reason (empty when the figure was read). The report HTML prints `unreadable` and the reason. `Jobs.stats` returns the full backlog as `dlq_count`, and the infrastructure card is labelled DLQ, so Platform, Technical, and Infrastructure show one number. A null figure renders `Unreadable` (already exported from `frontend/src/ui`) with the server's reason. A measured zero is still 0.
+
+**Left alone.** `GET /api/infra/dlq` still works the rows and still sums both tables. The overview and financial rows of the same CSV still use `?? 0`.
+
+**No migration. No new `/api/*` method. `GET /api/infra/queue` already spreads `Jobs.stats`, so the field rename rides that route.**
+
+### VERIFIED
+
+- `cloudflare-worker/test/dlq_depth_d220.test.ts`: **4** tests, exit 0. A single `cf_dlq_mirror` row makes Technical `dlq_count` 1, equal to Platform `monitoring.dlq.total` and `Jobs.stats`. Dropping `cf_dlq_mirror` makes `dlq_count` null, the reason names the table, the CSV value is empty with that reason in `note`, and the HTML line starts with `unreadable`. Dropping `queue_jobs` does the same for queue depth. The count guard finds `COUNT(*)` of either backlog table only in `services/deadLetters.ts` and `routes/infra.ts`.
+- `frontend/test/dlq_depth_d220.test.mjs`: **4** tests, exit 0. Null queue depth and null DLQ render Unreadable with the server reason. A measured 0 still renders 0. The two pages pass the fields through with no `??` or `||` on them.
+- Six mutations, each restored from a saved copy. One-table count in `loadTechnical`: exit 1 (`not ok` 1, 2, 4). Failed read stored as 0: exit 1 (`not ok` 2). A `COUNT(*)` of `cf_dlq_mirror` added in `jobs.ts`: exit 1 (`not ok` 2 and 4). `DepthCount` rendering `value ?? 0`: exit 1 (`not ok` 1 and 2). Analytics tab inlining `dlq_count ?? 0`: exit 1 (`not ok` 4). `queue_depth` coerced with `?? 0`: exit 1 (`not ok` 3).
+- `cd cloudflare-worker && npx --no-install tsc --noEmit` exits 0. Frontend `tsc`, eslint, `check-dark-mode`, `test:guards`, and `test:retention` exit 0.
+- `check-decision-ids` reports 218 decisions, D1 through D220. `check-folder-docs` exits 0. `check-docs-fresh --strict`, `check-docs-assets-closure`, and `prerender-og --check` exit 0 after the root `npm run build`.
+- `npm run test:drift` exits 1. Frontend: **3088** tests, **3088** pass, including `ok 903` through `ok 906`. Worker: **4015** tests, **4011** pass, **1** fail, **3** skipped. The new worker tests are `ok 1485` through `ok 1488`. The only `not ok` is `capital_call_ledger.test.ts:204`, "a retry after a partial write fills only the gap": expected 1, actual 0. That file is not in this change. The same assertion failed on the D219 run. npm stops there, so the later drift steps were run on their own and exited 0.
+
+**285 is still the next free migration.**
