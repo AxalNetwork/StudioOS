@@ -17,8 +17,38 @@ import { bindingKey } from '../util/schemaBootstrap';
 
 const READY = new WeakMap<object, boolean>();
 
+// D229 — the role this catalog called 'mentor' was renamed 'advisor', but
+// the column default (`network_profiles.kind DEFAULT 'mentor'`, this file's
+// `ensureNetworkProfilesSchema`) and two callers (`admin_network_profiles.ts`
+// POST, `axalSpinoutDemoDay.ts` loadNetworkProfiles) still defaulted a
+// missing kind to the retired name. 'mentor' stays a valid, storable value —
+// existing rows carry it, and rewriting them is a data change no read fix
+// makes on its own — but it is no longer the default anywhere a kind must be
+// chosen without one given: `NETWORK_KIND_DEFAULT` is 'advisor'. A reader
+// that wants to show a legacy 'mentor' row under its current name treats
+// 'mentor' as an alias of 'advisor'; nothing here rewrites the stored value
+// to do that.
 export const NETWORK_KINDS = ['mentor', 'partner', 'advisor', 'investor'] as const;
 export type NetworkKind = typeof NETWORK_KINDS[number];
+
+/** The kind a new profile gets when none is given. Not 'mentor' — see above. */
+export const NETWORK_KIND_DEFAULT: NetworkKind = 'advisor';
+
+/**
+ * What a reader should CALL a stored kind, without changing what is stored:
+ * 'mentor' displays as 'advisor', every other known kind displays as
+ * itself. Callers that write `kind` back (the admin console's edit form)
+ * must not run a row's raw value through this first — resubmitting the
+ * translated value would convert a legacy 'mentor' row to 'advisor' on the
+ * next unrelated save, which is exactly the silent rewrite D229 fixed
+ * POST's default to avoid. This is for read-only display (the deck) only.
+ */
+export function displayNetworkKind(kind: string): NetworkKind {
+  if (kind === 'mentor') return 'advisor';
+  return (NETWORK_KINDS as readonly string[]).includes(kind)
+    ? (kind as NetworkKind)
+    : NETWORK_KIND_DEFAULT;
+}
 
 // Single source of truth for the 12-axis spider/skill picker. Keep in
 // sync with the front-end mirror in

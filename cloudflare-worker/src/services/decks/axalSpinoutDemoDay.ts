@@ -40,7 +40,7 @@ import type { Env } from '../../types';
 import { ensureDiscoveryValidationRatingColumns } from '../discoveryInterviewSchema';
 import { computePainThemes } from '../painGroups';
 import { ensureLandingPageBrandKitColumns } from '../landingPageSchema';
-import { SKILL_CATALOG } from '../networkProfilesSchema';
+import { NETWORK_KIND_DEFAULT, SKILL_CATALOG, displayNetworkKind } from '../networkProfilesSchema';
 import { computeRadar, type RadarResult } from '../radar';
 import { RADAR_AXES, ensureSkillsTaxonomySchema } from '../skillsTaxonomySchema';
 import { ensureSkillProfileSchema } from '../skillProfileSchema';
@@ -126,7 +126,7 @@ export async function loadNetworkProfiles(env: Env): Promise<NetworkProfilesResu
           skills,
           photo_url: r.photo_r2_key ? `/api/public/network/${r.id}/photo` : null,
           linkedin_url: r.linkedin_url || null,
-          kind: String(r.kind || 'mentor'),
+          kind: String(r.kind || NETWORK_KIND_DEFAULT),
         };
       }),
     };
@@ -1168,7 +1168,9 @@ export async function fillAxalSpinoutDemoDay(
     skills: np.skills,
     photo_url: np.photo_url,
     linkedin_url: np.linkedin_url,
-    kind: np.kind,
+    // D229 — a legacy row stored before the role's rename still carries
+    // 'mentor'; the deck shows it as Advisor without rewriting the row.
+    kind: displayNetworkKind(np.kind),
   }));
   // Skill coverage spider: count of active profiles per axis, normalised
   // 0..1 against the busiest axis so the radar stays well-shaped.
@@ -1187,7 +1189,9 @@ export async function fillAxalSpinoutDemoDay(
   // decks don't regress to an empty bar chart.
   const kindCounts = new Map<string, number>();
   for (const np of networkRoster) {
-    const k = np.kind || 'mentor';
+    // D229 — grouped by what the kind reads as today (a legacy 'mentor' row
+    // counts as Advisor), not by the retired stored name.
+    const k = displayNetworkKind(np.kind);
     kindCounts.set(k, (kindCounts.get(k) || 0) + 1);
   }
   const networkBreakdown = kindCounts.size > 0
