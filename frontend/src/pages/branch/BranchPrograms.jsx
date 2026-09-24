@@ -109,8 +109,8 @@ export default function BranchPrograms({ user }) {
   // WHAT THE RAIL MAY SAY (D126): only what this page actually loaded. A failed
   // read contributes no line rather than a zero.
   const coverage = [];
-  if (timelineReady) coverage.push(['Cohort cycles', `${cycles.length} most recent`]);
-  if (gamesReady) coverage.push(['Assessment games', String(gameRows.length)]);
+  if (timelineReady) coverage.push(`Cohort cycles: ${cycles.length} most recent`);
+  if (gamesReady) coverage.push(`Assessment games: ${gameRows.length}`);
 
   const unavailable = [
     ['Assessment runs', 'No admin route lists assessment sessions or results — there is no '
