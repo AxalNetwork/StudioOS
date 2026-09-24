@@ -11,12 +11,18 @@ import { Card } from '../../ui';
  * The NAMES are the canvas's, verbatim. The NOTES are not: every one was read
  * against the route that performs the act, and several describe a platform that
  * does not exist — "banner both sides see" (the target sees no banner and is not
- * told), "both parties notified" (nobody is), "Lands on Programs as well" (it
- * does not), "Within the licence's seats only" (no grant is checked against a
- * seat count), "The decision happens on Approvals" (Approvals decides
- * nothing). A card that repeated those would be the first place an operator
- * learned something false about their own powers, so each row says instead
- * what gates the act, where it is done, and whether Security records it.
+ * told), "Lands on Programs as well" (it does not), "Within the licence's seats
+ * only" (no grant is checked against a seat count), "The decision happens on
+ * Approvals" (Approvals decides nothing). A card that repeated those would be
+ * the first place an operator learned something false about their own powers,
+ * so each row says instead what gates the act, where it is done, and whether
+ * Security records it.
+ *
+ * ONE CANVAS NOTE WAS FALSE AND IS NOW TRUE. "Both parties notified" described
+ * a transfer that told nobody, and this card said so until D241 made the route
+ * tell the successor and the former holder. The transfer row now says what the
+ * route does, and the test that held it false now holds it true — against the
+ * route's own two notices, so the sentence cannot outlive them.
  *
  * ONE ROW IS NOT HQ'S, AND IT SAYS SO RATHER THAN MOVING. "View as a role shell"
  * is offered to every admin — HQ, the holder and a branch admin alike — by the
@@ -67,7 +73,7 @@ export const HQ_ONLY_ACTIONS = [
     key: 'transfer',
     name: 'Transfer the Super Admin elevation',
     hq: true,
-    gate: 'The Super Admin alone: authenticator, fresh step-up and a typed reason of at least 10 characters, in one step, to an administrator whose account is active. The successor is not notified.',
+    gate: 'The Super Admin alone: authenticator, fresh step-up and a typed reason of at least 10 characters, in one step, to an administrator whose account is active. The successor and the former holder are both notified, in the app and by email.',
     where: 'The holder console at the top of this page.',
     recorded: 'Yes — who received it, who gave it up, and the reason.',
   },

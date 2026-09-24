@@ -23342,3 +23342,91 @@ they are no longer what keeps the set at one holder.
   - answering 200 when nothing moved;
   - removing the double-click branch;
   - folding `successor_changed` into `holder_changed`.
+
+## D241
+
+**Transferring the Super Admin elevation now tells both parties. The
+successor and the former holder each get a `security` notice, in the app and
+by email, as soon as the transfer has landed and been recorded. It is
+best-effort and reported per party. A transfer that moved nothing tells
+nobody.** Task 400.
+
+**No migration and no new route.** The transfer response gains
+`notified: { successor, former }`.
+
+### THE DEFECT
+
+The canvas's note for the transfer says "both parties notified". The route
+told nobody, so the H20 card said so ("The successor is not notified."), and
+`hq_team_h20.test.mjs` held that note on its list of false canvas claims. A
+holder whose session was used by someone else to hand the platform on had no
+way to learn of it except by reading Security.
+
+### WHAT CHANGED
+
+- **`notify()`, not `send()`,** by the rule `routes/admin_licences.ts` states
+  for its own two cases:
+  - `send()` is for mail worth designing: a template, a retrying queue, a send
+    log.
+  - `notify()` is "one sentence and the route back".
+
+  A transfer is the second kind (who holds the elevation now, and where to
+  look), and no designed template exists for it.
+- **Category `security`,** which is in `CRITICAL_CATEGORIES`, so quiet hours
+  and the digest cannot hold it back. Channels are `in_app` and `email`,
+  because the person who most needs it is a former holder who is not signed
+  in.
+- **What each notice says:**
+  - The successor's names who handed it on and their reason, and asks them to
+    raise it before using the elevation if they did not expect it.
+  - The former holder's names the new holder and the reason. It says that if
+    they did not do this, their session was used by someone else, and tells
+    them what to do.
+  - Both link to `/admin/accounts`.
+- **Only after D240's check and after the audit rows.** A transfer refused
+  for any reason sends nothing: no reason, a lost race, a double-click, or
+  `successor_changed`. The record does not wait on a notice.
+- **Best-effort and reported.** Each notice runs in its own try and reports
+  whether it reached the person's inbox, which is what `notify()` returns. A
+  notice that fails never turns a transfer that landed into a failed request;
+  that is D111's rule for side effects after a recorded write.
+
+The H20 card now says "The successor and the former holder are both notified,
+in the app and by email." Its docblock records that the canvas note went from
+false to true. In `hq_team_h20.test.mjs`, "both parties notified" leaves
+`FALSE_CLAIMS`, and the old "not notified" pin is re-aimed to the new
+sentence. A new test holds the claim true against the route itself: the
+`notify` import, a `security` category, one call for `target.id` and one for
+`actor.id`, and both placed after the `changes` check. So the sentence cannot
+outlive the notices.
+
+### VERIFIED
+
+- **`npm run test:drift` exits 0** on Node 22 (`EXIT=0` read from the redirected
+  log), on `main` with D240 merged: frontend **3180**, worker **4136** pass with
+  the same **3** environment-gated skips, retention **48**, zero `not ok`. D240's
+  run was 3179 and 4133. `docs/` was rebuilt with the root `npm run build` after
+  the last `frontend/src` edit (retention ledger moved aside), and
+  `check-docs-fresh --strict` exits 0.
+- `cloudflare-worker/test/hq_team_actions_d221.test.ts` gains three tests.
+  The fixture adds `notifications_inbox` from the baseline, and `fetch` is
+  stubbed and counted so a notice cannot reach the network.
+  - **A landed transfer:** one notice to each party, `super_admin_transfer`,
+    `security`, `critical`, linking to `/admin/accounts`, carrying the reason,
+    and `notified: { successor: true, former: true }`.
+  - **Nothing moves, nobody is told:** a short reason, the lost race, the
+    double-click and `successor_changed` each send no notice of their own.
+  - **An inbox that refuses every write:** the transfer still answers 200,
+    moves the elevation and writes its two audit rows, and reports
+    `notified: { successor: false, former: false }`.
+- **Mutation checks: nine of nine caught,** each alone and restored from a
+  sha256-verified snapshot.
+  - Six run against both test files:
+    - the successor's notice removed;
+    - the former holder's notice removed;
+    - a notice sent before the check;
+    - `notified` reported true regardless;
+    - the category demoted from `security`;
+    - the card's sentence reverted.
+  - Three run against the frontend test alone, to prove the re-aimed pin
+    catches the route: either notice removed, or the `notify` import replaced.

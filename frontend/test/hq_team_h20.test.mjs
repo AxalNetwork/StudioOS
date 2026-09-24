@@ -5,14 +5,18 @@
  * WHAT H20 DRAWS AND WHAT IS TRUE. The artboard names five HQ-only powers and
  * four admin powers, each with a one-line note. The NAMES are held to the
  * canvas here, verbatim and in order, read out of the artboard's own data
- * model so a renamed row fails. The NOTES are held to the opposite rule: six of
+ * model so a renamed row fails. The NOTES are held to the opposite rule: five of
  * them describe a platform that does not exist (a banner the impersonated
- * person sees, a notification on transfer, Admit to Lab landing on Programs, a
- * seat check on a grant, a decision taken on Approvals, and "live on Admin ·
- * Accounts"), and the cards say instead what the route that performs each act
- * actually requires. So the test asserts the canvas still SAYS each false thing
- * — this is a guard against repeating the canvas, not a quote of it — and that
- * the rendered cards do not.
+ * person sees, Admit to Lab landing on Programs, a seat check on a grant, a
+ * decision taken on Approvals, and "live on Admin · Accounts"), and the cards
+ * say instead what the route that performs each act actually requires. So the
+ * test asserts the canvas still SAYS each false thing — this is a guard against
+ * repeating the canvas, not a quote of it — and that the rendered cards do not.
+ *
+ * A SIXTH WAS FALSE AND IS NOW TRUE: "both parties notified". D241 made the
+ * transfer tell the successor and the former holder, so it left the false list
+ * and is held the other way — the card says it, and the route's two notices are
+ * read to prove the sentence is still earned.
  *
  * RENDERED, NOT MATCHED. `HqTeamActions` is pure over one prop, so both of its
  * states are rendered with renderToStaticMarkup; the account drawer's footer is
@@ -127,7 +131,6 @@ test('the canvas notes that describe a platform that does not exist do not reach
   // longer makes would pass the second half vacuously.
   const FALSE_CLAIMS = [
     ['banner both sides see', notes], // the target sees no banner and is not told
-    ['both parties notified', notes], // the transfer notifies nobody
     ['Lands on Programs as well', notes], // spinout-admit writes user_spinout_flags only
     ['seats only', notes], // no grant is checked against a seat count
     ['The decision happens on Approvals', notes], // Approvals decides nothing
@@ -143,10 +146,31 @@ test('the canvas notes that describe a platform that does not exist do not reach
   // canvas stated the fiction.
   const plain = text(PLAIN);
   assert.match(plain, /The person is not told: no banner on their side, no notification\./);
-  assert.match(plain, /The successor is not notified\./);
+  assert.match(plain, /The successor and the former holder are both notified, in the app and by email\./);
   assert.match(plain, /It does not place them in a cohort on Programs\./);
   assert.match(plain, /Neither is checked against the licence’s seats — no grant on the platform is\./);
   assert.match(plain, /Approvals shows the outcome and offers no decision\./);
+});
+
+test('D241: "both parties notified" is now true, and the card says so only while the route earns it', () => {
+  // The canvas note that used to be on the false list. It is held the other
+  // way now: the canvas still says it, the card says it in its own words, and
+  // the route that performs the transfer is read for the two notices that make
+  // the sentence true — so removing either notice fails here, not only in the
+  // worker suite.
+  const notes = [...HQ_CANVAS, ...ADMIN_CANVAS].map((a) => a.note).join(' | ');
+  assert.ok(notes.includes('both parties notified'), 'the canvas no longer says "both parties notified"');
+  for (const [state, html] of [['HQ view', PLAIN]]) {
+    assert.match(text(html), /The successor and the former holder are both notified, in the app and by email\./, state);
+  }
+  const route = codeOnly(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_super_admins.ts'), 'utf8'));
+  assert.match(route, /import \{ notify \} from '\.\.\/services\/notify';/, 'the route no longer imports notify');
+  assert.match(route, /await notify\(env, \{[^}]*category: 'security'/, 'the transfer notice is not a security notice');
+  assert.match(route, /successor: await tellOfTransfer\(\s*c\.env, target\.id,/, 'the successor is no longer notified');
+  assert.match(route, /former: await tellOfTransfer\(\s*c\.env, actor\.id,/, 'the former holder is no longer notified');
+  // After D240's check, so a transfer that moved nothing tells nobody.
+  assert.ok(route.indexOf('successor: await tellOfTransfer(') > route.indexOf('if (!(granted === 1 && released === 1))'),
+    'a notice is sent before the write is known to have moved the elevation');
 });
 
 test('the HQ-only card: five rows, the role shell marked as every admin\'s, the count stated from the data', () => {
