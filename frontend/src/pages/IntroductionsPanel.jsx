@@ -32,8 +32,14 @@ const ROLE_LABEL = {
   advisor: 'Advisor', admin: 'Axal Team',
 };
 
-// Persona ids → entity-type labels (mirrors cloudflare-worker/src/personas.ts,
-// same local-fallback pattern as lib/personas.js).
+// Persona ids → SHORT entity-type labels for this panel's entity filter and
+// chips. D254 — this deliberately does NOT mirror the canonical labels in
+// cloudflare-worker/src/personas.ts: 5 of the 12 are shortened here (e.g.
+// 'gp_external' is 'VC / GP', not 'GP — External Fund'), and founder_new /
+// founder_existing are merged into one 'Founder' filter option on purpose —
+// a product call, not drift, recorded in D254. The key set is pinned to the
+// canonical 12 ids by frontend/test/persona_sources_agree.test.mjs, so a
+// 13th persona fails loudly here instead of rendering unlabelled.
 const PERSONA_LABEL = {
   lp_individual: 'LP — Individual', lp_institutional: 'LP — Institutional',
   gp_external: 'VC / GP', angel_scout: 'Angel / Scout', corporate_vc: 'Corporate VC',

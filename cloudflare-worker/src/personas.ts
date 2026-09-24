@@ -6,8 +6,13 @@
  *   - routes/personas.ts            (taxonomy + finalize)
  *   - routes/profiling.ts           (onboarding chat extension)
  *
- * Mirrored verbatim in `frontend/src/lib/personas.js` so the React side
+ * Mirrored verbatim in `frontend/src/lib/personas.js` (and, without
+ * `nav_extras`, in `backend/app/api/routes/personas.py`) so the React side
  * does not have to round-trip the worker just to render a label/icon.
+ * `frontend/test/persona_sources_agree.test.mjs` (D254) holds the three
+ * in agreement — it found and fixed a `nav_extras` drift on two personas
+ * where this file was NOT the source of truth: the frontend mirror is what
+ * the sidebar actually draws from, so its nav entries are canonical.
  *
  * Multi-persona is allowed up to 2 rows per user — the only currently-
  * supported overlap is `founder_*` + `operator_advisor` (a founder who
@@ -172,7 +177,10 @@ export const PERSONAS: Persona[] = [
       { key: 'partnership_goal', prompt: 'Primary goal? (Capital / AI integration / Distribution / M&A)', type: 'choice', choices: ['Capital', 'AI Integration (StudioOS)', 'Distribution / GTM', 'M&A / Liquidity'] },
       { key: 'existing_investors', prompt: 'Existing investors / cap-table summary (one line)?', type: 'text' },
     ],
-    nav_extras: [{ to: '/founder', label: 'Founder Portal' }, { to: '/legal-capital', label: 'Legal & Capital' }],
+    // D254 — was `[{ to: '/founder', ... }, ...]`; no `/founder` route exists
+    // (only `/founder/post-need`), and the frontend mirror the sidebar
+    // actually draws from never had that entry. Taken from the frontend.
+    nav_extras: [{ to: '/legal-capital', label: 'Legal & Capital' }],
   },
   {
     id: 'operator_advisor',
@@ -186,7 +194,9 @@ export const PERSONAS: Persona[] = [
       { key: 'time_per_week_hours', prompt: 'Hours per week you can commit?', type: 'number' },
       { key: 'compensation_pref', prompt: 'Compensation preference (equity / cash / hybrid)?', type: 'choice', choices: ['equity', 'cash', 'hybrid'] },
     ],
-    nav_extras: [{ to: '/matches', label: 'AI Matches' }, { to: '/projects', label: 'Projects' }],
+    // D254 — was `/projects`, which only redirects to `/build`. Taken from
+    // the frontend mirror, which pointed at `/build` directly.
+    nav_extras: [{ to: '/matches', label: 'AI Matches' }, { to: '/build', label: 'Startups' }],
   },
   {
     id: 'service_provider',
