@@ -298,8 +298,8 @@ export function githubConfigured(env: Env): boolean {
  * mirror must not either.
  *
  * NOTHING ELSE ABOUT THE TOKEN LEAVES HERE. Whether it is set is a boolean; no
- * prefix, no suffix, no length — the console's `token_preview` shows eight
- * characters, which is a defect of its own and not repeated.
+ * prefix, no suffix, no length. The console's `token_preview` used to show
+ * eight characters of it; D223 removed that, so neither surface does now.
  */
 export function githubMirrorTarget(env: Env): { token_set: boolean; repo: string | null; configured: boolean } {
   const owner = env.GITHUB_REPO_OWNER;

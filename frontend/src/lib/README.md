@@ -13,6 +13,7 @@ The API client, formatters and helpers. Nothing here renders.
 | `branchHost.js` | `branchCodeFromHost`, `csrfCookieNameFor` — the SPA's half of D104: which CSRF cookie this page mirrors, decided from the hostname so it agrees with the Worker's `BRANCH_CODE` without a request. |
 | `platformSwitches.js` | `SWITCH_TONE`, `setByLabel`, `operatorLine`, `stampMinutes` — the platform switches as HQ's two pages draw them: Platform's read-only list (D202) and Switches' control (D203). Nothing here decides a state; the worker computes it through the predicate the code that obeys it calls. An unknown state takes the unreadable tone, never "on" or "off", and an unreadable store reads "Unreadable" with its reason, never "never thrown". |
 | `url.js` | `safeExternalUrl` and link handling — user-supplied URLs pass through it. |
+| `refundReason.js` | `REFUND_REASON_MIN`, `refundReasonOk` — the shortest written reason a refund carries (D224). The worker (`cloudflare-worker/src/routes/admin_billing.ts`) is the gate and exports the same number; this copy only lets the two refund forms (Revenue, the Billing tab) refuse before sending, and `revenue_billing_exceptions_d224.test.mjs` fails if the two drift. |
 | `seo.js` | `usePageMeta`, for title/description/OG on public routes. |
 | `log.js` | `reportError`, the client error channel. |
 | `statusOverall.js` | The single roll-up rule for platform health, shared by `/status` and the Help Center. |

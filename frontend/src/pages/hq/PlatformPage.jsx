@@ -819,7 +819,7 @@ export function PromoCodesPanel({ loading, unreadable, promos }) {
     <>
       {body}
       <Link to="/admin?tab=promos" className={CONSOLE_LINK} data-testid="hq-h16-link-promos">
-        <ConsoleLinkBody title="Promo codes" note="Create and switch off codes there. Ceilings are listed on Revenue; no screen sets one yet." />
+        <ConsoleLinkBody title="Promo codes" note="Create and switch off codes there. Ceilings are set and listed on Revenue; checkout does not check codes against them yet." />
       </Link>
     </>
   );
