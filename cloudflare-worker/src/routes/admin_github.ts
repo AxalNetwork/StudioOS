@@ -10,12 +10,33 @@
  * GitHub credentials differ from the OAuth id/secret pairs handled by
  * admin_integration_keys.ts (single token + repo + webhook secret), so this
  * is a dedicated route that reuses the same Cloudflare secret-promotion
- * helpers (`setSecret`/`deleteSecret`). Gated on `requireAdmin`.
+ * helpers (`setSecret`/`deleteSecret`).
+ *
+ * D223 — WHO MAY WRITE. PUT and DELETE write the four Worker secrets onto
+ * production's own `studioos` script. `GITHUB_ACCESS_TOKEN` is not only the
+ * ticket mirror's credential: it is the token that dispatches a branch deploy
+ * (`POST /api/admin/licences/:uid/deploy`, `requireSuperAdminWriteBar`). So
+ * whoever could overwrite it could aim that dispatch at a token of their own
+ * choosing, and before D223 that was every admin. Both writes now take the
+ * same bar as the dispatch, and each is audited once through
+ * `logAdminAction` (D159) — the secret NAMES, never a value.
+ *
+ * THE READS STAY `requireAdmin`. `GET /` answers booleans, the repository it
+ * names and the webhook URL; `POST /test` exercises the token and changes no
+ * secret (its write probe opens one fixed-text issue and closes it). Support
+ * staff need both to tell a broken mirror from a working one.
+ *
+ * AND `GET /` NO LONGER CARRIES `token_preview`. It was `maskClientId` of the
+ * token — eight characters of a whole credential. That mask was written for
+ * OAuth client ids, which are the public half of a pair; a token has no public
+ * half. `has_token` is all the console needs, and D213's Platform payload
+ * already refuses the name.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin } from '../auth';
-import { setSecret, deleteSecret, maskClientId } from '../services/cloudflareSecrets';
+import { requireAdmin, requireSuperAdminWriteBar } from '../auth';
+import { setSecret, deleteSecret } from '../services/cloudflareSecrets';
+import { logAdminAction } from '../services/adminAudit';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -43,7 +64,6 @@ r.get('/', async (c) => {
     configured: hasToken && !!env.GITHUB_REPO_OWNER && !!env.GITHUB_REPO_NAME,
     source: hasToken ? 'env' : 'unconfigured',
     has_token: hasToken,
-    token_preview: hasToken ? maskClientId(env.GITHUB_ACCESS_TOKEN!) : null,
     repo_owner: owner,
     repo_name: repo,
     default_repo_owner: DEFAULT_OWNER,
@@ -54,7 +74,7 @@ r.get('/', async (c) => {
 });
 
 r.put('/', async (c) => {
-  await requireAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
   let body: { token?: string; repo_owner?: string; repo_name?: string; webhook_secret?: string; generate_webhook_secret?: boolean } = {};
   try { body = await c.req.json(); } catch { /* empty */ }
 
@@ -82,13 +102,26 @@ r.put('/', async (c) => {
 
   if (pushes.length === 0) return c.json({ error: 'nothing_to_update' }, 400);
 
+  // ONE AUDIT ROW PER REQUEST, naming the secrets and never their values. A
+  // push that fails part-way records what had already landed, because the
+  // pushes are not a transaction and the ones before the failure are live.
+  const names = pushes.map((p) => p.name);
+  const pushed: string[] = [];
   for (const p of pushes) {
     const res = await setSecret(c.env, p.name, p.value);
     if (!res.ok) {
+      await logAdminAction(c.env, admin.id, admin.email, 'github_sync_secrets_set', {
+        secrets: names, pushed, failed_secret: p.name, outcome: 'failed',
+        cf_status: res.status ?? null, cf_code: res.code ?? null,
+      });
       const httpStatus = res.code === 'cloudflare_api_token_missing' ? 503 : 502;
       return c.json({ error: res.code || 'cf_api_failed', detail: res.error || null, failed_secret: p.name }, httpStatus);
     }
+    pushed.push(p.name);
   }
+  await logAdminAction(c.env, admin.id, admin.email, 'github_sync_secrets_set', {
+    secrets: names, pushed, outcome: 'ok', generated_webhook_secret: !!generatedSecret,
+  });
 
   const resp: Record<string, unknown> = { ok: true };
   if (generatedSecret) resp.webhook_secret = generatedSecret;
@@ -256,14 +289,26 @@ r.post('/test', async (c) => {
 });
 
 r.delete('/', async (c) => {
-  await requireAdmin(c);
-  for (const name of ['GITHUB_ACCESS_TOKEN', 'GITHUB_REPO_OWNER', 'GITHUB_REPO_NAME', 'GITHUB_WEBHOOK_SECRET']) {
+  const admin = await requireSuperAdminWriteBar(c);
+  const names = ['GITHUB_ACCESS_TOKEN', 'GITHUB_REPO_OWNER', 'GITHUB_REPO_NAME', 'GITHUB_WEBHOOK_SECRET'];
+  // A missing Cloudflare API token skips every delete; the audit says so
+  // rather than recording a removal that did not happen.
+  let tokenMissing = false;
+  for (const name of names) {
     const res = await deleteSecret(c.env, name);
+    if (res.code === 'cloudflare_api_token_missing') tokenMissing = true;
     if (!res.ok && res.code !== 'cloudflare_api_token_missing') {
+      await logAdminAction(c.env, admin.id, admin.email, 'github_sync_secrets_delete', {
+        secrets: names, failed_secret: name, outcome: 'failed',
+        cf_status: res.status ?? null, cf_code: res.code ?? null,
+      });
       return c.json({ error: res.code || 'cf_api_failed', detail: res.error || null, failed_secret: name }, 502);
     }
   }
-  return c.json({ ok: true });
+  await logAdminAction(c.env, admin.id, admin.email, 'github_sync_secrets_delete', {
+    secrets: names, outcome: tokenMissing ? 'failed' : 'ok', cf_code: tokenMissing ? 'cloudflare_api_token_missing' : null,
+  });
+  return c.json({ ok: true, cf_token_missing: tokenMissing });
 });
 
 export default r;
