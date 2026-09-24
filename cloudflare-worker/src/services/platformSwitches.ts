@@ -223,8 +223,9 @@ export async function readPlatformSwitches(env: Env): Promise<PlatformSwitch[]> 
     set_by: 'runtime',
     effect: 'Every AI call on the platform is refused.',
     ...(trip === 'on' ? {
-      reason: 'The router threw it when the organisation\'s monthly AI spend passed its cap. It clears '
-        + 'when its key expires, up to 35 days after it was set — nothing in the product clears it sooner.',
+      reason: 'The router threw it when the organisation\'s AI spend for this month passed its cap. It '
+        + 'holds for the rest of the calendar month (UTC) and lifts on the 1st, when the next month\'s '
+        + 'budget starts — nothing in the product clears it sooner.',
     } : {}),
     ...(trip === 'unreadable' ? {
       reason: 'The spend store did not answer, so whether the trip is set is unknown. The router fails '

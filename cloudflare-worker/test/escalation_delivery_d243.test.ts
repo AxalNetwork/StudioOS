@@ -168,3 +168,29 @@ test('send again pushes the stored answer and ignores a new one', async () => {
   assert.equal(row.status, 'answered');
   assert.equal(row.push_ok, 1);
 });
+
+test('send again with no stored decision is refused and pushes nothing', async () => {
+  const db = hqDb();
+  const seen: any[] = [];
+  db.prepare(
+    `INSERT INTO hq_escalations (uid, branch_code, kind, subject, status)
+     VALUES ('esc_open', 'fr', 'other', 'Still open', 'open')`,
+  ).run();
+  const app = new Hono<any>();
+  app.route('/api/admin', adminEscalations);
+  const env = {
+    DB: makeD1(db), JWT_SECRET,
+    BRANCH_FR: { async applyEscalationAnswer(a: any) { seen.push(a); return { ok: true }; } },
+  };
+  const res = await app.request('/api/admin/escalations/esc_open/resend', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await token()}` },
+  }, env);
+  const body = await res.json() as any;
+  assert.equal(res.status, 400);
+  assert.equal(body.error, 'no_decision');
+  assert.equal(seen.length, 0);
+  const row = db.prepare('SELECT answer, push_ok FROM hq_escalations WHERE uid = ?').get('esc_open') as any;
+  assert.equal(row.answer, null);
+  assert.equal(row.push_ok, null);
+});

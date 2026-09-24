@@ -10,13 +10,25 @@ import { Card } from '../../ui';
  * only HQ may take and four that belong to an admin, each with a one-line note.
  * The NAMES are the canvas's, verbatim. The NOTES are not: every one was read
  * against the route that performs the act, and several describe a platform that
- * does not exist — "banner both sides see" (the target sees no banner and is not
- * told), "both parties notified" (nobody is), "Lands on Programs as well" (it
- * does not), "Within the licence's seats only" (no grant is checked against a
- * seat count), "The decision happens on Approvals" (Approvals decides
- * nothing). A card that repeated those would be the first place an operator
- * learned something false about their own powers, so each row says instead
- * what gates the act, where it is done, and whether Security records it.
+ * does not exist — "banner both sides see" (the target sees no banner; since
+ * D248 they are told by a notice, which is not a banner), "Lands on Programs as well" (it does not), "Within the licence's seats
+ * only" (no grant is checked against a seat count), "The decision happens on
+ * Approvals" (Approvals decides nothing). A card that repeated those would be
+ * the first place an operator learned something false about their own powers,
+ * so each row says instead what gates the act, where it is done, and whether
+ * Security records it.
+ *
+ * ONE CANVAS NOTE WAS FALSE AND IS NOW TRUE. "Both parties notified" described
+ * a transfer that told nobody, and this card said so until D241 made the route
+ * tell the successor and the former holder. The transfer row now says what the
+ * route does, and the test that held it false now holds it true — against the
+ * route's own two notices, so the sentence cannot outlive them.
+ *
+ * ONE OF THIS CARD'S OWN NOTES WAS TRUE AND WEAK, AND IS NOW STRONGER. The
+ * Deactivate note said the Super Admin could close an administrator's account
+ * with no authenticator, step-up or reason asked — accurately, until D247 gave
+ * the act demote's bar. The note says what the route now requires, and the
+ * test reads the route for the three checks so the sentence cannot outlive them.
  *
  * ONE ROW IS NOT HQ'S, AND IT SAYS SO RATHER THAN MOVING. "View as a role shell"
  * is offered to every admin — HQ, the holder and a branch admin alike — by the
@@ -36,15 +48,23 @@ import { Card } from '../../ui';
  * silently redirect.
  */
 
+/**
+ * D248 — how long a support session may last in all, extensions included, in
+ * hours. The worker's `IMPERSONATION_CEILING_MINUTES` (cloudflare-worker/src/
+ * auth.ts) is the one that is enforced; the SPA cannot import worker code, so
+ * this states it and hq_team_h20.test.mjs holds the two equal.
+ */
+export const SUPPORT_SESSION_CEILING_HOURS = 2;
+
 /** The five H20 draws under "HQ-only actions". `hq: false` marks the one that is not. */
 export const HQ_ONLY_ACTIONS = [
   {
     key: 'impersonate',
     name: 'Impersonate — including other admins',
     hq: true,
-    gate: 'A typed reason of at least 10 characters, your authenticator and a fresh step-up. The session lasts 30 minutes; Extend adds 30 more with no new reason. Opening one as another admin is the Super Admin’s alone — as anyone else, it is every admin’s power. The person is not told: no banner on their side, no notification.',
+    gate: `A typed reason of at least 10 characters, your authenticator and a fresh step-up. The session lasts 30 minutes; Extend adds 30 more for a new reason, up to ${SUPPORT_SESSION_CEILING_HOURS} hours from when it opened, and not in the day after an account recovery. Opening one as another admin is the Super Admin’s alone — as anyone else, it is every admin’s power. The person is told when it opens, in the app and by email, with your name and your reason; there is no banner on their side.`,
     where: 'View As on an admin’s row in the directory below.',
-    recorded: 'Yes — the session, its reason and when it ended, under Impersonations. An extension is not in the feed.',
+    recorded: 'Yes — the session, its reason and when it ended, under Impersonations; each extension, with its reason, in the audit log.',
   },
   {
     key: 'role_shell',
@@ -58,16 +78,16 @@ export const HQ_ONLY_ACTIONS = [
     key: 'demote_deactivate',
     name: 'Demote or deactivate an Admin',
     hq: true,
-    gate: 'Demote: your authenticator, a fresh step-up and a typed reason. Deactivate: the Super Admin alone, with no authenticator, step-up or reason asked. Neither reaches an admin whose account lives on a branch database.',
+    gate: 'Demote: your authenticator, a fresh step-up and a typed reason. Deactivate: the Super Admin alone, with the same three — your authenticator, a fresh step-up and a typed reason of at least 10 characters — and re-opening the account asks for them again. Neither reaches an admin whose account lives on a branch database.',
     where: 'Demote on the licence’s Administrators tab; deactivate with Disable on the directory below.',
     link: 'licences',
-    recorded: 'Yes — a demotion as a role change, a deactivation as a suspension.',
+    recorded: 'Yes — a demotion as a role change; a deactivation as a suspension, and in the audit log with the account and the reason.',
   },
   {
     key: 'transfer',
     name: 'Transfer the Super Admin elevation',
     hq: true,
-    gate: 'The Super Admin alone: authenticator, fresh step-up and a typed reason of at least 10 characters, in one step, to an administrator whose account is active. The successor is not notified.',
+    gate: 'The Super Admin alone: authenticator, fresh step-up and a typed reason of at least 10 characters, in one step, to an administrator whose account is active. The successor and the former holder are both notified, in the app and by email.',
     where: 'The holder console at the top of this page.',
     recorded: 'Yes — who received it, who gave it up, and the reason.',
   },

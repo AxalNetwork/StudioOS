@@ -26,7 +26,8 @@
  *                       with `?transfer=1` the holder hands the platform on,
  *                       both writes in one batch (D133), each conditioned on
  *                       the set at the write so a lost race moves nothing
- *                       (D240). Either way the body carries a typed `reason`
+ *                       (D240), and both parties are notified once it has
+ *                       (D241). Either way the body carries a typed `reason`
  *                       of ten characters or more (D221)
  *   DELETE /:userId     revoke — never yourself, never the last active holder
  *
@@ -53,6 +54,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
+import { notify } from '../services/notify';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -129,6 +131,41 @@ function reasonRefusal(c: any) {
     error: `Say why the elevation is changing hands — at least ${HOLDER_REASON_MIN} characters. It is recorded in Security beside the change.`,
     code: 'reason_too_short',
   }, 400);
+}
+
+/**
+ * D241 — one notice about a transfer, to one party. Never throws.
+ *
+ * `notify()` and NOT `send()`, by the argument routes/admin_licences.ts makes
+ * for its own two cases: `send()` is for mail worth DESIGNING (a template, a
+ * retrying queue, a send log), and `notify()` is "one sentence and the route
+ * back". A transfer is the second kind — who holds the elevation now, and where
+ * to look — and no designed template exists for it.
+ *
+ * Category `security`, which is in `CRITICAL_CATEGORIES`, so quiet hours and
+ * the digest cannot hold it back; and email as well as the inbox, because the
+ * person most in need of this is a former holder who is not signed in — the
+ * one who learns from it that their session handed the platform on.
+ *
+ * `true` means the notice reached the person's inbox (`notify()` returns the
+ * inbox row id). It is reported, not assumed, and a failure here never turns
+ * a transfer that landed into a failed request: the D111 rule for every side
+ * effect after a recorded write.
+ */
+async function tellOfTransfer(
+  env: Env, userId: number, title: string, body: string,
+  payload: Record<string, unknown>,
+): Promise<boolean> {
+  try {
+    const rowId = await notify(env, {
+      userId, type: 'super_admin_transfer', title, body,
+      link: '/admin/accounts', payload, channels: ['in_app', 'email'], category: 'security',
+    });
+    return rowId !== null;
+  } catch (e) {
+    console.warn('[super-admins] transfer notice failed', (e as Error).message);
+    return false;
+  }
 }
 
 function parseUserId(raw: string): number | null {
@@ -323,9 +360,30 @@ r.post('/:userId', async (c) => {
   }
   await audit(c.env, actor, 'super_admin_grant', target, { reason, transfer: true });
   await audit(c.env, actor, 'super_admin_revoke', actor, { reason, transfer: true, transferred_to: target.id });
+  // D241 — BOTH PARTIES ARE TOLD, AND ONLY NOW. After D240's check, so a
+  // transfer that moved nothing tells nobody; after the audit, so the record
+  // does not wait on a notice. Each is best-effort and reported on its own.
+  const from = actor.email;
+  const to = target.name || target.email;
+  const payload = { from_user_id: actor.id, to_user_id: target.id };
+  const notified = {
+    successor: await tellOfTransfer(
+      c.env, target.id, 'You now hold the Super Admin elevation',
+      `${from} handed it to you. Their reason: "${reason}". It is recorded in Security. `
+        + 'If you did not expect this, raise it with them before you use it.',
+      payload,
+    ),
+    former: await tellOfTransfer(
+      c.env, actor.id, 'You handed on the Super Admin elevation',
+      `It now belongs to ${to}. The reason recorded: "${reason}". `
+        + 'If this was not you, your session was used by someone else: sign out everywhere and tell the new holder at once.',
+      payload,
+    ),
+  };
   return c.json({
     ok: true, transferred_from: actor.id,
     holder: { ...target, is_super_admin: 1, granted_by_user_id: actor.id },
+    notified,
   });
 });
 

@@ -23,6 +23,7 @@ function StatusIcon({ status }) {
 export default function CronTab() {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
+  const [retentionDays, setRetentionDays] = useState(null);
   const [offset, setOffset] = useState(0);
   const [trigger, setTrigger] = useState('');
   const [triggers, setTriggers] = useState([]);
@@ -42,6 +43,7 @@ export default function CronTab() {
       if (cr.status === 'fulfilled') {
         setItems(cr.value.items || []);
         setTotal(cr.value.total || 0);
+        setRetentionDays(Number.isInteger(cr.value.retention_days) ? cr.value.retention_days : null);
         setTriggers(cr.value.triggers || []);
       }
       if (ws.status === 'fulfilled') setWsCheck(ws.value);
@@ -139,7 +141,11 @@ export default function CronTab() {
           <div className="flex items-center gap-2">
             <Clock size={18} className="text-violet-600" />
             <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Cron run history</h2>
-            <span className="text-xs text-gray-500">{total} run(s)</span>
+            {/* D237 — the table keeps a retention window, so the count is
+                not all-time; the window comes from the worker. */}
+            <span className="text-xs text-gray-500" data-testid="cron-history-total">
+              {total} run(s){retentionDays ? ` in the last ${retentionDays} days (older runs are pruned; each trigger's newest run is kept)` : ''}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <input

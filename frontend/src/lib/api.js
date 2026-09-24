@@ -2063,9 +2063,23 @@ export const api = {
     } catch { /* storage unavailable */ }
     return res;
   },
-  /** Another thirty minutes on a session that is still open. */
-  adminImpersonateExtend: async (sessionId) => {
-    const res = await request(`/admin/impersonate-sessions/${sessionId}/extend`, { method: 'POST' });
+  /**
+   * Another thirty minutes on a session that is still open.
+   *
+   * D248 — the route asks for a reason of at least 10 characters, and refuses
+   * past two hours from when the session opened. The caller may pass the
+   * reason. The impersonation bar passes none, so this method asks for it with
+   * the same prompt Demote uses; a cancelled prompt extends nothing and returns
+   * null, which the bar reads as "no new expiry".
+   */
+  adminImpersonateExtend: async (sessionId, reason) => {
+    const why = reason ?? (typeof window !== 'undefined'
+      ? window.prompt('Why does this support session need another 30 minutes? At least 10 characters, and it is recorded.')
+      : null);
+    if (!why) return null;
+    const res = await request(`/admin/impersonate-sessions/${sessionId}/extend`, {
+      method: 'POST', body: JSON.stringify({ reason: why }),
+    });
     try {
       if (res?.token) localStorage.setItem('token', res.token);
       if (res?.expires_at) localStorage.setItem('impersonationExpiresAt', String(res.expires_at));
@@ -2125,7 +2139,15 @@ export const api = {
     method: 'PATCH',
     ...(overrideReason ? { body: JSON.stringify({ override_reason: overrideReason }) } : {}),
   }),
-  adminToggleActive: (userId) => request(`/admin/users/${userId}/toggle-active`, { method: 'PATCH' }),
+  // D247 — an ADMIN target needs a reason of at least 10 characters (and the
+  // route asks for an authenticator-minted, freshly stepped-up session, which
+  // request() already handles by prompting for a step-up and retrying). A
+  // non-admin target needs none, so no reason means NO BODY, the shape
+  // adminUpdateRole above uses for the same reason.
+  adminToggleActive: (userId, reason) => request(`/admin/users/${userId}/toggle-active`, {
+    method: 'PATCH',
+    ...(reason ? { body: JSON.stringify({ reason }) } : {}),
+  }),
   // Set per-user access level. `level` is 'limited' (browse-only, no signing
   // until KYC) or null (revoke). Full access is granted via kycAdminApprove.
   adminSetAccessLevel: (userId, level) =>

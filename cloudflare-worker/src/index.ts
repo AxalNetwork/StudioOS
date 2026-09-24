@@ -563,6 +563,34 @@ for (const p of COOL_OFF_PREFIXES) {
   app.use(p, recoveryCoolOff);
   app.use(`${p}/*`, recoveryCoolOff);
 }
+// D248 — ROUTES, NOT PREFIXES, for the acts that share a prefix with routes
+// that must stay open. `recoveryCoolOff` refuses every method, GETs included,
+// and the loop above adds `${p}/*`, which covers every sibling under p. So each
+// entry here is the one route pattern itself (Hono matches `:param`), and is
+// registered without the wildcard.
+//
+// `/api/admin/impersonate` above covers OPENING a support session. Extending
+// lives under `/api/admin/impersonate-sessions`, which no prefix reached, so a
+// freshly recovered account could not open a session but could extend one it
+// already held. Ending a session is deliberately NOT covered: it is the safe
+// direction, and an owner who has just recovered their account may need to
+// close a session somebody else opened.
+//
+// Admin-over-admin writes this wave touched, decided one by one (D248):
+//   · the Super Admin elevation — grant, revoke and transfer are POST and
+//     DELETE on `/:userId`; the holder list at GET `/` stays readable.
+//   · closing or re-opening an account (D247).
+//   · changing an account's role, the binding-agreement override included.
+//   · force re-auth (`/api/admin/security/force-reauth`) is NOT covered. It
+//     ends sessions and grants nothing; it is the containment tool a
+//     recovered owner is most likely to need, the same argument as End.
+const COOL_OFF_ROUTES = [
+  '/api/admin/impersonate-sessions/:id/extend',
+  '/api/admin/super-admins/:userId',
+  '/api/admin/users/:userId/toggle-active',
+  '/api/admin/users/:userId/role',
+];
+for (const p of COOL_OFF_ROUTES) app.use(p, recoveryCoolOff);
 // Task #6 — Stripe billing surface (tier checkout/portal/webhook + MI Pro).
 app.route('/api/billing', billing);
 
@@ -1445,13 +1473,20 @@ export default {
       let cronSummary: string[] = [];
       let cronError: string | null = null;
 
+      // D239 — EVERY GATE BELOW ASKS "WHICH SCHEDULED MINUTE IS THIS?", so it
+      // reads the event's own time, fixed BEFORE the queue drain. It read the
+      // wall clock AFTER the drain until D239, so a drain that crossed a
+      // minute boundary made the tick look at the next minute: the 03:00
+      // tick finishing its drain at 03:01 skipped every 03:00 block, and
+      // nothing recorded it. The wall clock stays for stamps of the sweep's
+      // own acts (D122's rule; the classification is in D239's entry).
+      const now = new Date(Number.isFinite(event.scheduledTime) ? event.scheduledTime : Date.now());
       try {
         const r = await processQueueBatch(env, 25);
         if (r.processed || r.failed) {
           console.info(`[cron] drain processed=${r.processed} failed=${r.failed}`);
           cronSummary.push(`drain processed=${r.processed} failed=${r.failed}`);
         }
-        const now = new Date();
         // D106 — PLATFORM CONTENT IS HQ'S WORK, AND N BRANCHES MUST NOT EACH
         // DO IT. Four cadences below fetch from the open internet or send a
         // platform-wide digest: the Founder Signals refresh, the whole
@@ -1672,6 +1707,20 @@ export default {
             if (!p.readable) console.warn('[cron] security_events prune could not read the ledger');
             else if (p.deleted) console.info(`[cron] security_events pruned=${p.deleted}`);
           } catch (e) { console.error('[cron] security_events prune failed', e); }
+        }
+        // D237 — cron_run_history keeps 30 days, and always each trigger's
+        // newest row (the reasons and the batch cap are in
+        // util/cronHistory.ts). NOT GATED ON `hqCadences`, on the D122
+        // precedent: every deployment writes its own table, so every tier
+        // prunes its own. `branch_licence_copy.test.ts` pins it in the
+        // ungated list. DAILY at 03:45, a minute no other block uses.
+        if (now.getUTCHours() === 3 && now.getUTCMinutes() === 45) {
+          try {
+            const { pruneCronRunHistory } = await import('./util/cronHistory');
+            const p = await pruneCronRunHistory(env);
+            if (!p.readable) console.warn('[cron] cron_run_history prune could not read the table');
+            else if (p.deleted || p.capped) console.info(`[cron] cron_run_history pruned=${p.deleted} batches=${p.batches} kept=${p.kept}${p.capped ? ' capped' : ''}`);
+          } catch (e) { console.error('[cron] cron_run_history prune failed', e); }
         }
         // D148 — the anonymised platform median, computed at HQ and pushed to
         // every branch. `branch_benchmarks` was created by migration 256 and
@@ -2159,7 +2208,11 @@ export default {
         if (now.getUTCMinutes() % 15 === 0) {
           try {
             const { sweepWatchlistReminders } = await import('./services/watchlistReminders');
-            const r = await sweepWatchlistReminders(env, now);
+            // D239 — the WALL clock, on purpose: `now` here decides whether a
+            // reminder is due by now and stamps `reminded_at`, the moment the
+            // reminder was actually sent. Neither asks which minute this is;
+            // the block's own gate above already did.
+            const r = await sweepWatchlistReminders(env, new Date());
             if (r.sent > 0) {
               console.info(`[cron] watchlist reminders candidates=${r.candidates} sent=${r.sent}`);
             }

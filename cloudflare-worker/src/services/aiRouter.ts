@@ -510,7 +510,26 @@ async function bumpSpend(store: MinimalKV, key: string, delta: number, ttlSec: n
   return next;
 }
 
-const ORG_KILL_SWITCH_KEY = 'ai_killswitch:org';
+/**
+ * D242 — THE ORG TRIP IS PER MONTH, KEYED EXACTLY AS THE SPEND IT MEASURES.
+ *
+ * It was one key, `ai_killswitch:org`, written for 35 days. The spend it
+ * guards is counted per calendar month (`org:${monthKey()}`), so a trip on the
+ * 29th kept every AI call refused for about five weeks — through most of a
+ * month whose budget nobody had touched — and nothing in the product could
+ * clear it sooner. Keyed by the same `monthKey()`, the trip ends with the month
+ * it measured: on the 1st the readers ask for a key that has never been
+ * written.
+ *
+ * THE OLD KEY IS INERT, NOT DELETED. Nothing reads `ai_killswitch:org` any
+ * more; a copy left in KV expires on its own TTL. There is no runtime delete
+ * and no runtime clear of the new key either: D203 made the operator store
+ * kill-only, and a way to switch AI back on mid-month would be a second,
+ * unaudited one.
+ */
+function orgKillSwitchKey(month: string): string {
+  return `ai_killswitch:org:${month}`;
+}
 
 /**
  * The organisation-wide budget trip, read as one of three answers.
@@ -521,7 +540,7 @@ const ORG_KILL_SWITCH_KEY = 'ai_killswitch:org';
  */
 async function killSwitchState(store: MinimalKV): Promise<'on' | 'off' | 'unreadable'> {
   try {
-    const v = await store.get(ORG_KILL_SWITCH_KEY);
+    const v = await store.get(orgKillSwitchKey(monthKey()));
     return v === '1' || v === 'true' ? 'on' : 'off';
   } catch { return 'unreadable'; }
 }
@@ -544,8 +563,10 @@ export async function aiOrgKillSwitchState(env: Env): Promise<'on' | 'off' | 'un
   return killSwitchState(store);
 }
 
+// The TTL outlasts any month, so a trip written on the 1st still stands on the
+// 31st; the month in the KEY, not the TTL, is what ends it.
 async function setKillSwitch(store: MinimalKV, ttlSec: number): Promise<void> {
-  try { await store.put(ORG_KILL_SWITCH_KEY, '1', { expirationTtl: ttlSec }); } catch {}
+  try { await store.put(orgKillSwitchKey(monthKey()), '1', { expirationTtl: ttlSec }); } catch {}
 }
 
 // ---------------------------------------------------------------------------

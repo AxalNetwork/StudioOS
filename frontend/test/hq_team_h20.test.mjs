@@ -5,14 +5,22 @@
  * WHAT H20 DRAWS AND WHAT IS TRUE. The artboard names five HQ-only powers and
  * four admin powers, each with a one-line note. The NAMES are held to the
  * canvas here, verbatim and in order, read out of the artboard's own data
- * model so a renamed row fails. The NOTES are held to the opposite rule: six of
+ * model so a renamed row fails. The NOTES are held to the opposite rule: five of
  * them describe a platform that does not exist (a banner the impersonated
- * person sees, a notification on transfer, Admit to Lab landing on Programs, a
- * seat check on a grant, a decision taken on Approvals, and "live on Admin ·
- * Accounts"), and the cards say instead what the route that performs each act
- * actually requires. So the test asserts the canvas still SAYS each false thing
- * — this is a guard against repeating the canvas, not a quote of it — and that
- * the rendered cards do not.
+ * person sees, Admit to Lab landing on Programs, a seat check on a grant, a
+ * decision taken on Approvals, and "live on Admin · Accounts"), and the cards
+ * say instead what the route that performs each act actually requires. So the
+ * test asserts the canvas still SAYS each false thing — this is a guard against
+ * repeating the canvas, not a quote of it — and that the rendered cards do not.
+ *
+ * A SIXTH WAS FALSE AND IS NOW TRUE: "both parties notified". D241 made the
+ * transfer tell the successor and the former holder, so it left the false list
+ * and is held the other way — the card says it, and the route's two notices are
+ * read to prove the sentence is still earned.
+ *
+ * ONE OF THE CARD'S OWN NOTES CHANGED WITH ITS ROUTE: D247 put deactivating an
+ * administrator on demote's bar, so "no authenticator, step-up or reason
+ * asked" became the three the route now checks, and the route is read for them.
  *
  * RENDERED, NOT MATCHED. `HqTeamActions` is pure over one prop, so both of its
  * states are rendered with renderToStaticMarkup; the account drawer's footer is
@@ -38,7 +46,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
-import HqTeamActions, { HQ_ONLY_ACTIONS, ADMIN_ACTIONS } from '../src/pages/hq/HqTeamActions.jsx';
+import HqTeamActions, { HQ_ONLY_ACTIONS, ADMIN_ACTIONS, SUPPORT_SESSION_CEILING_HOURS } from '../src/pages/hq/HqTeamActions.jsx';
 import { drawsAccountControls } from '../src/lib/accountControls.js';
 import { UserDetailModal } from '../src/pages/AdminPage.jsx';
 
@@ -126,8 +134,7 @@ test('the canvas notes that describe a platform that does not exist do not reach
   // Each claim is asserted to be the CANVAS'S first — a phrase the canvas no
   // longer makes would pass the second half vacuously.
   const FALSE_CLAIMS = [
-    ['banner both sides see', notes], // the target sees no banner and is not told
-    ['both parties notified', notes], // the transfer notifies nobody
+    ['banner both sides see', notes], // the target sees no banner (D248 tells them by notice, not banner)
     ['Lands on Programs as well', notes], // spinout-admit writes user_spinout_flags only
     ['seats only', notes], // no grant is checked against a seat count
     ['The decision happens on Approvals', notes], // Approvals decides nothing
@@ -142,11 +149,131 @@ test('the canvas notes that describe a platform that does not exist do not reach
   // What each row says instead is the route's own requirement, stated where the
   // canvas stated the fiction.
   const plain = text(PLAIN);
-  assert.match(plain, /The person is not told: no banner on their side, no notification\./);
-  assert.match(plain, /The successor is not notified\./);
+  // D248 — re-aimed. "The person is not told" was true until D248; the
+  // banner half of the canvas's claim stays false and the card still says so.
+  assert.match(plain, /The person is told when it opens, in the app and by email, with your name and your reason; there is no banner on their side\./);
+  assert.match(plain, /The successor and the former holder are both notified, in the app and by email\./);
   assert.match(plain, /It does not place them in a cohort on Programs\./);
   assert.match(plain, /Neither is checked against the licence’s seats — no grant on the platform is\./);
   assert.match(plain, /Approvals shows the outcome and offers no decision\./);
+});
+
+test('D241: "both parties notified" is now true, and the card says so only while the route earns it', () => {
+  // The canvas note that used to be on the false list. It is held the other
+  // way now: the canvas still says it, the card says it in its own words, and
+  // the route that performs the transfer is read for the two notices that make
+  // the sentence true — so removing either notice fails here, not only in the
+  // worker suite.
+  const notes = [...HQ_CANVAS, ...ADMIN_CANVAS].map((a) => a.note).join(' | ');
+  assert.ok(notes.includes('both parties notified'), 'the canvas no longer says "both parties notified"');
+  for (const [state, html] of [['HQ view', PLAIN]]) {
+    assert.match(text(html), /The successor and the former holder are both notified, in the app and by email\./, state);
+  }
+  const route = codeOnly(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_super_admins.ts'), 'utf8'));
+  assert.match(route, /import \{ notify \} from '\.\.\/services\/notify';/, 'the route no longer imports notify');
+  assert.match(route, /await notify\(env, \{[^}]*category: 'security'/, 'the transfer notice is not a security notice');
+  assert.match(route, /successor: await tellOfTransfer\(\s*c\.env, target\.id,/, 'the successor is no longer notified');
+  assert.match(route, /former: await tellOfTransfer\(\s*c\.env, actor\.id,/, 'the former holder is no longer notified');
+  // After D240's check, so a transfer that moved nothing tells nobody.
+  assert.ok(route.indexOf('successor: await tellOfTransfer(') > route.indexOf('if (!(granted === 1 && released === 1))'),
+    'a notice is sent before the write is known to have moved the elevation');
+});
+
+test('D248: the target is told, Extend has a reason and a ceiling, and the card says so only while the route does', () => {
+  const plain = text(PLAIN);
+  assert.ok(!plain.includes('The person is not told'), 'the card still says the person is not told');
+  assert.ok(!plain.includes('with no new reason'), 'the card still says Extend asks for no reason');
+  assert.ok(!plain.includes('An extension is not in the feed'), 'the card still says an extension is not recorded');
+  assert.match(plain, new RegExp(`Extend adds 30 more for a new reason, up to ${SUPPORT_SESSION_CEILING_HOURS} hours from when it opened, and not in the day after an account recovery\\.`));
+  assert.match(plain, /each extension, with its reason, in the audit log\./);
+
+  // The ceiling the card states is the ceiling the worker enforces.
+  const auth = codeOnly(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/auth.ts'), 'utf8'));
+  const m = auth.match(/export const IMPERSONATION_CEILING_MINUTES = (\d+);/);
+  assert.ok(m, 'the worker no longer exports IMPERSONATION_CEILING_MINUTES');
+  assert.equal(Number(m[1]) / 60, SUPPORT_SESSION_CEILING_HOURS,
+    'the card states a different ceiling from the one the worker enforces');
+
+  // The route: the open handler tells the target after every refusal and
+  // after the grant; Extend asks for a reason and measures from started_at.
+  const route = codeOnly(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin.ts'), 'utf8'));
+  const slice = (from, to) => {
+    const a = route.indexOf(from);
+    assert.ok(a >= 0, `${from} is gone`);
+    const b = route.indexOf(to, a + from.length);
+    return route.slice(a, b > a ? b : route.length);
+  };
+  const openH = slice("admin.post('/impersonate/:userId'", "\nadmin.");
+  const at = openH.indexOf('await tellOfSupportSession(');
+  assert.ok(at > 0, 'the open handler no longer tells the target');
+  for (const refusal of ["code: 'impersonation_reason_required'", "code: 'cannot_impersonate_super_admin'", "code: 'super_admin_required'", 'await createJWT(']) {
+    assert.ok(openH.indexOf(refusal) >= 0 && openH.indexOf(refusal) < at, `the target is told before ${refusal}`);
+  }
+  assert.match(route, /category: 'security',/);
+  const ext = slice("admin.post('/impersonate-sessions/:id/extend'", "\nadmin.");
+  // The check itself, not only its refusal code: an `if (false)` in front of
+  // the code string passed the first draft of this pin (D248 records it).
+  assert.match(ext, /if \(reason\.length < 10\) \{\s*await sql\.end\(\);\s*return c\.json\(\{\s*error: 'A reason of at least 10 characters is required to extend/,
+    'Extend no longer checks the reason');
+  assert.ok(ext.indexOf("code: 'extend_reason_required'") < ext.indexOf('await createJWT('),
+    'the reason is checked after the token is minted');
+  assert.match(ext, /const ceilingMs = startedMs \+ IMPERSONATION_CEILING_MINUTES \* 60_000;/,
+    'the ceiling is no longer measured from when the session opened');
+  assert.ok(ext.indexOf("code: 'support_session_ceiling'") < ext.indexOf('await createJWT('),
+    'the ceiling is checked after the token is minted');
+
+  // The page: Extend sends a reason, asking for one when the bar passes none.
+  const method = API.slice(API.indexOf('adminImpersonateExtend:'), API.indexOf('adminImpersonateEnd:'));
+  assert.match(method, /adminImpersonateExtend: async \(sessionId, reason\) =>/);
+  assert.match(method, /window\.prompt\(/, 'Extend no longer asks for a reason when its caller has none');
+  assert.match(method, /if \(!why\) return null;/, 'a cancelled prompt still sends the request');
+  assert.match(method, /body: JSON\.stringify\(\{ reason: why \}\)/, 'the reason is not sent');
+});
+
+test('D247: deactivating an administrator takes demote\'s bar, and the card says so only while the route asks for it', () => {
+  // The card said the Super Admin closed an administrator's account with "no
+  // authenticator, step-up or reason asked" — true until D247. It now says the
+  // route asks for all three, and the route is read for them, in order: after
+  // the D132 refusal (which answers without them) and before the write.
+  const plain = text(PLAIN);
+  assert.ok(!plain.includes('no authenticator, step-up or reason asked'),
+    'the card still says deactivating an administrator asks for nothing');
+  assert.match(plain, /Deactivate: the Super Admin alone, with the same three — your authenticator, a fresh step-up and a typed reason of at least 10 characters — and re-opening the account asks for them again\./);
+  assert.match(plain, /a deactivation as a suspension, and in the audit log with the account and the reason\./);
+
+  const route = codeOnly(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin.ts'), 'utf8'));
+  const start = route.indexOf("admin.patch('/users/:userId/toggle-active'");
+  assert.ok(start >= 0, 'the toggle-active route is gone');
+  const end = route.indexOf('\nadmin.', start + 1);
+  const handler = route.slice(start, end > start ? end : route.length);
+  const at = (needle) => {
+    const i = handler.indexOf(needle);
+    assert.ok(i >= 0, `the toggle-active handler no longer contains ${needle}`);
+    return i;
+  };
+  const gate = at('const adminUser = await requireAdmin(c);');
+  const refusal = at("code: 'super_admin_required'");
+  const factor = at("await requireFactor(c, 'totp');");
+  const stepUp = at('await requireStepUp(c);');
+  const short = at('if (reason.length < 10)');
+  const write = at('UPDATE users SET is_active');
+  const audit = at('await logAdminAction(');
+  assert.ok(gate < refusal, 'requireAdmin (D135\'s freeze gate) is no longer the first check');
+  assert.ok(refusal < factor && factor < stepUp && stepUp < short && short < write,
+    'the authenticator, the step-up and the reason are not all checked between the D132 refusal and the write');
+  assert.ok(write < audit, 'the audit row is written before the act it records');
+  assert.match(handler, /if \(adminTarget\) \{\s*try \{\s*await requireFactor\(c, 'totp'\);/,
+    'the bar is no longer scoped to an administrator target');
+
+  // The page asks for the reason on an administrator's row, and forwards what
+  // was typed.
+  assert.match(ADMIN, /if \(user\.role === 'admin'\) \{\s*reason = window\.prompt\(/,
+    'the directory no longer asks for a reason before toggling an administrator');
+  assert.match(ADMIN, /await api\.adminToggleActive\(user\.id, reason\)/, 'the typed reason is not sent');
+  const method = API.slice(API.indexOf('adminToggleActive:'), API.indexOf('adminSetAccessLevel:'));
+  assert.match(method, /adminToggleActive: \(userId, reason\) =>/, 'adminToggleActive takes no reason');
+  assert.match(method, /\.\.\.\(reason \? \{ body: JSON\.stringify\(\{ reason \}\) \} : \{\}\)/,
+    'the api method does not forward the reason as typed');
 });
 
 test('the HQ-only card: five rows, the role shell marked as every admin\'s, the count stated from the data', () => {
@@ -246,7 +373,10 @@ test('the directory draws View As and Disable only inside the one guard, on the 
   assert.equal(count(ADMIN, guard), 1, 'the row guard is missing or doubled');
   const g = ADMIN.indexOf(guard);
   const close = ADMIN.indexOf('</>', g);
-  for (const call of ['handleImpersonate(u)', 'handleToggleActive(u.id)']) {
+  // D247 — the toggle takes the ROW, not its id, because an admin row asks for
+  // a reason and the handler has to see the role to know. The count still
+  // pins one call from the directory.
+  for (const call of ['handleImpersonate(u)', 'handleToggleActive(u)']) {
     assert.equal(count(ADMIN, call), 1, `${call} is called from more than one place in the directory`);
     const at = ADMIN.indexOf(call);
     assert.ok(at > g && at < close, `${call} is drawn outside the guard`);

@@ -17226,6 +17226,12 @@ attribution therefore records nothing, which is money-adjacent"* is **false**.
 `ensureSchema` sixteen lines earlier. The ledger's *"giving it a store is a
 product decision about whether that surface is still wanted"* is **false**.
 
+*Corrected by D235: the bootstrap does heal a missing table, and the first
+time it ran in production that made production hold three names the fresh
+build lacked, which failed deploy step 9 on every main deploy after #757.
+Migration 287 declares it; a bootstrap is a safety net, never the only
+declaration.*
+
 **Corrections 2 and 3 are the class D189 corrected four of**: reading
 `check-migration-declarations`' finding — which compares declarations against a
 **fresh build** — as a behavioural claim, without checking for a runtime
@@ -23301,6 +23307,380 @@ the reason that the read stopped at its ceiling.
   length failed that test (non-zero exit, one `not ok` line) and was restored
   by sha256.
 
+## D235 — a runtime bootstrap is a safety net for a declared object, never the only declaration
+
+**Every main deploy from #757 on failed at step 9, and the cause was a
+decision in this file.** D190 left `admin_publications` to its D95 bootstrap
+(`routes/admin_publications.ts`, `ensureSchema`) on purpose, reasoning that
+the bootstrap heals a missing table. It does, and that was the problem. The
+bootstrap first ran in production on 2026-09-24, between 12:44:48Z (run
+36000909495, step 9 green) and 12:50:17Z (run 36001483496, step 9 red). From
+then on production held three names the repo's own fresh build did not —
+`admin_publications`, `idx_admin_publications_slug` and
+`idx_admin_publications_status_created` — and step 9 ("Repo can still
+rebuild production's schema", `scripts/check-baseline-drift.mjs`), which
+compares object names in both directions, failed on every deploy: #757,
+#759, #760, #755, #761 and #762, runs 36001483496, 36002768477, 36003562211,
+36004154029, 36004642340 and 36005839758. Step 8 deployed each time, so
+production code was current; only the check was red, and each run's own
+message said why.
+
+**The rule, stated once so it can be checked:** a runtime
+`CREATE … IF NOT EXISTS` is a safety net for a database that is missing a
+DECLARED object. When it is the only declaration, the first request that
+reaches it in production creates a name the fresh build lacks, and the deploy
+fails from then on. D190's reasoning was right about the reader (it works)
+and wrong about the schema (it diverges), and its own ledger note has been
+corrected to say so.
+
+### What shipped
+
+- **Migration 287** declares every object a runtime statement can create:
+  fourteen, measured rather than listed. `admin_publications` with both of
+  its bootstrap indexes plus 045's third (`idx_admin_publications_created_by`,
+  which never reached any database because 045 is sub-cutoff — 278's
+  precedent for 048's index); `spinout_moderation_cases` and its three
+  indexes; `referral_attributions` and its index; `deck_brand_watermarks`;
+  `deck_recommendation_overrides`; and the two partial UNIQUE indexes the
+  advisor's slot upserts name as their ON CONFLICT target
+  (`uniq_discovery_advisor_slot`, `uniq_roadmap_okrs_advisor_slot`). Each is
+  copied verbatim from its runtime statement, and the test proves it rather
+  than asserting it: the runtime statements run on a build without 287 and
+  every object's columns, keys, uniqueness and partial WHERE must equal the
+  build with it. No `BEGIN`/`COMMIT` (#26). Every object is created over an
+  empty table, so nothing is rewritten.
+- **`scripts/check-runtime-schema-declared.mjs`**, in `test:guards` right
+  after `check-migration-declarations`, with its ledger
+  `scripts/runtime-schema-declared-baseline.json`. It builds the database
+  exactly as step 9 does — it imports `postCutoffMigrations` and `buildFresh`
+  from `check-baseline-drift.mjs`, so there is one list of which files in
+  which order — then EXECUTES every literal runtime `CREATE TABLE`,
+  `CREATE INDEX`, `CREATE TRIGGER`, `ADD COLUMN` and `RENAME` against a copy,
+  to a fixed point. Anything that appears is a finding that cannot be
+  ledgered; so is a statement that removes or renames a name the build has.
+- **`routes/financials.ts` drops `idx_financial_models_project`.** Its
+  statement ran only when `financial_models` was absent, which no database
+  this repo builds is, and the table's `UNIQUE(project_id)` already indexes the
+  column. A statement that can only matter where it can never run is not a
+  safety net.
+- **`check-baseline-drift.mjs`**'s failure message names this as the first
+  usual cause, and exports the three pieces the guard shares.
+- **`migration-declarations-baseline.json`** loses its two
+  `admin_publications` / `referral_attributions` entries; its note carries the
+  correction.
+
+### Why EXECUTE rather than parse
+
+A parse can say a statement names a table; only SQLite can say whether the
+statement succeeds. Five runtime CREATEs name objects no migration declares
+and create nothing, on every database the repo builds, production included:
+`capital_calls`' three indexes in `routes/legalcap.ts` name columns the
+winning `capital_calls` shape does not have (the known collision), and
+`integrations/providers/stripe.ts`'s `metric_anomalies` table and its index
+use double-quoted DEFAULTs SQLite rejects as not constant. A parser would
+report all five as creatable and push them into a migration that could not
+apply. The guard records each in the ledger with the refusal SQLite gives,
+and **re-proves the refusal on every run**: an entry whose statement starts to
+succeed, or fails for a different reason, fails the gate. An ALTER the guard
+cannot expand that reaches a refused table makes the refusal unverifiable,
+which also fails — an unmodelled ADD COLUMN could be exactly the column the
+refusal depends on.
+
+The copy it executes against enables double-quoted string literals. That is
+the permissive direction: a statement refused there is refused on D1 too, so
+a refusal on record is never an artefact of the check being stricter than
+production. `findings()` asserts the permissive and strict builds hold the
+same names before anything is judged.
+
+**Fixed point.** A runtime index can depend on a column another file adds at
+runtime; the order they appear in the tree decides nothing about the order a
+database met them. Every statement that adds is re-run until a whole pass adds
+nothing — two passes over the current tree.
+
+**Loops over literal arrays are expanded**, one statement per entry, because
+that is how the tree writes them: 121 statements from 16 loops in 14 files. Anything else built at runtime is
+**opaque**, counted per file in the ledger with a reason; a count that moves
+fails. One file is on record today: `util/usersRoleRebuild.ts`, whose four
+statements rebuild `users` under its own name inside one batch, so the
+temporary name exists only inside the batch.
+
+### A defect in the guard, found while building it
+
+`literalArrayEntries` stopped at a quote inside a `//` comment (`D1's`) and
+took it for the start of an entry, so `routes/settings.ts:91` and
+`services/fundGpSchema.ts:78` read as unmodelled — two loops the guard should
+have expanded, reported as opaque. `maskCode` could not help: it blanks
+strings as well as comments, so its output cannot tell a comment's quote from
+an entry's. A small `blankComments` blanks only comments and leaves every
+literal intact; both loops now expand with no findings. The tests pin both
+directions: an apostrophe in a comment is skipped, and a `//` inside a string
+is kept.
+
+### Measured read-only against production studioos-db, 2026-09-24
+
+Schema and aggregates only, no user content. `admin_publications` and both
+bootstrap indexes exist, and `sqlite_master` holds exactly the runtime
+statement 287 copies, so every `IF NOT EXISTS` in 287 leaves them alone; the
+table holds 0 rows. The other eleven objects are absent, and so are the five
+refusals. `discovery_interviews` and `roadmap_okrs` exist and hold 0 rows
+each, so the two partial UNIQUE indexes cannot fail on a duplicate. No index
+in production uses `LIKE` today; SQLite allows it in a partial index's WHERE,
+and the test builds both indexes and runs the advisor's real upserts against
+them — twice, so an upsert that duplicated a slot would fail — and shows the
+same statement refused on a build without 287.
+
+### Corrects D190
+
+D190's third correction said `admin_publications` "SELF-HEALS" and so needed
+no declaration. It self-heals, and self-healing is what broke the deploy. The
+rule above replaces that reasoning; D190's entry carries a pointer here.
+
+### VERIFIED
+
+Measured before the first push, and no further. `node scripts/check-runtime-schema-declared.mjs` exits 0: 1081 literal statements executed to a fixed point in two passes over a 1308-object fresh build, with 5 refusals and one opaque file (4 statements) on its ledger and nothing creatable left undeclared. `runtime_schema_declared_d235.test.ts` passes 20 of 20, and 16 of 16 mutations against the guard, migration 287, the ledger, `writeRouter.ts` and `package.json` were caught, as were 6 of 6 earlier mutations against the guard's command line. The two older tests this decision re-aims pass: `sub_cutoff_restores_d190.test.ts` 16 of 16 and `schema_pair_drift_d191.test.ts` 27 of 27. Not yet measured when this was written, and stated so rather than implied: mutation checks of those two re-aimed tests, a full `test:drift` on the landed tree (CI's full-suite run is the first), and migration 287 read back from production after the deploy that applies it. No migration above 284 was on `main` when this landed; 285, 286, 288 and 289 stay with the sessions they were allocated to.
+
+## D237
+
+**`cron_run_history` gets a retention sweep (task 327). It keeps 30 days of
+rows, and ALWAYS the newest row of every trigger. Nothing ever deleted from the
+table. Production, measured read-only on 2026-09-24: 152,331 rows, 108,976 of
+them older than 30 days, and 0 rows in ISO format.**
+
+**No migration**, so 290 is not used. EXPLAIN QUERY PLAN on the baseline's
+table and index:
+
+| statement | plan |
+| --- | --- |
+| keep list, `SELECT DISTINCT trigger_name` | covering-index scan of `idx_crh_trigger_time` |
+| keep list, one newest-row read per trigger | index seek on `trigger_name` |
+| the delete | primary-key lookups, over a covering-index scan of candidates |
+
+The candidate predicate is `datetime()` on the column, so no index could serve
+it with a range seek, whatever the index. The covering index is scanned instead,
+and the scan stops at the batch LIMIT. A new index would buy nothing.
+
+### THE SWEEP (`util/cronHistory.ts`, `pruneCronRunHistory`, beside the writer)
+
+- **Keeps each trigger's newest row, however old.** It uses the same statement
+  `latestRunPerTrigger` reads (now one shared `NEWEST_ROW_SQL`), including its
+  ceiling. So the row it protects is exactly the row Platform's "Cron triggers
+  firing" and the Cron tab read, and a future-dated row cannot take that slot.
+  The weekly trigger (`0 9 * * 2`) whose last row is 40 days old keeps that row
+  and does not read "never fired".
+- **The keep list is built before anything is deleted.** If it cannot be built,
+  nothing is deleted.
+- **Compares `datetime(started_at) < datetime(?)`**, with `datetime()` on both
+  sides. An ISO stamp is therefore read by its time and not by where `T` sorts.
+- **Deletes in bounded batches.** Each statement deletes at most 500 rows, by
+  id from a LIMITed subquery. A sweep runs at most 50 statements, so 25,000
+  rows. The first run meets about 109,000 rows and clears them over five daily
+  runs. After that, a day adds far fewer rows than the cap.
+- **Never throws,** because a failed prune must not fail the tick.
+
+**Why 30 days** (also stated in the file header). Two things read the table:
+
+- `latestRunPerTrigger` reads only each trigger's newest row, which is always
+  kept.
+- The Cron tab pages the raw list, 100 rows at a time. 30 days is some 450
+  pages.
+
+Nothing reads a row by age beyond that, and nothing totals the table over time.
+
+### THE CRON BLOCK (`index.ts`)
+
+The block runs daily at 03:45, a minute no other block uses. It has its own
+try/catch and the `[cron]` prefix. It is **not** gated on `hqCadences`, on the
+D122 precedent: each deployment writes its own table and prunes its own.
+`branch_licence_copy.test.ts` now pins it in the ungated list, anchored on its
+import.
+
+### THE COUNT IS NO LONGER ALL-TIME
+
+`GET /api/infra/cron-history` still returns `COUNT(*)` as `total`. It now also
+sends `retention_days`. The Cron tab reads "N run(s) in the last 30 days (older
+runs are pruned; each trigger's newest run is kept)" instead of a bare "N
+run(s)".
+
+### HOW IT IS HELD
+
+`cloudflare-worker/test/cron_history_retention_d237.test.ts` (new, 8 tests)
+builds the table from the baseline's own DDL and index. It covers:
+
+- the window, with the boundary row kept;
+- the weekly trigger's aged-out newest row, read back through
+  `latestRunPerTrigger` and `triggerState`;
+- a future-dated row;
+- an ISO row one hour past the cutoff;
+- the batch size and cap, plus a second sweep that finishes the job;
+- an unreadable keep list;
+- the sweep's comparisons, read from source;
+- the route and Cron tab label.
+
+`branch_licence_copy.test.ts` gains the ungated pin.
+
+Nine mutations were each run both ways: the code was broken, a named test
+failed with a non-zero exit, the file was restored from a sha256-checked
+snapshot, and the test passed. None escaped. The nine:
+
+1. dropping the keep-newest rule;
+2. a bare `started_at < ?` comparison;
+3. an unLIMITed delete;
+4. deleting when the keep list failed;
+5. a keep list that ignores the ceiling;
+6. an ignored cap;
+7. the block gated on `hqCadences`;
+8. `retention_days` dropped from the route;
+9. the all-time label restored on the Cron tab.
+
+## D238
+
+**A branch is graded against its own crons, not HQ's six (task 332).**
+`GET /api/infra/cron-history` read the newest row of every expression in
+`CRON_TRIGGERS`. A branch only ever fires `BRANCH_CRONS`: `* * * * *`, the
+queue drain, and `0 3 * * *`, the nightly cleanup. So on a branch four triggers
+read "never fired" for ever, which is false. The route now reads
+`triggersFor(env)`. HQ keeps `CRON_TRIGGERS`, and a branch (`branchOf(env)`)
+reads its own two, with their display names.
+
+**No migration and no frontend change.**
+
+### ONE LIST, TWO COPIES, AND A TEST THAT THEY AGREE
+
+`scripts/lib/branchConfig.mjs` writes each branch's wrangler `[triggers]` from
+its own `BRANCH_CRONS`. The worker cannot import from `scripts/`, so it holds
+its own copy, `BRANCH_CRONS` in `util/cronHistory.ts`.
+`cron_triggers_branch_d238.test.ts` asserts that the two copies are equal. So
+the list a branch is graded against is always the list the generator put in
+its triggers. `cron_record_d201.test.ts` still asserts that `BRANCH_CRONS` is a
+subset of `CRON_TRIGGERS`, and that is unchanged.
+
+### LEFT ALONE, ON PURPOSE
+
+`admin_platform.ts` (about line 241) still grades against `CRON_TRIGGERS`. It
+is HQ's super-admin console and is refused on a branch, so HQ's list is the
+right one there.
+
+### RECORDED, NOT FIXED
+
+`[env.preview.triggers]` in `wrangler.toml` declares three crons: `* * * * *`,
+`0 */6 * * *` and `0 4 * * *`. That is neither HQ's six nor a branch's two.
+`cron_record_d201.test.ts` checks only that each of the three is one HQ knows.
+Nothing checks that the preview's set is a list any screen grades against. On
+the preview deployment the history route grades against HQ's six, so three read
+"never fired" there. The preview is not a production tier, and whether it
+should fire HQ's six or a list of its own is the owner's call.
+
+### A ONE-KEYWORD FIX THAT CAME WITH IT
+
+`routes/infra.ts` imported the type `JobType` as a value (`import { Jobs,
+JobType }`). The test loader strips types and then fails to find that export,
+so no test could import the router. It is now `type JobType`. That changes
+nothing at runtime, and it lets the route be tested directly rather than read
+as source.
+
+### HOW IT IS HELD
+
+`cloudflare-worker/test/cron_triggers_branch_d238.test.ts` (new, 4 tests) drives
+the real route on HQ and on a branch (`BRANCH_CODE: 'fr'`). It covers:
+
+- the two `BRANCH_CRONS` copies are equal;
+- HQ is graded against all six;
+- a branch is graded against exactly its own two, and none it never fires;
+- `triggersFor` keeps the display names.
+
+Six mutations were each run both ways. Each broke the code, failed a named test
+with a non-zero exit, was restored from a sha256-checked snapshot, and then
+passed:
+
+1. HQ's list hard-coded in the route.
+2. The helper returning HQ's list on a branch.
+3. The worker copy drifting.
+4. The generator copy drifting.
+5. HQ graded against the branch's list.
+6. HQ's list hard-coded as `triggersFor({})`.
+
+One of them first reached the route by replacing the call with `CRON_TRIGGERS`,
+a name `infra.ts` no longer imports. It was caught, but by a crash, not by the
+list the route returned. It was re-run as a real hard-coding, `triggersFor({}
+as any)`, and that version fails on the list itself. That re-run is the sixth
+mutation above.
+
+## D239
+
+**The scheduled handler's gates now read the event's own time (task 326).**
+Every block in `scheduled()` gates on "which minute is this?", and the clock
+they read was taken with `new Date()` AFTER `processQueueBatch`. When a drain
+crossed a minute boundary, the tick then looked at the next minute. The 03:00
+tick that finished its drain at 03:01 skipped every 03:00 block, and nothing
+recorded it: the cron row still said `completed`. The gate clock is now
+`new Date(event.scheduledTime)`, fixed BEFORE the drain. If `scheduledTime` is
+not a number it falls back to `Date.now()`. It is still named `now`, so the
+gate patterns `branch_licence_copy.test.ts` pins are unchanged.
+
+**No migration.**
+
+### EVERY CONSUMER OF `now`, CLASSIFIED BY D122'S RULE
+
+D122's rule is that a stamp records the moment the thing it represents
+happened. A gate asks which scheduled minute this is, so it reads
+`scheduledTime`. A row that stamps the sweep's own act may keep the wall clock.
+
+| consumer | what `now` decides | clock |
+| --- | --- | --- |
+| every block condition (`now.getUTCHours()/Minutes()/Day()/Date()/Month()`) | which minute's blocks run | **scheduled** |
+| `runCohortTimingTick(env, now)` | its own `% 15 === 1` materialisation gate, and which windows are due | **scheduled** |
+| `runCohortApplicationsTick(env, now)` | the Delaware year-month and which windows are due | **scheduled** |
+| `renewalSweep(env, now)` | the days-left buckets that choose a reminder | **scheduled** |
+| `currentPeriod(now)` (benchmarks) | which quarter is published | **scheduled** |
+| `sendMarketIntelDigests(env, now)` | `isDigestWindow` (weekly/monthly), and `last_sent_at` | **scheduled** (see below) |
+| `sweepEventReminders(env, now)` | the hours-until buckets (its candidate SQL uses `datetime('now')`, unchanged) | **scheduled** |
+| `sweepWatchlistReminders(env, …)` | whether a reminder is due by now, and the `reminded_at` stamp | **wall clock**, `new Date()` |
+
+`cronStartedAt` (the cron row's `started_at`) and the D237 prune's cutoff are
+not in the table. They never read `now`, and both keep the wall clock.
+
+**One compromise, recorded rather than hidden.** `sendMarketIntelDigests`
+takes one `Date` for two jobs: its digest-window gate and the `last_sent_at`
+stamp it writes after sending. The gate is the one a boundary-crossing drain
+breaks, since a skipped digest is a missed email. So it gets the scheduled
+minute, and `last_sent_at` records that minute rather than the wall clock
+second, which is at most the drain's length earlier. Splitting the parameter
+would change a service outside this task.
+
+### HOW IT IS HELD
+
+`cloudflare-worker/test/cron_scheduled_time_d239.test.ts` (new, 5 tests)
+drives the **real** `scheduled()`. It bundles `src/index.ts` with esbuild, the
+bundler Wrangler uses. Node's type stripping cannot load the worker's module
+graph, because several files import a type as a value. The bundle maps
+`cloudflare:*` to a stub and loads `*.md?raw` as text. `Date` is mocked, and the
+stub database moves the clock while the drain reads the queue. The tests:
+
+- The 03:00 tick whose drain ends at 03:01 still runs the 03:00 block
+  (`Jobs.cleanup`).
+- The same tick with a quick drain runs it too (the control).
+- A 03:00 tick delivered late, at 03:01:05, still runs it. Gating on the wall
+  clock read before the drain would get this wrong too.
+- A tick scheduled for 03:01 does not run it.
+- Read from source:
+  - the gate clock is set from `scheduledTime` before the drain;
+  - `now` is declared once;
+  - no block condition reads `new Date()`;
+  - the watchlist sweep's wall clock stays.
+
+Five mutations were each run both ways: break the code, see a named test fail
+with a non-zero exit, restore from a sha256-checked snapshot, see it pass.
+
+1. The gate clock taken after the drain again (the old code) — fails the
+   boundary test itself.
+2. The gate clock read before the drain but from the wall clock.
+3. The watchlist sweep moved onto the scheduled clock.
+4. The 03:00 gate alone reverted to the wall clock.
+5. The 04:50 gate alone reverted to the wall clock.
+
+The fifth was caught only by the source guard. That guard was added once it
+was clear the behavioural tests drive only the 03:00 block.
+
 ## D240
 
 **The one-holder ceiling is now enforced by the write itself. Two overlapping
@@ -23404,6 +23784,186 @@ they are no longer what keeps the set at one holder.
   - removing the double-click branch;
   - folding `successor_changed` into `holder_changed`.
 
+## D241
+
+**Transferring the Super Admin elevation now tells both parties. The
+successor and the former holder each get a `security` notice, in the app and
+by email, as soon as the transfer has landed and been recorded. It is
+best-effort and reported per party. A transfer that moved nothing tells
+nobody.** Task 400.
+
+**No migration and no new route.** The transfer response gains
+`notified: { successor, former }`.
+
+### THE DEFECT
+
+The canvas's note for the transfer says "both parties notified". The route
+told nobody, so the H20 card said so ("The successor is not notified."), and
+`hq_team_h20.test.mjs` held that note on its list of false canvas claims. A
+holder whose session was used by someone else to hand the platform on had no
+way to learn of it except by reading Security.
+
+### WHAT CHANGED
+
+- **`notify()`, not `send()`,** by the rule `routes/admin_licences.ts` states
+  for its own two cases:
+  - `send()` is for mail worth designing: a template, a retrying queue, a send
+    log.
+  - `notify()` is "one sentence and the route back".
+
+  A transfer is the second kind (who holds the elevation now, and where to
+  look), and no designed template exists for it.
+- **Category `security`,** which is in `CRITICAL_CATEGORIES`, so quiet hours
+  and the digest cannot hold it back. Channels are `in_app` and `email`,
+  because the person who most needs it is a former holder who is not signed
+  in.
+- **What each notice says:**
+  - The successor's names who handed it on and their reason, and asks them to
+    raise it before using the elevation if they did not expect it.
+  - The former holder's names the new holder and the reason. It says that if
+    they did not do this, their session was used by someone else, and tells
+    them what to do.
+  - Both link to `/admin/accounts`.
+- **Only after D240's check and after the audit rows.** A transfer refused
+  for any reason sends nothing: no reason, a lost race, a double-click, or
+  `successor_changed`. The record does not wait on a notice.
+- **Best-effort and reported.** Each notice runs in its own try and reports
+  whether it reached the person's inbox, which is what `notify()` returns. A
+  notice that fails never turns a transfer that landed into a failed request;
+  that is D111's rule for side effects after a recorded write.
+
+The H20 card now says "The successor and the former holder are both notified,
+in the app and by email." Its docblock records that the canvas note went from
+false to true. In `hq_team_h20.test.mjs`, "both parties notified" leaves
+`FALSE_CLAIMS`, and the old "not notified" pin is re-aimed to the new
+sentence. A new test holds the claim true against the route itself: the
+`notify` import, a `security` category, one call for `target.id` and one for
+`actor.id`, and both placed after the `changes` check. So the sentence cannot
+outlive the notices.
+
+### VERIFIED
+
+- **`npm run test:drift` exits 0** on Node 22 (`EXIT=0` read from the redirected
+  log), on `main` with D240 merged: frontend **3180**, worker **4136** pass with
+  the same **3** environment-gated skips, retention **48**, zero `not ok`. D240's
+  run was 3179 and 4133. `docs/` was rebuilt with the root `npm run build` after
+  the last `frontend/src` edit (retention ledger moved aside), and
+  `check-docs-fresh --strict` exits 0.
+- `cloudflare-worker/test/hq_team_actions_d221.test.ts` gains three tests.
+  The fixture adds `notifications_inbox` from the baseline, and `fetch` is
+  stubbed and counted so a notice cannot reach the network.
+  - **A landed transfer:** one notice to each party, `super_admin_transfer`,
+    `security`, `critical`, linking to `/admin/accounts`, carrying the reason,
+    and `notified: { successor: true, former: true }`.
+  - **Nothing moves, nobody is told:** a short reason, the lost race, the
+    double-click and `successor_changed` each send no notice of their own.
+  - **An inbox that refuses every write:** the transfer still answers 200,
+    moves the elevation and writes its two audit rows, and reports
+    `notified: { successor: false, former: false }`.
+- **Mutation checks: nine of nine caught,** each alone and restored from a
+  sha256-verified snapshot.
+  - Six run against both test files:
+    - the successor's notice removed;
+    - the former holder's notice removed;
+    - a notice sent before the check;
+    - `notified` reported true regardless;
+    - the category demoted from `security`;
+    - the card's sentence reverted.
+  - Three run against the frontend test alone, to prove the re-aimed pin
+    catches the route: either notice removed, or the `notify` import replaced.
+
+## D242
+
+**The AI organisation budget trip now ends with the month it measured. The
+trip key carries the same `monthKey()` the spend counter uses, so a trip on
+the 29th holds for the rest of that month and reads off on the 1st.** Task 330.
+
+**No migration, no new route, and no runtime clear.** The key changes from
+`ai_killswitch:org` to `ai_killswitch:org:<YYYY-MM>`.
+
+### THE DEFECT
+
+`services/aiRouter.ts` counts the organisation's AI spend per calendar month
+(`ai_spend:org:<YYYY-MM>`). When that spend passes `WORKERS_AI_BUDGET_USD_ORG_MONTH`,
+it writes a trip that refuses every AI call on the platform. That trip was one
+un-monthed key, written with a 35-day TTL. A trip on the 29th therefore kept
+Eadwyn and every other AI call switched off for about five weeks, through most
+of a month whose budget nobody had touched. Nothing in the product could clear
+it sooner. `services/platformSwitches.ts` said exactly that on the Platform
+console ("up to 35 days after it was set").
+
+### WHAT CHANGED
+
+- **One helper, `orgKillSwitchKey(month)`, used by both sides.**
+  `setKillSwitch` writes `orgKillSwitchKey(monthKey())`, and `killSwitchState`
+  reads the same key. That covers the router's gate (`killSwitchOn`) and the
+  console's reading (`aiOrgKillSwitchState`), which D202 made share one
+  function. On the 1st the readers ask for a key that has never been written,
+  so the trip is off and the new month's budget is live.
+- **The TTL stays at 35 days,** so a trip written on the 1st still stands on
+  the 31st. The month in the key is what ends a trip, not the TTL.
+- **The old key goes inert.** Nothing reads `ai_killswitch:org`, not even as
+  a fallback when the month's key is absent. A copy left in KV by the old
+  router expires on its own TTL. There is no runtime delete and no migration.
+- **No runtime clear, deliberately.** D203 made the operator switch store
+  kill-only: it can switch things off, never on. A control to lift a trip
+  mid-month would be a second way to switch AI back on, and an unaudited one.
+- **The console's reason now says what is true:** the trip "holds for the rest
+  of the calendar month (UTC) and lifts on the 1st, when the next month's
+  budget starts — nothing in the product clears it sooner."
+
+### PINS
+
+- `cloudflare-worker/test/platform_consoles_d202.test.ts` held the reason to
+  `/35 days/`. It is re-aimed to "rest of the calendar month" and "lifts on
+  the 1st". It refuses "35 days", and it still requires "nothing in the
+  product clears it sooner".
+- `frontend/test/hq_platform_consoles_d202.test.mjs` ~426–435 pins that the
+  router's gate and the console both read the trip through
+  `killSwitchState(store)`. That property is unchanged, because `monthKey()`
+  reads the clock inside the function, so those pins are **not** re-aimed.
+  Three assertions are added beside them:
+  - `killSwitchState` reads `orgKillSwitchKey(monthKey())`;
+  - `setKillSwitch` writes it;
+  - the literal `'ai_killswitch:org'` appears nowhere in the router.
+- The ~357 pin renders a stub switch with its own text, so it does not hold
+  the real reason and needed no change.
+
+### VERIFIED
+
+`cloudflare-worker/test/aiRouter.test.mjs` exercises the router's shipped
+source bytes on a fixed clock (`node:test`'s Date mock, which the router's own
+`new Date()` reads). It gains two tests:
+
+- **Tripped on 2026-09-29.** The org cap refuses and writes
+  `ai_killswitch:org:2026-09`, and no un-monthed key.
+  - On 2026-09-30 at 23:59:59 the state is still `on` and the router refuses
+    with `kill_switch`.
+  - On 2026-10-01 the state reads `off` and the router answers. September's
+    key is still in KV: it lapsed rather than being deleted.
+- **An un-monthed `ai_killswitch:org` left in KV:** read as `off`, and the
+  router serves.
+
+**Mutation checks: seven of seven caught,** each alone and restored from a
+sha256-verified snapshot:
+
+- The brief's three, against the behaviour test alone:
+  - read the un-monthed key;
+  - key the trip by day instead of month (caught at the 30th);
+  - fall back to the old key when the month's key is absent.
+- The reason text reverted to the 35-day claim, against the worker pin.
+- Three against the new frontend pins alone: the reader off the month key, the
+  writer off the month key, and the old key named again.
+
+**Full suite:** `npm run test:drift` exits 0 on `main` with D241 merged:
+- frontend 3180;
+- worker 4181 passed with 3 skipped, the two tests above over `main`'s 4179;
+- retention 48.
+
+Both typechecks, `check-decision-ids`, `check-folder-docs`, `check-api-drift`
+and `check-docs-fresh --strict` exit 0. `frontend/src` did not move, so
+`docs/` was not rebuilt.
+
 ## D243
 
 **An escalation can be sent again, in both directions.** A raise HQ did not answer stayed `undelivered`, and migration 261 called that retryable, but nothing retried it. A retry after a lost response would also have inserted a second HQ row, because `recordEscalation` had no idempotency key. The other way, HQ's answer push was returned on the response and not stored, so HQ could not tell later whether it arrived or send that same decision again. Task 341.
@@ -23418,4 +23978,303 @@ HQ stores `push_ok`, `push_reason`, `push_at`, and the name that was pushed (`an
 
 - The same `raise_key` returns one uid and one row. A suspended branch retries an undelivered row with that same key and does not insert a second local row. The retry handler does not call `requireBranchNotSuspended`.
 - Send again, given a different answer in the body, pushes the stored text and leaves the row's answer as it was. `push_ok` is written.
-- Two mutations, each restored sha256-identical. Dropping the unique index makes the keyed insert fail (the `ON CONFLICT` target is gone) and the one-row test exits non-zero with one `not ok`. Letting send again read a new answer from the body pushes that text; the stored-answer test exits non-zero with one `not ok`.
+- Three mutations, each restored sha256-identical, each a non-zero exit and one `not ok`. Dropping the unique index makes the keyed insert fail (the `ON CONFLICT` target is gone). Letting send again read a new answer from the body pushes that text. Skipping the stored-decision check lets a resend of an open row through.
+
+## D247
+
+**Deactivating an administrator now takes demote's bar: a TOTP-minted
+session, a fresh step-up and a typed reason of at least 10 characters. The
+reason reaches both activity rows, and the act is recorded through
+`logAdminAction` with the account as its target.** Task 398.
+
+**No migration, no new route.** `adminToggleActive` gains an optional reason.
+
+### THE DEFECT
+
+`PATCH /api/admin/users/:userId/toggle-active` (`routes/admin.ts`) closes or
+re-opens an account. D132 made an administrator target the Super Admin's
+alone. That was the only bar:
+- no authenticator and no step-up;
+- no reason, because the body was never read;
+- two `activity_logs` rows, `user_toggled` and `account_status_changed`,
+  neither carrying a reason;
+- no `admin_audit_log` row, so Security's Target column had no subject.
+
+Demote, the sibling act, takes `requireSuperAdminWriteBar` (TOTP, step-up,
+then the holder) and a reason of at least 10 characters. Closing an
+administrator's account silences them as surely as demoting them, so the
+weaker bar was the one an attacker holding a stale HQ session would use.
+
+### WHAT CHANGED
+
+- **The order of checks.**
+  - `requireAdmin` stays first. It is D135's freeze gate, and the compliance
+    ladder's write probe is this route (`compliance_ladder_d135.test.ts`).
+  - Then the self-refusal, then D132's admin-target refusal. Both answer
+    without the new checks.
+  - Then, for an administrator target only: `requireFactor(c, 'totp')`,
+    `requireStepUp(c)`, and the reason. All of them come before the write, so
+    a refused toggle changes nothing.
+- **Both directions.** The route toggles, and re-opening an account HQ closed
+  is the same power as closing it, so re-opening asks for all three too.
+- **A non-admin target is unchanged, on purpose.** Any admin may disable and
+  re-enable a founder in their own territory with one click. That is the
+  everyday act D132 kept, and a reason prompt there would put friction on the
+  common case to guard the rare one.
+- **The record.**
+  - Both activity rows end `Reason: …`. The target's row still says "by an
+    Axal admin" and does not name the admin.
+  - `logAdminAction` writes `admin_account_deactivated` or
+    `admin_account_reactivated` with `{ target_user_id, reason, is_active }`,
+    so Security's Target column names the account and `reasonFrom` lifts the
+    reason. It is imported dynamically, because `services/adminAudit.ts`
+    imports `ensureAdminAuditLogTable` from `routes/admin.ts`.
+  - **One act shows as two lines under Security's "All actions":** the
+    `user_toggled` suspension line (which the Suspensions filter reads, and
+    which now carries the reason) and the audit line (which names the target).
+    The feed does not de-duplicate across stores, and this entry states it
+    rather than hiding either.
+- **The page.** `handleToggleActive` takes the row, not its id.
+  - On an administrator's row it asks for the reason with `window.prompt`,
+    the idiom Demote already uses on the licence's Administrators tab.
+    Cancelling sends nothing.
+  - `adminToggleActive(userId, reason)` sends a body only when there is a
+    reason, the shape `adminUpdateRole` uses.
+  - The step-up prompt is `request()`'s existing one.
+- **The H20 card.** The Deactivate note said "no authenticator, step-up or
+  reason asked", which was true. It now names the three checks and says that
+  re-opening asks for them again. The Recorded column adds the audit log.
+
+### PINS
+
+- `super_admin_exclusive_powers.test.ts`: "the super admin can deactivate an
+  admin" and the reactivation test sent a bare JWT with no session, no TOTP
+  and no body. They are re-aimed, not loosened: they now send a TOTP-minted,
+  just-stepped-up session and a reason, and the reactivation test first
+  proves a bare JWT is refused. The fixture reads `user_sessions` and
+  `admin_audit_log` from `schema_baseline.sql`. The error handler is
+  replicated from `util/authErrors.ts`, the one table `index.ts` reads.
+- `hq_team_h20.test.mjs`: the row pin `handleToggleActive(u.id)` becomes
+  `handleToggleActive(u)`. The drawer's two pins match unchanged.
+- `admin_role_override.test.mjs` slices `api.js` from `adminUpdateRole:` to
+  `adminToggleActive:`. `adminToggleActive` still follows it directly, so the
+  slice still bounds `adminUpdateRole`. D247's comment above the method falls
+  inside the slice and contains none of the patterns it checks.
+
+### VERIFIED
+
+Five new worker tests in `super_admin_exclusive_powers.test.ts`:
+- the reason reaches both activity rows, and exactly one audit row names the
+  target and carries the reason;
+- a bare JWT and an SMS-minted session → 403 `TOTP required`, nothing written;
+- a step-up an hour old → 403 `step_up_required`, nothing written;
+- no reason, an empty one, spaces, and 9 characters → 400 `reason_too_short`.
+  The account is unchanged after each attempt, and 10 characters passes;
+- a founder toggles for both HQ and a plain admin with no session and no
+  reason, and no audit row is written.
+
+One new frontend test in `hq_team_h20.test.mjs`. It reads the handler for the
+order requireAdmin < the D132 refusal < factor < step-up < reason < write <
+audit, and reads the page and `api.js` for the prompt and the forwarded reason.
+
+**Mutation checks: twelve runs, all caught in the end,** each alone and
+restored from a sha256-verified snapshot:
+- the brief's five, against the worker tests:
+  - drop `requireStepUp` for an admin target;
+  - accept a 9-character reason;
+  - move the reason check after the write;
+  - key the audit row `user_id` (the D159 guard and the new audit test both
+    fail);
+  - demand a reason for a non-admin target;
+- the first three again, against the frontend pin alone;
+- four against the frontend pin alone: no prompt on an admin row, the typed
+  reason not sent, `api.js` not forwarding it, and the card's note reverted.
+
+**One escaped, and the assertion was fixed, not the code.** Moving the reason
+check below the write passed the first draft of the short-reason test. That
+draft sent four short reasons and checked the account once, at the end, and
+four refused toggles flip it four times and land it where it started. The
+test now checks the account after every attempt, and the mutation is caught.
+
+**Full suite:** `npm run test:drift` on Node 22 exits 0 on `main` at
+`de6b143c`:
+- frontend 3181 (one new);
+- worker 4186 passed with 3 skipped (five new, over `main`'s 4181);
+- retention 48.
+
+`docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
+edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
+`check-folder-docs` and `check-api-drift` exit 0.
+
+## D248
+
+**A support session now tells the person it opens on. Extend asks for its own
+reason, stops at a ceiling of two hours measured from when the session opened,
+and is recorded where Security reads. The recovery cool-off pauses Extend but
+not End, and D248 decides which other admin-over-admin writes it pauses.**
+Task 397.
+
+**No migration.** `impersonation_sessions.started_at` already exists. The
+target's notice goes through `notify()`, and nothing in `App.jsx` changes.
+
+### THE DEFECTS
+
+- **The person was never told.** None of the three impersonation handlers
+  (open, Extend, End) called `notify()`. No row reached the target's own feed
+  either, because `routes/activity.ts` reads `user_id = me OR actor = my
+  email` and the `admin_impersonate` row is on the admin. Someone could act as
+  you for thirty minutes, extendable, and nothing on your side said so.
+- **Extend asked for no reason and had no ceiling.** Nothing read
+  `started_at`. An HQ session whose tab was closed keeps `ended_at` NULL for
+  ever, since the sweep skips HQ rows by design
+  (`util/supportSessionSweep.ts`). So Extend could revive a session days old,
+  on a reason typed days ago.
+- **Extend's only record was invisible.** It was an `admin_impersonate_extend`
+  activity row, which Security's feed excludes on purpose
+  (`admin_security.ts`), and it carried no reason.
+- **Extend was outside the cool-off.** `COOL_OFF_PREFIXES` had
+  `/api/admin/impersonate`, registered as `p` and `${p}/*`. That reaches
+  `/api/admin/impersonate/42` but not `/api/admin/impersonate-sessions/7/extend`.
+  A freshly recovered account could not open a session, but could extend one
+  it already held.
+
+### WHAT CHANGED
+
+- **Open tells the target.**
+  - `tellOfSupportSession` sends one `security` notice, in the app and by
+    email, after every refusal and after the grant. It says who, the typed
+    reason, thirty minutes, and the two-hour ceiling, and links to
+    `/account/security`, where "sign out everywhere" ends the session's token.
+  - It is best-effort and reported as `target_notified`, never thrown, per
+    D111's rule. `tellOfTransfer` (D241) is the same shape.
+  - Nothing is added to `App.jsx`: the notice reaches the target through the
+    inbox and email.
+- **Extend asks for a reason** of at least 10 characters (`reason` in the
+  JSON body), and refuses with 400 `extend_reason_required`.
+- **Extend has a ceiling.** `IMPERSONATION_CEILING_MINUTES = 120` is exported
+  from `auth.ts` beside the 30-minute expiry.
+  - An extension that would carry the session past `started_at + ceiling` is
+    refused with 409 `support_session_ceiling`. So no token minted for a
+    session outlives two hours from its start.
+  - An unreadable `started_at` is refused too: the safe answer to "how long
+    has this been open?" is not "no time".
+  - **Why two hours:** it is the first thirty minutes and three extensions.
+    Past that, the work is a new visit, and a new visit is a new session, with
+    a new reason and a new notice to the person. The number is a judgement,
+    not a measurement.
+  - A refused extension writes nothing: no token, no activity row, no audit
+    row, and `ended_at` untouched.
+- **Extend is recorded** through `logAdminAction('admin_impersonate_extend',
+  { target_user_id, reason, impersonation_session_id, minutes, started_at })`.
+  Security's audit arm shows it with the target and the reason. That call's
+  activity row replaces the hand-written one.
+- **The cool-off, by route, not by prefix.** `recoveryCoolOff` refuses every
+  method, GETs included, and `${p}/*` covers every sibling under `p`. So the
+  new `COOL_OFF_ROUTES` holds exact Hono patterns, registered without the
+  wildcard. Each call:
+
+  | Route | Paused | Why |
+  |---|---|---|
+  | `/api/admin/impersonate-sessions/:id/extend` | **yes** | thirty more minutes as someone else |
+  | `/api/admin/impersonate-sessions/:id/end` | no | the safe direction; a recovered owner may need to close a session someone else opened |
+  | `/api/admin/super-admins/:userId` (grant, revoke, transfer) | **yes** | it was not on the list, so a freshly recovered holder could hand the platform on during cool-off |
+  | `/api/admin/super-admins` (GET, the holder list) | no | a read |
+  | `/api/admin/users/:userId/toggle-active` | **yes** | closing an administrator's account (D247) |
+  | `/api/admin/users/:userId/role` | **yes** | a role change, the binding-agreement override included (D249) |
+  | `/api/admin/security/force-reauth` | no | it ends sessions and grants nothing; it is the containment tool a recovered owner is most likely to need |
+
+- **The Extend button needs no `App.jsx` change.** The bar belongs to
+  Session 1 this wave, and it calls `api.adminImpersonateExtend(id)` with no
+  reason. The method now takes `(sessionId, reason)`. When the reason is
+  absent it asks with the same `window.prompt` idiom Demote uses. A cancelled
+  prompt sends nothing and returns null, which the bar reads as "no new
+  expiry". Moving the prompt into the bar itself is Session 1's call.
+- **The H20 card.**
+  - "Extend adds 30 more with no new reason" and "The person is not told"
+    were true, and now describe the new behaviour.
+  - The ceiling is stated from `SUPPORT_SESSION_CEILING_HOURS`, which a test
+    holds equal to the Worker's constant, because the SPA cannot import
+    Worker code.
+  - "An extension is not in the feed" became "each extension, with its
+    reason, in the audit log".
+  - The canvas's "banner both sides see" stays on the false list: a notice is
+    not a banner.
+
+### PINS
+
+- `hq_team_h20.test.mjs:148` ("The person is not told…") is re-aimed to the
+  sentence that replaced it.
+- `support_session_h4.test.mjs` pinned `adminImpersonateExtend: async
+  (sessionId) =>`. It is re-aimed to `(sessionId, reason)`.
+- `territory_licences.test.mjs` pins the cool-off list. It gains a test
+  covering `COOL_OFF_ROUTES`:
+  - the four entries are present, registered without a wildcard;
+  - no parent prefix (`impersonate-sessions`, `super-admins`, `users`,
+    `security`) is on the prefix list;
+  - the route list names neither End nor force re-auth.
+- `hq_team_actions_d221.test.ts` and `admin_impersonation_session.test.ts`
+  drove Extend with no body. Each Extend call now sends a reason. Nothing they
+  assert is loosened.
+
+### VERIFIED
+
+`cloudflare-worker/test/impersonation_d248.test.ts` bundles `index.ts` the way
+Wrangler does (esbuild, the D239 precedent) and drives every request through
+the real `fetch`. Its database is `buildFresh(schema_baseline.sql + every later
+migration)`, the build the deploy's step 9 uses (D235). The cool-off's table
+comes from migration 277, which a baseline-only fixture would lack. Eight
+tests:
+
+- Opening a session sends the target exactly one `security` notice, naming
+  who, why, thirty minutes and the ceiling. The admin gets none.
+- A refused open (a short reason, or a peer on an admin) tells nobody.
+- An inbox that refuses every write still opens the session, and reports
+  `target_notified: false`.
+- Extend writes one audit row naming the target, the reason and the session.
+- Extend with no reason, an empty one, spaces, or 9 characters → 400, and no
+  token, activity row or audit row.
+- Extend on a session opened three days ago, or 100 minutes ago → 409, and
+  nothing written. One opened 80 minutes ago is extended.
+- During the cool-off, Extend → 423 `recovery_cool_off_active` from the
+  middleware, while End → 200 and stamps `ended_at`.
+- During the cool-off, the elevation writes, toggle-active and the role route
+  → 423, and nothing changes. The holder list and force re-auth are not paused.
+
+**Two fixture facts, recorded because both surprised the first draft:**
+- **Access-log rows.** The observability middleware writes an `http_post`
+  access-log row for every request, refused ones included. "Nothing written"
+  therefore means nothing from the route, and the helper excludes `http_*`.
+- **Sealed start times.** D156's trigger seals `impersonation_sessions.started_at`
+  against UPDATE, so the ceiling tests insert back-dated sessions rather than
+  rewriting one. That seal is what makes the ceiling trustworthy.
+
+**Mutation checks: sixteen runs, all caught in the end,** each alone and
+restored from a sha256-verified snapshot:
+- The brief's five against the bundled-worker test, plus one extra, caught 6
+  of 6:
+  - drop the notify call;
+  - accept an Extend with no reason;
+  - measure the ceiling from now instead of `started_at`;
+  - remove the Extend registration;
+  - let the cool-off cover End, by adding the `impersonate-sessions` prefix;
+  - (extra) drop toggle-active from the cool-off.
+- The same six against the frontend pins caught 6 of 6.
+- Four more against the frontend pins alone caught 4 of 4: the "not told"
+  sentence restored, the card's ceiling drifting from the Worker's, Extend
+  asking for no reason, and the reason not sent.
+
+**One escaped at first, and the assertion was fixed.** "Accept an Extend with
+no reason", done as `if (false)` in front of the refusal, passed the first
+frontend pin, which looked only for the `extend_reason_required` string. The
+pin now reads the `reason.length < 10` check itself, and the mutation is
+caught. The worker test caught it from the start.
+
+**Full suite:** `npm run test:drift` on Node 22 exits 0 on `main` with D247
+merged (`f2a69e92`):
+- frontend 3183 (two new);
+- worker 4194 passed with 3 skipped (eight new, over 4186);
+- retention 48.
+
+`docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
+edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
+`check-folder-docs` and `check-api-drift` exit 0.

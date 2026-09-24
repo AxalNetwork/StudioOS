@@ -11,7 +11,7 @@
  * shipped to Cloudflare. Provides in-memory mocks for `env.AI` (Workers AI),
  * `env.AI_SPEND` (KV), and `env.DB` (D1).
  */
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -33,7 +33,7 @@ async function loadRouter() {
     .replace(/^export\s+\{[^}]*\};?\s*$/gm, '');
   const outputText = transpileTs(stripped);
   // Re-export the public surface via an IIFE wrapper.
-  const wrapped = `${outputText}\nreturn { run, ROUTE, estimateCostUsd, loadAiUsageReport, __resetForTest };`;
+  const wrapped = `${outputText}\nreturn { run, ROUTE, estimateCostUsd, loadAiUsageReport, aiOrgKillSwitchState, __resetForTest };`;
   return new Function(wrapped)();
 }
 
@@ -443,4 +443,77 @@ test('a fallback\'s answer is not cached under the primary\'s name', async () =>
   assert.equal(third.usage.cached, true, 'the primary never cached its own answer');
   assert.equal(third.output, 'from the 70b');
   assert.equal(ai.calls.length, 3);
+});
+
+// --------------------------------------------------------------------------
+// D242 — the org budget trip ends with the month it measured.
+//
+// The spend it guards is counted per month (`ai_spend:org:YYYY-MM`); the trip
+// was one un-monthed key written for 35 days, so a trip on the 29th refused
+// every AI call for about five weeks. The clock is FIXED here (node:test's
+// Date mock, which the router's own `new Date()` reads) — a boundary asserted
+// against the wall clock is a test that passes on most days of the month.
+// --------------------------------------------------------------------------
+const at = (iso) => Date.parse(iso);
+function answering() {
+  return makeAI([() => ({ response: 'ok', usage: { prompt_tokens: 1, completion_tokens: 1 } })]);
+}
+const ask = (run, env) => run(env, {
+  task: 'workspace_explain', userId: 7, model: '@cf/meta/llama-3.2-3b-instruct',
+  messages: [{ role: 'user', content: 'read this page back' }],
+});
+
+test('D242: a trip on the 29th holds for the rest of that month and lifts on the 1st', async () => {
+  const { run, aiOrgKillSwitchState, __resetForTest } = await loadRouter();
+  __resetForTest();
+  mock.timers.enable({ apis: ['Date'], now: at('2026-09-29T12:00:00Z') });
+  try {
+    const kv = makeKV();
+    const ai = answering();
+    const env = baseEnv({ ai, kv, db: makeDB(), budgets: { orgMonth: '10' } });
+    kv.store.set('ai_spend:org:2026-09', '999'); // September's budget is spent
+
+    const tripped = await ask(run, env);
+    assert.equal(tripped.refusal, 'budget_org_month', `the org cap did not refuse: ${JSON.stringify(tripped)}`);
+    assert.equal(kv.store.get('ai_killswitch:org:2026-09'), '1', 'the trip is not keyed by the month it measured');
+    assert.ok(!kv.store.has('ai_killswitch:org'), 'the trip was still written under the un-monthed key');
+    assert.equal(await aiOrgKillSwitchState(env), 'on');
+
+    // The rest of September: still off for everyone.
+    mock.timers.setTime(at('2026-09-30T23:59:59Z'));
+    assert.equal(await aiOrgKillSwitchState(env), 'on', 'the trip lifted before its month ended');
+    const late = await ask(run, env);
+    assert.equal(late.refusal, 'kill_switch', 'the router served during the month the trip measured');
+
+    // The 1st: a month whose budget nobody has touched. The trip reads off and
+    // the router answers — with no clear, no delete and no operator act.
+    mock.timers.setTime(at('2026-10-01T00:00:01Z'));
+    assert.equal(await aiOrgKillSwitchState(env), 'off', 'the trip outlived the month it measured');
+    const callsBefore = ai.calls.length;
+    const october = await ask(run, env);
+    assert.equal(october.ok, true, `the router still refused on the 1st: ${JSON.stringify(october)}`);
+    assert.equal(ai.calls.length, callsBefore + 1);
+    assert.equal(kv.store.get('ai_killswitch:org:2026-09'), '1', 'September\'s trip was deleted at runtime rather than left to lapse');
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test('D242: an un-monthed trip left in KV by the old router is ignored', async () => {
+  // What production holds on the day this ships: `ai_killswitch:org` from a
+  // trip written before D242. Nothing may read it — not as the key, and not as
+  // a fallback when the month's key is absent.
+  const { run, aiOrgKillSwitchState, __resetForTest } = await loadRouter();
+  __resetForTest();
+  mock.timers.enable({ apis: ['Date'], now: at('2026-10-05T09:00:00Z') });
+  try {
+    const kv = makeKV();
+    kv.store.set('ai_killswitch:org', '1');
+    const env = baseEnv({ ai: answering(), kv, db: makeDB(), budgets: { orgMonth: '10' } });
+    assert.equal(await aiOrgKillSwitchState(env), 'off', 'the old un-monthed key is still read');
+    const r = await ask(run, env);
+    assert.equal(r.ok, true, `the old key still refused AI calls: ${JSON.stringify(r)}`);
+  } finally {
+    mock.timers.reset();
+  }
 });

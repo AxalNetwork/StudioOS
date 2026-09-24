@@ -264,6 +264,31 @@ test('the licence surface is in the recovery cool-off list', () => {
   assert.ok(block.includes("'/api/admin/licences'"), 'a freshly-recovered admin must not issue licences');
 });
 
+test('D248: Extend is paused by the recovery cool-off, End is not, and each admin-over-admin write is decided', () => {
+  const idx = read('cloudflare-worker/src/index.ts');
+  const start = idx.indexOf('const COOL_OFF_ROUTES = [');
+  assert.ok(start > 0, 'the cool-off route list is gone');
+  const block = idx.slice(start, idx.indexOf('];', start));
+  for (const route of [
+    '/api/admin/impersonate-sessions/:id/extend',
+    '/api/admin/super-admins/:userId',
+    '/api/admin/users/:userId/toggle-active',
+    '/api/admin/users/:userId/role',
+  ]) assert.ok(block.includes(`'${route}'`), `${route} is not paused during the cool-off`);
+  // Registered as the route itself, never with a wildcard: `${p}/*` on a
+  // parent would reach End.
+  assert.match(idx, /for \(const p of COOL_OFF_ROUTES\) app\.use\(p, recoveryCoolOff\);/);
+  // What must stay open: End (the safe direction), the holder list, every
+  // other /users route, and force re-auth. A PREFIX here would take them all.
+  const pStart = idx.indexOf('const COOL_OFF_PREFIXES = [');
+  const prefixes = idx.slice(pStart, idx.indexOf('];', pStart));
+  for (const parent of ['/api/admin/impersonate-sessions', '/api/admin/super-admins', '/api/admin/users', '/api/admin/security']) {
+    assert.ok(!prefixes.includes(`'${parent}'`), `${parent} is a cool-off PREFIX, which pauses every route under it`);
+  }
+  assert.ok(!block.includes('/end'), 'End is paused by the cool-off; ending a session is the safe direction');
+  assert.ok(!block.includes('/api/admin/security'), 'force re-auth is paused; it ends sessions and grants nothing');
+});
+
 test('it is mounted before the /api/admin catch-all', () => {
   const s = read('cloudflare-worker/src/index.ts');
   const mine = s.indexOf("app.route('/api/admin/licences'");
