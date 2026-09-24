@@ -24609,3 +24609,88 @@ concurrent sweeps both reach the claim depends on how they interleave. The
 deterministic test, where the clock is handed a due row that is no longer
 'scheduled', was added for that reason. It catches the mutation on both
 consoles.
+
+## D251
+
+**The production deploy step retries Cloudflare error 10013, and nothing else
+(task 339).** `cloudflare-worker-deploy.yml` ran
+`npx --no-install wrangler deploy --config ../wrangler.toml --env production`
+once. On D202's merge, run 35852624173 failed that step with error 10013 after
+it had already changed things, and main was left half-deployed.
+
+**No migration. No worker or frontend source change.**
+
+### WHAT A PARTIAL DEPLOY LOOKS LIKE (measured from that run's log)
+
+Wrangler uploaded the Worker (`Uploaded studioos (8.59 sec)`) and printed
+`Deployed studioos triggers`. It had applied the custom domains, all six cron
+schedules, the queue producer and the job-queue consumer. Then it failed:
+
+```
+✘ [ERROR] Trigger configuration for "studioos" was only partially updated:
+  Queue consumers:
+    - A request to the Cloudflare API (/accounts/…/queues/…/consumers/…) failed.
+      - An unknown error has occurred. … [code: 10013]
+  Successful trigger changes were not rolled back.
+```
+
+So the new code was live, but the DLQ queue had no consumer attached, and step 9
+was skipped. Main stayed that way until D203's merge re-ran every step.
+
+### WHY A RETRY IS SAFE
+
+`wrangler deploy` converges on the config it is given. A second run re-uploads
+the same bundle and re-applies the same triggers, and what already succeeded is
+a no-op. The migrations step finished before this step began, so a retry never
+reaches the schema.
+
+### WHAT LANDS
+
+The step is a loop:
+
+- **Up to three attempts, 15 seconds apart.**
+- **`set -o pipefail`.** The output is piped through `tee deploy.log`, and
+  without pipefail a failed deploy would take `tee`'s exit status (0) and turn
+  the step green.
+- **Only 10013 is retried.** A failed attempt is retried only if its log
+  contains `[code: 10013]`, the exact text measured above. Any other failure
+  exits at once. A build or configuration error does not change on a second
+  try, and retrying it only buries the first message under two more. A code
+  joins the pattern only with a run that shows it.
+
+This is `pr-preview.yml`'s loop, narrowed. The preview retries every failure,
+because its known transient (#423) has no code of its own.
+
+**One line still runs `npx … wrangler deploy`,** which is what
+`topology_d209.test.ts` holds, so the topology page's "who deploys HQ" stays
+true. `migrate_d1_plan.test.ts` pinned the old one-line `run:`. It now matches
+the loop's `if npx --no-install wrangler deploy --config ../wrangler.toml --env
+production` line. It still searches code lines only, not the header's prose,
+and it still asserts the migrations come first. Only the shape of the line it
+searches for changed.
+
+### HOW IT IS HELD
+
+`frontend/test/deploy_retry_d251.test.mjs` (new, 5 tests) **executes** the
+step. It lifts the `run: |` script out of the workflow and runs it with bash,
+with a fake `npx` and a no-op `sleep` first on PATH. The fake prints what each
+attempt would print and exits the way it would. The tests:
+
+- two 10013s then a success is green, after three calls;
+- any other error fails after one call;
+- three 10013s fail after exactly three;
+- a failure with no retryable code is not turned green by `tee`;
+- read as text: the step comes after the migrations, it is the one `npx`
+  deploy line, and its filter is 10013 only.
+
+Four mutations were each run both ways: the code was broken, a named test
+failed with a non-zero exit, the file was restored from a sha256-checked
+snapshot, and the tests passed again.
+
+1. `pipefail` removed.
+2. Every error retried.
+3. The loop dropped.
+4. The deploy step moved before the migrations step. This was caught here and
+   by `migrate_d1_plan`.
+
+None escaped.
