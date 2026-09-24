@@ -349,7 +349,18 @@ export function armDeadline(ms, callerSignal) {
  * the fallback in every page), so the message is prose, not `AbortError` or
  * `signal is aborted without reason`.
  *
- * THREE SHAPE RULES, each protecting an existing consumer:
+ * D233 — "Nothing was changed" was said for EVERY timed-out request, writes
+ * included. A GET or HEAD that times out really did change nothing — there
+ * was nothing to change — but a write (POST/PUT/PATCH/DELETE) may have
+ * committed on the server and simply answered late; the client can't tell.
+ * Claiming "nothing changed" there is a guess dressed as a fact, and it
+ * invites exactly the retry that duplicates the write. So only a read keeps
+ * that sentence; a write gets the honest unknown-outcome wording instead
+ * (the model is `HqSupportPage.jsx`'s `decisionError()`: "Whether … is not
+ * known … Reload before trying again").
+ *
+ * THREE SHAPE RULES, each protecting an existing consumer — unchanged by
+ * which wording fires:
  *   · `name` is NOT `AbortError`. `LoginPage.jsx` and `SettingsPage.jsx` both
  *     read that name to mean "the user dismissed the passkey prompt".
  *   · the message must not match a chunk-load phrase from
@@ -359,8 +370,12 @@ export function armDeadline(ms, callerSignal) {
  *     has no HTTP status; consumers branching on `e.status` fall through to
  *     their generic branch, which is the honest outcome.
  */
-export function timeoutError(path, ms) {
-  const e = new Error(`The server did not respond within ${Math.round(ms / 1000)}s. Nothing was changed.`);
+export function timeoutError(path, ms, method) {
+  const isRead = ['GET', 'HEAD'].includes(String(method || 'GET').toUpperCase());
+  const outcome = isRead
+    ? 'Nothing was changed.'
+    : "Whether this was saved is not known. Reload before trying again.";
+  const e = new Error(`The server did not respond within ${Math.round(ms / 1000)}s. ${outcome}`);
   e.name = 'TimeoutError';
   e.code = 'timeout';
   e.path = path;
@@ -564,7 +579,7 @@ export async function request(path, options = {}) {
     // timeout cannot compound whatever caused it.
     if (deadline.timedOut()) {
       const ms = deadlineFor(path, options);
-      const timeout = timeoutError(path, ms);
+      const timeout = timeoutError(path, ms, options.method);
       reportError('api:timeout', new Error(`${path} exceeded ${ms}ms`));
       throw timeout;
     }
