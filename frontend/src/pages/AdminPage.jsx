@@ -9,7 +9,7 @@ import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useAuth } from '../hooks/useAuthSync';
-import { Unrecorded } from '../ui';
+import { Unrecorded, Unreadable } from '../ui';
 import { PromoProductScope } from './PromoProductScope';
 // D128 — the scope caption is fed from `/me.branch` through the same reader
 // the territory badge uses, so the two cannot disagree about which
@@ -1832,7 +1832,7 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
             <div className="space-y-3 text-sm">
               <Field label="KYC status" value={kyc.status || 'unknown'} />
               <Field label="Email verified" value={u.email_verified ? 'Yes' : 'No'} />
-              <Field label="TOTP enabled" value={kyc.totp_enabled ? 'Yes (required at login)' : 'No'} />
+              <TotpEnrolmentField kyc={kyc} />
               <Field label="ID document uploaded" value={kyc.id_uploaded ? 'Yes' : 'No'} />
               <div className="pt-2">
                 <button onClick={resend} disabled={resending || u.email_verified}
@@ -1957,6 +1957,33 @@ function Field({ label, value, mono }) {
       <div className={`text-gray-900 ${mono ? 'font-mono text-xs' : ''} mt-0.5 break-all`}>{value || '—'}</div>
     </div>
   );
+}
+
+/**
+ * D236 — the drawer's authenticator line, in the three states the server
+ * sends. `true` and `false` are answers, read from the same definition sign-in
+ * uses. Anything else is not an answer: `null` means the read failed, and a
+ * payload without the field said nothing. Printing "No" for either would
+ * repeat the hard-coded placeholder this replaced, which told HQ that every
+ * account had no second factor.
+ *
+ * "Yes" does not claim the factor is required at every sign-in: a magic link
+ * still signs an enrolled account in, at a lower assurance, so the old
+ * "(required at login)" was never true for every route in.
+ */
+export function TotpEnrolmentField({ kyc }) {
+  const enrolled = kyc?.totp_enabled;
+  const value = enrolled === true
+    ? 'Yes — an authenticator app is enrolled'
+    : enrolled === false
+      ? 'No — no authenticator app is enrolled'
+      : (
+        <Unreadable
+          what="Authenticator enrolment"
+          claim={kyc?.totp_reason || 'The profile did not say whether an authenticator is enrolled.'}
+        />
+      );
+  return <Field label="TOTP enabled" value={value} />;
 }
 
 function Stat({ label, value }) {
