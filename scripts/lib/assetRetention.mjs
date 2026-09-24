@@ -107,6 +107,17 @@ export function planAssetRetention({
   const keep = new Set();
   for (const b of trimmed) for (const f of b.files) keep.add(f);
 
+  // AN EXPLICIT SEED IS KEPT WHATEVER THE LEDGER SAYS (task 333, D252). With a
+  // ledger the seed above never runs, so a ledger whose newest entries are
+  // other rebuilds pushed the generation production is serving out of the
+  // window: the seed was computed, then dropped. It joins the kept set after
+  // the trim. Only an explicitly passed, non-empty seed does: the prevFiles
+  // fallback is the whole tree on disk, and keeping that on every build is
+  // D183's high-water mark again.
+  if (Array.isArray(seedFiles) && seedFiles.length > 0) {
+    for (const f of seedFiles) keep.add(f);
+  }
+
   const newSet = new Set(newFiles);
   const prevSet = new Set(prevFiles);
 
@@ -116,4 +127,29 @@ export function planAssetRetention({
   const missing = [...keep].filter((f) => !newSet.has(f) && !prevSet.has(f));
 
   return { nextLedger: { builds: trimmed }, keep: [...keep], restore, missing };
+}
+
+/**
+ * The flag the production deploy passes to seed the WHOLE committed
+ * `docs/assets` rather than the previous generation (task 351, D252).
+ *
+ * The deploy rebuilds `docs/` from source, and the generation production is
+ * serving is the one the LAST deploy uploaded, which is not necessarily the
+ * one the committed shells describe (`docs/` is committed by hand). Seeding
+ * the committed tree keeps every generation still committed; the deploy never
+ * commits its build back, so this cannot grow `docs/assets` (D183).
+ *
+ * It is a flag the workflow passes, never `CI`: every CI job and the PR
+ * preview set `CI`, and none of them uploads to production.
+ */
+export const SEED_COMMITTED_TREE_FLAG = '--seed-committed-tree';
+
+/**
+ * @param {object} opts
+ * @param {string[]} opts.argv            the build script's arguments
+ * @param {string[]} opts.prevGeneration  the previous generation's assets
+ * @returns {string[] | null} the seed; null means "fall back to prevFiles"
+ */
+export function seedFilesFor({ argv = [], prevGeneration = [] } = {}) {
+  return argv.includes(SEED_COMMITTED_TREE_FLAG) ? null : prevGeneration;
 }
