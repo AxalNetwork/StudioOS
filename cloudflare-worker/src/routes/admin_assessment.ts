@@ -3,11 +3,15 @@
  *
  * Mounted at /api/admin/assessment, BEFORE the catch-all /api/admin router
  * (same mount-before-catch-all precedence as admin_events / admin_articles).
- * Every handler is requireAdmin, and that is the WHOLE gate: this used to
- * claim a `/api/admin/*` Cf-Access perimeter "applied in index.ts", which is
- * the one file that records its removal — Task #33 took it out because the
- * Access app is apex-only while the SPA uses a relative API base, so
- * app.axal.vc/api/admin/* could not carry the assertion header.
+ * Two gates, and nothing in front of them: the 17 handlers that write a game,
+ * chapter, item, archetype or badge are `hqAuthor` (requireAdmin plus "not on
+ * a branch", D106), and the other 6 — the reads, preview and rescore — are
+ * plain `admin`. This header said every handler was requireAdmin and that was
+ * the whole gate from D106, which made it false, until D214 corrected it. It
+ * used to claim a `/api/admin/*` Cf-Access perimeter "applied in index.ts"
+ * too, which is the one file that records its removal — Task #33 took it out
+ * because the Access app is apex-only while the SPA uses a relative API base,
+ * so app.axal.vc/api/admin/* could not carry the assertion header.
  *
  * Surface: CRUD + version + publish/archive for games / chapters / items /
  * archetypes / badges; preview a game (plays without writing results);

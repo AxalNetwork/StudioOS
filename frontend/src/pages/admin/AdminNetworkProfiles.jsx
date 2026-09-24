@@ -2,7 +2,8 @@
  * Task #1 — Admin mentor & partner network profiles.
  *
  * Admin-only roster that feeds the Axal VC Spin-Out Demo Day deck's
- * Mentors & Network slide. CRUD + photo upload + drag-to-reorder +
+ * Team & Network slide (it said "Mentors & Network", a slide no deck has —
+ * corrected in D214). CRUD + photo upload + drag-to-reorder +
  * active toggle. Skills are picked from a fixed 12-axis catalog
  * (mirrors SKILL_CATALOG in cloudflare-worker/src/services/
  * networkProfilesSchema.ts — keep in sync).
@@ -348,7 +349,7 @@ export default function AdminNetworkProfiles() {
             <Users className="w-6 h-6 text-violet-600" /> Mentor & partner network
           </h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-            Admin-only roster powering the Spin-Out Demo Day deck's Mentors & Network slide.
+            Admin-only roster powering the Spin-Out Demo Day deck's Team & Network slide.
           </p>
         </div>
         <div className="flex gap-2">

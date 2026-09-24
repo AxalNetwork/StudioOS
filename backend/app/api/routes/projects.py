@@ -173,7 +173,7 @@ def _spinout_deck_payload(project: Project, session: Session) -> dict:
             "title": "A founder backed by an operating network.",
             "founder": {"initials": "—", "name": "Founder", "role": "Founder & CEO",
                         "bio": "[draft — add your founder profile in the Team module]"},
-            "advisorsLabel": "ADVISORS & ADVISORS",
+            "advisorsLabel": "ADVISORS & PARTNERS",
             "advisors": [["DK", "Daniel Kerr", "Former CRO"], ["RP", "Rina Patel", "Fintech GTM"]],
             "centerName": name,
             "nodes": [

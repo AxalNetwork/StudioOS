@@ -28,6 +28,7 @@
 
 import type { Env } from '../../types';
 import { fillAxalSpinoutDemoDay, type SpinoutDemoDayData } from './axalSpinoutDemoDay';
+import { deckAdvisorRole } from './deckRoster';
 
 type Status = 'done' | 'active' | 'pending';
 
@@ -762,7 +763,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   if (profiles.length) {
     advisors = profiles.slice(0, 8).map((p) => {
       const photo = has(p.photo_url || '') ? String(p.photo_url) : undefined;
-      return [initialsOf(p.name), p.name, has(p.role) ? p.role : 'Advisor', photo] as [string, string, string, string?];
+      return [initialsOf(p.name), p.name, deckAdvisorRole(p.role), photo] as [string, string, string, string?];
     });
   } else if (advisorNames.length) {
     advisors = advisorNames.slice(0, 8).map((n) => [initialsOf(n), n, 'Advisor'] as [string, string, string, string?]);
@@ -776,7 +777,12 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     title: has(src.team?.headline) ? src.team.headline : 'A founder backed by an operating network.',
     founder,
     founders,
-    advisorsLabel: 'ADVISORS & ADVISORS',
+    // "ADVISORS & MENTORS" until fb36dd5fe renamed the mentor role to advisor
+    // across every layer and turned this into a repeated word. The frontend
+    // sample (deckData.js) was corrected to PARTNERS in a196b1d7e and this
+    // copy and the dev mirror were not; D214 aligns all three, and a guard now
+    // holds them equal (spinout_deck_label_d214.test.mjs).
+    advisorsLabel: 'ADVISORS & PARTNERS',
     advisors,
     centerName: projectName,
     nodes: [

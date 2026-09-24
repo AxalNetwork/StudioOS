@@ -43,7 +43,14 @@ import BranchZone from './BranchZone';
  * `admin_assessment.ts` has 23 routes and **17 of them are behind
  * `requireHqAuthoring`** (D106) — authoring is HQ's, and asking a branch admin
  * to press a button that 403s is the same lie as the date picker. Of the six
- * that are not, this page uses two: the game list and per-game analytics. What
+ * that are not, this page uses ONE: the game list. It does not call per-game
+ * analytics, and an earlier version of this sentence said it did (D214).
+ *
+ * AND ON A BRANCH THAT LIST IS EMPTY BY CONSTRUCTION, which is not the same as
+ * "HQ has authored nothing". HQ authors the games in HQ's database; a branch's
+ * database is built from a baseline with no seed rows, authoring is refused
+ * here, and no call sends a game to a branch (D214 measured every RPC method).
+ * So the empty state names the branch's own database as what was read. What
  * it cannot draw is the artboard's "assessment **runs**": there is **no
  * `GET /sessions` and no `GET /results`** anywhere in that file, and the one
  * session-shaped route, `POST /sessions/:id/rescore`, needs a `public_id` no
@@ -57,6 +64,13 @@ import BranchZone from './BranchZone';
  */
 
 const UNAVAILABLE = Symbol('unavailable');
+
+// The empty state's reason, said once and drawn twice — on hover, and as the
+// sentence beside it, because a reason that lives only in a `title` attribute
+// is one most readers never see.
+export const NO_GAME_HERE = 'The list read is this branch\u2019s own database, and no game is in it. '
+  + 'HQ authors the games in its own database, and no call sends one to a branch, so there is none '
+  + 'to run here yet.';
 
 export default function BranchPrograms({ user }) {
   const [timeline, setTimeline] = useState(null);
@@ -101,7 +115,7 @@ export default function BranchPrograms({ user }) {
   const unavailable = [
     ['Assessment runs', 'No admin route lists assessment sessions or results — there is no '
       + 'GET /sessions and no GET /results on the worker, so a table of runs would have nothing '
-      + 'to read. Per-game analytics is what exists.'],
+      + 'to read. The player routes that recorded a run are retired, so none is recorded now.'],
     ['Cycle and week dates', 'The four week windows are derived from the month and no route '
       + 'changes them, so there is nothing here to adjust. What this branch decides is a '
       + "company's week outcome."],
@@ -128,7 +142,8 @@ export default function BranchPrograms({ user }) {
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink">Programme</h1>
         <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
           The cohort calendar as the platform derives it, what this territory decides about a
-          company&rsquo;s week, and the assessment games running under it. Authoring stays at HQ.
+          company&rsquo;s week, and the assessment games this branch&rsquo;s own database holds.
+          Authoring stays at HQ.
         </p>
       </header>
 
@@ -322,11 +337,10 @@ export default function BranchPrograms({ user }) {
         ) : null}
 
         {gamesReady && !gameRows.length ? (
-          <div className="mt-3">
-            <Unrecorded reason="No assessment game has been authored at HQ yet, so there is none to run here.">
-              No game to show
-            </Unrecorded>
-          </div>
+          <p className="mt-3 text-[11.5px] text-axal-muted" data-testid="branch-programs-no-game">
+            <Unrecorded reason={NO_GAME_HERE}>No game on this branch</Unrecorded>
+            {' '}&mdash; {NO_GAME_HERE}
+          </p>
         ) : null}
 
         {gamesReady && gameRows.length ? (
@@ -356,8 +370,7 @@ export default function BranchPrograms({ user }) {
             that lists one. */}
         <p className="mt-3 text-[11.5px] text-axal-muted" data-testid="branch-programs-runs-gap">
           Individual assessment runs are not listed: no admin route returns sessions or results, so
-          a table of them here would have nothing behind it. Per-game analytics is what the worker
-          can answer.
+          a table of them here would have nothing behind it.
         </p>
       </Card>
     </BranchZone>
