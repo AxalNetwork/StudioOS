@@ -1,5 +1,5 @@
 /**
- * The four local approval queues, declared once (D130).
+ * The local approval queues, declared once (D130; eleven since D215's S16).
  *
  * WHY THIS FILE EXISTS. `backlogOf` in `rpc/branchOps.ts` already named all
  * four stores with their real tables and their real status vocabularies, and
@@ -42,7 +42,9 @@ import type { Env } from '../types';
 import { PRE_VERDICT_STATUSES } from './referralSubmissions';
 
 /** A lane's stable key. The UI orders by this list, so the order is the canvas's. */
-export type ApprovalLaneKey = 'lp' | 'referrals' | 'cohort' | 'moderation';
+export type ApprovalLaneKey =
+  | 'lp' | 'referrals' | 'cohort' | 'moderation'
+  | 'kyc' | 'partner_profiles' | 'exploring' | 'jobs' | 'events' | 'best_fit' | 'due_diligence';
 
 export type ApprovalSource = {
   key: ApprovalLaneKey;
@@ -148,7 +150,123 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + 'FROM spinout_moderation_cases m LEFT JOIN users u ON u.id = m.user_id '
       + "WHERE m.status = 'under_review' ORDER BY m.created_at ASC LIMIT ?",
   },
+  // ── S16 (D215): the queues the live console kept on their own pages. ──
+  //
+  // SEVEN OF THE CANVAS'S ELEVEN, because only seven have a state that means
+  // "waiting on an admin". The other four are named in `NOT_LANED` below with
+  // the reason, rather than laned over a predicate invented to fill a column.
+  {
+    key: 'kyc',
+    label: 'KYC',
+    // The store IS `users`: kyc.ts:195 stamps `kyc_submitted_at` and sets
+    // `'pending'` whenever the provider did not decide on its own.
+    countSql:
+      'SELECT COUNT(*) AS n, MIN(kyc_submitted_at) AS oldest FROM users WHERE kyc_status = \'pending\'',
+    rowsSql:
+      "SELECT u.id AS id, COALESCE(NULLIF(u.name, ''), u.email, 'account ' || u.id) AS who, "
+      + "'KYC · ' || COALESCE(u.role, 'account') AS what, u.kyc_submitted_at AS created_at "
+      + "FROM users u WHERE u.kyc_status = 'pending' ORDER BY u.kyc_submitted_at ASC LIMIT ?",
+  },
+  {
+    key: 'partner_profiles',
+    label: 'Partner profiles',
+    // PK is `email` and `user_id` may be null (migration 275's header), so the
+    // row id is SQLite's `rowid` and the join is on email, as profiling.ts does.
+    countSql:
+      'SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM partner_profiles WHERE admin_status = \'pending\'',
+    rowsSql:
+      "SELECT p.rowid AS id, COALESCE(NULLIF(u.name, ''), p.email) AS who, "
+      + "'Partner profile · ' || COALESCE(NULLIF(p.legal_entity_name, ''), p.persona, 'unnamed') AS what, "
+      + 'p.created_at AS created_at '
+      + 'FROM partner_profiles p LEFT JOIN users u ON u.email = p.email '
+      + "WHERE p.admin_status = 'pending' ORDER BY p.created_at ASC LIMIT ?",
+  },
+  {
+    key: 'exploring',
+    label: 'Exploring',
+    // NO STATUS COLUMN: the queue is `role = 'exploring'` (admin_exploring.ts),
+    // left when an admin assigns the final role. Its age is the route's own,
+    // `COALESCE(onboarded_at, users.created_at)` — a subquery in the count so
+    // the count still has no join.
+    countSql:
+      'SELECT COUNT(*) AS n, MIN(COALESCE((SELECT rr.onboarded_at FROM user_role_review rr '
+      + "WHERE rr.user_id = u.id), u.created_at)) AS oldest FROM users u WHERE u.role = 'exploring'",
+    rowsSql:
+      "SELECT u.id AS id, COALESCE(NULLIF(u.name, ''), u.email, 'account ' || u.id) AS who, "
+      + "'Exploring · ' || COALESCE(rr.suggested_role, 'no role suggested') AS what, "
+      + 'COALESCE(rr.onboarded_at, u.created_at) AS created_at '
+      + 'FROM users u LEFT JOIN user_role_review rr ON rr.user_id = u.id '
+      + "WHERE u.role = 'exploring' ORDER BY COALESCE(rr.onboarded_at, u.created_at) ASC LIMIT ?",
+  },
+  {
+    key: 'jobs',
+    label: 'Jobs',
+    countSql:
+      'SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM job_postings WHERE status = \'pending_review\'',
+    rowsSql:
+      "SELECT j.id AS id, COALESCE(NULLIF(u.name, ''), u.email, 'account ' || j.host_user_id, 'no host') AS who, "
+      + "'Job · ' || j.title AS what, j.created_at AS created_at "
+      + 'FROM job_postings j LEFT JOIN users u ON u.id = j.host_user_id '
+      + "WHERE j.status = 'pending_review' ORDER BY j.created_at ASC LIMIT ?",
+  },
+  {
+    key: 'events',
+    label: 'Events',
+    countSql:
+      'SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM events WHERE status = \'pending_review\'',
+    rowsSql:
+      "SELECT e.id AS id, COALESCE(NULLIF(u.name, ''), u.email, 'account ' || e.host_user_id, 'no host') AS who, "
+      + "'Event · ' || e.title AS what, e.created_at AS created_at "
+      + 'FROM events e LEFT JOIN users u ON u.id = e.host_user_id '
+      + "WHERE e.status = 'pending_review' ORDER BY e.created_at ASC LIMIT ?",
+  },
+  {
+    key: 'best_fit',
+    label: 'Best-Fit consultations',
+    // The canvas says "Best-Fit"; the queue is the booking table the
+    // consultations route decides (`admin_bestfit.ts` only fetches reports).
+    countSql:
+      'SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM admin_consultation_bookings '
+      + "WHERE status = 'requested'",
+    rowsSql:
+      "SELECT b.id AS id, COALESCE(NULLIF(u.name, ''), u.email, 'account ' || b.user_id) AS who, "
+      + "'Best-Fit consultation · ' || COALESCE(NULLIF(b.topic, ''), 'no topic') AS what, "
+      + 'b.created_at AS created_at '
+      + 'FROM admin_consultation_bookings b LEFT JOIN users u ON u.id = b.user_id '
+      + "WHERE b.status = 'requested' ORDER BY b.created_at ASC LIMIT ?",
+  },
+  {
+    key: 'due_diligence',
+    label: 'Due diligence',
+    // `open` and `in_review` are both undecided (the CHECK's other two are
+    // `completed` and `archived`). Nothing here is territory-specific: the
+    // table has no territory column, and the branch's D1 is the territory.
+    countSql:
+      'SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM dd_cases '
+      + "WHERE status IN ('open', 'in_review')",
+    rowsSql:
+      "SELECT d.id AS id, COALESCE(NULLIF(u.name, ''), u.email, 'account ' || d.owner_user_id) AS who, "
+      + "'Due diligence · ' || d.subject_label AS what, d.created_at AS created_at "
+      + 'FROM dd_cases d LEFT JOIN users u ON u.id = d.owner_user_id '
+      + "WHERE d.status IN ('open', 'in_review') ORDER BY d.created_at ASC LIMIT ?",
+  },
 ] as const;
+
+/**
+ * The canvas's four other S16 lanes, which are NOT laned, and why (D215).
+ *
+ * Each has a D1 table, but none has a state meaning "an admin owes a
+ * decision". Laning one would need a predicate invented here, which would put
+ * work on the board that nobody handed the admin — the `'draft'` referral
+ * argument above, four times over. The route sends this list so the page can
+ * say what it leaves out instead of implying the board is everything.
+ */
+export const NOT_LANED: ReadonlyArray<{ label: string; reason: string }> = [
+  { label: 'Directory', reason: 'A partner is listed or not (`directory_listed`); nothing is submitted for a listing decision.' },
+  { label: 'Circles', reason: 'Admins create circles and publish them; nobody submits one for review.' },
+  { label: 'Partner invitations', reason: 'An open invitation waits on the invitee, not an admin.' },
+  { label: 'Advisor cohort access', reason: 'Access is assigned by an admin; an advisor has no way to request it, so there is no request to wait on.' },
+];
 
 /**
  * The referral statuses the literals above spell out, exported so the test can
@@ -220,7 +338,7 @@ export type ApprovalBoard = {
 };
 
 /**
- * Every open item across the four local queues, newest-waiting last.
+ * Every open item across the local queues, newest-waiting last.
  *
  * ONE LANE FAILING DOES NOT POISON THE OTHERS, and it does not silently
  * shrink the board either. `backlogOf` returns `null` for the whole count
@@ -232,7 +350,7 @@ export type ApprovalBoard = {
  * stated rather than averaged away.
  *
  * `limit` bounds each lane, not the board, so a flooded queue cannot crowd the
- * other three off a screen whose whole purpose is "what is oldest anywhere".
+ * others off a screen whose whole purpose is "what is oldest anywhere".
  */
 export async function approvalBoard(env: Env, limit = 100, now = Date.now()): Promise<ApprovalBoard> {
   const items: ApprovalItem[] = [];

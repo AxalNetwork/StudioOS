@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --config ../wrangler.toml",
-    "deploy": "wrangler deploy --config ../wrangler.toml",
+    "deploy": "cd .. && npm run deploy",
     "db:create": "wrangler d1 create studioos-db",
     "db:schema": "wrangler d1 execute studioos-db --config ../wrangler.toml --file=sql/schema_baseline.sql",
     "db:schema:remote": "wrangler d1 execute studioos-db --config ../wrangler.toml --remote --file=sql/schema_baseline.sql",
