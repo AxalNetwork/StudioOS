@@ -305,6 +305,13 @@ export function renderBranchConfig(tomlSrc, entry) {
         kv.set('BRANCH_CODE', q(code));
         kv.set('BRANCH_NAME', q(entry.name));
         kv.set('BRANCH_TERRITORY', q(entry.territory.join(',')));
+        // D264 — the Durable Object jurisdiction, applied by the Worker's
+        // util/doNamespace.ts. Wrangler has no jurisdiction key on a DO
+        // binding, so this var is the only channel. A null residency REMOVES
+        // it, so a value on HQ's table can never leak into a branch that was
+        // granted none, and `none` is never written as a value.
+        if (entry.residency?.do_jurisdiction) kv.set('BRANCH_DO_JURISDICTION', q(entry.residency.do_jurisdiction));
+        else kv.delete('BRANCH_DO_JURISDICTION');
         // The Analytics Engine dataset is shared on purpose; naming it in a
         // var keeps the SQL-API reader from hardcoding HQ's.
         const ae = prod.find((p) => p.name.endsWith('analytics_engine_datasets'));
@@ -491,11 +498,17 @@ export function checkRendered(tomlSrc, entry, rendered) {
     if (v('BRANCH_CODE') !== n.hostname.split('.')[0]) bad.push('BRANCH_CODE must be the hostname\'s first label');
     if (v('BRANCH_NAME') !== entry.name) bad.push('BRANCH_NAME must be the registry name');
     if (v('BRANCH_TERRITORY') !== entry.territory.join(',')) bad.push('BRANCH_TERRITORY must be the registry territory');
+    // D264 — the var is the registry's do_jurisdiction exactly, or absent when that is null.
+    const doJur = entry.residency?.do_jurisdiction ?? undefined;
+    if (v('BRANCH_DO_JURISDICTION') !== doJur) {
+      bad.push(`BRANCH_DO_JURISDICTION must be ${doJur === undefined ? 'absent (do_jurisdiction is null)' : doJur}`);
+    }
     if (v('CF_WORKER_SCRIPT_NAME') !== n.worker) bad.push(`CF_WORKER_SCRIPT_NAME must be ${n.worker}`);
     for (const key of ['APP_URL', 'PUBLIC_BASE_URL', 'OAUTH_CALLBACK_BASE_URL', 'PUBLIC_MARKETING_URL']) {
       if (v(key) !== `https://${n.hostname}`) bad.push(`${key} must be https://${n.hostname} — every email link and OAuth callback reads one of these`);
     }
     for (const hqVar of prodTables.get('vars')?.[0]?.kv.keys() ?? []) {
+      if (hqVar === 'BRANCH_DO_JURISDICTION') continue; // per branch, above
       if (!vars.kv.has(hqVar)) bad.push(`var ${hqVar} is declared on HQ and missing here`);
     }
   }

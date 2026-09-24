@@ -5,15 +5,17 @@
  * with a console warning. Never throws into the calling route.
  */
 import type { Env } from '../types';
+import { doNamespace } from '../util/doNamespace';
 
-async function postToDO(ns: DurableObjectNamespace | undefined, name: string, body: unknown): Promise<void> {
+async function postToDO(env: Env, ns: DurableObjectNamespace | undefined, name: string, body: unknown): Promise<void> {
   if (!ns) {
     console.warn('[realtime] DO namespace missing — broadcast dropped');
     return;
   }
   try {
-    const id = ns.idFromName(name);
-    const stub = ns.get(id);
+    const scoped = doNamespace(env, ns);
+    const id = scoped.idFromName(name);
+    const stub = scoped.get(id);
     // The DO base URL is irrelevant — the namespace stub routes by ID.
     await stub.fetch('https://do/broadcast', {
       method: 'POST',
@@ -35,8 +37,8 @@ export async function notifyPipelineRoom(
   // that run in parallel; failures in one don't affect the other.
   const stamped = { ...event, ts: Date.now() };
   await Promise.allSettled([
-    postToDO(env.PIPELINE_ROOM, `deal:${dealId}`, stamped),
-    postToDO(env.PIPELINE_ROOM, 'overview', stamped),
+    postToDO(env, env.PIPELINE_ROOM, `deal:${dealId}`, stamped),
+    postToDO(env, env.PIPELINE_ROOM, 'overview', stamped),
   ]);
 }
 
@@ -45,7 +47,7 @@ export async function notifyOnboardingChat(
   userId: number | string,
   message: { role: 'user' | 'assistant' | 'system'; content: string }
 ): Promise<void> {
-  await postToDO(env.ONBOARDING_CHAT, `user:${userId}`, message);
+  await postToDO(env, env.ONBOARDING_CHAT, `user:${userId}`, message);
 }
 
 /** Used by /api/infra/queue to surface live connection counts. */
@@ -117,7 +119,7 @@ export async function notifyAdvisorPageFill(
   payload: { question_id: string; saved_to?: unknown },
 ): Promise<void> {
   if (!env.ONBOARDING_CHAT) return;
-  await postToDO(env.ONBOARDING_CHAT, `user:${userId}`, {
+  await postToDO(env, env.ONBOARDING_CHAT, `user:${userId}`, {
     role: 'system',
     content: JSON.stringify({
       kind: 'page-fill',
@@ -137,7 +139,7 @@ export async function notifyAdvisorProgress(
   payload: { total: number; answered: number; skipped: number; percent: number },
 ): Promise<void> {
   if (!env.ONBOARDING_CHAT) return;
-  await postToDO(env.ONBOARDING_CHAT, `user:${userId}`, {
+  await postToDO(env, env.ONBOARDING_CHAT, `user:${userId}`, {
     role: 'system',
     content: JSON.stringify({
       kind: 'advisor-progress',
