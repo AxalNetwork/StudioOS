@@ -193,6 +193,8 @@ export const SIDEBAR_GROUPS = {
       // GP review queue for Spin-Out Fund I LP applications (migration 165).
       { to: '/admin/lp-applications', icon: Inbox, label: 'LP Applications' },
       { to: '/monitoring', icon: Activity, label: 'Monitoring' },
+      // HQ's broadcast console (D216, #337): the worker answers only the super
+      // admin, and a plain admin who follows this row meets SuperAdminOnlyNotice.
       { to: '/admin/telegram', icon: Send, label: 'Telegram Channels' },
       // X (Twitter) broadcaster temporarily hidden — OAuth not provisioned yet.
       // Re-enable once X_CLIENT_ID/SECRET are bound on the prod worker.

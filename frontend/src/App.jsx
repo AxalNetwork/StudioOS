@@ -2280,8 +2280,8 @@ function AppInner() {
       {/* Task #106 — read-only admin preview of the new-founder Spin-Out Lab
           journey (simulated client-side state; no impersonation, no writes). */}
       <Route path="/admin/spinout-lab/preview" element={guard(['admin'], <AdminSpinoutJourneyPreview />)} />
-      <Route path="/admin/telegram" element={guard(['admin'], <AdminTelegram />)} />
-      <Route path="/admin/x" element={guard(['admin'], <AdminX />)} />
+      <Route path="/admin/telegram" element={guard(['admin'], hqOnly(<AdminTelegram />))} />
+      <Route path="/admin/x" element={guard(['admin'], hqOnly(<AdminX />))} />
       <Route path="/admin/assessment" element={guard(['admin'], <AdminAssessment />)} />
       {/* Task #20 — Admin Best-Fit console (consultation queue + full report). */}
       <Route path="/admin/best-fit" element={guard(['admin'], <AdminBestFitPage />)} />

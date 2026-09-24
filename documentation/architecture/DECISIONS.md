@@ -22214,6 +22214,74 @@ lane). This predates D215. The fix is a migration, and it is filed separately.
 
 **285 is still the next free migration.**
 
+## D216
+
+**The Telegram and X consoles are HQ's. Every route under
+`/api/admin/telegram/*` and `/api/admin/x/*` gated on plain `requireAdmin`, so
+any admin (a subsidiary's included) could create, test and send on the
+platform's own broadcast channels, and `GET /api/admin/telegram/channels`
+handed each of them every channel's `chat_id`. Both files now gate every route,
+reads and writes alike, on `requireSuperAdmin`: the D133 precedent for a
+surface a plain admin must not reach. And `POST /posts/:id/send` no longer
+sends through a disabled channel.**
+
+#337 and #328. **No migration**, so no migration number is taken. **No new route
+and no new `api.js` method**, so `check-api-drift` has nothing new to match.
+
+### WHAT CHANGED
+
+- **`cloudflare-worker/src/routes/admin_telegram.ts` and `admin_x.ts`.** Every
+  `requireAdmin` is now `requireSuperAdmin`: 18 routes in the first file and 21
+  handlers in the second, including X's OAuth start and callback. The callback
+  still turns a refusal into its `x_oauth_error=admin_required` redirect, not a
+  bare 403. A plain admin now gets 403 `Super admin required`, which is a
+  different sentence from `Admin required` because it is a different fact about
+  them. On a branch it gets `HQ only`, from `requireSuperAdmin`'s own branch arm.
+- **Reads are gated too, deliberately.** The chat id is the reason #337 exists,
+  and a list that is readable but not writable would still hand it out. The
+  consent override (`/consent/:user_id`) moves with the rest: it is admin-side
+  and nothing outside the console calls it.
+- **#328.** `loadPost` now also reads `c.enabled AS channel_enabled`. `/send`
+  refuses a disabled channel with 409 `channel_disabled` and the sentence
+  *"This channel is disabled, so nothing is sent through it. Enable the channel
+  first, or move the draft to another channel."* The check runs after the
+  missing-chat-id check and before the compare-and-set claim, so the draft
+  stays a `draft` and can be edited. Creating a post already refused a disabled
+  channel (`channel_disabled`, 400). What was missing was a channel switched off
+  after a draft was written on it.
+- **Frontend.** `/admin/telegram` and `/admin/x` are wrapped in `hqOnly(...)`,
+  like `/admin/licences` and `/admin/contracts`. A plain admin sees
+  `SuperAdminOnlyNotice` instead of a page whose every action returns 403. The
+  subsidiary sidebar keeps its Telegram row, with a comment, because
+  `admin_route_reachability.test.mjs` counts that row as the route's only link.
+  HQ · Platform's link to the route is built from a `.map` over an array, and
+  the test cannot read a link built that way. The `api.js` methods are
+  unchanged and still match the worker's routes one for one.
+
+### WHY IT IS CHEAP TO REVERSE
+
+The whole change is the gate function each handler calls, plus one `hqOnly`
+wrapper per route. Letting subsidiary admins broadcast again is the same edit
+run backwards, with no data to migrate. If the product later wants each branch
+to have its own channels, the answer is the branch programme (each branch runs
+its own Worker and D1, as U1 records), not widening this gate.
+
+### HOW IT IS HELD
+
+`cloudflare-worker/test/broadcast_consoles_super_admin_d216.test.ts` (new, 5 tests):
+
+- Neither file contains `requireAdmin` any more.
+- Every route the two files mount is read from the source, not retyped, and
+  each one refuses a plain admin with `Super admin required`. So a route added
+  later without the gate fails this test.
+- The X callback redirects a plain admin with `admin_required`.
+- A plain admin cannot read a channel's `chat_id`, and the super admin still
+  can.
+- A draft on a channel disabled after it was written is refused with
+  `channel_disabled`, and the post is still `draft` afterwards.
+
+`check-decision-ids` passes.
+
 ## D217
 
 **`cd cloudflare-worker && npm run deploy` shipped the live worker without

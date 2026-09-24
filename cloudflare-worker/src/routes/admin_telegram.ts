@@ -1,8 +1,9 @@
 /**
  * Task #3 — Admin Telegram channels + posts + aggregator endpoints.
  *
- * Mounted at /api/admin/telegram. ALL endpoints admin-gated via
- * requireAdmin and (in prod) sit behind the /api/admin/* Cf-Access
+ * Mounted at /api/admin/telegram. ALL endpoints super-admin-gated via
+ * requireSuperAdmin (D216, #337: these are the platform's broadcast
+ * channels, and a chat_id is HQ's to see, not every subsidiary admin's) and (in prod) sit behind the /api/admin/* Cf-Access
  * perimeter applied in index.ts. The full surface is documented in the
  * task spec at `.local/tasks/task-3.md`.
  *
@@ -31,7 +32,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin } from '../auth';
+import { requireSuperAdmin } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { clampLimit, parseOffset } from '../util/pagination';
 import { ensureTelegramSchema, TELEGRAM_AUDIENCES, type TelegramAudience } from '../services/telegramSchema';
@@ -81,7 +82,8 @@ async function sha256Hex(input: string): Promise<string> {
 async function loadPost(env: Env, id: number) {
   return env.DB.prepare(
     `SELECT p.*, c.slug AS channel_slug, c.label AS channel_label, c.chat_id,
-            c.audience AS channel_audience, c.signature AS channel_signature
+            c.audience AS channel_audience, c.signature AS channel_signature,
+            c.enabled AS channel_enabled
        FROM telegram_posts p
        JOIN telegram_channels c ON c.id = p.channel_id
       WHERE p.id = ?`,
@@ -197,7 +199,7 @@ function telegramErrorPayload(e: unknown): { body: Record<string, unknown>; stat
 // ----------------------------- CHANNELS -----------------------------
 
 r.get('/channels', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   await ensureTelegramSchema(c.env);
   const rows = await c.env.DB.prepare(
     `SELECT id, slug, label, chat_id, audience, is_invite_only, enabled,
@@ -215,7 +217,7 @@ r.get('/channels', async (c) => {
 });
 
 r.post('/channels', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureTelegramSchema(c.env);
   const body: any = await c.req.json().catch(() => ({}));
   const slug = String(body.slug || '').trim().toLowerCase();
@@ -246,7 +248,7 @@ r.post('/channels', async (c) => {
 });
 
 r.put('/channels/:id', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureTelegramSchema(c.env);
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id)) return c.json({ error: 'invalid_id' }, 400);
@@ -278,7 +280,7 @@ r.put('/channels/:id', async (c) => {
 });
 
 r.delete('/channels/:id', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureTelegramSchema(c.env);
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id)) return c.json({ error: 'invalid_id' }, 400);
@@ -295,7 +297,7 @@ r.delete('/channels/:id', async (c) => {
 });
 
 r.post('/channels/:id/test', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureTelegramSchema(c.env);
   const id = Number(c.req.param('id'));
   const ch: any = await c.env.DB.prepare(
@@ -327,7 +329,7 @@ r.post('/channels/:id/test', async (c) => {
 // ----------------------------- POSTS -----------------------------
 
 r.get('/posts', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   await ensureTelegramSchema(c.env);
   const status = c.req.query('status');
   const channelId = c.req.query('channel_id');
@@ -361,7 +363,7 @@ r.get('/posts', async (c) => {
 // `.find()`d by id, which silently failed if the draft was beyond the
 // LIMIT 200 window (e.g. after several aggregator runs accumulated drafts).
 r.get('/posts/:id', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   await ensureTelegramSchema(c.env);
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id)) return c.json({ error: 'invalid_id' }, 400);
@@ -371,7 +373,7 @@ r.get('/posts/:id', async (c) => {
 });
 
 r.post('/posts', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureTelegramSchema(c.env);
   const body: any = await c.req.json().catch(() => ({}));
   const channelId = Number(body.channel_id);
@@ -395,7 +397,7 @@ r.post('/posts', async (c) => {
 });
 
 r.put('/posts/:id', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureTelegramSchema(c.env);
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
@@ -425,7 +427,7 @@ r.put('/posts/:id', async (c) => {
 });
 
 r.delete('/posts/:id', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureTelegramSchema(c.env);
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
@@ -441,7 +443,7 @@ r.delete('/posts/:id', async (c) => {
 });
 
 r.post('/posts/:id/media', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureTelegramSchema(c.env);
   if (!c.env.FILES) return c.json({ error: 'r2_unavailable' }, 503);
   const id = Number(c.req.param('id'));
@@ -483,7 +485,7 @@ r.post('/posts/:id/media', async (c) => {
 });
 
 r.post('/posts/:id/lint', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   await ensureTelegramSchema(c.env);
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
@@ -493,7 +495,7 @@ r.post('/posts/:id/lint', async (c) => {
 });
 
 r.post('/posts/:id/schedule', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureTelegramSchema(c.env);
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
@@ -512,7 +514,7 @@ r.post('/posts/:id/schedule', async (c) => {
 });
 
 r.post('/posts/:id/send', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureTelegramSchema(c.env);
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
@@ -520,6 +522,15 @@ r.post('/posts/:id/send', async (c) => {
   if (post.status === 'sent') return c.json({ error: 'already_sent' }, 409);
   if (post.status === 'sending') return c.json({ error: 'send_in_progress' }, 409);
   if (!post.chat_id) return c.json({ error: 'channel_missing_chat_id' }, 400);
+  // D216 (#328): a disabled channel is switched off, and a draft written while
+  // it was on does not switch it back. Refused before the claim, so the draft
+  // stays a draft and its own sentence says which fact stopped it.
+  if (!post.channel_enabled) {
+    return c.json({
+      error: 'channel_disabled',
+      message: 'This channel is disabled, so nothing is sent through it. Enable the channel first, or move the draft to another channel.',
+    }, 409);
+  }
 
   // Compare-and-set: atomically transition draft|scheduled|failed -> sending
   // so two concurrent /send calls cannot both pass the precheck and double-
@@ -651,7 +662,7 @@ r.post('/posts/:id/send', async (c) => {
 // ----------------------------- AGGREGATOR -----------------------------
 
 r.get('/aggregator/preview', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   await ensureTelegramSchema(c.env);
   const periodDays = Math.min(90, Math.max(1, Number(c.req.query('period_days')) || 7));
   const kind = c.req.query('kind') as TelegramAudience | undefined;
@@ -665,7 +676,7 @@ r.get('/aggregator/preview', async (c) => {
 });
 
 r.post('/aggregator/run', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureTelegramSchema(c.env);
   const body: any = await c.req.json().catch(() => ({}));
   const periodDays = Math.min(90, Math.max(1, Number(body.period_days) || 7));
@@ -681,7 +692,7 @@ r.post('/aggregator/run', async (c) => {
 // ----------------------------- CONSENT -----------------------------
 
 r.get('/consent/:user_id', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   await ensureTelegramSchema(c.env);
   const uid = Number(c.req.param('user_id'));
   if (!Number.isFinite(uid)) return c.json({ error: 'invalid_user_id' }, 400);
@@ -692,7 +703,7 @@ r.get('/consent/:user_id', async (c) => {
 });
 
 r.put('/consent/:user_id', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureTelegramSchema(c.env);
   const uid = Number(c.req.param('user_id'));
   if (!Number.isFinite(uid)) return c.json({ error: 'invalid_user_id' }, 400);
