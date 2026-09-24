@@ -22451,6 +22451,124 @@ This is latent. The SPA always sends an array of strings, so it needs a direct A
 - `frontend/test/promo_product_list_d222.test.mjs`: **3** tests, exit 0 (`ok 2281` through `ok 2283`).
 - Three mutations, restored from saved copies. `readProductIds` dropping non-strings: exit 1 (`not ok` 1, 2, 4, 5, 6). An unreadable list treated as `[]`: exit 1 (`not ok` 2). CheckoutPage's `product_list_unreadable` sentence removed: exit 1 (`not ok` 1).
 - `npm run test:drift` exits 1. Frontend **3126** pass, **0** fail. Worker **4058** tests, **4054** pass, **1** fail, **3** skipped. The only `not ok` is the capital-call assertion above. The drift steps after the worker suite, run on their own, exit 0. `tsc`, `check-docs-fresh --strict`, asset closure, and `prerender-og --check` exit 0. `check-decision-ids` reports 221 decisions, D1 through D222.
+## D224
+
+**H21 on HQ · Revenue: billing exceptions, the refund as HQ's governed action,
+and an LTV that says it is not recorded. `POST /api/admin/billing/refund` asked
+for a TOTP session, a fresh step-up and `requireAdmin`, so every admin could
+refund any charge on HQ's Stripe account. That is the D133 class: a power that
+belongs to the one holder, reachable by every admin. It now asks for
+`requireSuperAdminWriteBar` and a written reason, and writes its audit through
+`logAdminAction`.**
+
+**No migration**, so 286 is not used. One new route, `GET
+/api/admin/billing/refunds`, and its `api.js` method `adminBillingRefunds`,
+land in the same commit.
+
+### THE REFUND
+
+- **Gate: `requireSuperAdminWriteBar`.** It keeps the two checks the route
+  already had (a TOTP-minted session, a step-up inside its window) and adds the
+  elevation last, in the order `POST /impersonate` checks them. A plain admin
+  gets 403 `Super admin required`. On a branch it is 403 `HQ only`, because the
+  Stripe account this route drives is HQ's.
+- **The reason is required text, at least `REFUND_REASON_MIN` (12)
+  characters.** It is checked before the product-policy read and before Stripe
+  is called, so a refused request moves nothing and writes nothing. A bare
+  Stripe category is not a reason: "duplicate" is nine characters and is
+  refused. The canvas says why: "customer request" explains nothing to the
+  auditor reading it a year later. Stripe's own closed-enum `reason` now
+  arrives as `stripe_reason`. The old shape, an enum value sent as `reason`,
+  still reaches Stripe when it is also long enough, so no caller breaks. The
+  written reason always goes to Stripe metadata (`admin_reason`).
+- **Audit through `logAdminAction` (D159).** The route used to insert its own
+  `admin_audit_log` row with `report_type = 'billing'`. Nothing reads that
+  column for this action. It now makes one `logAdminAction` call, which writes
+  one `admin_audit_log` row (the target account on `viewed_user_id`) and one
+  hashed-actor `activity_logs` row. Both writes are best-effort, because the
+  money has already moved.
+- **Unchanged:** the product refund policy and its override, the idempotency
+  key, the referral-commission clawback, and the recovery cool-off in
+  `index.ts`.
+- **Both refund forms require the reason:** the new one on Revenue and the
+  Billing tab's. The Billing tab's reason `<select>` of Stripe categories
+  becomes a required text field, with the category beside it as an optional
+  `stripe_reason`. `frontend/src/lib/refundReason.js` holds the SPA's copy of
+  the floor, and a test pins it to the worker's.
+
+### THE BLOCK ON REVENUE
+
+`BillingExceptions`, between Statements and Promotions. It has two
+independent reads, and one failing does not blank the other:
+
+- **Refunds (30d)** come from the new `GET /api/admin/billing/refunds` (super
+  admin). It reads the `billing_refund` audit rows from the last 30 days
+  (compared through `datetime()`), per currency, in integer cents, never summed
+  across currencies. A row whose amount or currency cannot be read is counted in
+  `unreadable_rows` and kept out of every total. A failed read answers
+  `available: false` with its reason and carries no count. The payload says
+  what it is not: a refund made in the Stripe dashboard never passes through
+  this route and is not listed.
+- **Disputes open** come from the existing `GET /api/admin/billing/disputes`
+  (Stripe). Open means Stripe has not closed it (not `won`, not `lost`).
+  Overdue means `due_by` has passed with no evidence on file.
+- **LTV** and **token margin per branch** render Not recorded with the canvas's
+  own reasons: "no store reconciles revenue to account lifetime" and "gateway
+  cost is an estimate, not a ledger". No margin is derived from
+  `ai_usage_logs.est_cost_usd`. It is a cost with no price beside it, and this
+  screen has refused that figure three times (D111, D149, D213). The per-user
+  `/api/admin/billing/ltv` lookup on the Billing tab is unchanged. It totals one
+  customer's Stripe charges and is not the lifetime value the canvas draws.
+- **The branch column** is Not recorded on every row, because no charge names
+  the licence it was earned under (U1).
+- Each block has its own loading, empty and unreadable state. An empty block
+  says nothing was refunded and nothing is disputed. A failed block says "This
+  is not a claim that none were issued".
+
+### THE BILLING TAB STAYS
+
+H21's changelog says it "retires /admin Billing". It does not retire here.
+Dispute evidence and the policy override are filed there, and nothing
+retires. Revenue links to `/admin?tab=billing`, and the tab says a refund is
+HQ's super admin's, after a step-up.
+
+### WHAT IS LEFT, FOR A DECISION
+
+- **Dispute reads and dispute evidence** still use `requireAdmin`.
+  `/disputes` and `/disputes/:id` read HQ's Stripe account, and `POST
+  /disputes/:id/evidence` writes to it. They are the same class as the refund,
+  and this PR does not decide them.
+- **A branch's own refunds.** `requireSuperAdminWriteBar` refuses on every
+  branch. If a branch deployment ever bills through its own Stripe account, its
+  refund gate is a separate decision.
+
+### HOW IT IS HELD
+
+- `cloudflare-worker/test/billing_refund_governed_d224.test.ts` (new, 8 tests):
+  - The holder refunds and exactly one `admin_audit_log` row and one
+    `activity_logs` row are written.
+  - A plain admin with TOTP and a fresh step-up is refused, and Stripe is never
+    called.
+  - The holder with a stale step-up is refused.
+  - On a branch the refusal is "HQ only".
+  - A missing, blank, enum-only or 11-character reason is refused before
+    Stripe, and exactly 12 characters is accepted.
+  - `stripe_reason` reaches Stripe, and the written reason stays in metadata.
+  - The refunds read is gated, windowed and per currency, and keeps the
+    unreadable row out of the totals.
+  - An empty ledger is an empty list, and a failed read carries no count.
+- `frontend/test/revenue_billing_exceptions_d224.test.mjs` (new, 12 tests)
+  renders `BillingExceptions` readable, empty, loading, refunds-unreadable and
+  disputes-unreadable. It holds the LTV and margin tiles to the canvas's
+  reasons in every state, pins the reason floor across the worker and the SPA,
+  and checks that the Billing tab is still mounted and linked from Revenue.
+
+Every new assertion was mutation-checked both ways: the code was broken, a
+named test failed, the code was restored from a saved copy, and the test
+passed. That covers 8 mutations on the route (gate, step-up, reason, a double
+audit, the unreadable row, the read's gate, the window, a failed read shown as
+empty) and 8 on the page.
+
 ## D225
 
 **A failed roster read is not an empty roster.** `loadNetworkProfiles`
