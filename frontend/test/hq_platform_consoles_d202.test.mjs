@@ -434,6 +434,13 @@ test("each switch is read through the predicate the code that obeys it calls", (
     "the router's gate stopped reading the trip through killSwitchState");
   assert.ok(body('export async function aiOrgKillSwitchState(').includes('killSwitchState(store)'),
     "the console's reading stopped going through killSwitchState");
+  // D242 — and that one function reads THIS month's trip, keyed as the spend
+  // it measures, so a trip ends with its month. The writer uses the same key.
+  assert.ok(body('async function killSwitchState(').includes('orgKillSwitchKey(monthKey())'),
+    'the trip is no longer read for the current month');
+  assert.ok(body('async function setKillSwitch(').includes('orgKillSwitchKey(monthKey())'),
+    'the trip is no longer written for the current month');
+  assert.doesNotMatch(ROUTER, /'ai_killswitch:org'/, 'the un-monthed key is named again');
   assert.ok(calls(ROUTER, 'killSwitchOn') >= 1, 'nothing gates on the trip any more');
 });
 

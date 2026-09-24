@@ -23871,3 +23871,95 @@ outlive the notices.
     - the card's sentence reverted.
   - Three run against the frontend test alone, to prove the re-aimed pin
     catches the route: either notice removed, or the `notify` import replaced.
+
+## D242
+
+**The AI organisation budget trip now ends with the month it measured. The
+trip key carries the same `monthKey()` the spend counter uses, so a trip on
+the 29th holds for the rest of that month and reads off on the 1st.** Task 330.
+
+**No migration, no new route, and no runtime clear.** The key changes from
+`ai_killswitch:org` to `ai_killswitch:org:<YYYY-MM>`.
+
+### THE DEFECT
+
+`services/aiRouter.ts` counts the organisation's AI spend per calendar month
+(`ai_spend:org:<YYYY-MM>`). When that spend passes `WORKERS_AI_BUDGET_USD_ORG_MONTH`,
+it writes a trip that refuses every AI call on the platform. That trip was one
+un-monthed key, written with a 35-day TTL. A trip on the 29th therefore kept
+Eadwyn and every other AI call switched off for about five weeks, through most
+of a month whose budget nobody had touched. Nothing in the product could clear
+it sooner. `services/platformSwitches.ts` said exactly that on the Platform
+console ("up to 35 days after it was set").
+
+### WHAT CHANGED
+
+- **One helper, `orgKillSwitchKey(month)`, used by both sides.**
+  `setKillSwitch` writes `orgKillSwitchKey(monthKey())`, and `killSwitchState`
+  reads the same key. That covers the router's gate (`killSwitchOn`) and the
+  console's reading (`aiOrgKillSwitchState`), which D202 made share one
+  function. On the 1st the readers ask for a key that has never been written,
+  so the trip is off and the new month's budget is live.
+- **The TTL stays at 35 days,** so a trip written on the 1st still stands on
+  the 31st. The month in the key is what ends a trip, not the TTL.
+- **The old key goes inert.** Nothing reads `ai_killswitch:org`, not even as
+  a fallback when the month's key is absent. A copy left in KV by the old
+  router expires on its own TTL. There is no runtime delete and no migration.
+- **No runtime clear, deliberately.** D203 made the operator switch store
+  kill-only: it can switch things off, never on. A control to lift a trip
+  mid-month would be a second way to switch AI back on, and an unaudited one.
+- **The console's reason now says what is true:** the trip "holds for the rest
+  of the calendar month (UTC) and lifts on the 1st, when the next month's
+  budget starts — nothing in the product clears it sooner."
+
+### PINS
+
+- `cloudflare-worker/test/platform_consoles_d202.test.ts` held the reason to
+  `/35 days/`. It is re-aimed to "rest of the calendar month" and "lifts on
+  the 1st". It refuses "35 days", and it still requires "nothing in the
+  product clears it sooner".
+- `frontend/test/hq_platform_consoles_d202.test.mjs` ~426–435 pins that the
+  router's gate and the console both read the trip through
+  `killSwitchState(store)`. That property is unchanged, because `monthKey()`
+  reads the clock inside the function, so those pins are **not** re-aimed.
+  Three assertions are added beside them:
+  - `killSwitchState` reads `orgKillSwitchKey(monthKey())`;
+  - `setKillSwitch` writes it;
+  - the literal `'ai_killswitch:org'` appears nowhere in the router.
+- The ~357 pin renders a stub switch with its own text, so it does not hold
+  the real reason and needed no change.
+
+### VERIFIED
+
+`cloudflare-worker/test/aiRouter.test.mjs` exercises the router's shipped
+source bytes on a fixed clock (`node:test`'s Date mock, which the router's own
+`new Date()` reads). It gains two tests:
+
+- **Tripped on 2026-09-29.** The org cap refuses and writes
+  `ai_killswitch:org:2026-09`, and no un-monthed key.
+  - On 2026-09-30 at 23:59:59 the state is still `on` and the router refuses
+    with `kill_switch`.
+  - On 2026-10-01 the state reads `off` and the router answers. September's
+    key is still in KV: it lapsed rather than being deleted.
+- **An un-monthed `ai_killswitch:org` left in KV:** read as `off`, and the
+  router serves.
+
+**Mutation checks: seven of seven caught,** each alone and restored from a
+sha256-verified snapshot:
+
+- The brief's three, against the behaviour test alone:
+  - read the un-monthed key;
+  - key the trip by day instead of month (caught at the 30th);
+  - fall back to the old key when the month's key is absent.
+- The reason text reverted to the 35-day claim, against the worker pin.
+- Three against the new frontend pins alone: the reader off the month key, the
+  writer off the month key, and the old key named again.
+
+**Full suite:** `npm run test:drift` exits 0 on `main` with D241 merged:
+- frontend 3180;
+- worker 4181 passed with 3 skipped, the two tests above over `main`'s 4179;
+- retention 48.
+
+Both typechecks, `check-decision-ids`, `check-folder-docs`, `check-api-drift`
+and `check-docs-fresh --strict` exit 0. `frontend/src` did not move, so
+`docs/` was not rebuilt.
