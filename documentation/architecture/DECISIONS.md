@@ -23032,6 +23032,98 @@ row; converting them, if ever wanted, is the owner's call.
 
 **285 is still the next free migration.**
 
+## D232
+
+**Four dead symbols, re-grepped and removed.** The first three are `api.js`
+methods with no caller: `getTicketMapping`, `adminDeleteGithubConfig` and
+`adminCatalogMode`. Their worker routes stay. The fourth is
+`handleStripeConnectEvent`, which was exported from the Stripe provider and
+never called. It is **deleted, not wired**, and the header that promised it
+now says what actually delivers a founder's Stripe events.
+
+D213 first listed these as dead code. **No migration**, so **285 is still
+free**. **No route changes.** Removing client methods cannot add drift:
+`check-api-drift` checks that each client call has a worker route, not the
+reverse.
+
+### THE THREE `api.js` METHODS
+
+Each was re-grepped across `frontend/src`, and each has zero callers. No
+real caller was waiting for any of them:
+
+- **`getTicketMapping`**: `GET /api/tickets/:id/mapping` is an admin debug
+  view of event keys and payload hashes. The tickets page already reads
+  sync state off the ticket itself (D171).
+- **`adminDeleteGithubConfig`**: GitHub Sync draws no Remove control, and a
+  new one would be a feature rather than a caller. `DELETE /api/admin/github`
+  stays, behind D223's holder bar and audit.
+- **`adminCatalogMode`**: the mode is already on `adminCatalogList` and
+  `adminStripeGetConfig`, and the Payments panel reads `config.mode`.
+
+Nothing retires: all three routes are still mounted and reachable.
+
+### `handleStripeConnectEvent`: DELETED, AND WHY NOT WIRED
+
+The provider's header said the platform endpoint `/api/billing/stripe/webhook`
+received Connect events with `event.account` set, and that `billing.ts`
+dispatched them to this function. `billing.ts` never did. Wiring it in was
+rejected for three reasons:
+
+1. **No Connect event reaches that endpoint.** The one the Stripe console
+   registers (`admin_stripe.ts`) is an *account* endpoint: a URL and a fixed
+   event list, with no `connect` parameter. Nothing else registers a Connect
+   endpoint. A dispatch there would never run, and a test that proves a
+   Connect event reaches it would be testing a delivery production does not
+   have.
+2. **Wiring it safely is a design decision, not a repair.** A Connect
+   endpoint aimed at the billing route would also hand a connected founder's
+   `customer.subscription.*` to `handleStripeEvent` as the platform's own
+   billing. Doing it properly needs its own endpoint, its own signing secret,
+   and that guard.
+3. **Founder events are already delivered another way.**
+   `POST /api/integrations/webhook/stripe/:uid` takes each connection's own
+   events, verified against that connection's secret, and re-syncs.
+
+The header now names that receiver and records the above.
+
+### FOUND, NOT FIXED HERE
+
+The same header promised a "15-min cron". `syncAllStripeIntegrations` exists,
+but `index.ts`'s scheduled handler runs the HubSpot, Calendly, Salesforce,
+Carta and DocuSign reconciles, and not this one. A founder's Stripe metrics
+are therefore refreshed only by a webhook, a first sync or an import. The
+header now says the reconcile is not scheduled, and a test holds that
+sentence to the cron in either direction. Scheduling it is its own change.
+
+### VERIFIED
+
+- **`npm run test:drift` exits 0** on Node 22 (`EXIT=0` read from the redirected
+  log): frontend **3165**, worker **4114** pass with the same **3**
+  environment-gated skips, retention **48**, zero `not ok`. D227's merged run
+  was 3162 and 4110. `docs/` was rebuilt with the root `npm run build`
+  (`api.js` changed), and `check-docs-fresh --strict` exits 0.
+- `cloudflare-worker/test/stripe_connect_dispatch_d232.test.ts` checks four
+  things:
+  - the export is gone;
+  - the header no longer claims the dispatch or the cron, and names the
+    receiver, which still exists;
+  - the premise holds: the registered endpoint has no `connect` parameter,
+    and `billing.ts` does not import the provider;
+  - the header's "not scheduled" sentence matches the cron.
+- `frontend/test/dead_api_methods_d232.test.mjs` checks that the three
+  methods are absent from `api.js`, that nothing in `frontend/src` calls
+  them, and that their three routes are still mounted.
+- **Mutation checks, each alone, restored from saved copies.** Each of these
+  fails a named test:
+  - re-exporting `handleStripeConnectEvent`;
+  - restoring the old header claim;
+  - adding `connect` to the registration form;
+  - scheduling the reconcile without correcting the header;
+  - re-adding `adminCatalogMode`;
+  - adding a call to `api.getTicketMapping`.
+
+**285 is still the next free migration.**
+
 ## D233
 
 **A timed-out write told the user "Nothing was changed" — a guess dressed

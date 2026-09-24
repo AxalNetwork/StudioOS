@@ -2,7 +2,7 @@
  * Task #6 (DG) — Stripe provider (Live, Growth tier).
  *
  * Founder OAuth-connects their Stripe account via Stripe Connect (read_only
- * scope). On first sync (and via webhook deltas + 15-min cron) we pull MRR /
+ * scope). On first sync, on an import, and on webhook deltas we pull MRR /
  * ARR / paying_customers / monthly_churn_pct from /v1/subscriptions and
  * project them into:
  *   - `project_metrics` rows tagged `source='stripe'` (history),
@@ -14,11 +14,26 @@
  * a row into `metric_anomalies`; scoring + portfolio surfaces read this
  * table to flag the project.
  *
- * Webhook delivery uses the existing platform endpoint /api/billing/stripe/
- * webhook (Stripe Connect events arrive there with `event.account` set);
- * routes/billing.ts dispatches Connect-account events to `handleStripeConnectEvent`
- * exported below. The per-uid /api/integrations/webhook/stripe/:uid receiver
- * is also wired as a fallback for direct account-level webhooks.
+ * WEBHOOK DELIVERY IS THE PER-CONNECTION RECEIVER, AND ONLY THAT (D232).
+ * `POST /api/integrations/webhook/stripe/:uid` (routes/integrations.ts) takes
+ * an event from the founder's own account endpoint, verifies it against that
+ * connection's signing secret (`verifyWebhook`), and re-syncs (`webhook`).
+ *
+ * This header used to say the platform endpoint, /api/billing/stripe/webhook,
+ * received Connect events with `event.account` set and that routes/billing.ts
+ * dispatched them to an exported `handleStripeConnectEvent`. None of that was
+ * true: billing.ts never called it, and no Connect event reaches that
+ * endpoint — the one the Stripe console registers (routes/admin_stripe.ts) is
+ * an account endpoint with a fixed event list, not a Connect endpoint. D232
+ * deleted the function rather than wiring it, because wiring it is not a
+ * one-line dispatch: a Connect endpoint aimed at the billing route would also
+ * hand a connected founder's `customer.subscription.*` to `handleStripeEvent`
+ * as if it were the platform's own billing. Doing it would need its own
+ * endpoint, its own signing secret and that guard — a decision, not a repair.
+ *
+ * NOT SCHEDULED, AND SAID SO: `syncAllStripeIntegrations` below is a
+ * reconcile over every active connection, but index.ts's cron runs the other
+ * providers' reconciles and not this one. Filed by D232, not changed there.
  */
 import type { Context } from 'hono';
 import { callbackBase } from '../../util/url';
@@ -561,40 +576,6 @@ const impl: ProviderImpl = {
   postConnect,
 };
 registerProvider(impl);
-
-/**
- * Dispatch a Stripe Connect platform-webhook event (event.account=acct_…)
- * to the right per-integration sync. Called from routes/billing.ts so
- * webhooks update within seconds without requiring per-account webhook
- * configuration.
- */
-export async function handleStripeConnectEvent(
-  env: Env,
-  event: { type?: string; account?: string; data?: { object?: Record<string, unknown> } },
-): Promise<void> {
-  const acct = event.account;
-  if (!acct) return;
-  const type = String(event.type || '');
-  if (!RESYNC_EVENTS.has(type)) return;
-  const row = await env.DB.prepare(
-    "SELECT * FROM integrations WHERE provider_key = 'stripe' AND external_account_id = ? AND status = 'active'",
-  ).bind(acct).first<IntegrationRow>();
-  if (!row) return;
-  const stubCtx = { env } as unknown as Context<{ Bindings: Env }>;
-  const stubUser = { id: row.user_id } as User;
-  try {
-    const out = await sync(stubCtx, stubUser, row);
-    await env.DB.prepare(
-      'UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = ?',
-    ).bind(row.id).run();
-    console.info(`[stripe] connect-webhook ${type} acct=${acct}: ${out.summary}`);
-  } catch (e) {
-    const msg = (e as Error).message?.slice(0, 500) || 'webhook sync failed';
-    try {
-      await env.DB.prepare('UPDATE integrations SET last_error = ? WHERE id = ?').bind(msg, row.id).run();
-    } catch { /* non-fatal */ }
-  }
-}
 
 /** Public sync entry-point used by /api/progress/metrics/:projectId/import-stripe. */
 export async function syncStripeForUser(env: Env, userId: number, projectId: number): Promise<{

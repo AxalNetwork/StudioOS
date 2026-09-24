@@ -1152,9 +1152,9 @@ export const api = {
   getTicket: (id) => request(`/tickets/${id}`),
   updateTicket: (id, data) => request(`/tickets/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   syncTickets: () => request('/tickets/sync', { method: 'POST' }),
-  // Task #9 — GitHub-canonical ticket comments + admin sync-mapping debug.
+  // Task #9 — GitHub-canonical ticket comments. (D232: the sync-mapping debug
+  // method went — no screen called it; `GET /api/tickets/:id/mapping` stays.)
   commentTicket: (id, body) => request(`/tickets/${id}/comments`, { method: 'POST', body: JSON.stringify({ body }) }),
-  getTicketMapping: (id) => request(`/tickets/${id}/mapping`),
 
   // Task #82 — `scope='mine'` narrows the funnel to deals the investor has a
   // relationship with (dealroom member / introduced / converted watchlist).
@@ -1791,7 +1791,6 @@ export const api = {
   // Task #16 — Admin Stripe catalog CRUD + webhook/config management.
   //
   // Catalog:
-  //   adminCatalogMode()                       → { mode: 'test'|'live'|'unconfigured' }
   //   adminCatalogList()                       → { products, mode }
   //   adminCatalogSync()                       → { ok, synced }
   //   adminCatalogCreateProduct(body)          → { ok, product }
@@ -1806,7 +1805,8 @@ export const api = {
   // Config (publishable key):
   //   adminStripeGetConfig()                   → { publishable_key, mode, configured }
   //   adminStripeSetConfig(pk)                 → { ok, mode }
-  adminCatalogMode: () => request('/admin/catalog/mode'),
+  // D232 — `adminCatalogMode` went: no caller, and the mode already rides on
+  // `adminCatalogList` and `adminStripeGetConfig`. The route stays.
   adminCatalogList: () => request('/admin/catalog/products'),
   adminCatalogSync: () => request('/admin/catalog/sync', { method: 'POST', body: '{}' }),
   adminCatalogCreateProduct: (body) =>
@@ -2111,7 +2111,8 @@ export const api = {
   // proved the token may open an issue.
   adminTestGithub: (write = false) =>
     request('/admin/github/test', { method: 'POST', body: JSON.stringify({ write: !!write }) }),
-  adminDeleteGithubConfig: () => request('/admin/github', { method: 'DELETE' }),
+  // D232 — `adminDeleteGithubConfig` went: GitHub Sync draws no Remove control.
+  // `DELETE /api/admin/github` stays, behind D223's holder bar.
   // `overrideReason`, when given, asks the server to assign a role that the
   // binding-agreement gate would otherwise refuse. It is NOT a formality: the
   // route requires a super admin and a reason of real length, and writes the
