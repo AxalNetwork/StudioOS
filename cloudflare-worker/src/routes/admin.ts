@@ -3,7 +3,8 @@ import { clampLimit, parseOffset } from '../util/pagination';
 import { hashEmail } from '../util/hashEmail';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAdmin, createJWT, hashToken, requireFactor, requireStepUp, requireSuperAdminWriteBar, isSuperAdmin, hydrateSuperAdmin, IMPERSONATION_EXPIRY_MINUTES } from '../auth';
+import { requireAdmin, createJWT, hashToken, requireFactor, requireStepUp, requireSuperAdminWriteBar, isSuperAdmin, hydrateSuperAdmin, IMPERSONATION_EXPIRY_MINUTES, IMPERSONATION_CEILING_MINUTES } from '../auth';
+import { notify } from '../services/notify';
 import {
   serializeTranscriptCsv,
   classifyOnboardingEmpty,
@@ -1545,6 +1546,55 @@ admin.post('/maintenance/totp-remediation', async (c) => {
   return c.json({ ok: true, ...result });
 });
 
+/**
+ * D248 — tell the person whose account a support session opens on.
+ *
+ * Until D248 the target was never told. None of the three impersonation
+ * handlers called `notify()`, and they wrote no row the target's own feed can
+ * see: `routes/activity.ts` reads `user_id = me OR actor = my email`, and the
+ * `admin_impersonate` row is on the admin. So someone could act as you for
+ * thirty minutes, extendable, and nothing on your side said so.
+ *
+ * A `security` notice, which is in `CRITICAL_CATEGORIES`, so quiet hours and
+ * the digest cannot hold it back. `in_app` and `email`, because the person
+ * most worth reaching is not signed in while it happens. It says who, why (the
+ * typed reason) and for how long, and links to their Security settings, where
+ * "sign out everywhere" ends the session's token.
+ *
+ * `true` means the notice reached the person's inbox. It is reported as its
+ * own response field and never thrown: the session has already been granted,
+ * and D111's rule is that a side effect after a recorded act never turns that
+ * act into a failed request. `tellOfTransfer` in admin_super_admins.ts is the
+ * same shape.
+ */
+async function tellOfSupportSession(
+  env: Env, targetId: number, adminName: string, reason: string, sessionId: number | null,
+): Promise<boolean> {
+  try {
+    const hours = IMPERSONATION_CEILING_MINUTES / 60;
+    const rowId = await notify(env, {
+      userId: targetId,
+      type: 'support_session_opened',
+      title: 'An Axal admin opened a support session on your account',
+      body: `${adminName} opened a support session on your account. For the next ${IMPERSONATION_EXPIRY_MINUTES} minutes they can see and act in it as you; they can extend it, up to ${hours} hours in all. The reason they gave: "${reason}". If you did not expect this, sign out everywhere from your Security settings, which ends the session, and contact Axal.`,
+      link: '/account/security',
+      payload: {
+        impersonation_session_id: sessionId,
+        admin_name: adminName,
+        reason,
+        minutes: IMPERSONATION_EXPIRY_MINUTES,
+        ceiling_minutes: IMPERSONATION_CEILING_MINUTES,
+      },
+      channels: ['in_app', 'email'],
+      category: 'security',
+    });
+    return rowId !== null;
+  } catch (e) {
+    console.warn('[admin/impersonate] target notice failed', (e as Error).message);
+    return false;
+  }
+}
+
 admin.post('/impersonate/:userId', async (c) => {
   // Task #6 — impersonation is a high-risk step-up. The admin's current
   // session must have authenticated with TOTP (not SMS, not a recovery
@@ -1631,10 +1681,17 @@ admin.post('/impersonate/:userId', async (c) => {
     ).bind(adminUser.id, target.id, ctx).run();
     impersonationSessionId = Number(ins.meta?.last_row_id ?? 0) || null;
   } catch (e) { console.warn('[admin/impersonate] session audit failed', e); }
+  // D248 — only here, after every refusal above has had its chance, so a
+  // refused open tells nobody.
+  const targetNotified = await tellOfSupportSession(
+    c.env, target.id, String(adminUser.name || 'An Axal admin'), reason, impersonationSessionId,
+  );
   return c.json({
     token,
     user: { id: target.id, email: target.email, name: target.name, role: target.role },
     impersonation_session_id: impersonationSessionId,
+    // D248 — whether the person was told. Reported, never assumed.
+    target_notified: targetNotified,
     // The client shows the remaining time and hands the session back at zero.
     // Without this it would discover the expiry as a 401, and api.request
     // treats a 401 as "session expired" and bounces to /login — which would
@@ -1656,6 +1713,19 @@ admin.post('/impersonate/:userId', async (c) => {
 // the caller is the admin who opened THIS session, and that the session is
 // still open. An ended session cannot be revived; that is a new session with
 // its own reason.
+//
+// D248 — AND IT NOW ASKS WHAT THE GRANT ASKS, PLUS A LIMIT THE GRANT DID NOT
+// NEED. A typed reason of at least 10 characters, because thirty more minutes
+// as someone else is a decision the audit should be able to explain; and a
+// ceiling of IMPERSONATION_CEILING_MINUTES measured from `started_at`, because
+// nothing read that column and an HQ session whose tab was closed stays open
+// for ever. Both are checked after the refusals above and before the token is
+// minted, so a refused extension writes nothing. The extension is recorded
+// through `logAdminAction` with the target and the reason, so Security shows
+// it: the old `admin_impersonate_extend` activity row alone was excluded from
+// Security's feed on purpose (admin_security.ts), and carried no reason.
+//
+// Covered by the recovery cool-off (index.ts COOL_OFF_ROUTES); End is not.
 admin.post('/impersonate-sessions/:id/extend', async (c) => {
   await requireFactor(c, 'totp');
   await requireStepUp(c);
@@ -1695,19 +1765,55 @@ admin.post('/impersonate-sessions/:id/extend', async (c) => {
       code: 'super_admin_required',
     }, 403);
   }
+  const body: any = await c.req.json().catch(() => ({}));
+  const reason = String(body?.reason ?? '').trim().slice(0, 200);
+  if (reason.length < 10) {
+    await sql.end();
+    return c.json({
+      error: 'A reason of at least 10 characters is required to extend a support session — the extra time is recorded with it.',
+      code: 'extend_reason_required',
+    }, 400);
+  }
+  // Measured from when the session OPENED. An unreadable start is refused:
+  // the safe answer to "how long has this been open?" is not "no time".
+  const startedMs = sqlTimestampMs(row.started_at);
+  const ceilingMs = startedMs + IMPERSONATION_CEILING_MINUTES * 60_000;
+  if (!Number.isFinite(startedMs) || Date.now() + IMPERSONATION_EXPIRY_MINUTES * 60_000 > ceilingMs) {
+    await sql.end();
+    return c.json({
+      error: `A support session lasts at most ${IMPERSONATION_CEILING_MINUTES / 60} hours from when it opened, and another ${IMPERSONATION_EXPIRY_MINUTES} minutes would run past that. End it and open a new session, with its own reason.`,
+      code: 'support_session_ceiling',
+      started_at: row.started_at ?? null,
+      ceiling_minutes: IMPERSONATION_CEILING_MINUTES,
+    }, 409);
+  }
   const token = await createJWT(
     c.env, target.id, target.email, target.role, adminUser.id, undefined,
     `${IMPERSONATION_EXPIRY_MINUTES}m`,
   );
-  const extAdminHash = await hashEmail(adminUser.email);
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('admin_impersonate_extend', ${`Admin ${adminUser.name} extended a support session on user_id=${target.id} by ${IMPERSONATION_EXPIRY_MINUTES} minutes`}, ${extAdminHash}, ${adminUser.id})`;
   await sql.end();
+  // Imported here, not at the top: services/adminAudit.ts imports from this
+  // file, so a static import is a cycle.
+  const { logAdminAction } = await import('../services/adminAudit');
+  await logAdminAction(c.env, adminUser.id, adminUser.email, 'admin_impersonate_extend', {
+    target_user_id: target.id,
+    reason,
+    impersonation_session_id: id,
+    minutes: IMPERSONATION_EXPIRY_MINUTES,
+    started_at: row.started_at ?? null,
+  });
   return c.json({
     token,
     expires_at: new Date(Date.now() + IMPERSONATION_EXPIRY_MINUTES * 60_000).toISOString(),
     expires_in_minutes: IMPERSONATION_EXPIRY_MINUTES,
   });
 });
+
+/** A D1 timestamp ('YYYY-MM-DD HH:MM:SS', UTC, or ISO) as epoch ms; NaN when unreadable. */
+function sqlTimestampMs(v: unknown): number {
+  if (typeof v !== 'string' || !v) return Number.NaN;
+  return Date.parse(v.includes('T') ? v : `${v.replace(' ', 'T')}Z`);
+}
 
 // Close an impersonation session (audit end timestamp). Fired best-effort
 // by the client when the admin exits the founder view; sessions left open
@@ -1894,9 +2000,11 @@ admin.patch('/users/:userId/role', async (c) => {
   const body: any = await c.req.json().catch(() => ({}));
   const role = c.req.query('role') || body.role;
 
-  // An override is REQUESTED by supplying a reason, and granted only below.
-  const overrideReason = String(body.override_reason ?? '').trim();
-  const wantsOverride = overrideReason.length > 0;
+  // D249 — the reason, whatever change it rides on. It arrives as
+  // `override_reason`, the key the SPA has always sent. It is an OVERRIDE only
+  // when the change is out of `exploring` (decided below, once the target is
+  // read); on any other change it is simply that change's reason.
+  const reason = String(body.override_reason ?? '').trim().slice(0, 500);
   // Task #9 follow-up — 'exploring' is a valid destination role so admins
   // can move a user (e.g. a partner) back into the holding state for
   // re-review, from the same dropdown used for founder/partner/investor.
@@ -1904,37 +2012,6 @@ admin.patch('/users/:userId/role', async (c) => {
     return c.json({ error: `Invalid role: ${role}` }, 400);
   }
 
-  // Validated HERE, above the admin promotion/demotion guards below, so that an
-  // override can never reach them: minting or removing an admin stays SQL-only
-  // whatever reason is supplied. That ordering is the whole reason the override
-  // is a narrow door rather than a wide one, and a test asserts it.
-  if (wantsOverride) {
-    // NO EXPLICIT HYDRATE HERE, and that is checked rather than assumed. This
-    // block first called `hydrateSuperAdmin(c.env, adminUser)` on the theory
-    // that `requireAdmin` leaves the flag unset — it does not: `getCurrentUser`
-    // hydrates it from the `super_admins` side table on every request
-    // (`auth.ts`), which is why `requireSuperAdmin` itself only calls
-    // `isSuperAdmin` and why the two impersonation guards above hydrate their
-    // TARGET (a raw `SELECT *` row) and not the caller. Removing the redundant
-    // read changed no test in either direction, which is what said it was
-    // redundant. The ordering inside `getCurrentUser` is the load-bearing part:
-    // the side table's answer is written over whatever `SELECT *` returned, so a
-    // database still carrying the first version of migration 199's
-    // `users.is_super_admin` column cannot elevate every admin
-    // (`admin_role_override.test.ts` drives exactly that database).
-    if (!isSuperAdmin(adminUser as any)) {
-      return c.json({
-        error: 'Only a super admin can override the binding-agreement requirement.',
-        code: 'super_admin_required',
-      }, 403);
-    }
-    if (overrideReason.length < 10) {
-      return c.json({
-        error: 'An override reason of at least 10 characters is required — it is the line someone reads in the audit later.',
-        code: 'override_reason_too_short',
-      }, 400);
-    }
-  }
   // Security policy: admin promotion is NOT allowed via this endpoint, so a
   // compromised admin session cannot mint peers to entrench access.
   //
@@ -1977,24 +2054,64 @@ admin.patch('/users/:userId/role', async (c) => {
   // admin could bypass the signed binding agreement requirement simply by
   // using the Users table dropdown instead of the Exploring Users queue.
   //
-  // THAT BYPASS NOW EXISTS, DELIBERATELY, AND IS NOT SILENT. A super admin may
-  // pass `override_reason` to assign the role anyway — because an admin with no
-  // way to correct a role at all is its own failure mode, and every new signup
-  // lands in `exploring` (routes/auth.ts), so this gate covers most of the user
-  // table. What keeps it narrow: it is super-admin only, it needs a reason of
-  // real length, the reason is written into the `role_changed` audit line, and
-  // it is validated above the admin promotion/demotion guards so it can never
-  // mint an admin. An unreasoned request is still refused exactly as before,
-  // and /admin/exploring keeps its strict rule for the normal path.
-  if (String(rows[0].role).toLowerCase() === 'exploring' && role !== 'exploring' && !wantsOverride) {
+  // THAT BYPASS EXISTS, DELIBERATELY: THE BINDING-AGREEMENT OVERRIDE (#549,
+  // first described by D249). A super admin may pass a reason to assign the
+  // role anyway — because an admin with no way to correct a role at all is its
+  // own failure mode, and every new signup lands in `exploring`
+  // (routes/auth.ts), so this gate covers most of the user table.
+  //
+  // D249 — WHAT AN OVERRIDE IS, AND WHAT IT NOW TAKES.
+  //  · It is a change OUT OF `exploring` with a reason, and nothing else. Until
+  //    D249 it was keyed on a reason being present, so a reason sent with
+  //    founder→partner stamped "BINDING-AGREEMENT OVERRIDE" on an ordinary
+  //    change. A reason on any other change is carried as that change's reason.
+  //  · It is decided HERE, below the admin promotion and demotion guards, and
+  //    that cannot turn it into escalation: `role === 'admin'` is refused above
+  //    for every request, and an `exploring` target is by definition not an
+  //    admin, so an override can neither mint nor demote one. (It was validated
+  //    above those guards when a reason alone made one.)
+  //  · It takes demote's bar — the Super Admin, a TOTP-minted session and a
+  //    fresh step-up — and a reason of at least 10 characters. It is the same
+  //    class of act: a role change the normal path would refuse.
+  //  · NO EXPLICIT HYDRATE on the caller: `getCurrentUser` writes the
+  //    `super_admins` side table's answer over whatever `SELECT *` returned, so
+  //    a database still carrying the first version of migration 199's
+  //    `users.is_super_admin` column cannot elevate every admin
+  //    (`admin_role_override.test.ts` drives exactly that database).
+  const oldRole = rows[0].role;
+  const fromExploring = String(oldRole).toLowerCase() === 'exploring' && role !== 'exploring';
+  if (fromExploring && !reason) {
     await sql.end();
     return c.json({
       error: 'This user is in the exploring holding state. Assign their final role from the Exploring Users queue (requires a signed binding agreement).',
       code: 'use_exploring_assign_role',
     }, 409);
   }
+  const isOverride = fromExploring && reason.length > 0;
+  if (isOverride) {
+    if (!isSuperAdmin(adminUser as any)) {
+      await sql.end();
+      return c.json({
+        error: 'Only a super admin can override the binding-agreement requirement.',
+        code: 'super_admin_required',
+      }, 403);
+    }
+    try {
+      await requireFactor(c, 'totp');
+      await requireStepUp(c);
+    } catch (e) {
+      await sql.end();
+      throw e;
+    }
+    if (reason.length < 10) {
+      await sql.end();
+      return c.json({
+        error: 'An override reason of at least 10 characters is required — it is the line someone reads in the audit later.',
+        code: 'override_reason_too_short',
+      }, 400);
+    }
+  }
 
-  const oldRole = rows[0].role;
   if (role === 'exploring') await ensureExploringSchema(c.env);
   await sql`UPDATE users SET role = ${role} WHERE id = ${userId}`;
 
@@ -2028,6 +2145,48 @@ admin.patch('/users/:userId/role', async (c) => {
     const { seedObligations } = await import('../services/trust');
     await seedObligations(c.env, userId, role, { pruneStaleForRole: true });
   } catch (e) { console.error('[admin] trust re-seed failed', e); }
+  // D249 — AN OVERRIDE DOES WHAT assign-role DOES THAT THE ACCOUNT NEEDS.
+  //  · `user_role_review` is stamped as assign-role stamps it — role_confirmed,
+  //    assigned_role, by, at — so the Exploring queue reads the account as
+  //    assigned rather than still waiting. An upsert, because an account can be
+  //    overridden before any review row exists; assign-role's UPDATE cannot
+  //    meet that case, since it requires an envelope.
+  //  · A founder or investor gets their onboarding wizard, the SQL assign-role
+  //    runs. Moved into either role without it, the account lands on a shell
+  //    with nothing behind it.
+  //  · The Spin-Out Lab auto-start is LEFT to assign-role: it enrols a company
+  //    in a programme, and an override reason does not establish that the
+  //    company belongs there.
+  // Each write is best-effort: the role has changed, and a stamp that fails
+  // must not turn a recorded change into a failed request (D111).
+  if (isOverride) {
+    try {
+      await ensureExploringSchema(c.env);
+      await c.env.DB.prepare(
+        `INSERT INTO user_role_review (user_id, role_confirmed, assigned_role, assigned_by_user_id, assigned_at, updated_at)
+         VALUES (?, 1, ?, ?, datetime('now'), datetime('now'))
+         ON CONFLICT(user_id) DO UPDATE SET
+           role_confirmed = 1,
+           assigned_role = excluded.assigned_role,
+           assigned_by_user_id = excluded.assigned_by_user_id,
+           assigned_at = excluded.assigned_at,
+           updated_at = excluded.updated_at`,
+      ).bind(userId, role, adminUser.id).run();
+    } catch (e) { console.error('[admin/role-override] review stamp failed', (e as Error).message); }
+    if (role === 'founder' || role === 'investor') {
+      try {
+        await c.env.DB.prepare(
+          `INSERT INTO onboarding_progress (user_id, flow, step, total_steps, completed_at, updated_at)
+           VALUES (?, ?, 0, 0, NULL, datetime('now'))
+           ON CONFLICT(user_id) DO UPDATE SET
+             flow = excluded.flow,
+             step = 0,
+             completed_at = NULL,
+             updated_at = datetime('now')`,
+        ).bind(userId, role).run();
+      } catch (e) { console.error('[admin/role-override] onboarding reset failed', (e as Error).message); }
+    }
+  }
   // Epic 11 — actor on both rows is email_hash, never the plaintext.
   const roleAdminHash = await hashEmail(adminUser.email);
   const roleTargetHash = await hashEmail(rows[0].email);
@@ -2037,13 +2196,28 @@ admin.patch('/users/:userId/role', async (c) => {
   // label map, and a reader missed in that sweep would show role changes while
   // hiding precisely the overrides — the opposite of the point. Marking the
   // details keeps it visible in every view that already renders a role change.
-  const overrideNote = wantsOverride
-    ? ` — BINDING-AGREEMENT OVERRIDE by super admin. Reason: ${overrideReason}`
-    : '';
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('role_changed', ${`Admin ${adminUser.name} changed ${rows[0].name}'s role from ${oldRole} to ${role}${overrideNote}`}, ${roleAdminHash}, ${adminUser.id})`;
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('your_role_changed', ${`Your role was changed from ${oldRole} to ${role} by ${adminUser.name}`}, ${roleTargetHash}, ${rows[0].id})`;
+  // D249 — and the audit log gets its own row (below), which names the target.
+  const because = isOverride
+    ? ` — BINDING-AGREEMENT OVERRIDE by super admin. Reason: ${reason}`
+    : (reason ? `. Reason: ${reason}` : '');
+  // D249 — THE PERSON IS TOLD WHAT HAPPENED. Their row said only "Your role was
+  // changed from X to Y by <name>", so an override read as a routine change on
+  // the one feed they can see.
+  const theirs = isOverride
+    ? `Your role was changed from ${oldRole} to ${role} by ${adminUser.name} without a completed binding agreement: a Super Admin override. Reason: ${reason}`
+    : `Your role was changed from ${oldRole} to ${role} by ${adminUser.name}${reason ? `. Reason: ${reason}` : ''}`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('role_changed', ${`Admin ${adminUser.name} changed ${rows[0].name}'s role from ${oldRole} to ${role}${because}`}, ${roleAdminHash}, ${adminUser.id})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('your_role_changed', ${theirs}, ${roleTargetHash}, ${rows[0].id})`;
   await sql.end();
-  return c.json({ message: `Role updated to ${role}`, user_id: userId, role });
+  // D249 — one audit row per override, naming the account. Imported here, not
+  // at the top: services/adminAudit.ts imports from this file.
+  if (isOverride) {
+    const { logAdminAction } = await import('../services/adminAudit');
+    await logAdminAction(c.env, adminUser.id, adminUser.email, 'role_override', {
+      target_user_id: rows[0].id, from: oldRole, to: role, reason,
+    });
+  }
+  return c.json({ message: `Role updated to ${role}`, user_id: userId, role, override: isOverride });
 });
 
 admin.patch('/users/:userId/toggle-active', async (c) => {

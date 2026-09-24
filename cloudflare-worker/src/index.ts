@@ -563,6 +563,34 @@ for (const p of COOL_OFF_PREFIXES) {
   app.use(p, recoveryCoolOff);
   app.use(`${p}/*`, recoveryCoolOff);
 }
+// D248 — ROUTES, NOT PREFIXES, for the acts that share a prefix with routes
+// that must stay open. `recoveryCoolOff` refuses every method, GETs included,
+// and the loop above adds `${p}/*`, which covers every sibling under p. So each
+// entry here is the one route pattern itself (Hono matches `:param`), and is
+// registered without the wildcard.
+//
+// `/api/admin/impersonate` above covers OPENING a support session. Extending
+// lives under `/api/admin/impersonate-sessions`, which no prefix reached, so a
+// freshly recovered account could not open a session but could extend one it
+// already held. Ending a session is deliberately NOT covered: it is the safe
+// direction, and an owner who has just recovered their account may need to
+// close a session somebody else opened.
+//
+// Admin-over-admin writes this wave touched, decided one by one (D248):
+//   · the Super Admin elevation — grant, revoke and transfer are POST and
+//     DELETE on `/:userId`; the holder list at GET `/` stays readable.
+//   · closing or re-opening an account (D247).
+//   · changing an account's role, the binding-agreement override included.
+//   · force re-auth (`/api/admin/security/force-reauth`) is NOT covered. It
+//     ends sessions and grants nothing; it is the containment tool a
+//     recovered owner is most likely to need, the same argument as End.
+const COOL_OFF_ROUTES = [
+  '/api/admin/impersonate-sessions/:id/extend',
+  '/api/admin/super-admins/:userId',
+  '/api/admin/users/:userId/toggle-active',
+  '/api/admin/users/:userId/role',
+];
+for (const p of COOL_OFF_ROUTES) app.use(p, recoveryCoolOff);
 // Task #6 — Stripe billing surface (tier checkout/portal/webhook + MI Pro).
 app.route('/api/billing', billing);
 

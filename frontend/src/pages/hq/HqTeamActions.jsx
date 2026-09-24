@@ -10,8 +10,8 @@ import { Card } from '../../ui';
  * only HQ may take and four that belong to an admin, each with a one-line note.
  * The NAMES are the canvas's, verbatim. The NOTES are not: every one was read
  * against the route that performs the act, and several describe a platform that
- * does not exist — "banner both sides see" (the target sees no banner and is not
- * told), "Lands on Programs as well" (it does not), "Within the licence's seats
+ * does not exist — "banner both sides see" (the target sees no banner; since
+ * D248 they are told by a notice, which is not a banner), "Lands on Programs as well" (it does not), "Within the licence's seats
  * only" (no grant is checked against a seat count), "The decision happens on
  * Approvals" (Approvals decides nothing). A card that repeated those would be
  * the first place an operator learned something false about their own powers,
@@ -29,6 +29,11 @@ import { Card } from '../../ui';
  * with no authenticator, step-up or reason asked — accurately, until D247 gave
  * the act demote's bar. The note says what the route now requires, and the
  * test reads the route for the three checks so the sentence cannot outlive them.
+ *
+ * AND ONE MORE CHANGED WITH ITS ROUTE: the role override said "No authenticator
+ * or step-up is asked", which was true until D249 gave it demote's bar. The
+ * note now names the bar, and says the person is told and what the override
+ * does and does not start.
  *
  * ONE ROW IS NOT HQ'S, AND IT SAYS SO RATHER THAN MOVING. "View as a role shell"
  * is offered to every admin — HQ, the holder and a branch admin alike — by the
@@ -48,15 +53,23 @@ import { Card } from '../../ui';
  * silently redirect.
  */
 
+/**
+ * D248 — how long a support session may last in all, extensions included, in
+ * hours. The worker's `IMPERSONATION_CEILING_MINUTES` (cloudflare-worker/src/
+ * auth.ts) is the one that is enforced; the SPA cannot import worker code, so
+ * this states it and hq_team_h20.test.mjs holds the two equal.
+ */
+export const SUPPORT_SESSION_CEILING_HOURS = 2;
+
 /** The five H20 draws under "HQ-only actions". `hq: false` marks the one that is not. */
 export const HQ_ONLY_ACTIONS = [
   {
     key: 'impersonate',
     name: 'Impersonate — including other admins',
     hq: true,
-    gate: 'A typed reason of at least 10 characters, your authenticator and a fresh step-up. The session lasts 30 minutes; Extend adds 30 more with no new reason. Opening one as another admin is the Super Admin’s alone — as anyone else, it is every admin’s power. The person is not told: no banner on their side, no notification.',
+    gate: `A typed reason of at least 10 characters, your authenticator and a fresh step-up. The session lasts 30 minutes; Extend adds 30 more for a new reason, up to ${SUPPORT_SESSION_CEILING_HOURS} hours from when it opened, and not in the day after an account recovery. Opening one as another admin is the Super Admin’s alone — as anyone else, it is every admin’s power. The person is told when it opens, in the app and by email, with your name and your reason; there is no banner on their side.`,
     where: 'View As on an admin’s row in the directory below.',
-    recorded: 'Yes — the session, its reason and when it ended, under Impersonations. An extension is not in the feed.',
+    recorded: 'Yes — the session, its reason and when it ended, under Impersonations; each extension, with its reason, in the audit log.',
   },
   {
     key: 'role_shell',
@@ -87,9 +100,9 @@ export const HQ_ONLY_ACTIONS = [
     key: 'role_override',
     name: 'Role override on a binding agreement',
     hq: true,
-    gate: 'The Super Admin alone, with a typed reason of at least 10 characters. No authenticator or step-up is asked.',
+    gate: 'The Super Admin alone: your authenticator, a fresh step-up and a typed reason of at least 10 characters. Only a change out of Exploring is an override, and the person’s own activity says it was one, and why. A founder or investor starts their onboarding; the Spin-Out Lab is left to the Exploring queue.',
     where: 'The Role picker on an Exploring account’s row in the directory below.',
-    recorded: 'Yes — as a role change carrying the reason.',
+    recorded: 'Yes — as a role change carrying the reason, and in the audit log as an override naming the person.',
   },
 ];
 

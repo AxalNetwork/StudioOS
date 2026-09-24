@@ -2063,9 +2063,23 @@ export const api = {
     } catch { /* storage unavailable */ }
     return res;
   },
-  /** Another thirty minutes on a session that is still open. */
-  adminImpersonateExtend: async (sessionId) => {
-    const res = await request(`/admin/impersonate-sessions/${sessionId}/extend`, { method: 'POST' });
+  /**
+   * Another thirty minutes on a session that is still open.
+   *
+   * D248 — the route asks for a reason of at least 10 characters, and refuses
+   * past two hours from when the session opened. The caller may pass the
+   * reason. The impersonation bar passes none, so this method asks for it with
+   * the same prompt Demote uses; a cancelled prompt extends nothing and returns
+   * null, which the bar reads as "no new expiry".
+   */
+  adminImpersonateExtend: async (sessionId, reason) => {
+    const why = reason ?? (typeof window !== 'undefined'
+      ? window.prompt('Why does this support session need another 30 minutes? At least 10 characters, and it is recorded.')
+      : null);
+    if (!why) return null;
+    const res = await request(`/admin/impersonate-sessions/${sessionId}/extend`, {
+      method: 'POST', body: JSON.stringify({ reason: why }),
+    });
     try {
       if (res?.token) localStorage.setItem('token', res.token);
       if (res?.expires_at) localStorage.setItem('impersonationExpiresAt', String(res.expires_at));

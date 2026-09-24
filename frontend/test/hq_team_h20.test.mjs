@@ -46,7 +46,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
-import HqTeamActions, { HQ_ONLY_ACTIONS, ADMIN_ACTIONS } from '../src/pages/hq/HqTeamActions.jsx';
+import HqTeamActions, { HQ_ONLY_ACTIONS, ADMIN_ACTIONS, SUPPORT_SESSION_CEILING_HOURS } from '../src/pages/hq/HqTeamActions.jsx';
 import { drawsAccountControls } from '../src/lib/accountControls.js';
 import { UserDetailModal } from '../src/pages/AdminPage.jsx';
 
@@ -134,7 +134,7 @@ test('the canvas notes that describe a platform that does not exist do not reach
   // Each claim is asserted to be the CANVAS'S first — a phrase the canvas no
   // longer makes would pass the second half vacuously.
   const FALSE_CLAIMS = [
-    ['banner both sides see', notes], // the target sees no banner and is not told
+    ['banner both sides see', notes], // the target sees no banner (D248 tells them by notice, not banner)
     ['Lands on Programs as well', notes], // spinout-admit writes user_spinout_flags only
     ['seats only', notes], // no grant is checked against a seat count
     ['The decision happens on Approvals', notes], // Approvals decides nothing
@@ -149,7 +149,9 @@ test('the canvas notes that describe a platform that does not exist do not reach
   // What each row says instead is the route's own requirement, stated where the
   // canvas stated the fiction.
   const plain = text(PLAIN);
-  assert.match(plain, /The person is not told: no banner on their side, no notification\./);
+  // D248 — re-aimed. "The person is not told" was true until D248; the
+  // banner half of the canvas's claim stays false and the card still says so.
+  assert.match(plain, /The person is told when it opens, in the app and by email, with your name and your reason; there is no banner on their side\./);
   assert.match(plain, /The successor and the former holder are both notified, in the app and by email\./);
   assert.match(plain, /It does not place them in a cohort on Programs\./);
   assert.match(plain, /Neither is checked against the licence’s seats — no grant on the platform is\./);
@@ -175,6 +177,93 @@ test('D241: "both parties notified" is now true, and the card says so only while
   // After D240's check, so a transfer that moved nothing tells nobody.
   assert.ok(route.indexOf('successor: await tellOfTransfer(') > route.indexOf('if (!(granted === 1 && released === 1))'),
     'a notice is sent before the write is known to have moved the elevation');
+});
+
+test('D248: the target is told, Extend has a reason and a ceiling, and the card says so only while the route does', () => {
+  const plain = text(PLAIN);
+  assert.ok(!plain.includes('The person is not told'), 'the card still says the person is not told');
+  assert.ok(!plain.includes('with no new reason'), 'the card still says Extend asks for no reason');
+  assert.ok(!plain.includes('An extension is not in the feed'), 'the card still says an extension is not recorded');
+  assert.match(plain, new RegExp(`Extend adds 30 more for a new reason, up to ${SUPPORT_SESSION_CEILING_HOURS} hours from when it opened, and not in the day after an account recovery\\.`));
+  assert.match(plain, /each extension, with its reason, in the audit log\./);
+
+  // The ceiling the card states is the ceiling the worker enforces.
+  const auth = codeOnly(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/auth.ts'), 'utf8'));
+  const m = auth.match(/export const IMPERSONATION_CEILING_MINUTES = (\d+);/);
+  assert.ok(m, 'the worker no longer exports IMPERSONATION_CEILING_MINUTES');
+  assert.equal(Number(m[1]) / 60, SUPPORT_SESSION_CEILING_HOURS,
+    'the card states a different ceiling from the one the worker enforces');
+
+  // The route: the open handler tells the target after every refusal and
+  // after the grant; Extend asks for a reason and measures from started_at.
+  const route = codeOnly(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin.ts'), 'utf8'));
+  const slice = (from, to) => {
+    const a = route.indexOf(from);
+    assert.ok(a >= 0, `${from} is gone`);
+    const b = route.indexOf(to, a + from.length);
+    return route.slice(a, b > a ? b : route.length);
+  };
+  const openH = slice("admin.post('/impersonate/:userId'", "\nadmin.");
+  const at = openH.indexOf('await tellOfSupportSession(');
+  assert.ok(at > 0, 'the open handler no longer tells the target');
+  for (const refusal of ["code: 'impersonation_reason_required'", "code: 'cannot_impersonate_super_admin'", "code: 'super_admin_required'", 'await createJWT(']) {
+    assert.ok(openH.indexOf(refusal) >= 0 && openH.indexOf(refusal) < at, `the target is told before ${refusal}`);
+  }
+  assert.match(route, /category: 'security',/);
+  const ext = slice("admin.post('/impersonate-sessions/:id/extend'", "\nadmin.");
+  // The check itself, not only its refusal code: an `if (false)` in front of
+  // the code string passed the first draft of this pin (D248 records it).
+  assert.match(ext, /if \(reason\.length < 10\) \{\s*await sql\.end\(\);\s*return c\.json\(\{\s*error: 'A reason of at least 10 characters is required to extend/,
+    'Extend no longer checks the reason');
+  assert.ok(ext.indexOf("code: 'extend_reason_required'") < ext.indexOf('await createJWT('),
+    'the reason is checked after the token is minted');
+  assert.match(ext, /const ceilingMs = startedMs \+ IMPERSONATION_CEILING_MINUTES \* 60_000;/,
+    'the ceiling is no longer measured from when the session opened');
+  assert.ok(ext.indexOf("code: 'support_session_ceiling'") < ext.indexOf('await createJWT('),
+    'the ceiling is checked after the token is minted');
+
+  // The page: Extend sends a reason, asking for one when the bar passes none.
+  const method = API.slice(API.indexOf('adminImpersonateExtend:'), API.indexOf('adminImpersonateEnd:'));
+  assert.match(method, /adminImpersonateExtend: async \(sessionId, reason\) =>/);
+  assert.match(method, /window\.prompt\(/, 'Extend no longer asks for a reason when its caller has none');
+  assert.match(method, /if \(!why\) return null;/, 'a cancelled prompt still sends the request');
+  assert.match(method, /body: JSON\.stringify\(\{ reason: why \}\)/, 'the reason is not sent');
+});
+
+test('D249: the role override takes demote\'s bar, tells the person, and the card says so only while the route does', () => {
+  const plain = text(PLAIN);
+  assert.ok(!plain.includes('No authenticator or step-up is asked'), 'the card still says the override asks for no authenticator');
+  assert.match(plain, /The Super Admin alone: your authenticator, a fresh step-up and a typed reason of at least 10 characters\. Only a change out of Exploring is an override, and the person’s own activity says it was one, and why\./);
+  assert.match(plain, /the Spin-Out Lab is left to the Exploring queue\./);
+  assert.match(plain, /in the audit log as an override naming the person\./);
+
+  const route = codeOnly(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin.ts'), 'utf8'));
+  const start = route.indexOf("admin.patch('/users/:userId/role'");
+  assert.ok(start >= 0, 'the role route is gone');
+  const end = route.indexOf('\nadmin.', start + 1);
+  const h = route.slice(start, end > start ? end : route.length);
+  assert.match(h, /const isOverride = fromExploring && reason\.length > 0;/,
+    'an override is no longer a change out of exploring with a reason');
+  assert.match(h, /if \(isOverride\) \{\s*if \(!isSuperAdmin\(adminUser as any\)\) \{/);
+  const factor = h.indexOf("await requireFactor(c, 'totp');");
+  const stepUp = h.indexOf('await requireStepUp(c);');
+  const write = h.indexOf('UPDATE users SET role');
+  assert.ok(factor > 0 && factor < stepUp && stepUp < write, 'the override\'s authenticator and step-up are not checked before the write');
+  assert.match(h, /without a completed binding agreement: a Super Admin override\. Reason: \$\{reason\}/,
+    'the person\'s own row no longer says it was an override');
+  assert.match(h, /logAdminAction\(c\.env, adminUser\.id, adminUser\.email, 'role_override', \{\s*target_user_id: rows\[0\]\.id,/,
+    'the override is no longer one audit row naming the person');
+  assert.doesNotMatch(h, /startLab/, 'the override starts the Spin-Out Lab, which D249 leaves to assign-role');
+  // The card says a founder or investor starts their onboarding, and the
+  // Exploring queue reads the account as assigned: both are held to the
+  // writes, conditions included. The first draft of this test did not read
+  // them, and an `if (false)` in front of either passed it (D249 records it).
+  const ov = h.slice(h.indexOf('  if (isOverride) {\n    try {\n      await ensureExploringSchema(c.env);'));
+  assert.ok(ov.length > 0, 'the override\'s own writes are gone');
+  assert.match(ov, /^  if \(isOverride\) \{\s*try \{\s*await ensureExploringSchema\(c\.env\);\s*await c\.env\.DB\.prepare\(\s*`INSERT INTO user_role_review/,
+    'the override no longer stamps user_role_review');
+  assert.match(ov, /if \(role === 'founder' \|\| role === 'investor'\) \{\s*try \{\s*await c\.env\.DB\.prepare\(\s*`INSERT INTO onboarding_progress/,
+    'the override no longer starts a founder\'s or investor\'s onboarding, which the card says it does');
 });
 
 test('D247: deactivating an administrator takes demote\'s bar, and the card says so only while the route asks for it', () => {

@@ -20,17 +20,19 @@
  * rather than tidy. `frontend/src/lib/api.js` carries ~90 `/admin/*` strings and
  * ZERO navigation — every one an argument to `request(...)`. A bare grep scores
  * `/admin/x` as linked 19 times and `/admin/team` 6 times, all falsely. Note
- * `codeOnly` does NOT save you here: the prose naming `/admin/partners` at
- * `App.jsx:2117` sits in an indented JSX block comment whose continuation lines
- * carry no leading asterisk, so it survives the strip. Only the syntax anchor
- * rejects it, which is what 'the door scanner reads navigation syntax…' pins.
+ * `codeOnly` does NOT save you here: the prose naming `/admin/partners`, in the
+ * indented JSX block comment above that route's own `<Route>` in App.jsx, has
+ * continuation lines that carry no leading asterisk, so it survives the strip.
+ * Only the syntax anchor rejects it, which is what 'the door scanner reads
+ * navigation syntax…' pins.
  *
  * `SIDEBAR_GROUPS` IS IMPORTED, NOT PARSED. `super_admin_shell.test.mjs:25` does
  * the same and ships (the "cannot be imported, lucide-react" note on
  * `parseSidebar` in `scripts/build-profile-routing.mjs:97` is true of plain-node
  * scripts, not of tests, which run under `_deck-loader.mjs`). Importing makes the
- * ONE commented-out row — `// { to: '/admin/x', … }` at `sidebarConfig.js:148` —
- * structurally invisible instead of regex-filtered, so a deliberately-dark door
+ * ONE commented-out row — `// { to: '/admin/x', … }`, parked beside the Telegram
+ * row in `sidebarConfig.js` — structurally invisible instead of regex-filtered,
+ * so a deliberately-dark door
  * can never read as live. It also keeps `match:` a separate field the door
  * extractor never touches; `match` decides highlighting, not navigation
  * (`sidebarConfig.js:273-276`).
@@ -62,9 +64,9 @@ const APP = read('frontend/src/App.jsx');
 /**
  * Every `<Route>` as `{ path, body, component, redirect }`.
  *
- * Scans the WHOLE file. `/admin/advisor-cohorts` lives at App.jsx:2323, far
- * below the 1949-2009 block where the other 32 sit, so a block-bounded parser
- * silently loses it — which is why the completeness test below counts.
+ * Scans the WHOLE file. `/admin/advisor-cohorts` lives far below the block
+ * where the other 32 sit, so a block-bounded parser silently loses it —
+ * which is why the completeness test below counts.
  * Segment-splitting shape lifted from `route_role_zone_contract.test.mjs:67`.
  */
 function routes(src) {
@@ -303,15 +305,23 @@ const EXEMPT = [
   {
     path: '/admin/x',
     kind: 'parked-row',
+    // Copied verbatim from ONE physical line of sidebarConfig.js — a line
+    // number in a comment goes stale with the next edit above it, a phrase
+    // from the line itself does not. Tested below (`raw.includes(e.cites)`).
+    cites: 'Re-enable once X_CLIENT_ID/SECRET are bound on the prod worker.',
     why: 'the row exists but is commented out — the X broadcaster is parked until '
-       + 'X_CLIENT_ID/SECRET are bound on the prod worker (sidebarConfig.js:146-148).',
+       + 'X_CLIENT_ID/SECRET are bound on the prod worker (sidebarConfig.js, beside '
+       + 'the Telegram row).',
   },
   {
     path: '/admin/network-profiles',
     kind: 'same-component-elsewhere',
     host: '/admin',
     tab: 'network-profiles',
-    why: 'AdminPage.jsx:14 records that this standalone route stays wired for direct '
+    // Copied verbatim from ONE physical line of AdminPage.jsx, above the
+    // AdminNetworkProfiles import. Tested below (`adminPage.includes(e.cites)`).
+    cites: '/admin/network-profiles route stays wired for direct deep-links',
+    why: 'AdminPage.jsx records that this standalone route stays wired for direct '
        + 'deep links; the roster itself is reached at /admin?tab=network-profiles.',
   },
   // `/admin/spinout-lab`'s entry was DELETED IN D140, by this guard's own rule:
@@ -340,10 +350,10 @@ const REDIRECTS = ADMIN.filter((r) => r.redirect).map((r) => r.path);
 test('the route parser finds every /admin route in App.jsx', () => {
   // A route this parser misses is a route the guard silently has no opinion
   // about — the exact failure mode of a block-bounded scan, which would lose
-  // /admin/advisor-cohorts at App.jsx:2323.
+  // /admin/advisor-cohorts, sitting far below where the rest of the routes sit.
   const paths = ADMIN.map((r) => r.path);
   assert.ok(paths.includes('/admin/advisor-cohorts'),
-    'the scan no longer reaches App.jsx:2323 — it has been narrowed to a block');
+    'the scan no longer reaches /admin/advisor-cohorts — it has been narrowed to a block');
   assert.ok(ADMIN.length >= 33, `expected at least 33 /admin routes, parsed ${ADMIN.length}`);
   const nameless = ADMIN.filter((r) => !r.component && !r.redirect).map((r) => r.path);
   assert.deepEqual(nameless, [], 'these routes yielded no component, so their doors cannot be read');
@@ -419,6 +429,13 @@ test('a parked sidebar row still names a row that is present but commented out',
       + 'sidebarConfig.js — either restore the row, or retire the route');
     assert.ok(!SIDEBAR_ROWS.some((r) => r.to === e.path),
       `${e.path} now has a LIVE row, so it is not parked — remove the EXEMPT entry`);
+    // The `why` cites this file by phrase, not by line number, so a comment
+    // edit above it cannot go stale silently. Require the phrase to still be
+    // there, not merely present in the EXEMPT entry.
+    assert.ok(e.cites, `${e.path}'s EXEMPT entry has no \`cites\` field`);
+    assert.ok(raw.includes(e.cites),
+      `${e.path}'s EXEMPT entry cites "${e.cites}", which no longer appears in `
+      + 'sidebarConfig.js — the comment moved or was reworded; re-anchor the citation');
   }
 });
 
@@ -437,6 +454,12 @@ test('a route exempted as a tab still mounts the same component behind that tab'
     // 3. the chain has to end on a real door
     assert.ok(REACHED.has(e.host),
       `${e.path} is exempted via ${e.host}, which is itself unreachable`);
+    // 4. the `why` cites AdminPage.jsx by phrase, not by line number, so a
+    //    comment edit above it cannot go stale silently.
+    assert.ok(e.cites, `${e.path}'s EXEMPT entry has no \`cites\` field`);
+    assert.ok(adminPage.includes(e.cites),
+      `${e.path}'s EXEMPT entry cites "${e.cites}", which no longer appears in `
+      + 'AdminPage.jsx — the comment moved or was reworded; re-anchor the citation');
   }
 });
 
@@ -460,12 +483,14 @@ test('the door scanner reads navigation syntax, not paths in prose or api calls'
   const api = doorsIn(read('frontend/src/lib/api.js')).doors.filter((d) => d.startsWith('/admin'));
   assert.deepEqual(api, [], 'api.js yielded navigation targets; the scanner is matching request() arguments');
 
-  // And prose. codeOnly does NOT strip App.jsx:2117 — it is an indented {/* … */}
-  // whose continuation lines carry no leading `*` — so this proves the SYNTAX
-  // anchor rejects it, not the comment stripper.
+  // And prose. codeOnly does NOT strip the /admin/partners block comment in
+  // App.jsx — it is an indented {/* … */} whose continuation lines carry no
+  // leading `*` — so this proves the SYNTAX anchor rejects it, not the comment
+  // stripper.
   assert.ok(codeOnly(APP).includes('/admin/partners'),
-    'App.jsx:2117 prose no longer survives codeOnly; this assertion now proves nothing — '
-    + 'find another comment that mentions a route and pin that instead');
+    'the /admin/partners prose comment in App.jsx no longer survives codeOnly; this '
+    + 'assertion now proves nothing — find another comment that mentions a route and '
+    + 'pin that instead');
   assert.ok(!doorsIn(CHROME).doors.includes('/admin/partners'),
     'the scanner read a path out of prose');
 
