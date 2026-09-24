@@ -26,9 +26,9 @@ import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
  * read. So: the ledger is real (rows today, refused sign-ins in 24 hours, the
  * feed), the Sanctions card carries the store's own figures with the sentence
  * that a count of zero is a measured zero, and Backup / DR is two halves with
- * their own states — the export's heartbeat, and a restore drill whose outcome
- * is genuinely written nowhere the platform can read. H23 itself draws
- * Sanctions and the drill as "Not recorded"; the canvas's sentence "a list
+ * their own states — the export's heartbeat, and the restore drill's own
+ * marker (D263; until then its outcome was written nowhere the platform could
+ * read). H23 itself draws Sanctions as "Not recorded"; the canvas's sentence "a list
  * check happens inside KYC at the branch" is false for this repo, and the
  * card says what is true instead.
  *
@@ -110,14 +110,6 @@ function Zone({ title, sub, children, tone = '' }) {
       </div>
       {children}
     </Card>
-  );
-}
-
-function Absent({ block, fallback }) {
-  return (
-    <p className="text-[12.5px] leading-relaxed text-axal-muted">
-      <Unrecorded /> — {block?.reason || fallback}
-    </p>
   );
 }
 
@@ -318,11 +310,39 @@ export function Sanctions({ block, unreadable }) {
  *
  * The backup half reads the heartbeat the nightly export writes to R2: absent
  * with its reason when the binding is unbound or nothing was ever written,
- * present with the export's own stamp otherwise. The drill half is a stated
- * absence — the restore drill writes its outcome nowhere the platform can
- * read — and it stays one however green the backup half is. The canvas's own
- * words: "stated in words rather than a green light."
+ * present with the export's own stamp otherwise. D263 — the drill half reads
+ * the marker the restore drill writes on every exit, in four states of its
+ * own (unreadable, never run, last run failed, last run passed), and none of
+ * them is inferred from the backup half however green that is. The canvas's
+ * own words: "stated in words rather than a green light."
  */
+export function drillSentence(drill) {
+  if (!drill || drill.state === 'unreadable' || drill.available === false) {
+    return `Unreadable — ${drill?.reason || 'the drill marker could not be read.'}`;
+  }
+  if (drill.state === 'never_run') return `Never run — ${drill.reason}`;
+  const when = day(drill.at) || 'an unstamped date';
+  if (drill.state === 'last_run_failed') {
+    const exit = drill.exit_code === null || drill.exit_code === undefined ? 'no exit code recorded' : `exit ${drill.exit_code}`;
+    return `Last run failed on ${when}, at step ${drill.step || 'not recorded'} (${exit}).`;
+  }
+  if (drill.state === 'last_run_passed') {
+    return `Last run passed on ${when}, restoring ${drill.backup_key || 'a backup it did not name'}.`;
+  }
+  return `Unreadable — the drill marker is in a state this page does not know (${String(drill.state)}).`;
+}
+
+function DrillState({ drill }) {
+  const failed = drill?.state === 'last_run_failed';
+  const passed = drill?.state === 'last_run_passed';
+  const tone = failed ? 'text-red-700 dark:text-red-300' : passed ? 'text-emerald-700 dark:text-emerald-300' : 'text-axal-muted';
+  return (
+    <p className={`text-[12.5px] leading-relaxed ${tone}`} data-state={drill?.state || 'unreadable'}>
+      {drillSentence(drill)}
+    </p>
+  );
+}
+
 export function BackupDr({ block, unreadable }) {
   // Same rule as Sanctions: a failed overview read is not a load in progress.
   if (!block) {
@@ -350,7 +370,7 @@ export function BackupDr({ block, unreadable }) {
       <div>
         <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">Restore drill</div>
         <div className="mt-0.5" data-testid="hq-restore-drill">
-          <Absent block={block.drill} fallback="no drill record is kept." />
+          <DrillState drill={block.drill} />
         </div>
       </div>
     </div>
@@ -584,7 +604,7 @@ export default function HqSecurityPage() {
     : (data.backup_dr?.backup?.available
       ? `Read from the export heartbeat — last ${day(data.backup_dr.backup.at) || 'unstamped'}.`
       : (data.backup_dr?.backup?.reason || 'unreadable'));
-  const drillDetail = !ready ? 'unreadable' : (data.backup_dr?.drill?.reason || 'not recorded');
+  const drillDetail = !ready ? 'unreadable' : drillSentence(data.backup_dr?.drill);
 
   const rail = (
     <WorkerRail
@@ -620,8 +640,8 @@ export default function HqSecurityPage() {
         // store holds and how a run happens.
         ['Sanctions screening', sanctionsDetail],
         // D200 — one absence became two facts. The backup half reads the
-        // export's heartbeat; the drill half is still written nowhere the
-        // platform can read, and says so in the server's own words.
+        // export's heartbeat. D263 — the drill half reads the drill's own
+        // marker, in the same sentence the zone draws.
         ['Backup heartbeat', backupDetail],
         ['Restore drill', drillDetail],
         ['Per-tenant anything', 'No account names its licence yet (U1) — except a licence event, which is about one, and a security event, which names the deployment that recorded it.'],
@@ -660,7 +680,7 @@ export default function HqSecurityPage() {
             Was Governance, which described the audit log and nothing else. The ledger here is H23&apos;s: five
             stores — the security_events ledger of refusals and step-ups, the admin action log, the activity log,
             impersonation sessions and licence events — merged newest-first into one monospace feed. Sanctions and
-            backup read their own stores; the restore drill says what is not recorded and why. Only a licence
+            backup read their own stores; the restore drill reads the marker each run writes. Only a licence
             event names a subsidiary and only a security event names its deployment — nothing else here is
             scoped per subsidiary yet, the guardrail counters included.
           </p>
