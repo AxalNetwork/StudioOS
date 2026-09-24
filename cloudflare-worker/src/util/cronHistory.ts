@@ -55,6 +55,7 @@
 import type { Env } from '../types';
 import { withD1Retry } from './d1Retry';
 import { prevCronRun, sqlStamp } from './cronSchedule';
+import { branchOf } from './branch';
 
 /**
  * The cron expressions `wrangler.toml` declares, in `[triggers]` and again in
@@ -74,6 +75,26 @@ export const CRON_TRIGGERS: ReadonlyArray<{ name: string; expr: string }> = [
   { name: 'daily_digest', expr: '0 9 * * *' },
   { name: 'weekly_digest', expr: '0 9 * * 2' },
 ];
+
+/**
+ * D238 — the crons a BRANCH fires: the queue drain and the nightly cleanup.
+ * The worker's copy of `BRANCH_CRONS` in `scripts/lib/branchConfig.mjs`, which
+ * writes each branch's wrangler `[triggers]` from its own list. The two may
+ * never differ, and `cron_triggers_branch_d238.test.ts` fails when they do.
+ * `cron_record_d201.test.ts` keeps asserting it is a subset of CRON_TRIGGERS.
+ */
+export const BRANCH_CRONS: readonly string[] = ['* * * * *', '0 3 * * *'];
+
+/**
+ * The triggers THIS deployment fires, and so the ones it is graded against.
+ * HQ keeps CRON_TRIGGERS. A branch reads its own two: graded against HQ's six,
+ * four of them would read "never fired" for ever, which is false, because a
+ * branch never fires them.
+ */
+export function triggersFor(env: Pick<Env, 'BRANCH_CODE'>): ReadonlyArray<{ name: string; expr: string }> {
+  if (branchOf(env) === null) return CRON_TRIGGERS;
+  return CRON_TRIGGERS.filter((t) => BRANCH_CRONS.includes(t.expr));
+}
 
 /**
  * The four states HQ reads a trigger in, in precedence order. There is no

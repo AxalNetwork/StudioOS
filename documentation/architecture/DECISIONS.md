@@ -23333,6 +23333,79 @@ snapshot, and the test passed. None escaped. The nine:
 8. `retention_days` dropped from the route;
 9. the all-time label restored on the Cron tab.
 
+## D238
+
+**A branch is graded against its own crons, not HQ's six (task 332).**
+`GET /api/infra/cron-history` read the newest row of every expression in
+`CRON_TRIGGERS`. A branch only ever fires `BRANCH_CRONS`: `* * * * *`, the
+queue drain, and `0 3 * * *`, the nightly cleanup. So on a branch four triggers
+read "never fired" for ever, which is false. The route now reads
+`triggersFor(env)`. HQ keeps `CRON_TRIGGERS`, and a branch (`branchOf(env)`)
+reads its own two, with their display names.
+
+**No migration and no frontend change.**
+
+### ONE LIST, TWO COPIES, AND A TEST THAT THEY AGREE
+
+`scripts/lib/branchConfig.mjs` writes each branch's wrangler `[triggers]` from
+its own `BRANCH_CRONS`. The worker cannot import from `scripts/`, so it holds
+its own copy, `BRANCH_CRONS` in `util/cronHistory.ts`.
+`cron_triggers_branch_d238.test.ts` asserts that the two copies are equal. So
+the list a branch is graded against is always the list the generator put in
+its triggers. `cron_record_d201.test.ts` still asserts that `BRANCH_CRONS` is a
+subset of `CRON_TRIGGERS`, and that is unchanged.
+
+### LEFT ALONE, ON PURPOSE
+
+`admin_platform.ts` (about line 241) still grades against `CRON_TRIGGERS`. It
+is HQ's super-admin console and is refused on a branch, so HQ's list is the
+right one there.
+
+### RECORDED, NOT FIXED
+
+`[env.preview.triggers]` in `wrangler.toml` declares three crons: `* * * * *`,
+`0 */6 * * *` and `0 4 * * *`. That is neither HQ's six nor a branch's two.
+`cron_record_d201.test.ts` checks only that each of the three is one HQ knows.
+Nothing checks that the preview's set is a list any screen grades against. On
+the preview deployment the history route grades against HQ's six, so three read
+"never fired" there. The preview is not a production tier, and whether it
+should fire HQ's six or a list of its own is the owner's call.
+
+### A ONE-KEYWORD FIX THAT CAME WITH IT
+
+`routes/infra.ts` imported the type `JobType` as a value (`import { Jobs,
+JobType }`). The test loader strips types and then fails to find that export,
+so no test could import the router. It is now `type JobType`. That changes
+nothing at runtime, and it lets the route be tested directly rather than read
+as source.
+
+### HOW IT IS HELD
+
+`cloudflare-worker/test/cron_triggers_branch_d238.test.ts` (new, 4 tests) drives
+the real route on HQ and on a branch (`BRANCH_CODE: 'fr'`). It covers:
+
+- the two `BRANCH_CRONS` copies are equal;
+- HQ is graded against all six;
+- a branch is graded against exactly its own two, and none it never fires;
+- `triggersFor` keeps the display names.
+
+Six mutations were each run both ways. Each broke the code, failed a named test
+with a non-zero exit, was restored from a sha256-checked snapshot, and then
+passed:
+
+1. HQ's list hard-coded in the route.
+2. The helper returning HQ's list on a branch.
+3. The worker copy drifting.
+4. The generator copy drifting.
+5. HQ graded against the branch's list.
+6. HQ's list hard-coded as `triggersFor({})`.
+
+One of them first reached the route by replacing the call with `CRON_TRIGGERS`,
+a name `infra.ts` no longer imports. It was caught, but by a crash, not by the
+list the route returned. It was re-run as a real hard-coding, `triggersFor({}
+as any)`, and that version fails on the list itself. That re-run is the sixth
+mutation above.
+
 ## D240
 
 **The one-holder ceiling is now enforced by the write itself. Two overlapping
