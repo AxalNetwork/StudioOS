@@ -184,8 +184,14 @@ test('the page composes the three in H9\'s order and keeps the directory', () =>
 test('granting the elevation refreshes the badge rather than leaving it stale', () => {
   assert.match(PAGE, /onChanged=\{\(\) => setReloadKey/,
     'the page does not hear about a grant');
-  assert.match(PAGE, /<HqTeamTable reloadKey=\{reloadKey\} \/>/,
-    'the Team table is not told to reload');
+  // D221 gave the table a second prop (`onLoaded`, so the page's rail reads
+  // what the table read). The pin is therefore on the TAG rather than on its
+  // exact spelling: whatever else the table is handed, it must still be
+  // handed the reload key.
+  const tagAt = PAGE.indexOf('<HqTeamTable');
+  assert.ok(tagAt >= 0, 'the Team table is not mounted');
+  const tag = PAGE.slice(tagAt, PAGE.indexOf('/>', tagAt) + 2);
+  assert.ok(tag.includes('reloadKey={reloadKey}'), 'the Team table is not told to reload');
   assert.match(HOLDERS, /onChanged\?\.\(\)/, 'the holder console never tells anyone');
 });
 

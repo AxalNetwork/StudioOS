@@ -168,10 +168,12 @@ async function token(userId: number): Promise<string> {
 }
 
 async function call(
-  a: any, e: any, actor: number, path: string, method = 'GET',
+  a: any, e: any, actor: number, path: string, method = 'GET', json?: Record<string, unknown>,
 ): Promise<{ status: number; body: any }> {
+  const headers: Record<string, string> = { Authorization: `Bearer ${await token(actor)}` };
+  if (json) headers['content-type'] = 'application/json';
   const res = await a.request(
-    path, { method, headers: { Authorization: `Bearer ${await token(actor)}` } }, e,
+    path, { method, headers, body: json ? JSON.stringify(json) : undefined }, e,
   );
   let body: any = null;
   try { body = await res.json(); } catch { /* empty */ }
@@ -333,8 +335,11 @@ test('the holder can TRANSFER it, and the set is never two nor empty', async () 
   // nothing, and it hid the real defect: with one holder, revoke refuses three
   // ways, so a bare ceiling freezes the elevation forever.
   const db = freshDb();
+  // D221 — the transfer carries its reason; without one it is refused before
+  // anything moves (asserted in `hq_team_actions_d221.test.ts`).
   const { status, body } = await call(
     holders, env(db), SUPER, `/${OTHER_ADMIN}?transfer=1`, 'POST',
+    { reason: 'Sue hands HQ to Otto for the autumn cohort' },
   );
   assert.equal(status, 200, 'the holder could not hand the platform on');
   assert.equal(body?.transferred_from, SUPER);

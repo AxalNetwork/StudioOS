@@ -19,6 +19,7 @@ import { branchOfUser } from '../lib/shellRole';
 // the `branchOfUser` import D128's test pins stays exactly as it was.
 import { isSuperAdminUser } from '../lib/shellRole';
 import { REFUND_REASON_MIN, refundReasonOk } from '../lib/refundReason';
+import { drawsAccountControls } from '../lib/accountControls';
 import TrustScoreBadge from '../components/TrustScoreBadge';
 import SecretWriteGate from '../components/SecretWriteGate';
 // Task #1 — embedded as a tab inside Admin Console so admins land on
@@ -936,12 +937,16 @@ export default function AdminPage({ onImpersonate, section = null }) {
                         <td className="px-4 py-3 text-gray-600">{u.email}</td>
                         <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                           {u.role === 'admin' ? (
-                            // Admin role is intentionally read-only in the UI. The PATCH
-                            // /users/:id/role endpoint also refuses to promote into or
-                            // demote out of `admin` — those changes must be made
-                            // directly against the Cloudflare D1 database via SQL.
+                            // Admin role is read-only in THIS picker, and the PATCH
+                            // /users/:id/role endpoint refuses to promote into or demote
+                            // out of `admin`. D221 — the tooltip used to say those changes
+                            // "can only be made via direct database SQL", which stopped
+                            // being true in D134: an administrator is opened through a
+                            // licence (POST /licences/:uid/admins) and demoted there by the
+                            // Super Admin (POST /users/:id/demote-admin), both on the
+                            // licence's Administrators tab.
                             <span
-                              title="Admin role can only be changed via direct database SQL (security policy)"
+                              title="An administrator is opened and demoted on the licence they hold (Licences → Administrators), by the Super Admin — not from this picker"
                               className={`inline-block text-xs font-semibold px-3 py-1 rounded-full ${ROLE_BADGES.admin || 'bg-violet-100 text-violet-700'}`}
                             >
                               Admin
@@ -1021,17 +1026,26 @@ export default function AdminPage({ onImpersonate, section = null }) {
                                 Admit to Lab
                               </button>
                             )}
-                            <button onClick={() => handleImpersonate(u)}
-                              className="px-2.5 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium transition-colors flex items-center gap-1"
-                              title="Login as this user">
-                              <LogIn size={12} /> View As
-                            </button>
-                            <button onClick={() => handleToggleActive(u.id)}
-                              className={`px-2.5 py-1.5 text-xs rounded-lg font-medium transition-colors ${
-                                u.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'
-                              }`}>
-                              {u.is_active ? 'Disable' : 'Enable'}
-                            </button>
+                            {/* D221 — neither is drawn where the server can only
+                                refuse: an admin's row, unless the viewer holds the
+                                elevation (D132 on the toggle, D133 on impersonation),
+                                and the viewer's own row. `lib/accountControls.js`
+                                holds the one rule both controls follow. */}
+                            {drawsAccountControls(u, viewer) && (
+                              <>
+                                <button onClick={() => handleImpersonate(u)}
+                                  className="px-2.5 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium transition-colors flex items-center gap-1"
+                                  title="Login as this user">
+                                  <LogIn size={12} /> View As
+                                </button>
+                                <button onClick={() => handleToggleActive(u.id)}
+                                  className={`px-2.5 py-1.5 text-xs rounded-lg font-medium transition-colors ${
+                                    u.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'
+                                  }`}>
+                                  {u.is_active ? 'Disable' : 'Enable'}
+                                </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1309,8 +1323,10 @@ export default function AdminPage({ onImpersonate, section = null }) {
         <UserDetailModal
           userRow={openUser}
           onClose={() => setOpenUser(null)}
-          onImpersonate={() => { handleImpersonate(openUser); setOpenUser(null); }}
-          onToggleActive={() => { handleToggleActive(openUser.id); setOpenUser(null); }}
+          // D221 — the drawer follows the row's rule: where the server can
+          // only refuse, it is handed no handler and draws no button.
+          onImpersonate={drawsAccountControls(openUser, viewer) ? () => { handleImpersonate(openUser); setOpenUser(null); } : null}
+          onToggleActive={drawsAccountControls(openUser, viewer) ? () => { handleToggleActive(openUser.id); setOpenUser(null); } : null}
         />
       )}
     </div>
@@ -1850,14 +1866,20 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
 
         <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between dark:border-gray-800">
           <div className="flex gap-2">
-            <button onClick={onImpersonate}
-              className="px-3 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium flex items-center gap-1">
-              <LogIn size={12} /> View As
-            </button>
-            <button onClick={onToggleActive}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium ${u.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
-              {u.is_active ? 'Disable account' : 'Enable account'}
-            </button>
+            {/* D221 — absent, never disabled: a handler of null means the
+                server would refuse this viewer on this account. */}
+            {onImpersonate && (
+              <button onClick={onImpersonate}
+                className="px-3 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium flex items-center gap-1">
+                <LogIn size={12} /> View As
+              </button>
+            )}
+            {onToggleActive && (
+              <button onClick={onToggleActive}
+                className={`px-3 py-1.5 text-xs rounded-lg font-medium ${u.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
+                {u.is_active ? 'Disable account' : 'Enable account'}
+              </button>
+            )}
           </div>
           <button onClick={onClose} className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900">Close</button>
         </div>

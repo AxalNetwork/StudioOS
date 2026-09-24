@@ -22432,6 +22432,67 @@ A row that existed only in `cf_dlq_mirror` was counted on Platform and missing o
 
 **285 is still the next free migration.**
 
+## D221
+
+**Team becomes H20's people desk: it says which of its powers are HQ's, stops drawing controls that can only refuse, and gives the elevation transfer — the most consequential write on the platform — a reason, a readable audit row and a floor under who may receive it.**
+
+No migration. No new route. No new `api.js` method: `superAdminGrant` gains a request body. Nothing retires: H20 says it retires the `/admin` Users table, and the brief overrules that, so the directory stays and every `/admin/*` route stays reachable.
+
+### What was wrong
+
+1. **The canvas's notes describe a platform that does not exist.** H20 draws five HQ-only powers and four admin powers, each with a note. Read against the route that performs each act, five notes are false: "banner both sides see" (the impersonated account sees no banner and is not told), "both parties notified" (nobody is), "Lands on Programs as well" (Admit to Lab upserts `user_spinout_flags` and places nobody in a cohort), "Within the licence's seats only" (no grant anywhere is checked against a seat count), and "The decision happens on Approvals" (Approvals decides nothing).
+2. **The directory drew View As and Disable on every row.** On an administrator's row, a plain admin can only get a 403 back, because D133 made both acts the holder's alone. On the viewer's own row, both are refused (`Cannot deactivate yourself`). D134's rule is that a control the server can only refuse is not drawn.
+3. **The Admin role badge said the role changes only "via direct database SQL".** That has been false since D134, which opens and demotes administrators through the licence.
+4. **Extend re-ran the holder guard and not D133's.** `POST /impersonate-sessions/:id/extend` says it "re-checks everything the original grant checked". It re-checked the holder-vs-holder guard alone, so a session the holder opened on an administrator could be extended, thirty minutes at a time, by the same account after it had handed the elevation on. That account can no longer open the session.
+5. **The transfer took no reason, and Security could not name its target.** Every other act H20 files under HQ asks for a typed reason. The elevation transfer did not. Its two audit rows were a raw `INSERT INTO admin_audit_log` that left `viewed_user_id` empty, and that is the column the governance feed joins to name who an act was about.
+6. **A deactivated administrator could receive the elevation.** The transfer's INSERT filters on role and not on `is_active`, and nothing else checked. The picker offered deactivated admins, because the Team payload lists every admin with its state. A transfer to one leaves the old holder without the elevation and the new holder unable to sign in. Re-activating an administrator is itself the holder's act alone (D133), so nothing inside the product could undo it; the only way back would have been SQL. This was found while writing D221's own race test, not in the audit.
+
+### What shipped
+
+- **`/admin/accounts` in H20's order**, headed **Team**: the holder console, the Team table, the two action cards (`pages/hq/HqTeamActions.jsx`), then the Admin Console's Users panel. Under the view-as overlay the HQ-only card is absent, and the holder console and directory are not drawn: both read HQ's own database, and the page says so. A `WorkerRail` on the `super_admin` tier reads what the Team table read (`HqTeamTable` gains `onLoaded`). It shows no HQ figure under the overlay, and it has four literal `unavailable` rows.
+- **The cards keep the canvas's names verbatim and replace its notes.** Each row says what gates the act, where it is done, and whether Security records it. "View as a role shell" stays in the HQ card, where the canvas draws it, and is marked **Every admin's**: every admin's picker offers it, a branch admin's included, and it changes nothing but the browser's chrome. The cards draw no control of their own. Their links are literal and land on registered routes.
+- **One rule for the directory's two controls.** `lib/accountControls.js`'s `drawsAccountControls(row, viewer)` returns false for the viewer's own row. It returns false for an `admin`-role row unless the viewer holds the elevation. The table row and the profile drawer both ask it. The badge's tooltip now says an administrator is opened and demoted on the licence they hold, by the Super Admin.
+- **Extend re-runs D133's guard**, with the grant's own test and code: 403 `super_admin_required`.
+- **The transfer asks for a reason, reads it at the same floor as the route, and sends it.** The route checks it last, after every refusal that names a real obstacle, and requires `HOLDER_REASON_MIN = 10` characters. That is the floor the other four HQ acts share. The form mirrors it, and a test holds the two numbers equal.
+- **Both audit rows go through `logAdminAction`**, carrying `target_user_id`, the reason and `transfer: true`. So Security's feed names who received the elevation, who gave it up, and why.
+- **A deactivated successor is refused** with 409 `not_active`, before the reason is asked for. The picker offers active admins only, and the card states the condition.
+- **The plain-grant branch is gone.** Only a holder passes the write bar, so the active set `holders()` reads always contains the caller, and every grant is a transfer. The first mutation run proved the branch unreachable: removing its reason check, and separately its audit call, both passed every test (34 of 36 caught). It is deleted rather than kept for decoration.
+- **The empty-set case now refuses.** The active set can still read empty in one way: the elevation leaves between the gate and the read. That case now refuses with 409 `no_active_holder` and moves nothing. The deleted branch would have granted into the gap.
+
+### Corrections while building
+
+- **D133's comment claimed the caller is "necessarily" the holder when the ceiling passes. That holds only for one request at a time.** The gate, `holders()` and the batch are three separate reads. Two overlapping transfers by one holder can both pass the gate, and the second can then write its successor beside the first one's, leaving two holders. Re-adding the id conjunct D133 removed would narrow that and not close it, because both requests can read the set before either writes. The comment now says so. The fix is a write that refuses unless the caller still holds the elevation at the write (a conditional INSERT plus a `meta.changes` check). It is its own change, filed as #405.
+- **`hq_team_h9.test.mjs` is re-aimed, not loosened.** It pinned the Team table's tag as exactly `reloadKey={reloadKey}`. The tag now also carries `onLoaded`, so the assertion reads the tag and requires the reload key inside it.
+- **Two existing worker tests send a reason.** `super_admin.test.ts` and `admin_over_admin_d133.test.ts` each ran a transfer without one. They now send one, and the refusal without one has its own test.
+
+### The judgement calls, each cheap to strike
+
+1. **The role shell stays in the HQ card, marked as every admin's.** That is where the canvas draws it, and so where an operator will look for it. *Strike it and it moves to the Admin card.*
+2. **Under the overlay, H20's "these four become the row actions" is refused, with its reason.** A branch account search returns a role and an active state, not KYC, access or Lab state, so a branch row has nothing those actions could act on. *Strike it and the row actions need `searchAccounts` widened first.*
+3. **The deactivated-successor refusal is folded in rather than filed.** It is the same handler and the same act, and it is a lockout the shipped picker could reach in one request. *Strike it and it becomes its own task, with the picker left as it was.*
+4. **The overlapping-transfer race is filed, not folded in.** Its fix changes the write's semantics and needs an interleaving test of its own. The empty-set refusal shipped here closes only the one interleaving that reads empty.
+
+### Filed, not folded in
+
+- **#397.** Impersonation does not tell the target. Extensions have no ceiling and ask no reason, and Extend sits outside the recovery cool-off.
+- **#398.** Deactivating an admin needs no authenticator, no step-up and no reason, while demoting one needs all three.
+- **#399.** No route reaches an admin whose account lives on a branch database.
+- **#400.** Transferring the elevation notifies nobody.
+- **#401.** The binding-agreement role override is recorded only in `activity_logs`, its subject-side row omits it, and nothing guards a role that signed terms fix.
+- **#402.** The HQ→branch support session (D120) has no SPA caller, and two impersonation callers are stale.
+- **#403.** The four admin actions are not freeze-gated on a branch, and the branch account search cannot show their state.
+- **#404.** "View As" (impersonate) and "View as" (role shell) share a name.
+- **#405.** Two overlapping transfers can leave two holders (above).
+
+### VERIFIED
+
+- `npm run test:drift` exits 0 on the landed tree, `main` at `d585eec84` plus this change. The exit code was read from a redirected log. Frontend: **3170** tests, all pass. Worker: **4114** tests, **4111** pass, plus the same **3** pre-existing environment-gated skips. Retention: **48**. Zero `not ok`. The run includes `test:guards`, both typechecks, `lint:undef` and `check-dark-mode`.
+- Every D221 test is confirmed **by name** in that log, not inferred from a count: the 14 in `frontend/test/hq_team_h20.test.mjs`, the 9 in `cloudflare-worker/test/hq_team_actions_d221.test.ts`, and the 12 in the re-aimed `frontend/test/hq_team_h9.test.mjs`.
+- `check-decision-ids` reports D1 through D233 in file order, with D221 between D220 and D222. `check-api-drift`, `check-folder-docs`, `check-unused-imports`, `check-react-hook-imports` and `check-frontend-logging` all exit 0.
+- The root `npm run build` ran with the local retention ledger moved aside. After it, `check-docs-fresh --strict`, `prerender-og --check` and `check-docs-assets-closure` exit 0, and `docs/.build-source` equals the hash of `frontend/src`.
+- **42 mutations applied, 42 caught.** Every anchor was checked unique before any write, every mutation changed bytes, and every file was restored byte-identical. The first run caught 34 of 36. Its two escapes, dropping the plain grant's reason check and dropping its audit call, are what proved the branch unreachable, and it was deleted. Three mutations are caught only because the new test interleaves: a D1 shim removes the elevation at the exact moment the route reads the active set. They make the empty set grant into the gap, delete the `no_active_holder` refusal, and turn it into a 200. A test that cannot interleave cannot see a race.
+- No migration. **285 is still the next free migration.**
+
 ## D222
 
 **A promo code whose product list cannot be read does not apply to every product.**

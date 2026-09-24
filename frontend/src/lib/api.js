@@ -2080,9 +2080,12 @@ export const api = {
   // D133 — `transfer` is the holder handing the platform on. The elevation is
   // capped at one, and with one holder revoke refuses three ways, so without
   // this flag the grant would be permanently unreachable rather than merely
-  // guarded. The server does both writes in one batch.
-  superAdminGrant: (userId, { transfer = false } = {}) =>
-    request(`/admin/super-admins/${userId}${transfer ? '?transfer=1' : ''}`, { method: 'POST' }),
+  // guarded. The server does both writes in one batch. D221 — the change
+  // carries the holder's typed `reason`, which Security records beside it.
+  superAdminGrant: (userId, { transfer = false, reason = '' } = {}) =>
+    request(`/admin/super-admins/${userId}${transfer ? '?transfer=1' : ''}`, {
+      method: 'POST', body: JSON.stringify({ reason: String(reason || '').trim() }),
+    }),
   superAdminRevoke: (userId) => request(`/admin/super-admins/${userId}`, { method: 'DELETE' }),
   // Task #7 — admin-managed OAuth client credentials per provider.
   adminListIntegrationKeys: () => request('/admin/integration-keys'),
