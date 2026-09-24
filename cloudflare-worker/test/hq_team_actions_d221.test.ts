@@ -87,7 +87,7 @@ function freshDb() {
   });
   for (const t of [
     'users', 'super_admins', 'user_sessions', 'activity_logs',
-    'impersonation_sessions', 'admin_audit_log',
+    'impersonation_sessions', 'admin_audit_log', 'notifications_inbox',
   ]) db.exec(ddl(t));
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)');
   u.run(HOLDER, 'admin', 'Holder Hart', 'holder@axal.example');
@@ -445,4 +445,102 @@ test('D240: a plain transfer through the racing env still lands, audited once ea
   assert.equal(r.body?.transferred_from, HOLDER);
   assert.deepEqual(holderIds(db), [SUCCESSOR]);
   assert.deepEqual(auditRows(db).map((x: any) => x.action), ['super_admin_grant', 'super_admin_revoke']);
+});
+
+/* ------------------------------------------------------------------ *
+ * 4. D241 — both parties are told, and only when it moved             *
+ * ------------------------------------------------------------------ */
+
+// Nothing may leave the machine: a notice's email half has no provider here,
+// and a test that let it try the network would be testing the network.
+const outbound: string[] = [];
+const realFetch = globalThis.fetch;
+globalThis.fetch = (async (input: any) => {
+  outbound.push(String(typeof input === 'string' ? input : input?.url));
+  return new Response('no network in tests', { status: 599 });
+}) as typeof fetch;
+process.on('exit', () => { globalThis.fetch = realFetch; });
+
+const notices = (db: any) =>
+  db.prepare('SELECT user_id, type, title, body, link, category, severity FROM notifications_inbox ORDER BY id').all() as any[];
+
+test('D241: a transfer that lands tells the successor and the former holder, as a security notice', async () => {
+  const db = freshDb();
+  const before = outbound.length;
+  const r = await call(superAdmins, db, HOLDER, `/${SUCCESSOR}?transfer=1`, { reason: HANDOVER });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body?.notified, { successor: true, former: true }, 'the response does not report both notices');
+
+  const rows = notices(db);
+  assert.deepEqual(rows.map((n: any) => n.user_id).sort(), [HOLDER, SUCCESSOR].sort(), 'not exactly one notice to each party');
+  for (const n of rows) {
+    assert.equal(n.type, 'super_admin_transfer');
+    // `security` is a CRITICAL category: quiet hours and the digest cannot hold it.
+    assert.equal(n.category, 'security');
+    assert.equal(n.severity, 'critical');
+    assert.equal(n.link, '/admin/accounts', 'the notice does not lead to the holder console');
+    assert.ok(n.body.includes(HANDOVER), 'the notice does not carry the reason the holder typed');
+    assert.doesNotMatch(`${n.title} ${n.body}`, /advis|advice|recommend|fiduciar/i);
+  }
+  assert.match(rows.find((n: any) => n.user_id === SUCCESSOR).title, /You now hold/);
+  assert.match(rows.find((n: any) => n.user_id === HOLDER).title, /You handed on/);
+  assert.equal(outbound.length, before, `a notice reached the network: ${outbound.slice(before).join(', ')}`);
+});
+
+test('D241: a transfer that moves nothing tells nobody', async () => {
+  // A missing reason, a lost race, a successor who stopped being eligible: each
+  // is refused before or at the write, and none of them may send a notice
+  // saying the elevation moved.
+  const noReason = freshDb();
+  await call(superAdmins, noReason, HOLDER, `/${SUCCESSOR}?transfer=1`, { reason: 'short' });
+  assert.equal(notices(noReason).length, 0, 'a transfer refused for its reason sent a notice');
+
+  const race = withContender(freshDb());
+  const { e } = racingBatchEnv(race, async () => {
+    await call(superAdmins, race, HOLDER, `/${SUCCESSOR}?transfer=1`, { reason: HANDOVER });
+  });
+  const lost = await call(superAdmins, race, HOLDER, `/${CONTENDER}?transfer=1`, { reason: HANDOVER }, e);
+  assert.equal(lost.status, 409);
+  assert.equal(lost.body?.notified, undefined, 'a refusal reports notices');
+  assert.deepEqual(notices(race).map((n: any) => n.user_id).sort(), [HOLDER, SUCCESSOR].sort(),
+    'the losing transfer sent notices of its own — only the one that landed may');
+
+  const repeat = freshDb();
+  const { e: e2 } = racingBatchEnv(repeat, async () => {
+    await call(superAdmins, repeat, HOLDER, `/${SUCCESSOR}?transfer=1`, { reason: HANDOVER });
+  });
+  const again = await call(superAdmins, repeat, HOLDER, `/${SUCCESSOR}?transfer=1`, { reason: HANDOVER }, e2);
+  assert.equal(again.body?.already, true);
+  assert.equal(notices(repeat).length, 2, 'the double-click told both parties a second time');
+
+  const demoted = freshDb();
+  const { e: e3 } = racingBatchEnv(demoted, async () => {
+    demoted.prepare("UPDATE users SET role = 'founder' WHERE id = ?").run(SUCCESSOR);
+  });
+  const refused = await call(superAdmins, demoted, HOLDER, `/${SUCCESSOR}?transfer=1`, { reason: HANDOVER }, e3);
+  assert.equal(refused.body?.code, 'successor_changed');
+  assert.equal(notices(demoted).length, 0, 'a transfer that did not land sent a notice');
+});
+
+test('D241: a notice that cannot be written never makes a landed transfer read as failed', async () => {
+  // The inbox refuses every write. The transfer has already moved and been
+  // recorded, so it answers 200 and says, per party, that the notice did not
+  // go — reported, not assumed.
+  const db = freshDb();
+  const base = makeD1(db);
+  const e = {
+    JWT_SECRET, ENVIRONMENT: 'development',
+    DB: {
+      ...base,
+      prepare(sql: string) {
+        if (/notifications_inbox/.test(sql)) throw new Error('D1_ERROR: inbox unavailable');
+        return base.prepare(sql);
+      },
+    },
+  } as any;
+  const r = await call(superAdmins, db, HOLDER, `/${SUCCESSOR}?transfer=1`, { reason: HANDOVER }, e);
+  assert.equal(r.status, 200, `a failed notice failed the transfer: ${JSON.stringify(r.body)}`);
+  assert.deepEqual(r.body?.notified, { successor: false, former: false }, 'an unsent notice was reported as sent');
+  assert.deepEqual(holderIds(db), [SUCCESSOR]);
+  assert.equal(auditRows(db).length, 2, 'the record of the transfer depended on the notice');
 });
