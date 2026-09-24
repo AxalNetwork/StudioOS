@@ -16,8 +16,10 @@
  *                      OWN endpoint, so a slow ledger costs this zone only.
  *   Open disputes      real, and read from its OWN endpoint so that Stripe
  *                      being slow or down costs this zone and not the page.
- *   Promo ceilings     REAL — HQ sets a ceiling per licence per period and
- *                      pushes it to the branch. What is still absent is the
+ *   Promo ceilings     REAL — HQ sets a ceiling per licence per period, here
+ *                      since D228 (the editor under the list), and pushes it
+ *                      to the branch. Nothing at checkout enforces it yet, and
+ *                      the editor says so. What is still absent is the
  *                      ISSUED figure when a branch has not reported one, and
  *                      a null there is not a zero.
  *
@@ -304,6 +306,111 @@ function RefundForm({ onDone }) {
   );
 }
 
+/**
+ * D228 — what the ceiling editor sends, or why it will not. Pure, so a test
+ * can put a form through it. Money leaves as integer minor units; a blank or
+ * unreadable amount is refused rather than sent as 0, because the worker
+ * would (since D228) refuse it too and a 0 ceiling is a real instruction.
+ */
+export function ceilingPayload({ licenceUid, period, amount, currency }) {
+  if (!licenceUid) return { error: 'Choose the licence this ceiling is for.' };
+  if (!/^\d{4}-Q[1-4]$/.test(String(period || ''))) return { error: 'The period is a quarter, written YYYY-Qn.' };
+  const text = String(amount ?? '').trim();
+  if (text === '') return { error: 'Enter the ceiling. 0 is a ceiling: no promotions this period.' };
+  const n = Number(text);
+  if (!Number.isFinite(n) || n < 0) return { error: 'The ceiling must be a figure of 0 or more.' };
+  const cents = Math.round(n * 100);
+  const cur = String(currency || '').trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(cur)) return { error: 'The currency is a three-letter code, such as EUR.' };
+  return { licenceUid, body: { period: String(period), ceiling_cents: cents, currency: cur } };
+}
+
+/** Said on the editor, because nothing in checkout reads a ceiling yet. */
+export const CEILING_NOT_ENFORCED =
+  'Setting a ceiling records it at HQ and pushes it to the branch. Nothing at checkout checks a '
+  + 'code against it yet: a branch can issue past its ceiling and no payment is refused because of it.';
+
+/**
+ * D228 — the promo-ceiling editor. `licences` is null (loading), UNAVAILABLE
+ * (the read failed) or the licence list; `onSave(licenceUid, body)` is the
+ * worker call. The route's own gate and audit apply: super admin, and a
+ * branch-action mirror row for the push.
+ */
+export function CeilingEditor({ licences, currentPeriod, onSave }) {
+  const [f, setF] = useState({ licenceUid: '', period: currentPeriod || '', amount: '', currency: '' });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const list = licences && licences !== UNAVAILABLE ? licences : null;
+  const period = f.period || currentPeriod || '';
+  const picked = list ? list.find((l) => l.uid === f.licenceUid) : null;
+  const currency = f.currency || picked?.currency || '';
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (busy) return;
+    const p = ceilingPayload({ licenceUid: f.licenceUid, period, amount: f.amount, currency });
+    if (p.error) { setMsg({ err: true, text: p.error }); return; }
+    setBusy(true); setMsg(null);
+    try {
+      const r = await onSave(p.licenceUid, p.body);
+      // Saved and pushed are two facts, and the second can fail alone.
+      setMsg(r?.pushed?.ok
+        ? { err: false, text: `Ceiling saved for ${r.period} and pushed to the branch.` }
+        : { err: false, warn: true, text: `Ceiling saved for ${r?.period || period} at HQ. Not pushed: ${r?.pushed?.reason || 'the branch did not confirm.'}` });
+      setF((x) => ({ ...x, amount: '' }));
+    } catch (err) {
+      setMsg({ err: true, text: err?.data?.message || err?.message || 'The ceiling was not saved.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const input = 'w-full rounded-lg border border-axal-hairline bg-axal-ground px-2.5 py-1.5 text-[12.5px]';
+  return (
+    <div className="mt-4 border-t border-axal-hairline pt-3" data-testid="hq-revenue-ceiling-editor">
+      <div className="text-[11px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Set a ceiling</div>
+      <p className="mt-1 text-[11.5px] leading-relaxed text-amber-700 dark:text-amber-300" data-testid="hq-revenue-ceiling-not-enforced">
+        {CEILING_NOT_ENFORCED}
+      </p>
+      {licences === UNAVAILABLE && (
+        <div className="mt-2">
+          <Unreadable what="The licence list" claim="No ceiling can be set until it is read; this is not a claim that there are no licences." />
+        </div>
+      )}
+      {licences === null && <p className="mt-2 text-[11.5px] text-axal-faint">Loading the licences…</p>}
+      {list && list.length === 0 && (
+        <p className="mt-2 text-[12px] text-axal-muted" data-testid="hq-revenue-ceiling-no-licences">
+          No territory licence exists yet, so there is nothing to set a ceiling for.
+        </p>
+      )}
+      {list && list.length > 0 && (
+        <form onSubmit={submit} className="mt-2 grid gap-2 sm:grid-cols-4">
+          <select className={`${input} sm:col-span-2`} value={f.licenceUid} onChange={(e) => set('licenceUid', e.target.value)} aria-label="Licence">
+            <option value="">Licence…</option>
+            {list.map((l) => (
+              <option key={l.uid} value={l.uid}>{l.brand_name || l.licence_ref || l.uid}{l.status && l.status !== 'active' ? ` · ${l.status}` : ''}</option>
+            ))}
+          </select>
+          <input className={input} value={period} onChange={(e) => set('period', e.target.value)} placeholder="YYYY-Qn" aria-label="Period" />
+          <input className={input} value={currency} onChange={(e) => set('currency', e.target.value)} placeholder="EUR" maxLength={3} aria-label="Currency" />
+          <input className={`${input} sm:col-span-2`} type="number" step="0.01" min="0" value={f.amount} onChange={(e) => set('amount', e.target.value)} placeholder="Ceiling for the period" aria-label="Ceiling" />
+          <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
+            <button type="submit" disabled={busy} className="rounded-lg bg-axal-violet px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-50">
+              {busy ? 'Saving…' : 'Save ceiling'}
+            </button>
+          </div>
+          {msg && (
+            <p role="status" className={`sm:col-span-4 text-[11.5px] ${msg.err ? 'text-red-700 dark:text-red-300' : (msg.warn ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300')}`}>
+              {msg.text}
+            </p>
+          )}
+        </form>
+      )}
+    </div>
+  );
+}
+
 export default function RevenuePage() {
   const [data, setData] = useState(null);            // null = loading, UNAVAILABLE = failed
   // Disputes load separately on purpose: they are the one figure that comes
@@ -317,6 +424,8 @@ export default function RevenuePage() {
   const [ceilings, setCeilings] = useState(null);
   // H21 (D224) — the refunds HQ issued, from their audit rows. Its own read.
   const [refunds, setRefunds] = useState(null);
+  // D228 — the licences the ceiling editor offers. Its own read.
+  const [licences, setLicences] = useState(null);
 
   const load = useCallback(() => {
     setData(null);
@@ -350,9 +459,21 @@ export default function RevenuePage() {
       setRefunds(UNAVAILABLE);
     });
   }, []);
+  const loadLicences = useCallback(() => {
+    setLicences(null);
+    api.licences().then((r) => setLicences(Array.isArray(r?.items) ? r.items : UNAVAILABLE), (e) => {
+      reportError('hq-revenue-licences', e);
+      setLicences(UNAVAILABLE);
+    });
+  }, []);
+  const saveCeiling = useCallback(async (uid, body) => {
+    const r = await api.promoCeilingSet(uid, body);
+    loadCeilings();
+    return r;
+  }, [loadCeilings]);
   useEffect(() => {
-    load(); loadDisputes(); loadStatements(); loadCeilings(); loadRefunds();
-  }, [load, loadDisputes, loadStatements, loadCeilings, loadRefunds]);
+    load(); loadDisputes(); loadStatements(); loadCeilings(); loadRefunds(); loadLicences();
+  }, [load, loadDisputes, loadStatements, loadCeilings, loadRefunds, loadLicences]);
 
   const ready = data && data !== UNAVAILABLE;
   const fees = ready ? data.licence_fees : null;
@@ -715,6 +836,11 @@ export default function RevenuePage() {
             {promos?.available && (
               <p className="mt-3 text-[12.5px] leading-relaxed text-axal-muted">{promos.budget_reason}</p>
             )}
+            <CeilingEditor
+              licences={licences}
+              currentPeriod={ceilings && ceilings !== UNAVAILABLE ? ceilings.current_period : ''}
+              onSave={saveCeiling}
+            />
           </Zone>
         </div>
       </div>
