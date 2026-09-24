@@ -108,8 +108,8 @@ jobs:
           # it here as well is not redundant: it is what lets the value be used
           # in a shell at all, and it fails the run before any credential is
           # handed to a command built from it.
-          if [[ ! "$BRANCH" =~ ^[a-z][a-z0-9-]{1,15}$ ]]; then
-            echo "::error::branch must match ^[a-z][a-z0-9-]{1,15}\$ — got '$BRANCH'"
+          if [[ ! "$BRANCH" =~ ^[a-z][a-z0-9-]{1,15}$ || "$BRANCH" == hq ]]; then
+            echo "::error::branch must match ^[a-z][a-z0-9-]{1,15}\$ and not be 'hq' (HQ's own code, D211) — got '$BRANCH'"
             exit 1
           fi
           echo "TARGET_ARGS=--branch $BRANCH" >> "$GITHUB_ENV"

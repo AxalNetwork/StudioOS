@@ -42,7 +42,7 @@ const primaryBtn =
 const ghostBtn =
   'rounded-lg border border-axal-hairline bg-axal-ground px-3 py-1.5 text-[12px] font-semibold text-axal-ink '
   + 'hover:bg-axal-ground/80 disabled:cursor-not-allowed disabled:opacity-40 '
-  + 'dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+  + 'dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 
 const BAND_SKIN = {
   partner: 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40',

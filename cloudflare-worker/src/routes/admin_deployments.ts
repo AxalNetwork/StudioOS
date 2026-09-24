@@ -72,8 +72,21 @@ r.post('/licences/:uid/deploy', async (c) => {
   // would be accepted here and rejected by the workflow it dispatched to,
   // which is two definitions of a valid branch code. There is one (D105).
   const code = String(body.code ?? '').trim();
+  // `hq` passes the charset and is still refused, with its own sentence: it is
+  // HQ's own code in the metrics store, so a branch given it would be counted
+  // into HQ's line on Analytics (D211). The regex carries the same
+  // reservation; this line only says why in words a person can act on.
+  if (code === 'hq') {
+    return c.json({
+      error: 'bad_code',
+      message: 'The code "hq" is HQ\'s own deployment in the metrics store, so no branch may take it.',
+    }, 400);
+  }
   if (!BRANCH_CODE_RE.test(code)) {
-    return c.json({ error: 'bad_code', message: `code must match ${BRANCH_CODE_RE}` }, 400);
+    return c.json({
+      error: 'bad_code',
+      message: 'A branch code is 2 to 16 characters: a lowercase letter, then lowercase letters, digits or hyphens.',
+    }, 400);
   }
   const d1 = String(body.d1_jurisdiction ?? 'none').toLowerCase();
   const hint = String(body.location_hint ?? 'none').toLowerCase();

@@ -230,7 +230,7 @@ export default function PlatformSwitchesPage() {
     <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-6" data-testid="hq-switches-page">
       <div className="min-w-0 space-y-4">
         <div>
-          <Link to="/admin/platform" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-muted hover:text-axal-ink">
+          <Link to="/admin/platform" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-muted hover:text-axal-ink dark:hover:text-gray-100">
             <ArrowLeft size={13} /> Platform
           </Link>
           <h1 className="mt-1 text-xl font-extrabold tracking-tight">Switches</h1>

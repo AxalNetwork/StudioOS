@@ -20764,7 +20764,7 @@ sidebar stays the canvas's eight (#322 is already a decision about it).
 | H15: *"Revenue by stream · what branches wrote at period close"* — subscriptions, programme fees, perks | no branch reports usage to HQ; `reportUsage` has **no caller** (#354). Programme fees and perks are **not income** this platform records. **Not recorded** |
 | H15's foot: an unreadable branch *"is nonetheless current on every card here"* | true of the one card the dataset feeds. The page reads **no binding**, so a branch's binding state cannot touch it. The foot the payload carries is *"Aggregates, never records."* |
 | H15: *"All subsidiaries ▾"* | the page is **not narrowed** by H12's overlay, and says so under it: every branch is already its own line, and narrowing the chart to one would hide the comparison it exists for |
-| S15 KPI: *"this D1 · accounts with an event in the week"* | the count reads **only the middleware's rows** (`endpoint IS NOT NULL`). About forty other writers put rows in `activity_logs`, and some are addressed to an account that did nothing — a notice that "your role was changed" is filed under the person it happened to |
+| S15 KPI: *"this D1 · accounts with an event in the week"* | the count reads **only the middleware's rows** (`endpoint IS NOT NULL`). Fifty-two other files write `activity_logs` rows — 137 statements, measured in D211, where this cell first said "about forty" — and some are addressed to an account that did nothing — a notice that "your role was changed" is filed under the person it happened to |
 | S15: *"Median approval age · 34h · HQ median 19h"* | measured for **referrals only**, the one queue whose decision is written once and never rewritten, over 30 days and with its n. HQ publishes **no median of this**, so there is no delta, and the tile says so |
 | S15: a dashed median across all eight weeks, *"anonymised median 226 · n 4 branches · computed by HQ 12 Sep 09:10"* | HQ publishes the median for **one week**, the last complete one, and stamps the row with that Monday. The caption names the week, n and when HQ computed it, and the rule sits at its **true value** on the line's own scale. Withheld (fewer than three branches) and unreadable (no table) are **two sentences**, and neither draws a line at zero |
 | S15 approval age: LP applications 41h, cohort applications 29h, referrals 17h, content to HQ 96h | referrals and content to HQ are **timed**. LP applications cannot be: `reviewed_at` is rewritten on every status change and a decision can be reversed. Cohort applications cannot be: `decided_at` is overwritten on a re-decision and a rolled application starts a new row. Both are **Not recorded**, each with that reason. Content to HQ keeps the canvas's note that **the clock is HQ's** |
@@ -20778,8 +20778,10 @@ sidebar stays the canvas's eight (#322 is already a decision about it).
     decides a log row by. The skip list **moved here**, and the middleware
     imports it rather than keeping a copy;
   - `aeLoggedRequestPredicate()` — the same rule as an Analytics Engine WHERE
-    clause, built from the same list. It takes no parameter, uses only `LIKE`
-    and `NOT LIKE`, and refuses to build if a skip path ever carries a LIKE
+    clause, built from the same list. It takes no parameter, uses `LIKE`,
+    `NOT LIKE` and one numeric pair — `(double2 < 429 OR double2 > 429)`,
+    which is "not 429" (this line said "only `LIKE` and `NOT LIKE`" until
+    D211) — and refuses to build if a skip path ever carries a LIKE
     wildcard. A test holds the two rules to each other path by path;
   - `ACTIVE_ACCOUNT_BASIS` — the one sentence both pages print under the
     figure;
@@ -20821,8 +20823,12 @@ sidebar stays the canvas's eight (#322 is already a decision about it).
   `branchOverview()` reports the branch's count for the last complete week and
   the Monday it measured. HQ medians it only across branches reporting the
   **same** Monday, and stamps the row with that Monday rather than the
-  quarter: two branches' "last week" differ for an hour a week around midnight
-  UTC on Monday, and a median across two different weeks describes neither. A
+  quarter: a median across two different weeks describes neither. (Corrected
+  in D211: this said two branches' "last week" differ "for an hour a week
+  around midnight UTC on Monday", which nothing supports — HQ publishes daily
+  at 04:55 UTC, so every answering branch measures the same Monday. The
+  same-Monday filter is a defence: a branch reporting another Monday — a
+  stale Worker, a skewed clock — is left out rather than mixed in.) A
   branch whose log began **inside** the week offers nothing, because four
   days are not a week's figure.
 - **`verdictSpans`**, extracted from the referrer's own average into
@@ -20908,7 +20914,10 @@ sidebar stays the canvas's eight (#322 is already a decision about it).
   `toUtcInstant` (D136) now. The test reads the stamps as a reader in
   `Asia/Kolkata` would, five and a half hours off UTC, because the sandbox runs
   in UTC, where the defect is invisible. It is load-bearing: both mutations
-  that remove the normalisation fail it.
+  that remove the normalisation fail it. (Corrected in D211: those two
+  mutations were `pushedLabel`'s and `inZone`'s. `dateInZone` had no
+  assertion at all until D211 added one — a cycle's first day, two hours into
+  it in UTC — and a mutation that removes its normalisation now fails it.)
 - **Two constructs were avoided rather than assumed.** Analytics Engine SQL's
   `!=` could not be confirmed from the documentation, so "not 429" is
   `< 429 OR > 429`. On D1, the first logged day is `ORDER BY … LIMIT 1` rather
@@ -20963,8 +20972,10 @@ sidebar stays the canvas's eight (#322 is already a decision about it).
 - **A branch reading the shared dataset** — H15's read is the holder's by its
   caller, and a branch holding SQL credentials is already filed (#360).
 - **Two defects found beside this work**, filed rather than fixed here:
-  `HqBranchOverlay` passes `num(live.backlog)`, which is `NaN` for the object
-  the backlog is (#365); and `BranchPrograms` passes the rail `[label, value]`
+  `HqBranchOverlay` passes `num(live.backlog)`, which is `null` for the object
+  the backlog is — `num` returns `null` for anything non-finite, so a branch
+  that sent its backlog read as one that answered without it (#365; this
+  line said `NaN` until D211, which fixes it); and `BranchPrograms` passes the rail `[label, value]`
   pairs where `WorkerRail` takes strings (#366).
 
 ### VERIFIED
@@ -21034,3 +21045,362 @@ at the median — and the re-run caught W5 with both. By area:
 
 D210 adds no migration, so nothing is owed in D1. **285 is still the next free
 migration, and D211 the next decision.**
+
+## D211
+
+**D210's review found places where the two Analytics pages, and the data
+behind them, stated things that were not so. A read that failed was drawn as
+"Not recorded", which claims there was nothing to read. A line's one gap
+reason was printed as the reason its newest week was blank, and it was often
+an older week's reason. A four-week change, a median, and a branch's own
+figure beside that median each set part of a week beside whole weeks. The
+code `hq`, which is HQ's own line in the metrics store, was free for a branch
+to take. A week-gate count nobody could read printed as "0 failed". Each
+claim is corrected where it is made. Where D210's own record said something
+that was not so, it is corrected in place.**
+
+#368 and #372. **No migration**, so **285 is still free**. **No new route and
+no new `api.js` method**: every field below rides a payload the page already
+fetches, so `check-api-drift` has nothing to say. `frontend/src` changes, so
+`docs/` is rebuilt. **Nothing retires.**
+
+### WHAT WAS WRONG, AND WHAT SHIPPED
+
+1. **A failed read was drawn as "Not recorded".** `ui/Honesty.jsx` keeps two
+   absences apart: a store that was read and holds nothing, and a read that
+   failed, where nothing is known either way. D210 drew both the same way.
+   Every payload now marks a failed read with `unreadable: true`. That covers:
+   - HQ's metrics read, when Analytics Engine did not answer or answered in a
+     shape the fold cannot read;
+   - the branch's request log, referral log and escalation log;
+   - the seat count;
+   - the benchmark copy;
+   - the revenue summary.
+
+   `KpiTile` takes the flag and carries a `data-state`. The two charts and the
+   revenue card draw a failed read as `<Unreadable>` with a retry. **A Worker
+   with no Analytics Engine credential stays "Not recorded" and gets no
+   retry**, because retrying cannot change it. `unreadable` is only ever set
+   on a failed read.
+2. **One gap reason per line, printed for the wrong week.** `seriesValues`
+   kept a single reason per series: the first one it met walking from the
+   oldest week. The legend printed that reason beside the newest week. On a
+   year's range it named the store's floor for a line whose recent weeks were
+   blank for another reason, and a line with no rows at all read the cap
+   sentence.
+   - Each week now carries its own reason (`gaps`, aligned with `values`).
+   - `gap_reason` is the last complete week's reason, and is absent when that
+     week has a figure.
+   - `gap_notes` states every reason the chart's blank points need, once each,
+     keyed by `gap`, in `GAP_ORDER`: cap, store floor, no rows, before the
+     series.
+   - The cap's size rides on the cap's own note, so a capped read is described
+     once rather than in two paragraphs.
+3. **The legend printed a reason beside a number.** A reason next to a figure
+   reads as that figure's caveat, which is not what it says. It is printed only
+   beside a missing figure now.
+4. **Part of a week was set beside whole weeks, three times.**
+   `partialWeekReason(firstDay, monday)` is now **one rule with three
+   readers**:
+   - the median's input (`activeAccountsInWeek`);
+   - the branch's own figure beside the median;
+   - the KPI's four-week change.
+
+   Under that rule, **the week holding a line's first recorded request is not
+   a whole week, whatever day that request fell on**.
+   - D210's median input compared the first logged day with the Monday using
+     `>`, so a branch whose log began on the Monday itself put a partial week
+     into the median.
+   - D210's four-week change did not ask the question at all, so half a week
+     of logging read as growth.
+5. **The change was refused as "two populations" for a week the read never
+   reached.** When a line is blank at one end, the refusal now names the
+   reason that holds for that week, ranked:
+   - the row cap;
+   - then the store's floor;
+   - then, and only then, a change in who is counted.
+6. **HQ stated a first week it cannot see.** A line whose earliest row is the
+   store's earliest row may reach further back than the store keeps. Its first
+   week inside the window is therefore not its first week at all, so HQ now
+   states `first_week` only when `first_day > fold.floorDay`. A branch's own
+   log has no retention, so there `first_week` is always known.
+7. **The branch's own figure beside the median was not read by the median's
+   rule.** It now is:
+   - a week this branch's log began inside gets the producer's own sentence
+     instead of a figure;
+   - an unreadable log is marked `own_unreadable` and says so, in the same
+     words as the failed read;
+   - a week off the chart's range says that, rather than "no recorded value".
+8. **The revenue rate's absence used the page's own sentence.** The page said
+   the licence copy "carries no revenue share". For a branch whose copy had not
+   arrived at all, that was false. The server now sends `share_reason`, in the
+   words the seat card uses for the same licence copy.
+9. **A count nobody could read became "0 failed".**
+   - `statusesByWeek` wrote `Number(r.n) || 0`. A count that is not a count is
+     now `null`, and `tallyReadable` asks the question.
+   - `weekOutcome` returns `unreadable` with `what: 'tally'` for a due week
+     whose tally holds an unread count, and `what: 'deadline'` for the old
+     case.
+   - S15 says "its outcome could not be read". S4 says the same, and never
+     lists the week as counts.
+10. **An ended cycle read "under way".** `currentCycle` returns the newest
+    cycle that has **started**, which is the right one to gate even after it
+    finishes. What it cannot say is whether that cycle is still running.
+    `cycleEnded` reads the server's clock against `end_at`. `gatesSub` then
+    heads the card with one of three states: under way, ended, or not known.
+    An ended cycle also names when it ended.
+11. **A superseded timeline answer could land last.** Pressing Retry twice, or
+    leaving the page while a read was in flight, let the older answer write
+    over the newer one, or write to an unmounted page. Each load now takes a
+    number, and only the newest may write. Leaving the page retires every
+    number still in flight.
+12. **The median lost its caption behind an unread log.** The median is HQ's
+    pushed copy and is readable on its own. D210 drew its caption only when
+    the branch's line was drawn, which hid the one figure the card could still
+    state. `MedianNote` is now drawn in both states.
+13. **The rail said "could not be read" for a payload that answered.** Both
+    pages said the read failed whenever the rail had nothing to read back.
+    That was false for a payload that answered with every figure absent.
+    `hqCoverageNote` and `branchCoverageNote` tell apart three states:
+    reading, failed, and answered with nothing.
+14. **A ninth branch reused the first branch's colour.** The palette wraps,
+    so the two lines could not be told apart. `coloursRepeat` detects it (HQ's
+    own line does not count), and the page tells the reader to read each line
+    from its legend row.
+15. **`hq` was not reserved.** Every Worker writes its code to Analytics
+    Engine's `blob6` as `branchOf(env) || 'hq'`, so HQ's own rows **are** the
+    rows coded `hq`. A branch given that code would be counted into HQ's line,
+    and HQ's route, which lists `hq` first and then every registered code,
+    would draw it twice. The code is reserved in **every** copy of the rule:
+    - the worker's, the scripts' and `AdminLicences`' `BRANCH_CODE_RE`, as
+      `/^(?!hq$)[a-z][a-z0-9-]{1,15}$/`;
+    - the deploy route, with its own sentence a person can act on;
+    - `branch-provision.yml`'s validation step and its RPC-hash step;
+    - `d1-migrate.yml`;
+    - `branchHost.js`, so `hq.axal.vc` is not a branch host.
+
+    As a consequence, `branchOf` refuses to run a Worker deployed with
+    `BRANCH_CODE=hq`, and `branchBindings` skips a `BRANCH_HQ` binding.
+    Codes that only begin with `hq` stay valid.
+16. **HQ's branch overlay read the backlog object as a number** (#365). The
+    backlog is `{ count, oldest_at }`. `num()` returns `null` for anything
+    that is not finite, so a branch that sent its backlog read as one that
+    "answered without a backlog". Both the rail line and the tile now read
+    `backlog.count`.
+17. **The basis sentence said "monitoring polls" and "reads of the activity
+    feed".** The skip list matches by prefix and ignores the method, so
+    writes under `/api/monitoring/` (a score-flag review, a waiver) and under
+    `/api/activity` (the GitHub sync) are skipped too. The sentence now names
+    the prefixes as the rule matches them, writes included.
+18. **Light-theme hovers had no dark pair.** Five `hover:bg-axal-ground` and
+    five `hover:text-axal-ink` hovers are now paired. They include three hovers
+    outside the analytics pages: the topology page's and the switches page's
+    back links, and HQ Team's Cancel. A guard walks `frontend/src` and requires
+    a dark hover in the same class expression for every one. It sees 11 of the
+    first and 7 of the second, and a floor stops it passing on a narrowed scan.
+19. **The D210 tests could fail on the clock, and could agree for the wrong
+    reason.**
+    - The routes built their week axis from `Date.now()`, a few lines after
+      the tests built theirs from `new Date()`. A run that crossed Sunday
+      midnight UTC between the two compared two different axes. The clock is
+      now frozen at 23:59:59.5 on a Sunday, the instant where that drift bit.
+      SQLite fixtures anchor on the same instant (`NOW_SQL`) rather than on
+      SQLite's own clock.
+    - SQLite's `LIKE` ignores ASCII case, and Analytics Engine's does not. The
+      path-by-path agreement test therefore runs under
+      `PRAGMA case_sensitive_like = ON`, with mixed-case paths added where the
+      two rules could disagree.
+20. **The SQL was untested.** D210 tested the fold and never the queries.
+    `analytics_d211.test.ts` now covers them:
+    - **A1**: the branch reader's SQLite week expression puts a Tuesday, and a
+      Sunday at 23:59:59, each in its own week.
+    - **A2**: HQ's SQL returns exactly the aliases the fold reads, `branch`,
+      `uid` and `weight`. A renamed alias would reach the fold as `undefined`
+      and count every row as the anonymous account.
+    - **A3**: a read that hits the row cap names the day it stopped.
+
+### WHERE D210'S OWN RECORD WAS CORRECTED
+
+Each correction is marked in D210's text with the words it replaced:
+
+- **"About forty other writers"** of `activity_logs`, in the canvas table.
+  Measured: fifty-two files, 137 statements.
+- **The predicate "uses only `LIKE` and `NOT LIKE`".** It also uses one
+  numeric pair, `(double2 < 429 OR double2 > 429)`.
+- **Two branches' "last week" differing "for an hour a week around midnight
+  UTC on Monday".** Nothing supports this: HQ publishes daily at 04:55 UTC, so
+  every answering branch measures the same Monday. The same-Monday filter is a
+  defence against a stale Worker or a skewed clock.
+- **"Both mutations that remove the normalisation"** of the cohort stamps.
+  Those were `pushedLabel`'s and `inZone`'s. `dateInZone` had no assertion
+  until D211 added one.
+- **`num(live.backlog)` "gives NaN"** (#365). It gives `null`, and D211 fixes
+  it.
+
+### THE JUDGEMENT CALLS, EACH CHEAP TO STRIKE
+
+1. **A Monday start counts as partial.** Analytics Engine answers by the day,
+   so HQ cannot see the hour a branch began, and one rule on both tiers beats
+   a sharper rule on one of them. *Strike it and the branch reader compares
+   the first request's instant with the Monday's midnight, and HQ keeps the
+   day rule.*
+2. **`unreadable` is a flag, not a state enum.** Every payload already carries
+   `available`; adding one boolean to the refusals keeps D210's shape and its
+   tests. *Strike it and each block carries `state: 'recorded' |
+   'not_recorded' | 'unreadable'`.*
+3. **The legend prints a reason only beside a missing figure.** *Strike it and
+   the newest week's reason is printed under every line whose older weeks are
+   blank, which is the foot's job.*
+4. **`hq` is reserved rather than HQ's code renamed.** Renaming would mean
+   changing what every Worker writes to `blob6`, which re-keys HQ's
+   history in the store. *Strike it and HQ writes a code no hostname label can
+   take, and old rows keep `hq`.*
+5. **The text-hover pairs reach all seven sites**, three of them outside the
+   analytics pages. That is what the guard's rule asks for, and a rule with
+   named exceptions is one somebody widens later. *Strike it and the guard
+   scans only the analytics pages.*
+6. **The rail note has three states.** *Strike it and it has two again, and an
+   answered payload with nothing to read back says the read failed.*
+
+### CORRECTIONS WHILE BUILDING
+
+- **The dark-hover premise was measured, not assumed, and it came back
+  narrower than planned.** In Chromium, inside the app shell, `index.css`'s
+  dark skin is unlayered while Tailwind v4's utilities sit in
+  `@layer utilities`. Unlayered rules outrank layered ones whatever their
+  specificity, so the skin's rules for these neutrals win over the new `dark:`
+  pairs there. The pairs take effect outside the shell today, and inside it
+  once #373 settles the layering. They ship because the rule is right and the
+  guard holds it, and the entry says plainly that they change little a reader
+  sees inside the shell yet.
+- **Two of this PR's own test helpers were rewritten.** A retry check written
+  as a regex had a ReDoS shape and became a bounded `indexOf` scan. A local
+  variable named `window` shadowed the browser global and was renamed.
+- **An H15 test built a `RegExp` from data**, which Semgrep refuses. It became
+  a literal `.includes`.
+- **One of D210's `gap_notes` expectations was wrong**, not the code. It was
+  corrected in the assertion.
+
+### DELIBERATELY NOT BUILT, AND FILED
+
+- **#373** — inside the app shell the dark skin outranks every `dark:` utility
+  on the neutrals it maps. Settling that is a change to `index.css`'s layering
+  across every page, not an Analytics fix.
+- **#366** stays open. `BranchPrograms` passes the rail `[label, value]` pairs
+  where `WorkerRail` takes strings.
+
+### VERIFIED
+
+`npm run test:drift` exits **0**, read as the exit code from a redirected log.
+Counts:
+
+- frontend 3038 → **3058**: the twenty tests in `analytics_d211.test.mjs`.
+  `analytics_h15_s15.test.mjs` keeps its twenty-six, with assertions re-aimed
+  where D211 changed what they hold;
+- worker 3947 → **3970** — 3967 pass plus the same 3 pre-existing
+  environment-gated skips: the fourteen tests in `analytics_d211.test.ts`,
+  seven more in `analytics_d210.test.ts`, one in
+  `admin_licences_deploy.test.ts` that refuses the code `hq` with its own
+  sentence, and one in `branch_benchmarks_d148.test.ts` that leaves a branch
+  reporting another Monday out of the weekly median;
+- retention **47**, unchanged;
+- zero `not ok`.
+
+All forty-three new tests were confirmed **by name** in the log. The name
+checker flagged one more, `hq`, as missing. It is a `re.test('hq')` call inside
+a test body, not a test.
+
+Every guard ran as a step of that same run and exited 0: both typechecks,
+`lint:undef`, `check-api-drift` (no new method), `check-folder-docs`,
+`check-decision-ids` (D1 → **D211**), `check-unused-imports`,
+`check-react-hook-imports`, `check-frontend-logging`, `check-dark-mode`,
+`check-sql-prepare`, `check-timestamp-comparisons`, `check-sqlite-dialect` and
+`check-sql-migrations`.
+
+`docs/` was rebuilt on the no-ledger path. The local retention ledger was
+moved aside first, so a stale one could not decide the window (#333). The
+build emitted 613 fresh assets and retained 371, keeping 984 in all.
+`check-docs-fresh --strict`, `prerender-og --check` (31 routes) and
+`check-docs-assets-closure` (9,332 references across 941 chunks, 984 files on
+disk) all exit 0. A walk of every asset `main`'s committed shells reach (31
+shells, 19 seeds) found **613 of 613** still on disk.
+
+**91 mutations applied, 91 caught — eight only after their assertions were
+fixed.** Before writing anything, the harness pre-flighted all 91 anchors as
+unique and byte-changing. It ran a clean baseline of both suites, ran both
+suites for every mutation, and restored every file byte-identical by sha256.
+The full run caught 83 of 91 in 448 seconds. In each of the eight that escaped
+it was the assertion that could not see the defect, not the code, and each fix
+went into the assertions:
+
+- **W21**, unread seats losing their mark. No test failed the seat count on
+  its own. Dropping `users.is_active` would have broken authentication first,
+  so the new test fails only the `GROUP BY role` statement: *"S15 with the seat
+  count unreadable marks seats unreadable, beside the licence it did read"*.
+- **W28**, a failed revenue summary losing its mark. `branchRevenueSummary`
+  throws only off a branch or on a bad period, and neither can happen inside
+  this route, so no request can reach it. It is held by a rule instead: every
+  refusal the route builds in a `catch` must carry `unreadable: true`. A floor
+  of four such blocks stops a narrowed scan from passing, and the revenue
+  summary's own block must be among them.
+- **T2**, the clock no longer frozen. Nothing asserted that `Date.now()` and
+  `NOW_SQL` name one instant. *"The routes and the fixtures read one clock"*
+  now does, and it pins that instant to half a second before a week turns.
+- **F10, F13, F32, F33 and F34**, a page dropping a card's retry or wiring the
+  old rail sentence. The tests rendered the cards and the helpers but never
+  read the pages that wire them. One new test now reads both pages: *"each
+  page hands its reload to every card that offers a retry, and its rail note
+  to the helper that says why"*.
+
+The re-run caught all eight in 44 seconds. By area:
+
+- **the week and its gaps**: the basis sentence saying "monitoring polls"
+  again; `GAP_ORDER` out of the order the reasons bite; gap notes in the order
+  met; a Monday start read as a whole week; HQ claiming a first week it cannot
+  see; one reason per series again; the branch read dropping its first week;
+- **the change and the median**: the change drawn across a partial week; the
+  cap no longer outranking a change in population; every refusal borrowing
+  "two populations"; the median input letting a partial week through; the
+  branch KPI blind to its first week; the branch's own figure skipping the
+  median's whole-week rule;
+- **the unreadable mark**, dropped from a failed Analytics Engine read, from
+  HQ's payload on its way out, from an unread branch log, the seats, the
+  referral log, the escalation log, the branch's own figure, the benchmark
+  copy and the revenue summary; and a missing copy reading "carries no revenue
+  share";
+- **the payloads**: HQ's legend reason being the first gap met again, and HQ
+  sending no gap notes or first weeks; the branch doing the same;
+- **the reserved code `hq`**, admitted by the worker's rule, the scripts' rule,
+  the deploy form, the provision workflow's first step, its RPC-hash step and
+  `d1-migrate`; the deploy route's own sentence dropped; `hq.axal.vc` read as a
+  branch host;
+- **the test clock and store**: the case-sensitive `LIKE` pragma dropped from
+  the stand-in store; the clock unfrozen;
+- **H15**: an unreadable tile reading Not recorded; the tile declaring one
+  absence; an unreadable zero turned into an absence; `coloursRepeat` counting
+  HQ's own line; the rail saying "could not be read" of an answered payload; a
+  reason printed beside a number; `HqKpis` forgetting the read failed; a failed
+  read drawn as Not recorded; the retry and the rail note unwired; the cap
+  note losing its size; the foot naming no reason; the KPI value slot off by
+  one;
+- **S15**: the rail saying "did not complete" of an answered payload;
+  `BranchKpis` forgetting that the log, the referral log or the account table
+  failed; an unread own figure, or an unread median copy, not said as unread;
+  a failed log read drawn as Not recorded; the median losing its caption behind
+  an unread log; the foot naming no reason; an unread approval queue reading
+  Not recorded; an ended cycle called "under way", and not marked on the card;
+  a failed revenue summary drawn as Not recorded; the page's own "carries no
+  revenue share" back; a superseded timeline answer landing; leaving the page
+  without retiring the read; the retries and the rail note unwired; the KPI
+  value slot off by one;
+- **the gates**: an unread count becoming 0 again; `tallyReadable` always yes;
+  `weekOutcome` counting an unread tally; an unread deadline no longer said so;
+  a cycle ending now not yet ended; an unread end read as still running; S4
+  listing an unread tally as counts; `dateInZone` reading a SQL stamp in local
+  time;
+- **#365**: the overlay's rail and its tile reading the backlog object;
+- **the dark hovers**: the range pill, HQ Home's view-as button, Security's
+  filter chip, both ghost buttons, the three back links and Team's cancel.
+
+D211 adds no migration, so nothing is owed in D1. **285 is still the next free
+migration, and D212 the next decision.**

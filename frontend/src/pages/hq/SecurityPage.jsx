@@ -691,7 +691,7 @@ export default function HqSecurityPage() {
                   className={`rounded-lg border px-3 py-1.5 text-[11.5px] font-semibold ${
                     filter === f.key
                       ? 'border-rose-200 bg-rose-50 text-[#881337] dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200'
-                      : 'border-axal-hairline bg-white text-axal-muted hover:bg-axal-ground dark:bg-gray-900'
+                      : 'border-axal-hairline bg-white text-axal-muted hover:bg-axal-ground dark:bg-gray-900 dark:hover:bg-gray-800'
                   }`}
                 >
                   {f.label}

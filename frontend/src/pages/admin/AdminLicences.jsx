@@ -144,7 +144,8 @@ const DO_JURISDICTIONS = [
   { v: 'us', label: 'US' },
 ];
 
-const BRANCH_CODE_RE = /^[a-z][a-z0-9-]{1,15}$/;
+// The workflow's charset, and never `hq`: HQ's own code in the metrics store (D211).
+const BRANCH_CODE_RE = /^(?!hq$)[a-z][a-z0-9-]{1,15}$/;
 
 const n0 = (n) => Number(n || 0).toLocaleString();
 

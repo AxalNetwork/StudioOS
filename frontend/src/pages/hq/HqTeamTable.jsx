@@ -245,7 +245,7 @@ function RevokeForm({ row, onDone, onCancel }) {
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-md px-2 py-1.5 text-[12px] font-semibold text-axal-muted hover:text-axal-ink"
+          className="rounded-md px-2 py-1.5 text-[12px] font-semibold text-axal-muted hover:text-axal-ink dark:hover:text-gray-100"
         >
           Cancel
         </button>

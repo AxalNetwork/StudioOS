@@ -46,8 +46,12 @@
  * the file; `scripts/check-branch-config.mjs` checks it; both call in here.
  */
 
-/** A branch code is one hostname label: `fr`, `dach`, `dubai-2`. */
-export const BRANCH_CODE_RE = /^[a-z][a-z0-9-]{1,15}$/;
+/**
+ * A branch code is one hostname label: `fr`, `dach`, `dubai-2` — and never
+ * `hq`, which is HQ's own code in the metrics store (D211; the worker's copy in
+ * `cloudflare-worker/src/util/branch.ts` says why).
+ */
+export const BRANCH_CODE_RE = /^(?!hq$)[a-z][a-z0-9-]{1,15}$/;
 
 /** Hosts that are HQ's and can never be a branch's. */
 export const HQ_HOSTS = ['axal.vc', 'app.axal.vc'];

@@ -5,7 +5,7 @@ import { api, adminAssessment } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { COHORT_TZ } from '../../lib/spinoutLab';
 import { inZone, dateInZone } from '../../lib/zoneTime';
-import { cycleLabel, statusesByWeek } from '../../lib/cohortTimeline';
+import { cycleLabel, statusesByWeek, tallyReadable } from '../../lib/cohortTimeline';
 import { Card, Unrecorded, Unreadable } from '../../ui';
 import BranchZone from './BranchZone';
 
@@ -228,13 +228,19 @@ export default function BranchPrograms({ user }) {
                             {/* A WEEK NOBODY HAS BEEN JUDGED IN IS NOT A WEEK
                                 EVERYONE PASSED, so it says so rather than
                                 printing zeroes. */}
-                            {counts ? (
+                            {counts && !tallyReadable(counts) && (
+                              <div className="mt-0.5 text-[11.5px] text-axal-muted" data-testid="branch-programs-week-unreadable">
+                                its outcome could not be read
+                              </div>
+                            )}
+                            {counts && tallyReadable(counts) && (
                               <div className="mt-0.5 text-[11.5px] text-axal-muted">
                                 {Object.entries(counts)
                                   .map(([k, n]) => `${n} ${k}`)
                                   .join(' · ')}
                               </div>
-                            ) : (
+                            )}
+                            {!counts && (
                               <div className="mt-0.5 text-[11.5px] text-axal-muted">
                                 no outcome recorded yet
                               </div>

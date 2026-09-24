@@ -19,7 +19,7 @@
  * Run with:
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/branch_benchmarks_d148.test.ts
  */
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
@@ -32,6 +32,13 @@ import {
 import { applyBenchmarks } from '../src/rpc/branchOps.ts';
 import { weekAxis } from '../src/services/activeAccounts.ts';
 import branchInsights from '../src/routes/branch_insights.ts';
+
+// THE CLOCK IS FROZEN (D211). `WEEK` below is read when this module loads and
+// the producer reads its own week when a test calls it; a run that crossed
+// Sunday midnight UTC between the two compared two different Mondays and
+// withheld the weekly median for no reason in the code. Frozen half a second
+// before Monday — the instant the drift used to bite — both read one week.
+mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-09-27T23:59:59.500Z') });
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ADMIN = 7;
@@ -183,6 +190,27 @@ test('THREE branches publish, and every row carries the n it was computed over',
   // in a new place.
   assert.equal(pushed.length, 3);
   assert.equal(r.pushed.filter((p) => p.status === 'ok').length, 3);
+});
+
+test('a branch reporting ANOTHER Monday is left out of the weekly median, not mixed into it', async () => {
+  const pushed: any[] = [];
+  const stale = { ...OV(40, 24, 12, 100), active_accounts_week_of: '2026-08-31' };
+  const env = {
+    ...HQ,
+    BRANCH_FR: binding(OV(10, 6, 2, 5), pushed),
+    BRANCH_DE: binding(OV(20, 12, 4, 9), pushed),
+    BRANCH_ES: binding(OV(30, 18, 9, 14), pushed),
+    BRANCH_IT: binding(stale, pushed),
+  } as any;
+  assert.notEqual(stale.active_accounts_week_of, WEEK);
+  const r = await publishBenchmarks(env, '2026-Q3');
+  assert.equal(r.answered, 4);
+  const weekly = r.rows.find((x) => x.metric_key === 'active_accounts_week')!;
+  assert.equal(weekly.n_branches, 3, 'the branch that measured another week is not an answer for this one');
+  assert.equal(weekly.median_value, 9, 'with it mixed in the median of 5, 9, 14, 100 would read 11.5');
+  assert.equal(weekly.period, WEEK);
+  // Its other figures are not dated to a week, so it still counts for those.
+  assert.equal(r.rows.find((x) => x.metric_key === 'accounts_total')!.n_branches, 4);
 });
 
 test('an UNREADABLE branch is excluded from n, never counted as a zero', async () => {

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -9,7 +9,9 @@ import { titleCase } from '../../lib/absence';
 import { toUtcInstant } from '../../lib/notices';
 import { inZone } from '../../lib/zoneTime';
 import { COHORT_TZ } from '../../lib/spinoutLab';
-import { currentCycle, cycleLabel, statusesByWeek, weekOutcome, WEEK_STATUSES } from '../../lib/cohortTimeline';
+import {
+  currentCycle, cycleEnded, cycleLabel, statusesByWeek, weekOutcome, WEEK_STATUSES,
+} from '../../lib/cohortTimeline';
 import WeeklyLineChart from '../../components/WeeklyLineChart';
 import { RangePills, KpiTile, NotRecordedCard, rangeLabel, signed } from '../../components/AnalyticsParts';
 import { Card, Unrecorded, Unreadable } from '../../ui';
@@ -67,6 +69,21 @@ const AGE_TONE_CLASS = {
   slow: 'text-amber-700 dark:text-amber-300',
 };
 
+/**
+ * The rail's sentence when there is nothing to read back — by why (D211). D210
+ * said "the analytics read did not complete" whenever the list was empty,
+ * which was false for a payload that answered with every figure unreadable.
+ */
+export function branchCoverageNote(data, coverage) {
+  if (coverage.length) return undefined;
+  if (data === null) return 'Reading this territory\'s analytics…';
+  if (data === UNAVAILABLE) {
+    return 'The analytics read did not complete, so there is nothing to read back — this is not a claim '
+      + 'that nobody is active.';
+  }
+  return 'The analytics answered, but none of its figures could be read back; each says why on the page.';
+}
+
 /** When HQ computed a pushed copy, in UTC and said so. Null when unreadable. */
 export function pushedLabel(stamp) {
   const norm = toUtcInstant(stamp);
@@ -97,6 +114,7 @@ export function BranchKpis({ data }) {
         label="Active accounts"
         value={kpi ? kpi.value : null}
         reason={kpi ? kpi.reason : aa.reason}
+        unreadable={!aa.available && Boolean(aa.unreadable)}
         delta={kpi && kpi.delta !== null ? `${signed(kpi.delta)} vs ${weekLabel(kpi.compare_week)}` : null}
         note={kpi ? (
           <>
@@ -119,6 +137,7 @@ export function BranchKpis({ data }) {
         label="Median decision age"
         value={noneDecided ? 'None decided' : (da.available ? `${da.median_hours}h` : null)}
         reason={da.reason}
+        unreadable={!da.available && Boolean(da.unreadable)}
         note={(
           <>
             <span>
@@ -134,6 +153,7 @@ export function BranchKpis({ data }) {
         label="Seat utilisation"
         value={seats.available ? `${seats.used} of ${seats.licensed}` : null}
         reason={seats.reason}
+        unreadable={!seats.available && Boolean(seats.unreadable)}
         note={seats.available ? seats.basis : seats.reason}
         testId="s15-kpi-seats"
       />
@@ -141,11 +161,53 @@ export function BranchKpis({ data }) {
   );
 }
 
-/** The chart, and the median rule with the week, n and stamp it carries. */
-export function BranchChartCard({ data }) {
+/**
+ * The median's caption: HQ's figure for its week, and this branch's own figure
+ * beside it BY THE MEDIAN'S RULE (D211) — or, when this branch's own figure is
+ * not a whole week's or its log could not be read, the reason instead.
+ *
+ * It is drawn whether or not this branch's line could be read: the median is
+ * HQ's pushed copy, readable on its own, and hiding it behind an unread log
+ * would lose the one figure this card could still state.
+ */
+export function MedianNote({ benchmark: bm }) {
+  if (!bm.available) {
+    return (
+      <p data-testid="s15-median-absent" data-state={bm.unreadable ? 'unreadable' : 'not_published'}>
+        No median is drawn. {bm.reason}
+      </p>
+    );
+  }
+  const pushed = pushedLabel(bm.pushed_at);
+  const own = bm.own_value;
+  return (
+    <p data-testid="s15-median-note">
+      Dashed rule: HQ&rsquo;s median for the week of {weekLabel(bm.week) || bm.week} &mdash;{' '}
+      {bm.median_value} across {bm.n_branches} branches, computed {pushed || 'at a time that could not be read'}.
+      {' '}It is that week&rsquo;s median, drawn across the chart for comparison, not a median of every week.
+      {' '}
+      {own === null || own === undefined ? (
+        <span data-testid="s15-median-own" data-state={bm.own_unreadable ? 'unreadable' : 'not_recorded'}>
+          {bm.own_unreadable ? 'You, that week: unreadable. ' : ''}{bm.own_reason}
+        </span>
+      ) : (
+        <span data-testid="s15-median-own" data-state="recorded">You, that week: {own}.</span>
+      )}
+    </p>
+  );
+}
+
+/**
+ * The chart, and the median rule with the week, n and stamp it carries.
+ *
+ * A FAILED READ OF THIS BRANCH'S LOG IS UNREADABLE, WITH A RETRY (D211): the
+ * payload marks it `unreadable`, and trying again can answer it. D210 drew it
+ * as "Not recorded", which is the claim that there was nothing to read.
+ */
+export function BranchChartCard({ data, onRetry }) {
   const aa = data.active_accounts;
   const bm = data.benchmark;
-  const pushed = bm.available ? pushedLabel(bm.pushed_at) : null;
+  const noLine = 'No line is drawn: a chart of an unread log would show this territory at nobody.';
   return (
     <Card data-testid="s15-chart">
       <SectionHead
@@ -153,12 +215,15 @@ export function BranchChartCard({ data }) {
         sub={`${rangeLabel(data.range) || data.range} · this branch's own request log`}
       />
       {!aa.available && (
-        <div data-testid="s15-active-unavailable">
-          <Unrecorded reason={aa.reason} />
+        <div data-testid="s15-active-unavailable" data-state={aa.unreadable ? 'unreadable' : 'not_recorded'}>
+          {aa.unreadable
+            ? <Unreadable what="This branch's request log" claim={noLine} onRetry={onRetry} />
+            : <Unrecorded reason={aa.reason} />}
           <p className="mt-1 text-[11.5px] leading-relaxed text-axal-muted">{aa.reason}</p>
-          <p className="mt-1 text-[11.5px] leading-relaxed text-axal-muted">
-            No line is drawn: a chart of an unread log would show this territory at nobody.
-          </p>
+          {!aa.unreadable && <p className="mt-1 text-[11.5px] leading-relaxed text-axal-muted">{noLine}</p>}
+          <div className="mt-3 border-t border-axal-hairline pt-2 text-[11px] leading-relaxed text-axal-muted">
+            <MedianNote benchmark={bm} />
+          </div>
         </div>
       )}
       {aa.available && (
@@ -173,20 +238,11 @@ export function BranchChartCard({ data }) {
             testId="s15-plot"
           />
           <div className="mt-3 space-y-1 border-t border-axal-hairline pt-2 text-[11px] leading-relaxed text-axal-muted">
-            {bm.available ? (
-              <p data-testid="s15-median-note">
-                Dashed rule: HQ&rsquo;s median for the week of {weekLabel(bm.week) || bm.week} &mdash;{' '}
-                {bm.median_value} across {bm.n_branches} branches, computed {pushed || 'at a time that could not be read'}.
-                {' '}It is that week&rsquo;s median, drawn across the chart for comparison, not a median of every week.
-                {' '}
-                {bm.own_value === null || bm.own_value === undefined
-                  ? <span data-testid="s15-median-own">{bm.own_reason}</span>
-                  : <span data-testid="s15-median-own">You, that week: {bm.own_value}.</span>}
-              </p>
-            ) : (
-              <p data-testid="s15-median-absent">No median is drawn. {bm.reason}</p>
-            )}
-            {aa.gap_reason && <p data-testid="s15-gap">{aa.gap_reason}</p>}
+            <MedianNote benchmark={bm} />
+            {/* Every reason a point is blank, said once (D211). */}
+            {(aa.gap_notes || []).map((n) => (
+              <p key={n.gap} data-testid="s15-gap-note" data-gap={n.gap}>{n.sentence}</p>
+            ))}
             {aa.first_day && <p data-testid="s15-first-day">This branch&rsquo;s log begins on {aa.first_day}.</p>}
             <p data-testid="s15-partial-week">
               The newest point is the week of {weekLabel(data.current_week) || data.current_week}, which has not
@@ -213,7 +269,11 @@ export function ApprovalAgeList({ rows }) {
             <li key={q.key} className="py-2" data-testid="s15-age-row" data-queue={q.key}>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="text-[12.5px] font-semibold text-axal-ink">{q.label}</span>
-                {!q.available && <span className="text-[12px]"><Unrecorded reason={q.reason} /></span>}
+                {!q.available && (
+                  <span className="text-[12px]" data-state={q.unreadable ? 'unreadable' : 'not_recorded'}>
+                    {q.unreadable ? <Unrecorded reason={q.reason}>Unreadable</Unrecorded> : <Unrecorded reason={q.reason} />}
+                  </span>
+                )}
                 {q.available && q.median_hours === null && (
                   <span className="text-[12px] text-axal-muted">none decided</span>
                 )}
@@ -245,10 +305,14 @@ export function ApprovalAgeList({ rows }) {
 }
 
 /** What one week gate says, in the words a reader takes it in. */
-function gateSentence(outcome) {
+export function gateSentence(outcome) {
   if (outcome.state === 'not_yet_due') return 'not yet due';
   if (outcome.state === 'no_outcome') return 'no outcome recorded';
-  if (outcome.state === 'unreadable') return 'its deadline could not be read';
+  if (outcome.state === 'unreadable') {
+    // A tally that could not be read is not a deadline that could not be read,
+    // and it is never "0 failed" (D211).
+    return outcome.what === 'tally' ? 'its outcome could not be read' : 'its deadline could not be read';
+  }
   const parts = WEEK_STATUSES
     .filter((s) => outcome.counts[s] !== null && outcome.counts[s] !== undefined)
     .map((s) => `${outcome.counts[s]} ${s === 'grace' ? 'in grace' : s}`);
@@ -256,8 +320,23 @@ function gateSentence(outcome) {
   return parts.join(' · ');
 }
 
+/**
+ * What the gates card's heading says about its cycle. `currentCycle` picks the
+ * newest cycle that has STARTED, which may since have ended (D211) — D210 called
+ * it "the cycle under way" either way.
+ */
+export function gatesSub(cycle, ended) {
+  if (!cycle) return 'from the cohort timeline';
+  if (ended === true) return 'the most recent cycle, which has ended, from the cohort timeline';
+  if (ended === false) return 'the cycle under way, from the cohort timeline';
+  return 'the most recent cycle to start, from the cohort timeline';
+}
+
 /** Gates by week for the cycle that has started, read against the SERVER's clock. */
 export function WeekGates({ timeline, onRetry }) {
+  const readable = Boolean(timeline) && timeline !== UNAVAILABLE;
+  const cycle = readable ? currentCycle(timeline.cycles, timeline.server_time) : null;
+  const ended = cycle ? cycleEnded(cycle, timeline.server_time) : null;
   let body;
   if (timeline === null) {
     body = <p className="text-[12px] text-axal-muted">Reading the cohort timeline&hellip;</p>;
@@ -270,7 +349,6 @@ export function WeekGates({ timeline, onRetry }) {
       />
     );
   } else {
-    const cycle = currentCycle(timeline.cycles, timeline.server_time);
     if (!cycle) {
       body = (
         <div data-testid="s15-gates-none">
@@ -289,6 +367,11 @@ export function WeekGates({ timeline, onRetry }) {
             <span className="font-semibold text-axal-ink">{cycleLabel(cycle.year, cycle.month) || 'The current cycle'}</span>
             {' · '}
             {cycle.participant_count} {cycle.participant_count === 1 ? 'participant' : 'participants'} today
+            {ended === true && (
+              <span data-testid="s15-gates-ended">
+                {' · ended '}{inZone(cycle.end_at, COHORT_TZ) || 'at a time that could not be read'}
+              </span>
+            )}
           </p>
           {windows.length ? (
             <ul className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -330,7 +413,7 @@ export function WeekGates({ timeline, onRetry }) {
   }
   return (
     <Card data-testid="s15-gates">
-      <SectionHead title="Gates by week" sub="the cycle under way, from the cohort timeline" />
+      <SectionHead title="Gates by week" sub={gatesSub(cycle, ended)} />
       {body}
     </Card>
   );
@@ -346,8 +429,28 @@ function cents(n, currency) {
   }
 }
 
-/** Revenue: the rate is on the licence; every stream says why it has no amount. */
-export function RevenueCard({ revenue }) {
+/**
+ * Revenue: the rate is on the licence; every stream says why it has no amount.
+ *
+ * A SUMMARY THAT FAILED TO BUILD IS UNREADABLE, WITH A RETRY (D211), and a rate
+ * the licence copy does not carry says why in the SERVER's words — D210 printed
+ * its own sentence ("the copy carries no revenue share"), which was false for a
+ * branch whose copy had not arrived at all.
+ */
+export function RevenueCard({ revenue, onRetry }) {
+  if (!revenue.available && revenue.unreadable) {
+    return (
+      <Card data-testid="s15-revenue" data-state="unreadable">
+        <SectionHead title="Revenue" />
+        <Unreadable
+          what="The revenue summary"
+          claim="This is not a claim that this branch earned nothing."
+          onRetry={onRetry}
+        />
+        {revenue.reason && <p className="mt-1 text-[11.5px] leading-relaxed text-axal-muted">{revenue.reason}</p>}
+      </Card>
+    );
+  }
   if (!revenue.available) {
     return <NotRecordedCard label="Revenue" reason={revenue.reason} testId="s15-revenue" />;
   }
@@ -360,7 +463,14 @@ export function RevenueCard({ revenue }) {
         {share && keeps ? (
           <>HQ&rsquo;s share <strong className="tabular-nums">{share}</strong> · you keep <strong className="tabular-nums">{keeps}</strong></>
         ) : (
-          <Unrecorded reason="The licence copy on this branch carries no revenue share." />
+          <>
+            <Unrecorded reason={revenue.share_reason} />
+            {revenue.share_reason && (
+              <span className="mt-0.5 block text-[11px] leading-relaxed text-axal-muted" data-testid="s15-revenue-share-reason">
+                {revenue.share_reason}
+              </span>
+            )}
+          </>
         )}
       </p>
       <ul className="mt-2 divide-y divide-axal-hairline">
@@ -412,14 +522,29 @@ export default function BranchAnalytics({ user }) {
 
   // THE TIMELINE IS ITS OWN READ, WITH ITS OWN STATE: a failed timeline must not
   // take the chart down with it, and the range does not change it.
+  //
+  // AND A SUPERSEDED ANSWER IS DROPPED (D211). Retry pressed twice, or the page
+  // left while a read is in flight, would otherwise let the older answer land
+  // last — or land on an unmounted page. Each load takes a number; only the
+  // newest may write, and leaving the page retires every number in flight.
+  const timelineRun = useRef(0);
   const loadTimeline = useCallback(() => {
+    timelineRun.current += 1;
+    const run = timelineRun.current;
     setTimeline(null);
-    api.adminCohortTimeline().then(setTimeline, (e) => {
-      reportError('BranchAnalytics:timeline', e);
-      setTimeline(UNAVAILABLE);
-    });
+    api.adminCohortTimeline().then(
+      (t) => { if (run === timelineRun.current) setTimeline(t); },
+      (e) => {
+        if (run !== timelineRun.current) return;
+        reportError('BranchAnalytics:timeline', e);
+        setTimeline(UNAVAILABLE);
+      },
+    );
   }, []);
-  useEffect(() => { loadTimeline(); }, [loadTimeline]);
+  useEffect(() => {
+    loadTimeline();
+    return () => { timelineRun.current += 1; };
+  }, [loadTimeline]);
 
   const ready = Boolean(data) && data !== UNAVAILABLE;
   const aa = ready ? data.active_accounts : null;
@@ -456,15 +581,12 @@ export default function BranchAnalytics({ user }) {
       user={user}
       stance="Reads this territory's weekly figures back"
       coverage={coverage}
-      coverageNote={coverage.length ? undefined
-        : (data === null
-          ? 'Reading this territory\'s analytics…'
-          : 'The analytics read did not complete, so there is nothing to read back — this is not a claim that nobody is active.')}
+      coverageNote={branchCoverageNote(data, coverage)}
       unavailable={unavailable}
     >
       <div className="space-y-4" data-testid="branch-analytics-page">
         <div>
-          <Link to="/branch/insights" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-muted hover:text-axal-ink">
+          <Link to="/branch/insights" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-muted hover:text-axal-ink dark:hover:text-gray-100">
             <ArrowLeft size={13} /> Insights
           </Link>
           <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
@@ -483,7 +605,7 @@ export default function BranchAnalytics({ user }) {
         )}
 
         {ready && <BranchKpis data={data} />}
-        {ready && <BranchChartCard data={data} />}
+        {ready && <BranchChartCard data={data} onRetry={retry} />}
         {ready && (
           <NotRecordedCard label="Activation" reason={data.activation.reason} testId="s15-nr-activation" />
         )}
@@ -491,7 +613,7 @@ export default function BranchAnalytics({ user }) {
 
         <WeekGates timeline={timeline} onRetry={loadTimeline} />
 
-        {ready && <RevenueCard revenue={data.revenue} />}
+        {ready && <RevenueCard revenue={data.revenue} onRetry={retry} />}
 
         {ready && (
           <p className="text-[11px] leading-relaxed text-axal-faint" data-testid="s15-foot">
