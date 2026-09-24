@@ -4,7 +4,7 @@
  * Mounted at /api/admin/x BEFORE the generic /api/admin catch-all in
  * index.ts (same precedence pattern as admin_telegram). Sits inside the
  * existing requireCfAccess() perimeter; role gating is per-route via
- * requireAdmin.
+ * requireSuperAdmin (D216, #337: the platform's own X account is HQ's).
  *
  * Endpoint summary:
  *   Accounts
@@ -33,7 +33,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin } from '../auth';
+import { requireSuperAdmin } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { clampLimit, parseOffset } from '../util/pagination';
 import { ensureXSchema, X_MAX_TWEET_LEN, X_MAX_MEDIA_PER_TWEET, X_DEFAULT_DAILY_CAP } from '../services/xSchema';
@@ -241,7 +241,7 @@ function dailyCap(env: Env): number {
 // ----------------------------- ACCOUNTS -----------------------------
 
 r.get('/accounts', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const rows = await c.env.DB.prepare(
     `SELECT id, handle, display_name, x_user_id, scopes, expires_at,
@@ -261,7 +261,7 @@ r.get('/accounts', async (c) => {
 });
 
 r.post('/accounts', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const body: any = await c.req.json().catch(() => ({}));
   const handle = String(body.handle || '').replace(/^@/, '').trim();
@@ -281,7 +281,7 @@ r.post('/accounts', async (c) => {
 });
 
 r.put('/accounts/:id', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id)) return c.json({ error: 'invalid_id' }, 400);
@@ -298,7 +298,7 @@ r.put('/accounts/:id', async (c) => {
 });
 
 r.delete('/accounts/:id', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const id = Number(c.req.param('id'));
   const sent = await c.env.DB.prepare(
@@ -314,7 +314,7 @@ r.delete('/accounts/:id', async (c) => {
 });
 
 r.post('/accounts/:id/test', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const id = Number(c.req.param('id'));
   const acct: any = await loadAccount(c.env, id);
@@ -355,7 +355,7 @@ function xRedirectUri(env: Env): string {
 // implemented `/oauth/*` paths AND the spec-mandated `/auth/*` aliases on
 // the same code. Doc says `/api/admin/x/auth/start` + `/auth/callback`.
 const oauthStart = async (c: any) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   if (!xClientConfigured(c.env)) {
     return c.json({ error: 'x_config_missing', message: 'X_CLIENT_ID / X_CLIENT_SECRET not set.' }, 503);
@@ -397,10 +397,10 @@ const oauthCallback = async (c: any) => {
   // flow. Without this check, an attacker who tricked an admin into clicking a
   // crafted `/oauth/callback?code=…&state=…` URL (where `state` was minted from
   // the attacker's own /oauth/start) could bind the attacker's X account to
-  // ours. requireAdmin throws on no-auth / non-admin, which we map to a
+  // ours. requireSuperAdmin throws on no-auth / non-admin / un-elevated admin, which we map to a
   // user-facing redirect rather than letting the global 401 page swallow it.
   let admin: { id: number } | null = null;
-  try { admin = await requireAdmin(c); } catch { return land('x_oauth_error=admin_required'); }
+  try { admin = await requireSuperAdmin(c); } catch { return land('x_oauth_error=admin_required'); }
   let bound: { verifier?: string; account_id?: number; admin_id?: number } | null = null;
   try {
     const raw = await c.env.TOKENS.get(`xstate:${state}`);
@@ -446,7 +446,7 @@ r.get('/oauth/callback', oauthCallback);
 // ----------------------------- POSTS -----------------------------
 
 r.get('/posts', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const status = c.req.query('status');
   const accountId = c.req.query('account_id');
@@ -490,7 +490,7 @@ r.get('/posts', async (c) => {
 });
 
 r.post('/posts', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const body: any = await c.req.json().catch(() => ({}));
   const accountId = Number(body.account_id);
@@ -531,7 +531,7 @@ r.post('/posts', async (c) => {
 });
 
 r.put('/posts/:id', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
@@ -562,7 +562,7 @@ r.put('/posts/:id', async (c) => {
 });
 
 r.delete('/posts/:id', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
@@ -580,7 +580,7 @@ r.delete('/posts/:id', async (c) => {
 });
 
 r.post('/posts/:id/media', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   if (!c.env.FILES) return c.json({ error: 'r2_unavailable' }, 503);
   const id = Number(c.req.param('id'));
@@ -648,7 +648,7 @@ r.post('/posts/:id/media', async (c) => {
 });
 
 r.post('/posts/:id/alt-text', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   if (!c.env.AI) return c.json({ error: 'ai_unavailable' }, 503);
   const id = Number(c.req.param('id'));
@@ -688,7 +688,7 @@ r.post('/posts/:id/alt-text', async (c) => {
 });
 
 r.post('/posts/:id/lint', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
@@ -700,7 +700,7 @@ r.post('/posts/:id/lint', async (c) => {
 });
 
 r.post('/posts/:id/approve', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
@@ -716,7 +716,7 @@ r.post('/posts/:id/approve', async (c) => {
 });
 
 r.post('/posts/:id/schedule', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
@@ -735,7 +735,7 @@ r.post('/posts/:id/schedule', async (c) => {
 });
 
 r.post('/posts/:id/send', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
@@ -919,7 +919,7 @@ r.post('/posts/:id/send', async (c) => {
 });
 
 r.post('/posts/:id/retract', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
@@ -950,7 +950,7 @@ r.post('/posts/:id/retract', async (c) => {
 // ----------------------------- AGGREGATOR -----------------------------
 
 r.get('/aggregator/preview', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const periodDays = Math.min(90, Math.max(1, Number(c.req.query('period_days')) || 7));
   const kind = c.req.query('kind') as XAudience | undefined;
@@ -964,7 +964,7 @@ r.get('/aggregator/preview', async (c) => {
 });
 
 r.post('/aggregator/run', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const body: any = await c.req.json().catch(() => ({}));
   const periodDays = Math.min(90, Math.max(1, Number(body.period_days) || 7));
