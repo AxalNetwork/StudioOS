@@ -17,7 +17,16 @@ import { Card } from '../../ui';
  * The worker refuses a non-admin target, self-revoke and the last active
  * holder. Those refusals are shown verbatim: each is a sentence written for a
  * person, not a code to translate.
+ *
+ * D221 — A GRANT OR TRANSFER CARRIES A TYPED REASON. It was the one act H20
+ * draws as HQ's with no why: opening a support session, demoting an admin and
+ * overriding a binding agreement each take ten characters, and the elevation
+ * that governs all three took none. The floor is the server's
+ * (`HOLDER_REASON_MIN` in routes/admin_super_admins.ts); the form mirrors it so
+ * it never offers a submission the server can only refuse.
  */
+const HOLDER_REASON_MIN = 10;
+
 const FRIENDLY = {
   'TOTP required': 'Changing holders needs a session signed in with your authenticator app. Sign out and back in with a code, then try again.',
   'Super admin required': 'Only a current holder can change who holds the elevation.',
@@ -34,6 +43,14 @@ export default function SuperAdminHolders({ onChanged }) {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [pick, setPick] = useState('');
+  const [reason, setReason] = useState('');
+  // D221 — WHO THIS ACCOUNT JUST HANDED THE PLATFORM TO. After a transfer it no
+  // longer holds the elevation, so the reads this card and the Team table make
+  // answer 403. Reloading them read that refusal back as an error on a change
+  // that had SUCCEEDED ("Only a current holder can change who holds the
+  // elevation"), which is the one message a successful handover must never
+  // show. The card says what happened instead, and stops reading.
+  const [handed, setHanded] = useState(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -55,7 +72,9 @@ export default function SuperAdminHolders({ onChanged }) {
       // holder list both key on `id`, so the shape is normalised here rather
       // than at four render sites.
       const list = Array.isArray(u?.items) ? u.items : [];
-      setAdmins(list.map((x) => ({ id: x.user_id, name: x.name, email: x.email })));
+      setAdmins(list.map((x) => ({
+        id: x.user_id, name: x.name, email: x.email, is_active: x.is_active,
+      })));
     } catch (e) {
       reportError('super-admin-holders', e);
       setError(messageOf(e));
@@ -64,11 +83,15 @@ export default function SuperAdminHolders({ onChanged }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const run = async (fn) => {
+  const run = async (fn, handedTo = null) => {
     setBusy(true);
     setError(null);
     try {
       await fn();
+      if (handedTo) {
+        setHanded({ name: handedTo.name || handedTo.email, at: new Date() });
+        return;
+      }
       await load();
       // The Team table above renders the super-admin badge from the same
       // elevation, so it is told rather than left stale until a reload.
@@ -77,9 +100,38 @@ export default function SuperAdminHolders({ onChanged }) {
   };
 
   const holderIds = new Set((holders || []).map((h) => h.id));
-  const candidates = admins.filter((a) => !holderIds.has(a.id));
+  // D221 — A DEACTIVATED ADMIN IS NOT OFFERED. The route refuses one
+  // (`not_active`): an account that cannot sign in would hold an elevation
+  // nobody could use, and the holder would have given it up. A choice the
+  // server can only refuse is not drawn (D134's rule).
+  const candidates = admins.filter((a) => !holderIds.has(a.id) && Number(a.is_active) === 1);
   // One active holder is the enforced state, so the form's verb follows it.
   const hasHolder = (holders || []).some((h) => Number(h.is_active) === 1);
+  const reasonReady = reason.trim().length >= HOLDER_REASON_MIN;
+
+  if (handed) {
+    return (
+      <Card className="p-5" data-testid="super-admin-holders">
+        <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+          <ShieldCheck size={13} /> Super Admin holders
+        </div>
+        <p className="mt-2 text-[13px] font-semibold text-axal-ink" data-testid="super-admin-handed">
+          Handed to {handed.name} · {handed.at.toLocaleString()}
+        </p>
+        <p className="mt-1 text-[12.5px] leading-relaxed text-axal-muted">
+          You no longer hold the elevation, so HQ's pages stop answering this account. The change
+          and your reason are recorded in Security. Reload to leave HQ.
+        </p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="mt-3 rounded-md border border-axal-hairline px-3 py-1.5 text-[12px] font-semibold text-axal-ink hover:bg-gray-50 dark:hover:bg-gray-800"
+        >
+          Reload
+        </button>
+      </Card>
+    );
+  }
 
   return (
     <Card className="p-5" data-testid="super-admin-holders">
@@ -90,7 +142,7 @@ export default function SuperAdminHolders({ onChanged }) {
         The account that licenses the platform to subsidiaries. <strong>Exactly one holder,
         enforced</strong> — not a convention: a second elevation is refused. Handing it on is a
         transfer, which grants and revokes in one act so the set is never two nor empty. Changes
-        need your authenticator and are recorded in the admin audit log.
+        need your authenticator and a typed reason, and Security records both.
       </p>
 
       {error && (
@@ -129,12 +181,15 @@ export default function SuperAdminHolders({ onChanged }) {
         className="mt-4 flex flex-wrap items-center gap-2"
         onSubmit={(e) => {
           e.preventDefault();
-          if (!pick) return;
+          if (!pick || !reasonReady) return;
           // WITH A HOLDER, THE ONLY LAWFUL MOVE IS A TRANSFER, so the form asks for
           // one rather than sending a grant the server will refuse with 409. A
           // button that reliably errors is the "bare error" D132 was written about.
-          run(() => api.superAdminGrant(Number(pick), { transfer: hasHolder }))
-            .then(() => setPick(''));
+          const to = candidates.find((a) => String(a.id) === String(pick)) || null;
+          run(
+            () => api.superAdminGrant(Number(pick), { transfer: hasHolder, reason: reason.trim() }),
+            hasHolder ? to || { name: `account ${pick}` } : null,
+          ).then(() => { setPick(''); setReason(''); });
         }}
       >
         <label htmlFor="super-admin-grant" className="text-[12px] font-semibold text-axal-muted">
@@ -147,14 +202,25 @@ export default function SuperAdminHolders({ onChanged }) {
           disabled={busy || candidates.length === 0}
           className="rounded-md border border-axal-hairline bg-white px-2 py-1.5 text-[12.5px] text-axal-ink dark:bg-gray-900"
         >
-          <option value="">{candidates.length ? 'Choose an admin…' : 'No other admin to hand it to'}</option>
+          <option value="">{candidates.length ? 'Choose an admin…' : 'No other active admin to hand it to'}</option>
           {candidates.map((a) => (
             <option key={a.id} value={a.id}>{a.name ? `${a.name} · ${a.email}` : a.email}</option>
           ))}
         </select>
+        <input
+          type="text"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          maxLength={500}
+          disabled={busy || candidates.length === 0}
+          placeholder={`Why — at least ${HOLDER_REASON_MIN} characters, recorded in Security`}
+          aria-label="Reason for the change"
+          data-testid="super-admin-reason"
+          className="min-w-[16rem] flex-1 rounded-md border border-axal-hairline bg-white px-2 py-1.5 text-[12.5px] text-axal-ink dark:bg-gray-900"
+        />
         <button
           type="submit"
-          disabled={busy || !pick}
+          disabled={busy || !pick || !reasonReady}
           className="rounded-md bg-gray-900 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
         >
           {busy ? <Loader2 size={13} className="inline animate-spin" /> : (hasHolder ? 'Transfer' : 'Grant')}

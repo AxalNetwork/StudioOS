@@ -255,8 +255,17 @@ test('the holder console never empties the set, never elevates a non-admin, neve
 });
 
 test('every holder change is written to admin_audit_log', () => {
+  // RE-POINTED IN D221. This pinned the router's own hand-written INSERT, which
+  // left `viewed_user_id` empty — the column HQ Security's feed joins to name
+  // who an act was about — so the feed showed a transfer with no target. The
+  // rows now go through the shared writer (D159), and what is pinned is that
+  // both halves of a holder change are recorded through it, never by hand.
+  // The rows themselves are read back in `hq_team_actions_d221.test.ts`.
   const src = read(ROUTER);
-  assert.match(src, /INSERT INTO admin_audit_log \(admin_user_id, action, filters_json\)/);
+  assert.match(src, /import \{ logAdminAction \} from '\.\.\/services\/adminAudit'/,
+    'the holder console does not record through the shared writer');
+  assert.doesNotMatch(src, /INSERT INTO admin_audit_log/,
+    'the holder console writes its audit by hand again, beside the shared writer');
   assert.match(src, /'super_admin_grant'/);
   assert.match(src, /'super_admin_revoke'/);
 });

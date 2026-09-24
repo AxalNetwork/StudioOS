@@ -1681,6 +1681,20 @@ admin.post('/impersonate-sessions/:id/extend', async (c) => {
       code: 'cannot_impersonate_super_admin',
     }, 403);
   }
+  // D221 — AND D133's ADMIN-TARGET GUARD, which this route did not re-run. The
+  // comment above this handler says it "re-checks everything the original grant
+  // checked"; it re-checked the holder guard alone. So a session opened on an
+  // administrator by the holder, who has since handed the elevation on, could
+  // be extended thirty minutes at a time by an account that could no longer
+  // open it — the line D133 drew would hold at the door and not in the room.
+  // The same test, the same code, the same words as the grant.
+  if (String(target.role).toLowerCase() === 'admin' && !isSuperAdmin(adminUser as any)) {
+    await sql.end();
+    return c.json({
+      error: 'Only a super admin can extend a support session as another admin.',
+      code: 'super_admin_required',
+    }, 403);
+  }
   const token = await createJWT(
     c.env, target.id, target.email, target.role, adminUser.id, undefined,
     `${IMPERSONATION_EXPIRY_MINUTES}m`,
