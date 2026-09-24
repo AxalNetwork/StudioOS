@@ -121,6 +121,12 @@ export type EscalationInput = {
   detail?: string | null;
   raised_by_name?: string | null;
   raised_by_branch_user_id?: number | null;
+  /**
+   * The branch's idempotency key for this raise (D243). Generated there
+   * before the call. A second insert with the same key on the same branch
+   * returns the row already stored.
+   */
+  raise_key?: string | null;
 };
 
 /**
@@ -223,21 +229,42 @@ export async function recordEscalation(
   // The due date, not a band: a band stored at write time is wrong an hour
   // later, which is the whole reason migration 259 stores this column.
   const dueAt = new Date(Date.now() + SLA_HOURS[kind] * 3600_000).toISOString();
+  const subjectRef = item?.subject_ref ? String(item.subject_ref).slice(0, 300) : null;
+  const detail = item?.detail ? String(item.detail).slice(0, 4000) : null;
+  const raisedBy = item?.raised_by_name ? String(item.raised_by_name).slice(0, 200) : null;
+  const raisedById = Number.isFinite(Number(item?.raised_by_branch_user_id))
+    ? Number(item.raised_by_branch_user_id) : null;
+
+  // D243 — THE KEY IS THE BRANCH'S, AND A REPEAT IS THE SAME ROW. Absent on a
+  // caller that predates the key: that insert is the old statement, so an old
+  // branch still records. Present, the partial unique index makes the second
+  // insert change nothing, and the uid already stored is what comes back.
+  const raiseKey = String(item?.raise_key ?? '').trim().slice(0, 80);
+  if (/^[A-Za-z0-9_-]{8,80}$/.test(raiseKey)) {
+    const inserted = await env.DB.prepare(
+      `INSERT INTO hq_escalations
+         (uid, branch_code, kind, subject, subject_ref, detail,
+          raised_by_name, raised_by_branch_user_id, status, due_at, raise_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)
+       ON CONFLICT(branch_code, raise_key) WHERE raise_key IS NOT NULL DO NOTHING`,
+    ).bind(uid, code, kind, subject, subjectRef, detail, raisedBy, raisedById, dueAt, raiseKey).run();
+    const changes = Number((inserted as { meta?: { changes?: number } })?.meta?.changes ?? 0);
+    if (changes === 0) {
+      const existing = await env.DB.prepare(
+        `SELECT uid, due_at FROM hq_escalations WHERE branch_code = ? AND raise_key = ?`,
+      ).bind(code, raiseKey).first<{ uid: string; due_at: string }>();
+      if (!existing) throw new Error('escalate: the raise key matched no row and recorded none');
+      return { uid: existing.uid, due_at: existing.due_at, status: 'open' };
+    }
+    return { uid, due_at: dueAt, status: 'open' };
+  }
 
   await env.DB.prepare(
     `INSERT INTO hq_escalations
        (uid, branch_code, kind, subject, subject_ref, detail,
         raised_by_name, raised_by_branch_user_id, status, due_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)`,
-  ).bind(
-    uid, code, kind, subject,
-    item?.subject_ref ? String(item.subject_ref).slice(0, 300) : null,
-    item?.detail ? String(item.detail).slice(0, 4000) : null,
-    item?.raised_by_name ? String(item.raised_by_name).slice(0, 200) : null,
-    Number.isFinite(Number(item?.raised_by_branch_user_id))
-      ? Number(item.raised_by_branch_user_id) : null,
-    dueAt,
-  ).run();
+  ).bind(uid, code, kind, subject, subjectRef, detail, raisedBy, raisedById, dueAt).run();
 
   return { uid, due_at: dueAt, status: 'open' };
 }
@@ -592,9 +619,9 @@ export async function answerEscalation(
 
   await env.DB.prepare(
     `UPDATE hq_escalations
-        SET answer = ?, answered_by_user_id = ?, answered_at = ?, status = ?, updated_at = ?
+        SET answer = ?, answered_by_user_id = ?, answered_by_name = ?, answered_at = ?, status = ?, updated_at = ?
       WHERE uid = ?`,
-  ).bind(answer, Number(input.answered_by_user_id) || null, now, status, now, id).run();
+  ).bind(answer, Number(input.answered_by_user_id) || null, name || null, now, status, now, id).run();
 
   const row = await env.DB.prepare(
     `SELECT uid, branch_code, kind, subject, subject_ref, detail, raised_by_name,

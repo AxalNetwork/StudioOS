@@ -1,8 +1,9 @@
 /**
  * The branch's "To HQ" lane (S3, D112).
  *
- *   GET  /api/branch/escalations   what this branch raised, and HQ's answers
- *   POST /api/branch/escalations   raise one
+ *   GET  /api/branch/escalations          what this branch raised, and HQ's answers
+ *   POST /api/branch/escalations          raise one
+ *   POST /api/branch/escalations/:id/retry   send an undelivered row again (D243)
  *
  * NOT GATED ON SUSPENSION, AND THIS IS THE IMPORTANT ONE. Every other write on
  * a suspended branch answers 423 through `requireBranchNotSuspended` (D107) —
@@ -220,11 +221,13 @@ r.post('/escalations', async (c) => {
     const detail = str(b?.detail, 4000) || null;
     const raisedBy = str((admin as { name?: string }).name, 200) || null;
     const now = nowIso();
+    // D243 — BEFORE THE CALL, so a lost response retries as the same raise.
+    const raiseKey = crypto.randomUUID();
 
     // HQ FIRST, so a successful raise carries HQ's own uid from the start and
     // the two rows are the same escalation. The local row is written either
     // way, which is the reason this order is safe: nothing is lost if the call
-    // throws.
+    // throws. The key is on that row either way.
     let hqUid: string | null = null;
     let dueAt: string | null = null;
     let deliveryError: string | null = null;
@@ -239,6 +242,7 @@ r.post('/escalations', async (c) => {
         res = await hq.escalate(code, {
           kind, subject, subject_ref: subjectRef, detail,
           raised_by_name: raisedBy, raised_by_branch_user_id: admin.id,
+          raise_key: raiseKey,
         }) as HqEscalateAnswer | null;
       } catch (e) {
         deliveryError = `HQ did not accept the escalation: ${(e as Error).message}`;
@@ -264,11 +268,11 @@ r.post('/escalations', async (c) => {
     const res = await c.env.DB.prepare(
       `INSERT INTO branch_escalations
          (hq_uid, kind, subject, subject_ref, detail, raised_by_user_id, raised_by_name,
-          status, delivery_error, due_at, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+          status, delivery_error, due_at, created_at, updated_at, raise_key)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     ).bind(
       hqUid, kind, subject, subjectRef, detail, admin.id, raisedBy,
-      hqUid ? 'open' : 'undelivered', deliveryError, dueAt, now, now,
+      hqUid ? 'open' : 'undelivered', deliveryError, dueAt, now, now, raiseKey,
     ).run();
 
     return c.json({
@@ -281,6 +285,96 @@ r.post('/escalations', async (c) => {
       status: hqUid ? 'open' : 'undelivered',
       ...(deliveryError ? { delivery_error: deliveryError } : {}),
     }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /api/branch/escalations/:id/retry
+// An undelivered row, again, with the key it already holds. Not suspension
+// gated: escalating is how a frozen branch gets out (D107, D112). The body is
+// not a new raise — the stored row is what is sent.
+r.post('/escalations/:id/retry', async (c) => {
+  try {
+    await requireAdmin(c);
+    const code = requireBranchTier(c.env);
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id) || id < 1) {
+      return c.json({ error: 'bad_id', message: 'An escalation id is required.' }, 400);
+    }
+    const row = await c.env.DB.prepare(
+      `SELECT id, kind, subject, subject_ref, detail, raised_by_user_id, raised_by_name,
+              status, raise_key
+         FROM branch_escalations WHERE id = ?`,
+    ).bind(id).first<{
+      id: number; kind: string; subject: string; subject_ref: string | null; detail: string | null;
+      raised_by_user_id: number | null; raised_by_name: string | null; status: string;
+      raise_key: string | null;
+    }>();
+    if (!row) return c.json({ error: 'not_found' }, 404);
+    if (row.status !== 'undelivered') {
+      return c.json({
+        error: 'not_undelivered',
+        message: 'Only a raise that has not reached HQ can be sent again.',
+      }, 409);
+    }
+    let raiseKey = row.raise_key;
+    if (!raiseKey) {
+      raiseKey = crypto.randomUUID();
+      await c.env.DB.prepare(
+        `UPDATE branch_escalations SET raise_key = ?, updated_at = ? WHERE id = ? AND raise_key IS NULL`,
+      ).bind(raiseKey, nowIso(), id).run();
+    }
+    const hq = (c.env as { HQ?: { escalate?: (code: string, item: unknown) => Promise<unknown> } }).HQ;
+    let deliveryError: string | null = null;
+    let res: HqEscalateAnswer | null = null;
+    if (!hq || typeof hq.escalate !== 'function') {
+      deliveryError =
+        'This Worker has no HQ service binding, so the escalation is recorded here and has not reached HQ.';
+    } else {
+      try {
+        res = await hq.escalate(code, {
+          kind: row.kind,
+          subject: row.subject,
+          subject_ref: row.subject_ref,
+          detail: row.detail,
+          raised_by_name: row.raised_by_name,
+          raised_by_branch_user_id: row.raised_by_user_id,
+          raise_key: raiseKey,
+        }) as HqEscalateAnswer | null;
+      } catch (e) {
+        deliveryError = `HQ did not accept the escalation: ${(e as Error).message}`;
+      }
+      if (res && res.refused === 'kind_not_available') {
+        return c.json({
+          error: 'kind_not_available',
+          message: str(res.reason, 300) || 'HQ does not take this kind of escalation from this branch.',
+          kind: row.kind,
+        }, 400);
+      }
+      if (!deliveryError) {
+        const hqUid = str(res?.uid, 80) || null;
+        if (!hqUid) deliveryError = 'HQ accepted the call but returned no escalation id.';
+        else {
+          const dueAt = str(res?.due_at, 40) || null;
+          const now = nowIso();
+          await c.env.DB.prepare(
+            `UPDATE branch_escalations
+                SET hq_uid = ?, status = 'open', delivery_error = NULL, due_at = ?, updated_at = ?
+              WHERE id = ? AND status = 'undelivered'`,
+          ).bind(hqUid, dueAt, now, id).run();
+          return c.json({ id, hq_uid: hqUid, status: 'open', due_at: dueAt });
+        }
+      }
+    }
+    await c.env.DB.prepare(
+      `UPDATE branch_escalations SET delivery_error = ?, updated_at = ? WHERE id = ? AND status = 'undelivered'`,
+    ).bind(deliveryError, nowIso(), id).run();
+    return c.json({
+      error: 'undelivered',
+      message: deliveryError,
+      id,
+      status: 'undelivered',
+      delivery_error: deliveryError,
+    }, 502);
   } catch (e) { return mapError(c, e); }
 });
 
