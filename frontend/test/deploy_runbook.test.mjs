@@ -69,17 +69,26 @@ test('the deploy chain table quotes the real predeploy/deploy/postdeploy command
   }
 });
 
-test('§1.1 is still right that the worker package’s own deploy omits --env production', () => {
+test('§1.1 is still right that the worker package’s own deploy delegates to the root', () => {
   const s = workerPkg.scripts.deploy;
   assert.ok(s, 'cloudflare-worker/package.json has no deploy script');
-  assert.ok(
-    !s.includes('--env production'),
-    'the worker package deploy script now sets --env production; ' +
-      'DEPLOY.md §1.1 calls it out as a footgun and must be rewritten',
+  assert.equal(
+    s,
+    'cd .. && npm run deploy',
+    'the worker package deploy script must hand off to the root deploy script, ' +
+      'not call wrangler directly — DEPLOY.md §1.1 relies on this',
   );
   assert.ok(
-    !s.includes('migrate-d1'),
-    'the worker package deploy script now migrates; §1.1 says it does not',
+    !s.includes('wrangler deploy'),
+    'the worker package deploy script must never call wrangler deploy itself',
+  );
+  assert.ok(
+    'predeploy' in rootPkg.scripts && /migrate-d1/.test(rootPkg.scripts.predeploy),
+    'the root package must run migrate-d1 in predeploy for the delegation to migrate',
+  );
+  assert.ok(
+    'deploy' in rootPkg.scripts && rootPkg.scripts.deploy.includes('--env production'),
+    'the root package deploy script must set --env production for the delegation to hit the right env',
   );
 });
 

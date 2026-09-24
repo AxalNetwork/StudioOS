@@ -306,15 +306,39 @@ export interface ProviderKeyStatus {
   active_integrations: number;
 }
 
+/** The Integration keys console's list. It creates the table first, as it always has. */
 export async function listProviderKeyStatus(env: Env): Promise<ProviderKeyStatus[]> {
   await ensureSchema(env);
+  return (await readProviderKeyStatus(env)).items;
+}
+
+/**
+ * D213 — the same list, read without writing and without hiding a failed read.
+ *
+ * TWO DIFFERENCES FROM THE CONSOLE'S LIST, AND THEY ARE THE POINT.
+ *   1. No `ensureSchema`. That is a `CREATE TABLE`, a write, and HQ's Platform
+ *      summary only reads; a database without the table answers
+ *      `db_readable: false`, which is true, rather than being altered by
+ *      someone looking at it (D204's rule for GETs).
+ *   2. A failed read of `provider_oauth_keys` is REPORTED, not swallowed. The
+ *      console's list still catches it and carries on, so on the console every
+ *      key not set as a Worker secret reads as unconfigured when the truth is
+ *      "unknown" — a defect filed on its own, not changed here. The items are
+ *      built exactly as the console builds them, so its payload does not move;
+ *      `db_readable` is what lets this reader tell the two apart (`keyStateOf`).
+ */
+export async function readProviderKeyStatus(
+  env: Env,
+): Promise<{ db_readable: boolean; items: ProviderKeyStatus[] }> {
   let dbRows: Array<{ provider_key: string; client_id: string; updated_at: string; updated_by_user_id: number | null }> = [];
+  let dbReadable = true;
   try {
     const r: any = await env.DB.prepare(
       `SELECT provider_key, client_id, updated_at, updated_by_user_id FROM provider_oauth_keys`,
     ).all();
     dbRows = (r?.results || []) as typeof dbRows;
   } catch (e) {
+    dbReadable = false;
     console.warn('[providerOauthKeys] list failed', e);
   }
   // Per-provider integration counts (best-effort — table may not exist yet).
@@ -328,7 +352,7 @@ export async function listProviderKeyStatus(env: Env): Promise<ProviderKeyStatus
     }
   } catch { /* table may not exist */ }
   const dbMap = new Map(dbRows.map(r => [r.provider_key, r] as const));
-  return MANAGED_PROVIDERS.map((pk) => {
+  const items = MANAGED_PROVIDERS.map((pk): ProviderKeyStatus => {
     const env_ = envCreds(env, pk);
     const db = dbMap.get(pk);
     let source: 'env' | 'db' | 'unconfigured' = 'unconfigured';
@@ -350,6 +374,84 @@ export async function listProviderKeyStatus(env: Env): Promise<ProviderKeyStatus
       active_integrations: counts.get(pk) ?? 0,
     };
   });
+  return { db_readable: dbReadable, items };
+}
+
+/**
+ * Where a managed key lives, or that nobody can tell.
+ *
+ *   env         set as a Worker secret — it wins over any row (`loadOauthCreds`)
+ *   db          held encrypted in `provider_oauth_keys`
+ *   unset       neither, and the table answered, so this is a measured absence
+ *   unreadable  no Worker secret, and the table did not answer: it may hold a
+ *               key or not, and saying "unset" would be a claim nothing measured
+ */
+export type ProviderKeyState = 'env' | 'db' | 'unset' | 'unreadable';
+
+export function keyStateOf(item: Pick<ProviderKeyStatus, 'source'>, dbReadable: boolean): ProviderKeyState {
+  if (item.source === 'env') return 'env';
+  if (item.source === 'db') return 'db';
+  return dbReadable ? 'unset' : 'unreadable';
+}
+
+/**
+ * The audit actions `routes/admin_integration_keys.ts` writes when a key is
+ * saved or rotated from the console, and the one it writes when a key is
+ * removed. A test reads that file and holds these equal to what it writes, so a
+ * renamed action cannot silently empty the "last set" read.
+ */
+export const KEY_SET_AUDIT_ACTIONS = ['integration_key_cf_secret_push', 'integration_key_cf_secret_rotate'] as const;
+export const KEY_REMOVE_AUDIT_ACTION = 'integration_key_cf_secret_delete';
+
+/**
+ * When each key was last saved or rotated from the console, from the audit
+ * log, successful writes only.
+ *
+ * A FAILED WRITE IS NOT A SET. The console audits refusals too (`outcome:
+ * 'failed'`), and reading those would date a key to the moment Cloudflare
+ * refused it.
+ *
+ * A REMOVAL AFTER THE LAST SAVE CANCELS THE DATE. The console's Remove deletes
+ * the Worker secret; if a key is present today and the console's latest act on
+ * it was a removal, it was set again some other way (at deploy), and the save
+ * before the removal is not when the key in place was set. That provider gets
+ * no date rather than a wrong one. A key set at deploy, or before the console
+ * audited its saves, has no row at all, and likewise gets no date.
+ *
+ * Rides `idx_admin_audit_action_ts (action, exported_at DESC)`. `datetime()`
+ * puts every stamp in one format before MAX compares them.
+ */
+export async function readProviderKeyLastSet(
+  env: Env,
+): Promise<{ available: true; byProvider: Map<string, string> } | { available: false }> {
+  try {
+    const res = await env.DB.prepare(
+      `SELECT json_extract(filters_json, '$.provider') AS provider, action, MAX(datetime(exported_at)) AS at
+         FROM admin_audit_log
+        WHERE action IN (?, ?, ?)
+          AND json_extract(filters_json, '$.outcome') = 'ok'
+        GROUP BY json_extract(filters_json, '$.provider'), action`,
+    ).bind(...KEY_SET_AUDIT_ACTIONS, KEY_REMOVE_AUDIT_ACTION)
+      .all<{ provider: string | null; action: string; at: string | null }>();
+    const set = new Map<string, string>();
+    const removed = new Map<string, string>();
+    for (const row of res.results || []) {
+      if (!row.provider || !row.at) continue;
+      const provider = String(row.provider);
+      const at = String(row.at);
+      const into = row.action === KEY_REMOVE_AUDIT_ACTION ? removed : set;
+      const prior = into.get(provider);
+      if (!prior || at > prior) into.set(provider, at);
+    }
+    const byProvider = new Map<string, string>();
+    for (const [provider, at] of set) {
+      const gone = removed.get(provider);
+      if (!gone || at > gone) byProvider.set(provider, at);
+    }
+    return { available: true, byProvider };
+  } catch {
+    return { available: false };
+  }
 }
 
 /** Test hook — clears the in-isolate cache. Not exported via the route layer. */

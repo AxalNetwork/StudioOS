@@ -303,6 +303,66 @@ export async function readTicketSync(env: Env): Promise<TicketSync> {
   }
 }
 
+/** How many of the latest attempts HQ · Platform lists (D213). */
+export const RECENT_SYNC_LIMIT = 10;
+/** An error is clipped here: it is GitHub's message, and one line is enough to act on. */
+export const SYNC_ERROR_CLIP = 200;
+
+export type RecentSyncAttempts =
+  | {
+      available: true;
+      items: Array<{
+        ticket_id: number;
+        issue_number: number | null;
+        status: string | null;
+        error: string | null;
+        attempted_at: string;
+      }>;
+    }
+  | { available: false; reason: string };
+
+/**
+ * D213 — the latest mirror attempts, one per ticket, newest first.
+ *
+ * ONE ROW PER TICKET, BECAUSE THAT IS WHAT IS STORED. A ticket keeps only its
+ * latest attempt (migration 273), so this is not a log of failures and says
+ * so where it is drawn: a ticket that failed and later synced shows the sync.
+ *
+ * NO TITLE AND NO REQUESTER. This list is about the mirror's health; what a
+ * ticket says stays on Support, which each row links to. And no schema
+ * bootstrap, for `readTicketSync`'s reason: a database without 273 answers
+ * unreadable, which is true, rather than being altered by a read.
+ */
+export async function readRecentSyncAttempts(env: Env): Promise<RecentSyncAttempts> {
+  try {
+    const res = await env.DB.prepare(
+      `SELECT id, github_issue_number, github_sync_status, github_sync_error, github_sync_attempted_at
+         FROM tickets
+        WHERE github_sync_attempted_at IS NOT NULL
+        ORDER BY datetime(github_sync_attempted_at) DESC, id DESC
+        LIMIT ?`,
+    ).bind(RECENT_SYNC_LIMIT).all<{
+      id: number;
+      github_issue_number: number | null;
+      github_sync_status: string | null;
+      github_sync_error: string | null;
+      github_sync_attempted_at: string;
+    }>();
+    return {
+      available: true,
+      items: (res.results || []).map((row) => ({
+        ticket_id: Number(row.id),
+        issue_number: row.github_issue_number == null ? null : Number(row.github_issue_number),
+        status: row.github_sync_status == null ? null : String(row.github_sync_status),
+        error: row.github_sync_error ? String(row.github_sync_error).slice(0, SYNC_ERROR_CLIP) : null,
+        attempted_at: String(row.github_sync_attempted_at),
+      })),
+    };
+  } catch {
+    return { available: false, reason: SYNC_UNREADABLE };
+  }
+}
+
 // ─── The tenant × queue matrix ────────────────────────────────────────────
 
 export type SupportLicence = { uid: string; licence_ref: string; brand_name: string; status: string };

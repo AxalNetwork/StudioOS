@@ -47,6 +47,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
 import { DERIVED_UNAVAILABLE } from './licence';
+import { promoState } from '../services/promos';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -137,14 +138,29 @@ r.get('/summary', async (c) => {
   // draws: HQ allocating a spend ceiling per subsidiary does not exist.
   let promos: unknown;
   try {
-    const row = await env.DB.prepare(
-      `SELECT COUNT(*) AS codes, SUM(times_redeemed) AS redemptions
-         FROM promo_codes WHERE active = 1`,
-    ).first<{ codes: number; redemptions: number }>();
+    // D213 — "REDEEMABLE NOW" MEANS ACTIVE AND UNEXPIRED, by the one rule
+    // checkout and HQ · Platform also read (`promoState`). This used to count
+    // `WHERE active = 1`, so a code past its expiry — which checkout refuses —
+    // was counted as redeemable. A code at its cap is not redeemable either.
+    // The mirror's `times_redeemed` is the count here, a lower bound: Stripe
+    // counts subscription redemptions and nothing mirrors them.
+    const res = await env.DB.prepare(
+      `SELECT active, expires_at, max_redemptions, times_redeemed FROM promo_codes`,
+    ).all<{ active: number; expires_at: string | null; max_redemptions: number | null; times_redeemed: number }>();
+    const nowMs = Date.now();
+    let activeCodes = 0;
+    let redemptions = 0;
+    for (const row of res.results || []) {
+      const redeemed = Number(row.times_redeemed);
+      if (!Number.isFinite(redeemed)) throw new Error('times_redeemed unreadable');
+      if (promoState(row, redeemed, nowMs) !== 'active') continue;
+      activeCodes += 1;
+      redemptions += redeemed;
+    }
     promos = {
       available: true,
-      active_codes: Number(row?.codes) || 0,
-      redemptions: Number(row?.redemptions) || 0,
+      active_codes: activeCodes,
+      redemptions,
       // A CEILING EXISTS NOW; A BUDGET COMPUTED FROM THIS TABLE STILL DOES
       // NOT, and they are different claims. HQ sets a spend ceiling per
       // licence per period (D111) and reads it from its own endpoint. What

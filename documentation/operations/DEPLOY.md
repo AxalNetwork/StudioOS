@@ -33,22 +33,29 @@ A failing `post`-script propagates to the parent `npm run`. **`npm run deploy`
 exiting 0 is therefore real evidence that the live smoke check passed** — not
 just that the upload succeeded.
 
-### 1.1 Two ways to silently skip the migrations
+### 1.1 One way to silently skip the migrations
 
-Both of these deploy the worker *without* applying schema changes, leaving the
-new code running against the old database:
+This deploys the worker *without* applying schema changes, leaving the new
+code running against the old database:
 
 1. **`npx wrangler deploy --config ../wrangler.toml --env production` by hand.**
    npm only fires `pre`/`post` hooks for `npm run <script>`. Invoking wrangler
    directly bypasses `predeploy` entirely.
-2. **`cd cloudflare-worker && npm run deploy`.** That package's own script is
-   `wrangler deploy --config ../wrangler.toml` — no `--env production`, no
-   migration hook. Both the top-level `name` and the `[env.production]` `name`
-   in `wrangler.toml` are `studioos`, so this *still hits the live worker*; it
-   just ships it with the top-level binding, var and route set, ahead of its
-   schema.
 
-Deploy from the repository root, through `npm run deploy`. Nothing else.
+**`cd cloudflare-worker && npm run deploy`** used to be a second way to hit
+this footgun: that package's own script called `wrangler deploy` directly,
+with no `--env production` and no migration hook, and because the top-level
+`name` and the `[env.production]` `name` in `wrangler.toml` are both
+`studioos`, it still shipped to the live worker — just with the top-level
+binding, var and route set, ahead of its schema. That script now reads
+`cd .. && npm run deploy`: it hands off to the root `deploy` script instead
+of calling wrangler itself, so it inherits the root's `predeploy` migration
+hook and `--env production` for free. There is only one real deploy path
+left to bypass.
+
+Deploy from the repository root, through `npm run deploy` (directly, or via
+`cd cloudflare-worker && npm run deploy`, which now delegates to it).
+Nothing else.
 
 ### 1.2 The same runner, from CI
 

@@ -238,6 +238,29 @@ test('promotions report what promo_codes holds, not what the canvas wanted', asy
   assert.equal(r.body.promos.redemptions, 7, 'redemptions include inactive codes');
 });
 
+test('an expired code, or one at its cap, is not counted as redeemable now (D213)', async () => {
+  // Checkout refuses both (promos.ts validatePromoForProduct), so a count
+  // labelled "redeemable now" that includes them is wrong in the direction
+  // that flatters the programme. One rule decides it: promoState.
+  const db = freshDb();
+  const ins = db.prepare(
+    `INSERT INTO promo_codes (id, code, code_normalized, coupon_id, times_redeemed, active, max_redemptions, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const past = new Date(Date.now() - 86_400_000).toISOString();
+  const future = new Date(Date.now() + 86_400_000).toISOString();
+  ins.run('p1', 'LIVE', 'live', 'c1', 2, 1, null, null);                     // redeemable
+  ins.run('p2', 'SOON', 'soon', 'c2', 1, 1, 5, future);                      // redeemable until tomorrow
+  ins.run('p3', 'GONE', 'gone', 'c3', 5, 1, null, past);                     // expired yesterday
+  ins.run('p4', 'OLD', 'old', 'c4', 4, 1, null, '2020-01-01 00:00:00');      // expired, SQL-format stamp
+  ins.run('p5', 'FULL', 'full', 'c5', 3, 1, 3, null);                        // exactly at its cap
+  ins.run('p6', 'OFF', 'off', 'c6', 9, 0, null, null);                       // switched off
+  const r = await call(db, SUPER);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.promos.active_codes, 2, 'an expired or exhausted code was counted as redeemable');
+  assert.equal(r.body.promos.redemptions, 3, 'redemptions include codes that are not redeemable');
+});
+
 test('an unreadable table says so and does not take the rest down', async () => {
   // Each zone reads independently. One missing table used to be the
   // difference between a page and a stack trace; here it must be the
