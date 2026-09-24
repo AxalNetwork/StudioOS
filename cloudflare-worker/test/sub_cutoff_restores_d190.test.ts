@@ -527,8 +527,10 @@ test('referral_attributions and admin_publications are declared (D235), and thei
   const listed = await call('', tok, {});
   assert.equal(listed.status, 200,
     `the publications list did not answer 200 (${listed.status}: ${JSON.stringify(listed.body)}). `
-    + 'This test is about whether a READER creates the table, so a gate or a routing miss has to '
-    + 'fail as itself rather than read as a bootstrap that did not run.');
+    + 'A 500 naming "no such table: admin_publications" IS the bootstrap not healing — the list '
+    + 'reads the table ensureSchema should have created, so this line fires before the one below '
+    + 'can. Anything else is a gate or a routing miss, which has to fail as itself rather than '
+    + 'read as a bootstrap that did not run.');
   assert.equal(has(db, 'admin_publications'), true,
     'a reader ran on a database missing admin_publications and it still does not exist: '
     + 'ensureSchema, awaited by all six handlers, is the safety net D235 keeps behind migration 287.');

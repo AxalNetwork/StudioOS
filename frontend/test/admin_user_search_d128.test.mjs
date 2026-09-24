@@ -44,7 +44,14 @@ test('a total that has not been read yet is Unrecorded, not zero', () => {
   // is the same lie one beat earlier. `Unrecorded` is the shared primitive.
   assert.match(PAGE, /count === null \? <Unrecorded \/> : count/,
     'an unread total renders as a number rather than as a stated absence');
-  assert.match(PAGE, /import \{ Unrecorded \} from '\.\.\/ui'/,
+  // Imported from the shared module, among whatever else the page takes from
+  // it, and never declared here. The second half is the property this message
+  // has always named; the first used to pin the whole import line, which
+  // failed the day the page took a second primitive from the same module
+  // (D236 imports `Unreadable` beside it) while the property still held.
+  assert.match(PAGE, /import \{[^}]*\bUnrecorded\b[^}]*\} from '\.\.\/ui'/,
+    'the honesty primitive must be imported from ../ui');
+  assert.doesNotMatch(PAGE, /\b(?:function|const|let|var|class)\s+Unrecorded\b/,
     'the honesty primitive must be imported, not re-declared');
 });
 
