@@ -23301,6 +23301,172 @@ the reason that the read stopped at its ceiling.
   length failed that test (non-zero exit, one `not ok` line) and was restored
   by sha256.
 
+## D237
+
+**`cron_run_history` gets a retention sweep (task 327). It keeps 30 days of
+rows, and ALWAYS the newest row of every trigger. Nothing ever deleted from the
+table. Production, measured read-only on 2026-09-24: 152,331 rows, 108,976 of
+them older than 30 days, and 0 rows in ISO format.**
+
+**No migration**, so 290 is not used. EXPLAIN QUERY PLAN on the baseline's
+table and index:
+
+| statement | plan |
+| --- | --- |
+| keep list, `SELECT DISTINCT trigger_name` | covering-index scan of `idx_crh_trigger_time` |
+| keep list, one newest-row read per trigger | index seek on `trigger_name` |
+| the delete | primary-key lookups, over a covering-index scan of candidates |
+
+The candidate predicate is `datetime()` on the column, so no index could serve
+it with a range seek, whatever the index. The covering index is scanned instead,
+and the scan stops at the batch LIMIT. A new index would buy nothing.
+
+### THE SWEEP (`util/cronHistory.ts`, `pruneCronRunHistory`, beside the writer)
+
+- **Keeps each trigger's newest row, however old.** It uses the same statement
+  `latestRunPerTrigger` reads (now one shared `NEWEST_ROW_SQL`), including its
+  ceiling. So the row it protects is exactly the row Platform's "Cron triggers
+  firing" and the Cron tab read, and a future-dated row cannot take that slot.
+  The weekly trigger (`0 9 * * 2`) whose last row is 40 days old keeps that row
+  and does not read "never fired".
+- **The keep list is built before anything is deleted.** If it cannot be built,
+  nothing is deleted.
+- **Compares `datetime(started_at) < datetime(?)`**, with `datetime()` on both
+  sides. An ISO stamp is therefore read by its time and not by where `T` sorts.
+- **Deletes in bounded batches.** Each statement deletes at most 500 rows, by
+  id from a LIMITed subquery. A sweep runs at most 50 statements, so 25,000
+  rows. The first run meets about 109,000 rows and clears them over five daily
+  runs. After that, a day adds far fewer rows than the cap.
+- **Never throws,** because a failed prune must not fail the tick.
+
+**Why 30 days** (also stated in the file header). Two things read the table:
+
+- `latestRunPerTrigger` reads only each trigger's newest row, which is always
+  kept.
+- The Cron tab pages the raw list, 100 rows at a time. 30 days is some 450
+  pages.
+
+Nothing reads a row by age beyond that, and nothing totals the table over time.
+
+### THE CRON BLOCK (`index.ts`)
+
+The block runs daily at 03:45, a minute no other block uses. It has its own
+try/catch and the `[cron]` prefix. It is **not** gated on `hqCadences`, on the
+D122 precedent: each deployment writes its own table and prunes its own.
+`branch_licence_copy.test.ts` now pins it in the ungated list, anchored on its
+import.
+
+### THE COUNT IS NO LONGER ALL-TIME
+
+`GET /api/infra/cron-history` still returns `COUNT(*)` as `total`. It now also
+sends `retention_days`. The Cron tab reads "N run(s) in the last 30 days (older
+runs are pruned; each trigger's newest run is kept)" instead of a bare "N
+run(s)".
+
+### HOW IT IS HELD
+
+`cloudflare-worker/test/cron_history_retention_d237.test.ts` (new, 8 tests)
+builds the table from the baseline's own DDL and index. It covers:
+
+- the window, with the boundary row kept;
+- the weekly trigger's aged-out newest row, read back through
+  `latestRunPerTrigger` and `triggerState`;
+- a future-dated row;
+- an ISO row one hour past the cutoff;
+- the batch size and cap, plus a second sweep that finishes the job;
+- an unreadable keep list;
+- the sweep's comparisons, read from source;
+- the route and Cron tab label.
+
+`branch_licence_copy.test.ts` gains the ungated pin.
+
+Nine mutations were each run both ways: the code was broken, a named test
+failed with a non-zero exit, the file was restored from a sha256-checked
+snapshot, and the test passed. None escaped. The nine:
+
+1. dropping the keep-newest rule;
+2. a bare `started_at < ?` comparison;
+3. an unLIMITed delete;
+4. deleting when the keep list failed;
+5. a keep list that ignores the ceiling;
+6. an ignored cap;
+7. the block gated on `hqCadences`;
+8. `retention_days` dropped from the route;
+9. the all-time label restored on the Cron tab.
+
+## D238
+
+**A branch is graded against its own crons, not HQ's six (task 332).**
+`GET /api/infra/cron-history` read the newest row of every expression in
+`CRON_TRIGGERS`. A branch only ever fires `BRANCH_CRONS`: `* * * * *`, the
+queue drain, and `0 3 * * *`, the nightly cleanup. So on a branch four triggers
+read "never fired" for ever, which is false. The route now reads
+`triggersFor(env)`. HQ keeps `CRON_TRIGGERS`, and a branch (`branchOf(env)`)
+reads its own two, with their display names.
+
+**No migration and no frontend change.**
+
+### ONE LIST, TWO COPIES, AND A TEST THAT THEY AGREE
+
+`scripts/lib/branchConfig.mjs` writes each branch's wrangler `[triggers]` from
+its own `BRANCH_CRONS`. The worker cannot import from `scripts/`, so it holds
+its own copy, `BRANCH_CRONS` in `util/cronHistory.ts`.
+`cron_triggers_branch_d238.test.ts` asserts that the two copies are equal. So
+the list a branch is graded against is always the list the generator put in
+its triggers. `cron_record_d201.test.ts` still asserts that `BRANCH_CRONS` is a
+subset of `CRON_TRIGGERS`, and that is unchanged.
+
+### LEFT ALONE, ON PURPOSE
+
+`admin_platform.ts` (about line 241) still grades against `CRON_TRIGGERS`. It
+is HQ's super-admin console and is refused on a branch, so HQ's list is the
+right one there.
+
+### RECORDED, NOT FIXED
+
+`[env.preview.triggers]` in `wrangler.toml` declares three crons: `* * * * *`,
+`0 */6 * * *` and `0 4 * * *`. That is neither HQ's six nor a branch's two.
+`cron_record_d201.test.ts` checks only that each of the three is one HQ knows.
+Nothing checks that the preview's set is a list any screen grades against. On
+the preview deployment the history route grades against HQ's six, so three read
+"never fired" there. The preview is not a production tier, and whether it
+should fire HQ's six or a list of its own is the owner's call.
+
+### A ONE-KEYWORD FIX THAT CAME WITH IT
+
+`routes/infra.ts` imported the type `JobType` as a value (`import { Jobs,
+JobType }`). The test loader strips types and then fails to find that export,
+so no test could import the router. It is now `type JobType`. That changes
+nothing at runtime, and it lets the route be tested directly rather than read
+as source.
+
+### HOW IT IS HELD
+
+`cloudflare-worker/test/cron_triggers_branch_d238.test.ts` (new, 4 tests) drives
+the real route on HQ and on a branch (`BRANCH_CODE: 'fr'`). It covers:
+
+- the two `BRANCH_CRONS` copies are equal;
+- HQ is graded against all six;
+- a branch is graded against exactly its own two, and none it never fires;
+- `triggersFor` keeps the display names.
+
+Six mutations were each run both ways. Each broke the code, failed a named test
+with a non-zero exit, was restored from a sha256-checked snapshot, and then
+passed:
+
+1. HQ's list hard-coded in the route.
+2. The helper returning HQ's list on a branch.
+3. The worker copy drifting.
+4. The generator copy drifting.
+5. HQ graded against the branch's list.
+6. HQ's list hard-coded as `triggersFor({})`.
+
+One of them first reached the route by replacing the call with `CRON_TRIGGERS`,
+a name `infra.ts` no longer imports. It was caught, but by a crash, not by the
+list the route returned. It was re-run as a real hard-coding, `triggersFor({}
+as any)`, and that version fails on the list itself. That re-run is the sixth
+mutation above.
+
 ## D240
 
 **The one-holder ceiling is now enforced by the write itself. Two overlapping

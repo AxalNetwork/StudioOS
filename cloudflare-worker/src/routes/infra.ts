@@ -4,12 +4,12 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAdmin, createJWT } from '../auth';
-import { Jobs, JobType } from '../models/jobs';
+import { Jobs, type JobType } from '../models/jobs';
 import { cfQueueEnabled, enqueueJob } from '../services/queue';
 import { processQueueBatch } from '../services/queueWorker';
 import { getRealtimeStats } from '../services/realtime';
 import { bindingKey } from '../util/schemaBootstrap';
-import { CRON_TRIGGERS, latestRunPerTrigger } from '../util/cronHistory';
+import { CRON_HISTORY_RETENTION_DAYS, latestRunPerTrigger, triggersFor } from '../util/cronHistory';
 import { nextCronRun } from '../util/cronSchedule';
 
 const infra = new Hono<{ Bindings: Env }>();
@@ -351,8 +351,13 @@ infra.get('/cron-history', async (c) => {
   // helper HQ · Platform also reads, in place of a GROUP BY over the whole
   // table; and the next run comes from the matcher that speaks Cloudflare's
   // weekday numbering (1 = Sunday), which the copy that lived here did not.
-  const latest = await latestRunPerTrigger(c.env, CRON_TRIGGERS.map((t) => t.expr));
-  const triggers = CRON_TRIGGERS.map(t => ({
+  //
+  // D238 — the triggers THIS deployment fires. A branch fires only its own
+  // two (BRANCH_CRONS); graded against HQ's six, four would read "never
+  // fired" for ever.
+  const declared = triggersFor(c.env);
+  const latest = await latestRunPerTrigger(c.env, declared.map((t) => t.expr));
+  const triggers = declared.map(t => ({
     name: t.name,
     expr: t.expr,
     last_run_at: latest.get(t.expr)?.started_at || null,
@@ -363,6 +368,11 @@ infra.get('/cron-history', async (c) => {
     ok: true,
     items: rows.results || [],
     total: Number(count?.c ?? 0),
+    // D237 — `total` counts what the table holds, and since the retention
+    // sweep that is the last RETENTION days plus each trigger's newest row,
+    // not every tick ever recorded. Sent beside it so no screen can present
+    // the figure as all-time.
+    retention_days: CRON_HISTORY_RETENTION_DAYS,
     limit,
     offset,
     triggers,
