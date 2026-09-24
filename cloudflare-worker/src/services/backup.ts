@@ -59,19 +59,91 @@ function resolveBucket(env: Env): R2BackupBucket | null {
 }
 
 /**
- * D200 — why the restore-drill half of HQ's "Backup / DR" card is a STATED
- * ABSENCE rather than a status. `scripts/dr-drill.sh` lists and fetches
- * backups and writes no marker on success or failure, and
- * `.github/workflows/dr-drill.yml` records nothing either; its outcome lives
- * only in GitHub Actions, which the Worker cannot read. Until a drill writes
- * a marker the platform can read, the honest card says so. (The count of
- * failed drill runs is a plan-time measurement and deliberately NOT in this
- * string, where it would go stale.)
+ * D263 — the restore drill's outcome, read from the marker it writes.
+ *
+ * Until D263 this half of HQ's "Backup / DR" card was a stated absence: the
+ * drill wrote nothing the Worker could read. `scripts/dr-drill.sh` now writes
+ * `drill-d1.json` to the backups bucket from its EXIT trap on every exit,
+ * pass or fail (at, outcome, duration_s, source, step, exit_code,
+ * backup_key, run_id), so the card can say what the last run did.
+ *
+ * Four states, each its own claim, and none inferred from the backup half:
+ *   unreadable       no binding, the read threw, the JSON did not parse, or
+ *                    the outcome is not one the drill writes;
+ *   never_run        the bucket answered and holds no marker;
+ *   last_run_failed  the marker says failed, with the step and exit code;
+ *   last_run_passed  the marker says passed, with the backup it restored.
+ * No reason string carries a count: a count belongs in a D-entry, where it
+ * does not go stale.
  */
-export const RESTORE_DRILL_REASON =
-  'No restore drill outcome is written anywhere the platform can read: the drill script fetches a backup and '
-  + 'records nothing, and its workflow writes no marker. Whether a restore has ever been rehearsed is visible '
-  + 'only in the workflow\'s own run history.';
+export const RESTORE_DRILL_KEY = 'drill-d1.json';
+
+export type RestoreDrill =
+  | { available: false; state: 'unreadable'; reason: string }
+  | { available: true; state: 'never_run'; reason: string }
+  | {
+      available: true;
+      state: 'last_run_failed' | 'last_run_passed';
+      at: string | null;
+      step: string | null;
+      exit_code: number | null;
+      backup_key: string | null;
+      duration_s: number | null;
+      source: string | null;
+      run_id: string | null;
+    };
+
+const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
+const int = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+export async function readRestoreDrill(env: Env): Promise<RestoreDrill> {
+  const bucket = env.BACKUPS;
+  if (!bucket) {
+    return {
+      available: false,
+      state: 'unreadable',
+      reason: 'The BACKUPS R2 binding is not bound on this deployment, so the restore drill\'s marker cannot be read here.',
+    };
+  }
+  let body: Record<string, unknown>;
+  try {
+    const obj = await bucket.get(RESTORE_DRILL_KEY);
+    if (!obj) {
+      return {
+        available: true,
+        state: 'never_run',
+        reason: `No ${RESTORE_DRILL_KEY} has been written to the backups bucket, so no restore drill has recorded a run.`,
+      };
+    }
+    const parsed = await obj.json<unknown>();
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('the marker is not a JSON object');
+    body = parsed as Record<string, unknown>;
+  } catch (e) {
+    return {
+      available: false,
+      state: 'unreadable',
+      reason: `The restore drill's marker could not be read (${e instanceof Error ? e.message : String(e)}).`,
+    };
+  }
+  if (body.outcome !== 'passed' && body.outcome !== 'failed') {
+    return {
+      available: false,
+      state: 'unreadable',
+      reason: `The restore drill's marker names an outcome the drill never writes (${JSON.stringify(body.outcome ?? null)}).`,
+    };
+  }
+  return {
+    available: true,
+    state: body.outcome === 'passed' ? 'last_run_passed' : 'last_run_failed',
+    at: str(body.at),
+    step: str(body.step),
+    exit_code: int(body.exit_code),
+    backup_key: str(body.backup_key),
+    duration_s: int(body.duration_s),
+    source: str(body.source),
+    run_id: body.run_id === null || body.run_id === undefined ? null : String(body.run_id),
+  };
+}
 
 export type BackupHeartbeat =
   | {

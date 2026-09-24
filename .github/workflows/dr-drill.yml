@@ -1,9 +1,11 @@
 name: Monthly DR Drill
 
 # Task #5 (IE) — Monthly disaster-recovery drill.
-# Provisions a throwaway D1 database, restores the latest nightly
-# backup into it, runs the smoke-test suite, and pages on-call on
-# failure. Validates RTO (4h) and RPO (24h) commitments end-to-end.
+# Reads the latest backup's key from the export's heartbeat, restores it
+# into a throwaway EU D1 database, smoke-checks the restored rows and
+# tables, and pages on-call on failure. Every run writes drill-d1.json
+# to the backups bucket, pass or fail, which HQ's Security page reads
+# (D263).
 #
 # Schedule: 1st of the month at 06:00 UTC. Also runnable on demand.
 
@@ -20,14 +22,24 @@ permissions:
 # to every step in the job.
 env:
   BACKUP_BUCKET: studioos-backups
-  # Enables 4d in scripts/dr-drill.sh: deploy a fresh preview worker
-  # bound to the restored throwaway D1 and HTTP-smoke /api/health.
-  DR_DRILL_PREVIEW: '1'
+  # D263 — 4d in scripts/dr-drill.sh (deploy a preview worker bound to the
+  # restored database and HTTP-smoke it) is OFF until the preview env has real
+  # ids: wrangler.toml's [env.preview] KV ids are placeholders, and the probe
+  # URL it builds lacks the account's workers.dev subdomain. Switched on with
+  # this '0' changed to '1' once both are real.
+  DR_DRILL_PREVIEW: '0'
+  DRILL_SOURCE: gha
 
 jobs:
   drill:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # D263 — a step's `if:` cannot see that step's own `env:`, so "Notify on
+    # failure" used to test a variable that was always empty there, and it was
+    # skipped on every failed run. This exposes only WHETHER a pager is
+    # configured (a boolean, never the URL) at job level, where `if:` can see it.
+    env:
+      PAGER_CONFIGURED: ${{ secrets.PAGER_WEBHOOK_URL != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -71,6 +83,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y jq
 
       - name: Run DR drill
+        id: drill
         # Cloudflare creds + optional pager are consumed by scripts/dr-drill.sh
         # (it runs wrangler and posts its own failure page), so scope them here.
         env:
@@ -79,8 +92,10 @@ jobs:
           PAGER_WEBHOOK_URL: ${{ secrets.PAGER_WEBHOOK_URL }}
         run: bash scripts/dr-drill.sh
 
+      # The drill script pages from its own EXIT trap when it fails, so this
+      # step pages only for a failure BEFORE the drill ran (preflight, install).
       - name: Notify on failure
-        if: failure() && env.PAGER_WEBHOOK_URL != ''
+        if: failure() && steps.drill.outcome != 'failure' && env.PAGER_CONFIGURED == 'true'
         env:
           PAGER_WEBHOOK_URL: ${{ secrets.PAGER_WEBHOOK_URL }}
           # Pass GitHub-context values via env (never interpolate them

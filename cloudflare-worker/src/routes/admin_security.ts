@@ -57,7 +57,7 @@ import {
   loadSecurityEventCounts, SECURITY_EVENT_KINDS, SECURITY_EVENT_RETENTION_DAYS, SECURITY_EVENTS_NOT_COUNTED,
 } from '../services/securityEvents';
 import { screeningSummary } from '../services/sanctions';
-import { readBackupHeartbeat, RESTORE_DRILL_REASON } from '../services/backup';
+import { readBackupHeartbeat, readRestoreDrill } from '../services/backup';
 import { branchBindings } from '../services/branches';
 import {
   HQ_DSR_OUTCOMES, isHqDsrOutcome, loadDsrHistory, closeDsrRequest, dsrDaysLeft, DSR_CLOCK_DAYS,
@@ -308,12 +308,13 @@ r.get('/overview', async (c) => {
     sanctions: await screeningSummary(env),
     // D200 — two halves with their own states. The backup half reads the
     // heartbeat the nightly export writes to R2 (absent when the binding is
-    // unbound, absent when nothing was ever written, present with its stamp);
-    // the drill half stays a stated absence for the runtime reason in
-    // RESTORE_DRILL_REASON. Never one green light inferred from the other.
+    // unbound, absent when nothing was ever written, present with its stamp).
+    // D263 — the drill half reads the marker the drill writes on every exit
+    // (unreadable, never run, last run failed, last run passed). Each reads
+    // its own key; never one green light inferred from the other.
     backup_dr: {
       backup: await readBackupHeartbeat(env, 'd1'),
-      drill: absent(RESTORE_DRILL_REASON),
+      drill: await readRestoreDrill(env),
     },
   });
 });

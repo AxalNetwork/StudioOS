@@ -6,7 +6,7 @@
  * measured against the code most of what they drew was false: Access guards
  * two KYC routes, not /hq and /admin/*; three screens write Worker secrets;
  * four RPC methods have no caller; the branch dimension is a blob, not an
- * index; nothing redeploys a branch. `services/topology.ts` carries the true
+ * index; and, until D253, nothing redeployed a branch. `services/topology.ts` carries the true
  * version as literals, and a literal is exactly how a false claim survives —
  * `branchConfig.test.mjs` once pinned the wrong entrypoint because it pinned
  * what the generator wrote rather than what the far side exports (D207). So

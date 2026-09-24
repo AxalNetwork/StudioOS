@@ -149,13 +149,22 @@ npx wrangler d1 info studioos-db-restore --json    # expect "jurisdiction": "eu"
 
 ## 5. What the monthly drill does and does not prove
 
-`dr-drill.yml` runs `dr-drill.sh` on the 1st at 06:00 UTC: it creates a
-throwaway database, imports the latest backup, counts rows and tables, and
-deletes it. It **re-implements** the import rather than calling
-`restore-d1.sh`, so the two paths can drift; the drill is the one that runs.
+`dr-drill.yml` runs `dr-drill.sh` on the 1st at 06:00 UTC: it reads the latest
+backup's key from `heartbeat-d1.json`, creates a throwaway EU database, imports
+the backup, counts rows and tables, and deletes the database, on failure too.
+Every run writes `drill-d1.json` to the backups bucket, pass or fail, and HQ's
+Security page reads it (D263). It **re-implements** the import rather than
+calling `restore-d1.sh`, so the two paths can drift; the drill is the one that
+runs.
 
-It proves the backup is present, recent, and importable — a real and useful
-thing. It does **not** prove the restore lands in the right jurisdiction, and
+**Until D263 it had never reached the import.** The four runs from June to
+September 2026 failed before it: two on unset secrets, one at the preflight,
+one with no runner. A run with the secrets set would have failed too, on
+`wrangler r2 object list`, which wrangler 4.131 does not have. Read the
+Security page, or `drill-d1.json`, for what the last run actually did.
+
+When a run passes, it proves the backup is present, recent and importable. It
+does **not** prove the restore lands in the right jurisdiction, and
 until D167 it created its throwaway database with no `--jurisdiction`, so it
 was quietly exercising the wrong shape every month. The create now carries the
 flag, which makes the drill rehearse what a real recovery must do.

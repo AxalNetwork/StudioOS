@@ -25,7 +25,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { codeOnly } from './_codeOnly.mjs';
 import {
-  Sanctions, BackupDr, securityEventsBar, dsrBranchesSentence,
+  Sanctions, BackupDr, drillSentence, securityEventsBar, dsrBranchesSentence,
 } from '../src/pages/hq/SecurityPage.jsx';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -34,7 +34,13 @@ const CODE = codeOnly(PAGE);
 const render = (C, props) => renderToStaticMarkup(React.createElement(C, props));
 
 const HOW = 'Screening runs on request from the Trust Center Sanctions tab. Nothing schedules it, so a count of zero is a measured zero.';
-const DRILL = { available: false, reason: 'The restore drill writes its outcome nowhere the platform can read.' };
+const DRILL = { available: false, state: 'unreadable', reason: 'The BACKUPS R2 binding is not bound on this deployment.' };
+const DRILL_NEVER = { available: true, state: 'never_run', reason: 'No drill-d1.json has been written to the backups bucket.' };
+const DRILL_FAILED = {
+  available: true, state: 'last_run_failed', at: '2026-10-01T06:03:10Z', step: 'restore', exit_code: 2,
+  backup_key: 'd1/studioos-db/backup-2026-09-30.sql', duration_s: 41, source: 'gha', run_id: '1234',
+};
+const DRILL_PASSED = { ...DRILL_FAILED, state: 'last_run_passed', step: 'teardown', exit_code: 0 };
 
 // ─────────────────────────────────────────────────────────── the ledger ──
 
@@ -110,26 +116,53 @@ test('sanctions: a measured zero is four figures and the reason it is zero; an u
   assert.doesNotMatch(unread, />\d+</, 'an unreadable store drew a number');
 });
 
-test('backup / DR: the restore drill stays a stated absence however green the backup half is', () => {
-  const green = render(BackupDr, {
-    block: { backup: { available: true, kind: 'd1', at: '2026-09-23T02:10:00Z', source: 'gha', size_bytes: 4096 }, drill: DRILL },
-  });
-  assert.match(green, /data-testid="hq-backup-heartbeat"/);
-  assert.ok(green.includes('2026-09-23 02:10'), 'the export is not stamped');
-  assert.ok(green.includes('D1 export'));
-  const drillAt = green.indexOf('data-testid="hq-restore-drill"');
-  assert.ok(drillAt > 0, 'the restore drill is not drawn');
-  const drill = green.slice(drillAt);
-  assert.ok(drill.includes('Not recorded'), 'a green backup turned the drill green too');
-  assert.ok(drill.includes(DRILL.reason), 'the drill is not given its reason');
+test('backup / DR: the restore drill draws its own state however green the backup half is', () => {
+  const GREEN = { available: true, kind: 'd1', at: '2026-09-23T02:10:00Z', source: 'gha', size_bytes: 4096 };
+  const drillOf = (markup) => {
+    const at = markup.indexOf('data-testid="hq-restore-drill"');
+    assert.ok(at > 0, 'the restore drill is not drawn');
+    return markup.slice(at);
+  };
+
+  const unreadable = render(BackupDr, { block: { backup: GREEN, drill: DRILL } });
+  assert.match(unreadable, /data-testid="hq-backup-heartbeat"/);
+  assert.ok(unreadable.includes('2026-09-23 02:10'), 'the export is not stamped');
+  assert.ok(unreadable.includes('D1 export'));
+  const u = drillOf(unreadable);
+  assert.ok(u.includes('Unreadable'), 'a green backup turned an unreadable drill into something else');
+  assert.ok(u.includes(DRILL.reason), 'the drill is not given its reason');
+  assert.ok(!u.includes('passed'), 'an unreadable drill rendered as passed');
+
+  const never = drillOf(render(BackupDr, { block: { backup: GREEN, drill: DRILL_NEVER } }));
+  assert.ok(never.includes('Never run') && never.includes(DRILL_NEVER.reason));
+
+  // D263 — a failed run shows its step and its date, and is never drawn as passed.
+  const failed = drillOf(render(BackupDr, { block: { backup: GREEN, drill: DRILL_FAILED } }));
+  assert.match(failed, /data-state="last_run_failed"/);
+  assert.ok(failed.includes('Last run failed on 2026-10-01 06:03'), 'the failed run is not dated');
+  assert.ok(failed.includes('at step restore') && failed.includes('exit 2'), 'the failed run does not name its step');
+  assert.ok(!failed.includes('passed'), 'a failed drill rendered as passed');
+  assert.ok(!failed.includes('emerald'), 'a failed drill drew the passing tone');
+
+  const passed = drillOf(render(BackupDr, { block: { backup: GREEN, drill: DRILL_PASSED } }));
+  assert.ok(passed.includes('Last run passed on 2026-10-01 06:03') && passed.includes(DRILL_PASSED.backup_key));
 
   const unbound = render(BackupDr, {
-    block: { backup: { available: false, reason: 'No BACKUPS R2 binding on this Worker.' }, drill: DRILL },
+    block: { backup: { available: false, reason: 'No BACKUPS R2 binding on this Worker.' }, drill: DRILL_PASSED },
   });
   assert.match(unbound, /data-testid="hq-backup-unreadable"/);
   assert.ok(unbound.includes('No BACKUPS R2 binding'), 'an unbound bucket is not given its reason');
   assert.ok(!unbound.includes('hq-backup-heartbeat'), 'an unbound bucket drew an export');
-  assert.ok(unbound.slice(unbound.indexOf('data-testid="hq-restore-drill"')).includes(DRILL.reason));
+  assert.ok(drillOf(unbound).includes('Last run passed'), 'the drill half followed the backup half');
+});
+
+test('D263 — the rail row says what the zone says about the drill', () => {
+  for (const d of [DRILL, DRILL_NEVER, DRILL_FAILED, DRILL_PASSED]) {
+    const zone = render(BackupDr, { block: { backup: { available: false, reason: 'x' }, drill: d } });
+    assert.ok(zone.includes(drillSentence(d).replace(/'/g, '&#x27;')), `the zone does not draw the rail's sentence for ${d.state}`);
+  }
+  assert.match(drillSentence(DRILL_FAILED), /^Last run failed/);
+  assert.match(drillSentence(null), /^Unreadable/);
 });
 
 // ──────────────────────────────────────────────────── data subject requests ──

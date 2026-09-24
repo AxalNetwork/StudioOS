@@ -14580,6 +14580,10 @@ branch — and the recovery path does not. That is a gap, not an unknown.
 `wrangler d1 create "${TARGET_DB}"` with **no `--jurisdiction`**, on the 1st of
 every month. The drill therefore proved the backup was present, recent and
 importable — all real — while rehearsing a restore into a **non-EU** database.
+*(Corrected by D263: "proved … importable" was never true. No run before
+2026-10 reached the import: the first four failed on unset secrets or no runner,
+and the script's first call, `wrangler r2 object list`, is not a wrangler 4.131
+command.)*
 An operator following the shape the drill validates, in a real incident, would
 recover production data into the wrong jurisdiction with no way to move it.
 **That one flag is the only executable change in this PR**, and the guard
@@ -24990,6 +24994,12 @@ SPA HQ does.
   requires exactly one HQ line and requires every other line to name a branch
   config.
 
+**What D253 left standing, corrected in place.** Two sentences still said
+nothing redeploys a branch: the H14 rail row "A redeploy of a branch"
+(`PlatformTopologyPage.jsx`) and the header of `topology_d209.test.ts`. Both
+were corrected in the first commit of the task-323 PR (D263), and
+`topology_h14_s14` now fails if the page says it again.
+
 **Filed, not built: the status flip.** Nothing moves a branch from
 `provisioning` to `live`. `branch-provision.yml` writes `provisioning`, and its
 smoke step is what shows the branch is live, but nothing writes that back. That
@@ -25527,3 +25537,125 @@ boundary, which is what the pin holds.
 `docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
 edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
 `check-folder-docs` and `check-api-drift` exit 0.
+
+## D263
+
+**Task 323: the restore drill had failed four runs out of four, and the next
+run would have failed on its first command.** It is scheduled for
+2026-10-01 06:00 UTC.
+
+**What the four runs show.** Their logs have expired; their step names,
+conclusions and timings have not.
+- **06-01 (run 26752271085) and 07-01 (run 28501383273).** "Run DR drill"
+  failed about a second in, at the first wrangler call. Commit 6dd551a43,
+  written while those logs still existed, says both secrets were unset.
+- **08-01 (run 30691494444).** The preflight failed on empty secrets.
+- **09-01 (run 33500945404).** The job never got a runner.
+- **No backup existed anywhere before 2026-09-04**, backup-d1's first success.
+
+**Why 2026-10-01 would have failed anyway.**
+- **Its first command does not exist.** The drill found the latest backup with
+  `wrangler r2 object list`. Wrangler 4.131 registers only get, put and
+  delete under `r2 object`, and its parser is strict.
+- **The error was thrown away.** `2>/dev/null` discarded wrangler's message,
+  and `set -euo pipefail` ended the script at the assignment. So the
+  empty-target check after it could never run.
+- **The download read the wrong store.** The backup `get` had no `--remote`,
+  and wrangler defaults to local storage.
+- **Step 4c proved nothing.** It ran `npm run test:drift` with no `npm ci`,
+  and that suite never touches the restored database.
+- **Step 4d could not work.** It deployed a preview env whose KV ids are
+  placeholders, and probed a `workers.dev` URL with no account subdomain.
+- **Every failure leaked a database.** The trap removed only the temp
+  directory.
+- **Nobody was paged.** "Notify on failure" was skipped on all four runs. Its
+  `if:` tested `env.PAGER_WEBHOOK_URL`, which exists only in that step's own
+  `env:`, and a step's `if:` does not see its own `env:`.
+
+**What changed in `scripts/dr-drill.sh`.**
+- **Every exit writes a marker,** `drill-d1.json`, to the backups bucket from
+  the EXIT trap: at, outcome, duration_s, source, step, exit_code,
+  backup_key, run_id.
+  - It is built with `jq -n` and written the way backup-d1 writes its heartbeat
+    (`r2 object put … --remote || log`).
+  - `trap - EXIT` is gone, so a passing run writes one too.
+  - A marker that cannot be written never changes the exit code.
+- **The key comes from `heartbeat-d1.json`,** which backup-d1 writes with the
+  key it just uploaded. The drill checks it against the backup-key pattern,
+  and the empty check now runs.
+- **Every R2 call carries `--remote`.** No wrangler error is discarded.
+- **The trap deletes the throwaway database** whenever one was created.
+- **Step 4c is removed.** What proves the restore is 4a and 4b, run against the
+  restored database itself.
+- **Step 4d is off.** `DR_DRILL_PREVIEW: '0'` in the workflow keeps it off
+  until the preview env has real KV ids and the probe has the account's
+  `workers.dev` subdomain. Turning it on is changing that `'0'` to `'1'`.
+
+**What changed in `dr-drill.yml`: paging can fire.**
+- The job now exposes only a boolean, `PAGER_CONFIGURED`, derived from the
+  secret, at job level where `if:` can see it.
+- The script already pages from its own trap, so the workflow step pages only
+  for a failure before the drill ran, such as the preflight or the install.
+
+**The platform reads it.** `readRestoreDrill(env)` in `services/backup.ts`
+returns one of four states:
+- `unreadable` (`available: false`): no binding, the read threw, the JSON did
+  not parse, or the outcome is not one the drill writes;
+- `never_run`: the object is absent;
+- `last_run_failed` or `last_run_passed`, each with at, step, exit_code and
+  backup_key.
+
+No reason string carries a count. `/api/admin/security/overview` sends
+`drill: await readRestoreDrill(env)` in place of D200's stated absence, and
+`RESTORE_DRILL_REASON` is gone. H23's Backup / DR zone and its rail row both
+draw the one sentence `drillSentence` builds. A failed run names its step,
+exit code and date, and is never drawn in the passing tone.
+
+**Corrected in place.**
+- D1_RECOVERY.md §5 said the drill proves the backup "importable". D200's
+  finding 4 said the same. Both now say no run ever reached the import.
+- The script's comment claiming old-shape keys cover most of the year went
+  with the `list` call. Those keys exist only for 2026-09-04 to 09-14.
+- The D253 residue (see D253) is the first commit of this PR.
+
+**Owner action, before 2026-10-01.** Run "Monthly DR Drill" once by hand
+(workflow_dispatch) and say what `drill-d1.json` it wrote. A session cannot
+dispatch a workflow: `actions: write` is not granted.
+
+**Tests.**
+- **`frontend/test/dr_drill_d263.test.mjs`, 7 tests.** They run the script with
+  a fake `wrangler` on PATH that records every argument list. The cases:
+  - a passing run writes a passed marker and exits 0;
+  - every R2 call names `--remote`, and the only put is to `drill-d1.json`;
+  - a failed restore exits 2 with a failed marker, and still deletes the
+    database;
+  - an unreadable heartbeat fails at `find_backup` with no key, and wrangler's
+    error reaches the log;
+  - a smoke failure exits 3;
+  - a marker that cannot be written never changes the exit code;
+  - the four defects are gone from the script and the workflow.
+- **Five Worker tests in `security_events_d200.test.ts`:**
+  - the key read is exactly `drill-d1.json`;
+  - no binding, a throw, bad JSON, a non-object and an unknown outcome are
+    all `unreadable`;
+  - an absent marker is `never_run`, and a failed or passed marker keeps its
+    step;
+  - no reason carries a count;
+  - `/overview` with a green heartbeat beside a failed marker reports the
+    failure.
+- **Re-aimed, never loosened:**
+  - `hq_security.test.mjs` now requires the route to read the marker, and
+    fails if it returns to a stated absence or derives the drill from the
+    backup half.
+  - `hq_security_h23.test.mjs` renders all four states, and a new test holds
+    the rail row to the zone's sentence.
+
+**Mutations: 8 run, 8 caught** (plus 1 for the D253 residue):
+- the marker written only on success;
+- `--remote` dropped from the marker put;
+- a throw read as `never_run`;
+- the route returned to a stated absence;
+- the drill inferred from the backup half;
+- a failed drill exiting 0;
+- a failed marker rendered as passed;
+- an unknown outcome accepted.
