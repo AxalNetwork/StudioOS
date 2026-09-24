@@ -21531,3 +21531,274 @@ appear. The first real migration read-back after this merges will show it.
 - `check-decision-ids` reads **D1 through D212**.
 
 **285 is still the next free migration, and D213 the next decision.**
+
+## D213
+
+**Canvas H16 draws four consoles on Platform — Integration keys, GitHub Sync,
+Payments catalog, Promo codes — and says they retire the `/admin` tabs.
+Nothing retires, so Platform does not become those consoles: it gains four
+read-only panels, each summarising one console from the store that console
+writes, each in its own state, and each ending in one literal link to the
+console where anything is changed. Measuring what the four consoles store
+turned up five things on shipped screens that were not so, and each is
+corrected where it was said.**
+
+#315, #375–#377. **No migration**, so **285 is still free**. **No new route
+and no new `api.js` method**: the four blocks ride `GET
+/api/admin/platform/summary`, D202's precedent, so `check-api-drift` has
+nothing to say. `frontend/src` changes, so `docs/` is rebuilt. **Nothing
+retires**: the four consoles stay where they are.
+
+### WHAT WAS WRONG
+
+1. **Platform said a key could be revealed, in four places, and nothing
+   reveals one.** The page's docblock, its rail, its keys paragraph and the
+   route's header all said reveal and revoke live on the console that owns key
+   material. Measured: a saved key is write-only — promoted to a Worker secret
+   and never read back — and no screen reveals one. Removing one does exist, on
+   the Integration keys console, so that half is kept, with what the console
+   actually offers today (below).
+2. **An unreadable key table read as "unconfigured".** `listProviderKeyStatus`
+   caught a failed read of `provider_oauth_keys` and carried on, so every key
+   not set as a Worker secret reported `unconfigured` — the unreadable-as-empty
+   class, one screen away. Platform now reads through
+   `readProviderKeyStatus`, which reports the failure, and draws those keys as
+   **Unknown**. The console's own list keeps its behaviour for now; that is
+   filed, not changed here.
+3. **Revenue counted expired codes as "redeemable now".** Its count was
+   `WHERE active = 1`, while checkout refuses a code past its expiry or at its
+   cap. It now counts through the same rule checkout and Platform read, and its
+   note says what the number is: *switched on, unexpired, under their recorded
+   cap*.
+4. **Support said H16's P2 console was not built.** It is now: Platform's
+   GitHub Sync panel. Support's footer links it with a literal
+   `<Link to="/admin/platform">` and keeps its link to the mirror's settings.
+5. **The GitHub console displays a default repository the mirror never
+   writes to.** `admin_github.ts` falls back to `AxalNetwork/StudioOS` for
+   display when the variables are unset; the mirror (`githubConfigured`)
+   refuses to run unless both are set. P2 reads the mirror's rule, through a new
+   `githubMirrorTarget`, and names a repository only when both halves are set.
+
+### WHAT SHIPPED — four blocks, each its own state
+
+- **P1 · `integration_keys`.** For each of the twelve managed providers:
+  whether a key is held as a Worker secret, in the database, not at all, or
+  unknown because the table could not be read (`keyStateOf`). **Four fields
+  per key and no more** — no client id, which is half a credential pair. When a
+  Worker-secret key was last set comes from the console's own audit rows:
+  successful saves and rotations only (`outcome = 'ok'`), because the console
+  audits refusals too; **a removal after the last save cancels the date**,
+  because the key present today was then set some other way. A key held in the
+  database is dated by its row. A key set at deploy has no date, and the panel
+  says so rather than inventing one. The action names the reader matches are
+  held equal to the ones the console writes, from the source.
+- **P2 · `github_sync`.** The target (`token_set`, the repository by the
+  mirror's rule, `configured`) — never the token, not even the eight characters
+  the console's `token_preview` shows. The 24-hour window is Support's own
+  `readTicketSync`, reused verbatim. The latest attempts are one row per
+  ticket, newest first by `datetime()` so an ISO stamp and a SQL one order by
+  time, errors clipped to 200 characters, and **no title or requester**: this
+  panel is about the mirror's health, and each row links to its ticket. Without
+  migration 273 both reads say so, naming 273, and nothing is added to
+  `tickets`.
+- **P3 · `payments_catalog`.** The publishable key checkout is served — the
+  same KV-then-env answer `/api/payments/config` gives — masked by the one mask
+  the Payments console now also calls (`maskPublishableKey`), with its mode from
+  its own prefix and never from the secret key. The mirror is read directly,
+  **never through `getCatalog`, which calls Stripe when the mirror is empty**:
+  products and prices, all and active; a row whose price list does not parse is
+  counted as unreadable, never as zero prices; the last write is the maximum of
+  `datetime(synced_at)`, because the column holds both ISO and SQL stamps and a
+  raw comparison puts ISO above a later SQL stamp the same day. The webhook's
+  last delivery and its 24 hours come from the request log for
+  `/api/billing/stripe/webhook` only — a path held equal to where `index.ts`
+  mounts billing and billing serves the handler — and a delivery with no
+  recorded status is a delivery, not a refusal. One sentence each says what the
+  latency measures and that each deployment reads its own mirror.
+- **P4 · `promo_codes`.** Every code's terms, cap, recorded redemptions,
+  expiry and **one state, by one rule**: `promoState` checks switched off, then
+  expired, then at its cap (`>=`, as checkout refuses at the cap), then active.
+  `promoExpired` is now the one definition of expired, read by checkout, by
+  Revenue and by Platform; a SQL-format expiry is read as UTC. Platform passes
+  the mirror's `times_redeemed`, a lower bound, so a code is called exhausted
+  only when the mirror alone reaches the cap — which is sound. Fifty codes are
+  listed, newest first; the counts cover every code. A product list that does
+  not parse is `null`, kept apart from `0`, which means every product. Four
+  caveats say what the figures cannot.
+
+**The GET alters no schema and makes no network call.** No block runs a
+bootstrap (`ensureSchema`, `ensurePromoSchema`, `ensureCatalogSchema`,
+`ensureTicketSyncSchema`): each would turn "unreadable" into "empty". A test
+snapshots `sqlite_master` before and after, with every table present and with
+none of them, and stubs `fetch` to count zero calls with a Stripe key set over
+an empty mirror — the case where `getCatalog` would have gone to Stripe.
+
+**The page.** Four zones in a grid right after Keys and connections, in the
+artboard's order and titled as it titles them without the `P1 ·` prefix,
+**before Scheduled jobs**, so the slices other tests take from there are
+unaffected. Each panel is an exported, pure component that renders its block
+in every state, and each ends in one literal link: `/admin?tab=integration-keys`,
+`/admin?tab=github`, `/admin?tab=payments`, `/admin?tab=promos`. Operator
+consoles keeps the two consoles with no panel here, Monitoring and Telegram,
+so every console is linked once. The rail gains four coverage lines and five
+rows for what H16 draws and nothing stores — secret reveal, key expiry, mirror
+lag, catalog schedule, code attribution — beside a corrected key-material row.
+
+### THE JUDGEMENT CALLS, EACH CHEAP TO STRIKE
+
+1. **Extend `/summary` rather than add a route.** *Strike it and a
+   `/consoles` route plus one `api.js` method carry the four blocks.*
+2. **Each console linked once, from its panel.** *Strike it and Operator
+   consoles lists all six again — two links to each of four places.*
+3. **Revenue's count is fixed here, not filed.** It is the same fact as P4:
+   which codes are redeemable. *Strike it and Revenue keeps counting expired
+   codes, filed as its own task.*
+4. **No ticket titles and no masked client id on Platform.** *Strike either and
+   the field joins the whitelist.*
+
+### DELIBERATELY NOT BUILT
+
+- A reveal, a key expiry or an Active/Expired key state: nothing stores them.
+- A mirror lag or a failure log: a ticket keeps only its latest attempt.
+- A catalog sync schedule or a failed-sync record: none exists, and only a
+  manual sync that succeeded is audited.
+- Licence or cohort scoping on a promo code, and subscription redemptions:
+  a code names neither, and Stripe counts the second without a mirror.
+- The canvas's *"inside that cap"*: no promo ceiling is checked against these
+  codes, and no screen sets one.
+
+### CORRECTIONS WHILE BUILDING
+
+- **The webhook's refused count counted a delivery with no recorded status as
+  refused** (`CASE WHEN 2xx THEN 0 ELSE 1`). A missing status is not a refusal;
+  only a written status outside 2xx counts now, and a test pins it.
+- **P1's link note said a key could be rotated or removed there.** The console
+  offers both only for a key held in the database, and a save moves a key out
+  of the database, so the note says so.
+- **P4 drew an unknown state with the Expired pill.** It now draws the state
+  itself; borrowing a known label is a claim nothing measured.
+- **P4 used a bare dash for "no cap", and P3 a `?` for a missing status**, and
+  drew a failed request-log read through the not-recorded component. Each now
+  says what it is in words; the failed read is red with its own reason.
+- **The promo caveats said ceilings are set on Revenue and ignored codes with
+  no product list.** Measured: no screen calls `promoCeilingSet`, and an empty
+  list applies a code to every product. Both caveats say that now.
+- **One of this build's own assertions aimed at the wrong line.** It refused
+  `pk.slice(0, 8)` in the Payments console as a second mask; that expression
+  there is the audit row's key prefix on a save. The assertion now refuses the
+  mask's own shape, `pk.slice(-4)`.
+- **GitHub's own error text can put "credentials" in the payload.** "Bad
+  credentials" is what GitHub answers a failed token, and P2 shows the error.
+  It is data, not key material and not a sentence this route writes; the two
+  existing payload scans refuse the word only in their own fixtures. The new
+  scan's fixture uses another GitHub error and says why.
+- **The mutation run found an assertion that could not fail here.** Dropping
+  the `Z` from `promoExpired`'s SQL-format branch reads the stamp as local
+  time, and the test pinning "a SQL stamp is UTC" passed anyway — this
+  sandbox and CI both run in UTC, where local time and UTC are the same
+  instant. The assertion was fixed, not the code: the pair is now made again
+  under a zone west of UTC (`Etc/GMT+5`, which catches the misread on the
+  expiry instant) and one east of it (`Asia/Tokyo`, one second after), with a
+  probe that fails first if the runtime ignored the zone. The mutation is
+  caught now, and so is a helper that stops applying the zone.
+- **The secret scan refused a fixture of mine.** The no-network test seeded
+  `STRIPE_SECRET_KEY` with a made-up value shaped exactly like a live key, and
+  gitleaks' `stripe-access-token` rule failed the PR on it. `getCatalog`
+  reaches Stripe for any non-empty key, so the value only has to be truthy; it
+  is now shaped so no scanner can read it as a key. The scan reads every
+  commit in the PR, so the commit was rewritten rather than followed by a fix,
+  and nothing was added to the gitleaks allowlist, which is reserved for
+  history that cannot be rewritten. Mutation W12 was re-run against the new
+  value and is still caught.
+
+### FILED, NOT FOLDED IN
+
+- **A promo code whose product list does not parse applies to every product
+  at checkout.** `parseProductIds` answers `[]` on a parse failure and
+  `validatePromoForProduct` reads `[]` as every product — fail-open.
+- `api.promoCeilingSet` has no caller, so no screen can set a promo ceiling.
+- **The Integration keys console:** Rotate and Remove are enabled only for a
+  key held in the database while a save moves the key out of it, so a key
+  saved from the UI cannot be rotated or removed from the UI; its modal copy
+  (*"Only the secret hash is ever logged"*) is stale; and it shows an
+  unreadable store as unconfigured.
+- **`admin_github`'s `token_preview` shows eight characters of the token.**
+  Appended to #359.
+- Dead code: the `api.js` methods `getTicketMapping`,
+  `adminDeleteGithubConfig` and `adminCatalogMode` have no caller, and neither
+  does `handleStripeConnectEvent`, whose comment says billing dispatches it.
+
+### VERIFIED
+
+`npm run test:drift` exits **0**, read as the exit code from a redirected log.
+Counts:
+
+- frontend 3058 → **3080**: the twenty-two tests in
+  `hq_platform_consoles_h16.test.mjs`. `hq_support_h22_d204.test.mjs` keeps its
+  sixteen, one assertion re-aimed at the footer that now links Platform;
+- worker 3970 → **4001** — 3998 pass plus the same 3 pre-existing
+  environment-gated skips: the thirty tests in `platform_consoles_d213.test.ts`,
+  and one in `admin_revenue.test.ts` that leaves an expired code and a code at
+  its cap out of the active count;
+- retention **47**, unchanged;
+- zero `not ok`.
+
+All eighty tests in those four files were confirmed **by name** in the log.
+
+Every guard ran as a step of that same run and exited 0: both typechecks,
+`lint:undef`, `check-api-drift` (no new method), `check-folder-docs`,
+`check-decision-ids` (D1 → **D213**), `check-unused-imports`,
+`check-react-hook-imports`, `check-frontend-logging`, `check-dark-mode`,
+`check-sql-prepare`, `check-timestamp-comparisons`, `check-sqlite-dialect` and
+`check-sql-migrations`.
+
+`docs/` was rebuilt on the no-ledger path. The local retention ledger was
+moved aside first, so a stale one could not decide the window (#333). The
+build emitted 613 fresh assets and retained 363, keeping 976 in all.
+`check-docs-fresh --strict`, `prerender-og --check` (31 routes) and
+`check-docs-assets-closure` (9,304 references across 932 chunks, 976 files on
+disk) all exit 0. A walk of every asset `main`'s committed shells reach (31
+shells, 19 seeds) found **613 of 613** still on disk.
+
+**40 mutations applied, 40 caught — one only after its assertion was fixed.**
+Before writing anything, the harness pre-flighted all 43 anchors as unique and
+byte-changing. It ran a clean baseline of both suites, ran both for every
+mutation, counted a mutation caught only on a non-zero exit **and** a `not
+ok`, and restored every file byte-identical by sha256. The full run caught 39
+of 40 in 198 seconds. The one that escaped, a SQL-format expiry read as local
+time, is under CORRECTIONS WHILE BUILDING: the assertion could not fail in
+UTC, and was fixed, not the code. Re-run alone, it is caught, and so is a
+helper that stops applying the zone.
+
+What the forty broke, by area:
+
+- **Integration keys (6):** the key-table read swallowed again; a refused
+  save dating a key; the client id's preview back in the payload; a removal
+  no longer cancelling the date; an unreadable audit log read as "no record";
+  a database-held key dated by nothing.
+- **GitHub Sync (5):** the read running the ticket-sync bootstrap; a default
+  repository when the variables are unset; the token preview leaking;
+  attempts ordered by the raw stamp; the error text unclipped.
+- **Payments catalog (10):** the page load going through `getCatalog`;
+  prices counted without the active filter; an unparsed price list read as no
+  prices; the last write compared raw; the mirror read bootstrapping its
+  table; the webhook window dropping its endpoint filter; a missing status
+  counted as refused; the webhook path moved where billing does not serve it;
+  the mode guessed from any `pk_`; a mask showing six characters.
+- **The payload scans (2):** an environment-variable name, and the word
+  "credential", in a basis sentence.
+- **The route header (1):** the reveal claim restored.
+- **Promo codes and Revenue (7):** `promoState` ignoring expiry; exhausted
+  only past the cap; a SQL-format expiry read as local time; checkout growing
+  a second expiry rule; Revenue counting expired codes; the list not cut; an
+  unparsed product list read as all products.
+- **The page and Support (9):** an unavailable keys block drawn as zeros; an
+  unavailable promo block drawn as zero codes; the reveal claim restored in
+  the keys paragraph and in the rail; a console link made non-literal; a
+  failed webhook read drawn as "no delivery"; Support's "not built" footer
+  restored; Revenue's count relabelled "redeemable now"; the promo console
+  linked twice.
+
+No migration, so there is nothing to read back from production D1.
+
+**285 is still the next free migration, and D214 the next decision.**

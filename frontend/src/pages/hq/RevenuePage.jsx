@@ -420,8 +420,8 @@ export default function RevenuePage() {
           <Zone title="Promotions" sub="the ceiling HQ sets, and the codes it cannot attribute">
             {promos?.available ? (
               <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-                <Stat label="Active codes" value={num(promos.active_codes)} note="redeemable now" />
-                <Stat label="Redemptions" value={num(promos.redemptions)} note="across active codes" />
+                <Stat label="Active codes" value={num(promos.active_codes)} note="switched on, unexpired, under their recorded cap" />
+                <Stat label="Redemptions" value={num(promos.redemptions)} note="recorded here, across active codes" />
                 <Stat
                   label="Ceilings set"
                   value={ceilingRows ? num(ceilingRows.length) : null}

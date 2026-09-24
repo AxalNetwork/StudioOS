@@ -663,8 +663,9 @@ export function TenantMatrix({ matrix, failed, onRetry }) {
 /**
  * The mirror strip. Two measured counts over the last day and an average lag
  * that is not recorded, with the server's reason. The canvas links this strip
- * to H16's P2 console; that console is not built, so the link goes to the
- * mirror's settings, which are.
+ * to H16's P2 console, which is Platform's GitHub Sync panel (D213): the
+ * mirror's latest attempts, ticket by ticket. Its settings stay on the Admin
+ * Console, so the strip links both, each with a literal path.
  */
 export function SyncStrip({ sync, failed, onRetry }) {
   let body;
@@ -709,7 +710,10 @@ export function SyncStrip({ sync, failed, onRetry }) {
         </Link>
       </div>
       <div className="mt-2">{body}</div>
-      <p className="mt-2 text-[10px] text-axal-faint">H16&apos;s P2 console is not built; the settings are on the Admin Console.</p>
+      <p className="mt-2 text-[10px] text-axal-faint">
+        The mirror&apos;s latest attempts, ticket by ticket, are on{' '}
+        <Link to="/admin/platform" className="underline">Platform</Link>; its settings are on the Admin Console.
+      </p>
     </Card>
   );
 }
