@@ -21967,3 +21967,35 @@ belongs — on committed builds that skipped the rebuild hook.
   prints the two causes and the fix verbatim.
 - Comments fixed to reflect absent as a failure, not a fallback.
 - Wiring test added: the new branch pins exact location and exit behavior.
+
+## D219
+
+**One `clientIp` helper, and the NDA signature stops trusting a header the signer controls.**
+
+Four private `clientIp` functions disagreed about which header is the client:
+
+- `cloudflare-worker/src/routes/auth_recover.ts:96` — `cf-connecting-ip`, else the first hop of `x-forwarded-for`, else `unknown`; trimmed and clipped to 64 characters.
+- `cloudflare-worker/src/routes/auth_sms.ts:80` — the same.
+- `cloudflare-worker/src/routes/esign.ts:153` — `cf-connecting-ip`, else `x-real-ip`, else the first hop of `x-forwarded-for`, else `unknown`; not clipped; already took a `Request`.
+- `cloudflare-worker/src/routes/cofounder.ts:152` — `x-forwarded-for` **first**, then `cf-connecting-ip`, else `unknown`; not clipped.
+
+The cofounder order is the defect. Cloudflare appends to an incoming `X-Forwarded-For` rather than replacing it, so its first hop is whatever the client sent, while `CF-Connecting-IP` is set by Cloudflare. `cofounder.ts:793` stored that value as NDA-signature evidence in `cofounder_connections.nda_signed_ip_a` / `nda_signed_ip_b`, so a signer could put any address they liked into a legal-evidence field.
+
+**What shipped.** `cloudflare-worker/src/util/clientIp.ts` exports `clientIp(req: Request): string`. `cf-connecting-ip` first; else the first comma-separated hop of `x-forwarded-for`, trimmed; `unknown` when neither yields a non-empty value; the result clipped to 64 characters. The four local copies are gone. Hono handlers pass the raw request, `clientIp(c.req.raw)`. The `.slice(0, 64)` that followed the cofounder call is gone, because the helper clips.
+
+**Behaviour, named.** Cofounder now prefers `cf-connecting-ip`. That is the fix. Esign loses its `x-real-ip` fallback and gains the 64-character clip. That has no production effect, because Cloudflare always sets `cf-connecting-ip`. `auth_recover` and `auth_sms` are unchanged: they already used this precedence and this clip.
+
+**Left alone on purpose.** `middleware/rateLimit.ts:367` is a fifth reader. It already uses this precedence, and it says why in the comment above the read. It stays inline because it is the hot path. `RATE_LIMIT_EXEMPT` is untouched. The six `c.req.header('cf-connecting-ip') || undefined` sites — `auth.ts:298`, `auth.ts:717`, `jobs_public.ts:102`, `contact.ts:66` (that one spells the header `CF-Connecting-IP`), `events_public.ts:142`, `events_public.ts:209` — feed `verifyTurnstile`'s optional `remoteip`, where `undefined` means omit the field. That is a different contract from a string that is never empty.
+
+**No migration — 285 stays free. No `frontend/src` change, so `docs/` is not rebuilt. No new `/api/*` method.**
+
+### VERIFIED
+
+- `cloudflare-worker/test/client_ip_d219.test.ts`: **5** tests, exit 0. Spoofed `x-forwarded-for: 6.6.6.6` beside `cf-connecting-ip: 1.2.3.4` returns `1.2.3.4`. No CF header and `x-forwarded-for: ' 9.9.9.9 , 10.0.0.1'` returns `9.9.9.9`. Neither header, and a whitespace-only XFF, return `unknown`. A 100-character value comes back 64 characters. The single-definition guard walks `cloudflare-worker/src` after stripping `//` and `/* */` comments; `cofounder.ts` still names `function clientIp(` inside a comment and is not counted.
+- Three mutations, each restored from a saved copy rather than git. XFF-first helper: `not ok 1`, exit 1. A local `function clientIp` put back in `cofounder.ts`: `not ok 5`, exit 1. Clip removed: `not ok 4`, exit 1. Restored helper: 5 pass, exit 0.
+- `cloudflare-worker/test/security_events_d200.test.ts` is unchanged: **28** tests, exit 0.
+- `cd cloudflare-worker && npx --no-install tsc --noEmit` exits 0.
+- `check-decision-ids` and `check-folder-docs` exit 0.
+- `npm run test:drift` exits 1. The worker half reports **4006** tests, **4002** pass, **1** fail, **3** skipped. The only `not ok` is `capital_call_ledger.test.ts:204`, "a retry after a partial write fills only the gap": expected 1, actual 0. That file is not in this change, and the same assertion fails when run alone. The five new tests appear in that log by name (`ok 1219` through `ok 1223`).
+
+**285 is still the next free migration.**

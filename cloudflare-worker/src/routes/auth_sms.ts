@@ -34,6 +34,7 @@ import {
   createJWT, requireAuth, setAuthCookies, generateCsrfToken,
 } from '../auth';
 import { hashEmail } from '../util/hashEmail';
+import { clientIp } from '../util/clientIp';
 import { hasTotpConfigured } from '../services/authTotp';
 import {
   hasSmsConfigured, loadSms, persistSmsEnrollment, clearSms, markSmsUsed,
@@ -77,11 +78,6 @@ async function rate(env: Env, key: string, max: number, windowSec: number): Prom
   }
 }
 
-function clientIp(c: any): string {
-  return (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '')
-    .split(',')[0].trim().slice(0, 64) || 'unknown';
-}
-
 // E.164 must start with '+' followed by 7-15 digits.
 function isE164(p: string): boolean {
   return /^\+[1-9]\d{6,14}$/.test(p || '');
@@ -97,7 +93,7 @@ sms.get('/factors', async (c) => {
   const email = (c.req.query('email') || '').toLowerCase().trim().slice(0, 320);
   if (!email) return c.json({ error: 'Email required' }, 400);
   // Rate-limit per IP so this can't be used as an enumeration oracle.
-  const ip = clientIp(c);
+  const ip = clientIp(c.req.raw);
   const ok = await rate(c.env, `factors-ip:${ip}`, 30, 60);
   if (!ok) return c.json({ error: 'Too many requests' }, 429);
   const sql = getSQL(c.env);
@@ -129,7 +125,7 @@ sms.post('/sms/start-enrollment', async (c) => {
     return c.json({ error: 'country_not_allowed', message: `SMS to ${country} is not enabled.` }, 400);
   }
   // 10/min/IP, 5/min/user — matches the brief.
-  if (!(await rate(c.env, `sms-enroll-ip:${clientIp(c)}`, 10, 60))) return c.json({ error: 'Too many requests' }, 429);
+  if (!(await rate(c.env, `sms-enroll-ip:${clientIp(c.req.raw)}`, 10, 60))) return c.json({ error: 'Too many requests' }, 429);
   if (!(await rate(c.env, `sms-enroll-user:${user.id}`, 5, 60))) return c.json({ error: 'Too many requests' }, 429);
   const r = await sendVerificationCode(c.env, phone, recaptcha);
   if (!r.ok) {
@@ -227,7 +223,7 @@ sms.post('/sms/start-challenge', async (c) => {
   const email = String(body?.email || '').toLowerCase().trim();
   const recaptcha = body?.recaptcha_token ? String(body.recaptcha_token) : null;
   if (!email) return c.json({ error: 'Email required' }, 400);
-  if (!(await rate(c.env, `sms-chal-ip:${clientIp(c)}`, 10, 60))) return c.json({ error: 'Too many requests' }, 429);
+  if (!(await rate(c.env, `sms-chal-ip:${clientIp(c.req.raw)}`, 10, 60))) return c.json({ error: 'Too many requests' }, 429);
   if (!(await rate(c.env, `sms-chal-email:${email}`, 5, 60))) return c.json({ error: 'Too many requests' }, 429);
 
   const sql = getSQL(c.env);
@@ -266,7 +262,7 @@ sms.post('/sms/verify-challenge', async (c) => {
   // hashed and network bucketed; the answer it already gave is unchanged. A
   // 502 from the provider is not a refusal and is not written.
   const smsRefuse = (detail: string, userId?: number) =>
-    recordSecurityEvent(c.env, { kind: 'signin', factor: 'sms', outcome: 'refused', detail, userId, email, ip: clientIp(c) });
+    recordSecurityEvent(c.env, { kind: 'signin', factor: 'sms', outcome: 'refused', detail, userId, email, ip: clientIp(c.req.raw) });
 
   const stashed = await withDeadline(c.env.RATE_LIMITS.get(`sms-login:${sessionInfo}`), RATE_KV_DEADLINE_MS, 'stash-get');
   if (!stashed) { await smsRefuse('session_expired'); return c.json({ error: 'session_expired' }, 410); }
@@ -300,7 +296,7 @@ sms.post('/sms/verify-challenge', async (c) => {
   const jti = crypto.randomUUID();
   const jwtToken = await createJWT(c.env, user.id, user.email, user.role, undefined, jti);
   const ua = (c.req.header('user-agent') || '').slice(0, 500);
-  const ip = clientIp(c);
+  const ip = clientIp(c.req.raw);
   try {
     await sql`INSERT INTO user_sessions (user_id, jti, user_agent, ip, factor)
               VALUES (${user.id}, ${jti}, ${ua || null}, ${ip || null}, 'sms')`;
