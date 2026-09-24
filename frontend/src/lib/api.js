@@ -5368,12 +5368,13 @@ export const assessment = {
 
 // Task #3 — Assessment admin authoring + analytics (§3/§5/§7.2). Each method
 // maps 1:1 to a /api/admin/assessment route on the worker (api-drift guard
-// checks this prefix). The 17 writes are `requireHqAuthoring` on the worker —
-// an admin, and not on a branch (D106) — and the six reads, preview and rescore
-// are plain `requireAdmin`. This comment used to say every route was
-// requireAdmin, which D106 made false (corrected in D214). The dev FastAPI
-// backend does NOT implement these, so this surface is worker-only — expect
-// 404s in the dev preview.
+// checks this prefix). The writes are `requireHqAuthoring` on the worker —
+// an admin, and not on a branch (D106) — and the reads and preview are plain
+// `requireAdmin`. This comment used to say every route was requireAdmin,
+// which D106 made false (corrected in D214). The dev FastAPI backend does
+// NOT implement these, so this surface is worker-only — expect 404s in the
+// dev preview. D255 removed the dead `rescore` method (no caller); the
+// worker's own POST /sessions/:id/rescore route is unaffected.
 export const adminAssessment = {
   // Games
   listGames: () => request('/admin/assessment/games'),
@@ -5425,7 +5426,8 @@ export const adminAssessment = {
     }),
   // Analytics — aggregate funnel/distribution/coverage for a game.
   analytics: (slug) => request(`/admin/assessment/games/${encodeURIComponent(slug)}/analytics`),
-  // Admin re-score of a persisted session (optional surface).
-  rescore: (sessionId) =>
-    request(`/admin/assessment/sessions/${sessionId}/rescore`, { method: 'POST', body: '{}' }),
+  // D255 — `rescore` was removed here: no caller in frontend/src called it.
+  // The worker route (admin_assessment.ts, POST /sessions/:id/rescore)
+  // stays — check-api-drift reads api.js → worker only, so a route with no
+  // api.js caller is invisible to it either way.
 };
