@@ -6,10 +6,19 @@
  *
  *   Keys   `integrations` carries a provider, a status and a connection per
  *          account. The KEY MATERIAL IS NEVER FETCHED BY THIS PAGE — the
- *          endpoint counts and states, and the artboard's "reveal on click,
- *          re-hide after thirty seconds" belongs to the console that owns
- *          key material, not to a read-only HQ summary. Revocation likewise:
- *          it is instant and irreversible, so it stays where it is audited.
+ *          endpoint counts and states. The artboard's "reveal on click,
+ *          re-hide after thirty seconds" is drawn nowhere because it exists
+ *          nowhere (D213): once saved, a key is write-only, promoted to a
+ *          Worker secret and never read back. Removing one does exist, on the
+ *          Integration keys console, where it is recorded and cannot be undone
+ *          — though that console offers it today only for a key held in the
+ *          database.
+ *   H16 (D213) — four panels, one per console HQ runs the platform on:
+ *          Integration keys, GitHub Sync, Payments catalog, Promo codes. Each
+ *          summarises its console's own store, in its own state, and ends in
+ *          ONE literal link to that console — which is where anything is
+ *          changed. The canvas says they retire the /admin tabs; nothing
+ *          retires, so the consoles stay and each is linked once, from here.
  *   Jobs   `cron_run_history` records every scheduled tick, and since D201
  *          that includes the tick that found the lease held and ran nothing.
  *          Each DECLARED trigger is read against its own schedule, so a
@@ -432,6 +441,401 @@ export function SwitchList({ switches }) {
   );
 }
 
+/* ── H16 (D213) · the four consoles ─────────────────────────────────────── */
+
+/**
+ * The link each panel ends in. ONE per panel and a literal `to` at each call
+ * site, so the reachability walk counts it and it stands whether or not the
+ * panel's own block could be read — the console is where you would go to find
+ * out. It is a link and never a button: this page holds no handler.
+ */
+function ConsoleLinkBody({ title, note }) {
+  return (
+    <>
+      <div className="text-[12.5px] font-bold text-axal-ink dark:text-white">{title} →</div>
+      <div className="mt-0.5 text-[11px] leading-relaxed text-axal-faint">{note}</div>
+    </>
+  );
+}
+const CONSOLE_TILE = 'block rounded-xl border border-axal-hairline bg-axal-ground px-3 py-2 hover:border-axal-violet dark:hover:border-violet-700';
+const CONSOLE_LINK = `mt-3 ${CONSOLE_TILE}`;
+
+/**
+ * The console's own names for the managed providers (AdminPage's
+ * PROVIDER_LABELS), so a key reads the same on both screens. A test holds the
+ * two maps equal; a provider this map does not know shows its key, never
+ * nothing.
+ */
+export const PROVIDER_LABEL = {
+  slack: 'Slack',
+  hubspot: 'HubSpot',
+  salesforce: 'Salesforce',
+  docusign: 'DocuSign',
+  linkedin: 'LinkedIn',
+  calendly: 'Calendly',
+  stripe: 'Stripe',
+  carta: 'Carta',
+  crunchbase: 'Crunchbase',
+  affinity: 'Affinity',
+  telegram: 'Telegram',
+  gcip: 'Google Identity (SMS)',
+};
+
+/**
+ * Where a key lives, and its one tone. `unreadable` is its own state: the
+ * table did not answer and no Worker secret is set, so whether a key is held
+ * is unknown — drawing that as "not set" would claim a measurement nobody made.
+ */
+export const KEY_STATE = {
+  env: ['Worker secret', 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300'],
+  db: ['In the database', 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300'],
+  unset: ['Not set', 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'],
+  unreadable: ['Unknown', 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'],
+};
+
+/** What a key's date is, or why it has none. Never a date the store did not give. */
+export function keyDateLine(item) {
+  switch (item.last_set_basis) {
+    case 'console_audit': return `saved from the console ${day(item.last_set_at)}`;
+    case 'd1_row': return `row written ${day(item.last_set_at)}`;
+    case 'no_record': return item.state === 'env'
+      ? 'no date: set at deploy, or before the console recorded its saves'
+      : 'no date on its row';
+    case 'unreadable': return 'date unknown: the audit log could not be read';
+    default: return null;
+  }
+}
+
+/** H16 P1 — where each managed key lives, and when it was last set. No key material. */
+export function IntegrationKeysPanel({ loading, unreadable, keys }) {
+  let body;
+  if (loading) body = <p className="text-[12.5px] text-axal-muted">Reading the keys…</p>;
+  else if (unreadable) body = <Absent reason="The platform summary could not be read." />;
+  else if (!keys?.available) body = <Absent reason={keys?.reason || 'The managed keys were not reported.'} />;
+  else {
+    body = (
+      <>
+        <p className="text-[11.5px] tabular-nums text-axal-muted" data-testid="hq-keys-counts">
+          {num(keys.managed)} managed · {num(keys.counts.env)} as Worker secrets · {num(keys.counts.db)} in the
+          database · {num(keys.counts.unset)} not set
+          {keys.counts.unreadable > 0 ? ` · ${num(keys.counts.unreadable)} unknown` : ''}
+        </p>
+        {!keys.db_readable && (
+          <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50/40 px-3 py-2 text-[11.5px] leading-relaxed text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-300" data-testid="hq-keys-db-unreadable">
+            {keys.db_reason}
+          </p>
+        )}
+        <ul className="mt-2 space-y-1.5" data-testid="hq-keys-list">
+          {keys.items.map((k) => {
+            const [label, tone] = KEY_STATE[k.state] || KEY_STATE.unreadable;
+            const date = keyDateLine(k);
+            return (
+              <li key={k.provider_key} className="rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[11.5px]">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="min-w-0 truncate font-medium">{PROVIDER_LABEL[k.provider_key] || k.provider_key}</span>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${tone}`}>{label}</span>
+                </div>
+                {date && <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{date}</div>}
+              </li>
+            );
+          })}
+        </ul>
+        <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">{keys.last_set_reason}</p>
+        {keys.notes.map((n) => (
+          <p key={n} className="mt-1 text-[11px] leading-relaxed text-axal-faint">{n}</p>
+        ))}
+      </>
+    );
+  }
+  return (
+    <>
+      {body}
+      <p className="mt-2 text-[11px] leading-relaxed text-axal-muted" data-testid="hq-keys-no-reveal">
+        No screen reveals a saved key: once saved it is write-only, so no masked secret is drawn and nothing here
+        re-hides after thirty seconds. Nothing stores when a key expires, so none is drawn as expired.
+      </p>
+      <Link to="/admin?tab=integration-keys" className={CONSOLE_LINK} data-testid="hq-h16-link-keys">
+        <ConsoleLinkBody
+          title="Integration keys"
+          note="Configure or test a key there; rotate and remove are offered only for a key held in the database. This panel changes none."
+        />
+      </Link>
+    </>
+  );
+}
+
+/** A mirror attempt's one tone, by the three states the mirror writes. */
+export const SYNC_STATE = {
+  synced: ['Synced', 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300'],
+  failed: ['Failed', 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'],
+  not_configured: ['Mirror off', 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'],
+};
+
+/** H16 P2 — the ticket mirror: where it writes, its day, and its latest attempts. */
+export function GithubSyncPanel({ loading, unreadable, sync }) {
+  let body;
+  if (loading) body = <p className="text-[12.5px] text-axal-muted">Reading the mirror…</p>;
+  else if (unreadable || !sync) body = <Absent reason="The platform summary could not be read." />;
+  else {
+    const { target, window: day24, recent } = sync;
+    body = (
+      <>
+        <p className="text-[11.5px] leading-relaxed text-axal-muted" data-testid="hq-sync-target">
+          {target.repo
+            ? <>Mirrors tickets to <span className="font-mono">{target.repo}</span></>
+            : 'No repository is named: the mirror needs both halves of it set, and never falls back to a default.'}
+          {' · '}{target.token_set ? 'token set' : 'no token set'}
+        </p>
+        {!target.configured && (
+          <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50/40 px-3 py-2 text-[11.5px] leading-relaxed text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-300" data-testid="hq-sync-off">
+            The mirror is off on this deployment: a ticket is still filed, and reaches no issue.
+          </p>
+        )}
+        {day24?.available ? (
+          <div className="mt-2 grid grid-cols-3 gap-2" data-testid="hq-sync-stats">
+            <Stat label={`Synced (${day24.window_hours}h)`} value={num(day24.synced)} tone="text-green-700 dark:text-green-300" />
+            <Stat
+              label={`Failed (${day24.window_hours}h)`}
+              value={num(day24.failed)}
+              tone={day24.failed > 0 ? RED_INK : undefined}
+            />
+            <Stat label="Average lag" value={null} note="not recorded" />
+          </div>
+        ) : (
+          <div className="mt-2"><Absent reason={day24?.reason || 'The mirror window was not reported.'} /></div>
+        )}
+        {day24?.available && (
+          <p className="mt-1.5 text-[11px] leading-relaxed text-axal-faint">{day24.lag?.reason}</p>
+        )}
+        <h3 className="mt-3 text-[12px] font-bold text-axal-ink dark:text-white">Latest attempts</h3>
+        {!recent?.available ? (
+          <Absent reason={recent?.reason || 'The latest attempts were not reported.'} />
+        ) : recent.items.length === 0 ? (
+          <p className="text-[12px] leading-relaxed text-axal-muted">
+            No ticket has been mirrored or tried yet. That is an empty list, not an unreadable one.
+          </p>
+        ) : (
+          <ul className="mt-1 space-y-1" data-testid="hq-sync-recent">
+            {recent.items.map((t) => {
+              const [label, tone] = SYNC_STATE[t.status]
+                || [String(t.status || 'unknown'), 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'];
+              return (
+                <li key={t.ticket_id} className="border-t border-axal-hairline pt-1.5 text-[11.5px]">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <Link to={`/help/tickets/${t.ticket_id}`} className="min-w-0 truncate font-medium underline decoration-axal-hairline">
+                      Ticket #{t.ticket_id}
+                    </Link>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${tone}`}>{label}</span>
+                  </div>
+                  <div className="mt-0.5 font-mono text-[10px] text-axal-faint">
+                    {t.issue_number != null ? `issue #${t.issue_number} · ` : ''}{day(t.attempted_at)}
+                  </div>
+                  {t.error && <div className="mt-0.5 text-[11px] text-red-700 dark:text-red-300">{t.error}</div>}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">{sync.recent_note}</p>
+      </>
+    );
+  }
+  return (
+    <>
+      {body}
+      <Link to="/admin?tab=github" className={CONSOLE_LINK} data-testid="hq-h16-link-sync">
+        <ConsoleLinkBody title="GitHub sync" note="The token, the repository, and the test that says what the token is missing." />
+      </Link>
+    </>
+  );
+}
+
+/** One row of P3's field list: a label, and a value or its stated absence. */
+function FieldRow({ label, children, testid }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 border-t border-axal-hairline py-1.5 text-[11.5px]" data-testid={testid}>
+      <span className="shrink-0 text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</span>
+      <span className="min-w-0 text-right">{children}</span>
+    </div>
+  );
+}
+
+/** H16 P3 — the money rail: the key checkout is served, the mirror, the webhook. */
+export function PaymentsCatalogPanel({ loading, unreadable, payments }) {
+  let body;
+  if (loading) body = <p className="text-[12.5px] text-axal-muted">Reading the catalog…</p>;
+  else if (unreadable || !payments) body = <Absent reason="The platform summary could not be read." />;
+  else {
+    const { publishable, catalog, webhook } = payments;
+    const w = webhook?.available ? webhook : null;
+    body = (
+      <>
+        <FieldRow label="Publishable key" testid="hq-pay-key">
+          {publishable.configured ? (
+            <>
+              <span className="font-mono">{publishable.masked}</span>
+              <span className="ml-1.5 text-[10.5px] text-axal-faint">
+                {publishable.mode === 'unknown' ? 'mode unknown' : `${publishable.mode} mode`}
+              </span>
+            </>
+          ) : (
+            <span className="text-amber-700 dark:text-amber-300">Not configured: checkout is served no key</span>
+          )}
+        </FieldRow>
+        {catalog?.available ? (
+          <>
+            <FieldRow label="Products" testid="hq-pay-products">
+              <span className="tabular-nums">{num(catalog.products.active)} active of {num(catalog.products.all)}</span>
+            </FieldRow>
+            <FieldRow label="Prices" testid="hq-pay-prices">
+              <span className="tabular-nums">{num(catalog.prices.active)} active of {num(catalog.prices.all)}</span>
+              {catalog.unreadable_price_rows > 0 && (
+                <span className="block text-[10.5px] text-amber-700 dark:text-amber-300">
+                  {num(catalog.unreadable_price_rows)} {catalog.unreadable_price_rows === 1 ? 'product has' : 'products have'} a
+                  price list that could not be read, and {catalog.unreadable_price_rows === 1 ? 'is' : 'are'} not counted
+                </span>
+              )}
+            </FieldRow>
+            <FieldRow label="Mirror last written" testid="hq-pay-written">
+              <span className="font-mono">{catalog.last_written_at ? day(catalog.last_written_at) : 'never written'}</span>
+            </FieldRow>
+          </>
+        ) : (
+          <div className="border-t border-axal-hairline pt-1.5">
+            <Absent reason={catalog?.reason || 'The catalog mirror was not reported.'} />
+          </div>
+        )}
+        <FieldRow label="Webhook" testid="hq-pay-webhook">
+          {!w ? (
+            <span className={RED_INK} data-testid="hq-pay-webhook-unreadable">
+              {webhook?.reason || 'The request log could not be read.'}
+            </span>
+          ) : w.last ? (
+            <span className={w.last.status_code != null && (w.last.status_code < 200 || w.last.status_code >= 300) ? RED_INK : ''}>
+              {w.last.status_code != null ? `HTTP ${w.last.status_code}` : 'status not recorded'}
+              {w.last.latency_ms != null ? ` in ${num(w.last.latency_ms)}ms` : ''} · {day(w.last.at)}
+            </span>
+          ) : (
+            <span className="text-axal-muted">no delivery recorded</span>
+          )}
+          {w && (
+            <span className="block text-[10.5px] tabular-nums text-axal-faint">
+              {num(w.deliveries)} in {num(w.window_hours)}h · {num(w.not_2xx)} not 2xx
+            </span>
+          )}
+        </FieldRow>
+        {catalog?.available && (
+          <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">{catalog.sync_basis}</p>
+        )}
+        {w && <p className="mt-1 text-[11px] leading-relaxed text-axal-faint">{w.basis}</p>}
+        <p className="mt-1 text-[11px] leading-relaxed text-axal-faint">{payments.storefront_note}</p>
+      </>
+    );
+  }
+  return (
+    <>
+      {body}
+      <Link to="/admin?tab=payments" className={CONSOLE_LINK} data-testid="hq-h16-link-payments">
+        <ConsoleLinkBody title="Payments catalog" note="Products, prices, the publishable key, and the sync." />
+      </Link>
+    </>
+  );
+}
+
+/** A code's one state, by the rule checkout applies (services/promos `promoState`). */
+export const PROMO_STATE = {
+  active: ['Active', 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300'],
+  inactive: ['Switched off', 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'],
+  expired: ['Expired', 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'],
+  exhausted: ['At its cap', 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'],
+};
+
+/**
+ * A code's terms in the console's own words (AdminPage formats amount_off the
+ * same way). Months on a repeating code are Stripe's, so the phrase says so
+ * rather than inventing a number.
+ */
+export function promoTerms(p) {
+  const off = p.percent_off != null
+    ? `${p.percent_off}% off`
+    : p.amount_off != null
+      ? `${(p.amount_off / 100).toFixed(2)} ${String(p.currency || '').toUpperCase()} off`
+      : 'no discount recorded';
+  const how = p.duration === 'forever' ? 'every payment'
+    : p.duration === 'repeating' ? 'repeating, for months Stripe keeps'
+      : p.duration === 'once' ? 'once' : String(p.duration);
+  const scope = p.product_count === null
+    ? 'product list unreadable'
+    : p.product_count === 0 ? 'all products'
+      : `${p.product_count} ${p.product_count === 1 ? 'product' : 'products'}`;
+  return `${off} · ${how} · ${scope}`;
+}
+
+/** H16 P4 — every code's terms, cap, redemptions and one state. */
+export function PromoCodesPanel({ loading, unreadable, promos }) {
+  let body;
+  if (loading) body = <p className="text-[12.5px] text-axal-muted">Reading the codes…</p>;
+  else if (unreadable) body = <Absent reason="The platform summary could not be read." />;
+  else if (!promos?.available) body = <Absent reason={promos?.reason || 'The promo codes were not reported.'} />;
+  else {
+    body = (
+      <>
+        <p className="text-[11.5px] tabular-nums text-axal-muted" data-testid="hq-promo-counts">
+          {num(promos.total)} {promos.total === 1 ? 'code' : 'codes'} · {num(promos.counts.active)} active ·{' '}
+          {num(promos.counts.inactive)} switched off · {num(promos.counts.expired)} expired ·{' '}
+          {num(promos.counts.exhausted)} at their cap
+        </p>
+        {promos.items.length === 0 ? (
+          <p className="mt-2 text-[12px] leading-relaxed text-axal-muted">
+            No promo code exists. That is an empty list, not an unreadable one.
+          </p>
+        ) : (
+          <ul className="mt-2 space-y-1.5" data-testid="hq-promo-list">
+            {promos.items.map((c) => {
+              const [label, tone] = PROMO_STATE[c.state]
+                || [String(c.state || 'unknown'), 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'];
+              return (
+                <li key={c.code} className="flex items-center justify-between gap-3 rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2">
+                  <div className="min-w-0">
+                    <span className="font-mono text-[11.5px] font-bold">{c.code}</span>
+                    <div className="mt-0.5 text-[10.5px] text-axal-faint">
+                      {promoTerms(c)}{c.expires_at ? ` · expires ${day(c.expires_at)}` : ' · no expiry set'}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="text-[12px] font-bold tabular-nums">
+                      {num(c.times_redeemed)} recorded{c.max_redemptions != null ? ` of ${num(c.max_redemptions)}` : ' · no cap'}
+                    </div>
+                    <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold ${tone}`}>{label}</span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {promos.truncated && (
+          <p className="mt-1.5 text-[11px] text-axal-faint" data-testid="hq-promo-truncated">
+            The newest {num(promos.listed_limit)} of {num(promos.total)} are listed; the counts above cover every code.
+          </p>
+        )}
+        <ul className="mt-2 space-y-1" data-testid="hq-promo-caveats">
+          {promos.caveats.map((line) => (
+            <li key={line} className="text-[11px] leading-relaxed text-axal-faint">{line}</li>
+          ))}
+        </ul>
+      </>
+    );
+  }
+  return (
+    <>
+      {body}
+      <Link to="/admin?tab=promos" className={CONSOLE_LINK} data-testid="hq-h16-link-promos">
+        <ConsoleLinkBody title="Promo codes" note="Create and switch off codes there. Ceilings are listed on Revenue; no screen sets one yet." />
+      </Link>
+    </>
+  );
+}
+
 export default function PlatformPage() {
   const [data, setData] = useState(null);
   const load = useCallback(() => {
@@ -474,6 +878,12 @@ export default function PlatformPage() {
   const telegram = ready ? data.broadcast?.telegram : null;
   const xStatus = ready ? data.broadcast?.x : null;
   const switches = ready ? data.switches : null;
+  // D213 — H16's four consoles. Each block carries its own state, so one
+  // store that cannot be read empties its own panel and no other.
+  const integrationKeys = ready ? data.integration_keys : null;
+  const githubSync = ready ? data.github_sync : null;
+  const paymentsCatalog = ready ? data.payments_catalog : null;
+  const promoCodes = ready ? data.promo_codes : null;
 
   // One line per read that answered (D126). `canRun = coverage.length > 0` in
   // WorkerRail, so a mount passing none disables its own button and prints
@@ -494,6 +904,14 @@ export default function PlatformPage() {
       ? `${num(telegram.channels.length)} Telegram channels, ${num(telegram.channels.reduce((n, ch) => n + ch.sent_count, 0))} posts sent` : null,
     switches?.available
       ? `${num(switches.items.length)} platform switches, ${num(switches.items.filter((sw) => sw.state === 'on').length)} on` : null,
+    integrationKeys?.available
+      ? `${num(integrationKeys.managed)} managed keys: ${num(integrationKeys.counts.env)} as Worker secrets, ${num(integrationKeys.counts.db)} in the database, ${num(integrationKeys.counts.unset)} not set${integrationKeys.counts.unreadable > 0 ? `, ${num(integrationKeys.counts.unreadable)} unknown` : ''}` : null,
+    githubSync?.window?.available
+      ? `Ticket mirror: ${num(githubSync.window.synced)} synced and ${num(githubSync.window.failed)} failed in ${num(githubSync.window.window_hours)}h` : null,
+    paymentsCatalog?.catalog?.available
+      ? `Catalog mirror: ${num(paymentsCatalog.catalog.products.active)} active products, ${num(paymentsCatalog.catalog.prices.active)} active prices` : null,
+    promoCodes?.available
+      ? `${num(promoCodes.total)} promo codes, ${num(promoCodes.counts.active)} active` : null,
   ].filter(Boolean);
 
   const rail = (
@@ -501,7 +919,7 @@ export default function PlatformPage() {
       workspace="Platform"
       role="super_admin"
       stance="Read-only summary"
-      note="This rail summarises connection counts, scheduled-job health, the dead-letter backlog, the broadcast channels, the platform switches and the branch deployment registry. It reads no key material, throws no switch and rolls nothing back."
+      note="This rail summarises connection counts, where each platform key lives, the ticket mirror, the payments catalog, the promo codes, scheduled-job health, the dead-letter backlog, the broadcast channels, the platform switches and the branch deployment registry. It reads no key material, throws no switch and rolls nothing back."
       coverage={coverage}
       coverageNote={coverage.length ? undefined
         : (data === UNAVAILABLE || deps === UNAVAILABLE
@@ -510,7 +928,12 @@ export default function PlatformPage() {
       unavailable={[
         ['Staged switches', 'A switch is on or off for a whole deployment; none can be staged to one territory or a share of accounts.'],
         ['Branch reach', 'A switch HQ throws stops Eadwyn on HQ\'s own deployment; pushing one to the branches is not built.'],
-        ['Key material', 'Never read by this page. Reveal and revoke live where they are audited.'],
+        ['Key material', 'Never read by this page. A saved key is write-only: promoted to a Worker secret and never read back.'],
+        ['Secret reveal', 'No screen reveals a saved key, so no masked secret is drawn here or anywhere.'],
+        ['Key expiry', 'Nothing stores when a key expires, so none is drawn as expired or as active.'],
+        ['Mirror lag', 'A ticket keeps only its latest mirror attempt, so no delay between a change and its mirror is stored.'],
+        ['Catalog schedule', 'Nothing schedules a catalog sync, and a sync that fails leaves no record.'],
+        ['Code attribution', 'A promo code names no licence and no cohort, so none is drawn as a branch code.'],
         ['Channel member counts', 'Never asked of Telegram, so not recorded.'],
         ['Dead letters per branch', 'No branch reports its backlog to HQ; the figure here is HQ\'s own.'],
         ['Per-subsidiary integrations', 'No account names its licence yet (U1).'],
@@ -535,9 +958,10 @@ export default function PlatformPage() {
           </div>
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">Platform</h1>
           <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
-            Keys, jobs, deployments, monitoring, broadcast and switches, each read from its own store. The
-            switches are listed read-only here; the ones HQ can throw are thrown on Switches. No key material
-            and no chat id reaches this page, and nothing on it changes a setting.
+            Keys, the ticket mirror, the payments catalog, promo codes, jobs, deployments, monitoring,
+            broadcast and switches, each read from its own store. Each console is one link from its panel,
+            and changes are made there; the switches HQ can throw are thrown on Switches. No key material and
+            no chat id reaches this page, and nothing on it changes a setting.
           </p>
         </header>
 
@@ -578,15 +1002,38 @@ export default function PlatformPage() {
                   </ul>
                 )}
                 <p className="mt-3 text-[12.5px] leading-relaxed text-axal-muted" data-testid="hq-platform-secrets">
-                  {integrations.secrets_note} Revealing and revoking a key stay in the console that owns key
-                  material, where revocation is recorded — it is instant and irreversible, which is not something
-                  a read-only summary should be able to do.
+                  {integrations.secrets_note} Where each platform key lives is the Integration keys panel
+                  below. No screen reveals a saved key: once saved it is write-only. Removing one is done on the
+                  Integration keys console, where it is recorded and cannot be undone — not something a
+                  read-only summary should be able to do.
                 </p>
               </>
             ) : (
               <Absent reason={integrations?.reason || 'The platform summary could not be read.'} />
             )}
           </Zone>
+
+          {/* D213 — H16's four consoles, P1 to P4 in the artboard's order.
+              Each panel summarises its console's own store in its own state
+              and ends in one literal link to that console, which is where
+              anything is changed. They sit before Scheduled jobs on purpose:
+              two tests slice from later headings to the Monitoring and
+              Broadcast zones, and a zone placed between those would fall
+              inside what they count. */}
+          <div className="grid gap-4 md:grid-cols-2" data-testid="hq-platform-h16">
+            <Zone title="Integration keys" sub="where each managed key lives, never its value">
+              <IntegrationKeysPanel loading={data === null} unreadable={data === UNAVAILABLE} keys={integrationKeys} />
+            </Zone>
+            <Zone title="GitHub Sync" sub="ticket to issue mirroring, HQ only">
+              <GithubSyncPanel loading={data === null} unreadable={data === UNAVAILABLE} sync={githubSync} />
+            </Zone>
+            <Zone title="Payments catalog" sub="the money rail, not a subsidiary billing clerk">
+              <PaymentsCatalogPanel loading={data === null} unreadable={data === UNAVAILABLE} payments={paymentsCatalog} />
+            </Zone>
+            <Zone title="Promo codes" sub="one Stripe coupon each, not the ceilings on Revenue">
+              <PromoCodesPanel loading={data === null} unreadable={data === UNAVAILABLE} promos={promoCodes} />
+            </Zone>
+          </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <Zone
@@ -847,28 +1294,26 @@ export default function PlatformPage() {
 
             <Zone title="Operator consoles" sub="the controls this summary does not hold">
               <p className="text-[12.5px] leading-relaxed text-axal-muted">
-                Key material, catalog, and broadcast stay in the consoles that audit them.
-                This page counts; those pages change.
+                Keys, the ticket mirror, the catalog and the promo codes are each linked once, from their own
+                panel above. These two have no panel here. This page counts; those pages change.
               </p>
               <ul className="mt-3 grid gap-2 sm:grid-cols-2" data-testid="hq-platform-consoles">
-                {[
-                  ['/admin?tab=integration-keys', 'Integration keys', 'Save, rotate, test. Secrets never render here.'],
-                  ['/admin?tab=github', 'GitHub sync', 'Ticket mirror. A failed test says what the token is missing.'],
-                  ['/admin?tab=payments', 'Payments catalog', 'Stripe products, prices, webhook status.'],
-                  ['/admin?tab=promos', 'Promo codes', 'Coupons. Ceilings per licence stay on Revenue.'],
-                  ['/monitoring', 'Monitoring', 'Infra, cron, and the platform-wide aggregate.'],
-                  ['/admin/telegram', 'Telegram', 'Channels and drafts. X stays off until OAuth is bound.'],
-                ].map(([to, title, note]) => (
-                  <li key={to}>
-                    <Link
-                      to={to}
-                      className="block rounded-xl border border-axal-hairline bg-axal-ground px-3 py-2 hover:border-axal-violet dark:hover:border-violet-700"
-                    >
-                      <div className="text-[12.5px] font-bold text-axal-ink dark:text-white">{title}</div>
-                      <div className="mt-0.5 text-[11px] leading-relaxed text-axal-faint">{note}</div>
-                    </Link>
-                  </li>
-                ))}
+                <li>
+                  <Link to="/monitoring" className={CONSOLE_TILE}>
+                    <div className="text-[12.5px] font-bold text-axal-ink dark:text-white">Monitoring</div>
+                    <div className="mt-0.5 text-[11px] leading-relaxed text-axal-faint">
+                      Infra, cron, and the platform-wide aggregate.
+                    </div>
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/admin/telegram" className={CONSOLE_TILE}>
+                    <div className="text-[12.5px] font-bold text-axal-ink dark:text-white">Telegram</div>
+                    <div className="mt-0.5 text-[11px] leading-relaxed text-axal-faint">
+                      Channels and drafts. X stays off until OAuth is bound.
+                    </div>
+                  </Link>
+                </li>
               </ul>
             </Zone>
 

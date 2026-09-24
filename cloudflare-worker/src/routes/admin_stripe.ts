@@ -17,7 +17,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAdmin } from '../auth';
 import { stripeCall } from './billing';
-import { stripeMode, getPublishableKey, setPublishableKey } from '../services/catalog';
+import { stripeMode, getPublishableKey, setPublishableKey, maskPublishableKey } from '../services/catalog';
 import { setSecret } from '../services/cloudflareSecrets';
 import { ensureAdminAuditLogTable } from './admin';
 
@@ -217,11 +217,8 @@ r.post('/webhook', async (c) => {
 r.get('/config', async (c) => {
   await requireAdmin(c);
   const pk = await getPublishableKey(c.env);
-  const masked = pk
-    ? pk.length >= 12
-      ? `${pk.slice(0, 8)}••••${pk.slice(-4)}`
-      : `${pk.slice(0, 4)}••••`
-    : null;
+  // One mask, shared with HQ · Platform (D213), so the key reads the same on both.
+  const masked = maskPublishableKey(pk);
   return c.json({
     publishable_key: masked,
     mode: stripeMode(c.env),

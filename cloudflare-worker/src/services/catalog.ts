@@ -514,6 +514,110 @@ export async function setPublishableKey(env: Env, key: string): Promise<void> {
   await env.RATE_LIMITS.put(PK_KV_KEY, key);
 }
 
+/**
+ * The one mask for a publishable key (D213): the first eight characters, which
+ * carry the mode (`pk_live_` / `pk_test_`), and the last four. A publishable key
+ * is public by design — checkout serves it whole — so this is about a screen
+ * not printing a long token, not about keeping a secret. The Payments console
+ * (`routes/admin_stripe.ts`) and HQ · Platform both call this, so the two
+ * cannot mask the same key two ways.
+ */
+export function maskPublishableKey(pk: string | null): string | null {
+  if (!pk) return null;
+  return pk.length >= 12 ? `${pk.slice(0, 8)}••••${pk.slice(-4)}` : `${pk.slice(0, 4)}••••`;
+}
+
+/**
+ * Test or live, read off the publishable key's own prefix — never off the
+ * secret key, which a summary has no reason to touch. `unknown` for a key
+ * with neither prefix, rather than a guess.
+ */
+export function publishableKeyMode(pk: string | null): 'live' | 'test' | 'unknown' | null {
+  if (!pk) return null;
+  if (pk.startsWith('pk_live_')) return 'live';
+  if (pk.startsWith('pk_test_')) return 'test';
+  return 'unknown';
+}
+
+// ---------------------------------------------------------------------------
+// D213 — the mirror, summarised for HQ · Platform without touching Stripe.
+// ---------------------------------------------------------------------------
+
+/** Said beside the last-written time, because nothing about it is scheduled. */
+export const CATALOG_SYNC_BASIS =
+  'Nothing schedules a sync of this mirror. It is rewritten when an admin syncs it or edits a '
+  + 'product from the Payments catalog console, and when a read finds it empty. A sync that fails '
+  + 'leaves no record, and only a manual sync that succeeded is audited.';
+
+export type CatalogMirrorSummary =
+  | {
+      available: true;
+      products: { all: number; active: number };
+      prices: { all: number; active: number };
+      /** Rows whose price list does not parse: counted here, never as zero prices. */
+      unreadable_price_rows: number;
+      last_written_at: string | null;
+      sync_basis: string;
+    }
+  | { available: false; reason: string };
+
+/**
+ * Counts over `stripe_products`, read directly.
+ *
+ * NEVER THROUGH `getCatalog`, which calls Stripe when the mirror is empty — a
+ * page load must not reach Stripe (the rule `routes/admin_revenue.ts` states).
+ * And no `ensureCatalogSchema`: a database without the table answers
+ * unreadable rather than being altered by a read.
+ *
+ * THE LAST WRITE IS NORMALISED BEFORE IT IS COMPARED. `synced_at` is written
+ * as an ISO string by `syncCatalog` and as `datetime('now')` by the column
+ * default, and compared raw an ISO stamp sorts above a SQL one from later the
+ * same day (`'T'` > `' '`). `datetime()` makes them one format first.
+ *
+ * Counted in JS rather than with `json_each`: the table is one row per product,
+ * and a table-valued function in SQL would be new to this codebase for one count.
+ */
+export async function readCatalogMirrorSummary(env: Env): Promise<CatalogMirrorSummary> {
+  let rows: Array<{ active: number; prices_json: string | null; synced: string | null }>;
+  try {
+    const res = await env.DB.prepare(
+      `SELECT active, prices_json, datetime(synced_at) AS synced FROM stripe_products`,
+    ).all<{ active: number; prices_json: string | null; synced: string | null }>();
+    rows = res.results || [];
+  } catch {
+    return { available: false, reason: 'The catalog mirror could not be read on this database.' };
+  }
+  let productsActive = 0;
+  let pricesAll = 0;
+  let pricesActive = 0;
+  let unreadable = 0;
+  let last: string | null = null;
+  for (const row of rows) {
+    if (Number(row.active) === 1) productsActive += 1;
+    if (row.synced && (last === null || row.synced > last)) last = row.synced;
+    let prices: unknown;
+    try {
+      prices = JSON.parse(String(row.prices_json ?? ''));
+    } catch {
+      prices = null;
+    }
+    if (!Array.isArray(prices)) {
+      unreadable += 1;
+      continue;
+    }
+    pricesAll += prices.length;
+    for (const price of prices as CatalogPrice[]) if (price && price.active === true) pricesActive += 1;
+  }
+  return {
+    available: true,
+    products: { all: rows.length, active: productsActive },
+    prices: { all: pricesAll, active: pricesActive },
+    unreadable_price_rows: unreadable,
+    last_written_at: last,
+    sync_basis: CATALOG_SYNC_BASIS,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Metadata taxonomy validation.
 // ---------------------------------------------------------------------------
