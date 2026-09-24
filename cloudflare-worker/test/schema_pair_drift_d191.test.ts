@@ -17,7 +17,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -191,15 +191,24 @@ test('partner_profiles is NOT reported at all — D187 converged it, through an 
 });
 
 test('sql/historical/ is excluded — an archived shape is not a rival definition', () => {
-  // `spinout_moderation_cases` is created at runtime and declared ONLY under
-  // sql/historical/. Harvesting the archive would report it as a pair nobody
-  // can answer, which is the false finding its three sibling guards each record.
-  assert.ok(!sqlDefinitions().has('spinout_moderation_cases'));
-  assert.ok(runtimeDefinitions().has('spinout_moderation_cases'));
-  for (const key of FOUND.keys()) assert.notEqual(key.split(':')[1], 'spinout_moderation_cases');
+  // Harvesting the archive would report pairs nobody can answer, which is the
+  // false finding its three sibling guards each record. This test first proved
+  // the exclusion with `spinout_moderation_cases`, then declared ONLY under
+  // sql/historical/. D235's migration 287 declares it for real, and no table is
+  // archive-only any more, so the property is asserted on the archive itself —
+  // with a count that stops it passing on an empty one.
+  const archived = readdirSync(resolve(ROOT, 'cloudflare-worker/sql/historical'))
+    .filter((f) => f.endsWith('.sql') && /CREATE\s+TABLE/i.test(read(`cloudflare-worker/sql/historical/${f}`)));
+  assert.ok(archived.length > 0, 'the archive declares no table, so the loop below would pass on nothing');
   for (const def of sqlDefinitions().values()) {
     assert.doesNotMatch(def.where, /sql\/historical\//, `${def.where} is an archived file`);
   }
+  // The old example is now a live pair, and it agrees: 287 copies the runtime
+  // statement verbatim, which is the whole of D235's rule.
+  assert.equal(sqlDefinitions().get('spinout_moderation_cases')?.where,
+    'cloudflare-worker/sql/migrations/287_runtime_schema_declared.sql');
+  assert.ok(runtimeDefinitions().has('spinout_moderation_cases'));
+  for (const key of FOUND.keys()) assert.notEqual(key.split(':')[1], 'spinout_moderation_cases');
 });
 
 test('the rebuild idiom renames the CREATE with the table', () => {
