@@ -248,12 +248,16 @@ test('the localisation lane is real, and the one absence it does NOT close is na
   assert.match(C, /label="Submitted for approval"/, 'the submitted count is gone');
   assert.match(C, /onRetry=\{loadLane\}/, 'an unreadable lane cannot be retried on its own');
 
-  // The count comes from the lane's own length — never a `|| 0`, and never a
-  // figure invented when the lane could not be read.
-  const at = C.indexOf('label="Submitted for approval"');
-  const end = C.indexOf('/>', at);
-  assert.match(C.slice(at, end), /laneItems \? String\(laneItems\.length\) : null/,
-    'the submitted count is defaulted rather than left absent when the lane is unreadable');
+  // D234 — the count is the lane's length only when the read was complete.
+  // A cut list renders the stated absence, never the capped length.
+  const at = C.indexOf('export function submittedFigure');
+  const end = C.indexOf('}', at);
+  assert.match(C.slice(at, end), /if \(!laneItems \|\| lane\.complete !== true\) return null;\s*return String\(laneItems\.length\);/,
+    'the submitted count is the capped length when the read was cut');
+  const tile = C.indexOf('label="Submitted for approval"');
+  assert.match(C.slice(tile, C.indexOf('label="Localised"', tile)),
+    /laneItems && lane\.complete !== true[\s\S]*Not counted[\s\S]*submittedFigure\(lane, laneItems\)/,
+    'a cut lane still prints its length');
 
   // AND THE REFUSAL SURVIVES, NARROWED. The route's sentence is rendered, and
   // it still names the link nothing records — deleting it would make the lane

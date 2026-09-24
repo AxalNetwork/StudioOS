@@ -602,9 +602,19 @@ export function RosterPanel({ loading, unreadable, roster }) {
 
 /* ── the page ────────────────────────────────────────────────────────────── */
 
-/** The localisation lane's count note — reading, unreadable and not offered are three different things. */
+/**
+ * The submitted count, or null when it must not be shown.
+ * A cut list is not a count: the route stops at 100 and says so with `complete`.
+ */
+export function submittedFigure(lane, laneItems) {
+  if (!laneItems || lane.complete !== true) return null;
+  return String(laneItems.length);
+}
+
+/** The localisation lane's count note — reading, unreadable, cut and not offered are different things. */
 function submittedNote(lane, laneItems) {
-  if (laneItems) return 'escalations of kind content';
+  if (laneItems && lane.complete === true) return 'escalations of kind content';
+  if (laneItems && lane.complete !== true) return 'the read stopped at its ceiling, so this is not the count';
   if (lane === null) return 'reading the lane';
   if (lane === UNAVAILABLE) return 'the lane could not be read';
   return 'the lane is not available';
@@ -856,7 +866,9 @@ export default function ContentPage() {
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <Stat
                   label="Submitted for approval"
-                  value={laneItems ? String(laneItems.length) : null}
+                  value={laneItems && lane.complete !== true
+                    ? <Unrecorded reason="More content escalations than one read returns, so no count is shown.">Not counted</Unrecorded>
+                    : submittedFigure(lane, laneItems)}
                   note={submittedNote(lane, laneItems)}
                 />
                 {/* STILL PERMANENTLY BLANK, and for the one reason that did not
