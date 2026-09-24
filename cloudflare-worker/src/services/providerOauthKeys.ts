@@ -303,13 +303,40 @@ export interface ProviderKeyStatus {
   client_id_preview: string | null;
   updated_at: string | null;
   updated_by_user_id: number | null;
-  active_integrations: number;
+  /**
+   * Active user integrations for the provider, or `null` when the
+   * `integrations` table could not be read (D227). It was `?? 0`, and the
+   * console's Remove confirmation quotes this number as how many users the
+   * removal will disconnect — an unread count must not promise "none".
+   */
+  active_integrations: number | null;
 }
 
-/** The Integration keys console's list. It creates the table first, as it always has. */
-export async function listProviderKeyStatus(env: Env): Promise<ProviderKeyStatus[]> {
+/**
+ * Whether a managed key is held as a Worker secret — the place that wins over
+ * any database row (`loadOauthCreds`). D227: the rotate route asks this before
+ * falling back to the database, because rotating the row under a key that a
+ * Worker secret overrides would report success and change nothing in use.
+ */
+export function keyHeldAsWorkerSecret(env: Env, providerKey: ManagedProviderKey): boolean {
+  return envCreds(env, providerKey) !== null;
+}
+
+/**
+ * The Integration keys console's list. It creates the table first, as it
+ * always has, and since D227 it carries D213's `db_readable` and each key's
+ * `state` (`keyStateOf`), so the console can say "unknown" rather than read a
+ * failed table as "unconfigured" and offer to configure over it.
+ */
+export async function listProviderKeyStatus(
+  env: Env,
+): Promise<{ db_readable: boolean; items: Array<ProviderKeyStatus & { state: ProviderKeyState }> }> {
   await ensureSchema(env);
-  return (await readProviderKeyStatus(env)).items;
+  const status = await readProviderKeyStatus(env);
+  return {
+    db_readable: status.db_readable,
+    items: status.items.map((item) => ({ ...item, state: keyStateOf(item, status.db_readable) })),
+  };
 }
 
 /**
@@ -320,12 +347,10 @@ export async function listProviderKeyStatus(env: Env): Promise<ProviderKeyStatus
  *      summary only reads; a database without the table answers
  *      `db_readable: false`, which is true, rather than being altered by
  *      someone looking at it (D204's rule for GETs).
- *   2. A failed read of `provider_oauth_keys` is REPORTED, not swallowed. The
- *      console's list still catches it and carries on, so on the console every
- *      key not set as a Worker secret reads as unconfigured when the truth is
- *      "unknown" — a defect filed on its own, not changed here. The items are
- *      built exactly as the console builds them, so its payload does not move;
- *      `db_readable` is what lets this reader tell the two apart (`keyStateOf`).
+ *   2. A failed read of `provider_oauth_keys` is REPORTED, not swallowed.
+ *      `db_readable` is what lets a reader tell a measured absence from an
+ *      unread table (`keyStateOf`). Since D227 the console's list carries it
+ *      too, so the console no longer reads a failed table as unconfigured.
  */
 export async function readProviderKeyStatus(
   env: Env,
@@ -341,8 +366,11 @@ export async function readProviderKeyStatus(
     dbReadable = false;
     console.warn('[providerOauthKeys] list failed', e);
   }
-  // Per-provider integration counts (best-effort — table may not exist yet).
+  // Per-provider integration counts. A failed read leaves every count null
+  // (D227): unknown, not zero, because Remove quotes it as the users it will
+  // disconnect. A table that answered with no row for a provider is a real 0.
   const counts = new Map<string, number>();
+  let countsReadable = true;
   try {
     const r: any = await env.DB.prepare(
       `SELECT provider_key, COUNT(*) AS n FROM integrations WHERE status = 'active' GROUP BY provider_key`,
@@ -350,7 +378,7 @@ export async function readProviderKeyStatus(
     for (const row of (r?.results || []) as Array<{ provider_key: string; n: number }>) {
       counts.set(String(row.provider_key), Number(row.n));
     }
-  } catch { /* table may not exist */ }
+  } catch { countsReadable = false; }
   const dbMap = new Map(dbRows.map(r => [r.provider_key, r] as const));
   const items = MANAGED_PROVIDERS.map((pk): ProviderKeyStatus => {
     const env_ = envCreds(env, pk);
@@ -371,7 +399,8 @@ export async function readProviderKeyStatus(
       client_id_preview: preview,
       updated_at: db?.updated_at ?? null,
       updated_by_user_id: db?.updated_by_user_id ?? null,
-      active_integrations: counts.get(pk) ?? 0,
+      // Absent from an answered GROUP BY means no active row: a measured zero.
+      active_integrations: !countsReadable ? null : counts.has(pk) ? counts.get(pk)! : 0,
     };
   });
   return { db_readable: dbReadable, items };
