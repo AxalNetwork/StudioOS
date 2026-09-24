@@ -51,7 +51,7 @@ import {
   SECURITY_EVENT_KINDS, SECURITY_EVENT_RETENTION_DAYS, SECURITY_EVENTS_NOT_COUNTED,
 } from '../src/services/securityEvents.ts';
 import { screeningSummary } from '../src/services/sanctions.ts';
-import { readBackupHeartbeat, RESTORE_DRILL_REASON } from '../src/services/backup.ts';
+import { readBackupHeartbeat, readRestoreDrill, RESTORE_DRILL_KEY } from '../src/services/backup.ts';
 import { hashEmail } from '../src/util/hashEmail.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { codeOnly } from './_codeOnly.mjs';
@@ -483,7 +483,7 @@ test('sanctions: a measured zero is a figure, a missing table is unreadable, and
   assert.deepEqual([hit.runs_total, hit.hits_total, hit.unreviewed_hits], [2, 1, 1]);
 });
 
-test('backup: three states for the heartbeat, and the drill reason carries no count that would go stale', async () => {
+test('backup: three states for the heartbeat', async () => {
   const unbound = await readBackupHeartbeat({} as any, 'd1');
   assert.equal(unbound.available, false);
   assert.match((unbound as any).reason, /BACKUPS/);
@@ -498,8 +498,78 @@ test('backup: three states for the heartbeat, and the drill reason carries no co
   assert.deepEqual(keys, ['heartbeat-d1.json'], 'the D1 heartbeat was read from the wrong key');
   assert.deepEqual([present.available, present.at, present.source, present.size_bytes], [true, '2026-09-23T02:10:00Z', 'gha', 4096]);
 
-  assert.doesNotMatch(RESTORE_DRILL_REASON, /\d+\s*(?:\/|of)\s*\d+|\bfour\b/i,
-    'a run count belongs in D200 and the PR body, never in a runtime string that will go stale');
+});
+
+// ── D263 · the restore drill's marker ──────────────────────────────────────
+
+/** A bucket whose get() answers from a map, and records every key it was asked for. */
+function bucketWith(objects: Record<string, unknown>, keys: string[] = []) {
+  return {
+    async get(k: string) {
+      keys.push(k);
+      if (!(k in objects)) return null;
+      const v = objects[k];
+      if (v instanceof Error) throw v;
+      return { async json() { if (typeof v === 'string') return JSON.parse(v); return v; } };
+    },
+  };
+}
+const MARKER_FAILED = {
+  at: '2026-10-01T06:03:10Z', outcome: 'failed', duration_s: 41, source: 'gha',
+  step: 'restore', exit_code: 2, backup_key: 'd1/studioos-db/backup-2026-09-30.sql', run_id: '1234',
+};
+const MARKER_PASSED = { ...MARKER_FAILED, outcome: 'passed', step: 'teardown', exit_code: 0 };
+
+test('D263 drill: the marker is read from exactly drill-d1.json', async () => {
+  const keys: string[] = [];
+  await readRestoreDrill({ BACKUPS: bucketWith({}, keys) } as any);
+  assert.equal(RESTORE_DRILL_KEY, 'drill-d1.json');
+  assert.deepEqual(keys, ['drill-d1.json']);
+});
+
+test('D263 drill: no binding, a throw, bad JSON and an unknown outcome are all unreadable — never never_run', async () => {
+  const unbound = await readRestoreDrill({} as any) as any;
+  assert.deepEqual([unbound.available, unbound.state], [false, 'unreadable']);
+  assert.match(unbound.reason, /BACKUPS/);
+
+  const threw = await readRestoreDrill({ BACKUPS: bucketWith({ 'drill-d1.json': new Error('r2 down') }) } as any) as any;
+  assert.deepEqual([threw.available, threw.state], [false, 'unreadable']);
+  assert.match(threw.reason, /r2 down/);
+
+  const bad = await readRestoreDrill({ BACKUPS: bucketWith({ 'drill-d1.json': '{not json' }) } as any) as any;
+  assert.deepEqual([bad.available, bad.state], [false, 'unreadable']);
+
+  const notObject = await readRestoreDrill({ BACKUPS: bucketWith({ 'drill-d1.json': [1, 2] }) } as any) as any;
+  assert.deepEqual([notObject.available, notObject.state], [false, 'unreadable']);
+
+  const odd = await readRestoreDrill({ BACKUPS: bucketWith({ 'drill-d1.json': { ...MARKER_PASSED, outcome: 'green' } }) } as any) as any;
+  assert.deepEqual([odd.available, odd.state], [false, 'unreadable']);
+  assert.match(odd.reason, /"green"/);
+});
+
+test('D263 drill: an absent marker is never_run; a failed and a passed marker say which, with their step', async () => {
+  const never = await readRestoreDrill({ BACKUPS: bucketWith({}) } as any) as any;
+  assert.deepEqual([never.available, never.state], [true, 'never_run']);
+  assert.match(never.reason, /drill-d1\.json/);
+
+  const failed = await readRestoreDrill({ BACKUPS: bucketWith({ 'drill-d1.json': MARKER_FAILED }) } as any) as any;
+  assert.deepEqual(
+    [failed.state, failed.at, failed.step, failed.exit_code, failed.backup_key, failed.source, failed.run_id],
+    ['last_run_failed', MARKER_FAILED.at, 'restore', 2, MARKER_FAILED.backup_key, 'gha', '1234'],
+  );
+  const passed = await readRestoreDrill({ BACKUPS: bucketWith({ 'drill-d1.json': MARKER_PASSED }) } as any) as any;
+  assert.deepEqual([passed.state, passed.exit_code], ['last_run_passed', 0]);
+});
+
+test('D263 drill: no state\'s reason carries a count that would go stale', async () => {
+  const states = [
+    await readRestoreDrill({} as any),
+    await readRestoreDrill({ BACKUPS: bucketWith({}) } as any),
+  ] as any[];
+  for (const r of states) {
+    assert.doesNotMatch(r.reason, /\d+\s*(?:\/|of)\s*\d+|\bfour\b/i,
+      'a run count belongs in a D-entry, never in a runtime string that will go stale');
+  }
 });
 
 // ─────────────────────────────────────────────────────── /overview ──
@@ -516,7 +586,7 @@ async function overview(db: any, over: Record<string, unknown> = {}) {
   return { status: res.status, body: await res.json().catch(() => ({})) as any };
 }
 
-test('/overview: the ledger block carries figures, sanctions and backup read their stores, the drill stays absent', async () => {
+test('/overview: the ledger block carries figures, sanctions and backup read their stores, an unbound drill is unreadable', async () => {
   const db = freshDb({ extra: ['sanctions_screenings'] });
   await recordSecurityEvent(envFor(db), { kind: 'signin', factor: 'totp', outcome: 'refused', detail: 'unknown_account', email: EMAIL, ip: IP });
   const r = await overview(db);
@@ -528,10 +598,20 @@ test('/overview: the ledger block carries figures, sanctions and backup read the
   assert.equal(r.body.sanctions.available, true);
   assert.equal(r.body.sanctions.runs_total, 0);
   assert.equal(r.body.backup_dr.backup.available, false, 'an unbound bucket read as a healthy backup');
-  assert.equal(r.body.backup_dr.drill.available, false);
-  assert.equal(r.body.backup_dr.drill.reason, RESTORE_DRILL_REASON);
+  assert.deepEqual([r.body.backup_dr.drill.available, r.body.backup_dr.drill.state], [false, 'unreadable']);
+  assert.match(r.body.backup_dr.drill.reason, /BACKUPS/);
   assert.deepEqual(r.body.dsr.by_branch, [{ branch: 'HQ-held', open: 0 }]);
   assert.equal(r.body.dsr.branches.bound, 0);
+});
+
+test('D263 /overview: a green heartbeat beside a failed drill marker reports the failure, not the heartbeat', async () => {
+  const db = freshDb({ extra: ['sanctions_screenings'] });
+  const heartbeat = { at: '2026-09-30T02:10:00Z', source: 'gha', kind: 'd1', key: 'd1/studioos-db/backup-2026-09-30.sql', size_bytes: 4096 };
+  const r = await overview(db, { BACKUPS: bucketWith({ 'heartbeat-d1.json': heartbeat, 'drill-d1.json': MARKER_FAILED }) });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.backup_dr.backup.available, true);
+  assert.equal(r.body.backup_dr.drill.state, 'last_run_failed', 'the drill was inferred from the backup half');
+  assert.deepEqual([r.body.backup_dr.drill.step, r.body.backup_dr.drill.exit_code], ['restore', 2]);
 });
 
 test('/overview on a database without 282: the ledger is unreadable with its reason — never 0 today', async () => {

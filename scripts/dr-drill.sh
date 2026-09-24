@@ -2,18 +2,27 @@
 # ---------------------------------------------------------------------------
 # scripts/dr-drill.sh — Task #5 (IE)
 #
-# Disaster-recovery drill. Provisions a fresh preview D1 database,
-# downloads the latest nightly backup from R2, imports it, runs the
-# smoke-test suite against a preview Worker pointed at the new DB, and
-# pages on-call on failure.
+# Disaster-recovery drill. Reads the latest nightly backup's key from the
+# export's heartbeat, provisions a throwaway EU D1 database, downloads the
+# backup from R2, imports it, smoke-checks the restored rows and tables,
+# deletes the throwaway, and pages on-call on failure.
+#
+# D263 — EVERY EXIT WRITES `drill-d1.json` to the backups bucket (at, outcome,
+# duration_s, source, step, exit_code, backup_key, run_id), from the EXIT
+# trap, pass or fail. That marker is what HQ's Security page reads
+# (services/backup.ts readRestoreDrill). Writing it never changes the
+# drill's exit code.
 #
 # Intended to run monthly via the GitHub Actions workflow
 # `.github/workflows/dr-drill.yml`. Can also be invoked manually.
 #
 # Required env:
 #   CLOUDFLARE_ACCOUNT_ID   — accountId (from wrangler whoami)
-#   CLOUDFLARE_API_TOKEN    — token with D1:edit + R2:read + Workers:edit
+#   CLOUDFLARE_API_TOKEN    — token with D1:edit + R2:read/write (+ Workers:edit
+#                             only if DR_DRILL_PREVIEW=1)
 #   PAGER_WEBHOOK_URL       — optional. Slack/Opsgenie/PD webhook for failure.
+#   DRILL_SOURCE            — optional. `gha` from the workflow; `manual` otherwise.
+#   GITHUB_RUN_ID           — optional. Recorded in the marker when present.
 #
 # Exit codes:
 #   0  drill green
@@ -23,10 +32,15 @@
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
-DRILL_PREFIX="dr-drill-$(date -u +%Y%m%d)"
+DRILL_PREFIX="dr-drill-$(date -u +%Y%m%d%H%M)"
 TARGET_DB="${DRILL_PREFIX}-db"
 BUCKET="${BACKUP_BUCKET:-studioos-backups}"
 PAGER_WEBHOOK_URL="${PAGER_WEBHOOK_URL:-}"
+DRILL_SOURCE="${DRILL_SOURCE:-manual}"
+STARTED_EPOCH=$(date -u +%s)
+STARTED_AT=$(date -u +%FT%TZ)
+LATEST_KEY=""
+DB_CREATED=0
 
 log() { echo "[dr-drill] $*"; }
 page() {
@@ -39,42 +53,79 @@ page() {
   fi
 }
 
-# Single EXIT trap, set once. Captures `$?` from the script's exit
-# status BEFORE running cleanup so a failing `rm -rf` in the cleanup
-# block can't mask the real failure code. `TMP` is created later and
-# may be empty at trap time — guarded with -n.
+# D263 — the marker. Built with `jq -n` so no value is interpolated into
+# JSON by hand, and written the way backup-d1.yml writes its heartbeat. A
+# failed write is logged and never changes the drill's exit code.
+write_marker() {
+  local rc="$1" outcome="failed" marker
+  [[ "$rc" -eq 0 ]] && outcome="passed"
+  marker="$(mktemp)"
+  if jq -n \
+      --arg at "${STARTED_AT}" \
+      --arg outcome "${outcome}" \
+      --argjson duration_s "$(( $(date -u +%s) - STARTED_EPOCH ))" \
+      --arg source "${DRILL_SOURCE}" \
+      --arg step "${STEP:-unknown}" \
+      --argjson exit_code "${rc}" \
+      --arg backup_key "${LATEST_KEY}" \
+      --arg run_id "${GITHUB_RUN_ID:-}" \
+      '{at: $at, outcome: $outcome, duration_s: $duration_s, source: $source, step: $step,
+        exit_code: $exit_code,
+        backup_key: (if $backup_key == "" then null else $backup_key end),
+        run_id: (if $run_id == "" then null else $run_id end)}' > "${marker}"; then
+    wrangler r2 object put "${BUCKET}/drill-d1.json" --file "${marker}" --content-type application/json --remote \
+      || log "WARN: could not write the drill marker (r2://${BUCKET}/drill-d1.json)"
+  else
+    log "WARN: could not build the drill marker"
+  fi
+  rm -f "${marker}" || true
+}
+
+# Single EXIT trap, set once and never cleared: it runs on success too, which
+# is how a passing drill writes its marker. Captures `$?` BEFORE any cleanup so
+# a failing `rm -rf` or delete can't mask the real failure code. `TMP` and the
+# throwaway database are created later and may not exist at trap time.
 TMP=""
 on_exit() {
   local rc=$?
+  set +e
+  if [[ "${DB_CREATED}" -eq 1 ]]; then
+    wrangler d1 delete "${TARGET_DB}" --skip-confirmation \
+      || log "WARN: could not delete throwaway DB ${TARGET_DB}; clean up manually"
+  fi
   if [[ -n "${TMP}" && -d "${TMP}" ]]; then
     rm -rf "${TMP}" || log "WARN: tmp cleanup failed (${TMP})"
   fi
+  write_marker "$rc"
   if [[ $rc -ne 0 ]]; then
     page "exit_code=$rc step=${STEP:-unknown}"
   fi
-  return $rc
+  exit $rc
 }
 trap on_exit EXIT
 
 # ---------- 1. Find the latest backup -------------------------------
-STEP="list_backups"
-log "listing latest backup in r2://${BUCKET}/d1/"
-# TWO KEY SHAPES, BOTH PRODUCTION'S. Backups were written to
-# `d1/backup-<date>.sql` until 2026-09-15 and to `d1/studioos-db/backup-<date>.sql`
-# after it, when the key gained the database name so a second database could
-# not overwrite production's restore point. Object lock keeps the old ones for
-# 365 days, and they are the restore points for most of that year — matching
-# only the new shape would have quietly narrowed this drill to whatever had
-# been written since the rename. Sorting is by the DATE, not the key, because
-# the two prefixes do not sort against each other.
-LATEST_KEY=$(wrangler r2 object list "${BUCKET}" --prefix "d1/" 2>/dev/null \
-  | awk '{print $NF}' \
-  | grep -E '^d1/(studioos-db/)?backup-[0-9]{4}-[0-9]{2}-[0-9]{2}\.sql$' \
-  | awk -F'backup-' '{print $2"\t"$0}' \
-  | sort -r | head -n1 | cut -f2-)
+STEP="find_backup"
+# D263 — THE KEY COMES FROM THE EXPORT'S OWN HEARTBEAT. This used to run
+# `wrangler r2 object list`, a subcommand wrangler 4.131 does not have (only
+# get, put and delete are registered), and it threw wrangler's error away with
+# `2>/dev/null`; `set -e` then ended the script at the assignment, so the
+# empty-target check below was unreachable. backup-d1.yml writes the key it
+# just uploaded into heartbeat-d1.json, so that is where the drill reads it.
+log "reading the latest backup key from r2://${BUCKET}/heartbeat-d1.json"
+if ! HEARTBEAT=$(wrangler r2 object get "${BUCKET}/heartbeat-d1.json" --remote --pipe); then
+  log "FATAL: could not read r2://${BUCKET}/heartbeat-d1.json"
+  exit 1
+fi
+LATEST_KEY=$(printf '%s' "${HEARTBEAT}" | jq -r '.key // empty' 2>&1) || LATEST_KEY=""
 
 if [[ -z "${LATEST_KEY:-}" ]]; then
-  log "FATAL: no backups found in r2://${BUCKET}/d1/"
+  log "FATAL: the heartbeat names no backup key"
+  exit 1
+fi
+if ! [[ "${LATEST_KEY}" =~ ^d1/(studioos-db/)?backup-[0-9]{4}-[0-9]{2}-[0-9]{2}\.sql$ ]]; then
+  log "FATAL: the heartbeat's key is not a D1 backup key: ${LATEST_KEY}"
+  LATEST_KEY=""
   exit 1
 fi
 log "latest backup: ${LATEST_KEY}"
@@ -98,12 +149,13 @@ log "creating throwaway DB ${TARGET_DB}"
 # outside the EU. branch-provision.yml already passes this flag when it
 # creates a branch database; the drill now does too.
 wrangler d1 create "${TARGET_DB}" --jurisdiction eu >/dev/null
+DB_CREATED=1
 
 # ---------- 3. Restore ---------------------------------------------
 STEP="restore"
 log "downloading + restoring backup into ${TARGET_DB}"
 TMP=$(mktemp -d)
-wrangler r2 object get "${BUCKET}/${LATEST_KEY}" --file "${TMP}/backup.sql"
+wrangler r2 object get "${BUCKET}/${LATEST_KEY}" --file "${TMP}/backup.sql" --remote
 
 if ! wrangler d1 execute "${TARGET_DB}" --remote --file "${TMP}/backup.sql"; then
   log "FATAL: restore failed"
@@ -142,22 +194,11 @@ for t in "${REQUIRED_TABLES[@]}"; do
 done
 log "schema smoke ok (${#REQUIRED_TABLES[@]} required tables present)"
 
-# 4c. Repo-level smoke suite — runs the same checks CI runs on every
-# merge (API ↔ Worker drift, advisor bank drift, statemachine coverage,
-# advisor scenarios, market-intel personas, worker tsc). If the restore
-# produced a DB whose shape no longer matches the deployed worker code,
-# the drift + scenarios tests fail and this exits non-zero.
-# The DR drill GH Action runs from a repo checkout so `npm` is available.
+# 4c. (removed, D263) This ran `npm run test:drift` from the checkout. That
+# suite never touches the restored database, the workflow never ran `npm ci`
+# for it, and it re-ran every repo test on each drill. What proves the restore
+# is 4a and 4b above, against the restored database itself.
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-if command -v npm >/dev/null 2>&1 && [[ -f "${REPO_ROOT}/package.json" ]]; then
-  log "running npm run test:drift (repo smoke suite)"
-  if ! ( cd "${REPO_ROOT}" && npm run test:drift ); then
-    log "FATAL: repo smoke suite (test:drift) failed against restored shape"
-    exit 3
-  fi
-else
-  log "WARN: npm/package.json unavailable — skipping repo smoke suite"
-fi
 
 # 4d. Preview-worker validation against restored DB.
 # True environment validation per spec: deploy the worker to a fresh
@@ -222,10 +263,8 @@ else
 fi
 
 # ---------- 5. Teardown --------------------------------------------
+# The EXIT trap deletes the throwaway database and writes the marker, on this
+# path and on every failure path alike.
 STEP="teardown"
-log "deleting throwaway DB ${TARGET_DB}"
-wrangler d1 delete "${TARGET_DB}" --skip-confirmation || log "WARN: teardown delete failed; clean up manually"
-
 log "DR drill GREEN ✓ (backup=${LATEST_KEY}, users=${USERS}, projects=${PROJECTS})"
-trap - EXIT
 exit 0

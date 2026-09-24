@@ -7,7 +7,7 @@
  * written by `screenUser` since migration 035, and the backup half of
  * "Backup / DR" reads the heartbeat the nightly export writes to R2. The
  * security_events ledger is built (migration 282). What is still genuinely
- * absent is the restore drill's outcome — written nowhere the platform can
+ * absent was the restore drill's outcome — written nowhere the platform could
  * read — and the page says so in its card, never from the canvas's sample
  * rows. The one action, force re-auth, carries the impersonation write bar
  * and a stored reason. These pin that shape.
@@ -64,7 +64,7 @@ test('the page reads two endpoints and writes through two, and nothing else', ()
   assert.deepEqual(calls, ['hqCloseDsrRequest', 'hqGovernance', 'hqSecurityForceReauth', 'hqSecurityOverview']);
 });
 
-test('D200 — only the restore drill is still a stated absence; the ledger and sanctions read their stores', () => {
+test('D200/D263 — the ledger, sanctions, backup and the restore drill all read their stores', () => {
   // D152 — IT WAS FOUR, AND `ai_safety` DID NOT BELONG IN THE LIST. Its
   // refusal claimed no guardrail, flagged-output or token-anomaly counter was
   // stored; two of those three clauses were false, and the verdict rollup was
@@ -87,11 +87,17 @@ test('D200 — only the restore drill is still a stated absence; the ledger and 
   assert.match(ROUTE, /security_events: await securityEventsBlock\(env\)/, 'the ledger block is not read');
   assert.match(ROUTE, /sanctions: await screeningSummary\(env\)/, 'the sanctions card is not read from its store');
   assert.match(ROUTE, /backup: await readBackupHeartbeat\(env, 'd1'\)/, 'the backup half is not read from the heartbeat');
-  assert.match(ROUTE, /drill: absent\(RESTORE_DRILL_REASON\)/,
-    'the restore drill must stay a stated absence, with the reason from its one home');
-  // The drill half renders the server's reason in its own card — never a
-  // green light inferred from a healthy backup half.
-  assert.match(PAGE, /<Absent block=\{block\.drill\} fallback="no drill record is kept\." \/>/);
+  // D263 RE-AIMED THIS A THIRD TIME: the restore drill writes a marker now,
+  // so the drill half reads it rather than stating its absence. It must read
+  // its OWN key, never be derived from the backup half, and never go back to
+  // a stated absence.
+  assert.match(ROUTE, /drill: await readRestoreDrill\(env\)/, 'the restore drill is not read from its marker');
+  assert.doesNotMatch(ROUTE, /drill: absent\(/, 'the restore drill went back to a stated absence');
+  assert.doesNotMatch(ROUTE, /drill:[^\n]*(?:backup|Heartbeat)/, 'the drill half is inferred from the backup half');
+  // The zone and the rail draw the drill from one sentence, so they cannot
+  // disagree about what the last run did.
+  assert.match(PAGE, /<DrillState drill=\{block\.drill\} \/>/);
+  assert.match(PAGE, /const drillDetail = !ready \? 'unreadable' : drillSentence\(data\.backup_dr\?\.drill\);/);
   // The tile that was `value={null}` under "no security_events" reads the
   // ledger — and ONLY under its availability, with the reason otherwise.
   assert.match(PAGE,
