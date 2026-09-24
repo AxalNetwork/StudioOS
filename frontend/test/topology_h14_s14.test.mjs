@@ -331,9 +331,9 @@ test('S14\'s cannot-list, summary and heading say which way each came out on thi
   assert.match(byTestId(handAddedMarkup, 's14-summary'),
     /It holds a binding to HQ and one to another branch, which a generated config never writes, and exports/);
 
-  const readable = describeTopology({ ...ALL_BOUND, BRANCH_CODE: 'fr', HQ: {}, ...AE_CREDS });
-  assert.deepEqual(holds(readable), ['yes', 'no', 'yes']);
-  assert.equal(byTestId(html(DeploymentZone, { dep: readable }), 's14-analytics-head'), 'Writes to, and can read');
+  const branchWithCreds = describeTopology({ ...ALL_BOUND, BRANCH_CODE: 'fr', HQ: {}, ...AE_CREDS });
+  assert.deepEqual(holds(branchWithCreds), ['yes', 'yes', 'yes']);
+  assert.equal(byTestId(html(DeploymentZone, { dep: branchWithCreds }), 's14-analytics-head'), 'Writes to, cannot read');
 
   const noHq = describeTopology({ ...ALL_BOUND, BRANCH_CODE: 'fr', HQ: undefined });
   const noHqMarkup = html(DeploymentZone, { dep: noHq });
