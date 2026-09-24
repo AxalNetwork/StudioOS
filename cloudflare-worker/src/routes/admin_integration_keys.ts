@@ -7,6 +7,9 @@
  *                              → pushes BOTH as Cloudflare Worker secrets
  *                                via the CF API, deletes the encrypted DB row
  *  POST   /:provider/rotate  → push a fresh client_secret as a Worker secret
+ *                              (wherever the key lives — D227: the console
+ *                              offers rotate and remove for a key held as a
+ *                              Worker secret too, which is where a save puts it)
  *  POST   /:provider/test    → dry-run probe against the provider
  *  DELETE /:provider         → delete both Worker secrets + cascade-disconnect
  *
@@ -40,6 +43,7 @@ import {
   deleteOauthCredsAndDisconnect,
   deleteOauthCredsRowOnly,
   listProviderKeyStatus,
+  keyHeldAsWorkerSecret,
   _clearOauthCredsCache,
 } from '../services/providerOauthKeys';
 import { testOauthCreds } from '../services/providerOauthTest';
@@ -85,10 +89,22 @@ function cfErrorJson(c: any, res: CfSecretResult, fallback = 'cf_api_failed') {
   return c.json({ error: code, detail: res.error || null, cf_status: res.status }, httpStatus);
 }
 
+// D227 — each key carries `state` (env | db | unset | unreadable) and the
+// payload carries `db_readable`, so a table that did not answer reads as
+// "unknown" on the console rather than as "not configured". `providers` keeps
+// its name and every field it had.
 r.get('/', async (c) => {
   await requireAdmin(c);
   const status = await listProviderKeyStatus(c.env);
-  return c.json({ providers: status });
+  return c.json({
+    providers: status.items,
+    db_readable: status.db_readable,
+    ...(status.db_readable ? {} : {
+      unreadable_reason:
+        'The table that holds database-kept keys could not be read, so for any provider without a Worker '
+        + 'secret it is unknown whether a key is kept there.',
+    }),
+  });
 });
 
 r.put('/:provider', async (c) => {
@@ -186,7 +202,11 @@ r.post('/:provider/rotate', async (c) => {
     // the outcome of this request, so it is recorded once, as a rotate that
     // landed in the table, rather than as a Cloudflare refusal followed by a
     // second row saying it worked after all.
-    if (res.code === 'cloudflare_api_token_missing') {
+    //
+    // NOT FOR A KEY HELD AS A WORKER SECRET (D227). The Worker secret wins over
+    // any row (`loadOauthCreds`), so rotating a row under it would answer "ok"
+    // and change nothing a user's connection reads.
+    if (res.code === 'cloudflare_api_token_missing' && !keyHeldAsWorkerSecret(c.env, provider)) {
       try {
         const rotated = await rotateOauthSecret(c.env, provider, clientSecret, admin.id);
         await audit(c.env, admin, {

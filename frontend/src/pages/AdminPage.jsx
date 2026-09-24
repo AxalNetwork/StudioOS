@@ -22,6 +22,8 @@ import { REFUND_REASON_MIN, refundReasonOk } from '../lib/refundReason';
 import { drawsAccountControls } from '../lib/accountControls';
 import TrustScoreBadge from '../components/TrustScoreBadge';
 import SecretWriteGate from '../components/SecretWriteGate';
+// D227 — Integration keys' actions and wording follow where a key lives.
+import { keyActionsFor, keyStateBadge, connectedUsersLine, removeConfirmText, SAVE_EFFECT } from '../lib/integrationKeys';
 // Task #1 — embedded as a tab inside Admin Console so admins land on
 // the network roster via /admin?tab=network-profiles. The standalone
 // /admin/network-profiles route stays wired for direct deep-links.
@@ -5589,11 +5591,15 @@ function IntegrationKeysPanel() {
     } finally { setTesting(null); }
   };
 
+  // D227 — the worker says when the key table did not answer, and why.
+  const [unreadableReason, setUnreadableReason] = useState(null);
+
   const refresh = async () => {
     setLoading(true);
     try {
       const r = await api.adminListIntegrationKeys();
       setRows(r.providers || []);
+      setUnreadableReason(r.db_readable === false ? (r.unreadable_reason || 'The key table could not be read.') : null);
     } catch (e) {
       reportError('IntegrationKeysPanel:refresh', e);
       showToast({ kind: 'err', msg: e.message || 'Failed to load' });
@@ -5601,17 +5607,13 @@ function IntegrationKeysPanel() {
   };
   useEffect(() => { refresh(); /* eslint-disable-next-line */ }, []);
 
+  // D227 — Remove works wherever the key lives: the worker deletes both Worker
+  // secrets through the Cloudflare API and any database row. It used to refuse
+  // an env-held key here and point at `wrangler secret delete`, which is where
+  // every key saved from this console ends up.
   const onDelete = async (provider) => {
     const row = rows.find(r => r.provider_key === provider);
-    if (row?.source === 'env') {
-      showToast({ kind: 'err', msg: 'This provider is configured via env vars — remove the secret with `wrangler secret delete` instead.' });
-      return;
-    }
-    const n = row?.active_integrations || 0;
-    const msg = n > 0
-      ? `Remove ${PROVIDER_LABELS[provider]} keys?\n\nThis will disconnect ${n} active user integration${n === 1 ? '' : 's'}. Affected users will need to reconnect once new keys are configured.`
-      : `Remove ${PROVIDER_LABELS[provider]} keys?`;
-    if (!confirm(msg)) return;
+    if (!confirm(removeConfirmText(PROVIDER_LABELS[provider] || provider, row?.active_integrations ?? null))) return;
     try {
       const r = await api.adminDeleteIntegrationKeys(provider);
       showToast({ kind: 'ok', msg: r.disconnected_users
@@ -5635,7 +5637,7 @@ function IntegrationKeysPanel() {
         <div className="text-sm text-amber-900 dark:text-amber-100">
           <div className="font-semibold mb-1">OAuth client credentials are sensitive.</div>
           <div className="text-amber-800 dark:text-amber-200">
-            Worker env vars always take precedence over keys configured here. Removing keys forcibly disconnects every active user integration for that provider — they'll need to reconnect once new keys are saved.
+            A save writes the pair as Worker secrets on the production Worker. A key still kept in the database, from before saves moved to Worker secrets, is used only while no Worker secret is set. Removing keys disconnects every active user integration for that provider — they'll need to reconnect once new keys are saved.
           </div>
         </div>
       </div>
@@ -5644,6 +5646,12 @@ function IntegrationKeysPanel() {
         <div className="mb-5">
           <SecretWriteGate holds={false} what="Saving, rotating or removing a provider's keys" testid="integration-keys-holder-only" />
         </div>
+      )}
+
+      {unreadableReason && (
+        <p className="mb-5 text-xs text-amber-800 dark:text-amber-300" data-testid="integration-keys-unreadable">
+          {unreadableReason} A provider without a Worker secret reads Unknown, and nothing is offered for it until the table answers.
+        </p>
       )}
 
       {loading ? (
@@ -5655,11 +5663,11 @@ function IntegrationKeysPanel() {
           {rows.map((row) => {
             const label = PROVIDER_LABELS[row.provider_key] || row.provider_key;
             const envNames = PROVIDER_ENV_NAMES[row.provider_key] || [];
-            const sourceBadge = row.source === 'env'
-              ? { text: 'env vars', cls: 'bg-blue-100 text-blue-700' }
-              : row.source === 'db'
-                ? { text: 'admin-managed', cls: 'bg-emerald-100 text-emerald-700' }
-                : { text: 'not configured', cls: 'bg-gray-100 text-gray-700' };
+            // D227 — the worker's state, not `source`: `unreadable` is not
+            // `unconfigured`, and a key saved here lives in `env`.
+            const state = row.state;
+            const sourceBadge = keyStateBadge(state);
+            const actions = keyActionsFor(state);
             return (
               <div key={row.provider_key} data-card className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
                 <div className="flex items-start justify-between mb-3">
@@ -5669,7 +5677,7 @@ function IntegrationKeysPanel() {
                       <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${sourceBadge.cls}`}>{sourceBadge.text}</span>
                     </div>
                     <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      {row.active_integrations} active user integration{row.active_integrations === 1 ? '' : 's'}
+                      {connectedUsersLine(row.active_integrations)}
                     </div>
                   </div>
                 </div>
@@ -5678,27 +5686,40 @@ function IntegrationKeysPanel() {
                     Client ID: {row.client_id_preview}
                   </div>
                 )}
-                {row.source === 'db' && row.updated_at && (
+                {state === 'db' && row.updated_at && (
                   <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-3">
                     Last rotated {new Date(row.updated_at).toLocaleString()}
                   </div>
                 )}
-                {row.source === 'env' && (
+                {state === 'env' && (
                   <div className="text-[11px] text-blue-700 dark:text-blue-300 mb-3">
-                    Configured via worker secret{envNames.length === 2 ? 's' : ''}: <code>{envNames.join('</code> + <code>')}</code>. Admin UI cannot edit env-var configs.
+                    Held as Worker secret{envNames.length === 2 ? 's' : ''}{' '}
+                    {envNames.map((n, i) => <React.Fragment key={n}>{i > 0 && ' + '}<code>{n}</code></React.Fragment>)}.
+                    Rotate and Remove write them through the Cloudflare API.
                   </div>
                 )}
-                {row.source === 'unconfigured' && (
+                {state === 'unset' && (
                   <div className="text-xs text-gray-600 dark:text-gray-400 mb-3">{PROVIDER_HINTS[row.provider_key]}</div>
                 )}
+                {state === 'unreadable' && (
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mb-3" data-testid="integration-key-unknown">
+                    <Unrecorded reason={unreadableReason || 'The key table could not be read.'}>Unknown</Unrecorded>
+                    {' '}— no Worker secret is set, and the database could not be read to say whether a key is kept there.
+                  </div>
+                )}
                 <div className="flex gap-2 flex-wrap">
-                  {holdsSecretWrites && (
+                  {holdsSecretWrites && actions.configure && (
                     <button
-                      onClick={() => setEditing({ provider: row.provider_key, mode: row.source === 'db' ? 'rotate' : 'configure' })}
-                      disabled={row.source === 'env'}
-                      title={row.source === 'env' ? 'Configured via env var — edit the worker secret instead' : ''}
-                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
-                      {row.source === 'db' ? 'Rotate keys' : 'Configure'}
+                      onClick={() => setEditing({ provider: row.provider_key, mode: 'configure' })}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700">
+                      Configure
+                    </button>
+                  )}
+                  {holdsSecretWrites && actions.rotate && (
+                    <button
+                      onClick={() => setEditing({ provider: row.provider_key, mode: 'rotate' })}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700">
+                      Rotate secret
                     </button>
                   )}
                   {/* Task #3 — Test button: dry-runs a provider auth call. */}
@@ -5710,7 +5731,7 @@ function IntegrationKeysPanel() {
                     {testing === row.provider_key ? <Loader2 size={12} className="animate-spin" /> : null}
                     Test
                   </button>
-                  {holdsSecretWrites && row.source === 'db' && (
+                  {holdsSecretWrites && actions.remove && (
                     <button
                       onClick={() => onDelete(row.provider_key)}
                       className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-gray-700 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 inline-flex items-center gap-1.5">
@@ -5808,8 +5829,9 @@ function IntegrationKeysEditModal({ provider, mode = 'configure', onClose, onSav
           spellCheck={false}
           className="w-full px-3 py-2 mb-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-mono"
           placeholder="••••••••••••••••" />
-        <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-4">
-          Encrypted at rest. Only the secret hash is ever logged.
+        {/* D227 — what a save does now, not what the database store did. */}
+        <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-4" data-testid="integration-keys-save-effect">
+          {isRotate ? SAVE_EFFECT.rotate : SAVE_EFFECT.configure}
         </div>
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose}
