@@ -22510,3 +22510,61 @@ not this read path.
   five new tests failing. Restored, all five pass again.
 
 **285 is still the next free migration.**
+
+## D229
+
+**`network_profiles.kind` was validated two different ways.** POST
+(`routes/admin_network_profiles.ts`) silently rewrote an unrecognized kind
+to `'mentor'` — `sanitizeKind(body.kind) || 'mentor'` — while PUT refused
+the identical input with 400 `invalid_kind`. A client typo or a retired
+value sent to POST read back as if the operator had deliberately chosen
+`'mentor'`: a silently rewritten field reading as stored. Two more spots
+still named the retired role: `NETWORK_KINDS`
+(`services/networkProfilesSchema.ts`) listed `'mentor'` as if it were
+current, although the role was renamed `advisor`, and `loadNetworkProfiles`
+(`services/decks/axalSpinoutDemoDay.ts`, D225) defaulted a missing kind to
+`'mentor'` too.
+
+**What shipped.** POST now matches PUT: an explicitly-given, unrecognized
+kind is refused with 400 `invalid_kind`, the same as PUT, and a blank
+string is treated as an omission rather than a client error. A genuinely
+omitted kind gets `NETWORK_KIND_DEFAULT` — a new export, `'advisor'` — not
+`'mentor'`. `loadNetworkProfiles`'s own defensive fallback (the DB column is
+`NOT NULL DEFAULT 'mentor'`, so this rarely fires) changed the same way.
+
+`'mentor'` is **not removed** from `NETWORK_KINDS` and PUT still accepts it:
+existing rows carry it, and refusing to save an unrelated field on a
+legacy row (the admin form always resends the full `kind` on every save)
+would be a regression for no gain. Instead `displayNetworkKind` (also new,
+`networkProfilesSchema.ts`) maps `'mentor'` to `'advisor'` for read-only
+display and is applied where the deck labels a roster row: each profile
+card's `kind` and the network-breakdown bucket count
+(`services/decks/axalSpinoutDemoDay.ts`). It is deliberately **not** applied
+to `admin_network_profiles.ts`'s own LIST/GET response, which stays the raw
+stored value — running a row's kind through the alias before it round-trips
+into the admin edit form would convert a legacy `'mentor'` row to
+`'advisor'` on the next unrelated save, the same silent-rewrite failure
+this fixes on POST. **No migration**: nothing rewrites a stored `'mentor'`
+row; converting them, if ever wanted, is the owner's call.
+
+### VERIFIED
+
+- `cloudflare-worker/test/admin_network_profiles_d229.test.ts`: **7** tests
+  against the real Hono route and real `node:sqlite`, plus `displayNetworkKind`
+  and a `fillAxalSpinoutDemoDay` pipeline check, exit 0. An explicitly
+  unrecognized POST kind is refused and inserts no row. An omitted kind
+  stores `'advisor'`. An explicit valid kind stores as given. A
+  blank-string kind is treated as an omission. PUT's existing refusal is
+  unchanged, held as the reference. `displayNetworkKind('mentor')` is
+  `'advisor'`; every other known kind reads as itself. A legacy `'mentor'`
+  row read through the full deck pipeline shows `kind: 'advisor'` on its
+  profile card and buckets under `Advisors`, not `Mentors`, in the network
+  breakdown.
+- Two mutations, each restored byte-identical from a saved copy: reverting
+  POST to `sanitizeKind(body.kind) || 'mentor'` fails 3 of the 7 tests;
+  reverting the deck's two `displayNetworkKind` call sites to the raw
+  `np.kind` fails the pipeline test. Both restored, all 7 pass again.
+- `cd cloudflare-worker && npx --no-install tsc --noEmit` exits 0.
+- `node scripts/check-decision-ids.mjs` exits 0 (D1 through D229).
+
+**285 is still the next free migration.**
