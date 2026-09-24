@@ -144,6 +144,10 @@ jobs:
           fail() { echo "::error::$1"; exit 1; }
           [[ "$BRANCH" =~ ^[a-z][a-z0-9-]{1,15}$ ]] \
             || fail "code must match ^[a-z][a-z0-9-]{1,15}\$ — got '$BRANCH'"
+          # `hq` is HQ's own code in the metrics store (D211): a branch coded
+          # `hq` would be counted into HQ's line. ERE has no lookahead, so the
+          # reservation is its own test.
+          [[ "$BRANCH" != hq ]] || fail "code 'hq' is reserved for HQ's own deployment"
           [[ "$BRANCH_NAME" =~ ^[[:alnum:][:space:].&'"'"'-]{2,80}$ ]] \
             || fail "name must be 2-80 chars of letters, digits, spaces and . & ' -"
           [[ "$LICENCE_UID" =~ ^[A-Za-z0-9_-]{4,64}$ ]] \
@@ -324,7 +328,7 @@ jobs:
       - name: Record the RPC secret hash at HQ
         run: |
           set -o pipefail
-          [[ "$BRANCH" =~ ^[a-z][a-z0-9-]{1,15}$ ]] || { echo "::error::bad branch code"; exit 1; }
+          [[ "$BRANCH" =~ ^[a-z][a-z0-9-]{1,15}$ && "$BRANCH" != hq ]] || { echo "::error::bad branch code"; exit 1; }
           [[ "$RPC_SECRET_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::RPC_SECRET_SHA256 is not a sha256 digest"; exit 1; }
           npx --yes wrangler@4.131.0 d1 execute studioos-db --config wrangler.toml --remote \
             --command "UPDATE licence_deployments SET rpc_secret_hash = '${RPC_SECRET_SHA256}', updated_at = datetime('now') WHERE code = '${BRANCH}'"

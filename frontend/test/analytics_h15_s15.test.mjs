@@ -53,10 +53,11 @@ import BranchAnalytics, {
 import WeeklyLineChart from '../src/components/WeeklyLineChart.jsx';
 import { RANGE_PILLS, rangeLabel, signed } from '../src/components/AnalyticsParts.jsx';
 import { weeklyChartGeometry, weekLabel } from '../src/lib/weeklyChart.js';
-import { inZone } from '../src/lib/zoneTime.js';
+import { inZone, dateInZone } from '../src/lib/zoneTime.js';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import {
   ANALYTICS_RANGES, weekAxis, weeklyKpi, GAP_SENTENCES, ACTIVE_ACCOUNT_BASIS,
+  foldDailyActives, seriesValues, gapNotes,
 } from '../../cloudflare-worker/src/services/activeAccounts.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -91,28 +92,99 @@ function attrs(markup, name) {
   return out;
 }
 const count = (hay, needle) => hay.split(needle).length - 1;
+/**
+ * What a KPI tile's figure reads — its value slot alone, not its label, delta
+ * or note. The notes say "Not recorded" and name weeks in digits, so a match
+ * over the whole tile passes whether or not the figure itself is right.
+ */
+function kpiValue(markup, id) {
+  const at = markup.indexOf(`data-testid="${id}"`);
+  assert.ok(at >= 0, `missing ${id}`);
+  const value = markup.indexOf('text-xl', at);
+  const next = markup.indexOf('data-testid=', at + 1);
+  assert.ok(value > at && (next < 0 || value < next), `${id} has no figure slot of its own`);
+  return renderedText(markup.slice(markup.lastIndexOf('<', value), markup.indexOf('</span>', value) + '</span>'.length));
+}
 
 // ── The fixtures, built by the worker's own functions ──────────────────────
 
 const NOW = '2026-09-23T12:00:00Z';
 const axis = weekAxis(NOW, ANALYTICS_RANGES['8w']);
 
-const HQ_SERIES = [
+/** `monday` plus `k` days, as `YYYY-MM-DD`. */
+function dayAfter(monday, k) {
+  const t = new Date(`${monday}T00:00:00Z`);
+  t.setUTCDate(t.getUTCDate() + k);
+  return t.toISOString().slice(0, 10);
+}
+
+/**
+ * HQ's lines, declared as the accounts each week holds, and `since` — the day
+ * of the line's first recorded request inside the window. HQ's own line and
+ * Iberia's begin on the window's first day, which is the store's earliest row
+ * too, so the read cannot see where they began (their `first_week` is null);
+ * France and the unregistered code begin inside the window, where it can.
+ */
+const HQ_LINES = [
   { code: 'hq', label: 'HQ-held', kind: 'hq', status: null, suspended_at: null,
-    values: [5, 6, 7, 8, 9, 10, 11, 4], gap: null, first_day: '2026-06-02' },
+    since: axis.weeks[0], counts: [5, 6, 7, 8, 9, 10, 11, 4] },
   { code: 'fr', label: 'Axal VC France', kind: 'branch', status: 'active', suspended_at: null,
-    values: [null, null, 3, 4, 5, 6, 7, 2], gap: 'before_series', gap_reason: GAP_SENTENCES.before_series,
-    first_day: '2026-08-18' },
+    since: '2026-08-11', counts: [null, 2, 3, 4, 5, 6, 7, 2] },
   { code: 'es', label: 'Axal VC Iberia', kind: 'branch', status: 'suspended', suspended_at: '2026-09-01 10:00:00',
-    values: [2, 2, 3, 3, 4, 4, 5, 1], gap: null, first_day: '2026-07-01' },
+    since: axis.weeks[0], counts: [2, 2, 3, 3, 4, 4, 5, 1] },
   { code: 'de', label: 'Axal VC DACH', kind: 'branch', status: 'active', suspended_at: null,
-    values: [null, null, null, null, null, null, null, null], gap: 'no_rows', gap_reason: GAP_SENTENCES.no_rows,
-    first_day: null },
+    since: null, counts: [null, null, null, null, null, null, null, null] },
   { code: 'xx', label: 'xx', kind: 'unregistered', status: null, suspended_at: null,
-    values: [null, null, null, null, null, 2, 3, 1], gap: 'before_series', gap_reason: GAP_SENTENCES.before_series,
-    first_day: '2026-09-02',
+    since: '2026-09-08', counts: [null, null, null, null, null, 2, 3, 1],
     note: 'The metrics store recorded this code and the deployment registry has no row for it.' },
 ];
+
+/**
+ * One Analytics Engine row per account per day — the shape HQ's reader folds.
+ * An anonymous row (`uid` 0) dates each line's first request; the counted
+ * accounts sign in on each week's Tuesday.
+ */
+const AE_ROWS = HQ_LINES.flatMap((l) => [
+  ...(l.since ? [{ day: l.since, branch: l.code, uid: 0, n: 1, weight: 1 }] : []),
+  ...l.counts.flatMap((c, k) => Array.from({ length: c ?? 0 }, (_, u) => (
+    { day: dayAfter(axis.weeks[k], 1), branch: l.code, uid: u + 1, n: 1, weight: 1 }))),
+]);
+
+/**
+ * `active_accounts` as `GET /api/admin/hq/analytics` assembles it: each line
+ * from `seriesValues`, its last complete week's gap sentence as `gap_reason`
+ * (and none when that week has a figure), the chart's foot from `gapNotes`,
+ * the KPI from `weeklyKpi`. `capDay` is where a read that stopped at its row
+ * cap stopped.
+ */
+function hqActive({ capDay = null } = {}) {
+  const fold = foldDailyActives(AE_ROWS, axis);
+  const last = axis.weeks.length - 2;
+  const series = HQ_LINES.map(({ since, counts, ...line }) => {
+    const v = seriesValues(fold, axis, line.code, capDay);
+    const lastGap = v.gaps[last];
+    return {
+      ...line,
+      values: v.values,
+      gaps: v.gaps,
+      ...(lastGap ? { gap_reason: GAP_SENTENCES[lastGap] } : {}),
+      first_day: v.first_day,
+      first_week: v.first_week,
+    };
+  });
+  return {
+    available: true,
+    as_of: '2026-09-23T12:00:00.000Z',
+    series,
+    gap_notes: gapNotes(series.map((s) => s.gaps)),
+    kpi: weeklyKpi(axis, series),
+    complete: capDay === null,
+    row_cap: 50000,
+    store_first_day: fold.floorDay,
+    sampled: fold.sampled,
+  };
+}
+const HQ_SERIES = hqActive().series;
 
 /**
  * The server's four absences, read out of the route that sends them. The list
@@ -141,27 +213,44 @@ function hqPayload(over = {}) {
     basis: ACTIVE_ACCOUNT_BASIS,
     source: 'Analytics Engine: one row per metered request from every Worker, read here as counts.',
     registry: { readable: true, count: 3 },
-    active_accounts: {
-      available: true,
-      as_of: '2026-09-23T12:00:00.000Z',
-      series: HQ_SERIES,
-      kpi: weeklyKpi(axis, HQ_SERIES),
-      complete: true,
-      row_cap: 50000,
-      store_first_day: '2026-06-01',
-      sampled: false,
-    },
+    active_accounts: hqActive(),
     not_recorded: SERVER_NR,
     foot: 'Aggregates, never records.',
     ...over,
   };
 }
 
-const BRANCH_VALUES = [null, null, 3, 4, 5, 6, 7, 2];
+/**
+ * The branch's own line, as `loadBranchWeeklyActives` returns it for a log
+ * whose first request was on 2026-08-11: the week before is blank because the
+ * branch was not logging, and every week from its first on is a measurement.
+ * The branch's read always knows its first week — its log has no retention.
+ */
+const BRANCH_VALUES = [null, 2, 3, 4, 5, 6, 7, 2];
+const BRANCH_GAPS = ['before_series', null, null, null, null, null, null, null];
 const BRANCH_STREAMS = [
   { stream: 'subscriptions', available: false, reason: 'No subscription on this branch reports a gross yet.' },
   { stream: 'licence_fees', available: false, reason: 'Licence fees are HQ’s ledger, not this branch’s.' },
 ];
+/**
+ * `active_accounts` as `GET /api/branch/analytics` assembles it from the
+ * reader's values, gaps and first day: the last complete week's gap sentence
+ * as `gap_reason`, the foot from `gapNotes`, the KPI from `weeklyKpi`.
+ */
+function branchActive(values, gaps, firstDay) {
+  const firstWeek = firstDay ? dayAfter(firstDay, -((new Date(`${firstDay}T00:00:00Z`).getUTCDay() + 6) % 7)) : null;
+  const lastGap = gaps[axis.weeks.length - 2];
+  return {
+    available: true,
+    values,
+    gaps,
+    ...(lastGap ? { gap_reason: GAP_SENTENCES[lastGap] } : {}),
+    gap_notes: gapNotes([gaps]),
+    first_day: firstDay,
+    first_week: firstWeek,
+    kpi: weeklyKpi(axis, [{ values, gaps, first_week: firstWeek }]),
+  };
+}
 function branchPayload(over = {}) {
   return {
     branch: 'fr',
@@ -172,14 +261,7 @@ function branchPayload(over = {}) {
     as_of: '2026-09-23T12:00:00.000Z',
     basis: ACTIVE_ACCOUNT_BASIS,
     source: 'This branch\'s own request log (activity_logs).',
-    active_accounts: {
-      available: true,
-      values: BRANCH_VALUES,
-      gap: 'before_series',
-      gap_reason: GAP_SENTENCES.before_series,
-      first_day: '2026-08-18',
-      kpi: weeklyKpi(axis, [{ values: BRANCH_VALUES }]),
-    },
+    active_accounts: branchActive(BRANCH_VALUES, BRANCH_GAPS, '2026-08-11'),
     seats: { available: true, used: 12, licensed: 40, basis: 'Seats used counts accounts by role.' },
     activation: { available: false, reason: 'No activation step is recorded as an event on this branch.' },
     decision_age: {
@@ -253,6 +335,16 @@ test('the fixtures are the worker\'s own weeks: eight Mondays, the newest the cu
   assert.equal(axis.current, '2026-09-21');
   assert.equal(axis.last_complete, '2026-09-14');
   assert.equal(weekLabel(axis.last_complete), '14 Sep');
+
+  // The fold gives back every week the lines declare, so each fixture means what it says.
+  assert.deepEqual(HQ_SERIES.map((s) => s.values), HQ_LINES.map((l) => l.counts));
+  const by = Object.fromEntries(HQ_SERIES.map((s) => [s.code, s]));
+  assert.equal(by.fr.first_week, '2026-08-10', 'France began inside the window, where the read can see it');
+  assert.equal(by.hq.first_week, null, 'HQ\'s line reaches the store\'s first row, so where it began is not known');
+  assert.deepEqual(by.de.gaps, Array(8).fill('no_rows'));
+  assert.equal(by.de.gap_reason, GAP_SENTENCES.no_rows, 'a line blank in its last complete week carries that week\'s sentence');
+  assert.equal(by.fr.gap_reason, undefined, 'a line with a figure that week carries none');
+  assert.equal(by.xx.gap_reason, undefined);
 });
 
 // ── The geometry ───────────────────────────────────────────────────────────
@@ -374,18 +466,28 @@ test('H15 · an unread metrics store draws no line and says why', () => {
 test('H15 · the chart\'s notes appear exactly when the read calls for them', () => {
   const plain = html(ActiveAccountsCard, { data: hqPayload() });
   assert.match(plain, /data-testid="h15-partial-week"/);
-  assert.doesNotMatch(plain, /data-testid="h15-sampled"|data-testid="h15-capped"|data-testid="h15-registry-unreadable"/);
+  assert.doesNotMatch(plain, /data-testid="h15-sampled"|data-testid="h15-registry-unreadable"/);
+  assert.deepEqual(attrs(plain, 'data-gap'), ['no_rows', 'before_series'],
+    'every reason a point is blank, said once each, in the server\'s order');
+  for (const n of hqPayload().active_accounts.gap_notes) {
+    assert.ok(renderedText(slice(plain, `data-gap="${n.gap}"`, '</p>')).includes(n.sentence), `${n.gap} is printed`);
+  }
 
-  const aa = hqPayload().active_accounts;
   const noisy = html(ActiveAccountsCard, {
     data: hqPayload({
-      active_accounts: { ...aa, sampled: true, sampled_note: 'Sampled, so each count is a floor.', complete: false },
+      active_accounts: {
+        ...hqActive({ capDay: axis.weeks[1] }), sampled: true, sampled_note: 'Sampled, so each count is a floor.',
+      },
       registry: { readable: false, reason: 'The deployment registry could not be read.' },
     }),
   });
   assert.match(noisy, /data-testid="h15-sampled"/);
-  assert.match(noisy, /data-testid="h15-capped"/);
-  assert.ok(renderedText(noisy).includes('The read stopped at its cap of 50000 rows'));
+  assert.equal(attrs(noisy, 'data-gap')[0], 'cap', 'the cap is named first: it is why the oldest weeks are blank');
+  const cap = renderedText(slice(noisy, 'data-gap="cap"', '</p>'));
+  assert.ok(cap.includes(GAP_SENTENCES.cap));
+  assert.ok(cap.includes('The cap is 50000 rows.'), 'the cap\'s size rides on its own note');
+  assert.equal(count(renderedText(noisy), GAP_SENTENCES.cap), 1, 'a capped read is described once');
+  assert.doesNotMatch(noisy, /h15-capped/, 'D210\'s separate cap paragraph is not drawn beside the note');
   assert.match(noisy, /data-testid="h15-registry-unreadable"/);
 });
 
@@ -396,13 +498,14 @@ test('H15 · the KPI row: one figure with its week and its lines, three absences
   assert.equal(kpi.delta, null, 'xx was not recorded four weeks earlier, so the populations differ');
   const markup = html(HqKpis, { data });
   const active = renderedText(slice(markup, 'data-testid="h15-kpi-active"', 'lines recorded'));
-  assert.match(active, /26/);
+  assert.equal(kpiValue(markup, 'h15-kpi-active'), '26');
   assert.match(active, /Week of 14 Sep · 4 of 5 lines recorded/);
   assert.match(markup, /data-testid="h15-kpi-delta-reason"/, 'the missing delta says why');
   for (const [key, id] of [['activation', 'activation'], ['approval_age', 'approval-age'], ['token_spend', 'token-spend']]) {
     const tile = slice(markup, `data-testid="h15-kpi-${id}"`, 'below.');
-    assert.match(tile, new RegExp(`title="Reason for ${key}, as the server wrote it\\."`));
-    assert.match(renderedText(tile), /Not recorded/);
+    assert.ok(tile.includes(`title="Reason for ${key}, as the server wrote it."`), `${key}'s reason rides on its figure`);
+    assert.equal(kpiValue(markup, `h15-kpi-${id}`), 'Not recorded', `${key}'s figure itself reads Not recorded`);
+    assert.equal(attrs(tile, 'data-state')[0], 'not_recorded');
   }
 
   const comparable = HQ_SERIES.filter((s) => s.code !== 'xx');
@@ -469,7 +572,9 @@ test('S15 · the median rule names its week, its n and when HQ computed it', () 
   assert.ok(note.includes('computed 2026-09-21 06:00 UTC'));
   assert.ok(note.includes('not a median of every week'));
   assert.ok(note.includes('You, that week: 7.'));
-  assert.ok(renderedText(markup).includes(GAP_SENTENCES.before_series), 'the gap before the log began is said');
+  assert.deepEqual(attrs(markup, 'data-gap'), ['before_series'], 'the week before the log began is the only blank');
+  assert.ok(renderedText(slice(markup, 'data-gap="before_series"', '</p>')).includes(GAP_SENTENCES.before_series),
+    'the gap before the log began is said');
   assert.match(markup, /data-testid="s15-source"/);
 });
 
@@ -568,7 +673,7 @@ test('S15 · revenue states the rate and every stream\'s reason, and never an am
 test('S15 · the KPI row: the week and its delta, a stated no-decision, and seats as a pair', () => {
   const markup = html(BranchKpis, { data: branchPayload() });
   const active = renderedText(slice(markup, 'data-testid="s15-kpi-active"', 'Week of 14 Sep'));
-  assert.match(active, /7/);
+  assert.equal(kpiValue(markup, 's15-kpi-active'), '7');
   assert.match(active, /\+4 vs 17 Aug/);
   assert.match(renderedText(slice(markup, 'data-testid="s15-kpi-decision-age"', 'Against HQ')), /30\.5h/);
   assert.ok(renderedText(slice(markup, 'data-testid="s15-kpi-decision-hq"', '</span>'))
@@ -585,9 +690,8 @@ test('S15 · the KPI row: the week and its delta, a stated no-decision, and seat
 
   // The compare week falls in the gap before the log began, so the delta is refused with its reason.
   const late = [null, null, null, 4, 5, 6, 7, 2];
-  const gapped = branchPayload({
-    active_accounts: { ...branchPayload().active_accounts, values: late, kpi: weeklyKpi(axis, [{ values: late }]) },
-  });
+  const lateGaps = ['before_series', 'before_series', 'before_series', null, null, null, null, null];
+  const gapped = branchPayload({ active_accounts: branchActive(late, lateGaps, '2026-08-25') });
   const gappedMarkup = html(BranchKpis, { data: gapped });
   assert.match(gappedMarkup, /data-testid="s15-kpi-delta-reason"/);
   assert.doesNotMatch(renderedText(gappedMarkup), / vs 17 Aug/, 'no delta across the gap');
@@ -613,6 +717,10 @@ test('a SQL-format deadline is read as UTC whatever zone the reader is in', () =
     assert.equal(pushedLabel('2026-09-21 06:00:00'), '2026-09-21 06:00 UTC');
     assert.equal(inZone('2026-10-05 04:00:00', 'UTC'), '5 Oct, 04:00');
     assert.equal(inZone('2026-10-05 04:00:00', 'UTC'), inZone('2026-10-05T04:00:00Z', 'UTC'));
+    // A cycle's first day, two hours into it in UTC: read as Kolkata time it
+    // would be the evening before, and the calendar would print September.
+    assert.equal(dateInZone('2026-10-01 02:00:00', 'UTC'), '1 Oct 2026');
+    assert.equal(dateInZone('2026-10-01 02:00:00', 'UTC'), dateInZone('2026-10-01T02:00:00Z', 'UTC'));
     assert.match(renderedText(html(WeekGates, { timeline: TIMELINE, onRetry() {} })), /Week 1closes 8 Sept?, 00:00/);
   } finally {
     if (saved === undefined) delete process.env.TZ;
@@ -642,6 +750,7 @@ const PAGES = [
   'frontend/src/components/AnalyticsParts.jsx',
   'frontend/src/components/WeeklyLineChart.jsx',
   'frontend/src/lib/weeklyChart.js',
+  'frontend/src/lib/cohortTimeline.js',
 ];
 
 test('no figure falls back to zero anywhere on either page', () => {

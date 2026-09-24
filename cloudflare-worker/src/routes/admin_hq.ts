@@ -43,7 +43,7 @@ import { FREEZING_STATUSES } from '../util/authErrors';
 import { ensureLastActiveColumn } from '../middleware/lastActive';
 import { ticketBacklog } from '../services/supportQueues';
 import {
-  ACTIVE_ACCOUNT_BASIS, ANALYTICS_RANGES, GAP_SENTENCES, parseAnalyticsRange, seriesValues,
+  ACTIVE_ACCOUNT_BASIS, ANALYTICS_RANGES, GAP_SENTENCES, gapNotes, parseAnalyticsRange, seriesValues,
   weekAxis, weeklyKpi,
 } from '../services/activeAccounts';
 import { loadActiveAccountsByBranchWeek } from '../services/analyticsReports';
@@ -609,7 +609,10 @@ r.get('/analytics', async (c) => {
 
   let active_accounts: Record<string, unknown>;
   if (!read.available) {
-    active_accounts = { available: false, reason: read.reason, as_of: read.as_of };
+    active_accounts = {
+      available: false, reason: read.reason, as_of: read.as_of,
+      ...(read.unreadable ? { unreadable: true } : {}),
+    };
   } else {
     // HQ's own deployment first, then every registered branch — including one
     // with no traffic, whose line is blank with its reason — then any code the
@@ -641,14 +644,20 @@ r.get('/analytics', async (c) => {
       });
       listed.add(code);
     }
+    // Each week carries its own gap reason (D211). The legend speaks for the
+    // last complete week, so `gap_reason` is THAT week's sentence, or absent
+    // when the week has a figure; the chart's foot lists every reason once.
+    const last = axis.weeks.length - 2;
     const series = drawn.map((d) => {
       const v = seriesValues(read.fold, axis, d.code, read.cap_day);
+      const lastGap = v.gaps[last];
       return {
         ...d,
         values: v.values,
-        gap: v.gap,
-        ...(v.gap ? { gap_reason: GAP_SENTENCES[v.gap] } : {}),
+        gaps: v.gaps,
+        ...(lastGap ? { gap_reason: GAP_SENTENCES[lastGap] } : {}),
         first_day: v.first_day,
+        first_week: v.first_week,
         ...(d.kind === 'unregistered'
           ? { note: 'The metrics store recorded this code and the deployment registry has no row for it.' }
           : {}),
@@ -658,6 +667,7 @@ r.get('/analytics', async (c) => {
       available: true,
       as_of: read.as_of,
       series,
+      gap_notes: gapNotes(series.map((x) => x.gaps)),
       kpi: weeklyKpi(axis, series),
       complete: read.cap_day === null,
       row_cap: read.row_cap,

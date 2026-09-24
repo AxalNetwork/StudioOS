@@ -18,7 +18,9 @@
  */
 
 const BRANCH_HOST_RE = /^([a-z][a-z0-9-]{1,15})\.axal\.vc$/;
-const NOT_A_BRANCH = new Set(['app', 'www']);
+// `hq` is HQ's own code in the metrics store and is never given to a branch
+// (D211), so `hq.axal.vc` is not a branch host either.
+const NOT_A_BRANCH = new Set(['app', 'www', 'hq']);
 
 /** The branch code for `hostname`, or `null` when the page is HQ, dev or preview. */
 export function branchCodeFromHost(hostname) {

@@ -16,7 +16,15 @@
  */
 import type { Env } from '../types';
 
-export const BRANCH_CODE_RE = /^[a-z][a-z0-9-]{1,15}$/;
+/**
+ * One hostname label — and never `hq` (D211). Every Worker writes its code to
+ * Analytics Engine's blob6 as `branchOf(env) || 'hq'`, so HQ's own rows ARE the
+ * rows coded `hq`: a branch given that code would be counted into HQ's line on
+ * H15, and HQ's analytics route, which lists `hq` first and then every
+ * registered code, would draw the same line twice. So the code is reserved in
+ * every copy of this rule, not in one of them.
+ */
+export const BRANCH_CODE_RE = /^(?!hq$)[a-z][a-z0-9-]{1,15}$/;
 
 /**
  * The two refusals branch mode adds, as the exact strings thrown (D106).

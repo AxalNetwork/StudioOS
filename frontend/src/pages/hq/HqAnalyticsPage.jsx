@@ -60,6 +60,16 @@ export function seriesColor(series, index) {
   return BRANCH_LINES[Math.max(0, index - 1) % BRANCH_LINES.length];
 }
 
+/**
+ * Whether two branch lines share a colour (D211). The palette wraps after its
+ * last entry, so a ninth branch draws in the first branch's colour and the two
+ * lines cannot be told apart on the chart. The page says so, and points at the
+ * legend, where every line's figure is named.
+ */
+export function coloursRepeat(series) {
+  return (series || []).filter((s) => s?.kind !== 'hq').length > BRANCH_LINES.length;
+}
+
 /** Suspension does not end a line (D210); it changes how the line is drawn. */
 export function isSuspended(series) {
   return series?.status === 'suspended';
@@ -83,6 +93,20 @@ export function notRecordedReason(data, key) {
   if (data === UNAVAILABLE) return 'The analytics could not be read, so neither could this reason.';
   const hit = data ? (data.not_recorded || []).find((n) => n.key === key) : null;
   return hit ? hit.reason : 'Reading the analytics…';
+}
+
+/**
+ * The rail's sentence when there is nothing to read back — which differs by
+ * why (D211). D210 said "could not be read" whenever the list was empty, which
+ * was false for a payload that answered while the metrics store and the
+ * registry each gave it nothing.
+ */
+export function hqCoverageNote(data, coverage) {
+  if (coverage.length) return undefined;
+  if (data === null) return 'Reading the analytics…';
+  if (data === UNAVAILABLE) return 'The analytics could not be read, so there is nothing to read back.';
+  return 'The analytics answered, but neither the metrics store nor the deployment registry gave this page '
+    + 'a figure to read back; each says why on the page.';
 }
 
 /**
@@ -116,7 +140,11 @@ function SectionHead({ title, sub }) {
 
 /**
  * The legend: a line's name, its figure for the last complete week, and one
- * flag. A line with no figure that week says why, in the server's words.
+ * flag. A line with no figure that week says why, in the server's words — and
+ * `gap_reason` is THAT week's reason (D211), not the first one met walking from
+ * the oldest week; the chart's foot names the reasons for the older blanks.
+ * The sentence is printed only beside a MISSING figure: a reason next to a
+ * number would read as the number's caveat, which is not what it says.
  */
 export function SeriesLegend({ series, weeks }) {
   const last = weeks.length - 2;
@@ -124,6 +152,7 @@ export function SeriesLegend({ series, weeks }) {
     <ul className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2" data-testid="h15-legend">
       {series.map((s, i) => {
         const value = s.values[last];
+        const missing = value === null || value === undefined;
         const flag = seriesFlag(s);
         const color = seriesColor(s, i);
         return (
@@ -135,7 +164,7 @@ export function SeriesLegend({ series, weeks }) {
               />
               <span className="font-semibold text-axal-ink">{s.label}</span>
               <span className="font-mono tabular-nums text-axal-ink">
-                {value === null || value === undefined ? <Unrecorded reason={s.gap_reason} /> : value}
+                {missing ? <Unrecorded reason={s.gap_reason} /> : value}
               </span>
               {flag && (
                 <span
@@ -147,7 +176,9 @@ export function SeriesLegend({ series, weeks }) {
               )}
             </div>
             {s.note && <p className="mt-0.5 text-[11px] text-axal-faint">{s.note}</p>}
-            {s.gap_reason && <p className="mt-0.5 text-[11px] text-axal-faint" data-testid="h15-legend-gap">{s.gap_reason}</p>}
+            {missing && s.gap_reason && (
+              <p className="mt-0.5 text-[11px] text-axal-faint" data-testid="h15-legend-gap">{s.gap_reason}</p>
+            )}
           </li>
         );
       })}
@@ -163,12 +194,14 @@ export function SeriesLegend({ series, weeks }) {
 export function HqKpis({ data }) {
   const aa = data.active_accounts;
   const kpi = aa.available ? aa.kpi : null;
+  const unreadable = !aa.available && Boolean(aa.unreadable);
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="h15-kpis">
       <KpiTile
         label="Active accounts"
         value={kpi ? kpi.value : null}
         reason={kpi ? kpi.reason : aa.reason}
+        unreadable={unreadable}
         delta={kpi && kpi.delta !== null ? `${signed(kpi.delta)} vs ${weekLabel(kpi.compare_week)}` : null}
         note={kpi ? (
           <>
@@ -177,7 +210,9 @@ export function HqKpis({ data }) {
               <span className="mt-0.5 block" data-testid="h15-kpi-delta-reason">{kpi.delta_reason}</span>
             )}
           </>
-        ) : 'The metrics store could not be read; its reason is on the chart below.'}
+        ) : (unreadable
+          ? 'The metrics store could not be read; its reason is on the chart below.'
+          : 'This Worker cannot reach the metrics store; the reason is on the chart below.')}
         testId="h15-kpi-active"
       />
       <KpiTile
@@ -205,9 +240,17 @@ export function HqKpis({ data }) {
   );
 }
 
-/** The chart card, in each of the states the payload can be in. */
-export function ActiveAccountsCard({ data }) {
+/**
+ * The chart card, in each of the states the payload can be in.
+ *
+ * A FAILED READ AND AN UNREACHABLE STORE ARE TWO STATES (D211). The server
+ * marks a read that failed `unreadable`; that is drawn as Unreadable with a
+ * retry, because trying again can answer it. A Worker with no read credential
+ * is Not recorded: retrying cannot change it, so no retry is offered.
+ */
+export function ActiveAccountsCard({ data, onRetry }) {
   const aa = data.active_accounts;
+  const noLine = 'No line is drawn: a chart of an unread store would show every branch at nobody.';
   return (
     <Card data-testid="h15-chart">
       <SectionHead
@@ -215,12 +258,12 @@ export function ActiveAccountsCard({ data }) {
         sub={`${rangeLabel(data.range) || data.range} · the platform's metrics store`}
       />
       {!aa.available && (
-        <div data-testid="h15-active-unavailable">
-          <Unrecorded reason={aa.reason} />
+        <div data-testid="h15-active-unavailable" data-state={aa.unreadable ? 'unreadable' : 'not_recorded'}>
+          {aa.unreadable
+            ? <Unreadable what="The metrics store" claim={noLine} onRetry={onRetry} />
+            : <Unrecorded reason={aa.reason} />}
           <p className="mt-1 text-[11.5px] leading-relaxed text-axal-muted">{aa.reason}</p>
-          <p className="mt-1 text-[11.5px] leading-relaxed text-axal-muted">
-            No line is drawn: a chart of an unread store would show every branch at nobody.
-          </p>
+          {!aa.unreadable && <p className="mt-1 text-[11.5px] leading-relaxed text-axal-muted">{noLine}</p>}
         </div>
       )}
       {aa.available && (
@@ -244,10 +287,20 @@ export function ActiveAccountsCard({ data }) {
               ended: it is a count so far, drawn hollow, and will read low against every finished week.
             </p>
             {aa.sampled && <p data-testid="h15-sampled">{aa.sampled_note}</p>}
-            {!aa.complete && (
-              <p data-testid="h15-capped">
-                The read stopped at its cap of {aa.row_cap} rows before reaching the oldest weeks, so those weeks are
-                blank rather than drawn short.
+            {/* EVERY REASON A POINT IS BLANK, SAID ONCE (D211). The legend
+                speaks for the newest complete week; these speak for all of
+                them. The cap's size rides on the cap's own note, so a capped
+                read is described once rather than in two paragraphs. */}
+            {(aa.gap_notes || []).map((n) => (
+              <p key={n.gap} data-testid="h15-gap-note" data-gap={n.gap}>
+                {n.sentence}
+                {n.gap === 'cap' && ` The cap is ${aa.row_cap} rows.`}
+              </p>
+            ))}
+            {coloursRepeat(aa.series) && (
+              <p data-testid="h15-colours-repeat">
+                More than {BRANCH_LINES.length} branches are drawn, so line colours repeat: read each line&rsquo;s
+                figure from its legend row rather than its colour.
               </p>
             )}
             {data.registry && data.registry.readable === false && (
@@ -296,8 +349,7 @@ export default function HqAnalyticsPage() {
       stance="Reads the weekly figures back"
       note="This rail reads back what the page loaded: weekly counts per branch from the platform's metrics store. It reads no account and changes nothing."
       coverage={coverage}
-      coverageNote={coverage.length ? undefined
-        : (data === null ? 'Reading the analytics…' : 'The analytics could not be read, so there is nothing to read back.')}
+      coverageNote={hqCoverageNote(data, coverage)}
       unavailable={[
         ['Activation', notRecordedReason(data, 'activation')],
         ['Median approval age', notRecordedReason(data, 'approval_age')],
@@ -312,7 +364,7 @@ export default function HqAnalyticsPage() {
     <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-6" data-testid="hq-analytics-page">
       <div className="min-w-0 space-y-4">
         <div>
-          <Link to="/hq" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-muted hover:text-axal-ink">
+          <Link to="/hq" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-muted hover:text-axal-ink dark:hover:text-gray-100">
             <ArrowLeft size={13} /> Home
           </Link>
           <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
@@ -340,7 +392,7 @@ export default function HqAnalyticsPage() {
 
         {ready && <HqKpis data={data} />}
 
-        {ready && <ActiveAccountsCard data={data} />}
+        {ready && <ActiveAccountsCard data={data} onRetry={retry} />}
 
         {ready && (
           <div className="grid gap-3 md:grid-cols-2" data-testid="h15-not-recorded">

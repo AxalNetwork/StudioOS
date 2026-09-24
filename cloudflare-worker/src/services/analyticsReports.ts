@@ -1056,7 +1056,12 @@ export async function loadBranchActionMirror(
 export const AE_ACTIVE_ROW_CAP = 10000;
 
 export type ActiveAccountsRead =
-  | { available: false; reason: string; as_of: string }
+  /**
+   * `unreadable` separates a read that FAILED from a store this Worker cannot
+   * reach at all (D211): the page draws the first as Unreadable with a retry
+   * and the second as Not recorded — and neither as a zero.
+   */
+  | { available: false; unreadable?: true; reason: string; as_of: string }
   | { available: true; as_of: string; fold: ActiveFold; cap_day: string | null; row_cap: number };
 
 /**
@@ -1119,6 +1124,7 @@ export async function loadActiveAccountsByBranchWeek(env: Env, axis: WeekAxis): 
   if (data === null) {
     return {
       available: false,
+      unreadable: true,
       as_of,
       reason:
         'Analytics Engine did not answer, or answered in a shape this page cannot read, so these '
@@ -1129,6 +1135,7 @@ export async function loadActiveAccountsByBranchWeek(env: Env, axis: WeekAxis): 
   if (!fold) {
     return {
       available: false,
+      unreadable: true,
       as_of,
       reason:
         'Analytics Engine answered with a day this page could not read, so the weeks cannot be '

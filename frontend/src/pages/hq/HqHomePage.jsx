@@ -376,7 +376,7 @@ export default function HqHomePage() {
                       type="button"
                       data-testid="hq-view-as-enter"
                       onClick={() => setViewAs(b.code)}
-                      className="mt-2 rounded border border-axal-hairline px-2 py-0.5 text-[11px] font-semibold text-axal-muted hover:bg-axal-ground"
+                      className="mt-2 rounded border border-axal-hairline px-2 py-0.5 text-[11px] font-semibold text-axal-muted hover:bg-axal-ground dark:hover:bg-gray-800"
                     >
                       View as {b.code}
                     </button>

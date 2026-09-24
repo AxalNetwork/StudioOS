@@ -54,12 +54,20 @@ export function activityLogged(path: string, status: number): boolean {
 /**
  * The sentence both Analytics pages print under the figure. One string, so the
  * two tiers cannot describe the same number two ways.
+ *
+ * IT NAMES THE PREFIXES, NOT WHAT THEY USUALLY CARRY (D211). D210's sentence
+ * said "monitoring polls" and "reads of the activity feed", but the skip list
+ * above is matched by prefix and ignores the method: a POST under
+ * `/api/monitoring/` (a score-flag review, a waiver) and a POST under
+ * `/api/activity` (the GitHub sync) are skipped too, so an account whose only
+ * request that week was one of those is not counted. The sentence now says
+ * what the rule does rather than what it was written for.
  */
 export const ACTIVE_ACCOUNT_BASIS =
   'An active account is a signed-in account that made at least one request the platform logs '
-  + 'as activity during the week: every /api/ request except health checks, monitoring polls, '
-  + 'reads of the activity feed and the dashboard counter, and requests refused for rate. Weeks '
-  + 'run Monday to Sunday in UTC.';
+  + 'as activity during the week: every /api/ request except health checks, anything under '
+  + '/api/monitoring/ or /api/activity (writes as well as reads), the dashboard counter, and '
+  + 'requests refused for rate. Weeks run Monday to Sunday in UTC.';
 
 /**
  * A skip path may only hold characters that mean nothing inside a LIKE pattern.
@@ -214,8 +222,18 @@ export function foldDailyActives(rows: readonly AeActiveRow[], axis: WeekAxis): 
   return { byBranch, firstDay, floorDay, sampled };
 }
 
-/** Why a week has no value. One reason per series, in the order they bite. */
+/**
+ * Why a week has no value, in the order the reasons bite.
+ *
+ * ONE REASON PER WEEK, NOT PER SERIES (D211). D210 kept a single reason per
+ * line — the first one met walking from the oldest week — and the legend
+ * printed it as the reason the NEWEST week was missing. On a year's range that
+ * named the store floor for a line whose recent weeks were blank for a
+ * different reason, and a line with no rows at all read the cap sentence. Each
+ * week now carries its own.
+ */
 export type GapReason = 'cap' | 'before_store' | 'no_rows' | 'before_series';
+export const GAP_ORDER: readonly GapReason[] = ['cap', 'before_store', 'no_rows', 'before_series'];
 
 /**
  * The sentence a page prints for each gap. Server-side, so the two Analytics
@@ -231,6 +249,45 @@ export const GAP_SENTENCES: Record<GapReason, string> = {
   no_rows: 'Nothing from this series was recorded in the range.',
   before_series: 'The weeks before this series\' first recorded request are left blank, not zero.',
 };
+
+/**
+ * The distinct reasons a chart's blank weeks need, each said once however
+ * many weeks and lines it blanks, in `GAP_ORDER`. What a page prints under the
+ * chart, so a reader learns why every blank point is blank — including the
+ * older weeks a legend row, which speaks for the newest week only, does not.
+ *
+ * The reason travels with its sentence so a page can key a note by what it is
+ * rather than by its wording, and add the one figure a sentence cannot carry
+ * (the row cap's size) without printing the cap twice.
+ */
+export type GapNote = { gap: GapReason; sentence: string };
+export function gapNotes(gapsBySeries: ReadonlyArray<ReadonlyArray<GapReason | null>>): GapNote[] {
+  const seen = new Set<GapReason>();
+  for (const gaps of gapsBySeries) for (const g of gaps) if (g) seen.add(g);
+  return GAP_ORDER.filter((g) => seen.has(g)).map((g) => ({ gap: g, sentence: GAP_SENTENCES[g] }));
+}
+
+/**
+ * Whether one week's count is a whole week's, by the rule every comparison on
+ * both tiers uses (D211): THE WEEK THAT HOLDS A SERIES' FIRST RECORDED REQUEST
+ * IS NOT, WHATEVER DAY THAT REQUEST FELL ON. A branch that began logging on a
+ * Thursday has a real count for that week, but it is four days' count, and
+ * setting it beside a full week — as a median's input, as the branch's own
+ * figure against that median, or as the far end of a four-week change —
+ * measures how many days were logged rather than how many accounts were
+ * active. A Monday start is partial too: Analytics Engine answers by the day,
+ * so HQ cannot see the hour, and one rule on both tiers beats a sharper rule on
+ * one of them.
+ *
+ * `null` when the week is whole; otherwise the sentence saying why it is not.
+ */
+export function partialWeekReason(firstDay: string | null, monday: string): string | null {
+  if (!firstDay) return 'This branch has logged no request yet.';
+  if (firstDay < monday) return null;
+  return weekStartOf(firstDay) === monday
+    ? `This branch began logging on ${firstDay}, inside that week, so its count is not a whole week's.`
+    : `This branch began logging on ${firstDay}, after that week had ended, so it has no count for it.`;
+}
 
 /**
  * One branch's line, and why any point on it is missing.
@@ -249,25 +306,38 @@ export const GAP_SENTENCES: Record<GapReason, string> = {
  * MEASURED ZERO. The store holds that branch's history from that day on, and
  * rows expire oldest-first, so a newer week with no signed-in account in it had
  * none — it is not a gap.
+ *
+ * `first_week` IS ONLY STATED WHEN THE READ CAN SEE IT. A line whose earliest
+ * row is the store's earliest row may reach further back than the store keeps,
+ * so its first week inside the window is not its first week at all; claiming
+ * it was would refuse a four-week change for a line that has none to refuse.
  */
 export function seriesValues(
   fold: ActiveFold, axis: WeekAxis, code: string, capDay: string | null,
-): { values: Array<number | null>; gap: GapReason | null; first_day: string | null } {
+): {
+  values: Array<number | null>;
+  gaps: Array<GapReason | null>;
+  first_day: string | null;
+  first_week: string | null;
+} {
   const capWeek = capDay ? weekStartOf(capDay) : null;
   const windowStart = axis.weeks[0];
   const storeWeek = fold.floorDay && fold.floorDay > windowStart ? weekStartOf(fold.floorDay) : null;
   const first = fold.firstDay.get(code) ?? null;
   const firstWeek = first ? weekStartOf(first) : null;
   const weeks = fold.byBranch.get(code);
-  let gap: GapReason | null = null;
+  const gaps: Array<GapReason | null> = [];
   const values = axis.weeks.map((w) => {
-    if (capWeek && w <= capWeek) { gap = gap ?? 'cap'; return null; }
-    if (storeWeek && w <= storeWeek) { gap = gap ?? 'before_store'; return null; }
-    if (!firstWeek) { gap = gap ?? 'no_rows'; return null; }
-    if (w < firstWeek) { gap = gap ?? 'before_series'; return null; }
-    return weeks?.get(w)?.size ?? 0;
+    let gap: GapReason | null = null;
+    if (capWeek && w <= capWeek) gap = 'cap';
+    else if (storeWeek && w <= storeWeek) gap = 'before_store';
+    else if (!firstWeek) gap = 'no_rows';
+    else if (w < firstWeek) gap = 'before_series';
+    gaps.push(gap);
+    return gap ? null : (weeks?.get(w)?.size ?? 0);
   });
-  return { values, gap, first_day: first };
+  const seen = Boolean(first && fold.floorDay && first > fold.floorDay);
+  return { values, gaps, first_day: first, first_week: seen ? firstWeek : null };
 }
 
 export type WeeklyKpi = {
@@ -283,6 +353,15 @@ export type WeeklyKpi = {
   delta_reason?: string;
 };
 
+/** What `weeklyKpi` reads from each line. */
+export type KpiSeries = {
+  values: ReadonlyArray<number | null>;
+  /** Why each blank week is blank, aligned with `values`. */
+  gaps?: ReadonlyArray<GapReason | null>;
+  /** The week holding the line's first recorded request, when the read can see it. */
+  first_week?: string | null;
+};
+
 /**
  * The headline: the last complete week, summed over the series that have it,
  * and the change against four weeks earlier.
@@ -291,12 +370,19 @@ export type WeeklyKpi = {
  * has a value now and none four weeks ago would otherwise arrive as growth; a
  * branch that dropped out would arrive as a decline. Either is a change in who
  * is counted, not in how many are active, so the delta is refused with its
- * reason instead.
+ * reason instead — and the reason is the one that holds for that week (D211):
+ * a read that stopped short of it is not a change in who is counted.
+ *
+ * AND ONLY BETWEEN WHOLE WEEKS (D211). A line whose first recorded request
+ * falls in either week has only part of that week counted, so the change would
+ * measure the days logged. `partialWeekReason` states the rule; the refusal
+ * here is its third reader, beside the median's input and the branch's own
+ * figure against it.
  */
-export function weeklyKpi(axis: WeekAxis, series: Array<{ values: Array<number | null> }>): WeeklyKpi {
+export function weeklyKpi(axis: WeekAxis, series: ReadonlyArray<KpiSeries>): WeeklyKpi {
   const i = axis.weeks.length - 2;
   const j = i - 4;
-  const at = (k: number) => series.map((s) => s.values[k]);
+  const at = (k: number) => series.map((s) => s.values[k] ?? null);
   const now = at(i);
   const counted = now.filter((v) => v !== null).length;
   const base: WeeklyKpi = {
@@ -309,17 +395,44 @@ export function weeklyKpi(axis: WeekAxis, series: Array<{ values: Array<number |
   const value = now.reduce<number>((sum, v) => sum + (v ?? 0), 0);
   if (j < 0) return { ...base, value, delta_reason: 'The range holds no week four weeks earlier to compare with.' };
   const then = at(j);
-  const sameSet = now.every((v, k) => (v === null) === (then[k] === null));
-  if (!sameSet) {
+  // The reason the blank end of each line that is blank at only one end is blank.
+  const why = new Set<GapReason | null>();
+  series.forEach((s, k) => {
+    if ((now[k] === null) === (then[k] === null)) return;
+    why.add((then[k] === null ? s.gaps?.[j] : s.gaps?.[i]) ?? null);
+  });
+  if (why.size) return { ...base, value, delta_reason: deltaRefusal(why, axis.weeks[j]) };
+  const partial = [axis.weeks[j], axis.weeks[i]]
+    .find((w) => series.some((s, k) => now[k] !== null && s.first_week === w));
+  if (partial) {
     return {
       ...base, value,
       delta_reason:
-        'The series recorded that week are not the ones recorded four weeks earlier, so a difference '
-        + 'would compare two different populations.',
+        `The week of ${partial} holds the first request recorded from a line drawn here, so its count `
+        + 'is not a whole week\'s, and a change against it would measure how many days were logged '
+        + 'rather than how many accounts were active.',
     };
   }
   const prior = then.reduce<number>((sum, v) => sum + (v ?? 0), 0);
   return { ...base, value, delta: value - prior };
+}
+
+/**
+ * Why the four-week change is refused when a line is blank at one end — the
+ * reason that holds for that week, and never "a different population" for a
+ * week the read did not reach.
+ */
+function deltaRefusal(why: ReadonlySet<GapReason | null>, compareWeek: string): string {
+  if (why.has('cap')) {
+    return `The read stopped at its row cap before reaching the week of ${compareWeek}, so there is `
+      + 'no count four weeks earlier to set this against.';
+  }
+  if (why.has('before_store')) {
+    return `The metrics store's history in this range begins after the week of ${compareWeek} began, `
+      + 'so there is no whole count four weeks earlier to set this against.';
+  }
+  return 'The series recorded that week are not the ones recorded four weeks earlier, so a difference '
+    + 'would compare two different populations.';
 }
 
 /**
@@ -341,23 +454,26 @@ async function firstLoggedDay(env: Env): Promise<string | null> {
 }
 
 export type BranchWeeklyRead =
-  | { available: false; reason: string }
+  | { available: false; unreadable: true; reason: string }
   | {
     available: true;
     values: Array<number | null>;
-    gap: 'no_rows' | 'before_series' | null;
+    gaps: Array<'no_rows' | 'before_series' | null>;
     first_day: string | null;
+    first_week: string | null;
   };
 
 /**
  * This branch's own line: distinct signed-in accounts per week, from its own
  * `activity_logs` (S15).
  *
- * ONLY MIDDLEWARE ROWS. About forty other writers put rows in `activity_logs`
- * without an `endpoint`, and some of them are addressed to an account that did
- * nothing — a notice that "your role was changed" is filed under the person it
- * happened to. `endpoint IS NOT NULL` keeps exactly the rows `activityLogged()`
- * produced, which is what makes this the same definition HQ reads.
+ * ONLY MIDDLEWARE ROWS. Fifty-two other files write `activity_logs` rows — 137
+ * statements, measured in D211, where D210 wrote "about forty" — and none of
+ * them names an `endpoint`; some are addressed to an account that did nothing
+ * (a notice that "your role was changed" is filed under the person it
+ * happened to). `endpoint IS NOT NULL` keeps exactly the rows
+ * `activityLogged()` produced, which is what makes this the same definition
+ * HQ reads.
  *
  * THE WEEK IS `date(created_at, '-6 days', 'weekday 1')`: back six days, then
  * forward to the next Monday — which lands on the Monday of the row's own week
@@ -367,7 +483,9 @@ export type BranchWeeklyRead =
  *
  * THERE IS NO RETENTION ON THIS TABLE, so every week after the first logged
  * request is a measurement: a week with nobody in it is 0. Weeks before it are
- * blank, because the branch was not logging then.
+ * blank, because the branch was not logging then. And the first request is
+ * this database's first, not the window's, so `first_week` is always known
+ * here — unlike HQ's read, whose window can begin after a line did.
  */
 export async function loadBranchWeeklyActives(env: Env, axis: WeekAxis): Promise<BranchWeeklyRead> {
   try {
@@ -382,16 +500,17 @@ export async function loadBranchWeeklyActives(env: Env, axis: WeekAxis): Promise
     const byWeek = new Map<string, number>();
     for (const r of q.results || []) byWeek.set(String(r.week), Math.max(0, Math.trunc(Number(r.n) || 0)));
     const firstWeek = first ? weekStartOf(first) : null;
-    let gap: 'no_rows' | 'before_series' | null = null;
+    const gaps: Array<'no_rows' | 'before_series' | null> = [];
     const values = axis.weeks.map((w) => {
-      if (!firstWeek) { gap = 'no_rows'; return null; }
-      if (w < firstWeek) { gap = 'before_series'; return null; }
-      return byWeek.get(w) ?? 0;
+      const gap = !firstWeek ? 'no_rows' : w < firstWeek ? 'before_series' : null;
+      gaps.push(gap);
+      return gap ? null : (byWeek.get(w) ?? 0);
     });
-    return { available: true, values, gap, first_day: first };
+    return { available: true, values, gaps, first_day: first, first_week: firstWeek };
   } catch (e) {
     return {
       available: false,
+      unreadable: true,
       reason:
         'This branch\'s request log could not be read, so these are not counts of zero: '
         + `${(e as Error)?.message || 'activity_logs is unreadable'}.`,
@@ -402,12 +521,11 @@ export async function loadBranchWeeklyActives(env: Env, axis: WeekAxis): Promise
 /**
  * One week's count, for the benchmark HQ medians (D148's pipe, D210's metric).
  *
- * A WEEK THE LOG BEGAN INSIDE IS NOT OFFERED. A branch provisioned on a
- * Thursday has a real count for that week, but it is a count of four days, and
- * putting it into a median beside full weeks would drag the platform's figure
- * down for a reason that has nothing to do with activity. So it is `null` with
- * that reason, and the branch counts toward the median from its first whole
- * week.
+ * A WEEK THE LOG BEGAN INSIDE IS NOT OFFERED — `partialWeekReason`'s rule, the
+ * same one the branch's own figure beside the median and the KPI's four-week
+ * change read. D210 compared the first logged DAY with the week's Monday using
+ * `>`, so a branch whose log began on the Monday itself slipped a partial week
+ * into the median; `partialWeekReason` treats that week as partial too.
  */
 export async function activeAccountsInWeek(
   env: Env, monday: string,
@@ -417,19 +535,8 @@ export async function activeAccountsInWeek(
     const bounds = weekAxis(`${monday}T12:00:00Z`, 2);
     const from = `${bounds.current} 00:00:00`;
     const to = bounds.to;
-    const first = await firstLoggedDay(env);
-    if (!first) return { value: null, reason: 'This branch has logged no request yet.' };
-    if (first > bounds.current) {
-      // Two different claims share this branch: logging began part-way through
-      // the week, or only after it had ended. Saying "inside that week" about
-      // the second would put a count of days on a week that has none.
-      return {
-        value: null,
-        reason: weekStartOf(first) === bounds.current
-          ? `This branch began logging on ${first}, inside that week, so its count is not a whole week's.`
-          : `This branch began logging on ${first}, after that week had ended, so it has no count for it.`,
-      };
-    }
+    const partial = partialWeekReason(await firstLoggedDay(env), bounds.current);
+    if (partial) return { value: null, reason: partial };
     const row = await env.DB.prepare(
       `SELECT COUNT(DISTINCT user_id) AS n
          FROM activity_logs

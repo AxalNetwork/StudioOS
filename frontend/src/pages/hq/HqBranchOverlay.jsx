@@ -96,7 +96,10 @@ export default function HqBranchOverlay({ branch }) {
   if (live) {
     if (num(live.accounts?.total) !== null) railCoverage.push(`${num(live.accounts.total)} accounts on ${code}`);
     if (num(live.seats_used) !== null) railCoverage.push(`${num(live.seats_used)} seats used`);
-    if (num(live.backlog) !== null) railCoverage.push(`${num(live.backlog)} open approvals`);
+    // `backlog` is `{ count, oldest_at }` (BranchOverview), not a number. D153
+    // read the object itself, which `num` turned into null — so a branch that
+    // sent its backlog read as one that "answered without a backlog" (D211).
+    if (num(live.backlog?.count) !== null) railCoverage.push(`${num(live.backlog.count)} open approvals`);
     railCoverage.push(`read ${readAt || 'at an unrecorded time'}${asOf ? ` · branch stamped ${asOf}` : ''}`);
   }
 
@@ -183,7 +186,7 @@ export default function HqBranchOverlay({ branch }) {
         />
         <BranchTile
           label="Queue backlog"
-          value={live ? num(live.backlog) : null}
+          value={live ? num(live.backlog?.count) : null}
           reason={absent || live?.backlog_reason || 'The branch answered without a backlog.'}
           branch={code}
           readAt={readAt}

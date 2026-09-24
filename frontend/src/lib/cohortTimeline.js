@@ -43,6 +43,11 @@ export function cycleLabel(year, month) {
  * (week, status) pair — and a week with no rows at all is a week nobody has
  * been judged in, which is different from a week where everyone passed. The
  * map therefore has no entry for that week rather than an object of zeroes.
+ *
+ * A COUNT THAT IS NOT A COUNT IS `null`, NEVER 0 (D211). D210 wrote
+ * `Number(r.n) || 0`, so a row whose `n` arrived unreadable became "0 failed"
+ * — a week gate claiming nobody failed on the strength of a value nobody
+ * could read. `tallyReadable` is how a reader asks.
  */
 export function statusesByWeek(rows) {
   const out = new Map();
@@ -50,10 +55,16 @@ export function statusesByWeek(rows) {
     const wk = Number(r.week_number);
     if (!Number.isFinite(wk)) continue;
     const bucket = out.get(wk) || {};
-    bucket[String(r.status)] = Number(r.n) || 0;
+    const n = r.n === null || r.n === undefined || r.n === '' ? Number.NaN : Number(r.n);
+    bucket[String(r.status)] = Number.isInteger(n) && n >= 0 ? n : null;
     out.set(wk, bucket);
   }
   return out;
+}
+
+/** Whether every count in one week's tally could be read. */
+export function tallyReadable(tally) {
+  return Object.values(tally || {}).every((n) => n !== null);
 }
 
 /** An instant the server sent, in milliseconds, or NaN. Both stamp formats the store writes are read. */
@@ -82,6 +93,22 @@ export function currentCycle(cycles, serverTime) {
   return null;
 }
 
+/**
+ * Whether a cycle has ended by the server's clock — `null` when its end or the
+ * clock cannot be read.
+ *
+ * `currentCycle` returns the newest cycle that has STARTED, which is the right
+ * cycle to gate even after it finishes; what it cannot say is whether that
+ * cycle is still running. D210's card called it "the cycle under way" either
+ * way (D211), so a cohort that ended last week read as live.
+ */
+export function cycleEnded(cycle, serverTime) {
+  const now = instantMs(serverTime);
+  const end = instantMs(cycle?.end_at);
+  if (!Number.isFinite(now) || !Number.isFinite(end)) return null;
+  return end <= now;
+}
+
 /** The four statuses `company_week_status` writes, in the order a card prints them. */
 export const WEEK_STATUSES = ['passed', 'failed', 'grace', 'pending'];
 
@@ -94,7 +121,10 @@ export const WEEK_STATUSES = ['passed', 'failed', 'grace', 'pending'];
  *   no_outcome   the deadline passed and nobody has a status for the week —
  *                nothing was judged, which is not everyone passing;
  *   counted      the statuses as the store holds them;
- *   unreadable   the deadline or the server's clock could not be read.
+ *   unreadable   the deadline or the server's clock could not be read
+ *                (`what: 'deadline'`), or the deadline has passed and a count
+ *                in the tally could not be (`what: 'tally'`) — which is not a
+ *                week with no outcome, and never "0 failed".
  *
  * COUNTS, NEVER A RATE. The timeline's `participant_count` is the accounts
  * active in the Lab NOW that started inside the cycle, so a rate over it would
@@ -103,10 +133,11 @@ export const WEEK_STATUSES = ['passed', 'failed', 'grace', 'pending'];
 export function weekOutcome(window, tally, serverTime) {
   const now = instantMs(serverTime);
   const deadline = instantMs(window?.deadline_at);
-  if (!Number.isFinite(now) || !Number.isFinite(deadline)) return { state: 'unreadable' };
+  if (!Number.isFinite(now) || !Number.isFinite(deadline)) return { state: 'unreadable', what: 'deadline' };
   if (deadline > now) return { state: 'not_yet_due', deadline_at: window.deadline_at };
   const entries = Object.entries(tally || {});
   if (!entries.length) return { state: 'no_outcome' };
+  if (!tallyReadable(tally)) return { state: 'unreadable', what: 'tally' };
   const counts = {};
   for (const s of WEEK_STATUSES) counts[s] = tally[s] ?? null;
   const other = entries.filter(([k]) => !WEEK_STATUSES.includes(k));

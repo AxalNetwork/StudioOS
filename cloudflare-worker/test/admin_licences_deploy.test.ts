@@ -332,6 +332,23 @@ test('a code outside the charset is refused, and so is a residency Cloudflare do
   } finally { s.restore(); }
 });
 
+test('the code "hq" passes the charset and is still refused, with its own sentence (D211)', async () => {
+  const { call, rows } = deployApp(GH_VARS);
+  const s = stubFetch(() => new Response(null, { status: 204 }));
+  try {
+    const r = await call(...deploy({ code: 'hq' }));
+    assert.equal(r.status, 400);
+    assert.equal(r.body.error, 'bad_code');
+    assert.match(r.body.message, /HQ's own deployment in the metrics store/,
+      'the charset sentence would tell the operator to fix a code that already fits it');
+    assert.equal(s.seen.length, 0, 'nothing is dispatched for a refused code');
+    assert.equal(rows().length, 0, 'and no deployment row is left behind');
+    // A code that merely STARTS with hq is a branch like any other.
+    const ok = await call(...deploy({ code: 'hq-north' }));
+    assert.equal(ok.status, 200);
+  } finally { s.restore(); }
+});
+
 test('what was requested is recorded apart from what Cloudflare can grant', async () => {
   // D.1: `eu` is a guarantee and a location hint is not. A record that stored
   // only the request would misreport a Dubai branch's residency.

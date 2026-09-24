@@ -23,7 +23,7 @@
  * Run alone:
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/analytics_d210.test.ts
  */
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
@@ -32,7 +32,7 @@ import { SignJWT } from 'jose';
 
 import {
   activityLogged, aeLoggedRequestPredicate, SKIP_ACTIVITY_LOG_PATHS, parseAnalyticsRange,
-  ANALYTICS_RANGES, weekAxis, foldDailyActives, seriesValues, weeklyKpi, GAP_SENTENCES,
+  ANALYTICS_RANGES, weekAxis, foldDailyActives, seriesValues, weeklyKpi, GAP_SENTENCES, gapNotes,
   ACTIVE_ACCOUNT_BASIS, activeAccountsInWeek,
 } from '../src/services/activeAccounts.ts';
 import { weekStartOf } from '../src/services/okrWeeks.ts';
@@ -44,6 +44,17 @@ import hq from '../src/routes/admin_hq.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { tableFromBaseline, splitStatements, stripForeignKeys } from './_baseline.mjs';
 
+// THE CLOCK IS FROZEN, AND AT THE WORST INSTANT THERE IS (D211). The routes
+// build their week axis from `Date.now()` while these tests build theirs from
+// `new Date()` a few lines earlier; a run that crossed Sunday midnight UTC
+// between the two compared two different axes and failed on nothing. Frozen,
+// both read one instant — half a second before Monday, which is where the old
+// drift bit — and SQLite fixtures anchor on the same instant (`NOW_SQL`)
+// rather than on SQLite's own clock.
+const FIXED = Date.parse('2026-09-27T23:59:59.500Z');
+mock.timers.enable({ apis: ['Date'], now: FIXED });
+const NOW_SQL = '2026-09-27 23:59:59';
+
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ADMIN = 7;
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
@@ -54,6 +65,19 @@ function exec(db: InstanceType<typeof DatabaseSync>, sql: string) {
   for (const st of splitStatements(sql)) db.exec(st);
 }
 
+// ────────────────────────────────────────────────────────────── the clock ──
+
+// Every fixture below is aged from NOW_SQL, and the routes build their weeks
+// from Date.now(). The two must be one instant: were the freeze lifted, or
+// FIXED moved without NOW_SQL, the fixtures would be aged from one clock and
+// read against another, and a week test could pass on the wrong week — which
+// is exactly how D210's tests passed except across Sunday midnight (D211).
+test('the routes and the fixtures read one clock: Date.now() is the instant NOW_SQL names', () => {
+  assert.equal(Date.now(), FIXED, 'the clock is frozen at FIXED');
+  assert.equal(new Date().toISOString().slice(0, 19).replace('T', ' '), NOW_SQL);
+  assert.equal(new Date(FIXED).getUTCDay(), 0, 'a Sunday, half a second before the week turns');
+});
+
 // ─────────────────────────────────────────────────────────────── the rule ──
 
 test('the Analytics Engine predicate counts exactly the requests activityLogged() logs', () => {
@@ -62,9 +86,18 @@ test('the Analytics Engine predicate counts exactly the requests activityLogged(
     '/api/activity/recent', '/api/monitoring', '/api/monitoring/', '/api/monitoring/alerts',
     '/api/dashboard/stats', '/api/dashboard/stats2', '/api/dashboard', '/assets/app.js', '/',
     '/apix', 'hq:branch_action',
+    // Case differs where the two rules could disagree (D211): `/API/…` is not
+    // an /api/ path to `startsWith`, and `/api/Health` is not the health check.
+    '/API/projects', '/Api/activity', '/api/Health', '/api/Monitoring/alerts',
   ];
   const statuses = [200, 302, 404, 428, 429, 430, 500];
   const db = new DatabaseSync(':memory:');
+  // SQLite's LIKE ignores ASCII case unless told otherwise, while Analytics
+  // Engine's LIKE is case-sensitive (ILIKE is its insensitive form). Without
+  // this pragma the stand-in store would disagree with the real one on every
+  // mixed-case path above, and a predicate that matched case-insensitively
+  // could not be told apart from one that did not.
+  db.exec('PRAGMA case_sensitive_like = ON');
   db.exec('CREATE TABLE ae (blob1 TEXT, double2 REAL)');
   const ins = db.prepare('INSERT INTO ae (blob1, double2) VALUES (?, ?)');
   const expected = new Set<string>();
@@ -158,7 +191,11 @@ test('the fold counts distinct signed-in accounts per branch per week, and anony
   const v = seriesValues(fold, AXIS, 'fr', null);
   assert.deepEqual(v.values, [null, null, null, 2, 0, 0, 0, 0],
     'weeks the store may not fully hold are blank; after them, a week with nobody is a measured 0');
-  assert.equal(v.gap, 'before_store');
+  // D211: each blank week carries its own reason, aligned with `values`.
+  assert.deepEqual(v.gaps, ['before_store', 'before_store', 'before_store', null, null, null, null, null]);
+  assert.equal(v.first_day, '2026-08-18');
+  assert.equal(v.first_week, null,
+    'the line\'s first row IS the store\'s first row, so it may reach further back than the store keeps');
 });
 
 test('a row standing for more than one request marks the read as sampled', () => {
@@ -177,14 +214,23 @@ test('every gap reason is its own claim, and each has a sentence', () => {
   ], AXIS)!;
   const fr = seriesValues(fold, AXIS, 'fr', null);
   assert.deepEqual(fr.values, [null, null, 1, 0, 0, 0, 0, 0]);
-  assert.equal(fr.gap, 'before_series');
+  assert.deepEqual(fr.gaps, ['before_series', 'before_series', null, null, null, null, null, null]);
+  assert.equal(fr.first_week, '2026-08-17', 'fr began after the store did, so its first week is known');
   const de = seriesValues(fold, AXIS, 'de', null);
   assert.ok(de.values.every((x) => x === null), 'a branch with no rows has no zeros');
-  assert.equal(de.gap, 'no_rows');
+  assert.ok(de.gaps.every((g) => g === 'no_rows'));
+  assert.equal(de.first_week, null);
   const capped = seriesValues(fold, AXIS, 'fr', '2026-08-26');
   assert.deepEqual(capped.values, [null, null, null, null, 0, 0, 0, 0],
     'weeks at or before the day the read stopped are blank, not short');
-  assert.equal(capped.gap, 'cap');
+  assert.deepEqual(capped.gaps, ['cap', 'cap', 'cap', 'cap', null, null, null, null],
+    'the cap blanks exactly the weeks it did not reach, and no reason is borrowed for the rest');
+  // What a chart's foot prints: each reason once, in GAP_ORDER, keyed.
+  assert.deepEqual(gapNotes([fr.gaps, de.gaps, capped.gaps]), [
+    { gap: 'cap', sentence: GAP_SENTENCES.cap },
+    { gap: 'no_rows', sentence: GAP_SENTENCES.no_rows },
+    { gap: 'before_series', sentence: GAP_SENTENCES.before_series },
+  ]);
   for (const g of ['cap', 'before_store', 'no_rows', 'before_series'] as const) {
     assert.ok(GAP_SENTENCES[g] && GAP_SENTENCES[g].length > 30, `${g} needs its own sentence`);
   }
@@ -298,19 +344,45 @@ test('S15 draws this branch\'s own weeks: blank before its log began, a measured
   assert.equal(a.available, true);
   assert.deepEqual(a.values, [null, null, 1, 2, 0, 1, 0, 0],
     'account 9\'s row has no endpoint, so it is not a request this rule counts');
-  assert.equal(a.gap, 'before_series');
-  assert.equal(a.gap_reason, GAP_SENTENCES.before_series);
+  assert.deepEqual(a.gaps, ['before_series', 'before_series', null, null, null, null, null, null]);
+  assert.equal(a.gap_reason, undefined,
+    'the last complete week has a figure, so no reason is printed beside it (D211)');
+  assert.deepEqual(a.gap_notes, [{ gap: 'before_series', sentence: GAP_SENTENCES.before_series }],
+    '…while the foot still says why the older weeks are blank');
+  assert.equal(a.first_day, axis.weeks[2]);
+  assert.equal(a.first_week, axis.weeks[2]);
   assert.equal(a.kpi.week, axis.last_complete);
   assert.equal(a.kpi.value, 0);
-  assert.equal(a.kpi.delta, 0 - 1);
+  assert.equal(a.kpi.compare_week, axis.weeks[2]);
+  assert.equal(a.kpi.delta, null,
+    'week 2 holds the log\'s first request — half a week, which a change would read as growth (D211)');
+  assert.match(a.kpi.delta_reason, /holds the first request recorded/);
   assert.equal(body.basis, ACTIVE_ACCOUNT_BASIS, 'one sentence for the figure on both tiers');
   assert.deepEqual(body.weeks, axis.weeks);
   assert.equal(body.range, '8w');
 });
 
+test('S15 draws the four-week change once both ends are whole weeks', async () => {
+  const db = branchDb();
+  const axis = weekAxis(new Date().toISOString(), 8);
+  const at = (i: number) => `${axis.weeks[i]} 12:00:00`;
+  logged(db, 7, at(1));                        // the log begins in week 1, before the compared week
+  logged(db, 7, at(2));
+  logged(db, 7, at(3)); logged(db, 8, at(3));
+  logged(db, 8, at(5));
+  const { body } = await branchGet(db);
+  const a = body.active_accounts;
+  assert.deepEqual(a.values, [null, 1, 1, 2, 0, 1, 0, 0]);
+  assert.equal(a.first_week, axis.weeks[1]);
+  assert.equal(a.kpi.delta, 0 - 1, 'both weeks are whole, so the change is a change in accounts');
+  assert.equal(a.kpi.delta_reason, undefined);
+});
+
 test('S15 reads an unreadable log as unreadable, never as a line of zeros', async () => {
   const { body } = await branchGet(branchDb({ log: false }));
   assert.equal(body.active_accounts.available, false);
+  assert.equal(body.active_accounts.unreadable, true,
+    'the page draws a FAILED read with a retry, and a missing store without one (D211)');
   assert.match(body.active_accounts.reason, /not counts of zero/);
   assert.equal(body.active_accounts.values, undefined);
 });
@@ -334,26 +406,33 @@ test('S15 with no licence copy says so on the seats and leaves the rate unknown'
   assert.match(body.seats.reason, /HQ has not pushed/);
   assert.equal(body.revenue.share_bps, null);
   assert.equal(body.revenue.keeps_bps, null);
+  assert.equal(body.revenue.share_reason, body.seats.reason,
+    'the rate is missing for the reason the seats are — one licence copy, one sentence (D211)');
+  assert.match(body.revenue.share_reason, /HQ has not pushed/);
+  assert.ok(!/carries no revenue share/.test(body.revenue.share_reason),
+    'a copy that never arrived is not a copy without a rate');
 });
 
 test('S15 times a referral from submission to its FIRST verdict, inside the window only', async () => {
   const db = branchDb();
   const sub = db.prepare(
     `INSERT INTO referral_submissions (id, uid, referrer_user_id, referred_name, status, created_at)
-     VALUES (?, ?, 8, 'Acme', ?, datetime('now', ?))`,
+     VALUES (?, ?, 8, 'Acme', ?, datetime(?, ?))`,
   );
   const ev = db.prepare(
     `INSERT INTO referral_submission_events (submission_id, label, status, created_at)
-     VALUES (?, 'x', ?, datetime('now', ?))`,
+     VALUES (?, 'x', ?, datetime(?, ?))`,
   );
-  sub.run(1, 'r1', 'qualified', '-60 hours');
-  ev.run(1, 'submitted', '-60 hours'); ev.run(1, 'qualified', '-50 hours');          // 10 hours
-  sub.run(2, 'r2', 'rejected', '-5 days');
-  ev.run(2, 'rejected', '-90 hours');                                                 // 30 hours
-  sub.run(3, 'r3', 'converted', '-80 days');
-  ev.run(3, 'qualified', '-79 days'); ev.run(3, 'converted', '-2 days');             // decided long ago
-  sub.run(4, 'r4', 'under_review', '-3 days');
-  ev.run(4, 'under_review', '-2 days');                                               // not decided
+  // Anchored on the frozen instant, not on SQLite's clock: the route measures
+  // its window from `Date.now()`, so the fixture must too.
+  sub.run(1, 'r1', 'qualified', NOW_SQL, '-60 hours');
+  ev.run(1, 'submitted', NOW_SQL, '-60 hours'); ev.run(1, 'qualified', NOW_SQL, '-50 hours');  // 10 hours
+  sub.run(2, 'r2', 'rejected', NOW_SQL, '-5 days');
+  ev.run(2, 'rejected', NOW_SQL, '-90 hours');                                                   // 30 hours
+  sub.run(3, 'r3', 'converted', NOW_SQL, '-80 days');
+  ev.run(3, 'qualified', NOW_SQL, '-79 days'); ev.run(3, 'converted', NOW_SQL, '-2 days');      // decided long ago
+  sub.run(4, 'r4', 'under_review', NOW_SQL, '-3 days');
+  ev.run(4, 'under_review', NOW_SQL, '-2 days');                                                 // not decided
   const { body } = await branchGet(db);
   const d = body.decision_age;
   assert.equal(d.queue, 'referrals');
@@ -397,6 +476,7 @@ test('S15 without the escalation mirror says the log is unreadable, not that HQ 
   const { body } = await branchGet(branchDb({ escalations: false }));
   const content = body.approval_age.find((l: any) => l.key === 'content_to_hq');
   assert.equal(content.available, false);
+  assert.equal(content.unreadable, true);
   assert.match(content.reason, /migration 261/);
 });
 
@@ -419,10 +499,12 @@ test('S15 sets its own week beside HQ\'s median, and keeps withheld apart from u
   db.exec('DELETE FROM branch_benchmarks');
   ({ body } = await branchGet(db));
   assert.equal(body.benchmark.available, false);
+  assert.equal(body.benchmark.unreadable, undefined, 'withheld is a statement HQ made, not a failed read');
   assert.match(body.benchmark.reason, /published no median/);
 
   ({ body } = await branchGet(branchDb({ benchmarks: false })));
   assert.equal(body.benchmark.available, false);
+  assert.equal(body.benchmark.unreadable, true);
   assert.match(body.benchmark.reason, /not the same/);
 });
 
@@ -461,9 +543,9 @@ test('the benchmark readers read what branchOverview() actually returns', async 
     CREATE TABLE lp_applications (id INTEGER PRIMARY KEY, status TEXT, created_at TEXT);
     CREATE TABLE cohort_applicants (id INTEGER PRIMARY KEY, status TEXT, created_at TEXT);
     CREATE TABLE spinout_moderation_cases (id INTEGER PRIMARY KEY, status TEXT, created_at TEXT);
-    INSERT INTO lp_applications (status, created_at) VALUES ('pending', datetime('now','-2 days'));
-    INSERT INTO cohort_applicants (status, created_at) VALUES ('pending', datetime('now','-1 days'));
   `);
+  db.prepare(`INSERT INTO lp_applications (status, created_at) VALUES ('pending', datetime(?, '-2 days'))`).run(NOW_SQL);
+  db.prepare(`INSERT INTO cohort_applicants (status, created_at) VALUES ('pending', datetime(?, '-1 days'))`).run(NOW_SQL);
   const axis = weekAxis(new Date().toISOString(), 8);
   logged(db, 7, `${axis.weeks[0]} 09:00:00`);
   logged(db, 8, `${axis.last_complete} 09:00:00`);
@@ -577,6 +659,8 @@ test('H15 without a read credential says the dataset is unreadable, and draws no
   const { status, body } = await hqGet(hqDb(), HQ_ENV);
   assert.equal(status, 200);
   assert.equal(body.active_accounts.available, false);
+  assert.equal(body.active_accounts.unreadable, undefined,
+    'no credential is a store this Worker cannot reach — Not recorded, with no retry to offer (D211)');
   assert.match(body.active_accounts.reason, /not a count of zero/);
   assert.equal(body.active_accounts.series, undefined);
   assert.deepEqual(body.not_recorded.map((n: any) => n.key),
@@ -618,9 +702,15 @@ test('H15 draws one line per registered branch and one for HQ, from the store\'s
   assert.equal(by.fr.label, 'Axal VC France');
   assert.equal(by.fr.status, 'suspended', 'a suspended branch keeps its line: reads are not gated');
   assert.ok(by.de.values.every((v: any) => v === null));
-  assert.equal(by.de.gap, 'no_rows');
-  assert.equal(by.de.gap_reason, GAP_SENTENCES.no_rows);
+  assert.ok(by.de.gaps.every((g: any) => g === 'no_rows'), 'every week of a silent branch says why');
+  assert.equal(by.de.gap_reason, GAP_SENTENCES.no_rows, 'and the legend speaks for the last complete week');
+  assert.equal(by.fr.gap_reason, undefined, 'fr has a figure that week, so no reason is printed beside it');
+  assert.deepEqual(a.gap_notes.map((n: any) => n.gap), ['no_rows', 'before_series'],
+    'de is silent, fr and xx begin after week 0 — and HQ\'s row dates the store from week 0, so no '
+    + 'week is blank for the store\'s sake and `before_store` is not said');
   assert.deepEqual(by.hq.values, [1, 0, 0, 0, 0, 0, 0, 0]);
+  assert.equal(by.hq.first_week, null, 'HQ\'s first row IS the store\'s first row: its first week is not known');
+  assert.equal(by.fr.first_week, axis.weeks[1], 'fr began after the store did, so its first week is');
   assert.match(by.xx.note, /registry has no row/);
   assert.equal(a.sampled, false);
   assert.equal(a.complete, true);
@@ -648,6 +738,7 @@ test('H15 reads a failed, malformed or unreadable answer from the store as unrea
   ]) {
     const { body } = await withAe(answer, () => hqGet(hqDb(), AE_ENV));
     assert.equal(body.active_accounts.available, false);
+    assert.equal(body.active_accounts.unreadable, true, 'a read that failed is one a retry can answer');
     assert.ok(body.active_accounts.reason);
     assert.equal(body.active_accounts.series, undefined);
   }
@@ -675,4 +766,104 @@ test('H15 is the super admin\'s, refuses an unknown range, and uses the same ran
   const year = await hqGet(hqDb(), HQ_ENV, '/analytics?range=year');
   assert.equal(year.body.weeks.length, 52);
   assert.equal(year.body.weeks[51], weekStartOf(new Date().toISOString().slice(0, 10)));
+});
+
+// ─────────────────────────── D211 — the review's findings, on these fixtures ──
+
+test('S15 sets its own figure beside the median by the median\'s whole-week rule (D211)', async () => {
+  const db = branchDb();
+  const axis = weekAxis(new Date().toISOString(), 8);
+  // The log begins on the Wednesday of the week the median is for.
+  const wednesday = new Date(Date.parse(`${axis.weeks[6]}T00:00:00Z`) + 2 * 86_400_000).toISOString().slice(0, 10);
+  logged(db, 8, `${wednesday} 10:00:00`);
+  const bench = db.prepare(
+    `INSERT INTO branch_benchmarks (metric_key, label, median_value, unit, n_branches, period, pushed_at)
+     VALUES ('active_accounts_week', 'Active accounts · last week', 4, 'count', 3, ?, '2026-09-21T09:00:00Z')`,
+  );
+  bench.run(axis.last_complete);
+  let { body } = await branchGet(db);
+  assert.equal(body.benchmark.available, true);
+  assert.equal(body.benchmark.own_value, null,
+    'a week the log began inside is not set against a median of whole weeks');
+  assert.match(body.benchmark.own_reason, /inside that week/);
+  assert.equal(body.benchmark.own_unreadable, undefined);
+
+  db.exec('DELETE FROM branch_benchmarks');
+  bench.run(axis.weeks[3]);
+  ({ body } = await branchGet(db));
+  assert.equal(body.benchmark.own_value, null);
+  assert.match(body.benchmark.own_reason, /after that week had ended/,
+    'before the log began there is no count, and the sentence says which of the two it is');
+});
+
+test('S15 with an unreadable log says the branch\'s own figure is unreadable, beside a median it can read', async () => {
+  const db = branchDb({ log: false });
+  const axis = weekAxis(new Date().toISOString(), 8);
+  db.prepare(
+    `INSERT INTO branch_benchmarks (metric_key, label, median_value, unit, n_branches, period, pushed_at)
+     VALUES ('active_accounts_week', 'Active accounts · last week', 4, 'count', 3, ?, '2026-09-21T09:00:00Z')`,
+  ).run(axis.last_complete);
+  const { body } = await branchGet(db);
+  assert.equal(body.benchmark.available, true, 'the median is HQ\'s copy and was read');
+  assert.equal(body.benchmark.own_value, null);
+  assert.equal(body.benchmark.own_unreadable, true);
+  assert.equal(body.benchmark.own_reason, body.active_accounts.reason,
+    'the same failed read, in the same words, not "no value"');
+});
+
+test('S15 with an unreadable referral log marks the decision age as unreadable, not as no decisions', async () => {
+  const db = branchDb();
+  db.exec('DROP TABLE referral_submission_events');
+  const { body } = await branchGet(db);
+  assert.equal(body.decision_age.available, false);
+  assert.equal(body.decision_age.unreadable, true);
+  assert.equal(body.decision_age.median_hours, null);
+  const lane = body.approval_age.find((l: any) => l.key === 'referrals');
+  assert.equal(lane.unreadable, true, 'the lane and the tile read one referral log and say one thing');
+});
+
+test('S15 with the seat count unreadable marks seats unreadable, beside the licence it did read (D211)', async () => {
+  // The seat count is its own read (D127), so it can fail while the account
+  // this request signs in as is read. Only that one statement fails here.
+  const d1 = d1Over(branchDb());
+  const refuse = async () => { throw new Error('D1_ERROR: the account table could not be read'); };
+  const DB = {
+    ...d1,
+    prepare(sql: string) {
+      if (!/GROUP BY role/.test(sql)) return d1.prepare(sql);
+      const stmt: any = { bind: () => stmt, all: refuse, first: refuse, run: refuse };
+      return stmt;
+    },
+  };
+  const res = await branchApp.request('/branch/analytics', { headers: { Authorization: `Bearer ${await token(ADMIN)}` } },
+    { ...FR, DB });
+  assert.equal(res.status, 200);
+  const body = await res.json() as any;
+  assert.equal(body.seats.available, false);
+  assert.equal(body.seats.unreadable, true,
+    'a count that failed is one a retry can answer — not a licence with no seats in use');
+  assert.equal(body.seats.used, null);
+  assert.equal(body.seats.licensed, 8, 'the licence copy was read, so what HQ licensed is still stated');
+  assert.match(body.seats.reason, /could not be read/);
+});
+
+test('H15 names the row cap when its read stops short, and refuses the change for that reason (D211)', async () => {
+  const axis = weekAxis(new Date().toISOString(), 8);
+  const rows = Array.from({ length: AE_ACTIVE_ROW_CAP }, (_, k) => ({
+    day: `${axis.weeks[4 + (k % 3)]} 00:00:00`, branch: 'fr', uid: k + 1, n: 1, weight: 1,
+  }));
+  const { body } = await withAe(
+    () => new Response(JSON.stringify({ data: rows }), { status: 200 }),
+    () => hqGet(hqDb(), AE_ENV),
+  );
+  const a = body.active_accounts;
+  assert.equal(a.available, true);
+  assert.equal(a.complete, false);
+  assert.equal(a.row_cap, AE_ACTIVE_ROW_CAP, 'the page prints the cap beside its note');
+  const fr = a.series.find((s: any) => s.code === 'fr');
+  assert.deepEqual(fr.gaps.slice(0, 5), ['cap', 'cap', 'cap', 'cap', 'cap']);
+  assert.equal(a.gap_notes[0].gap, 'cap', 'the cap is said first, in GAP_ORDER');
+  assert.equal(a.gap_notes[0].sentence, GAP_SENTENCES.cap);
+  assert.equal(a.kpi.delta, null);
+  assert.match(a.kpi.delta_reason, /row cap/, 'not "two populations" for a week the read did not reach');
 });

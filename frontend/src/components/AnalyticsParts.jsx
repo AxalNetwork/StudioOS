@@ -35,7 +35,7 @@ const SELECTED = {
   hq: 'border-rose-200 bg-rose-50 text-[#881337] dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200',
   branch: 'border-slate-300 bg-slate-100 text-[#334155] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100',
 };
-const UNSELECTED = 'border-axal-hairline bg-white text-axal-muted hover:bg-axal-ground dark:bg-gray-900';
+const UNSELECTED = 'border-axal-hairline bg-white text-axal-muted hover:bg-axal-ground dark:bg-gray-900 dark:hover:bg-gray-800';
 
 export function RangePills({ value, onChange, tier = 'hq', testId }) {
   return (
@@ -60,14 +60,22 @@ export function RangePills({ value, onChange, tier = 'hq', testId }) {
  * One KPI. A figure the page does not have renders `<Unrecorded>` with its
  * reason — never a zero, never a bare dash — and `note` carries what the
  * figure is of, so a number never stands without its week.
+ *
+ * `unreadable` IS THE OTHER ABSENCE (D211). A store the page read and found
+ * nothing in says "Not recorded"; a read that FAILED says "Unreadable", because
+ * nothing is known either way and the two claims must not look alike
+ * (`ui/Honesty.jsx`). The server says which: its payload marks a failed read.
  */
-export function KpiTile({ label, value, delta, note, reason, testId }) {
+export function KpiTile({ label, value, delta, note, reason, unreadable = false, testId }) {
+  const missing = value === null || value === undefined;
   return (
-    <Card data-testid={testId}>
+    <Card data-testid={testId} data-state={missing ? (unreadable ? 'unreadable' : 'not_recorded') : 'recorded'}>
       <div className="text-[9.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</div>
       <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2">
         <span className="text-xl font-extrabold tracking-tight tabular-nums text-axal-ink">
-          {value === null || value === undefined ? <Unrecorded reason={reason} /> : value}
+          {missing && unreadable && <Unrecorded reason={reason}>Unreadable</Unrecorded>}
+          {missing && !unreadable && <Unrecorded reason={reason} />}
+          {!missing && value}
         </span>
         {delta && <span className="font-mono text-[11px] font-semibold tabular-nums text-axal-muted">{delta}</span>}
       </div>

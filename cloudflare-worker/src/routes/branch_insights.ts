@@ -12,10 +12,12 @@
  *
  * S6 DRAWS FOUR STATS AND THIS SHIPS TWO, which is the measurement rather than
  * a choice. Accounts and seats used are counted here the way `branchOverview`
- * counts them (D127's definition, stated with the figure). Activation and
- * programme throughput have no branch-side read anywhere in the worker, so they
- * arrive as `unavailable` with their reasons instead of a derived-looking zero —
- * the shape `branch_home.ts` already uses for S1's three sourceless blocks.
+ * counts them (D127's definition, stated with the figure). Activation has no
+ * branch-side read anywhere in the worker, and programme throughput has half of
+ * one — the cohort timeline's week outcomes, with no list route for assessment
+ * runs (D210; this sentence said "no read" until D211) — so both arrive as
+ * `unavailable` with their reasons instead of a derived-looking zero, the shape
+ * `branch_home.ts` already uses for S1's three sourceless blocks.
  *
  * REVENUE SHARE IS THE FOURTH AND IT IS THE INTERESTING ABSENCE.
  * `branchOverview` returns `revenue_mtd_cents: null` BY CONSTRUCTION and
@@ -41,7 +43,7 @@ import { mapError } from './_t13t14t15_helpers';
 import { SEAT_ROLES, branchRevenueSummary } from '../rpc/branchOps';
 import {
   ACTIVE_ACCOUNT_BASIS, parseAnalyticsRange, ANALYTICS_RANGES, weekAxis,
-  loadBranchWeeklyActives, weeklyKpi, GAP_SENTENCES,
+  loadBranchWeeklyActives, weeklyKpi, GAP_SENTENCES, gapNotes, partialWeekReason,
 } from '../services/activeAccounts';
 import { verdictSpans, type VerdictEventRow } from '../services/referralSubmissions';
 import { median, currentPeriod } from '../services/branchBenchmarks';
@@ -253,17 +255,22 @@ r.get('/analytics', async (c) => {
     const axis = weekAxis(new Date(nowMs).toISOString(), ANALYTICS_RANGES[range]);
 
     // ACTIVE ACCOUNTS — this branch's own request log, one definition with HQ.
+    // Each week carries its own gap reason (D211); `gap_reason` speaks for the
+    // last complete week, the one the KPI and the median read.
     const actives = await loadBranchWeeklyActives(c.env, axis);
+    const lastGap = actives.available ? actives.gaps[axis.weeks.length - 2] : null;
     const active_accounts = actives.available
       ? {
         available: true as const,
         values: actives.values,
-        gap: actives.gap,
-        ...(actives.gap ? { gap_reason: GAP_SENTENCES[actives.gap] } : {}),
+        gaps: actives.gaps,
+        ...(lastGap ? { gap_reason: GAP_SENTENCES[lastGap] } : {}),
+        gap_notes: gapNotes([actives.gaps]),
         first_day: actives.first_day,
-        kpi: weeklyKpi(axis, [{ values: actives.values }]),
+        first_week: actives.first_week,
+        kpi: weeklyKpi(axis, [actives]),
       }
-      : { available: false as const, reason: actives.reason };
+      : { available: false as const, unreadable: true as const, reason: actives.reason };
 
     // SEAT UTILISATION — the licence copy's own figures, read the way
     // `/api/licence/mine` reads them, so the two pages cannot disagree.
@@ -276,14 +283,14 @@ r.get('/analytics', async (c) => {
         licensed: lic.licence.seats_licensed,
         basis: lic.licence.seats_used_basis,
         ...(lic.licence.seats_used === null
-          ? { reason: 'The account table could not be read, so seats used is not known.' }
+          ? { unreadable: true, reason: 'The account table could not be read, so seats used is not known.' }
           : {}),
       };
 
     // MEDIAN DECISION AGE — referrals, the one queue whose decision is an
     // event that is written once and never rewritten.
     const windowStartMs = nowMs - DECISION_WINDOW_DAYS * 86_400_000;
-    let referralAge: { available: boolean; median_hours: number | null; n: number; reason?: string };
+    let referralAge: { available: boolean; unreadable?: true; median_hours: number | null; n: number; reason?: string };
     try {
       const q = await c.env.DB.prepare(
         `SELECT s.id AS submission_id, s.created_at AS submitted_at,
@@ -302,14 +309,14 @@ r.get('/analytics', async (c) => {
       }
     } catch (e) {
       referralAge = {
-        available: false, median_hours: null, n: 0,
+        available: false, unreadable: true, median_hours: null, n: 0,
         reason: `The referral log could not be read: ${(e as Error)?.message || 'unknown'}.`,
       };
     }
 
     // CONTENT TO HQ — what this branch asked HQ and how long HQ took. The
     // clock that ends it is HQ's (`answered_at` is HQ's stamp, pushed here).
-    let contentAge: { available: boolean; median_hours: number | null; n: number; reason?: string };
+    let contentAge: { available: boolean; unreadable?: true; median_hours: number | null; n: number; reason?: string };
     try {
       const q = await c.env.DB.prepare(
         `SELECT created_at, answered_at FROM branch_escalations
@@ -324,7 +331,7 @@ r.get('/analytics', async (c) => {
       }
     } catch (e) {
       contentAge = {
-        available: false, median_hours: null, n: 0,
+        available: false, unreadable: true, median_hours: null, n: 0,
         reason: `The escalation log could not be read (migration 261): ${(e as Error)?.message || 'unknown'}.`,
       };
     }
@@ -345,8 +352,25 @@ r.get('/analytics', async (c) => {
             + 'branches answer, so HQ withholds it rather than naming a territory.',
         };
       } else {
+        // THIS BRANCH'S OWN FIGURE BESIDE THE MEDIAN, BY THE MEDIAN'S RULE
+        // (D211). The median is taken only over whole weeks
+        // (`activeAccountsInWeek`), so a week this branch's log began inside
+        // is not set against it — the same sentence the producer gives. And
+        // an unreadable log is said as unreadable, not as "no value".
         const i = axis.weeks.indexOf(row.period);
-        const own = i >= 0 && actives.available ? actives.values[i] : null;
+        let own: number | null = null;
+        let ownReason: string | null = null;
+        let ownUnreadable = false;
+        if (!actives.available) {
+          ownReason = actives.reason;
+          ownUnreadable = true;
+        } else {
+          ownReason = partialWeekReason(actives.first_day, row.period);
+          if (!ownReason) own = i >= 0 ? actives.values[i] : null;
+          if (own === null && !ownReason) {
+            ownReason = `The week of ${row.period} is not on this chart's range, so this branch's figure for it is not drawn.`;
+          }
+        }
         benchmark = {
           available: true,
           metric: row.metric_key,
@@ -355,14 +379,14 @@ r.get('/analytics', async (c) => {
           n_branches: row.n_branches,
           pushed_at: row.pushed_at,
           own_value: own,
-          ...(own === null
-            ? { own_reason: `This branch has no recorded value for the week of ${row.period} on this chart.` }
-            : {}),
+          ...(ownReason ? { own_reason: ownReason } : {}),
+          ...(ownUnreadable ? { own_unreadable: true } : {}),
         };
       }
     } catch (e) {
       benchmark = {
         available: false,
+        unreadable: true,
         reason:
           'The benchmark copy could not be read on this database (migration 256), which is not the same '
           + `as HQ having published nothing: ${(e as Error)?.message || 'the table is missing'}.`,
@@ -374,11 +398,23 @@ r.get('/analytics', async (c) => {
     try {
       const summary = await branchRevenueSummary(c.env, currentPeriod(new Date(nowMs)));
       const shareBps = 'error' in lic ? null : lic.licence.revenue_share_bps;
+      const noShare = shareBps === null || shareBps === undefined;
       revenue = {
         available: true,
         period: summary.period,
         share_bps: shareBps,
-        keeps_bps: shareBps === null || shareBps === undefined ? null : 10_000 - Number(shareBps),
+        keeps_bps: noShare ? null : 10_000 - Number(shareBps),
+        // Why the rate is missing, in the words the seat card uses for the
+        // same licence copy (D211) — the page printed its own sentence here,
+        // which said the copy "carries no revenue share" when the copy had
+        // not arrived at all.
+        ...(noShare
+          ? {
+            share_reason: 'error' in lic
+              ? lic.message
+              : 'The licence copy HQ pushed to this branch carries no revenue share.',
+          }
+          : {}),
         streams: summary.streams,
         note:
           'The canvas draws programme fees and perks as revenue streams. Neither is a stream this '
@@ -386,7 +422,11 @@ r.get('/analytics', async (c) => {
           + 'a partner gives, not income.',
       };
     } catch (e) {
-      revenue = { available: false, reason: `The revenue summary could not be built: ${(e as Error)?.message || 'unknown'}.` };
+      revenue = {
+        available: false,
+        unreadable: true,
+        reason: `The revenue summary could not be built: ${(e as Error)?.message || 'unknown'}.`,
+      };
     }
 
     return c.json({
