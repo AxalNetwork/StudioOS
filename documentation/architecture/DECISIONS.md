@@ -17226,6 +17226,12 @@ attribution therefore records nothing, which is money-adjacent"* is **false**.
 `ensureSchema` sixteen lines earlier. The ledger's *"giving it a store is a
 product decision about whether that surface is still wanted"* is **false**.
 
+*Corrected by D235: the bootstrap does heal a missing table, and the first
+time it ran in production that made production hold three names the fresh
+build lacked, which failed deploy step 9 on every main deploy after #757.
+Migration 287 declares it; a bootstrap is a safety net, never the only
+declaration.*
+
 **Corrections 2 and 3 are the class D189 corrected four of**: reading
 `check-migration-declarations`' finding — which compares declarations against a
 **fresh build** — as a behavioural claim, without checking for a runtime
@@ -23239,6 +23245,138 @@ signature gained a parameter, not a new export.
 - `node scripts/check-decision-ids.mjs` exits 0 (D1 through D233).
 
 **285 is still the next free migration.**
+
+## D235 — a runtime bootstrap is a safety net for a declared object, never the only declaration
+
+**Every main deploy from #757 on failed at step 9, and the cause was a
+decision in this file.** D190 left `admin_publications` to its D95 bootstrap
+(`routes/admin_publications.ts`, `ensureSchema`) on purpose, reasoning that
+the bootstrap heals a missing table. It does, and that was the problem. The
+bootstrap first ran in production on 2026-09-24, between 12:44:48Z (run
+36000909495, step 9 green) and 12:50:17Z (run 36001483496, step 9 red). From
+then on production held three names the repo's own fresh build did not —
+`admin_publications`, `idx_admin_publications_slug` and
+`idx_admin_publications_status_created` — and step 9 ("Repo can still
+rebuild production's schema", `scripts/check-baseline-drift.mjs`), which
+compares object names in both directions, failed on every deploy: #757,
+#759, #760, #755, #761 and #762, runs 36001483496, 36002768477, 36003562211,
+36004154029, 36004642340 and 36005839758. Step 8 deployed each time, so
+production code was current; only the check was red, and each run's own
+message said why.
+
+**The rule, stated once so it can be checked:** a runtime
+`CREATE … IF NOT EXISTS` is a safety net for a database that is missing a
+DECLARED object. When it is the only declaration, the first request that
+reaches it in production creates a name the fresh build lacks, and the deploy
+fails from then on. D190's reasoning was right about the reader (it works)
+and wrong about the schema (it diverges), and its own ledger note has been
+corrected to say so.
+
+### What shipped
+
+- **Migration 287** declares every object a runtime statement can create:
+  fourteen, measured rather than listed. `admin_publications` with both of
+  its bootstrap indexes plus 045's third (`idx_admin_publications_created_by`,
+  which never reached any database because 045 is sub-cutoff — 278's
+  precedent for 048's index); `spinout_moderation_cases` and its three
+  indexes; `referral_attributions` and its index; `deck_brand_watermarks`;
+  `deck_recommendation_overrides`; and the two partial UNIQUE indexes the
+  advisor's slot upserts name as their ON CONFLICT target
+  (`uniq_discovery_advisor_slot`, `uniq_roadmap_okrs_advisor_slot`). Each is
+  copied verbatim from its runtime statement, and the test proves it rather
+  than asserting it: the runtime statements run on a build without 287 and
+  every object's columns, keys, uniqueness and partial WHERE must equal the
+  build with it. No `BEGIN`/`COMMIT` (#26). Every object is created over an
+  empty table, so nothing is rewritten.
+- **`scripts/check-runtime-schema-declared.mjs`**, in `test:guards` right
+  after `check-migration-declarations`, with its ledger
+  `scripts/runtime-schema-declared-baseline.json`. It builds the database
+  exactly as step 9 does — it imports `postCutoffMigrations` and `buildFresh`
+  from `check-baseline-drift.mjs`, so there is one list of which files in
+  which order — then EXECUTES every literal runtime `CREATE TABLE`,
+  `CREATE INDEX`, `CREATE TRIGGER`, `ADD COLUMN` and `RENAME` against a copy,
+  to a fixed point. Anything that appears is a finding that cannot be
+  ledgered; so is a statement that removes or renames a name the build has.
+- **`routes/financials.ts` drops `idx_financial_models_project`.** Its
+  statement ran only when `financial_models` was absent, which no database
+  this repo builds is, and the table's `UNIQUE(project_id)` already indexes the
+  column. A statement that can only matter where it can never run is not a
+  safety net.
+- **`check-baseline-drift.mjs`**'s failure message names this as the first
+  usual cause, and exports the three pieces the guard shares.
+- **`migration-declarations-baseline.json`** loses its two
+  `admin_publications` / `referral_attributions` entries; its note carries the
+  correction.
+
+### Why EXECUTE rather than parse
+
+A parse can say a statement names a table; only SQLite can say whether the
+statement succeeds. Five runtime CREATEs name objects no migration declares
+and create nothing, on every database the repo builds, production included:
+`capital_calls`' three indexes in `routes/legalcap.ts` name columns the
+winning `capital_calls` shape does not have (the known collision), and
+`integrations/providers/stripe.ts`'s `metric_anomalies` table and its index
+use double-quoted DEFAULTs SQLite rejects as not constant. A parser would
+report all five as creatable and push them into a migration that could not
+apply. The guard records each in the ledger with the refusal SQLite gives,
+and **re-proves the refusal on every run**: an entry whose statement starts to
+succeed, or fails for a different reason, fails the gate. An ALTER the guard
+cannot expand that reaches a refused table makes the refusal unverifiable,
+which also fails — an unmodelled ADD COLUMN could be exactly the column the
+refusal depends on.
+
+The copy it executes against enables double-quoted string literals. That is
+the permissive direction: a statement refused there is refused on D1 too, so
+a refusal on record is never an artefact of the check being stricter than
+production. `findings()` asserts the permissive and strict builds hold the
+same names before anything is judged.
+
+**Fixed point.** A runtime index can depend on a column another file adds at
+runtime; the order they appear in the tree decides nothing about the order a
+database met them. Every statement that adds is re-run until a whole pass adds
+nothing — two passes over the current tree.
+
+**Loops over literal arrays are expanded**, one statement per entry, because
+that is how the tree writes them: 121 statements from 16 loops in 14 files. Anything else built at runtime is
+**opaque**, counted per file in the ledger with a reason; a count that moves
+fails. One file is on record today: `util/usersRoleRebuild.ts`, whose four
+statements rebuild `users` under its own name inside one batch, so the
+temporary name exists only inside the batch.
+
+### A defect in the guard, found while building it
+
+`literalArrayEntries` stopped at a quote inside a `//` comment (`D1's`) and
+took it for the start of an entry, so `routes/settings.ts:91` and
+`services/fundGpSchema.ts:78` read as unmodelled — two loops the guard should
+have expanded, reported as opaque. `maskCode` could not help: it blanks
+strings as well as comments, so its output cannot tell a comment's quote from
+an entry's. A small `blankComments` blanks only comments and leaves every
+literal intact; both loops now expand with no findings. The tests pin both
+directions: an apostrophe in a comment is skipped, and a `//` inside a string
+is kept.
+
+### Measured read-only against production studioos-db, 2026-09-24
+
+Schema and aggregates only, no user content. `admin_publications` and both
+bootstrap indexes exist, and `sqlite_master` holds exactly the runtime
+statement 287 copies, so every `IF NOT EXISTS` in 287 leaves them alone; the
+table holds 0 rows. The other eleven objects are absent, and so are the five
+refusals. `discovery_interviews` and `roadmap_okrs` exist and hold 0 rows
+each, so the two partial UNIQUE indexes cannot fail on a duplicate. No index
+in production uses `LIKE` today; SQLite allows it in a partial index's WHERE,
+and the test builds both indexes and runs the advisor's real upserts against
+them — twice, so an upsert that duplicated a slot would fail — and shows the
+same statement refused on a build without 287.
+
+### Corrects D190
+
+D190's third correction said `admin_publications` "SELF-HEALS" and so needed
+no declaration. It self-heals, and self-healing is what broke the deploy. The
+rule above replaces that reasoning; D190's entry carries a pointer here.
+
+### VERIFIED
+
+Measured before the first push, and no further. `node scripts/check-runtime-schema-declared.mjs` exits 0: 1081 literal statements executed to a fixed point in two passes over a 1308-object fresh build, with 5 refusals and one opaque file (4 statements) on its ledger and nothing creatable left undeclared. `runtime_schema_declared_d235.test.ts` passes 20 of 20, and 16 of 16 mutations against the guard, migration 287, the ledger, `writeRouter.ts` and `package.json` were caught, as were 6 of 6 earlier mutations against the guard's command line. The two older tests this decision re-aims pass: `sub_cutoff_restores_d190.test.ts` 16 of 16 and `schema_pair_drift_d191.test.ts` 27 of 27. Not yet measured when this was written, and stated so rather than implied: mutation checks of those two re-aimed tests, a full `test:drift` on the landed tree (CI's full-suite run is the first), and migration 287 read back from production after the deploy that applies it. No migration above 284 was on `main` when this landed; 285, 286, 288 and 289 stay with the sessions they were allocated to.
 
 ## D237
 
