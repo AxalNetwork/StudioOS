@@ -6,6 +6,7 @@
  *   - failed jobs with attempts >= max_retries are dead-lettered
  */
 import type { Env } from '../types';
+import { dlqDepth } from '../services/deadLetters';
 
 export type JobType =
   | 'ai_scoring'
@@ -134,14 +135,13 @@ export const Jobs = {
       `SELECT id, job_type, status, attempts, error, created_at, started_at, completed_at
        FROM queue_jobs ORDER BY id DESC LIMIT 50`
     ).all<QueueJob>();
-    const dlq = await env.DB.prepare(
-      `SELECT COUNT(*) as n FROM dead_letter_queue WHERE moved_at > datetime('now','-7 days')`
-    ).first<{ n: number }>();
+    const depth = await dlqDepth(env);
     return {
       by_status: r.results || [],
       by_type: byType.results || [],
       recent: recent.results || [],
-      dlq_7d: dlq?.n ?? 0,
+      dlq_count: depth.available ? depth.total : null,
+      dlq_reason: depth.available ? null : depth.reason,
     };
   },
 

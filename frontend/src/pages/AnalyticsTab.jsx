@@ -8,6 +8,7 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts';
 import { api } from '../lib/api';
+import { TechnicalDepthRow } from './DepthCount';
 
 const SUB_TABS = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
@@ -1430,8 +1431,7 @@ function TechnicalView({ data, onExport, busy }) {
       <div className="flex items-center justify-end"><ExportButtons onExport={onExport} busy={busy} /></div>
       {isEmpty && <EmptyPill />}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Stat label="Queue depth" value={data.queue_depth} />
-        <Stat label="DLQ" value={data.dlq_count} />
+        <TechnicalDepthRow data={data} />
         <Stat label="Routes tracked" value={data.by_route.length} />
         <Stat label="Top errors" value={data.top_errors.length} />
       </div>

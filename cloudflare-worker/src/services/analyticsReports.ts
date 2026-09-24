@@ -11,6 +11,7 @@
  */
 import type { Env } from '../types';
 import { getSQL } from '../db';
+import { dlqDepth } from './deadLetters';
 import { MIRROR_KIND } from './auditMirror';
 import {
   aeLoggedRequestPredicate, foldDailyActives,
@@ -715,10 +716,47 @@ export interface TechnicalReport {
   }>;
   error_rate_by_route: Array<{ endpoint: string; error_rate_pct: number; errors_5xx: number; hits: number }>;
   slow_queries: Array<{ endpoint: string; p95_ms: number; hits: number }>;
-  queue_depth: number; dlq_count: number;
+  queue_depth: number | null;
+  queue_depth_reason: string | null;
+  dlq_count: number | null;
+  dlq_reason: string | null;
   top_errors: Array<{ endpoint: string; status_code: number; message: string; c: number }>;
   // Task #13 — see OverviewReport.meta.
   meta?: { reason: 'ok' | 'no_data' };
+}
+
+const QUEUE_DEPTH_UNREADABLE =
+  'The pending-job count (queue_jobs) could not be read, so the queue depth is unknown rather than empty.';
+
+/** Pending D1 jobs. A failed read is null plus a reason, never a zero. */
+async function pendingQueueDepth(env: Env): Promise<{ count: number | null; reason: string | null }> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS c FROM queue_jobs WHERE status = 'pending'`,
+    ).first<{ c: number }>();
+    const n = Number(row?.c);
+    if (!Number.isFinite(n)) return { count: null, reason: QUEUE_DEPTH_UNREADABLE };
+    return { count: n, reason: null };
+  } catch {
+    return { count: null, reason: QUEUE_DEPTH_UNREADABLE };
+  }
+}
+
+/** A counted figure, or an empty cell plus the reason. Never a zero standing in for a failed read. */
+function countCell(
+  value: number | null | undefined,
+  reason: string | null | undefined,
+): { value: number | ''; note: string } {
+  if (typeof value === 'number' && Number.isFinite(value)) return { value, note: '' };
+  const why = reason && String(reason).trim();
+  return { value: '', note: why || 'unreadable' };
+}
+
+/** The same figure for the report email. A failed read says unreadable, never null or 0. */
+function countText(value: number | null | undefined, reason: string | null | undefined): string {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  const why = reason && String(reason).trim();
+  return why ? `unreadable — ${why}` : 'unreadable';
 }
 
 // Task #13 — read true edge-level traffic + latency from Workers Analytics
@@ -1194,10 +1232,8 @@ export async function loadTechnical(env: Env, range: DateRange): Promise<Technic
       });
     }
   }
-  const queueDepth = await sql`SELECT COUNT(*) AS c FROM queue_jobs WHERE status = 'pending'`
-    .then(r => rows<SqlRow>(r)).catch(() => [{ c: 0 } as SqlRow]);
-  const dlqCount = await sql`SELECT COUNT(*) AS c FROM dead_letter_queue`
-    .then(r => rows<SqlRow>(r)).catch(() => [{ c: 0 } as SqlRow]);
+  const queueDepth = await pendingQueueDepth(env);
+  const depth = await dlqDepth(env);
   const topErrorsRaw = rows<SqlRow>(await sql`
     SELECT endpoint, status_code, message, COUNT(*) AS c
     FROM error_logs
@@ -1221,8 +1257,10 @@ export async function loadTechnical(env: Env, range: DateRange): Promise<Technic
     by_route: enriched,
     error_rate_by_route: errorRateByRoute,
     slow_queries: slowQueries,
-    queue_depth: num(queueDepth[0]?.c),
-    dlq_count: num(dlqCount[0]?.c),
+    queue_depth: queueDepth.count,
+    queue_depth_reason: queueDepth.reason,
+    dlq_count: depth.available ? depth.total : null,
+    dlq_reason: depth.available ? null : depth.reason,
     top_errors: topErrorsRaw.map(r => ({
       endpoint: str(r.endpoint),
       status_code: num(r.status_code),
@@ -1303,10 +1341,10 @@ export function reportToCsv(report: string, data: unknown): string {
     { section: 'overview', metric: 'churn_rate_pct', value: m.overview?.churn_rate_pct ?? 0 },
     { section: 'financial', metric: 'new_mrr_usd', value: m.financial?.new_mrr_usd ?? 0 },
     { section: 'financial', metric: 'churn_mrr_usd', value: m.financial?.churn_mrr_usd ?? 0 },
-    { section: 'technical', metric: 'queue_depth', value: m.technical?.queue_depth ?? 0 },
-    { section: 'technical', metric: 'dlq_count', value: m.technical?.dlq_count ?? 0 },
+    { section: 'technical', metric: 'queue_depth', ...countCell(m.technical?.queue_depth, m.technical?.queue_depth_reason) },
+    { section: 'technical', metric: 'dlq_count', ...countCell(m.technical?.dlq_count, m.technical?.dlq_reason) },
   ];
-  return toCsv(rowsOut, ['section', 'metric', 'value']);
+  return toCsv(rowsOut, ['section', 'metric', 'value', 'note']);
 }
 
 // Task #20 — CSV export of the Plan change history panel.
@@ -1453,7 +1491,7 @@ export function reportToHtml(report: string, data: unknown, range: DateRange): s
   }
   if (report === 'technical' || report === 'management') {
     const t = (report === 'management' ? d.technical : d) as TechnicalReport;
-    body += `<p><strong>Queue depth:</strong> ${esc(String(t?.queue_depth))} · <strong>DLQ:</strong> ${esc(String(t?.dlq_count))}</p>`;
+    body += `<p><strong>Queue depth:</strong> ${esc(countText(t?.queue_depth, t?.queue_depth_reason))} · <strong>DLQ:</strong> ${esc(countText(t?.dlq_count, t?.dlq_reason))}</p>`;
     body += table('Per-route latency', t?.by_route as unknown as Array<Record<string, unknown>> || [], ['endpoint', 'hits', 'p50_ms', 'p95_ms', 'p99_ms', 'errors_5xx', 'error_rate_pct']);
     body += table('Slow queries (P95)', t?.slow_queries as unknown as Array<Record<string, unknown>> || [], ['endpoint', 'p95_ms', 'hits']);
     body += table('Top errors', t?.top_errors as unknown as Array<Record<string, unknown>> || [], ['endpoint', 'status_code', 'message', 'c']);
