@@ -335,8 +335,10 @@ export function describeTopology(env: Env) {
   }
 
   // THE BRANCH'S "CANNOT" LIST IS READ, NOT RECITED. S14 drew three refusals
-  // as facts; two of them depend on what this Worker was given, so each is
-  // checked here and says which way it came out.
+  // as facts. Reaching another branch depends on a binding added by hand.
+  // Reading Analytics Engine does not: a branch never reads the shared
+  // dataset (D230), and the sentence still says whether the SQL API
+  // credentials are present. Deploying stays refused whatever this Worker holds.
   const hqBound = present('HQ');
   return {
     ...base,
@@ -363,11 +365,11 @@ export function describeTopology(env: Env) {
       {
         what: 'Read Analytics Engine',
         holds: !readable,
-        why: !readable
-          ? 'Its SQL API credentials are not set here. It writes to the shared dataset through its '
-            + 'binding and cannot read it back.'
-          : 'The SQL API credentials are set on this Worker, so it can read every branch\'s rows in '
-            + 'the shared dataset. Nothing structural stops that yet.',
+        why: Boolean(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_AE_API_TOKEN)
+          ? 'The SQL API credentials are set on this Worker. A branch still does not read the shared '
+            + 'dataset: that read stays at HQ. It writes through its binding.'
+          : 'Its SQL API credentials are not set here. A branch would not read the shared dataset '
+            + 'even if they were. It writes through its binding and cannot read it back.',
       },
       {
         what: 'Deploy anything, itself included',

@@ -496,13 +496,20 @@ test('on a branch: its own names, its one link, and a cannot-list that says whic
     assert.equal(b.resource, BINDINGS.find((x) => x.name === b.name)!.branch('fr'), `${b.name} names the branch's resource`);
   }
   const holds = (x: any) => Object.fromEntries(x.cannot.map((c: { what: string; holds: boolean }) => [c.what, c.holds]));
+  const aeWhy = (x: any) => x.cannot.find((c: { what: string }) => c.what === 'Read Analytics Engine').why;
   assert.deepEqual(holds(t), { 'Reach another branch': true, 'Read Analytics Engine': true, 'Deploy anything, itself included': true });
-  // Each refusal that depends on env flips when env changes, and says so.
+  assert.match(aeWhy(t), /not set here/);
+  // Reaching another branch flips when a binding is added by hand.
+  // Reading Analytics Engine does not: a branch never reads, and the
+  // sentence says whether the credentials are present.
   const handAdded = describeTopology(branchEnv({ BRANCH_DE: {} })) as any;
   assert.equal(holds(handAdded)['Reach another branch'], false);
   assert.match(handAdded.cannot[0].why, /\bde\b/);
-  const readable = describeTopology(branchEnv({ CLOUDFLARE_ACCOUNT_ID: 'a', CLOUDFLARE_AE_API_TOKEN: 'b' })) as any;
-  assert.equal(holds(readable)['Read Analytics Engine'], false);
+  const withCreds = describeTopology(branchEnv({ CLOUDFLARE_ACCOUNT_ID: 'a', CLOUDFLARE_AE_API_TOKEN: 'b' })) as any;
+  assert.equal(holds(withCreds)['Read Analytics Engine'], true,
+    'credentials on a branch do not make it able to read Analytics Engine');
+  assert.match(aeWhy(withCreds), /credentials are set/);
+  assert.doesNotMatch(aeWhy(withCreds), /not set here/);
   assert.equal(holds(describeTopology(branchEnv(FAKE)))['Deploy anything, itself included'], true,
     'no secret on a branch makes it able to deploy');
   assert.equal(describeTopology(branchEnv(FAKE)).deploy_dispatch.available, false);
