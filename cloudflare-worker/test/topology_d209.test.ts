@@ -37,7 +37,7 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 import {
-  BINDINGS, RPC_SURFACE, AE_READERS, NOT_FROM_ANALYTICS, DEPLOY_WORKFLOWS, DEPLOY_BY_HAND, BRANCH_DEPLOYED_BY,
+  BINDINGS, RPC_SURFACE, AE_READERS, NOT_FROM_ANALYTICS, DEPLOY_WORKFLOWS, DEPLOY_BY_HAND, BRANCH_DEPLOYED_BY, BRANCH_PROVISIONED_BY,
   SECRET_WRITERS, CF_ACCESS_PATHS, HQ_WORKER, TAIL_CONSUMER, branchResourceNames, describeTopology,
 } from '../src/services/topology.ts';
 import { GATEWAY_TASKS } from '../src/services/aiRouter.ts';
@@ -283,20 +283,32 @@ test('each workflow deploys what the page says, on the trigger it says', () => {
   const byFile = Object.fromEntries(WORKFLOWS.map((w) => [w.file, w.src]));
   const invocation = (f: string) => deployLines(byFile[f]).filter((l) => /\bnpx\b/.test(l));
 
-  const hq = invocation('cloudflare-worker-deploy.yml');
+  // D253: the push-to-main workflow deploys HQ once, then each branch from
+  // one line inside its loop. Two lines, one of each, and nothing else.
+  const main = invocation('cloudflare-worker-deploy.yml');
+  assert.equal(main.length, 2);
+  const hq = main.filter((l) => /--env production\b/.test(l));
   assert.equal(hq.length, 1);
   assert.match(hq[0], /--config \.\.\/wrangler\.toml --env production/);
+  const redeploy = main.filter((l) => l !== hq[0]);
+  assert.match(redeploy[0], /--config "wrangler\.branch\.\$\{code\}\.toml"/);
+  assert.doesNotMatch(redeploy[0], /--env\b|wrangler\.toml/);
   const branch = invocation('branch-provision.yml');
   assert.equal(branch.length, 1);
   assert.match(branch[0], /--config "wrangler\.branch\.\$\{BRANCH\}\.toml"/);
   const preview = invocation('pr-preview.yml');
   assert.equal(preview.length, 1);
   assert.match(preview[0], /--config wrangler\.pr-preview\.toml/);
-  // Only provisioning deploys with a branch config — the file S14 names as
-  // what deployed the branch it is shown on.
+  // Exactly two workflows deploy with a branch config (D253): provisioning,
+  // once, and the push-to-main redeploy, every time after. S14 names the
+  // second as what deployed the branch it is shown on, and the first as what
+  // provisioned it.
   const branchDeployers = WORKFLOWS.filter((w) => deployLines(w.src).some((l) => l.includes('wrangler.branch.'))).map((w) => w.file);
-  assert.deepEqual(branchDeployers, [BRANCH_DEPLOYED_BY]);
+  assert.deepEqual(branchDeployers, [BRANCH_DEPLOYED_BY, BRANCH_PROVISIONED_BY].sort());
+  assert.equal(BRANCH_DEPLOYED_BY, 'cloudflare-worker-deploy.yml');
+  assert.equal(BRANCH_PROVISIONED_BY, 'branch-provision.yml');
   assert.ok(DEPLOY_WORKFLOWS.some((w) => w.file === BRANCH_DEPLOYED_BY));
+  assert.ok(DEPLOY_WORKFLOWS.some((w) => w.file === BRANCH_PROVISIONED_BY));
   // "It refuses a code that is already provisioned" — the refusal is code, not a comment.
   const refusal = codeLines(byFile['branch-provision.yml']).join('\n');
   assert.match(refusal, /if \[\[ -f "infra\/branches\/\$\{BRANCH\}\.json" \]\]; then\s+fail "infra\/branches\/\$\{BRANCH\}\.json already exists/);
@@ -464,7 +476,8 @@ test('on HQ: what HQ calls and exports, its branch lines, the naming rule, Acces
   assert.equal(t.analytics.written_here.length, 2, 'HQ writes request rows and the branch-action mirror');
   assert.equal(t.deploys.by_hand, DEPLOY_BY_HAND);
   assert.equal(t.deploys.branch_deployed_by, BRANCH_DEPLOYED_BY);
-  assert.equal(t.deploys.branch_redeployed, false);
+  assert.equal(t.deploys.branch_provisioned_by, BRANCH_PROVISIONED_BY);
+  assert.equal(t.deploys.branch_redeployed, true, 'D253: the push-to-main workflow redeploys every branch');
   assert.equal(t.deploy_dispatch.available, false, 'no repository token, no dispatch');
   assert.equal(describeTopology(hqEnv(FAKE)).deploy_dispatch.available, true);
   assert.deepEqual(describeTopology(hqEnv({ GITHUB_ACCESS_TOKEN: 'x', GITHUB_REPO_OWNER: 'y' })).deploy_dispatch, { available: false },

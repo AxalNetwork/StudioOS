@@ -186,7 +186,7 @@ export const DEPLOY_WORKFLOWS = [
   {
     file: 'cloudflare-worker-deploy.yml',
     trigger: 'on every push to main, or by hand',
-    deploys: 'HQ, the studioos Worker, after its D1 migrations are applied',
+    deploys: 'HQ, the studioos Worker, after its D1 migrations are applied; then every provisioning or live branch, each after its own',
   },
   {
     file: 'branch-provision.yml',
@@ -201,12 +201,17 @@ export const DEPLOY_WORKFLOWS = [
 ] as const;
 
 /**
- * The one workflow that deploys a branch — the only one whose `wrangler deploy`
- * reads a generated `wrangler.branch.<code>.toml`. It runs once per code. The
- * test holds this name to that deploy line, so S14 can say who deployed it
- * without typing the file name into the page.
+ * The workflow that deploys a branch's CURRENT code (D253): its `branches` job
+ * redeploys every provisioning or live branch after HQ, on every push to main,
+ * from a generated `wrangler.branch.<code>.toml`. Until D253 this named
+ * provisioning, which deployed a branch once and nothing ever again (task
+ * 356). The test holds both names to their deploy lines, so S14 can say who
+ * deployed and who provisioned the branch without typing a file name.
  */
-export const BRANCH_DEPLOYED_BY = 'branch-provision.yml';
+export const BRANCH_DEPLOYED_BY = 'cloudflare-worker-deploy.yml';
+
+/** The workflow that deployed a branch the first time, and refuses to again. */
+export const BRANCH_PROVISIONED_BY = 'branch-provision.yml';
 
 /**
  * THE CANVAS SAID "GITHUB ACTIONS IS THE ONLY THING THAT DEPLOYS". It is not:
@@ -308,10 +313,11 @@ export function describeTopology(env: Env) {
       workflows: DEPLOY_WORKFLOWS.map((w) => ({ ...w })),
       by_hand: DEPLOY_BY_HAND,
       branch_deployed_by: BRANCH_DEPLOYED_BY,
-      // No workflow deploys a branch a second time: provisioning refuses a
-      // code it already holds, and the push-to-main job ships HQ alone. So a
-      // branch runs the code it was provisioned with (task #356).
-      branch_redeployed: false,
+      branch_provisioned_by: BRANCH_PROVISIONED_BY,
+      // D253: the push-to-main workflow's `branches` job redeploys every
+      // provisioning or live branch after HQ, so a branch runs main's code
+      // rather than the code it was provisioned with (task 356).
+      branch_redeployed: true,
     },
     secret_writes: {
       screens: SECRET_WRITERS.map((s) => ({ ...s })),
