@@ -390,8 +390,24 @@ r.put('/promo-ceilings/:uid', async (c) => {
     const b = await c.req.json().catch(() => ({} as any));
     const period = str(b?.period, 10) || quarterKey(new Date());
     if (!PERIOD_RE.test(period)) return c.json({ error: 'bad_period', message: 'period must be YYYY-Qn' }, 400);
-    const ceiling = cents(b?.ceiling_cents);
+    // D228 — A CEILING IS A FIGURE SOMEBODY TYPED, SO AN UNREADABLE ONE IS
+    // REFUSED, NOT STORED AS ZERO. `cents()` clamps and coerces, which is right
+    // for a reported stream and wrong here: a missing or mistyped
+    // `ceiling_cents` became a stored ceiling of 0 — a branch told it may issue
+    // nothing — and the route answered 200. Integer minor units, 0 or more;
+    // zero stays expressible, because "no promotions this quarter" is a ceiling.
+    const rawCeiling = b?.ceiling_cents;
+    if (typeof rawCeiling !== 'number' || !Number.isInteger(rawCeiling) || rawCeiling < 0) {
+      return c.json({
+        error: 'bad_ceiling',
+        message: 'ceiling_cents must be a whole number of minor units, 0 or more.',
+      }, 400);
+    }
+    const ceiling = rawCeiling;
     const currency = (str(b?.currency, 3) || licence.currency || 'EUR').toUpperCase();
+    if (!/^[A-Z]{3}$/.test(currency)) {
+      return c.json({ error: 'bad_currency', message: 'currency must be a three-letter ISO code.' }, 400);
+    }
 
     const now = nowIso();
     await c.env.DB.prepare(
