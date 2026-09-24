@@ -23332,3 +23332,106 @@ snapshot, and the test passed. None escaped. The nine:
 7. the block gated on `hqCadences`;
 8. `retention_days` dropped from the route;
 9. the all-time label restored on the Cron tab.
+
+## D240
+
+**The one-holder ceiling is now enforced by the write itself. Two overlapping
+transfers of the Super Admin elevation can no longer leave two holders. The
+grant lands only while the caller still holds the elevation at the write, and
+the caller's row goes only once the successor holds. A request that loses the
+race moves nothing, writes no audit row, and says so.** Task 405.
+
+This closes the gap D221 recorded and handed on. **No migration and no new
+route.** `POST /api/admin/super-admins/:userId?transfer=1` gains two refusal
+codes and one deliberate `already` answer.
+
+### THE DEFECT
+
+The transfer ran three separate steps: the write bar (which reads the caller's
+own row), `holders()`, and the `DB.batch` that grants and revokes. Two
+transfers by the same holder, A→B and A→C, could both pass the first two steps
+before either reached the batch. Each batch then wrote its own successor, so
+the set became `{B, C}`: two holders, the one state the ceiling exists to
+prevent. D221 had noted that re-adding an id check to the read would narrow
+the gap without closing it, since both requests can read before either writes.
+
+### WHAT CHANGED
+
+The batch's two statements are conditioned on the set as it is at the write:
+
+1. `INSERT … SELECT … AND EXISTS (SELECT 1 FROM super_admins WHERE user_id =
+   <caller>)`. A transfer whose caller no longer holds grants nobody.
+2. `DELETE … WHERE user_id = <caller> AND EXISTS (SELECT 1 FROM super_admins
+   WHERE user_id = <successor>)`.
+   - The statements of a D1 batch run in order inside one transaction, so
+     this one sees the grant in the table. What it cannot do is branch on the
+     grant's result, so it re-derives that result from the table.
+   - Without the condition, a grant that did not land would still take the
+     caller's row, and a lost race would empty the set instead of moving
+     nothing.
+
+So the two statements move together or not at all, and the route reads both
+`meta.changes`:
+
+| At the write | Grant | Release | Answer |
+|---|---|---|---|
+| Caller holds, successor eligible | 1 | 1 | 200, both audit rows |
+| The elevation already went elsewhere | 0 | 0 | 409 `holder_changed`, "nothing was moved", with the current holders |
+| The same transfer already landed (a double-click) | 0 | 0 | 200 `already: true`, the shape a transfer to a current holder gets |
+| Caller still holds, successor no longer an admin | 0 | 0 | 409 `successor_changed` |
+
+- **The audit rows are written only after the check.** A refused transfer
+  records nothing.
+- **The double-click is answered on purpose.** The second request finds the
+  caller gone and the successor holding, which is the end state the operator
+  asked for. A 409 there would report a failure for an act that succeeded.
+- **`successor_changed` is its own code** because "the holder changed" would
+  be untrue in that case: the caller still holds. It is also the case that
+  proves the DELETE's condition is needed.
+- A mixed result (one statement moved, the other did not) cannot happen with
+  these two predicates. If it ever does, the route answers `holder_changed`
+  without claiming that nothing moved.
+
+The comment D221 left about the missing id check now says the write enforces
+the ceiling. The reads before the write stay as early, readable refusals, but
+they are no longer what keeps the set at one holder.
+
+### VERIFIED
+
+- **`npm run test:drift` exits 0** on Node 22 (`EXIT=0` read from the redirected
+  log, never through a pipe): frontend **3179**, worker **4133** pass with the
+  same **3** environment-gated skips, retention **48**, zero `not ok`. D232's
+  run was 3179 and 4128. Both typechecks, `check-decision-ids`,
+  `check-folder-docs`, `check-api-drift` and `check-docs-fresh --strict` exit
+  0. No `frontend/src` change, so `docs/` was not rebuilt.
+- `cloudflare-worker/test/hq_team_actions_d221.test.ts` gains five tests.
+  `racingEnv` is kept as it was. Beside it, `racingBatchEnv` parks the request
+  at its batch and runs a whole competing request through the real route
+  there, after both requests have read the set. That is the window D240
+  closes, and it cannot be reproduced with sequential calls.
+  - **A→B racing A→C at the batch:** exactly `[B]` afterwards. C's request
+    gets 409 `holder_changed` naming B, and exactly two audit rows exist,
+    neither about C.
+  - **The same race landing at the holder read** (through `racingEnv`): 409,
+    and no audit row.
+  - **The double-click:** 200 `already: true`, no `transferred_from`, and no
+    audit rows of its own.
+  - **A successor demoted mid-flight:** 409 `successor_changed`, and the
+    caller still holds.
+  - **A plain transfer through the racing env:** still lands, with one grant
+    row and one revoke row.
+
+  The competitor in the `racingEnv` case now lands once. The route reads the
+  set a second time on a refusal, and that read must see the landed state,
+  not a second copy of the competitor.
+- **Mutation checks: six of six caught.** Each was applied alone, to a unique
+  anchor, with the bytes proven changed. Each gave a non-zero exit and at
+  least one `not ok`, and the file was restored from a sha256-verified
+  snapshot. The six mutations:
+  - dropping the EXISTS from the INSERT;
+  - dropping it from the DELETE (caught only by the demoted-successor case,
+    which is why that case exists);
+  - writing the audit rows before the check;
+  - answering 200 when nothing moved;
+  - removing the double-click branch;
+  - folding `successor_changed` into `holder_changed`.
