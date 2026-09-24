@@ -20,9 +20,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { addS16Stores } from './_approval_s16_stores.mjs';
 
 import { branchHome, openWeekAt } from '../src/services/branchHome.ts';
-import { approvalBoard } from '../src/services/approvalSources.ts';
+import { approvalBoard, APPROVAL_SOURCES } from '../src/services/approvalSources.ts';
 import { COHORT_TZ } from '../src/services/cohortTiming.ts';
 
 function coerce(a: any[]): any[] {
@@ -84,6 +85,7 @@ const NOW = Date.parse('2026-09-16T12:00:00Z');
 function db(seed = '') {
   const d = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   d.exec(SCHEMA);
+  addS16Stores(d);
   d.exec("INSERT INTO users (id, name, email) VALUES (1, 'A', 'a@x.test'), (2, 'B', 'b@x.test');");
   d.exec("INSERT INTO branch_licence (id, licence_uid, revenue_share_bps, pushed_at) "
     + "VALUES (1, 'lic_fr', 3500, '2026-09-10T08:00:00Z');");
@@ -141,16 +143,22 @@ test('an unreadable lane sorts FIRST and reports null, never zero', async () => 
   assert.equal(home.queue_pressure[0].sla, 'unknown',
     'calling an unreadable lane ok is the one reading that turns a gap into reassurance');
   assert.deepEqual(home.unreadable, ['Cohort applications'], 'the gap is named, not averaged away');
-  // The other three still answered — a failure isolates rather than blanking.
-  assert.equal(home.queue_pressure.filter((l) => l.count !== null).length, 3);
+  // Every other lane still answered — a failure isolates rather than blanking.
+  assert.equal(home.queue_pressure.filter((l) => l.count !== null).length, APPROVAL_SOURCES.length - 1);
 });
 
 test('a measured EMPTY lane sorts last and is not confused with an unreadable one', async () => {
   const home = await branchHome({ DB: makeD1(db(seedPressure())) } as any, NOW);
-  const last = home.queue_pressure[home.queue_pressure.length - 1];
-  assert.equal(last.key, 'cohort');
-  assert.equal(last.count, 0, 'a lane that answered nothing is a measured zero');
-  assert.equal(last.oldest_age_hours, null, 'with nothing waiting there is no oldest item');
+  // SEVERAL LANES ARE EMPTY SINCE S16 (D215), so the check is that the empty
+  // ones are the tail — every measured zero after every lane with work in it —
+  // and that cohort's zero is a measurement, not a gap.
+  const firstEmpty = home.queue_pressure.findIndex((l) => l.count === 0);
+  assert.ok(firstEmpty > 0, 'the lanes with work in them come first');
+  assert.ok(home.queue_pressure.slice(firstEmpty).every((l) => l.count === 0),
+    'no lane with work in it sorts after an empty one');
+  const cohort = home.queue_pressure.find((l) => l.key === 'cohort')!;
+  assert.equal(cohort.count, 0, 'a lane that answered nothing is a measured zero');
+  assert.equal(cohort.oldest_age_hours, null, 'with nothing waiting there is no oldest item');
   assert.equal(home.unreadable.length, 0, 'an empty lane is not an unreadable one');
 });
 

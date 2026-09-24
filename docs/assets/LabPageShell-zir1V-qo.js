@@ -1,0 +1,1 @@
+import{n as e}from"./react-vendor-C6KBIP7L.js";import{a as t}from"./labStyles-CMXkcbCC.js";var n=e();function r({width:e=`workbench`,spaceY:r=`space-y-5`,className:i=``,testId:a,children:o,...s}){return(0,n.jsx)(`div`,{className:t(e,{spaceY:r,className:i}),"data-testid":a,...s,children:o})}export{r as t};

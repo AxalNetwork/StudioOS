@@ -2,8 +2,8 @@
  * Branch · Approvals — canvas S3, the whole of it (D112 the lane, D130 the board).
  *
  * TWO HALVES THAT ARE DIFFERENT KINDS OF THING, which is why they are two
- * cards and two loads rather than one list. The **board** is the four queues
- * this territory decides, unioned and sorted oldest first. The **To-HQ lane**
+ * cards and two loads rather than one list. The **board** is every queue
+ * this territory decides (four in D130, eleven since S16 / D215), unioned and sorted oldest first. The **To-HQ lane**
  * is what it asked HQ — outbound, decided elsewhere, and its answer comes back
  * as one decision. Folding them together would make either failure blank the
  * other, and would suggest the branch decides its own escalations.
@@ -16,7 +16,7 @@
  * D111 pattern, and `frontend/test/branch_approvals_board_d130.test.mjs`
  * refuses the retired sentence.
  *
- * THE BOARD READS; THE CONSOLES DECIDE. It shows four stores it does not own,
+ * THE BOARD READS; THE CONSOLES DECIDE. It shows stores it does not own,
  * so each row offers that queue's own console instead of an Approve button.
  * One lane has no console to offer — see `LANE_CONSOLE` — and says so.
  *
@@ -398,6 +398,16 @@ const LANE_CONSOLE = {
   // `/admin/cohort` would 404.
   cohort: { to: '/admin/spinout-lab', label: 'Spin-Out Lab admin' },
   moderation: null,
+  // S16 (D215). Each is the page that already decides that store — checked
+  // against App.jsx's routes; KYC and partner profiles are tabs of `/admin`,
+  // which honours `?tab=`.
+  kyc: { to: '/admin?tab=kyc', label: 'KYC queue' },
+  partner_profiles: { to: '/admin?tab=profiles', label: 'Partner profiles' },
+  exploring: { to: '/admin/exploring', label: 'Exploring queue' },
+  jobs: { to: '/admin/jobs', label: 'Jobs console' },
+  events: { to: '/admin/events', label: 'Events console' },
+  best_fit: { to: '/admin/best-fit', label: 'Best-Fit console' },
+  due_diligence: { to: '/admin/due-diligence', label: 'Due diligence' },
 };
 
 /** The two views that are pure predicates over what the server already sent. */
@@ -410,6 +420,8 @@ export default function BranchApprovals({ user }) {
   const [lane, setLane] = useState(null);           // null = loading, UNAVAILABLE = failed
   const [board, setBoard] = useState(null);         // D130 — the four local queues
   const [view, setView] = useState('all');
+  // S16's chip row: null = every lane, else one lane's key.
+  const [laneFilter, setLaneFilter] = useState(null);
   const [kind, setKind] = useState('other');
   const [concern, setConcern] = useState('');       // D208 — the picked item's key, or none
   const [subject, setSubject] = useState('');
@@ -473,7 +485,8 @@ export default function BranchApprovals({ user }) {
 
   const boardReady = board && board !== UNAVAILABLE;
   const boardItems = boardReady ? (board.items || []) : [];
-  const shown = view === 'past' ? boardItems.filter((it) => it.sla === 'past') : boardItems;
+  const inLane = laneFilter ? boardItems.filter((it) => it.lane === laneFilter) : boardItems;
+  const shown = view === 'past' ? inLane.filter((it) => it.sla === 'past') : inLane;
   const pastCount = boardItems.filter((it) => it.sla === 'past').length;
 
   // WHAT THE RAIL CAN HONESTLY REPORT (D126): what this page loaded. The count
@@ -679,8 +692,8 @@ export default function BranchApprovals({ user }) {
           )}
         </div>
         <p className="mb-3 text-[11.5px] leading-relaxed text-axal-muted">
-          Four queues that were four consoles, ordered by what has waited longest. The board reads;
-          each decision is still made in that queue&rsquo;s own console.
+          Every queue this branch decides, in one list ordered by what has waited longest. The board
+          reads; each decision is still made in that queue&rsquo;s own console. Pick a lane to narrow it.
         </p>
 
         {board === UNAVAILABLE && (
@@ -699,18 +712,37 @@ export default function BranchApprovals({ user }) {
                 as a dash. */}
             <div className="mb-3 flex flex-wrap gap-1.5" data-testid="branch-board-lanes">
               {(board.lanes || []).map((ln) => (
-                <span
+                <button
+                  type="button"
                   key={ln.key}
-                  className="rounded-full border border-axal-hairline px-2 py-0.5 text-[10.5px] font-semibold"
+                  onClick={() => setLaneFilter(laneFilter === ln.key ? null : ln.key)}
+                  aria-pressed={laneFilter === ln.key}
+                  className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${
+                    laneFilter === ln.key ? 'border-slate-700 dark:border-slate-300' : 'border-axal-hairline'
+                  }`}
                   data-testid={`branch-lane-${ln.key}`}
                 >
                   {ln.label}{' '}
                   {ln.count === null
                     ? <Unrecorded reason="This queue could not be read, so its count is unknown rather than zero.">unreadable</Unrecorded>
                     : <span className="tabular-nums text-axal-muted">{ln.count}</span>}
-                </span>
+                </button>
               ))}
             </div>
+
+            {/* WHAT THE BOARD LEAVES OUT, said rather than implied (D215). */}
+            {(board.not_laned || []).length > 0 && (
+              <details className="mb-3 text-[11px] text-axal-muted" data-testid="branch-board-not-laned">
+                <summary className="cursor-pointer">
+                  {board.not_laned.length} console pages are not lanes here, because nothing in them waits on an admin
+                </summary>
+                <ul className="mt-1 space-y-0.5 pl-4">
+                  {board.not_laned.map((n) => (
+                    <li key={n.label}><span className="font-semibold">{n.label}</span> — {n.reason}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
 
             {board.reason && (
               <p className="mb-3 text-[11.5px] leading-relaxed text-red-700 dark:text-red-300" data-testid="branch-board-gap">
@@ -740,7 +772,9 @@ export default function BranchApprovals({ user }) {
               <p className="text-[12.5px] leading-relaxed text-axal-muted" data-testid="branch-board-empty">
                 {view === 'past'
                   ? 'Nothing is past the 72-hour SLA.'
-                  : 'All four queues are empty. They were read and hold nothing, which is not the same as a queue that could not be read.'}
+                  : laneFilter
+                    ? 'This lane is empty. It was read and holds nothing, which is not the same as a lane that could not be read.'
+                    : 'Every queue is empty. They were read and hold nothing, which is not the same as a queue that could not be read.'}
               </p>
             ) : (
               <ul className="space-y-1.5" data-testid="branch-board-rows">
