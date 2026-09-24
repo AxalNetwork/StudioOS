@@ -3,7 +3,8 @@ import { clampLimit, parseOffset } from '../util/pagination';
 import { hashEmail } from '../util/hashEmail';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAdmin, createJWT, hashToken, requireFactor, requireStepUp, requireSuperAdminWriteBar, isSuperAdmin, hydrateSuperAdmin, IMPERSONATION_EXPIRY_MINUTES } from '../auth';
+import { requireAdmin, createJWT, hashToken, requireFactor, requireStepUp, requireSuperAdminWriteBar, isSuperAdmin, hydrateSuperAdmin, IMPERSONATION_EXPIRY_MINUTES, IMPERSONATION_CEILING_MINUTES } from '../auth';
+import { notify } from '../services/notify';
 import {
   serializeTranscriptCsv,
   classifyOnboardingEmpty,
@@ -1545,6 +1546,55 @@ admin.post('/maintenance/totp-remediation', async (c) => {
   return c.json({ ok: true, ...result });
 });
 
+/**
+ * D248 — tell the person whose account a support session opens on.
+ *
+ * Until D248 the target was never told. None of the three impersonation
+ * handlers called `notify()`, and they wrote no row the target's own feed can
+ * see: `routes/activity.ts` reads `user_id = me OR actor = my email`, and the
+ * `admin_impersonate` row is on the admin. So someone could act as you for
+ * thirty minutes, extendable, and nothing on your side said so.
+ *
+ * A `security` notice, which is in `CRITICAL_CATEGORIES`, so quiet hours and
+ * the digest cannot hold it back. `in_app` and `email`, because the person
+ * most worth reaching is not signed in while it happens. It says who, why (the
+ * typed reason) and for how long, and links to their Security settings, where
+ * "sign out everywhere" ends the session's token.
+ *
+ * `true` means the notice reached the person's inbox. It is reported as its
+ * own response field and never thrown: the session has already been granted,
+ * and D111's rule is that a side effect after a recorded act never turns that
+ * act into a failed request. `tellOfTransfer` in admin_super_admins.ts is the
+ * same shape.
+ */
+async function tellOfSupportSession(
+  env: Env, targetId: number, adminName: string, reason: string, sessionId: number | null,
+): Promise<boolean> {
+  try {
+    const hours = IMPERSONATION_CEILING_MINUTES / 60;
+    const rowId = await notify(env, {
+      userId: targetId,
+      type: 'support_session_opened',
+      title: 'An Axal admin opened a support session on your account',
+      body: `${adminName} opened a support session on your account. For the next ${IMPERSONATION_EXPIRY_MINUTES} minutes they can see and act in it as you; they can extend it, up to ${hours} hours in all. The reason they gave: "${reason}". If you did not expect this, sign out everywhere from your Security settings, which ends the session, and contact Axal.`,
+      link: '/account/security',
+      payload: {
+        impersonation_session_id: sessionId,
+        admin_name: adminName,
+        reason,
+        minutes: IMPERSONATION_EXPIRY_MINUTES,
+        ceiling_minutes: IMPERSONATION_CEILING_MINUTES,
+      },
+      channels: ['in_app', 'email'],
+      category: 'security',
+    });
+    return rowId !== null;
+  } catch (e) {
+    console.warn('[admin/impersonate] target notice failed', (e as Error).message);
+    return false;
+  }
+}
+
 admin.post('/impersonate/:userId', async (c) => {
   // Task #6 — impersonation is a high-risk step-up. The admin's current
   // session must have authenticated with TOTP (not SMS, not a recovery
@@ -1631,10 +1681,17 @@ admin.post('/impersonate/:userId', async (c) => {
     ).bind(adminUser.id, target.id, ctx).run();
     impersonationSessionId = Number(ins.meta?.last_row_id ?? 0) || null;
   } catch (e) { console.warn('[admin/impersonate] session audit failed', e); }
+  // D248 — only here, after every refusal above has had its chance, so a
+  // refused open tells nobody.
+  const targetNotified = await tellOfSupportSession(
+    c.env, target.id, String(adminUser.name || 'An Axal admin'), reason, impersonationSessionId,
+  );
   return c.json({
     token,
     user: { id: target.id, email: target.email, name: target.name, role: target.role },
     impersonation_session_id: impersonationSessionId,
+    // D248 — whether the person was told. Reported, never assumed.
+    target_notified: targetNotified,
     // The client shows the remaining time and hands the session back at zero.
     // Without this it would discover the expiry as a 401, and api.request
     // treats a 401 as "session expired" and bounces to /login — which would
@@ -1656,6 +1713,19 @@ admin.post('/impersonate/:userId', async (c) => {
 // the caller is the admin who opened THIS session, and that the session is
 // still open. An ended session cannot be revived; that is a new session with
 // its own reason.
+//
+// D248 — AND IT NOW ASKS WHAT THE GRANT ASKS, PLUS A LIMIT THE GRANT DID NOT
+// NEED. A typed reason of at least 10 characters, because thirty more minutes
+// as someone else is a decision the audit should be able to explain; and a
+// ceiling of IMPERSONATION_CEILING_MINUTES measured from `started_at`, because
+// nothing read that column and an HQ session whose tab was closed stays open
+// for ever. Both are checked after the refusals above and before the token is
+// minted, so a refused extension writes nothing. The extension is recorded
+// through `logAdminAction` with the target and the reason, so Security shows
+// it: the old `admin_impersonate_extend` activity row alone was excluded from
+// Security's feed on purpose (admin_security.ts), and carried no reason.
+//
+// Covered by the recovery cool-off (index.ts COOL_OFF_ROUTES); End is not.
 admin.post('/impersonate-sessions/:id/extend', async (c) => {
   await requireFactor(c, 'totp');
   await requireStepUp(c);
@@ -1695,19 +1765,55 @@ admin.post('/impersonate-sessions/:id/extend', async (c) => {
       code: 'super_admin_required',
     }, 403);
   }
+  const body: any = await c.req.json().catch(() => ({}));
+  const reason = String(body?.reason ?? '').trim().slice(0, 200);
+  if (reason.length < 10) {
+    await sql.end();
+    return c.json({
+      error: 'A reason of at least 10 characters is required to extend a support session — the extra time is recorded with it.',
+      code: 'extend_reason_required',
+    }, 400);
+  }
+  // Measured from when the session OPENED. An unreadable start is refused:
+  // the safe answer to "how long has this been open?" is not "no time".
+  const startedMs = sqlTimestampMs(row.started_at);
+  const ceilingMs = startedMs + IMPERSONATION_CEILING_MINUTES * 60_000;
+  if (!Number.isFinite(startedMs) || Date.now() + IMPERSONATION_EXPIRY_MINUTES * 60_000 > ceilingMs) {
+    await sql.end();
+    return c.json({
+      error: `A support session lasts at most ${IMPERSONATION_CEILING_MINUTES / 60} hours from when it opened, and another ${IMPERSONATION_EXPIRY_MINUTES} minutes would run past that. End it and open a new session, with its own reason.`,
+      code: 'support_session_ceiling',
+      started_at: row.started_at ?? null,
+      ceiling_minutes: IMPERSONATION_CEILING_MINUTES,
+    }, 409);
+  }
   const token = await createJWT(
     c.env, target.id, target.email, target.role, adminUser.id, undefined,
     `${IMPERSONATION_EXPIRY_MINUTES}m`,
   );
-  const extAdminHash = await hashEmail(adminUser.email);
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('admin_impersonate_extend', ${`Admin ${adminUser.name} extended a support session on user_id=${target.id} by ${IMPERSONATION_EXPIRY_MINUTES} minutes`}, ${extAdminHash}, ${adminUser.id})`;
   await sql.end();
+  // Imported here, not at the top: services/adminAudit.ts imports from this
+  // file, so a static import is a cycle.
+  const { logAdminAction } = await import('../services/adminAudit');
+  await logAdminAction(c.env, adminUser.id, adminUser.email, 'admin_impersonate_extend', {
+    target_user_id: target.id,
+    reason,
+    impersonation_session_id: id,
+    minutes: IMPERSONATION_EXPIRY_MINUTES,
+    started_at: row.started_at ?? null,
+  });
   return c.json({
     token,
     expires_at: new Date(Date.now() + IMPERSONATION_EXPIRY_MINUTES * 60_000).toISOString(),
     expires_in_minutes: IMPERSONATION_EXPIRY_MINUTES,
   });
 });
+
+/** A D1 timestamp ('YYYY-MM-DD HH:MM:SS', UTC, or ISO) as epoch ms; NaN when unreadable. */
+function sqlTimestampMs(v: unknown): number {
+  if (typeof v !== 'string' || !v) return Number.NaN;
+  return Date.parse(v.includes('T') ? v : `${v.replace(' ', 'T')}Z`);
+}
 
 // Close an impersonation session (audit end timestamp). Fired best-effort
 // by the client when the admin exits the founder view; sessions left open

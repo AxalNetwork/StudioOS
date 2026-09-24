@@ -10,8 +10,8 @@ import { Card } from '../../ui';
  * only HQ may take and four that belong to an admin, each with a one-line note.
  * The NAMES are the canvas's, verbatim. The NOTES are not: every one was read
  * against the route that performs the act, and several describe a platform that
- * does not exist — "banner both sides see" (the target sees no banner and is not
- * told), "Lands on Programs as well" (it does not), "Within the licence's seats
+ * does not exist — "banner both sides see" (the target sees no banner; since
+ * D248 they are told by a notice, which is not a banner), "Lands on Programs as well" (it does not), "Within the licence's seats
  * only" (no grant is checked against a seat count), "The decision happens on
  * Approvals" (Approvals decides nothing). A card that repeated those would be
  * the first place an operator learned something false about their own powers,
@@ -48,15 +48,23 @@ import { Card } from '../../ui';
  * silently redirect.
  */
 
+/**
+ * D248 — how long a support session may last in all, extensions included, in
+ * hours. The worker's `IMPERSONATION_CEILING_MINUTES` (cloudflare-worker/src/
+ * auth.ts) is the one that is enforced; the SPA cannot import worker code, so
+ * this states it and hq_team_h20.test.mjs holds the two equal.
+ */
+export const SUPPORT_SESSION_CEILING_HOURS = 2;
+
 /** The five H20 draws under "HQ-only actions". `hq: false` marks the one that is not. */
 export const HQ_ONLY_ACTIONS = [
   {
     key: 'impersonate',
     name: 'Impersonate — including other admins',
     hq: true,
-    gate: 'A typed reason of at least 10 characters, your authenticator and a fresh step-up. The session lasts 30 minutes; Extend adds 30 more with no new reason. Opening one as another admin is the Super Admin’s alone — as anyone else, it is every admin’s power. The person is not told: no banner on their side, no notification.',
+    gate: `A typed reason of at least 10 characters, your authenticator and a fresh step-up. The session lasts 30 minutes; Extend adds 30 more for a new reason, up to ${SUPPORT_SESSION_CEILING_HOURS} hours from when it opened, and not in the day after an account recovery. Opening one as another admin is the Super Admin’s alone — as anyone else, it is every admin’s power. The person is told when it opens, in the app and by email, with your name and your reason; there is no banner on their side.`,
     where: 'View As on an admin’s row in the directory below.',
-    recorded: 'Yes — the session, its reason and when it ended, under Impersonations. An extension is not in the feed.',
+    recorded: 'Yes — the session, its reason and when it ended, under Impersonations; each extension, with its reason, in the audit log.',
   },
   {
     key: 'role_shell',
