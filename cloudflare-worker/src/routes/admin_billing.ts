@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin, requireFactor, requireStepUp } from '../auth';
+import { requireAdmin, requireFactor, requireStepUp, requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { stripeCall } from './billing';
 import { ensureAdminAuditLogTable } from './admin';
+import { logAdminAction } from '../services/adminAudit';
 import { clawbackReferralCommissionForRefund, type ClawbackResult } from '../services/referralCommissions';
 
 // Task #11 (II) — Admin billing actions. Mounted at `/api/admin/billing`
@@ -11,8 +12,8 @@ import { clawbackReferralCommissionForRefund, type ClawbackResult } from '../ser
 // here (same mount-precedence trick as `/api/admin/telegram` | `/x` | `/news`).
 //
 // Sits inside the existing `app.use('/api/admin/*', requireCfAccess())`
-// perimeter. Each route enforces `requireFactor('totp')` + `requireStepUp` +
-// `requireAdmin` so issuing a refund needs a RECENT strong-factor re-auth, not
+// perimeter. Each write enforces `requireFactor('totp')` + `requireStepUp` +
+// an admin check so a money move needs a RECENT strong-factor re-auth, not
 // just a long-lived admin JWT — mirrors impersonation / billing-checkout
 // step-up gating. `/api/admin/billing` is also in index.ts's COOL_OFF_PREFIXES
 // so a freshly-recovered admin account can't move money during cool-off.
@@ -35,6 +36,9 @@ interface StripeRefund {
 // Stripe's `reason` is a closed enum. Any free-text admin justification is
 // preserved in refund metadata + the audit row instead of being forced in here.
 const STRIPE_REFUND_REASONS = new Set(['duplicate', 'fraudulent', 'requested_by_customer']);
+
+/** D224 — the shortest written refund reason accepted. Exported for the SPA's own check. */
+export const REFUND_REASON_MIN = 12;
 
 // Minimal shapes of the Stripe objects we read back. No Stripe SDK in the
 // Worker (see billing.ts::stripeCall) — we hand-type only the fields we touch.
@@ -173,14 +177,27 @@ async function evaluateRefundPolicy(
 //
 // Body accepts EXACTLY ONE of `payment_intent` / `charge`, an optional
 // `amount` (positive integer minor units → partial refund; omit for a full
-// refund), an optional free-text `reason`, and an optional `target_user_id`
-// for audit linkage. On success writes an `admin_audit_log` row
-// (report_type='billing', action='billing_refund') capturing the refund id +
+// refund), a REQUIRED free-text `reason` (D224), an optional `stripe_reason`
+// (Stripe's closed enum), and an optional `target_user_id` for audit linkage.
+// On success writes one audit entry through `logAdminAction`
+// (action='billing_refund') capturing the refund id +
 // status, and returns the refund summary.
+//
+// D224 — A REFUND IS HQ'S GOVERNED ACTION. It moves money out of HQ's Stripe
+// account, and until D224 any admin holding a TOTP session and a fresh step-up
+// could issue one: the D133 class, where a power that belongs to the one
+// holder was reachable by every admin. `requireSuperAdminWriteBar` keeps the
+// two checks it already had (TOTP-minted session, recent step-up) and adds the
+// elevation last, in the order `POST /impersonate` checks them. On a branch it
+// refuses with "HQ only": the Stripe account this route drives is HQ's.
+//
+// THE REASON IS REQUIRED TEXT (REFUND_REASON_MIN characters or more), checked
+// before the policy read and before Stripe is called, so a refused request
+// moves nothing. A Stripe enum value alone ("duplicate") still satisfies
+// Stripe's own field, but it is not the reason: the canvas's line is that
+// "customer request" explains nothing to the auditor reading it in a year.
 adminBilling.post('/refund', async (c) => {
-  await requireFactor(c, 'totp');
-  await requireStepUp(c); // BLOCK-AUTH-03 — recent strong-factor re-auth, not just a TOTP-minted session
-  const adminUser = await requireAdmin(c);
+  const adminUser = await requireSuperAdminWriteBar(c);
 
   const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
   const paymentIntent = typeof body.payment_intent === 'string' ? body.payment_intent.trim() : '';
@@ -194,6 +211,12 @@ adminBilling.post('/refund', async (c) => {
   // refund with neither is meaningless. Fail explicitly rather than guessing.
   if ((paymentIntent && charge) || (!paymentIntent && !charge)) {
     return c.json({ error: 'Provide exactly one of payment_intent or charge', code: 'invalid_target' }, 400);
+  }
+  if (reason.length < REFUND_REASON_MIN) {
+    return c.json({
+      error: `A refund needs a written reason of at least ${REFUND_REASON_MIN} characters, saying why this money goes back.`,
+      code: 'reason_required',
+    }, 400);
   }
 
   // Optional partial-refund amount: positive integer minor units (e.g. cents).
@@ -226,12 +249,17 @@ adminBilling.post('/refund', async (c) => {
   if (paymentIntent) form.payment_intent = paymentIntent;
   else form.charge = charge;
   if (amount != null) form.amount = String(amount);
-  if (reason && STRIPE_REFUND_REASONS.has(reason)) form.reason = reason;
+  // Stripe's own `reason` is its closed enum, taken from `stripe_reason` when
+  // the caller names one (or from `reason` when that is itself an enum value,
+  // the shape callers used before D224). The written reason goes to metadata.
+  const stripeReason = typeof body.stripe_reason === 'string' ? body.stripe_reason.trim() : '';
+  if (STRIPE_REFUND_REASONS.has(stripeReason)) form.reason = stripeReason;
+  else if (STRIPE_REFUND_REASONS.has(reason)) form.reason = reason;
   // Always stamp who/why into Stripe metadata so the refund is traceable back
   // to an Axal admin from the Stripe dashboard, even if it predates this row.
   form['metadata[admin_user_id]'] = String(adminUser.id);
   if (targetUserId != null) form['metadata[target_user_id]'] = String(targetUserId);
-  if (reason) form['metadata[admin_reason]'] = reason.slice(0, 500);
+  form['metadata[admin_reason]'] = reason.slice(0, 500);
   form['metadata[product_kind]'] = policy.kind;
   // Record a forced refund (policy said no, admin overrode) so it's auditable
   // from the Stripe dashboard, not just our DB.
@@ -306,39 +334,27 @@ adminBilling.post('/refund', async (c) => {
   }
 
   // Audit AFTER the refund lands so we capture the real refund id + status.
-  // Best-effort (matches the admin_audit_log convention elsewhere): the money
-  // has already moved, so a logging hiccup must never fail the request or imply
-  // the refund didn't happen — we log loudly instead.
-  try {
-    await ensureAdminAuditLogTable(c.env);
-    await c.env.DB.prepare(
-      `INSERT INTO admin_audit_log (admin_user_id, action, report_type, viewed_user_id, filters_json)
-       VALUES (?, ?, ?, ?, ?)`,
-    ).bind(
-      adminUser.id,
-      'billing_refund',
-      'billing',
-      targetUserId,
-      JSON.stringify({
-        refund_id: refund.id,
-        status: refund.status,
-        amount: refund.amount,
-        currency: refund.currency,
-        payment_intent: refund.payment_intent,
-        charge: refund.charge,
-        reason: reason || null,
-        target_user_id: targetUserId,
-        product_kind: policy.kind,
-        policy_allowed: policy.allowed,
-        policy_reason: policy.reason || null,
-        policy_override: !policy.allowed && overridePolicy,
-        policy_note: policy.note || null,
-        clawback,
-      }),
-    ).run();
-  } catch (e) {
-    console.error('[admin/billing] admin_audit_log insert failed after refund', refund.id, (e as Error).message);
-  }
+  // D224: through `logAdminAction` (D159), which writes the `admin_audit_log`
+  // row HQ's governance feed and the Revenue refunds list read, plus the
+  // hashed-actor `activity_logs` row, each best-effort — the money has already
+  // moved, so a logging failure must never fail the request or imply the
+  // refund did not happen. One call, so one row in each store per refund.
+  await logAdminAction(c.env, adminUser.id, adminUser.email || '', 'billing_refund', {
+    refund_id: refund.id,
+    status: refund.status,
+    amount: refund.amount,
+    currency: refund.currency,
+    payment_intent: refund.payment_intent,
+    charge: refund.charge,
+    reason,
+    target_user_id: targetUserId,
+    product_kind: policy.kind,
+    policy_allowed: policy.allowed,
+    policy_reason: policy.reason || null,
+    policy_override: !policy.allowed && overridePolicy,
+    policy_note: policy.note || null,
+    clawback,
+  });
 
   return c.json({
     ok: true,
@@ -359,6 +375,70 @@ adminBilling.post('/refund', async (c) => {
     },
     clawback,
   });
+});
+
+// D224 — GET /api/admin/billing/refunds — the refunds HQ issued, for Revenue.
+//
+// READ FROM THE AUDIT ROWS, NOT FROM STRIPE. Every refund issued here writes
+// one `billing_refund` row (above), so the rows ARE the local record of what
+// HQ refunded and when, with the written reason beside each. Refunds made in
+// the Stripe dashboard never pass through this route and are not in it; the
+// payload says so rather than letting the count read as Stripe's.
+//
+// Super admin only, the same as the Revenue page that reads it. Amounts stay
+// integer minor units per currency and are never summed across currencies.
+export const REFUND_WINDOW_DAYS = 30;
+adminBilling.get('/refunds', async (c) => {
+  await requireSuperAdmin(c);
+  try {
+    await ensureAdminAuditLogTable(c.env);
+    const res = await c.env.DB.prepare(
+      `SELECT id, admin_user_id, filters_json, exported_at
+         FROM admin_audit_log
+        WHERE action = 'billing_refund'
+          AND datetime(exported_at) >= datetime('now', ?)
+        ORDER BY datetime(exported_at) DESC, id DESC`,
+    ).bind(`-${REFUND_WINDOW_DAYS} days`).all<{ id: number; admin_user_id: number; filters_json: string | null; exported_at: string }>();
+    const items: Array<Record<string, unknown>> = [];
+    const byCurrency = new Map<string, { currency: string; count: number; amount_cents: number }>();
+    let unreadableRows = 0;
+    for (const row of res.results || []) {
+      let d: Record<string, unknown> | null = null;
+      try { d = row.filters_json ? JSON.parse(row.filters_json) : null; } catch { d = null; }
+      const amount = d && Number.isInteger(d.amount) ? (d.amount as number) : null;
+      const currency = d && typeof d.currency === 'string' ? d.currency.toUpperCase() : null;
+      // A row whose amount or currency cannot be read is counted as such and
+      // kept out of every total, never folded in as a zero.
+      if (amount === null || currency === null) { unreadableRows += 1; continue; }
+      const b = byCurrency.get(currency) || { currency, count: 0, amount_cents: 0 };
+      b.count += 1;
+      b.amount_cents += amount;
+      byCurrency.set(currency, b);
+      items.push({
+        audit_id: row.id,
+        refund_id: typeof d?.refund_id === 'string' ? d.refund_id : null,
+        status: typeof d?.status === 'string' ? d.status : null,
+        amount_cents: amount,
+        currency,
+        reason: typeof d?.reason === 'string' && d.reason ? d.reason : null,
+        target_user_id: Number.isInteger(d?.target_user_id) ? d?.target_user_id : null,
+        policy_override: d?.policy_override === true,
+        admin_user_id: row.admin_user_id,
+        issued_at: row.exported_at,
+      });
+    }
+    return c.json({
+      available: true,
+      window_days: REFUND_WINDOW_DAYS,
+      source: 'Refunds issued through HQ, from their audit rows. A refund made in the Stripe dashboard is not listed here.',
+      count: items.length,
+      unreadable_rows: unreadableRows,
+      by_currency: [...byCurrency.values()],
+      items,
+    });
+  } catch {
+    return c.json({ available: false, reason: 'The refund audit rows could not be read.' });
+  }
 });
 
 // -------------------------------------------------------------------------

@@ -1769,6 +1769,9 @@ export const api = {
     request(`/admin/billing/disputes/${encodeURIComponent(id)}/evidence`, { method: 'POST', body: JSON.stringify(body || {}) }),
   adminBillingLTV: (userId) =>
     request(`/admin/billing/ltv?user_id=${encodeURIComponent(userId)}`),
+  // D224 — the refunds HQ issued in the last 30 days, read from their audit
+  // rows (super admin). → { available, window_days, count, by_currency, items }
+  adminBillingRefunds: () => request('/admin/billing/refunds'),
 
   // Task #16 — Admin Stripe catalog CRUD + webhook/config management.
   //
