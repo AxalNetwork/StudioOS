@@ -9,6 +9,7 @@ import {
   getPromoById,
   setPromoActiveMirror,
   normalizeCode,
+  readProductIds,
 } from '../services/promos';
 
 // Task #9 — Promo Code admin CRUD. Mounted at `/api/admin/promos` BEFORE the
@@ -159,10 +160,17 @@ adminPromos.post('/', async (c) => {
     couponForm.duration_in_months = String(months);
   }
 
-  // Product allow-list.
-  const productIds = Array.isArray(body.product_ids)
-    ? (body.product_ids as unknown[]).filter((x): x is string => typeof x === 'string')
-    : [];
+  // Product allow-list. Absent means every product. Present but not a
+  // JSON array of strings is refused — dropping the bad entries used to
+  // store [] and apply the code to every product.
+  let productIds: string[] = [];
+  if (body.product_ids !== undefined) {
+    const parsed = readProductIds(JSON.stringify(body.product_ids));
+    if (!parsed.ok) {
+      return c.json({ error: 'product_ids must be an array of product id strings', code: 'invalid_product_ids' }, 400);
+    }
+    productIds = parsed.ids;
+  }
   for (const pid of productIds) {
     if (!PRODUCT_RE.test(pid)) {
       return c.json({ error: `invalid product id: ${pid}`, code: 'invalid_product' }, 400);

@@ -57,6 +57,8 @@ export interface PromoView {
   currency: string | null;
   duration: string;
   product_ids: string[];
+  /** False when product_ids_json is not a JSON array of strings. [] is readable and means every product. */
+  product_ids_readable: boolean;
   max_redemptions: number | null;
   times_redeemed: number;
   active: boolean;
@@ -121,16 +123,26 @@ export function normalizeCode(code: string): string {
   return code.trim().toUpperCase();
 }
 
-function parseProductIds(json: string): string[] {
+/**
+ * The one reading of a product allow-list.
+ *
+ * A JSON array of strings is readable. `[]` is readable and means every
+ * product (migration 099). Anything else — bad JSON, an object, a number,
+ * a mixed array — is not a list, and it is not "every product".
+ */
+export function readProductIds(json: string): { ok: true; ids: string[] } | { ok: false } {
+  let v: unknown;
   try {
-    const v = JSON.parse(json);
-    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+    v = JSON.parse(json);
   } catch {
-    return [];
+    return { ok: false };
   }
+  if (!Array.isArray(v) || v.some((x) => typeof x !== 'string')) return { ok: false };
+  return { ok: true, ids: v };
 }
 
 export function rowToView(row: PromoRow): PromoView {
+  const products = readProductIds(row.product_ids_json);
   return {
     id: row.id,
     code: row.code,
@@ -139,7 +151,8 @@ export function rowToView(row: PromoRow): PromoView {
     amount_off: row.amount_off,
     currency: row.currency,
     duration: row.duration,
-    product_ids: parseProductIds(row.product_ids_json),
+    product_ids: products.ok ? products.ids : [],
+    product_ids_readable: products.ok,
     max_redemptions: row.max_redemptions,
     times_redeemed: row.times_redeemed,
     active: row.active === 1,
@@ -307,6 +320,7 @@ export type PromoRejectReason =
   | 'inactive'
   | 'expired'
   | 'product_not_eligible'
+  | 'product_list_unreadable'
   | 'usage_limit_reached'
   | 'currency_mismatch';
 
@@ -369,8 +383,9 @@ export async function validatePromoForProduct(
   ) {
     return { ok: false, reason: 'currency_mismatch' };
   }
-  const allow = parseProductIds(promo.product_ids_json);
-  if (allow.length > 0 && !allow.includes(productId)) {
+  const allow = readProductIds(promo.product_ids_json);
+  if (!allow.ok) return { ok: false, reason: 'product_list_unreadable' };
+  if (allow.ids.length > 0 && !allow.ids.includes(productId)) {
     return { ok: false, reason: 'product_not_eligible' };
   }
   if (promo.max_redemptions != null) {

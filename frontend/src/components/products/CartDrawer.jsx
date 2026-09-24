@@ -12,6 +12,7 @@ const PROMO_REASONS = {
   inactive: 'This code is no longer active.',
   expired: 'This code has expired.',
   product_not_eligible: "This code doesn't apply to these items.",
+  product_list_unreadable: "This code can't be applied right now.",
   usage_limit_reached: 'This code has reached its usage limit.',
   currency_mismatch: "This code can't be used for this purchase.",
   amount_below_minimum: 'This code lowers the total below what we can process.',

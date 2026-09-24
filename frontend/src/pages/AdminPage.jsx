@@ -10,6 +10,7 @@ import { useEscapeClose } from '../components/useEscapeClose';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useAuth } from '../hooks/useAuthSync';
 import { Unrecorded } from '../ui';
+import { PromoProductScope } from './PromoProductScope';
 // D128 — the scope caption is fed from `/me.branch` through the same reader
 // the territory badge uses, so the two cannot disagree about which
 // deployment this is.
@@ -5049,9 +5050,7 @@ function PromoCodesPanel() {
                     <td className="px-4 py-3 font-mono font-medium text-gray-900 dark:text-gray-100">{p.code}</td>
                     <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{discountLabel(p)}</td>
                     <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400 max-w-[18rem]">
-                      {(!p.product_ids || p.product_ids.length === 0)
-                        ? <span className="text-gray-400">All products</span>
-                        : p.product_ids.map(productName).join(', ')}
+                      <PromoProductScope promo={p} productName={productName} />
                     </td>
                     <td className="px-4 py-3 text-center text-gray-700 dark:text-gray-300">{p.times_redeemed ?? 0}{limit}</td>
                     <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400">
