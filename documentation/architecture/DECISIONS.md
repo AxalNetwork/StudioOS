@@ -22432,6 +22432,26 @@ A row that existed only in `cf_dlq_mirror` was counted on Platform and missing o
 
 **285 is still the next free migration.**
 
+## D222
+
+**A promo code whose product list cannot be read does not apply to every product.**
+
+`parseProductIds` turned bad JSON, a non-array, and a mixed array into `[]`, and checkout treats `[]` as every product (migration 099). `'{}'` and `'[123]'` both became allow-all. Creating a code did the same: a non-array `product_ids` was stored as `[]`, and non-string entries were dropped, including in Stripe's `applies_to`. Platform counted `'[123]'` as one product while checkout treated it as every product. The admin list rendered a missing or empty list as "All products".
+
+This is latent. The SPA always sends an array of strings, so it needs a direct API call or a hand-written row. It is not a live incident.
+
+**What shipped.** `readProductIds` in `services/promos.ts` is the one rule: a JSON array of strings is readable, and `[]` still means every product. Anything else is not. `validatePromoForProduct` refuses that state with `product_list_unreadable` before the redemption count, so no Stripe call is made. `rowToView` returns `product_ids: []` and `product_ids_readable: false`. The admin list renders Unreadable for that state. Platform uses the same rule, so `'[123]'` is `product_count: null`. A null column is still read as `'[]'`. Creating a code with `product_ids` present but malformed answers 400 `invalid_product_ids`. An absent `product_ids` still means every product. The three shopper maps name the new reason, and CheckoutPage also names `currency_mismatch`, which it had been missing. A frontend guard reads `PromoRejectReason` and fails if any map omits a reason.
+
+**No migration. No new `/api/*` method.**
+
+### VERIFIED
+
+- Node is **v22.14.0**. `npm run test:worker` on this tree before the promo change: **4052** tests, **4048** pass, **1** fail, **3** skipped. The only failure is `capital_call_ledger.test.ts:204`, expected 1, actual 0 ("the LP whose row already existed was told again"). CI's full drift passed on Node 22 for D219 and for D220's head `71313ec97`. The same assertion still fails on this 22.14.0. Not folded in.
+- `cloudflare-worker/test/promo_product_list_d222.test.ts`: **6** tests, exit 0. In the drift log they are `ok 3125` through `ok 3130`.
+- `frontend/test/promo_product_list_d222.test.mjs`: **3** tests, exit 0 (`ok 2281` through `ok 2283`).
+- Three mutations, restored from saved copies. `readProductIds` dropping non-strings: exit 1 (`not ok` 1, 2, 4, 5, 6). An unreadable list treated as `[]`: exit 1 (`not ok` 2). CheckoutPage's `product_list_unreadable` sentence removed: exit 1 (`not ok` 1).
+- `npm run test:drift` exits 1. Frontend **3126** pass, **0** fail. Worker **4058** tests, **4054** pass, **1** fail, **3** skipped. The only `not ok` is the capital-call assertion above. The drift steps after the worker suite, run on their own, exit 0. `tsc`, `check-docs-fresh --strict`, asset closure, and `prerender-og --check` exit 0. `check-decision-ids` reports 221 decisions, D1 through D222.
+
 ## D223
 
 **The three consoles that write Worker secrets now take the holder's bar.
@@ -22578,6 +22598,8 @@ the existing StepUp modal, because `api.js` already turns a 403
   - making the gate always draw its children;
   - reading `token_preview` again.
 
+**285 is still the next free migration.**
+
 ## D225
 
 **A failed roster read is not an empty roster.** `loadNetworkProfiles`
@@ -22635,5 +22657,63 @@ not this read path.
   reinstating the `ensureNetworkProfilesSchema` call and swallowing the
   error back into `{ rows: [], available: true }` — caught by two of the
   five new tests failing. Restored, all five pass again.
+
+**285 is still the next free migration.**
+
+## D229
+
+**`network_profiles.kind` was validated two different ways.** POST
+(`routes/admin_network_profiles.ts`) silently rewrote an unrecognized kind
+to `'mentor'` — `sanitizeKind(body.kind) || 'mentor'` — while PUT refused
+the identical input with 400 `invalid_kind`. A client typo or a retired
+value sent to POST read back as if the operator had deliberately chosen
+`'mentor'`: a silently rewritten field reading as stored. Two more spots
+still named the retired role: `NETWORK_KINDS`
+(`services/networkProfilesSchema.ts`) listed `'mentor'` as if it were
+current, although the role was renamed `advisor`, and `loadNetworkProfiles`
+(`services/decks/axalSpinoutDemoDay.ts`, D225) defaulted a missing kind to
+`'mentor'` too.
+
+**What shipped.** POST now matches PUT: an explicitly-given, unrecognized
+kind is refused with 400 `invalid_kind`, the same as PUT, and a blank
+string is treated as an omission rather than a client error. A genuinely
+omitted kind gets `NETWORK_KIND_DEFAULT` — a new export, `'advisor'` — not
+`'mentor'`. `loadNetworkProfiles`'s own defensive fallback (the DB column is
+`NOT NULL DEFAULT 'mentor'`, so this rarely fires) changed the same way.
+
+`'mentor'` is **not removed** from `NETWORK_KINDS` and PUT still accepts it:
+existing rows carry it, and refusing to save an unrelated field on a
+legacy row (the admin form always resends the full `kind` on every save)
+would be a regression for no gain. Instead `displayNetworkKind` (also new,
+`networkProfilesSchema.ts`) maps `'mentor'` to `'advisor'` for read-only
+display and is applied where the deck labels a roster row: each profile
+card's `kind` and the network-breakdown bucket count
+(`services/decks/axalSpinoutDemoDay.ts`). It is deliberately **not** applied
+to `admin_network_profiles.ts`'s own LIST/GET response, which stays the raw
+stored value — running a row's kind through the alias before it round-trips
+into the admin edit form would convert a legacy `'mentor'` row to
+`'advisor'` on the next unrelated save, the same silent-rewrite failure
+this fixes on POST. **No migration**: nothing rewrites a stored `'mentor'`
+row; converting them, if ever wanted, is the owner's call.
+
+### VERIFIED
+
+- `cloudflare-worker/test/admin_network_profiles_d229.test.ts`: **7** tests
+  against the real Hono route and real `node:sqlite`, plus `displayNetworkKind`
+  and a `fillAxalSpinoutDemoDay` pipeline check, exit 0. An explicitly
+  unrecognized POST kind is refused and inserts no row. An omitted kind
+  stores `'advisor'`. An explicit valid kind stores as given. A
+  blank-string kind is treated as an omission. PUT's existing refusal is
+  unchanged, held as the reference. `displayNetworkKind('mentor')` is
+  `'advisor'`; every other known kind reads as itself. A legacy `'mentor'`
+  row read through the full deck pipeline shows `kind: 'advisor'` on its
+  profile card and buckets under `Advisors`, not `Mentors`, in the network
+  breakdown.
+- Two mutations, each restored byte-identical from a saved copy: reverting
+  POST to `sanitizeKind(body.kind) || 'mentor'` fails 3 of the 7 tests;
+  reverting the deck's two `displayNetworkKind` call sites to the raw
+  `np.kind` fails the pipeline test. Both restored, all 7 pass again.
+- `cd cloudflare-worker && npx --no-install tsc --noEmit` exits 0.
+- `node scripts/check-decision-ids.mjs` exits 0 (D1 through D229).
 
 **285 is still the next free migration.**
