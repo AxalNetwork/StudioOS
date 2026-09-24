@@ -45,6 +45,7 @@ import { branchByCode } from '../services/branches';
 import { mirrorBranchAction } from '../services/auditMirror';
 import { BRANCH_CODE_RE } from '../util/branch';
 import { SUPPORT_REASON_MIN, MOVE_REASON_MIN } from '../rpc/branchOps';
+import { logAdminAction } from '../services/adminAudit';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -127,24 +128,23 @@ r.post('/branches/:code/support-session', async (c) => {
     // HQ'S OWN ROW, WRITTEN HERE. The branch writes its own at authorisation
     // and again at redeem; neither database can read the other, so "audited on
     // both sides" means exactly this — two rows, each true where it lives.
-    try {
-      await c.env.DB.prepare(
-        `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
-      ).bind(
-        'hq_branch_support_session',
-        JSON.stringify({
-          branch: code,
-          target_user_id: targetUserId,
-          target_email_present: Boolean(offer?.target?.email),
-          reason,
-          expires_at: offer?.expires_at ?? null,
-        }),
-        await hashEmail(admin.email),
-        admin.id,
-      ).run();
-    } catch (e) {
-      console.warn('[admin:support-session] audit row failed', (e as Error).message);
-    }
+    //
+    // D259 — THROUGH `logAdminAction`, so the act reaches `admin_audit_log`
+    // and Security's feed, which it never did (`hq_branch_support_session`
+    // was on neither of the feed's arms). The account is named as
+    // `branch_user_id` and NEVER as `target_user_id`: `targetUserIdOf` would
+    // store this id as HQ's `viewed_user_id`, and an id from a branch database
+    // joined against HQ's `users` names whoever happens to hold that id HERE —
+    // a different person. The subject of this row lives on `branch`; HQ's
+    // Target column stays blank rather than wrong. `logAdminAction` never
+    // throws, which is the D111 rule the old try/catch kept.
+    await logAdminAction(c.env, admin.id, admin.email, 'hq_branch_support_session', {
+      branch: code,
+      branch_user_id: targetUserId,
+      target_email_present: Boolean(offer?.target?.email),
+      reason,
+      expires_at: offer?.expires_at ?? null,
+    });
 
     return c.json({
       branch: code,

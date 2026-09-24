@@ -274,6 +274,9 @@ test('D248: Extend is paused by the recovery cool-off, End is not, and each admi
     '/api/admin/super-admins/:userId',
     '/api/admin/users/:userId/toggle-active',
     '/api/admin/users/:userId/role',
+    // D259 — the two acts HQ takes into a branch's database.
+    '/api/admin/branches/:code/support-session',
+    '/api/admin/branches/:code/accounts/:userId/move',
   ]) assert.ok(block.includes(`'${route}'`), `${route} is not paused during the cool-off`);
   // Registered as the route itself, never with a wildcard: `${p}/*` on a
   // parent would reach End.
@@ -282,7 +285,9 @@ test('D248: Extend is paused by the recovery cool-off, End is not, and each admi
   // other /users route, and force re-auth. A PREFIX here would take them all.
   const pStart = idx.indexOf('const COOL_OFF_PREFIXES = [');
   const prefixes = idx.slice(pStart, idx.indexOf('];', pStart));
-  for (const parent of ['/api/admin/impersonate-sessions', '/api/admin/super-admins', '/api/admin/users', '/api/admin/security']) {
+  // D259 — `/api/admin/branches` joins them: a prefix there would pause the
+  // next HQ→branch route before anyone had decided it.
+  for (const parent of ['/api/admin/impersonate-sessions', '/api/admin/super-admins', '/api/admin/users', '/api/admin/security', '/api/admin/branches']) {
     assert.ok(!prefixes.includes(`'${parent}'`), `${parent} is a cool-off PREFIX, which pauses every route under it`);
   }
   assert.ok(!block.includes('/end'), 'End is paused by the cool-off; ending a session is the safe direction');

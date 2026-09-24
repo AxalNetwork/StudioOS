@@ -151,7 +151,10 @@ test('the canvas notes that describe a platform that does not exist do not reach
   const plain = text(PLAIN);
   // D248 — re-aimed. "The person is not told" was true until D248; the
   // banner half of the canvas's claim stays false and the card still says so.
-  assert.match(plain, /The person is told when it opens, in the app and by email, with your name and your reason; there is no banner on their side\./);
+  // D259 — narrowed, not loosened: the sentence is true of an HQ-held account,
+  // and the card now says so, and says a branch account is not told yet.
+  assert.match(plain, /On an HQ-held account the person is told when it opens, in the app and by email, with your name and your reason; there is no banner on their side\./);
+  assert.match(plain, /An account on a branch, opened with Support in the Team table’s branch search, is not told yet\./);
   assert.match(plain, /The successor and the former holder are both notified, in the app and by email\./);
   assert.match(plain, /It does not place them in a cohort on Programs\./);
   assert.match(plain, /Neither is checked against the licence’s seats — no grant on the platform is\./);

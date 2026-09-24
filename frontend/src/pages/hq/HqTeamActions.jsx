@@ -35,6 +35,11 @@ import { Card } from '../../ui';
  * note now names the bar, and says the person is told and what the override
  * does and does not start.
  *
+ * AND ONE NOTE HAD TO NARROW (D259). "The person is told when it opens" was
+ * true of every session HQ could open, until the Team table gave HQ a Support
+ * control on a BRANCH account: the branch path writes its own record and
+ * notifies nobody. The note now says which accounts are told.
+ *
  * ONE ROW IS NOT HQ'S, AND IT SAYS SO RATHER THAN MOVING. "View as a role shell"
  * is offered to every admin — HQ, the holder and a branch admin alike — by the
  * shell's own picker, and it changes nothing but this browser's chrome. The
@@ -67,7 +72,7 @@ export const HQ_ONLY_ACTIONS = [
     key: 'impersonate',
     name: 'Impersonate — including other admins',
     hq: true,
-    gate: `A typed reason of at least 10 characters, your authenticator and a fresh step-up. The session lasts 30 minutes; Extend adds 30 more for a new reason, up to ${SUPPORT_SESSION_CEILING_HOURS} hours from when it opened, and not in the day after an account recovery. Opening one as another admin is the Super Admin’s alone — as anyone else, it is every admin’s power. The person is told when it opens, in the app and by email, with your name and your reason; there is no banner on their side.`,
+    gate: `A typed reason of at least 10 characters, your authenticator and a fresh step-up. The session lasts 30 minutes; Extend adds 30 more for a new reason, up to ${SUPPORT_SESSION_CEILING_HOURS} hours from when it opened, and not in the day after an account recovery. Opening one as another admin is the Super Admin’s alone — as anyone else, it is every admin’s power. On an HQ-held account the person is told when it opens, in the app and by email, with your name and your reason; there is no banner on their side. An account on a branch, opened with Support in the Team table’s branch search, is not told yet.`,
     where: 'View As on an admin’s row in the directory below.',
     recorded: 'Yes — the session, its reason and when it ended, under Impersonations; each extension, with its reason, in the audit log.',
   },

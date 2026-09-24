@@ -584,11 +584,26 @@ for (const p of COOL_OFF_PREFIXES) {
 //   · force re-auth (`/api/admin/security/force-reauth`) is NOT covered. It
 //     ends sessions and grants nothing; it is the containment tool a
 //     recovered owner is most likely to need, the same argument as End.
+//
+// D259 — the two acts HQ takes INTO a branch's database, decided the same way:
+//   · opening a support session on a branch account. `/api/admin/impersonate`
+//     paused the local open; this one — the same act across a tenancy
+//     boundary — was on neither list, so a Super Admin inside the cool-off
+//     could open a session on a branch account they could not open at HQ.
+//   · moving an account between branches. It closes the account where it
+//     lives and moves which subsidiary earns its revenue share: the money-
+//     adjacent class the licence and promo prefixes above already pause.
+//   Both are the exact route, never `/api/admin/branches/*`. These two are all
+//   that prefix holds today, but a prefix would pause whatever lands under it
+//   next with no one deciding it — the next HQ→branch act is to be decided on
+//   its own, the way each entry above was.
 const COOL_OFF_ROUTES = [
   '/api/admin/impersonate-sessions/:id/extend',
   '/api/admin/super-admins/:userId',
   '/api/admin/users/:userId/toggle-active',
   '/api/admin/users/:userId/role',
+  '/api/admin/branches/:code/support-session',
+  '/api/admin/branches/:code/accounts/:userId/move',
 ];
 for (const p of COOL_OFF_ROUTES) app.use(p, recoveryCoolOff);
 // Task #6 — Stripe billing surface (tier checkout/portal/webhook + MI Pro).

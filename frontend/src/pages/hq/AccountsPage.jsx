@@ -74,7 +74,7 @@ export default function HqAccountsPage({ onImpersonate }) {
         ['A tenant per ordinary account', 'No account but an administrator names a licence (U1), so the directory has no Branch column to read.'],
         ['KYC, access and Lab state on a branch account', 'A branch account search returns a role and an active state only, so none of the four admin actions can be drawn on a branch row.'],
         ['Trust on a branch account', 'Trust is computed over HQ’s own accounts and is not a per-branch figure.'],
-        ['Telling the person acted on', 'Neither an impersonated account nor the successor to the elevation is notified.'],
+        ['Telling a branch account HQ supports', 'An HQ-held account is told when a support session opens on it (D248), and both parties to a transfer of the elevation are told (D241). An account on a branch is not told yet: the branch records the session and sends no notice.'],
       ]}
       data-testid="hq-team-rail"
     />

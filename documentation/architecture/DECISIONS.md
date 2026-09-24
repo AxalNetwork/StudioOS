@@ -25368,3 +25368,162 @@ so `check-runtime-schema-declared` (D235) has nothing new to check either.
   `check-runtime-schema-declared.mjs`, `check-api-drift.mjs`,
   `check-folder-docs.mjs` all exit 0.
 - `node scripts/check-decision-ids.mjs` exits 0 (D1 through D257).
+
+## D259
+
+**HQ's cross-host support session (D120) gets its screen. A Support control
+on the Team table's branch hit opens the one-time URL the route builds. The
+recovery cool-off now pauses both acts HQ takes into a branch's database, the
+session and the move. HQ's record of the session reaches Security without
+naming an HQ user. Two stale impersonation callers are gone.** Task 402.
+
+**No migration, no new route.** `api.hqSupportSession` calls the route D120
+built, and `api.adminCohortImpersonationAudit` leaves `api.js`.
+
+### THE DEFECTS
+
+- **No screen.** `POST /api/admin/branches/:code/support-session`
+  (`routes/admin_support_sessions.ts`) and the branch's redeem half
+  (SupportRedeemPage) existed. Nothing in `frontend/src` called the open
+  route, so HQ could not reach a branch account's session at all.
+- **Outside the cool-off.** `COOL_OFF_ROUTES` covered Extend, the elevation
+  writes, toggle-active and the role route (D248). Neither this route nor its
+  sibling `/accounts/:userId/move` was on it or on `COOL_OFF_PREFIXES`. A Super
+  Admin inside the 24-hour cool-off could open a session on a branch account
+  they could not open on an HQ one.
+- **Invisible in Security.** HQ's `hq_branch_support_session` row was on
+  neither arm of the governance feed.
+- **Two stale callers.**
+  - ApiBridgePage's sample bridge script posted `/admin/impersonate/:id` with
+    no `context`. That answers 400 `impersonation_reason_required`, and a
+    bridge token could not pass TOTP or step-up either. Its endpoints table
+    still said "Admin only", stale since D133.
+  - `adminCohortImpersonationAudit` had no caller.
+- **Two sentences were false.**
+  - AccountsPage's rail said neither an impersonated account nor the
+    elevation's successor is told, which has been false since D241 and D248.
+  - HqTeamActions said "The person is told when it opens" of every session,
+    but the branch path notifies nobody.
+
+### WHAT CHANGED
+
+- **The control** (`HqTeamTable.jsx`, `MoveHit`, now a named export). Support
+  sits on the branch hit beside Move.
+  - It is drawn under `canSupport = !viewAs && Number(hit.is_active) === 1`,
+    both conditions the route's own. The view-as overlay acts on nothing
+    (D153), and a deactivated account can only be refused.
+  - Begin is disabled below 10 trimmed characters.
+  - On success the page calls `window.open(res.open_url, '_blank',
+    'noopener')`, the URL the route built. The page never spells a host or a
+    path. `noopener` makes `window.open` return null whether or not a tab
+    opened, so the same URL is also shown as a link.
+  - A refusal shows the route's sentence (`data.message`), not its machine
+    code, because `request()` puts the code in `message`.
+  - The form says the person is not told.
+- **The cool-off, by exact route** (`index.ts`, `COOL_OFF_ROUTES`):
+  `/api/admin/branches/:code/support-session`, and — decided the same way —
+  `/api/admin/branches/:code/accounts/:userId/move`. The move closes an
+  account where it lives and moves which subsidiary earns its revenue share,
+  the money-adjacent class the licence and promo prefixes already pause.
+  - Neither is a `/*` prefix. These two are all `/api/admin/branches` holds
+    today, but a prefix would pause the next HQ→branch route before anyone
+    had decided it.
+- **The record.** HQ's row goes through `logAdminAction`, so it reaches
+  `admin_audit_log`.
+  - It carries `{ branch, branch_user_id, reason, … }` and **never
+    `target_user_id`**. `targetUserIdOf` would store the branch-local id as
+    HQ's `viewed_user_id`, and Security's join would then name whoever holds
+    that id in HQ's own database: a different person.
+  - `hq_branch_support_session` joins `ACTOR_SIDE_ACTIONS`, and its IN-list
+    grows to nine placeholders. The activity arm renders `details`, which
+    names the branch and the account, so it can show whose session it was.
+  - **Stated rather than hidden:** under "All actions" one act reads as two
+    lines. The activity line shows whose session it was, and the audit line
+    shows a blank Target and the reason.
+- **The stale callers.**
+  - The bridge script's impersonation block and its endpoints row are
+    removed, not patched. A support session opened from an external Jekyll
+    page on a bridge token is not a flow this product has.
+  - `adminCohortImpersonationAudit` leaves `api.js`. Its route
+    (`admin_cohort.ts`) stays, because D133 tests it and nothing retires.
+    `check-api-drift` reads api.js → worker only.
+- **The sentences.**
+  - AccountsPage: an HQ-held account is told (D248), both parties to a
+    transfer are told (D241), and an account on a branch is not told yet.
+  - HqTeamActions: "On an HQ-held account the person is told…", and a branch
+    account opened with Support is not told yet.
+
+### FILED, NOT BUILT
+
+**Telling the person on the branch.** It needs `rpc/branchOps.ts`
+(`openSupportSession` imports no notify function), which Copilot holds this
+wave. Until it lands, the page and the card say the branch account is not
+told.
+
+### PINS
+
+- `territory_licences.test.mjs` pins the cool-off list. It gains the two
+  routes and forbids `/api/admin/branches` as a prefix.
+- `hq_team_h20.test.mjs:154` is narrowed, not loosened: the HQ-held sentence
+  plus the branch sentence.
+- **A fixture fact, recorded because it cost a run.** `admin_governance.test.ts`
+  counts the quote marks inside `ACTOR_SIDE_ACTIONS` to check its IN-list, so
+  a comment with an apostrophe inside the array miscounts. The D259 note sits
+  above the array, and a line there says why.
+
+### VERIFIED
+
+`cloudflare-worker/test/branch_support_session_d259.test.ts` uses the D248
+harness: the bundled `index.ts` on the `buildFresh` schema, with `BRANCH_FR`
+(and `BRANCH_DE`) as stub bindings that record every call. Its tests:
+- in the cool-off, opening → 423 `recovery_cool_off_active`, and the branch is
+  never called;
+- in the cool-off, moving → 423, and neither branch is called;
+- a bare JWT → 403, and the branch is never called;
+- outside the cool-off, the branch is asked once, secret first, and the answer
+  is the route's `open_url`;
+- the audit row has `viewed_user_id` NULL and `branch_user_id` 7, with no
+  `target_user_id`. HQ's own user 7, a different person, is never named, and
+  the governance feed shows the act on both arms.
+
+`frontend/test/hq_support_session_d259.test.mjs`, nine tests:
+- the api path and body;
+- Support rendered through `MoveHit` for an active hit, and absent under the
+  overlay and on a deactivated account;
+- exactly one control, mounted in the branch map after "HQ-held ·";
+- Begin's 10-character gate, and the typed reason sent;
+- `res.open_url` opened, with no host or redeem path spelled in the file;
+- the not-told sentence, and refusals in words;
+- no `/admin/impersonate/` in `frontend/src` code without `context=`;
+- the api method gone and its route kept;
+- the rail's sentence.
+
+**Mutation checks: thirteen runs, all caught,** each alone and restored from a
+sha256-verified snapshot:
+- **Against the worker tests, 4 of 4:**
+  - the cool-off entry dropped;
+  - a numeric `target_user_id` passed to `logAdminAction`;
+  - extras: the move dropped from the cool-off, and the action taken off
+    Security's activity arm.
+- **Against the frontend tests, 9 of 9:**
+  - the brief's: the cool-off entry dropped; the entry replaced by a
+    `/api/admin/branches/*` prefix; the control drawn under view-as; the
+    control mounted on an HQ-held row; Begin enabled at 9 characters; the URL
+    built client-side;
+  - extras: an impersonate call posted without a reason, the rail's old
+    sentence restored, and the card's branch sentence dropped.
+
+**One gap, stated.** The `/*`-prefix mutation is caught only by the source
+pin, not by the Worker test. A prefix still pauses both routes, so behaviour
+cannot tell it from the exact entries; what it breaks is the decision
+boundary, which is what the pin holds.
+
+**Full suite:** `npm run test:drift` on Node 22 exits 0 on `main` at
+`6927c8fe`:
+- frontend 3228 (the nine above are new);
+- worker 4238 passed with 3 skipped (the five above are new);
+- retention 52.
+
+`docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
+edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
+`check-folder-docs` and `check-api-drift` exit 0.
