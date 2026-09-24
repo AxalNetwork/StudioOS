@@ -1,7 +1,11 @@
 /**
  * The branch's approvals board (S3, D130).
  *
- *   GET /api/branch/approvals   the four local queues as one list, oldest first
+ *   GET /api/branch/approvals   every local queue as one list, oldest first
+ *
+ * D215 (S16) widened it from four lanes to eleven — the queues the live
+ * console kept on their own pages — and the payload now names the canvas lanes
+ * it leaves out (`not_laned`) with the reason each has no open state.
  *
  * WHY A BOARD RATHER THAN FOUR PAGES, in the canvas's own words: *"Five queues
  * that were five pages become five lanes, because an admin's actual question is
@@ -35,6 +39,7 @@ import { requireBranchTier } from '../util/branch';
 import { mapError } from './_t13t14t15_helpers';
 import {
   approvalBoard,
+  NOT_LANED,
   SLA_DUE_SOON_HOURS,
   SLA_PAST_HOURS,
 } from '../services/approvalSources';
@@ -48,7 +53,7 @@ r.get('/approvals', async (c) => {
     const branch = requireBranchTier(c.env);
 
     const raw = Number(c.req.query('limit'));
-    // Per lane, so one flooded queue cannot crowd the other three off a screen
+    // Per lane, so one flooded queue cannot crowd the others off a screen
     // whose entire purpose is "what is oldest anywhere".
     const limit = Number.isFinite(raw) ? Math.min(200, Math.max(1, Math.trunc(raw))) : 100;
 
@@ -67,6 +72,7 @@ r.get('/approvals', async (c) => {
       // `answer_shape` is on the escalations route. A surface that drew an
       // Approve button here would be writing to a store this route does not
       // touch.
+      not_laned: NOT_LANED,
       decides: false,
       decide_note:
         'This board reads. Each decision is made in the queue\'s own console, which owns that '

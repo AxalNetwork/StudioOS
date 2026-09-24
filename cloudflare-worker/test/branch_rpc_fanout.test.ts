@@ -18,6 +18,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { addS16Stores } from './_approval_s16_stores.mjs';
 
 import {
   fanOut, coverage, withRegistry, branchBindings, branchByCode, branchRead, BRANCH_BINDING_PREFIX,
@@ -85,6 +86,7 @@ const HQ_SCHEMA = `
 function branchDb(seed = '') {
   const d = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   d.exec(BRANCH_SCHEMA);
+  addS16Stores(d);
   if (seed) d.exec(seed);
   return d;
 }
@@ -303,7 +305,7 @@ test('every branch answer is refused on HQ', async () => {
   }
 });
 
-test('the backlog sums the four queues, and one unreadable queue voids the total', async () => {
+test('the backlog sums every queue, and one unreadable queue voids the total', async () => {
   const seeded = branchDb(`
     INSERT INTO users (id, role, is_active) VALUES (1,'founder',1),(2,'founder',1),(3,'admin',1);
     INSERT INTO lp_applications (id,status,created_at) VALUES (1,'pending','2026-09-01T00:00:00Z');

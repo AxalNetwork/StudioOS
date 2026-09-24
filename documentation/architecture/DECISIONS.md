@@ -21531,3 +21531,104 @@ appear. The first real migration read-back after this merges will show it.
 - `check-decision-ids` reads **D1 through D212**.
 
 **285 is still the next free migration, and D213 the next decision.**
+
+## D215
+
+**S16: Approvals takes in the queues the live console kept on their own
+pages. Seven of the canvas's eleven are now lanes on the one age-sorted list.
+The other four have no state meaning "an admin owes a decision", so the board
+names them, each with its reason, instead of inventing a predicate to fill the
+column.**
+
+D213 and D214 are reserved by the coordinator session and land separately.
+**No migration**, so **285 is still free**. **No new route and no `api.js`
+method**: `GET /api/branch/approvals` gains one field, `not_laned`.
+
+### THE SEVEN NEW LANES
+
+Each reads the store and status its own console already decides. They were
+checked against `sql/schema_baseline.sql`, not taken from the canvas's labels:
+
+| Lane | Store | Open means | Console |
+| --- | --- | --- | --- |
+| KYC | `users` | `kyc_status = 'pending'`, aged by `kyc_submitted_at` | `/admin?tab=kyc` |
+| Partner profiles | `partner_profiles` | `admin_status = 'pending'` | `/admin?tab=profiles` |
+| Exploring | `users` + `user_role_review` | `role = 'exploring'`, aged by `COALESCE(onboarded_at, created_at)` as `admin_exploring.ts` sorts it | `/admin/exploring` |
+| Jobs | `job_postings` | `status = 'pending_review'` | `/admin/jobs` |
+| Events | `events` | `status = 'pending_review'` | `/admin/events` |
+| Best-Fit consultations | `admin_consultation_bookings` | `status = 'requested'` | `/admin/best-fit` |
+| Due diligence | `dd_cases` | `status IN ('open', 'in_review')` | `/admin/due-diligence` |
+
+Three of these have their own quirks:
+
+- **Partner profiles** has `email` as its primary key and a nullable
+  `user_id`. So the row id is `rowid`, the join is on email (as `profiling.ts`
+  does), and `who` falls back to the email.
+- **"Best-Fit"** on the canvas is the consultation bookings queue.
+  `admin_bestfit.ts` only fetches reports.
+- **"Territory diligence"** has no territory column. On a branch, the branch's
+  own D1 is the territory.
+
+### THE FOUR THAT ARE NOT LANES
+
+Each has a D1 table, but none has a state meaning "waiting on an admin":
+
+- **Directory:** a partner is listed or not, and nothing is submitted for a
+  listing decision.
+- **Circles:** admins create and publish them. Nobody submits one.
+- **Partner invitations:** an open invitation waits on the invitee.
+- **Advisor cohort access:** an admin assigns it. An advisor has no way to
+  request it (`advisors.ts`: "ADMIN ASSIGNS, THE ADVISOR READS").
+
+Laning any of these would put work on the board that nobody handed the admin.
+That is the argument D130 made for leaving out `'draft'` referrals. The list
+is `NOT_LANED` in `approvalSources.ts`. The route sends it and the page shows
+it under the chip row.
+
+### WHAT ELSE CHANGED
+
+- **The chip row filters.** Pressing a lane narrows the list to that lane, and
+  pressing it again clears the filter. It is S16's primary view. S3's
+  five-column kanban is not built.
+- **One source list still feeds everything.** The backlog count (H1), queue
+  pressure (S1) and the board all read `APPROVAL_SOURCES`. So all three grew
+  together, and the backlog reason now says "every approval queue" instead of
+  "four".
+- **Wellbeing is not laned.** The canvas defers it until it is known whether
+  the roster is local or an HQ catalog.
+
+### FOUND, NOT FIXED HERE
+
+`spinout_moderation_cases` is not in `schema_baseline.sql`. It is created
+lazily by `spinout_moderation.ts` the first time that route runs. On a freshly
+provisioned branch, the moderation lane reads as unreadable until then, and so
+does the whole backlog total (`backlogOf` voids the sum on any unreadable
+lane). This predates D215. The fix is a migration, and it is filed separately.
+
+### VERIFIED
+
+- **`npm run test:drift` exits 0**: frontend **3062**, worker **3972** pass
+  (3 environment-gated skips, as before), retention **47**, zero `not ok`.
+  `docs/` was rebuilt with the root `npm run build`.
+- `cloudflare-worker/test/branch_approvals_s16_d215.test.ts` builds every
+  table from the baseline's own DDL. The one exception is moderation, which
+  uses the route's DDL. The test asserts that no lane is unreadable, that each
+  new lane counts its open row and not its decided one, that the board and the
+  count agree lane by lane, that ages sort across lanes (Exploring by
+  `onboarded_at`), and that `who` is never blank.
+- **Mutation checks.** Each of these three changes fails that file:
+  - widening due diligence to include `completed`;
+  - dropping the events status predicate;
+  - ageing Exploring by `users.created_at`.
+- The four existing fixtures that read the backlog now build the new stores
+  through one shared helper, `test/_approval_s16_stores.mjs`. Two expectations
+  moved, and both moves are real:
+  - The analytics fixture's `exploring` account now counts toward the backlog
+    (2 → 3).
+  - Several lanes are measured empty, so "empty sorts last" is asserted over
+    the tail instead of on one key.
+- `frontend/test/branch_approvals_board_d130.test.mjs` now checks that a
+  `?tab=` console link lands on a tab `/admin` actually has.
+
+**285 is still the next free migration. D216 is the next decision after the
+coordinator's D213 and D214.**

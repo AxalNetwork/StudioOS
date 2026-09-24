@@ -21,6 +21,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { addS16Stores } from './_approval_s16_stores.mjs';
 import { execFileSync } from 'node:child_process';
 
 import {
@@ -85,6 +86,7 @@ const NOW = Date.parse('2026-09-16T12:00:00Z');
 function db(seed = '') {
   const d = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   d.exec(SCHEMA);
+  addS16Stores(d);
   d.exec(`INSERT INTO users (id, name, email) VALUES
     (1, 'Aurélie Chen', 'a@x.test'), (2, '', 'blank@x.test'), (3, 'Ben', 'b@x.test');`);
   if (seed) d.exec(seed);
