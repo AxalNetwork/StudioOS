@@ -111,7 +111,7 @@ const stamp = classifyStamp((() => {
   try {
     return readFileSync(STAMP, 'utf8');
   } catch {
-    return null;  // docs/ built before builds recorded their source
+    return null;  // absent stamp: either deleted or built with bare `vite build`
   }
 })());
 
@@ -123,8 +123,8 @@ const stamp = classifyStamp((() => {
 // frontend/src. So a stamp nobody could parse silently downgraded this gate to
 // the thing it replaced, and said ✓ while doing it.
 //
-// Absent stays a fallback: a docs/ built before builds recorded their source
-// genuinely has no stamp, and the proxy is the only answer available.
+// Absent is now a strict failure (D218): the build records its source hash
+// under D103, so absent means someone deleted the file or ran a bare `vite build`.
 //
 // The case this was written for is a MERGE. `.gitattributes` marks this path
 // `merge=union` so two branches that both rebuilt produce a two-line file
@@ -173,6 +173,26 @@ ${mark} check-docs-fresh: the committed docs/ build is not the build of this sou
     cd frontend && npm ci && cd .. && npm run build && git add docs && git commit -m "Rebuild docs/"
 `);
   process.exit(strict ? 1 : 0);
+}
+
+// ABSENT STAMP: the file never existed at all.
+//
+// From D103 forward, every build writes docs/.build-source. Absent means one
+// of two things: either someone deleted it, or someone ran a bare `vite build`
+// instead of `npm run build`. Both are the defect this gate exists to catch.
+if (!stamp.present) {
+  const mark = strict ? '✖' : '⚠';
+  const write = strict ? console.error : console.warn;
+  write(`
+${mark} check-docs-fresh: docs/.build-source is missing.
+
+  The build writes a stamp of the source tree it consumed. Missing means either
+  you deleted the file or you ran a bare \`vite build\` instead of
+  \`npm run build\`. Either way, the fix is the same:
+
+    npm run build && git add docs && git commit -m "Rebuild docs/"
+`);
+  if (strict) process.exit(1);
 }
 
 // ---------------------------------------------------------------------------

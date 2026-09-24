@@ -13,11 +13,11 @@
  * `frontend/src`. So a stamp that could not be parsed silently downgraded the
  * gate to the thing it exists instead of.
  *
- * Absent is legitimate: a `docs/` built before builds recorded their source has
- * no stamp and the proxy is the only answer available. Present-but-unparseable
- * is not — the build writes exactly 64 hex characters and a newline, so
- * anything else means the file was edited, truncated, or merged. Under
- * `--strict` that is a refusal.
+ * Absent is now a strict failure (D218): the build records its source hash
+ * under D103, so absent means someone deleted it or ran a bare `vite build`.
+ * Present-but-unparseable is a failure too — the build writes exactly 64 hex
+ * characters and a newline, so anything else means the file was edited,
+ * truncated, or merged. Under `--strict` that is a refusal.
  *
  * THE MERGED CASE IS THE ONE THIS WAS BUILT FOR. `.gitattributes` marks this
  * path `merge=union`, so two branches that both rebuilt produce a two-line file

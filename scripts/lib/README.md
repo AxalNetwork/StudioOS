@@ -15,7 +15,7 @@ can be read to find out what a rule actually is.
 | `assetGeneration.mjs` | The assets ONE build's shells reach — what the no-ledger seed keeps, so `docs/assets` stops growing (D183). |
 | `assetRetention.mjs` | Which hashed assets in `docs/` a build keeps and which it may prune. |
 | `sourceTreeHash.mjs` | The content hash of `frontend/src` that `docs/.build-source` records, so "is this bundle built from this source" is answerable (D103). |
-| `buildStamp.mjs` | Whether `docs/.build-source` is absent, readable or corrupt — three states, not two. Absent falls back to the commit-timestamp proxy; present-but-unreadable (a `merge=union` result, say) must never (D113). |
+| `buildStamp.mjs` | Whether `docs/.build-source` is absent, readable or corrupt — three states, not two. Absent is a strict failure (D218); present-but-unreadable (a `merge=union` result, say) must never pass under --strict either (D113). |
 
 ## Tests
 
