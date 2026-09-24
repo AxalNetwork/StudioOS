@@ -25211,3 +25211,82 @@ unless already touched for D254 (it was read, not edited, there).
 - `node scripts/check-api-drift.mjs` and `node scripts/check-folder-docs.mjs`
   both exit 0.
 - `node scripts/check-decision-ids.mjs` exits 0 (D1 through D255).
+
+## D256
+
+**The assessment track key in code was not the key the data uses.**
+`advisor_compass_v1` appeared in exactly two code lists:
+`cloudflare-worker/src/services/assessmentSchema.ts`'s `ASSESSMENT_TRACKS`
+(whose own comment says "Keep in lockstep with the seed migrations (108 /
+110) — these are stable identifiers; never rename one") and
+`frontend/src/pages/admin/assessment/jsonFields.js`'s mirror of it. The
+data disagreed: `110_assessment_tracks.sql` seeds the game, its chapters,
+items, archetypes and badge criteria (`{"track":"mentor_compass_v1"}`)
+under `mentor_compass_v1`. Migration 107 and the design docs agree with
+the data. `git log -S advisor_compass_v1` traces the wrong name to
+`6dae4f57` (2026-09-21, #695) — both lists have named it wrong since,
+agreeing with each other and disagreeing with the migration the whole
+time, which is exactly why a test that only compared the two lists could
+never have caught this.
+
+The one live reader is HQ's create-game suggestion list
+(`AdminAssessmentPage.jsx`, hinted "Stable track key — drives result
+routing"), which offered `advisor_compass_v1`; `POST /games` accepts any
+non-empty track. Picking the suggestion would have created a second,
+unseeded advisor track that no seeded archetype or badge criterion
+matched. Nothing reads a game by this key today — the player and award
+code is gone — so the damage was theoretical only in the sense that it
+had not yet been triggered by an operator; the mechanism was live.
+
+**What shipped.**
+
+- Both lists now say `mentor_compass_v1`. The key is an identifier;
+  `AdminAssessmentPage.jsx` needed no change — it only imports the list.
+- `routes/events.ts`'s `preferredEventTypes` uses the same vocabulary
+  (track-key prefixes) for a different purpose — event-type suggestions —
+  and had its own miss on the same axis: the investor/LP track's own game
+  slug is `thesis_lab_v1` (`assessmentSchema.ts`'s `INVESTOR_TRACK`), not
+  `investor_*`, so it fell through to the generic default set instead of
+  the investor-shaped one (`demo_day`, `lp_briefing`, `conference`,
+  `webinar`). Fixed by matching `thesis` alongside `investor`. `mentor_
+  compass_v1` and `coachs_lens_v1` also default (no `mentor`/`coach`
+  branch exists) — this is **not** new; the retired `advisor_compass_v1`
+  didn't match anything either. Adding branches for them would be a design
+  call about what event types suit a mentor/coach track, which nothing
+  asked for and this task does not make: **filed, not fixed.**
+- New `cloudflare-worker/test/assessment_track_keys_d256.test.ts` reads
+  `108_assessment_play.sql` and `110_assessment_tracks.sql` off disk for
+  the seeded `assessment_games.slug` values, asserts it parsed exactly 6
+  before comparing anything (a regex matching nothing would otherwise
+  agree with everything), and checks **both lists against the migrations**
+  — not the lists against each other, the shape of bug that let this one
+  through — plus `INVESTOR_TRACK` and `preferredEventTypes` for the
+  founder/partner/operator/investor tracks.
+
+**Left alone.** `mentor_compass_v1` and `coachs_lens_v1` still default in
+`preferredEventTypes` — filed above, not fixed. The 26 assessment badges
+and the player/award code remain gone; this task does not touch either.
+
+**No migration.** No new route or `api.js` method, so `check-api-drift`
+has nothing to say. `frontend/src` changed (`jsonFields.js`), so `docs/`
+was rebuilt.
+
+### VERIFIED
+
+- `cloudflare-worker/test/assessment_track_keys_d256.test.ts`: **5** tests,
+  exit 0. Exactly 6 tracks parsed from the seed migrations. Both
+  `ASSESSMENT_TRACKS` copies match that set exactly. `INVESTOR_TRACK` is
+  among the seeded set. `preferredEventTypes` no longer defaults the
+  investor track and includes `lp_briefing`; founder/partner/operator
+  tracks (already correct) are pinned so a future rename is caught the
+  same way this one was missed.
+- Three mutations, each restored byte-identical from a saved copy: putting
+  `advisor_compass_v1` back in the worker's list (caught); adding a track
+  no migration seeds to the frontend mirror (caught); the SQL reader
+  regex matching nothing (caught — the 6-track assertion fails rather than
+  vacuously agreeing). All restored, all 5 pass again.
+- `cd cloudflare-worker && npx tsc --noEmit` and
+  `npx tsc --noEmit -p frontend/tsconfig.json` both exit 0.
+- `node scripts/check-api-drift.mjs` and `node scripts/check-folder-docs.mjs`
+  both exit 0.
+- `node scripts/check-decision-ids.mjs` exits 0 (D1 through D256).
