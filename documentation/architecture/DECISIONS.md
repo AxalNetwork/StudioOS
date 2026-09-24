@@ -22924,3 +22924,58 @@ row; converting them, if ever wanted, is the owner's call.
 - `node scripts/check-decision-ids.mjs` exits 0 (D1 through D229).
 
 **285 is still the next free migration.**
+
+## D233
+
+**A timed-out write told the user "Nothing was changed" — a guess dressed
+as a fact.** `timeoutError(path, ms)` (`frontend/src/lib/api.js`) built one
+message for every request that hit the client deadline: *"The server did
+not respond within Ns. Nothing was changed."* A GET or HEAD that times out
+really did change nothing — there was nothing to change — but a write
+(POST/PUT/PATCH/DELETE) may have committed on the server and simply
+answered late; the client cannot tell from an aborted `fetch`. Saying
+"nothing changed" there invited exactly the retry that duplicates the
+write.
+
+**What shipped.** `timeoutError` takes a third argument, `method`. GET and
+HEAD (the default, when no method is given) keep the sentence unchanged. A
+write instead gets *"Whether this was saved is not known. Reload before
+trying again."* — the model is `HqSupportPage.jsx`'s `decisionError()`,
+which already says a failure with no status is "not known" rather than a
+refusal, and already ignored `timeoutError`'s "Nothing was changed"
+regardless of wording (its own docblock says as much). The one call site
+(`request()`'s catch block) passes `options.method` through. The three
+shape rules protecting existing consumers — `name` is not `AbortError`,
+the message never matches a chunk-load phrase, `code`/`status` stay
+machine-readable — hold for both wordings.
+
+**Grepped, not touched.** Three forms fall back to their own
+"…Nothing was changed." sentence only when `err?.message` is falsy
+(`AdvisorCohortAssignments.jsx`, `ProfileZone.jsx`, `SessionsZone.jsx`):
+none of them matches or depends on `timeoutError`'s string, so none needed
+a change. `HqSupportPage.jsx`'s `decisionError()` overrides the message
+entirely by status, also independent of the wording — confirmed by
+`hq_support_answer_d205.test.mjs`, which builds its own synthetic timeout
+error rather than importing `timeoutError` and still passes unchanged.
+
+**No migration. No new route or `api.js` method** — `timeoutError`'s
+signature gained a parameter, not a new export.
+
+### VERIFIED
+
+- `frontend/test/api_request_timeout.test.mjs`: **12** tests, exit 0 (was
+  9; three added, none loosened). The pre-existing "cannot be mistaken"
+  test now runs for a read and a write method, unchanged otherwise. New:
+  `timeoutError` keeps "Nothing was changed." for `undefined`/`GET`/`get`/
+  `HEAD`/`head` and never says it for `POST`/`post`/`PUT`/`PATCH`/`DELETE`,
+  which instead say the outcome is not known and to reload. A hung
+  `request('/tickets', { method: 'POST' })` rejects with the write wording,
+  driven through the real deadline/abort path, not a direct call to
+  `timeoutError`.
+- One mutation, restored byte-identical from a saved copy: reverting
+  `timeoutError` to the single old message fails 2 of the 12 tests.
+  Restored, all 12 pass again.
+- `npx --no-install tsc --noEmit -p frontend/tsconfig.json` exits 0.
+- `node scripts/check-decision-ids.mjs` exits 0 (D1 through D233).
+
+**285 is still the next free migration.**
