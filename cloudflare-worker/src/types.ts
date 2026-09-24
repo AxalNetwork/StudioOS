@@ -58,6 +58,12 @@ export interface Env {
   BRANCH_CODE?: string;
   BRANCH_NAME?: string;
   BRANCH_TERRITORY?: string;
+  // D264 — the branch's Durable Object jurisdiction (eu, us or fedramp),
+  // rendered by scripts/lib/branchConfig.mjs from residency.do_jurisdiction
+  // and applied by util/doNamespace.ts. Unset on HQ and on a branch
+  // provisioned with none; write-once, because an object's jurisdiction is
+  // fixed when it is first created.
+  BRANCH_DO_JURISDICTION?: string;
   // The HQ→branch RPC leg (D120), the mirror of the branch's own RPC_SECRET.
   // `branch-provision.yml` generates one value per deployment and splits it:
   // the plaintext becomes a Worker secret on HQ, the SHA-256 becomes one on the

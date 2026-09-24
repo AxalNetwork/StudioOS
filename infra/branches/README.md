@@ -41,7 +41,12 @@ and KV ids — are recorded, because nothing can derive those.
 **`residency` states what was actually granted, including when that is
 nothing.** `d1_jurisdiction` and `r2_jurisdiction` are `eu`, `fedramp` or
 `null`; `do_jurisdiction` adds `us`; `location_hint` is one of `weur`, `eeur`,
-`enam`, `wnam`, `apac`, `oc`, or `null`. There is no Swiss or UAE option, so a
+`enam`, `wnam`, `apac`, `oc`, or `null`. `do_jurisdiction` is APPLIED, not
+only recorded (D264): `gen-branch-wrangler.mjs` renders it as the var
+`BRANCH_DO_JURISDICTION`, and the Worker scopes every Durable Object through it
+(`cloudflare-worker/src/util/doNamespace.ts`). It is write-once: an object's
+jurisdiction is fixed when it is first created, so the value a branch is first
+deployed with is the one it keeps. There is no Swiss or UAE option, so a
 Geneva or Dubai branch records `null` and a hint — a null here is the honest
 answer, not a missing value, and the licence record repeats it to the reader.
 

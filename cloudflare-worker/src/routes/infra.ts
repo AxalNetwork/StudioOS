@@ -8,6 +8,7 @@ import { Jobs, type JobType } from '../models/jobs';
 import { cfQueueEnabled, enqueueJob } from '../services/queue';
 import { processQueueBatch } from '../services/queueWorker';
 import { getRealtimeStats } from '../services/realtime';
+import { doNamespace } from '../util/doNamespace';
 import { bindingKey } from '../util/schemaBootstrap';
 import { CRON_HISTORY_RETENTION_DAYS, latestRunPerTrigger, triggersFor } from '../util/cronHistory';
 import { nextCronRun } from '../util/cronSchedule';
@@ -432,8 +433,9 @@ infra.get('/ws-check', async (c) => {
   //     trusts the worker because the DO is only accessible via the binding).
   if (c.env.PIPELINE_ROOM) {
     try {
-      const id = c.env.PIPELINE_ROOM.idFromName('healthcheck');
-      const stub = c.env.PIPELINE_ROOM.get(id);
+      const rooms = doNamespace(c.env, c.env.PIPELINE_ROOM);
+      const id = rooms.idFromName('healthcheck');
+      const stub = rooms.get(id);
       // DO count (reachability)
       const count = await stub.fetch('https://do/count');
       const countOk = count.status === 200;
@@ -459,8 +461,9 @@ infra.get('/ws-check', async (c) => {
   // 2. OnboardingChat DO internal upgrade probe.
   if (c.env.ONBOARDING_CHAT) {
     try {
-      const id = c.env.ONBOARDING_CHAT.idFromName('healthcheck');
-      const stub = c.env.ONBOARDING_CHAT.get(id);
+      const chats = doNamespace(c.env, c.env.ONBOARDING_CHAT);
+      const id = chats.idFromName('healthcheck');
+      const stub = chats.get(id);
       const count = await stub.fetch('https://do/count');
       const countOk = count.status === 200;
       const upgrade = await stub.fetch('https://do/ws', {

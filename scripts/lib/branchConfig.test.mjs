@@ -207,3 +207,29 @@ test('the cron table\'s multi-line array is read, not dropped', () => {
   assert.ok(hq.kv.get('crons').startsWith('[') && hq.kv.get('crons').endsWith(']'), hq.kv.get('crons'));
   assert.equal(JSON.parse(hq.kv.get('crons')).length, 6, 'HQ declares six cadences');
 });
+
+// D264 — the Durable Object jurisdiction reaches the Worker as a var.
+test('D264: residency.do_jurisdiction eu renders BRANCH_DO_JURISDICTION = "eu", and checkRendered holds it', () => {
+  const e = entry({ residency: { ...EXAMPLE.residency, do_jurisdiction: 'eu' } });
+  const out = render(e);
+  assert.match(out, /^BRANCH_DO_JURISDICTION = "eu"$/m);
+  assert.deepEqual(checkRendered(TOML, e, out), []);
+  const problems = (s) => checkRendered(TOML, e, s).join(' | ');
+  assert.match(problems(out.replace('BRANCH_DO_JURISDICTION = "eu"\n', '')), /BRANCH_DO_JURISDICTION must be eu/, 'a dropped var passed');
+  assert.match(problems(out.replace('BRANCH_DO_JURISDICTION = "eu"', 'BRANCH_DO_JURISDICTION = "us"')), /BRANCH_DO_JURISDICTION must be eu/);
+});
+
+test('D264: a null do_jurisdiction renders no var — never "none" — even when HQ\'s table carries one', () => {
+  const e = entry({ residency: { ...EXAMPLE.residency, do_jurisdiction: null } });
+  const out = render(e);
+  assert.doesNotMatch(out, /BRANCH_DO_JURISDICTION/, 'a branch granted no jurisdiction was given one');
+  assert.deepEqual(checkRendered(TOML, e, out), []);
+  assert.match(checkRendered(TOML, e, out.replace(/(\nBRANCH_CODE = "fr")/, '\nBRANCH_DO_JURISDICTION = "none"$1')).join(' | '),
+    /BRANCH_DO_JURISDICTION must be absent/);
+  // HQ's own table must never leak into a branch that was granted none.
+  const hqWithVar = TOML.replace(/^\[env\.production\.vars\]\n/m, '[env.production.vars]\nBRANCH_DO_JURISDICTION = "us"\n');
+  assert.notEqual(hqWithVar, TOML, 'the fixture did not reach HQ\'s vars table');
+  const leaked = renderBranchConfig(hqWithVar, e);
+  assert.doesNotMatch(leaked, /BRANCH_DO_JURISDICTION/, 'HQ\'s value leaked into a branch whose jurisdiction is null');
+  assert.deepEqual(checkRendered(hqWithVar, e, leaked), []);
+});

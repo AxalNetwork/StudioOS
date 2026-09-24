@@ -25500,3 +25500,92 @@ dispatch a workflow: `actions: write` is not granted.
 - a failed drill exiting 0;
 - a failed marker rendered as passed;
 - an unknown outcome accepted.
+
+## D264
+
+**Task 357: the Durable Object jurisdiction was chosen and recorded, but
+applied nowhere.**
+
+**What existed.**
+- **HQ's Deploy step** drew a "Realtime residency" select, and
+  `admin_deployments.ts` admitted eu, us or none, defaulting to none.
+- **`branch-provision.yml`'s input** also admitted eu, us or none, but
+  defaulted to **eu**: it disagreed with HQ.
+- **The value was written only to the registry file.** `infra/branches/README.md`
+  said residency records "what was actually granted", which was false for this
+  field.
+- **The Worker never read it.** `BRANCH_DO_JURISDICTION` had zero hits, and all
+  six `idFromName`/`get` sites ran on the unrestricted namespace:
+  - `services/realtime.ts` (postToDO);
+  - three in `routes/realtime.ts`;
+  - two in `routes/infra.ts`.
+
+**Why HQ must stay unrestricted, and why a branch must be scoped on its first
+deploy.** `ns.jurisdiction(j)` returns a namespace scoped to that
+jurisdiction. The same name gives a different id in each one, and there is no
+API to move or list objects.
+- **HQ's objects were all created unrestricted.** OnboardingChat keeps each
+  founder's last 50 messages in its storage. Scoping HQ now would reach new,
+  empty objects and strand the old ones.
+- **A branch's objects are born on first use.** So if its first deploy carries
+  the var, every object it ever has is born in the right place. The value is
+  write-once, and this lands before the first branch is provisioned.
+
+**What changed.**
+- **The helper.** New `util/doNamespace.ts`: `doNamespace(env, ns)` returns
+  `ns` unchanged when `BRANCH_DO_JURISDICTION` is unset.
+  - `eu`, `us` or `fedramp` give `ns.jurisdiction(v)`.
+  - Anything else throws, the way `branchOf` does. A branch that fell back to
+    unrestricted would create objects it could never move.
+  - All six sites go through it. `Env` gains `BRANCH_DO_JURISDICTION` beside
+    `BRANCH_TERRITORY`.
+  - `postToDO` catches and logs as it always has, so a bad value there fails
+    the broadcast, not the calling route.
+- **The config channel.** `branchConfig.mjs` renders the var from
+  `residency.do_jurisdiction`, because wrangler has no jurisdiction key on a
+  Durable Object binding.
+  - A null value removes the var, so HQ's table can never leak one into a
+    branch granted none, and `none` is never written as a value.
+  - `checkRendered` asserts the var equals the registry value, or is absent.
+- **One allowed list.** The helper's list is `branchConfig.mjs`'s
+  `DO_JURISDICTIONS` (eu, us, fedramp), and a test holds the two equal. HQ,
+  the workflow and the UI offer a subset, eu, us or none, and none becomes null
+  in the registry.
+- **The defaults align on `none`.** The workflow's default moves from `eu` to
+  `none`, matching HQ's route and its Deploy step's select.
+  - The reason: HQ dispatches provisioning with an explicit value, so the
+    workflow default governs only a hand run.
+  - A write-once residency should never be granted by a default nobody chose.
+  - A test holds the three defaults equal.
+- **The README** now says `do_jurisdiction` is applied, and that it is
+  write-once.
+
+**Not built (optional in the brief).** A Durable Object reporting
+`state.id.jurisdiction` through branchHealth, so HQ can see what a branch
+actually runs with. `topology.ts` is unchanged.
+
+**Tests.**
+- **`cloudflare-worker/test/do_namespace_d264.test.ts`, 6 tests:**
+  - no var returns the namespace untouched, and `jurisdiction()` is never
+    called;
+  - eu, us and fedramp scope the namespace, while uk, EU, none and ch throw;
+  - the helper's list equals `branchConfig.mjs`'s;
+  - a broadcast from an `eu` branch reaches both rooms through the eu
+    sub-namespace, and HQ's is never scoped;
+  - a static scan finds every `idFromName`/`idFromString`/`newUniqueId`
+    receiver and requires it to be a `const … = doNamespace(`, with a floor of
+    six sites so it cannot pass empty;
+  - the three defaults agree.
+- **`scripts/lib/branchConfig.test.mjs`, 2 new tests:**
+  - `eu` renders the var, and `checkRendered` catches it dropped or changed;
+  - a null value renders no var, never `none`, even when HQ's own table
+    carries one.
+
+**Mutations: 7 run, 7 caught:**
+- `routes/realtime.ts`'s pipeline room skipping the helper;
+- an unknown value falling back to unrestricted;
+- the helper defaulting to `eu` when unset;
+- the renderer dropping the var;
+- the renderer writing `none`;
+- HQ's value leaking into a null branch;
+- the workflow default returning to `eu`.

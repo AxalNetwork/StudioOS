@@ -17,6 +17,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { decodeJWT } from '../auth';
 import { getSQL } from '../db';
+import { doNamespace } from '../util/doNamespace';
 
 const realtime = new Hono<{ Bindings: Env }>();
 
@@ -128,8 +129,9 @@ realtime.get('/pipeline/ws/:deal_id', async (c) => {
   if (!(await checkUpgradeRate(c.env, user.id))) return c.json({ error: 'Too many WS upgrades' }, 429);
 
   const roomName = dealId === 'overview' ? 'overview' : `deal:${dealId}`;
-  const id = c.env.PIPELINE_ROOM.idFromName(roomName);
-  const stub = c.env.PIPELINE_ROOM.get(id);
+  const rooms = doNamespace(c.env, c.env.PIPELINE_ROOM);
+  const id = rooms.idFromName(roomName);
+  const stub = rooms.get(id);
   // Forward the upgrade to the DO with auth context attached.
   return stub.fetch(buildUpgradeRequest(c, user));
 });
@@ -155,8 +157,9 @@ realtime.get('/onboarding/ws/:user_id', async (c) => {
   // is part of the pre-KYC onboarding flow itself. Admins are always exempt.
   if (!(await checkUpgradeRate(c.env, user.id))) return c.json({ error: 'Too many WS upgrades' }, 429);
 
-  const id = c.env.ONBOARDING_CHAT.idFromName(`user:${targetUserId}`);
-  const stub = c.env.ONBOARDING_CHAT.get(id);
+  const chats = doNamespace(c.env, c.env.ONBOARDING_CHAT);
+  const id = chats.idFromName(`user:${targetUserId}`);
+  const stub = chats.get(id);
   return stub.fetch(buildUpgradeRequest(c, user));
 });
 
@@ -173,8 +176,9 @@ realtime.get('/realtime/room/:kind/:id/count', async (c) => {
   else if (kind === 'onboarding') { ns = c.env.ONBOARDING_CHAT; name = `user:${id}`; }
   else return c.json({ error: 'Unknown kind' }, 400);
   if (!ns) return c.json({ error: 'Realtime disabled' }, 503);
-  const doId = ns.idFromName(name);
-  const stub = ns.get(doId);
+  const scoped = doNamespace(c.env, ns);
+  const doId = scoped.idFromName(name);
+  const stub = scoped.get(doId);
   const r = await stub.fetch('https://do/count');
   return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json' } });
 });

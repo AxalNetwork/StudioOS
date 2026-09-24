@@ -76,9 +76,12 @@ on:
         type: choice
         options: ['weur', 'eeur', 'enam', 'wnam', 'apac', 'oc', 'none']
       do_jurisdiction:
-        description: 'Durable Object jurisdiction'
+        # D264 — `none` by default, as HQ's Deploy step and its route default.
+        # The value is write-once: it becomes BRANCH_DO_JURISDICTION on the
+        # branch's first deploy, and every object is created where it says.
+        description: 'Durable Object jurisdiction (write-once)'
         required: true
-        default: 'eu'
+        default: 'none'
         type: choice
         options: ['eu', 'us', 'none']
 
