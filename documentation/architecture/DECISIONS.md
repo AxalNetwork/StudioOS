@@ -22845,6 +22845,35 @@ not this read path.
 
 **285 is still the next free migration.**
 
+## D226
+
+**The branch Programs rail printed each coverage line as two strings run
+together.** `BranchPrograms.jsx` pushed `['Cohort cycles', '12 most recent']`
+and `['Assessment games', '4']` into `coverage`, and `WorkerRail` takes
+`coverage` as `string[]`: it renders each entry inside one `<strong>`
+(`frontend/src/ui/WorkerRail.jsx`), so React printed the array's two members
+back to back — *"Cohort cycles12 most recent"* — and the explain route
+(`routes/ai.ts`), which coerces each line with `String(line)`, read
+*"Cohort cycles,12 most recent"*. D151 had just given the page its coverage
+(it was one of the three branch zones that passed none), so this is the shape
+the coverage arrived in, not a regression of an older one.
+
+**What shipped** (#750, task 366, merged as `0fed7c636`). The two pushes
+became template strings — `Cohort cycles: N most recent` and
+`Assessment games: N` — and `frontend/test/branch_rail_mount.test.mjs` gained
+*"coverage lines are strings, not arrays (D226)"*, which reads
+`BranchPrograms.jsx` through `codeOnlyJsx` from `const coverage` to
+`<BranchZone` and refuses `coverage.push([`. No worker change, no migration,
+no `api.js` method.
+
+**Recorded after the fact.** #750 merged without a DECISIONS entry. This one
+was written by D236's PR from the merged diff and re-measured rather than
+recalled: the guard passes on today's tree, and no file under `frontend/src`
+pushes an array into `coverage` (a repo-wide search for `coverage.push([`
+finds none). **The guard reads one file.** A second page that pushed a pair
+would pass it; the repo-wide search is what says none does today. Widening
+the guard is not done here.
+
 ## D227
 
 **The Integration keys console follows where a key lives. Rotate and Remove
@@ -23098,6 +23127,41 @@ row; converting them, if ever wanted, is the owner's call.
 - `node scripts/check-decision-ids.mjs` exits 0 (D1 through D229).
 
 **285 is still the next free migration.**
+
+## D230
+
+**A branch could read every branch's Analytics Engine rows the day its SQL
+credentials were set.** `aeReadable(env)` (`services/analyticsReports.ts`)
+was the whole read gate — `CLOUDFLARE_ACCOUNT_ID && CLOUDFLARE_AE_API_TOKEN`
+— and every Worker writes the one shared dataset (D105, D161). So a branch
+Worker given those two secrets passed the gate, and `aeSql` would answer its
+queries over the whole dataset, every branch's rows included. `topology.ts`
+said so in the branch's own cannot-list: *"The SQL API credentials are set on
+this Worker, so it can read every branch's rows in the shared dataset.
+Nothing structural stops that yet."*
+
+**What shipped** (#755, task 360, merged as `b24135e97`). `aeReadable`
+returns `false` first whenever `branchOf(env)` names a branch, so the read
+stays at HQ whatever a branch Worker holds. Writing is untouched: the
+`ANALYTICS` binding needs no credential. `topology.ts`'s *"Read Analytics
+Engine"* refusal now holds on every branch, and its sentence says whether the
+credentials are present and that a branch would not read the dataset either
+way. Tests: `cloudflare-worker/test/analytics-branch-readable.test.mjs` (5 —
+HQ with both credentials reads; HQ missing either does not; a branch with
+both does not; a branch with neither does not), and the topology tests in
+`topology_d209.test.ts` and `topology_h14_s14.test.mjs` re-aimed at the held
+refusal. No migration, no `api.js` method.
+
+**Why the gate is the right place.** The Worker calls the SQL API from one
+function: `analytics_engine/sql` is fetched only inside `aeSql`, which asks
+`aeReadable` first. Its other two callers are `loadActiveAccountsByBranchWeek`,
+which asks it to state its own reason before reading, and `topology.ts`,
+which describes the answer. So one predicate covers every read path, and a
+new reader that goes through `aeSql` inherits it.
+
+**Recorded after the fact.** #755 merged without a DECISIONS entry. This one
+was written by D236's PR from the merged diff and re-measured: the five tests
+pass on today's tree.
 
 ## D231
 
@@ -23437,7 +23501,105 @@ rule above replaces that reasoning; D190's entry carries a pointer here.
 
 ### VERIFIED
 
-Measured before the first push, and no further. `node scripts/check-runtime-schema-declared.mjs` exits 0: 1081 literal statements executed to a fixed point in two passes over a 1308-object fresh build, with 5 refusals and one opaque file (4 statements) on its ledger and nothing creatable left undeclared. `runtime_schema_declared_d235.test.ts` passes 20 of 20, and 16 of 16 mutations against the guard, migration 287, the ledger, `writeRouter.ts` and `package.json` were caught, as were 6 of 6 earlier mutations against the guard's command line. The two older tests this decision re-aims pass: `sub_cutoff_restores_d190.test.ts` 16 of 16 and `schema_pair_drift_d191.test.ts` 27 of 27. Not yet measured when this was written, and stated so rather than implied: mutation checks of those two re-aimed tests, a full `test:drift` on the landed tree (CI's full-suite run is the first), and migration 287 read back from production after the deploy that applies it. No migration above 284 was on `main` when this landed; 285, 286, 288 and 289 stay with the sessions they were allocated to.
+Measured before the first push. `node scripts/check-runtime-schema-declared.mjs` exits 0: 1081 literal statements executed to a fixed point in two passes over a 1308-object fresh build, with 5 refusals and one opaque file (4 statements) on its ledger and nothing creatable left undeclared. `runtime_schema_declared_d235.test.ts` passes 20 of 20, and 16 of 16 mutations against the guard, migration 287, the ledger, `writeRouter.ts` and `package.json` were caught, as were 6 of 6 earlier mutations against the guard's command line. The two older tests this decision re-aims pass: `sub_cutoff_restores_d190.test.ts` 16 of 16 and `schema_pair_drift_d191.test.ts` 27 of 27. No migration above 284 was on `main` when this landed; 285, 286, 288 and 289 stayed with the sessions they were allocated to.
+
+**Measured after it landed**, and recorded by D236's PR, which owed these three. This entry first said they were not yet measured, and said so rather than implied it.
+
+- **Migration 287 is in production.** Read-only against `studioos-db`, schema and ledger only: `schema_migrations` records `287_runtime_schema_declared.sql` applied **2026-09-24 15:13:15**. Deploy run 36018453630 applied it at step 7 (*Apply pending D1 migrations*, 15:13:04 → 15:13:15), before step 8 (*Deploy*) started at 15:13:15, and step 9 (*Repo can still rebuild production's schema*) passed at 15:13:28 → 15:13:30 — the check that had failed on every `main` deploy since #757.
+- **The full suite passed on the landed tree.** CI run 36018453693 on `main` concluded `success`, `test:drift (full suite)` included, so the new guard is green in CI and not only locally.
+- **The two re-aimed tests were mutation-checked: 8 of 8 caught**, each restored byte-identical. Against D190's test: 287 not declaring `referral_attributions`; 287 not declaring `admin_publications`; the build "without 287" applying 287 anyway (every test that builds one fails); `ensureAttributionSchema` creating the wrong table; `admin_publications`' bootstrap creating the wrong table. Against D191's: the guard harvesting `sql/historical/`; 287 not declaring `spinout_moderation_cases`; 287's copy of it drifting a column from the runtime statement.
+
+One of the eight was caught by a different line than the one it aimed at, and that line's message was wrong. With `admin_publications`' bootstrap broken, the list reads the table the bootstrap should have made and answers 500 *"no such table"*, so the status assertion fires before the `has()` one — and its message called any non-200 "a gate or a routing miss". D236's PR corrected the message to name that 500 as the bootstrap not healing. The assertion was right; its account of its own failure was not.
+
+## D236 — the admin drawer's authenticator line reads the definition sign-in uses
+
+**The account drawer told HQ that every account had no authenticator.**
+`GET /api/admin/users/:user_id/profile` (`routes/admin.ts`) returned
+`totp_enabled: false` under the comment *"placeholder — wire to actual TOTP
+table when added"*, and the drawer's KYC tab (`AdminPage.jsx`) printed it as
+*"TOTP enabled: No"* for every account — a false claim about a security
+property, on the screen HQ supervises accounts from. The table was added long
+ago: enrolment is an `auth_totp` row, and `/login` asks
+`hasTotpConfigured(env, userId)` (`services/authTotp.ts`), which also counts a
+legacy base32 secret still parked in `users.password_hash`. The "Yes" branch
+the placeholder could never reach claimed more than is true, too: *"Yes
+(required at login)"* — a magic link signs an enrolled account in at
+`assurance_level = 'email_only'`, so the factor is not required on every
+route in.
+
+**What shipped.**
+
+- The route calls `hasTotpConfigured` inside its own `try`. An answer is
+  `true` or `false`. A failed read is `totp_enabled: null` with
+  `totp_reason` — *"Whether an authenticator is enrolled is unknown, which is
+  not the same as "No"."* — and the rest of the record still loads. The
+  helper is the one sign-in asks, so the drawer and `/login` cannot disagree
+  about the same account.
+- The drawer renders an exported `TotpEnrolmentField`: *Yes — an
+  authenticator app is enrolled*, *No — no authenticator app is enrolled*,
+  or `Unreadable` carrying the server's reason. Only the two booleans are
+  answers (`=== true`, `=== false`); `null`, an absent field and any
+  stand-in value (`0`, `'false'`) render Unreadable. *"(required at login)"*
+  is gone.
+- No migration: **289** stays reserved for this session and unused. No new
+  `/api/*` method, so `check-api-drift` has nothing to say. `frontend/src`
+  moves, so `docs/` is rebuilt.
+
+**A missing `auth_totp` is not the unreadable case.** `hasTotpConfigured`
+runs its bootstrap first, which creates `auth_totp` when it is absent — so on
+a database without the table the honest answer is "No", and it is one: nobody
+can have enrolled in a table that did not exist, and the legacy half is still
+read. The unreadable case is a read that fails, which the worker test
+produces with an `auth_totp` of the wrong shape.
+
+**Scope, stated because the drawer is another session's section this wave.**
+The KYC tab sits in the account drawer, which the wave allocates to Session 2;
+task 325 was allocated to Session 1. The edit is one line in that tab plus a
+component at the file's end, and touches nothing Session 2's open work does.
+The dev FastAPI mirror (`backend/app/api/routes/admin.py`) still returns
+`"totp_enabled": True` for every account. It is never deployed and is left
+alone, recorded here so it is not mistaken for the production shape.
+
+### VERIFIED
+
+- Worker: `cloudflare-worker/test/admin_profile_totp_d236.test.ts`, 6 tests on
+  real `node:sqlite` over `schema_baseline.sql` plus every post-cutoff
+  migration: enrolled → `true`; never enrolled → `false`; a legacy base32
+  secret → `true`, with the secret left unmigrated by the read; the drawer
+  equals `hasTotpConfigured` for all three; an unreadable store → `null` with
+  its reason while the record still loads; and a source guard against any
+  literal `totp_enabled` answer.
+- Frontend: `frontend/test/admin_profile_totp_d236.test.mjs`, 7 tests
+  rendering `TotpEnrolmentField` in every state — `true`, `false`, `null`
+  with the server's reason, an absent field (`{}`, `undefined`, `null`), and
+  six non-boolean stand-ins — and holding the KYC tab's mount and the dropped
+  claim as source.
+- **10 mutations, 10 caught**, each anchor asserted unique first and each
+  file restored byte-identical: the payload hard-coding `false` again; the
+  catch answering `false`; no `try`, so a failed read takes the record down;
+  a one-table check that misses the legacy secret; the reason dropped from
+  the payload; a non-boolean rendering No; a truthy stand-in rendering Yes;
+  the server's reason not passed through; *"(required at login)"* restored;
+  the tab deciding the line inline again.
+- `npm run test:drift` **exit 0**, read as the exit code from a redirected
+  log, on the tree that lands (rebased onto `884ba9993`, #777): frontend
+  **3202**, worker **4223** (4220 pass plus the same 3 pre-existing
+  environment-gated skips), retention **48**, zero `not ok`. All thirteen
+  D236 tests are confirmed in the log **by name**, not inferred from the
+  count.
+- **One existing guard was re-aimed, not loosened.**
+  `frontend/test/admin_user_search_d128.test.mjs` pinned the whole line
+  `import { Unrecorded } from '../ui'`, so the first drift run failed the day
+  this page took a second primitive (`Unreadable`) from the same module —
+  while the property the assertion's message names still held. It now pins
+  that property in two halves: `Unrecorded` is imported from `../ui` among
+  whatever else the page takes from it, and it is never declared in the page.
+  **2 mutations, 2 caught**: dropping `Unrecorded` from the import, and
+  re-declaring it locally beside the import. The anchor was asserted unique
+  first and the page restored byte-identical after each.
+- This PR also carries D235's three owed measurements (recorded in D235's
+  own VERIFIED section) and the two entries #750 and #755 shipped without
+  (D226, D230).
 
 ## D237
 
@@ -24717,6 +24879,59 @@ before the pre-push `git diff --name-only origin/main origin/<branch>` had
 been read as zero; it listed 15 files. They were all main moving on (#776,
 merged after the restart); `03b22044` was byte-identical to #772's squash on
 main, so nothing was lost. The check is now read before the push, not after.
+
+## D252
+
+**Tasks 351 and 333: the deploy's upload keeps the generation production is serving.**
+
+**What went wrong.** The deploy rebuilds `docs/` from source and uploads that
+build (CLAUDE.md fact 4). With no ledger, which is every CI run, the build
+seeds retention with the *committed shells'* generation (D183). But production
+serves the generation the **last deploy** uploaded. That is not necessarily
+the committed one, because `docs/` is committed by hand. So a client holding
+the shell production served a minute ago could ask for hashes the new upload
+had dropped. Separately (task 333), when a ledger *does* exist, the seed never
+runs at all. A window full of other rebuilds then pushed the seeded generation
+out, so it was computed and then thrown away.
+
+**What changed.**
+- **The rebuild stays.** In the production deploy only, the build step passes
+  `--seed-committed-tree` (`SEED_COMMITTED_TREE_FLAG`). `seedFilesFor` then
+  returns `null`, and the planner falls back to `prevFiles`: every committed
+  asset, which holds every generation still committed.
+- **It is a flag, never `CI`.** Every CI job and the PR preview set `CI`, and
+  none of them uploads to production. A test sets `CI=true` without the flag
+  and still expects the generation.
+- **An explicit seed joins the kept set after the window trim.** Only a
+  non-empty `seedFiles` passed by the caller does. The `prevFiles` fallback
+  never joins it, because keeping the whole tree on every build is D183's
+  high-water mark.
+
+**Why D183's growth guard still holds.** The deploy never commits its build
+back, so seeding the committed tree there cannot grow `docs/assets`. Local and
+CI builds still seed the bounded generation, and `check-docs-assets-closure`'s
+1800-file ceiling is untouched.
+
+**The alternative, recorded and not built: seed from production's shells.**
+Fetching the live shells from `axal.vc` and walking their chunk graph would
+name *exactly* the serving generation. It was not built for three reasons:
+- it makes the build depend on the network and on production being up;
+- an unreachable host needs a fallback anyway, which is this one;
+- the committed tree already contains what production serves whenever `docs/`
+  was committed with the source it deployed.
+
+**Tests (`npm run test:retention`, 48 → 52).**
+- A stale ledger plus `seedFiles` PREV keeps and restores all of PREV.
+- No seed plus a stale ledger keeps only the window, as before.
+- The deploy flag seeds the committed tree, and its absence does not, even under `CI`.
+- Only `cloudflare-worker-deploy.yml` passes the flag.
+
+**Mutations: 3 run, 3 caught.** Each exited non-zero with a named `not ok` and
+passed again after a sha256-checked restore:
+- dropping the seed union;
+- unioning the `prevFiles` fallback (caught by three existing window tests
+  as well as the new one);
+- keying the switch on `CI`.
 
 ## D254
 

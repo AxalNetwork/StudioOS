@@ -12,6 +12,7 @@ import {
   type WriteMap,
 } from './admin.conversations.helpers';
 import { runTotpRemediation } from '../services/totpRemediation';
+import { hasTotpConfigured } from '../services/authTotp';
 import { assignFounderPublicId, assignPartnerPublicId, ensurePublicIdColumns } from '../services/publicIds';
 // Task #9 follow-up — lets the generic role-change endpoint move a user
 // INTO the 'exploring' holding state (e.g. demoting a partner back for
@@ -388,6 +389,29 @@ admin.get('/users/:user_id/profile', async (c) => {
     if (pid) userRow.partner_public_id = pid;
   }
 
+  // D236 — THE AUTHENTICATOR LINE IS READ FROM THE DEFINITION SIGN-IN USES.
+  // `totp_enabled` was a hard-coded `false` under the comment "placeholder —
+  // wire to actual TOTP table when added", so the drawer told HQ that every
+  // account had no second factor: a false claim about a security property, on
+  // the screen HQ supervises accounts from. The table was added long ago, and
+  // `hasTotpConfigured` is what `/login` asks (an `auth_totp` row, or a legacy
+  // base32 secret still waiting to migrate), so the drawer and sign-in cannot
+  // disagree about the same account.
+  //
+  // A FAILED READ IS NOT "NO". The helper throws when either of its reads
+  // fails, and it is caught here on its own so the rest of the record still
+  // loads: `totp_enabled` is then null with the reason beside it, and the
+  // drawer says the answer is unknown instead of printing a verdict that
+  // nothing measured.
+  let totpEnabled: boolean | null = null;
+  let totpReason: string | null = null;
+  try {
+    totpEnabled = await hasTotpConfigured(c.env, userId);
+  } catch (e: any) {
+    console.error('[admin/profile] authenticator enrolment read failed:', e?.message);
+    totpReason = 'Whether an authenticator is enrolled is unknown, which is not the same as "No".';
+  }
+
   // Audit trail — admin viewed this profile. Epic 11 — actor stores
   // hashEmail(adminUser.email), never the plaintext, to keep PII out of
   // activity_logs. user_id is the join key for support workflows.
@@ -409,7 +433,8 @@ admin.get('/users/:user_id/profile', async (c) => {
       submitted_at: userRow.kyc_submitted_at || null,
       reviewed_at: userRow.kyc_reviewed_at || null,
       rejection_reason: userRow.kyc_rejection_reason || null,
-      totp_enabled: false, // placeholder — wire to actual TOTP table when added
+      totp_enabled: totpEnabled,
+      totp_reason: totpReason,
       id_uploaded: userRow.kyc_status && userRow.kyc_status !== 'not_started',
     },
     timeline,

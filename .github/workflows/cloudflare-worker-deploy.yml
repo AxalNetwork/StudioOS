@@ -58,8 +58,11 @@ jobs:
       - name: Install Worker dependencies
         run: npm ci --prefix cloudflare-worker
 
+      # --seed-committed-tree (D252): keep every committed asset, not only the
+      # committed shells' generation, because production serves the LAST
+      # deploy's build. Only this workflow passes it; CI and previews do not.
       - name: Build production SPA
-        run: npm run build
+        run: npm run build -- --seed-committed-tree
 
       # A failure here fails the deploy: the new worker must never start
       # against an old schema. The runner refuses a ledger it cannot read and
