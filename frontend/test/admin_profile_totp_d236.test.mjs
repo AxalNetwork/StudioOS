@@ -46,9 +46,10 @@ const render = (kyc) => renderToStaticMarkup(React.createElement(TotpEnrolmentFi
 const YES = 'Yes — an authenticator app is enrolled';
 const NO = 'No — no authenticator app is enrolled';
 const ALERT = 'role="alert"';
-/** The worker's reason, as `admin.ts` writes it and React escapes it. */
-const SERVER_REASON = 'Whether an authenticator is enrolled is unknown, which is not the same as "No".';
-const SERVER_REASON_HTML = SERVER_REASON.replaceAll('"', '&quot;');
+/** The worker's reason, as `admin.ts` writes it. React writes the quotes as `&quot;`. */
+const stem = 'Whether an authenticator is enrolled is unknown, which is not the same as ';
+const SERVER_REASON = `${stem}"No".`;
+const SERVER_REASON_HTML = `${stem}&quot;No&quot;.`;
 
 test('D236: an enrolled account reads as enrolled, and as nothing else', () => {
   const html = render({ totp_enabled: true, totp_reason: null });

@@ -5908,14 +5908,27 @@ function PersonasPanel() {
   };
   useEffect(() => { load(); }, []);
 
-  const retag = async (userId, personaId) => {
+  const retag = async (userId, personaId, selectEl) => {
     if (!personaId) return;
+    // D255 — the row's own persona is what the select must fall back to,
+    // whether the operator cancels or the write fails; it is a live DOM
+    // reset (the select is uncontrolled — `defaultValue`, not `value`) so
+    // a cancelled or failed re-tag never leaves the row showing a persona
+    // nothing actually saved.
+    const restore = () => { if (selectEl) selectEl.value = ''; };
+    const row = rows.find((r) => r.user_id === userId);
+    const label = PERSONA_TAXONOMY.find((p) => p.id === personaId)?.label || personaId;
+    if (!confirm(`Re-tag ${row?.email || row?.name || `user ${userId}`} as ${label}?`)) {
+      restore();
+      return;
+    }
     setSavingId(userId);
     try {
       await api.retagPersonaAdmin(userId, personaId);
       await load();
     } catch (e) {
       alert(e.message || 'Re-tag failed');
+      restore();
     } finally { setSavingId(null); }
   };
 
@@ -5983,7 +5996,7 @@ function PersonasPanel() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <select disabled={savingId === r.user_id} defaultValue=""
-                      onChange={(e) => retag(r.user_id, e.target.value)}
+                      onChange={(e) => retag(r.user_id, e.target.value, e.target)}
                       className="text-xs px-2 py-1.5 border border-gray-200 rounded-md bg-white dark:border-gray-800 dark:bg-gray-900">
                       <option value="">{savingId === r.user_id ? 'Saving…' : 'Re-tag as…'}</option>
                       {PERSONA_TAXONOMY.map((p) => (

@@ -24788,6 +24788,98 @@ deterministic test, where the clock is handed a due row that is no longer
 'scheduled', was added for that reason. It catches the mutation on both
 consoles.
 
+## D251
+
+**The production deploy step retries Cloudflare error 10013, and nothing else
+(task 339).** `cloudflare-worker-deploy.yml` ran
+`npx --no-install wrangler deploy --config ../wrangler.toml --env production`
+once. On D202's merge, run 35852624173 failed that step with error 10013 after
+it had already changed things, and main was left half-deployed.
+
+**No migration. No worker or frontend source change.**
+
+### WHAT A PARTIAL DEPLOY LOOKS LIKE (measured from that run's log)
+
+Wrangler uploaded the Worker (`Uploaded studioos (8.59 sec)`) and printed
+`Deployed studioos triggers`. It had applied the custom domains, all six cron
+schedules, the queue producer and the job-queue consumer. Then it failed:
+
+```
+✘ [ERROR] Trigger configuration for "studioos" was only partially updated:
+  Queue consumers:
+    - A request to the Cloudflare API (/accounts/…/queues/…/consumers/…) failed.
+      - An unknown error has occurred. … [code: 10013]
+  Successful trigger changes were not rolled back.
+```
+
+So the new code was live, but the DLQ queue had no consumer attached, and step 9
+was skipped. Main stayed that way until D203's merge re-ran every step.
+
+### WHY A RETRY IS SAFE
+
+`wrangler deploy` converges on the config it is given. A second run re-uploads
+the same bundle and re-applies the same triggers, and what already succeeded is
+a no-op. The migrations step finished before this step began, so a retry never
+reaches the schema.
+
+### WHAT LANDS
+
+The step is a loop:
+
+- **Up to three attempts, 15 seconds apart.**
+- **`set -o pipefail`.** The output is piped through `tee deploy.log`, and
+  without pipefail a failed deploy would take `tee`'s exit status (0) and turn
+  the step green.
+- **Only 10013 is retried.** A failed attempt is retried only if its log
+  contains `[code: 10013]`, the exact text measured above. Any other failure
+  exits at once. A build or configuration error does not change on a second
+  try, and retrying it only buries the first message under two more. A code
+  joins the pattern only with a run that shows it.
+
+This is `pr-preview.yml`'s loop, narrowed. The preview retries every failure,
+because its known transient (#423) has no code of its own.
+
+**One line still runs `npx … wrangler deploy`,** which is what
+`topology_d209.test.ts` holds, so the topology page's "who deploys HQ" stays
+true. `migrate_d1_plan.test.ts` pinned the old one-line `run:`. It now matches
+the loop's `if npx --no-install wrangler deploy --config ../wrangler.toml --env
+production` line. It still searches code lines only, not the header's prose,
+and it still asserts the migrations come first. Only the shape of the line it
+searches for changed.
+
+### HOW IT IS HELD
+
+`frontend/test/deploy_retry_d251.test.mjs` (new, 5 tests) **executes** the
+step. It lifts the `run: |` script out of the workflow and runs it with bash,
+with a fake `npx` and a no-op `sleep` first on PATH. The fake prints what each
+attempt would print and exits the way it would. The tests:
+
+- two 10013s then a success is green, after three calls;
+- any other error fails after one call;
+- three 10013s fail after exactly three;
+- a failure with no retryable code is not turned green by `tee`;
+- read as text: the step comes after the migrations, it is the one `npx`
+  deploy line, and its filter is 10013 only.
+
+Four mutations were each run both ways: the code was broken, a named test
+failed with a non-zero exit, the file was restored from a sha256-checked
+snapshot, and the tests passed again.
+
+1. `pipefail` removed.
+2. Every error retried.
+3. The loop dropped.
+4. The deploy step moved before the migrations step. This was caught here and
+   by `migrate_d1_plan`.
+
+None escaped.
+
+**A process slip, recorded.** When this branch was restarted from main after
+#772 merged, the remote tip (`03b22044`) was replaced by force-with-lease
+before the pre-push `git diff --name-only origin/main origin/<branch>` had
+been read as zero; it listed 15 files. They were all main moving on (#776,
+merged after the restart); `03b22044` was byte-identical to #772's squash on
+main, so nothing was lost. The check is now read before the push, not after.
+
 ## D254
 
 **The persona taxonomy exists four times, and two of the three canonical
@@ -24874,3 +24966,109 @@ reads nav from it.
 - Both typechecks exit 0 (`cd cloudflare-worker && npx tsc --noEmit`;
   `npx tsc --noEmit -p frontend/tsconfig.json`).
 - `node scripts/check-decision-ids.mjs` exits 0 (D1 through D254).
+
+## D255
+
+**A persona retag had no confirm, no target check, and its audit row did
+not name its subject.** The UI is AdminPage.jsx's `PersonasPanel`: the
+row's `<select>` fired `retag(r.user_id, e.target.value)` straight from
+`onChange`, with no confirmation, though the same file guards a dozen other
+acts with `confirm(…)`. The route, `POST
+/api/personas/admin/:user_id/retag` (`routes/personas.ts`): `user_personas`
+has no foreign key, so nothing checked the target existed before writing;
+it made two separate D1 writes instead of one batch; it never read the
+previous persona, so nothing recorded what a retag changed FROM; and its
+audit row was `INSERT INTO activity_logs (action, details, actor,
+user_id)` with `user_id` holding the ADMIN's id — the target reachable
+only inside free-text `details`, unqueryable by who was retagged.
+`entity_type`/`entity_id`/`metadata` already exist on `activity_logs`
+(schema_baseline.sql) and were unused here.
+
+**What shipped.**
+
+- The `<select>` now confirms, naming the user and the new persona, on the
+  file's own `if (!confirm(...)) return;` idiom. It is uncontrolled
+  (`defaultValue`, not `value`), so a cancelled confirm alone would not
+  un-pick the option the browser already changed to; a `restore()` helper
+  resets `selectEl.value` on both a cancel and a failed write, so neither
+  leaves the row showing a persona nothing actually saved.
+- The route reads the target from `users` first; an unknown id answers 404
+  and writes nothing.
+- It reads the CURRENT primary persona before writing; a retag to the
+  persona already stored is a no-op — `{ ok: true, unchanged: true }` — and
+  writes nothing.
+- The demote-then-insert is one `db.batch(...)`, not two round-trips.
+- The audit row now carries `entity_type = 'user'`, `entity_id =
+  <target>`, and `metadata = { from, to }` — queryable by subject, and
+  honest about what changed.
+- Also fed through `logAdminAction` (`services/adminAudit.ts`, D159) with
+  `target_user_id` — never `user_id`, which `targetUserIdOf`'s guard
+  refuses on purpose — so Security's governance feed names who was
+  retagged. Imported with a dynamic `import()`, the same way
+  `routes/admin.ts` already does for the same helper: `adminAudit.ts`
+  imports `ensureAdminAuditLogTable` from `routes/admin.ts`, and a static
+  import back from a route module risks the cycle that pattern exists to
+  avoid.
+- **An admin target takes the same bar D132 set for toggle-active**: a peer
+  admin cannot re-tag another admin's persona, 403 `super_admin_required`;
+  a super admin can. Judged worth the one check — re-tagging is small next
+  to deactivating or demoting, but it is still an act on another admin's
+  account, and the existing bar was one `isSuperAdmin` call away.
+
+**Two dead exports, filed with this task, in their own commit.**
+
+- `sendPersonaInvite` (`services/email/personaInviteSend.ts`) had no
+  importer anywhere in the tree. Its only consumer, `renderInvite`, is
+  imported directly from `personaInviteRender.ts` by
+  `persona_invites.test.ts` and by `personaInviteSend.ts` itself — never
+  through the send wrapper. So persona invites are rendered and tested, and
+  nothing sends them: no other route wires Gmail delivery for them. The
+  file is deleted, its README row removed
+  (`services/email/README.md`), and this is the fact filed rather than a
+  bug fixed — wiring a send path is a decision for whoever owns that
+  console next, not implied by deleting dead code.
+- `api.adminAssessment.rescore` (`frontend/src/lib/api.js`) had no caller
+  in `frontend/src`. Removed. The worker's own `POST
+  /sessions/:id/rescore` route (`admin_assessment.ts`) is unaffected —
+  `check-api-drift` reads api.js → worker only, so an orphaned worker route
+  was never its concern either way. The comment above `adminAssessment`
+  that counted "the six reads, preview and rescore" no longer names a
+  method that does not exist. A second stale mention,
+  `BranchPrograms.jsx`'s comment on the same route, is Session 5's file
+  and is not touched here — filed for whoever next edits that file, though
+  its existing wording ("no console surfaces" it) reads as already
+  accurate post-fix, not stale.
+
+**Left alone.** The FastAPI mirror (`backend/app/api/routes/personas.py`)
+has the same shape of bug in its own `retag` handler; it is dev-only and
+out of scope for this task, per the wave's own instruction to leave it
+unless already touched for D254 (it was read, not edited, there).
+
+**No migration.** `entity_type`/`entity_id`/`metadata` already exist on
+`activity_logs`. `frontend/src` changed, so `docs/` was rebuilt.
+
+### VERIFIED
+
+- `cloudflare-worker/test/persona_retag_d255.test.ts`: **4** tests against
+  the real Hono route and real `node:sqlite`, exit 0. An unknown target is
+  refused 404 and writes nothing anywhere. A retag writes the persona and
+  exactly one `persona_retagged` audit row naming the target, with `from`
+  and `to`. A retag to the already-stored persona writes nothing. A peer
+  admin is refused 403 `super_admin_required` against an admin target; a
+  super admin succeeds.
+- `frontend/test/persona_retag_confirm_d255.test.mjs`: **5** tests, exit
+  0. `retag()` calls `confirm()` before the write. It defines a `restore()`
+  helper that resets `selectEl.value`. A cancelled confirm calls `restore()`
+  before its early return. A failed write also calls `restore()`. The
+  `<select>`'s `onChange` passes itself (`e.target`) to `retag()`.
+- Five mutations, each restored byte-identical from a saved copy: firing
+  the retag without the confirm block (3 of 5 frontend tests fail); the
+  route trusting an unvalidated target (2 of 4 worker tests fail); writing
+  the admin's id as the audit subject instead of the target's (1 of 4
+  fails); skipping the previous-persona read so a no-op retag both writes
+  and cannot report `from` (2 of 4 fail). All restored, all tests pass
+  again.
+- `cd cloudflare-worker && npx tsc --noEmit` exits 0.
+- `node scripts/check-api-drift.mjs` and `node scripts/check-folder-docs.mjs`
+  both exit 0.
+- `node scripts/check-decision-ids.mjs` exits 0 (D1 through D255).

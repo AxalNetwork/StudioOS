@@ -62,7 +62,7 @@ const ENROLLED = 10;  // an auth_totp row
 const PLAIN = 11;     // no authenticator of any kind
 const LEGACY = 12;    // a base32 secret still in users.password_hash
 /** 32 characters of the base32 alphabet — the shape `BASE32_RE` accepts. */
-const LEGACY_SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
+const LEGACY_BASE32 = 'AB'.repeat(16);
 
 /**
  * `app.onError` lives in index.ts and is not in the chain for a directly
@@ -89,7 +89,7 @@ function freshDb() {
   user.run(ENROLLED, 'enrolled@example.com', 'Ed', 'founder');
   user.run(PLAIN, 'plain@example.com', 'Pia', 'founder');
   user.run(LEGACY, 'legacy@example.com', 'Lee', 'founder');
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(LEGACY_SECRET, LEGACY);
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(LEGACY_BASE32, LEGACY);
   db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(HOLDER);
   // The presence of the row is the whole fact; the ciphertext is never read
   // by the presence check, so any non-empty value stands in for it.
@@ -144,7 +144,7 @@ test('D236: a legacy base32 secret counts, as it does at sign-in', async () => {
   assert.equal(body.kyc.totp_enabled, true,
     'the drawer disagrees with sign-in about an account whose secret has not migrated yet');
   const stillLegacy = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(LEGACY) as any;
-  assert.equal(stillLegacy.password_hash, LEGACY_SECRET,
+  assert.equal(stillLegacy.password_hash, LEGACY_BASE32,
     'reading the drawer migrated the secret — only sign-in may do that');
 });
 
