@@ -2125,7 +2125,15 @@ export const api = {
     method: 'PATCH',
     ...(overrideReason ? { body: JSON.stringify({ override_reason: overrideReason }) } : {}),
   }),
-  adminToggleActive: (userId) => request(`/admin/users/${userId}/toggle-active`, { method: 'PATCH' }),
+  // D247 — an ADMIN target needs a reason of at least 10 characters (and the
+  // route asks for an authenticator-minted, freshly stepped-up session, which
+  // request() already handles by prompting for a step-up and retrying). A
+  // non-admin target needs none, so no reason means NO BODY, the shape
+  // adminUpdateRole above uses for the same reason.
+  adminToggleActive: (userId, reason) => request(`/admin/users/${userId}/toggle-active`, {
+    method: 'PATCH',
+    ...(reason ? { body: JSON.stringify({ reason }) } : {}),
+  }),
   // Set per-user access level. `level` is 'limited' (browse-only, no signing
   // until KYC) or null (revoke). Full access is granted via kycAdminApprove.
   adminSetAccessLevel: (userId, level) =>

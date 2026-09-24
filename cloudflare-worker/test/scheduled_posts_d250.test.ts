@@ -88,14 +88,14 @@ function stubProviders() {
   globalThis.fetch = (async (input: any) => {
     const url = String(input);
     const json = (o: unknown) => new Response(JSON.stringify(o), { status: 200, headers: { 'content-type': 'application/json' } });
-    if (/api\.telegram\.org\/bot[^/]+\/send(Message|Photo|Document)/.test(url)) {
+    if (/^https:\/\/api\.telegram\.org\/bot[^/]+\/send(?:Message|Photo|Document)$/.test(url)) {
       sends.push('telegram'); n += 1;
       return json({ ok: true, result: { message_id: n, chat: { id: -100123 } } });
     }
-    if (/api\.telegram\.org\/bot[^/]+\/getChat/.test(url)) {
+    if (/^https:\/\/api\.telegram\.org\/bot[^/]+\/getChat$/.test(url)) {
       return json({ ok: true, result: { id: -100123, type: 'channel', username: 'axalhq' } });
     }
-    if (/api\.twitter\.com\/2\/tweets/.test(url)) {
+    if (/^https:\/\/api\.twitter\.com\/2\/tweets$/.test(url)) {
       sends.push('x'); n += 1;
       return json({ data: { id: `t${n}`, text: 'x' } });
     }

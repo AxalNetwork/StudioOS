@@ -707,8 +707,19 @@ export default function AdminPage({ onImpersonate, section = null }) {
     } catch (e) { alert(e.message || 'The support session could not be started'); }
     finally { setSupportBusy(false); }
   };
-  const handleToggleActive = async (userId) => {
-    try { await api.adminToggleActive(userId); loadAll(); } catch (e) { alert(e.message); }
+  // D247 — an administrator's account takes a typed reason, the way Demote
+  // asks for one on the licence's Administrators tab; anyone else's is one
+  // click, as before. The route also asks for a fresh step-up, which request()
+  // prompts for and retries.
+  const handleToggleActive = async (user) => {
+    let reason;
+    if (user.role === 'admin') {
+      reason = window.prompt(
+        `Why is this administrator account being ${user.is_active ? 'closed' : 're-opened'}? At least 10 characters, and it is recorded.`,
+      );
+      if (!reason) return;
+    }
+    try { await api.adminToggleActive(user.id, reason); loadAll(); } catch (e) { alert(e.message); }
   };
   const handleGrantFullAccess = async (user) => {
     const ok = window.confirm(
@@ -1040,7 +1051,7 @@ export default function AdminPage({ onImpersonate, section = null }) {
                                   title="Login as this user">
                                   <LogIn size={12} /> View As
                                 </button>
-                                <button onClick={() => handleToggleActive(u.id)}
+                                <button onClick={() => handleToggleActive(u)}
                                   className={`px-2.5 py-1.5 text-xs rounded-lg font-medium transition-colors ${
                                     u.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'
                                   }`}>
@@ -1328,7 +1339,7 @@ export default function AdminPage({ onImpersonate, section = null }) {
           // D221 — the drawer follows the row's rule: where the server can
           // only refuse, it is handed no handler and draws no button.
           onImpersonate={drawsAccountControls(openUser, viewer) ? () => { handleImpersonate(openUser); setOpenUser(null); } : null}
-          onToggleActive={drawsAccountControls(openUser, viewer) ? () => { handleToggleActive(openUser.id); setOpenUser(null); } : null}
+          onToggleActive={drawsAccountControls(openUser, viewer) ? () => { handleToggleActive(openUser); setOpenUser(null); } : null}
         />
       )}
     </div>
