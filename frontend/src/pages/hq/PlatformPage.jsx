@@ -52,6 +52,7 @@ import { reportError } from '../../lib/log';
 import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import { SWITCH_TONE, setByLabel, operatorLine } from '../../lib/platformSwitches';
 import { liveChip, residencyLine } from '../../lib/deployTimeline';
+import { ConsoleLinkBody, CONSOLE_LINK, CONSOLE_TILE } from './ConsoleLink';
 
 // Re-exported, not redeclared: Platform → Switches draws the same tones, and
 // the list lives once in lib/platformSwitches.js (D203).
@@ -443,22 +444,10 @@ export function SwitchList({ switches }) {
 
 /* ── H16 (D213) · the four consoles ─────────────────────────────────────── */
 
-/**
- * The link each panel ends in. ONE per panel and a literal `to` at each call
- * site, so the reachability walk counts it and it stands whether or not the
- * panel's own block could be read — the console is where you would go to find
- * out. It is a link and never a button: this page holds no handler.
- */
-function ConsoleLinkBody({ title, note }) {
-  return (
-    <>
-      <div className="text-[12.5px] font-bold text-axal-ink dark:text-white">{title} →</div>
-      <div className="mt-0.5 text-[11px] leading-relaxed text-axal-faint">{note}</div>
-    </>
-  );
-}
-const CONSOLE_TILE = 'block rounded-xl border border-axal-hairline bg-axal-ground px-3 py-2 hover:border-axal-violet dark:hover:border-violet-700';
-const CONSOLE_LINK = `mt-3 ${CONSOLE_TILE}`;
+// Each panel ends in ONE link, with a literal `to` at its call site so the
+// reachability walk counts it and it stands whether or not the panel's own
+// block could be read — the console is where you would go to find out. The
+// tile and its text are ConsoleLink.jsx's, shared with Content (D214).
 
 /**
  * The console's own names for the managed providers (AdminPage's

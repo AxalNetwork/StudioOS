@@ -4,9 +4,13 @@
  * Mirrors ensureTeamMembersSchema(): migration 075 is the canonical
  * production apply path; development and preview retain the lazy fallback.
  *
- * Also exports the canonical 12-axis SKILL_CATALOG that drives both
- * the admin profile editor (multi-select) and the SkillsSpider radar
- * on the Spin-Out deck's Mentors & Network slide.
+ * Also exports the canonical 12-axis SKILL_CATALOG that drives the admin
+ * profile editor (multi-select) and the deck's skill-coverage figures
+ * (`mentor_network.skill_coverage`, services/decks/axalSpinoutDemoDay.ts).
+ * No "SkillsSpider" component exists in the SPA and no slide draws that
+ * coverage; what a slide draws of this roster is the Team & Network advisor
+ * block. This comment named the spider and a Mentors & Network slide until
+ * D214 measured neither.
  */
 import type { Env } from '../types';
 import { bindingKey } from '../util/schemaBootstrap';

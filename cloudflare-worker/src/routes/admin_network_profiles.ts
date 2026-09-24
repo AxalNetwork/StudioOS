@@ -11,7 +11,10 @@
  *   PUT    /:id                 — partial update (name, kind, role,
  *                                 bio, linkedin_url, skills,
  *                                 display_order, is_active)
- *   DELETE /:id                 — hard delete (also removes R2 photo)
+ *   DELETE /:id                 — archive: sets is_active = 0 and keeps
+ *                                 the row and its R2 photo, so re-activating
+ *                                 is lossless (the handler below says why;
+ *                                 this line said "hard delete" until D214)
  *   POST   /:id/photo           — upload square photo (data URI body)
  *   POST   /reorder             — { order: [id, ...] }
  *

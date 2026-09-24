@@ -21803,6 +21803,340 @@ No migration, so there is nothing to read back from production D1.
 
 **285 is still the next free migration, and D214 the next decision.**
 
+## D214
+
+**Canvases H18 and H19 light the Content row, and the changelog says they
+retire `/admin/assessment` authoring, the Personas tab, `/admin/publications`
+and `/admin/network-profiles`. Nothing retires, so Content does not become
+those consoles: its pipeline becomes H19's six-lane board, built from the same
+two reads the page already made, and it gains three read-only panels —
+Assessment Studio, the Personas taxonomy and the Advisors & Partners deck
+roster — each read from the store its console writes, each in its own state,
+each ending in one literal link to that console. Measuring what those stores
+hold turned up a broken heading on every Demo Day deck built from live data,
+and five sentences on shipped screens and in comments that were not so; each is
+corrected where it was said.**
+
+#316, #382–#384. **No migration**, so **285 is still free**. **No new route and
+no new `api.js` method**: the four blocks ride `GET /api/admin/content/summary`,
+D202's and D213's precedent, so `check-api-drift` has nothing to say.
+`frontend/src` changes, so `docs/` is rebuilt. **Nothing retires.**
+
+### WHAT WAS WRONG
+
+1. **Every Demo Day deck built from live data printed "ADVISORS & ADVISORS".**
+   `fb36dd5fe` renamed the mentor role to advisor "across all layers", which
+   turned "ADVISORS & MENTORS" into a repeated word in the worker
+   (`spinoutDeckData.ts`) and the dev mirror (`backend/app/api/routes/projects.py`).
+   `a196b1d7e` corrected only the SPA's sample (`deckData.js`), to "ADVISORS &
+   PARTNERS". No test held the three together, so two of three copies stayed
+   broken while the one a reviewer sees looked right.
+2. **The canvas's C1 footer claims something the code does not do** —
+   *"editing a question here republishes to every branch running that game; the
+   branch is told."* Nothing republishes and nothing tells a branch: no RPC
+   method carries a game, a branch's database is built from a baseline with no
+   seed rows, and authoring is refused on a branch (D106). C1 says what is true.
+3. **Branch Programs blamed HQ for an empty list HQ could not fill.** Its empty
+   state read *"No assessment game has been authored at HQ yet"* — false twice:
+   HQ has authored games, and the list read is the branch's own database, which
+   has none because nothing delivers one. Its docblock and its runs note also
+   said it uses per-game analytics; it never calls them.
+4. **Two comments denied D106.** `admin_assessment.ts`'s header said every
+   handler was `requireAdmin` "and that is the WHOLE gate", and `api.js` said
+   "all routes are requireAdmin". Seventeen writes are `requireHqAuthoring`.
+   Migration 107 carries the same stale sentence, and it is an **applied**
+   migration, so it is recorded here and never edited.
+5. **The localisation reason named decisions HQ does not make.** It said a
+   content escalation "takes an approve or request-changes decision"; HQ's
+   vocabulary is answered or declined (`hqOps.ts`), which is all HQ Support
+   offers. Its pinned phrases stay intact.
+6. **The roster's own comments described a slide and a delete that do not
+   exist.** `admin_network_profiles.ts` said DELETE is a "hard delete"; it
+   archives (`is_active = 0`) and keeps the photo. `networkProfilesSchema.ts`,
+   `AdminNetworkProfiles.jsx` and `BranchCommunity.jsx` named a "Mentors &
+   Network slide" and a "SkillsSpider" radar; no deck has that slide and no
+   such component exists. What a slide draws of this roster is the Team &
+   Network advisor block.
+
+### WHAT SHIPPED — four blocks, each its own state
+
+- **C1 · `assessment`.** Every game, capped at fifty with `truncated`, in
+  display order: slug, title, status, version, and its own chapters, archetypes
+  and **active** questions, counted per game. Totals by status, with any status
+  outside the three reported rather than dropped. Completed runs per game come
+  from `assessment_sessions` in their **own** read: if it fails, every run is
+  unreadable while the games still render. `runs_basis` says the routes that
+  recorded a run are retired, so the count does not grow, and `branches` is
+  `{recorded: false, reason}` — no game reaches a branch.
+- **C2 · `personas`.** All twelve personas the code defines, in the code's
+  order, each with the **primary** tags held by **active** accounts; a zero is
+  a measured zero. A tag outside the code's set is reported as `unrecognised`
+  with its count. The footing is reported beside it — active accounts,
+  unclassified (no primary row) and `multi_primary` (more than one, which
+  nothing constrains) — so the page can say whether tagged plus unclassified
+  equals the accounts. `schema_note` says the set is code, so no console authors
+  it; `scope_note` says it is HQ's database only.
+- **C3 · `board`.** Six lanes in H19's order — Draft, Review, Localisation,
+  Brand approval, Scheduled, Published — **built from the same two by-status
+  reads as the `pipeline` and `publications` blocks**, so a lane cannot disagree
+  with the block beside it. Each part names its store; the two meanings of
+  "published" stay two parts. Localisation has **no source** and says why
+  (#355). Brand approval counts open **content** escalations, oldest first,
+  through D204's single open-escalation statement; past its ceiling the count is
+  `null`, the oldest rows it read are still drawn, and the reason names the
+  ceiling. Scheduled is `approved` awaiting a manual publish — nothing stores a
+  publish time. A lane whose part could not be read has **no total**, never a
+  smaller one, and names the store. Up to three newest cards per part.
+- **C4 · `roster`.** `network_profiles` in **the deck's own order** — active
+  rows first, then display order, name, id — capped at fifty with `truncated`,
+  and counts by active/archived and by kind (a kind the code does not know is
+  reported). Each row is marked with what the deck built on HQ does with it:
+  `profile` (the first six active rows — passed with name, role and photo to the
+  Team & Network slide), `named` (the seventh and eighth **named** rows — the
+  names list), `counted` (in the network total and skill coverage only) or
+  `archived`. "Role on decks" is exactly what the slide prints, and only for a
+  row it draws. **No bio, photo key or LinkedIn URL** reaches the payload.
+  `nominations` is `{recorded: false}` — nothing records who put a person on the
+  roster — and `branch_rule` says a branch authors its own roster (D140).
+
+**One rule, two readers.** The deck's two caps and its name rule now live in
+`services/decks/deckRoster.ts` (`DECK_ROSTER_PROFILES = 6`, `DECK_ROSTER_NAMES
+= 8`, `deckProfiles`, `deckMentorNames`, `deckAdvisorRole`, `deckRosterReach`).
+The deck assembler and the summary both call it, and a test holds
+`deckRosterReach` equal to what `deckProfiles` and `deckMentorNames` pick for
+every roster of up to twelve rows (8,191 of them). `spinoutDeckData.ts`'s own
+`profiles.slice(0, 8)` is inert, since its input is already capped at six; it
+is the renderer's ceiling, and it stays.
+
+**The GET alters no schema.** No block runs `ensureAssessmentSchema`,
+`ensurePersonaSchema` or `ensureNetworkProfilesSchema`: each would turn
+"unreadable" into "empty". Every read is literal SQL over HQ's own database,
+bound where it takes a value.
+
+**The page.** The band reads *"N in pipeline · localisation not recorded · two
+meanings of published"*. The board replaces the Editorial pipeline stats, the
+recent list and the Publications zone, so each figure renders once (the D128
+rule); the rejected line and the unmapped-status notes move under it. Then the
+master template library and the localisation lane as they were, then C4, then
+C1 beside C2, as the canvas draws them. Each panel is an exported pure component
+and ends in one literal link: `/admin/assessment`, `/admin?tab=personas`,
+`/admin?tab=network-profiles` (never `/admin/network-profiles`, whose
+reachability exemption would go stale), and the board's two consoles. Card meta
+is lower case (`article · in_review · …`), because D208's guard bans the
+capitalised form anywhere in `frontend/src`. A read that **failed** says
+Unreadable; a canvas figure **no store holds** says Not recorded with its
+reason — two different claims, drawn two ways.
+
+**Elsewhere.** The deck heading is `'ADVISORS & PARTNERS'` in the worker and
+the dev mirror, the canvas's own name for the roster (*"Advisors & Partners —
+deck roster"*), and a new guard holds the three copies equal, forbids a repeated
+word or the retired role, and allows one literal per tier. Branch Programs'
+empty state, runs note and docblock say what they read. The two D106 comments
+and the four roster comments are corrected.
+
+### THE JUDGEMENT CALLS, EACH CHEAP TO STRIKE
+
+1. **Extend `/summary` rather than add a route.** *Strike it and one route plus
+   one `api.js` method carry the four blocks.*
+2. **The board draws both stores in shared lanes, each part labelled with its
+   store, and says "two meanings of published".** It unifies nothing, and
+   `unified_pipeline_available` stays false. *Strike it and publications keep a
+   zone of their own below the lanes.*
+3. **Personas are counted over active accounts, admins included**, because the
+   tag is not bound to a role, and the footing says what the population is.
+   *Strike it and admins are excluded from every count.*
+4. **Branch Programs' false sentences are fixed here, not filed** — the same
+   fact on two screens: games never reach a branch. *Strike it and they become a
+   task of their own.*
+5. **The deck heading becomes "ADVISORS & PARTNERS"**, the canvas's name for
+   the roster and the sample's value, rather than "ADVISORS & MENTORS", a word
+   the platform renamed on purpose. *Strike it and it reverts to MENTORS.*
+
+### DELIBERATELY NOT BUILT
+
+- **"Live on N branches" and runs on a branch**: no game reaches a branch and no
+  route returns a branch's runs. Stated, not drawn.
+- **An authorable persona schema, a colour per persona, a branch's counts**: the
+  set is code, and no branch call returns persona counts.
+- **The Localisation lane, a publish time, "from" on a piece, and "one meaning
+  of published"**: nothing records any of them.
+- **"Nominated by", "Appears on N branches" and "Published vs Nominated"**:
+  nothing records a nomination, each branch's deck reads its own roster, and the
+  only state is active or archived.
+- **HQ owning the roster.** H19 draws *"HQ publishes · a branch nominates"*;
+  D140 shipped a branch-authored roster that a test pins. C4 states the rule as
+  it is and the gate does not move. **Filed as DECISION NEEDED (#385)**, beside
+  #322 and #355.
+
+### FILED, NOT FOLDED IN
+
+#385 (who owns the roster); #386 (`kind` validated two ways, and `NETWORK_KINDS`
+still carries `mentor`); #387 (the deck reads a failed roster read as an empty
+roster); #388 (the reachability exemption cites a stale line); #389 ("Submitted
+for approval" caps at 100 without saying so); #390 (assessment track key drift);
+#391 (persona labels in four drifted copies); #392 (the persona retag records no
+target, fires with no confirmation, and two api methods have no caller).
+
+### CORRECTIONS WHILE BUILDING
+
+- **The caps moved out of the deck assembler.** The plan put the two constants
+  in `axalSpinoutDemoDay.ts`; importing that into the summary would have pulled
+  its eleven service imports into a read endpoint. They live in
+  `deckRoster.ts`, which imports nothing.
+- **A capped Brand approval lane first rendered as a failed read.** Past its
+  ceiling the part has no count but does have rows; the first draft drew
+  "Unreadable", a claim about a store that answered. The page now tells "no
+  count and no rows" (Unreadable) from "no count, rows read" (*not fully
+  counted*, with the oldest rows drawn).
+- **The names-list reach is labelled "Names list only"**, not after the deck's
+  `mentors` field, whose name keeps the retired role; a test forbids that word in
+  the labels.
+- **`ConsoleLink` was lifted, not copied.** Platform's panel link — the tile and
+  its two lines — moved to `pages/hq/ConsoleLink.jsx` for its second caller. It
+  deliberately does not take the path: each page writes its own literal
+  `<Link to>`, because the reachability walk counts literal attributes.
+- **Two of my own test slicers read past what they bounded.** A lane slice
+  bounded by the next `hq-content-lane-` prefix stopped at
+  `hq-content-lane-no-source` inside the lane itself; it walks balanced `div`s
+  now. And a scan for "completed runs" on an unreadable game caught the refusal
+  sentence that explains why runs are unreadable — *a lexical scan cannot tell a
+  rule from its refusal*, so it asserts the shape (a number before "completed
+  run") instead.
+- **The mutation run found three weak assertions and one invalid mutation**,
+  each answered in the tests, never the code:
+  - *A second count of the same rows* (W13) agreed with the first, because
+    nothing moved between them — so agreement proved nothing. The one-read test
+    now lands a write between reads: right after each store's `GROUP BY`
+    returns, one more row goes into every lane, and a board that counted again
+    would see it. W13b does the same for publications.
+  - *The deck cutting its own roster by a literal 6* (W20) behaves identically
+    to `deckProfiles` today, so no behaviour can tell them apart until the cap
+    moves. A test reads the deck's source for the two helper calls and refuses a
+    `slice` on its roster.
+  - *A bootstrap on the GET* (W21) changed no schema, because the test shim's
+    `batch` executes nothing and the roster bootstrap swallows its own failed
+    `ALTER`. The shim now records every statement it is asked to prepare or
+    exec, and the GET may issue no DDL — with every table present and with none.
+  - *Dropping the `is_active` filter before `deckRosterReach`* (the first W16)
+    is **equivalent**: the ORDER BY puts every archived row after every active
+    one, so the reach entries computed for archived rows are never consumed.
+    It was withdrawn, not counted as caught, and re-aimed at the defect its name
+    describes — archived rows sorted by display order filling the fifty-row list
+    and pushing the deck's rows off it — which a new test catches.
+- **Code scanning found two helpers in my own tests written wrongly**, after
+  the drift suite had passed them. Both are fixed in the test, at the
+  mechanism; nothing was suppressed.
+  - *The visible-text decoder decoded twice.* It was a chain that turned
+    `&amp;` into `&` before turning `&lt;` into `<`, so text a reader sees as
+    `&lt;` — which React writes as `&amp;lt;` — came back as `<` (CodeQL
+    js/double-escaping). It is one replace over a five-entry table now, which
+    never re-reads its own output. No existing assertion had noticed, because
+    no rendered sentence held an escaped entity, so a new test renders one
+    through React and holds the helper to it. The mutation run shows that test
+    is the only one that sees the old chain.
+  - *The label test escaped only the first "&".* It encoded the label to match
+    the canvas with a `replace` that reached one occurrence (CodeQL
+    js/incomplete-sanitization; Semgrep's detect-replaceall-sanitization named
+    the same line). It decodes the canvas once instead, so text is compared
+    with text. The old version would have failed a correct label that carries
+    two ampersands against a canvas that drew it exactly — shown, not argued:
+    with both sides changed to "ADVISORS & PARTNERS & FRIENDS", the old
+    assertion fails and the new one passes.
+
+### VERIFIED
+
+`npm run test:drift` exits **0**, read as the exit code from a redirected log,
+on the tree pushed: D214 merged with `main` at `5cb4dc005`, which carries D215
+through D219. Counts:
+
+- frontend **3119**, `main`'s suite plus the thirty tests in
+  `hq_content_h18_h19.test.mjs` and the five in
+  `spinout_deck_label_d214.test.mjs`;
+- worker **4048** — 4045 pass plus the same 3 pre-existing
+  environment-gated skips — `main`'s suite plus the thirty-two tests in
+  `content_studio_d214.test.ts`;
+- retention **48**, `main`'s own — D214 adds none;
+- zero `not ok`.
+
+All sixty-seven new tests were confirmed **by name** in the log. No test that
+predates D214 was edited. The same run also exited 0 on the five earlier bases
+D214 was landed on while other sessions' PRs merged — `main` at `4913d8196`, at
+`8400a29fb` once D217 had landed, at `d0bf170ad` once D215 had, at `e54dcbaa5`
+once D219 had, and at `4144afa67` once D218 had — with D214's own tests passing
+each time. Until the pull request opened, D214 was re-applied rather than
+rebased, so what was verified is the tree that was pushed. Once it was open,
+D216's landing was merged in instead, so no pushed commit was rewritten. The
+pull request's own CI runs the suite again on the merge.
+
+Every guard ran as a step of that same run and exited 0: both typechecks,
+`lint:undef`, `check-api-drift` (no new method), `check-folder-docs`,
+`check-decision-ids` (219 decisions, D1 → **D219**, D214 filed between D213
+and D215),
+`check-unused-imports`, `check-react-hook-imports`, `check-frontend-logging`,
+`check-dark-mode`, `check-sql-prepare`, `check-sqlite-columns`,
+`check-timestamp-comparisons`, `check-sqlite-dialect` and
+`check-sql-migrations`.
+
+`docs/` was rebuilt on the no-ledger path. No local retention ledger existed,
+and the one the build wrote was moved aside afterwards, so a stale one could
+not decide the next window (#333). The build emitted 614 fresh assets and
+retained 518, keeping 1,132 in all. `check-docs-fresh --strict`,
+`prerender-og --check` (31 routes) and `check-docs-assets-closure` (9,565
+references across 1,089 chunks, 1,132 files on disk) all exit 0. A walk of every
+asset `main`'s committed shells reach (31 shells, 19 seeds) found **613 of
+613** still on disk.
+
+**Mutations: the first run caught 37 of 41; the second caught 42 of 42.**
+Before writing anything, the harness pre-flighted every anchor as unique and
+byte-changing (44 anchors across 42 mutations in the second run). It ran a
+clean baseline of both suites, ran both for every mutation, counted a mutation
+caught only on a non-zero exit **and** a `not ok`, and restored every file
+byte-identical by sha256. The first run's four escapes are under CORRECTIONS
+WHILE BUILDING: three weak assertions, each fixed in the test rather than the
+code, and one equivalent mutation, withdrawn and re-aimed. W13b was added for
+publications. The second run took 183 seconds. The two code-scanning fixes
+under CORRECTIONS WHILE BUILDING had a run of their own, **8 of 8** as
+expected: four mutations of the text decoder, each caught by the new test
+alone; the label moved off the canvas's name, caught; and a correct
+two-ampersand label, which the new assertion passes and the old one failed.
+
+What the forty-two broke, by area:
+
+- **C1 · Assessment Studio (5):** every chapter counted as each game's; retired
+  questions counted as active; an unreadable runs read counted as zero;
+  abandoned sessions counted as completed runs; "live on branches" claimed as
+  recorded.
+- **C2 · Personas (4):** secondary tags counted as primary; closed accounts
+  counted; tags outside the code's set dropped; unclassified read from the
+  wrong population.
+- **C3 · the board (7):** a second open-escalation statement; every open
+  escalation counted as a content one; a lane total that skips an unreadable
+  part; a second article count and a second publication count beside the
+  pipeline's; the Localisation lane given a value; a capped escalation count
+  reported as a total.
+- **C4 · the roster (9):** archived rows taking the list's slots ahead of the
+  deck's rows; the roster ordered by id rather than the deck's order; the
+  profile cap moved with the panel following it; the seventh row marked a
+  profile; the deck cutting its own roster by a literal; the GET bootstrapping
+  the roster table; a deck role printed for a row the deck does not draw; the
+  bio reaching the payload; a dash printed as the role.
+- **The deck heading (2):** "ADVISORS & ADVISORS" back in the worker; the dev
+  mirror drifting from the worker.
+- **The pages (15):** an unreadable personas block drawn as zero; a console
+  link that is not a literal; the roster linked to `/admin/network-profiles`;
+  the canvas's republish claim restored; card meta leading with a capitalised
+  store; a capped lane drawn as a failed read, and its figure saying
+  Unreadable; the Localisation lane drawn as a zero, and losing its reason; the
+  band claiming one meaning of published; the names-list label saying mentors
+  again; a named row showing a deck role; "live on branches" drawn as a number;
+  an unreadable run count printed as zero runs; Branch Programs saying the
+  games are authored at HQ yet.
+
+No migration, so there is nothing to read back from production D1. **285 is
+still the next free migration** — none of the other sessions' open PRs adds
+one. D215 through D219 have landed and D220 is still held by another session,
+so **the next decision this session takes is D221.**
+
 ## D215
 
 **S16: Approvals takes in the queues the live console kept on their own
