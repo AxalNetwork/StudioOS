@@ -80,6 +80,7 @@ function code(src) {
 const PAGE = raw('frontend/src/pages/branch/BranchApprovals.jsx');
 const PAGE_CODE = code(PAGE);
 const APP = raw('frontend/src/App.jsx');
+const ADMIN_PAGE = raw('frontend/src/pages/AdminPage.jsx');
 const API = raw('frontend/src/lib/api.js');
 const ROUTE = raw('cloudflare-worker/src/routes/branch_approvals.ts');
 const SOURCES = raw('cloudflare-worker/src/services/approvalSources.ts');
@@ -149,10 +150,18 @@ test('every console a lane DOES link to is a registered route', () => {
   const tos = [...block.matchAll(/to: '([^']+)'/g)].map((m) => m[1]);
   assert.ok(tos.length >= 3, `expected at least three console links, found ${tos.length}`);
   for (const to of tos) {
+    // S16 (D215): KYC and partner profiles are TABS of `/admin`, reached by
+    // `?tab=`. The path must be routed AND the tab must exist, or the link
+    // lands on the admin page's default tab — shipped-looking, and wrong.
+    const [path, query] = to.split('?');
     assert.ok(
-      APP.includes(`path="${to}"`),
-      `${to} is not a registered route in App.jsx — a link that 404s looks shipped`,
+      APP.includes(`path="${path}"`),
+      `${path} is not a registered route in App.jsx — a link that 404s looks shipped`,
     );
+    const tab = query && new URLSearchParams(query).get('tab');
+    if (tab) {
+      assert.ok(ADMIN_PAGE.includes(`value: '${tab}'`), `/admin has no '${tab}' tab for ${to}`);
+    }
   }
 });
 

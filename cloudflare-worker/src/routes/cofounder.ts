@@ -16,6 +16,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { clientIp } from '../util/clientIp';
 import { filterOptedInUserIds } from '../services/matchingConsent';
 import { logMatchListGeneration } from '../services/matchAudit';
 import {
@@ -149,11 +150,7 @@ type UserLite = { id: number; uid?: string | null; name: string | null; email: s
 function role(u: { role: string }): string { return (u.role || '').toLowerCase(); }
 function isAdmin(u: { role: string }): boolean { return role(u) === 'admin'; }
 function canUseCofounder(u: { role: string }): boolean { return ['admin', 'founder'].includes(role(u)); }
-function clientIp(c: any): string {
-  const fwd = c.req.header('x-forwarded-for') || '';
-  if (fwd) return fwd.split(',')[0].trim();
-  return c.req.header('cf-connecting-ip') || 'unknown';
-}
+// D219 — the local `function clientIp(` trusted X-Forwarded-For first and is gone.
 function gate(u: { role: string }): void {
   if (!canUseCofounder(u)) {
     const e = new Error('Co-founder matching is for founder accounts'); (e as any).status = 403; throw e;
@@ -790,7 +787,7 @@ cofounder.post('/connections/:uid/nda/sign', async (c) => {
   const already = isA ? conn.nda_signed_at_a : conn.nda_signed_at_b;
   if (!already) {
     const now = new Date().toISOString();
-    const ip = clientIp(c).slice(0, 64);
+    const ip = clientIp(c.req.raw);
     if (isA) {
       await c.env.DB.prepare(
         `UPDATE cofounder_connections

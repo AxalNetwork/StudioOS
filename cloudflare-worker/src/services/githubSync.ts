@@ -288,6 +288,29 @@ export function githubConfigured(env: Env): boolean {
   return !!(env.GITHUB_ACCESS_TOKEN && env.GITHUB_REPO_OWNER && env.GITHUB_REPO_NAME);
 }
 
+/**
+ * D213 — what the mirror would write to, by the mirror's own rule.
+ *
+ * THE REPO IS NAMED ONLY WHEN BOTH HALVES ARE SET, because that is what
+ * `githubConfigured` requires before `ghFetch` will run. The GitHub console
+ * (`routes/admin_github.ts`) shows a default repository when the variables are
+ * unset, for display; the mirror never falls back to it, so a summary of the
+ * mirror must not either.
+ *
+ * NOTHING ELSE ABOUT THE TOKEN LEAVES HERE. Whether it is set is a boolean; no
+ * prefix, no suffix, no length — the console's `token_preview` shows eight
+ * characters, which is a defect of its own and not repeated.
+ */
+export function githubMirrorTarget(env: Env): { token_set: boolean; repo: string | null; configured: boolean } {
+  const owner = env.GITHUB_REPO_OWNER;
+  const name = env.GITHUB_REPO_NAME;
+  return {
+    token_set: !!env.GITHUB_ACCESS_TOKEN,
+    repo: owner && name ? `${owner}/${name}` : null,
+    configured: githubConfigured(env),
+  };
+}
+
 export interface GhResult { ok: boolean; status: number; data: any; error?: string }
 
 async function ghFetch(env: Env, path: string, init: RequestInit = {}): Promise<GhResult> {

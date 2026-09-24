@@ -38,6 +38,7 @@ import { sendAgreementAssignedEmail } from '../services/email';
 import { renderAgreementPdf, sha256Hex } from '../services/pdf';
 import { PDFDocument } from 'pdf-lib';
 import { bindingKey } from '../util/schemaBootstrap';
+import { clientIp } from '../util/clientIp';
 
 const esign = new Hono<{ Bindings: Env }>();
 
@@ -148,13 +149,6 @@ function genToken(): string {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-function clientIp(req: Request): string {
-  return req.headers.get('cf-connecting-ip')
-      || req.headers.get('x-real-ip')
-      || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-      || 'unknown';
 }
 
 interface AuditEntry {

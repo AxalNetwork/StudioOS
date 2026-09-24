@@ -27,6 +27,7 @@ import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { addS16Stores } from './_approval_s16_stores.mjs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
@@ -544,6 +545,7 @@ test('the benchmark readers read what branchOverview() actually returns', async 
     CREATE TABLE cohort_applicants (id INTEGER PRIMARY KEY, status TEXT, created_at TEXT);
     CREATE TABLE spinout_moderation_cases (id INTEGER PRIMARY KEY, status TEXT, created_at TEXT);
   `);
+  addS16Stores(db);
   db.prepare(`INSERT INTO lp_applications (status, created_at) VALUES ('pending', datetime(?, '-2 days'))`).run(NOW_SQL);
   db.prepare(`INSERT INTO cohort_applicants (status, created_at) VALUES ('pending', datetime(?, '-1 days'))`).run(NOW_SQL);
   const axis = weekAxis(new Date().toISOString(), 8);
@@ -553,7 +555,9 @@ test('the benchmark readers read what branchOverview() actually returns', async 
   const read = Object.fromEntries(METRICS.map((m) => [m.key, m.of(ov as any)]));
   assert.equal(read.accounts_total, 4);
   assert.equal(read.seats_used, 2);
-  assert.equal(read.approvals_backlog, 2,
+  // 1 LP + 1 cohort + the fixture's `exploring` account (user 10), which
+  // waits on an admin to assign its role and is a lane since S16 (D215).
+  assert.equal(read.approvals_backlog, 3,
     'the backlog metric must read the object the producer returns, not the array a fixture once invented');
   assert.equal(read.active_accounts_week, 1);
   const weekly = METRICS.find((m) => m.key === 'active_accounts_week')!;

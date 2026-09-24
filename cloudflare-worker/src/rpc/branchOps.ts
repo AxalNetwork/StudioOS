@@ -138,7 +138,7 @@ export async function branchHealth(env: Env): Promise<BranchAnswer<BranchHealth>
 }
 
 /**
- * The four approval queues, as one backlog count and the oldest item's age.
+ * The local approval queues (four until D215, eleven since), as one backlog count and the oldest item's age.
  *
  * WHY IT IS ONE NUMBER AND NOT FOUR. H1's health card draws "backlog + oldest
  * item age", and S1 orders queue pressure by the OLDEST item rather than by
@@ -146,8 +146,8 @@ export async function branchHealth(env: Env): Promise<BranchAnswer<BranchHealth>
  * S3's board, which PR 13 builds over a read model; duplicating a partial
  * version of it here would be a second answer to the same question.
  *
- * A TABLE THAT CANNOT BE READ SUBTRACTS THE WHOLE ANSWER. If one of the four
- * is missing, the count is not "the other three" — that is a smaller number
+ * A TABLE THAT CANNOT BE READ SUBTRACTS THE WHOLE ANSWER. If one of them
+ * is missing, the count is not "the others" — that is a smaller number
  * presented as the backlog, which is worse than no number. It returns null
  * with a reason naming what could not be read.
  */
@@ -184,7 +184,7 @@ async function backlogOf(env: Env): Promise<{ backlog: BranchOverview['backlog']
     return {
       backlog: null,
       reason:
-        `The backlog is the sum of four queues and ${unreadable.join(', ')} could not be read on this `
+        `The backlog is the sum of every approval queue and ${unreadable.join(', ')} could not be read on this `
         + 'branch, so the total would be smaller than the truth rather than unknown.',
     };
   }
