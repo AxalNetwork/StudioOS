@@ -282,7 +282,7 @@ export function describeTopology(env: Env) {
     analytics: {
       dataset: aeDataset(env),
       bound: present('ANALYTICS'),
-      readable_here: readable,
+      readable_here: readable,  // false on branch deployments (D230); they share the dataset but only HQ reads
       written_here: [
         'One point per metered API request — path, method, role, status and tier — with the writing '
           + 'Worker\'s branch code, or hq, in the sixth blob. It is carried per row, not as an index '
