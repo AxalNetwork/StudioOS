@@ -86,16 +86,19 @@ function stubProviders() {
   const real = globalThis.fetch;
   let n = 0;
   globalThis.fetch = (async (input: any) => {
-    const url = String(input);
+    // Matched on the parsed host and path, exactly: a stub that matched a
+    // substring anywhere in the URL would also answer for any other host.
+    const u = new URL(String(input));
     const json = (o: unknown) => new Response(JSON.stringify(o), { status: 200, headers: { 'content-type': 'application/json' } });
-    if (/api\.telegram\.org\/bot[^/]+\/send(Message|Photo|Document)/.test(url)) {
+    const tgMethod = u.hostname === 'api.telegram.org' ? u.pathname.split('/')[2] : null;
+    if (tgMethod === 'sendMessage' || tgMethod === 'sendPhoto' || tgMethod === 'sendDocument') {
       sends.push('telegram'); n += 1;
       return json({ ok: true, result: { message_id: n, chat: { id: -100123 } } });
     }
-    if (/api\.telegram\.org\/bot[^/]+\/getChat/.test(url)) {
+    if (tgMethod === 'getChat') {
       return json({ ok: true, result: { id: -100123, type: 'channel', username: 'axalhq' } });
     }
-    if (/api\.twitter\.com\/2\/tweets/.test(url)) {
+    if (u.hostname === 'api.twitter.com' && u.pathname === '/2/tweets') {
       sends.push('x'); n += 1;
       return json({ data: { id: `t${n}`, text: 'x' } });
     }
