@@ -21,8 +21,11 @@ const WF = readFileSync(resolve(process.cwd(), '.github/workflows/cloudflare-wor
 
 /** One job's block: from `  <id>:` to the next top-level job key. */
 function job(id) {
-  const at = WF.search(new RegExp(`^  ${id}:\\s*$`, 'm'));
-  assert.ok(at >= 0, `no job ${id}`);
+  // A line scan, not a RegExp built from `id` (Semgrep's non-literal-regexp).
+  const header = `\n  ${id}:\n`;
+  const hit = WF.indexOf(header);
+  assert.ok(hit >= 0, `no job ${id}`);
+  const at = hit + 1;
   const rest = WF.slice(at + 1);
   const next = rest.search(/\n  [a-z][\w-]*:\s*\n/);
   return next > 0 ? WF.slice(at, at + 1 + next) : WF.slice(at);
