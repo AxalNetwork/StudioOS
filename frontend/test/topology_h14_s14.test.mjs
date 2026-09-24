@@ -43,7 +43,7 @@ import { DeploymentZone } from '../src/pages/branch/BranchSettings.jsx';
 import { RpcSide } from '../src/components/TopologyParts.jsx';
 import {
   describeTopology, BINDINGS, RPC_SURFACE, AE_READERS, DEPLOY_WORKFLOWS, DEPLOY_BY_HAND, CF_ACCESS_PATHS,
-  SECRET_WRITERS, NOT_FROM_ANALYTICS, BRANCH_DEPLOYED_BY,
+  SECRET_WRITERS, NOT_FROM_ANALYTICS, BRANCH_DEPLOYED_BY, BRANCH_PROVISIONED_BY,
 } from '../../cloudflare-worker/src/services/topology.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -161,12 +161,17 @@ test('the deploy strip lists what the Worker lists, and the dispatch sentence fo
     assert.ok(list.includes(`Runs ${w.trigger}.`), `${w.file} says when it runs`);
   }
   assert.equal(byTestId(markup, 'h14-deploys-by-hand'), DEPLOY_BY_HAND);
-  assert.match(byTestId(markup, 'h14-branch-not-redeployed'), /^Nothing deploys a branch a second time\./);
+  // D253: the payload says branches are redeployed, so the page says so, and
+  // the old "nothing redeploys" warning is gone.
+  assert.match(byTestId(markup, 'h14-branch-redeployed'), /^Every push to main redeploys each provisioning or live branch after HQ/);
+  assert.doesNotMatch(markup, /h14-branch-not-redeployed/);
   assert.match(byTestId(markup, 'h14-dispatch'), /^HQ cannot dispatch provisioning from here: the repository token, owner and name are not all set/);
   const dispatchable = describeTopology({ ...ALL_BOUND, GITHUB_ACCESS_TOKEN: 't', GITHUB_REPO_OWNER: 'o', GITHUB_REPO_NAME: 'n' });
   assert.match(text(DeploysStrip, { deploys: dispatchable.deploys, dispatch: dispatchable.deploy_dispatch }), /HQ can dispatch provisioning from a licence’s Deploy step\./);
   // The redeploy sentence is conditional on the payload, not typed in.
-  assert.doesNotMatch(html(DeploysStrip, { deploys: { ...HQ.deploys, branch_redeployed: true }, dispatch: HQ.deploy_dispatch }), /h14-branch-not-redeployed/);
+  const notRedeployed = html(DeploysStrip, { deploys: { ...HQ.deploys, branch_redeployed: false }, dispatch: HQ.deploy_dispatch });
+  assert.match(notRedeployed, /h14-branch-not-redeployed/);
+  assert.doesNotMatch(notRedeployed, /h14-branch-redeployed"/);
 });
 
 test('HQ\'s card: its own bindings and which are missing, both sides of the RPC surface, Access and the secret writers', () => {
@@ -314,8 +319,9 @@ test('S14 names this Worker, its own resources, its one link and both sides of t
   assert.equal(byTestId(markup, 's14-analytics-head'), 'Writes to, cannot read');
   assert.match(renderedText(markup), /This branch writes one point per metered API request/);
   assert.doesNotMatch(renderedText(markup), /act against a branch/, 'a branch writes no mirror rows');
-  assert.equal(byTestId(markup, 's14-deployed-once'),
-    `Deployed once, by ${BRANCH_DEPLOYED_BY}. Nothing deploys a branch a second time, so this Worker runs the code it was provisioned with.`);
+  assert.equal(byTestId(markup, 's14-redeployed'),
+    `Redeployed after HQ on every push to main, by ${BRANCH_DEPLOYED_BY}, so this Worker runs main’s code. Provisioned by ${BRANCH_PROVISIONED_BY}.`);
+  assert.doesNotMatch(markup, /s14-deployed-once/);
   assert.match(byTestId(markup, 's14-gateway'), /cannot be split by branch/);
 });
 

@@ -24,8 +24,9 @@ function stepScript(name) {
   const at = WF.indexOf(`- name: ${name}\n`);
   assert.ok(at >= 0, `no step named ${name}`);
   const rest = WF.slice(at);
-  const next = rest.indexOf('\n      - name: ', 1);
-  const step = next > 0 ? rest.slice(0, next) : rest;
+  // The step ends at the next step, or at the next job (D253 added two).
+  const ends = [rest.indexOf('\n      - ', 1), rest.search(/\n  \S/)].filter((i) => i > 0);
+  const step = ends.length ? rest.slice(0, Math.min(...ends)) : rest;
   const m = /\n(\s+)run: \|\n([\s\S]*)$/.exec(step);
   assert.ok(m, `${name} is not a run: | block`);
   const indent = m[1].length + 2;
@@ -98,7 +99,12 @@ test('the step runs after the migrations, and is the one line that deploys HQ', 
   // The lines that RUN it: npx and the command, as topology_d209 counts them.
   // An echo that names "wrangler deploy" in a message runs nothing.
   const code = WF.split('\n').filter((l) => !/^\s*#/.test(l) && /\bnpx\b.*\bwrangler(?:@[\d.]+)?\s+deploy\b/.test(l));
-  assert.equal(code.length, 1, 'more than one line runs npx … wrangler deploy');
+  // D253 added the branch redeploys: exactly one line ships HQ, and every
+  // other names a branch config.
+  const hq = code.filter((l) => /--env production\b/.test(l));
+  assert.equal(hq.length, 1, 'more than one line runs npx … wrangler deploy for HQ');
+  assert.match(hq[0], /--config \.\.\/wrangler\.toml --env production\b/);
+  for (const l of code.filter((x) => x !== hq[0])) assert.match(l, /--config "?wrangler\.branch\./, `a deploy line that is neither HQ nor a branch: ${l.trim()}`);
   const script = stepScript('Deploy to Cloudflare Worker');
   assert.match(script, /^set -o pipefail$/m);
   assert.match(script, /grep -qE '\\\[code: 10013\\\]' deploy\.log/, 'the retry is no longer limited to 10013');

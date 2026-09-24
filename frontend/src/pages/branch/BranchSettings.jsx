@@ -208,6 +208,15 @@ export function DeploymentZone({ dep }) {
         </Card>
       </div>
 
+      {dep?.deploys?.branch_redeployed === true && dep.deploys.branch_deployed_by && (
+        <p className="mt-3 max-w-2xl text-[11.5px] leading-relaxed text-axal-faint" data-testid="s14-redeployed">
+          Redeployed after HQ on every push to main, by <span className="font-mono">{dep.deploys.branch_deployed_by}</span>, so
+          this Worker runs main&rsquo;s code.
+          {dep.deploys.branch_provisioned_by && (
+            <> Provisioned by <span className="font-mono">{dep.deploys.branch_provisioned_by}</span>.</>
+          )}
+        </p>
+      )}
       {dep?.deploys?.branch_redeployed === false && dep.deploys.branch_deployed_by && (
         <p className="mt-3 max-w-2xl text-[11.5px] leading-relaxed text-axal-faint" data-testid="s14-deployed-once">
           Deployed once, by <span className="font-mono">{dep.deploys.branch_deployed_by}</span>. Nothing deploys a

@@ -66,6 +66,12 @@ export function DeploysStrip({ deploys, dispatch }) {
       {deploys?.by_hand && (
         <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted" data-testid="h14-deploys-by-hand">{deploys.by_hand}</p>
       )}
+      {deploys?.branch_redeployed === true && (
+        <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted" data-testid="h14-branch-redeployed">
+          Every push to main redeploys each provisioning or live branch after HQ, applying its own migrations
+          first, so a branch runs main&rsquo;s code. One branch failing does not stop the others.
+        </p>
+      )}
       {deploys?.branch_redeployed === false && (
         <p className="mt-2 text-[11.5px] leading-relaxed text-amber-800 dark:text-amber-300" data-testid="h14-branch-not-redeployed">
           Nothing deploys a branch a second time. Provisioning refuses a code it already holds, and the push to

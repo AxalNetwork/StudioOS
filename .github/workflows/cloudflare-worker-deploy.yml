@@ -108,6 +108,29 @@ jobs:
           echo "::error::wrangler deploy failed three times with Cloudflare error 10013; see the attempts above"
           exit 1
 
+  # Step 9 as its own job (D253). It still runs only after HQ's deploy, and it
+  # still turns the workflow red on a disagreement, but it no longer shares a
+  # job with the branch redeploys: each of them depends on `deploy` alone, so
+  # neither can skip the other.
+  schema-drift:
+    name: repo can still rebuild production's schema
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package-lock.json
+            cloudflare-worker/package-lock.json
+
+      - name: Install Worker dependencies
+        run: npm ci --prefix cloudflare-worker
+
       # Can the repo still rebuild the database it operates? The invariant is
       # `schema_baseline.sql` + every migration above the cutoff == production —
       # not equality with the baseline alone, which would go red on the first
@@ -126,3 +149,109 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/check-baseline-drift.mjs
+
+  # D253 — EVERY BRANCH RUNS MAIN'S CODE, NOT THE CODE IT WAS PROVISIONED WITH.
+  # Until this job, branch-provision.yml deployed a branch Worker once and
+  # nothing deployed it again (task 356), so a fix merged here never reached
+  # a subsidiary. After HQ ships, each branch listed by
+  # scripts/list-deployable-branches.mjs (status provisioning or live; never
+  # an `_` fixture, `example` or `suspended`) is:
+  #   1. rendered: gen-branch-wrangler writes wrangler.branch.<code>.toml;
+  #   2. migrated: migrate-d1 --branch <code>, against that branch's own D1;
+  #   3. deployed with D251's loop, retrying only 10013.
+  # Every wrangler call names --config wrangler.branch.<code>.toml. Never
+  # wrangler.toml, never --env production: those carry the apex custom
+  # domains, and deploying a branch with them would move axal.vc onto it.
+  # No `secret put` either: a branch's secrets were put at provisioning and
+  # persist across deploys.
+  #
+  # THE SPA IS REBUILT HERE with D252's --seed-committed-tree rather than
+  # handed over from the deploy job: an artifact of ~800 files buys nothing
+  # the committed tree does not already hold, and a branch serves the same
+  # SPA HQ does.
+  #
+  # One branch failing does not stop the others. The job summary names each
+  # outcome, and the job goes red if any failed.
+  branches:
+    name: redeploy every provisioned branch
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package-lock.json
+            cloudflare-worker/package-lock.json
+
+      - name: List the branches to redeploy
+        id: list
+        run: |
+          codes=$(node scripts/list-deployable-branches.mjs | tr '\n' ' ')
+          echo "codes=${codes}" >> "$GITHUB_OUTPUT"
+          if [ -z "${codes// /}" ]; then
+            echo "No branch to redeploy: infra/branches holds no provisioning or live entry." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Install frontend dependencies
+        if: steps.list.outputs.codes != ''
+        run: npm ci --prefix frontend
+
+      - name: Install Worker dependencies
+        if: steps.list.outputs.codes != ''
+        run: npm ci --prefix cloudflare-worker
+
+      - name: Build the SPA
+        if: steps.list.outputs.codes != ''
+        run: npm run build -- --seed-committed-tree
+
+      - name: Render, migrate and deploy each branch
+        if: steps.list.outputs.codes != ''
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CODES: ${{ steps.list.outputs.codes }}
+        run: |
+          set -o pipefail
+          deploy_branch() {
+            local code="$1" attempt
+            for attempt in 1 2 3; do
+              if npx --yes wrangler@4.131.0 deploy --config "wrangler.branch.${code}.toml" 2>&1 | tee "deploy.${code}.log"; then
+                return 0
+              fi
+              if ! grep -qE '\[code: 10013\]' "deploy.${code}.log"; then
+                echo "::error::${code}: wrangler deploy failed with an error that is not a known transient code; not retried"
+                return 1
+              fi
+              if [ "$attempt" = 3 ]; then break; fi
+              echo "::warning::${code}: wrangler deploy attempt ${attempt} of 3 failed with Cloudflare error 10013; retrying in 15s"
+              sleep 15
+            done
+            echo "::error::${code}: wrangler deploy failed three times with Cloudflare error 10013"
+            return 1
+          }
+          failed=0
+          {
+            echo "### Branch redeploys"
+            echo
+            echo "| Branch | Outcome |"
+            echo "| --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for code in $CODES; do
+            if ! node scripts/gen-branch-wrangler.mjs "$code"; then
+              outcome="failed: config did not render"
+            elif ! node scripts/migrate-d1.mjs --branch "$code"; then
+              outcome="failed: migrations"
+            elif ! deploy_branch "$code"; then
+              outcome="failed: deploy"
+            else
+              outcome="deployed"
+            fi
+            echo "| ${code} | ${outcome} |" >> "$GITHUB_STEP_SUMMARY"
+            [ "$outcome" = deployed ] || failed=1
+          done
+          exit "$failed"

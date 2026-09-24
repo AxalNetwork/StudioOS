@@ -24933,6 +24933,92 @@ passed again after a sha256-checked restore:
   as well as the new one);
 - keying the switch on `CI`.
 
+## D253
+
+**Task 356: nothing redeployed a branch Worker when main changed.**
+`branch-provision.yml` deployed a branch once and refused the code ever after,
+and the push-to-main workflow shipped HQ alone. So a fix merged to main never
+reached a subsidiary: a branch ran the code it was provisioned with, forever.
+`services/topology.ts` said so honestly (`branch_redeployed: false`), and H14
+and S14 printed it as a warning.
+
+**What changed in `cloudflare-worker-deploy.yml`.**
+- **Step 9 is its own job, `schema-drift`.** It still waits on HQ's deploy and
+  still turns the run red on a disagreement.
+- **A new `branches` job also waits on `deploy`.** It covers every
+  `infra/branches/*.json` that `scripts/list-deployable-branches.mjs` returns:
+  status `provisioning` or `live`, and never an `_` fixture, `example` or
+  `suspended`. `suspended` is left out because redeploying a branch someone
+  stopped would undo that on every merge.
+- **Each branch is rendered, migrated, then deployed.**
+  `gen-branch-wrangler <code>`, then `migrate-d1 --branch <code>`, then
+  `wrangler deploy --config "wrangler.branch.<code>.toml"` inside D251's loop,
+  which retries 10013 only.
+- **The two jobs never wait on each other.** A drift finding cannot hold back a
+  branch, and a failed branch cannot skip step 9.
+- **Never `--env production` or `wrangler.toml`.** Those carry the apex custom
+  domains, and a branch deployed with them would take `axal.vc`.
+- **Never a `secret put`.** A branch's secrets were put at provisioning and
+  persist across deploys.
+- **One branch failing does not stop the others.** The job summary has a row
+  per branch naming its outcome, and the job goes red if any failed. With zero
+  branches, which is today, the summary says "No branch to redeploy" and every
+  later step is skipped.
+
+**The SPA is rebuilt, not handed over.** The `branches` job runs
+`npm run build -- --seed-committed-tree` (D252) rather than downloading the
+deploy job's `docs/` as an artifact. An artifact of about 800 files would carry
+nothing the committed tree does not already hold, and a branch serves the same
+SPA HQ does.
+
+**`BRANCH_DEPLOYED_BY` is re-aimed, not loosened.** It now names
+`cloudflare-worker-deploy.yml`. The new `BRANCH_PROVISIONED_BY` names
+`branch-provision.yml`, and `branch_redeployed` is `true`.
+- **`topology_d209`** now requires the push-to-main workflow to have exactly
+  two `npx … wrangler deploy` lines, one per target:
+  - HQ's line, `--config ../wrangler.toml --env production`;
+  - the branch line, `--config "wrangler.branch.${code}.toml"`, which may
+    carry no `--env` and no `wrangler.toml`.
+- **The two branch-config workflows** must be exactly these two files, each
+  named by its own constant.
+- **H14** replaces its amber "nothing deploys a branch a second time" note with
+  a sentence saying every push redeploys each provisioning or live branch.
+- **S14** now says which workflow redeploys the branch and which provisioned it.
+  The "deployed once" text still renders if the payload ever says `false`, and
+  a test holds that.
+- **D251's test** counted one `npx … wrangler deploy` line in the file. It now
+  requires exactly one HQ line and requires every other line to name a branch
+  config.
+
+**Filed, not built: the status flip.** Nothing moves a branch from
+`provisioning` to `live`. `branch-provision.yml` writes `provisioning`, and its
+smoke step is what shows the branch is live, but nothing writes that back. That
+is why the filter keeps `provisioning`: filtering on `live` alone would
+redeploy nothing, and a mutation proves the test catches that. The flip belongs
+to provisioning's link PR (`open-branch-link-pr.mjs`), which already commits the
+registry file, after the smoke step has passed. It is a separate task.
+
+**Tests: new `frontend/test/branch_redeploy_d253.test.mjs`, 7 tests.** The
+workflow is read as text, on the pattern of `branch_provision_workflow`:
+- every wrangler call in the `branches` job names a branch config;
+- the job puts no secret;
+- the filter keeps provisioning and live and drops `_`, example and suspended;
+- `schema-drift` and `branches` each need `deploy` and not each other;
+- each branch is rendered, then migrated, then deployed.
+
+Two more tests run the steps in bash with a fake `node` and `npx`:
+- one branch failing does not stop the others, and the summary names each outcome;
+- with zero branches the job says so and skips the rest.
+
+**Mutations: 6 run, 6 caught.** Each exited non-zero with a named `not ok` and
+passed again after a sha256-checked restore:
+- adding `--env production` to the branch deploy;
+- adding a `secret put`;
+- filtering on `live` only;
+- dropping the `_` exclusion;
+- making `branches` depend on `schema-drift`;
+- exiting the loop on the first failed branch.
+
 ## D254
 
 **The persona taxonomy exists four times, and two of the three canonical
