@@ -24262,3 +24262,90 @@ merged (`f2a69e92`):
 `docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
 edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
 `check-folder-docs` and `check-api-drift` exit 0.
+
+## D254
+
+**The persona taxonomy exists four times, and two of the three canonical
+copies had drifted on their nav entries.** `cloudflare-worker/src/personas.ts`
+(`PERSONAS`) is canonical, its own comment claiming it is "Mirrored verbatim"
+in `frontend/src/lib/personas.js` — the copy the sidebar actually reads
+(`App.jsx`) — and in `backend/app/api/routes/personas.py`, the dev-only
+FastAPI mirror. All three agreed on the 12 ids, their labels,
+`role_alignment` and the follow-up question keys. They did not agree on nav:
+
+- `founder_existing`: the worker offered `{ to: '/founder', label: 'Founder
+  Portal' }`. No `/founder` route exists — only `/founder/post-need`. The
+  frontend had only `/legal-capital`.
+- `operator_advisor`: the worker offered `/projects`, which only redirects
+  to `/build`. The frontend pointed at `/build` directly, labelled
+  'Startups'.
+
+`GET /api/personas/taxonomy` serves the worker's copy, including the dead
+link, and nothing draws it today — which is why nobody saw it. The two
+existing guards (`founder_portal_removed.test.mjs`,
+`spinouts_page_removed.test.mjs`) each watch one copy, not the agreement
+between them.
+
+A fourth copy, `IntroductionsPanel.jsx`'s `PERSONA_LABEL`, differs from the
+canonical labels on 5 of the 12 ids on purpose: shorter labels for its
+entity filter and chips (`gp_external` → 'VC / GP',
+`sovereign_family_office` → 'Family Office', `academic` → 'University /
+Academic'), and `founder_new` / `founder_existing` both read 'Founder' —
+merging the two founder personas into one filter option. Its own comment
+claimed it "mirrors" `personas.ts`, which was false on those 5. This is
+recorded here as the product call it is, not fixed: no rendered string
+changes.
+
+**What shipped.**
+
+- The worker's `nav_extras` for `founder_existing` and `operator_advisor`
+  now match the frontend's — the frontend is canonical for nav because it is
+  what the sidebar actually draws from, not the worker.
+- The worker's top-of-file comment no longer claims a bare "verbatim"
+  mirror; it names the exception (`nav_extras` is frontend-canonical, and
+  the Python mirror carries no `nav_extras` field at all) and points at the
+  new test.
+- `IntroductionsPanel.jsx`'s comment now says what `PERSONA_LABEL` actually
+  is — a deliberately short, partly-merged label set — instead of claiming
+  to mirror the canonical labels.
+- New `frontend/test/persona_sources_agree.test.mjs`, on the shape of
+  `deck_category_sources_agree.test.mjs` (D102): one reader per source in a
+  `SOURCES` table, each asserted to parse exactly 12 personas before
+  anything is compared (a regex matching nothing would otherwise agree with
+  everything), worker/frontend/dev-mirror compared on label,
+  `role_alignment` and question keys, worker/frontend separately compared
+  on `nav_extras` (the dev mirror is asserted to declare no `nav_extras`
+  field, so it is excluded from that comparison rather than silently
+  passed), and `IntroductionsPanel`'s `PERSONA_LABEL` key set pinned to the
+  canonical 12 ids so a 13th persona fails loudly instead of rendering
+  unlabelled.
+- The two existing one-copy guards are left in place — the new test makes
+  them redundant, not wrong.
+
+**Left alone.** No rendered string in `IntroductionsPanel.jsx` changed. The
+Python mirror gained no `nav_extras` field — it is dev-only and nothing
+reads nav from it.
+
+**No migration.** `frontend/src` changed, so `docs/` was rebuilt.
+
+### VERIFIED
+
+- `frontend/test/persona_sources_agree.test.mjs`: **5** tests, exit 0.
+  Every source parses exactly 12 personas matching the canonical id set;
+  worker/frontend/dev-mirror agree on label, `role_alignment` and question
+  keys; worker and frontend agree on `nav_extras` (absent-vs-empty
+  normalised, since the worker's field is optional and the frontend always
+  writes it); the dev mirror is confirmed to carry no `nav_extras` field;
+  `IntroductionsPanel`'s `PERSONA_LABEL` key set equals the canonical 12.
+- `frontend/test/founder_portal_removed.test.mjs` and
+  `frontend/test/spinouts_page_removed.test.mjs`: unchanged, still pass.
+- Four mutations, each restored byte-identical from a saved copy: a changed
+  label in the frontend copy (caught by the label/role/keys test); a reader
+  regex matching nothing (caught by the 12-entry assertion — the test fails
+  rather than vacuously passing); a 13th id added to `IntroductionsPanel`'s
+  map only (caught by the key-set test); `/founder` put back in the
+  worker's `nav_extras` (caught by the nav-agreement test). All restored,
+  all 5 pass again.
+- Both typechecks exit 0 (`cd cloudflare-worker && npx tsc --noEmit`;
+  `npx tsc --noEmit -p frontend/tsconfig.json`).
+- `node scripts/check-decision-ids.mjs` exits 0 (D1 through D254).
