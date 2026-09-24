@@ -478,7 +478,13 @@ test('the AI budget trip is read in all four of its answers', async () => {
 
   const tripped = switchOf((await summary(db, { TOKENS: kvWith('1') })).body, 'ai_budget_trip');
   assert.equal(tripped.state, 'on', 'the router would refuse every AI call and the console says it is off');
-  assert.match(String(tripped.reason), /35 days/, 'the trip does not say how long it lasts');
+  // D242 — the trip is keyed by month, so it lasts for the rest of the month
+  // it measured and not the 35 days its old key did. Re-aimed, not loosened:
+  // the reason must still say how long it lasts, and the old length is refused.
+  assert.match(String(tripped.reason), /rest of the calendar month/, 'the trip does not say how long it lasts');
+  assert.match(String(tripped.reason), /lifts on the 1st/, 'the trip does not say when it ends');
+  assert.doesNotMatch(String(tripped.reason), /35 days/, 'the trip still claims the old 35-day life');
+  assert.match(String(tripped.reason), /nothing in the product clears it sooner/, 'the reason implies a runtime clear exists');
 
   const trueWord = switchOf((await summary(db, { AI_SPEND: kvWith('true') })).body, 'ai_budget_trip');
   assert.equal(trueWord.state, 'on');
