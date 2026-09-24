@@ -23093,6 +23093,43 @@ row; converting them, if ever wanted, is the owner's call.
 
 **285 is still the next free migration.**
 
+## D231
+
+**Two escalation contracts were stated and not kept.** `listEscalations`
+declared `branch_code` on its filter and none of its four statements bound
+it. Nothing calls that filter. `answerEscalation`, which is HQ's PATCH,
+accepted `withdrawn`. Withdrawing is the branch taking its request back.
+
+**What shipped.** `branch_code` is gone from the filter type. No branch
+filter was added. `HQ_DECISION_STATUSES` is `['answered', 'declined']`, and
+`answerEscalation` validates against it. `open` is still refused first, with
+the sentence "an answered escalation cannot stay open". The route's existing
+map answers 400 `bad_status`. `ESCALATION_STATUSES` stays the table's
+vocabulary, including `withdrawn`, because GET filters on it.
+`applyEscalationAnswer` is unchanged: anything other than `open` still
+becomes `answered` on the branch. Its comment no longer calls `withdrawn`
+one of HQ's decisions. The SPA already offers only `answered` and `declined`.
+
+**`slaBand(null)` stays `'ok'`.** `SLA_HOURS` is a `Record` of every
+escalation kind, and `recordEscalation` writes `due_at` from it as ISO, so
+a row this writer stores is never null and never unparseable. A null clock
+can only come from a hand-written row. HQ Home and HQ Support would draw
+that band as "on time". A fourth band was not added. A test fails the day a
+kind is added to `ESCALATION_KINDS` without hours in `SLA_HOURS`.
+
+**No migration. No new route.**
+
+### VERIFIED
+
+- `cloudflare-worker/test/escalation_contracts_d231.test.ts` covers the
+  refused withdrawal, the unchanged row, no push, `answered` and `declined`,
+  GET `?status=withdrawn`, every kind's SLA hours, and a filter type that
+  names no unread key.
+- Four mutations, each restored from a snapshot and checked by sha256.
+  Accepting `withdrawn`, deleting `moderation`'s hours, returning a cut list
+  as complete, and printing the capped length each exited non-zero with a
+  `not ok` line.
+
 ## D232
 
 **Four dead symbols, re-grepped and removed.** The first three are `api.js`
@@ -23239,6 +23276,30 @@ signature gained a parameter, not a new export.
 - `node scripts/check-decision-ids.mjs` exits 0 (D1 through D233).
 
 **285 is still the next free migration.**
+
+## D234
+
+**"Submitted for approval" stopped at 100 and still printed 100.**
+`GET /api/admin/escalations` listed at most 100 rows and did not say when
+there were more. HQ Content rendered `laneItems.length`.
+
+**What shipped.** `listEscalations` reads one past its limit and returns
+`complete: false` when that extra row exists. The extra row is not in
+`items`. The route returns `complete` beside `items`. The page shows the
+count only when `complete` is true. A cut read renders "Not counted", with
+the reason that the read stopped at its ceiling.
+
+**No migration. No new route.** `docs/` was rebuilt because `frontend/src` moved.
+
+### VERIFIED
+
+- The worker test asks for `limit: 1` with two rows and gets one item and
+  `complete: false`. A complete read of two rows returns `complete: true`.
+- `frontend/test/hq_content_platform_h6.test.mjs` pins `submittedFigure`: it
+  returns the length only when `lane.complete === true`, and otherwise null.
+  The tile renders "Not counted" when the read was cut. Returning the capped
+  length failed that test (non-zero exit, one `not ok` line) and was restored
+  by sha256.
 
 ## D237
 
