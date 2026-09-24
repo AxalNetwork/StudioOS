@@ -24146,6 +24146,173 @@ HQ stores `push_ok`, `push_reason`, `push_at`, and the name that was pushed (`an
 - Send again, given a different answer in the body, pushes the stored text and leaves the row's answer as it was. `push_ok` is written.
 - Three mutations, each restored sha256-identical, each a non-zero exit and one `not ok`. Dropping the unique index makes the keyed insert fail (the `ON CONFLICT` target is gone). Letting send again read a new answer from the body pushes that text. Skipping the stored-decision check lets a resend of an open row through.
 
+## D244
+
+**A branch with no licence copy now fetches one from HQ the first time it is
+read, and HQ hands a licence's terms only to a branch that proves which
+deployment it is.** Task 342.
+
+**No migration, no new route, no new `api.js` method.** `GET /api/licence/mine`
+and `GET /api/branch/analytics` keep their shapes; each carries a `pull` when
+the request fetched the copy or tried to.
+
+### THE DEFECT
+
+- **The copy had one writer, and nothing guaranteed it would run.** A branch's
+  `branch_licence` row (migration 256) was written only by HQ's push,
+  `pushLicenceToBranch`, on a licence transition. Provisioning pushes nothing,
+  and a licence that is simply active has no next transition. So a freshly
+  provisioned branch answered `licence_not_pushed` for as long as nothing
+  happened at HQ — on `/admin/my-licence`, and on the revenue card of
+  `/branch/insights/analytics`, which reads the same payload.
+- **Two push reasons promised what nothing did.** "Will reach the branch when
+  one is provisioned" and "will reach the branch when a binding exists".
+  Neither provisioning nor a new binding sends anything.
+- **Both halves of a pull existed, unwired.** `BranchEntrypoint.licence` had no
+  caller. The branch-side writer, `applyLicenceCopy`, was the push's.
+- **`licence(callerCode)` was unauthenticated.** A service binding cannot say
+  who called it, so any Worker in the account that named a code received that
+  branch's fees, revenue share, token split and signatory. Its sibling
+  `reportUsage` already took the per-deployment secret.
+- **The branch held that secret and no code could read it.**
+  `branch-provision.yml` puts `RPC_SECRET` on every branch and writes its
+  SHA-256 into `licence_deployments.rpc_secret_hash`, but `Env` named it only
+  in a comment.
+
+### WHAT SHIPPED
+
+- **HQ authenticates before it reads.** `licenceForBranch(env, callerCode,
+  secret)` runs `authenticateBranch` first, exactly as `reportUsage` does: an
+  unprovisioned code, a deployment with no hash on file, and a missing or wrong
+  secret all throw before the licence row is read. It had no caller, so
+  nothing that worked stopped working. A deployment whose licence row has gone
+  still answers `no_licence_for_branch`, a fact about HQ's ledger rather than a
+  refusal of the caller. `promoCeiling()` is left as it is, unauthenticated and
+  uncalled: task 354 retires it.
+- **`Env` declares `RPC_SECRET`**, beside `HQ_RPC_SECRET`.
+- **The pull, in `routes/licence.ts`.** `branchLicencePayload` calls
+  `pullLicenceCopy` when the copy is missing, then reads again. The order of
+  its checks is the policy; each refusal that costs nothing runs before the
+  call that costs something:
+  1. HQ never pulls — it holds the ledger;
+  2. no `RPC_SECRET` refuses, because HQ would refuse the call;
+  3. no `HQ` binding refuses;
+  4. **no throttle store refuses** rather than calling without a limit, and an
+     unreadable throttle record refuses the same way;
+  5. an attempt inside the window reports that attempt and waits;
+  6. only then is HQ called, under a 3-second deadline, and the attempt is
+     recorded in KV whatever it produced.
+  The answer is checked before it is stored. An error object is never applied,
+  because it would become a copy with an empty uid and every term null; an
+  answer with no licence id is not stored. What passes is written through
+  `applyLicenceCopy`, the push's own writer, so a pulled row and a pushed row
+  are one row written one way. A write that does not read back is reported as
+  that, never as a success.
+- **Five minutes, and why.** One pull per branch per 300 seconds, keyed
+  `licence_pull:<code>` in `RATE_LIMITS`. Long enough that a branch whose HQ
+  link is broken does not call HQ on every page load; short enough that a fix
+  at HQ — a secret set, a licence row restored — is picked up while someone is
+  still looking. KV bounds it from below: its shortest expiry is 60 seconds and
+  a write can take about as long to be seen elsewhere. It is also the cadence
+  `lastActive.ts` already uses over the same binding.
+- **An unreadable copy table is not pulled into.** The licence would have
+  nowhere to go, and the call would end in a storage error that is really the
+  unapplied migration. The page names migrations 256, 265 and 284 instead.
+- **Never thrown.** Every way the pull can fail is a sentence in `pull.reason`
+  beside the unchanged `licence_not_pushed` 404. `called` says whether this
+  request reached HQ; `retry_after` says when the window closes.
+- **Only an admin reads a branch's terms.** HQ's arm of `/mine` answers 404 to
+  anyone not bound in `licence_admins`. A branch has no binding to consult, so
+  its arm served the fees and the signatory to any signed-in member — latent
+  while no branch is provisioned. It now requires the admin role, so a
+  founder's read never reaches HQ. Every screen that calls it is already an
+  admin route.
+- **The push's two reasons say what is true.** The change is recorded at HQ; a
+  branch that holds no copy reads it from HQ the first time it asks; one that
+  already holds a copy keeps it until a push reaches it through a binding.
+- **The page.** `MyLicencePage` carries `pull` into state and draws
+  `LicencePullNote` inside the not-pushed block: whether the page asked HQ just
+  now or did not ask, the server's sentence as written, and the next attempt as
+  a UTC `<time>` with the instant on the element. A `retry_after` that is not
+  an ISO instant is not drawn, and a response with no `pull` draws nothing.
+- **The RPC surface.** `services/topology.ts` marks `licence` called and
+  authenticated, and names the methods still uncalled rather than counting
+  them. `scripts/lib/rpcEntrypoints.test.mjs`'s branch-to-HQ floor gains
+  `['alias', 'routes/licence.ts', 'licence']`, the way D207 added `escalate`.
+  The call goes through a local alias because that is the form
+  `scripts/lib/rpcSurface.mjs` harvests.
+- **D206's fixture** provisions its two branches with hashed synthetic secrets
+  and presents them, because `licenceForBranch` now refuses without one.
+
+### NOT BUILT, AND FILED
+
+- **Nothing re-sends a change to a branch that already holds a copy.** Such a
+  branch never pulls, and a push that failed — no binding yet, or the branch
+  unreachable — is not retried. HQ gaining a binding sends nothing. The next
+  transition carries the licence's current state, as D137 records; until then
+  the branch shows an older copy with its `as_of`. Filed as task 431.
+- **Two first reads at once can both pull.** KV has no compare-and-set and is
+  eventually consistent, so two requests inside the same second can each find
+  no attempt recorded. Both calls are authenticated and both write the same row
+  through the same upsert, so the cost is one extra call to HQ, not a wrong
+  copy. Not locked.
+- **The page has no control to ask again.** The next attempt happens on the
+  first visit after `retry_after`, and the page says when that is.
+
+### VERIFIED
+
+- **`npm run test:drift` exit 0**, read as the exit code from a redirected log:
+  frontend **3250** passed, worker **4270** (4267 pass + the same 3
+  pre-existing environment-gated skips), retention **54**, zero `not ok`.
+- **Worker, `licence_pull_d244.test.ts`, 18 tests**: a missing copy is fetched
+  from HQ, written, read back and served · a copy already held is served without
+  asking HQ · HQ throwing leaves no copy, and the refusal says a pull was tried
+  and why · a second request inside the window does not call HQ, and reports the
+  first · a wrong secret is refused by HQ itself, and nothing is written · a
+  deployment with no hash on file is refused by HQ — never a default-open ·
+  HQ's licence() refuses before it reads anything, whatever calls it · HQ
+  answering with an error object writes nothing · an answer with no licence id
+  is not stored · no RPC_SECRET refuses before calling HQ, and says what to do ·
+  no HQ binding refuses before anything else can be tried · no throttle store
+  refuses — it never falls back to an unlimited pull · an unreadable throttle
+  record refuses rather than calling · an unreadable copy table is not pulled
+  into · HQ never pulls · HQ that never answers is reported as not answering,
+  within the deadline · only an admin reads the branch's licence terms, and a
+  founder's read never reaches HQ · the call is written where the RPC harvest
+  can see it.
+- **Frontend, `licence_pull_ui_d244.test.mjs`, 5 tests**, rendered with
+  `renderToStaticMarkup` rather than scanned: a pull that reached HQ and failed
+  says so, in the server's words, with the retry in UTC · a pull refused before
+  calling says it did not ask, and why · no pull from an older server draws
+  nothing · a retry stamp that is not an ISO instant is not drawn · the page
+  carries the pull into state and draws it inside the not-pushed block.
+- **14 mutations applied, 14 caught**, each anchor asserted unique before it was
+  applied, each proved to have changed bytes, each restore verified by sha256:
+  `authenticateBranch` dropped from `licence()`; the throttle written to a key
+  nobody reads; the error-object branch disabled; a no-licence-id answer
+  applied; the deadline removed; `/mine`'s branch path not admin-only; no
+  throttle store falling through; no `RPC_SECRET` falling through; an
+  unreadable copy table pulled into; the topology row saying `licence` is
+  uncalled; the call hidden from the RPC harvest; the page dropping the pull on
+  the way into state; the note not drawn; the called/not-called labels swapped.
+- **One guard re-aimed, not loosened.** `branch_seats_from_role.test.ts` pinned
+  the literal line `import { SEAT_ROLES } from '../rpc/branchOps'`, and this
+  entry adding `applyLicenceCopy` to that import failed it on a change that kept
+  its rule. It now asserts the property: `SEAT_ROLES` arrives by name from
+  `../rpc/branchOps`, and nothing declares a local copy beside it.
+  Mutation-checked both ways — importing from another module fails it, a local
+  re-list fails it, and splitting the import into two lines still passes, which
+  is the reshape the old literal could not survive. The 14-mutation harness had
+  not included that file, which is why it surfaced in the full suite rather than
+  in the harness.
+- Both typechecks exit 0; `check-api-drift`, `check-unused-imports`,
+  `check-dark-mode`, `check-folder-docs` and `check-decision-ids` exit 0. The
+  root `npm run build` ran after the last `frontend/src` edit, and
+  `check-docs-fresh --strict` exits 0.
+- **Not measured, said plainly:** no branch is provisioned, so the pull has
+  never run against a real HQ binding. The tests drive it through a stub HQ over
+  real `node:sqlite` databases on both sides.
+
 ## D247
 
 **Deactivating an administrator now takes demote's bar: a TOTP-minted

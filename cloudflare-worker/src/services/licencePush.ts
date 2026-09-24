@@ -180,8 +180,14 @@ export async function pushLicenceToBranch(
     return {
       ok: false,
       code: null,
+      // D244 — the second sentence used to promise the change "will reach the
+      // branch when one is provisioned", and nothing did that: provisioning
+      // pushes nothing, and until D244 a branch never asked. It asks now — a
+      // branch holding no copy pulls one on its first read (routes/licence.ts,
+      // `pullLicenceCopy`) — so the sentence says that instead.
       reason: 'This licence has no branch deployment, so there is nothing to push to. '
-        + 'The change is recorded at HQ and will reach the branch when one is provisioned.',
+        + 'The change is recorded at HQ, and a branch provisioned for this licence reads it from '
+        + 'HQ the first time it asks.',
     };
   }
 
@@ -191,8 +197,15 @@ export async function pushLicenceToBranch(
     return {
       ok: false,
       code,
+      // D244 — "will reach the branch when a binding exists" was the same
+      // promise: nothing re-sends a change when HQ gains a binding. What is true
+      // depends on the branch. One that holds no copy pulls it the first time
+      // it asks; one that already holds a copy never asks, and keeps what it
+      // has until a push reaches it — which needs the binding this lacks.
       reason: `No branch Worker is bound for ${code}, so the change is recorded at HQ `
-        + 'and will reach the branch when a binding exists.',
+        + 'and has not reached the branch. A branch that holds no copy yet reads it from HQ the '
+        + 'first time it asks; one that already holds a copy keeps it until a push reaches it '
+        + 'through a binding.',
     };
   }
 

@@ -32,6 +32,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -99,6 +100,12 @@ const run = (db: InstanceType<typeof DatabaseSync>, sql: string) => {
  * Fixtures, production-shaped                                         *
  * ------------------------------------------------------------------ */
 
+// Synthetic per-deployment secrets. Obviously not credentials: they exist only
+// in this file, and the secret scan must never mistake them for one.
+const RPC_SECRET_FR = 'synthetic-test-value-fr-not-a-credential';
+const RPC_SECRET_LYON = 'synthetic-test-value-lyon-not-a-credential';
+const hashOf = (v: string) => createHash('sha256').update(v).digest('hex');
+
 /**
  * HQ: the licence ledger as the baseline declares it, migration 279's `kind`
  * applied on top, the deployment registry, both 259s. Two licences — an Axal
@@ -140,12 +147,16 @@ function hqDb() {
   );
   ct.run('ct_1', 'lic_fr', 'licence-agreement', 3, 'Licence agreement', '…');
   ct.run('ct_2', 'lic_fr', 'licence-agreement', 4, 'Licence agreement', '…');
+  // D244: the pull is authenticated, so each deployment carries the hash of the
+  // secret its branch presents — what branch-provision.yml writes. The hash is
+  // taken here with node:crypto rather than the Worker's own helper, so the
+  // test does not agree with the code by construction.
   const dep = db.prepare(
-    `INSERT INTO licence_deployments (licence_uid, code, hostname, worker_name, d1_name, status)
-     VALUES (?,?,?,?,?,'live')`,
+    `INSERT INTO licence_deployments (licence_uid, code, hostname, worker_name, d1_name, status, rpc_secret_hash)
+     VALUES (?,?,?,?,?,'live',?)`,
   );
-  dep.run('lic_fr', 'fr', 'fr.axal.vc', 'studioos-fr', 'studioos-fr');
-  dep.run('lic_lyon', 'lyon', 'lyon.axal.vc', 'studioos-lyon', 'studioos-lyon');
+  dep.run('lic_fr', 'fr', 'fr.axal.vc', 'studioos-fr', 'studioos-fr', hashOf(RPC_SECRET_FR));
+  dep.run('lic_lyon', 'lyon', 'lyon.axal.vc', 'studioos-lyon', 'studioos-lyon', hashOf(RPC_SECRET_LYON));
   return db;
 }
 
@@ -487,7 +498,7 @@ test('the push and the pull send one record, field for field', async () => {
   const pushed = await pushLicenceToBranch(env, 1, '2026-09-23T12:00:00Z');
   assert.equal(pushed.ok, true, pushed.reason);
   assert.equal(seen.length, 1);
-  const pulled: any = await licenceForBranch(env, 'fr');
+  const pulled: any = await licenceForBranch(env, 'fr', RPC_SECRET_FR);
   assert.ok(!('error' in pulled), `the pull failed: ${JSON.stringify(pulled)}`);
 
   const { pushed_at: pushStamp, ...pushRecord } = seen[0];
@@ -514,7 +525,7 @@ test('a white-label’s copy says it is one, from both emitters', async () => {
   } as any;
   await pushLicenceToBranch(env, 2, '2026-09-23T12:00:00Z');
   assert.equal(seen[0].kind, 'white_label');
-  const pulled: any = await licenceForBranch(env, 'lyon');
+  const pulled: any = await licenceForBranch(env, 'lyon', RPC_SECRET_LYON);
   assert.equal(pulled.kind, 'white_label');
   assert.equal(pulled.template_version, null, 'a licence with no contract invented a template version');
 });

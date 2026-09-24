@@ -106,7 +106,13 @@ export class BranchEntrypoint extends WorkerEntrypoint<Env> {
     return recordEscalation(this.env, callerCode, item);
   }
 
-  licence(callerCode: string) { return licenceForBranch(this.env, callerCode); }
+  // MONEY-ADJACENT SINCE D244: the answer is a licence's fees, revenue share
+  // and signatory, so the call carries the branch's own secret as well as its
+  // code, verified by `authenticateBranch` before anything is read. The
+  // branch's caller is `pullLicenceCopy` in routes/licence.ts.
+  licence(callerCode: string, secret: string) {
+    return licenceForBranch(this.env, callerCode, secret);
+  }
 
   // MONEY-ADJACENT, so it carries the branch's own secret as well as its
   // code (D.7). See `authenticateBranch` in hqOps.ts for why a code alone is

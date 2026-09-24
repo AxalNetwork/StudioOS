@@ -314,6 +314,12 @@ test('a branch HQ has not pushed to says so — a different 404 from "you admini
   assert.equal(notPushed.status, 404);
   assert.equal(notPushed.body.error, 'licence_not_pushed');
   assert.equal(notPushed.body.branch, 'fr');
+  // D244 — the 404 now carries WHY no copy was fetched. This fixture's branch
+  // has no RPC_SECRET, so it refused before reaching HQ and must say so: a
+  // missing secret that looked like "HQ has not pushed yet" would wait forever
+  // for a push that the branch itself could have fetched.
+  assert.equal(notPushed.body.pull?.called, false, 'a branch with no secret reached HQ anyway');
+  assert.match(String(notPushed.body.pull?.reason), /RPC_SECRET/);
 
   // HQ, same empty ledger, keeps its own 404 and its own code. If these two
   // collapsed into one answer, support could not tell "the push has not

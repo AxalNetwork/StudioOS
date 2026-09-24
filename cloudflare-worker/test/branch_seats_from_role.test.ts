@@ -132,8 +132,17 @@ test('the licence page and the overview count the same thing', () => {
   // for deck categories (#207), and a branch admin comparing its own licence
   // page against what HQ's card shows is exactly who would notice.
   const licence = read('cloudflare-worker/src/routes/licence.ts');
-  assert.match(licence, /import \{ SEAT_ROLES \} from '\.\.\/rpc\/branchOps'/,
+  // THE PROPERTY, NOT THE LINE. This pinned the literal
+  // `import { SEAT_ROLES } from '../rpc/branchOps'` until D244 added a second
+  // name to that import, which failed the test on a change that kept the rule.
+  // What the rule needs is that SEAT_ROLES arrives from branchOps by name and
+  // that nothing declares a local copy beside it.
+  const fromBranchOps = [...licence.matchAll(/import \{([^}]*)\} from '\.\.\/rpc\/branchOps'/g)]
+    .flatMap((m) => m[1].split(',').map((n) => n.trim()));
+  assert.ok(fromBranchOps.includes('SEAT_ROLES'),
     'the licence page must take the seat roles from one place, not re-list them');
+  assert.doesNotMatch(licence, /\b(?:const|let|var)\s+SEAT_ROLES\b/,
+    'the licence page declares its own seat roles beside the shared ones');
   // THE SAME QUERY, not merely the same list. Both readers run
   // `SELECT role, COUNT(*) … WHERE is_active = 1 GROUP BY role` and sum over
   // SEAT_ROLES in JavaScript — which is also why neither interpolates into
