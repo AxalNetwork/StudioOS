@@ -42,10 +42,11 @@ test('a real stamp is valid, with and without its trailing newline', () => {
   }
 });
 
-test('an ABSENT stamp is not a failure — it is the pre-D103 docs/ case', () => {
-  // This must stay a fallback. A `docs/` built before builds recorded their
-  // source has no stamp and the timestamp proxy is the only answer available;
-  // making it fail would break every older checkout.
+test('an ABSENT stamp classifies as not present (but the checker treats it as strict failure)', () => {
+  // The classifier still reports absent as present:false — only the checker's
+  // --strict behavior changes. A `docs/` built before D103 genuinely has no
+  // stamp, but D103 has been in every build since it was written, so absent
+  // now means someone deleted it or ran a bare `vite build` (D218).
   for (const raw of [null, undefined]) {
     const s = classifyStamp(raw);
     assert.equal(s.present, false, 'an unreadable file was reported as present');
@@ -83,7 +84,7 @@ test('every other malformed shape is present and invalid too', () => {
   }
 });
 
-test('the checker actually REFUSES on it, rather than merely importing it', () => {
+test('the checker actually REFUSES on present-but-unreadable stamps, not merely importing it', () => {
   // THE WIRING, which a unit test on a pure function cannot see. A correct
   // classifier whose verdict is ignored is the same bug with an extra file in
   // it, so the refusal branch is pinned where it lives.
@@ -104,6 +105,21 @@ test('the checker actually REFUSES on it, rather than merely importing it', () =
   );
   assert.match(attrs, /^docs\/\.build-source merge=union$/m,
     'the build stamp lost its union merge attribute, so it conflicts again');
+});
+
+test('the checker actually REFUSES on absent stamps under --strict (D218)', () => {
+  // THE WIRING for the new absent-stamp branch. The classifier reports absent
+  // as present:false, but the checker must refuse when --strict is set, because
+  // every build since D103 writes the stamp, so absent now means someone deleted
+  // it or ran a bare `vite build` — both defects this gate is meant to catch.
+  const at = CHECKER.indexOf('if (!stamp.present)');
+  assert.ok(at > 0, 'the absent-stamp branch is missing');
+  const fallback = CHECKER.indexOf('// FALLBACK: the commit-timestamp proxy');
+  const branch = CHECKER.slice(at, fallback);
+  assert.match(branch, /if \(strict\) process\.exit\(1\)/,
+    'absent stamp does not exit under --strict, so it falls through to the proxy');
+  assert.match(branch, /npm run build && git add docs && git commit -m "Rebuild docs\/"/,
+    'the fix command is not printed or is wrong');
 });
 
 test('the shape the build writes is the shape the regex accepts', () => {

@@ -21952,6 +21952,22 @@ nothing to say and `docs/` is not rebuilt.
 
 **285 is still the next free migration.**
 
+## D218
+
+**An absent `docs/.build-source` is now a `--strict` failure. The build records
+its source hash under D103, so absent means someone deleted it or ran a bare
+`vite build` instead of `npm run build`.**
+
+No migration. The guard `scripts/check-docs-fresh.mjs` still exits 0 locally
+without `--strict` (printing a warning), but `npm run test:guards` still passes.
+CI's `og-tags` job runs with `--strict`, so it catches the defect where it
+belongs — on committed builds that skipped the rebuild hook.
+
+- Absent stamp: new `if (!stamp.present)` branch exits 1 under `--strict`,
+  prints the two causes and the fix verbatim.
+- Comments fixed to reflect absent as a failure, not a fallback.
+- Wiring test added: the new branch pins exact location and exit behavior.
+
 ## D219
 
 **One `clientIp` helper, and the NDA signature stops trusting a header the signer controls.**
