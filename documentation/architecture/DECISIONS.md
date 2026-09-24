@@ -24990,6 +24990,12 @@ SPA HQ does.
   requires exactly one HQ line and requires every other line to name a branch
   config.
 
+**What D253 left standing, corrected in place.** Two sentences still said
+nothing redeploys a branch: the H14 rail row "A redeploy of a branch"
+(`PlatformTopologyPage.jsx`) and the header of `topology_d209.test.ts`. Both
+were corrected in the first commit of the task-323 PR (D263), and
+`topology_h14_s14` now fails if the page says it again.
+
 **Filed, not built: the status flip.** Nothing moves a branch from
 `provisioning` to `live`. `branch-provision.yml` writes `provisioning`, and its
 smoke step is what shows the branch is live, but nothing writes that back. That

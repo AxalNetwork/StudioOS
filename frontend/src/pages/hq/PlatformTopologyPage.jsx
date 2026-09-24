@@ -337,7 +337,7 @@ export default function PlatformTopologyPage() {
         : (topo === null ? 'Reading the topology…' : 'The topology could not be read, so there is nothing to read back.')}
       unavailable={[
         ['A branch’s own bindings', 'HQ reads a branch’s health over its binding, which reports its database and licence copy. Which bindings a branch holds is on that branch’s Settings page.'],
-        ['A redeploy of a branch', 'No workflow deploys a branch a second time, so there is no rollout or rollback to show per branch.'],
+        ['A per-branch rollout or rollback', 'Every push to main redeploys each provisioned branch after HQ, all at once, so there is no staged rollout or rollback to show per branch.'],
       ]}
       data-testid="hq-topology-rail"
     />

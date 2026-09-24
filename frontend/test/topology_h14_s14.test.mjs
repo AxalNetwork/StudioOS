@@ -165,6 +165,17 @@ test('the deploy strip lists what the Worker lists, and the dispatch sentence fo
   // the old "nothing redeploys" warning is gone.
   assert.match(byTestId(markup, 'h14-branch-redeployed'), /^Every push to main redeploys each provisioning or live branch after HQ/);
   assert.doesNotMatch(markup, /h14-branch-not-redeployed/);
+  // Nor may any other copy on the page still say it: D253 left the rail row
+  // claiming no workflow redeploys a branch until the residue commit fixed it.
+  // The rail rows are unconditional, unlike the `branch_redeployed === false`
+  // note above, so they are read line by line, the way hq_home reads rails.
+  const rail = readFileSync('frontend/src/pages/hq/PlatformTopologyPage.jsx', 'utf8')
+    .split('\n').map((l) => l.trim()).filter((l) => l.startsWith("['"));
+  assert.ok(rail.length > 0, 'the page has rail rows to read');
+  for (const row of rail) {
+    assert.doesNotMatch(row, /(?:deploys a branch a second time|redeploys? (?:a|no) branch|nothing redeploys)/i,
+      `a rail row still says branches are not redeployed: ${row.slice(0, 80)}`);
+  }
   assert.match(byTestId(markup, 'h14-dispatch'), /^HQ cannot dispatch provisioning from here: the repository token, owner and name are not all set/);
   const dispatchable = describeTopology({ ...ALL_BOUND, GITHUB_ACCESS_TOKEN: 't', GITHUB_REPO_OWNER: 'o', GITHUB_REPO_NAME: 'n' });
   assert.match(text(DeploysStrip, { deploys: dispatchable.deploys, dispatch: dispatchable.deploy_dispatch }), /HQ can dispatch provisioning from a licence’s Deploy step\./);
