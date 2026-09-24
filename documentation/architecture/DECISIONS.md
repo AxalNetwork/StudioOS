@@ -22629,6 +22629,95 @@ not this read path.
 
 **285 is still the next free migration.**
 
+## D228
+
+**A screen sets a promo ceiling now. `api.promoCeilingSet` and its route, `PUT
+/api/admin/promo-ceilings/:uid` (D111), existed with no caller, so a ceiling
+could only be set by a hand-written request. Revenue now has the editor, on the
+route's existing gate (super admin) and audit (the `promo_ceiling_pushed`
+branch-action mirror row). The route now refuses a ceiling it cannot read
+instead of storing 0. The editor states that nothing at checkout enforces a
+ceiling.**
+
+**No migration.** No new route and no new `api.js` method: `promoCeilingSet`,
+`promoCeilings` and `licences` already existed, so `check-api-drift` has nothing
+new to match.
+
+### THE EDITOR
+
+`CeilingEditor` sits in Revenue's Promotions zone, under the ceilings list.
+
+- **Fields.** A licence, picked from `GET /api/admin/licences` (a non-active
+  licence is labelled with its status). A period, defaulting to the ceilings
+  payload's `current_period`. A currency, defaulting to the licence's own. An
+  amount.
+- **What it sends.** `ceilingPayload` turns the form into integer minor units
+  (`Math.round(amount × 100)`, so 19.99 is 1999 and not 1998.99…). A blank,
+  negative or unreadable amount is refused before any call. It is never sent as
+  0, because 0 is a real ceiling: "no promotions this period". A period that is
+  not `YYYY-Qn` is refused, and so is a currency that is not three letters.
+- **The result is two facts.** Whether the ceiling was saved, and whether the
+  push reached the branch: "Not pushed", with the route's own reason. After a
+  save the ceilings list is read again.
+- **Its own states for the licence list.** While loading it says so. If the
+  read fails, it shows Unreadable and draws no form. If there are no licences,
+  it says there is nothing to set a ceiling for.
+
+### THE ROUTE REFUSES WHAT IT CANNOT READ
+
+`ceiling_cents` went through `cents()`, which clamps and coerces. A missing,
+fractional or mistyped figure was stored as a ceiling of 0 (the branch told it
+may issue nothing) and the route answered 200. It now takes only a whole number
+of minor units, 0 or more, and otherwise returns 400 `bad_ceiling`. A currency
+that is not three letters returns 400 `bad_currency`. `cents()` still serves the
+statement fields it was written for.
+
+### NOT ENFORCED AT CHECKOUT, AND SAID SO
+
+Nothing at checkout compares a promo code against its branch's ceiling. The
+editor says: "Setting a ceiling records it at HQ and pushes it to the branch.
+Nothing at checkout checks a code against it yet: a branch can issue past its
+ceiling and no payment is refused because of it." Whether checkout should
+enforce it is a **decision for the owner**, not built here.
+`services/promos.ts` and the checkout reason maps are Session 6's, and neither
+is touched.
+
+### THE SENTENCE THAT STOPPED BEING TRUE
+
+`PlatformPage.jsx` said "Ceilings are listed on Revenue; no screen sets one
+yet." It now says "Ceilings are set and listed on Revenue; checkout does not
+check codes against them yet." A grep found no other live copy. The phrase in
+D213's own entry is a dated record and is left as it was.
+
+### HOW IT IS HELD
+
+- `cloudflare-worker/test/hq_statements.test.ts` gains 3 tests:
+  - A missing, null, string, non-numeric, negative, fractional or NaN ceiling
+    is refused, and nothing is written.
+  - 0 is stored as 0.
+  - A bad currency is refused, and a lowercase one is upper-cased.
+- `frontend/test/revenue_ceiling_editor_d228.test.mjs` (new, 8 tests) covers:
+  - The payload, including amounts whose float product is not an integer.
+  - Blank and negative amounts refused.
+  - The enforcement sentence in every state.
+  - The licence list loading, empty, unreadable and readable.
+  - The page's wiring, including the re-read after a save.
+  - Saved and pushed reported apart.
+  - The Platform sentence.
+
+**Mutation checks**, each run both ways (break the code, a named test fails,
+restore from a saved copy, it passes):
+
+- **Route (3):** the ceiling check, zero refused, and the currency check each
+  failed a named test. A fourth change, `cents(rawCeiling)`, is equivalent on a
+  value already validated as a non-negative integer, so it changes nothing to
+  catch.
+- **Page (6):** a blank sent as 0, the enforcement sentence dropped, a failed
+  licence read that still draws the form, no re-read after a save, and saved
+  and pushed merged into one fact each failed a named test. The sixth, dropping
+  `Math.round`, first survived because 0.1 × 100 is exact. The test was
+  tightened with 0.29 and 19.99, and it now fails.
+
 ## D229
 
 **`network_profiles.kind` was validated two different ways.** POST
