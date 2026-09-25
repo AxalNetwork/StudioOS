@@ -3,7 +3,7 @@ import { clampLimit, parseOffset } from '../util/pagination';
 import { hashEmail } from '../util/hashEmail';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAdmin, createJWT, hashToken, requireFactor, requireStepUp, requireSuperAdminWriteBar, isSuperAdmin, hydrateSuperAdmin, IMPERSONATION_EXPIRY_MINUTES, IMPERSONATION_CEILING_MINUTES } from '../auth';
+import { requireAdmin, requireBranchNotSuspended, createJWT, hashToken, requireFactor, requireStepUp, requireSuperAdminWriteBar, isSuperAdmin, hydrateSuperAdmin, IMPERSONATION_EXPIRY_MINUTES, IMPERSONATION_CEILING_MINUTES } from '../auth';
 import { notify } from '../services/notify';
 import {
   serializeTranscriptCsv,
@@ -1027,6 +1027,13 @@ admin.patch('/users/:user_id/access-level', async (c) => {
     return c.json({ error: "level must be 'limited' or null" }, 400);
   }
   const newLevel: string | null = raw === 'limited' ? 'limited' : null;
+  // D260 — ONLY THE GRANT FREEZES. Granting limited access lets an account in
+  // without KYC, which is admitting someone new under the brand; a suspended
+  // branch may not (423, after the admin gate). Revoking it (`level: null`)
+  // takes access away, and taking something down still works while suspended
+  // (`FREEZE_RULE`, lib/branchFreeze.js) — freezing it would trap a branch
+  // with an account it had let in and could no longer shut out.
+  if (newLevel === 'limited') await requireBranchNotSuspended(c);
 
   const target: any = await c.env.DB.prepare(
     `SELECT id, email, name, role, access_level, kyc_status FROM users WHERE id = ?`
@@ -1113,6 +1120,8 @@ async function ensureSpinoutAdmissionColumns(env: Env): Promise<void> {
 // and does NOT re-send the email.
 admin.post('/users/:user_id/spinout-admit', async (c) => {
   const adminUser = await requireAdmin(c);
+  // D260 — a suspended branch admits no one to the Lab: 423, after the admin gate.
+  await requireBranchNotSuspended(c);
   const userId = parseInt(c.req.param('user_id'));
   if (!Number.isFinite(userId)) return c.json({ error: 'Invalid user_id' }, 400);
   const body = (await c.req.json().catch(() => ({}))) as { cohort?: unknown };
@@ -1198,6 +1207,12 @@ admin.get('/spinout-applications', async (c) => {
 
 admin.post('/spinout-applications/:app_id/decide', async (c) => {
   const adminUser = await requireAdmin(c);
+  // D260 — FROZEN BOTH WAYS, because this is the D107 cohort queue by another
+  // door. It writes the same `cohort_applicants` rows as admin_cohort.ts's
+  // decide, which has been frozen since D107; left open, a suspended branch
+  // would decide the frozen queue through this route instead. A refusal is a
+  // verdict, not a takedown, as it is on every other queue.
+  await requireBranchNotSuspended(c);
   const appId = parseInt(c.req.param('app_id'));
   if (!Number.isFinite(appId)) return c.json({ error: 'Invalid application id' }, 400);
   const body = (await c.req.json().catch(() => ({}))) as { decision?: unknown; cohort?: unknown };
@@ -1217,6 +1232,13 @@ admin.post('/spinout-applications/:app_id/decide', async (c) => {
   ).bind(appId).first();
   if (!app) return c.json({ error: 'Application not found' }, 404);
   if (app.status !== 'pending') return c.json({ error: `Application already ${app.status}` }, 409);
+  // D260 — THE ROLE THIS HANDLER ALWAYS READ AND NEVER USED. `/apply` takes
+  // founders and explorers only, but a role can change while an application
+  // waits, and spinout-admit refuses an admin. Accepting one here admitted
+  // through this door what the other refuses. A refusal stays open.
+  if (decision === 'accepted' && app.role === 'admin') {
+    return c.json({ error: 'Admins cannot be admitted to the Lab' }, 400);
+  }
 
   // Guarded update — WHERE status='pending' makes the decision atomic, so two
   // admins deciding at once can't both trigger emails/admission side effects.

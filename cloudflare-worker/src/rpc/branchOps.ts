@@ -263,6 +263,13 @@ export async function branchOverview(env: Env): Promise<BranchAnswer<BranchOverv
 
 export type BranchAccountHit = {
   id: number; name: string | null; email: string | null; role: string; is_active: number; created_at: string | null;
+  // D260 — the three states HQ's Team table names on a branch hit. Each is the
+  // branch's own column, read as stored: `kyc_status` NULL stays NULL (not
+  // recorded, never "not started"), and `access_level` is 'limited' or NULL.
+  kyc_status: string | null;
+  access_level: string | null;
+  spinout_lab_active: number;
+  spinout_lab_admitted: number;
 };
 
 /**
@@ -287,11 +294,19 @@ export async function branchSearchAccounts(
   if (like === null) {
     return { results: [], truncated: false, branch, as_of: nowIso() };
   }
+  // D260 — KYC, access and Lab state ride on the hit, so HQ can say which of
+  // the branch's own admin acts an account is waiting on. A founder with no
+  // `user_spinout_flags` row has never been admitted: the table's own DEFAULT
+  // is 0 and every admission writes a row, so COALESCE states that default
+  // rather than inventing a figure.
   const rows = await env.DB.prepare(
-    `SELECT id, name, email, role, is_active, created_at
-       FROM users
-      WHERE name LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\'
-      ORDER BY id DESC
+    `SELECT u.id, u.name, u.email, u.role, u.is_active, u.created_at,
+            u.kyc_status, u.access_level, u.spinout_lab_active,
+            COALESCE(f.spinout_lab_admitted, 0) AS spinout_lab_admitted
+       FROM users u
+       LEFT JOIN user_spinout_flags f ON f.user_id = u.id
+      WHERE u.name LIKE ? ESCAPE '\\' OR u.email LIKE ? ESCAPE '\\'
+      ORDER BY u.id DESC
       LIMIT ?`,
   ).bind(like, like, cap + 1).all<BranchAccountHit>();
   const all = rows.results || [];

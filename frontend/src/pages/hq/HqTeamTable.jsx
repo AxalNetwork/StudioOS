@@ -99,6 +99,30 @@ function supportRefusal(ex) {
   return ex?.message || 'The support session could not be opened.';
 }
 
+/**
+ * D260 — what a branch hit says about the account's KYC, access and Lab, as
+ * the branch sent it. Read-only: acting on any of the three is the branch
+ * admin's, on its own Admin Console, and HQ draws no control for it.
+ *
+ * A branch on a build from before D260 sends none of the three fields, and
+ * `null` is returned for it so the row says the branch did not send them —
+ * never "not started", which would be a claim about the account. A KYC state
+ * the branch holds as NULL reads "not recorded" for the same reason. Access is
+ * named only when it is `limited`: the column holds that or nothing, and
+ * nothing means access follows KYC, which the first state already says.
+ */
+const KYC_STATE = {
+  not_started: 'KYC not started', pending: 'KYC pending', approved: 'KYC approved', rejected: 'KYC rejected',
+};
+export function branchHitStates(hit) {
+  if (!hit || !('kyc_status' in hit)) return null;
+  const out = [hit.kyc_status == null ? 'KYC not recorded' : (KYC_STATE[hit.kyc_status] || `KYC ${hit.kyc_status}`)];
+  if (hit.access_level === 'limited') out.push('limited access');
+  if (Number(hit.spinout_lab_active) === 1) out.push('in the Lab');
+  else if (Number(hit.spinout_lab_admitted) === 1) out.push('admitted to the Lab');
+  return out;
+}
+
 export function MoveHit({ hit, from, destinations, onMoved, viewAs }) {
   const [open, setOpen] = useState(false);
   const [to, setTo] = useState(destinations[0] || '');
@@ -112,6 +136,7 @@ export function MoveHit({ hit, from, destinations, onMoved, viewAs }) {
   const [supportErr, setSupportErr] = useState('');
   const [supportUrl, setSupportUrl] = useState(null);
   const canSupport = !viewAs && Number(hit.is_active) === 1;
+  const states = branchHitStates(hit);
   if (done) {
     return (
       <li className="py-1.5 text-[12px] text-axal-muted">
@@ -123,7 +148,12 @@ export function MoveHit({ hit, from, destinations, onMoved, viewAs }) {
   return (
     <li className="py-1.5 text-[12px]">
       <div className="flex items-center justify-between gap-3">
-        <span className="truncate text-axal-ink dark:text-white">{hit.name || hit.email}</span>
+        <span className="min-w-0">
+          <span className="block truncate text-axal-ink dark:text-white">{hit.name || hit.email}</span>
+          <span className="block truncate text-[11px] text-axal-faint" data-testid="hq-team-hit-states">
+            {states ? states.join(' · ') : 'KYC, access and Lab state not sent by this branch’s build'}
+          </span>
+        </span>
         <span className="flex shrink-0 items-center gap-2 text-[11.5px] text-axal-faint">
           <span>{hit.role} · {Number(hit.is_active) === 1 ? 'active' : 'deactivated'}</span>
           {canSupport && (
@@ -680,8 +710,9 @@ export default function HqTeamTable({ reloadKey = 0, onLoaded }) {
                 trust field to put in one. D129's precedent on S2 governs the
                 other one — a hit carries `role`, not a licence type, so the
                 heading beside it says Role. */}
-            A branch hit carries a role and an active state; it carries no trust score, because trust
-            is computed over HQ&rsquo;s own accounts and is not a per-branch figure.
+            A branch hit carries a role, an active state and its KYC, access and Lab state, read-only; it
+            carries no trust score, because trust is computed over HQ&rsquo;s own accounts and is not a
+            per-branch figure.
             {' '}
           </>
         )}

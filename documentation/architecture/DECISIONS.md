@@ -25705,6 +25705,205 @@ boundary, which is what the pin holds.
 edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
 `check-folder-docs` and `check-api-drift` exit 0.
 
+## D260
+
+**The branch freeze (D107) now reaches the admin acts that decide an
+account's access. On a suspended branch, KYC approve and reject, a grant of
+limited access, Spin-Out Lab admission and the older application decide answer
+423 and write nothing. Revoking limited access stays open. HQ's Team table now
+shows each branch account's KYC, access and Lab state, read-only.** Task 403.
+
+**No migration, no new route, no api.js method.** Five handlers gain the
+existing gate. The branch search reads three more columns and the flags table,
+all declared in the baseline.
+
+### THE DEFECTS
+
+- **A suspended branch could still let people in.** The four approval lanes
+  (D107) and seven community writes (D142) froze. But `kyc.ts` approve and
+  reject, `admin.ts`'s `PATCH /users/:user_id/access-level`, and
+  `POST /users/:user_id/spinout-admit` did not. A branch HQ had suspended could
+  clear an account for full access, let it browse without KYC, or admit it to
+  the Lab.
+- **A second door into a frozen queue.** `POST
+  /spinout-applications/:app_id/decide` writes the same `cohort_applicants`
+  rows as `admin_cohort.ts`'s decide, which has been frozen since D107. A
+  suspended branch could decide the frozen cohort queue through the older route.
+- **The application decide read the applicant's role and never used it.**
+  `/apply` takes founders and explorers only, but a role can change while an
+  application waits. `spinout-admit` refuses an admin ("Admins cannot be
+  admitted to the Lab"); the decide would accept one. That is a defect, and
+  its fix is one check.
+- **S7 claimed more than the server refused.** `branchFreeze.js`'s Approvals
+  row said "Every queue frozen". Approvals has had eleven lanes since D215, and
+  five had no gate: KYC, Partner profiles, Exploring, Best-Fit consultations
+  and due diligence. Programs said "Cohort admissions closed" while one of its
+  two doors was open.
+- **HQ could not see what a branch account was waiting on.** The branch
+  search returned a role and an active state. Four sentences said so, and
+  H20's row actions were refused on that ground.
+
+### WHAT CHANGED
+
+- **The gates.** Each gate comes after `requireAdmin`, so an anonymous caller
+  or a non-admin never learns the licence state:
+  - **KYC approve and reject** (`kyc.ts`): the gate also comes before
+    `requireStepUp`, so a frozen branch is not asked for a code it could not
+    use. **Frozen both ways.** A reject purges the stored document and writes
+    a verdict, and neither is a takedown. This matches every D107 queue.
+  - **Access level** (`admin.ts`): **only the grant freezes.** The gate is
+    `if (newLevel === 'limited') await requireBranchNotSuspended(c)`, after
+    the body is parsed.
+    - A grant lets an account in without KYC, which is admitting someone new.
+    - A revoke (`level: null`) takes access away, and `FREEZE_RULE` has always
+      promised that a takedown still works. Freezing it would trap a branch
+      with an account it had let in and could no longer shut out.
+  - **Lab admission** (`spinout-admit`): gated.
+  - **The application decide: decided, gated, both ways.** It is the D107
+    cohort queue by another door, and a refusal is a verdict there as on
+    every other queue.
+  - **The decide's role check, fixed.** `if (decision === 'accepted' &&
+    app.role === 'admin')` answers 400 with spinout-admit's own sentence,
+    before the guarded UPDATE, so nothing is written. Refusing an admin's
+    pending application still works.
+- **S7** (`lib/branchFreeze.js`, `FROZEN`):
+  - A new **Access** row with `gatedIn: ['admin.ts', 'kyc.ts']`. It says the
+    revoke still works.
+  - **Approvals** names the frozen lanes (LP applications, referrals, Spin-Out
+    moderation, KYC verdicts) and the four that are not, by the labels
+    `approvalSources.ts` gives them.
+  - **Programs** names the older application decide, and its evidence gains
+    `admin.ts`. The running cohort's carve-out stays.
+- **The floors.** `branch_suspended_freeze.test.ts`'s `FILES` gains `admin.ts`
+  and `kyc.ts`, and the gated-write floor goes **11 → 16**. Task 403 named
+  15; the application decide is the fifth gated handler, so the floor counts
+  it. `branch_shell_s7_s13`'s file floor follows,
+  **7 → 9**.
+- **The search half.** `rpc/branchOps.ts` was checked for an open Copilot PR
+  before it was touched; there was none.
+  - `branchSearchAccounts` selects `u.kyc_status, u.access_level,
+    u.spinout_lab_active` and `COALESCE(f.spinout_lab_admitted, 0)` through
+    `LEFT JOIN user_spinout_flags f`. The COALESCE states the table's own
+    DEFAULT: all three writers of the flag insert a row, so no row means
+    never admitted. It is a state, not a figure.
+  - `BranchAccountHit` widens.
+  - HqTeamTable's branch hit shows the states under the name through
+    `branchHitStates`:
+    - "KYC not recorded" for a NULL, never "not started";
+    - "limited access" only when the column says so;
+    - "in the Lab" or "admitted to the Lab".
+  - A branch still on the build before D260 sends none of the three fields.
+    The row then says the branch did not send them, rather than drawing a
+    state. D253 deploys HQ first, so HQ can briefly be ahead of a branch.
+  - The states are read-only. Deciding them is the branch admin's, on its
+    own Admin Console.
+- **The four sentences** that said a branch hit lacked these states now say
+  it shows them read-only:
+  - HqTeamActions' docblock and its overlay note;
+  - HqTeamTable's footnote;
+  - AccountsPage's rail entry, retitled to what is still unavailable from
+    HQ: deciding them.
+
+### PINS
+
+- `hq_team_h20.test.mjs:350` pinned "not KYC, access or Lab state". It is
+  re-aimed, not loosened: the new sentence is pinned, and the old one is
+  asserted absent.
+- `branch_rpc_fanout.test.ts`'s hand-built branch schema gains the three
+  columns and `user_spinout_flags`, copied from the baseline. A fixture
+  narrower than the schema fails on a shape production does not have (D142).
+
+### VERIFIED
+
+`cloudflare-worker/test/branch_freeze_admin_acts_d260.test.ts` uses the D248
+harness: the bundled `index.ts` on `buildFresh`, with the FR branch's vars and
+a TOTP session stepped up this minute. Thirteen tests:
+- **suspended, one test per act:** each of the five answers 423
+  `branch_suspended`. A snapshot of every row the five could write (the
+  account, its flags, the application, its cohort row) is byte-identical
+  afterwards;
+- **active:** all five answer 200 and land;
+- **anonymous:** 401 from all five, never the licence state;
+- **a signed-in non-admin on the Studio tier:** refused as a non-admin on all
+  five, never 423;
+- **HQ with a suspended row present:** 200 from all five, because the gate
+  is a no-op without a branch code;
+- **the revoke while suspended:** 200, and the column is cleared;
+- **no licence copy yet:** not frozen;
+- **the search on the fresh schema:** the three states as stored. The
+  admitted flag is strictly `0` without a flags row, and a NULL KYC stays
+  NULL;
+- **the decide's role check:** accepting an applicant who is now an admin
+  answers 400 and writes nothing, and refusing the same application answers
+  200.
+
+`frontend/test/branch_freeze_admin_acts_d260.test.mjs`, eight tests:
+- the Access row and its revoke sentence;
+- Approvals names the four lanes with no gate, read from `approvalSources.ts`;
+- Programs names the second door;
+- the access-level gate is conditional, in the handler;
+- the states as sent;
+- absent fields and NULL are said;
+- the states carry no control;
+- no file in `frontend/src` still says a branch hit lacks them.
+
+**Mutation checks: 25 runs, 24 caught,** each alone and restored from a
+sha256-verified snapshot. The one exit 0 was a mis-aimed mutation (below).
+- **Against the worker tests, 14 runs, all caught:**
+  - the gate removed, once for each of the five handlers;
+  - the gate placed before `requireAdmin`: KYC reject (run twice, see
+    below), KYC approve and spinout-admit;
+  - the revoke gated;
+  - `kyc_status` dropped from the SELECT;
+  - the COALESCE dropped;
+  - the decide's role check removed, and widened to refusals.
+- **Against the frontend tests, 11 runs, 10 caught:**
+  - `kyc.ts` removed from the gated set, twice (both rows, and the Access row
+    alone);
+  - "Every queue" restored;
+  - the Access row's revoke sentence dropped;
+  - a NULL KYC drawn as "not started";
+  - absent fields drawn as states;
+  - the states not rendered;
+  - AccountsPage's old sentence restored;
+  - the access gate made unconditional;
+  - `kyc.ts` stops gating: see the second item below.
+
+**An escape, fixed in the assertion.** The first run of "gate before
+`requireAdmin`" on KYC reject was caught only by the structural test. The
+anonymous test could not see it: on `/api/kyc`, the recovery cool-off and
+studio middlewares answer 401 before the handler runs. The signed-in non-admin
+test was added for that reason, since she passes both middlewares and reaches
+the handler. Run against the behavioural test alone, both KYC order mutations
+are now caught.
+
+**A mutation re-aimed, stated.** Removing only KYC approve's gate left
+`kyc.ts` still gating (reject), so file-level parity held and the frontend run
+exited 0. The worker suite catches that removal (above). Re-aimed to "`kyc.ts`
+stops gating at all", which is the property parity holds, it is caught.
+
+**Filed, not built.**
+- Whether Partner profiles, Exploring, Best-Fit consultations and due
+  diligence should freeze is not decided here. Their decide routes carry no
+  gate, and S7 now says so rather than claiming every queue.
+- The cohort door has the same role gap. `admin_cohort.ts`'s decide approves
+  a `cohort_applicants` row, and the activation in
+  `services/cohortApplications.ts` sets the admitted flag without reading the
+  role. Neither file is this session's, so it is filed rather than fixed.
+
+**Full suite:** `npm run test:drift` on Node 22 exits 0 on `main` at
+`9919975e`:
+- frontend 3258 (the eight above are new);
+- worker 4280 passed with 3 skipped (the thirteen above are new);
+- retention 54.
+
+No test name from a run on the earlier base (`f51ba684`) is missing.
+
+`docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
+edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
+`check-folder-docs`, `check-api-drift` and `check-runtime-schema-declared`
+exit 0.
+
 ## D263
 
 **Task 323: the restore drill had failed four runs out of four, and the next

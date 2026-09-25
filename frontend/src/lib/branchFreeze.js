@@ -32,14 +32,26 @@
  */
 export const FROZEN = [
   {
+    // D260 — "Every queue frozen" was never true: Approvals has eleven lanes
+    // since D215, and four of them have no gate. The row now names both sides.
     row: 'Approvals',
-    note: 'Every queue frozen. Items keep their SLA age, so nothing looks fresh when it unfreezes.',
-    gatedIn: ['admin_lp_applications.ts', 'refer_earn.ts', 'spinout_moderation.ts'],
+    note: 'LP applications, referrals, Spin-Out moderation and KYC verdicts are frozen, approve and reject alike. Items keep their SLA age, so nothing looks fresh when it unfreezes. Partner profiles, Exploring, Best-Fit consultations and due diligence are not frozen.',
+    gatedIn: ['admin_lp_applications.ts', 'refer_earn.ts', 'spinout_moderation.ts', 'kyc.ts'],
   },
   {
+    // D260 — the older application decide in admin.ts writes the same cohort
+    // queue, so "admissions closed" was true of one door only until it gated.
     row: 'Programs',
-    note: 'Cohort admissions closed. The running cohort continues to its end date — its week decisions are not frozen, because the founders in it did nothing.',
-    gatedIn: ['admin_cohort.ts'],
+    note: 'Cohort and Spin-Out Lab admissions closed, by the cohort queue and by the older application decide alike. The running cohort continues to its end date — its week decisions are not frozen, because the founders in it did nothing.',
+    gatedIn: ['admin_cohort.ts', 'admin.ts'],
+  },
+  {
+    // D260 — the admin acts that decide an account's access: both KYC
+    // verdicts, the grant of limited access, and the two Lab admissions.
+    // Revoking limited access is a takedown and stays open, as FREEZE_RULE says.
+    row: 'Access',
+    note: 'No KYC verdict, no grant of limited access, and no admission to the Spin-Out Lab. Revoking limited access still works.',
+    gatedIn: ['admin.ts', 'kyc.ts'],
   },
   {
     row: 'Community',

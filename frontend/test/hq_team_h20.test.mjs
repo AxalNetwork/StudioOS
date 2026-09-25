@@ -347,7 +347,12 @@ test('under the overlay the HQ-only card is absent and the admin card says whose
   assert.ok(OVERLAY.includes('data-testid="hq-team-actions-admin"'), 'the admin card must still be drawn');
   const note = text(OVERLAY);
   assert.match(note, /These are fr's own, on its Admin Console\./, 'the admin card does not name the branch it describes');
-  assert.match(note, /not KYC, access or Lab state/, 'the admin card does not say why there are no row actions');
+  // D260 — the reason changed, not the rule: the branch hit now carries the
+  // three states, so the card says they are shown read-only and whose the
+  // decision is, and it keeps no sentence claiming the search lacks them.
+  assert.match(note, /HQ is reading fr's answer\. Each account it returns shows its KYC, access and Lab state, read-only — deciding them is fr's/,
+    'the admin card does not say why there are no row actions');
+  assert.doesNotMatch(note, /not KYC, access or Lab state/, 'the admin card still says a branch hit lacks the states D260 added');
   // And on HQ it says they are every admin's, HQ's included.
   assert.match(text(PLAIN), /Every admin has these four, HQ included/);
 });
