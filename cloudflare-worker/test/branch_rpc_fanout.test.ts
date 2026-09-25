@@ -48,8 +48,14 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
 }
 
 const BRANCH_SCHEMA = `
+  -- D260 — the search reads KYC, access and Lab state, so the fixture carries
+  -- those columns and the flags table as the baseline declares them.
   CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1,
-                      name TEXT, email TEXT, created_at TEXT);
+                      name TEXT, email TEXT, created_at TEXT,
+                      kyc_status TEXT DEFAULT 'not_started', access_level TEXT,
+                      spinout_lab_active INTEGER NOT NULL DEFAULT 0);
+  CREATE TABLE user_spinout_flags (user_id INTEGER PRIMARY KEY,
+    spinout_lab_admitted INTEGER NOT NULL DEFAULT 0, spinout_lab_cohort TEXT, registration_product TEXT);
   CREATE TABLE branch_licence (id INTEGER PRIMARY KEY CHECK (id = 1), licence_uid TEXT NOT NULL,
     licence_ref TEXT, legal_entity TEXT, brand_name TEXT, territory TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'active', seats_json TEXT, revenue_share_bps INTEGER,

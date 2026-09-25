@@ -49,9 +49,10 @@ import { Card } from '../../ui';
  * UNDER THE OVERLAY THE HQ-ONLY CARD IS ABSENT, as H20 draws it ("the HQ-only
  * card hides"), and D153's rule governs the rest: HQ is reading one branch, so
  * nothing here can be acted on and no control is drawn. What H20 says happens
- * next — "these four become the row actions" — is refused with its reason: a
- * branch account search returns a role and an active state, not KYC, access
- * or Lab state, so there are no row actions a branch's answer could carry.
+ * next — "these four become the row actions" — is refused with its reason.
+ * Since D260 a branch hit carries KYC, access and Lab state and the Team table
+ * shows them, read-only; deciding any of them is the branch admin's, on its
+ * own Admin Console, so HQ reads the states and draws no row action on them.
  *
  * LINKS ARE LITERAL AND GO ONLY TO REGISTERED ROUTES. Every `to` below is a
  * string a reachability test can read, and none is a route that would 404 or
@@ -220,7 +221,7 @@ export default function HqTeamActions({ viewAs = null }) {
         </ul>
         <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-team-actions-admin-note">
           {viewAs
-            ? `These are ${viewAs}'s own, on its Admin Console. From here they are not drawn as row actions: HQ is reading ${viewAs}'s answer, and a branch account search returns a role and an active state — not KYC, access or Lab state — so there is nothing a row could act on.`
+            ? `These are ${viewAs}'s own, on its Admin Console. From here they are not drawn as row actions: HQ is reading ${viewAs}'s answer. Each account it returns shows its KYC, access and Lab state, read-only — deciding them is ${viewAs}'s, and while its licence is suspended it can only revoke limited access.`
             : 'Every admin has these four, HQ included — on the Admin Console’s Users table and on the directory below. On a branch they are the branch admin’s, on its own Admin Console.'}
         </p>
       </Card>

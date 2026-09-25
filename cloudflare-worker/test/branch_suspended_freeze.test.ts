@@ -280,6 +280,10 @@ test('every gated write sits AFTER its own admin gate, in every file', () => {
     'cloudflare-worker/src/routes/admin_events.ts',
     'cloudflare-worker/src/routes/admin_jobs.ts',
     'cloudflare-worker/src/routes/admin_circles.ts',
+    // D260 — the admin acts on an account's access: KYC approve and reject,
+    // the grant of limited access, Lab admission and the application decide.
+    'cloudflare-worker/src/routes/admin.ts',
+    'cloudflare-worker/src/routes/kyc.ts',
   ];
   let checked = 0;
   for (const f of FILES) {
@@ -318,7 +322,9 @@ test('every gated write sits AFTER its own admin gate, in every file', () => {
     assert.match(src, /requireBranchNotSuspended[^\n]*from '\.\.\/auth'|requireBranchNotSuspended[,}]/);
   }
   // A floor, so deleting gates cannot quietly shrink what this covers.
-  assert.ok(checked >= 11, `only ${checked} gated writes were examined; the four lanes plus seven community writes is 11`);
+  // D260 raised it from 11: two KYC verdicts, the access grant, Lab admission
+  // and the application decide.
+  assert.ok(checked >= 16, `only ${checked} gated writes were examined; the four lanes, seven community writes and five access writes is 16`);
 });
 
 test('a suspended branch can still TAKE DOWN what it published', () => {

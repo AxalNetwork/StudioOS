@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth, requireAdmin, requireStepUp } from '../auth';
+import { requireAuth, requireAdmin, requireStepUp, requireBranchNotSuspended } from '../auth';
 import { putKycDocumentFromDataUri, getKycDocument, deleteKycDocument } from '../services/r2';
 import { hashEmail } from '../util/hashEmail';
 import { bindingKey } from '../util/schemaBootstrap';
@@ -316,6 +316,10 @@ kyc.get('/admin/:userId/document', async (c) => {
 
 kyc.patch('/admin/:userId/approve', async (c) => {
   const adminUser = await requireAdmin(c);
+  // D260 — a suspended branch clears no one for full access: 423, after the
+  // admin gate (an anonymous caller still gets 401) and before step-up (a
+  // frozen branch is not asked for a code it could not use).
+  await requireBranchNotSuspended(c);
   await requireStepUp(c); // BLOCK-AUTH-03 — KYC verdicts require a RECENT TOTP step-up
   await ensureColumns(c.env);
   const userId = parseInt(c.req.param('userId'));
@@ -350,6 +354,9 @@ kyc.patch('/admin/:userId/approve', async (c) => {
 
 kyc.patch('/admin/:userId/reject', async (c) => {
   const adminUser = await requireAdmin(c);
+  // D260 — the verdict is frozen both ways, as every D107 queue is: a reject
+  // purges the stored document and writes a verdict, and neither is a takedown.
+  await requireBranchNotSuspended(c);
   await requireStepUp(c); // BLOCK-AUTH-03 — KYC verdicts require a RECENT TOTP step-up
   await ensureColumns(c.env);
   const userId = parseInt(c.req.param('userId'));
