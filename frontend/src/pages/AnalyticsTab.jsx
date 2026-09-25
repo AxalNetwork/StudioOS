@@ -85,7 +85,7 @@ export function RetryCard({ tab, status, message, onRetry }) {
         {onRetry && (
           <button
             onClick={onRetry}
-            className="mt-1.5 text-xs px-2 py-1 rounded border border-red-300 bg-white hover:bg-red-50 text-red-700 inline-flex items-center gap-1 dark:bg-gray-900"
+            className="mt-1.5 text-xs px-2 py-1 rounded border border-red-300 bg-white hover:bg-red-50 dark:hover:bg-red-900/30 text-red-700 inline-flex items-center gap-1 dark:bg-gray-900"
           >
             <RefreshCw size={11} /> Retry
           </button>
@@ -153,14 +153,14 @@ function ExportButtons({ onExport, busy }) {
       <button
         onClick={() => onExport('csv')}
         disabled={busy}
-        className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 inline-flex items-center gap-1.5 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+        className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 inline-flex items-center gap-1.5 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
       >
         <Download size={13} /> Export CSV
       </button>
       <button
         onClick={() => onExport('pdf')}
         disabled={busy}
-        className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 inline-flex items-center gap-1.5 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+        className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 inline-flex items-center gap-1.5 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
       >
         <FileText size={13} /> Export PDF
       </button>
@@ -1159,7 +1159,7 @@ function PlanAuditHistory({ refreshKey }) {
           </div>
           <button
             type="submit"
-            className="text-xs px-2 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900"
+            className="text-xs px-2 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50 dark:hover:bg-gray-800 dark:border-gray-700 dark:bg-gray-900"
           >
             Apply
           </button>
@@ -1199,7 +1199,7 @@ function PlanAuditHistory({ refreshKey }) {
             onClick={exportCsv}
             disabled={exporting || (items !== null && items.length === 0 && !hasFilters)}
             title={hasFilters ? 'Export rows matching current filters' : 'Export all plan changes'}
-            className="text-xs px-2 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50 disabled:opacity-50 inline-flex items-center gap-1 dark:border-gray-700 dark:bg-gray-900"
+            className="text-xs px-2 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 inline-flex items-center gap-1 dark:border-gray-700 dark:bg-gray-900"
           >
             {exporting
               ? <><RefreshCw size={11} className="animate-spin" /> Exporting…</>
@@ -1243,7 +1243,7 @@ function PlanAuditHistory({ refreshKey }) {
             type="button"
             onClick={loadMore}
             disabled={loadingMore}
-            className="text-xs px-3 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900"
+            className="text-xs px-3 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900"
           >
             {loadingMore ? <><RefreshCw size={11} className="inline animate-spin mr-1" /> Loading…</> : `Load more (${total - items.length} remaining)`}
           </button>

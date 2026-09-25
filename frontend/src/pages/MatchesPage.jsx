@@ -48,7 +48,7 @@ export default function MatchesPage() {
         </div>
         {!isFounder && (
           <Link to="/account/privacy"
-            className="flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 text-sm text-gray-700 px-3 py-2 rounded-lg dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300">
+            className="flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm text-gray-700 px-3 py-2 rounded-lg dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300">
             <Settings size={14} /> My thesis
           </Link>
         )}

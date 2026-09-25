@@ -517,12 +517,16 @@ test('hq.axal.vc is not a branch host: `hq` is HQ\'s own code in the metrics sto
  * every `hover:text-axal-ink` a `dark:hover:text-` pair, in the same class
  * expression — the string, or the `+`-joined strings of one const.
  *
- * LATENT INSIDE THE APP SHELL, VISIBLE OUTSIDE IT (measured in Chromium against
- * the built CSS, D211). `index.css`'s dark skin is unlayered and Tailwind v4's
- * utilities are layered, so inside `[data-app-main]` the skin outranks both
- * hover utilities and neither shows. Outside it — and the day the skin moves
- * into a layer below the utilities — an unpaired one paints the light ground
- * over a dark button, or the dark ink over a dark ground. The window runs from
+ * WHY THE PAIR MATTERS ON BOTH SIDES OF THE SHELL (D211, corrected by D265).
+ * `index.css`'s dark skin is unlayered and Tailwind 4's utilities are layered,
+ * and an unlayered rule beats every layer whatever its specificity. Outside
+ * `[data-app-main]` the skin does not apply, so an unpaired light hover paints
+ * the light ground over a dark button, or the dark ink over a dark ground.
+ * Inside it the skin repaints `bg-axal-ground` and would mask any hover — so
+ * since D265 each skin background rule steps aside for an element whose class
+ * names a `dark:hover:bg-` while hovered, and the pair is what shows. The
+ * skin must never move into a layer below the utilities: there the bare
+ * utility wins and every token it covers paints light. The window runs from
  * the previous `;` `{` or `<` to the next `;` `>` or `}`, which bounds a JSX
  * attribute, a template branch, and a multi-line `const` alike.
  */
@@ -561,4 +565,47 @@ test('every light-theme hover carries a dark hover in the same class expression'
     assert.ok(seen >= floor, `the scan found ${seen} ${needle}; it must still see the ${floor} D211 paired`);
     assert.deepEqual(bare, [], `a ${needle} with no ${pair} pair`);
   }
+});
+
+/**
+ * D265 — D211's rule, generalised to every background hover: a plain
+ * `hover:bg-` beside a `dark:bg-` in one class string needs a `dark:hover:bg-`
+ * in that string too. The element chose its own dark background, so the skin
+ * steps aside for it (D265), and a light hover left unpaired flashes the light
+ * colour over the dark one.
+ *
+ * THE UNIT IS ONE STRING LITERAL, not D211's `;{<` window: that window spans
+ * both branches of a ternary and every field of an object, and on its first
+ * run here it flagged six sites whose hover and dark background belong to
+ * different strings. The literal pattern is the one D265 measured the sweep
+ * with (quote, apostrophe or backtick, on one line). The floor is the 75
+ * strings D265 swept, so a scan that stopped seeing class strings cannot pass
+ * empty.
+ */
+test('D265: every plain hover:bg- beside a dark:bg- carries a dark:hover:bg- in the same class string', () => {
+  const files = [];
+  const walk = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.(jsx?|tsx?)$/.test(e.name)) files.push(p);
+    }
+  };
+  walk(resolve(root, 'frontend/src'));
+  const LITERAL = /"[^"\n]*"|'[^'\n]*'|`[^`\n]*`/g;
+  const PLAIN_HOVER = /(?<![\w:-])hover:bg-/;
+  const DARK_BG = /(?<![\w:-])dark:bg-/;
+  let seen = 0;
+  const bare = [];
+  for (const f of files) {
+    const src = readFileSync(f, 'utf8');
+    for (const m of src.matchAll(LITERAL)) {
+      const lit = m[0];
+      if (!PLAIN_HOVER.test(lit) || !DARK_BG.test(lit)) continue;
+      seen += 1;
+      if (!lit.includes('dark:hover:bg-')) bare.push(`${f.slice(root.length + 1)} @${src.slice(0, m.index).split('\n').length}`);
+    }
+  }
+  assert.ok(seen >= 75, `the scan found ${seen} class strings with hover:bg- beside dark:bg-; it must still see the 75 D265 swept`);
+  assert.deepEqual(bare, [], 'a light hover beside a dark background, with no dark hover');
 });

@@ -598,7 +598,7 @@ function PassModal({ deal, onClose, onConfirm }) {
               Cancel
             </button>
             <button onClick={submit} disabled={!reason || saving}
-              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gray-100 dark:text-gray-900">
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-black dark:hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gray-100 dark:text-gray-900">
               {saving && <Loader2 size={15} className="animate-spin" />}
               {reason ? `Record pass · ${passReasonLabel(reason)}` : 'Select a reason to continue'}
             </button>

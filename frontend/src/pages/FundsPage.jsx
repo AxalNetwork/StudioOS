@@ -329,7 +329,7 @@ export function AdminFundsView() {
             <Plus size={13} /> New fund
           </button>
           <button onClick={load} disabled={busy}
-            className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 text-gray-900 rounded-lg flex items-center gap-1.5 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">
+            className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 rounded-lg flex items-center gap-1.5 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">
             <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> Refresh
           </button>
         </div>
@@ -476,7 +476,7 @@ export function LPPortalView() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">My LP Portal</div>
-        <button onClick={load} disabled={busy} className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 text-gray-900 rounded-lg flex items-center gap-1.5 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">
+        <button onClick={load} disabled={busy} className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 rounded-lg flex items-center gap-1.5 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">
           <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> Refresh
         </button>
       </div>

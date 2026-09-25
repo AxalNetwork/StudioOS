@@ -412,7 +412,7 @@ export default function CapTablePage({ embedded = false }) {
             ))}
           </select>
           <button onClick={newScenario}
-            className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700">
+            className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700">
             <Plus size={14} /> New
           </button>
           <button onClick={saveScenario}
@@ -423,11 +423,11 @@ export default function CapTablePage({ embedded = false }) {
             <>
               <button onClick={saveAsVariant}
                 title="Save the current inputs as a named draft variant to compare"
-                className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700">
+                className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700">
                 <Copy size={14} /> Save as variant
               </button>
               <button onClick={toggleCompare}
-                className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700">
+                className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700">
                 <GitCompare size={14} /> {compareOpen ? 'Hide compare' : 'Compare'}
               </button>
             </>
@@ -436,7 +436,7 @@ export default function CapTablePage({ embedded = false }) {
             <a
               href={api.exportCapTableCsvUrl(activeUid)}
               target="_blank" rel="noreferrer"
-              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700"
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700"
               onClick={(e) => {
                 // Append the auth header by switching to fetch+blob — easier: open with token in URL hash.
                 e.preventDefault();
@@ -755,11 +755,11 @@ function ScenarioComparePanel({ data, loading, error, activeUid, onClose, onRefr
         </div>
         <div className="flex items-center gap-2">
           <button onClick={onRefresh} disabled={loading}
-            className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 inline-flex items-center gap-1 disabled:opacity-50 dark:bg-gray-900 dark:border-gray-700">
+            className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-800 inline-flex items-center gap-1 disabled:opacity-50 dark:bg-gray-900 dark:border-gray-700">
             <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
           </button>
           <button onClick={onClose}
-            className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700">
+            className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-900 dark:border-gray-700">
             Hide
           </button>
         </div>
@@ -978,13 +978,13 @@ function LiveCapTablePanel({ live, loading, error, onRefresh }) {
           <button
             onClick={onRefresh}
             disabled={loading}
-            className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 inline-flex items-center gap-1 disabled:opacity-50 dark:bg-gray-900 dark:border-gray-700"
+            className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-800 inline-flex items-center gap-1 disabled:opacity-50 dark:bg-gray-900 dark:border-gray-700"
           >
             <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
           </button>
           <a
             href="/integrations"
-            className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 inline-flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700"
+            className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-800 inline-flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700"
           >
             Manage <ExternalLink size={12} />
           </a>

@@ -226,10 +226,13 @@ test('every axal neutral that paints has a dark-mode counterpart in the skin', (
     assert.ok(declared.has(token),
       `${token} is in the neutrals list but @theme no longer declares it — `
       + 'update the list or restore the token, do not leave them disagreeing');
-    // The skin's own shape: zero-specificity `:where(.dark [data-app-main] …)`
-    // so an explicit `dark:` utility still wins. Matching on the class plus the
-    // `.dark` scope is what distinguishes a skin rule from the @theme
-    // declaration that mints the utility.
+    // The skin's own shape: `:where(.dark [data-app-main] …)`, unlayered. Its
+    // zero specificity does NOT let an explicit `dark:` utility win — an
+    // unlayered rule beats every layered utility regardless (D265); the
+    // background rules step aside through their own `:not([class*="dark:bg-"])`
+    // opt-out instead. Matching on the class plus the `.dark` scope is what
+    // distinguishes a skin rule from the @theme declaration that mints the
+    // utility.
     const rule = new RegExp(`\\.dark \\[data-app-main\\] \\.${role}-${token}:not`);
     if (!rule.test(css)) missing.push(`${role}-${token}`);
   }

@@ -72,7 +72,7 @@ function CopyLine({ label, value }) {
         <code className="flex-1 break-all font-mono text-sm text-gray-900 dark:text-gray-100">{value}</code>
         <button
           type="button"
-          className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900"
+          className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs hover:bg-gray-50 dark:hover:bg-gray-800 dark:border-gray-700 dark:bg-gray-900"
           onClick={() => {
             navigator.clipboard?.writeText(value).then(() => {
               setDone(true);

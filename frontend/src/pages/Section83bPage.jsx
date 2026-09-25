@@ -225,7 +225,7 @@ function TrackerCard({ tracker, onChange }) {
           accept="image/*,application/pdf"
           onChange={(e) => upload(e.target.files?.[0])} />
         <label htmlFor={fileInputId}
-          className="px-3 py-1.5 text-xs font-semibold rounded-md border bg-white hover:bg-gray-50 cursor-pointer inline-flex items-center gap-1 dark:bg-gray-900">
+          className="px-3 py-1.5 text-xs font-semibold rounded-md border bg-white hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer inline-flex items-center gap-1 dark:bg-gray-900">
           <Upload size={12} /> {tracker.receipt_doc_id ? 'Replace receipt' : 'Upload PS Form 3800 receipt'}
         </label>
         {!tracker.mailed_at && (

@@ -1701,7 +1701,7 @@ function WatchlistTab({ user: _user }) {
               type="button"
               disabled={busy}
               onClick={applyPause}
-              className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+              className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
             >
               Pause digests
             </button>
@@ -2756,7 +2756,7 @@ function PlatformPersonasTab() {
           <a href={data.exports.csv_url} download className="text-xs bg-violet-600 hover:bg-violet-700 text-white font-medium px-3 py-1.5 rounded-md inline-flex items-center gap-1.5">
             <Database size={12} /> Export CSV
           </a>
-          <a href={data.exports.pdf_url} download className="text-xs bg-white dark:bg-gray-900 border border-violet-300 text-violet-700 dark:text-violet-300 hover:bg-violet-50 font-medium px-3 py-1.5 rounded-md inline-flex items-center gap-1.5">
+          <a href={data.exports.pdf_url} download className="text-xs bg-white dark:bg-gray-900 border border-violet-300 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/30 font-medium px-3 py-1.5 rounded-md inline-flex items-center gap-1.5">
             <ExternalLink size={12} /> Export PDF
           </a>
           <span className="text-xs text-gray-500 dark:text-gray-400">Studio &amp; Institutional only</span>

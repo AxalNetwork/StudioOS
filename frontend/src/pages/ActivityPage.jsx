@@ -120,7 +120,7 @@ export default function ActivityPage() {
         <button
           onClick={handleSyncGithub}
           disabled={syncing}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors dark:text-gray-300 dark:bg-gray-900 dark:border-gray-700"
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors dark:text-gray-300 dark:bg-gray-900 dark:border-gray-700"
         >
           {syncing ? <Loader2 size={14} className="animate-spin" /> : <GitBranch size={14} />}
           {syncing ? 'Syncing...' : 'Sync to GitHub'}

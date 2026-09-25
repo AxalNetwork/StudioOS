@@ -357,7 +357,7 @@ function Marketplace() {
       <div className="flex gap-1 mb-4">
         {[{id:'search', label:'Search Operators'}, {id:'me', label:'My Profile'}, {id:'match', label:'AI Match'}].map(t => (
           <button key={t.id} onClick={() => setTab2(t.id)}
-            className={`px-3 py-1.5 text-xs font-medium rounded ${tab2 === t.id ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200'}`}>{t.label}</button>
+            className={`px-3 py-1.5 text-xs font-medium rounded ${tab2 === t.id ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>{t.label}</button>
         ))}
       </div>
       {tab2 === 'search' && <MarketplaceSearch />}

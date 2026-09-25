@@ -358,27 +358,40 @@ main[data-onboarding-canvas] {
      • Light mode is byte-identical (rules only fire under `.dark`).
      • Public marketing pages (PublicLayout/GVPN palette) are NOT
        affected because they do not render under `[data-app-main]`.
-     • Components that already declared `dark:` variants keep working
-       because explicit utility classes still win the cascade order.
+     • Components that declare their OWN dark background keep it, but
+       only because each background rule below opts out of any element
+       whose class names a `dark:bg-` or `dark:hover:bg-` (D265). The
+       cascade alone would not do it — see the next comment.
 
    Per-page exceptions can opt out by adding `data-keep-light` on a
    wrapper — the `:not()` chain below skips any element inside such
    a wrapper.
    ------------------------------------------------------------------------ */
-/* Selectors are wrapped in `:where(...)` so they contribute ZERO
-   specificity. This guarantees that any explicit `dark:` Tailwind
-   utility (e.g. `dark:text-white`) — which carries one class worth
-   of specificity — always wins over the auto-skin. Opt out by
-   nesting the subtree under `[data-keep-light]` (the auto-skin
-   selector requires `:not([data-keep-light] *)`, so anything inside
-   is exempt). */
-:where(.dark [data-app-main] .bg-white:not([data-keep-light] *):not([data-keep-light])) {
+/* D265 — WHY THE OPT-OUTS EXIST. This block is UNLAYERED, and every
+   Tailwind 4 utility sits inside `@layer utilities`. For normal
+   declarations an unlayered rule beats every layered one WHATEVER ITS
+   SPECIFICITY, so the zero-specificity `:where(...)` below does NOT let an
+   explicit `dark:bg-gray-800` win: without an opt-out the skin paints over
+   it. The block must stay unlayered — moved into `@layer base` (or any layer
+   below utilities) the bare `.bg-white` utility would win instead and every
+   token the skin exists for would paint its light value in dark mode.
+
+   So each background rule skips an element whose class names a `dark:bg-`
+   (it chose its own dark background) or a `dark:hover:bg-` while hovered
+   (it chose its own dark hover), and each hover rule skips an element whose
+   class names a `dark:hover:bg-`. Text and border rules have no opt-out yet;
+   D265 files them. `frontend/test/dark_skin_d265.test.mjs` compiles this
+   file and holds all of it.
+
+   `[data-keep-light]` opts a subtree out entirely (the selector requires
+   `:not([data-keep-light] *)`). Nothing uses it today. */
+:where(.dark [data-app-main] .bg-white:not([data-keep-light] *):not([data-keep-light]):not([class*="dark:bg-"]):not([class*="dark:hover:bg-"]:hover)) {
   background-color: var(--app-surface);
 }
-:where(.dark [data-app-main] .bg-gray-50:not([data-keep-light] *):not([data-keep-light])) {
+:where(.dark [data-app-main] .bg-gray-50:not([data-keep-light] *):not([data-keep-light]):not([class*="dark:bg-"]):not([class*="dark:hover:bg-"]:hover)) {
   background-color: var(--app-surface-2);
 }
-:where(.dark [data-app-main] .bg-gray-100:not([data-keep-light] *):not([data-keep-light])) {
+:where(.dark [data-app-main] .bg-gray-100:not([data-keep-light] *):not([data-keep-light]):not([class*="dark:bg-"]):not([class*="dark:hover:bg-"]:hover)) {
   background-color: #1f2937;
 }
 :where(.dark [data-app-main] .text-gray-900:not([data-keep-light] *):not([data-keep-light])),
@@ -398,13 +411,13 @@ main[data-onboarding-canvas] {
 :where(.dark [data-app-main] .border-gray-300:not([data-keep-light] *):not([data-keep-light])) {
   border-color: var(--app-border);
 }
-:where(.dark [data-app-main] .divide-gray-100, .dark [data-app-main] .divide-gray-200) > :not([hidden]) ~ :not([hidden]) {
+:where(.dark [data-app-main] .divide-gray-100 > :not(:last-child), .dark [data-app-main] .divide-gray-200 > :not(:last-child)) {
   border-color: var(--app-border);
 }
-:where(.dark [data-app-main] .hover\:bg-gray-50:hover:not([data-keep-light] *):not([data-keep-light])) {
+:where(.dark [data-app-main] .hover\:bg-gray-50:hover:not([data-keep-light] *):not([data-keep-light]):not([class*="dark:hover:bg-"])) {
   background-color: #1f2937;
 }
-:where(.dark [data-app-main] .hover\:bg-gray-100:hover:not([data-keep-light] *):not([data-keep-light])) {
+:where(.dark [data-app-main] .hover\:bg-gray-100:hover:not([data-keep-light] *):not([data-keep-light]):not([class*="dark:hover:bg-"])) {
   background-color: #374151;
 }
 
@@ -447,7 +460,7 @@ main[data-onboarding-canvas] {
 :where(.dark [data-app-main] .border-axal-hairline:not([data-keep-light] *):not([data-keep-light])) {
   border-color: var(--app-border);
 }
-:where(.dark [data-app-main] .bg-axal-ground:not([data-keep-light] *):not([data-keep-light])) {
+:where(.dark [data-app-main] .bg-axal-ground:not([data-keep-light] *):not([data-keep-light]):not([class*="dark:bg-"]):not([class*="dark:hover:bg-"]:hover)) {
   background-color: var(--app-surface-2);
 }
 

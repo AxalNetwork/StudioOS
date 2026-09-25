@@ -136,7 +136,7 @@ function ErrorDetailModal({ error, allErrors, onClose }) {
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={copyAll}
-              className="text-xs px-2.5 py-1.5 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 inline-flex items-center gap-1.5 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+              className="text-xs px-2.5 py-1.5 rounded-md border border-gray-300 bg-white hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 inline-flex items-center gap-1.5 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
               title="Copy details to clipboard"
             >
               {copied ? <Check size={12} /> : <Copy size={12} />}
@@ -785,7 +785,7 @@ function ScoreIntegrityTab({ focusSnapshotId = null }) {
                     Reject · revert tier
                   </button>
                   <button onClick={() => waive(it.id)}
-                          className="px-3 py-1.5 text-xs bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg font-medium dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300">
+                          className="px-3 py-1.5 text-xs bg-white border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 rounded-lg font-medium dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300">
                     Waive 7-day cooldown
                   </button>
                 </div>

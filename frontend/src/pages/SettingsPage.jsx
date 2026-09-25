@@ -2816,7 +2816,7 @@ function PrivacySection({ data, patch, flash }) {
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <a href={publicUrl} target="_blank" rel="noreferrer noopener"
                  className="font-mono text-sm text-violet-900 hover:underline break-all">{publicUrl}</a>
-              <button onClick={copyPublicUrl} className="ml-auto rounded-md border border-violet-300 bg-white dark:bg-gray-900 px-2 py-1 text-xs text-violet-700 hover:bg-violet-100">
+              <button onClick={copyPublicUrl} className="ml-auto rounded-md border border-violet-300 bg-white dark:bg-gray-900 px-2 py-1 text-xs text-violet-700 hover:bg-violet-100 dark:hover:bg-violet-900/40">
                 {copied ? 'Copied' : 'Copy'}
               </button>
             </div>
