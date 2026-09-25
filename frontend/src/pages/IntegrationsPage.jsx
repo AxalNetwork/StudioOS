@@ -780,7 +780,7 @@ function ProviderCard({ provider, connected, bypassesTier, onConnect }) {
         <button
           onClick={onConnect}
           className={`text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${
-            connected ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200'
+            connected ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700 dark:bg-gray-800 dark:text-gray-200'
             : tierLocked ? 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
             : 'bg-violet-600 text-white hover:bg-violet-700'
           }`}

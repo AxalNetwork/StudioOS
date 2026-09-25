@@ -507,7 +507,7 @@ export default function LiquidityPage({ currentUser }) {
             <Plus size={13} /> List my shares
           </button>
           <button onClick={load} disabled={refreshing}
-            className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 text-gray-900 rounded-lg flex items-center gap-1.5 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">
+            className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 rounded-lg flex items-center gap-1.5 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">
             <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} /> Refresh
           </button>
         </div>
@@ -621,7 +621,7 @@ export default function LiquidityPage({ currentUser }) {
                     {l.ai_valuation_cents != null && <span className="text-violet-700">AI {fmt(l.ai_valuation_cents)}</span>}
                     <StatusPill status={l.status} />
                     <button onClick={() => setShowSettlement(l)}
-                      className="px-2 py-1 text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg flex items-center gap-1 dark:bg-gray-800 dark:text-gray-200">
+                      className="px-2 py-1 text-[11px] bg-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 rounded-lg flex items-center gap-1 dark:bg-gray-800 dark:text-gray-200">
                       <ShieldCheck size={11} /> Settlement
                     </button>
                   </div>

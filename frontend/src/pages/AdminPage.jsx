@@ -4773,7 +4773,7 @@ function BillingPanel() {
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Disputes</h3>
           <div className="ml-auto">
             <button onClick={loadDisputes} disabled={dispLoading}
-              className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded-md text-gray-700 inline-flex items-center gap-1 dark:bg-gray-800 dark:text-gray-300" data-testid="disputes-refresh">
+              className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md text-gray-700 inline-flex items-center gap-1 dark:bg-gray-800 dark:text-gray-300" data-testid="disputes-refresh">
               {dispLoading ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />} Load disputes
             </button>
           </div>
@@ -4817,7 +4817,7 @@ function BillingPanel() {
                 ))}
                 <div className="flex items-center gap-2 pt-1">
                   <button onClick={() => submitEvidence(false)} disabled={evBusy}
-                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-800 text-xs rounded-md dark:bg-gray-800 dark:text-gray-200">Save draft</button>
+                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 text-gray-800 text-xs rounded-md dark:bg-gray-800 dark:text-gray-200">Save draft</button>
                   <button onClick={() => submitEvidence(true)} disabled={evBusy}
                     className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs rounded-md inline-flex items-center gap-1.5">
                     {evBusy ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Submit to Stripe
@@ -5011,7 +5011,7 @@ function PromoCodesPanel() {
         <span className="text-xs text-gray-500">{activeCount} active · {rows.length} total</span>
         <div className="ml-auto flex items-center gap-2">
           <button onClick={load}
-            className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded-md text-gray-700 inline-flex items-center gap-1 dark:bg-gray-800 dark:text-gray-300">
+            className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md text-gray-700 inline-flex items-center gap-1 dark:bg-gray-800 dark:text-gray-300">
             <RefreshCw size={11} /> Refresh
           </button>
           <button onClick={() => setShowCreate((v) => !v)}
@@ -5538,13 +5538,13 @@ function GithubSyncPanel() {
           )}
           <button onClick={() => onTest(false)} disabled={testing || !cfg?.has_token}
             title={cfg?.has_token ? 'Reach the repo and read its issues — does NOT prove the token can create one' : 'Configure a token first'}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 disabled:opacity-50 inline-flex items-center gap-1.5">
+            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 inline-flex items-center gap-1.5">
             {testing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Test read access
           </button>
           <button onClick={() => onTest(true)} disabled={testing || !cfg?.has_token}
             data-testid="github-write-test"
             title={cfg?.has_token ? 'Create a real issue and close it — the only check that proves the mirror can work' : 'Configure a token first'}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 disabled:opacity-50 inline-flex items-center gap-1.5">
+            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 inline-flex items-center gap-1.5">
             {testing ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Test issue creation
           </button>
         </div>
@@ -5576,7 +5576,7 @@ function GithubSyncPanel() {
         <div className="flex gap-2 mb-3">
           <input readOnly value={cfg?.webhook_url || ''} className={`${inputClass} font-mono text-xs`} />
           <button onClick={() => copy(cfg?.webhook_url || '', 'Payload URL')}
-            className="shrink-0 px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 inline-flex items-center gap-1.5">
+            className="shrink-0 px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 inline-flex items-center gap-1.5">
             <Copy size={12} /> Copy
           </button>
         </div>
@@ -5588,7 +5588,7 @@ function GithubSyncPanel() {
           <div className="flex gap-2 mb-2">
             <input readOnly value={revealedSecret} className={`${inputClass} font-mono text-xs`} />
             <button onClick={() => copy(revealedSecret, 'Secret')}
-              className="shrink-0 px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 inline-flex items-center gap-1.5">
+              className="shrink-0 px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 inline-flex items-center gap-1.5">
               <Copy size={12} /> Copy
             </button>
           </div>
@@ -5596,7 +5596,7 @@ function GithubSyncPanel() {
           <SecretWriteGate holds={holdsSecretWrites} what={cfg?.has_webhook_secret ? 'Rotating the webhook secret' : 'Generating a webhook secret'} testid="github-webhook-holder-only">
             <div className="flex gap-2 mb-2 flex-wrap">
               <button onClick={onRotateSecret}
-                className="px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 inline-flex items-center gap-1.5">
+                className="px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 inline-flex items-center gap-1.5">
                 <RefreshCw size={12} /> {cfg?.has_webhook_secret ? 'Rotate secret' : 'Generate secret'}
               </button>
             </div>
@@ -5881,7 +5881,7 @@ function IntegrationKeysEditModal({ provider, mode = 'configure', onClose, onSav
         </div>
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose}
-                  className="px-4 py-2 text-sm font-medium rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200">
+                  className="px-4 py-2 text-sm font-medium rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
             Cancel
           </button>
           <button type="submit" disabled={saving}

@@ -693,7 +693,7 @@ function InterviewModal({ value, onChange, onSave, onClose, suggestions = [] }) 
                       key={s}
                       type="button"
                       onClick={() => addPain(s)}
-                      className="text-[11px] bg-violet-50 text-violet-700 border border-violet-200 rounded-full px-2 py-0.5 hover:bg-violet-100 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-900"
+                      className="text-[11px] bg-violet-50 text-violet-700 border border-violet-200 rounded-full px-2 py-0.5 hover:bg-violet-100 dark:hover:bg-violet-900/50 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-900"
                     >+ {s}</button>
                   ))}
                 </div>

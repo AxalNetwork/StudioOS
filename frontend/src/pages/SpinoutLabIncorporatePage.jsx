@@ -627,7 +627,7 @@ export default function SpinoutLabIncorporatePage() {
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button" disabled={d.status === 'locked'} onClick={() => docAction(d)} data-testid={`doc-action-${d.key}`}
-                        className={`text-[11.5px] font-semibold rounded-lg px-3 py-1.5 ${d.status === 'locked' ? 'text-gray-400 bg-gray-100 dark:bg-gray-800 cursor-default' : 'text-violet-700 bg-violet-50 border border-violet-200 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800'}`}
+                        className={`text-[11.5px] font-semibold rounded-lg px-3 py-1.5 ${d.status === 'locked' ? 'text-gray-400 bg-gray-100 dark:bg-gray-800 cursor-default' : 'text-violet-700 bg-violet-50 border border-violet-200 hover:bg-violet-100 dark:hover:bg-violet-900/40 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800'}`}
                       >{btn}</button>
                     </td>
                   </tr>
