@@ -426,8 +426,11 @@ r.put('/promo-ceilings/:uid', async (c) => {
     // already stored.
     let pushed: { ok: boolean; reason?: string } = {
       ok: false,
-      reason: 'No branch is bound to this licence yet, so the ceiling is set at HQ and will reach '
-        + 'the branch when one is.',
+      // D266 — THIS USED TO PROMISE the ceiling "will reach the branch when
+      // one is". Nothing re-pushes a ceiling when a branch is deployed later:
+      // this route is its one push. So the sentence says what to do instead.
+      reason: 'No branch is bound to this licence yet, so the ceiling is set at HQ only. Nothing '
+        + 'sends it when a branch is deployed later: save it again once the branch answers.',
     };
     const dep = await c.env.DB.prepare(
       'SELECT code FROM licence_deployments WHERE licence_uid = ?',

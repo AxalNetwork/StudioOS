@@ -436,3 +436,26 @@ test('the three platform-content cadences are gated on HQ in the scheduled handl
     'the cron_run_history prune was gated on hqCadences — a branch would then keep its history forever',
   );
 });
+
+test('the usage report is the one block gated to a branch, and it is gated that way (D266)', () => {
+  // The mirror of the platform-content cadences: HQ keeps the statements
+  // ledger this report feeds, so the push must run on a branch and never on
+  // HQ. `pushUsageReport` refuses on HQ too, so a flipped gate would not write
+  // a wrong row — it would stop every branch reporting, silently, which is the
+  // failure this assertion exists for. Anchored on the IMPORT, for the reason
+  // the sweep above records: a local stub can keep a name, never the module
+  // specifier.
+  const src = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+  const spec = "await import('./services/usageReport')";
+  const at = src.indexOf(spec);
+  assert.ok(at > 0, 'the usage report is no longer wired into the cron');
+  assert.equal(src.indexOf(spec, at + 1), -1, 'a second copy of the usage report block exists');
+  assert.match(src.slice(at, at + 200), /pushUsageReport\(env, now\)/,
+    'the usage report is imported but never called with env and the tick\'s clock');
+  assert.match(
+    src.slice(Math.max(0, at - 300), at),
+    /if \(!hqCadences && now\.getUTCHours\(\) === 5 && now\.getUTCMinutes\(\) === 10\) \{\s*\n\s*try \{\s*\n\s*const \{ pushUsageReport \} = $/,
+    'the usage report lost its branch-only 05:10 gate — on HQ it has nothing to report, and ungated or '
+    + 'HQ-gated it would stop reaching the branches that do',
+  );
+});

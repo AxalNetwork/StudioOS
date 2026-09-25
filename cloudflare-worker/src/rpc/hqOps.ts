@@ -493,9 +493,13 @@ export async function reportUsage(
   const now = new Date().toISOString();
   const rows = (figures || []).filter((f) => f && typeof f.stream === 'string' && f.stream.trim());
   for (const f of rows) {
-    const gross = f.available === false || f.gross_cents === null || f.gross_cents === undefined
-      ? null
-      : Math.trunc(Number(f.gross_cents) || 0);
+    // A value that is not a finite number is as unmeasured as a null one, so
+    // it is stored as NULL too. `Number(x) || 0` used to turn it into a zero,
+    // which is the one reading this function exists to refuse.
+    const n = f.available === false || f.gross_cents === null || f.gross_cents === undefined
+      ? NaN
+      : Number(f.gross_cents);
+    const gross = Number.isFinite(n) ? Math.trunc(n) : null;
     await env.DB.prepare(
       `INSERT INTO subsidiary_usage_reports
          (licence_uid, branch_code, period, stream, gross_cents, currency,
@@ -513,40 +517,6 @@ export async function reportUsage(
     ).run();
   }
   return { ok: true, period: p, streams: rows.length };
-}
-
-/**
- * The promo ceiling HQ has set for this branch's current period, for the
- * branch to store as a dated copy (`branch_promo_ceiling`, migration 256).
- *
- * `issued_cents` IS NOT SENT BACK. HQ does not know it — the branch issues the
- * codes and reports the figure through `reportUsage`. Echoing HQ's last-known
- * value would let a stale number overwrite the branch's own fresher one.
- */
-export async function promoCeilingForBranch(
-  env: Env, callerCode: string,
-): Promise<{ period: string; ceiling_cents: number; currency: string; pushed_at: string } | { error: 'no_ceiling_set' }> {
-  requireHq(env);
-  const code = String(callerCode ?? '').trim().toLowerCase();
-  if (!BRANCH_CODE_RE.test(code)) throw new Error('promoCeiling: the caller must name a valid branch code');
-
-  const dep = await env.DB.prepare('SELECT licence_uid FROM licence_deployments WHERE code = ?')
-    .bind(code).first<{ licence_uid: string }>();
-  if (!dep) return { error: 'no_ceiling_set' };
-
-  const row = await env.DB.prepare(
-    `SELECT period, ceiling_cents, currency FROM licence_promo_ceilings
-      WHERE licence_uid = ? ORDER BY period DESC LIMIT 1`,
-  ).bind(dep.licence_uid).first<{ period: string; ceiling_cents: number; currency: string }>();
-  if (!row) return { error: 'no_ceiling_set' };
-
-  return {
-    period: row.period,
-    ceiling_cents: Number(row.ceiling_cents) || 0,
-    currency: row.currency,
-    // Stamped when HQ asserts it, like every other pushed copy (D106).
-    pushed_at: new Date().toISOString(),
-  };
 }
 
 /* ------------------------------------------------------------------ *

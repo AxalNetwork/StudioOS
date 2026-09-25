@@ -1789,6 +1789,29 @@ export default {
             }
           } catch (e) { console.error('[cron] benchmark publish failed', e); }
         }
+        // D266 — a branch reports its previous and current quarter to HQ at
+        // 05:10 UTC, so HQ's statements say "reported, unmeasurable" rather
+        // than "not reported" (services/usageReport.ts has the why).
+        //
+        // THE ONE BLOCK GATED ON `!hqCadences`, and the gate is the design:
+        // HQ keeps the ledger this report feeds, so HQ has nothing to report
+        // to itself, and `pushUsageReport` refuses there anyway. The negation
+        // is what a test anchors on, so a later tidy into the HQ group — where
+        // it would run on the one deployment that must not — is caught.
+        //
+        // DAILY, AND TWO QUARTERS. The report is a restatement, upserted per
+        // (licence, period, stream), so a daily run keeps the current quarter
+        // current and lets the previous one take its final figure after it
+        // closes. 05:xx is unused on both tiers.
+        if (!hqCadences && now.getUTCHours() === 5 && now.getUTCMinutes() === 10) {
+          try {
+            const { pushUsageReport } = await import('./services/usageReport');
+            const r = await pushUsageReport(env, now);
+            const detail = r.periods.map((p) => `${p.period}=${p.sent ? 'sent' : 'not sent'}`).join(' ');
+            if (r.sent) console.info(`[cron] usage report ${detail}`);
+            else console.warn(`[cron] usage report not sent ${detail}: ${r.reason}`);
+          } catch (e) { console.error('[cron] usage report failed', e); }
+        }
         // The 04:50 UTC Refer & Earn payout auto-approval sweep was removed
         // with Stripe Connect in the referrals redesign. Referral rewards are
         // milestone labels reviewed by a human in the admin queue, so there is

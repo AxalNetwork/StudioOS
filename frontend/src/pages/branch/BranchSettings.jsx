@@ -97,11 +97,14 @@ function Row({ field, value, reason, who, act, actTo }) {
  * the service HQ's Topology page reads too — so the two tiers cannot describe
  * one architecture two ways.
  *
- * WHAT THE CANVAS GOT WRONG, AND THIS DOES NOT REPEAT. S14 drew the branch as
- * deployed by the push-to-main workflow (it is provisioned once, and nothing
- * deploys it again), its entrypoint as "accounts, queues, statement, audit"
- * (HQ may call twelve methods, listed from the class), and its search index
- * under the wrong name. Every one of those now comes off the payload.
+ * WHAT THE CANVAS GOT WRONG, AND THIS DOES NOT REPEAT. S14 drew the branch's
+ * entrypoint as "accounts, queues, statement, audit" (HQ's methods are listed
+ * from the class, and no count is typed here: a count in prose goes stale with
+ * the next method, which D266 found in this very sentence) and its search index
+ * under the wrong name. Its deploy line was wrong when drawn and is right now:
+ * branch-provision.yml deploys a branch the first time, and since D253 every
+ * push to main redeploys every provisioned branch. Every one of those comes
+ * off the payload rather than being typed here.
  *
  * THE "CANNOT" LIST IS READ, NOT RECITED. Two of S14's three refusals depend
  * on what this Worker was given — a hand-added binding, a pair of SQL API

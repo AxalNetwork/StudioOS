@@ -120,12 +120,13 @@ const m = (name: string, called: boolean, authenticated = false): RpcMethod => (
  * the test from the source — the class's own parameter lists, and the D207
  * harvest of every `fanOut`, `branchRead`, `.stub.` and `HQ` call — so a
  * method gaining its first caller, or losing its last, fails the test until
- * this list says so. Still declared and uncalled: revenueSummary on
- * HqEntrypoint, and reportUsage and promoCeiling on BranchEntrypoint (task
- * 354). licence gained its caller in D244 — a branch with no licence copy
- * pulls one — and takes the per-deployment secret since the same change. The
- * uncalled methods are named rather than counted, because the count moves with
- * every method that gains or loses a caller.
+ * this list says so. Since D266 every declared method has a caller: licence
+ * gained its own in D244 (a branch with no licence copy pulls one), reportUsage
+ * in D266 (a branch reports its quarter every morning), and the two that never
+ * would — revenueSummary and promoCeiling — were retired rather than left
+ * declared. An uncalled method is still a state this list can carry and the
+ * page can draw; which methods are in it is named, never counted, because the
+ * count moves with every method that gains or loses a caller.
  */
 export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
   hqCallsBranch: {
@@ -137,7 +138,6 @@ export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
       m('overview', true),
       m('searchAccounts', true),
       m('applyLicence', true),
-      m('revenueSummary', false),
       m('applyPromoCeiling', true),
       m('applyEscalationAnswer', true),
       m('publishTemplate', true),
@@ -154,8 +154,7 @@ export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
     methods: [
       m('escalate', true),
       m('licence', true, true),
-      m('reportUsage', false, true),
-      m('promoCeiling', false),
+      m('reportUsage', true, true),
     ],
   },
 };
@@ -180,7 +179,8 @@ export const NOT_FROM_ANALYTICS = [
     + 'from here.',
   'Guardrail counts. HQ reads them from its own database — the turn audit and the usage log — and '
     + 'they are platform-wide, not per branch.',
-  'Statements. They are built from what a branch reports over reportUsage, which nothing calls yet.',
+  'Statements. They are built from what a branch reports over reportUsage — each branch sends its '
+    + 'previous and current quarter every morning (D266) — not from anything read here.',
 ] as const;
 
 // ── deploys, secrets and access ─────────────────────────────────────────────

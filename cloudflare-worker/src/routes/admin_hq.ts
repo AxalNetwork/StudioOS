@@ -549,7 +549,8 @@ const HQ_ANALYTICS_NOT_RECORDED = [
     key: 'revenue_by_stream',
     label: 'Revenue by stream',
     reason:
-      'No branch reports usage to HQ yet — reportUsage has no caller (#354). The canvas also draws '
+      'Each branch reports its quarter to HQ every morning (D266), and every stream in that report '
+      + 'arrives unmeasured: a branch database records no revenue amounts. The canvas also draws '
       + 'programme fees and perks as streams; neither is income this platform records.',
   },
 ] as const;

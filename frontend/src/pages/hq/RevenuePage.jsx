@@ -20,8 +20,10 @@
  *                      since D228 (the editor under the list), and pushes it
  *                      to the branch. Nothing at checkout enforces it yet, and
  *                      the editor says so. What is still absent is the
- *                      ISSUED figure when a branch has not reported one, and
- *                      a null there is not a zero.
+ *                      ISSUED figure: nothing on either tier writes one, and
+ *                      no call carries one to HQ (D266 retired the
+ *                      promoCeiling pull that would have), so it is null for
+ *                      every row — and a null there is not a zero.
  *
  *   Billing exceptions H21 (D224) — refunds HQ issued in the last 30 days,
  *                      read from their audit rows, beside open disputes from
@@ -519,9 +521,9 @@ export default function RevenuePage() {
         ['LTV', NOT_RECORDED_H21.ltv],
         ['Token P&L per subsidiary', 'No account names its licence yet (U1).'],
         // Statements and ceilings came OFF this list in D111, because they
-        // acquired a store. What is left absent is the issued figure a branch
-        // has not reported, which is a per-row state rather than a zone's.
-        ['Promotional spend per code', 'A code names no subsidiary, so a branch reports its own issued figure.'],
+        // acquired a store. What is left absent is the issued figure, and
+        // D266 found the old reason promised a report nothing sends.
+        ['Promotional spend per code', 'A code names no subsidiary, and no branch reports an issued figure to HQ, so spend against a ceiling is not recorded.'],
       ]}
       data-testid="hq-revenue-rail"
     />
@@ -693,9 +695,12 @@ export default function RevenuePage() {
               )}
               {ledger && ledger.items.length === 0 && (
                 <p className="text-[12.5px] leading-relaxed text-axal-muted" data-testid="hq-revenue-statements-empty">
-                  No statement has been drawn. The store exists and is empty, which is not the same as a
-                  figure nobody can produce: draw one for {ledger.current_period} from what the branches
-                  have reported.
+                  {/* D266 — THIS USED TO SAY "draw one", and no control on this
+                      page draws a statement: `api.statementDraw` has no caller.
+                      The route exists; the control is filed, not built here. */}
+                  No statement has been drawn for {ledger.current_period}. The store exists and is empty,
+                  which is not the same as a figure nobody can produce — but this page offers no control to
+                  draw one yet, and every stream a branch reports today arrives unmeasured.
                 </p>
               )}
               {ledger && Object.keys(ledger.totals_by_currency).length > 0 && (
@@ -793,11 +798,11 @@ export default function RevenuePage() {
                         <td className="py-2 pr-3 font-medium">{x.brand_name || x.licence_ref || x.licence_uid}</td>
                         <td className="py-2 pr-3 tabular-nums">{x.period}</td>
                         <td className="py-2 pr-3 tabular-nums">{money(x.ceiling_cents, x.currency)}</td>
-                        {/* NULL ISSUED IS NOT ZERO ISSUED. A branch that has
-                            not reported reads as <Unrecorded/>, because a zero
-                            here would say the whole ceiling is still
-                            available — the one wrong number this zone can
-                            produce. */}
+                        {/* NULL ISSUED IS NOT ZERO ISSUED. No branch reports
+                            an issued figure (nothing writes one — D266), so it
+                            reads as <Unrecorded/>, because a zero here would
+                            say the whole ceiling is still available — the one
+                            wrong number this zone can produce. */}
                         <td className="py-2 pr-3 tabular-nums">
                           {x.issued_available ? money(x.issued_cents, x.currency) : <Unrecorded />}
                         </td>
@@ -809,8 +814,8 @@ export default function RevenuePage() {
                   </tbody>
                 </table>
                 <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-revenue-issued-note">
-                  An issued figure is reported by the branch. Where one is absent the branch has not said,
-                  which is not the same as having issued nothing.
+                  Issued is not recorded: nothing on either tier writes an issued figure, and no call
+                  carries one to HQ. An absent figure is not the same as having issued nothing.
                 </p>
               </div>
             )}

@@ -28,9 +28,12 @@ import HqBranchOverlay from './HqBranchOverlay';
  * states, and they render differently on purpose: a branch that ANSWERED shows
  * its figures with the time it answered; one that did not is `<Unrecorded/>`
  * with the reason, never a zero; a licence with no branch at all has not been
- * deployed. Revenue per subsidiary stays unrecorded because no branch has
- * reported one, which is a different sentence from the call not existing — it
- * does (D111). A figure the payload lacks renders the same way: `num` returns
+ * deployed. Revenue per subsidiary stays unrecorded, and since D266 for a
+ * third reason rather than the first two: the call exists (D111) and every
+ * branch now reports its quarter each morning, but every stream in that report
+ * arrives unmeasured, because a branch database records no revenue amounts. A
+ * report of "unmeasurable" is not a figure. A figure the payload lacks renders
+ * the same way: `num` returns
  * null for a missing value rather than defaulting it, which is the difference
  * between "0 accounts" and "not recorded". A failed request renders as
  * unreadable, never as an empty platform — `InvestorFundLanding` is the
@@ -239,13 +242,15 @@ export default function HqHomePage() {
         // cites, so each is replaced by what is actually missing now.
         //
         //   · "Revenue per subsidiary — that call is not built" was FALSE:
-        //     D111 built `reportUsage` and `revenueSummary`. What is missing is
-        //     that no branch has REPORTED one, which is a different sentence.
+        //     D111 built `reportUsage` and `revenueSummary`. D150 then said no
+        //     branch had REPORTED one, which D266 made false in turn: every
+        //     branch reports its quarter each morning. What is missing now is
+        //     a MEASUREMENT — every stream in the report arrives unmeasured.
         //   · "Seat utilisation — needs seat_assignments" was half stale: D127
         //     decided AGAINST that store and counts seats from `users.role`,
         //     which the fan-out returns. What has no store is which seat id a
         //     person holds.
-        ['Revenue per subsidiary', 'The reporting call exists (a branch sends its own figure through reportUsage); no branch has sent one yet, so there is nothing to show rather than nothing to read it with.'],
+        ['Revenue per subsidiary', 'Each branch reports its quarter to HQ every morning, and every stream in that report arrives unmeasured: a branch database records no revenue amounts, so there is no figure to show.'],
         ['Which seat id a member holds', 'Seats USED is counted from roles and arrives with each branch read. Naming the individual seat needs a seat-assignment store, which nothing writes on either tier.'],
         ['Token P&L per subsidiary', 'Only Eadwyn’s two gatewayed task classes carry branch metadata (D261); every other model call carries none, and nothing meters AI spend per tenant yet.'],
       ]}
@@ -439,7 +444,8 @@ export default function HqHomePage() {
             Status, territory, seats licensed and renewal date are the ledger&apos;s own. Accounts, seats used
             and backlog come from each branch&apos;s own read over its own database, stamped with the time it
             answered — and a branch that did not answer says so rather than reading as a zero. Revenue stays
-            unrecorded: the reporting call exists, and no branch has sent a figure through it yet.
+            unrecorded: each branch reports its quarter every morning, and every stream arrives unmeasured
+            because a branch database records no revenue amounts.
           </p>
         </Card>
 
