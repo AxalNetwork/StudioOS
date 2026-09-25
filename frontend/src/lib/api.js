@@ -3349,6 +3349,12 @@ export const api = {
   // (D120). The route answers the one-time `open_url` on the branch's host;
   // the caller opens that URL as given and never builds one. TOTP and a recent
   // step-up are the route's (request() handles the step-up challenge).
+  // D262 — take the admin role off an account on a branch database.
+  hqUnbindAdmin: (code, userId, reason) =>
+    request(`/admin/branches/${encodeURIComponent(code)}/admins/${encodeURIComponent(userId)}/unbind`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
   hqSupportSession: (code, userId, reason) =>
     request(`/admin/branches/${encodeURIComponent(code)}/support-session`, {
       method: 'POST',

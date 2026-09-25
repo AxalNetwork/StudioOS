@@ -145,6 +145,8 @@ export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
       m('openSupportSession', true, true),
       m('moveAccountOut', true, true),
       m('inviteAccount', true, true),
+      // D262 — HQ's unbind route and licence termination both call it.
+      m('unbindAdmin', true, true),
     ],
   },
   branchCallsHq: {

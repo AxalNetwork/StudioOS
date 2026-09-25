@@ -107,8 +107,12 @@ test('D259: the operator is told the person is not told, and each refusal is sho
   const rendered = moveHit();
   assert.ok(TEAM_RAW.includes('The person is not told:'), 'the form does not say the branch account is not told');
   assert.match(rendered, /setSupportErr\(supportRefusal\(ex\)\)/);
-  assert.match(TEAM, /function supportRefusal\(ex\) \{\s*const d = ex\?\.data;\s*if \(d && typeof d\.message === 'string' && d\.message\) return d\.message;/,
+  // D262 moved the body into `branchRefusal`, which Unbind shares; the
+  // property is unchanged: the sentence first, the machine code only after.
+  assert.match(TEAM, /function branchRefusal\(ex, fallback\) \{\s*const d = ex\?\.data;\s*if \(d && typeof d\.message === 'string' && d\.message\) return d\.message;/,
     'a refusal shows the route\'s machine code instead of its sentence');
+  assert.match(TEAM, /function supportRefusal\(ex\) \{\s*return branchRefusal\(ex, /,
+    'the support form no longer reads the refusal through the sentence-first helper');
 });
 
 /** Every .js/.jsx file under frontend/src. */

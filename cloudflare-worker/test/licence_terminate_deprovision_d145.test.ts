@@ -25,7 +25,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { deprovisionLicenceAdmins } from '../src/routes/admin_licences.ts';
+import { deprovisionLicenceAdmins, unbindBranchAdmins } from '../src/routes/admin_licences.ts';
 
 const ACTOR = { id: 1, name: 'HQ Holder', email: 'hq@axal.test' };
 const LICENCE = 42;
@@ -234,4 +234,55 @@ test('no new licence_events value is written — 187\'s CHECK is not widened her
     !helper.includes('logEvent('),
     'a new licence_events value needs a migration to widen the CHECK — D139 learned that the expensive way',
   );
+});
+
+/* D262 — the branch's own administrators. */
+
+const SECRET = 'synthetic-hq-rpc-secret-not-a-credential';
+const branchEnv = (stub: unknown, extra: Record<string, unknown> = {}) =>
+  ({ HQ_RPC_SECRET: SECRET, BRANCH_FR: stub, ...extra }) as any;
+
+test('D262: a branch that throws is reported, never thrown — the termination stands', async () => {
+  const stub = { async unbindAdmin() { throw new Error('rpc: fr did not answer'); } };
+  const out = await unbindBranchAdmins(branchEnv(stub), 'fr', 'HQ Holder', 'the agreement has ended');
+  assert.equal(out.ok, false);
+  assert.equal(out.code, 'fr');
+  assert.match(String(out.reason), /termination is recorded/);
+  assert.match(String(out.reason), /fr did not answer/);
+});
+
+test('D262: no deployment, no secret and no binding are each a reported reason, and the branch is not called', async () => {
+  let calls = 0;
+  const stub = { async unbindAdmin() { calls += 1; return { unbound: [], skipped: [] }; } };
+  const none = await unbindBranchAdmins(branchEnv(stub), null, 'HQ Holder', 'n');
+  assert.equal(none.ok, false);
+  assert.match(String(none.reason), /no branch deployment/);
+  const noSecret = await unbindBranchAdmins(branchEnv(stub, { HQ_RPC_SECRET: '' }), 'fr', 'HQ Holder', 'n');
+  assert.equal(noSecret.ok, false);
+  assert.match(String(noSecret.reason), /HQ_RPC_SECRET/);
+  const unbound = await unbindBranchAdmins(branchEnv(stub), 'de', 'HQ Holder', 'n');
+  assert.equal(unbound.ok, false);
+  assert.match(String(unbound.reason), /No branch Worker is bound for de/);
+  assert.equal(calls, 0, 'the branch was called on a path that should have stopped short of it');
+});
+
+test('D262: a branch that answers is asked with the secret first and no target, and its count is reported', async () => {
+  const seen: unknown[][] = [];
+  const stub = { async unbindAdmin(...args: unknown[]) { seen.push(args); return { unbound: [{ id: 3 }, { id: 4 }], skipped: [] }; } };
+  const out = await unbindBranchAdmins(branchEnv(stub), 'fr', 'HQ Holder', 'the agreement has ended');
+  assert.deepEqual(out, { ok: true, code: 'fr', unbound: 2, skipped: [] });
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0][0], SECRET);
+  assert.ok(!('target_user_id' in (seen[0][1] as object)));
+});
+
+test('D262: terminate calls it AFTER the push, reports it as its own field, and never rethrows', () => {
+  const at = ROUTE.indexOf("r.post('/:uid/terminate'");
+  const body = ROUTE.slice(at, ROUTE.indexOf('\n});', at));
+  const push = body.indexOf('pushLicenceToBranch(');
+  const unbind = body.indexOf('unbindBranchAdmins(');
+  assert.ok(push > 0 && unbind > push, 'the branch must hold `terminated` before its administrators are unbound');
+  assert.match(body, /branch_admins_unbound: branchAdminsUnbound/);
+  const helper = ROUTE.slice(ROUTE.indexOf('export async function unbindBranchAdmins'), at);
+  assert.doesNotMatch(helper, /\bthrow\b/, 'the helper throws: a failed cleanup would undo a recorded termination');
 });

@@ -1301,6 +1301,136 @@ export async function moveAccountOut(
   };
 }
 
+/** D262 — the reason an unbind needs, the same bar as a support session and a move. */
+export const UNBIND_REASON_MIN = SUPPORT_REASON_MIN;
+
+export type UnbindRequest = {
+  hq_actor_name: string;
+  /**
+   * One administrator of this branch. Omitted, EVERY active administrator:
+   * that is licence termination's call, where the whole branch loses its right
+   * to administer anyone.
+   */
+  target_user_id?: number | null;
+  reason: string;
+};
+
+export type UnbindResult = BranchAnswer<{
+  unbound: Array<{ id: number; name: string | null; email: string | null }>;
+  /** Accounts left as they were, each with why. Only the no-target form skips. */
+  skipped: Array<{ id: number; reason: string }>;
+}>;
+
+/**
+ * D262 — HQ takes the admin role off an account that lives on THIS branch.
+ *
+ * WHY THIS EXISTS. HQ's demote, toggle-active and licence termination all act
+ * on HQ's own database: `deprovisionLicenceAdmins` reads HQ's
+ * `licence_admins JOIN users`, so a branch's administrator, whose account lives
+ * here, was never touched. Terminating a licence pushes `terminated`, which the
+ * branch stores, and the freeze reacts only to `suspended` — so a terminated
+ * branch's principal kept the admin role and every gated write. `moveAccountOut`
+ * already refuses an administrator and says to unbind at HQ; until D262 there
+ * was nothing at HQ to unbind with.
+ *
+ * D145'S SHAPE, ONE BRANCH DOWN. One UPDATE per account setting
+ * `role = 'exploring', is_active = 0`, guarded `AND role = 'admin'` so a row
+ * that changed underneath it is reported rather than overwritten. Deactivated
+ * as well as demoted: `requireAuth` refuses an inactive account, so the
+ * principal's session stops at the next request rather than living on as an
+ * ordinary account with an admin's history.
+ *
+ * THE BRANCH CHECKS WHAT IT CAN, as `openSupportSession` does: the caller is
+ * HQ (`authenticateHq`, first), the reason is at least ten characters, the
+ * target is an active administrator here, and it carries no `super_admins`
+ * row (a branch should have none, D106, so a row is a state to investigate
+ * rather than an account to strip). The operator's TOTP, step-up and elevation
+ * are HQ's to check before the binding is touched, and nothing here pretends
+ * otherwise.
+ *
+ * TWO ROWS PER ACCOUNT, `moveAccountOut`'s shape: one for what the operator
+ * did, one addressed to the person, both with actor `hq:<name>`.
+ */
+export async function unbindAdmin(
+  env: Env, secret: string, req: UnbindRequest,
+): Promise<UnbindResult> {
+  const branch = await authenticateHq(env, secret);
+
+  const reason = String(req?.reason ?? '').trim().slice(0, 300);
+  if (reason.length < UNBIND_REASON_MIN) {
+    throw new Error(
+      `rpc: unbinding an administrator needs a reason of at least ${UNBIND_REASON_MIN} characters, `
+      + 'recorded on both sides.',
+    );
+  }
+  const actor = String(req?.hq_actor_name ?? '').trim().slice(0, 200);
+  if (!actor) throw new Error('rpc: unbinding an administrator needs the name of the HQ operator doing it');
+
+  type Row = { id: number; name: string | null; email: string | null; role: string; is_active: number };
+  const named = req?.target_user_id !== undefined && req?.target_user_id !== null;
+  let targets: Row[];
+  if (named) {
+    const targetId = Number(req.target_user_id);
+    if (!Number.isInteger(targetId) || targetId <= 0) {
+      throw new Error('rpc: an unbind needs the id of an administrator on this branch');
+    }
+    const t = await env.DB.prepare(
+      'SELECT id, name, email, role, is_active FROM users WHERE id = ?',
+    ).bind(targetId).first<Row>();
+    if (!t) throw new Error(`rpc: ${branch} holds no account with id ${targetId}`);
+    if (String(t.role).toLowerCase() !== 'admin') {
+      throw new Error(`rpc: account ${targetId} is not an administrator of ${branch}, so there is nothing to unbind`);
+    }
+    if (Number(t.is_active ?? 1) === 0) {
+      throw new Error(`rpc: account ${targetId} is already deactivated on ${branch}`);
+    }
+    if (await loadSuperAdminFlag(env, targetId)) {
+      throw new Error(
+        `rpc: account ${targetId} carries a super_admins row on ${branch}. A branch database should `
+        + 'have none (D106), so this is a state to investigate rather than an account to unbind.',
+      );
+    }
+    targets = [t];
+  } else {
+    const res = await env.DB.prepare(
+      "SELECT id, name, email, role, is_active FROM users WHERE role = 'admin' AND is_active = 1 ORDER BY id",
+    ).all<Row>();
+    targets = res.results ?? [];
+  }
+
+  const unbound: Array<{ id: number; name: string | null; email: string | null }> = [];
+  const skipped: Array<{ id: number; reason: string }> = [];
+  for (const t of targets) {
+    if (!named && await loadSuperAdminFlag(env, t.id)) {
+      skipped.push({ id: t.id, reason: 'Carries a super_admins row, which a branch should not have (D106); left for investigation.' });
+      continue;
+    }
+    const res = await env.DB.prepare(
+      "UPDATE users SET role = 'exploring', is_active = 0 WHERE id = ? AND role = 'admin' AND is_active = 1",
+    ).bind(t.id).run();
+    if (Number(res?.meta?.changes ?? 0) === 0) {
+      skipped.push({ id: t.id, reason: 'Changed while this ran: no longer an active administrator, so left as it is.' });
+      continue;
+    }
+    unbound.push({ id: t.id, name: t.name, email: t.email });
+    try {
+      await env.DB.prepare(
+        'INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)',
+      ).bind('hq_admin_unbound', `Unbound as administrator of ${branch} by ${actor}: ${reason}`,
+        `hq:${actor}`.slice(0, 200), t.id).run();
+      await env.DB.prepare(
+        'INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)',
+      ).bind('your_role_changed',
+        `Your administrator role on this branch was removed by HQ and your account deactivated. Reason: ${reason}`,
+        `hq:${actor}`.slice(0, 200), t.id).run();
+    } catch (e) {
+      console.warn('[rpc:unbindAdmin] audit rows failed', (e as Error).message);
+    }
+  }
+
+  return { unbound, skipped, branch, as_of: nowIso() };
+}
+
 export type InviteRequest = {
   hq_actor_name: string;
   email: string;

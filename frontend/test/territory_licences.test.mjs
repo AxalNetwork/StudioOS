@@ -223,7 +223,10 @@ test('every mutation is admin-only and recorded', () => {
   // narrows — so the claim here is unchanged in kind and tighter in degree.
   // Matching either keeps the original property (no ungated mutation) as the
   // floor; the second assertion pins the ceiling for THIS file.
-  const gated = (s.match(/require(?:Super)?Admin\(c\)/g) || []).length;
+  // `requireSuperAdminWriteBar` is the stronger gate (TOTP, a fresh step-up,
+  // then `requireSuperAdmin`), and D262 moved terminate onto it; counting it is
+  // the same floor, not a looser one.
+  const gated = (s.match(/require(?:Super)?Admin(?:WriteBar)?\(c\)/g) || []).length;
   assert.ok(gated >= handlers.length, `every mutation must be gated (${gated} vs ${handlers.length})`);
   assert.doesNotMatch(s, /\brequireAdmin\b/,
     'a plain requireAdmin on the franchise console is a franchisee who can franchise');
@@ -277,7 +280,15 @@ test('D248: Extend is paused by the recovery cool-off, End is not, and each admi
     // D259 — the two acts HQ takes into a branch's database.
     '/api/admin/branches/:code/support-session',
     '/api/admin/branches/:code/accounts/:userId/move',
+    // D262 — unbinding a branch's administrator, and HQ's demote-admin.
+    '/api/admin/branches/:code/admins/:userId/unbind',
+    '/api/admin/users/:userId/demote-admin',
   ]) assert.ok(block.includes(`'${route}'`), `${route} is not paused during the cool-off`);
+  // D262 decided these three stay open: none gives power over an administrator,
+  // money or another tenant.
+  for (const open of ['access-level', 'spinout-admit', 'spinout-applications']) {
+    assert.ok(!block.includes(open), `${open} was added to the cool-off; D262 decided it stays open`);
+  }
   // Registered as the route itself, never with a wildcard: `${p}/*` on a
   // parent would reach End.
   assert.match(idx, /for \(const p of COOL_OFF_ROUTES\) app\.use\(p, recoveryCoolOff\);/);

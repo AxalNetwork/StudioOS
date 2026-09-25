@@ -64,6 +64,9 @@ import { mergeValues, renderContract } from '../services/licenceContract';
 // licence. `applyLicence` had no caller at all, so HQ's suspend changed four
 // columns here and nothing on the subsidiary.
 import { pushLicenceToBranch } from '../services/licencePush';
+// D262 — termination reaches the branch's own administrators too.
+import { branchByCode } from '../services/branches';
+import { mirrorBranchAction } from '../services/auditMirror';
 // D197 — the host register. HQ reads it onto every licence payload and may
 // detach; the tenant's own binds live in `routes/licence.ts`, deliberately not
 // behind an admin gate.
@@ -839,9 +842,73 @@ export async function deprovisionLicenceAdmins(
   return out;
 }
 
+/**
+ * D262 — take the admin role off every administrator on the terminated
+ * licence's BRANCH, whose accounts live in the branch's database.
+ *
+ * `deprovisionLicenceAdmins` above reads HQ's `licence_admins JOIN users`, so
+ * it only ever reached accounts in HQ's own database. Termination pushes
+ * `terminated`, which the branch stores, and the freeze reacts only to
+ * `suspended` (D107), so a terminated branch's principal kept the admin role
+ * and every gated write. This asks the branch, with no target, to unbind every
+ * active administrator it holds (`unbindAdmin`).
+ *
+ * REPORTED, NEVER THROWN, D145's rule: a recorded termination must never be
+ * undone by the cleanup after it. Every failure — no deployment, no secret,
+ * no binding, a branch that refuses or does not answer — is a field with a
+ * reason the operator can act on.
+ */
+export async function unbindBranchAdmins(
+  env: Env,
+  code: string | null | undefined,
+  actorName: string,
+  note: string,
+): Promise<{ ok: boolean; code: string | null; unbound?: number; skipped?: { id: number; reason: string }[]; reason?: string }> {
+  if (!code) {
+    return { ok: false, code: null, reason: 'This licence has no branch deployment, so there is no branch administrator to unbind.' };
+  }
+  if (!env.HQ_RPC_SECRET) {
+    return {
+      ok: false, code,
+      reason: 'HQ_RPC_SECRET is not set on this Worker, so the branch cannot tell this call from any '
+        + `other; ${code}'s administrators still hold the role. Set it and unbind them from HQ · Team.`,
+    };
+  }
+  const binding = branchByCode(env, code);
+  if (!binding) {
+    mirrorBranchAction(env, 'admin_unbound', 'not_deployed', code);
+    return { ok: false, code, reason: `No branch Worker is bound for ${code}, so its administrators could not be reached.` };
+  }
+  try {
+    const res = await (binding.stub as any).unbindAdmin(env.HQ_RPC_SECRET, {
+      hq_actor_name: actorName,
+      reason: `Licence terminated: ${note}`,
+    });
+    mirrorBranchAction(env, 'admin_unbound', 'ok', code);
+    return {
+      ok: true, code,
+      unbound: Array.isArray(res?.unbound) ? res.unbound.length : 0,
+      skipped: Array.isArray(res?.skipped) ? res.skipped : [],
+    };
+  } catch (e) {
+    mirrorBranchAction(env, 'admin_unbound', 'failed', code);
+    return {
+      ok: false, code,
+      reason: `The termination is recorded, and ${code} did not unbind its administrators: `
+        + `${String((e as Error).message || e).replace(/^rpc: /, '').slice(0, 300)}. `
+        + 'Unbind them from HQ · Team.',
+    };
+  }
+}
+
 r.post('/:uid/terminate', async (c) => {
   try {
-    const admin = await requireSuperAdmin(c);
+    // D262 — THE WRITE BAR, where every other lifecycle move keeps the plain
+    // elevation. Terminate is the one that takes the admin role off accounts:
+    // HQ's since D145, and the branch's own since D262. Every other act that
+    // removes an admin role (demote-admin, DELETE /:uid/admins, the branch
+    // unbind) already asks for TOTP and a fresh step-up.
+    const admin = await requireSuperAdminWriteBar(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
     // D139 — the state machine, on `reinstate`'s own 409 shape.
@@ -916,10 +983,17 @@ r.post('/:uid/terminate', async (c) => {
     // Pushed AFTER the territory release, so the copy the branch receives
     // reports the same empty territory the ledger now holds.
     const pushed = await pushLicenceToBranch(c.env, licence.id);
+    // D262 — AFTER the push, so the branch already holds `terminated` when its
+    // administrators lose the role. Its own field, never thrown.
+    const branchAdminsUnbound = await unbindBranchAdmins(
+      c.env, pushed?.code ?? null,
+      String((admin as { name?: string }).name || '').trim().slice(0, 200) || 'Axal VC HQ', note,
+    );
     return c.json({
       ok: true, status: 'terminated', released: codes, pushed,
       notices_withdrawn: noticesWithdrawn,
       admins_deprovisioned: adminsDeprovisioned,
+      branch_admins_unbound: branchAdminsUnbound,
     });
   } catch (e) { return mapError(c, e); }
 });
