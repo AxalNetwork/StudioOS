@@ -179,9 +179,10 @@ export function DeploymentZone({ dep }) {
             ))}
           </ul>
           <p className="mt-1.5 text-[11px] leading-snug text-axal-faint" data-testid="s14-gateway">
-            {g.carries_metadata
-              ? 'Each model call carries metadata naming this branch.'
-              : 'No model call carries metadata naming this branch, so gateway spend cannot be split by branch.'}
+            {/* D261 — only the gatewayed task classes carry it, and only while a slug is set. */}
+            {(g.metadata?.carried_by || []).length > 0
+              ? `Only ${g.metadata.carried_by.map((r) => r.label).join(' and ')} carry metadata naming this branch, so gateway spend can be split by branch for those alone. Every other model call carries none.`
+              : 'No gateway is set on this Worker, so no model call carries metadata naming this branch, and gateway spend cannot be split by branch.'}
           </p>
           <div className="mt-3 text-[11px] font-extrabold uppercase tracking-[.06em] text-axal-faint">
             What this Worker cannot do

@@ -291,7 +291,14 @@ test('the shared card: the dataset and who reads it, the gateway, the account se
   const slug = describeTopology({ ...ALL_BOUND, CF_AI_GATEWAY_SLUG_ADVISOR: 'g' });
   assert.match(byTestId(html(SharedCard, { topo: slug }), 'h14-shared-gateway'),
     /Routes Eadwyn's turns and Eadwyn's explanations through the gateway\. Every other model call goes to Workers AI directly\./);
-  assert.match(byTestId(markup, 'h14-gateway-metadata'), /No call carries metadata naming a branch or a person/);
+  // D261 — no slug: nothing is gatewayed, so nothing carries metadata. With a
+  // slug: exactly the gatewayed task classes do, named, and every other call
+  // is said to carry none — never "each call".
+  assert.match(byTestId(markup, 'h14-gateway-metadata'), /No gateway is set on this Worker, so no call carries metadata naming a branch or a person\./);
+  const md = byTestId(html(SharedCard, { topo: slug }), 'h14-gateway-metadata');
+  assert.match(md, /^Only Eadwyn's turns and Eadwyn's explanations carry gateway metadata \(branch, account, task\)/);
+  assert.match(md, /Every other model call carries none\./);
+  assert.doesNotMatch(md, /Each call carries/);
 
   assert.match(byTestId(markup, 'h14-shared-AI'), /Workers AI — bound as AI, one account-wide service\./);
   const unbound = html(SharedCard, { topo: describeTopology({ DB: {} }) });
@@ -333,7 +340,11 @@ test('S14 names this Worker, its own resources, its one link and both sides of t
   assert.equal(byTestId(markup, 's14-redeployed'),
     `Redeployed after HQ on every push to main, by ${BRANCH_DEPLOYED_BY}, so this Worker runs main’s code. Provisioned by ${BRANCH_PROVISIONED_BY}.`);
   assert.doesNotMatch(markup, /s14-deployed-once/);
-  assert.match(byTestId(markup, 's14-gateway'), /cannot be split by branch/);
+  assert.match(byTestId(markup, 's14-gateway'), /No gateway is set on this Worker, so no model call carries metadata naming this branch, and gateway spend cannot be split by branch\./);
+  // D261 — with a slug set, the two gatewayed task classes carry it, and only they.
+  const slugged = byTestId(html(DeploymentZone, { dep: describeTopology({ ...ALL_BOUND, BRANCH_CODE: 'fr', HQ: {}, CF_AI_GATEWAY_SLUG_ADVISOR: 'g' }) }), 's14-gateway');
+  assert.match(slugged, /^Only Eadwyn's turns and Eadwyn's explanations carry metadata naming this branch/);
+  assert.match(slugged, /Every other model call carries none\./);
 });
 
 test('S14\'s cannot-list, summary and heading say which way each came out on this Worker', () => {

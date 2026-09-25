@@ -24,6 +24,7 @@
  *     module is deployable today without provisioning a new namespace.
  */
 import type { Env } from '../types';
+import { branchOf } from '../util/branch';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -692,11 +693,14 @@ interface ProviderResult {
   error?: string;
 }
 
+/** The slice of workers-types' `GatewayOptions` this router sends (D261). */
+type GatewayOption = { gateway: { id: string; metadata: Record<string, string> } };
+
 interface WorkersAIBinding {
   run(
     model: string,
     payload: unknown,
-    options?: { gateway?: { id: string; skipCache?: boolean; cacheTtl?: number } },
+    options?: { gateway?: { id: string; skipCache?: boolean; cacheTtl?: number; metadata?: Record<string, string> } },
   ): Promise<unknown>;
 }
 
@@ -710,23 +714,40 @@ interface WorkersAIBinding {
 //
 // D209 — the list and the slug are exported because HQ's topology page states
 // them, and a page holding its own copy of "which calls go through the gateway"
-// is a second place to update. What the option carries is ONLY the gateway id:
-// no `cf-aig-metadata`, so the gateway sees no branch and no user, and cannot
-// hold a per-branch spend limit (task #358). The page says that too, and
-// `topology_d209.test.ts` fails if an option here starts carrying anything else
-// without the page learning of it.
+// is a second place to update.
+//
+// D261 — THE OPTION NOW SAYS WHOSE CALL IT IS. It carries the gateway's custom
+// metadata (at most five entries; `cf.*` is reserved): the branch the Worker is
+// deployed for, or `hq`; the account as `<branch>:<user id>`, because a user id
+// is only unique within one database; and the task class. So the gateway's logs
+// can split this traffic by branch and by account. Only these two task classes
+// carry it, because only they are gatewayed; every other call reaches Workers AI
+// with no gateway and so with no metadata. `GATEWAY_METADATA_KEYS` is exported
+// for the topology page, and `topology_d209.test.ts` holds the two equal.
 export const GATEWAY_TASKS: readonly TaskClass[] = ['advisor_turn', 'advisor_explain'];
+
+/** The metadata keys a gatewayed call carries, in the order it sends them (D261). */
+export const GATEWAY_METADATA_KEYS = ['branch', 'account', 'task'] as const;
 
 export function advisorGatewaySlug(env: Env): string | null {
   const slug = env.CF_AI_GATEWAY_SLUG_ADVISOR;
   return slug && slug.trim() ? slug.trim() : null;
 }
 
-function gatewayOptionFor(env: Env, task: TaskClass): { gateway: { id: string } } | undefined {
+function gatewayOptionFor(env: Env, task: TaskClass, userId?: number | null): GatewayOption | undefined {
   if (!GATEWAY_TASKS.includes(task)) return undefined;
   const slug = advisorGatewaySlug(env);
   if (!slug) return undefined;
-  return { gateway: { id: slug } };
+  const branch = branchOf(env) ?? 'hq';
+  const metadata: Record<string, string> = { branch };
+  // NO ACCOUNT FROM A ZERO. `bindAi` defaults `userId` to 0 for calls that have
+  // no person behind them; `hq:0` would read as an account and pool every such
+  // call under it. So the key is left out rather than invented.
+  if (typeof userId === 'number' && Number.isInteger(userId) && userId > 0) {
+    metadata.account = `${branch}:${userId}`;
+  }
+  metadata.task = task;
+  return { gateway: { id: slug, metadata } };
 }
 
 // True when this task would normally route through the advisor AI Gateway
@@ -747,7 +768,7 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
   if (!ai || typeof ai.run !== 'function') {
     return { ok: false, status: 0, error: 'AI binding not configured' };
   }
-  const gatewayOpt = bypassGateway ? undefined : gatewayOptionFor(env, opts.task);
+  const gatewayOpt = bypassGateway ? undefined : gatewayOptionFor(env, opts.task, opts.userId);
   try {
     if (ROUTE[opts.task]?.isAudio) {
       // `Array.from` on the bytes is what the binding expects, and it is also

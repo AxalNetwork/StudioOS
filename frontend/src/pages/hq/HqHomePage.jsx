@@ -247,7 +247,7 @@ export default function HqHomePage() {
         //     person holds.
         ['Revenue per subsidiary', 'The reporting call exists (a branch sends its own figure through reportUsage); no branch has sent one yet, so there is nothing to show rather than nothing to read it with.'],
         ['Which seat id a member holds', 'Seats USED is counted from roles and arrives with each branch read. Naming the individual seat needs a seat-assignment store, which nothing writes on either tier.'],
-        ['Token P&L per subsidiary', 'Needs per-branch metadata on every model call; nothing meters AI spend per tenant yet.'],
+        ['Token P&L per subsidiary', 'Only Eadwyn’s two gatewayed task classes carry branch metadata (D261); every other model call carries none, and nothing meters AI spend per tenant yet.'],
       ]}
       data-testid="hq-home-rail"
     />

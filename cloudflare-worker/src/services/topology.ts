@@ -33,7 +33,7 @@ import type { Env } from '../types';
 import { branchOf } from '../util/branch';
 import { branchBindings } from './branches';
 import { aeDataset, aeReadable } from './analyticsReports';
-import { GATEWAY_TASKS, advisorGatewaySlug } from './aiRouter';
+import { GATEWAY_TASKS, GATEWAY_METADATA_KEYS, advisorGatewaySlug } from './aiRouter';
 import { githubConfigured } from './githubSync';
 import { secretWriteTarget } from './cloudflareSecrets';
 
@@ -253,6 +253,14 @@ export const CF_ACCESS_PATHS = [
 
 export type Topology = ReturnType<typeof describeTopology>;
 
+/** The gatewayed task classes as the page names them: an id (code) and a label (voice). */
+function gatewayRoutes(): Array<{ id: string; label: string }> {
+  return GATEWAY_TASKS.map((id) => ({
+    id,
+    label: id === 'advisor_turn' ? 'Eadwyn\'s turns' : 'Eadwyn\'s explanations',
+  }));
+}
+
 /**
  * This Worker's topology. Pure over `env`: no D1 read, no network, so it
  * cannot fail on a store and needs no unreadable state of its own.
@@ -305,12 +313,16 @@ export function describeTopology(env: Env) {
     },
     ai_gateway: {
       // Labels, not task ids: the ids are code, and the product's voice is Eadwyn's.
-      routes: GATEWAY_TASKS.map((id) => ({
-        id,
-        label: id === 'advisor_turn' ? 'Eadwyn\'s turns' : 'Eadwyn\'s explanations',
-      })),
+      routes: gatewayRoutes(),
       slug_set: advisorGatewaySlug(env) !== null,
-      carries_metadata: false,
+      // D261 — was `carries_metadata: false`. What a gatewayed call now
+      // carries, and which task classes carry it ON THIS WORKER: the gatewayed
+      // ones when a slug is set, and none when it is not, because a call that
+      // reaches Workers AI directly carries no gateway option at all.
+      metadata: {
+        keys: [...GATEWAY_METADATA_KEYS],
+        carried_by: advisorGatewaySlug(env) !== null ? gatewayRoutes() : [],
+      },
     },
     tail: { consumer: TAIL_CONSUMER },
     deploys: {

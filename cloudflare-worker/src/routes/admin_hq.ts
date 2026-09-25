@@ -541,8 +541,9 @@ const HQ_ANALYTICS_NOT_RECORDED = [
     key: 'token_spend',
     label: 'Token spend against limit',
     reason:
-      'AI Gateway calls carry no branch metadata (#358), so spend cannot be split by branch, and no '
-      + 'licence carries a token limit to set it against.',
+      'Only Eadwyn\'s two gatewayed task classes carry branch metadata to the AI Gateway (D261); '
+      + 'every other model call carries none, and nothing reads the gateway\'s logs back into HQ. '
+      + 'So spend cannot be split by branch here, and no licence carries a token limit to set it against.',
   },
   {
     key: 'revenue_by_stream',

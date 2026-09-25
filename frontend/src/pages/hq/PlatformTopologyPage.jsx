@@ -17,7 +17,8 @@ import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
  * every /admin route (it guards two KYC routes), "no screen writes to
  * Cloudflare" (three write Worker secrets), an entrypoint exporting five
  * methods of which four do not exist, a dataset indexed by branch (the code
- * rides in a blob), AI Gateway metadata per branch (none is sent). D209 carries
+ * rides in a blob), AI Gateway metadata on every call (D261 sends it on the two
+ * gatewayed task classes only). D209 carries
  * the whole table. So nothing on this page is typed here: every fact comes
  * from `services/topology.ts` over `GET /api/admin/platform/topology`, and
  * `cloudflare-worker/test/topology_d209.test.ts` holds that service to the
@@ -269,9 +270,11 @@ export function SharedCard({ topo }) {
               : 'No gateway is set on this Worker, so every model call goes to Workers AI directly.'}
           </p>
           <p className="mt-1 text-[11px] leading-snug text-axal-faint" data-testid="h14-gateway-metadata">
-            {g?.carries_metadata
-              ? 'Each call carries metadata naming who made it.'
-              : 'No call carries metadata naming a branch or a person, so the gateway cannot split spend by either.'}
+            {/* D261 — WHICH calls carry it, never "each call": only the
+                gatewayed task classes do, and only while a slug is set. */}
+            {(g?.metadata?.carried_by || []).length > 0
+              ? `Only ${g.metadata.carried_by.map((r) => r.label).join(' and ')} carry gateway metadata (${(g.metadata.keys || []).join(', ')}), so the gateway can split their spend by branch and by account. A call with no signed-in person behind it carries no account. Every other model call carries none.`
+              : 'No gateway is set on this Worker, so no call carries metadata naming a branch or a person.'}
           </p>
         </div>
         {sharedBindings.map((b) => (

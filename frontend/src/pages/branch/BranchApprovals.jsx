@@ -526,7 +526,7 @@ export default function BranchApprovals({ user }) {
         // became false the moment this shipped. What is still genuinely
         // missing is smaller, and saying the smaller true thing is the point.
         ['Assignment and history', 'Who a queue item is assigned to, and its history timeline, need a store that does not exist. Nothing records either today, so the board shows neither rather than showing them empty.'],
-        ['An AI-drafted decision note', 'The canvas draws one with its cost. There is no per-branch AI cost figure — the gateway metadata that would produce one is not wired — so a cost line here would be invented.'],
+        ['An AI-drafted decision note', 'The canvas draws one with its cost. There is no per-branch AI cost figure: only Eadwyn’s two gatewayed task classes name the branch to the gateway (D261), and nothing reads the gateway’s logs back as a cost, so a cost line here would be invented.'],
         ['A reply to HQ', 'An escalation carries one answer with an author and a time. There is no thread, so there is nothing for a reply to be added to.'],
       ]}
     >
