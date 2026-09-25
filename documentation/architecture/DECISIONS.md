@@ -26896,3 +26896,94 @@ caught.
 `docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
 edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
 `check-folder-docs`, `check-api-drift` and `check-access-comments` exit 0.
+
+## D272
+
+**Task 431: a licence change that failed to reach a branch was never re-sent.**
+
+**What was true on main (79b1fa69).**
+- **A branch that holds a copy never pulls.** `routes/licence.ts` pulls only
+  when `branch_licence` has no row (D244).
+- **A failed push was reported and dropped.** `pushLicenceToBranch` answers
+  `ok: false` and stops, whether the branch had no binding yet, was
+  unreachable or refused. The compliance ladder only logs it.
+- So a branch kept its old licence until some later transition happened to
+  push, and nothing guarantees there will be one.
+- **`applyLicenceCopy` overwrote unconditionally.**
+- **Five changes that alter the copy never pushed at all:**
+  - territories;
+  - seats;
+  - commercial terms;
+  - a new contract, which moves `template_version`;
+  - the reinstatement that accepting a notice performs. The `/reinstate`
+    route already pushed; the notice-review path did not.
+
+**Chosen: an HQ-side retry, not a branch-side staleness check.**
+- **A staleness check needs a new HQ method.** A cheap version read,
+  authenticated like `licence()`, would live in `rpc/hqOps.ts`, which this
+  session does not hold. It also puts a call to HQ on the read path, and
+  D244's throttle exists because a broken binding would otherwise call HQ on
+  every page load.
+- **A retry needs only what HQ already knows.** HQ knows exactly which push
+  failed and why.
+
+**What changed.**
+- **Migration 295, `licence_push_pending`.** It holds one row per licence
+  whose last push to a DEPLOYED branch did not land: its code, the reason, the
+  attempt count, and the first and last attempt times.
+  - `pushLicenceToBranch` writes or bumps the row on failure, and deletes it
+    when a push lands. A branch holding the current copy is therefore never
+    re-sent it.
+  - A licence with no deployment writes nothing, because its branch pulls on
+    its first read.
+  - Recording the outcome never throws. A database without 295 loses the
+    retry, not the push.
+- **`retryPendingLicencePushes`** re-sends each row whose last attempt is at
+  least 60 minutes old, at most 20 per run.
+  - It reads the licence fresh, so the retry carries the current record.
+  - A retry that fails again bumps the row and is reported, never thrown.
+  - HQ's scheduled handler runs it every ten minutes (`% 10 === 3`), gated on
+    `hqCadences`. The per-row window is the throttle: a broken binding costs
+    one call per licence per hour, not one per tick.
+- **The five routes above now push,** and each returns `pushed` beside its
+  answer, like the transitions that already did. Changes to licence admins,
+  brand kits, domains and notices are not in the copy, so they need not push.
+  Licence creation needs not push either: no branch is deployed yet, and the
+  branch pulls when it is.
+- **`applyLicenceCopy` never lets an older copy overwrite a newer one.** The
+  upsert's `DO UPDATE` carries
+  `WHERE branch_licence.pushed_at IS NULL OR datetime(excluded.pushed_at) >= datetime(branch_licence.pushed_at)`.
+  Re-sending makes out-of-order arrival possible.
+
+**Authentication.** `applyLicence` is an HQ-authored push. `rpc/index.ts`
+takes no secret for it, as with `publishTemplate`, because a call from any
+Worker in the account costs at most a stale copy. The retry travels the same
+path. The secret that matters to this item guards the PULL: `licenceForBranch`
+checks the branch's `RPC_SECRET` against the deployment's hash. This change
+leaves it untouched, and the mutation below proves its existing tests still
+catch its removal.
+
+**Tests: new `cloudflare-worker/test/licence_push_retry_d272.test.ts`, 8
+tests,** against migration 295's own DDL and `branch_licence` built from
+256/257/265/284:
+- a failed push to a deployed branch is recorded, and one with no deployment
+  is not;
+- a failed push is retried exactly once per window, and landing clears it;
+- a current copy is never re-sent;
+- a retry that fails again, by throwing or by refusing, is reported and stays
+  pending with its attempt counted;
+- without 295 the push still lands and the retry reports itself unreadable;
+- an older copy never overwrites a newer one;
+- each of the five changes pushes;
+- the retry block is gated on `hqCadences`.
+
+**Re-aimed, not loosened:** `licence_push_d137`'s wiring test counted exactly five push calls in `admin_licences.ts`; it now counts exactly ten, the five status transitions and the five changes above.
+
+**Mutations: 6 run, 6 caught:**
+- the throttle bypassed, with the cutoff set to now;
+- a current copy re-sent, with the delete on success removed;
+- `licenceForBranch`'s wrong-secret check dropped, caught by
+  `licence_pull_d244`'s existing tests;
+- a failed retry thrown instead of reported;
+- the older-copy guard removed;
+- the seats route's push removed.
