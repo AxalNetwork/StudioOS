@@ -25904,6 +25904,172 @@ edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
 `check-folder-docs`, `check-api-drift` and `check-runtime-schema-declared`
 exit 0.
 
+## D261
+
+**AI Gateway calls now say whose call they are. Every call through the gateway
+carries `{ branch, account, task }` metadata: the branch the Worker is
+deployed for or `hq`, the account as `<branch>:<user id>`, and the task class.
+So the gateway's logs can split that spend by branch and by account. Only the
+two gatewayed task classes carry it, and every sentence that said otherwise
+now says exactly that.** Task 358.
+
+**No migration, no route, no api.js method.**
+
+### THE DEFECT
+
+- `gatewayOptionFor` (`services/aiRouter.ts`) returned `{ gateway: { id } }`
+  and nothing else, so the gateway saw no branch and no person. It could not
+  split spend by either, and task 358's per-branch spend limit had nothing to
+  key on.
+- `services/advisor/aiClient.ts` built a second gateway option of its own,
+  on a path with no caller (`runAdvisorTurn`).
+
+### WHAT CHANGED
+
+- **The option** (`gatewayOptionFor(env, task, userId)`, called from
+  `callWorkersAI` with `opts.userId`):
+  - `metadata: { branch, account, task }`:
+    - `branch` is `branchOf(env) ?? 'hq'`;
+    - `account` is `${branch}:${userId}`, because a user id is only unique
+      within one database;
+    - `task` is the task class.
+  - All three keys are strings. That is at most five entries, none `cf.*`,
+    as workers-types' `GatewayOptions.metadata` allows. The router's local
+    binding type gains the field. The installed workers-types is
+    5.20260914.1, the lockfile's, so no `npm ci` was needed.
+  - **No account is built from 0.** `bindAi` defaults `userId` to 0 for calls
+    with no person behind them. `hq:0` would read as an account and pool every
+    such call, so the key is left out.
+  - `GATEWAY_METADATA_KEYS` is exported beside `GATEWAY_TASKS`.
+  - **Unchanged:**
+    - `isGatewayRouted` still asks only whether a call would be gatewayed.
+    - The bypass retry (`callWaiRaw(model, true)`) still sends no option at
+      all.
+    - `onboarding_chat` is still never gatewayed.
+- **aiClient's gateway path: deleted, not taught.** `advisorGatewayOption`,
+  the private slug reader and the gateway argument through `callOnce` are
+  gone, and the file sends `ai.run(model, payload)`. Nothing imports the
+  module. Had `runAdvisorTurn` ever gained a caller, its path would have been
+  a second source of gateway traffic that the router's rules did not govern.
+  Giving it the metadata would have kept two builders to hold equal.
+  `aiRouter.ts` is now the only file that builds a gateway option.
+- **Topology** (`services/topology.ts`): `carries_metadata: false` becomes
+  `metadata: { keys, carried_by }`.
+  - `keys` is `GATEWAY_METADATA_KEYS`.
+  - `carried_by` is the gatewayed routes (id and label) when a slug is set,
+    and `[]` when it is not. An ungatewayed call carries no option, so it
+    carries no metadata.
+  - The routes are labelled, never bare task ids: the payload's voice guard
+    exempts only `id` keys.
+- **The strings.** Each now names the calls that carry the metadata:
+  - PlatformTopologyPage's docblock and its metadata line, on both branches
+    of the ternary. "Each call carries metadata naming who made it" would
+    have overclaimed; the line now reads "Only Eadwyn's turns and Eadwyn's
+    explanations carry gateway metadata (branch, account, task)… Every other
+    model call carries none", and says an unsigned call carries no account.
+  - BranchSettings' S14 line, on both branches.
+  - `admin_hq.ts`'s token-spend reason, `branch_home.ts`'s AI digest reason,
+    BranchApprovals' decision-note row and HqHomePage's Token P&L row.
+  - Each of those four still says the figure is absent, now for the true
+    reason: only two task classes carry the branch, and nothing reads the
+    gateway's logs back.
+
+### LEFT ALONE
+
+The D152, D158 and D111 counters are not touched. Token margin, revenue per
+subsidiary and guardrail counters by branch stay not recorded: the metadata
+makes a split possible in the gateway's own logs, and nothing here reads
+those back.
+
+### FILED, NOT BUILT
+
+- **Gatewaying the other task classes.** A second slug is needed, because the
+  onboarding chat must never depend on this one (task 19).
+- **The nine direct Workers AI calls** that skip the router: `admin_x.ts` ×2,
+  `brand.ts`, `legalcap.ts`, `matches.ts`, `monitoring.ts`, `networkfx.ts`,
+  `pipeline.ts` and `services/vectorize.ts`. They carry neither the budget
+  nor the metadata; routing them through the router is its own change.
+
+### PINS, RE-AIMED
+
+- `topology_d209.test.ts`'s gateway test is re-aimed, not loosened. It said
+  two task classes route through the gateway "carrying no metadata" and that
+  the dead path stayed dead. It now asserts:
+  - exactly one file builds an option;
+  - no file sends the `cf-aig-metadata` header by hand;
+  - `gatewayOptionFor` reads the branch from `branchOf`, guards the id with
+    `userId > 0` and returns the metadata;
+  - the call site passes `opts.userId`;
+  - aiClient reads no slug and calls `ai.run(model, payload)`.
+
+  A second test holds the payload: `carried_by` is `[]` without a slug and
+  equals `routes` with one, the keys equal the router's, and
+  `carries_metadata` is gone.
+- `topology_h14_s14.test.mjs:294` and `:336` pin both states on each page,
+  with and without a slug, and forbid "Each call carries".
+
+### A HARNESS FACT, RECORDED BECAUSE IT COST A RUN
+
+`cloudflare-worker/test/aiRouter.test.mjs` loads the router by stripping its
+one `import type`, transpiling it and evaluating it with `new Function`, so
+a runtime import cannot resolve. The new `branchOf` import made all twelve of
+its tests fail with "Cannot use import statement outside a module". The
+first full run caught it; the targeted runs had not included that file.
+
+The loader now strips that one import line and passes the real `branchOf` in
+as a parameter, because a stand-in would be a second definition of a branch
+code. It also throws, naming the line, on any other runtime import. No
+assertion in that file changed.
+
+### VERIFIED
+
+`cloudflare-worker/test/aiRouter.bugfix.test.ts`: `makeAI` now keeps each
+call's options. Seven new tests, through `run()`:
+- an FR env gives `{ branch: 'fr', account: 'fr:42', task: 'advisor_explain' }`;
+- HQ gives `{ branch: 'hq', account: 'hq:42', task: 'advisor_turn' }`;
+- `bindAi`'s default 0 gives no account key;
+- the bypass retry sends no options object at all;
+- `onboarding_chat` on a branch with a slug sends none;
+- no slug means no option;
+- across both task classes, both tiers and a zero id, every metadata object
+  has at most five keys, none `cf.*`, only declared keys, in the exported
+  order, all strings.
+
+`frontend/test/ai_gateway_metadata_d261.test.mjs`, two tests:
+- the four "not recorded" reasons state the gatewayed count, derived from
+  `GATEWAY_TASKS` rather than typed, cite D261, and still say the figure is
+  absent;
+- no source file in either tree still carries one of the seven stale
+  sentences.
+
+**Mutation checks: 10 of 10 caught,** each alone and restored from a
+sha256-verified snapshot:
+- the metadata dropped;
+- the branch hard-coded to `hq`;
+- the wrong user id at the call site;
+- an account key built from 0;
+- `onboarding_chat` gatewayed;
+- `carried_by` set with no slug, which is the flag flipped without the copy
+  changing;
+- the HQ page saying "Each call carries" again;
+- the branch page reading the old flag;
+- HqHomePage's old reason restored;
+- a `cf.*` key added.
+
+**Full suite:** `npm run test:drift` on Node 22 exits 0 on `main` at
+`6140ea2a`:
+- frontend 3260 (the two above are new);
+- worker 4288 passed with 3 skipped (the seven router tests above and
+  topology_d209's second gateway test are new);
+- retention 70.
+
+The one test name gone since the D260 run is topology_d209's gateway test,
+re-aimed and renamed above.
+
+`docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
+edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
+`check-folder-docs`, `check-api-drift` and `check-access-comments` exit 0.
+
 ## D263
 
 **Task 323: the restore drill had failed four runs out of four, and the next

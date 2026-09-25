@@ -2,14 +2,14 @@
  * Task #4 (CG) — Personal Advisor AI client.
  *
  * Thin wrapper around the Workers AI binding (`env.AI`) that:
- *   1. Routes every call through the dedicated AI Gateway slug
- *      (`CF_AI_GATEWAY_SLUG_ADVISOR`, default `advisor-ongoing`) so
- *      advisor analytics are tracked separately from the onboarding
- *      chatbot. Cloudflare Workers AI does NOT support multiple
- *      [ai] blocks per worker — there's a single `AI` binding shared
- *      across all features. The gateway slug is therefore the only
- *      way to keep advisor spend / latency / cache visibility
- *      isolated.
+ *   1. Calls Workers AI directly, with NO AI Gateway option (D261). This
+ *      client used to route through the gateway slug on its own, and it
+ *      had no caller, so that path could only ever go live as a second,
+ *      unlabelled source of gateway traffic. It was deleted rather than
+ *      taught the metadata: `services/aiRouter.ts`'s `gatewayOptionFor`
+ *      is the one place a gateway option is built, and it carries the
+ *      branch, the account and the task. A caller that needs the gateway
+ *      goes through the router.
  *   2. Single-tier model fallback: primary
  *      `@cf/meta/llama-3.3-70b-instruct-fp8-fast`, fallback
  *      `@cf/meta/llama-3.1-8b-instruct` only on HTTP 500/429 from
@@ -64,11 +64,6 @@ export interface AdvisorTurnOptions {
   temperature?: number;     // default 0.2
   maxTokens?: number;       // default 800
   stream?: boolean;         // streaming first token under 500ms in prod
-  // Optional cache directives for the gateway. Advisor turns are
-  // user-specific so caching is normally OFF; explainers (handled by
-  // aiRouter, not this client) cache at 5m via the gateway dashboard.
-  skipCache?: boolean;
-  cacheTtlSec?: number;
 }
 
 export interface TurnBudgetStatus {
@@ -116,11 +111,6 @@ function turnLimit(env: Env): number {
   const raw = e.WORKERS_AI_ADVISOR_BUDGET_USD_DAY ?? e.WORKERS_AI_ADVISOR_BUDGET_PER_DAY;
   const n = raw != null ? Number(raw) : NaN;
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : DEFAULT_TURNS_PER_DAY;
-}
-
-function gatewaySlug(env: Env): string | null {
-  const v = (env as unknown as Record<string, string | undefined>).CF_AI_GATEWAY_SLUG_ADVISOR;
-  return v && v.trim() ? v.trim() : null;
 }
 
 function todayUtc(): string {
@@ -206,33 +196,10 @@ export async function bumpAdvisorTurn(
 
 // ---------------------------------------------------------------------------
 // Workers AI binding shape (lightweight — matches Cloudflare's ts shim).
-// The third `options` arg is what carries the gateway slug.
+// D261: no third `options` argument — this client sends no gateway option.
 // ---------------------------------------------------------------------------
 interface WorkersAIBinding {
-  run(
-    model: string,
-    payload: unknown,
-    options?: {
-      gateway?: { id: string; skipCache?: boolean; cacheTtl?: number };
-    },
-  ): Promise<unknown>;
-}
-
-/**
- * Build the gateway option object passed to env.AI.run. Returns
- * undefined when no slug is configured so the call falls through to
- * the un-gatewayed Workers AI path (no breakage on misconfig).
- */
-export function advisorGatewayOption(
-  env: Env,
-  cache?: { skipCache?: boolean; cacheTtlSec?: number },
-): { gateway: { id: string; skipCache?: boolean; cacheTtl?: number } } | undefined {
-  const id = gatewaySlug(env);
-  if (!id) return undefined;
-  const gateway: { id: string; skipCache?: boolean; cacheTtl?: number } = { id };
-  if (cache?.skipCache != null) gateway.skipCache = cache.skipCache;
-  if (cache?.cacheTtlSec != null && cache.cacheTtlSec > 0) gateway.cacheTtl = cache.cacheTtlSec;
-  return { gateway };
+  run(model: string, payload: unknown): Promise<unknown>;
 }
 
 interface CallResult {
@@ -247,7 +214,6 @@ async function callOnce(
   ai: WorkersAIBinding,
   model: AdvisorModel,
   opts: AdvisorTurnOptions,
-  gatewayOpt: { gateway: { id: string; skipCache?: boolean; cacheTtl?: number } } | undefined,
 ): Promise<CallResult> {
   const messages = opts.systemPrompt && !opts.messages.some((m) => m.role === 'system')
     ? [{ role: 'system' as const, content: opts.systemPrompt }, ...opts.messages]
@@ -259,7 +225,7 @@ async function callOnce(
   };
   if (opts.stream) payload.stream = true;
   try {
-    const raw = await ai.run(model, payload, gatewayOpt);
+    const raw = await ai.run(model, payload);
     if (opts.stream && raw && typeof (raw as ReadableStream).getReader === 'function') {
       return { ok: true, status: 200, stream: raw as ReadableStream };
     }
@@ -335,19 +301,14 @@ export async function runAdvisorTurn(env: Env, opts: AdvisorTurnOptions): Promis
     };
   }
 
-  const gatewayOpt = advisorGatewayOption(env, {
-    skipCache: opts.skipCache ?? true,        // turns are user-specific
-    cacheTtlSec: opts.cacheTtlSec,
-  });
-
   // Primary attempt.
-  let attempt = await callOnce(ai, ADVISOR_PRIMARY_MODEL, opts, gatewayOpt);
+  let attempt = await callOnce(ai, ADVISOR_PRIMARY_MODEL, opts);
   let modelUsed: AdvisorModel = ADVISOR_PRIMARY_MODEL;
   let fallbackUsed = false;
 
   // Single-tier 8b fallback ONLY on HTTP 500/429 per spec.
   if (!attempt.ok && (attempt.status === 500 || attempt.status === 429)) {
-    const second = await callOnce(ai, ADVISOR_FALLBACK_MODEL, opts, gatewayOpt);
+    const second = await callOnce(ai, ADVISOR_FALLBACK_MODEL, opts);
     if (second.ok) {
       attempt = second;
       modelUsed = ADVISOR_FALLBACK_MODEL;

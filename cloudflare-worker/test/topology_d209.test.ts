@@ -40,7 +40,7 @@ import {
   BINDINGS, RPC_SURFACE, AE_READERS, NOT_FROM_ANALYTICS, DEPLOY_WORKFLOWS, DEPLOY_BY_HAND, BRANCH_DEPLOYED_BY, BRANCH_PROVISIONED_BY,
   SECRET_WRITERS, CF_ACCESS_PATHS, HQ_WORKER, TAIL_CONSUMER, branchResourceNames, describeTopology,
 } from '../src/services/topology.ts';
-import { GATEWAY_TASKS } from '../src/services/aiRouter.ts';
+import { GATEWAY_TASKS, GATEWAY_METADATA_KEYS } from '../src/services/aiRouter.ts';
 import {
   parseToml, renderBranchConfig, derivedNames, BRANCH_CALLS_HQ, HQ_CALLS_BRANCH, BRANCH_CODE_RE,
 } from '../../scripts/lib/branchConfig.mjs';
@@ -367,25 +367,47 @@ test('Cloudflare Access is mounted on the paths the page lists and nowhere else'
 
 // ── 5 · the AI Gateway ──────────────────────────────────────────────────────
 
-test('two task classes route through the gateway, carrying no metadata, and the dead path stays dead', () => {
+test('two task classes route through the gateway, each call naming its branch, account and task, and only the router builds the option', () => {
+  // D261 re-aimed this test from "carrying no metadata" to what is now true.
+  // Exactly one file builds a gateway option: aiClient's own path was deleted.
   const optionFiles = CODE.filter(({ code }) => /\bgateway\s*[:?]|\{\s*gateway\s*\}/.test(code)).map((f) => f.file).sort();
-  assert.deepEqual(optionFiles, ['services/advisor/aiClient.ts', 'services/aiRouter.ts'], 'a new place builds a gateway option');
+  assert.deepEqual(optionFiles, ['services/aiRouter.ts'], 'a second place builds a gateway option');
+  // The metadata travels as the binding's `gateway.metadata`, never as a raw
+  // header a second code path could send without the router's rules.
   for (const { file, code } of CODE) {
-    assert.doesNotMatch(code, /cf-aig-metadata/, `${file} sends gateway metadata; the page says nothing does`);
+    assert.doesNotMatch(code, /cf-aig-metadata/, `${file} sends the gateway metadata header by hand`);
   }
   const router = CODE.find((f) => f.file === 'services/aiRouter.ts')!.code;
   const optionFor = fnBody(router, 'function gatewayOptionFor(');
   assert.match(optionFor, /if \(!GATEWAY_TASKS\.includes\(task\)\) return undefined;/);
-  assert.doesNotMatch(optionFor, /metadata/);
+  assert.match(optionFor, /branchOf\(env\) \?\? 'hq'/, 'the branch is not read from the deployment');
+  assert.match(optionFor, /userId > 0/, 'an account key can be built from a zero or missing id');
+  assert.match(optionFor, /return \{ gateway: \{ id: slug, metadata \} \};/);
+  // The call site passes the caller's own user id.
+  assert.match(router, /gatewayOptionFor\(env, opts\.task, opts\.userId\)/);
+  // aiClient keeps no gateway path, so runAdvisorTurn gaining a caller could
+  // not add unlabelled gateway traffic.
+  assert.deepEqual(callSites('advisorGatewayOption'), [], 'aiClient\'s deleted gateway builder is back');
   const client = CODE.find((f) => f.file === 'services/advisor/aiClient.ts')!.code;
-  assert.doesNotMatch(fnBody(client, 'export function advisorGatewayOption('), /metadata/);
-  // aiClient's gateway path runs only through runAdvisorTurn, which nothing calls.
-  assert.deepEqual(callSites('runAdvisorTurn'), [], 'runAdvisorTurn gained a caller — its gateway path is live now');
-  assert.deepEqual([...new Set(callSites('advisorGatewayOption').map((s) => s.file))], ['services/advisor/aiClient.ts']);
+  assert.match(client, /ai\.run\(model, payload\)/);
+  assert.doesNotMatch(client, /CF_AI_GATEWAY_SLUG_ADVISOR/, 'aiClient reads the gateway slug again');
 
   const routes = describeTopology({} as never).ai_gateway.routes;
   assert.deepEqual(routes.map((r) => r.id), [...GATEWAY_TASKS]);
   assert.equal(new Set(routes.map((r) => r.label)).size, routes.length, 'two routes, two labels');
+});
+
+test('the topology states the metadata the router sends, and only for the calls that send it', () => {
+  // The page reads keys and carriers from here; both come from aiRouter's
+  // exports, so the page cannot claim a key or a task class the router lacks.
+  const without = describeTopology({} as never).ai_gateway as Record<string, any>;
+  assert.ok(!('carries_metadata' in without), 'the old boolean is back beside the keys');
+  assert.deepEqual(without.metadata.keys, [...GATEWAY_METADATA_KEYS]);
+  assert.deepEqual(without.metadata.carried_by, [], 'with no slug set nothing is gatewayed, so nothing carries metadata');
+  const withSlug = describeTopology({ CF_AI_GATEWAY_SLUG_ADVISOR: 'g' } as never).ai_gateway as Record<string, any>;
+  assert.deepEqual(withSlug.metadata.carried_by.map((r: { id: string }) => r.id), [...GATEWAY_TASKS]);
+  assert.deepEqual(withSlug.metadata.carried_by, withSlug.routes, 'every gatewayed route carries the metadata, labelled the same');
+  assert.deepEqual(GATEWAY_METADATA_KEYS, ['branch', 'account', 'task']);
 });
 
 // ── 6 · Analytics Engine ────────────────────────────────────────────────────

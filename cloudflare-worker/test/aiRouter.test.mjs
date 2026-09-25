@@ -27,14 +27,25 @@ async function loadRouter() {
   // need the type and tsc's `module: None` won't resolve it. Also strip
   // every `export ` keyword so transpilation doesn't emit CommonJS
   // `exports.foo = foo` writes (no `exports` global in `new Function`).
+  //
+  // D261 — the router gained ONE runtime import, `branchOf`, for the gateway
+  // metadata. `new Function` cannot resolve an import, so that line is
+  // stripped and the REAL `branchOf` is passed in as a parameter: a stand-in
+  // here would be a second definition of what a branch code is. Any other
+  // runtime import fails loudly below rather than as a module-syntax error.
+  const BRANCH_IMPORT = /^import \{ branchOf \} from '\.\.\/util\/branch';\s*$/m;
   const stripped = src
     .replace(/^import type[^;]+;\s*$/m, '')
+    .replace(BRANCH_IMPORT, '')
     .replace(/^export\s+(const|let|function|async\s+function|class|interface|type|enum)\b/gm, '$1')
     .replace(/^export\s+\{[^}]*\};?\s*$/gm, '');
+  const unresolved = stripped.match(/^import\s[^;]*;/m);
+  if (unresolved) throw new Error(`aiRouter.ts has a runtime import this loader cannot pass in: ${unresolved[0]}`);
+  const { branchOf } = await import('../src/util/branch.ts');
   const outputText = transpileTs(stripped);
   // Re-export the public surface via an IIFE wrapper.
   const wrapped = `${outputText}\nreturn { run, ROUTE, estimateCostUsd, loadAiUsageReport, aiOrgKillSwitchState, __resetForTest };`;
-  return new Function(wrapped)();
+  return new Function('branchOf', wrapped)(branchOf);
 }
 
 // --------------------------------------------------------------------------
