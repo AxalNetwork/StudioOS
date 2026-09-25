@@ -30,8 +30,9 @@
  *      stay; present-tense claims do not;
  *   4. the Cloudflare Pages mirror stays retired (2026-09-03, DECISIONS.md
  *      D36): no workflow runs `wrangler pages deploy`, the Pages Advanced Mode
- *      entry `frontend/public/_worker.js` does not come back, the build no
- *      longer writes a `.assetsignore` to hide it, and the static security
+ *      entry `frontend/public/_worker.js` does not come back, the build's
+ *      `docs/.assetsignore` (D271) still lists `/_worker.js` so a stray one
+ *      would stay private rather than be served as source, and the static security
  *      headers live in `frontend/public/_headers` — read natively by Workers
  *      static assets — with the same values as `securityHeaders.ts`, so the
  *      two cannot drift apart again (GOTCHAS records that happening twice).
@@ -197,16 +198,18 @@ test('no workflow deploys to Cloudflare Pages', () => {
   }
 });
 
-test('the Pages Advanced Mode entry script and the .assetsignore that hid it stay gone', () => {
+test('the Pages Advanced Mode entry script stays gone, and the upload would keep a stray one private', () => {
   assert.ok(
     !existsSync(resolve(root, 'frontend/public/_worker.js')),
     'frontend/public/_worker.js is back — it only ever ran on the retired Pages mirror, and on Pages a `_worker.js` beside `_headers` makes `_headers` inert',
   );
-  assert.doesNotMatch(
-    at('scripts/build-frontend.mjs'),
-    /writeFileSync\([^)]*assetsignore/i,
-    'build-frontend.mjs writes .assetsignore again — nothing in docs/ needs hiding from the Worker upload',
-  );
+  // D271 brought a `.assetsignore` back, for the build's own bookkeeping. Its
+  // presence switches off wrangler's refusal to upload a `_worker.js`, so the
+  // file must list `/_worker.js` itself — otherwise a stray entry script would
+  // be served as source instead of refused.
+  const lines = at('docs/.assetsignore').split('\n').map((l) => l.trim());
+  assert.ok(lines.includes('/_worker.js'), 'docs/.assetsignore no longer lists /_worker.js — its presence disables wrangler\'s own refusal of one');
+  assert.ok(!lines.includes('/_headers'), 'docs/.assetsignore lists /_headers — wrangler reads that file to set the security headers');
 });
 
 /** The header rules under the `/*` block of _headers: lower-cased name → value. */
@@ -263,7 +266,7 @@ test('the static headers match the Worker middleware, except the deliberate Refe
 
 test('the committed docs/ build ships _headers and no Pages entry script', () => {
   assert.ok(existsSync(resolve(root, 'docs/_headers')), 'docs/_headers is missing — rebuild docs/ with `npm run build`');
-  for (const gone of ['docs/_worker.js', 'docs/.assetsignore', 'docs/404.html']) {
+  for (const gone of ['docs/_worker.js', 'docs/404.html']) {
     assert.ok(!existsSync(resolve(root, gone)), `${gone} is back in the committed build`);
   }
 });

@@ -26770,3 +26770,96 @@ checked to change bytes, and every file was restored and verified by sha256:
 
 No migration. 292 is still the highest on disk. No `frontend/src` change, so
 `docs/` is not rebuilt.
+
+## D271
+
+**Task 428: the build writes `docs/.assetsignore`, so the Worker's asset upload
+stops publishing the build's own bookkeeping at public URLs on both hosts.**
+
+**What was public.** `docs/` is the Worker's `[assets]` directory, and wrangler
+uploads every file under it — dotfiles included — unless `docs/.assetsignore`
+names it. `scripts/build-frontend.mjs` writes two files into `docs/` for its own
+use: the retention ledger `.asset-retention.json` (step 4, every build; the
+file's own comment calls it 45 KB that churns wholesale, and it names every
+retained asset hash) and the source stamp `.build-source` (step 7, D103). The
+deploy workflow runs that build before `wrangler deploy`, so every deploy since
+those files existed has served `/.asset-retention.json` and `/.build-source`
+on `axal.vc` and `app.axal.vc`. Neither holds a secret. Both are build state
+that says nothing to a visitor, and a deploy should publish what it means to.
+Not observed live: `axal.vc:443` is refused at CONNECT from this environment,
+so the exposure is established from the build and wrangler's source, not from
+a fetch.
+
+**Wrangler's rules, read from the version that deploys** (4.131.1,
+`cloudflare-worker/node_modules/wrangler`, not from memory or a doc page, which
+is unreachable here):
+
+- `createAssetsIgnoreFunction` always skips `/.assetsignore`, `/_redirects` and
+  `/_headers`, then appends the lines of `.assetsignore`, matched with the
+  bundled gitignore implementation. Nothing else is skipped by default — so
+  neither bookkeeping file ever was.
+- `errorOnLegacyPagesWorkerJSAsset` refuses to upload a Pages `_worker.js`
+  **only while no `.assetsignore` exists**. Writing this file therefore switches
+  that refusal off, which is why `/_worker.js` is on the list: the outcome is put
+  back, and a stray entry script stays private instead of being served as source.
+  `apex_truth_doc.test.mjs` still fails the build if one appears at all.
+- `_headers` is read by path to set the static security headers. It is NOT
+  listed: wrangler already skips it, and if a later wrangler consulted this list
+  before parsing it, listing it would switch those headers off on every shell
+  route.
+
+**What shipped.** `scripts/lib/assetsIgnore.mjs` holds the three filenames as
+constants and the list, each entry carrying the reason it stays private, which
+is written into the file as a comment. Every line is `/` plus one literal file
+name — anchored, no glob — because a broader pattern (`.*`, `*.json`) would also
+hide `/.well-known/security.txt`. The helper throws on anything else. The build
+writes the file after Vite (which empties `docs/`) and after the prerender, and
+names every file it writes into `docs/` through the module's constants.
+
+**The rule for the next file.** Anything `build-frontend.mjs` writes into
+`docs/` other than Vite's output and the prerendered shells is published the
+moment it lands. So it gets a constant and a line in `ASSETS_IGNORE_ENTRIES`
+with its reason; `assetsIgnore.test.mjs` refuses a `path.join(docsDir, …)` it
+cannot trace to a constant there, and refuses any `writeFileSync` target outside
+the three it knows.
+
+**The guard, and the one assertion that could go stale.** Ten tests, one of
+them a tripwire on wrangler itself: it reads the installed CLI, extracts the
+three default filenames and the defaults list from `createAssetsIgnoreFunction`,
+and checks `errorOnLegacyPagesWorkerJSAsset` still refuses only when no
+`.assetsignore` exists. A wrangler upgrade that changes any of that fails the
+suite with the version and a pointer to this entry, rather than leaving the
+reasoning above silently false. `ignore` is imported as wrangler's own
+dependency and stays transitive on purpose: the test must match with the
+implementation that deploys, not a pinned copy of it.
+
+**Corrected in passing.** `apex_truth_doc.test.mjs` asserted the build no
+longer writes an `.assetsignore` (D36's reason: nothing needed hiding). The
+reason expired; the assertion now checks the file lists `/_worker.js` and not
+`/_headers`. U9 in `UNRESOLVED_ITEMS.md` gains a dated note.
+
+**Two findings while building it, both recorded rather than acted on here:**
+
+- **A stale `node_modules` makes the build non-reproducible.** The first build
+  in this session rewrote 913 files under `docs/` with an unchanged
+  `.build-source`, because the local `frontend/node_modules` held React 19.2.8
+  against a lockfile pinning 19.3.0. `npm ci` in `frontend/`,
+  `cloudflare-worker/` and the root made the second build byte-identical to
+  `main` apart from the new file. `check-docs-fresh` cannot see this: it hashes
+  the source, not the toolchain.
+- **A local no-ledger build prunes retained assets, and those deletions must not
+  be committed.** The rebuild removed 362 older retained files. The deploy seeds
+  its retention window from the committed `docs/assets` (D252), so committing
+  the pruning would shrink the window production can serve to a stale tab. Only
+  `docs/.assetsignore` is committed.
+
+**Filed, not fixed:** `frontend/public/CHANGELOG.md` is a symlink to the root
+engineering changelog, so every build publishes it at `/CHANGELOG.md` and
+nothing in the SPA reads it; and `frontend/public/test.html` is public for no
+stated reason. Each is a decision about what the site publishes, not about
+build bookkeeping, so neither is on this list.
+
+**VERIFIED** — `npm run test:drift` exit 0, read as the exit code from a redirected log: frontend 3267, worker 4299 (4296 pass plus the same 3 pre-existing environment-gated skips), retention 112 with the ten new tests confirmed by name, zero `not ok`. `check-docs-fresh --strict`, `check-docs-assets-closure` (9320 references across 934 chunks), `check-folder-docs` and `check-decision-ids` (D1 through D271) exit 0. Eleven mutations applied, eleven caught, each on a non-zero exit and a `not ok` line, every anchor asserted unique first and every file restored from a snapshot and checked by sha256: `_headers` listed; the write moved before Vite; `.build-source` dropped from the list; the validator admitting a glob; a literal filename in the build; the write deleted; `/_worker.js` dropped from the list; the validator admitting a nested path; `/_headers` added to the committed file; `/_worker.js` removed from it; and the apex test wanting the file gone again.
+
+No migration. 292 is still the highest on disk. No `frontend/src` change, so
+`docs/.build-source` does not move.
