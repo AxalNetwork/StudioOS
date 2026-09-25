@@ -235,7 +235,8 @@ export const DEPLOY_BY_HAND =
  */
 export const SECRET_WRITERS = [
   { screen: 'Integration keys', writes: 'a provider\'s OAuth client id and secret' },
-  { screen: 'GitHub Sync', writes: 'the repository token, its owner and name, and the webhook secret' },
+  // D270 — the owner and name are wrangler.toml vars, shown read-only; the screen writes neither.
+  { screen: 'GitHub Sync', writes: 'the repository token and the webhook secret' },
   { screen: 'Stripe', writes: 'the webhook signing secret' },
 ] as const;
 

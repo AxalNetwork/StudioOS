@@ -26771,6 +26771,132 @@ checked to change bytes, and every file was restored and verified by sha256:
 No migration. 292 is still the highest on disk. No `frontend/src` change, so
 `docs/` is not rebuilt.
 
+## D270
+
+**GitHub Sync stops editing two values the next deploy reverts. The owner
+and name of the repository are deploy-time settings: the console shows
+them read-only, labelled with where they are set, and its Save writes the
+token alone.** Task 430 (C10).
+
+**No migration, no route, no api.js method.**
+
+### THE DEFECT
+
+- `GITHUB_REPO_OWNER` and `GITHUB_REPO_NAME` are plain `[vars]` in
+  wrangler.toml, in both the top-level and the production tables (the
+  preview table has neither). Every deploy writes them back over the Worker's
+  settings.
+- `routes/admin_github.ts`'s PUT pushed both as Worker secrets whenever a
+  body named them, behind `requireSuperAdminWriteBar`. The panel always sent
+  both, pre-filled from the GET's display defaults, so every Save rewrote them
+  even when only the token changed. An admin could "change" the repository,
+  see it take, and have the next deploy restore AxalNetwork/StudioOS. The
+  fields looked editable and durably did nothing: the D171 finding.
+- DELETE deleted both names along with the token and the webhook secret.
+- The same two values do more than aim the ticket mirror:
+  - they aim the branch-deploy dispatch (`services/githubSync.ts`);
+  - `scripts/branchConfig.mjs` copies them to every branch by rendering HQ's
+    whole `[env.production.vars]` table.
+- Three sentences described them as written by the console or as secrets:
+  - `topology.ts`'s secret-writer row ("the repository token, its owner and
+    name, and the webhook secret");
+  - `admin_deployments.ts`'s Deploy refusal ("set as Worker secrets");
+  - its `dispatch_reason`.
+
+### WHAT CHANGED
+
+- **PUT** refuses a body whose owner or name is non-empty and differs from
+  the deployed value.
+  - It answers 400 `repo_is_deploy_time`, with a sentence saying where they
+    are set, before anything is pushed. It never pushes either as a secret.
+  - A body that repeats the deployed values is accepted and they are ignored,
+    because a panel from before this change sends both on every Save.
+  - Owner and name alone are `nothing_to_update`.
+  - The token and webhook-secret paths are unchanged.
+- **DELETE** deletes `GITHUB_ACCESS_TOKEN` and `GITHUB_WEBHOOK_SECRET` only.
+- **GET** reports what the running Worker has.
+  - `repo_owner` and `repo_name` come from `env`, or null. The display
+    defaults are gone: the sync reads both with no fallback, so a default
+    would name a repository nothing writes to.
+  - It adds `repo_set_at: 'deploy'` and the sentence the panel shows.
+- **The panel** (AdminPage.jsx, GithubSyncPanel section only).
+  - The owner and name inputs and their state are gone.
+  - `GithubRepoReadOnly` draws the two values for every admin, labelled "set
+    at deploy time", with "Not set" for a value the Worker lacks.
+  - Save sends `{ token }` and is disabled while the token field is blank.
+  - The holder gate now reads "Changing the token".
+- **The three sentences** now say the token is a Worker secret and the owner
+  and name are wrangler.toml vars. The GitHub Sync row says the screen writes
+  the token and the webhook secret.
+
+### WHAT CHANGING THE REPOSITORY MEANS NOW
+
+Edit `GITHUB_REPO_OWNER` and `GITHUB_REPO_NAME` in wrangler.toml, in both
+tables, and deploy. Every branch picks the change up through
+`branchConfig.mjs` on its next redeploy (D253).
+
+### A STALE SECRET MAY EXIST
+
+If an admin ever saved the repository through the old path, a Worker secret
+named `GITHUB_REPO_OWNER` or `GITHUB_REPO_NAME` may remain on the script. The
+deploy's `[vars]` restore the values, and no code path reads the secret.
+`cloudflareSecrets.ts` exports `setSecret` and `deleteSecret` and no list
+call, so this change does not build one, and no secret's value is ever read.
+The clean-up is one `deleteSecret` on each name, by the owner, once.
+
+### VERIFIED
+
+`cloudflare-worker/test/github_sync_repo_d270.test.ts` has eight tests. It
+drives the real router behind the auth-error table, with `fetch` recording
+each secret by NAME: from the PUT body, and from the DELETE path.
+- a different owner → 400 `repo_is_deploy_time` naming wrangler.toml, no
+  push, no audit row;
+- a different name → the same;
+- a token alone → exactly `['GITHUB_ACCESS_TOKEN']`, and the audit names only
+  that;
+- the deployed owner and name repeated → accepted, still only the token;
+- owner and name alone → `nothing_to_update`;
+- a webhook-secret rotation → exactly `['GITHUB_WEBHOOK_SECRET']`;
+- DELETE → exactly the token and the webhook secret;
+- GET → the deployed values, or null with `configured` false, and no display
+  defaults.
+
+`frontend/test/github_sync_repo_d270.test.mjs`, four tests:
+- both values rendered, with no input, select, textarea or button;
+- "Not set", never a default;
+- the block mounted outside the holder gate, with the token as the panel's
+  only editable input;
+- no Save call sends the repository.
+
+D223's suites (the holder bar on each write) pass unchanged: their Save
+repeats the deployed values.
+
+**Mutation checks: nine runs, eight caught at first aim,** each alone and
+restored from a sha256-verified snapshot:
+- `GITHUB_REPO_OWNER` pushed again;
+- an input rendered for the name, once in the read-only block and once in
+  the panel;
+- DELETE's old four-name list restored;
+- the PUT refusal removed;
+- GET's default restored;
+- the Save sending the owner, and the rotation sending the name.
+
+**An escape, fixed in the assertion.** "The Save sends the owner again" exited
+0 at first. The scan captured the Save's argument with `[^)]*`, which stops at
+the `)` of `token.trim()`, so it never read what came after. It now captures
+the whole call line, and the mutation, with a second one on the rotation, is
+caught.
+
+**Full suite:** `npm run test:drift` on Node 22 exits 0 on `main` at
+`37ef62e8`:
+- frontend 3271 (the four above are new);
+- worker 4304 passed with 3 skipped (the eight above are new);
+- retention 102.
+
+`docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
+edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
+`check-folder-docs`, `check-api-drift` and `check-access-comments` exit 0.
+
 ## D272
 
 **Task 431: a licence change that failed to reach a branch was never re-sent.**

@@ -149,8 +149,9 @@ r.post('/licences/:uid/deploy', async (c) => {
       // Named precisely, because "not configured" covers three different
       // things and only one of them is this one.
       message:
-        'The Deploy button needs GITHUB_ACCESS_TOKEN (with the actions: write scope), GITHUB_REPO_OWNER '
-        + 'and GITHUB_REPO_NAME set as Worker secrets. Until then the provisioning workflow can still be '
+        'The Deploy button needs GITHUB_ACCESS_TOKEN (with the actions: write scope) set as a Worker '
+        + 'secret, and GITHUB_REPO_OWNER and GITHUB_REPO_NAME set in wrangler.toml\'s [vars]. Until then '
+        + 'the provisioning workflow can still be '
         + 'run by hand from the repository\'s Actions tab — nothing else about a branch waits on this.',
       code,
       workflow: PROVISION_WORKFLOW,
@@ -275,8 +276,9 @@ r.get('/deployments', async (c) => {
     dispatch_available: githubConfigured(env),
     dispatch_reason: githubConfigured(env)
       ? undefined
-      : 'GITHUB_ACCESS_TOKEN (actions: write), GITHUB_REPO_OWNER and GITHUB_REPO_NAME are not all set, '
-        + 'so a branch is provisioned by running the workflow by hand from the Actions tab.',
+      : 'GITHUB_ACCESS_TOKEN (actions: write, a Worker secret) and GITHUB_REPO_OWNER and GITHUB_REPO_NAME '
+        + '(wrangler.toml vars) are not all set, so a branch is provisioned by running the workflow by hand '
+        + 'from the Actions tab.',
   });
 });
 
