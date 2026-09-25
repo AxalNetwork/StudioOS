@@ -11,8 +11,9 @@ import { clawbackReferralCommissionForRefund, type ClawbackResult } from '../ser
 // BEFORE the catch-all `/api/admin` in index.ts so the nested routes resolve
 // here (same mount-precedence trick as `/api/admin/telegram` | `/x` | `/news`).
 //
-// Sits inside the existing `app.use('/api/admin/*', requireCfAccess())`
-// perimeter. Each write enforces `requireFactor('totp')` + `requireStepUp` +
+// No edge SSO layer sits in front of /api/admin — Task #33 removed it
+// (index.ts) — so the gate is in the handler: each write enforces
+// `requireFactor('totp')` + `requireStepUp` +
 // an admin check so a money move needs a RECENT strong-factor re-auth, not
 // just a long-lived admin JWT — mirrors impersonation / billing-checkout
 // step-up gating. `/api/admin/billing` is also in index.ts's COOL_OFF_PREFIXES

@@ -2,7 +2,7 @@
  * Task #68 — Public Job Board: public routes. No auth.
  *
  * Mounted at /api/public (alongside events_public) so it sits OUTSIDE the auth
- * layer and the /api/admin CF-Access perimeter. Read endpoints are open; the
+ * layer and the admin routers' gates. Read endpoints are open; the
  * apply endpoint is Turnstile-gated exactly like routes/contact.ts + events
  * (fails OPEN in dev/preview, closed in prod when the secret is set) and is
  * additionally throttled per-IP (best-effort KV) and de-duped by a UNIQUE

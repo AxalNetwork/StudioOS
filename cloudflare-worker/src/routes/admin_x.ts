@@ -2,9 +2,10 @@
  * Task #4 — Admin X (Twitter) accounts + posts + aggregator endpoints.
  *
  * Mounted at /api/admin/x BEFORE the generic /api/admin catch-all in
- * index.ts (same precedence pattern as admin_telegram). Sits inside the
- * existing requireCfAccess() perimeter; role gating is per-route via
- * requireSuperAdmin (D216, #337: the platform's own X account is HQ's).
+ * index.ts (same precedence pattern as admin_telegram). Role gating is
+ * per-route via requireSuperAdmin (D216, #337: the platform's own X account
+ * is HQ's), and that is the whole gate — nothing at the edge sits in front of
+ * /api/admin (Task #33, index.ts).
  *
  * Endpoint summary:
  *   Accounts
