@@ -90,7 +90,7 @@ function DetailDrawer({ projectUid, onClose }) {
                     setData({ ...data, latest: r, history: [r, ...(data.history || []).filter(h => h.uid !== r.uid)] });
                   } catch (e) { setErr(e.message); }
                 }}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded hover:bg-slate-50 dark:bg-slate-900"
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 Recompute

@@ -339,7 +339,7 @@ export default function LandingPage() {
               </Link>
               <Link
                 to="/directory"
-                className="flex items-center gap-2 bg-white hover:bg-violet-50 border border-violet-300 text-violet-700 transition-colors px-7 py-3.5 rounded-xl text-sm font-medium dark:bg-gray-900"
+                className="flex items-center gap-2 bg-white hover:bg-violet-50 dark:hover:bg-violet-900/30 border border-violet-300 text-violet-700 transition-colors px-7 py-3.5 rounded-xl text-sm font-medium dark:bg-gray-900"
               >
                 Explore the network <ChevronRight size={16} />
               </Link>

@@ -179,12 +179,12 @@ export default function AdminDueDiligenceCasePage() {
           </button>
           {(cs.subject_type === 'project' || cs.subject_type === 'founder') && (
             <button onClick={shareWithFounder} disabled={busy}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-60">
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60">
               <Send size={14} /> Notify founder
             </button>
           )}
           <button onClick={() => setAuditOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50">
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
             <ClipboardList size={14} /> Audit log
           </button>
           <button onClick={load} className="p-2 text-gray-600 hover:text-violet-600" title="Refresh"><RefreshCw size={16} /></button>
@@ -238,7 +238,7 @@ export default function AdminDueDiligenceCasePage() {
                     </span>
                   )}
                   <button onClick={() => setAssignModal(s)}
-                    className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 rounded">Assign</button>
+                    className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded">Assign</button>
                   <button onClick={() => setVerdictModal(s)}
                     className="text-xs px-2 py-1 bg-violet-600 text-white hover:bg-violet-700 rounded">Verdict</button>
                 </div>

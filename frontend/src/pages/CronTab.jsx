@@ -215,7 +215,7 @@ export default function CronTab() {
             <button
               onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
               disabled={offset === 0 || busy}
-              className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 rounded-lg flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
             >
               <ChevronLeft size={14} /> Previous
             </button>
@@ -223,7 +223,7 @@ export default function CronTab() {
             <button
               onClick={() => setOffset(offset + PAGE_SIZE)}
               disabled={offset + PAGE_SIZE >= total || busy}
-              className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 rounded-lg flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
             >
               Next <ChevronRight size={14} />
             </button>

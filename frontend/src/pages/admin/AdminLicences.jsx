@@ -1859,7 +1859,7 @@ function Coverage({ items, onOpen }) {
               className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${
                 sort === s.key
                   ? 'border-rose-200 bg-rose-50 text-[#881337] dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200'
-                  : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400'
+                  : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400'
               }`}
             >
               {s.label}

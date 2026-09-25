@@ -121,7 +121,7 @@ export default function AcceptInvitePage() {
             <p className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>
             <Link
               to="/studio"
-              className="mt-5 inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 hover:bg-gray-100 rounded-lg text-sm text-gray-900 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+              className="mt-5 inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-sm text-gray-900 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
             >
               Go to dashboard
             </Link>

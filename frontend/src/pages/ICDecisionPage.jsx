@@ -133,7 +133,7 @@ export default function ICDecisionPage() {
           <div className="flex flex-wrap gap-2 mb-3">
             {DECISIONS.map((dec) => (
               <button key={dec} onClick={() => setField({ decision: dec })} disabled={busy}
-                className={`px-3 py-1.5 rounded-lg text-sm disabled:opacity-50 ${d.decision === dec ? 'bg-violet-600 text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200'}`}>
+                className={`px-3 py-1.5 rounded-lg text-sm disabled:opacity-50 ${d.decision === dec ? 'bg-violet-600 text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
                 {dec}
               </button>
             ))}
@@ -161,7 +161,7 @@ export default function ICDecisionPage() {
           <div className="flex flex-wrap gap-2">
             {OUTCOMES.map((o) => (
               <button key={o} onClick={() => setField({ outcome: o })} disabled={busy}
-                className={`px-3 py-1.5 rounded-lg text-sm disabled:opacity-50 ${d.outcome === o ? 'bg-violet-600 text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200'}`}>
+                className={`px-3 py-1.5 rounded-lg text-sm disabled:opacity-50 ${d.outcome === o ? 'bg-violet-600 text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
                 {o}
               </button>
             ))}

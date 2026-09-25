@@ -184,13 +184,13 @@ export default function ProjectDetail() {
           <StatusBadge status={project.status} />
           <div className="flex gap-2 flex-wrap">
             {canEdit && (
-              <button onClick={() => setEditing(true)} className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg text-xs text-gray-700 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300">
+              <button onClick={() => setEditing(true)} className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg text-xs text-gray-700 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300">
                 <Pencil size={12} /> Edit
               </button>
             )}
             <Link
               to={`/build/captable?project=${project.id}`}
-              className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg text-xs text-gray-700 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300"
+              className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg text-xs text-gray-700 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300"
               title="Open this startup's cap table in the simulator"
             >
               <PieChart size={12} /> Cap Table
@@ -201,7 +201,7 @@ export default function ProjectDetail() {
               className={`flex items-center gap-1 px-3 py-1.5 border rounded-lg text-xs ${
                 compOpen
                   ? 'bg-violet-50 border-violet-300 text-violet-700 dark:bg-violet-950/40 dark:border-violet-800 dark:text-violet-300'
-                  : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300'
+                  : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300'
               }`}
               title="Map this startup's competitive landscape"
             >
@@ -212,7 +212,7 @@ export default function ProjectDetail() {
                 to={`/startups/${project.uid}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg text-xs text-gray-700 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300"
+                className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg text-xs text-gray-700 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300"
                 title="Open this startup's public profile page"
               >
                 <ExternalLink size={12} /> Public Page
@@ -247,7 +247,7 @@ export default function ProjectDetail() {
               </button>
             )}
             {canDelete && (
-              <button data-testid="project-delete-btn" onClick={handleDelete} className="flex items-center gap-1 px-3 py-1.5 bg-white border border-red-200 hover:bg-red-50 rounded-lg text-xs text-red-600 dark:bg-gray-900">
+              <button data-testid="project-delete-btn" onClick={handleDelete} className="flex items-center gap-1 px-3 py-1.5 bg-white border border-red-200 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg text-xs text-red-600 dark:bg-gray-900">
                 <Trash2 size={12} /> Delete
               </button>
             )}
@@ -1313,7 +1313,7 @@ function ProjectMembersSection({ projectId, onError }) {
                     <button
                       type="button"
                       onClick={copyLink}
-                      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-2 text-xs text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+                      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-2 text-xs text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
                     >
                       {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy'}
                     </button>
@@ -1571,7 +1571,7 @@ function EditProjectModal({ project, onClose, onSaved, onError }) {
           <button
             onClick={handleClose}
             disabled={saving}
-            className="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-100 rounded-lg text-sm text-gray-900 disabled:opacity-50 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+            className="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-sm text-gray-900 disabled:opacity-50 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
           >
             Cancel
           </button>

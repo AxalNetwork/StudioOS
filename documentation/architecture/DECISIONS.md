@@ -26115,6 +26115,129 @@ actually runs with. `topology.ts` is unchanged.
 - HQ's value leaking into a null branch;
 - the workflow default returning to `eu`.
 
+## D265
+
+**Task 373: the dark-mode skin painted over every element that declared its
+own dark background.**
+
+**The cascade, measured.**
+- `frontend/src/index.css`'s dark-mode auto-skin (Task #17) is **unlayered**:
+  `index.css` has no `@layer` anywhere.
+- Tailwind 4.3.3 puts **every utility in `@layer utilities`**. The committed
+  build shows `.bg-white`, `.dark\:bg-gray-800` and `.hover\:bg-gray-50:hover`
+  all inside that layer, with the skin's rules after it.
+- For normal declarations, **an unlayered rule beats every layer, whatever the
+  specificity**. So the skin's zero-specificity `:where(…)` did not let an
+  explicit `dark:` utility win, which four comments claimed it did. Inside
+  `[data-app-main]`, `bg-white dark:bg-gray-800` painted the skin's #111827.
+- **Counted on origin/main (d94da0dd)** over every single-line string literal
+  in `frontend/src`, matched with
+  `"[^"\n]*"|'[^'\n]*'|` + "`[^`\n]*`" + ` (129,668 literals):
+  - **330** literals carry a whole-word `bg-white` and a `dark:bg-` other than
+    `gray-900`. Regex:
+    `(?<![\w:-])bg-white(?![\w/-])` and `(?<![\w:-])dark:bg-(?!gray-900(?![\w/-]))`.
+    Each showed the skin's colour instead of its own.
+  - **252** literals pair `hover:bg-gray-50|100` with a `dark:hover:bg-`, and
+    showed the skin's hover instead.
+  - On `bg-axal-ground`, every hover was inert.
+
+**The fix the backlog proposed would have made things worse, and was not
+built.** Moving the block into `@layer base`, or any layer below utilities,
+kills the skin everywhere.
+- In a lower layer, the bare utility (`.bg-white{…}`, layered and later) wins,
+  and every skinned token paints its light value in dark mode.
+- Hundreds of single-line strings rely on the skin alone for their dark value:
+  bare `bg-white`, `bg-gray-50|100`, `bg-axal-ground`, the grey and axal text
+  tokens, and the grey and hairline borders.
+- A layer ABOVE utilities changes nothing, because it behaves like unlayered.
+- The source-text guard (`ui_design_tokens.test.mjs`) passes with the block
+  wrapped in a layer. That is why the new gate compiles the file.
+
+**What changed.**
+- **The block stays unlayered, and each rule steps aside** for an element that
+  declares its own dark value:
+  - the four background rules (`bg-white`, `bg-gray-50`, `bg-gray-100`,
+    `bg-axal-ground`) gain `:not([class*="dark:bg-"])` and
+    `:not([class*="dark:hover:bg-"]:hover)` inside their `:where()`;
+  - the two hover rules gain `:not([class*="dark:hover:bg-"])`.
+- **Substring collisions, measured:** no `dark:bg-` utility in `frontend/src` names
+  anything but a colour (the two bracketed values are `#171622` and
+  `#ece8f5`). There are 2 `dark:border-l-*`, which would matter only if
+  borders took the same opt-out.
+- **The divider rule** used Tailwind 3's
+  `> :not([hidden]) ~ :not([hidden])`. Tailwind 4 emits
+  `:where(.divide-y > :not(:last-child))` and draws the BOTTOM border, so the
+  first divider in every `divide-gray-100|200` list stayed light. It now
+  matches `> :not(:last-child)`.
+- **The four wrong comments are rewritten:** two in `index.css`, one in
+  `ui_design_tokens.test.mjs` and one in `analytics_d211.test.mjs`.
+
+**The hover sweep: 75 single-line class strings in 36 files,** reproduced with
+the brief's `git grep` before starting.
+- Each carried a `hover:bg-X` and a `dark:bg-Y` with no `dark:hover:bg-`.
+- Each gains one `dark:hover:bg-`, one step lighter than its own dark
+  background: gray-900 → 800, 800 → 700, 700 → 600, slate-900 → 800, and
+  gray-100 → 200.
+- A tinted light hover gets a translucent tint of its own hue: violet-50 →
+  `violet-900/30`, violet-100 → `/40`, and red-50 → `red-900/30`. Where the
+  dark background is already `violet-950/40`, the hover is `violet-900/50`.
+- The one `hover:bg-black` on a `dark:bg-gray-100` button gets
+  `dark:hover:bg-white`.
+- **Only those 75 strings changed:** 150 diff lines outside `index.css`, all
+  of them the one inserted token.
+- **Open PRs:** none of #789, #790, #791 or #794 changes any of the 36 files,
+  the skin or its tests. This was measured with three-dot diffs after
+  deepening the shallow clone.
+
+**Text and border rules: filed, not built.** Text first needs a sweep of about
+30 strings that carry a light `hover:text-*` and a `dark:text-` but no
+`dark:hover:text-`. Doing borders alone would be half a family.
+
+**Tests (CI runs no browser, so the gate is Node).**
+- **New `frontend/test/dark_skin_d265.test.mjs`, 4 tests.** It compiles
+  `index.css` with `@tailwindcss/node` 4.3.3 (installed by `npm ci`) and
+  asserts on the COMPILED output:
+  - every skin rule is outside every `@layer`, and carries the keep-light
+    chain;
+  - `.bg-white` is inside `@layer utilities`, the premise;
+  - each background rule carries both opt-outs;
+  - each hover rule carries its opt-out;
+  - the divider rule has Tailwind 4's shape.
+- **D211's scan, generalised** in `analytics_d211.test.mjs`: a plain `hover:bg-`
+  beside a `dark:bg-` in one class string needs a `dark:hover:bg-`, across
+  `frontend/src`, with a floor of 75.
+  - **The unit is one string literal.** D211's `;{<` window flagged six false
+    sites on the first run, where the hover and the dark background belonged
+    to different branches of a ternary or different fields of an object.
+
+**The Chromium probe (recorded verification, not a CI gate).** Headless
+Chromium 1194 at `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` loaded
+the compiled CSS with `<html class="dark"><div data-app-main>` fixtures.
+Colours were compared by `getComputedStyle` against reference elements.
+1. Bare `bg-white` → `rgb(17, 24, 39)`.
+2. `bg-white dark:bg-gray-800` equals a reference `bg-gray-800`.
+3. Hovered `bg-white hover:bg-violet-50 dark:hover:bg-violet-900`, with no
+   `dark:bg-`, equals a reference `bg-violet-900`.
+4. Hovered `hover:bg-gray-50 dark:hover:bg-violet-900` is not #1f2937.
+5. Inside `[data-keep-light]` → white.
+6. Outside `[data-app-main]` → white.
+
+All six held on the final CSS.
+
+**Mutations: 6 run, 6 caught.**
+
+| Mutation | Probe | Node check that failed |
+|---|---|---|
+| (i) the block wrapped in `@layer base` | 1 turned false | "outside every @layer" |
+| (ii) the background opt-out removed | 2 | "every background rule…" |
+| (iii) the hover-rule opt-out removed | 4 | "every hover rule…" |
+| (iv) the `:hover` opt-out removed | 3 | "every background rule…" |
+| (v) `CapTablePage.jsx:415`'s swept `dark:hover:bg-` deleted | not probed | the generalised scan |
+| (vi) the keep-light chain removed | 5 | "outside every @layer…" |
+
+(vi) was caught only by the probe on its first run. The compiled test then
+gained its keep-light assertion, and the rerun was caught by both.
+
 ## D266
 
 **Task 354: two RPC methods nothing called are retired, and the statement
