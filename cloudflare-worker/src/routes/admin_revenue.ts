@@ -24,7 +24,12 @@
  *                    margin cannot be derived, only the cost reported.
  *
  *   Token P&L by subsidiary   U1. Nothing ties inference spend to a licence.
- *   Statements and Stripe     No subsidiary-statement store exists at all.
+ *   Statements and Stripe     NOT HERE. Two stores exist (migration 260:
+ *                             `subsidiary_statements` and
+ *                             `subsidiary_usage_reports`), read by
+ *                             routes/admin_statements.ts on their own
+ *                             endpoint. D266 corrected this line, which said
+ *                             no store existed.
  *   Promo budget              `promo_codes` has discounts and redemption caps.
  *                             There is no budget or per-subsidiary allocation.
  *
@@ -166,14 +171,16 @@ r.get('/summary', async (c) => {
       // licence per period (D111) and reads it from its own endpoint. What
       // `promo_codes` cannot say is what any given branch has issued against
       // one: a code carries a discount and an optional redemption cap and
-      // names no subsidiary, so the issued figure is one the BRANCH reports,
-      // never one this row derives.
+      // names no subsidiary, so the issued figure could only come from the
+      // branch — and nothing carries one to HQ today (D266), so it is never
+      // one this row derives.
       budget_available: false,
       budget_reason:
         'A promotional ceiling is set per licence at HQ and read from /api/admin/promo-ceilings. '
         + 'It is not derived here and could not be: `promo_codes` carries a discount and an '
         + 'optional redemption cap per code and attributes none of them to a subsidiary, so what '
-        + 'a branch has issued against its ceiling is a figure the branch reports.',
+        + 'a branch has issued against its ceiling could only come from the branch, and no branch '
+        + 'reports it to HQ yet.',
       ceilings_endpoint: '/api/admin/promo-ceilings',
     };
   } catch {

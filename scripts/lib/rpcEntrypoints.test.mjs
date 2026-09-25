@@ -25,11 +25,11 @@
  *      passes — the half that keeps CI green on the first real provisioning.
  *
  * It asserts that each class DECLARES everything called through it, never that
- * everything declared is CALLED: some methods have no caller today
- * (`revenueSummary`, `reportUsage`, `promoCeiling` — task 354), and that is a
- * separate finding, not a wiring defect. The list is named rather than counted
- * because it moves: `licence` left it in D244, when a branch with no licence
- * copy started pulling one.
+ * everything declared is CALLED: a declared method with no caller is a separate
+ * finding, not a wiring defect, and services/topology.ts is where that is
+ * stated. The floor is named rather than counted because it moves: `licence`
+ * joined it in D244, when a branch with no licence copy started pulling one,
+ * and `reportUsage` in D266, when a branch started reporting its quarter.
  *
  * Run with:
  *   node --test scripts/lib/rpcEntrypoints.test.mjs
@@ -108,6 +108,7 @@ const HQ_TO_BRANCH_FLOOR = [
 const BRANCH_TO_HQ_FLOOR = [
   ['alias', 'routes/branch_escalations.ts', 'escalate'],
   ['alias', 'routes/licence.ts', 'licence'],
+  ['alias', 'services/usageReport.ts', 'reportUsage'],
 ];
 
 const assertFloor = (calls, floor) => {

@@ -250,8 +250,9 @@ export async function branchOverview(env: Env): Promise<BranchAnswer<BranchOverv
     ...(reason ? { backlog_reason: reason } : {}),
     revenue_mtd_cents: null,
     revenue_reason:
-      'Revenue month-to-date for a territory needs the branch\'s own billing rows summed against the '
-      + 'pushed revenue share. The reporting call that computes it is not built, so no figure is sent.',
+      'This branch reports its previous and current quarter to HQ every morning (D266), and every '
+      + 'stream in that report arrives unmeasured: this database records no revenue amounts, so '
+      + 'there is no month-to-date figure to send.',
     suspended: String(licence.status || '').toLowerCase() === 'suspended',
     active_accounts_week: active.value,
     active_accounts_week_of: weekOf,
@@ -457,7 +458,7 @@ export async function branchRevenueSummary(
   env: Env, period: string,
 ): Promise<BranchAnswer<{ period: string; streams: StreamReport[] }>> {
   const code = branchOf(env);
-  if (!code) throw new Error('revenueSummary is only live on a branch');
+  if (!code) throw new Error('branchRevenueSummary is only live on a branch');
 
   // THE PERIOD IS VALIDATED HERE, NOT WHERE IT IS USED. `quarterBounds` throws
   // on a period it cannot parse, and the only call to it sits inside a
@@ -475,8 +476,8 @@ export async function branchRevenueSummary(
       available: false,
       reason:
         'Subscription revenue is not totalled in this database. `account_subscriptions` records a '
-        + 'plan and a status but no amount, and the charges live in the Stripe API. HQ can enter '
-        + 'the figure on the statement; nothing here can derive it.',
+        + 'plan and a status but no amount, and the charges live in the Stripe API, so nothing here '
+        + 'can derive it and the stream is reported unmeasured.',
     },
     {
       stream: 'licence_fees',
@@ -526,7 +527,7 @@ export async function branchRevenueSummary(
 /** The half-open [start, end) ISO bounds of a 'YYYY-Qn' period. */
 function quarterBounds(period: string): [string, string] {
   const m = /^(\d{4})-Q([1-4])$/.exec(String(period || '').trim());
-  if (!m) throw new Error(`revenueSummary: ${JSON.stringify(period)} is not a period (YYYY-Qn)`);
+  if (!m) throw new Error(`branchRevenueSummary: ${JSON.stringify(period)} is not a period (YYYY-Qn)`);
   const y = Number(m[1]);
   const q = Number(m[2]) - 1;
   return [

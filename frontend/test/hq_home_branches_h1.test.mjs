@@ -159,7 +159,15 @@ test('the reasons that outlived their blockers are corrected, not reworded', () 
   assert.doesNotMatch(PAGE, /that call is not built/, 'D111 built reportUsage and revenueSummary');
   assert.doesNotMatch(PAGE, /\['Seat utilisation',/, 'D127 decided against a seat store');
   assert.match(PAGE, /\['Which seat id a member holds', '[^']+'\]/);
-  assert.match(PAGE, /no branch has sent one yet/, 'what is missing is a report, not the call');
+  // D266 — D150's replacement sentence went stale in its turn: every branch
+  // now REPORTS its quarter each morning, so "no branch has sent one yet" is
+  // false. What is missing is a measurement, and the row must say that, not
+  // regress to either earlier reason.
+  assert.doesNotMatch(PAGE, /no branch has sent one yet/, 'D266 wired the report; branches do send one');
+  const revenueRow = PAGE.match(/\['Revenue per subsidiary', '([^']+)'\]/);
+  assert.ok(revenueRow, 'the revenue row is one literal [title, detail] pair');
+  assert.match(revenueRow[1], /reports its quarter to HQ every morning/, 'the report exists and runs daily');
+  assert.match(revenueRow[1], /arrives unmeasured/, 'what is missing is a measurement, not a report');
   // Security's row cited U1 for a view that U1 does not block. The reason the
   // SERVER sends is the one copy both surfaces render, so it is asserted there.
   // D153 — THE OVERLAY IS BUILT, so both halves of this pin are re-aimed. D150

@@ -30,7 +30,8 @@ import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const OVERLAY = codeOnly(read('frontend/src/pages/hq/HqBranchOverlay.jsx'));
+const OVERLAY_RAW = read('frontend/src/pages/hq/HqBranchOverlay.jsx');
+const OVERLAY = codeOnly(OVERLAY_RAW);
 const HOME = codeOnly(read('frontend/src/pages/hq/HqHomePage.jsx'));
 const TEAM = codeOnly(read('frontend/src/pages/hq/HqTeamTable.jsx'));
 const BAR = codeOnly(read('frontend/src/components/HqViewingAsBar.jsx'));
@@ -133,11 +134,17 @@ test('every figure carries the branch and the time it was read', () => {
 
 test('the two absences stay absent — the Queues zone and MTD revenue', () => {
   // 5 — H12 draws a Queues zone of decisions the branch already made. Measured
-  // against the RPC surface, NOTHING returns one: twelve `HqEntrypoint`
-  // methods, fifteen `branchOps` exports, and none is a decision feed. So the
-  // heading is drawn and the absence stated, which is what D140, D147 and D151
-  // did in the same position.
+  // against the RPC surface, NOTHING returns one: no `HqEntrypoint` method and
+  // no `branchOps` export is a decision feed. So the heading is drawn and the
+  // absence stated, which is what D140, D147 and D151 did in the same position.
   assert.match(OVERLAY, /data-testid="hq-overlay-queues-absent"/, 'the Queues absence stopped being stated');
+  // D266 — the page used to type the surface's size ("twelve methods, fifteen
+  // exports"), and the count went stale the moment a method moved. The claim
+  // that matters is "none is a decision feed", which no count carries, so the
+  // page states no count at all. Read over the RAW file, comments included,
+  // because the stale count lived in a comment.
+  assert.doesNotMatch(OVERLAY_RAW, /\b(?:eleven|twelve|thirteen|fourteen|fifteen|sixteen|\d+)\s+`?\w*`?\s*(?:methods|exports)\b/i,
+    'a count of RPC methods is typed into prose again');
   assert.match(OVERLAY, /No branch RPC returns a decision feed/, 'the Queues zone stopped saying why it is empty');
   // MTD revenue is null BY CONSTRUCTION (`branchOverview` returns
   // `revenue_mtd_cents: null` with its own reason), so the tile renders the

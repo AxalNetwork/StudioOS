@@ -3310,8 +3310,9 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(data || {}),
     }),
-  // The ceiling HQ sets and the branch issues within. `issued_cents` comes
-  // back from the branch, never from HQ.
+  // The ceiling HQ sets and the branch issues within. `issued_cents` is HQ's
+  // column for the branch's issued figure, and nothing writes it on either
+  // tier yet (D266): no call carries an issued figure to HQ.
   promoCeilings: () => request('/admin/promo-ceilings'),
   promoCeilingSet: (licenceUid, data) =>
     request(`/admin/promo-ceilings/${encodeURIComponent(licenceUid)}`, {
