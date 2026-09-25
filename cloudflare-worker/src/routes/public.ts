@@ -930,7 +930,7 @@ publicRoutes.post('/demo-request', async (c) => {
 
 // ---------- admin: status incident management ----------------------
 // These are auth-gated inside the handler (role === 'admin'). The
-// /api/public mount-point skips cfAccess + auth middleware, so we
+// /api/public mount-point runs no auth middleware, so we
 // re-check the caller here.
 
 async function requireAdminInline(c: Parameters<typeof requireAuth>[0]) {

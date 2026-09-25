@@ -3,8 +3,9 @@
  *
  * Mounted at /api/admin/telegram. ALL endpoints super-admin-gated via
  * requireSuperAdmin (D216, #337: these are the platform's broadcast
- * channels, and a chat_id is HQ's to see, not every subsidiary admin's) and (in prod) sit behind the /api/admin/* Cf-Access
- * perimeter applied in index.ts. The full surface is documented in the
+ * channels, and a chat_id is HQ's to see, not every subsidiary admin's). That
+ * handler gate is the whole gate: nothing at the edge sits in front of
+ * /api/admin (Task #33, index.ts). The full surface is documented in the
  * task spec at `.local/tasks/task-3.md`.
  *
  * Endpoint summary:

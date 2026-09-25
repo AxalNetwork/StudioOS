@@ -16,11 +16,12 @@ can be read to find out what a rule actually is.
 | `assetRetention.mjs` | Which hashed assets in `docs/` a build keeps and which it may prune. |
 | `sourceTreeHash.mjs` | The content hash of `frontend/src` that `docs/.build-source` records, so "is this bundle built from this source" is answerable (D103). |
 | `buildStamp.mjs` | Whether `docs/.build-source` is absent, readable or corrupt — three states, not two. Absent is a strict failure (D218); present-but-unreadable (a `merge=union` result, say) must never pass under --strict either (D113). |
+| `accessComments.mjs` | Which comments in the Worker may say "Cloudflare Access": a small lexer that tells a comment from a string, a template literal or a regex, and the rule that every mention must be quoted by an entry in `../access-comment-allowlist.json`. Owned by `../check-access-comments.mjs`. |
 
 ## Tests
 
-`npm run test:retention` runs every `*.test.mjs` in this folder. Seven of the
-eight modules are covered here; `migrationPlan.mjs` is the exception, and
+`npm run test:retention` runs every `*.test.mjs` in this folder. Eight of the
+nine modules are covered here; `migrationPlan.mjs` is the exception, and
 deliberately so — its behaviour is pinned against a real SQLite database by
 `cloudflare-worker/test/migrate_d1_plan.test.ts` and
 `cloudflare-worker/test/migrations_fresh_build.test.ts`, which run the actual

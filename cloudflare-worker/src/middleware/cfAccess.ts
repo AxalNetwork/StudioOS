@@ -14,13 +14,16 @@
  * jwks-fetch helper here so we can keep the JWKS cache aligned with the
  * worker isolate lifecycle and avoid pulling in extra dependency surface.
  *
- * Apply selectively:
- *   app.use('/api/admin/*', requireCfAccess());
- *   app.use('/api/monitoring/*', requireCfAccess());
- *   app.use('/api/infra/*', requireCfAccess());
+ * Where it is mounted today — the two KYC document routes in index.ts, and
+ * nowhere else:
+ *   app.use('/api/kyc/admin/:userId/document', requireCfAccess());
+ *   app.use('/api/kyc/admin/:userId/document/*', requireCfAccess());
+ * Task #33 took it off /api/admin, /api/monitoring and /api/infra (index.ts
+ * records why), so for those the handler's own requireAdmin or
+ * requireSuperAdmin is the whole gate, not the inner one.
  *
- * Request-time RBAC (requireAdmin) still runs after this — Access is the
- * outer perimeter, not a replacement for in-app role checks.
+ * Request-time RBAC (requireAdmin) still runs after this on the KYC routes —
+ * Access is an outer layer there, not a replacement for in-app role checks.
  */
 import type { Context, Next } from 'hono';
 import { jwtVerify, importJWK, type JWK } from 'jose';

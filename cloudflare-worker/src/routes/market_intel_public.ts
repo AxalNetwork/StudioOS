@@ -141,7 +141,7 @@ function unsubscribePage(message: string): string {
 // Task #6 (ID) — Public index of published insights for the /insights
 // landing page. Lists only published, non-internal publications with a
 // minimal card shape; the heavy aggregate payload is loaded per-slug by
-// the read endpoint below. Outside the CF Access perimeter like the read.
+// the read endpoint below. Outside auth and /api/admin's gates, like the read.
 marketIntelPublic.get('/publications', async (c) => {
   let rows: Array<{ slug: string; title: string; subtitle: string | null; section: string; published_at: string | null }> = [];
   try {
@@ -158,8 +158,8 @@ marketIntelPublic.get('/publications', async (c) => {
 });
 
 // Task #2 (AU) — Public read for an admin-published Axal-VC publication.
-// Mounted under /api/market-intel-public, which sits OUTSIDE the
-// /api/admin/* CF Access perimeter, so anonymous visitors can read a
+// Mounted under /api/market-intel-public, which sits OUTSIDE auth and
+// /api/admin's gates, so anonymous visitors can read a
 // published report at /insights/public/:slug without an Axal session.
 marketIntelPublic.get('/publications/:slug', async (c) => {
   const slug = c.req.param('slug');
@@ -190,8 +190,8 @@ marketIntelPublic.get('/publications/:slug', async (c) => {
   // carry sample-row metadata, internal scoring labels, or partner
   // notes); per spec the public endpoint must expose ONLY the four
   // k-anonymized aggregate fields. Returning `payload` here would be a
-  // PII / internal-data exposure on an endpoint that sits outside the
-  // CF Access perimeter and is reachable by anyone with the slug.
+  // PII / internal-data exposure on an endpoint that runs no auth at all
+  // and is reachable by anyone with the slug.
   const aggregates = internalAggregates.map(r => ({
     dimension_key: r.dimension_key,
     period_key: r.period_key,
@@ -225,7 +225,7 @@ marketIntelPublic.get('/publications/:slug', async (c) => {
 
 // Task #2 (AU) — HMAC-gated download for any publication render artifact
 // in R2. The token (24h TTL, prefix-locked to "publications/") IS the
-// authorisation, so this lives outside the CF Access perimeter to allow
+// authorisation, so this lives outside auth and /api/admin's gates to allow
 // admins to forward render links by email to LPs/founders/media.
 marketIntelPublic.get('/publications/download/:token', async (c) => {
   const v = await verifyPublicationToken(c.env, c.req.param('token'));

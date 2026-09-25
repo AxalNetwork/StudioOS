@@ -245,9 +245,11 @@ export interface Env {
   // the third leg of the 3-way Founder/Investor/Axal NDA. Defaults to
   // 'legal@axal.vc' when unset (see services/trustEnvelope.ts).
   AXAL_COUNTERSIGNER_EMAIL?: string;
-  // Task #33 — Cloudflare Access perimeter for /api/admin|monitoring|infra.
-  // Both MUST be set in production for the gate to engage; either unset
-  // means the middleware is a no-op (dev / preview).
+  // Cloudflare Access verification (middleware/cfAccess.ts). Task #33
+  // removed it from /api/admin, /api/monitoring and /api/infra; today it
+  // gates only the two KYC document routes (index.ts). Both MUST be set in
+  // production for that gate to engage; either unset means the middleware is
+  // a no-op (dev / preview).
   CF_ACCESS_TEAM_DOMAIN?: string;   // e.g. "axal.cloudflareaccess.com"
   CF_ACCESS_AUD?: string;           // Application AUD tag from the Access dashboard
   // Task #6 — Google Cloud Identity Platform / Firebase Phone Auth.
