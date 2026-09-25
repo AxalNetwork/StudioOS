@@ -29,8 +29,8 @@ import {
   branchHealth, branchOverview, branchSearchAccounts, applyLicenceCopy,
   applyPromoCeiling, applyEscalationAnswer, applyTemplateCopy,
   applyBenchmarks, openSupportSession,
-  moveAccountOut, inviteAccount,
-  type SupportSessionRequest, type MoveOutRequest, type InviteRequest,
+  moveAccountOut, inviteAccount, unbindAdmin,
+  type SupportSessionRequest, type MoveOutRequest, type InviteRequest, type UnbindRequest,
 } from './branchOps';
 import {
   recordEscalation, licenceForBranch, reportUsage,
@@ -102,6 +102,13 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
 
   inviteAccount(secret: string, req: InviteRequest) {
     return inviteAccount(this.env, secret, req);
+  }
+
+  // D262 — HQ takes the admin role off an account on this branch, and licence
+  // termination takes it off every one. Secret first, for the reason above: it
+  // demotes and deactivates accounts, so it authenticates its caller.
+  unbindAdmin(secret: string, req: UnbindRequest) {
+    return unbindAdmin(this.env, secret, req);
   }
 }
 

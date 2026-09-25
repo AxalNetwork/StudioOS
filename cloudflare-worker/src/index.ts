@@ -593,10 +593,20 @@ for (const p of COOL_OFF_PREFIXES) {
 //   · moving an account between branches. It closes the account where it
 //     lives and moves which subsidiary earns its revenue share: the money-
 //     adjacent class the licence and promo prefixes above already pause.
-//   Both are the exact route, never `/api/admin/branches/*`. These two are all
-//   that prefix holds today, but a prefix would pause whatever lands under it
-//   next with no one deciding it — the next HQ→branch act is to be decided on
-//   its own, the way each entry above was.
+//   Both are the exact route, never `/api/admin/branches/*`: a prefix would
+//   pause whatever lands under it next with no one deciding it — each HQ→branch
+//   act is decided on its own, the way each entry above was.
+//
+// D262 — the next one, and the four acts task 399 asked to be decided:
+//   · unbinding a branch's administrator: it demotes and deactivates an
+//     account in another tenant's database — paused.
+//   · HQ's demote-admin: it takes the admin role off another administrator,
+//     the class of toggle-active and the role route above, and was on neither
+//     list — paused.
+//   · granting limited access, Lab admission and the application decide are
+//     NOT paused. None gives power over an administrator, money or another
+//     tenant, and a limited-access grant cannot sign; KYC verdicts are already
+//     paused by the `/api/kyc` prefix.
 const COOL_OFF_ROUTES = [
   '/api/admin/impersonate-sessions/:id/extend',
   '/api/admin/super-admins/:userId',
@@ -604,6 +614,8 @@ const COOL_OFF_ROUTES = [
   '/api/admin/users/:userId/role',
   '/api/admin/branches/:code/support-session',
   '/api/admin/branches/:code/accounts/:userId/move',
+  '/api/admin/branches/:code/admins/:userId/unbind',
+  '/api/admin/users/:userId/demote-admin',
 ];
 for (const p of COOL_OFF_ROUTES) app.use(p, recoveryCoolOff);
 // Task #6 — Stripe billing surface (tier checkout/portal/webhook + MI Pro).

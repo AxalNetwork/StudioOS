@@ -2,6 +2,8 @@
  * HQ opens a support session on a branch (H4's "Start a support session", D120).
  *
  *   POST /api/admin/branches/:code/support-session   { target_user_id, reason }
+ *   POST /api/admin/branches/:code/accounts/:userId/move   { destination_code, reason }
+ *   POST /api/admin/branches/:code/admins/:userId/unbind   { reason }   (D262)
  *
  * THIS ROUTE IS WHERE THE THREE UNCROSSABLE CHECKS HAPPEN, and that is the
  * whole architecture of the feature in one sentence. `requireFactor(c,'totp')`,
@@ -44,7 +46,7 @@ import { mapError } from './_t13t14t15_helpers';
 import { branchByCode } from '../services/branches';
 import { mirrorBranchAction } from '../services/auditMirror';
 import { BRANCH_CODE_RE } from '../util/branch';
-import { SUPPORT_REASON_MIN, MOVE_REASON_MIN } from '../rpc/branchOps';
+import { SUPPORT_REASON_MIN, MOVE_REASON_MIN, UNBIND_REASON_MIN } from '../rpc/branchOps';
 import { logAdminAction } from '../services/adminAudit';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -339,6 +341,97 @@ r.post('/branches/:code/accounts/:userId/move', async (c) => {
       // person something false about where their work went.
       records_note: `Projects, deals and documents stay with ${from} and are readable by HQ. `
         + 'This is a re-invite, not a record migration.',
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * POST /api/admin/branches/:code/admins/:userId/unbind   { reason }
+ *
+ * D262 — HQ takes the admin role off an account that lives on a branch
+ * database. HQ's demote, toggle-active and licence termination only ever
+ * reached HQ's own database, so a branch's administrator could not be reached
+ * at all: `moveAccountOut` refuses one ("unbound at HQ, not moved out"), and
+ * HQ had nothing to unbind with.
+ *
+ * THE SAME THREE GATES AS THE SUPPORT SESSION, in the same order, for the
+ * same reason: TOTP, a recent step-up and the elevation are facts about this
+ * operator's session that the branch cannot see, so they are checked here,
+ * before the binding is touched. The branch checks the rest (`unbindAdmin`):
+ * the secret, the reason, an active administrator, no `super_admins` row.
+ *
+ * NO NUMERIC `target_user_id` IN HQ'S AUDIT ROW, D259's rule: the id belongs
+ * to the branch's database, and HQ's `viewed_user_id` would name whoever holds
+ * that id at HQ. It travels as `branch_user_id`.
+ */
+r.post('/branches/:code/admins/:userId/unbind', async (c) => {
+  try {
+    await requireFactor(c, 'totp');
+    await requireStepUp(c);
+    const admin = await requireSuperAdmin(c);
+
+    const code = str(c.req.param('code'), 32).toLowerCase();
+    if (!BRANCH_CODE_RE.test(code)) {
+      return c.json({ error: 'bad_code', message: 'That is not a valid branch code.' }, 400);
+    }
+    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const reason = str(body?.reason, 300);
+    if (reason.length < UNBIND_REASON_MIN) {
+      return c.json({
+        error: 'unbind_reason_required',
+        message: `A reason of at least ${UNBIND_REASON_MIN} characters is required to unbind an administrator.`,
+      }, 400);
+    }
+    const userId = Number(c.req.param('userId'));
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return c.json({ error: 'bad_target', message: 'Name the administrator to unbind.' }, 400);
+    }
+    if (!c.env.HQ_RPC_SECRET) {
+      return c.json({
+        error: 'hq_rpc_secret_unset',
+        message: 'HQ_RPC_SECRET is not set on this Worker, so a branch has no way to tell this call '
+          + 'from any other Worker in the account. Set it, then try again.',
+      }, 409);
+    }
+    const binding = branchByCode(c.env, code);
+    if (!binding) {
+      mirrorBranchAction(c.env, 'admin_unbound', 'not_deployed', code);
+      return c.json({
+        error: 'branch_not_bound',
+        message: `No branch Worker is bound for ${code}, so there is no administrator to reach there.`,
+      }, 409);
+    }
+
+    let res;
+    try {
+      res = await (binding.stub as any).unbindAdmin(c.env.HQ_RPC_SECRET, {
+        hq_actor_name: str((admin as { name?: string }).name, 200) || 'Axal VC HQ',
+        target_user_id: userId,
+        reason,
+      });
+    } catch (e) {
+      // Nothing happened on the branch: it validates before it writes. Its
+      // refusal (not an admin, already inactive, a super_admins row) is the
+      // operator's business, passed through as words.
+      mirrorBranchAction(c.env, 'admin_unbound', 'failed', code);
+      return c.json({
+        error: 'branch_refused',
+        message: String((e as Error).message || e).replace(/^rpc: /, '').slice(0, 400),
+      }, 409);
+    }
+    mirrorBranchAction(c.env, 'admin_unbound', 'ok', code);
+
+    await logAdminAction(c.env, admin.id, admin.email, 'hq_branch_admin_unbound', {
+      branch: code,
+      branch_user_id: userId,
+      reason,
+      unbound: Array.isArray(res?.unbound) ? res.unbound.length : null,
+    });
+
+    return c.json({
+      branch: code,
+      unbound: res?.unbound ?? [],
+      skipped: res?.skipped ?? [],
     });
   } catch (e) { return mapError(c, e); }
 });

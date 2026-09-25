@@ -93,10 +93,13 @@ const LICENCE_TONE = {
  * branch's own reason, 423 during a recovery cool-off) carries a sentence in
  * `data.message`, so that is what the operator reads.
  */
-function supportRefusal(ex) {
+function branchRefusal(ex, fallback) {
   const d = ex?.data;
   if (d && typeof d.message === 'string' && d.message) return d.message;
-  return ex?.message || 'The support session could not be opened.';
+  return ex?.message || fallback;
+}
+function supportRefusal(ex) {
+  return branchRefusal(ex, 'The support session could not be opened.');
 }
 
 /**
@@ -136,7 +139,26 @@ export function MoveHit({ hit, from, destinations, onMoved, viewAs }) {
   const [supportErr, setSupportErr] = useState('');
   const [supportUrl, setSupportUrl] = useState(null);
   const canSupport = !viewAs && Number(hit.is_active) === 1;
+  // D262 — AN ADMINISTRATOR IS UNBOUND, NOT MOVED. The branch refuses to move
+  // one (`moveAccountOut`, D133) and says to unbind at HQ, so Move is not drawn
+  // on an admin hit and Unbind is. Support STAYS on an admin hit: the branch
+  // treats supporting its own administrator as the ordinary case and refuses
+  // only an account carrying a `super_admins` row (`openSupportSession`).
+  const isAdminHit = String(hit.role || '').toLowerCase() === 'admin';
+  const canUnbind = !viewAs && isAdminHit && Number(hit.is_active) === 1;
+  const [unbindOpen, setUnbindOpen] = useState(false);
+  const [unbindReason, setUnbindReason] = useState('');
+  const [unbindBusy, setUnbindBusy] = useState(false);
+  const [unbindErr, setUnbindErr] = useState('');
+  const [unbound, setUnbound] = useState(false);
   const states = branchHitStates(hit);
+  if (unbound) {
+    return (
+      <li className="py-1.5 text-[12px] text-axal-muted" data-testid="hq-team-unbound">
+        {hit.name || hit.email} is no longer an administrator of {from}: the role is removed and the account deactivated there.
+      </li>
+    );
+  }
   if (done) {
     return (
       <li className="py-1.5 text-[12px] text-axal-muted">
@@ -161,9 +183,14 @@ export function MoveHit({ hit, from, destinations, onMoved, viewAs }) {
               Support
             </button>
           )}
-          {destinations.length > 0 && Number(hit.is_active) === 1 && (
+          {destinations.length > 0 && Number(hit.is_active) === 1 && !isAdminHit && (
             <button type="button" className="font-bold text-axal-violet dark:text-violet-300" onClick={() => setOpen((v) => !v)}>
               Move
+            </button>
+          )}
+          {canUnbind && (
+            <button type="button" className="font-bold text-rose-700 dark:text-rose-300" data-testid="hq-team-unbind-toggle" onClick={() => setUnbindOpen((v) => !v)}>
+              Unbind
             </button>
           )}
         </span>
@@ -209,6 +236,40 @@ export function MoveHit({ hit, from, destinations, onMoved, viewAs }) {
           )}
           <button type="submit" disabled={supportBusy || supportReason.trim().length < 10} className="justify-self-start rounded-md bg-axal-violet px-3 py-1 text-[11.5px] font-bold text-white disabled:opacity-50">
             {supportBusy ? 'Opening…' : 'Begin'}
+          </button>
+        </form>
+      )}
+      {canUnbind && unbindOpen && (
+        <form
+          className="mt-2 grid gap-2 rounded-lg border border-axal-hairline bg-axal-ground p-2"
+          data-testid="hq-team-unbind"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setUnbindErr('');
+            setUnbindBusy(true);
+            try {
+              await api.hqUnbindAdmin(from, hit.id, unbindReason.trim());
+              setUnbound(true);
+              onMoved?.();
+            } catch (ex) {
+              reportError('hq-team-unbind', ex);
+              setUnbindErr(branchRefusal(ex, 'The unbind was refused.'));
+            } finally {
+              setUnbindBusy(false);
+            }
+          }}
+        >
+          <p className="text-[11px] leading-relaxed text-axal-muted">
+            Takes the admin role off {hit.name || hit.email} on {from} and deactivates the account there.
+            It needs your authenticator and a fresh step-up. Their records stay with {from}.
+          </p>
+          <label className="text-[11px] text-axal-muted">
+            Reason (at least 10 characters). It is recorded here and on the branch.
+            <textarea className="mt-1 block w-full rounded-md border border-axal-hairline bg-white px-2 py-1 text-[12px] dark:bg-gray-900" rows={2} value={unbindReason} onChange={(e) => setUnbindReason(e.target.value)} />
+          </label>
+          {unbindErr && <p className="text-[11.5px] text-rose-700 dark:text-rose-300" data-testid="hq-team-unbind-refused">{unbindErr}</p>}
+          <button type="submit" disabled={unbindBusy || unbindReason.trim().length < 10} className="justify-self-start rounded-md bg-rose-700 px-3 py-1 text-[11.5px] font-bold text-white disabled:opacity-50">
+            {unbindBusy ? 'Unbinding…' : `Unbind from ${from}`}
           </button>
         </form>
       )}
@@ -725,6 +786,8 @@ export default function HqTeamTable({ reloadKey = 0, onLoaded }) {
         It needs a step-up and TOTP; a refusal names the reason. HQ-held rows have no source branch,
         so they are not movable from this table. Support opens a session on an active branch account,
         on that branch&rsquo;s own site, with the same step-up and a reason; the person is not told yet.
+        An administrator&rsquo;s hit shows Unbind instead of Move: an administrator is unbound, not moved,
+        and Unbind removes the role and deactivates the account on that branch, with the same step-up and a reason.
       </p>
     </Card>
   );

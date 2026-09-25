@@ -101,6 +101,9 @@ const HQ_TO_BRANCH_FLOOR = [
   ['stub', 'routes/admin_support_sessions.ts', 'openSupportSession'],
   ['stub', 'routes/admin_support_sessions.ts', 'moveAccountOut'],
   ['stub', 'routes/admin_support_sessions.ts', 'inviteAccount'],
+  // D262 — the unbind route; termination's call is in admin_licences.ts.
+  ['stub', 'routes/admin_support_sessions.ts', 'unbindAdmin'],
+  ['stub', 'routes/admin_licences.ts', 'unbindAdmin'],
   ['stub', 'routes/admin_statements.ts', 'applyPromoCeiling'],
   ['stub', 'routes/admin_escalations.ts', 'applyEscalationAnswer'],
 ];

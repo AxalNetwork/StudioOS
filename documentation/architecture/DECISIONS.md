@@ -26070,6 +26070,189 @@ re-aimed and renamed above.
 edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
 `check-folder-docs`, `check-api-drift` and `check-access-comments` exit 0.
 
+## D262
+
+**HQ can now reach an administrator whose account lives on a branch database.
+Unbind on their hit in HQ · Team takes the admin role off the account and
+deactivates it on that branch. Terminating a licence now does the same for
+every administrator the branch holds. Terminate moves up to the write bar, and
+two admin-over-admin writes join the recovery cool-off.** Task 399.
+
+**No migration.** There is one new RPC method, `HqEntrypoint.unbindAdmin`, and
+one new HQ route with its api.js method.
+
+### THE DEFECTS
+
+- **Nothing reached a branch administrator.** HQ's demote-admin, toggle-active
+  and licence terminate act on HQ's own database. `deprovisionLicenceAdmins`
+  (D145) reads HQ's `licence_admins JOIN users`, so it never touched an account
+  in a branch database. `moveAccountOut` refuses an administrator and says to
+  unbind at HQ (D133), but there was nothing at HQ to unbind with.
+- **A terminated branch kept its admins.** Terminate pushes `terminated`, which
+  the branch stores. The freeze reacts only to `suspended` (D107), so the
+  principal kept the admin role and every gated write.
+- **The Team table drew Move on an admin hit**, which the branch always refuses.
+- **The H20 card said so without saying why:** "Neither reaches an admin whose
+  account lives on a branch database."
+
+### WHAT CHANGED
+
+- **The branch** (`rpc/branchOps.ts`, `unbindAdmin(env, secret, { hq_actor_name,
+  target_user_id?, reason })`):
+  - It checks, in order:
+    - `authenticateHq` first;
+    - a reason of at least 10 characters (`UNBIND_REASON_MIN`);
+    - an operator name;
+    - the target is an active administrator here;
+    - the target carries no `super_admins` row. A branch should have none
+      (D106), so a row is a state to investigate.
+  - With no target, which is termination's form, it unbinds every active
+    administrator and skips a `super_admins` holder, with the reason.
+  - D145's shape: one UPDATE per account, `role = 'exploring', is_active = 0
+    … AND role = 'admin' AND is_active = 1`. A row that changed underneath is
+    reported as skipped, never overwritten.
+  - Deactivation is what ends the session: `requireAuth` refuses an inactive
+    account, so the principal's next request answers 401.
+  - Two activity rows per account, actor `hq:<name>`, in `moveAccountOut`'s
+    shape.
+- **The entrypoint** (`rpc/index.ts`) delegates, secret first. It is recorded
+  in `topology.ts` as `m('unbindAdmin', true, true)`, and
+  `rpcEntrypoints.test.mjs`'s floor gains both call sites.
+- **The HQ route** (`POST /api/admin/branches/:code/admins/:userId/unbind`,
+  `admin_support_sessions.ts`):
+  - It runs the support session's three gates in its order (TOTP, a fresh
+    step-up, the elevation), before the binding is touched.
+  - A reason under 10 characters answers 400.
+  - No secret, no binding, or a branch refusal each answers 409, with the
+    branch's own words.
+  - It mirrors to `mirrorBranchAction` as `admin_unbound`.
+  - The audit goes through `logAdminAction` with `branch_user_id`, never a
+    numeric `target_user_id` (D259's rule).
+- **Terminate** (`admin_licences.ts`):
+  - It calls the exported `unbindBranchAdmins` after the push, so the branch
+    already holds `terminated`. The result is reported as
+    `branch_admins_unbound` and is never thrown: a recorded termination is
+    never undone by the cleanup after it (D145).
+  - **It moves up to the write bar, decided.** Terminate is now the one
+    lifecycle move that takes the admin role off accounts: HQ's since D145, and
+    the branch's since D262. Every other act that removes an admin role
+    (demote-admin, `DELETE /:uid/admins`, the branch unbind) already asks for
+    TOTP and a fresh step-up. Activate, suspend, reinstate and renew keep the
+    plain elevation: they change a licence's status, not an account's role.
+- **The recovery cool-off** (`COOL_OFF_ROUTES`), with task 399's four
+  decided:
+  - **The new unbind: paused.** It demotes and deactivates an account in
+    another tenant's database.
+  - **HQ's `demote-admin`: paused.** It takes the admin role off another
+    administrator, the class of toggle-active and the role route (D248), and
+    was on neither list.
+  - **Granting limited access, Lab admission and the application decide: not
+    paused.** None gives power over an administrator, money or another tenant.
+    A limited-access grant cannot sign, and KYC verdicts are already paused by
+    the `/api/kyc` prefix.
+- **The Team table** (`MoveHit`):
+  - An active admin hit draws **Unbind** and no Move: a reason of at least 10
+    characters, the branch's refusal in words, and the row reporting the unbind
+    once done.
+  - **Support stays on an admin hit, decided.** The branch treats supporting
+    its own administrator as the ordinary case and refuses only a
+    `super_admins` row (`openSupportSession`).
+  - The footnote says both.
+- **The H20 card** (`HqTeamActions.jsx`) now says a branch administrator is
+  unbound, with the same three gates, where Unbind is, and that terminating the
+  licence unbinds every administrator the branch holds.
+
+### PINS, RE-AIMED
+
+- `territory_licences.test.mjs`:
+  - the cool-off list gains the unbind and demote-admin, and names the three
+    that stay open;
+  - its gate count now recognises `requireSuperAdminWriteBar(c)`, the stronger
+    gate, which counts as the same floor.
+- `hq_support_session_d259.test.mjs` pinned `supportRefusal`'s body. The body
+  moved into `branchRefusal`, which Unbind shares, and the pin follows it with
+  the same property: the route's sentence first.
+
+### VERIFIED
+
+`cloudflare-worker/test/branch_unbind_admin_d262.test.ts`, 12 tests, on
+`d1Over(buildFresh(...))` with the FR vars and a hashed synthetic secret:
+- eight refusals, each writing nothing: a wrong secret, no secret, no hash, a
+  short reason, a non-admin target, a `super_admins` row, a missing account
+  and no operator name;
+- an already-deactivated admin, refused;
+- one unbind: demoted and deactivated, with two rows as `hq:<name>`, and no one
+  else touched;
+- the principal's JWT answering 401 after the unbind;
+- the no-target form unbinding both admins, skipping the holder, and leaving
+  the founder.
+
+`cloudflare-worker/test/hq_unbind_admin_d262.test.ts`, 10 tests, through the
+bundled Worker with a stub `BRANCH_FR` that records every call:
+- no TOTP, a stale step-up and no elevation each answer 403, and the stub is
+  never called;
+- a short reason answers 400;
+- inside the cool-off, the unbind and demote-admin both answer 423;
+- each 409 writes no audit row;
+- the success path calls the stub once, secret first. The audit names
+  `branch_user_id` with `viewed_user_id` NULL, and HQ's own user 7 is never
+  touched;
+- terminate calls `applyLicence`, then `unbindAdmin`, with no target;
+- a throwing branch leaves the termination recorded and reported;
+- a stale step-up terminates nothing.
+
+`licence_terminate_deprovision_d145.test.ts` goes from 11 to 15 tests:
+- a throwing stub is reported and never thrown;
+- no deployment, no secret and no binding are each a reason, and the stub is
+  never called;
+- the success path passes the secret first and no target;
+- terminate calls the helper after the push, the helper contains no `throw`,
+  and its result is its own field.
+
+`frontend/test/hq_unbind_admin_d262.test.mjs`, 6 tests:
+- the api path, the mounted route and the cool-off entry;
+- Unbind and no Move on an admin hit, and the reverse on an ordinary one;
+- Support kept on an admin hit;
+- no Unbind under the overlay or on an inactive admin;
+- the form's trimmed reason, 10-character gate and words;
+- the card's claim, pinned by what it says rather than its wording.
+
+**Mutation checks: 14 of 14 caught,** each alone and restored from a
+sha256-verified snapshot:
+- the five task 399 named:
+  - `authenticateHq` dropped;
+  - the branch-side reason check dropped;
+  - a non-admin target allowed;
+  - the stub called before the step-up;
+  - terminate rethrowing.
+- nine more:
+  - the `super_admins` refusal dropped;
+  - demoted but not deactivated;
+  - the audit carrying `target_user_id`;
+  - terminate back on the plain elevation;
+  - the unbind moved before the push;
+  - the unbind off the cool-off;
+  - demote-admin off the cool-off;
+  - Unbind drawn on any hit;
+  - Move drawn on an admin hit.
+
+### FILED, NOT BUILT
+
+`branch_invitations` has no working reader. `inviteAccount` writes it, and no
+route or page on a branch reads an invitation back to the person it names.
+
+**Full suite:** `npm run test:drift` on Node 22 exits 0 on `main` at
+`423d56f5`:
+- frontend 3277 (the six above are new);
+- worker 4330 passed with 3 skipped (the twenty-six above are new);
+- retention 102.
+
+No test name from the previous run is missing.
+
+`docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
+edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
+`check-folder-docs`, `check-api-drift` and `check-access-comments` exit 0.
+
 ## D263
 
 **Task 323: the restore drill had failed four runs out of four, and the next
