@@ -21,9 +21,10 @@
 // wrong thing to draw.
 //
 // FOUR TILES, AND ONE OF THEM IS NULL BY CONSTRUCTION. `branchOverview`
-// returns `revenue_mtd_cents: null` with its own `revenue_reason` — no branch
-// has reported a figure (D111 built the call; nobody has used it) — so that
-// tile renders the server's sentence rather than a zero. The canvas draws a
+// returns `revenue_mtd_cents: null` with its own `revenue_reason` — a branch
+// database records no revenue amounts, so the quarterly report it sends HQ
+// each morning (D266) carries every stream unmeasured — and that tile renders
+// the server's sentence rather than a zero. The canvas draws a
 // number there; the branch does not have one, and D129's rule applies: draw
 // the absence, never the sample.
 import React, { useCallback, useEffect, useState } from 'react';
@@ -122,8 +123,10 @@ export default function HqBranchOverlay({ branch }) {
           : (data === UNAVAILABLE ? 'This branch could not be read.' : 'Reading this branch…')
       }
       unavailable={[
-        // Measured, not deferred: twelve `HqEntrypoint` methods and fifteen
-        // `branchOps` exports, and none of them is a decision feed.
+        // Measured, not deferred: none of `HqEntrypoint`'s methods and none of
+        // `branchOps`' exports is a decision feed. (No count is typed here: a
+        // count in prose goes stale with the next method, which is D266's
+        // finding about this very sentence.)
         ['What this branch decided', 'No branch RPC returns a decision feed, so the approvals behind the backlog count are on the branch and not here.'],
         // H13 RULE 2, refused with its measurement and restated rather than
         // dropped. The canvas prices "All branches" as up to four reads and
@@ -194,11 +197,12 @@ export default function HqBranchOverlay({ branch }) {
         <BranchTile
           label="MTD revenue"
           // NULL BY CONSTRUCTION, and the server says why: `branchOverview`
-          // returns `revenue_mtd_cents: null` with `revenue_reason` because no
-          // branch has reported a figure yet. Rendering a zero here would be a
-          // claim about this branch's trading that nothing measured.
+          // returns `revenue_mtd_cents: null` with `revenue_reason` because a
+          // branch database records no revenue amounts (D266). Rendering a zero
+          // here would be a claim about this branch's trading that nothing
+          // measured.
           value={null}
-          reason={absent || live?.revenue_reason || 'No revenue figure has been reported by this branch.'}
+          reason={absent || live?.revenue_reason || 'This branch measures no revenue amounts, so there is no figure to show.'}
           branch={code}
           readAt={readAt}
         />
@@ -206,9 +210,9 @@ export default function HqBranchOverlay({ branch }) {
 
       {/* H12 draws a "Queues · as the branch sees them" zone whose rows are
           decisions the branch already made ("approved by C. Moreau · 09:41").
-          NOTHING RETURNS THAT. Measured rather than assumed: `HqEntrypoint`
-          has twelve methods and `branchOps` fifteen exports, and none of them
-          is a decision feed. So the heading is drawn and the absence is
+          NOTHING RETURNS THAT. Measured rather than assumed: none of
+          `HqEntrypoint`'s methods and none of `branchOps`' exports is a
+          decision feed. So the heading is drawn and the absence is
           stated, which is what D140, D147 and D151 all did in the same
           position — a zone of invented rows would be the one thing this
           screen cannot survive. */}

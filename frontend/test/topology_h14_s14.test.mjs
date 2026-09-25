@@ -132,12 +132,31 @@ for (const role of ['hqCallsBranch', 'branchCallsHq']) {
       assert.equal(c.label.endsWith(' · secret'), m.authenticated, `${m.name}: "· secret" exactly when it takes one`);
     }
     const uncalled = side.methods.filter((m) => !m.called).map((m) => m.name);
-    assert.ok(uncalled.length > 0, 'both classes have an uncalled method today (task #354), or this proves nothing');
-    const sentence = byTestId(markup, `rpc-uncalled-${side.class}`);
-    startsWithText(sentence, `Declared and not called by anything yet: ${uncalled.join(', ')}.`);
-    assert.match(sentence, /not one that failed/);
+    if (uncalled.length) {
+      startsWithText(byTestId(markup, `rpc-uncalled-${side.class}`), `Declared and not called by anything yet: ${uncalled.join(', ')}.`);
+    } else {
+      assert.ok(!markup.includes(`rpc-uncalled-${side.class}`), 'no idle-method sentence when every method has a caller');
+    }
     assert.ok(readable(markup).includes(`${side.class}, exported by somebody and called over ${side.called_over}.`),
       'the class, who exports it and the binding it is called over');
+  });
+
+  // Since D266 every declared method has a caller, so the real surface draws no
+  // dashed chip at all and the assertion above cannot fail on the dash. This one
+  // marks a method idle on purpose, so the dashed chip and its sentence still
+  // have something to be wrong about — a render that stopped dashing idle
+  // methods would otherwise pass for as long as the platform happened to have
+  // none.
+  test(`RpcSide dashes an idle ${RPC_SURFACE[role].class} method and names it`, () => {
+    const real = RPC_SURFACE[role];
+    const idle = real.methods[real.methods.length - 1].name;
+    const side = { ...real, methods: real.methods.map((m) => ({ ...m, called: m.name !== idle })) };
+    const markup = html(RpcSide, { side, heading: 'Heading', exportedBy: 'somebody' });
+    const drawn = chips(markup);
+    assert.deepEqual(drawn.filter((c) => c.dashed).map((c) => c.name), [idle], 'exactly the idle method is dashed');
+    const sentence = byTestId(markup, `rpc-uncalled-${side.class}`);
+    startsWithText(sentence, `Declared and not called by anything yet: ${idle}.`);
+    assert.match(sentence, /not one that failed/);
   });
 }
 

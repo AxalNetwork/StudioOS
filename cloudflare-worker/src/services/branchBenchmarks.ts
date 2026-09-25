@@ -267,7 +267,7 @@ export async function publishBenchmarks(env: Env, period: string): Promise<Bench
 /**
  * The period a benchmark is stamped with: the current UTC quarter.
  *
- * SAME SHAPE `revenueSummary` PARSES (`YYYY-Qn`), so a branch reading its
+ * SAME SHAPE `branchRevenueSummary` PARSES (`YYYY-Qn`), so a branch reading its
  * benchmark and a statement covering the same window agree by construction
  * rather than by convention.
  */

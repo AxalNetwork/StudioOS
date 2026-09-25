@@ -38,7 +38,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
-import { authenticateBranch, reportUsage, promoCeilingForBranch } from '../src/rpc/hqOps.ts';
+import { authenticateBranch, reportUsage } from '../src/rpc/hqOps.ts';
 import { branchRevenueSummary, applyPromoCeiling } from '../src/rpc/branchOps.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -206,7 +206,7 @@ test('HQ methods refuse to run on a branch', async () => {
   const { env } = await hqEnv();
   const onBranch = { ...env, BRANCH_CODE: 'fr' };
   await assert.rejects(() => authenticateBranch(onBranch, 'fr', SECRET));
-  await assert.rejects(() => promoCeilingForBranch(onBranch, 'fr'));
+  await assert.rejects(() => reportUsage(onBranch, 'fr', SECRET, '2026-Q3', figures()));
 });
 
 /* ------------------------------------------------------------------ *
@@ -242,6 +242,27 @@ test('a figure the branch could not measure is stored NULL, never 0', async () =
   assert.equal(rows.find((x) => x.stream === 'subscriptions').gross_cents, null);
   assert.equal(rows.find((x) => x.stream === 'licence_fees').gross_cents, null,
     'an unavailable stream kept a number the branch disclaimed');
+});
+
+test('a figure that is not a finite number is stored NULL, never coerced to 0 (D266)', async () => {
+  // THE ONE READING THIS FUNCTION EXISTS TO REFUSE. `Number(x) || 0` turned a
+  // figure that did not parse into a zero, which a statement then sums as a
+  // measured quarter that earned nothing. Not parsing is not measuring.
+  const { env, db } = await hqEnv();
+  await reportUsage(env, 'fr', SECRET, '2026-Q3', [
+    { stream: 'a', gross_cents: 'not a number' },
+    { stream: 'b', gross_cents: Number.NaN },
+    { stream: 'c', gross_cents: Number.POSITIVE_INFINITY },
+    { stream: 'd', gross_cents: '1234.9' },
+    { stream: 'e', gross_cents: 0 },
+  ] as any);
+  const by = Object.fromEntries((db.prepare('SELECT stream, gross_cents FROM subsidiary_usage_reports').all() as any[])
+    .map((x) => [x.stream, x.gross_cents]));
+  assert.equal(by.a, null, 'a string that does not parse was stored as a figure');
+  assert.equal(by.b, null, 'NaN was stored as a figure');
+  assert.equal(by.c, null, 'Infinity was stored as a figure');
+  assert.equal(by.d, 1234, 'a numeric string is still a figure, truncated to whole cents');
+  assert.equal(by.e, 0, 'a real zero is a measured zero and stays one');
 });
 
 test('a re-report replaces the figure rather than adding a second quarter', async () => {
@@ -281,32 +302,6 @@ test('a nameless stream is dropped rather than written as an empty one', async (
 });
 
 /* ------------------------------------------------------------------ *
- * promoCeilingForBranch                                               *
- * ------------------------------------------------------------------ */
-
-test('a branch is told its ceiling and never its own issued figure', async () => {
-  const { env, db } = await hqEnv();
-  db.prepare(
-    `INSERT INTO licence_promo_ceilings (licence_uid, period, ceiling_cents, currency, issued_cents)
-     VALUES (?,?,?,?,?)`,
-  ).run('lic_fr', '2026-Q3', 500_000, 'EUR', 120_000);
-
-  const c = await promoCeilingForBranch(env, 'fr') as any;
-  assert.equal(c.ceiling_cents, 500_000);
-  assert.equal(c.period, '2026-Q3');
-  assert.ok(c.pushed_at, 'the copy arrived undated');
-  // HQ'S ISSUED FIGURE IS STALE BY CONSTRUCTION — the branch issues the codes.
-  // Echoing it back would let HQ's last-known value overwrite the branch's own.
-  assert.equal(c.issued_cents, undefined, 'HQ sent back an issued figure the branch owns');
-});
-
-test('no ceiling, and an unprovisioned code, both answer no_ceiling_set rather than throwing', async () => {
-  const { env } = await hqEnv();
-  assert.deepEqual(await promoCeilingForBranch(env, 'fr'), { error: 'no_ceiling_set' });
-  assert.deepEqual(await promoCeilingForBranch(env, 'nope'), { error: 'no_ceiling_set' });
-});
-
-/* ------------------------------------------------------------------ *
  * The branch side                                                     *
  * ------------------------------------------------------------------ */
 
@@ -342,7 +337,7 @@ test('the token COST is carried as a basis, never as revenue', async () => {
   assert.match(String(token.estimate_basis), /2 calls/);
 });
 
-test('revenueSummary refuses a period that is not a quarter, and refuses to run at HQ', async () => {
+test('branchRevenueSummary refuses a period that is not a quarter, and refuses to run at HQ', async () => {
   const { env } = branchEnv();
   await assert.rejects(() => branchRevenueSummary(env, '2026-13'), /is not a period/);
   const atHq = { ...env, BRANCH_CODE: '' };

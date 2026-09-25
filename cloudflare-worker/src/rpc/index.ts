@@ -27,13 +27,13 @@ import { WorkerEntrypoint } from 'cloudflare:workers';
 import type { Env } from '../types';
 import {
   branchHealth, branchOverview, branchSearchAccounts, applyLicenceCopy,
-  branchRevenueSummary, applyPromoCeiling, applyEscalationAnswer, applyTemplateCopy,
+  applyPromoCeiling, applyEscalationAnswer, applyTemplateCopy,
   applyBenchmarks, openSupportSession,
   moveAccountOut, inviteAccount,
   type SupportSessionRequest, type MoveOutRequest, type InviteRequest,
 } from './branchOps';
 import {
-  recordEscalation, licenceForBranch, reportUsage, promoCeilingForBranch,
+  recordEscalation, licenceForBranch, reportUsage,
   type EscalationInput, type UsageFigure, type EscalationAnswer,
 } from './hqOps';
 
@@ -47,7 +47,12 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
 
   applyLicence(record: Record<string, unknown>) { return applyLicenceCopy(this.env, record); }
 
-  revenueSummary(period: string) { return branchRevenueSummary(this.env, period); }
+  // D266 — NO `revenueSummary` HERE. It was declared, and nothing ever called
+  // it: HQ learns a branch's figures when the BRANCH reports them
+  // (`reportUsage` on the class below), never by asking, so a pull that
+  // answered the same streams would be a second road to one fact.
+  // `branchRevenueSummary` itself stays in branchOps.ts; the branch's own
+  // insights route and its usage report both read it locally.
 
   applyPromoCeiling(c: { period: string; ceiling_cents: number; currency: string; pushed_at: string }) {
     return applyPromoCeiling(this.env, c);
@@ -121,5 +126,8 @@ export class BranchEntrypoint extends WorkerEntrypoint<Env> {
     return reportUsage(this.env, callerCode, secret, period, figures);
   }
 
-  promoCeiling(callerCode: string) { return promoCeilingForBranch(this.env, callerCode); }
+  // D266 — NO `promoCeiling` HERE. The ceiling already travels the other way:
+  // HQ pushes it after every save (`applyPromoCeiling` above), and a branch
+  // holds it in `branch_promo_ceiling`. A pull that answered the same row was
+  // declared, never called, and would have been a second copy of one fact.
 }

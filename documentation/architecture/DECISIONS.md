@@ -26237,3 +26237,193 @@ All six held on the final CSS.
 
 (vi) was caught only by the probe on its first run. The compiled test then
 gained its keep-light assertion, and the rerun was caught by both.
+
+## D266
+
+**Task 354: two RPC methods nothing called are retired, and the statement
+ledger's only designed input finally has a caller. What it carries is that
+every stream is unmeasured, which is the true state.**
+
+**What existed.** Three declared RPC methods had no caller anywhere in `src`,
+and `services/topology.ts` marked all three uncalled:
+- **`revenueSummary`** on `HqEntrypoint`. It returned three streams, each
+  `available: false, gross_cents: null`. The function behind it,
+  `branchRevenueSummary`, has a second, local reader: the branch's own insights
+  route.
+- **`reportUsage`** on `BranchEntrypoint`, authenticated by the per-deployment
+  secret. It is the statement ledger's only designed input. With no caller,
+  `subsidiary_usage_reports` was never written, and every statement HQ drew
+  said the branch "has not reported".
+- **`promoCeiling`** on `BranchEntrypoint`. It duplicated a push that already
+  works: HQ pushes the ceiling after every save in `admin_statements.ts`, and
+  the branch holds it in `branch_promo_ceiling`. Its helper,
+  `promoCeilingForBranch`, carried a docblock claiming the branch reports an
+  issued figure. Nothing does.
+
+**Retired: `revenueSummary` and `promoCeiling`.** Each was a pull that would
+have been a second road to one fact:
+- HQ learns a branch's figures when the branch reports them, never by asking;
+- the ceiling already travels HQ → branch after every save.
+
+`promoCeilingForBranch` is deleted with its method. **`branchRevenueSummary`
+stays**, because the insights route and the new usage report both read it
+locally. The two `rpc/index.ts` sites each carry a comment saying why the
+method is absent, so it is not re-added as an oversight.
+
+**Wired: `reportUsage`, from the branch, every morning.**
+- **New `services/usageReport.ts`, `pushUsageReport(env, now, deadlineMs)`.**
+  Its refusals come in the same order as `pullLicenceCopy` (D244), for the same
+  reasons:
+  - on HQ it refuses, because only a branch reports;
+  - with no `RPC_SECRET` it refuses before calling, because HQ refuses a report
+    that does not carry it;
+  - with no HQ binding it refuses.
+- **Two quarters per run, oldest first.** The previous quarter is the day
+  before the current one's first day, so a run on 1 October closes Q3 and a run
+  on 1 January reports the previous year's Q4. `reportUsage` upserts on
+  `(licence_uid, period, stream)`, so a daily run restates rows rather than
+  adding them. The last figure a quarter gets is the one reported after it ends.
+- **A 5-second deadline per quarter** (`USAGE_REPORT_DEADLINE_MS`). An HQ that
+  never answers is a stated deadline, not a hang.
+- **It never throws.** A refusal is returned as a sentence, per quarter and
+  overall. The one throw left is `branchOf`'s on a malformed `BRANCH_CODE`,
+  which is deliberate everywhere.
+- **The call goes through a local alias** (`const hq = (env as …).HQ;`), the
+  form `scripts/lib/rpcSurface.mjs` harvests. That harvest is how
+  `RPC_SURFACE` and its guard know `reportUsage` has a caller.
+- **The cron block** is in `index.ts`, at 05:10 UTC, in its own `try/catch`
+  with a `[cron]` line. **It is the only block gated `!hqCadences`**, and the
+  negation is the design: HQ keeps the ledger this feeds, so it has nothing to
+  report to itself. `branch_licence_copy.test.ts` pins it as branch-only,
+  anchored on the import string.
+
+**What arrives at HQ, stated plainly.**
+- **Every stream is NULL.** A branch database records no revenue amounts:
+  subscriptions have no amount column, licence fees are HQ's own figure, and
+  token margin is a cost with no price beside it.
+- **So a statement now reads "reported, unmeasurable" instead of "not
+  reported".** That is a truer state, not a fuller one: no figure appears, and
+  none is invented.
+- **The token cost travels as `estimate_basis`** on the `token_margin` row,
+  with `is_estimate`. HQ already stores that column, and already refuses to sum
+  it as revenue.
+- **Each stream's `reason` sentence is sent and dropped.** Migration 260 has no
+  column for it, and HQ's draw writes its own reason for a reported NULL stream
+  from the stored basis.
+- **Nothing enters a gross figure at HQ.** The statement PATCH accepts only
+  `paid_cents`, `disputed_cents` and `status`. The sentence in `branchOps.ts`
+  saying "HQ can enter the figure on the statement" was false and is gone.
+
+**One defect fixed in `reportUsage`, in passing.** A figure that was not a
+finite number went through `Math.trunc(Number(x) || 0)`, so `NaN` and
+`Infinity` were stored as zero: a complete-looking quarter that earned nothing,
+the reading D111 exists to refuse. A non-finite value is now stored as NULL,
+the same as an unavailable one.
+
+**Sentences made true.** Each kept its reason and never became a zero:
+- **HQ Home.** The rail row and the footnote said revenue per subsidiary waits
+  for a branch to send one. They now say each branch reports its quarter every
+  morning and every stream arrives unmeasured. The header comments follow.
+- **The H12 overlay.** The month-to-date tile renders the branch's own
+  `revenue_reason`, which said "the reporting call that computes it is not
+  built". It now says the branch reports its quarter and records no revenue
+  amounts. The overlay's own fallback sentence follows.
+- **`licence.ts`'s `DERIVED_UNAVAILABLE_BRANCH`** said the reporting call was
+  not built.
+- **`admin_hq.ts`'s `revenue_by_stream` reason** said `reportUsage` had no
+  caller.
+- **`admin_revenue.ts`.** Its header said "No subsidiary-statement store exists
+  at all", but two exist (migration 260) and are read on their own endpoint.
+  `budget_reason` said an issued figure is one the branch reports; nothing
+  carries one to HQ, and it now says so.
+- **`admin_statements.ts`.** Its no-binding reason promised the ceiling "will
+  reach the branch when one is" deployed. Nothing re-pushes a ceiling, so it
+  now says to save it again once the branch answers. The phrase
+  `branch_rpc_fanout.test.ts` pins, "so the ceiling is set at HQ", is kept.
+- **`RevenuePage.jsx`.** It promised a draw that no control offers:
+  `api.statementDraw` has no caller. It also said an issued figure "is reported
+  by the branch", but `licence_promo_ceilings.issued_cents` has no writer. Both
+  now say what is true, and the promo row names no issued figure.
+- **`BranchSettings.jsx`'s DeploymentZone docblock** said a branch "is
+  provisioned once, and nothing deploys it again". That has been false since
+  D253: every push to `main` redeploys every provisioned branch.
+- **`services/topology.ts`.** The uncalled-methods sentence and the statements
+  row of `NOT_FROM_ANALYTICS` now say what is true, and `reportUsage` is marked
+  called. Also `api.js`'s statements comment and ROUTE_MAP row 41's revenue
+  sentence.
+
+**No count of RPC methods is typed into prose.** `HqBranchOverlay.jsx` and
+`BranchSettings.jsx` both said HQ may call "twelve methods". The count goes
+stale with the next method, and task 399 adds one. Both now name the class and
+state no number. `hq_view_as_h12.test.mjs` reads the overlay's raw source,
+comments included, and refuses a number word or digit before
+"methods"/"exports".
+
+**Guards re-aimed, never loosened.**
+- **`topology_h14_s14.test.mjs`** required each class to carry an uncalled
+  method, "or this proves nothing". None does now, so the dashed-chip assertion
+  renders a synthetic list that contains one, and still fails if dashing stops.
+- **`hq_home_branches_h1.test.mjs`** pinned "no branch has sent one yet". It
+  now refuses that phrase and asserts the rail row names the daily report and
+  the unmeasured streams.
+- **`scripts/lib/rpcEntrypoints.test.mjs`**'s branch-to-HQ floor gains
+  `['alias','services/usageReport.ts','reportUsage']`.
+- **`branch_usage_report.test.ts`** drops the `promoCeilingForBranch` tests
+  with the function, and gains the NaN/Infinity case.
+
+**Filed, not built.**
+- A control that draws a statement. `api.statementDraw` and its route exist,
+  and no screen calls them.
+- An issued-figure report from branch to HQ. Nothing writes
+  `licence_promo_ceilings.issued_cents`.
+
+**Tests.** New `cloudflare-worker/test/usage_report_d266.test.ts`, 8 tests, on
+a real branch database answering `branchRevenueSummary` and a real HQ database
+built with migration 260, with a stub binding that adds only the transport:
+- `reportPeriods` returns the previous and current quarter, and 1 October still
+  closes Q3;
+- a push writes six rows, every stream NULL, the Q3 token cost carried as a
+  basis, and `reported_at` stamped;
+- a re-run replaces the rows;
+- a wrong secret writes nothing, and HQ refuses both quarters;
+- a missing secret refuses before HQ is called;
+- no HQ binding refuses;
+- HQ never reports to itself, and the binding is never called there;
+- an HQ that never answers is a stated deadline.
+
+**Verified.**
+- **`npm run test:drift` exited 0**, read as the exit code from a redirected
+  log:
+  - frontend 3252 of 3252;
+  - worker 4278 tests, 4275 passing, with the same 3 pre-existing
+    environment-gated skips;
+  - retention 70 of 70;
+  - zero `not ok`.
+- **All nine new tests ran and passed**, each confirmed by name in the log:
+  the eight in `usage_report_d266.test.ts`, and the branch-only gate test in
+  `branch_licence_copy.test.ts`.
+- The root build was run after the last `frontend/src` edit, and
+  `check-docs-fresh --strict` exits 0. `check-decision-ids`,
+  `check-folder-docs`, `check-api-drift` and both typechecks exit 0.
+
+**Mutations: 13 run, 13 caught.** Every anchor was checked to be unique before
+any write, every mutation was checked to change bytes, and every file was
+restored and verified by sha256:
+- the gate flipped to `hqCadences &&`;
+- the secret read as `''`;
+- the secret read from `HQ_RPC_SECRET`;
+- a branch sending a measured zero (`?? 0` together with `available: true`;
+  either one alone is absorbed by HQ's NULL rule, so only the pair is a real
+  regression);
+- HQ turning a non-finite figure back into 0;
+- only the current quarter reported;
+- the call left only in a comment;
+- `revenueSummary` re-added to `RPC_SURFACE`;
+- `branchRevenueSummary` deleted;
+- `reportUsage` marked uncalled again;
+- HQ Home's rail saying "no branch has sent one yet";
+- a count of methods typed back into the overlay;
+- `promoCeiling` re-declared on the surface.
+
+No migration. 292 is still the highest on disk, and the next free numbers are
+the reserved ones.
