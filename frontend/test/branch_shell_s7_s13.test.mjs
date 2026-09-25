@@ -50,7 +50,7 @@ test('what S7 draws as Locked is exactly what the worker refuses', () => {
     'lib/branchFreeze.js and the worker disagree about which writes a suspended branch cannot make. '
     + 'A new gate needs a row; a row whose file stopped gating must lose it. The screen may not '
     + 'claim a freeze the server does not enforce, nor stay silent about one it does.');
-  assert.ok(actual.length >= 7, `only ${actual.length} route files gate; the four lanes plus three community files is 7`);
+  assert.ok(actual.length >= 9, `only ${actual.length} route files gate; the four lanes, three community files, admin.ts and kyc.ts is 9 (D260)`);
 });
 
 test('nothing drawn as Locked is a control that was never built', () => {
