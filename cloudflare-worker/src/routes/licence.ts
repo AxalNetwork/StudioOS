@@ -48,7 +48,10 @@ import {
 } from '../services/licenceDomain';
 // The roles a licence sells a seat for. Imported rather than re-listed, so the
 // branch overview and this page cannot disagree about what a seat is (D127).
-import { SEAT_ROLES } from '../rpc/branchOps';
+// D244 — and the push's own writer, which the pull reuses so a pulled copy and
+// a pushed one are one row written one way.
+import { SEAT_ROLES, applyLicenceCopy } from '../rpc/branchOps';
+import { withDeadline, DeadlineExceeded } from '../util/deadline';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -82,6 +85,226 @@ type BranchLicenceRow = {
   pushed_at: string;
 };
 
+/** The copy, or null when there is none — and a failed read kept apart from both. */
+async function readBranchLicence(
+  env: Env,
+): Promise<{ readable: true; row: BranchLicenceRow | null } | { readable: false }> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT licence_uid, licence_ref, legal_entity, brand_name, territory, status, seats_json,
+              revenue_share_bps, token_split_bps, annual_fee_cents, currency, term_start, term_end,
+              renewal_at, template_version, suspended_at, suspended_note,
+              registered_address, signatory_name, signatory_title, term_years, terminated_at,
+              kind, pushed_at
+         FROM branch_licence WHERE id = 1`,
+    ).first<BranchLicenceRow>();
+    return { readable: true, row: row ?? null };
+  } catch (e) {
+    console.warn('[licence] branch_licence unreadable', (e as Error).message);
+    return { readable: false };
+  }
+}
+
+/**
+ * D244 — what one attempt to fetch this branch's licence from HQ did.
+ *
+ * `called` says whether THIS request reached HQ at all, which is not the same
+ * as whether a pull has ever been tried: a request inside the throttle window
+ * reports the earlier attempt it is waiting on, with `called: false`. `ok` is
+ * true only when a copy was written. Every refusal carries its own sentence,
+ * because "HQ has not pushed this branch its licence yet" is true in all of
+ * them and tells an administrator nothing about what to do next.
+ */
+export type LicencePull = {
+  called: boolean;
+  ok: boolean;
+  at: string | null;
+  reason?: string;
+  retry_after?: string;
+};
+
+/**
+ * One pull per branch per five minutes.
+ *
+ * WHY FIVE MINUTES. The throttle exists so a branch whose HQ binding is broken
+ * does not call HQ on every page load, and it has to be long enough for that
+ * and short enough that a fix at HQ (a secret set, a licence row restored) is
+ * picked up while someone is still looking. It is also bounded from below by
+ * KV itself: the shortest expiry KV accepts is 60 seconds and a write can take
+ * about as long to be seen from another location, so anything much under a
+ * few minutes would be a window the store cannot honour. `lastActive.ts` stamps
+ * on the same five-minute cadence over the same binding, which is the other
+ * reason to pick it: one number for "how often this deployment may do a thing
+ * on its own" rather than two.
+ */
+export const LICENCE_PULL_WINDOW_SECONDS = 300;
+const LICENCE_PULL_DEADLINE_MS = 3_000;
+const LICENCE_PULL_KV_DEADLINE_MS = 2_000;
+const licencePullKey = (code: string) => `licence_pull:${code}`;
+
+/** The one shape a missing copy is reported in, with the pull beside it. */
+function notPushed(code: string, pull: LicencePull) {
+  return {
+    error: 'licence_not_pushed',
+    message: 'HQ has not pushed this branch its licence yet.',
+    branch: code,
+    pull,
+  } as const;
+}
+
+/**
+ * D244 — ask HQ for this branch's licence, once, and store what it answers.
+ *
+ * THE ORDER IS THE POLICY. Each check that can refuse without calling HQ runs
+ * before the one that costs something:
+ *   1. only a branch pulls — HQ holds the ledger itself;
+ *   2. no `RPC_SECRET` refuses before anything else, because HQ refuses a
+ *      licence request that does not carry it (D244 made `licence()`
+ *      money-adjacent) and calling anyway would spend a round trip to be told
+ *      what this branch already knows;
+ *   3. no HQ binding, likewise;
+ *   4. NO THROTTLE STORE REFUSES — it does not fall back to calling. A branch
+ *      that cannot record its own attempts cannot bound them, and bounding
+ *      them is the one thing a broken HQ binding needs from this code. The
+ *      page says so, and HQ's next push still reaches the branch the old way;
+ *   5. an attempt inside the window reports that attempt and waits;
+ *   6. only then is HQ called, under a deadline, and the attempt recorded
+ *      whatever it produced.
+ *
+ * A FAILED PULL NEVER THROWS. It is a sentence on a page that is otherwise
+ * working; an exception here would turn "your licence has not arrived" into a
+ * 500 on the page that exists to say so. The one throw left is `branchOf`'s on
+ * a malformed BRANCH_CODE, which is deliberate everywhere (util/branch.ts) and
+ * cannot reach this function from the route — the route has already resolved
+ * the code before it asks.
+ */
+export async function pullLicenceCopy(env: Env): Promise<LicencePull> {
+  const code = branchOf(env);
+  if (!code) {
+    return {
+      called: false, ok: false, at: null,
+      reason: 'HQ holds the licence ledger itself, so there is nothing for it to pull.',
+    };
+  }
+  const secret = String(env.RPC_SECRET ?? '').trim();
+  if (!secret) {
+    return {
+      called: false, ok: false, at: null,
+      reason:
+        'No pull was attempted: this branch has no RPC_SECRET, and HQ hands a branch its licence '
+        + 'terms only when the request carries it. branch-provision.yml sets it — re-run it for '
+        + 'this code, or set the secret the provisioning run generated.',
+    };
+  }
+  // A LOCAL ALIAS, NOT `env.HQ.licence(…)` INLINE. The call harvest in
+  // scripts/lib/rpcSurface.mjs recognises this form, which is how the RPC
+  // surface table (services/topology.ts) and its guard know `licence` has a
+  // caller at all.
+  const hq = (env as { HQ?: { licence?: (callerCode: string, rpcSecret: string) => Promise<unknown> } }).HQ;
+  if (!hq || typeof hq.licence !== 'function') {
+    return {
+      called: false, ok: false, at: null,
+      reason:
+        'No pull was attempted: this deployment has no HQ service binding, so it cannot ask HQ for '
+        + 'its licence. It keeps waiting for HQ to push one.',
+    };
+  }
+  const kv = env.RATE_LIMITS;
+  if (!kv) {
+    return {
+      called: false, ok: false, at: null,
+      reason:
+        'No pull was attempted: the store that limits how often this branch may ask HQ '
+        + '(RATE_LIMITS) is not bound here, and an unlimited pull is what a broken HQ link would '
+        + 'turn into a call on every page load.',
+    };
+  }
+
+  const key = licencePullKey(code);
+  let prior: string | null;
+  try {
+    prior = await withDeadline(kv.get(key), LICENCE_PULL_KV_DEADLINE_MS, 'licence-pull-get');
+  } catch (e) {
+    console.warn('[licence] pull throttle unreadable', (e as Error).message);
+    return {
+      called: false, ok: false, at: null,
+      reason:
+        'No pull was attempted: the record of this branch\'s last attempt could not be read, and '
+        + 'without it the attempts cannot be limited. The next page load will try again.',
+    };
+  }
+  if (prior) {
+    let last: { at?: unknown; until?: unknown; ok?: unknown; reason?: unknown } = {};
+    try { last = JSON.parse(prior); } catch { /* an unreadable record still means "wait" */ }
+    const at = typeof last.at === 'string' ? last.at : null;
+    const until = typeof last.until === 'string' ? last.until : undefined;
+    const outcome = last.ok === true
+      ? 'HQ answered it'
+      : `it did not bring the licence back${typeof last.reason === 'string' ? ` — ${last.reason}` : ''}`;
+    return {
+      called: false, ok: false, at,
+      reason: `A pull was already tried${at ? ` at ${at}` : ' in the last few minutes'} and ${outcome}. `
+        + `This branch asks HQ at most once every ${LICENCE_PULL_WINDOW_SECONDS / 60} minutes.`,
+      ...(until ? { retry_after: until } : {}),
+    };
+  }
+
+  const at = nowIso();
+  const until = new Date(Date.parse(at) + LICENCE_PULL_WINDOW_SECONDS * 1000).toISOString();
+  let ok = false;
+  let reason: string | undefined;
+  try {
+    const answer = await withDeadline(hq.licence(code, secret), LICENCE_PULL_DEADLINE_MS, 'licence-pull');
+    if (!answer || typeof answer !== 'object' || Array.isArray(answer)) {
+      reason = 'HQ answered with something that is not a licence.';
+    } else if ('error' in answer) {
+      // `no_licence_for_branch` — HQ knows this deployment and holds no licence
+      // row for it. Said as that, and never applied: an error object written
+      // through `applyLicenceCopy` would become a copy with an empty uid and
+      // every term null, which the page would render as a licence.
+      reason = (answer as { error?: unknown }).error === 'no_licence_for_branch'
+        ? 'HQ has this branch\'s deployment on record but no licence row for it, so there was nothing to send.'
+        : `HQ declined: ${String((answer as { error?: unknown }).error)}.`;
+    } else if (typeof (answer as { licence_uid?: unknown }).licence_uid !== 'string'
+      || !(answer as { licence_uid: string }).licence_uid) {
+      reason = 'HQ answered without a licence id, so the answer was not stored.';
+    } else {
+      try {
+        await applyLicenceCopy(env, answer as Record<string, unknown>);
+        ok = true;
+      } catch (e) {
+        reason = `HQ answered, but the copy could not be stored: ${(e as Error).message}`;
+      }
+    }
+  } catch (e) {
+    reason = e instanceof DeadlineExceeded
+      ? `HQ did not answer within ${LICENCE_PULL_DEADLINE_MS / 1000} seconds.`
+      : `HQ did not return the licence: ${(e as Error).message}`;
+  }
+  if (!ok) console.warn('[licence] pull failed', code, reason);
+
+  // RECORDED WHATEVER IT PRODUCED, a success included: the throttle limits
+  // calls to HQ, not failures, and a success that somehow did not read back
+  // must not turn into a pull on every load either. A failed write is logged
+  // and nothing more — the attempt has already happened, and refusing to show
+  // its outcome because it could not be recorded would hide the one thing
+  // this request learnt.
+  try {
+    await withDeadline(
+      kv.put(key, JSON.stringify({ at, until, ok, ...(reason ? { reason } : {}) }), {
+        expirationTtl: LICENCE_PULL_WINDOW_SECONDS,
+      }),
+      LICENCE_PULL_KV_DEADLINE_MS, 'licence-pull-put',
+    );
+  } catch (e) {
+    console.warn('[licence] pull throttle not recorded', (e as Error).message);
+  }
+
+  return ok
+    ? { called: true, ok: true, at }
+    : { called: true, ok: false, at, ...(reason ? { reason } : {}), retry_after: until };
+}
+
 /**
  * The same payload, read from the copy HQ pushed (D106, migration 256).
  *
@@ -101,34 +324,52 @@ type BranchLicenceRow = {
 // second query for "seats licensed" is how the two screens would come to
 // disagree about it.
 export async function branchLicencePayload(env: Env, code: string) {
-  let row: BranchLicenceRow | null = null;
-  try {
-    row = await env.DB.prepare(
-      `SELECT licence_uid, licence_ref, legal_entity, brand_name, territory, status, seats_json,
-              revenue_share_bps, token_split_bps, annual_fee_cents, currency, term_start, term_end,
-              renewal_at, template_version, suspended_at, suspended_note,
-              registered_address, signatory_name, signatory_title, term_years, terminated_at,
-              kind, pushed_at
-         FROM branch_licence WHERE id = 1`,
-    ).first<BranchLicenceRow>();
-  } catch (e) {
-    // A branch whose migration 256 has not been applied. Say so rather than
-    // reading as "no licence": provisioning has not finished, and the two
-    // states need different answers from support.
-    console.warn('[licence] branch_licence unreadable', (e as Error).message);
-    return {
-      error: 'licence_not_pushed',
-      message: 'HQ has not pushed this branch its licence yet.',
-      branch: code,
-    } as const;
+  let read = await readBranchLicence(env);
+  if (!read.readable) {
+    // A branch whose migrations 256/265/284 have not all been applied. Say so
+    // rather than reading as "no licence": provisioning has not finished, and
+    // the two states need different answers from support. NO PULL HERE — the
+    // copy is written into the very table that could not be read, so a pull
+    // would call HQ for a record with nowhere to go and then report a storage
+    // failure that is really this one.
+    return notPushed(code, {
+      called: false,
+      ok: false,
+      at: null,
+      reason:
+        'No pull was attempted: the table this branch keeps its licence copy in could not be read '
+        + '(migrations 256, 265 and 284), so a licence fetched from HQ would have nowhere to go. '
+        + 'Finish applying this branch\'s migrations.',
+    });
   }
-  if (!row) {
-    return {
-      error: 'licence_not_pushed',
-      message: 'HQ has not pushed this branch its licence yet.',
-      branch: code,
-    } as const;
+
+  // D244 — A MISSING COPY IS FETCHED ONCE, NOT WAITED FOR. Until this, a
+  // freshly provisioned branch held no copy until HQ's next licence transition
+  // happened to push one, and nothing guarantees there will be one: a licence
+  // that is simply active has no next transition. So the first read of a
+  // missing copy asks HQ for it (`pullLicenceCopy`), applies the answer through
+  // the push's own writer, and reads again. The pull is bounded, throttled and
+  // authenticated, and every way it can fail is reported as its own sentence
+  // beside the unchanged `licence_not_pushed` answer rather than instead of it.
+  let pull: LicencePull | null = null;
+  if (!read.row) {
+    pull = await pullLicenceCopy(env);
+    if (pull.ok) {
+      read = await readBranchLicence(env);
+      if (!read.readable || !read.row) {
+        // HQ answered and the write went through, yet nothing reads back. Not
+        // reported as a success: the page would then render a licence that is
+        // not there. Says what was seen instead.
+        pull = {
+          ...pull,
+          ok: false,
+          reason: 'HQ answered and the copy was written, but it could not be read back afterwards.',
+        };
+      }
+    }
+    if (!read.readable || !read.row) return notPushed(code, pull);
   }
+  const row = read.row;
 
   const territories = row.territory.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
   let seats: Record<string, number> = {};
@@ -272,6 +513,9 @@ export async function branchLicencePayload(env: Env, code: string) {
     source: 'hq_copy' as const,
     as_of: row.pushed_at,
     branch: code,
+    // D244 — present only when THIS request fetched the copy, so the page can
+    // say it has just arrived. `as_of` stays HQ's stamp either way.
+    ...(pull ? { pull } : {}),
   };
 }
 
@@ -342,6 +586,17 @@ r.get('/mine', async (c) => {
   // than the branch's licence terms.
   const code = branchOf(c.env);
   if (code) {
+    // D244 — AND ONLY AN ADMIN GETS THEM. On HQ this route answers 404 to
+    // anyone not bound in `licence_admins`, so a founder never reads a
+    // licence's fees. On a branch there is no binding to consult — the copy is
+    // the whole deployment's — and until now any signed-in member of the
+    // branch received the fees, the revenue share and the signatory. That was
+    // latent while no branch was provisioned; D244 also makes this read the
+    // trigger for a call to HQ, which settles it. Every screen that calls it is
+    // already an admin route. The role is read off the user `requireAuth` just
+    // loaded rather than through `requireAdmin`, which would load it again —
+    // and whose freeze check is a no-op on a branch and for a GET in any case.
+    if (user.role !== 'admin') throw new Error('Admin required');
     const payload = await branchLicencePayload(c.env, code);
     if ('error' in payload) return c.json(payload, 404);
     return c.json({ ...payload, ...DERIVED_UNAVAILABLE_BRANCH });

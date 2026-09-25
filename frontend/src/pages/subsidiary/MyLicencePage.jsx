@@ -284,6 +284,44 @@ function NoticeCard({ notice, onAnswered }) {
   );
 }
 
+/**
+ * D244 — what the branch's one attempt to fetch its licence from HQ did.
+ *
+ * The server writes every sentence here; this renders them and invents none.
+ * `called` separates "this page asked HQ just now" from "it did not ask" —
+ * which covers both a refusal made before calling (no secret, no binding, no
+ * throttle store) and a request waiting out an earlier attempt's window, whose
+ * own sentence already says which. The retry time is shown in UTC, from the
+ * server's ISO stamp, because a reader's local zone is not where the window is
+ * kept. An older server sends no `pull`; then nothing is drawn rather than a
+ * guess at why.
+ */
+export function LicencePullNote({ pull }) {
+  if (!pull || typeof pull !== 'object') return null;
+  const reason = typeof pull.reason === 'string' && pull.reason.trim() ? pull.reason.trim() : null;
+  const retry = typeof pull.retry_after === 'string'
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(pull.retry_after) ? pull.retry_after : null;
+  return (
+    <div
+      data-testid="licence-pull"
+      className="mx-auto mt-4 max-w-xl rounded-lg border border-gray-200 bg-gray-50 p-3 text-left text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-300"
+    >
+      <p className="font-medium text-gray-700 dark:text-gray-200">
+        {pull.called
+          ? 'This page asked HQ for the licence just now, and it did not arrive.'
+          : 'This page did not ask HQ for the licence this time.'}
+      </p>
+      {reason && <p className="mt-1">{reason}</p>}
+      {retry && (
+        <p className="mt-1">
+          It is asked again on the first visit after{' '}
+          <time dateTime={retry}>{`${retry.slice(0, 10)} ${retry.slice(11, 16)} UTC`}</time>.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function MyLicencePage() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
@@ -335,8 +373,14 @@ export default function MyLicencePage() {
         // not, and would send them to ask HQ for an assignment they already
         // have. The two need different sentences because they need different
         // actions from support.
+        //
+        // D244 — and the 404 now says WHY no copy arrived. A missing copy is
+        // fetched from HQ once, and `pull` carries what that attempt did — or
+        // why none was made — in a sentence written for this reader. Kept
+        // beside the answer, not instead of it: "not pushed yet" is true in
+        // every one of those cases and tells an administrator nothing to do.
         if (e?.status === 404 && e?.data?.error === 'licence_not_pushed') {
-          setData({ notPushed: true, branch: e?.data?.branch || null });
+          setData({ notPushed: true, branch: e?.data?.branch || null, pull: e?.data?.pull || null });
         } else if (e?.status === 404) setData({ none: true });
         else { reportError('MyLicencePage:load', e); setErr(e?.message || 'Could not load your licence'); }
       });
@@ -374,6 +418,7 @@ export default function MyLicencePage() {
             terms behind it are held at HQ until they are copied here. This is a provisioning
             step that has not finished — not a licence you are missing.
           </p>
+          <LicencePullNote pull={data.pull} />
         </div>
       </div>
     );

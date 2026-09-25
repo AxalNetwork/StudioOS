@@ -16,10 +16,11 @@
  *   - It is checked against `licence_deployments`, so a code HQ has never
  *     provisioned cannot file an escalation. That is the check that makes the
  *     stamp mean something, and it is why migration 258 lands in the same PR.
- *   - It is NOT enough for a money-adjacent call. Those carry a
- *     per-deployment secret verified against `rpc_secret_hash`; `reportUsage`
- *     is the first of them and PR 9 builds it. Saying so here rather than
- *     leaving the asymmetry to be discovered.
+ *   - It is NOT enough for a call whose answer or whose effect is about money.
+ *     Those carry a per-deployment secret verified against `rpc_secret_hash`:
+ *     `reportUsage` (D111), which feeds a statement, and since D244 `licence`,
+ *     which hands back a licence's fees, revenue share and signatory. Saying
+ *     so here rather than leaving the asymmetry to be discovered.
  *
  * An entrypoint is callable by any Worker in the account. The account is ours,
  * so this is not an authentication boundary — it is an attribution one, and
@@ -339,41 +340,6 @@ export async function openEscalations(env: Env, limit = 50): Promise<OpenEscalat
   return (await openEscalationSummary(env)).items.slice(0, cap);
 }
 
-/**
- * A branch pulls its own licence terms from HQ's ledger.
- *
- * WHY A BRANCH WOULD PULL WHEN HQ ALSO PUSHES. The push is how a change
- * propagates; the pull is how a freshly provisioned branch gets its first copy
- * without waiting for HQ to notice it exists. Both write the same row through
- * `applyLicenceCopy`, so there is one shape and one `pushed_at` rule.
- *
- * D206 — AND ONE ASSEMBLER. This used to build its record from its own column
- * list, and the two emitters drifted: the pull never carried migration 265's
- * five fields, listed territories in join order, and sent `template_version:
- * null` under a comment saying HQ holds no template version — the contract
- * ledger does, and the push already read it from there. It now reads the row
- * whole and hands it to `assembleLicenceRecord`, the function the push uses, so
- * the two cannot send different records again. A test asserts they are equal.
- */
-export async function licenceForBranch(
-  env: Env, callerCode: string,
-): Promise<Record<string, unknown> | { error: 'no_licence_for_branch' }> {
-  requireHq(env);
-  const code = String(callerCode ?? '').trim().toLowerCase();
-  if (!BRANCH_CODE_RE.test(code)) throw new Error('licence: the caller must name a valid branch code');
-
-  const dep = await deploymentOf(env, code);
-  if (!dep) return { error: 'no_licence_for_branch' };
-
-  const row = await env.DB.prepare('SELECT * FROM territory_licences WHERE uid = ?')
-    .bind(dep.licence_uid).first<Record<string, unknown>>();
-  if (!row) return { error: 'no_licence_for_branch' };
-
-  // Stamped by HQ at the moment it asserts the content — the branch stores
-  // this verbatim rather than the moment its own write lands.
-  return assembleLicenceRecord(env, row, new Date().toISOString());
-}
-
 /* ------------------------------------------------------------------ *
  * Money-adjacent: the calls that carry a per-deployment secret (D111) *
  * ------------------------------------------------------------------ */
@@ -445,6 +411,50 @@ export async function authenticateBranch(
   if (verdict === 'no_secret') throw new Error(`rpc: ${code} presented no secret`);
   if (verdict !== 'ok') throw new Error(`rpc: ${code} presented the wrong secret`);
   return { code: dep.code, licence_uid: dep.licence_uid };
+}
+
+/**
+ * A branch pulls its own licence terms from HQ's ledger.
+ *
+ * WHY A BRANCH WOULD PULL WHEN HQ ALSO PUSHES. The push is how a change
+ * propagates; the pull is how a freshly provisioned branch gets its first copy
+ * without waiting for HQ to notice it exists. Both write the same row through
+ * `applyLicenceCopy`, so there is one shape and one `pushed_at` rule.
+ *
+ * D206 — AND ONE ASSEMBLER. This used to build its record from its own column
+ * list, and the two emitters drifted: the pull never carried migration 265's
+ * five fields, listed territories in join order, and sent `template_version:
+ * null` under a comment saying HQ holds no template version — the contract
+ * ledger does, and the push already read it from there. It now reads the row
+ * whole and hands it to `assembleLicenceRecord`, the function the push uses, so
+ * the two cannot send different records again. A test asserts they are equal.
+ *
+ * D244 — AUTHENTICATED BEFORE IT READS ANYTHING, which is why it lives in this
+ * section now. What it returns is a licence's fees, revenue share, token split
+ * and signatory, and a service binding cannot say who called it, so until D244
+ * any Worker in the account that named a code received that branch's terms. It
+ * now takes the branch's per-deployment secret and runs `authenticateBranch`
+ * first, exactly as `reportUsage` does: a malformed or unprovisioned code, a
+ * deployment with no hash on file, and a missing or wrong secret all throw
+ * before the licence row is read. It had no caller when this changed, so
+ * nothing that worked stopped working; its first caller, the branch's
+ * `pullLicenceCopy` (routes/licence.ts), arrived in the same PR and sends
+ * `RPC_SECRET`. A deployment whose licence row has gone still answers
+ * `no_licence_for_branch` — that is a fact about HQ's ledger, not a refusal of
+ * the caller.
+ */
+export async function licenceForBranch(
+  env: Env, callerCode: string, secret: string,
+): Promise<Record<string, unknown> | { error: 'no_licence_for_branch' }> {
+  const who = await authenticateBranch(env, callerCode, secret);
+
+  const row = await env.DB.prepare('SELECT * FROM territory_licences WHERE uid = ?')
+    .bind(who.licence_uid).first<Record<string, unknown>>();
+  if (!row) return { error: 'no_licence_for_branch' };
+
+  // Stamped by HQ at the moment it asserts the content — the branch stores
+  // this verbatim rather than the moment its own write lands.
+  return assembleLicenceRecord(env, row, new Date().toISOString());
 }
 
 export type UsageFigure = {

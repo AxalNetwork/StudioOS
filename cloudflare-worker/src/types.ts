@@ -64,6 +64,15 @@ export interface Env {
   // provisioned with none; write-once, because an object's jurisdiction is
   // fixed when it is first created.
   BRANCH_DO_JURISDICTION?: string;
+  // The branch→HQ RPC leg (D111), set only on a branch. `branch-provision.yml`
+  // generates it per deployment, puts the plaintext here and writes its SHA-256
+  // into HQ's `licence_deployments.rpc_secret_hash`. A branch presents it on
+  // every call HQ must be able to attribute — `reportUsage`, and since D244 the
+  // licence pull — and a branch without it refuses before calling HQ, because
+  // HQ would refuse the call anyway (`authenticateBranch`, rpc/hqOps.ts).
+  // Declared here in D244: it had been set on every provisioned branch and
+  // named in this file only in the comment below, so no code could read it.
+  RPC_SECRET?: string;
   // The HQ→branch RPC leg (D120), the mirror of the branch's own RPC_SECRET.
   // `branch-provision.yml` generates one value per deployment and splits it:
   // the plaintext becomes a Worker secret on HQ, the SHA-256 becomes one on the

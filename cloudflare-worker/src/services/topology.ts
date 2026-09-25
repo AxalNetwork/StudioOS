@@ -120,8 +120,12 @@ const m = (name: string, called: boolean, authenticated = false): RpcMethod => (
  * the test from the source — the class's own parameter lists, and the D207
  * harvest of every `fanOut`, `branchRead`, `.stub.` and `HQ` call — so a
  * method gaining its first caller, or losing its last, fails the test until
- * this list says so. Four are declared and uncalled today (task #354; the
- * licence pull is #342).
+ * this list says so. Still declared and uncalled: revenueSummary on
+ * HqEntrypoint, and reportUsage and promoCeiling on BranchEntrypoint (task
+ * 354). licence gained its caller in D244 — a branch with no licence copy
+ * pulls one — and takes the per-deployment secret since the same change. The
+ * uncalled methods are named rather than counted, because the count moves with
+ * every method that gains or loses a caller.
  */
 export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
   hqCallsBranch: {
@@ -149,7 +153,7 @@ export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
     called_over: 'HQ',
     methods: [
       m('escalate', true),
-      m('licence', false),
+      m('licence', true, true),
       m('reportUsage', false, true),
       m('promoCeiling', false),
     ],
