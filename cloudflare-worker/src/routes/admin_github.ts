@@ -1,19 +1,33 @@
 /**
  * Admin GitHub ticket-sync config. Mounted at `/api/admin/github`.
  *
- *   GET    /       → connection status (no secret values) + webhook URL
- *   PUT    /       → set token / repo owner / repo name / webhook secret
- *                    (each promoted as a Cloudflare Worker secret)
+ *   GET    /       → connection status (no secret values), the repository
+ *                    this Worker is deployed with, and the webhook URL
+ *   PUT    /       → set the token and/or the webhook secret (each promoted as
+ *                    a Cloudflare Worker secret). Never the repository.
  *   POST   /test   → probe the target repo with the configured token
- *   DELETE /       → delete all four Worker secrets
+ *   DELETE /       → delete the token and the webhook secret
+ *
+ * D270 — THE REPOSITORY IS A DEPLOY-TIME SETTING, NOT A SECRET THIS CONSOLE
+ * WRITES. `GITHUB_REPO_OWNER` and `GITHUB_REPO_NAME` are plain `[vars]` in
+ * wrangler.toml, in both tables, and every deploy writes them back over the
+ * Worker's settings. The Save used to push both as Worker secrets on every
+ * click, pre-filled from display defaults, so an admin could "change" the
+ * repository and the next deploy would silently restore AxalNetwork/StudioOS
+ * (the D171 finding). The same two values aim the branch-deploy dispatch
+ * (`services/githubSync.ts`) and are copied to every branch
+ * (`scripts/branchConfig.mjs`). So PUT now refuses a body whose owner or name
+ * differs from the deployed value, with a sentence saying where they are set,
+ * and DELETE no longer deletes either name. Changing the repository means
+ * changing wrangler.toml and deploying.
  *
  * GitHub credentials differ from the OAuth id/secret pairs handled by
  * admin_integration_keys.ts (single token + repo + webhook secret), so this
  * is a dedicated route that reuses the same Cloudflare secret-promotion
  * helpers (`setSecret`/`deleteSecret`).
  *
- * D223 — WHO MAY WRITE. PUT and DELETE write the four Worker secrets onto
- * production's own `studioos` script. `GITHUB_ACCESS_TOKEN` is not only the
+ * D223 — WHO MAY WRITE. PUT and DELETE write Worker secrets (two since D270)
+ * onto production's own `studioos` script. `GITHUB_ACCESS_TOKEN` is not only the
  * ticket mirror's credential: it is the token that dispatches a branch deploy
  * (`POST /api/admin/licences/:uid/deploy`, `requireSuperAdminWriteBar`). So
  * whoever could overwrite it could aim that dispatch at a token of their own
@@ -40,8 +54,10 @@ import { logAdminAction } from '../services/adminAudit';
 
 const r = new Hono<{ Bindings: Env }>();
 
-const DEFAULT_OWNER = 'AxalNetwork';
-const DEFAULT_REPO = 'StudioOS';
+/** Where the repository is set, in the words a refusal and the panel both use. */
+const REPO_IS_DEPLOY_TIME =
+  'The repository is set at deploy time: GITHUB_REPO_OWNER and GITHUB_REPO_NAME are [vars] in '
+  + 'wrangler.toml, and every deploy writes them back. Change them there and deploy.';
 
 function webhookUrl(c: any): string {
   const appUrl = (c.env as { APP_URL?: string }).APP_URL;
@@ -58,16 +74,17 @@ r.get('/', async (c) => {
   await requireAdmin(c);
   const env = c.env;
   const hasToken = !!env.GITHUB_ACCESS_TOKEN;
-  const owner = env.GITHUB_REPO_OWNER || DEFAULT_OWNER;
-  const repo = env.GITHUB_REPO_NAME || DEFAULT_REPO;
   return c.json({
     configured: hasToken && !!env.GITHUB_REPO_OWNER && !!env.GITHUB_REPO_NAME,
     source: hasToken ? 'env' : 'unconfigured',
     has_token: hasToken,
-    repo_owner: owner,
-    repo_name: repo,
-    default_repo_owner: DEFAULT_OWNER,
-    default_repo_name: DEFAULT_REPO,
+    // D270 — what the running Worker has, or null. No display default: the
+    // sync reads these with no fallback, so a default here would name a
+    // repository nothing writes to.
+    repo_owner: env.GITHUB_REPO_OWNER || null,
+    repo_name: env.GITHUB_REPO_NAME || null,
+    repo_set_at: 'deploy',
+    repo_note: REPO_IS_DEPLOY_TIME,
     has_webhook_secret: !!env.GITHUB_WEBHOOK_SECRET,
     webhook_url: webhookUrl(c),
   });
@@ -78,16 +95,20 @@ r.put('/', async (c) => {
   let body: { token?: string; repo_owner?: string; repo_name?: string; webhook_secret?: string; generate_webhook_secret?: boolean } = {};
   try { body = await c.req.json(); } catch { /* empty */ }
 
+  // D270 — the repository is not written here. A body that names a different
+  // owner or name is refused before anything is pushed; one that repeats the
+  // deployed values (an older panel sends both on every Save) is accepted and
+  // they are ignored.
+  const differs = (sent: unknown, deployed: string | undefined) =>
+    typeof sent === 'string' && sent.trim() !== '' && sent.trim() !== (deployed ?? '');
+  if (differs(body.repo_owner, c.env.GITHUB_REPO_OWNER) || differs(body.repo_name, c.env.GITHUB_REPO_NAME)) {
+    return c.json({ error: 'repo_is_deploy_time', message: REPO_IS_DEPLOY_TIME }, 400);
+  }
+
   const pushes: Array<{ name: string; value: string }> = [];
   if (typeof body.token === 'string' && body.token.trim()) {
     if (body.token.trim().length > 4096) return c.json({ error: 'value_too_long' }, 400);
     pushes.push({ name: 'GITHUB_ACCESS_TOKEN', value: body.token.trim() });
-  }
-  if (typeof body.repo_owner === 'string' && body.repo_owner.trim()) {
-    pushes.push({ name: 'GITHUB_REPO_OWNER', value: body.repo_owner.trim() });
-  }
-  if (typeof body.repo_name === 'string' && body.repo_name.trim()) {
-    pushes.push({ name: 'GITHUB_REPO_NAME', value: body.repo_name.trim() });
   }
 
   let generatedSecret: string | null = null;
@@ -290,7 +311,11 @@ r.post('/test', async (c) => {
 
 r.delete('/', async (c) => {
   const admin = await requireSuperAdminWriteBar(c);
-  const names = ['GITHUB_ACCESS_TOKEN', 'GITHUB_REPO_OWNER', 'GITHUB_REPO_NAME', 'GITHUB_WEBHOOK_SECRET'];
+  // D270 — the token and the webhook secret only. The repository is a
+  // wrangler.toml var, so deleting it as a secret removed nothing the next
+  // deploy would not restore. A secret of either name left by the old Save is
+  // a stale leftover; see D270 for the one-time clean-up.
+  const names = ['GITHUB_ACCESS_TOKEN', 'GITHUB_WEBHOOK_SECRET'];
   // A missing Cloudflare API token skips every delete; the audit says so
   // rather than recording a removal that did not happen.
   let tokenMissing = false;
