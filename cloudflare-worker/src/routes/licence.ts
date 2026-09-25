@@ -553,9 +553,10 @@ export const DERIVED_UNAVAILABLE = {
 export const DERIVED_UNAVAILABLE_BRANCH = {
   derived_metrics_available: false,
   derived_metrics_reason:
-    'Seats used is shown, counted from active accounts by role. Revenue per subsidiary is not: the '
-    + 'reporting call that sends this branch\'s own billing figures to HQ is not built, so nothing '
-    + 'is shown rather than a zero.',
+    'Seats used is shown, counted from active accounts by role. Revenue per subsidiary is not: this '
+    + 'branch reports its quarter to HQ every morning (D266), every stream in that report is '
+    + 'unmeasured because this database records no revenue amounts, so nothing is shown rather '
+    + 'than a zero.',
 } as const;
 
 /**

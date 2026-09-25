@@ -280,7 +280,7 @@ test('the publisher refuses to run on a branch', async () => {
   );
 });
 
-test('the period is the UTC quarter, in the shape revenueSummary parses', () => {
+test('the period is the UTC quarter, in the shape branchRevenueSummary parses', () => {
   assert.equal(currentPeriod(new Date('2026-01-15T00:00:00Z')), '2026-Q1');
   assert.equal(currentPeriod(new Date('2026-03-31T23:59:59Z')), '2026-Q1');
   assert.equal(currentPeriod(new Date('2026-04-01T00:00:00Z')), '2026-Q2');
