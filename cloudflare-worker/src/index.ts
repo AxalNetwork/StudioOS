@@ -1077,13 +1077,14 @@ app.route('/api/public', circlesPublicRoutes);
 app.route('/api/public', publicCertificateRoutes);
 app.route('/api/public', publicRoutes);
 // Task #10 (LD) — Public team roster. Mounted under /api/public so it
-// sits OUTSIDE auth + the /api/admin/* CF Access perimeter. /api/public/team
+// sits OUTSIDE auth and outside the admin routers' requireAdmin gates. /api/public/team
 // was written for the Jekyll marketing build that used to curl it into
 // _data/team.json; that build is gone (the Worker serves axal.vc), and the
 // SPA's /team and /about read it directly.
 app.route('/api/public', teamPublic);
 // Task #1 — Public photo proxy for network_profiles (mentor/partner
-// roster). Mounted under /api/public so it bypasses CF-Access.
+// roster). Mounted under /api/public, so no auth or admin gate runs in front
+// of it; the route itself serves only active profiles.
 app.route('/api/public', networkPublic);
 // Public contact form → GitHub Issues. No auth; honeypot + email validation
 // + global per-IP rate cap; returns 503 when GITHUB_ISSUES_TOKEN is unset.

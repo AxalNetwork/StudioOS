@@ -1,9 +1,10 @@
 /**
  * Task #2 (AU) — Admin Publication Exports.
  *
- * Mounted at /api/admin/publications. All endpoints admin-only via
- * requireAdmin, except the public read at /api/admin/publications/public/:slug
- * and the HMAC-gated download at /api/admin/publications/download/:token.
+ * Mounted at /api/admin/publications. Every endpoint here is admin-only via
+ * requireAdmin. The public read and the HMAC-gated download are NOT here:
+ * they are /api/market-intel-public/publications/:slug and
+ * /api/market-intel-public/publications/download/:token (see the NOTE below).
  *
  * Endpoints:
  *   POST /draft               { title, subtitle?, audience, section, filters? }
@@ -12,8 +13,6 @@
  *   PUT  /:id                 patch { title?, subtitle?, audience?, summary_text? }
  *   POST /:id/render          { format: 'pdf'|'csv'|'png' } → R2 + 24h signed URL
  *   POST /:id/publish         flips to status='published' + sets published_at
- *   GET  /public/:slug        public read (no auth, status='published' only)
- *   GET  /download/:token     HMAC-gated R2 fetch (24h)
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -452,8 +451,8 @@ r.post('/:id{[0-9]+}/publish', async (c: AppCtx) => {
 
 // NOTE: the public read endpoint and the HMAC-gated download endpoint
 // both live under /api/market-intel-public (see
-// routes/market_intel_public.ts) so they sit OUTSIDE the /api/admin/*
-// CF Access perimeter applied in index.ts. The public read serves
+// routes/market_intel_public.ts) so they sit outside /api/admin and the
+// requireAdmin gate its handlers run. The public read serves
 // /insights/public/:slug for anonymous visitors; the download endpoint
 // must also be reachable by anyone holding the 24h HMAC token (the
 // token IS the authorisation), e.g. an LP receiving a render link by

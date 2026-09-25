@@ -2,7 +2,7 @@
  * Task #39 — Event engine: public routes (design §8.2). No auth.
  *
  * Mounted at /api/public (alongside the other public facades) so it sits
- * OUTSIDE the auth layer and the /api/admin CF-Access perimeter. Read endpoints
+ * OUTSIDE the auth layer and the admin routers' gates. Read endpoints
  * are open; write endpoints (public register, invite response) are Turnstile-
  * gated exactly like routes/contact.ts (fails OPEN in dev/preview, closed in
  * prod when the secret is set).
