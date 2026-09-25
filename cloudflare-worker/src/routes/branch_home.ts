@@ -51,8 +51,9 @@ r.get('/home', async (c) => {
           block: 'AI digest',
           reason:
             'The digest is a proposal with a cost beside it, and neither exists yet: there is no '
-            + 'store for an accepted brief, and per-branch AI cost needs gateway metadata that is '
-            + 'not being written. A digest with no cost shown would be the one thing the canvas '
+            + 'store for an accepted brief, and there is no per-branch AI cost: only Eadwyn\'s two '
+            + 'gatewayed task classes name this branch to the gateway (D261), and nothing reads its '
+            + 'logs back as a cost. A digest with no cost shown would be the one thing the canvas '
             + 'says it must never be.',
         },
         {
