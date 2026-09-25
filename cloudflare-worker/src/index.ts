@@ -1742,6 +1742,20 @@ export default {
             }
           } catch (e) { console.error('[cron] scheduled posts sweep failed', e); }
         }
+        // D272 — licence pushes that did not land are re-sent, each at most
+        // once per hour (LICENCE_PUSH_RETRY_WINDOW_MINUTES, per row), so a
+        // branch that already holds a copy stops keeping an old licence
+        // until the next transition happens to push. GATED ON `hqCadences`:
+        // only HQ holds the ledger and the branch bindings. Every ten minutes,
+        // at a minute no other block uses; reports, never throws.
+        if (hqCadences && now.getUTCMinutes() % 10 === 3) {
+          try {
+            const { retryPendingLicencePushes } = await import('./services/licencePush');
+            const r = await retryPendingLicencePushes(env, now);
+            if (!r.available) console.warn('[cron] licence push retry', r.reason);
+            else if (r.tried) console.info(`[cron] licence push retry tried=${r.tried} ok=${r.ok} failed=${r.failed}`);
+          } catch (e) { console.error('[cron] licence push retry failed', e); }
+        }
         // D237 — cron_run_history keeps 30 days, and always each trigger's
         // newest row (the reasons and the batch cap are in
         // util/cronHistory.ts). NOT GATED ON `hqCadences`, on the D122

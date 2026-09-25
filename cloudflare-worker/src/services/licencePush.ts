@@ -151,6 +151,88 @@ export async function pushLicenceToBranch(
   licenceId: number,
   pushedAt: string = new Date().toISOString(),
 ): Promise<LicencePushResult> {
+  const result = await pushOnce(env, licenceId, pushedAt);
+  await recordPushOutcome(env, licenceId, result, pushedAt);
+  return result;
+}
+
+/**
+ * D272 — WHAT A FAILED PUSH LEAVES BEHIND. A push that lands clears the
+ * licence's `licence_push_pending` row; one that fails for a DEPLOYED branch
+ * (it has a code: no binding yet, unreachable, refused, or HQ could not
+ * assemble the record) writes or bumps it, and HQ's scheduled handler retries
+ * it (`retryPendingLicencePushes`). A licence with no deployment writes
+ * nothing: the branch it will one day run under pulls on its first read.
+ *
+ * Never throws, like the push itself (D111). A database without migration 295
+ * loses the retry, not the push.
+ */
+async function recordPushOutcome(env: Env, licenceId: number, result: LicencePushResult, at: string): Promise<void> {
+  try {
+    if (result.ok) {
+      await env.DB.prepare('DELETE FROM licence_push_pending WHERE licence_id = ?').bind(licenceId).run();
+      return;
+    }
+    if (!result.code) return;
+    await env.DB.prepare(
+      `INSERT INTO licence_push_pending (licence_id, code, reason, attempts, first_failed_at, last_attempt_at)
+       VALUES (?, ?, ?, 1, ?, ?)
+       ON CONFLICT(licence_id) DO UPDATE SET
+         code = excluded.code, reason = excluded.reason,
+         attempts = licence_push_pending.attempts + 1, last_attempt_at = excluded.last_attempt_at`,
+    ).bind(licenceId, result.code, result.reason ?? null, at, at).run();
+  } catch (e) {
+    console.warn('[licencePush] could not record the push outcome', licenceId, (e as Error).message);
+  }
+}
+
+/** D272 — a pending push is retried at most once per this window. */
+export const LICENCE_PUSH_RETRY_WINDOW_MINUTES = 60;
+/** D272 — and at most this many per run, so one tick stays bounded. */
+export const LICENCE_PUSH_RETRY_CAP = 20;
+
+export type LicencePushRetry =
+  | { available: true; tried: number; ok: number; failed: number }
+  | { available: false; reason: string };
+
+/**
+ * D272 — re-send every licence push that has not landed, once per window.
+ *
+ * Called from HQ's scheduled handler. Each row whose last attempt is older
+ * than the window is pushed again through `pushLicenceToBranch`, which reads
+ * the licence FRESH — so the retry carries the current record, not the one
+ * that failed — and clears or bumps the row. A row attempted inside the
+ * window is left alone, which is the throttle: a binding that stays broken
+ * costs one call per licence per window, not one per tick. Reports, never
+ * throws.
+ */
+export async function retryPendingLicencePushes(env: Env, now: Date = new Date()): Promise<LicencePushRetry> {
+  let rows: { licence_id: number }[];
+  try {
+    const cutoff = new Date(now.getTime() - LICENCE_PUSH_RETRY_WINDOW_MINUTES * 60_000).toISOString();
+    const r = await env.DB.prepare(
+      `SELECT licence_id FROM licence_push_pending
+        WHERE datetime(last_attempt_at) <= datetime(?)
+        ORDER BY datetime(last_attempt_at) LIMIT ?`,
+    ).bind(cutoff, LICENCE_PUSH_RETRY_CAP).all<{ licence_id: number }>();
+    rows = r.results || [];
+  } catch (e) {
+    return { available: false, reason: `The pending licence pushes could not be read: ${(e as Error).message}` };
+  }
+  let ok = 0;
+  let failed = 0;
+  for (const row of rows) {
+    const res = await pushLicenceToBranch(env, Number(row.licence_id), now.toISOString());
+    if (res.ok) ok += 1; else failed += 1;
+  }
+  return { available: true, tried: rows.length, ok, failed };
+}
+
+async function pushOnce(
+  env: Env,
+  licenceId: number,
+  pushedAt: string,
+): Promise<LicencePushResult> {
   let licence: Row | null = null;
   try {
     licence = await env.DB.prepare(

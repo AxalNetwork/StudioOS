@@ -5381,6 +5381,31 @@ function WellbeingExpertsPanel() {
   );
 }
 
+/**
+ * D270 — the repository GitHub Sync files into, as the running Worker has it,
+ * with no control. `GITHUB_REPO_OWNER` and `GITHUB_REPO_NAME` are wrangler.toml
+ * [vars]: every deploy writes them back, so an input here could only ever show
+ * an edit the next deploy undoes. A value the Worker does not have reads
+ * "Not set", never a default the sync would not use.
+ */
+export function GithubRepoReadOnly({ cfg }) {
+  const val = (v) => (v ? <code className="text-[11px]">{v}</code> : <span className="text-gray-500 dark:text-gray-400">Not set</span>);
+  return (
+    <div className="my-3 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2" data-testid="github-sync-repo-readonly">
+      <div className="text-xs font-medium text-gray-700 dark:text-gray-300">
+        Repository · set at deploy time
+      </div>
+      <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs text-gray-600 dark:text-gray-400">
+        <dt>Owner</dt><dd data-testid="github-sync-repo-owner">{val(cfg?.repo_owner)}</dd>
+        <dt>Name</dt><dd data-testid="github-sync-repo-name">{val(cfg?.repo_name)}</dd>
+      </dl>
+      <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+        {cfg?.repo_note || 'GITHUB_REPO_OWNER and GITHUB_REPO_NAME are [vars] in wrangler.toml; change them there and deploy.'}
+      </p>
+    </div>
+  );
+}
+
 function GithubSyncPanel() {
   const [cfg, setCfg] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -5388,8 +5413,6 @@ function GithubSyncPanel() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [token, setToken] = useState('');
-  const [owner, setOwner] = useState('');
-  const [repo, setRepo] = useState('');
   const [revealedSecret, setRevealedSecret] = useState(null);
   const { toast, showToast } = useToast(3500);
   // D223 — saving writes GITHUB_ACCESS_TOKEN (the branch-deploy dispatcher's
@@ -5401,8 +5424,6 @@ function GithubSyncPanel() {
     try {
       const c = await api.adminGetGithubConfig();
       setCfg(c);
-      setOwner(c.repo_owner || '');
-      setRepo(c.repo_name || '');
       setToken('');
     } catch (e) {
       reportError('AdminPage:githubConfigLoad', e);
@@ -5411,12 +5432,13 @@ function GithubSyncPanel() {
   };
   useEffect(() => { refresh(); /* eslint-disable-next-line */ }, []);
 
+  // D270 — Save writes the token and nothing else. The repository is a
+  // deploy-time setting (wrangler.toml [vars]) and is shown read-only below;
+  // sending it here used to push it as a secret the next deploy reverted.
   const onSave = async () => {
     setSaving(true);
     try {
-      const body = { repo_owner: owner.trim(), repo_name: repo.trim() };
-      if (token.trim()) body.token = token.trim();
-      const r = await api.adminSaveGithubConfig(body);
+      const r = await api.adminSaveGithubConfig({ token: token.trim() });
       if (r.webhook_secret) setRevealedSecret(r.webhook_secret);
       showToast({ kind: 'ok', msg: 'GitHub settings saved.' });
       setTestResult(null);
@@ -5501,7 +5523,7 @@ function GithubSyncPanel() {
             ? <span className="text-emerald-600">· configured</span>
             : <span className="text-gray-500 dark:text-gray-400">· not set</span>}
         </label>
-        <SecretWriteGate holds={holdsSecretWrites} what="Changing the token or the repository" testid="github-sync-holder-only">
+        <SecretWriteGate holds={holdsSecretWrites} what="Changing the token" testid="github-sync-holder-only">
           <input
             type="password"
             value={token}
@@ -5511,27 +5533,12 @@ function GithubSyncPanel() {
             className={`${inputClass} mb-1`}
           />
           <p className="text-[11px] text-gray-500 mb-3">Needs <strong>Issues: Read and write</strong> on the target repo. Stored encrypted; never shown again after saving.</p>
-
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Repo owner</label>
-              <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder={cfg?.default_repo_owner} className={inputClass} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Repo name</label>
-              <input value={repo} onChange={(e) => setRepo(e.target.value)} placeholder={cfg?.default_repo_name} className={inputClass} />
-            </div>
-          </div>
         </SecretWriteGate>
-        {!holdsSecretWrites && (
-          <p className="text-xs text-gray-600 dark:text-gray-400 my-3" data-testid="github-sync-repo-readonly">
-            Repository: <code className="text-[11px]">{cfg?.repo_owner}/{cfg?.repo_name}</code>
-          </p>
-        )}
+        <GithubRepoReadOnly cfg={cfg} />
 
         <div className="flex gap-2 flex-wrap">
           {holdsSecretWrites && (
-            <button onClick={onSave} disabled={saving}
+            <button onClick={onSave} disabled={saving || !token.trim()}
               className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 inline-flex items-center gap-1.5">
               {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Save
             </button>
