@@ -26304,3 +26304,180 @@ restored and verified by sha256:
 
 No migration. 292 is still the highest on disk, and the next free numbers are
 the reserved ones.
+
+## D269
+
+**Task 427: a migration already on main is never edited, deleted or renamed,
+and a gate now fails when one is — on every pull request, and on every push to
+main, because six of the eight drifts it exists for never went through a pull
+request.**
+
+**What was wrong.** `scripts/migrate-d1.mjs` records each migration it applies
+in `schema_migrations`, keyed on the filename, with a sha256 of the file's
+text. It only moves forward: a file already in the ledger is never run again,
+whatever its bytes are now. So an edit to an applied migration reaches no
+database that already has it. It reaches every database built from the files
+afterwards — a fresh branch, a restore drill, the fresh-build tests — and those
+then carry a schema production never ran. The runner notices at deploy time and
+only warns (`(checksum drift). Forward-only runner will NOT re-run it.`). By
+then the edit is on main. No check ran before that.
+
+**It had happened eight times.** Production's ledger holds a drifted checksum
+for each of eight files, and each equals the file as it stood before exactly
+one later commit:
+- **1563f0aa8** (2026-09-08, Replit Agent, pushed straight to `main`, a single
+  parent — no pull request): six migrations, one comment line each except 196
+  (two). All six replace `sql/schema.sql` with `sql/schema_baseline.sql` in a
+  comment: 022, 035, 049, 196, 200 and 205. The edit is harmless to any
+  database. It is also exactly the edit a bulk rename makes without anyone
+  choosing to touch a migration, which is why it went unnoticed.
+- **e9d53372b** (#352): 109, one comment line (the event-type list replaced by
+  a pointer to `services/eventTypes.ts`).
+- **b2b8542d6** (#483): 039 rewritten outright, 55 lines in and 214 out — the
+  one drift that changes what a fresh build creates.
+
+**A correction to an earlier count.** Task 427 was filed with "nine, including
+106". Measured against production, 106's checksum matches its file. Nine was a
+transcription error; it is eight.
+
+**What shipped.**
+- **`scripts/lib/migrationImmutability.mjs`** — the rule, pure, so a test drives
+  it without a repository. Only an addition (`A`) or a copy (`C`) is allowed.
+  An edit, deletion, rename or type change (`M`, `D`, `R`, `T`) of a file on
+  the base is refused, each with its own sentence. A status letter the rule
+  does not recognise is refused too, rather than passed. A rename counts when
+  either end is a migration: moving one out of the folder removes it from every
+  fresh build, and moving a file in under an applied name runs it again as new.
+  Only what the runner reads is covered — direct `*.sql` children of
+  `cloudflare-worker/sql/migrations/`, the rule `listMigrationFiles` applies —
+  so the folder README and any subfolder are not migrations. The prefix keeps
+  its trailing slash, or `migrations_old/` would match.
+- **`scripts/migration-immutability-gate.mjs`** — the git half. It resolves the
+  base, fetches it explicitly, confirms it resolves to a commit, and diffs
+  `<base>...HEAD` with `--name-status -z --find-renames --diff-filter=MDRT`.
+  Exit 0 clean, 1 on a violation, 2 when the check cannot be made.
+- **`.github/workflows/migration-immutability.yml`** — runs it on every pull
+  request to main and every push to main, with `fetch-depth: 0`.
+
+**Why at pull-request time and not at deploy.** At deploy the edit is already on
+main; the runner's warning is the evidence that it arrived, and it cannot undo
+it. A pull request is the last point at which the right answer — a new
+migration — is still the cheaper one.
+
+**Why on a push to main as well.** Six of the eight came in one commit pushed
+straight to main. A gate that ran on pull requests alone would have seen two.
+On a push the gate cannot stop the edit, which has landed, so it does the next
+best thing: main goes red on the push that did it, with a report that says the
+edit is already on main and has to be reverted in a new commit, instead of at
+the next deploy's warning. The base on a push is the commit main pointed at
+before it (`github.event.before`), so the push's whole range is judged, however
+many commits it carries. Run against real history with 1563f0aa8's parent as
+the before-commit, the gate exits 1 and names exactly those six files; run the
+same way on b2b8542d6, it exits 1 and names 039 alone.
+
+**Why a push with no before-commit is refused, not downgraded.** On main,
+`origin/main...HEAD` is empty. A push that fell back to judging itself as a pull
+request would pass every time, including the push that did the damage. So a
+push without a 40-character commit id — absent, empty, the all-zero id GitHub
+sends for a created branch, or anything git could read as an option — exits 2
+with its own sentence. The event chooses the mode, never whichever variable
+happens to be set: a push ignores `GITHUB_BASE_REF`, and a pull request ignores
+`MIGRATION_GATE_BEFORE`.
+
+**Why its own workflow and not a `ci.yml` job.** `ci.yml` runs in the
+concurrency group `ci-${{ github.ref }}` with `cancel-in-progress: true`. On main
+that means a push landing while the previous push is still being checked
+cancels the previous run, and that push's range is then checked by nothing — a
+direct push followed quickly by a merge is exactly the shape that would have
+hidden 1563f0aa8. Here each push is its own concurrency group (`github.sha`)
+and only pull-request runs cancel.
+
+**Why a base it cannot see is a failure.** A base that does not fetch, does not
+resolve, shares no history with HEAD, or holds no migration at all fails with
+its own sentence. A gate that skips when it cannot look is how an edit reaches
+main unnoticed, which is the one thing this exists to stop. The last of those
+is a floor: if the base holds no `*.sql` under the folder, the watched path is
+wrong and every diff would be empty, so a pass would be a pass over nothing. A
+commit a force-push left unreachable is the same case and fails the same way.
+
+**Why `-z`.** Without it, git quotes a path holding a non-ASCII byte, a tab or
+a quote (`"cloudflare-worker/sql/migrations/\303\251.sql"`). A quoted path does
+not start with the folder prefix, so an edit to such a file would read as
+outside the rule and pass. With `-z` every path arrives verbatim. The `-z`
+stream has its own parser, and one that ends mid-record is refused rather than
+truncated.
+
+**No bypass.** There is no flag, label or environment variable that lets an
+edit through. A migration that has to change gets a new migration. The eight
+existing drifts are not re-litigated: they are on main, so they are on every
+base and no future diff reports them.
+
+**The branch name and the commit id are data, never script.** The workflow
+passes both through `env:`, and the script hands them to git through
+`execFileSync` with no shell. A base branch name must be a plain name — no
+leading dash, no `..`, nothing a shell or git reads as syntax — and a
+before-commit must be exactly 40 hex characters.
+
+**Tests.** New `scripts/lib/migrationImmutability.test.mjs`, 32 tests, run by
+`npm run test:retention`:
+- the rule: each refused letter with its own sentence, `A` and `C` allowed, a
+  rename caught from either end, the README and subfolders not covered,
+  `migrations_old/` not matched, an unknown letter refused, and the filter
+  asking for every altering change and no addition;
+- the `-z` parser: a non-ASCII name read verbatim, a quoted name shown not to be
+  a migration, and a stream that ends mid-record refused;
+- the base: pull request and push modes, the event choosing between them, and
+  every unusable branch name or before-commit refused;
+- the report, with and without the on-main remedy;
+- the workflow, read as text: both triggers, a push run that is never
+  cancelled, full history, the before-commit only on a push, no expression
+  substituted into `run:`, and pins equal to `ci.yml`'s;
+- the real CLI against a real repository with a bare origin: an edit, a rename,
+  and an edit to a migration git would quote each fail; an addition plus a
+  README edit passes; a missing base, an option-shaped base and a base with no
+  migration each exit 2; on a push, an edit on main fails saying it is on main,
+  an addition passes against its own before-commit, and a missing or
+  unreachable before-commit exits 2.
+
+One of those is a fix to the harness rather than the gate. CI runs this suite
+on a push to main with `GITHUB_EVENT_NAME=push` in the environment, and the
+test helper inherited it, so on exactly the run that matters every branch-mode
+test would have been judged as a push. The helper now sets the event on every
+run, and the suite passes when run with a push environment inherited.
+
+**Verified.**
+- **`npm run test:drift` exited 0**, read as the exit code from a redirected
+  log: frontend 3260 of 3260; worker 4291 tests, 4288 passing, with the same 3
+  pre-existing environment-gated skips; retention 70 → **102**, exactly the 32
+  new tests; zero `not ok`. All 32 were confirmed by name in the log.
+- The gate run against real history: exit 1 naming the six files on
+  1563f0aa8, and 039 alone on b2b8542d6, each with its parent as the
+  before-commit.
+- `check-decision-ids` (D1 → D269) and `check-folder-docs` exit 0. The
+  workflow parses as YAML; `actionlint` is not installed here, so it was not
+  linted.
+
+**Mutations: 17 run, 17 caught**, each on a non-zero exit and a `not ok` line.
+Every anchor was checked to be unique before any write, every mutation was
+checked to change bytes, and every file was restored and verified by sha256:
+- `R` dropped from the diff filter;
+- a base the gate cannot see exiting 0;
+- the folder prefix without its trailing slash;
+- `-z` dropped from the diff (the `-z` parser then refuses the stream);
+- `-z` dropped and the line parser used — caught only by the quoted-name CLI
+  test, which is why it exists;
+- a bad push falling back to branch mode;
+- the non-vacuity floor removed;
+- an unknown status letter passed;
+- a rename judged by its first path only;
+- push mode comparing against `origin/main` instead of the before-commit;
+- the on-main remedy dropped from the report;
+- the workflow cancelling every run;
+- the workflow's push trigger removed;
+- an expression substituted into the `run:` line;
+- a shallow checkout;
+- the before-commit passed on every event;
+- the test helper inheriting the event, run under a push environment.
+
+No migration. 292 is still the highest on disk. No `frontend/src` change, so
+`docs/` is not rebuilt.
