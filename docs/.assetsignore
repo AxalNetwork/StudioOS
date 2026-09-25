@@ -1,0 +1,13 @@
+# Written by scripts/build-frontend.mjs from scripts/lib/assetsIgnore.mjs (D271).
+# Do not edit: rebuild. Files in docs/ the Worker asset upload must not publish;
+# each line names one file at the root of docs/. Wrangler already skips
+# /.assetsignore, /_redirects and /_headers.
+
+# The asset-retention ledger: local build state, gitignored, never a page.
+/.asset-retention.json
+
+# The frontend/src hash check-docs-fresh reads: build bookkeeping, never a page.
+/.build-source
+
+# A Pages entry script; this file's presence turns wrangler's refusal of one off.
+/_worker.js

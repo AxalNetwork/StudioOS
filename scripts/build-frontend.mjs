@@ -27,6 +27,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generationFrom } from './lib/assetGeneration.mjs';
+import {
+  ASSETS_IGNORE_FILENAME,
+  BUILD_STAMP_FILENAME,
+  RETENTION_LEDGER_FILENAME,
+  assetsIgnoreText,
+} from './lib/assetsIgnore.mjs';
 import { planAssetRetention, seedFilesFor, SEED_COMMITTED_TREE_FLAG } from './lib/assetRetention.mjs';
 import { sourceTreeHash } from './lib/sourceTreeHash.mjs';
 
@@ -36,7 +42,12 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
 const docsDir = path.join(root, 'docs');
 const assetsDir = path.join(docsDir, 'assets');
-const ledgerPath = path.join(docsDir, '.asset-retention.json');
+// Every file this script writes into docs/ is named through lib/assetsIgnore.mjs,
+// because anything written there is published by the Worker's asset upload
+// unless it is listed in docs/.assetsignore (D271).
+const ledgerPath = path.join(docsDir, RETENTION_LEDGER_FILENAME);
+const ignorePath = path.join(docsDir, ASSETS_IGNORE_FILENAME);
+const stampPath = path.join(docsDir, BUILD_STAMP_FILENAME);
 
 function listAssetFiles(dir) {
   try {
@@ -174,14 +185,24 @@ fs.rmSync(backupDir, { recursive: true, force: true });
 console.log('[build] prerendering per-route Open Graph metadata …');
 execSync('node scripts/prerender-og.mjs', { cwd: root, stdio: 'inherit' });
 
-// Nothing in docs/ needs hiding from the Worker's asset upload any more. The
-// `.assetsignore` this step used to write existed only to keep the Pages
-// Advanced Mode entry (`_worker.js`) out of the upload, and both went with the
-// Pages mirror. `docs/_headers` (copied by Vite from frontend/public/) is read
-// by Workers static assets and applied to the responses the assets binding
-// serves; it is parsed, not served, so it needs no exclusion either.
+// 6. Keep this script's own bookkeeping out of the Worker's asset upload (D271).
+//
+// Wrangler uploads every file under docs/, dotfiles included, unless
+// docs/.assetsignore names it, and it hides only /.assetsignore, /_redirects
+// and /_headers on its own. So until this step the retention ledger written in
+// step 4 and the stamp written in step 7 were served at /.asset-retention.json
+// and /.build-source on both hosts. The list, and the reason each file stays
+// private, live in lib/assetsIgnore.mjs.
+//
+// AFTER VITE, because Vite empties docs/ and anything written earlier is gone;
+// after the prerender for the same reason one step later. It names the stamp
+// before the stamp exists, which is fine: the file is read at upload time.
+//
+// `_headers` is deliberately NOT listed: wrangler already skips it and reads it
+// by its own path to set the static security headers (see lib/assetsIgnore.mjs).
+fs.writeFileSync(ignorePath, assetsIgnoreText());
 
-// 6. Stamp docs/ with the source this build consumed — LAST, so a stamp only
+// 7. Stamp docs/ with the source this build consumed — LAST, so a stamp only
 //    ever describes a build that finished.
 //
 // WHY A SEPARATE FILE RATHER THAN A KEY IN THE RETENTION LEDGER. The obvious
@@ -201,7 +222,6 @@ execSync('node scripts/prerender-og.mjs', { cwd: root, stdio: 'inherit' });
 //
 // It is a hash, so it is also the thing that gives that no-op build a diff to
 // commit; the gate below it stays satisfiable either way.
-const stampPath = path.join(docsDir, '.build-source');
 fs.writeFileSync(stampPath, `${sourceTreeHash(path.join(root, 'frontend', 'src'))}\n`);
 
 console.log(
