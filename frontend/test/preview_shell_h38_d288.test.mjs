@@ -106,11 +106,15 @@ test('the trigger reads Preview shell, the menu carries the header, every option
 });
 
 test('View As — impersonation — keeps its name and chrome (task 404), and the Team row follows the rename', () => {
-  // The impersonation strip inside the switcher is unchanged: its words, its
-  // timer, Extend and Exit Impersonation.
-  assert.match(SWITCHER, /Viewing as \{impersonatedUser\?\.name\} — support session/);
-  assert.match(SWITCHER, /Exit Impersonation/);
-  assert.match(SWITCHER, /onClick=\{onExtendImpersonation\}/);
+  // Impersonation keeps its name and its own chrome. D290 / H25 moved that
+  // chrome out of the switcher into `ImpersonationBar`, global chrome above
+  // it: the session's words, its timer, Extend and End session live there,
+  // and the switcher says so rather than offering the picker mid-session.
+  const BAR = codeOnly(read('frontend/src/components/ImpersonationBar.jsx'));
+  assert.match(SWITCHER, /Support session in progress — the bar above says who, as whom, why and for how long\./);
+  assert.match(BAR, /\{END_LABEL\}/);
+  assert.match(BAR, /onClick=\{onExtend\}/);
+  assert.doesNotMatch(SWITCHER, /Preview shell is offered during a support session/);
   const row = HQ_ONLY_ACTIONS.find((a) => a.key === 'role_shell');
   assert.equal(row.name, 'Preview shell', 'the Team row still calls the picker "View as a role shell"');
   assert.equal(row.hq, false);

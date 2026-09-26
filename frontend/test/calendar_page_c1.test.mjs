@@ -1,5 +1,5 @@
 /**
- * `/calendar` — `design/incoming/Calendar.dc.html`, boards C1–C6, element by
+ * `/calendar` — `design/canvases/integrated/Calendar.dc.html`, boards C1–C6, element by
  * element, plus the two rules the canvas exists to enforce.
  *
  * WHAT THE CANVAS ASKED FOR THAT WAS NOT THERE:
@@ -45,7 +45,7 @@ import { escapeRe } from './_escapeRe.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 
-const CANVAS = raw('design/incoming/Calendar.dc.html');
+const CANVAS = raw('design/canvases/integrated/Calendar.dc.html');
 const pageRaw = raw('frontend/src/pages/CalendarPage.jsx');
 const page = codeOnly(pageRaw);
 const css = raw('frontend/src/pages/calendarPage.css');

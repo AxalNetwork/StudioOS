@@ -1,0 +1,1 @@
+function e(e,t=Date.now()){if(!e)return null;let n=new Date(e).getTime();return Number.isFinite(n)?Math.max(0,Math.floor((t-n)/864e5)):null}function t(t,n=Date.now()){let r=e(t?.last_activity_at,n);return r!==null&&r>60}function n(e){return String(e?.organization||e?.company||e?.firm||``).trim()}export{t as n,n as r,e as t};

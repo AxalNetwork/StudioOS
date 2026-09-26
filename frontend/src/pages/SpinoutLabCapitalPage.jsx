@@ -24,6 +24,12 @@
 //     objection counts, instrument/valuation-cap/discount/MFN round terms
 //     (rendered as honest "Not set" tiles), share/copy-link, projected-close
 //     pacing and meetings-this-week (no stage-transition/meeting timestamps).
+//   - Honest reads (D360): the committed total is the server's own SUM, and
+//     when it is absent the tile says "Not recorded" rather than $0. The two
+//     client-side sums (soft-circled, weighted pipeline) add only prospects
+//     that carry a check size and say how many do not. A failed project read
+//     is Unreadable, not "No startup record yet". Every "Works with" and data
+//     room link lands on the Lab's own page, not the founder-shell route.
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -39,6 +45,7 @@ import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabP
 import LabPageShell from '../components/spinout/LabPageShell';
 import IncomingLeadsStrip from '../components/IncomingLeadsStrip';
 import { reportError, reportWarn } from '../lib/log';
+import { Unreadable, Unrecorded } from '../ui';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -47,6 +54,8 @@ const INPUT = 'w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-
 // now lives in labStyles.js as labBtn('ghost') — the page-local QA_BTN is gone.
 
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+/** A prospect's check size, or null when none is recorded (num(null) is 0). */
+const checkSize = (p) => (p?.amount == null || p.amount === '' ? null : num(p.amount));
 
 export function fmtAmt(v) {
   const n = num(v);
@@ -175,6 +184,7 @@ export default function SpinoutLabCapitalPage() {
   // the select simply snapped back to the server's value with nothing said, so
   // a rejected move was indistinguishable from a mis-click.
   const [stageError, setStageError] = useState({ id: null, message: '' });
+  const [projectsUnread, setProjectsUnread] = useState(false);
 
   const canEdit = !!(user && project && Number(user.founder_id) === Number(project.founder_id));
 
@@ -185,7 +195,9 @@ export default function SpinoutLabCapitalPage() {
         api.raiseProspects(projectId),
         api.raiseUpdates(projectId),
       ]);
-      setRaise(round || { round: null, raised: 0, committed_count: 0 });
+      // An empty body is not "no round, $0 raised": it is a read we cannot use.
+      if (!round || typeof round !== 'object') throw new Error('raise-round returned no body');
+      setRaise(round);
       setProspects(Array.isArray(pros?.items) ? pros.items : []);
       if (Array.isArray(pros?.stages) && pros.stages.length) setStages(pros.stages);
       setUpdates(Array.isArray(ups?.items) ? ups.items : []);
@@ -208,7 +220,7 @@ export default function SpinoutLabCapitalPage() {
     ]);
     const rows = [];
     rows.push({
-      key: 'deck', name: 'Pitch deck', source: 'Pitch Deck Builder', to: '/raise/pitch',
+      key: 'deck', name: 'Pitch deck', source: 'Pitch Deck Builder', to: '/spinout-lab/pitch-deck',
       status: msDone('pitch_deck_drafted') ? 'ready' : 'missing',
       hint: msDone('pitch_deck_drafted') ? null : 'Draft your deck in the Pitch Deck Builder.',
     });
@@ -255,7 +267,7 @@ export default function SpinoutLabCapitalPage() {
       hint: hasTraction ? null : 'Log revenue or update your proof fields.',
     });
     rows.push({
-      key: 'incorporation', name: 'Incorporation docs', source: 'Incorporate', to: '/incorporate',
+      key: 'incorporation', name: 'Incorporation docs', source: 'Incorporate', to: '/spinout-lab/incorporate',
       status: st?.is_incorporated || msDone('incorporation_completed') ? 'ready' : 'missing',
       hint: st?.is_incorporated || msDone('incorporation_completed') ? null : 'Entity formation pending.',
     });
@@ -272,9 +284,10 @@ export default function SpinoutLabCapitalPage() {
         const [stResult, me, projects] = await Promise.all([
           spinoutLab.state().then((v) => ({ ok: true, v })).catch((e) => ({ ok: false, e })),
           api.getMe(),
-          api.listProjects().catch(() => []),
+          api.listProjects().catch((e) => { reportError('spinout-capital:projects', e); return null; }),
         ]);
         if (dead) return;
+        setProjectsUnread(projects === null);
         const st = stResult.ok ? stResult.v : null;
         if (!stResult.ok) {
           // Warn rather than error: the page degrades on purpose when state is
@@ -284,7 +297,7 @@ export default function SpinoutLabCapitalPage() {
         }
         setState(st);
         setUser(me);
-        const proj = pickLabProject(projects, me);
+        const proj = projects === null ? null : pickLabProject(projects, me);
         setProject(proj || null);
         if (proj) {
           await Promise.all([loadRaise(proj.id), buildDataroom(proj, st)]);
@@ -310,15 +323,16 @@ export default function SpinoutLabCapitalPage() {
 
   const raiseAvailable = raise && raise !== 'unavailable' && !raise.failed;
   const round = raiseAvailable ? raise.round : null;
-  const committed = raiseAvailable ? num(raise.raised) || 0 : 0;
+  // The server's SUM over committed prospects. Absent → null → "Not recorded".
+  const committed = raiseAvailable && raise.raised != null ? num(raise.raised) : null;
   const target = num(round?.target_amount);
   // Derived client-side — labeled as such in the UI.
-  const softCircled = useMemo(
-    () => prospects.filter((p) => p.stage === 'meeting' || p.stage === 'diligence')
-      .reduce((a, p) => a + (num(p.amount) || 0), 0),
-    [prospects],
-  );
-  const remaining = target !== null ? Math.max(0, target - committed) : null;
+  // Only prospects with a recorded check size are summed; the rest are
+  // counted and named beside the figure rather than added as $0.
+  const softProspects = prospects.filter((p) => p.stage === 'meeting' || p.stage === 'diligence');
+  const softCircled = softProspects.map(checkSize).filter((v) => v !== null).reduce((a, v) => a + v, 0);
+  const softUnsized = softProspects.filter((p) => checkSize(p) === null).length;
+  const remaining = target !== null && committed !== null ? Math.max(0, target - committed) : null;
   const visibleProspects = stageFilter === 'all' ? prospects : prospects.filter((p) => p.stage === stageFilter);
   const stageCounts = useMemo(() => {
     const c = {};
@@ -331,7 +345,10 @@ export default function SpinoutLabCapitalPage() {
   // A33 — tracker stats derivable from real rows. Committed/passed
   // conversations are settled either way, so neither counts as "active".
   const activeConversations = prospects.filter((p) => p.stage !== 'committed' && p.stage !== 'passed').length;
-  const weightedPipeline = prospects.reduce((a, p) => a + (num(p.amount) || 0) * (STAGE_PROBABILITY[p.stage] ?? 0), 0);
+  const weightedPipeline = prospects
+    .filter((p) => checkSize(p) !== null && STAGE_PROBABILITY[p.stage] !== undefined)
+    .reduce((a, p) => a + checkSize(p) * STAGE_PROBABILITY[p.stage], 0);
+  const pipelineUnsized = prospects.filter((p) => checkSize(p) === null).length;
 
   // A25 — next best actions derived ONLY from real conditions (no scoring or
   // intent data exists): empty pipeline, prospects with no pipeline update in
@@ -539,6 +556,17 @@ export default function SpinoutLabCapitalPage() {
       </div>
     );
   }
+  if (projectsUnread) {
+    return (
+      <div className="max-w-xl mx-auto mt-16" data-testid="capital-projects-unreadable">
+        <Unreadable
+          what="Your startup record"
+          claim="This is not a claim that you have no startup — reload before you create one."
+          onRetry={() => window.location.reload()}
+        />
+      </div>
+    );
+  }
   if (!project) {
     return (
       <div className="max-w-xl mx-auto mt-16 text-center" data-testid="capital-no-project">
@@ -632,13 +660,15 @@ export default function SpinoutLabCapitalPage() {
                 </div>
                 <div data-testid="stat-committed">
                   <div className={LBL}>Committed</div>
-                  <div className="text-[17px] font-extrabold text-violet-700 dark:text-violet-300 tabular-nums">{committed > 0 ? fmtAmt(committed) : '$0'}</div>
+                  <div className="text-[17px] font-extrabold text-violet-700 dark:text-violet-300 tabular-nums">{committed === null ? <Unrecorded reason="The raise summary carried no committed total." /> : committed > 0 ? fmtAmt(committed) : '$0'}</div>
                   <div className="text-[10px] text-gray-400">{raise.committed_count} committed prospect{raise.committed_count === 1 ? '' : 's'}</div>
                 </div>
                 <div data-testid="stat-soft">
                   <div className={LBL}>Soft-circled</div>
                   <div className="text-[17px] font-extrabold text-amber-600 dark:text-amber-400 tabular-nums">{softCircled > 0 ? fmtAmt(softCircled) : '$0'}</div>
-                  <div className="text-[10px] text-gray-400">check sizes at meeting/diligence</div>
+                  <div className="text-[10px] text-gray-400">
+                    check sizes at meeting/diligence{softUnsized > 0 ? ` · ${softUnsized} without a check size` : ''}
+                  </div>
                 </div>
                 <div data-testid="stat-remaining">
                   <div className={LBL}>Remaining</div>
@@ -651,8 +681,8 @@ export default function SpinoutLabCapitalPage() {
                   {/* A11 — design encoding: solid committed fill + a 2px
                       vertical marker at committed + soft-circled. The marker
                       only renders when a soft-circled figure actually exists. */}
-                  <div className="absolute inset-y-0 left-0 rounded-full bg-violet-600" style={{ width: `${Math.min(100, (committed / target) * 100)}%` }} />
-                  {softCircled > 0 && (
+                  <div className="absolute inset-y-0 left-0 rounded-full bg-violet-600" style={{ width: `${committed === null ? 0 : Math.min(100, (committed / target) * 100)}%` }} />
+                  {softCircled > 0 && committed !== null && (
                     <div
                       className="absolute inset-y-0 w-0.5 bg-gray-900 dark:bg-gray-100"
                       style={{ left: `calc(${Math.min(100, ((committed + softCircled) / target) * 100)}% - 1px)` }}
@@ -747,7 +777,11 @@ export default function SpinoutLabCapitalPage() {
           )}
           {raise?.failed && (
             <div className={`${CARD} !p-4`} data-testid="raise-failed">
-              <p className="text-[12px] text-amber-600 dark:text-amber-400">Couldn't load your raise pipeline right now — reload to retry. Data-room readiness below is unaffected.</p>
+              <Unreadable
+                what="Your raise pipeline"
+                claim="This is not a claim that it is empty. Data-room readiness below is unaffected."
+                onRetry={() => loadRaise(project.id)}
+              />
             </div>
           )}
 
@@ -1031,7 +1065,7 @@ export default function SpinoutLabCapitalPage() {
               <Link to="/spinout-lab/use-of-funds" className="block font-semibold text-gray-700 dark:text-gray-200 hover:text-violet-600" data-testid="link-uof">
                 Use of Funds <span className="text-gray-400 font-normal">· raise target & allocation</span>
               </Link>
-              <Link to="/raise/pitch" className="block font-semibold text-gray-700 dark:text-gray-200 hover:text-violet-600" data-testid="link-deck">
+              <Link to="/spinout-lab/pitch-deck" className="block font-semibold text-gray-700 dark:text-gray-200 hover:text-violet-600" data-testid="link-deck">
                 Pitch Deck Builder <span className="text-gray-400 font-normal">· what investors see first</span>
               </Link>
               <Link to="/spinout-lab/captable" className="block font-semibold text-gray-700 dark:text-gray-200 hover:text-violet-600" data-testid="link-captable">
@@ -1122,7 +1156,9 @@ export default function SpinoutLabCapitalPage() {
             <div data-testid="tracker-weighted">
               <div className={LBL}>Weighted pipeline</div>
               <div className="text-[17px] font-extrabold text-gray-900 dark:text-gray-50 tabular-nums">{weightedPipeline > 0 ? fmtAmt(weightedPipeline) : '$0'}</div>
-              <div className="text-[10px] text-gray-400">Σ check × stage probability</div>
+              <div className="text-[10px] text-gray-400">
+                Σ check × stage probability{pipelineUnsized > 0 ? ` · ${pipelineUnsized} without a check size` : ''}
+              </div>
             </div>
           </div>
         </div>
@@ -1255,7 +1291,7 @@ export default function SpinoutLabCapitalPage() {
                     </div>
                     <div>
                       <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Committed</div>
-                      <div className="text-[12.5px] font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{committed > 0 ? fmtAmt(committed) : '$0'}</div>
+                      <div className="text-[12.5px] font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{committed === null ? <Unrecorded reason="The raise summary carried no committed total." /> : committed > 0 ? fmtAmt(committed) : '$0'}</div>
                     </div>
                     <div>
                       <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Target close</div>

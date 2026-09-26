@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeeec;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#4f46e5;text-decoration:none}
+    .ab{padding:40px 46px 32px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px;flex-wrap:wrap}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:rgba(24,24,27,.6);max-width:1040px;margin:0 0 18px}
+    .mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .eye{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+    .nm{font-size:13px;font-weight:800;letter-spacing:-.01em}
+    .body{font-size:12px;line-height:1.55}
+    .pill{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;line-height:1.5}
+    .nr{display:inline-flex;font-size:10px;font-weight:700;border-radius:4px;padding:2px 7px;white-space:nowrap}
+    .card{border-radius:14px;padding:16px 18px;box-sizing:border-box}
+    .inp{width:100%;box-sizing:border-box;border-radius:9px;padding:9px 12px;font-size:12.5px;font-family:inherit}
+    .btn{font-size:11.5px;font-weight:700;padding:7px 13px;border-radius:8px;cursor:pointer;white-space:nowrap}
+    .nav{display:flex;align-items:center;gap:9px;padding:7px 14px;font-size:12px;font-weight:600;border-radius:8px}
+    .zp{font-size:11px;font-weight:700;padding:5px 12px;border-radius:99px;white-space:nowrap}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;text-align:left;padding:0 0 8px}
+    .td{font-size:12px;padding:9px 0;border-top:1px solid}
+    .cap{font-size:11px;color:rgba(24,24,27,.58);line-height:1.5;margin-top:9px}
+    .ph{width:390px;min-width:390px;flex:none;border-radius:34px;box-shadow:0 4px 22px rgba(24,24,27,.16),0 0 0 9px #1a1a1c;overflow:hidden}
+  </style>
+</helmet>
+
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="6">
+  <section class="ab" id="{{ b.id }}">
+    <div class="ab-hd"><a class="ab-id" href="#{{ b.id }}">{{ b.badge }}</a><span class="ab-nm">{{ b.title }}</span><span class="mono" style="font-size:11px;color:#615c6e">/research/benchmarking/{{ b.k.uid }}</span></div>
+    <div class="ab-sub">{{ b.blurb }}</div>
+
+    <!-- ══ DESKTOP 1280 ══ -->
+    <sc-if value="{{ b.desktop }}">
+      <div style="width:1280px;min-width:1280px;display:flex;border-radius:14px;overflow:hidden;box-shadow:0 2px 14px rgba(24,24,27,.08);background:{{ b.t.ground }}">
+        <div style="width:200px;flex:none;background:{{ b.t.card }};border-right:1px solid {{ b.t.hair }};padding:16px 10px">
+          <div style="display:flex;align-items:center;gap:8px;padding:4px 14px 16px"><img src="../assets/axal-dossier-mark.png" alt="Axal VC" width="16" height="16" style="display:block;object-fit:contain"><span style="font-size:12px;font-weight:800;letter-spacing:-.01em;color:{{ b.t.ink }}">StudioOS</span></div>
+          <sc-for list="{{ b.nav }}" as="n" hint-placeholder-count="7"><div class="nav" style="{{ n.style }}">{{ n.label }}</div></sc-for>
+        </div>
+        <div style="flex:1;min-width:0;padding:22px 30px 30px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:{{ b.t.muted }};flex-wrap:wrap"><span>Research</span><span>‹</span><span>Benchmarking</span><span>‹</span><span style="color:{{ b.t.ink }};font-weight:700">{{ b.k.metric }}</span></div>
+            <div style="display:flex;align-items:center;gap:8px"><span class="pill" style="background:#f0fdff;color:#0e7490;border:1px solid #a5edf5;letter-spacing:.05em">ANALYTICS</span><span class="pill" style="background:{{ b.t.chipBg }};color:{{ b.t.ink }};border:1px solid {{ b.t.hair }}">{{ b.scope }}</span></div>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:12px"><sc-for list="{{ b.zones }}" as="z" hint-placeholder-count="5"><span class="zp" style="{{ z.style }}">{{ z.t }}</span></sc-for></div>
+
+          <!-- 1 · header -->
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:16px">
+            <div class="eye" style="color:{{ b.t.muted }}">Benchmark</div>
+            <h1 style="margin:7px 0 0;font-size:24px;font-weight:800;letter-spacing:-.025em;color:{{ b.t.ink }}">{{ b.k.metric }}</h1>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:9px;flex-wrap:wrap">
+              <sc-if value="{{ b.k.our_value }}"><span class="mono" style="font-size:15px;font-weight:700;color:{{ b.t.ink }}">{{ b.k.our_value }}</span></sc-if>
+              <sc-if value="{{ b.noOurs }}"><span class="nr" style="{{ b.t.nr }}">Ours not recorded</span></sc-if>
+              <sc-if value="{{ b.comparison }}">
+                <span class="body" style="color:{{ b.t.muted }}">vs</span>
+                <span class="mono" style="font-size:15px;font-weight:700;color:{{ b.t.ink }}">{{ b.k.peer_value }}</span>
+                <span class="pill mono" style="{{ b.nStyle }}">n={{ b.k.peer_sample_size }}</span>
+              </sc-if>
+              <sc-if value="{{ b.tracked }}"><span class="pill" style="background:{{ b.t.chipBg }};color:{{ b.t.muted }};border:1px solid {{ b.t.hair }}">Tracked, not compared</span></sc-if>
+            </div>
+            <sc-if value="{{ b.comparison }}">
+              <div class="body" style="color:{{ b.t.muted }};margin-top:7px">{{ b.k.peer_source }} · as of <sc-if value="{{ b.k.peer_as_of }}">{{ b.k.peer_as_of }}</sc-if><sc-if value="{{ b.noAsOf }}"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></sc-if></div>
+            </sc-if>
+          </div>
+
+          <!-- 2 · thin-base banner -->
+          <sc-if value="{{ b.thin }}">
+            <div style="border:1.5px dashed {{ b.t.warnHair }};background:{{ b.t.warnFill }};border-radius:12px;padding:13px 16px;margin-top:12px">
+              <div class="body" style="color:{{ b.t.body }};max-width:900px"><strong style="color:{{ b.t.warn }}">Read the base before the number.</strong> The smallest peer set behind this comparison is {{ b.k.peer_sample_size }}. A median over a set that size moves with one member and should not be presented as a market rate.</div>
+            </div>
+          </sc-if>
+
+          <!-- tiles -->
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px">
+            <sc-for list="{{ b.tiles }}" as="tl" hint-placeholder-count="4">
+              <div class="card" style="background:{{ b.t.card }};border:1px solid {{ tl.hair }}">
+                <div class="eye" style="color:{{ b.t.muted }}">{{ tl.k }}</div>
+                <sc-if value="{{ tl.nr }}"><div style="margin-top:8px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+                <sc-if value="{{ tl.v }}"><div class="mono" style="font-size:{{ tl.size }};font-weight:700;letter-spacing:-.025em;margin-top:5px;color:{{ tl.ink }}">{{ tl.v }}</div></sc-if>
+                <div class="body" style="color:{{ b.t.muted }};margin-top:4px">{{ tl.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- 3 · the comparison -->
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:12px">
+            <div class="eye" style="color:{{ b.t.muted }}">{{ b.cmpTitle }}</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:12px">
+              <div style="border-right:1px solid {{ b.t.hair }};padding-right:20px">
+                <div class="eye" style="color:{{ b.t.muted }};font-size:9px">Ours</div>
+                <sc-if value="{{ b.k.our_value }}"><div class="mono" style="font-size:40px;font-weight:700;letter-spacing:-.03em;color:{{ b.t.ink }};margin-top:6px;line-height:1.05">{{ b.k.our_value }}</div></sc-if>
+                <sc-if value="{{ b.noOurs }}"><div style="margin-top:10px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+              </div>
+              <div>
+                <div class="eye" style="color:{{ b.t.muted }};font-size:9px">Peer</div>
+                <sc-if value="{{ b.comparison }}"><div class="mono" style="font-size:40px;font-weight:700;letter-spacing:-.03em;color:{{ b.t.ink }};margin-top:6px;line-height:1.05">{{ b.k.peer_value }}</div></sc-if>
+                <sc-if value="{{ b.tracked }}"><div style="margin-top:10px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div><div class="body" style="color:{{ b.t.muted }};margin-top:6px">No peer figure is entered, so there is nothing to compare against. A zero here would be a number the record does not hold.</div></sc-if>
+              </div>
+            </div>
+            <div class="body" style="color:{{ b.t.muted }};margin-top:13px;padding-top:11px;border-top:1px solid {{ b.t.hair }}">{{ b.cmpCaption }}</div>
+          </div>
+
+          <!-- 4 · reading -->
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:12px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><span class="eye" style="color:{{ b.t.muted }}">What the comparison supports</span><sc-if value="{{ b.readingSample }}"><span class="mono" style="font-size:9px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:3px;padding:1px 6px">SAMPLE</span></sc-if></div>
+            <div class="inp" style="margin-top:10px;min-height:58px;background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.readInk }}">{{ b.readText }}</div>
+            <sc-if value="{{ b.noReading }}"><div style="margin-top:8px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span><span class="body" style="color:{{ b.t.muted }};margin-left:8px">No read written yet — the comparison is shown without one.</span></div></sc-if>
+          </div>
+
+          <!-- 5 · peer constituents -->
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:12px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><span class="eye" style="color:{{ b.t.muted }}">Peer constituents</span><span class="mono" style="font-size:11px;color:{{ b.t.muted }}">{{ b.constCount }}</span></div>
+            <sc-if value="{{ b.hasConst }}">
+              <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin-top:10px">
+                <span class="th" style="color:{{ b.t.muted }}">Name</span><span class="th" style="color:{{ b.t.muted }}">Value</span><span class="th" style="color:{{ b.t.muted }}">As of</span>
+              </div>
+              <sc-for list="{{ b.k.constituents }}" as="c" hint-placeholder-count="3">
+                <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;align-items:center">
+                  <span class="td" style="border-color:{{ b.t.hair }};color:{{ b.t.ink }};font-weight:600">{{ c.name }}</span>
+                  <span class="td mono" style="border-color:{{ b.t.hair }};color:{{ b.t.ink }}">{{ c.value }}</span>
+                  <span class="td mono" style="border-color:{{ b.t.hair }};color:{{ b.t.muted }}">{{ c.as_of }}</span>
+                </div>
+              </sc-for>
+              <sc-if value="{{ b.countMismatch }}">
+                <div style="display:flex;gap:9px;align-items:flex-start;background:{{ b.t.warnFill }};border:1px solid {{ b.t.warnHair }};border-radius:10px;padding:10px 13px;margin-top:11px"><span style="color:{{ b.t.warn }};font-weight:800;flex:none">!</span><span class="body" style="color:{{ b.t.body }}">{{ b.mismatchNote }} The stored sample size is left as it is — a list that disagrees with the figure is a question for you, not something to silently correct.</span></div>
+              </sc-if>
+            </sc-if>
+            <sc-if value="{{ b.noConst }}">
+              <div style="border:1.5px dashed {{ b.t.hair }};border-radius:12px;padding:18px 20px;margin-top:10px">
+                <div class="body" style="color:{{ b.t.body }};max-width:680px">The product stores n only. Name the constituents or cite a published table. Do not invent funds.</div>
+                <span class="btn" style="border:1px solid {{ b.t.hair }};color:{{ b.t.ink }};background:transparent;display:inline-block;margin-top:12px">Add a constituent</span>
+              </div>
+            </sc-if>
+          </div>
+
+          <!-- 6 · editors -->
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:12px">
+            <div class="eye" style="color:{{ b.t.muted }}">Edit this benchmark</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:11px">
+              <sc-for list="{{ b.fields }}" as="fd" hint-placeholder-count="6">
+                <div>
+                  <div class="eye" style="color:{{ b.t.muted }};font-size:9px;margin-bottom:4px">{{ fd.k }}<sc-if value="{{ fd.req }}"><span style="color:{{ b.t.warn }}"> *</span></sc-if></div>
+                  <div class="inp mono" style="background:{{ b.t.chipBg }};border:1px solid {{ fd.hair }};color:{{ fd.ink }}">{{ fd.v }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap">
+              <span class="btn" style="background:{{ b.accent }};color:#fff">Save</span>
+              <sc-if value="{{ b.comparison }}"><span class="body" style="color:{{ b.t.warn }}">A peer figure needs its source and sample size — the schema refuses the row without them.</span></sc-if>
+              <sc-if value="{{ b.tracked }}"><span class="body" style="color:{{ b.t.muted }}">Leave the peer field blank and the row stays tracked. Fill it and source and sample become required.</span></sc-if>
+            </div>
+          </div>
+
+          <!-- 7 · zonedraft -->
+          <div style="border:1px solid {{ b.hair }};background:{{ b.tint }};border-radius:14px;padding:14px 18px;margin-top:12px">
+            <div style="display:flex;align-items:center;gap:9px"><span class="pill" style="background:{{ b.accent }};color:#fff;letter-spacing:.06em">ZONEDRAFT</span><span class="nm" style="color:{{ b.t.ink }}">Benchmark · what this supports</span></div>
+            <div class="body" style="color:{{ b.t.ink }};margin-top:9px;max-width:860px">{{ b.draft }}</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap">
+              <span class="btn" style="{{ b.draftBtn }}">Draft</span><span class="btn" style="{{ b.acceptBtn }}">Accept</span><span class="btn" style="color:{{ b.t.muted }};padding:7px 6px">Discard</span>
+              <span class="body" style="color:{{ b.t.muted }};margin-left:auto">Accept writes the reading. It does not invent a peer figure.</span>
+            </div>
+          </div>
+
+          <!-- 8 · stated limit -->
+          <div style="background:{{ b.t.sunk }};border:1px solid {{ b.t.hair }};border-radius:14px;padding:16px 18px;margin-top:12px">
+            <div class="eye" style="color:{{ b.t.muted }}">Where the peer numbers come from</div>
+            <div class="body" style="color:{{ b.t.body }};margin-top:6px;max-width:860px">Nowhere but you. This product ships no peer data set and gathers none, so every comparison here is one you entered and sourced yourself. That is why the source and the sample travel with the figure and why nothing on this page is presented as a market rate.</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ══ MOBILE 390 ══ -->
+    <sc-if value="{{ b.mobile }}">
+      <div class="ph" style="background:{{ b.t.ground }}">
+        <div style="height:44px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 6px;font-size:11px;font-weight:700;background:{{ b.t.card }};color:{{ b.t.ink }}"><span class="mono">9:41</span><span style="font-size:10px;letter-spacing:.06em">▮▮▮ ◗</span></div>
+        <div style="background:{{ b.t.card }};padding:4px 16px 12px;border-bottom:1px solid {{ b.t.hair }}">
+          <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:{{ b.t.muted }}"><span style="font-weight:700;color:{{ b.deep }}">‹ Benchmarking</span><span>·</span><span>Research</span></div>
+          <div class="eye" style="color:{{ b.t.muted }};margin-top:8px">Benchmark</div>
+          <h1 style="margin:5px 0 0;font-size:20px;font-weight:800;letter-spacing:-.024em;color:{{ b.t.ink }}">{{ b.k.metric }}</h1>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:8px;flex-wrap:wrap">
+            <span class="pill" style="background:#f0fdff;color:#0e7490;border:1px solid #a5edf5;letter-spacing:.05em">ANALYTICS</span>
+            <sc-if value="{{ b.comparison }}"><span class="pill mono" style="{{ b.nStyle }}">n={{ b.k.peer_sample_size }}</span></sc-if>
+            <sc-if value="{{ b.tracked }}"><span class="pill" style="background:{{ b.t.chipBg }};color:{{ b.t.muted }};border:1px solid {{ b.t.hair }}">Tracked, not compared</span></sc-if>
+          </div>
+          <sc-if value="{{ b.comparison }}"><div class="body" style="color:{{ b.t.muted }};margin-top:6px;font-size:11px">{{ b.k.peer_source }} · as of {{ b.k.peer_as_of }}</div></sc-if>
+        </div>
+        <div style="padding:12px 14px 22px;display:grid;gap:10px">
+          <sc-if value="{{ b.thin }}">
+            <div style="border:1.5px dashed {{ b.t.warnHair }};background:{{ b.t.warnFill }};border-radius:12px;padding:11px 13px">
+              <div class="body" style="color:{{ b.t.body }};font-size:11.5px"><strong style="color:{{ b.t.warn }}">Read the base before the number.</strong> The smallest peer set behind this comparison is {{ b.k.peer_sample_size }}. A median over a set that size moves with one member and should not be presented as a market rate.</div>
+            </div>
+          </sc-if>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <sc-for list="{{ b.tiles }}" as="tl" hint-placeholder-count="4">
+              <div class="card" style="background:{{ b.t.card }};border:1px solid {{ tl.hair }};padding:11px 12px">
+                <div class="eye" style="color:{{ b.t.muted }};font-size:9px">{{ tl.k }}</div>
+                <sc-if value="{{ tl.nr }}"><div style="margin-top:6px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+                <sc-if value="{{ tl.v }}"><div class="mono" style="font-size:{{ tl.msize }};font-weight:700;letter-spacing:-.025em;margin-top:4px;color:{{ tl.ink }}">{{ tl.v }}</div></sc-if>
+                <div class="body" style="color:{{ b.t.muted }};margin-top:3px;font-size:10.5px">{{ tl.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px">
+            <div class="eye" style="color:{{ b.t.muted }}">{{ b.cmpTitle }}</div>
+            <div style="display:grid;gap:10px;margin-top:10px">
+              <div><div class="eye" style="color:{{ b.t.muted }};font-size:9px">Ours</div><sc-if value="{{ b.k.our_value }}"><div class="mono" style="font-size:32px;font-weight:700;letter-spacing:-.03em;color:{{ b.t.ink }};line-height:1.05;margin-top:4px">{{ b.k.our_value }}</div></sc-if><sc-if value="{{ b.noOurs }}"><div style="margin-top:7px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if></div>
+              <div style="border-top:1px solid {{ b.t.hair }};padding-top:10px"><div class="eye" style="color:{{ b.t.muted }};font-size:9px">Peer</div><sc-if value="{{ b.comparison }}"><div class="mono" style="font-size:32px;font-weight:700;letter-spacing:-.03em;color:{{ b.t.ink }};line-height:1.05;margin-top:4px">{{ b.k.peer_value }}</div></sc-if><sc-if value="{{ b.tracked }}"><div style="margin-top:7px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div><div class="body" style="color:{{ b.t.muted }};margin-top:5px;font-size:11px">No peer figure is entered, so there is nothing to compare against.</div></sc-if></div>
+            </div>
+            <div class="body" style="color:{{ b.t.muted }};margin-top:11px;padding-top:9px;border-top:1px solid {{ b.t.hair }};font-size:11px">{{ b.cmpCaption }}</div>
+          </div>
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px">
+            <div class="eye" style="color:{{ b.t.muted }}">What the comparison supports</div>
+            <div class="inp" style="margin-top:8px;min-height:52px;background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.readInk }};font-size:12px">{{ b.readText }}</div>
+            <sc-if value="{{ b.noReading }}"><div style="margin-top:7px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div><div class="body" style="color:{{ b.t.muted }};margin-top:4px;font-size:11px">No read written yet — the comparison is shown without one.</div></sc-if>
+          </div>
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between"><span class="eye" style="color:{{ b.t.muted }}">Peer constituents</span><span class="mono" style="font-size:10.5px;color:{{ b.t.muted }}">{{ b.constCount }}</span></div>
+            <div style="border:1.5px dashed {{ b.t.hair }};border-radius:12px;padding:13px 14px;margin-top:9px">
+              <div class="body" style="color:{{ b.t.body }};font-size:11.5px">The product stores n only. Name the constituents or cite a published table. Do not invent funds.</div>
+              <span class="btn" style="border:1px solid {{ b.t.hair }};color:{{ b.t.ink }};background:transparent;display:inline-block;margin-top:10px;padding:6px 11px">Add a constituent</span>
+            </div>
+          </div>
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px">
+            <div class="eye" style="color:{{ b.t.muted }}">Edit this benchmark</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px">
+              <sc-for list="{{ b.fields }}" as="fd" hint-placeholder-count="6">
+                <div><div class="eye" style="color:{{ b.t.muted }};font-size:9px;margin-bottom:4px">{{ fd.k }}<sc-if value="{{ fd.req }}"><span style="color:{{ b.t.warn }}"> *</span></sc-if></div><div class="inp mono" style="background:{{ b.t.chipBg }};border:1px solid {{ fd.hair }};color:{{ fd.ink }};font-size:11.5px">{{ fd.v }}</div></div>
+              </sc-for>
+            </div>
+            <span class="btn" style="background:{{ b.accent }};color:#fff;display:inline-block;margin-top:10px">Save</span>
+            <sc-if value="{{ b.comparison }}"><div class="body" style="color:{{ b.t.warn }};margin-top:7px;font-size:11px">A peer figure needs its source and sample size — the schema refuses the row without them.</div></sc-if>
+          </div>
+          <div style="border:1px solid {{ b.hair }};background:{{ b.tint }};border-radius:14px;padding:13px 15px">
+            <div style="display:flex;align-items:center;gap:8px"><span class="pill" style="background:{{ b.accent }};color:#fff;letter-spacing:.06em">ZONEDRAFT</span><span class="nm" style="color:{{ b.t.ink }}">Benchmark · what this supports</span></div>
+            <div class="body" style="color:{{ b.t.ink }};margin-top:8px;font-size:11.5px">{{ b.draft }}</div>
+            <div style="display:flex;gap:7px;margin-top:10px;flex-wrap:wrap"><span class="btn" style="{{ b.draftBtn }};padding:6px 11px">Draft</span><span class="btn" style="{{ b.acceptBtn }};padding:6px 11px">Accept</span><span class="btn" style="color:{{ b.t.muted }};padding:6px 8px">Discard</span></div>
+            <div class="body" style="color:{{ b.t.muted }};margin-top:8px;font-size:10.5px">Accept writes the reading. It does not invent a peer figure.</div>
+          </div>
+          <div style="background:{{ b.t.sunk }};border:1px solid {{ b.t.hair }};border-radius:14px;padding:13px 15px">
+            <div class="eye" style="color:{{ b.t.muted }}">Where the peer numbers come from</div>
+            <div class="body" style="color:{{ b.t.body }};margin-top:5px;font-size:11.5px">Nowhere but you. This product ships no peer data set and gathers none, so every comparison here is one you entered and sourced yourself. That is why the source and the sample travel with the figure and why nothing on this page is presented as a market rate.</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+    <div class="cap" style="width:{{ b.capW }}">{{ b.cap }}</div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const IND = { a:'#4f46e5', deep:'#4338ca', tint:'#eef2ff', hair:'#c7d2fe', deepDark:'#818cf8', tintDark:'#211f3d' };
+    const THIN_AT = 10;
+
+    // Fill, ink and border always come from one theme — a lifted ink on a light fill reads
+    // worse than either alone.
+    const LIGHT = { ground:'#f4f3f7', card:'#fff', hair:'#ececf1', ink:'#18181b', body:'#3f3f46', muted:'#52525b',
+      ok:'#047857', okFill:'#ecfdf5', okHair:'#a7f3d0', warn:'#92400e', warnFill:'#fffbeb', warnHair:'#fde68a',
+      chipBg:'#fafafa', sunk:'#f4f3f7', nr:'background:#f4f4f6;color:#52525b;border:1px solid #e4e4e8' };
+    const DARK = { ground:'#140c26', card:'#111827', hair:'#374151', ink:'#f4f4f5', body:'#d1d5db', muted:'#9ca3af',
+      ok:'#4ade80', okFill:'#052e1a', okHair:'#065f46', warn:'#fbbf24', warnFill:'#422006', warnHair:'#78350f',
+      chipBg:'#0b1220', sunk:'#0f0a1e', nr:'background:#1f2937;color:#9ca3af;border:1px solid #374151' };
+    const toneStyle = (kind, t) => kind === 'warn'
+      ? 'background:' + t.warnFill + ';color:' + t.warn + ';border:1px solid ' + t.warnHair
+      : 'background:' + t.okFill + ';color:' + t.ok + ';border:1px solid ' + t.okHair;
+
+    const NAV = ['Studio','Deals','Portfolio','Fund','Network','Research','Trust'];
+    const nav = (t) => NAV.map(l => ({ label:l, style: l === 'Research'
+      ? 'background:' + (t === DARK ? IND.tintDark : IND.tint) + ';color:' + (t === DARK ? IND.deepDark : IND.deep) + ';font-weight:700;box-shadow:inset 2px 0 0 ' + IND.a
+      : 'color:' + t.muted }));
+    const ZONES = ['Ask','Diligence','Benchmarking','Markets','Library'];
+    const zones = (t) => ZONES.map(z => ({ t:z, style: z === 'Benchmarking'
+      ? 'background:' + (t === DARK ? IND.tintDark : IND.tint) + ';color:' + (t === DARK ? IND.deepDark : IND.deep) + ';border:1px solid ' + (t === DARK ? '#3730a3' : IND.hair)
+      : 'color:' + t.muted + ';border:1px solid transparent' }));
+
+    // ══ Values are TEXT with their unit in the glyph — 1.4x, not 1.4. Nothing here parses a
+    // float, so nothing can render 1.4 as 1.40 or drop the unit on the way to the page. ══
+    const TVPI_THIN = { uid:'bm_3k1', metric:'TVPI', our_value:'1.4x', peer_value:'1.2x',
+      peer_source:'Four 2023 vintage funds, internal set', peer_sample_size:4, peer_as_of:'2026 Q2',
+      reading:'Advantage rests on one re-mark in Fund C; do not take this to LPs as a trend.',
+      constituents:[] };
+    const TVPI_FAT = Object.assign({}, TVPI_THIN, { uid:'bm_3k2', peer_sample_size:400,
+      peer_source:'2023 vintage cohort, published table', reading:null });
+    const TRACKED = { uid:'bm_8p4', metric:'Time to first close', our_value:null, peer_value:null,
+      peer_source:null, peer_sample_size:null, peer_as_of:null, reading:null, constituents:[] };
+    const MISMATCH = { uid:'bm_5c7', metric:'DPI', our_value:'0.3x', peer_value:'0.5x',
+      peer_source:'Peer funds named below', peer_sample_size:5, peer_as_of:'2026 Q1', reading:null,
+      constituents:[ { name:'Fund A', value:'0.6x', as_of:'2026 Q1' }, { name:'Fund B', value:'0.4x', as_of:'2026 Q1' },
+        { name:'Fund C', value:'0.5x', as_of:'2025 Q4' } ] };
+
+    const board = (id, badge, k, t, kind, extra) => {
+      const dark = t === DARK;
+      // is_comparison is derived from the peer figure, not stored — a row with a peer value and
+      // no source cannot exist, because the schema refuses it.
+      const comparison = !!k.peer_value;
+      const thin = comparison && k.peer_sample_size < THIN_AT;
+      const nConst = k.constituents.length;
+      const mismatch = comparison && nConst > 0 && nConst !== k.peer_sample_size;
+      const hasDraftSource = !!(k.our_value || comparison);
+      const fieldOf = (label, value, req, warnIf) => ({ k:label, v: value || 'blank', req,
+        ink: value ? t.ink : t.muted, hair: (warnIf && !value) ? t.warnHair : t.hair });
+      return Object.assign({
+        id, badge, k, t, desktop: kind === 'desktop', mobile: kind === 'mobile',
+        capW: kind === 'desktop' ? '1280px' : '390px',
+        title: k.metric + ' · ' + (comparison ? 'n=' + k.peer_sample_size : 'tracked') + ' · ' + (kind === 'desktop' ? '1280' : '390') + (dark ? ' · dark' : ''),
+        nav: nav(t), zones: zones(t), scope:'Thornbury Capital',
+        accent: IND.a, deep: dark ? IND.deepDark : IND.deep, tint: dark ? IND.tintDark : IND.tint, hair: dark ? '#3730a3' : IND.hair,
+        comparison, tracked: !comparison, noOurs: !k.our_value, noAsOf: !k.peer_as_of, thin,
+        nStyle: thin ? toneStyle('warn', t) : 'background:' + t.chipBg + ';color:' + t.ink + ';border:1px solid ' + t.hair,
+        tiles: [
+          k.our_value ? { k:'Ours', v:k.our_value, ink:t.ink, size:'22px', msize:'18px', hair:t.hair, sub:'as you recorded it' }
+                      : { k:'Ours', nr:true, sub:'no figure entered yet', hair:t.hair },
+          comparison ? { k:'Peer', v:k.peer_value, ink:t.ink, size:'22px', msize:'18px', hair:t.hair, sub:'entered and sourced by you' }
+                     : { k:'Peer', nr:true, sub:'tracked, not compared', hair:t.hair },
+          comparison ? { k:'Sample', v:'n=' + k.peer_sample_size, ink: thin ? t.warn : t.ink, size:'22px', msize:'18px',
+                         hair: thin ? t.warnHair : t.hair, sub: thin ? 'thin — read the base first' : 'wide enough to state plainly' }
+                     : { k:'Sample', nr:true, sub:'no peer set to size', hair:t.hair },
+          k.peer_as_of ? { k:'As of', v:k.peer_as_of, ink:t.ink, size:'17px', msize:'14px', hair:t.hair, sub:'when the peer figure was measured' }
+                       : { k:'As of', nr:true, sub:'no peer figure to date', hair:t.hair }
+        ],
+        cmpTitle: comparison ? 'The comparison' : 'The figure',
+        cmpCaption: comparison
+          ? k.peer_source + ' · n=' + k.peer_sample_size + (k.peer_as_of ? ' · as of ' + k.peer_as_of : '')
+            + '. Neither figure is coloured as better: a number beside a peer median invites a conclusion the numbers alone do not support, which is what the reading is for.'
+          : 'Tracked without a peer. Nothing is coloured, ranked, or compared, because there is nothing to compare it to.',
+        readText: k.reading || 'What this comparison does and does not support…', readInk: k.reading ? t.ink : t.muted,
+        noReading: !k.reading, readingSample: !!k.reading,
+        constCount: nConst ? nConst + ' named · n=' + k.peer_sample_size : (comparison ? '0 named · n=' + k.peer_sample_size : 'no peer set'),
+        hasConst: nConst > 0, noConst: nConst === 0, countMismatch: mismatch,
+        mismatchNote: mismatch ? nConst + ' constituents are named against a stored sample of ' + k.peer_sample_size + '.' : '',
+        fields: [
+          fieldOf('Metric', k.metric, false, false),
+          fieldOf('Ours', k.our_value, false, false),
+          fieldOf('Peer figure', k.peer_value, false, false),
+          fieldOf('Peer source', k.peer_source, comparison, comparison),
+          fieldOf('Sample size', k.peer_sample_size ? String(k.peer_sample_size) : null, comparison, comparison),
+          fieldOf('Measured as of', k.peer_as_of, false, false)
+        ],
+        draft: !hasDraftSource
+          ? 'Enter ours or a sourced peer first.'
+          : (k.our_value ? 'Ours reads ' + k.our_value : 'Ours is not recorded')
+            + (comparison ? ' against a peer of ' + k.peer_value + ' from ' + k.peer_source + ', n=' + k.peer_sample_size
+                + (k.peer_as_of ? ', as of ' + k.peer_as_of : '') + '.' + (thin ? ' At that sample the gap is not a market rate and the draft will say so.' : '')
+              : ', with no peer figure entered.')
+            + ' The draft restates only those fields — it has no peer data set to reach for.',
+        draftBtn: hasDraftSource ? 'background:' + IND.a + ';color:#fff' : 'background:' + (dark ? '#211f3d' : '#e0e7ff') + ';color:' + (dark ? IND.deepDark : IND.deep) + ';cursor:not-allowed',
+        acceptBtn: 'border:1px solid ' + (dark ? '#3730a3' : IND.hair) + ';color:' + (dark ? IND.deepDark : IND.deep) + ';background:transparent'
+      }, extra || {});
+    };
+
+    const boards = [
+      board('d1','D1',TVPI_THIN,LIGHT,'desktop',{
+        blurb:'Comparison, labelled SAMPLE. TVPI 1.4x against a peer of 1.2x on a set of four. The thin-base banner carries this row\u2019s own n — not the list minimum — and the sample tile turns amber with it. Two large figures, no chart, no axes, and neither side coloured as winning.',
+        cap:'Values are text with the unit in the glyph, so nothing parses 1.4x into a float that could render as 1.40 or lose the x. The reading says the advantage rests on one re-mark, which is the whole reason the page refuses to colour the gap.' }),
+      board('d2','D2',TVPI_FAT,LIGHT,'desktop',{
+        blurb:'The same metric at n=400. The banner is gone and the sample tile reads plainly — that is the gate made visible: nothing about the figures changed, only the base beneath them.',
+        cap:'No reading is written here, so the field shows its empty state rather than a generated sentence. A comparison without a read is a legitimate state, not an incomplete one.' }),
+      board('d3','D3',TRACKED,LIGHT,'desktop',{
+        blurb:'Tracked, not compared, and mandatory. No peer figure exists, so the peer column reads Not recorded with the reason — never 0 or 0x. The header pill says tracked, the as-of tile has nothing to date, and no banner appears because there is no base to read.',
+        cap:'This is not a failed load. The editor note says it plainly: leave the peer field blank and the row stays tracked; fill it and source and sample become required.' }),
+      board('d4','D4',MISMATCH,LIGHT,'desktop',{
+        blurb:'Constituents named, and three of them against a stored n of five. The warning states the discrepancy and leaves the figure alone — silently rewriting the sample to match the list would be the product deciding which of your two entries was the mistake.',
+        cap:'The constituents table is the optional layer the API does not have. Where it is empty elsewhere, the empty state says the product stores n only and asks for names or a published table rather than offering to fill them.' }),
+      board('d5','D5',TVPI_THIN,DARK,'desktop',{
+        blurb:'Dark mode. Indigo lifts to #818cf8 and the tint drops to #211f3d; the thin-base banner and the amber sample tile take a dark fill with a lifted ink, so fill and ink come from the same theme.',
+        cap:'The ANALYTICS badge keeps its cyan — it is the archetype, not the accent, and the page stays indigo throughout.' }),
+      board('m1','M1',TVPI_THIN,LIGHT,'mobile',{
+        blurb:'Mobile 390, comparison. Banner first, then 2×2 tiles, the two figures stacked with a rule between them, reading, the constituents empty state, the form, draft and stated limit.',
+        cap:'Stacked rather than side by side: two 32px mono figures in one 358px row would either wrap or shrink below the size that makes them readable as headline numbers.' }),
+      board('m2','M2',TRACKED,LIGHT,'mobile',{
+        blurb:'Mobile 390, tracked. No banner, Not recorded in the peer half with its one-line reason, and the same form underneath.',
+        cap:'The stated limit survives in full on the phone — it is the page\u2019s contract about where these numbers come from, not chrome to trim.' })
+    ];
+
+    return { boards };
+  }
+}
+</script>
+</body></html>

@@ -222,3 +222,59 @@ test('the page keeps the artboard’s argument and none of its sample records', 
     assert.ok(!page.includes(sample), `the page prints the canvas’s own ${sample} as this founder’s`);
   }
 });
+
+test('the hypotheses card and the verdict read the board the band writes to', () => {
+  // D420. The desk flattened `hypotheses_json` off the interviews while the
+  // band on this very card accepts into the `hypotheses` table — so an
+  // accepted claim never appeared on the card it was accepted from.
+  assert.match(page, /api\.getValidationBoard\(projectId\)\.catch\(\(\) => null\)/, 'the desk does not read the hypothesis board');
+  const board = raw('cloudflare-worker/src/routes/founder_validate.ts');
+  assert.match(board, /founderValidate\.get\('\/board\/:projectId'/, 'the board route the desk reads is gone');
+  const writes = raw('cloudflare-worker/src/routes/_founder_validate_writes.ts');
+  assert.match(writes, /INSERT INTO hypotheses/, 'the accept path no longer writes the table the desk reads');
+  const evidenceBlock = page.slice(page.indexOf('const evidence = useMemo'), page.indexOf('if (isWorkspace) {'));
+  assert.ok(evidenceBlock.length > 100, 'the evidence block could not be found');
+  assert.match(evidenceBlock, /const hypotheses = liveClaims\(board\);/, 'the card is not built from the board');
+  assert.ok(!/item\.hypotheses \|\| \[\]\)\.filter\(\(hypothesis\)/.test(evidenceBlock),
+    'the card went back to flattening the interviews’ JSON');
+  // A RETIRED CLAIM IS NOT ON THE DESK.
+  assert.match(page, /\.filter\(\(claim\) => !claim\.retired_at && clean\(claim\.claim\)\)/);
+  // THE VERDICT IS THE SERVER'S, and a withheld one is not "unproven".
+  assert.match(page, /const verdictLabel = \(claim\) => \(claim\.verdict \? VERDICT_LABEL\[claim\.verdict\] : 'Fit not recorded'\);/,
+    'a withheld verdict reads as a verdict');
+  assert.ok(!/inconclusive/.test(page), 'the JSON-era status vocabulary is back');
+  // UNREADABLE IS NOT EMPTY: a failed board read is `null`, never `[]`.
+  assert.match(page, /boardUnreadable: board === null/);
+  assert.match(page, /evidence\.boardUnreadable \? <Unreadable what="The hypothesis board"/);
+  // EACH CARRIES ITS EVIDENCE: the worker's own counts and bar note.
+  const ev = page.slice(page.indexOf('function claimEvidence'), page.indexOf('function Verdict'));
+  assert.match(ev, /e\.supporting \?\? 0/);
+  assert.match(ev, /e\.contradicting \?\? 0/);
+  assert.match(ev, /item\.bar_note \|\| clean\(item\._note\)/, 'the distance to the bar, or the reason there is none, is dropped');
+  assert.match(css, /(^|\})\.hypothesis-withheld\{/, 'a withheld claim has no light-mode style');
+  assert.match(css, /\.dark \.hypothesis-withheld\{/, 'a withheld claim has no dark-mode style');
+});
+
+test('every verdict clause links to the receipts behind it', () => {
+  // A2's shield: "Every clause above links to the quotes behind it". A claim's
+  // quotes are the interviews touching its linked pain themes, and the page
+  // that lays those out is the hypotheses stage.
+  const verdict = page.slice(page.indexOf('function Verdict('));
+  assert.match(verdict, /data-testid=\{`link-verdict-clause-\$\{claim\.id\}`\} to=\{link\}/,
+    'a verdict clause is a sentence with nothing under it');
+  assert.match(page, /<Verdict evidence=\{evidence\}[^>]*link=\{stageLinks\.hypotheses\}/,
+    'the clauses do not open the hypotheses stage');
+  assert.match(verdict, /claim\.verdict \|\| claim\._note/, 'a claim whose verdict is withheld is dropped from the summary rather than named');
+  assert.match(verdict, /'withheld — ICP fit not recorded'/);
+  assert.match(css, /(^|\})\.verdict-clauses\{/);
+  assert.match(css, /\.dark \.verdict-clauses a\{/);
+});
+
+test('the interview card carries the artboard’s pain-tag band, the same one the pain map mounts', () => {
+  // A2's `Accept tags · Review each · Discard`, under the featured quote.
+  assert.ok(A2.includes('Accept tags'), 'the artboard’s pain-tag band is gone');
+  const library = page.slice(page.indexOf('title="Interview library"'), page.indexOf('title="Pain map"'));
+  assert.match(library, /<FillProposals key="overview-pain-tags" projectId=\{projectId\} kind="pain_tag" enabled=\{fillsOn\}/,
+    'the interview card does not mount the pain-tag band, or mounts it ungated');
+  assert.match(workspace, /kind="pain_tag"/, 'the pain map stopped mounting the same drafter');
+});

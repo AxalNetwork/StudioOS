@@ -4,6 +4,7 @@ import { AlertCircle, ArrowLeft, ChevronRight, RefreshCw, UsersRound } from 'luc
 import { api } from '../../lib/api';
 import { NOT_RECORDED, text, titleCase } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
+import { daysSince, isCold } from '../../lib/networkBook';
 import './founderNetworkRelationships.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
@@ -14,21 +15,11 @@ const list = (value, ...keys) => {
   return [];
 };
 const title = (value) => titleCase(value) || NOT_RECORDED;
-const daysSince = (value) => {
-  if (!value) return null;
-  const stamp = new Date(value).getTime();
-  if (!Number.isFinite(stamp)) return null;
-  return Math.max(0, Math.floor((Date.now() - stamp) / 86400000));
-};
 const lastTouch = (value) => {
   const days = daysSince(value);
   if (days === null) return 'Not recorded';
   if (days === 0) return 'Today';
   return `${days} day${days === 1 ? '' : 's'} ago`;
-};
-const isCold = (row) => {
-  const days = daysSince(row.last_activity_at);
-  return days !== null && days > 60;
 };
 
 /**

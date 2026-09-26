@@ -13,7 +13,7 @@ canvas behind it still shows up here.
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
 | Home | Studio | `/studio` | Founder Studio |
-| Home | Spin-Out Lab | `/spinout-lab` | Spin-Out Lab · Intro, Spin-Out Lab Workspace |
+| Home | Spin-Out Lab | `/spinout-lab` | Spin-Out Lab · Intro, Spin-Out Lab · Landing, Spin-Out Lab Workspace |
 | Home | Validate | `/validate` | Founder Workspaces Canvas, Pages · Founder Validate |
 | Home | Build | `/build` | Founder Workspaces Canvas |
 | Home | Raise | `/raise` | Founder Workspaces Canvas |
@@ -29,7 +29,7 @@ canvas behind it still shows up here.
 | Home | Spin-Out Lab | `/spinout-lab` | — (no canvas; shipped ahead of the design corpus) |
 | Home | Practice | `/practice` | — (no canvas; shipped ahead of the design corpus) |
 | Home | Cohorts | `/cohorts` | — (no canvas; shipped ahead of the design corpus) |
-| Home | Expertise | `/expertise` | — (no canvas; shipped ahead of the design corpus) |
+| Home | Expertise | `/expertise` | Pages · Advisor Expertise |
 | Home | Network | `/network` | Advisor Canvas |
 | Home | Research | `/research` | — (no canvas; shipped ahead of the design corpus) |
 
@@ -42,7 +42,7 @@ canvas behind it still shows up here.
 | Home | Deals | `/deals` | Deal Flow, Investor LP Canvas |
 | Home | Portfolio | `/portfolio` | Investor LP Canvas |
 | Home | Axal VC Fund | `/spinout-lab/investor-workspace` | Fund Brief One-Pager, LP Investor Workspace |
-| Home | Fund | `/funds` | Investor LP Canvas, Pages · Investor Fund |
+| Home | Fund | `/funds` | Investor LP Canvas, Pages · Funds and fund research, Pages · Investor Fund |
 | Home | Network | `/network` | Investor LP Canvas, Pages · Investor Network |
 | Home | Research | `/research` | Investor LP Canvas |
 | Home | Trust | `/trust` | — (no canvas; shipped ahead of the design corpus) |
@@ -112,7 +112,7 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-34 of the 62 sidebar rows above are not claimed
+33 of the 62 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
@@ -121,7 +121,6 @@ rather than merely absent.
 - advisor · Home · Spin-Out Lab (`/spinout-lab`)
 - advisor · Home · Practice (`/practice`)
 - advisor · Home · Cohorts (`/cohorts`)
-- advisor · Home · Expertise (`/expertise`)
 - advisor · Home · Research (`/research`)
 - investor · Home · Trust (`/trust`)
 - partner · Headerless · Pipeline (`/pipeline`)
@@ -153,4 +152,4 @@ rather than merely absent.
 - branch_admin · Branch · Insights (`/branch/insights`)
 - branch_admin · Branch · Settings (`/branch/settings`)
 
-**Canvas corpus:** 114. **Workspace assignments:** 134.
+**Canvas corpus:** 125. **Workspace assignments:** 148.

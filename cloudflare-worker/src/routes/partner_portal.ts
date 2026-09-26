@@ -9,6 +9,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { requirePartnerProfile, mapError } from './_t13t14t15_helpers';
+import { refusalBody } from '../util/refusal';
 import { ensurePartnerGuidanceColumns } from '../services/partnerGuidanceSchema';
 
 const portal = new Hono<{ Bindings: Env }>();
@@ -16,6 +17,22 @@ const portal = new Hono<{ Bindings: Env }>();
 function safeJsonObject(s: unknown): Record<string, unknown> {
   if (typeof s !== 'string') return {};
   try { const v = JSON.parse(s); return v && typeof v === 'object' ? v : {}; } catch { return {}; }
+}
+
+// D390 — AN UNLINKED ACCOUNT IS AN ANSWER WITH A CODE, not a sentence to
+// match. `requirePartnerProfile` throws the same message for every route that
+// calls it, and mapError ships that as a bare `{ detail }` 400, so the only way
+// a page could tell "this sign-in has no firm" from "the read failed" was a
+// regex over the words. The firm profile card on Firm Settings branches on
+// `e.code` instead. 404 because the record the caller asked for does not exist
+// for them; the sentence is unchanged, so every zone that still matches it
+// (`isNoPartnerProfile` in pages/partner/kit.jsx) keeps working.
+const NO_PARTNER_PROFILE = 'No partner profile attached to your account';
+function profileRefusal(c: any, e: any) {
+  if (String(e?.message || '') === NO_PARTNER_PROFILE) {
+    return c.json(refusalBody({ code: 'no_partner_profile', message: NO_PARTNER_PROFILE }), 404);
+  }
+  return mapError(c, e);
 }
 
 portal.get('/my-deal', async (c) => {
@@ -169,7 +186,10 @@ portal.patch('/accepting-intros', async (c) => {
   const row: any = await c.env.DB.prepare(
     `UPDATE partners SET accepting_intros = ? WHERE id = (SELECT partner_id FROM users WHERE id = ?) RETURNING id, accepting_intros`,
   ).bind(value, user.id).first();
-  if (!row) return c.json({ error: 'Partner not found' }, 404);
+  // D390 — the same refusal /profile gives, so the Firm Settings card's toggle
+  // reads one code for "this sign-in has no firm" wherever it meets it. The
+  // `error` field was the sentence itself, which a page could only match.
+  if (!row) return c.json(refusalBody({ code: 'no_partner_profile', message: NO_PARTNER_PROFILE }), 404);
   return c.json({ partner_id: row.id, accepting_intros: row.accepting_intros });
 });
 
@@ -321,7 +341,7 @@ portal.get('/profile', async (c) => {
     const user = await requireAuth(c);
     const partner = await requirePartnerProfile(c.env, user);
     return c.json({ partner: profileDto(partner) });
-  } catch (e) { return mapError(c, e); }
+  } catch (e) { return profileRefusal(c, e); }
 });
 
 // Per-field merge, not a full replace: the Overview form edits one card and
@@ -356,7 +376,7 @@ portal.patch('/profile', async (c) => {
     ).bind(...params).first<any>();
     if (!row) return c.json({ detail: 'Partner not found' }, 404);
     return c.json({ partner: profileDto(row) });
-  } catch (e) { return mapError(c, e); }
+  } catch (e) { return profileRefusal(c, e); }
 });
 
 export default portal;

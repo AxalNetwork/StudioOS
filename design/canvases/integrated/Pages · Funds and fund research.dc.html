@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeef1;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#6d28d9;text-decoration:none}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);min-width:1536px}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px;flex-wrap:wrap}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#615c6e;max-width:1040px;margin:0 0 18px}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f7f7f9;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;justify-content:space-between;padding:8px 15px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:11px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e;margin-bottom:9px}
+    .crumb b{color:#18181b;font-weight:700}
+    .zb{font-size:11px;font-weight:600;color:#615c6e;background:#fff;border:1px solid #ececf1;border-radius:999px;padding:5px 11px;display:inline-flex;align-items:center;gap:5px}
+    .dot{width:5px;height:5px;border-radius:50%;background:#f59e0b;flex:none}
+    .fil{font-size:11px;font-weight:600;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:11.5px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .prop{border-radius:11px;padding:13px 15px}
+    .propb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;color:#fff}
+    .gho{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49}
+    .dis{font-size:11px;font-weight:600;padding:6px 9px;color:#615c6e}
+    .arch{font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border-radius:3px;white-space:nowrap}
+    .cmp{background:#fbfbfc;border:1px dashed #d4d2dc;border-radius:11px;padding:13px 15px;width:1440px;min-width:1440px;flex:none;box-sizing:border-box;margin-bottom:10px}
+    .cmpb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#615c6e;background:#f0eff4;border:1px solid #e2e1e8;border-radius:3px;padding:2px 6px}
+    .nr{font-size:10px;font-weight:700;color:#7c6f86;background:#f6f5f8;border:1px solid #e2e1e8;border-radius:4px;padding:2px 7px;white-space:nowrap;display:inline-block}
+    .door{font-size:11.5px;font-weight:700;color:#6d28d9;cursor:pointer}
+    .tier{font-size:8.5px;font-weight:800;letter-spacing:.06em;color:#3730a3;background:#f5f5ff;border:1px solid #c7d2fe;border-radius:3px;padding:1px 5px}
+    .chk{width:13px;height:13px;border-radius:3px;flex:none;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800}
+    .legend{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;color:#4a4553}
+    .swatch{width:9px;height:9px;border-radius:2px;flex:none}
+  </style>
+</helmet>
+
+<sc-for list="{{ pages }}" as="p" hint-placeholder-count="7">
+  <section class="ab" id="{{ p.id }}">
+    <div class="ab-hd">
+      <a class="ab-id" href="#{{ p.id }}">{{ p.badge }}</a>
+      <span class="ab-nm">{{ p.title }}</span>
+      <span class="arch" style="{{ p.archStyle }}">{{ p.arch }}</span>
+      <span class="num" style="font:400 11px ui-monospace,Menlo,monospace;color:#615c6e">{{ p.route }}</span>
+    </div>
+    <div class="ab-sub">{{ p.blurb }}</div>
+
+    <div class="cmp">
+      <span class="cmpb">Compressed · on {{ p.cmpOn }}</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ p.cmpTitle }}</div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ p.cmpBody }}</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:{{ p.deep }};flex:none">{{ p.viewMore }}</span>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="side"><sc-for list="{{ p.nav }}" as="n" hint-placeholder-count="9">
+        <div class="{{ n.cls }}" style="{{ n.style }}"><span>{{ n.label }}</span><sc-if value="{{ n.tier }}"><span class="tier">{{ n.tier }}</span></sc-if></div>
+      </sc-for></div>
+
+      <div class="main">
+        <div class="crumb"><span>{{ p.c1 }}</span><span style="color:#615c6e">‹</span><span>{{ p.c2 }}</span><sc-if value="{{ p.c3 }}"><span style="color:#615c6e">‹</span><b>{{ p.c3 }}</b></sc-if></div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">{{ p.h1 }}</h1>
+          <span style="display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:700;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px">{{ p.scope }}</span>
+        </div>
+        <div style="font-size:12px;color:#4a4553;margin-top:5px;line-height:1.5">{{ p.sub }}</div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">
+          <sc-for list="{{ p.zones }}" as="z" hint-placeholder-count="5">
+            <span class="{{ z.cls }}" style="{{ z.style }}"><sc-if value="{{ z.attn }}"><span class="dot"></span></sc-if>{{ z.label }}</span>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;margin-top:14px;padding-bottom:13px;border-bottom:1px solid #ececf1;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ p.filters }}" as="f" hint-placeholder-count="4"><span class="{{ f.cls }}" style="{{ f.style }}">{{ f.label }}</span></sc-for>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+            <sc-for list="{{ p.ops }}" as="o" hint-placeholder-count="3"><span class="gho" style="{{ o.style }}">{{ o.label }}</span></sc-for>
+          </div>
+        </div>
+
+        <!-- four tiles -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:13px">
+          <sc-for list="{{ p.tiles }}" as="t" hint-placeholder-count="4">
+            <div class="card" style="padding:11px 13px">
+              <div class="lbl" style="font-size:9px">{{ t.label }}</div>
+              <sc-if value="{{ t.nr }}"><div style="margin-top:6px"><span class="nr">{{ t.nrText }}</span></div></sc-if>
+              <sc-if value="{{ t.value }}"><div class="num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:5px;color:{{ t.ink }}">{{ t.value }}</div></sc-if>
+              <div style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.45">{{ t.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- identity row (dossiers) -->
+        <sc-if value="{{ p.ident }}">
+          <div class="card" style="padding:15px 17px;margin-top:13px">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <span style="font-size:16px;font-weight:800;letter-spacing:-.02em">{{ p.ident.name }}</span>
+              <span class="num" style="font-size:12px;font-weight:700;color:#3f3a49">{{ p.ident.cheque }}</span>
+              <span style="font-size:11px;color:#615c6e;margin-left:auto">{{ p.ident.src }}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-top:12px">
+              <sc-for list="{{ p.ident.axes }}" as="a" hint-placeholder-count="3">
+                <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px;padding:10px 12px">
+                  <div class="lbl" style="font-size:8.5px">{{ a.k }}</div>
+                  <div style="margin-top:6px"><span style="{{ a.pillStyle }}">{{ a.v }}</span></div>
+                </div>
+              </sc-for>
+            </div>
+            <sc-if value="{{ p.ident.passNote }}">
+              <div style="border:1px solid #fecaca;background:#fef2f2;border-radius:9px;padding:10px 13px;margin-top:11px;font-size:11.5px;color:#7f1d1d;line-height:1.55">{{ p.ident.passNote }}</div>
+            </sc-if>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.55">{{ p.ident.note }}</div>
+          </div>
+        </sc-if>
+
+        <!-- quoted blocks -->
+        <sc-if value="{{ p.quotes }}">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:11px">
+            <sc-for list="{{ p.quotes }}" as="q" hint-placeholder-count="2">
+              <div class="card" style="padding:14px 16px">
+                <div class="lbl" style="font-size:9px">{{ q.k }}</div>
+                <sc-if value="{{ q.nr }}"><div style="margin-top:9px"><span class="nr">Unrecorded</span></div><div style="font-size:11px;color:#615c6e;margin-top:7px;line-height:1.55">{{ q.empty }}</div></sc-if>
+                <sc-if value="{{ q.text }}"><div style="font-size:12.5px;color:#18181b;margin-top:8px;line-height:1.65;{{ q.style }}">{{ q.text }}</div></sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- chart -->
+        <sc-if value="{{ p.chart }}">
+          <div class="card" style="padding:15px 17px;margin-top:11px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap">
+              <span style="font-size:14px;font-weight:800;letter-spacing:-.015em">{{ p.chart.title }}</span>
+              <div style="display:flex;gap:12px;flex-wrap:wrap">
+                <sc-for list="{{ p.chart.legend }}" as="lg" hint-placeholder-count="4">
+                  <span class="legend"><span class="swatch" style="{{ lg.style }}"></span>{{ lg.k }}</span>
+                </sc-for>
+              </div>
+            </div>
+            <sc-if value="{{ p.chart.empty }}">
+              <div style="border:1px dashed #d4d2dc;border-radius:10px;background:#fbfbfc;height:{{ p.chart.h }};display:flex;align-items:center;justify-content:center;padding:20px;margin-top:12px">
+                <div style="max-width:520px;text-align:center;font-size:12px;color:#4a4553;line-height:1.6">{{ p.chart.emptyText }}</div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ p.chart.groups }}">
+              <div style="display:flex;align-items:flex-end;gap:{{ p.chart.gap }};margin-top:16px;padding-bottom:9px;border-bottom:1px solid #ececf1;height:{{ p.chart.h }}">
+                <sc-for list="{{ p.chart.groups }}" as="g" hint-placeholder-count="2">
+                  <div style="flex:{{ g.flex }};display:flex;align-items:flex-end;justify-content:center;gap:5px;height:100%">
+                    <sc-for list="{{ g.bars }}" as="bar" hint-placeholder-count="4">
+                      <div style="width:{{ p.chart.bw }};display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%">
+                        <sc-if value="{{ bar.amt }}"><span class="num" style="font-size:9px;font-weight:700;color:#615c6e;margin-bottom:3px">{{ bar.amt }}</span></sc-if>
+                        <sc-if value="{{ bar.gapText }}"><span style="font-size:8.5px;font-weight:700;color:#7c6f86;margin-bottom:3px;writing-mode:vertical-rl;transform:rotate(180deg)">{{ bar.gapText }}</span></sc-if>
+                        <div style="width:100%;height:{{ bar.h }};border-radius:3px 3px 0 0;{{ bar.style }}"></div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex;gap:{{ p.chart.gap }};margin-top:7px">
+                <sc-for list="{{ p.chart.groups }}" as="g" hint-placeholder-count="2">
+                  <div style="flex:{{ g.flex }};text-align:center">
+                    <div class="num" style="font-size:10.5px;font-weight:700;color:#3f3a49">{{ g.label }}</div>
+                    <div style="font-size:9px;color:#615c6e;margin-top:2px">{{ g.sub }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+            <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ p.chart.note }}</div>
+          </div>
+        </sc-if>
+
+        <!-- sector strip -->
+        <sc-if value="{{ p.sector }}">
+          <div class="card" style="padding:14px 17px;margin-top:11px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+              <span class="lbl">{{ p.sector.title }}</span>
+              <span style="font-size:10.5px;color:#615c6e">{{ p.sector.meta }}</span>
+            </div>
+            <div style="height:22px;border:1px dashed #d4d2dc;background:#fbfbfc;border-radius:6px;margin-top:10px"></div>
+            <div style="font-size:11px;color:#615c6e;margin-top:9px;line-height:1.55">{{ p.sector.note }}</div>
+          </div>
+        </sc-if>
+
+        <!-- instrument table -->
+        <!-- Guarded on instTitle, not on rows: an instrument with no rows still has a card, a
+             header and an empty state to draw. Guarding the whole card on rows made instEmpty
+             unreachable on every page — the one honesty state this canvas leans on hardest. -->
+        <sc-if value="{{ p.instTitle }}">
+          <div class="card" style="padding:15px 17px;margin-top:11px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:11px">
+              <span style="font-size:14px;font-weight:800;letter-spacing:-.015em">{{ p.instTitle }}</span>
+              <span style="font-size:11px;color:#615c6e">{{ p.instMeta }}</span>
+            </div>
+            <sc-if value="{{ p.rows }}">
+              <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px">
+                <sc-for list="{{ p.head }}" as="h" hint-placeholder-count="5"><span class="th">{{ h }}</span></sc-for>
+              </div>
+            </sc-if>
+            <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="6">
+              <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px;align-items:center;{{ r.rowStyle }}">
+                <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="5">
+                  <span class="td" style="{{ c.style }}">
+                    <sc-if value="{{ c.door }}"><span class="door">{{ c.text }}</span></sc-if>
+                    <sc-if value="{{ c.plain }}"><span>{{ c.text }}</span></sc-if>
+                    <sc-if value="{{ c.pill }}"><span style="{{ c.pillStyle }}">{{ c.pill }}</span></sc-if>
+                    <sc-if value="{{ c.nr }}"><span class="nr">{{ c.nrText }}</span></sc-if>
+                  </span>
+                </sc-for>
+              </div>
+            </sc-for>
+            <sc-if value="{{ p.instEmpty }}">
+              <div style="border:1px dashed #d4d2dc;border-radius:10px;background:#fbfbfc;padding:16px 18px;margin-top:9px;font-size:11.5px;color:#4a4553;line-height:1.6">{{ p.instEmpty }}</div>
+            </sc-if>
+            <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ p.instNote }}</div>
+          </div>
+        </sc-if>
+
+        <!-- missing panel -->
+        <sc-if value="{{ p.missing }}">
+          <div class="card" style="padding:15px 17px;margin-top:11px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+              <span style="font-size:14px;font-weight:800;letter-spacing:-.015em">{{ p.missing.title }}</span>
+              <span class="num" style="font-size:11px;font-weight:700;color:#615c6e">{{ p.missing.count }}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:{{ p.missing.cols }};gap:8px 18px;margin-top:11px">
+              <sc-for list="{{ p.missing.rows }}" as="m" hint-placeholder-count="7">
+                <div style="display:flex;align-items:flex-start;gap:8px;{{ m.rowStyle }}">
+                  <span class="chk" style="{{ m.boxStyle }}">{{ m.mark }}</span>
+                  <div style="min-width:0">
+                    <div style="font-size:11.5px;font-weight:{{ m.weight }};color:{{ m.ink }};line-height:1.4">{{ m.k }}</div>
+                    <sc-if value="{{ m.sub }}"><div style="font-size:10px;color:#615c6e;margin-top:2px;line-height:1.45">{{ m.sub }}</div></sc-if>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ p.missing.note }}</div>
+          </div>
+        </sc-if>
+
+        <!-- AI card -->
+        <div class="prop" style="margin-top:11px;{{ p.propStyle }}">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;flex-wrap:wrap">
+            <span class="propb" style="{{ p.propbStyle }}">{{ p.aiLabel }}</span>
+            <span class="num" style="font-size:10.5px;color:{{ p.deep }};margin-left:auto">{{ p.aiCost }}</span>
+          </div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ p.aiBody }}</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap">
+            <sc-if value="{{ p.aiAccept }}"><span class="acc" style="background:{{ p.ink }}">{{ p.aiAccept }}</span><span class="gho">Edit first</span><span class="dis">Discard</span></sc-if>
+            <span style="font-size:10px;color:#615c6e;margin-left:auto">{{ p.aiFoot }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="rail"><dc-import name="DetailRail" accent="{{ p.railAccent }}" page="{{ p.railPage }}" hint-size="100%,{{ p.railH }}"></dc-import></div>
+    </div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    // ══ TWO PRODUCTS, TWO ACCENTS. The founder researches funds; the GP runs one. They share
+    // the word and nothing else — not a table, not a licence, not a chart. ══
+    const F = { ink:'#7c3aed', deep:'#6d28d9', tint:'#faf7ff', hair:'#e6dffb' };
+    const I = { ink:'#4f46e5', deep:'#4338ca', tint:'#f5f5ff', hair:'#c7d2fe' };
+
+    const F_ROWS = ['Home','Validate','Build','Raise','Grow','Network','Research','Trust','Company Settings'];
+    const I_ROWS = ['Home','Deals','Portfolio','Axal VC Fund','Fund','Network','Research','Trust','Firm Settings'];
+    const navFor = (rows, active, A, tierOn) => rows.map(label => ({ label,
+      cls: label === active ? 'nav on' : 'nav', tier: label === tierOn ? 'Inst.' : null,
+      style: label === active ? 'color:'+A.deep+';background:'+A.tint+';font-weight:700;box-shadow:inset 2px 0 0 '+A.ink : '' }));
+
+    const F_ZONES = ['Ask','Markets','Companies','Funds','Library'];
+    const I_ZONES = ['Overview','LPs','Calls','Accounting','Reporting'];
+    const zoneRow = (list, active, A) => list.map(label => ({ label, cls:'zb', attn: label === 'Calls',
+      style: label === active ? 'color:'+A.deep+';background:'+A.tint+';border-color:'+A.hair+';font-weight:700' : '' }));
+
+    const ARCH = { 'MATCH ENGINE':['#fdf4ff','#86198f','#f5d0fe'], 'COLLECTION':['#f0fdf6','#065f46','#a7f3d0'],
+      'ANALYTICS':['#f0fdff','#0e7490','#a5edf5'], 'LEDGER':['#f5f5ff','#3730a3','#c7d2fe'],
+      'FEED':['#fffbeb','#92400e','#fde68a'], 'WORK BOARD':['#eff6ff','#1d4ed8','#dbeafe'] };
+    const archStyle = (a) => { const c = ARCH[a]; return 'background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+
+    // Unrecorded / Unavailable / Not assessed are always grey. A gap never borrows a status colour.
+    const P = { 'Warm path':['#f5f3ff','#6d28d9','#ddd6fe'], 'Right stage':['#ecfdf5','#047857','#a7f3d0'],
+      'Wrong stage':['#fffbeb','#92400e','#fde68a'], 'Passed':['#fef2f2','#b91c1c','#fecaca'],
+      'Researching':['#ecfdf5','#047857','#a7f3d0'], 'Direct':['#eff6ff','#1d4ed8','#dbeafe'],
+      'Adjacent':['#f5f5ff','#3730a3','#c7d2fe'], 'Published':['#ecfdf5','#047857','#a7f3d0'],
+      'Drafted':['#f5f5ff','#3730a3','#c7d2fe'], 'No route in':['#f4f4f6','#615c6e','#e4e4e8'],
+      'Stage not assessed':['#f4f4f6','#615c6e','#e4e4e8'], 'Path not assessed':['#f4f4f6','#615c6e','#e4e4e8'],
+      'Unrecorded':['#f6f5f8','#7c6f86','#e2e1e8'], 'Unavailable':['#f6f5f8','#7c6f86','#e2e1e8'] };
+    const pill = (t, inline) => { const c = P[t] || P['Unrecorded'];
+      return (inline ? 'display:inline-block;margin-left:6px;' : 'display:inline-block;')
+        + 'font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:'
+        + c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap'; };
+
+    const cellText = (text, style) => ({ text, plain:true, door:false, pill:null, nr:false, nrText:'', style: style || '' });
+    const cellDoor = (text) => ({ text, plain:false, door:true, pill:null, nr:false, nrText:'', style:'' });
+    const cellPill = (t) => ({ text:'', plain:false, door:false, pill:t, pillStyle:pill(t), nr:false, nrText:'', style:'' });
+    const cellNR = (t) => ({ text:'', plain:false, door:false, pill:null, nr:true, nrText: t || 'Unrecorded', style:'' });
+    const fil = (list, i0, A) => list.map((label, i) => ({ label, cls:'fil',
+      style: i === i0 ? 'background:'+A.tint+';border-color:'+A.hair+';color:'+A.deep+';font-weight:700' : '' }));
+    const ops = (list, A) => list.map((label, i) => ({ label,
+      style: i === 0 ? 'border-color:'+A.hair+';color:'+A.deep : '' }));
+
+    const usd = (n) => '$' + Math.round(n).toLocaleString('en-US');
+    const m2 = (n) => '$' + (n / 1e6).toFixed(2) + 'M';
+    const k0 = (n) => n >= 1e6 ? '$' + (n / 1e6).toFixed(2) + 'M' : '$' + Math.round(n / 1000) + 'k';
+    // Counts landing mid-sentence are words; stat tiles keep numerals.
+    const nWord = (n) => ['no','one','two','three','four','five','six','seven','eight'][n] || String(n);
+    const Cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+    // Founder research used the cheap cached pair; the GP fund canvas declares DeepSeek V4 Pro.
+    const c4 = (n) => '≈ $' + n.toFixed(4);
+    const F_FIRST = 0.0272, F_CACHED = 0.0025;
+    const gpCost = (tin, tout) => tin / 1e6 * 1.320 + tout / 1e6 * 3.960;
+
+    // ══════════════════════════════════════════════════════════════════════
+    // FOUNDER CORPUS — research_funds. No AUM, no deployed capital, no book.
+    // Cheque ends are integers or null; a null end renders "unrecorded", never $0.
+    // ══════════════════════════════════════════════════════════════════════
+    const FUNDS = [
+      { uid:'lat', name:'Latitude Seed', lo:250000, hi:750000, stage:'right', path:'warm', status:'researching',
+        note:'"Tools engineers choose before procurement hears about it." Three dev-tooling seeds this year.' },
+      { uid:'kes', name:'Kestrel Ventures', lo:400000, hi:1500000, stage:'right', path:'warm', status:'researching',
+        note:'Led three workflow rounds in 18 months. Lost one at Series A — which is why they want a board seat.' },
+      { uid:'tho', name:'Thornbury Capital', lo:300000, hi:1000000, stage:null, path:'warm', status:'researching',
+        note:'Both recent seed leads had a named design partner in the deck. You have four. Stage not assessed.' },
+      { uid:'ver', name:'Verwood Ventures', lo:150000, hi:500000, stage:'right', path:'cold', status:'researching',
+        note:'Strong thesis fit, no route in. Also a customer — do not confuse the two relationships.' },
+      { uid:'mar', name:'Marchmont', lo:2000000, hi:8000000, stage:'wrong', path:null, status:'researching',
+        note:'Series A only. Kept on file so you stop rediscovering them.' },
+      { uid:'ald', name:'Aldworth Partners', lo:200000, hi:600000, stage:'right', path:'warm', status:'passed',
+        reason:'too early — return at $30k MRR', note:'Passed in June. The bar they named is a real one and you are close to it.' },
+      { uid:'pel', name:'Pelham Grove', lo:500000, hi:null, stage:'wrong', path:'cold', status:'passed',
+        reason:null, note:'Passed with no reason recorded.' }
+    ];
+    const chequeOf = (f) => (f.lo ? k0(f.lo) : 'unrecorded') + '–' + (f.hi ? k0(f.hi) : 'unrecorded');
+    // ONE pill, most useful of three independent facts — a highlight, not a collapse. The
+    // dossier shows all three axes side by side, which is why the list may pick one.
+    const listPill = (f) => f.status === 'passed' ? 'Passed'
+      : (f.path === 'warm' ? 'Warm path'
+      : (f.stage === 'right' ? 'Right stage' : (f.stage === 'wrong' ? 'Wrong stage' : null)));
+    const RESEARCHED = 14;                                  // owner-scoped count, sample
+    const rightStage = FUNDS.filter(f => f.stage === 'right').length + 7;  // nulls excluded
+    const passed = FUNDS.filter(f => f.status === 'passed');
+    const noReason = passed.filter(f => !f.reason);
+    const warm = FUNDS.filter(f => f.path === 'warm').length + 2;
+    const RAISE_TARGET = null;   // no ask recorded → overlap is null, never 0
+
+    const fundRows = FUNDS.map(f => {
+      const pl = listPill(f);
+      return { rowStyle: f.status === 'passed' ? 'opacity:.78' : '', cells:[
+        cellDoor(f.name), cellText(chequeOf(f), 'font-variant-numeric:tabular-nums'),
+        pl ? cellPill(pl) : cellNR('Stage not assessed'), cellText(f.note) ]};
+    });
+
+    // ══ Kestrel dossier. Public size is what the FOUNDER typed, not a capital account. ══
+    const KES = FUNDS[1];
+    const KES_SIZE = [ { label:'2024', v:40000000, sub:'Fund II close' }, { label:'2026', v:null, sub:'not filed yet' } ];
+    const KES_INV = [
+      { co:'Tessera', stage:'Seed', yr:'2025', note:'Led. Workflow tooling, $1.2M.' },
+      { co:'Padmore Labs', stage:'Seed', yr:'2025', note:'Led. Lost the Series A to a growth fund.' },
+      { co:'Highfield', stage:'Pre-seed', yr:'2024', note:'Followed. Board observer, not a seat.' }
+    ];
+
+    // ══════════════════════════════════════════════════════════════════════
+    // GP CORPUS — vc_funds + fund_report_periods. Called ≠ collected ≠ deployed.
+    // Dry powder is collected − deployed, and is Unavailable when collected is not readable.
+    // Nothing here is copied from spinoutFundModel.js; two issued quarters and one draft.
+    // ══════════════════════════════════════════════════════════════════════
+    const PERIODS = [
+      { period:'Q1 2026', issued:true, issuedOn:'14 Apr 2026', committed:8500000, called:2550000,
+        collected:2300000, deployed:null, sectors:null, nav:null },
+      { period:'Q2 2026', issued:true, issuedOn:'16 Jul 2026', committed:10000000, called:3500000,
+        collected:3280000, deployed:2390000, sectors:null, nav:null },
+      { period:'Q3 2026', issued:false, issuedOn:null, committed:10000000, called:3500000,
+        collected:3400000, deployed:2390000, sectors:null, nav:null }
+    ];
+    const issued = PERIODS.filter(q => q.issued);
+    const drafts = PERIODS.filter(q => !q.issued);
+    const latest = issued[issued.length - 1];
+    // Live ledger scalars are current records, not a time series — they stand even with no snapshot.
+    const LEDGER = { committed:10000000, called:3500000, collected:3280000, deployed:2390000 };
+    const dryPowder = LEDGER.collected - LEDGER.deployed;
+    const sectorQs = issued.filter(q => q.sectors);
+    const navQs = issued.filter(q => q.nav);
+
+    // Grouped columns. A null series is a gap in THAT cluster — never a zero bar, never a line
+    // drawn through a quarter that has no snapshot.
+    const SERIES = [
+      { k:'Committed', key:'committed', c:'#c7d2fe' }, { k:'Called', key:'called', c:'#818cf8' },
+      { k:'Collected', key:'collected', c:'#4f46e5' }, { k:'Deployed', key:'deployed', c:'#312e81' }
+    ];
+    // A bar narrower than its own label collides with its neighbour. The landing chart is the
+    // compressed one, so it drops per-bar figures and reads them off the table and the tiles;
+    // the full-width history keeps them, where 36px clears the widest "$10.00M".
+    const chartFor = (list, h, bw, gap, showAmounts) => {
+      const max = list.reduce((a, q) => SERIES.reduce((b, s) => Math.max(b, q[s.key] || 0), a), 0) || 1;
+      return {
+        h: h + 'px', bw, gap,
+        legend: SERIES.map(s => ({ k:s.k, style:'background:' + s.c })),
+        groups: list.map(q => ({ flex:'1', label:q.period, sub: q.issued ? 'issued ' + q.issuedOn : 'drafted',
+          bars: SERIES.map(s => {
+            const v = q[s.key];
+            return v == null
+              // A hatched stub, floor height only — it occupies the slot without stating a value.
+              ? { h:'10px', amt:null, gapText:'Unrecorded',
+                  style:'background:repeating-linear-gradient(45deg,#f0eff4,#f0eff4 3px,#e2e1e8 3px,#e2e1e8 6px);border:1px dashed #d4d2dc' }
+              : { h: Math.max(4, Math.round(v / max * (h - (showAmounts ? 26 : 8)))) + 'px',
+                  amt: showAmounts ? m2(v) : null, gapText:null,
+                  style:'background:' + s.c };
+          }) }))
+      };
+    };
+
+    const chk = (done, k, sub) => ({ k, sub, mark: done ? '✓' : '',
+      rowStyle: done ? 'opacity:.62' : '', weight: done ? '600' : '700', ink: done ? '#615c6e' : '#18181b',
+      boxStyle: done ? 'background:#ecfdf5;border:1px solid #a7f3d0;color:#047857'
+                     : 'background:#fff;border:1.5px solid #f59e0b;color:transparent' });
+
+    const base = (o) => Object.assign({
+      ident:null, quotes:null, chart:null, sector:null, rows:null, instEmpty:null, missing:null,
+      c3:null, aiAccept:'Accept', railH:'760px'
+    }, o);
+
+    const PAGES = [
+      // ══════════ fs4 · the shipped list, updated ══════════
+      base({ id:'fs4', badge:'FS4', route:'/research/funds', arch:'MATCH ENGINE', title:'Research · Funds — updated',
+        ink:F.ink, deep:F.deep, railAccent:'violet', railPage:'Research',
+        blurb:'The shipped list, updated rather than replaced. Every fund name is now a door to its dossier, the Best-fit filter is gone because the product does not score funds, and cheque overlap reads as a gap rather than a zero while no ask is recorded.',
+        cmpOn:'/studio', cmpTitle:'14 funds researched', cmpBody:'Six with a warm path, two wrong stage, two passed — one of those without a reason.',
+        viewMore:'View more · open the first warm-path dossier →',
+        nav: navFor(F_ROWS, 'Research', F), zones: zoneRow(F_ZONES, 'Funds', F),
+        c1:'Research', c2:'Funds', h1:'Fund research', scope:'Novacraft Labs',
+        sub:'Thesis in their words, stage and path as separate facts.',
+        filters: fil(['All funds','Right stage','Warm path','Passed'], 0, F),
+        ops: ops(['Add fund','Open dossier','Export'], F),
+        tiles:[
+          { label:'Researched', value:String(RESEARCHED), ink:'#18181b', note:nWord(warm) + ' with a path in' },
+          { label:'Right stage', value:String(rightStage), ink:'#18181b', note:'nulls are not in this number' },
+          { label:'Cheque overlap', nr:true, nrText:'—', note:'no ask recorded on this project' },
+          { label:'Passed', value:String(passed.length), ink:'#18181b', note:nWord(noReason.length) + ' missing a reason' } ],
+        instTitle:'Fund shortlist', instMeta:'Every name is a door · one pill, three facts behind it',
+        cols:'1.2fr 1fr .9fr 2.4fr', head:['Fund','Cheque','State','What the research says'],
+        rows: fundRows,
+        instNote:'The Kestrel note is the kind of thing this page exists for: their board-seat ask is explicable from their own history rather than mysterious, which changes how you negotiate it. Verwood is both a customer and a prospective investor, and the note says so — those are two relationships and confusing them is expensive. Pelham Grove was passed without a reason, which is why the tile counts it: a pass with no reason is a fund you will rediscover. Cheque overlap is a dash rather than zero because no raise target is recorded, and nothing can overlap an ask that does not exist.',
+        propStyle:'background:'+F.tint+';border:1px solid '+F.hair, propbStyle:'color:'+F.deep+';background:#f3e8ff;border:1px solid '+F.hair,
+        aiLabel:'Proposal · pre-meeting brief', aiCost: c4(F_FIRST) + ' first pass',
+        aiBody:'Six lines on the fund you are meeting Thursday: what they have funded at your stage, what both recent leads had in common, the partner who will be in the room, and the one question their own history says they will ask. Drawn from public filings and their own writing.',
+        aiAccept:'Save brief', aiFoot:'Built from sources in the dossier, not from a score.' }),
+
+      // ══════════ fs4d · founder dossier ══════════
+      base({ id:'fs4d', badge:'FS4d', route:'/research/funds/:uid', arch:'COLLECTION', title:'Fund dossier — founder',
+        ink:F.ink, deep:F.deep, railAccent:'violet', railPage:'Research', railH:'900px',
+        blurb:'A reading room, not a GP back office. Three independent facts stay separate — a fund can be right stage and warm and still open — and the only chart the founder licence permits is public size the founder typed, drawn with its missing year as a gap.',
+        cmpOn:'/research/funds', cmpTitle:'Kestrel Ventures · $400k–1.5M', cmpBody:'Right stage · Warm path. Board-seat ask is in the note.',
+        viewMore:'View more · thesis, what they funded, gaps →',
+        nav: navFor(F_ROWS, 'Research', F), zones: zoneRow(F_ZONES, 'Funds', F),
+        c1:'Research', c2:'Funds', c3:'Kestrel Ventures', h1:'Kestrel Ventures', scope:'Novacraft Labs',
+        sub:'What they wrote, what you found, and what is still missing before Thursday.',
+        filters: fil(['Dossier','Notes','Gaps'], 0, F),
+        ops: ops(['Edit record','Copy thesis','Back to list'], F),
+        tiles:[
+          { label:'Cheque', value:chequeOf(KES), ink:'#18181b', note:'both ends recorded' },
+          { label:'Stage', value:'Right', ink:'#047857', note:'seed, matches your round' },
+          { label:'Path', value:'Warm', ink:F.deep, note:'via the Lab demo day' },
+          { label:'Last updated', value:'3 days ago', ink:'#18181b', note:'by you' } ],
+        ident:{ name:'Kestrel Ventures', cheque:'$400k–1.5M', src:'kestrel.vc · source recorded',
+          axes:[ { k:'Stage', v:'Right stage', pillStyle:pill('Right stage') },
+            { k:'Path', v:'Warm path', pillStyle:pill('Warm path') },
+            { k:'Status', v:'Researching', pillStyle:pill('Researching') } ],
+          note:'Three independent facts, kept apart. Right stage and warm path are both true here, and the list can only highlight one of them — this is where all three are readable at once.' },
+        quotes:[
+          { k:'In their own words', text:'"We lead seed rounds in workflow and developer tooling, $400k to $1.5M, and we take a board seat at lead. We would rather be the first institutional money than the largest cheque."', style:'font-style:italic' },
+          { k:'What the research said', text:'Led three workflow rounds in 18 months. Lost Padmore at Series A to a growth fund — which is why the board seat is non-negotiable for them, not a power grab. Warm via the Spin-Out Lab demo day; Ines has met the partner.' } ],
+        chart:{ title:'Public size, if you recorded it', h:'150px', bw:'34px', gap:'26px',
+          legend:[ { k:'Fund size you recorded', style:'background:'+F.ink } ],
+          groups: KES_SIZE.map(s => ({ flex:'0 0 120px', label:s.label, sub:s.sub,
+            bars:[ s.v == null
+              ? { h:'10px', amt:null, gapText:'Unrecorded', style:'background:repeating-linear-gradient(45deg,#f0eff4,#f0eff4 3px,#e2e1e8 3px,#e2e1e8 6px);border:1px dashed #d4d2dc' }
+              : { h:'104px', amt:'$40M', gapText:null, style:'background:'+F.ink } ] })),
+          note:'Two points, one of them a gap. This is not a capital account: GP quarterly history — commitments, calls, deployment — lives on /funds for a fund you run, never on a fund you researched. The 2026 slot is drawn empty because the figure is unrecorded, which is not the same as a fund that shrank.' },
+        instTitle:'What they have funded', instMeta:'From public filings you saved · a note list, not a portfolio ledger',
+        cols:'1.2fr .8fr .6fr 2.4fr', head:['Company','Stage','Year','Note'],
+        rows: KES_INV.map(x => ({ cells:[cellText(x.co, 'font-weight:600;color:#18181b'), cellText(x.stage), cellText(x.yr, 'font-variant-numeric:tabular-nums'), cellText(x.note)] })),
+        instNote:'Three investments recorded from filings you saved. No sector ring and no AUM bar is drawn from this table, because three notes are not a book — and an empty version of this table would read "no investments recorded in this dossier", which is not the same claim as "they have made none".',
+        missing:{ title:'What\u2019s missing for a Thursday meeting', count:'2 gaps', cols:'1fr 1fr',
+          rows:[ chk(true,'Thesis quoted','their words, not a paraphrase'), chk(true,'Cheque range complete','both ends recorded'),
+            chk(true,'Stage assessed','right'), chk(true,'Path assessed','warm'),
+            chk(true,'At least one sourced investment','three from filings'),
+            chk(false,'Public size','optional — not required for the meeting'),
+            chk(false,'Partner who will be in the room','not recorded, and the brief needs it') ],
+          note:'Pass reason is absent from this list because the fund is not passed. The two open rows are the ones the eye lands on; the five done rows stay quiet rather than competing with them.' },
+        propStyle:'background:'+F.tint+';border:1px solid '+F.hair, propbStyle:'color:'+F.deep+';background:#f3e8ff;border:1px solid '+F.hair,
+        aiLabel:'Proposal · pre-meeting brief', aiCost: c4(F_CACHED) + ' cached',
+        aiBody:'The same brief the list offered, now with the dossier as context: their thesis quoted back, the Padmore loss as the reason behind the board seat, the three filings you saved, and the two gaps above named as questions to ask rather than facts to assert.',
+        aiAccept:'Write into the note', aiFoot:'Accept writes the note. It does not invent a fit score.' }),
+
+      // ══════════ fs3d · company / analysis dossier ══════════
+      base({ id:'fs3d', badge:'FS3d', route:'/research/companies/:id', arch:'COLLECTION', title:'Company dossier — founder',
+        ink:F.ink, deep:F.deep, railAccent:'violet', railPage:'Research', railH:'820px',
+        blurb:'The candidate inside a saved analysis, not a company CRM. Relation is direct or adjacent — comparable is not a filing — and the change narrative the old row implied is shown as a gap, because no change-event table exists to hold it.',
+        cmpOn:'/research/companies', cmpTitle:'Threadline · Direct', cmpBody:'Summary stored. Change since last look is not a stored event.',
+        viewMore:'View more · summary, comparables, gaps →',
+        nav: navFor(F_ROWS, 'Research', F), zones: zoneRow(F_ZONES, 'Companies', F),
+        c1:'Research', c2:'Companies', c3:'Threadline', h1:'Threadline', scope:'Novacraft Labs',
+        sub:'A candidate in the async-workflow analysis, last run 4 Sep 2026.',
+        filters: fil(['Profile','Notes','Gaps'], 0, F),
+        ops: ops(['Edit analysis','Open list','Export'], F),
+        tiles:[
+          { label:'Relation', value:'Direct', ink:'#1d4ed8', note:'filed on this analysis' },
+          { label:'Updated', value:'4 Sep 2026', ink:'#18181b', note:'analysis run date' },
+          { label:'Candidates here', value:'7', ink:'#18181b', note:'in the same analysis' },
+          { label:'Change events', nr:true, nrText:'Unrecorded', note:'no change log is stored' } ],
+        ident:{ name:'Threadline', cheque:'threadline.io', src:'analysis · async workflow · 4 Sep 2026',
+          axes:[ { k:'Relation', v:'Direct', pillStyle:pill('Direct') },
+            { k:'Source', v:'Unrecorded', pillStyle:pill('Unrecorded') },
+            { k:'Headcount', v:'Unrecorded', pillStyle:pill('Unrecorded') } ],
+          note:'Comparable never appears as a stored relation. The analysis files a candidate as direct or adjacent and nothing else — an unfiled candidate reads Unrecorded rather than being coerced into the nearest value.' },
+        quotes:[
+          { k:'Positioning, from the analysis', text:'Async-first handoffs for distributed engineering teams. Sells bottom-up to team leads, then expands. Entry tier undercuts the incumbent by roughly a third.' },
+          { k:'What changed since last look', nr:true, empty:'Nothing records change over time. The summary above describes them today. A change log is not stored, so "shipped async handoffs in July" would be a sentence this page cannot support — it is drawn here as a sample of the log we do not have, not as a fact we hold.' } ],
+        instTitle:'Comparables', instMeta:'Not a filing on a competitor',
+        cols:'1.4fr 1fr 2.6fr', head:['Analysis','Run','Note'],
+        rows:null,
+        instEmpty:'Comparables are not a filing on a competitor. Open another analysis to compare by eye — this record belongs to one run, and cross-analysis comparison is not stored anywhere the page could read.',
+        instNote:'The list at /research/companies holds saved analyses, not companies. This dossier is one candidate inside one of them, which is why the tile counts the seven candidates in the same run rather than implying a company register.',
+        missing:{ title:'What\u2019s missing on this candidate', count:'3 gaps · 1 unbuilt', cols:'1fr 1fr',
+          rows:[ chk(true,'Direct vs adjacent filed','direct'), chk(true,'Summary written','from the analysis'),
+            chk(false,'Source / URL','no link saved with the candidate'),
+            chk(false,'Change event','unbuilt — no table stores this'),
+            chk(false,'Headcount / pricing','unrecorded, and not fields on this object') ],
+          note:'The change-event row is marked unbuilt rather than merely empty: filling it is a schema change, not data entry, and a checklist that cannot tell those apart sends you looking for a field that does not exist.' },
+        propStyle:'background:'+F.tint+';border:1px solid '+F.hair, propbStyle:'color:'+F.deep+';background:#f3e8ff;border:1px solid '+F.hair,
+        aiLabel:'Proposal · what this launch changes for the deck', aiCost: c4(F_CACHED) + ' cached',
+        aiBody:'Reads the analysis summary against your positioning and names the two slides affected — Problem and Competitive — with what would need to change on each. It does not claim to know what Threadline shipped last month, because no change log is stored to read.',
+        aiAccept:'Save note', aiFoot:'Names the slides. Does not claim a change-log store.' }),
+
+      // ══════════ if0 · GP landing, updated ══════════
+      base({ id:'if0', badge:'IF0', route:'/funds', arch:'LEDGER', title:'Fund · Overview — updated',
+        ink:I.ink, deep:I.deep, railAccent:'indigo', railPage:'Fund', railH:'980px',
+        blurb:'The shipped GP landing with the quarterly size chart added beneath the scalars. Called, collected and deployed are three different facts, dry powder is collected less deployed, and Q1\u2019s missing deployment is a hatch rather than a zero bar. Sample figures throughout.',
+        cmpOn:'/studio', cmpTitle:'$10.0M committed · $2.39M deployed', cmpBody:'Two issued quarters · sector mix unrecorded. Sample fund.',
+        viewMore:'View more · quarterly history →',
+        nav: navFor(I_ROWS, 'Fund', I, 'Fund'), zones: zoneRow(I_ZONES, 'Overview', I),
+        c1:'Fund', c2:'Overview', h1:'Run my fund', scope:'Spin-Out Fund I · sample',
+        sub:'Commitments, calls, deployment and issued reporting for a fund you run.',
+        filters: fil(['Overview','This quarter','Gaps'], 0, I),
+        ops: ops(['Open quarterly history','Open reporting','Export register'], I),
+        tiles:[
+          { label:'Committed', value:m2(LEDGER.committed), ink:'#18181b', note:'LP register, all closes' },
+          { label:'Called', value:m2(LEDGER.called), ink:'#18181b', note:'notices issued' },
+          { label:'Deployed', value:m2(LEDGER.deployed), ink:'#18181b', note:'cash into companies' },
+          { label:'Dry powder', value:usd(dryPowder), ink:'#18181b', note:'collected less deployed' } ],
+        chart: Object.assign(chartFor(issued, 190, '30px', '30px', false), {
+          title:'Fund size by issued quarter',
+          note:'Bars carry no figures here — at this width a "$10.00M" label is wider than the column it sits on and would collide with its neighbour. The exact amounts are in the tiles above and on the history page; this chart is for the shape. Only issued snapshots plot. The Q3 draft sits in the table on the history page and never on this chart, because a working copy presented as published is the one error a GP cannot afford. Q1 carries no deployment figure, so that bar is hatched rather than drawn at zero — the snapshot simply did not capture it, which is a different fact from having deployed nothing.' }),
+        sector:{ title:'Sector mix · latest issued snapshot', meta:'Q2 2026',
+          note:'Sector mix unrecorded in the latest issued snapshot. The outline stays so the absence is visible rather than the row quietly vanishing, and it is not filled with another fund\u2019s demonstration mix.' },
+        instTitle:'The four cards', instMeta:'LP registry · calls · accounting · reporting',
+        cols:'1.3fr 1fr 1fr 2.2fr', head:['Card','Count','State','What it holds'],
+        rows:[
+          { cells:[cellDoor('LP registry'), cellText('11 LPs', 'font-variant-numeric:tabular-nums'), cellPill('Published'), cellText('Commitments, KYC state, documents and comms log.')] },
+          { cells:[cellDoor('Capital calls'), cellText('3 issued', 'font-variant-numeric:tabular-nums'), cellPill('Published'), cellText('Call three is open. Outstanding is named on that page, not netted here.')] },
+          { cells:[cellDoor('Accounting'), cellText('8 lines', 'font-variant-numeric:tabular-nums'), cellPill('Published'), cellText('NAV, fees, expenses, journal and audit trail.')] },
+          { cells:[cellDoor('Reporting'), cellText(issued.length + ' issued', 'font-variant-numeric:tabular-nums'), cellPill('Drafted'), cellText('Q3 2026 is drafted. The pack stamps DRAFT until the GP letter is written.')] }
+        ],
+        instNote:'Every recorded amount originates in this fund\u2019s operating record. DPI reads 0.00× because nothing has been realised — a real value, not a gap — while RVPI stays Unavailable because no issued snapshot carries a NAV, and a ratio computed from a mark that does not exist would be worse than a blank.',
+        missing:{ title:'What\u2019s missing to issue the next pack', count:'4 open', cols:'1fr 1fr',
+          rows:[ chk(false,'At least one issued snapshot this quarter','Q3 2026 is drafted, not issued'),
+            chk(true,'Collected distinguished from called','$220k outstanding named on Calls'),
+            chk(true,'Deployed reconciles to the positions book','six positions'),
+            chk(false,'Sector mix in the snapshot','absent from both issued quarters'),
+            chk(false,'NAV present','RVPI stays Unavailable without it'),
+            chk(false,'GP letter written','the pack stamps DRAFT until it is'),
+            chk(true,'Delivery state on the latest published pack','all eleven LPs') ],
+          note:'Three rows are done and quiet. The four open ones are the difference between a draft and a pack an LP can read, and none of them is something the product can write for you.' },
+        propStyle:'background:#fbfbfc;border:1px solid #e2e1e8', propbStyle:'color:#615c6e;background:#f0eff4;border:1px solid #e2e1e8',
+        aiLabel:'Manual · no assistance offered here', aiCost:'no run',
+        aiBody:'Tables, schedules and source records work without AI assistance. No letters, packs or models are drafted on this page. The gap list above is assembled from the operating record rather than generated, and the GP letter is authored.',
+        aiAccept:null, aiFoot:'The rail stance on this page is Manual.' }),
+
+      // ══════════ if0e · empty and locked ══════════
+      base({ id:'if0e', badge:'IF0e', route:'/funds', arch:'LEDGER', title:'Fund · Overview — no fund record',
+        ink:I.ink, deep:I.deep, railAccent:'indigo', railPage:'Fund', railH:'700px',
+        blurb:'The variant when no vc_funds row exists. Scalars read Not recorded, the chart keeps its frame and states why it is empty, and nothing is filled with another fund\u2019s demonstration history. The Institutional lock is a separate state and shows no figures at all.',
+        cmpOn:'/studio', cmpTitle:'No fund record', cmpBody:'Not recorded is not $0 committed.',
+        viewMore:'Create a fund record →',
+        nav: navFor(I_ROWS, 'Fund', I, 'Fund'), zones: zoneRow(I_ZONES, 'Overview', I),
+        c1:'Fund', c2:'Overview', h1:'Run my fund', scope:'No fund selected',
+        sub:'No vehicle is connected to this firm yet.',
+        filters: fil(['Overview','This quarter','Gaps'], 0, I),
+        ops: ops(['Create fund record','Open reporting','Export register'], I),
+        tiles:[
+          { label:'Committed', nr:true, nrText:'Not recorded', note:'no register to sum' },
+          { label:'Called', nr:true, nrText:'Not recorded', note:'no call ledger' },
+          { label:'Deployed', nr:true, nrText:'Not recorded', note:'no positions book' },
+          { label:'Dry powder', nr:true, nrText:'Unavailable', note:'needs collected and deployed' } ],
+        chart:{ title:'Fund size by issued quarter', h:'170px', empty:true, legend:[],
+          emptyText:'Create a fund record in fund administration to connect commitments, LP records, capital movements, and reporting periods. Not recorded is not $0 committed and not $0 deployed.',
+          note:'The frame stays so the absence has a shape. Filling it with a plausible staircase would make an empty account look like an operating one.' },
+        instTitle:'Locked · without the Institutional add-on', instMeta:'The same page, no figures behind the lock',
+        cols:'1.3fr 1fr 2.8fr', head:['Element','State','What the locked view shows'],
+        rows:[
+          { cells:[cellText('Scalar tiles'), cellPill('Unavailable'), cellText('Outlines only. No committed, called or deployed figure is previewed behind the lock.')] },
+          { cells:[cellText('Quarterly chart'), cellPill('Unavailable'), cellText('Not drawn. A teaser chart with sample bars would be a claim about a fund that does not exist.')] },
+          { cells:[cellText('The four cards'), cellPill('Unavailable'), cellText('Titles and one line each, describing what the add-on unlocks.')] },
+          { cells:[cellText('Call to action'), cellPill('Published'), cellText('"Run your own fund" — Institutional add-on, with what it includes.')] }
+        ],
+        instNote:'The locked composition shows lines rather than numbers, which is the existing behaviour and the right one: a preview populated with invented figures teaches a prospective buyer to distrust the figures they get after paying.',
+        propStyle:'background:#fbfbfc;border:1px solid #e2e1e8', propbStyle:'color:#615c6e;background:#f0eff4;border:1px solid #e2e1e8',
+        aiLabel:'Manual · no assistance offered here', aiCost:'no run',
+        aiBody:'Nothing to assemble. With no fund record there is no operating history to list gaps against, and the page says so rather than offering a run that would return an empty result.',
+        aiAccept:null, aiFoot:'The rail stance on this page is Manual.' }),
+
+      // ══════════ if5 · quarterly history ══════════
+      base({ id:'if5', badge:'IF5', route:'/funds/:id', arch:'ANALYTICS', title:'Fund · Quarterly history',
+        ink:I.ink, deep:I.deep, railAccent:'indigo', railPage:'Fund', railH:'1020px',
+        blurb:'The click target behind the landing chart — a child of Overview, not a fifth zone chip. The same series at full width, sector history, every snapshot as a row including the draft, and the gap list that says what the next pack still lacks.',
+        cmpOn:'/funds', cmpTitle:'Two issued quarters on record', cmpBody:'Q3 2026 is drafted and not on the chart. Sector mix unrecorded.',
+        viewMore:'View more · snapshots, sectors, gaps →',
+        nav: navFor(I_ROWS, 'Fund', I, 'Fund'), zones: zoneRow(I_ZONES, 'Overview', I),
+        c1:'Fund ‹ Overview', c2:'Spin-Out Fund I', c3:'Quarterly history', h1:'Quarterly history', scope:'2024 vintage · investing',
+        sub:'Every issued snapshot, the draft that is not on the chart, and what is still absent.',
+        filters: fil(['Issued','Drafts','Gaps'], 0, I),
+        ops: ops(['Back to overview','Open reporting','Export series'], I),
+        tiles:[
+          { label:'Issued periods', value:String(issued.length), ink:'#18181b', note:'Q1 and Q2 2026' },
+          { label:'Latest period', value:latest.period, ink:'#18181b', note:'issued ' + latest.issuedOn },
+          { label:'Dry powder at latest', value:usd(latest.collected - latest.deployed), ink:'#18181b', note:'collected less deployed' },
+          { label:'Sectors in latest', nr:true, nrText:'Unrecorded', note:'no breakdown in the snapshot' } ],
+        chart: Object.assign(chartFor(issued, 230, '42px', '54px', true), {
+          title:'Fund size by issued quarter · full series',
+          note:'NAV would overlay as a line, and the toggle for it is disabled: no issued snapshot carries a mark, so there is nothing to draw. IRR and TVPI are absent from the toggle entirely for the same reason — a toggle that offers a series the data cannot supply is a promise the page breaks on click. Q1\u2019s deployment is hatched, not zeroed.' }),
+        sector:{ title:'Sector over time', meta:nWord(sectorQs.length) + ' of ' + nWord(issued.length) + ' issued quarters carry one',
+          note:'No issued snapshot carries a sector breakdown, so there is no series to draw. One stacked column per issued quarter would appear here as soon as a snapshot holds the mix — invented from another fund\u2019s demo slices, it would be the most convincing wrong thing on the page.' },
+        instTitle:'Snapshots', instMeta:'Drafts appear here and nowhere on the chart',
+        cols:'.8fr .9fr .8fr .8fr .8fr .8fr .8fr .7fr .7fr',
+        head:['Period','Issued','Committed','Called','Collected','Deployed','Dry powder','Sectors','NAV'],
+        rows: PERIODS.map(q => ({ rowStyle: q.issued ? '' : 'background:#fafaff', cells:[
+          cellText(q.period, 'font-weight:700;color:#18181b'),
+          q.issued ? cellPill('Published') : cellPill('Drafted'),
+          cellText(m2(q.committed), 'font-variant-numeric:tabular-nums'),
+          cellText(m2(q.called), 'font-variant-numeric:tabular-nums'),
+          cellText(m2(q.collected), 'font-variant-numeric:tabular-nums'),
+          q.deployed == null ? cellNR('— Unrecorded') : cellText(m2(q.deployed), 'font-variant-numeric:tabular-nums'),
+          q.deployed == null ? cellNR('— Unavailable') : cellText(m2(q.collected - q.deployed), 'font-variant-numeric:tabular-nums'),
+          cellNR('—'), cellNR('—') ]})),
+        instNote:'The Q3 row shows working figures on a tinted background with a Drafted pill, and the column header says it: drafts appear here and nowhere on the chart. Q1\u2019s dry powder is Unavailable rather than $2.30M, because deployment is missing from that snapshot and collected-less-nothing is not a dry-powder figure. Every empty cell reads as a dash with its reason rather than a zero.',
+        missing:{ title:'What\u2019s missing to issue the next pack', count:'5 open', cols:'1fr 1fr',
+          rows:[ chk(false,'Q3 2026 not issued','drafted 2 Sep, not published'),
+            chk(false,'Sector mix','absent from both issued snapshots'),
+            chk(true,'Collected vs called split','$220k outstanding, named on Calls'),
+            chk(true,'Positions book reconcile','deployment matches six positions'),
+            chk(false,'NAV in the snapshot','RVPI and TVPI stay Unavailable without it'),
+            chk(false,'GP letter for the open draft','authored, never generated'),
+            chk(false,'Material developments','subsequent events, authored') ],
+          note:'Each open row points at the page that closes it — Reporting for the draft and the letter, Accounting for the mark, Calls for the split. The two authored rows are not work the product can take off you.' },
+        propStyle:'background:'+I.tint+';border:1px solid '+I.hair, propbStyle:'color:'+I.deep+';background:#eef2ff;border:1px solid '+I.hair,
+        aiLabel:'Proposal · gap list for the next pack', aiCost: c4(gpCost(9400, 700)),
+        aiBody:'The five unchecked rows above, each pointing at the page that closes it: Reporting for the Q3 draft and the GP letter, Accounting for the NAV mark, and the snapshot itself for the sector mix. It lists what is absent and stops there.',
+        aiAccept:'Accept gap list', aiFoot:'Narrative is authored. This only lists what the snapshot still lacks.' }),
+
+      // ══════════ if5e · no issued snapshots ══════════
+      base({ id:'if5e', badge:'IF5e', route:'/funds/:id', arch:'ANALYTICS', title:'Fund · Quarterly history — nothing issued',
+        ink:I.ink, deep:I.deep, railAccent:'indigo', railPage:'Fund', railH:'720px',
+        blurb:'A fund that exists and has never issued a snapshot. The chart keeps its frame, the table still shows the draft because a draft is a real record, and the scalar tiles on the landing remain valid — they are live ledger figures, not a time series.',
+        cmpOn:'/funds', cmpTitle:'No issued quarterly snapshot', cmpBody:'One draft on record. Unrecorded is not $0 committed.',
+        viewMore:'View more · the draft and what it lacks →',
+        nav: navFor(I_ROWS, 'Fund', I, 'Fund'), zones: zoneRow(I_ZONES, 'Overview', I),
+        c1:'Fund ‹ Overview', c2:'Spin-Out Fund I', c3:'Quarterly history', h1:'Quarterly history', scope:'2024 vintage · investing',
+        sub:'Nothing has been issued yet. One period is drafted.',
+        filters: fil(['Issued','Drafts','Gaps'], 1, I),
+        ops: ops(['Back to overview','Open reporting','Export series'], I),
+        tiles:[
+          { label:'Issued periods', value:'0', ink:'#18181b', note:'a real count, not a gap' },
+          { label:'Latest period', nr:true, nrText:'Unrecorded', note:'nothing issued to date' },
+          { label:'Dry powder at latest', nr:true, nrText:'Unavailable', note:'needs an issued snapshot' },
+          { label:'Sectors in latest', nr:true, nrText:'Unrecorded', note:'no snapshot to read' } ],
+        chart:{ title:'Fund size by issued quarter', h:'190px', empty:true, legend:[],
+          emptyText:'No issued quarterly snapshot. Unrecorded is not $0 committed and not $0 deployed — the fund holds commitments and has deployed capital; none of it has been published in a reporting period yet.',
+          note:'Issued periods reads 0 rather than Unrecorded: zero published snapshots is something the product knows for certain. The three tiles beside it are gaps, because they each need a snapshot that does not exist.' },
+        instTitle:'Snapshots', instMeta:'One draft · nothing published',
+        cols:'.8fr .9fr .8fr .8fr .8fr .8fr .8fr .7fr .7fr',
+        head:['Period','Issued','Committed','Called','Collected','Deployed','Dry powder','Sectors','NAV'],
+        rows:[ { rowStyle:'background:#fafaff', cells:[
+          cellText('Q3 2026', 'font-weight:700;color:#18181b'), cellPill('Drafted'),
+          cellText(m2(10000000), 'font-variant-numeric:tabular-nums'), cellText(m2(3500000), 'font-variant-numeric:tabular-nums'),
+          cellText(m2(3400000), 'font-variant-numeric:tabular-nums'), cellText(m2(2390000), 'font-variant-numeric:tabular-nums'),
+          cellText(usd(1010000), 'font-variant-numeric:tabular-nums'), cellNR('—'), cellNR('—') ]} ],
+        instNote:'The draft is a real record and appears here with its working figures — what it is not is a published quarter, which is why the chart above has nothing to plot. Showing the draft on the chart would turn an internal working copy into a claim to an LP.',
+        missing:{ title:'What\u2019s missing to issue the first pack', count:'5 open', cols:'1fr 1fr',
+          rows:[ chk(false,'Issue Q3 2026','the draft is complete enough to review'),
+            chk(false,'Sector mix','not in the draft'), chk(true,'Collected vs called split','recorded'),
+            chk(true,'Positions book reconcile','matches'), chk(false,'NAV in the snapshot','no mark yet'),
+            chk(false,'GP letter','authored'), chk(false,'LP delivery list','nothing published to deliver') ],
+          note:'A first pack is the same checklist as any other. Nothing here is skipped because the fund is early.' },
+        propStyle:'background:'+I.tint+';border:1px solid '+I.hair, propbStyle:'color:'+I.deep+';background:#eef2ff;border:1px solid '+I.hair,
+        aiLabel:'Proposal · gap list for the first pack', aiCost: c4(gpCost(7800, 600)),
+        aiBody:'The five unchecked rows, each pointing at the page that closes it. With nothing issued the list is longer, not different — and the GP letter stays on it as work the product will not do.',
+        aiAccept:'Accept gap list', aiFoot:'Narrative is authored. This only lists what the snapshot still lacks.' })
+    ];
+
+    return { pages: PAGES.map(p => Object.assign({}, p, { archStyle: archStyle(p.arch) })) };
+  }
+}
+</script>
+</body></html>

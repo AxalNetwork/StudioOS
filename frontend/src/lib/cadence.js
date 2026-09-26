@@ -29,6 +29,24 @@ export const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday',
 
 const KIND_LABEL = new Map(RITUAL_KINDS);
 
+/**
+ * `weekday` + `frequency` as one phrase, or the part that is recorded.
+ *
+ * Here rather than in the zone page because the Build desk's cadence card
+ * prints the same schedule, and two spellings of "every other Friday" would
+ * be two answers to one stored row.
+ */
+export function scheduleLabel(ritual) {
+  const day = ritual?.weekday == null ? null : WEEKDAYS[Number(ritual.weekday)];
+  const freq = String(ritual?.frequency || 'weekly');
+  if (day && freq === 'weekly') return `Every ${day}`;
+  if (day && freq === 'biweekly') return `Every other ${day}`;
+  if (day && freq === 'monthly') return `Monthly, on a ${day}`;
+  if (freq === 'weekly') return 'Weekly';
+  if (freq === 'biweekly') return 'Every two weeks';
+  return 'Monthly';
+}
+
 /** A stored kind as a person reads it; an unknown one reads as itself. */
 export const kindLabel = (kind) => KIND_LABEL.get(String(kind)) || String(kind || 'Other');
 

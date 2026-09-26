@@ -730,7 +730,10 @@ export default function AdminPage({ onImpersonate, section = null }) {
     try {
       const res = await api.adminImpersonate(supportTarget.id, reason);
       setSupportTarget(null);
-      if (onImpersonate) onImpersonate(res.token, res.user);
+      // D290 — the reason as the worker stored it (null when its write
+      // failed), passed on for the H25 bar; the shell never reads the typed
+      // text back from this dialog.
+      if (onImpersonate) onImpersonate(res.token, res.user, null, res.reason ?? null);
     } catch (e) { alert(e.message || 'The support session could not be started'); }
     finally { setSupportBusy(false); }
   };

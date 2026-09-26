@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeeec;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#4f46e5;text-decoration:none}
+    .ab{padding:40px 46px 32px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px;flex-wrap:wrap}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:rgba(24,24,27,.6);max-width:1040px;margin:0 0 18px}
+    .mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .eye{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+    .nm{font-size:13px;font-weight:800;letter-spacing:-.01em}
+    .body{font-size:12px;line-height:1.55}
+    .pill{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;line-height:1.5}
+    .nr{display:inline-flex;font-size:10px;font-weight:700;border-radius:4px;padding:2px 7px;white-space:nowrap}
+    .card{border-radius:14px;padding:16px 18px;box-sizing:border-box}
+    .btn{font-size:11.5px;font-weight:700;padding:7px 13px;border-radius:8px;cursor:pointer;white-space:nowrap}
+    .nav{display:flex;align-items:center;gap:9px;padding:7px 14px;font-size:12px;font-weight:600;border-radius:8px}
+    .zp{font-size:11px;font-weight:700;padding:5px 12px;border-radius:99px;white-space:nowrap}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;text-align:left;padding:0 0 8px}
+    .td{font-size:12px;padding:10px 0;border-top:1px solid}
+    .cap{font-size:11px;color:rgba(24,24,27,.58);line-height:1.5;margin-top:9px}
+    .ph{width:390px;min-width:390px;flex:none;border-radius:34px;box-shadow:0 4px 22px rgba(24,24,27,.16),0 0 0 9px #1a1a1c;overflow:hidden}
+  </style>
+</helmet>
+
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="6">
+  <section class="ab" id="{{ b.id }}">
+    <div class="ab-hd"><a class="ab-id" href="#{{ b.id }}">{{ b.badge }}</a><span class="ab-nm">{{ b.title }}</span><span class="mono" style="font-size:11px;color:#615c6e">/research/diligence/{{ b.g.grant_uid }}</span></div>
+    <div class="ab-sub">{{ b.blurb }}</div>
+
+    <!-- ══ DESKTOP 1280 ══ -->
+    <sc-if value="{{ b.desktop }}">
+      <div style="width:1280px;min-width:1280px;display:flex;border-radius:14px;overflow:hidden;box-shadow:0 2px 14px rgba(24,24,27,.08);background:{{ b.t.ground }}">
+        <div style="width:200px;flex:none;background:{{ b.t.card }};border-right:1px solid {{ b.t.hair }};padding:16px 10px">
+          <div style="display:flex;align-items:center;gap:8px;padding:4px 14px 16px"><img src="../assets/axal-dossier-mark.png" alt="Axal VC" width="16" height="16" style="display:block;object-fit:contain"><span style="font-size:12px;font-weight:800;letter-spacing:-.01em;color:{{ b.t.ink }}">StudioOS</span></div>
+          <sc-for list="{{ b.nav }}" as="n" hint-placeholder-count="7"><div class="nav" style="{{ n.style }}">{{ n.label }}</div></sc-for>
+        </div>
+        <div style="flex:1;min-width:0;padding:22px 30px 30px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:{{ b.t.muted }};flex-wrap:wrap"><span>Research</span><span>‹</span><span>Diligence</span><span>‹</span><span style="color:{{ b.t.ink }};font-weight:700">{{ b.g.project_name }}</span></div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="pill" style="background:#f0fdf6;color:#065f46;border:1px solid #a7f3d0;letter-spacing:.05em">COLLECTION</span>
+              <span class="pill" style="background:{{ b.t.chipBg }};color:{{ b.t.ink }};border:1px solid {{ b.t.hair }}">{{ b.scope }}</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:12px"><sc-for list="{{ b.zones }}" as="z" hint-placeholder-count="5"><span class="zp" style="{{ z.style }}">{{ z.t }}</span></sc-for></div>
+
+          <!-- missing grant -->
+          <sc-if value="{{ b.missing }}">
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:16px">
+              <div class="nm" style="color:{{ b.t.ink }};font-size:15px">This room is not open to you.</div>
+              <div class="body" style="color:{{ b.t.body }};margin-top:6px;max-width:680px">A grant is active or it is nothing — revoked and expired rooms do not appear in Diligence, so there is no state here to request your way out of.</div>
+              <a href="#" class="btn" style="border:1px solid {{ b.t.hair }};color:{{ b.t.ink }};background:transparent;display:inline-block;margin-top:12px">‹ Back to Diligence</a>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ b.live }}">
+            <!-- 1 · header -->
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:16px">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap">
+                <div style="min-width:0">
+                  <div class="eye" style="color:{{ b.t.muted }}">Room access</div>
+                  <h1 style="margin:7px 0 0;font-size:24px;font-weight:800;letter-spacing:-.025em;color:{{ b.t.ink }}">{{ b.g.project_name }}</h1>
+                  <div class="body" style="color:{{ b.t.muted }};margin-top:6px">Granted {{ b.g.created_at }}<sc-if value="{{ b.g.expires_at }}"> · Access expires {{ b.g.expires_at }}</sc-if></div>
+                  <div style="margin-top:7px">
+                    <sc-if value="{{ b.g.last_opened_at }}"><span class="body" style="color:{{ b.t.body }}">You last opened it {{ b.g.last_opened_at }}</span></sc-if>
+                    <sc-if value="{{ b.neverOpened }}"><span class="nr" style="{{ b.t.nr }}">Not recorded</span><span class="body" style="color:{{ b.t.muted }};margin-left:8px">You have not opened this room</span></sc-if>
+                  </div>
+                </div>
+                <a href="#" class="btn" style="border:1px solid {{ b.hair }};color:{{ b.deep }};background:{{ b.tint }}">Open the room →</a>
+              </div>
+            </div>
+
+            <!-- 2 · tiles -->
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px">
+              <sc-for list="{{ b.tiles }}" as="tl" hint-placeholder-count="4">
+                <div class="card" style="background:{{ b.t.card }};border:1px solid {{ tl.hair }}">
+                  <div class="eye" style="color:{{ b.t.muted }}">{{ tl.k }}</div>
+                  <sc-if value="{{ tl.nr }}"><div style="margin-top:8px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+                  <sc-if value="{{ tl.v }}"><div class="mono" style="font-size:{{ tl.size }};font-weight:700;letter-spacing:-.025em;margin-top:5px;color:{{ tl.ink }}">{{ tl.v }}</div></sc-if>
+                  <div class="body" style="color:{{ b.t.muted }};margin-top:4px">{{ tl.sub }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div class="body" style="color:{{ b.t.body }};margin-top:9px;padding:0 2px;max-width:900px">{{ b.scopeNote }}</div>
+
+            <!-- 3 · scope instrument -->
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:12px">
+              <div class="eye" style="color:{{ b.t.muted }}">Scope</div>
+              <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr 1.2fr;gap:12px;margin-top:10px">
+                <span class="th" style="color:{{ b.t.muted }}">Company</span><span class="th" style="color:{{ b.t.muted }}">Open to you</span><span class="th" style="color:{{ b.t.muted }}">In the room</span><span class="th" style="color:{{ b.t.muted }}">Behind an NDA</span><span class="th" style="color:{{ b.t.muted }}">You last opened</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr 1.2fr;gap:12px;align-items:center">
+                <span class="td" style="border-color:{{ b.t.hair }};color:{{ b.t.ink }};font-weight:700">{{ b.g.project_name }}</span>
+                <span class="td mono" style="border-color:{{ b.t.hair }};color:{{ b.t.ink }}">{{ b.g.file_open }}</span>
+                <span class="td mono" style="border-color:{{ b.t.hair }};color:{{ b.t.ink }}">{{ b.g.file_total }}</span>
+                <span class="td mono" style="border-color:{{ b.t.hair }};color:{{ b.withheldInk }}">{{ b.withheld }}</span>
+                <span class="td mono" style="border-color:{{ b.t.hair }};color:{{ b.t.muted }}"><sc-if value="{{ b.g.last_opened_at }}">{{ b.g.last_opened_at }}</sc-if><sc-if value="{{ b.neverOpened }}"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></sc-if></span>
+              </div>
+            </div>
+
+            <!-- 4 · open files -->
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:12px">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><span class="eye" style="color:{{ b.t.muted }}">Open to you</span><span class="mono" style="font-size:11px;color:{{ b.t.muted }}">{{ b.openCount }}</span></div>
+              <sc-if value="{{ b.hasOpen }}">
+                <div style="display:grid;grid-template-columns:2.2fr .7fr 1.2fr;gap:12px;margin-top:10px">
+                  <span class="th" style="color:{{ b.t.muted }}">File</span><span class="th" style="color:{{ b.t.muted }}">Size</span><span class="th" style="color:{{ b.t.muted }}">You last downloaded</span>
+                </div>
+                <sc-for list="{{ b.files }}" as="f" hint-placeholder-count="6">
+                  <div style="display:grid;grid-template-columns:2.2fr .7fr 1.2fr;gap:12px;align-items:center">
+                    <span class="td" style="border-color:{{ b.t.hair }}"><a href="#" style="font-weight:600;color:{{ b.deep }}">{{ f.name }}</a></span>
+                    <span class="td mono" style="border-color:{{ b.t.hair }};color:{{ b.t.muted }};font-size:11px">{{ f.size }}</span>
+                    <span class="td mono" style="border-color:{{ b.t.hair }};color:{{ b.t.muted }};font-size:11px"><sc-if value="{{ f.dl }}">{{ f.dl }}</sc-if><sc-if value="{{ f.noDl }}"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></sc-if></span>
+                  </div>
+                </sc-for>
+                <div class="body" style="color:{{ b.t.muted }};margin-top:11px;padding-top:10px;border-top:1px solid {{ b.t.hair }}">Links are issued to you alone, work once, expire after two minutes. Not watermarked. The founder can see which documents you opened.</div>
+              </sc-if>
+              <sc-if value="{{ b.allWithheld }}">
+                <div style="border:1px solid {{ b.t.warnHair }};background:{{ b.t.warnFill }};border-radius:12px;padding:14px 16px;margin-top:10px">
+                  <div class="body" style="color:{{ b.t.warn }};font-weight:600">Every document in this room is behind an NDA.</div>
+                  <div class="body" style="color:{{ b.t.body }};margin-top:5px">Nothing is listed here, by name or as a placeholder — the count above is the whole of what you can know today.</div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ b.emptyRoom }}">
+                <div style="border:1.5px dashed {{ b.t.hair }};border-radius:12px;padding:18px 20px;margin-top:10px">
+                  <div class="nm" style="color:{{ b.t.ink }}">Nothing staged in this room yet.</div>
+                  <div class="body" style="color:{{ b.t.body }};margin-top:5px">The grant is live and the room is empty. That is a finding, not an error.</div>
+                </div>
+              </sc-if>
+            </div>
+
+            <!-- 5 · behind an NDA -->
+            <sc-if value="{{ b.hasWithheld }}">
+              <div class="card" style="background:{{ b.t.warnFill }};border:1px solid {{ b.t.warnHair }};margin-top:12px">
+                <div class="eye" style="color:{{ b.t.warn }}">Behind an NDA</div>
+                <div class="body" style="color:{{ b.t.body }};margin-top:6px;max-width:760px">{{ b.withheld }} more documents are behind an NDA. Sign one with this company and they appear in the room. They are not listed here by name.</div>
+              </div>
+            </sc-if>
+
+            <!-- 6 · deal stage -->
+            <div style="background:{{ b.t.sunk }};border:1px solid {{ b.t.hair }};border-radius:14px;padding:14px 18px;margin-top:12px">
+              <div class="eye" style="color:{{ b.t.muted }}">Deal stage</div>
+              <div style="margin-top:7px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div>
+              <div class="body" style="color:{{ b.t.body }};margin-top:7px;max-width:780px">A data-room grant and a deal are separate records with no key between them, so no deal stage is attached to a room here. Opening the deal shows its own stage.</div>
+            </div>
+
+            <!-- 7 · your activity -->
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:12px">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><span class="eye" style="color:{{ b.t.muted }}">Your activity</span><span class="body" style="color:{{ b.t.muted }}">your opens and downloads on this project only</span></div>
+              <sc-if value="{{ b.hasActivity }}">
+                <div style="display:grid;gap:9px;margin-top:11px">
+                  <sc-for list="{{ b.activity }}" as="e" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:baseline;gap:11px"><span class="mono" style="font-size:11px;color:{{ b.t.muted }};width:110px;flex:none">{{ e.when }}</span><span class="pill" style="background:{{ b.t.chipBg }};color:{{ b.t.ink }};border:1px solid {{ b.t.hair }}">{{ e.kind }}</span><span class="body" style="color:{{ b.t.ink }}">{{ e.what }}</span></div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ b.noActivity }}">
+                <div style="margin-top:10px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span><span class="body" style="color:{{ b.t.muted }};margin-left:8px">You have not opened this room</span></div>
+              </sc-if>
+            </div>
+
+            <!-- 8 · zonedraft -->
+            <div style="border:1px solid {{ b.hair }};background:{{ b.tint }};border-radius:14px;padding:14px 18px;margin-top:12px">
+              <div style="display:flex;align-items:center;gap:9px"><span class="pill" style="background:{{ b.accent }};color:#fff;letter-spacing:.06em">ZONEDRAFT</span><span class="nm" style="color:{{ b.t.ink }}">Room · what is thin</span></div>
+              <div class="body" style="color:{{ b.t.ink }};margin-top:9px;max-width:840px">{{ b.draft }}</div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap">
+                <span class="btn" style="{{ b.draftBtn }}">Draft</span><span class="btn" style="{{ b.acceptBtn }}">Accept</span><span class="btn" style="color:{{ b.t.muted }};padding:7px 6px">Discard</span>
+                <span class="body" style="color:{{ b.t.muted }};margin-left:auto">Accept writes your memo. It does not email the founder or request files.</span>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- 9 · stated limit -->
+          <div style="background:{{ b.t.sunk }};border:1px solid {{ b.t.hair }};border-radius:14px;padding:16px 18px;margin-top:12px">
+            <div class="eye" style="color:{{ b.t.muted }}">What this page will not do</div>
+            <div class="body" style="color:{{ b.t.body }};margin-top:6px;max-width:840px">Nothing here asks a founder to open a room, or to stage more of one. The grant is theirs to make and theirs to revoke. A request button that wrote nowhere would be worse than the conversation it replaced.</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ══ MOBILE 390 ══ -->
+    <sc-if value="{{ b.mobile }}">
+      <div class="ph" style="background:{{ b.t.ground }}">
+        <div style="height:44px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 6px;font-size:11px;font-weight:700;background:{{ b.t.card }};color:{{ b.t.ink }}"><span class="mono">9:41</span><span style="font-size:10px;letter-spacing:.06em">▮▮▮ ◗</span></div>
+        <div style="background:{{ b.t.card }};padding:4px 16px 12px;border-bottom:1px solid {{ b.t.hair }}">
+          <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:{{ b.t.muted }}"><span style="font-weight:700;color:{{ b.deep }}">‹ Diligence</span><span>·</span><span>Research</span></div>
+          <div class="eye" style="color:{{ b.t.muted }};margin-top:8px">Room access</div>
+          <h1 style="margin:5px 0 0;font-size:20px;font-weight:800;letter-spacing:-.024em;color:{{ b.t.ink }}">{{ b.g.project_name }}</h1>
+          <div class="body" style="color:{{ b.t.muted }};margin-top:4px;font-size:11px">Granted {{ b.g.created_at }}<sc-if value="{{ b.g.expires_at }}"> · expires {{ b.g.expires_at }}</sc-if></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap"><span class="pill" style="background:#f0fdf6;color:#065f46;border:1px solid #a7f3d0;letter-spacing:.05em">COLLECTION</span><span class="pill" style="background:{{ b.t.chipBg }};color:{{ b.t.ink }};border:1px solid {{ b.t.hair }}">{{ b.scope }}</span></div>
+          <a href="#" class="btn" style="border:1px solid {{ b.hair }};color:{{ b.deep }};background:{{ b.tint }};display:inline-block;margin-top:10px">Open the room →</a>
+        </div>
+        <div style="padding:12px 14px 22px;display:grid;gap:10px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <sc-for list="{{ b.tiles }}" as="tl" hint-placeholder-count="4">
+              <div class="card" style="background:{{ b.t.card }};border:1px solid {{ tl.hair }};padding:11px 12px">
+                <div class="eye" style="color:{{ b.t.muted }};font-size:9px">{{ tl.k }}</div>
+                <sc-if value="{{ tl.nr }}"><div style="margin-top:6px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+                <sc-if value="{{ tl.v }}"><div class="mono" style="font-size:{{ tl.msize }};font-weight:700;letter-spacing:-.025em;margin-top:4px;color:{{ tl.ink }}">{{ tl.v }}</div></sc-if>
+                <div class="body" style="color:{{ b.t.muted }};margin-top:3px;font-size:10.5px">{{ tl.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div class="body" style="color:{{ b.t.body }};font-size:11.5px;padding:0 2px">{{ b.scopeNote }}</div>
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between"><span class="eye" style="color:{{ b.t.muted }}">Open to you</span><span class="mono" style="font-size:10.5px;color:{{ b.t.muted }}">{{ b.openCount }}</span></div>
+            <sc-if value="{{ b.hasOpen }}">
+              <div style="display:grid;gap:7px;margin-top:9px">
+                <sc-for list="{{ b.files }}" as="f" hint-placeholder-count="6">
+                  <div style="border:1px solid {{ b.t.hair }};border-radius:10px;padding:9px 11px">
+                    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px"><a href="#" style="font-size:12.5px;font-weight:700;color:{{ b.deep }}">{{ f.name }}</a><span class="mono" style="font-size:10px;color:{{ b.t.muted }};flex:none">{{ f.size }}</span></div>
+                    <div class="mono" style="font-size:10px;color:{{ b.t.muted }};margin-top:4px"><sc-if value="{{ f.dl }}">downloaded {{ f.dl }}</sc-if><sc-if value="{{ f.noDl }}">not downloaded</sc-if></div>
+                  </div>
+                </sc-for>
+              </div>
+              <div class="body" style="color:{{ b.t.muted }};margin-top:9px;font-size:11px">Links are issued to you alone, work once, expire after two minutes. Not watermarked. The founder can see which documents you opened.</div>
+            </sc-if>
+            <sc-if value="{{ b.allWithheld }}"><div style="border:1px solid {{ b.t.warnHair }};background:{{ b.t.warnFill }};border-radius:10px;padding:11px 13px;margin-top:9px"><div class="body" style="color:{{ b.t.warn }};font-weight:600;font-size:11.5px">Every document in this room is behind an NDA.</div><div class="body" style="color:{{ b.t.body }};margin-top:4px;font-size:11px">Nothing is listed here, by name or as a placeholder.</div></div></sc-if>
+            <sc-if value="{{ b.emptyRoom }}"><div style="border:1.5px dashed {{ b.t.hair }};border-radius:10px;padding:13px;margin-top:9px"><div class="nm" style="color:{{ b.t.ink }};font-size:12.5px">Nothing staged in this room yet.</div><div class="body" style="color:{{ b.t.body }};margin-top:4px;font-size:11px">The grant is live and the room is empty. That is a finding, not an error.</div></div></sc-if>
+          </div>
+          <sc-if value="{{ b.hasWithheld }}">
+            <div class="card" style="background:{{ b.t.warnFill }};border:1px solid {{ b.t.warnHair }};padding:13px 15px">
+              <div class="eye" style="color:{{ b.t.warn }}">Behind an NDA</div>
+              <div class="body" style="color:{{ b.t.body }};margin-top:5px;font-size:11.5px">{{ b.withheld }} more documents are behind an NDA. Sign one with this company and they appear in the room. They are not listed here by name.</div>
+            </div>
+          </sc-if>
+          <div style="background:{{ b.t.sunk }};border:1px solid {{ b.t.hair }};border-radius:14px;padding:13px 15px">
+            <div class="eye" style="color:{{ b.t.muted }}">Deal stage</div>
+            <div style="margin-top:6px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div>
+            <div class="body" style="color:{{ b.t.body }};margin-top:6px;font-size:11.5px">A data-room grant and a deal are separate records with no key between them, so no deal stage is attached to a room here.</div>
+          </div>
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px">
+            <div class="eye" style="color:{{ b.t.muted }}">Your activity</div>
+            <sc-if value="{{ b.hasActivity }}"><div style="display:grid;gap:8px;margin-top:9px"><sc-for list="{{ b.activity }}" as="e" hint-placeholder-count="3"><div><div style="display:flex;align-items:center;gap:7px"><span class="pill" style="background:{{ b.t.chipBg }};color:{{ b.t.ink }};border:1px solid {{ b.t.hair }}">{{ e.kind }}</span><span class="mono" style="font-size:10px;color:{{ b.t.muted }}">{{ e.when }}</span></div><div class="body" style="color:{{ b.t.ink }};margin-top:3px;font-size:11.5px">{{ e.what }}</div></div></sc-for></div></sc-if>
+            <sc-if value="{{ b.noActivity }}"><div style="margin-top:8px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span><span class="body" style="color:{{ b.t.muted }};margin-left:8px;font-size:11px">You have not opened this room</span></div></sc-if>
+          </div>
+          <div style="border:1px solid {{ b.hair }};background:{{ b.tint }};border-radius:14px;padding:13px 15px">
+            <div style="display:flex;align-items:center;gap:8px"><span class="pill" style="background:{{ b.accent }};color:#fff;letter-spacing:.06em">ZONEDRAFT</span><span class="nm" style="color:{{ b.t.ink }}">Room · what is thin</span></div>
+            <div class="body" style="color:{{ b.t.ink }};margin-top:8px;font-size:11.5px">{{ b.draft }}</div>
+            <div style="display:flex;gap:7px;margin-top:10px;flex-wrap:wrap"><span class="btn" style="{{ b.draftBtn }};padding:6px 11px">Draft</span><span class="btn" style="{{ b.acceptBtn }};padding:6px 11px">Accept</span><span class="btn" style="color:{{ b.t.muted }};padding:6px 8px">Discard</span></div>
+            <!-- The foot is the promise the button makes. On a phone the StatedLimit is several
+                 scrolls below, so this is the only place the guarantee sits next to the control. -->
+            <div class="body" style="color:{{ b.t.muted }};margin-top:8px;font-size:10.5px">Accept writes your memo. It does not email the founder or request files.</div>
+          </div>
+          <div style="background:{{ b.t.sunk }};border:1px solid {{ b.t.hair }};border-radius:14px;padding:13px 15px">
+            <div class="eye" style="color:{{ b.t.muted }}">What this page will not do</div>
+            <div class="body" style="color:{{ b.t.body }};margin-top:5px;font-size:11.5px">Nothing here asks a founder to open a room, or to stage more of one. The grant is theirs to make and theirs to revoke. A request button that wrote nowhere would be worse than the conversation it replaced.</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+    <div class="cap" style="width:{{ b.capW }}">{{ b.cap }}</div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    // ══ Investor indigo. Never founder violet — the accent says whose workspace this is, and
+    // this page is the investor's read of a grant the founder made. ══
+    const IND = { a:'#4f46e5', deep:'#4338ca', tint:'#eef2ff', hair:'#c7d2fe', deepDark:'#818cf8', tintDark:'#211f3d' };
+
+    const LIGHT = { ground:'#f4f3f7', card:'#fff', hair:'#ececf1', ink:'#18181b', body:'#3f3f46', muted:'#52525b',
+      warn:'#92400e', warnFill:'#fffbeb', warnHair:'#fde68a',
+      chipBg:'#fafafa', sunk:'#f4f3f7', nr:'background:#f4f4f6;color:#52525b;border:1px solid #e4e4e8' };
+    // Fill, ink and border move together; a lifted ink on a light fill reads worse than either.
+    const DARK = { ground:'#140c26', card:'#111827', hair:'#374151', ink:'#f4f4f5', body:'#d1d5db', muted:'#9ca3af',
+      warn:'#fbbf24', warnFill:'#422006', warnHair:'#78350f',
+      chipBg:'#0b1220', sunk:'#0f0a1e', nr:'background:#1f2937;color:#9ca3af;border:1px solid #374151' };
+
+    const NAV = ['Studio','Deals','Portfolio','Fund','Network','Research','Trust'];
+    const nav = (t) => NAV.map(l => ({ label:l, style: l === 'Research'
+      ? 'background:' + (t === DARK ? IND.tintDark : IND.tint) + ';color:' + (t === DARK ? IND.deepDark : IND.deep) + ';font-weight:700;box-shadow:inset 2px 0 0 ' + IND.a
+      : 'color:' + t.muted }));
+    const ZONES = ['Ask','Diligence','Benchmarking','Markets','Library'];
+    const zones = (t) => ZONES.map(z => ({ t:z, style: z === 'Diligence'
+      ? 'background:' + (t === DARK ? IND.tintDark : IND.tint) + ';color:' + (t === DARK ? IND.deepDark : IND.deep) + ';border:1px solid ' + (t === DARK ? '#3730a3' : IND.hair)
+      : 'color:' + t.muted + ';border:1px solid transparent' }));
+
+    // ══ Grants. withheld is derived from the two counts, never stored as a third number that
+    // could drift from them. ══
+    const KELP = { grant_uid:'gr_9k2', project_uid:'pr_41', project_name:'Kelp Bio', file_open:6, file_total:11,
+      created_at:'12 Jun 2026', expires_at:null, last_opened_at:'12 Aug 2026',
+      files:[ { name:'Cap table — Jun 2026.xlsx', size:'84 KB', dl:'12 Aug 2026' },
+        { name:'Founder bios.pdf', size:'1.2 MB', dl:'12 Aug 2026' },
+        { name:'Product roadmap — H2.pdf', size:'3.4 MB', dl:null },
+        { name:'Revenue summary — Q2.xlsx', size:'52 KB', dl:'12 Aug 2026' },
+        { name:'Incorporation certificate.pdf', size:'210 KB', dl:null },
+        { name:'Customer references.pdf', size:'640 KB', dl:null } ],
+      activity:[ { when:'12 Aug 2026', kind:'download', what:'Revenue summary — Q2.xlsx' },
+        { when:'12 Aug 2026', kind:'download', what:'Cap table — Jun 2026.xlsx' },
+        { when:'12 Aug 2026', kind:'open room', what:'Opened the room' },
+        { when:'14 Jun 2026', kind:'open room', what:'Opened the room' } ] };
+    const SPARSE = { grant_uid:'gr_3m8', project_uid:'pr_77', project_name:'Thornfield Systems', file_open:0, file_total:0,
+      created_at:'18 Sep 2026', expires_at:null, last_opened_at:null, files:[], activity:[] };
+    const SEALED = { grant_uid:'gr_5p1', project_uid:'pr_52', project_name:'Verdant IO', file_open:0, file_total:4,
+      created_at:'02 Sep 2026', expires_at:'02 Dec 2026', last_opened_at:'05 Sep 2026', files:[],
+      activity:[ { when:'05 Sep 2026', kind:'open room', what:'Opened the room' } ] };
+    const ALL_OPEN = { grant_uid:'gr_7t4', project_uid:'pr_18', project_name:'Novacraft Labs', file_open:5, file_total:5,
+      created_at:'30 Aug 2026', expires_at:null, last_opened_at:null,
+      files:[ { name:'Pitch deck — Sep.pdf', size:'8.1 MB', dl:null }, { name:'Cap table.xlsx', size:'71 KB', dl:null },
+        { name:'83(b) confirmation.pdf', size:'180 KB', dl:null }, { name:'Customer contracts.zip', size:'4.2 MB', dl:null },
+        { name:'Financial model — 3yr.xlsx', size:'320 KB', dl:null } ], activity:[] };
+
+    const SCOPE = 'Thornbury Capital';
+
+    const board = (id, badge, g, t, kind, extra) => {
+      const dark = t === DARK;
+      const withheld = g.file_total - g.file_open;
+      const hasOpen = g.files.length > 0;
+      const allWithheld = !hasOpen && g.file_total > 0;
+      const emptyRoom = g.file_total === 0;
+      const never = !g.last_opened_at;
+      const missing = !!(extra && extra.missing);
+      return Object.assign({
+        id, badge, g, t, desktop: kind === 'desktop', mobile: kind === 'mobile', live: !missing, missing,
+        capW: kind === 'desktop' ? '1280px' : '390px',
+        title: g.project_name + ' · ' + (kind === 'desktop' ? '1280' : '390') + (dark ? ' · dark' : ''),
+        nav: nav(t), zones: zones(t), scope: SCOPE,
+        accent: IND.a, deep: dark ? IND.deepDark : IND.deep, tint: dark ? IND.tintDark : IND.tint, hair: dark ? '#3730a3' : IND.hair,
+        neverOpened: never, withheld,
+        withheldInk: withheld > 0 ? t.warn : t.ink,
+        tiles: [
+          { k:'Open to you', v:String(g.file_open), ink:t.ink, size:'22px', msize:'18px', hair:t.hair, sub:'visibility = open' },
+          { k:'In the room', v:String(g.file_total), ink:t.ink, size:'22px', msize:'18px', hair:t.hair, sub:'everything they hold here' },
+          // 0 withheld is a real count and says so — the absence of an NDA wall is information.
+          { k:'Behind an NDA', v:String(withheld), ink: withheld > 0 ? t.warn : t.ink, size:'22px', msize:'18px',
+            hair: withheld > 0 ? t.warnHair : t.hair,
+            sub: withheld > 0 ? 'a count, never the names' : 'everything in this room is open to you' },
+          never ? { k:'Last opened', nr:true, sub:'you have not opened this room', hair:t.hair }
+                : { k:'Last opened', v:g.last_opened_at, ink:t.ink, size:'15px', msize:'13px', hair:t.hair, sub:'your open, not theirs' }
+        ],
+        scopeNote:'Scope is what they staged, not what was asked. ' + g.project_name + ' reads ' + g.file_open + ' of ' + g.file_total
+          + (withheld > 0 ? ' — the withheld folder has survived every ask so far.' : ' — nothing is held back.')
+          + ' What is absent from a room is diligence information too.',
+        openCount: g.file_open + (g.file_open === 1 ? ' file' : ' files'),
+        hasOpen, allWithheld, emptyRoom, hasWithheld: withheld > 0,
+        files: g.files.map(f => Object.assign({}, f, { noDl: !f.dl })),
+        hasActivity: g.activity.length > 0, noActivity: g.activity.length === 0, activity: g.activity,
+        // The draft reads the three counts and the last open. It has no access to NDA filenames
+        // and no deal record to join, so it can name neither.
+        draft: never && emptyRoom
+          ? 'Open the room once — or accept that ' + g.file_open + ' of ' + g.file_total + ' is already the finding.'
+          : g.file_open + ' of ' + g.file_total + ' documents are open to you'
+            + (withheld > 0 ? ', and ' + withheld + ' sit behind an NDA this room will not name' : ', with nothing held back')
+            + (never ? '. You have not opened it yet, so there is no download history to read against the staging.'
+                     : '. You last opened it ' + g.last_opened_at + '.')
+            + ' Nothing here infers a stage or a file name from those counts.',
+        draftBtn: 'background:' + IND.a + ';color:#fff',
+        acceptBtn: 'border:1px solid ' + (dark ? '#3730a3' : IND.hair) + ';color:' + (dark ? IND.deepDark : IND.deep) + ';background:transparent'
+      }, extra || {});
+    };
+
+    const boards = [
+      board('d1','D1',KELP,LIGHT,'desktop',{
+        blurb:'Dense SAMPLE. Kelp Bio reads 6 of 11 open, 5 behind an NDA — and the five are not listed, named, or placeholdered anywhere on the page, including in the dense frame. The subtitle under the tile strip states the reading: scope is what they staged, and what is absent is diligence information too.',
+        cap:'The withheld count is derived from the two file counts rather than stored as a third number, so it cannot drift from them. Activity is yours only — four of your own opens and downloads, no founder uploads, because this page has no such feed.' }),
+      board('d2','D2',SPARSE,LIGHT,'desktop',{
+        blurb:'Sparse and mandatory. The grant is live, the room is empty: 0 of 0, NDA panel omitted entirely, last opened Not recorded, activity Not recorded. "Nothing staged in this room yet" is stated as a finding rather than an error.',
+        cap:'The draft says the quiet part: open the room once, or accept that 0 of 0 is already the finding. There is no Request more files control on any frame.' }),
+      board('d3','D3',SEALED,LIGHT,'desktop',{
+        blurb:'Every document behind an NDA — 0 of 4 open. The open-files list shows an amber note instead of placeholder rows, because a greyed filename is still a filename. The grant carries an expiry, so the header states it.',
+        cap:'You opened the room once and saw nothing, which is itself recorded in your activity. The withheld tile is amber; the NDA panel repeats the count and the remedy.' }),
+      board('d4','D4',ALL_OPEN,LIGHT,'desktop',{
+        blurb:'Nothing held back — 5 of 5. The withheld tile reads 0 with "everything in this room is open to you", because zero is a real count here and the absence of an NDA wall is worth saying. The NDA panel is omitted.',
+        cap:'You have not opened it, so every download cell reads Not recorded and the activity timeline is empty. The link copy still states the terms: issued to you alone, one use, two minutes, and the founder sees what you opened.' }),
+      board('d5','D5',SPARSE,LIGHT,'desktop',{ missing:true,
+        blurb:'Grant missing. "This room is not open to you" — not an empty request state, and not a form. A grant is active or it is nothing; revoked and expired rooms never reach Diligence, so there is nothing here to appeal.',
+        cap:'The StatedLimit still renders, because the reason this page has no request button is the same reason this state has no remedy.' }),
+      board('d6','D6',KELP,DARK,'desktop',{
+        blurb:'Dark mode of D1. Indigo lifts to #818cf8 on the dark ground and the tint drops to #211f3d; the amber NDA surfaces take a dark fill with a lifted ink, so fill and ink move together.',
+        cap:'The COLLECTION badge keeps its green — it is an archetype colour, not the product accent.' }),
+      board('m1','M1',KELP,LIGHT,'mobile',{
+        blurb:'Mobile 390, dense. Header with the Open-the-room action, 2×2 tiles, the scope note, open files as cards, the NDA panel, deal stage, your activity, draft, stated limit.',
+        cap:'The scope table is dropped on mobile rather than squeezed: its five cells are the four tiles plus the company name, all of which are already above it.' }),
+      board('m2','M2',SEALED,LIGHT,'mobile',{
+        blurb:'Mobile 390, everything behind an NDA. The open-files card carries the amber note where the list would be, and the NDA panel restates the count and the remedy beneath it.',
+        cap:'Deal stage keeps its Not recorded chip and the reason — two records with no key between them — because a phone is exactly where someone would assume the join exists.' })
+    ];
+
+    return { boards };
+  }
+}
+</script>
+</body></html>

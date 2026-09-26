@@ -9,8 +9,11 @@
 //
 // Field mapping — every control writes a column the API actually accepts:
 //   Name                 → interviewee_name (required)
-//   Role + Company       → interviewee_role, joined as "Role · Company",
-//                          which is exactly how the log row renders it
+//   Role                 → interviewee_role
+//   Company              → interviewee_company, its own column (migration
+//                          211; D351). It used to be folded into the role as
+//                          "Role · Company"; a legacy row written that way is
+//                          split on open and saved back into the column.
 //   Interview date       → interview_date
 //   ICP fit              → icp_fit ('strong' | 'partial' | 'none'), D1 161.
 //                          Left unset it stays null = "not yet assessed",
@@ -24,13 +27,20 @@
 //   Deck-eligible        → featured
 //   Solution-fit rating  → validation_rating (0-5) + validation_comment
 //
+//   Per-pain severity    → interview_pain_severities (migration 211), need or
+//                          nice, rendered only when the caller passes
+//                          `severityControls` and handles the second argument
+//                          of `onSave` — a caller that did not would silently
+//                          discard the judgement. "Good-to-have" is not a value
+//                          the store accepts, so it is not offered.
+//
 // Design controls deliberately NOT rendered, because nothing stores them and
 // a control that silently discards input is worse than no control:
 //   Format (Call/In person), Source (Warm intro/…), Willingness to pay,
-//   Must-have / blocker, Follow-up action, and per-pain severity
-//   (need/good/nice — the API normalises pains to plain strings).
+//   Must-have / blocker and Follow-up action.
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Plus, X } from 'lucide-react';
+import { roleAndCompany, SEVERITY_OPTIONS } from '../../lib/discoveryEvidence';
 
 export const ICP_FIT_OPTIONS = [
   { value: 'strong', label: 'Strong fit' },
@@ -86,7 +96,7 @@ const INTENT_NOTE = {
   upload: 'Save the interview first — the uploader appears on its row, so the audio attaches to a person and a date.',
 };
 
-export default function LogInterviewModal({ open, interview, onClose, onSave, intent = null }) {
+export default function LogInterviewModal({ open, interview, onClose, onSave, intent = null, severityControls = false }) {
   const editing = Boolean(interview?.id);
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
@@ -102,18 +112,24 @@ export default function LogInterviewModal({ open, interview, onClose, onSave, in
   const [ratingComment, setRatingComment] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  // { phrase: 'need' | 'nice' } — only what the founder judged in THIS form.
+  // Severities already on file are not read back per interview (no route
+  // serves them per row), so the form starts blank and a choice replaces
+  // whatever is on file for that phrase.
+  const [severities, setSeverities] = useState({});
 
   // Reload the form whenever the target row changes (including null → create).
   useEffect(() => {
     if (!open) return;
     const iv = interview || null;
-    // interviewee_role is stored as "Role · Company"; split on the first
-    // separator only, so a company containing "·" survives the round-trip.
-    const rawRole = String(iv?.interviewee_role || '');
-    const sep = rawRole.indexOf(' · ');
+    // Company is its own column; a legacy "Role · Company" row is split on the
+    // first separator (so a company containing "·" survives) and saved back
+    // into the column on the next save.
+    const rc = roleAndCompany(iv);
     setName(iv?.interviewee_name || '');
-    setRole(sep === -1 ? rawRole : rawRole.slice(0, sep));
-    setCompany(sep === -1 ? '' : rawRole.slice(sep + 3));
+    setRole(rc.role);
+    setCompany(rc.company);
+    setSeverities({});
     setDate((iv?.interview_date || todayIso()).slice(0, 10));
     setIcpFit(iv?.icp_fit || '');
     setPains(Array.isArray(iv?.pains) ? iv.pains.filter(Boolean).map(String) : []);
@@ -143,9 +159,11 @@ export default function LogInterviewModal({ open, interview, onClose, onSave, in
     setSaving(true);
     setError(null);
     try {
+      const judged = Object.fromEntries(Object.entries(severities).filter(([p]) => pains.includes(p)));
       await onSave({
         interviewee_name: name.trim(),
-        interviewee_role: [role.trim(), company.trim()].filter(Boolean).join(' · ') || null,
+        interviewee_role: role.trim() || null,
+        interviewee_company: company.trim() || null,
         interview_date: date || undefined,
         notes: composeNotes({ quote, insights }),
         pains,
@@ -156,7 +174,7 @@ export default function LogInterviewModal({ open, interview, onClose, onSave, in
         featured,
         validation_rating: rating === '' ? null : Number(rating),
         validation_comment: ratingComment.trim() || null,
-      });
+      }, severityControls ? judged : undefined);
       onClose();
     } catch (err) {
       setError(err?.message || 'Could not save the interview.');
@@ -268,6 +286,34 @@ export default function LogInterviewModal({ open, interview, onClose, onSave, in
                       <X size={12} />
                     </button>
                   </span>
+                ))}
+              </div>
+            )}
+            {severityControls && pains.length > 0 && (
+              <div className="mt-2.5 space-y-1.5" data-testid="pain-severity-controls">
+                <p className="text-[10.5px] text-gray-400 dark:text-gray-500">
+                  How badly did they need it? Leave a pain unjudged to keep what is on file.
+                </p>
+                {pains.map((p) => (
+                  <div key={p} className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11.5px] text-gray-600 dark:text-gray-300 flex-1 min-w-0 truncate">{p}</span>
+                    {SEVERITY_OPTIONS.map((o) => (
+                      <button
+                        key={o.value}
+                        type="button"
+                        aria-pressed={severities[p] === o.value}
+                        data-testid={`severity-${o.value}-${p}`}
+                        onClick={() => setSeverities((m) => ({ ...m, [p]: m[p] === o.value ? undefined : o.value }))}
+                        className={`text-[10.5px] font-semibold px-2.5 py-1 rounded-full border ${
+                          severities[p] === o.value
+                            ? (o.value === 'need' ? 'bg-red-600 border-red-600 text-white' : 'bg-gray-600 border-gray-600 text-white')
+                            : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'
+                        }`}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
                 ))}
               </div>
             )}

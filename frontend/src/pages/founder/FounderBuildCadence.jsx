@@ -8,7 +8,7 @@ import './founderBuildCadence.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
-import { dayLabel, kindLabel, todayIso, WEEKDAYS } from '../../lib/cadence';
+import { dayLabel, kindLabel, scheduleLabel, todayIso } from '../../lib/cadence';
 import { RitualDialog, RunDialog, TemplatesDialog } from './CadenceDialogs';
 
 /**
@@ -67,17 +67,6 @@ export const CADENCE_VIEWS = {
   skipped: (run) => String(run?.state) === 'missed',
 };
 
-/** `weekday` + `frequency` as one phrase, or the part that is recorded. */
-function scheduleLabel(ritual) {
-  const day = ritual?.weekday == null ? null : WEEKDAYS[Number(ritual.weekday)];
-  const freq = String(ritual?.frequency || 'weekly');
-  if (day && freq === 'weekly') return `Every ${day}`;
-  if (day && freq === 'biweekly') return `Every other ${day}`;
-  if (day && freq === 'monthly') return `Monthly, on a ${day}`;
-  if (freq === 'weekly') return 'Weekly';
-  if (freq === 'biweekly') return 'Every two weeks';
-  return 'Monthly';
-}
 
 export default function FounderBuildCadence() {
   const [params, setParams] = useSearchParams();

@@ -13,6 +13,11 @@
 // same 'cofounder_request_sent' milestone — so Week 3 advances identically
 // whichever surface the founder used. The full browse/connections/NDA flow
 // stays on /cofounder and is linked, not duplicated.
+//
+// D352 — five outcomes, finalists and sort chips, all in the same stored
+// decision blob (see the view model's header). A failed project read renders
+// Unreadable: it is not "no startup record", and the console must not invite
+// a founder to create a second one.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -26,9 +31,11 @@ import { pickLabProject } from './SpinoutLabStartupPage';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
 import IncomingLeadsStrip from '../components/IncomingLeadsStrip';
+import { Unrecorded, Unreadable } from '../ui';
 import {
   buildMatchBrief, buildEvidenceModules, buildDecisionModel, serializeDecision,
   fitRows, DECISION_OUTCOMES, CAPABILITY_GAP_THRESHOLD,
+  FINALIST_LIMIT, SORT_KEYS, sortCards, sortFigure,
 } from '../lib/cofounderMatchViewModel';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
@@ -63,6 +70,10 @@ export default function SpinoutLabCofounderMatchPage() {
   const [followups, setFollowups] = useState([]);
   const [followDraft, setFollowDraft] = useState('');
   const [saveState, setSaveState] = useState('idle'); // idle | saving | saved | error
+  const [saveError, setSaveError] = useState('');
+  const [finalists, setFinalists] = useState([]);
+  const [sortKey, setSortKey] = useState('total');
+  const [projectsFailed, setProjectsFailed] = useState(false);
 
   useEffect(() => {
     let dead = false;
@@ -71,12 +82,13 @@ export default function SpinoutLabCofounderMatchPage() {
         const [st, me, projects] = await Promise.all([
           spinoutLab.state().catch(() => null),
           api.getMe().catch(() => null),
-          api.listProjects().catch(() => []),
+          api.listProjects().then((d) => ({ ok: true, d }), () => ({ ok: false })),
         ]);
         if (dead) return;
         setState(st);
         setUser(me);
-        const proj = pickLabProject(projects, me);
+        setProjectsFailed(!projects.ok);
+        const proj = projects.ok ? pickLabProject(projects.d, me) : null;
         setProject(proj || null);
         const [rd, rs, vv, prof, br] = await Promise.all([
           api.radar.me().catch(wkOnly),
@@ -97,6 +109,7 @@ export default function SpinoutLabCofounderMatchPage() {
         setCandidateUid(model.candidateUid);
         setNote(model.note);
         setFollowups(model.followups);
+        setFinalists(model.finalists);
         setStatus('ready');
       } catch {
         if (!dead) setStatus('error');
@@ -124,6 +137,12 @@ export default function SpinoutLabCofounderMatchPage() {
   );
   const scoringDone = milestoneKeys.has('scoring_run_completed');
   const cards = useMemo(() => (Array.isArray(browse?.items) ? browse.items : []), [browse]);
+  const sortedCards = useMemo(() => sortCards(cards, sortKey), [cards, sortKey]);
+  const cardByUid = useMemo(() => new Map(cards.map((c) => [c.uid, c])), [cards]);
+  const outcomeDef = DECISION_OUTCOMES.find((o) => o.value === outcome) || null;
+  const toggleFinalist = (uid) => setFinalists((f) => (
+    f.includes(uid) ? f.filter((x) => x !== uid) : f.length >= FINALIST_LIMIT ? f : [...f, uid]
+  ));
   const evidence = useMemo(
     () => buildEvidenceModules({
       brief,
@@ -174,19 +193,22 @@ export default function SpinoutLabCofounderMatchPage() {
     try {
       const blob = serializeDecision({
         outcome,
-        candidateUid: outcome === 'advance' ? candidateUid : null,
+        candidateUid,
         note,
         followups,
+        finalists,
         decidedAt: new Date().toISOString(),
       });
       const updated = await api.updateProject(project.id, { cofounder_decision_meta: JSON.stringify(blob) });
       setProject((p) => ({ ...(updated || p), cofounder_decision_meta: JSON.stringify(blob) }));
+      setSaveError('');
       setSaveState('saved');
       setTimeout(() => setSaveState('idle'), 2500);
-    } catch {
+    } catch (e) {
+      setSaveError(e?.message || '');
       setSaveState('error');
     }
-  }, [project, outcome, candidateUid, note, followups]);
+  }, [project, outcome, candidateUid, note, followups, finalists]);
 
   if (status === 'loading') {
     return <div className="max-w-7xl mx-auto px-4 py-16 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-violet-500" /></div>;
@@ -298,7 +320,26 @@ export default function SpinoutLabCofounderMatchPage() {
 
           {/* Ranked candidates */}
           <div className="space-y-3" data-testid="section-candidates">
-            <div className={LBL}>Ranked candidates · best complement first</div>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className={LBL}>Ranked candidates · by {SORT_KEYS.find((k) => k.key === sortKey)?.label.toLowerCase()}</div>
+              <div className="flex gap-1 flex-wrap items-center" data-testid="sort-chips">
+                {SORT_KEYS.map((k) => (
+                  <button
+                    key={k.key}
+                    type="button"
+                    onClick={() => setSortKey(k.key)}
+                    aria-pressed={sortKey === k.key}
+                    data-testid={`sort-${k.key}`}
+                    className={`text-[11px] font-semibold px-3 py-1 rounded-full border ${sortKey === k.key ? 'bg-violet-600 border-violet-600 text-white' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'}`}
+                  >
+                    {k.label}
+                  </button>
+                ))}
+                <span className="text-[10.5px] text-gray-400 dark:text-gray-500" data-testid="sort-evidence-unrecorded">
+                  Evidence: <Unrecorded reason="The matcher reports no per-candidate evidence figure, so there is nothing to order by." />
+                </span>
+              </div>
+            </div>
             {interestMsg && (
               <div className={`text-[12px] rounded-lg px-3 py-2 ${interestMsg.kind === 'ok' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300' : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300'}`} data-testid="interest-msg">
                 {interestMsg.text}
@@ -318,7 +359,7 @@ export default function SpinoutLabCofounderMatchPage() {
                   {browseSkill ? 'No listed candidates match this criterion — clear it or search the full pool.' : 'No listed candidates right now — the pool is still growing.'}
                 </p>
               </div>
-            ) : cards.map((card) => {
+            ) : sortedCards.map((card) => {
               const rows = fitRows(card.breakdown);
               const gapsGroup = rows.filter((r) => r.group === 'gaps');
               const styleGroup = rows.filter((r) => r.group === 'style');
@@ -401,6 +442,16 @@ export default function SpinoutLabCofounderMatchPage() {
                         >
                           <Scale size={12} /> Advance to decision
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleFinalist(card.uid)}
+                          disabled={!finalists.includes(card.uid) && finalists.length >= FINALIST_LIMIT}
+                          aria-pressed={finalists.includes(card.uid)}
+                          data-testid={`button-finalist-${card.uid}`}
+                          className="inline-flex items-center gap-1.5 text-[11.5px] font-bold text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 disabled:opacity-40"
+                        >
+                          {finalists.includes(card.uid) ? <><Check size={12} /> Finalist</> : 'Add to finalists'}
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -472,6 +523,47 @@ export default function SpinoutLabCofounderMatchPage() {
             )}
           </div>
 
+          {/* Finalists compare (D352) — uids stored in the decision blob,
+              figures read live from the current /browse cards. A finalist
+              not in the current list says so rather than showing old numbers. */}
+          <div className={CARD} data-testid="card-finalists">
+            <div className={`${LBL} mb-2`}>Finalists · compare · {finalists.length} of {FINALIST_LIMIT}</div>
+            {finalists.length === 0 ? (
+              <p className="text-[11.5px] text-gray-400 dark:text-gray-500">Add up to {FINALIST_LIMIT} candidates with “Add to finalists”. They are saved with your decision.</p>
+            ) : (
+              <div className="space-y-2">
+                {finalists.map((uid) => {
+                  const c = cardByUid.get(uid);
+                  return (
+                    <div key={uid} className="rounded-xl border border-gray-100 dark:border-gray-800 p-2.5" data-testid={`finalist-${uid}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[12.5px] font-bold text-gray-900 dark:text-gray-50 truncate">{c ? c.handle : `${uid.slice(0, 8)}…`}</span>
+                        <button type="button" onClick={() => toggleFinalist(uid)} aria-label="Remove finalist" className="text-gray-400 hover:text-rose-500"><X size={12} /></button>
+                      </div>
+                      {c ? (
+                        <div className="grid grid-cols-3 gap-1 mt-1.5 text-[10.5px]">
+                          {SORT_KEYS.map((k) => {
+                            const v = sortFigure(c, k.key);
+                            return (
+                              <div key={k.key}>
+                                <div className="text-gray-400 dark:text-gray-500">{k.label}</div>
+                                <div className="font-bold tabular-nums text-gray-800 dark:text-gray-100">
+                                  {v == null ? <Unrecorded reason="The matcher gave no figure for this part." /> : v}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-1">Not in the current candidate list — clear the search criterion to compare.</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Decision console */}
           <div className={CARD} data-testid="card-decision-console">
             <div className={`${LBL} mb-1`}>Decision console · track decision</div>
@@ -497,9 +589,11 @@ export default function SpinoutLabCofounderMatchPage() {
                 </label>
               ))}
             </div>
-            {outcome === 'advance' && (
+            {outcomeDef?.needsCandidate && (
               <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-3" data-testid="text-advance-candidate">
-                {candidateUid ? `Candidate: ${candidateUid.slice(0, 8)}… (from the list).` : 'Pick a candidate with "Advance to decision" on the left.'}
+                {candidateUid
+                  ? `Candidate: ${cardByUid.get(candidateUid)?.handle || `${candidateUid.slice(0, 8)}…`}.`
+                  : 'Pick a candidate with "Advance to decision" on the left.'}
               </p>
             )}
             {outcome === 'solo' && (
@@ -510,7 +604,8 @@ export default function SpinoutLabCofounderMatchPage() {
                 )}
                 <p>
                   For Week 3, <Link to="/spinout-lab/advisors" className="text-violet-600 hover:underline font-semibold">book an advisor meeting</Link> (the other valid path).
-                  The solo declaration itself executes in Week 4's <Link to="/spinout-lab/cofounder-agreement" className="text-violet-600 hover:underline font-semibold">Co-founder Agreement</Link> tool.
+                  The <Link to="/spinout-lab/cofounder-agreement" className="text-violet-600 hover:underline font-semibold">Co-founder Agreement</Link> page shows this recorded decision on its solo path.
+                  Axal has no solo-declaration document, so recording it here is the whole of the record.
                 </p>
               </div>
             )}
@@ -535,13 +630,17 @@ export default function SpinoutLabCofounderMatchPage() {
                 ))}
               </ul>
             )}
-            <button type="button" disabled={!outcome || !project || saveState === 'saving'} onClick={saveDecision} data-testid="button-save-decision"
+            <button type="button" disabled={!outcome || !project || saveState === 'saving' || (outcomeDef?.needsCandidate && !candidateUid)} onClick={saveDecision} data-testid="button-save-decision"
               className="w-full h-9 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white text-[12.5px] font-bold inline-flex items-center justify-center gap-1.5">
               {saveState === 'saving' && <Loader2 size={13} className="animate-spin" />}
               {saveState === 'saved' ? '✓ Decision recorded' : 'Record decision'}
             </button>
-            {saveState === 'error' && <p className="text-[11.5px] text-rose-600 dark:text-rose-400 mt-2" data-testid="text-save-error">Couldn't save — try again.</p>}
-            {!project && <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2">Create a startup record first to store a decision.</p>}
+            {saveState === 'error' && <p className="text-[11.5px] text-rose-600 dark:text-rose-400 mt-2" data-testid="text-save-error">{saveError || "Couldn't save — try again."}</p>}
+            {projectsFailed ? (
+              <div className="mt-2" data-testid="decision-projects-unreadable">
+                <Unreadable what="Your startup record" claim="This is not a claim that you have none, so no decision can be stored until it loads." onRetry={() => window.location.reload()} />
+              </div>
+            ) : !project && <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2">Create a startup record first to store a decision.</p>}
             {decision.decidedAt && saveState === 'idle' && (
               <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-2" data-testid="text-decided-at">
                 Last recorded {new Date(decision.decidedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}.

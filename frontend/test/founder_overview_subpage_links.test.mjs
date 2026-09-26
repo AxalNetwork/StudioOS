@@ -47,7 +47,21 @@ const DESKS = [
   { bucket: 'build', file: 'frontend/src/pages/founder/FounderBuildDesk.jsx' },
   { bucket: 'raise', file: 'frontend/src/pages/founder/FounderRaiseDesk.jsx' },
   { bucket: 'grow', file: 'frontend/src/pages/founder/FounderGrowDesk.jsx' },
+  // A6 and A7 joined in D421. Both handed off to legacy mounts —
+  // `/network?mode=workspace&tab=…` and `/market-intel`, `/raise/…` — while
+  // their own zones sat one pill away.
+  { bucket: 'network', file: 'frontend/src/pages/founder/FounderNetworkDesk.jsx' },
+  { bucket: 'research', file: 'frontend/src/pages/founder/FounderResearchDesk.jsx' },
 ];
+
+/**
+ * THE ONE LINK THIS RULE DOES NOT OWN. `FounderResearchDesk.jsx`'s Company
+ * profiles card links `/build/competitors`, and that line belongs to Session 2
+ * this wave, whose `/build/competitors` redirect decides where it lands. It is
+ * named here, one exact target in one file, rather than the rule being
+ * loosened for the desk — a second out-of-bucket link on the same desk fails.
+ */
+const HELD_ELSEWHERE = new Set(['frontend/src/pages/founder/FounderResearchDesk.jsx /build/competitors']);
 
 /** Every `/bucket/slug` route App.jsx actually mounts. */
 const BUCKET_PATH = {
@@ -55,6 +69,8 @@ const BUCKET_PATH = {
   build: /path="\/build\/([a-z-]+)"/g,
   raise: /path="\/raise\/([a-z-]+)"/g,
   grow: /path="\/grow\/([a-z-]+)"/g,
+  network: /path="\/network\/([a-z-]+)"/g,
+  research: /path="\/research\/([a-z-]+)"/g,
 };
 
 function routesFor(bucket) {
@@ -82,7 +98,10 @@ test('every founder overview mounts a card per subpage its own bucket has', () =
   for (const { bucket, file } of DESKS) {
     const src = read(file);
     const routes = routesFor(bucket);
-    assert.ok(routes.length >= 4, `/${bucket} has ${routes.length} subpage routes — has the bucket moved?`);
+    // Network is the one bucket with three zones (Relationships,
+    // Introductions, Organizations); every other bucket has at least four.
+    const floor = bucket === 'network' ? 3 : 4;
+    assert.ok(routes.length >= floor, `/${bucket} has ${routes.length} subpage routes — has the bucket moved?`);
     for (const slug of routes) {
       // `/build` mounts sixteen routes and the desk summarises five of them;
       // the others are the deep tools its subpages link on to. So the rule is
@@ -92,6 +111,14 @@ test('every founder overview mounts a card per subpage its own bucket has', () =
     }
     const sections = src.match(/const SECTIONS = \[[\s\S]*?\];/);
     assert.ok(sections, `${file} has no SECTIONS list for its chip row`);
+    // A FULL PATH IN THE LIST MUST BE IN THIS BUCKET. The slug loop below skips
+    // a slug the bucket does not mount, so without this a chip — and every card
+    // that takes its handoff from the same list — could point out of the
+    // bucket unseen: a mutation moving A6's Organizations to `/build/…` passed.
+    for (const [, path] of sections[0].matchAll(/'(\/[a-z/-]+)'/g)) {
+      assert.equal(path.split('/')[1], bucket,
+        `${file}'s section list names ${path}, which is outside /${bucket}`);
+    }
     for (const slug of [...sections[0].matchAll(/'\/?[a-z/-]*?([a-z-]+)'/g)].map((m) => m[1])) {
       if (['focus'].includes(slug) && bucket !== 'grow') continue;
       if (!routes.includes(slug)) continue;
@@ -109,6 +136,7 @@ test('no founder overview links out of its own bucket', () => {
       // section slug; the leading path segment is what identifies the bucket.
       const path = target.split('?')[0];
       if (!path.startsWith('/')) continue;
+      if (HELD_ELSEWHERE.has(`${file} ${path}`)) continue;
       const owner = path.split('/')[1];
       assert.equal(owner, bucket,
         `${file} links to ${target}, which is in /${owner} rather than /${bucket} — `

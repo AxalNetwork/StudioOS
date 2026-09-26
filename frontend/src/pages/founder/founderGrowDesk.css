@@ -23,3 +23,14 @@
 .dark .a5-funnel>div{background:#2b2634;border-color:#423b4b}
 .dark .a5-launches>div{border-color:#423b4b}
 @media(max-width:600px){.a5-funnel{grid-template-columns:1fr 1fr}.a5-focus-stats{gap:14px}}
+.a5-funds{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:9px}
+.a5-funds article{border:1px solid #f0eff4;background:#fbfbfc;border-radius:11px;padding:12px 13px;display:flex;flex-direction:column;gap:6px}
+.a5-funds article>div{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.a5-funds b{font-size:12.5px;font-weight:800;color:#2b2733}
+.a5-funds span{flex:none;font-size:10px;color:#7d7685;font-variant-numeric:tabular-nums}
+.a5-funds p{margin:0;font-size:11px;line-height:1.5;color:#5d5767}
+.a5-funds small{font-size:10px;font-weight:700;color:#6d28d9}
+.dark .a5-funds article{background:#2b2634;border-color:#463f4e}
+.dark .a5-funds b{color:#eee9f1}
+.dark .a5-funds p,.dark .a5-funds span{color:#bbb3c2}
+.dark .a5-funds small{color:#c4b5fd}

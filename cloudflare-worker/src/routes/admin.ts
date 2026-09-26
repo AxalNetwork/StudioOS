@@ -1738,6 +1738,10 @@ admin.post('/impersonate/:userId', async (c) => {
     token,
     user: { id: target.id, email: target.email, name: target.name, role: target.role },
     impersonation_session_id: impersonationSessionId,
+    // D290 — the reason as STORED, for the operator's bar (H25's Why). Null
+    // when the best-effort write above failed, so the bar reads "Not
+    // recorded" rather than a reason the audit does not hold.
+    reason: impersonationSessionId === null ? null : reason,
     // D248 — whether the person was told. Reported, never assumed.
     target_notified: targetNotified,
     // The client shows the remaining time and hands the session back at zero.
