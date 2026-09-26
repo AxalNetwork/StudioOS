@@ -11348,10 +11348,18 @@ control that is not there:
 - **Circles** — full CRUD. The one community surface a branch authors outright.
 - **Network profiles** — CRUD, photo and reorder, and **not a member
   directory.** The only public route over that table is `network_public.ts`'s
-  single photo-blob proxy, and the only other reader in the whole worker is
-  `services/decks/axalSpinoutDemoDay.ts`. There is no member-facing list
-  endpoint at all; what the table feeds is the Demo Day deck's Mentors & Network
-  slide. The card says that rather than letting the name imply otherwise.
+  single photo-blob proxy. There is no member-facing list endpoint at all;
+  what the table feeds is the Demo Day deck's Team & Network slide. The card
+  says that rather than letting the name imply otherwise.
+  **[Corrected by D302.]** This bullet named `services/decks/axalSpinoutDemoDay.ts`
+  as "the only other reader in the whole worker" and the slide as "Mentors &
+  Network". Both were true when this was written and are false now, on the
+  same later commit: D214 (#748) both renamed the slide to "Team & Network"
+  and added `routes/admin_content.ts`'s roster block (`admin_content.ts:480-494`,
+  HQ's Advisors & Partners deck-roster panel) as a second reader of
+  `network_profiles`. Neither claim was ever load-bearing for D140's actual
+  point — that the table is not a member directory — so the correction below
+  is purely factual, not a retraction.
 
 **The page fetches nothing, deliberately.** Four counts would each be a second
 read of a console's own list, and a count here disagreeing with the table one
@@ -29235,3 +29243,76 @@ exists.
   file order) all exit 0.
 - Both typechecks (`cd cloudflare-worker && npx tsc --noEmit`;
   `npx tsc --noEmit -p frontend/tsconfig.json`) exit 0.
+
+## D302
+
+**The roster stays branch-local. Widen the guard and correct D140's stale
+sentence.** Task 385 — the coordinator's decision, quoted rather than
+re-decided.
+
+**Measured: the code proves the decision right, not wrong.** All four
+community consoles (`admin_events.ts`, `admin_jobs.ts`, `admin_circles.ts`,
+`admin_network_profiles.ts`) carry zero `requireHqAuthoring`,
+`requireSuperAdmin` or `requireSuperAdminWriteBar` calls and no
+`HQ_ONLY`/`HQ_AUTHORING_ONLY` throw, so each already answers on a branch
+exactly as it does at HQ. Nothing here needed to change to make the
+decision true; what needed fixing was the guard that checks it and the one
+sentence D140 got wrong.
+
+**The guard was checking the wrong thing.**
+`branch_programs_s4.test.mjs`'s "the four community consoles really are
+reachable on a branch" read a hard-coded list of four worker file names —
+never asking `COMMUNITY_CONSOLES` which file actually serves each card —
+and refused only `requireHqAuthoring`, one of several ways a route can be
+made HQ-only. A card whose worker field drifted from the file that
+actually serves it, or a gate added through `requireSuperAdmin` instead of
+`requireHqAuthoring`, would have passed silently.
+
+**What changed.**
+- Each `COMMUNITY_CONSOLES` entry (`pages/branch/BranchCommunity.jsx`)
+  gains a `worker` field naming its route file — `admin_events.ts`,
+  `admin_jobs.ts`, `admin_circles.ts`, `admin_network_profiles.ts`.
+- The test now reads each card's own `worker` field, through `codeOnly`
+  (so a defensive comment mentioning `requireSuperAdmin` cannot trip the
+  check — proven by a new negative-control test), confirms the file
+  exists, and refuses all three HQ-gate helpers plus both throw
+  constants. The `COMMUNITY_CONSOLES.length === 4` pin from the existing
+  "every community card points at a route" test still catches a fifth
+  console added with no card.
+- **D140's bullet is corrected in place**, the way D256 was: the two false
+  claims (the deck service being "the only other reader in the whole
+  worker"; the slide being "Mentors & Network") are struck through in
+  substance and replaced with what is true today, with a note on when and
+  why they changed (D214, #748, which both renamed the slide and added
+  `admin_content.ts`'s roster block as a second reader) — see the bullet
+  itself for the full correction, inline where the claim was made.
+- **What stays true, and stays pinned, unchanged.** `admin_content.ts:480-494`'s
+  `nominations: { recorded: false, … }` and its `branch_rule` sentence are
+  untouched; `content_studio_d214.test.ts:744-746` and
+  `hq_content_h18_h19.test.mjs:591` still pin them. H19's canvas draws "HQ
+  publishes · a branch nominates" — that half is not built, and this
+  decision keeps it unbuilt: nothing here gives a branch a route to
+  propose a roster entry to HQ, and nothing should, since that is a
+  design call this task was not asked to make.
+
+**Worker only in the sense that nothing worker-side changed: no route, no
+migration.** `frontend/src` moved (the console list and the test), so
+`docs/` is rebuilt.
+
+### VERIFIED
+
+- `frontend/test/branch_programs_s4.test.mjs`: 18 tests, exit 0 (2 new: the
+  widened reachability check and its negative control; the existing 16
+  unaffected).
+- Four mutations run, four caught (non-zero exit + a `not ok` line), each
+  restored from a sha256-verified `/tmp` snapshot: `requireSuperAdmin`
+  added to `admin_circles.ts`; a card's `worker` field renamed to a file
+  that does not exist; the `worker` field dropped from one card; an
+  `HQ_ONLY` throw added to a console route. The negative control (a
+  comment mentioning `requireSuperAdmin` in a console file) does not fail,
+  confirmed both before and after each mutation and its restore.
+- `node scripts/check-docs-fresh.mjs --strict` exits 0 after the rebuild.
+- `node scripts/check-decision-ids.mjs` exits 0 (D1 through D302, in file
+  order).
+- No migration, no route, no `api.js` method, so `check-api-drift` has
+  nothing to say.
