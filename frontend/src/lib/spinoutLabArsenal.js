@@ -60,10 +60,10 @@ export const LAB_TOOLS = [
 
   { id: 'roadmap', group: 'Build', name: 'Roadmap and OKRs', blurb: 'MVP scope, value-rated.', route: '/spinout-lab/roadmap' },
   { id: 'brand', group: 'Build', name: 'Brand and landing pages', blurb: 'Sixteen templates, with lead routing.', route: '/spinout-lab/brand' },
-  { id: 'deck', group: 'Build', name: 'Pitch deck', blurb: 'Twelve slides from your own data.', route: '/spinout-lab/pitch-deck' },
+  { id: 'deck', group: 'Build', name: 'Pitch deck', blurb: 'Eleven slides from your own data.', route: '/spinout-lab/pitch-deck' },
 
-  { id: 'inc', group: 'Formation', name: 'Incorporation', blurb: 'The entity, by jurisdiction.', route: '/spinout-lab/incorporate' },
-  { id: 'cap', group: 'Formation', name: 'Cap table', blurb: 'Vesting, dilution, waterfall.', route: '/spinout-lab/captable' },
+  { id: 'inc', group: 'Formation', name: 'Incorporation', blurb: 'Entity choice and Delaware formation documents.', route: '/spinout-lab/incorporate' },
+  { id: 'cap', group: 'Formation', name: 'Cap table', blurb: 'Ownership, SAFEs and dilution, modeled.', route: '/spinout-lab/captable' },
   { id: 'e83b', group: 'Formation', name: '83(b) tracking', blurb: 'The 30-day window, counted for you.', route: '/spinout-lab/83b' },
   { id: 'coagree', group: 'Formation', name: 'Co-founder agreement', blurb: 'Clause by clause, then e-signed.', route: '/spinout-lab/cofounder-agreement' },
   { id: 'comply', group: 'Formation', name: 'Compliance', blurb: 'Formation, equity, filings, records.', route: '/spinout-lab/compliance' },

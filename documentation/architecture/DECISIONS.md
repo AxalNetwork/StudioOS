@@ -29447,3 +29447,93 @@ migration.** `frontend/src` moved (the console list and the test), so
   order).
 - No migration, no route, no `api.js` method, so `check-api-drift` has
   nothing to say.
+
+## D360
+
+**The Spin-Out Lab's capital and legal tools say when a read failed, and
+stop claiming what they do not do.** Wave 8, Session 8, PR 1 of 5 — frontend
+only: no migration, no route, no `api.js` method.
+
+**The defect.** Seven Lab pages (83(b), Cap Table, Revenue, Capital,
+Compliance, Use of Funds, Incorporate) caught each read into an empty value
+— `.catch(() => [])`, `.catch(() => null)`, `|| 0` — so a failed read
+rendered as a fact. Measured before the change:
+- 83(b): a failed tracker read painted "No 83(b) tracker yet" beside a
+  statutory deadline and lit the "Not required" chip; a failed project read
+  said "create your company record first".
+- Cap Table: a failed scenario read normalized to empty inputs; the first
+  edit plus Save would have upserted that partial data over the project's
+  one canonical scenario (`POST /captable/scenarios` is an upsert).
+- Revenue: a failed log read showed "0" snapshots and "Never" synced.
+- Compliance: a failed Lab-state read showed every Week 4 item open and
+  "Not started"; a failed tracker read "Opens on stock transfer"; a failed
+  documents read "0 documents on file".
+- Capital: an empty raise body became `{ raised: 0 }`; soft-circled and
+  weighted pipeline added prospects with no check size as $0.
+- Incorporate: a failed orders read offered "Pay" (an order may already be
+  paid); a failed members read printed "1 founder".
+- Every page's failed project read said "No startup record yet".
+
+**What changed.**
+- Each read records that it failed and the page renders `Unreadable` (with
+  a retry) in place of the empty state, or closes the write it would have
+  enabled. No state chip is derived from a failed read.
+- Cap Table: `canEdit` requires a readable scenario, `save` refuses on its
+  own before any request, and the ledger/founders/SAFEs/dilution grid is
+  not rendered over data the page never saw. A failed tracker read badges
+  each founder "83(b) unreadable".
+- 83(b): the tracker is created only from a taxpayer name and a
+  stock-transfer date the founder typed or confirmed — no "Founder"
+  fallback, no "today" default, both required. The proof row for the
+  generated election says "Generated — sign it before mailing", never
+  "Signed". The Shares tile now reads the scenario's founders
+  (`{scenario: {inputs}}`); it read `capTable.inputs` before, which the
+  route never returns, so it always showed a dash.
+- No `|| 0` / `?? 0` on a figure on the seven pages; sums add only values
+  that exist and say how many do not ("N without a check size"). An
+  unpriced milestone is no longer counted as funded, and an emptied cost
+  input stores no cost rather than $0.
+- **Use of Funds runway divides by a recorded net burn.** The design's
+  allocation-intensity model (eng%·$700 + gtm%·$1,200 + ops%·$450 a month)
+  was invented and drove a card headed "Runway at current burn". Burn is
+  now the newest `project_metrics.net_burn`; with none, runway reads "Not
+  recorded" and links to the Revenue page, whose snapshot form gains net
+  burn and cash balance inputs (`POST /progress/metrics/:projectId`
+  already accepted both). "Largest driver" became "Largest allocation": no
+  store splits burn by bucket. The canvas draws a burn driver; this entry
+  records that disagreement.
+- Use of Funds' "Share" was the same clipboard call as "Copy link" and is
+  dropped; Copy link reports a refused clipboard. "Axal VC Spin-Out
+  format / Export" only ever stamped a timestamp, so it is now "Record
+  Axal hand-off — stamps today's date, no file is generated".
+- Lab links land on Lab pages: Revenue and Use of Funds' `/build/deck` and
+  Capital's `/raise/pitch` → `/spinout-lab/pitch-deck`; Capital's data-room
+  `/incorporate` → `/spinout-lab/incorporate`. `/build/brand` stays linked
+  from the Brand page — layout and media editing have not been ported —
+  and App.jsx's comment no longer says the Lab page replaces it.
+- Copy: the arsenal's deck blurb names eleven slides (`SLIDE_META`), the
+  cap table blurb drops "vesting" and "waterfall" (neither is tracked), the
+  Incorporate blurb drops "by jurisdiction" (Delaware only today);
+  `SpinoutLabWorkspace`'s cap-table row says "dilution", not "vesting";
+  `LAB_JURISDICTIONS`' 83(b) line no longer says the filing is "archived in
+  your data room" — nothing archives it there.
+
+**Guard.** `frontend/test/spinout_lab_honest_reads_d360.test.mjs`, fifteen
+tests: source-text for the `useEffect` render paths (bounded to each block,
+comments stripped), runtime for `latestRecordedBurn`/`runwayMonths`, and
+the deck blurb checked against `SLIDE_META.length` rather than a literal.
+Mutation-checked both ways: 29 of 29 defects caught (non-zero exit and a
+`not ok` line each), every file restored by sha256. One fixture was
+reordered before the tally so the "newest recorded burn wins" check could
+fail — with the newest row first, dropping the sort escaped by position.
+
+**Not in this PR, each with its owner.** The 83(b) "Mark as filed" still
+stamps the click time — PR 2 (migration 310) adds the filed date. The
+Incorporate price is still hard-coded and paid state still reads a
+client-written field — PR 3. Filed rather than fixed, because they are
+Worker code and this PR is frontend-only: `GET /progress/metrics/:projectId`
+catches a failed SELECT and returns an empty list, so the Revenue log and
+the Use of Funds burn can still read a failed query as "none recorded";
+`routes/brand.ts`' page DTO (`views_count: row.views_count || 0`) and
+`routes/contacts.ts`' pro-rata `post_round_stake_pct` inputs carry `|| 0`
+(PR 5 wires pro-rata and meets the second).

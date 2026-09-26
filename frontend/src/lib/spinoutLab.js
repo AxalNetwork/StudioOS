@@ -244,13 +244,13 @@ export const LAB_JURISDICTIONS = [
     key: 'de', label: 'Delaware, USA', entity: 'Delaware C-Corp',
     incLine: 'Delaware C-Corp incorporation', entityDesc: 'Fully incorporated entity with EIN and registered agent.',
     filingBadge: '83(b) Filed', filingName: '83(b) Election', filingInc: '83(b) election filing',
-    filingDesc: 'Filed within the 30-day IRS window, archived in your data room.',
+    filingDesc: 'Filed within the 30-day IRS window, with the mailing proof on your 83(b) tracker.',
   },
   {
     key: 'wy', label: 'Wyoming, USA', entity: 'Wyoming C-Corp',
     incLine: 'Wyoming C-Corp incorporation', entityDesc: 'Fully incorporated Wyoming entity with EIN and registered agent.',
     filingBadge: '83(b) Filed', filingName: '83(b) Election', filingInc: '83(b) election filing',
-    filingDesc: 'Filed within the 30-day IRS window, archived in your data room.',
+    filingDesc: 'Filed within the 30-day IRS window, with the mailing proof on your 83(b) tracker.',
   },
   {
     key: 'sg', label: 'Singapore', soon: true, entity: 'Singapore Pte Ltd',

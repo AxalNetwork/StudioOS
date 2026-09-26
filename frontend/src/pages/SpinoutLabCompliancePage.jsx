@@ -33,12 +33,21 @@
 //     Categories come from WEEK_DEFS; documents from GET /legal/documents.
 //   - Activity is built from real timestamps (document created_at, the 83(b)
 //     tracker's mailed_at) rather than a scripted feed.
+//
+// Honest reads (D360). Every figure here is derived from four reads, and each
+// used to be caught into an empty value — so a failed Lab-state read rendered
+// "Not started" with every deliverable open, a failed tracker read rendered
+// "Opens on stock transfer", and a failed documents read "0 documents on
+// file". Lab state and the project gate the whole dashboard, so either failing
+// renders `Unreadable` in its place; a failed tracker or documents read marks
+// only the rows built from it.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, ShieldCheck, Upload } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
+import { Unreadable, Unrecorded } from '../ui';
 import LabPageHeader from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
 import LabPageIcon from '../components/spinout/LabPageIcon';
@@ -88,26 +97,35 @@ export default function SpinoutLabCompliancePage() {
   const [status, setStatus] = useState('loading');
   const [filter, setFilter] = useState('all'); // all | open | blocking
   const [openCats, setOpenCats] = useState({});
+  // Which reads failed. A failed read is never folded into an empty one.
+  const [unread, setUnread] = useState({ state: false, projects: false, tracker: false, docs: false });
 
   const load = useCallback(async () => {
     setStatus('loading');
     try {
+      const failed = { state: false, projects: false, tracker: false, docs: false };
+      const miss = (key) => (e) => {
+        reportError(`SpinoutLabCompliancePage:${key}`, e);
+        failed[key] = true;
+        return null;
+      };
       const [s, projects] = await Promise.all([
-        spinoutLab.state().catch(() => null),
-        api.listProjects().catch(() => []),
+        spinoutLab.state().catch(miss('state')),
+        api.listProjects().catch(miss('projects')),
       ]);
       setState(s);
-      const p = pickLabProject(projects, user);
+      const p = failed.projects ? null : pickLabProject(projects, user);
       setProject(p);
       if (p) {
         const [tr, dl] = await Promise.all([
-          api.legal83bList(p.id).catch(() => []),
-          api.listDocuments(p.id).catch(() => []),
+          api.legal83bList(p.id).catch(miss('tracker')),
+          api.listDocuments(p.id).catch(miss('docs')),
         ]);
         const list = Array.isArray(tr) ? tr : tr?.trackers || [];
         setTracker(list[0] || null);
         setDocs(Array.isArray(dl) ? dl : dl?.documents || []);
       }
+      setUnread(failed);
       setStatus('ready');
     } catch (e) {
       reportError('SpinoutLabCompliancePage:load', e);
@@ -156,13 +174,16 @@ export default function SpinoutLabCompliancePage() {
   const daysLeft = Number(tracker?.days_left);
   const filed83b = ['mailed', 'confirmed'].includes(String(tracker?.status || '').toLowerCase());
   const atRisk = tracker && !filed83b && Number.isFinite(daysLeft) && daysLeft <= 14 ? 1 : 0;
-  const scen = scenarioFrom(totals.done, totals.total, atRisk);
-  const tone = HERO_TONE[scen];
+  // No state chip lights from a read that failed ("Not started" would be a claim).
+  const scen = unread.state || unread.projects ? null : scenarioFrom(totals.done, totals.total, atRisk);
+  const tone = HERO_TONE[scen] || HERO_TONE.notstarted;
   const pct = totals.total ? Math.round((totals.done / totals.total) * 100) : 0;
 
   const deadlines = useMemo(() => {
     const out = [];
-    if (tracker) {
+    if (unread.tracker) {
+      out.push({ title: '83(b) election', due: 'Could not be read', state: 'Blocked', note: 'The 83(b) tracker could not be read — this is not a claim that none exists.' });
+    } else if (tracker) {
       const s = filed83b ? 'Safe' : tracker.overdue ? 'Overdue' : daysLeft <= 3 ? 'Critical' : daysLeft <= 14 ? 'Due soon' : 'Safe';
       out.push({
         title: '83(b) election',
@@ -185,14 +206,19 @@ export default function SpinoutLabCompliancePage() {
       state: doneKeys.has('cofounder_agreement_signed') ? 'Safe' : 'Due soon',
       note: doneKeys.has('cofounder_agreement_signed') ? 'Founder terms executed.' : 'Unsigned founder terms are a standard diligence flag.',
     });
-    out.push({
+    out.push(unread.docs ? {
+      title: 'Compliance record',
+      due: 'Could not be read',
+      state: 'Blocked',
+      note: 'Your documents could not be read — this is not a claim that none are on file.',
+    } : {
       title: 'Compliance record',
       due: `${docs.length} document${docs.length === 1 ? '' : 's'} on file`,
       state: docs.length > 0 ? 'Safe' : 'Due soon',
       note: docs.length > 0 ? 'Archived and visible in diligence.' : 'No documents generated or uploaded yet.',
     });
     return out;
-  }, [tracker, filed83b, daysLeft, doneKeys, docs]);
+  }, [tracker, filed83b, daysLeft, doneKeys, docs, unread]);
 
   const DL_TONE = {
     Safe: 'text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/60 dark:bg-emerald-950/20',
@@ -283,7 +309,15 @@ export default function SpinoutLabCompliancePage() {
         </div>
       </div>
 
-      {!project ? (
+      {unread.state || unread.projects ? (
+        <div className={`${CARD} p-6`} data-testid="compliance-unreadable">
+          <Unreadable
+            what={unread.projects ? 'Your company record' : 'Your Lab progress'}
+            claim="Every item on this page is derived from it, so nothing here is shown as open or complete until it reads."
+            onRetry={load}
+          />
+        </div>
+      ) : !project ? (
         <div className={`${CARD} p-8 text-center`} data-testid="compliance-no-project">
           <div className="text-base font-bold text-gray-900 dark:text-gray-50">Create your company record first</div>
           <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1.5">Compliance tracks the Week 4 deliverables against your project.</p>
@@ -311,7 +345,7 @@ export default function SpinoutLabCompliancePage() {
                   {[
                     { k: 'Items complete', v: `${totals.done} / ${totals.total}` },
                     { k: 'Open items', v: String(totals.open) },
-                    { k: 'At risk', v: String(atRisk) },
+                    { k: 'At risk', v: unread.tracker ? <Unrecorded reason="The 83(b) tracker could not be read.">Unreadable</Unrecorded> : String(atRisk) },
                     { k: 'Categories done', v: `${totals.catsDone} / ${categories.length}` },
                   ].map((s) => (
                     <div key={s.k} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl px-3.5 py-3">
@@ -568,7 +602,13 @@ export default function SpinoutLabCompliancePage() {
               <div>
                 <div className={`${LBL} mb-3`}>Activity</div>
                 <div className={`${CARD} p-4`}>
-                  {activity.length === 0 ? (
+                  {unread.docs || unread.tracker ? (
+                    <Unreadable
+                      what={unread.docs ? 'Your documents' : 'Your 83(b) tracker'}
+                      claim="Activity from it is not shown, which is not a claim that nothing happened."
+                      onRetry={load}
+                    />
+                  ) : activity.length === 0 ? (
                     <p className="text-[12px] text-gray-500 dark:text-gray-400">Nothing recorded yet.</p>
                   ) : (
                     <div className="flex flex-col gap-3">

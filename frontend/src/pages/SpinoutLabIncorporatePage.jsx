@@ -33,6 +33,7 @@ import AxalCheckout from '../components/AxalCheckout';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
 import { reportError } from '../lib/log';
+import { Unreadable } from '../ui';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -75,9 +76,11 @@ const DEEP_TECH = /\b(ai|ml|machine learning|deep[- ]?tech|robotic|biotech|quant
 const UNI_IP = /\buniversit|institute of technology|\btu \w|research (lab|institute)|tech[- ]transfer|\bTTO\b|\bPhD\b|\bETH\b|\bMIT\b|spin[- ]?out from/i;
 
 // Compute the recommendation from real project + team data. Exported for tests.
+// `memberCount` is null when the team read failed: the founder count is then
+// not stated at all, rather than stated as "1 founder" (D360).
 export function recommendEntity(project, memberCount) {
   const equity = Number(project?.funding_needed) > 0;
-  const founders = Math.max(1, 1 + (memberCount || 0));
+  const founders = memberCount == null || !Number.isFinite(Number(memberCount)) ? null : Math.max(1, 1 + Number(memberCount));
   const text = [project?.name, project?.description, project?.sector, project?.problem_statement, project?.solution, project?.why_now, project?.growth_signals]
     .filter(Boolean).join(' ');
   const deepTech = DEEP_TECH.test(text);
@@ -86,7 +89,7 @@ export function recommendEntity(project, memberCount) {
   const confidence = equity && project?.sector ? 'High' : 'Medium';
   const factors = [
     equity ? 'Equity-financed' : 'Bootstrap-leaning',
-    `${founders} founder${founders === 1 ? '' : 's'}`,
+    founders === null ? 'Team size unreadable' : `${founders} founder${founders === 1 ? '' : 's'}`,
     ...(deepTech ? ['Deep-tech IP'] : []),
     ...(equity ? ['Raising a SAFE round'] : []),
     'US-based',
@@ -142,7 +145,10 @@ export default function SpinoutLabIncorporatePage() {
   const [state, setState] = useState(null);
   const [user, setUser] = useState(null);
   const [project, setProject] = useState(null);
-  const [memberCount, setMemberCount] = useState(0);
+  const [memberCount, setMemberCount] = useState(null); // null = not read
+  const [projectsUnread, setProjectsUnread] = useState(false);
+  // A failed orders read must not offer "Pay": an order may already be paid.
+  const [ordersUnread, setOrdersUnread] = useState(false);
   const [order, setOrder] = useState(null); // matched real incorporation order
 
   const [meta, setMeta] = useState({});
@@ -166,11 +172,13 @@ export default function SpinoutLabIncorporatePage() {
     (async () => {
       try {
         const [st, me, projects] = await Promise.all([
-          spinoutLab.state(), api.getMe(), api.listProjects().catch(() => []),
+          spinoutLab.state(), api.getMe(),
+          api.listProjects().catch((e) => { reportError('spinout-inc:projects', e); return null; }),
         ]);
         if (dead) return;
         setState(st); setUser(me); userRef.current = me;
-        const proj = pickLabProject(projects, me);
+        setProjectsUnread(projects === null);
+        const proj = projects === null ? null : pickLabProject(projects, me);
         setProject(proj || null); projectRef.current = proj || null;
         if (proj) {
           let initial = {};
@@ -178,12 +186,16 @@ export default function SpinoutLabIncorporatePage() {
           metaRef.current = initial;
           setMeta(initial);
           const [members, orders] = await Promise.all([
-            api.listProjectMembers(proj.id).catch(() => null),
-            api.legalIncorporationOrders().catch(() => null),
+            api.listProjectMembers(proj.id).catch((e) => { reportError('spinout-inc:members', e); return null; }),
+            api.legalIncorporationOrders().catch((e) => { reportError('spinout-inc:orders', e); return null; }),
           ]);
           if (dead) return;
-          const list = Array.isArray(members?.members) ? members.members : (Array.isArray(members) ? members : []);
-          setMemberCount(list.filter((m) => (m.status || 'active') === 'active').length);
+          // A failed read stays null — never an empty team, never "no order".
+          if (members !== null) {
+            const list = Array.isArray(members?.members) ? members.members : (Array.isArray(members) ? members : []);
+            setMemberCount(list.filter((m) => (m.status || 'active') === 'active').length);
+          }
+          setOrdersUnread(orders === null);
           const ords = Array.isArray(orders?.orders) ? orders.orders : (Array.isArray(orders) ? orders : []);
           const mine = ords.find((o) => Number(o.project_id) === Number(proj.id) && ['paid', 'packet_processing', 'packet_ready'].includes(o.status));
           if (mine) setOrder(mine);
@@ -399,6 +411,17 @@ export default function SpinoutLabIncorporatePage() {
       </div>
     );
   }
+  if (projectsUnread) {
+    return (
+      <div className="max-w-xl mx-auto mt-16" data-testid="inc-projects-unreadable">
+        <Unreadable
+          what="Your startup record"
+          claim="This is not a claim that you have no startup — reload before you create one."
+          onRetry={() => window.location.reload()}
+        />
+      </div>
+    );
+  }
   if (!project) {
     return (
       <div className="max-w-xl mx-auto mt-16 text-center" data-testid="inc-no-project">
@@ -524,6 +547,14 @@ export default function SpinoutLabIncorporatePage() {
             <div className="flex items-center gap-2 mt-4 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5 dark:bg-emerald-900/30 dark:border-emerald-800" data-testid="paid-box">
               <Check size={15} className="flex-none text-emerald-600" />
               <span className="text-[12px] text-emerald-800 dark:text-emerald-300">Paid {paidAt ? new Date(paidAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''} · workflow unlocked</span>
+            </div>
+          ) : ordersUnread ? (
+            <div className="mt-4" data-testid="orders-unreadable">
+              <Unreadable
+                what="Your incorporation orders"
+                claim="Payment is not offered until they read, because one may already be paid."
+                onRetry={() => window.location.reload()}
+              />
             </div>
           ) : (
             <>
@@ -746,7 +777,7 @@ export default function SpinoutLabIncorporatePage() {
             </div>
             <div className="p-5 text-[12.5px] text-gray-600 dark:text-gray-300 leading-relaxed space-y-3">
               <p><b>{legalName}</b> · {ENTITIES[selected].name} · State of Delaware.</p>
-              <p>Prefilled from your Spin-Out data: {rec.founders} founder{rec.founders === 1 ? '' : 's'}, sector {project.sector || '—'}{project.funding_needed ? `, raising ${fmt(project.funding_needed)}` : ''}. The executed version is assembled into your filing packet after state submission.</p>
+              <p>Prefilled from your Spin-Out data: {rec.founders === null ? 'team size unreadable' : `${rec.founders} founder${rec.founders === 1 ? '' : 's'}`}, sector {project.sector || '—'}{project.funding_needed ? `, raising ${fmt(project.funding_needed)}` : ''}. The executed version is assembled into your filing packet after state submission.</p>
               <p className="text-[11px] text-gray-400">Source: {DOCS.find((d) => d.key === docModal)?.source}. Not legal advice.</p>
             </div>
           </div>
