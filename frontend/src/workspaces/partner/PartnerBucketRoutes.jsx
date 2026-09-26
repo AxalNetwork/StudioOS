@@ -286,9 +286,11 @@ const LIVE = {
  * TWO OF THOSE SENTENCES WERE NOT FULLY ANSWERED, and the zones say so on
  * themselves rather than a card saying it for them:
  *
- *   · "an embedded seat burning its cap" — nothing records the firm's CAP.
- *     Capacity shows real hours and real seats and refuses to mark anyone over,
- *     because a threshold nobody set is not a finding.
+ *   · "an embedded seat burning its cap" — the CAP is the firm's to state
+ *     (migration 230, firm-wide or per person). Capacity marks someone over
+ *     only against a cap that was stated, and until one is it refuses to,
+ *     because a threshold nobody set is not a finding (D391 corrected this
+ *     line, which still said nothing records a cap).
  *   · "whether the client opened it" — `opened_at` is the CLIENT'S to set and
  *     no surface in this product lets them. Deliverables shows every sent item
  *     as unopened and says the absence is ours, not theirs.
