@@ -29282,6 +29282,105 @@ the gate is the Node guard.
 `frontend/src` moved, so `docs/` is rebuilt. No route, no worker change, no
 migration, no `api.js` method.
 
+## D289
+
+**Task 340: the view-as bar stops claiming one branch on pages that do not
+scope.**
+
+**What was true on main (`cbdb002c3`).**
+- `HqViewingAsBar` drew "Every figure below was read from this branch alone
+  — none of it is a platform total." on every HQ page while the view-as
+  scope was set, because the bar is chrome (D153) and the sentence was a
+  literal in it. Five files read the scope: HQ Home (swaps in the branch
+  overlay), `AccountsPage` and `HqTeamTable` (ask the server for the
+  branch's administrators), and Analytics and Topology, which each draw
+  "Viewing as {branch} does not narrow this page". Every other HQ page —
+  Content, Contracts, Revenue, Funds (D245), Platform and its switches,
+  Support, Security — never reads it, and the sentence was false there.
+- `ViewAsBranchContext.js`'s docblock said `clearSession` clears the scope
+  "for the same reason it clears the support-session payload". It does
+  not: `clearSession` has no line for it, and App.jsx says why none is
+  needed — the scope is shell state that is never stored, and signing out
+  unmounts the layout, which is the purge.
+
+**What changed.**
+- **A registry, `lib/viewAsScope.js`.** `VIEW_AS_SCOPE` names the four
+  routes the scope reaches and how: `/hq` and `/admin/accounts` **narrow**
+  to the branch; `/admin/analytics` and `/admin/platform/topology`
+  **decline**, in their own words. `viewAsScopeFor(pathname)` answers
+  `narrows`, `declines` or `unscoped` on an exact match — no prefixes, so
+  `/admin/accounts/x` is unscoped — and `viewAsSentence(pathname, branch)`
+  gives the bar its sentence: H12's claim where the page narrows; "This
+  page does not narrow to {branch}, and says so below: what is drawn here
+  is HQ's own, read across every branch." where it declines; and, for every
+  other route with no per-page edit, "This page does not read the view-as
+  scope: everything below is HQ's own, not {branch}'s. The scope is kept
+  until you return to HQ view." ContentPage and `/admin/funds` get that
+  sentence without being touched.
+- **The bar reads the route.** `HqViewingAsBar` takes `useLocation()`'s
+  pathname, draws `viewAsSentence` and carries `data-scope`. "Read-only"
+  and "Return to HQ view" are unchanged. H12's claim is no longer a literal
+  in the bar.
+- **D153 stands: the scope survives navigation.** Nothing resets it on a
+  route change — the shell holds it in plain React state, no effect writes
+  it, the bar has none — and the guard pins that. Only the claim follows
+  the page; "Return to HQ view" is the one way out.
+- **`ViewAsBranchContext.js` says what the shell does**: no `clearSession`
+  line is needed and none exists, because the scope is never stored and
+  unmounting the layout is the purge; the support-session payload needs
+  one because it is stored.
+- **Not touched**: `HqHomePage.jsx` and `SecurityPage.jsx`, so their
+  title-casers stay on `DEFERRED_TITLE_CASERS`; every page that reads the
+  scope is unchanged.
+- **Also in this PR, the stale Messages comments in `sidebarConfig.js`**
+  the wave-8 brief assigns: the founder shell's "Spin-Out Lab and Messages
+  keep rows of their own … so ten" (nine: Messages is a top-bar button
+  since D284), "/messages keeps a row" (it is reached from the top-bar
+  button), and the partner shell's "Messages is a ninth row" (it is not;
+  D284 moved it). Only the exploring group carries a `/messages` row today.
+
+**Guard: `frontend/test/view_as_scope_d289.test.mjs`, 6 tests.**
+- *every registered route is an hqOnly route whose page reads the scope* —
+  the registry's keys by `deepEqual`, each route's component resolved
+  through App.jsx's lazy-import table to the file the entry names, each
+  file reading `useViewAsBranch`;
+- *every page that reads the scope is registered — the converse, scanned
+  rather than typed* — `pages/hq/*.jsx` scanned for the read; the one child
+  reader, `HqTeamTable`, declared as mounted by `/admin/accounts`;
+- *a route that says it narrows passes the branch into a read or the
+  overlay; one that declines says so in its own words*;
+- *the bar draws H12's claim only where the registry says narrows, and the
+  out-of-scope sentence everywhere else* — the three sentences, eleven
+  unscoped paths, exact matching, the bar reading the route and carrying no
+  literal claim;
+- *the scope survives navigation (D153): nothing in the shell resets it on
+  a route change*;
+- *the context file says what the shell does: no clearSession line, because
+  unmounting the layout is the purge* — and `clearSession` still has no
+  line for it.
+
+**Mutations: 13 run, 13 caught** — each a non-zero exit with a `not ok`
+line, anchors unique, bytes proven changed, sources restored from a
+sha256-checked snapshot: the four the brief names — `/admin/analytics` put
+in the scoped set; the claim shown on an unregistered route (as a literal
+in the bar, and as the lib's fallback); the out-of-scope sentence dropped;
+the scope dropped on navigation (an effect in the shell, and an effect in
+the bar) — plus `/hq` dropped from the registry, leaving its reader
+unregistered; an unregistered route added as narrowing; prefix matching
+letting `/admin/accounts/x` read as scoped; the bar no longer reading the
+route; the context claiming `clearSession` clears the scope again; a page
+that declines starting to narrow without registering; "Return to HQ view"
+dropped, seen by the H12 pin.
+
+**No browser probe this item, by decision.** The scope is entered only
+from a branch card on HQ Home, which draws only for a provisioned branch
+that answers; a stubbed one would exercise the stub. The gate is the Node
+guard, which reads the registry, the bar and every page that reads the
+scope.
+
+`frontend/src` moved, so `docs/` is rebuilt. No route, no worker change, no
+migration, no `api.js` method.
+
 ## D300
 
 **Every file in `frontend/public` has to have a named reader — one did not,

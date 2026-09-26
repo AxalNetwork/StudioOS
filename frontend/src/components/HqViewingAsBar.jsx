@@ -18,18 +18,30 @@
 // cannot run from this view is not drawn in it." A greyed control would claim
 // the action exists here and is merely unavailable; it does not exist here.
 //
+// D289 — THE SENTENCE IS THE ROUTE'S, NOT THE BAR'S. "Every figure below was
+// read from this branch alone" was drawn on every HQ page and true on two.
+// `lib/viewAsScope.js` says which routes narrow, which decline in their own
+// words, and — for everything else — that the page does not read the scope
+// and its figures are HQ's own. The scope itself is untouched by navigation
+// (D153); only the claim follows the page.
+//
 // IT PERSISTS NOTHING (`ViewAsBranchContext`), on `AdminFrozenBar`'s rule.
 import React from 'react';
+import { useLocation } from 'react-router-dom';
 import { Eye } from 'lucide-react';
 import { useViewAsBranch } from '../contexts/ViewAsBranchContext';
+import { viewAsScopeFor, viewAsSentence } from '../lib/viewAsScope';
 
 export default function HqViewingAsBar() {
   const { branch, setBranch } = useViewAsBranch();
+  const { pathname } = useLocation();
   if (!branch) return null;
+  const scope = viewAsScopeFor(pathname);
 
   return (
     <div
       data-testid="hq-viewing-as-bar"
+      data-scope={scope}
       role="status"
       className="z-50 shrink-0 border-b border-rose-300 bg-rose-50 px-4 py-2 dark:border-rose-800 dark:bg-rose-950"
     >
@@ -46,11 +58,15 @@ export default function HqViewingAsBar() {
         >
           Read-only
         </span>
-        {/* The sentence the canvas asks for, and the one thing a reader has to
-            be able to take from this bar without reading the rest of it: no
-            figure below is a platform total. */}
-        <span className="text-[13px] text-rose-800 dark:text-rose-300">
-          Every figure below was read from this branch alone — none of it is a platform total.
+        {/* The one thing a reader has to be able to take from this bar without
+            reading the rest of it: whether the figures below are this branch's
+            (H12's claim, on the routes that narrow), HQ's own by the page's own
+            account, or HQ's own because the page never reads the scope. */}
+        <span
+          data-testid="hq-viewing-as-sentence"
+          className="text-[13px] text-rose-800 dark:text-rose-300"
+        >
+          {viewAsSentence(pathname, branch)}
         </span>
         <button
           type="button"
