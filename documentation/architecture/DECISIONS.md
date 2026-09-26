@@ -29672,3 +29672,7 @@ have completed the Spin-Out Lab", a typed track record;
 - Both typechecks, `check-decision-ids`, `check-folder-docs`,
   `check-api-drift` pass inside the drift run; `check-docs-fresh --strict`
   exits 0 after the root `npm run build`.
+- The share-card image carries the description, so `frontend/public/og/spinout-lab.png`
+  and its `ogManifest.js` hash are regenerated (`generate-og-images.mjs`; only that
+  card — the other twelve PNGs were left byte-for-byte as committed).
+  `prerender-og --check`, `generate-og-images --check` and `validate-og-tags` pass.
