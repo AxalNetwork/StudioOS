@@ -30121,3 +30121,107 @@ capability, and the full suite shows no other test changed.
   bound `?`. `scope.sql @ routes/esign.ts` goes from 1 to 4 because
   download and both forwards now use the same `esignEnvelopeScope` clause
   as the detail route, whose values are bound too.
+
+## D420
+
+**The founder desks A2–A5 read the stores that already exist.** Wave 8,
+Session 14, item 1. No migration, no new `/api/*` method, no route: every
+store below was built by an earlier task and already served the zone page
+next door; the desk that summarises that zone said it did not exist.
+
+**What each desk read, and what it reads now.**
+- **A2 Validate** (`FounderValidatePage.jsx`). The hypotheses card and the
+  living verdict flattened `discovery_interviews.hypotheses_json`, while the
+  proposal band on the same card, and `/validate/hypotheses`, write the
+  project-level `hypotheses` table (migration 211). An accepted claim never
+  appeared on the card it was accepted from. Both now read
+  `api.getValidationBoard` — the worker's derived verdict, lane, For/Against
+  counts and bar note — and a retired claim is left off. `verdict: null` is
+  rendered "Fit not recorded", never "Unproven". Each verdict clause is a link
+  to `/validate/hypotheses`, where the claim's pain links and interviews are
+  laid out: that is the artboard's "every clause links to the quotes behind
+  it". The interview card mounts the artboard's pain-tag band — the same
+  `FillProposals kind="pain_tag"` the pain map mounts, gated on the same
+  Validate mode.
+- **A3 Build** (`FounderBuildDesk.jsx`). The cadence card said "no cadence
+  store"; migration 250 and `/api/founder/cadence` serve `/build/cadence`. The
+  card lists the active rituals with the schedule phrase the cadence page uses
+  (`scheduleLabel`, moved from `FounderBuildCadence.jsx` into
+  `lib/cadence.js` so both print one phrase) and the server's adherence, null
+  said rather than printed as 0%.
+- **A4 Raise** (`FounderRaiseDesk.jsx`). The liquidity card said no exit
+  model was recorded; the project's canonical cap-table scenario carries
+  `result.waterfall` whenever it models an exit value, and `/raise/liquidity`
+  renders it in full. The card draws what the `founder` rows take against
+  `totals.preference_paid`, with the simulator's own assumptions beside them.
+- **A5 Grow** (`FounderGrowDesk.jsx`). The focus card printed "Target not
+  recorded" over `metric_targets` (migration 173, written from `/grow/focus`
+  since task 194); it now reads the targets with the same `readTarget` the
+  Focus zone uses. Capital match said no warm path could be shown; it ranks
+  the founder's `research_funds` (migration 216) by the stage fit and path
+  they recorded — right stage first, a warm path breaking the tie — and
+  leaves out a fund they passed on.
+
+**Three absences, kept apart on every new read.** A failed read renders
+`Unreadable` (or the desk's existing `Unavailable`) with a retry; a store
+with nothing in it says so; a figure no store holds says "Not recorded" with
+its reason. None of the four new reads folds a failure into an empty list.
+
+**What stays not recorded, each said on screen with its reason.**
+- The Friday retro draft on the cadence card: no `DRAFT_SURFACES` entry
+  exists for it, so no control is drawn. It belongs with the desks' rail and
+  proposal anatomy (item 3).
+- The time of day on a ritual (`Mon 9:00`): a ritual stores a weekday and a
+  frequency, never a time.
+- Which target "owns the month": a founder may set one per metric and nothing
+  marks one as the month's. With several set, the first is headlined and the
+  state line says the choice is not a stored fact.
+- A fit *score* on capital match: no reranker runs, so the rank is the
+  founder's own record, never a number.
+- The preference clause behind the waterfall: the figures are the cap-table
+  simulator's model (1× non-participating), and the card says no clause is
+  read from a signed document.
+- Commitment owner and at-risk state, raise blockers, trial → paid, screened
+  sharing and image generation are unchanged from before this entry: each
+  still needs a store (the gap map's list), and each already says so.
+
+**Where the canvas disagrees and the product keeps its own rule.** The
+fund names on the Grow desk are not links to `/research/funds/:uid`:
+`founder_overview_subpage_links.test.mjs` holds that an overview hands off
+only inside its own bucket, and the Capital match zone is the Grow page that
+card summarises.
+
+### VERIFIED
+
+- `npm run test:drift` exit 0 on Node 22. Frontend tests 3398 → 3405; worker
+  4408 (4405 pass, 3 skipped, as on main); retention 112. The seven new tests:
+  `founder_validate_overview_a2` — "the hypotheses card and the verdict read
+  the board the band writes to", "every verdict clause links to the receipts
+  behind it", "the interview card carries the artboard's pain-tag band, the
+  same one the pain map mounts"; `founder_build_overview_a3` — "the cadence
+  card reads the rituals the cadence page files";
+  `founder_raise_overview_a4` — "the liquidity card draws the waterfall the
+  cap-table scenario already carries"; `founder_grow_overview_a5` — "the
+  focus card reads the plan number from metric_targets, and says when it
+  cannot", "capital match ranks the founder's researched funds by what they
+  recorded".
+- Four stale pins re-aimed at what is now true, none loosened: the A4 pair
+  (`founder_raise_a4_contract`, `founder_raise_overview_a4`) pinned "no exit
+  model is recorded" and now pin the two named absences (no scenario; a
+  scenario with no exit value); the A5 pin on "no reranker … no warm path"
+  now pins "no fit score is computed" and "this zone only ranks"; A3's
+  docblock no longer says no cadence store exists.
+- 29 mutations, 29 caught (non-zero exit and a `not ok` line), each applied
+  at a unique anchor and restored from a sha256-checked snapshot: 10 on A2
+  (board read removed, card rebuilt from interview JSON, retired claim shown,
+  withheld verdict read as unproven, unreadable board folded into empty, bar
+  note dropped, clause unlinked, withheld claim dropped from the verdict,
+  pain-tag band ungated, dark style renamed), 6 on A3, 4 on A4, 9 on A5
+  (targets read removed, targets not read against the snapshot, a failed read
+  folded into "none set", unmeasured counted as missed, a passed fund ranked,
+  rank reversed, warm path outranking stage fit, null path read as cold,
+  unreadable funds). None escaped.
+- Both typechecks, `check-decision-ids`, `check-folder-docs`,
+  `check-api-drift` and `check-dark-mode` exit 0. Root `npm run build`, then
+  `node scripts/check-docs-fresh.mjs --strict` exits 0. No browser probe was
+  run; CI runs none, and every gate above is a Node test.
