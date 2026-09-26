@@ -30131,20 +30131,22 @@ every `design/incoming` mention found the other three.
 
 ### VERIFIED
 
-- `npm run test:drift` exits 0 on the merged tree (`main` through #827, D360,
+- `npm run test:drift` exits 0 on the merged tree (`main` through #829, D351,
   plus this change), read as the exit code from a redirected log: frontend
-  3463 (none skipped), worker 4432 (4429 pass and the same 3
-  environment-gated skips), retention 112, zero `not ok`. This PR adds and
-  removes no test, so no count falls on its account:
-  `profile_routing_fresh.test.mjs` 8, `calendar_page_c1.test.mjs` 21 and
-  `advisor_expertise_canvas.test.mjs` 9, each confirmed by name in the log,
-  the last two reading their new `integrated/` paths.
+  3481 (none skipped), worker 4432 (4429 pass and the same 3
+  environment-gated skips), retention 112, zero `not ok`. The frontend count
+  was 3463 before #829; the 18 it gained are #829's own
+  `spinout_lab_discovery_evidence.test.mjs`. This PR adds and removes no test,
+  so no count falls on its account: `profile_routing_fresh.test.mjs` 8,
+  `calendar_page_c1.test.mjs` 21 and `advisor_expertise_canvas.test.mjs` 9,
+  each confirmed by test title in the log, the last two reading their new
+  `integrated/` paths.
 - Three mutations run, three caught (non-zero exit + a `not ok` line), each
   restored from a sha256-verified snapshot:
   - ROUTE_MAP's `Pages · Benchmark` row deleted: `profile_routing_fresh.test.mjs`
     fails `not ok 1` (the generated docs are stale) and `not ok 3`
-    (`124 !== 125`). Run before #827 merged; `ROUTE_MAP.md` and the test are
-    byte-identical after it.
+    (`124 !== 125`). Run before #827 and #829 merged; neither touched
+    `ROUTE_MAP.md` or the test, so both files are byte-identical after them.
   - `design/canvases/integrated` dropped from the advisor block of
     `profile_zone_actions.test.mjs` (`not ok 31`) and of
     `profile_zone_filters.test.mjs` (`not ok 25`). So both guards read the
@@ -30154,16 +30156,19 @@ every `design/incoming` mention found the other three.
 - `node scripts/check-docs-fresh.mjs --strict` exits 0; `frontend/src` does not
   move.
 - `node scripts/check-decision-ids.mjs` exits 0 (D1 through D420, in file order;
-  D360 merged to `main` during this work and sits after D350).
+  D360 and D351 merged to `main` during this work, and both sit after D350,
+  D351 first).
 - `check-folder-docs` (50 folders) and `check-api-drift` exit 0.
-- `node scripts/lfs-size-gate.mjs --against=origin/main` exits 0 over the 24
+- `node scripts/lfs-size-gate.mjs --against=origin/main` exits 0 over the 25
   files this PR adds or changes. The gate prints nothing when it passes, so the
   count was taken from the same `git diff`, and no canvas in the three folders
-  is over 500 KB.
+  is over 500 KB. An earlier count read 24 because it was taken before this
+  entry was committed: the gate diffs committed history
+  (`origin/main...HEAD`), not the working tree.
 - `Refer & Earn` is byte-identical to a fresh decode of `55827507` (sha256
   `6d978942…`).
-- `main` was merged in three times while this was built (#826, #831, #827),
-  with no conflict in any of them.
+- `main` was merged in four times while this was built (#826, #831, #827,
+  #829), with no conflict in any of them.
 - No migration, no route, no `api.js` method. Migration 307 and D306–D309 are
   unused, and 296 is the highest migration on disk.
 
