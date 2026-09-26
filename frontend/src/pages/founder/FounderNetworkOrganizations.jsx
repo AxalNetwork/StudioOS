@@ -4,6 +4,7 @@ import { AlertCircle, ArrowLeft, ChevronRight, RefreshCw, UsersRound } from 'luc
 import { api } from '../../lib/api';
 import { text } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
+import { daysSince, isCold, organizationOf } from '../../lib/networkBook';
 import './founderNetworkRelationships.css';
 import './founderNetworkOrganizations.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
@@ -14,16 +15,8 @@ const list = (value, ...keys) => {
   for (const key of keys) if (Array.isArray(value?.[key])) return value[key];
   return [];
 };
-const daysSince = (value) => {
-  if (!value) return null;
-  const time = new Date(value).getTime();
-  return Number.isFinite(time) ? Math.max(0, Math.floor((Date.now() - time) / 86400000)) : null;
-};
-const organization = (row) => text(row.organization || row.company || row.firm, '');
-const isDormant = (people) => people.length > 0 && people.every((row) => {
-  const days = daysSince(row.last_activity_at);
-  return days !== null && days > 60;
-});
+const organization = organizationOf;
+const isDormant = (people) => people.length > 0 && people.every((row) => isCold(row));
 const freshest = (people) => {
   const values = people.map((row) => daysSince(row.last_activity_at)).filter((value) => value !== null);
   return values.length ? `${Math.min(...values)} day${Math.min(...values) === 1 ? '' : 's'} ago` : 'Unavailable';

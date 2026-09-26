@@ -27,9 +27,46 @@ test('A6 normalizes both relationship envelopes and reads only approved endpoint
   for (const call of ['api.contactsList()', 'api.partnerRelationships()', 'api.partnerSummary()', 'api.introPropositions()']) assert.ok(desk.includes(call));
   assert.ok(!/introAccept|introDecline|contactGet|createRelationship|updateRelationship|logActivity/.test(desk));
 });
-test('A6 preserves detailed handoffs and carries its loaded seed', () => {
-  for (const path of ['/network?mode=workspace&tab=contacts', '/network?mode=workspace&tab=introductions', '/network?mode=workspace&tab=relationships']) assert.ok(desk.includes(path));
+test('A6 hands off to its three zones and carries its loaded seed', () => {
+  // D421. Every card linked to the legacy `/network?mode=workspace&tab=…`
+  // while the three zones it summarises sat one pill away.
+  const sections = desk.match(/const SECTIONS = \[([\s\S]*?)\];/)?.[1] || '';
+  assert.deepEqual([...sections.matchAll(/\['(\w+)', '([^']+)'\]/g)].map((m) => [m[1], m[2]]), [
+    ['Relationships', '/network/relationships'],
+    ['Introductions', '/network/introductions'],
+    ['Organizations', '/network/organizations'],
+  ], 'the chip row is no longer the three Network zones');
+  for (const [testid, zone] of [
+    ['link-open-network-relationships', 'Relationships'],
+    ['link-open-network-introductions', 'Introductions'],
+    ['link-open-network-pairings', 'Introductions'],
+    ['link-open-network-organizations', 'Organizations'],
+  ]) {
+    assert.match(desk, new RegExp(`testid="${testid}" to=\\{ZONE\\.${zone}\\}`), `${testid} does not hand off to the ${zone} zone`);
+  }
+  assert.ok(!desk.includes('mode=workspace'), 'a card still routes through the legacy NetworkPage');
   assert.match(desk, /founderNetworkSeed: \{ records \}/);
+});
+
+test('A6 flags going cold with the zone’s own definition', () => {
+  // ONE DEFINITION. The desk and /network/relationships used to be able to
+  // disagree about one contact; both import it now.
+  const lib = read('frontend/src/lib/networkBook.js');
+  assert.match(lib, /export const COLD_AFTER_DAYS = 60;/);
+  assert.match(lib, /return days !== null && days > COLD_AFTER_DAYS;/, 'unknown activity reads as cold, or the window moved');
+  for (const file of ['FounderNetworkDesk', 'FounderNetworkRelationships', 'FounderNetworkOrganizations']) {
+    const src = read(`frontend/src/pages/founder/${file}.jsx`);
+    assert.match(src, /from '\.\.\/\.\.\/lib\/networkBook';/, `${file} does not read the shared cold flag`);
+    assert.ok(!/> 60\b/.test(src), `${file} carries its own copy of the cold window`);
+  }
+  // THE DESK SHOWS IT on every row and counts it in the card's meta.
+  assert.match(desk, /\{touchCell\(row\.last_activity_at \|\| row\.last_touch_at\)\}/, 'partner relationships are not flagged');
+  assert.match(desk, /<span>Not scored<\/span>\{touchCell\(row\.last_activity_at\)\}/, 'contacts are not flagged');
+  assert.match(desk, /\$\{cold\} going cold/, 'the relationships card does not count who is going cold');
+  // ORGANIZATIONS ARE THE RECORDED FIELD, never an email domain.
+  assert.match(read('frontend/src/lib/networkBook.js'), /row\?\.organization \|\| row\?\.company \|\| row\?\.firm/);
+  assert.ok(!/split\('@'\)|\.email\.split|domain/.test(desk.replace(/email domains are not inferred/g, '')), 'an organization is being inferred from an email');
+  assert.doesNotMatch(desk, /recommendation/i, 'the desk calls what it shows a recommendation');
 });
 test('A6 does not resurrect rejected fixture records or unsupported AI claims', () => {
   for (const forbidden of ['Marisol Vega', 'Dev Raman', 'Aoife Brennan', 'Priyanka Raghunathan', 'Tobias Ncube', 'Thornbury Capital', 'Latitude Seed', 'Kestrel Ventures', 'Verwood', 'Raghunathan Law', 'Accept draft', 'Send to connector', 'bge-m3', 'Gemma', 'Mistral', 'Llama', 'GPT-OSS', 'FLUX', 'DeepSeek', 'QwQ', 'Granite']) assert.ok(!desk.includes(forbidden), `${forbidden} must not be a fixture`);

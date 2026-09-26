@@ -30789,3 +30789,90 @@ card summarises.
   `check-api-drift` and `check-dark-mode` exit 0. Root `npm run build`, then
   `node scripts/check-docs-fresh.mjs --strict` exits 0. No browser probe was
   run; CI runs none, and every gate above is a Node test.
+
+## D421
+
+**The Network and Research desks hand off to their own zones.** Wave 8,
+Session 14, item 2. No migration, no new `/api/*` method, no route.
+
+**A6 Network** (`FounderNetworkDesk.jsx`).
+- Every card linked to the legacy `/network?mode=workspace&tab=…` (NetworkPage)
+  while `/network/relationships`, `/network/introductions` and
+  `/network/organizations` sat one pill away. The chip row and the cards now
+  take their targets from one `SECTIONS` list, as the other four desks do.
+- **Going cold** is on the desk: every relationship row flags a contact whose
+  last recorded activity is more than 60 days old, and the card counts them.
+  The definition moved into `lib/networkBook.js` (`COLD_AFTER_DAYS`,
+  `daysSince`, `isCold`, `organizationOf`), which the desk,
+  `/network/relationships` and `/network/organizations` all import — each had
+  carried its own `> 60`, so the desk and a zone could disagree about one
+  contact. A contact with no recorded activity is unknown, not cold.
+- The Organizations card said "Not recorded" beside a zone that groups
+  contacts by the organization they record; it now shows that rollup (never
+  an email domain) and hands off to it.
+- Voice: "No pairwise recommendations recorded" reads "No pairwise suggestion
+  is recorded".
+
+**A7 Research** (`FounderResearchDesk.jsx`, every line but Session 2's
+`/build/competitors` link, which is untouched).
+- **Ask.** The question box stayed local ("Questions remain local here"). It
+  now submits to `api.research.ask` — only on the press, never on a visit —
+  and prints the route's answer with its numbered sources, or its own reason
+  for not answering. The route's two `no_source` meanings stay apart: an empty
+  library, and a library with nothing on this. The question joins the same
+  thread `/research/ask` shows.
+- **Funds.** "No founder-accessible fund-research contract exists" stood over
+  `research_funds` (migration 216). The card reads `api.research.funds`: right
+  stage, warm path, cheque overlap and passed, with the overlap `Not recorded`
+  (and the route's sentence) when no raise target exists, never zero.
+- **Library.** The card read the selected project's LEGAL documents and linked
+  to the data room; A7's library is the research library. It reads
+  `api.research.documents` — indexed and not-yet-indexed — and links to
+  `/research/library`.
+- **The dead link.** "Open market intelligence" pointed at `/market-intel`,
+  whose guard sends a founder outside the Lab back to their default page. It
+  is `/research/markets` now; "Open signals" (`/signals?mode=workspace`) is gone
+  with the local-only question box.
+
+**The rule these join.** `founder_overview_subpage_links.test.mjs` now holds
+all six desks. Two changes to it, neither a loosening: Network's floor is
+three zones (it has three), and one named exception — Session 2's
+`/build/competitors` line on the Research desk — is listed by file and exact
+target, so a second out-of-bucket link on that desk still fails.
+
+**A mutation escaped, and the assertion was fixed.** Moving one of A6's
+`SECTIONS` entries to `/build/organizations` passed the rule: its slug loop
+skips a slug the bucket does not mount. The rule now requires every
+path-shaped `SECTIONS` entry to sit in its own bucket; the same mutation is
+caught.
+
+**Still not recorded, each said on screen.** Relationship strength, notes and
+reminders (no store); re-engagement and intro-email drafts (no network draft
+surface); a cached-input cost read on Research (no store).
+
+### VERIFIED
+
+- `npm run test:drift` exit 0 on Node 22. Frontend tests 3437 on main
+  (3daa53d8) → 3439; worker 4430 (4427 pass, 3 skipped, as on main);
+  retention 112. The two new tests: `founder_network_a6_contract` — "A6 flags
+  going cold with the zone's own definition"; `founder_research_a7_contract` —
+  "A7 asks through the Research store, on the press, and says why when it
+  cannot answer". Re-aimed, none loosened: A6's handoff test (now "A6 hands
+  off to its three zones and carries its loaded seed"), A7's source and
+  handoff lists, `research_zone_states`' "a later success clears the failure"
+  (the library joined the batch, whose retry replaces the failed set), and
+  `founder_overview_subpage_links` (two desks added, the bucket rule
+  tightened as above).
+- 18 mutations, 17 caught on the first run and the 18th caught after the
+  assertion fix above (non-zero exit and a `not ok` line, unique anchors,
+  sha256-checked restores): A6 — a card back to the legacy workspace, a card
+  to the wrong zone, a section out of the bucket, the cold window moved,
+  unknown activity read as cold, a zone keeping its own cold copy, contacts
+  unflagged, the cold count dropped, "recommendations" back; A7 —
+  `/market-intel` back, the funds card out of the bucket, Ask run on mount,
+  the box left local, an empty library read as no match, citations hidden, a
+  failed funds read shown as empty, a null overlap printed as a number, the
+  batch no longer re-run on retry.
+- Both typechecks, `check-decision-ids`, `check-folder-docs`,
+  `check-api-drift`, `check-unused-imports` and `check-dark-mode` exit 0. Root
+  `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser probe.
