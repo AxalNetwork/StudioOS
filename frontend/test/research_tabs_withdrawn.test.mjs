@@ -40,9 +40,28 @@ test('the section root and the market tab still redirect to the live surface', (
   // /advisor/* URL landed on a guard rejection. `724dfc9f` repointed both.
   // research_market_funds_retired.test.mjs carries the same correction and
   // additionally pins that /signals admits 'advisor'.
+  //
+  // D392 moved both again, to the advisor's canvas-built Research bucket:
+  // /research (the root) and /research/markets (the comparable-readings zone).
+  // The property this pins is the one 724dfc9f cared about — the destination
+  // is a surface the advisor is allowed to open — read from each target's own
+  // guard rather than from the target string.
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /path="\/advisor\/research" element=\{<Navigate to="\/signals"/);
-  assert.match(app, /path="\/advisor\/research\/market" element=\{<Navigate to="\/signals"/);
+  // A plain string search, not a RegExp built from the argument (Semgrep's
+  // detect-non-literal-regexp, raised on this line in the first draft).
+  const target = (from) => {
+    const head = `path="${from}" element={<Navigate to="`;
+    const at = app.indexOf(head);
+    if (at < 0) return undefined;
+    const start = at + head.length;
+    return app.slice(start, app.indexOf('"', start));
+  };
+  assert.equal(target('/advisor/research'), '/research');
+  assert.equal(target('/advisor/research/market'), '/research/markets');
+  for (const to of [target('/advisor/research'), target('/advisor/research/market')]) {
+    const guardLines = app.split('\n').filter((l) => l.includes(`path="${to}"`) || (to === '/research' && l.includes("guard(labRoles(['admin', 'advisor', 'partner']), <ResearchWorkspace")));
+    assert.ok(guardLines.some((l) => l.includes("'advisor'")), `${to} must admit an advisor`);
+  }
 });
 
 test('the withdrawn tabs are not redirected to /market-intel either', () => {

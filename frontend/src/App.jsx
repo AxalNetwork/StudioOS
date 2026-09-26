@@ -2851,13 +2851,18 @@ function AppInner() {
           documents had `files.ts` — a single signed-download endpoint, not a
           library.
 
-          `/advisor/research` now lands on the one research surface that is
-          real. The four withdrawn tabs are removed rather than redirected
-          there: /market-intel has no company, document or news data either,
-          so pointing "Companies" at it would swap a blank surface for a
-          misleading one. They return when a data source is licensed. */}
-      <Route path="/advisor/research" element={<Navigate to="/signals" replace />} />
-      <Route path="/advisor/research/market" element={<Navigate to="/signals" replace />} />
+          The four withdrawn tabs are removed rather than redirected: a
+          surface with no company, document or news data would swap a blank
+          page for a misleading one. They return when a data source is licensed.
+
+          D392 — the section root and the market tab land on the advisor's
+          Research bucket, not /signals. /signals was the one live surface when
+          these were repointed; the canvas-built bucket (/research, five live
+          zones) is now the advisor's research home, and /research/markets is
+          the comparable-readings zone the Advisor Research canvas's AR3 draws.
+          Both guards admit 'advisor'. The sector feed keeps its own route. */}
+      <Route path="/advisor/research" element={<Navigate to="/research" replace />} />
+      <Route path="/advisor/research/market" element={<Navigate to="/research/markets" replace />} />
 
       {/* ── Partner · Pipeline, Delivery, Offers ─────────────────────────────
           Nine of these fifteen zones already have a live surface, spread over
