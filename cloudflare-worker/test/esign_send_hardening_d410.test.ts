@@ -393,7 +393,10 @@ test('ESIGN_FORWARD matches the forward route under both mounts, and nothing els
     '/api/legal/esign/42/1/forward',
     '/x/api/legal/esign/42/forward',
   ]) assert.ok(!ESIGN_FORWARD.test(p), `${p} should not be in the bucket`);
-  // Stateless: a /g flag would make every second call miss.
-  assert.ok(ESIGN_FORWARD.test('/api/legal/esign/7/forward') && ESIGN_FORWARD.test('/api/legal/esign/7/forward'));
+  // Stateless: a /g or /y flag advances lastIndex, so every second call on
+  // the same path would miss the bucket. Ask three times in a row.
+  for (let i = 0; i < 3; i++) {
+    assert.ok(ESIGN_FORWARD.test('/api/legal/esign/7/forward'), `call ${i + 1} missed`);
+  }
   assert.equal(ESIGN_FORWARD.flags.includes('g') || ESIGN_FORWARD.flags.includes('y'), false);
 });

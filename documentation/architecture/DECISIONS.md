@@ -29706,14 +29706,15 @@ capability, and the full suite shows no other test changed.
   403 on download and both forwards, the URL withheld and kept out of
   audit meta, and the account taken from the email.
   `rateLimit_esign_send.test.ts` gains one: forwarding in the bucket.
-- 19 mutations, 19 caught (non-zero exit and a `not ok` line). Each was
+- 20 mutations, 20 caught (non-zero exit and a `not ok` line). Each was
   restored from a sha256-checked snapshot and passed again. They covered
   the sender and the email each dropped from the key; the account taken
   from the body (checked two ways); the mismatch let through; the URL
   handed to every sender; the URL back in audit meta; no read redaction;
   download, POST forward and GET forward each unscoped; the sender not
   notified; the sender-subject notified twice; `actorIp` dropped; forward
-  out of the bucket; the pattern unanchored; orphan recipient rows on a
+  out of the bucket; the pattern unanchored; the pattern given a `/g`
+  flag; orphan recipient rows on a
   duplicate; `already_pending` dropped; a local 403 restored in download.
 - Both typechecks, `check-decision-ids`, `check-folder-docs`,
   `check-api-drift` and `check-refusal-bodies` exit 0.
