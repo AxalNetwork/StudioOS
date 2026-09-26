@@ -30249,6 +30249,83 @@ track is stored).
   typechecks, `lint:undef` and every guard green, including
   `check-decision-ids`, `check-folder-docs`, `check-api-drift` and
   `check-docs-fresh --strict` after the root `npm run build`.
+## D351
+
+**Lab Customer Discovery binds the evidence stores that already existed, and
+stops drawing a failed read as an empty one.** Wave 8, Session 7, item 2. No
+route, no migration, no new `api.js` method.
+
+**What was false.** The page header said per-pain severity was not stored
+("the API normalises pains to plain strings") and the log modal folded the
+company into the role as "Role · Company". Both stores have existed since
+migration 211: `interview_pain_severities` with a writer
+(`PUT /founder/validate/interviews/:id/pain-severity`) and a reader (the
+pain-groups view's `need_count` / `nice_count` / `severity_recorded`), and
+`discovery_interviews.interviewee_company`, which `POST` and `PUT
+/progress/discovery` already accept. Recordings (migration 215) and the CSV
+exports (`/founder/validate/*/export.csv`) were served and unused here.
+
+**The bug.** The follow-up branch counted `s.status === 'followed_up'`; the
+waitlist DTO carries `crm_status`, never `status`, so the count was always 1
+and `discovery_followups_mapped` never fired from this page. It is now counted
+from `followed_up_at`, which also counts a lead that was followed up and later
+converted (conversion moves `crm_status` on to `promoted`).
+
+**"Unreadable, never zero".** All four reads (`listProjects`, interviews,
+waitlist, pain groups) plus the deck overrides now resolve through
+`evidenceRead` to `{ ok, data }` or `{ failed }`. The worst case was the
+project list: `.catch(() => [])` sent a founder whose record failed to load
+to "Create your startup record" — a second company. That branch now renders
+Unreadable with a retry and is decided before the no-project prompt. Every
+card derived from a failed read draws Unreadable instead of its figures, and
+the two milestone recounts mark nothing on a failed read rather than
+counting zero.
+
+**What changed.**
+- `frontend/src/lib/discoveryEvidence.js` (new, pure): `evidenceRead`,
+  `severitySplit`, `roleAndCompany`, `followUpsAfter`, `SEVERITY_OPTIONS`.
+- Pain bars split each theme into need / nice / not judged. **Two bands, not
+  the canvas's three**: `PAIN_SEVERITIES` is `['need', 'nice']`, so
+  "Good-to-have" is shown `Unrecorded` with that reason. A project with no
+  severity on file says so instead of drawing every bar as "not judged".
+- Severity is set per pain in the log modal (need / nice, toggle to leave
+  unjudged). **Only where the value is written**: the control renders when
+  the caller passes `severityControls`, and the Lab page does; the Validate
+  desk's `saveInterview` takes no second argument, so it does not get the
+  control (it has its own per-pain severity control). Severities are not
+  read back per interview (no route serves them per row), so the form starts
+  blank and a choice replaces what is on file for that phrase.
+- Company is written to `interviewee_company`; legacy "Role · Company" rows
+  are split for display and for the edit form, and saved into the column on
+  the next edit. The working definition's segment counts the role alone.
+- Each log row has a Recording cell: attach audio, or its length and whether
+  a transcript is on file. Transcription is linked to `/validate/interviews`,
+  where the "AI fills the blanks" switch that governs model spend lives; this
+  page runs no model.
+- "Export interviews" and "Export summary" download the Worker's CSVs.
+- "Send to Problem slide" on each ranked pain writes the deck-level override
+  `problem.title` (migration 164), never `projects.problem_statement`; the
+  row shows "✓ On Problem slide" when the override matches.
+- A "Not recorded yet" card names each canvas field with no store and why:
+  interview format, interview source, willingness to pay, must-have /
+  blocker, per-interview follow-up, ICP pre-score on leads, and lead
+  qualify / archive / route.
+
+**Canvas numbers kept against the catalog.** The canvas's "≥5 interviews"
+stays the catalog's gate of 3 (`MIN_INTERVIEWS`, spinoutLabCatalog.ts); the
+ICP definition module is item 4 (D353).
+
+### VERIFIED
+
+- `frontend/test/spinout_lab_discovery_evidence.test.mjs` (new, 18 tests).
+- `founder_validate_overview_a2.test.mjs` (reads the modal): 8 of 8 pass.
+- Mutations: 21 run, 21 caught (non-zero exit and a `not ok` line; each
+  restored from a sha256-checked snapshot). One planned mutation was skipped
+  because its anchor was not in the file, then rerun on a real anchor.
+- `npm run test:drift` on main e35ebd0a: exit 0. Frontend 3423 → 3441 (the 18 new tests,
+  under `spinout_lab_discovery_evidence.test.mjs` in the log), worker 4408
+  (4405 pass, 0 fail) and retention 112 unchanged; typechecks, lint and
+  every guard green, `check-docs-fresh --strict` after the root build.
 
 ## D360
 

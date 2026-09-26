@@ -22,15 +22,35 @@
 // else. A null icp_fit is "not yet assessed" and is excluded from the ICP
 // summary's denominator rather than counted as "not ICP".
 //
-// Still not reproduced, because nothing stores them: per-pain severity
-// (need/good/nice — the API normalises pains to plain strings), interview
-// format/source, willingness-to-pay, must-have/blocker, and follow-up
-// actions. Controls for those would silently discard what the founder typed.
+// EVIDENCE STORES BOUND — D351 (derivations in ../lib/discoveryEvidence):
+//   * Per-pain severity is stored (migration 211, interview_pain_severities)
+//     as need or nice — two values, not the canvas's three. The pain bars split
+//     each theme's interviews into need / nice / not judged from the
+//     pain-groups view; "good-to-have" is not a value the store accepts, so it
+//     is shown Not recorded rather than drawn. Severity is set per pain in the
+//     log modal (PUT /founder/validate/interviews/:id/pain-severity).
+//   * Company is its own column (interviewee_company), no longer folded into
+//     the role; legacy "Role · Company" rows are split for display.
+//   * Recordings (migration 215): each log row shows whether audio is attached
+//     and can attach one; transcription stays on the Validate desk, where the
+//     "AI fills the blanks" switch lives.
+//   * CSV: "Export interviews" and "Export summary" are the Worker's
+//     /founder/validate/*/export.csv routes.
+//   * "Send to Problem slide" writes the deck-level override `problem.title`
+//     (migration 164) — the deck's wording, never the canonical problem field.
+//   * A failed read renders Unreadable with a retry, never an empty list.
+//
+// Still not recorded, because nothing stores them (listed on the page with the
+// reason): interview format and source, willingness-to-pay, must-have /
+// blocker, follow-up action, an ICP pre-score on leads, and lead
+// qualify / archive / route.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
   Check,
+  Download,
+  Mic,
   Circle,
   FileText,
   Loader2,
@@ -49,6 +69,15 @@ import { reportError } from '../lib/log';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import { TEMPLATES } from '../lib/brand/templates';
+import { Unrecorded, Unreadable } from '../ui';
+import {
+  evidenceRead,
+  followUpsAfter,
+  interviewsOf,
+  roleAndCompany,
+  severitySplit,
+  signupsOf,
+} from '../lib/discoveryEvidence';
 
 const MIN_INTERVIEWS = 3; // program gate — week 1 requires 3 logged interviews
 
@@ -102,7 +131,70 @@ const CRM_CHIP = {
   promoted: { label: 'Converted', cls: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' },
 };
 
+// The canvas's interview and lead fields that no table stores. Each needs a
+// store before it can be a control; until then it is named here with why.
+const NOT_RECORDED_FIELDS = [
+  { key: 'format', label: 'Interview format (call / in person)', reason: 'discovery_interviews has no format column.' },
+  { key: 'source', label: 'Interview source (warm intro, cold, …)', reason: 'Only a lead promoted from the waitlist is attributable; a manual interview records no source.' },
+  { key: 'wtp', label: 'Willingness to pay', reason: 'No column or table stores a willingness-to-pay answer.' },
+  { key: 'must-have', label: 'Must-have / blocker', reason: 'No column stores it; per-pain severity (need / nice) is the nearest recorded fact.' },
+  { key: 'follow-up', label: 'Follow-up action per interview', reason: 'No table stores interview follow-ups; lead follow-ups are the waitlist CRM’s.' },
+  { key: 'icp-prescore', label: 'ICP pre-score on leads', reason: 'Waitlist signups carry no ICP judgement until they become interviews.' },
+  { key: 'lead-triage', label: 'Qualify / archive / route a lead', reason: 'The customer waitlist has no qualify or archive state; manual leads live in the contacts hub, which this page does not write.' },
+];
+
 const isFromLeads = (iv) => (iv.notes || '').startsWith('Promoted from waitlist');
+
+// Recording on one interview (migration 215). Attaching audio is data entry,
+// so it lives here too; transcribing spends money and sits behind the
+// "AI fills the blanks" switch on the Validate desk, so this cell links there
+// rather than running a model from a page with no such switch.
+function RecordingCell({ interview, onChanged }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const hasAudio = Boolean(interview?.recording_uploaded_at);
+  const dur = Number(interview?.recording_duration_sec);
+  const length = Number.isFinite(dur) && dur > 0 ? `${Math.floor(dur / 60)}:${String(Math.round(dur % 60)).padStart(2, '0')}` : null;
+  const upload = async (file) => {
+    if (!file) return;
+    setBusy(true);
+    setNote('');
+    try {
+      await api.uploadInterviewRecording(interview.id, file, null);
+      onChanged?.();
+    } catch (e) {
+      setNote(e?.message || 'The recording could not be attached.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (hasAudio) {
+    return (
+      <div className="text-[11px] text-gray-500 dark:text-gray-400 whitespace-nowrap" data-testid={`recording-state-${interview.id}`}>
+        <Mic size={11} className="inline mr-1" />
+        {length || <Unrecorded reason="The browser reported no duration for this clip.">length not recorded</Unrecorded>}
+        {typeof interview.transcript === 'string' ? (
+          <span className="block text-[10px]">Transcript on file</span>
+        ) : (
+          <Link to="/validate/interviews" className="block text-[10px] font-semibold text-violet-700 dark:text-violet-300">Transcribe on Validate →</Link>
+        )}
+      </div>
+    );
+  }
+  return (
+    <label className="text-[11px] font-semibold text-violet-700 dark:text-violet-300 cursor-pointer whitespace-nowrap" data-testid={`recording-attach-${interview.id}`}>
+      <input
+        type="file"
+        accept="audio/webm,audio/ogg,audio/mpeg,audio/mp4,audio/x-m4a,audio/wav"
+        className="hidden"
+        disabled={busy}
+        onChange={(e) => upload(e.target.files?.[0])}
+      />
+      {busy ? 'Attaching…' : <><Mic size={11} className="inline mr-1" />Attach</>}
+      {note && <span className="block text-[10px] font-normal text-red-700 dark:text-red-300">{note}</span>}
+    </label>
+  );
+}
 
 export default function SpinoutLabDiscoveryPage() {
   const { user } = useAuth();
@@ -118,16 +210,28 @@ export default function SpinoutLabDiscoveryPage() {
   // null = closed; { interview: null } = create; { interview } = edit.
   const [logModal, setLogModal] = useState(null);
   const [rowBusy, setRowBusy] = useState(null);
+  // Which reads failed (D351). A failed read is drawn Unreadable, never as the
+  // empty list its state variable is left holding.
+  const [failed, setFailed] = useState({ interviews: false, waitlist: false, pains: false, overrides: false });
+  // Deck-level overrides (migration 164) — only `problem.title` is read here.
+  const [overrides, setOverrides] = useState(null);
+  const [deckBusy, setDeckBusy] = useState(null);
+  const [deckMsg, setDeckMsg] = useState(null);
+  const [exportBusy, setExportBusy] = useState(null);
+  const [exportMsg, setExportMsg] = useState(null);
 
   const loadProjectData = useCallback(async (pid) => {
-    const [ivs, wl, pg] = await Promise.all([
-      api.listInterviews(pid).catch(() => []),
-      api.listWaitlistCustomers(pid).catch(() => ({ signups: [] })),
-      api.painGroups(pid).catch(() => null),
+    const [ivs, wl, pg, ov] = await Promise.all([
+      evidenceRead(api.listInterviews(pid)),
+      evidenceRead(api.listWaitlistCustomers(pid)),
+      evidenceRead(api.painGroups(pid)),
+      evidenceRead(api.spinoutDeckOverrides(pid)),
     ]);
-    setInterviews(Array.isArray(ivs) ? ivs : ivs?.interviews || []);
-    setSignups(wl?.signups || []);
-    setPainData(pg);
+    setInterviews(interviewsOf(ivs) || []);
+    setSignups(signupsOf(wl) || []);
+    setPainData(pg.ok ? pg.data : null);
+    setOverrides(ov.ok ? (ov.data?.overrides || {}) : null);
+    setFailed({ interviews: !ivs.ok, waitlist: !wl.ok, pains: !pg.ok, overrides: !ov.ok });
   }, []);
 
   // Mark the ordinal interview milestones from a FRESH server count, skipping
@@ -145,20 +249,78 @@ export default function SpinoutLabDiscoveryPage() {
   // Create/update through the real interview routes, then re-read so every
   // derived block (funnel, pains, hypotheses, ICP split) recomputes from the
   // server's copy rather than an optimistic guess.
-  const saveInterview = useCallback(async (payload) => {
+  // `severities` is the modal's second argument: { phrase: 'need' | 'nice' }
+  // for each pain the founder judged. Severity is per PAIN, so it is its own
+  // write after the interview exists (D351). A failed severity write is
+  // surfaced by the modal, not swallowed: the interview is saved, the judgement
+  // is not, and the founder is told which.
+  const writeSeverities = useCallback(async (interviewId, severities) => {
+    const entries = Object.entries(severities || {}).filter(([, v]) => v === 'need' || v === 'nice');
+    for (const [phrase, sev] of entries) {
+      await api.setInterviewPainSeverity(interviewId, phrase, sev);
+    }
+  }, []);
+
+  const saveInterview = useCallback(async (payload, severities) => {
     if (!project) throw new Error('No project selected.');
     const existing = logModal?.interview;
     if (existing?.id) {
       await api.updateInterview(existing.id, payload);
-      await loadProjectData(project.id);
+      try {
+        await writeSeverities(existing.id, severities);
+      } finally {
+        await loadProjectData(project.id);
+      }
       return;
     }
-    await api.createInterview(project.id, payload);
-    const fresh = await api.listInterviews(project.id).catch(() => []);
-    const n = Array.isArray(fresh) ? fresh.length : (fresh?.interviews || []).length;
+    const created = await api.createInterview(project.id, payload);
+    const createdId = created?.id ?? created?.interview?.id;
+    if (createdId) {
+      try {
+        await writeSeverities(createdId, severities);
+      } catch (e) {
+        await loadProjectData(project.id);
+        throw e;
+      }
+    }
+    // A failed recount marks nothing — it is not a count of zero.
+    const fresh = interviewsOf(await evidenceRead(api.listInterviews(project.id)));
     await loadProjectData(project.id);
-    await markInterviewMilestones(n);
-  }, [project, logModal, loadProjectData, markInterviewMilestones]);
+    if (fresh) await markInterviewMilestones(fresh.length);
+  }, [project, logModal, loadProjectData, markInterviewMilestones, writeSeverities]);
+
+  // "Send to Problem slide" — a DECK-LEVEL override (migration 164). It sets
+  // the slide's title wording only; `projects.problem_statement` is untouched.
+  const sendToProblemSlide = useCallback(async (title) => {
+    if (!project) return;
+    setDeckBusy(title);
+    setDeckMsg(null);
+    try {
+      await api.saveSpinoutDeckOverrides(project.id, { 'problem.title': title });
+      setOverrides((o) => ({ ...(o || {}), 'problem.title': title }));
+      setDeckMsg({ kind: 'ok', text: `"${title}" is now the Problem slide's title.` });
+    } catch (e) {
+      setDeckMsg({ kind: 'error', text: e?.message || 'The Problem slide was not changed.' });
+    } finally {
+      setDeckBusy(null);
+    }
+  }, [project]);
+
+  const runExport = useCallback(async (kind) => {
+    if (!project) return;
+    setExportBusy(kind);
+    setExportMsg(null);
+    try {
+      const r = kind === 'summary'
+        ? await api.exportValidateSummary(project.id)
+        : await api.exportValidateInterviews(project.id);
+      setExportMsg({ kind: 'ok', text: `Downloaded ${r?.filename || 'the CSV'}.` });
+    } catch (e) {
+      setExportMsg({ kind: 'error', text: e?.message || 'The export did not download.' });
+    } finally {
+      setExportBusy(null);
+    }
+  }, [project]);
 
   const removeInterview = useCallback(async (iv) => {
     if (!project || !iv?.id) return;
@@ -173,14 +335,20 @@ export default function SpinoutLabDiscoveryPage() {
     }
   }, [project, loadProjectData]);
 
+  // `projectsFailed` is its own state: a failed project list is NOT "no
+  // project", and routing it to "Create your startup record" would send a
+  // founder with a company to make a second one.
+  const [projectsFailed, setProjectsFailed] = useState(false);
+  const [loadNonce, setLoadNonce] = useState(0);
   useEffect(() => {
     let alive = true;
     setStatus('loading');
-    Promise.all([spinoutLab.state().catch(() => null), api.listProjects().catch(() => [])])
-      .then(async ([s, projects]) => {
+    Promise.all([spinoutLab.state().catch(() => null), evidenceRead(api.listProjects())])
+      .then(async ([s, projectsRead]) => {
         if (!alive) return;
         setState(s);
-        const p = pickLabProject(projects, user);
+        setProjectsFailed(!projectsRead.ok);
+        const p = projectsRead.ok ? pickLabProject(projectsRead.data, user) : null;
         setProject(p);
         if (p) await loadProjectData(p.id);
         if (alive) setStatus('ready');
@@ -192,7 +360,9 @@ export default function SpinoutLabDiscoveryPage() {
       });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadNonce]);
+  const retryLoad = () => setLoadNonce((n) => n + 1);
+  const retryProjectData = () => { if (project) loadProjectData(project.id); };
 
   const derived = useMemo(() => {
     const ivs = interviews.map((iv) => ({
@@ -219,8 +389,15 @@ export default function SpinoutLabDiscoveryPage() {
         title: g.title,
         count: Number(g.count ?? (g.aliases || []).reduce((a, x) => a + Number(x.count || 0), 0)) || 0,
         grouped: true,
+        need_count: g.need_count,
+        nice_count: g.nice_count,
       })),
-      ...(painData?.ungrouped || []).map((u) => ({ title: u.display_phrase, count: Number(u.count) || 0 })),
+      ...(painData?.ungrouped || []).map((u) => ({
+        title: u.display_phrase,
+        count: Number(u.count) || 0,
+        need_count: u.need_count,
+        nice_count: u.nice_count,
+      })),
     ].filter((p) => p.count > 0).sort((a, b) => b.count - a.count);
     const distinctPains = painRows.length ||
       new Set(ivs.flatMap((iv) => iv._pains.map((p) => String(p).trim().toLowerCase()).filter(Boolean))).size;
@@ -240,7 +417,9 @@ export default function SpinoutLabDiscoveryPage() {
     // Working definition — derived live from the interview log.
     const roleCounts = new Map();
     ivs.forEach((iv) => {
-      const r = (iv.interviewee_role || '').trim();
+      // The role alone — a legacy "Role · Company" row would otherwise count
+      // each company as its own segment.
+      const r = roleAndCompany(iv).role;
       if (r) roleCounts.set(r, (roleCounts.get(r) || 0) + 1);
     });
     const topRole = [...roleCounts.entries()].sort((a, b) => b[1] - a[1])[0] || null;
@@ -281,14 +460,9 @@ export default function SpinoutLabDiscoveryPage() {
         // Derive milestone ordinals from the FRESH server count (not the
         // stale interviews state — concurrent promotes would double-mark one
         // ordinal and skip another) and only mark keys not already done.
-        const fresh = await api.listInterviews(project.id).catch(() => []);
-        const n = Array.isArray(fresh) ? fresh.length : (fresh?.interviews || []).length;
-        const done = new Set((state?.milestones || []).map((m) => m?.key ?? m));
-        for (let k = 1; k <= Math.min(n, 5); k += 1) {
-          const key = `customer_interview_logged_${k}`;
-          if (!done.has(key)) await markMilestone(user, key);
-        }
-        spinoutLab.state().then(setState).catch(() => {});
+        // A failed recount marks nothing — it is not a count of zero.
+        const fresh = interviewsOf(await evidenceRead(api.listInterviews(project.id)));
+        if (fresh) await markInterviewMilestones(fresh.length);
         setLeadMsg({ kind: 'ok', text: `${signup.name || signup.email} converted to an interview.` });
       } else if (kind === 'invite') {
         await api.inviteWaitlistCustomer(project.id, signup.id);
@@ -296,9 +470,9 @@ export default function SpinoutLabDiscoveryPage() {
       } else {
         await api.followUpWaitlistCustomer(project.id, signup.id);
         // W2 deliverable — the 3rd real follow-up marks the map as done.
-        const followed = (signups || []).filter(
-          (s) => s.status === 'followed_up' && s.id !== signup.id,
-        ).length + 1;
+        // D351 — counted from `followed_up_at`, a field the DTO carries. This
+        // read `s.status`, which it does not, so the count never passed one.
+        const followed = followUpsAfter(signups, signup.id);
         if (followed >= 3) await markMilestone(user, 'discovery_followups_mapped');
         setLeadMsg({ kind: 'ok', text: `Follow-up sent to ${signup.email}.` });
       }
@@ -402,11 +576,49 @@ export default function SpinoutLabDiscoveryPage() {
             >
               <Plus size={LAB_ICON_SIZE} /> Log interview
             </button>
+            {/* The Worker's CSV exports (D351): the interview log, and the
+                validation summary the canvas's "deck readiness · export" draws. */}
+            <button
+              type="button"
+              onClick={() => runExport('interviews')}
+              disabled={!project || exportBusy != null}
+              data-testid="button-export-interviews"
+              className={labBtn('ghost')}
+            >
+              {exportBusy === 'interviews' ? <Loader2 size={LAB_ICON_SIZE} className="animate-spin" /> : <Download size={LAB_ICON_SIZE} />} Export interviews
+            </button>
+            <button
+              type="button"
+              onClick={() => runExport('summary')}
+              disabled={!project || exportBusy != null}
+              data-testid="button-export-summary"
+              className={labBtn('ghost')}
+            >
+              {exportBusy === 'summary' ? <Loader2 size={LAB_ICON_SIZE} className="animate-spin" /> : <Download size={LAB_ICON_SIZE} />} Export summary
+            </button>
           </>
         )}
       />
 
-      {!project ? (
+      {exportMsg && (
+        <p
+          data-testid="export-message"
+          role={exportMsg.kind === 'error' ? 'alert' : 'status'}
+          className={`text-[12px] mb-4 ${exportMsg.kind === 'ok' ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-300'}`}
+        >
+          {exportMsg.text}
+        </p>
+      )}
+
+      {projectsFailed ? (
+        <div className={`${CARD} py-8`} data-testid="discovery-projects-unreadable">
+          <Unreadable
+            what="Your startup record"
+            claim="This is not a claim that you have none — do not create a second one."
+            onRetry={retryLoad}
+          />
+        </div>
+      ) : !project ? (
         <div className={`${CARD} text-center py-10`} data-testid="discovery-no-project">
           <div className="text-base font-bold text-gray-900 dark:text-gray-50">Create your startup record first</div>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-4">Interviews attach to your company record — create it, then start logging.</p>
@@ -416,7 +628,13 @@ export default function SpinoutLabDiscoveryPage() {
         </div>
       ) : (
         <>
-          {/* KPI row */}
+          {/* KPI row — every figure is a count over the interview log, so a
+              failed interview read draws no figure at all (D351). */}
+          {failed.interviews ? (
+            <div className={`${CARD} mb-5`} data-testid="discovery-interviews-unreadable">
+              <Unreadable what="Your interview log" claim="This is not a claim that you have logged none." onRetry={retryProjectData} />
+            </div>
+          ) : (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-5">
             {[
               { label: 'Interviews logged', value: ivs.length, testid: 'kpi-interviews' },
@@ -435,6 +653,7 @@ export default function SpinoutLabDiscoveryPage() {
               </div>
             ))}
           </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-5 items-start">
             {/* LEFT column */}
@@ -442,7 +661,13 @@ export default function SpinoutLabDiscoveryPage() {
               {/* Funnel */}
               <div className={CARD} data-testid="discovery-funnel">
                 <div className={`${LBL} mb-4`}>Discovery funnel · leads → solution-fit</div>
-                {funnel[0].n === 0 ? (
+                {failed.interviews || failed.waitlist ? (
+                  <Unreadable
+                    what={failed.interviews ? 'The interview log' : 'Your inbound leads'}
+                    claim="The funnel needs both reads, so no stage is drawn."
+                    onRetry={retryProjectData}
+                  />
+                ) : funnel[0].n === 0 ? (
                   <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">No contacts yet — log an interview or publish a landing page to start the funnel.</p>
                 ) : (
                   <div className="grid grid-cols-4 gap-2.5 items-end">
@@ -467,13 +692,41 @@ export default function SpinoutLabDiscoveryPage() {
                   <div className={LBL}>Pain point validation</div>
                   <Link to={logTool} className="text-[11px] font-semibold text-violet-700 dark:text-violet-300 whitespace-nowrap">Curate groups →</Link>
                 </div>
-                <p className="text-[11.5px] text-gray-400 dark:text-gray-500 mb-3.5">Ranked by mentions — the top pain anchors the deck&rsquo;s Problem slide.</p>
-                {painRows.length === 0 ? (
+                <p className="text-[11.5px] text-gray-400 dark:text-gray-500 mb-2">Ranked by mentions — the top pain anchors the deck&rsquo;s Problem slide.</p>
+                {/* Severity legend (D351). Two stored values; the canvas's
+                    third ("good-to-have") is not one the store accepts. */}
+                <div className="flex items-center gap-3 flex-wrap text-[10.5px] font-semibold mb-3.5" data-testid="pain-severity-legend">
+                  <span className="text-red-600 dark:text-red-400">● Need-to-have</span>
+                  <span className="text-gray-500 dark:text-gray-400">● Nice-to-have</span>
+                  <span className="text-gray-400 dark:text-gray-500">○ Not judged</span>
+                  <span className="text-gray-400 dark:text-gray-500">
+                    Good-to-have: <Unrecorded reason="The severity store accepts need or nice only; nothing records a third band." />
+                  </span>
+                </div>
+                {deckMsg && (
+                  <p
+                    data-testid="deck-override-message"
+                    role={deckMsg.kind === 'error' ? 'alert' : 'status'}
+                    className={`text-[11.5px] mb-3 ${deckMsg.kind === 'ok' ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-300'}`}
+                  >
+                    {deckMsg.text}
+                  </p>
+                )}
+                {failed.pains ? (
+                  <Unreadable what="Your pain groups" claim="This is not a claim that no pain was logged." onRetry={retryProjectData} />
+                ) : painData && !painData.severity_recorded && painRows.length > 0 ? (
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-3" data-testid="pain-severity-unrecorded">
+                    <Unrecorded>No severity on file yet</Unrecorded> — judge each pain as a need or a nice-to-have when you log or edit an interview.
+                  </p>
+                ) : null}
+                {failed.pains ? null : painRows.length === 0 ? (
                   <p className="text-sm text-gray-400 dark:text-gray-500 py-3 text-center">No pains logged yet — every interview should capture at least one.</p>
                 ) : (
                   <div className="flex flex-col gap-3">
                     {painRows.slice(0, 5).map((p, i) => {
                       const total = Math.max(1, painData?.interview_total ?? ivs.length);
+                      const sev = severitySplit(p, painData?.severity_recorded === true);
+                      const onSlide = overrides?.['problem.title'] === p.title;
                       return (
                         <div key={p.title} data-testid={`pain-row-${i}`}>
                           <div className="flex items-center gap-2 flex-wrap">
@@ -483,8 +736,44 @@ export default function SpinoutLabDiscoveryPage() {
                             {p.grouped && <span className="text-[10px] font-semibold rounded-full px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">Grouped</span>}
                             <span className="ml-auto text-[11.5px] font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">{p.count} of {total}</span>
                           </div>
-                          <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 mt-1.5 overflow-hidden">
-                            <div className={`h-full rounded-full ${i === 0 ? 'bg-violet-600' : 'bg-amber-400'}`} style={{ width: `${Math.min(100, Math.round((p.count / total) * 100))}%` }} />
+                          {sev ? (
+                            <>
+                              <div
+                                className="flex h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 mt-1.5 overflow-hidden"
+                                style={{ width: `${Math.min(100, Math.round((p.count / total) * 100))}%` }}
+                                data-testid={`pain-severity-bar-${i}`}
+                              >
+                                <div className="bg-red-500" style={{ width: `${(sev.need / Math.max(1, sev.mentions)) * 100}%` }} title="Need-to-have" />
+                                <div className="bg-gray-400 dark:bg-gray-500" style={{ width: `${(sev.nice / Math.max(1, sev.mentions)) * 100}%` }} title="Nice-to-have" />
+                                <div className="bg-gray-200 dark:bg-gray-700" style={{ width: `${(sev.unjudged / Math.max(1, sev.mentions)) * 100}%` }} title="Not judged" />
+                              </div>
+                              <div className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-1 tabular-nums" data-testid={`pain-severity-${i}`}>
+                                {sev.need} need · {sev.nice} nice · {sev.unjudged} not judged
+                              </div>
+                            </>
+                          ) : (
+                            <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 mt-1.5 overflow-hidden">
+                              <div className={`h-full rounded-full ${i === 0 ? 'bg-violet-600' : 'bg-amber-400'}`} style={{ width: `${Math.min(100, Math.round((p.count / total) * 100))}%` }} />
+                            </div>
+                          )}
+                          <div className="mt-1.5">
+                            {failed.overrides ? (
+                              <span className="text-[10.5px]" data-testid={`deck-override-unreadable-${i}`}>
+                                <Unrecorded reason="The deck overrides could not be read, so the slide's current title is unknown.">Problem slide unknown</Unrecorded>
+                              </span>
+                            ) : onSlide ? (
+                              <span className="text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-400" data-testid={`pain-on-slide-${i}`}>✓ On Problem slide</span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => sendToProblemSlide(p.title)}
+                                disabled={deckBusy != null}
+                                data-testid={`button-send-problem-${i}`}
+                                className="text-[10.5px] font-semibold text-violet-700 dark:text-violet-300 disabled:opacity-40"
+                              >
+                                {deckBusy === p.title ? 'Sending…' : 'Send to Problem slide'}
+                              </button>
+                            )}
                           </div>
                         </div>
                       );
@@ -505,7 +794,9 @@ export default function SpinoutLabDiscoveryPage() {
                     {leadMsg.text}
                   </div>
                 )}
-                {signups.length === 0 ? (
+                {failed.waitlist ? (
+                  <Unreadable what="Your inbound leads" claim="This is not a claim that nobody signed up." onRetry={retryProjectData} />
+                ) : signups.length === 0 ? (
                   <p className="text-sm text-gray-400 dark:text-gray-500 py-3 text-center">No inbound leads yet — publish a landing page with a waitlist to collect them.</p>
                 ) : (
                   <div className="flex flex-col gap-3">
@@ -587,7 +878,9 @@ export default function SpinoutLabDiscoveryPage() {
                     ))}
                   </div>
                 </div>
-                {logRows.length === 0 ? (
+                {failed.interviews ? (
+                  <Unreadable what="Your interview log" claim="This is not a claim that you have logged none." onRetry={retryProjectData} />
+                ) : logRows.length === 0 ? (
                   <p className="text-sm text-gray-400 dark:text-gray-500 py-3 text-center">
                     {ivs.length === 0 ? 'No interviews yet — log your first to start building evidence.' : 'No interviews match this filter.'}
                   </p>
@@ -596,7 +889,7 @@ export default function SpinoutLabDiscoveryPage() {
                     <table className="w-full min-w-[560px]">
                       <thead>
                         <tr className="text-left">
-                          {['Contact', 'ICP fit', 'Hypotheses', 'Top pain', 'Source', ''].map((h) => (
+                          {['Contact', 'ICP fit', 'Hypotheses', 'Top pain', 'Source', 'Recording', ''].map((h) => (
                             <th key={h} className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 pb-2 pr-3">{h}</th>
                           ))}
                         </tr>
@@ -614,7 +907,10 @@ export default function SpinoutLabDiscoveryPage() {
                                   <div className="min-w-0">
                                     <div className="text-[12.5px] font-semibold text-gray-900 dark:text-gray-50 truncate">{iv.interviewee_name}</div>
                                     <div className="text-[10.5px] text-gray-400 dark:text-gray-500 truncate">
-                                      {[iv.interviewee_role, shortDate(iv.interview_date)].filter(Boolean).join(' · ')}
+                                      {(() => {
+                                        const rc = roleAndCompany(iv);
+                                        return [rc.role, rc.company, shortDate(iv.interview_date)].filter(Boolean).join(' · ');
+                                      })()}
                                     </div>
                                   </div>
                                 </div>
@@ -648,6 +944,9 @@ export default function SpinoutLabDiscoveryPage() {
                                 ) : <span className="text-[11px] text-gray-300 dark:text-gray-600">—</span>}
                               </td>
                               <td className="py-2.5 pr-3 text-[11.5px] text-gray-500 dark:text-gray-400 whitespace-nowrap">{isFromLeads(iv) ? 'Brand & Pages' : 'Manual'}</td>
+                              <td className="py-2.5 pr-3">
+                                <RecordingCell interview={iv} onChanged={retryProjectData} />
+                              </td>
                               <td className="py-2.5 text-right">
                                 {(iv.notes || '').trim() && !isFromLeads(iv) ? (
                                   <span title={iv.notes}><Quote size={13} className="text-violet-400 dark:text-violet-500 inline" /></span>
@@ -696,7 +995,9 @@ export default function SpinoutLabDiscoveryPage() {
                     </span>
                   )}
                 </div>
-                {icpSummary.assessed === 0 ? (
+                {failed.interviews ? (
+                  <Unreadable what="ICP fit" claim="It is read from the interview log, which did not load." onRetry={retryProjectData} />
+                ) : icpSummary.assessed === 0 ? (
                   <p className="text-[12.5px] text-gray-400 dark:text-gray-500 py-3 text-center" data-testid="icp-summary-empty">
                     {ivs.length === 0
                       ? 'Log an interview to start tracking ICP fit.'
@@ -732,7 +1033,9 @@ export default function SpinoutLabDiscoveryPage() {
               {/* Hypothesis validation */}
               <div className={CARD} data-testid="discovery-hypotheses">
                 <div className={`${LBL} mb-3.5`}>Hypothesis validation</div>
-                {hypTotal === 0 ? (
+                {failed.interviews ? (
+                  <Unreadable what="Hypotheses" claim="They are read from the interview log, which did not load." onRetry={retryProjectData} />
+                ) : hypTotal === 0 ? (
                   <p className="text-sm text-gray-400 dark:text-gray-500 py-2 text-center">No hypotheses logged yet — attach them to interviews.</p>
                 ) : (
                   <>
@@ -764,7 +1067,9 @@ export default function SpinoutLabDiscoveryPage() {
               {/* Working definition — derived */}
               <div className={CARD} data-testid="discovery-icp">
                 <div className={`${LBL} mb-3.5`}>ICP · working definition</div>
-                {ivs.length === 0 ? (
+                {failed.interviews ? (
+                  <Unreadable what="The working definition" claim="It is derived from the interview log, which did not load." onRetry={retryProjectData} />
+                ) : ivs.length === 0 ? (
                   <p className="text-sm text-gray-400 dark:text-gray-500 py-2 text-center">Derived from your interview log once interviews are in.</p>
                 ) : (
                   <div className="flex flex-col gap-3">
@@ -786,7 +1091,9 @@ export default function SpinoutLabDiscoveryPage() {
               {/* Recurring themes */}
               <div className={CARD} data-testid="discovery-themes">
                 <div className={`${LBL} mb-3`}>Recurring themes</div>
-                {painRows.length === 0 ? (
+                {failed.pains ? (
+                  <Unreadable what="Recurring themes" claim="This is not a claim that no pain repeats." onRetry={retryProjectData} />
+                ) : painRows.length === 0 ? (
                   <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-2">Themes surface as pains repeat across interviews.</p>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
@@ -802,6 +1109,9 @@ export default function SpinoutLabDiscoveryPage() {
               {/* Data room */}
               <div className={CARD} data-testid="discovery-dataroom">
                 <div className={`${LBL} mb-3`}>Data room · discovery evidence</div>
+                {failed.interviews || failed.waitlist || failed.pains ? (
+                  <Unreadable what="The evidence inventory" claim="One of its three reads failed, so no row is marked Ready or Pending." onRetry={retryProjectData} />
+                ) : (<>
                 {[
                   { name: 'Interview notes', meta: `${notesCount} of ${ivs.length} interviews`, ok: ivs.length > 0 && notesCount === ivs.length },
                   { name: 'Inbound lead evidence', meta: `${signups.length} submissions`, ok: signups.length > 0 },
@@ -823,11 +1133,31 @@ export default function SpinoutLabDiscoveryPage() {
                     {ivs.length - notesCount} of {ivs.length} interviews have no attached notes. Add notes to strengthen the evidence.
                   </div>
                 )}
+                </>)}
+              </div>
+
+              {/* What the canvas draws that no store holds (D351). Listed with
+                  the reason rather than drawn as controls that would discard
+                  what the founder typed. */}
+              <div className={CARD} data-testid="discovery-not-recorded">
+                <div className={`${LBL} mb-2.5`}>Not recorded yet</div>
+                <ul className="space-y-1.5 text-[11.5px] text-gray-600 dark:text-gray-300">
+                  {NOT_RECORDED_FIELDS.map((f) => (
+                    <li key={f.key} data-testid={`not-recorded-${f.key}`}>
+                      {f.label}: <Unrecorded reason={f.reason} />
+                    </li>
+                  ))}
+                </ul>
               </div>
 
               {/* Deck readiness */}
               <div className={CARD} data-testid="discovery-deck-readiness">
-                <div className={`${LBL} mb-3`}>Deck readiness · {readyCount} of {readiness.length}</div>
+                <div className={`${LBL} mb-3`}>
+                  Deck readiness{failed.interviews || failed.pains ? '' : ` · ${readyCount} of ${readiness.length}`}
+                </div>
+                {failed.interviews || failed.pains ? (
+                  <Unreadable what="Deck readiness" claim="It is checked against the interview log and pain groups, and one did not load." onRetry={retryProjectData} />
+                ) : (
                 <div className="flex flex-col gap-2">
                   {readiness.map((r) => (
                     <div key={r.label} className="flex items-center gap-2.5">
@@ -838,6 +1168,7 @@ export default function SpinoutLabDiscoveryPage() {
                     </div>
                   ))}
                 </div>
+                )}
                 {deckUnlocked ? (
                   <Link
                     to="/build/deck"
@@ -866,6 +1197,7 @@ export default function SpinoutLabDiscoveryPage() {
         interview={logModal?.interview || null}
         onClose={() => setLogModal(null)}
         onSave={saveInterview}
+        severityControls
       />
     </LabPageShell>
   );
