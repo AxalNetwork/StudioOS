@@ -151,7 +151,11 @@ export function mapError(c: Context<{ Bindings: Env }>, e: any) {
     }), 400);
   }
   // Any other D1 or SQLite failure is ours, not the caller's: 500, logged.
-  if (/^(D1_ERROR|SQLITE_)/.test(msg)) {
+  // TWO TESTS, NOT ONE ALTERNATION: a message that STARTS with `D1_ERROR`, or
+  // one that CONTAINS `SQLITE_` anywhere (`Error: SQLITE_BUSY: …` does not
+  // start with it). The single anchored group CodeQL's autofix proposed on
+  // #814 dropped the second case (D278 follow-up).
+  if (/^D1_ERROR/.test(msg) || /SQLITE_/.test(msg)) {
     return c.json(refusalBody({
       code: 'storage_error',
       message: 'Something went wrong saving or loading this. The failure has been logged.',
