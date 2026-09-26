@@ -22,7 +22,8 @@ import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
 import { mapError } from './_t13t14t15_helpers';
 import {
-  answerEscalation, listEscalations, ESCALATION_KINDS, ESCALATION_STATUSES,
+  answerEscalation, listEscalations, licenceKindsByCode, escalationKindsFor,
+  ESCALATION_KINDS, ESCALATION_STATUSES,
 } from '../rpc/hqOps';
 import { branchByCode } from '../services/branches';
 import { mirrorBranchAction } from '../services/auditMirror';
@@ -91,7 +92,7 @@ r.get('/escalations', async (c) => {
       return c.json({ error: 'bad_kind', message: `kind must be one of ${ESCALATION_KINDS.join(', ')}` }, 400);
     }
 
-    let items: unknown[] = [];
+    let items: Array<Record<string, unknown>> = [];
     let complete = true;
     let available = true;
     try {
@@ -100,6 +101,40 @@ r.get('/escalations', async (c) => {
       complete = listed.complete;
     } catch { available = false; }
 
+    // D267 — WAS THIS ROW ONE THE KIND GATE SHOULD HAVE REFUSED? D206 refuses a
+    // white-label's `content` escalation at both ends, so such a row here can
+    // only be a gate regression, a row inserted by hand, or one older than
+    // D206 — and until now nothing on the lane would show it.
+    //
+    // ITS OWN TRY, AFTER THE LIST'S. The kind is a second read of a second
+    // store; if it fails, the lane still answers and says its rows were not
+    // checked, rather than a ledger fault blanking every submission.
+    //
+    // THE RULE IS REUSED, NOT RESTATED: a row is flagged when
+    // `escalationKindsFor` hides ITS kind under its branch's licence kind, so
+    // a white-label's moderation row is not flagged, and a kind the ledger
+    // cannot name (an orphan deployment, a code with none) hides nothing.
+    // `kind_gate_failed` is null when nothing was checked — not checked is not
+    // "passed".
+    let kindsAvailable = false;
+    if (available) {
+      let kinds: Map<string, string | null> | null = null;
+      try {
+        kinds = await licenceKindsByCode(c.env);
+        kindsAvailable = true;
+      } catch { kinds = null; }
+      items = items.map((it) => {
+        if (!kinds) return { ...it, licence_kind: null, kind_gate_failed: null };
+        const licenceKind = kinds.get(String(it.branch_code ?? '')) ?? null;
+        const hidden = escalationKindsFor(licenceKind).hidden;
+        return {
+          ...it,
+          licence_kind: licenceKind,
+          kind_gate_failed: hidden.some((h) => h.kind === it.kind),
+        };
+      });
+    }
+
     return c.json({
       available,
       ...(available ? {} : {
@@ -107,6 +142,14 @@ r.get('/escalations', async (c) => {
       }),
       items,
       ...(available ? { complete } : {}),
+      ...(available ? {
+        licence_kinds_available: kindsAvailable,
+        ...(kindsAvailable ? {} : {
+          licence_kinds_reason:
+            'The licence ledger could not be read on this database (migrations 258 and 279), so no '
+            + 'row here was checked against the kind of licence its branch runs under.',
+        }),
+      } : {}),
       kinds: ESCALATION_KINDS,
       statuses: ESCALATION_STATUSES,
     });

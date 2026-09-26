@@ -182,6 +182,40 @@ async function licenceKindOf(env: Env, code: string, licenceUid: string): Promis
   return String(row.kind ?? '');
 }
 
+/**
+ * D267 — every provisioned branch's licence kind, in ONE read, keyed by code.
+ *
+ * FOR THE READER THAT CHECKS THE GATE, NOT FOR THE GATE. `licenceKindOf` above
+ * fails closed because it decides whether a row is recorded. This one decides
+ * nothing: HQ's content lane asks it whether a row that IS recorded should not
+ * have been, so it answers what the ledger holds and never invents a kind.
+ *
+ *   - THE LEFT JOIN IS THE ORPHAN RULE. A deployment naming a licence the
+ *     ledger does not hold comes back with a NULL kind rather than throwing or
+ *     vanishing: "unknown" is an answer the lane can state, and one orphan must
+ *     not blank every other branch's kind.
+ *   - A FAILED STATEMENT THROWS, to the caller. No ledger is not "every kind is
+ *     unknown", and the caller is the one that knows how to say "not checked".
+ *
+ * Read at display time rather than stamped on the row, because nothing changes
+ * a licence's kind after it is issued, and `licence_deployments.code` and
+ * `.licence_uid` are both UNIQUE (migration 258): one code, one licence, one
+ * kind, today and at the time the row was raised.
+ */
+export async function licenceKindsByCode(env: Env): Promise<Map<string, string | null>> {
+  requireHq(env);
+  const rows = await env.DB.prepare(
+    `SELECT d.code, l.kind
+       FROM licence_deployments d
+       LEFT JOIN territory_licences l ON l.uid = d.licence_uid`,
+  ).all<{ code: string; kind: string | null }>();
+  const kinds = new Map<string, string | null>();
+  for (const r of rows.results || []) {
+    kinds.set(String(r.code), r.kind == null ? null : String(r.kind));
+  }
+  return kinds;
+}
+
 function newUid(): string {
   return `esc_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`;
 }

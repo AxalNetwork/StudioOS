@@ -26777,6 +26777,144 @@ restored and verified by sha256:
 No migration. 292 is still the highest on disk, and the next free numbers are
 the reserved ones.
 
+## D267
+
+**HQ's content lane now shows a row the kind gate should have refused. Each
+item carries its branch's licence kind and a `kind_gate_failed` flag, computed
+with the rule `recordEscalation` applies, against the item's own kind. A
+flagged row is marked on the row, never filtered out.** Task 346. It builds
+the "per-item kind flag on the lane" that D206 listed as deliberately not
+built.
+
+**No migration.**
+
+### THE DEFECT
+
+- **The gate could fail and nothing would show it.** D206 refuses a
+  white-label's `content` escalation at both ends: the branch route refuses
+  first, and `recordEscalation` refuses before its INSERT and fails closed. A
+  white-label row in HQ's content lane can therefore only be a gate
+  regression, a row inserted by hand, or a row older than D206.
+- **The lane could not tell.** `listEscalations` selects no licence kind, and
+  the only per-code kind lookups (`deploymentOf`, `licenceKindOf`) are private,
+  take one code at a time, and throw on an orphan.
+- **The scope note claimed what nothing checked:** "no white-label submission
+  can reach this lane".
+
+### WHAT CHANGED
+
+- **`licenceKindsByCode(env)`** (`rpc/hqOps.ts`, exported) is one literal
+  statement: `licence_deployments` LEFT JOIN `territory_licences` on the
+  licence uid, returned as a Map from code to kind.
+  - **The LEFT JOIN is the orphan rule.** A deployment naming a licence the
+    ledger does not hold reads as a null kind rather than throwing or
+    vanishing.
+  - **A failed statement throws, to the caller.** No ledger is not "every kind
+    is unknown".
+  - **The kind is read at display time, not stamped on the row.** Nothing
+    changes a licence's kind after issue, and `licence_deployments.code` and
+    `.licence_uid` are both UNIQUE (migration 258). One code maps to one
+    licence and one kind, both today and when the row was raised.
+- **`GET /api/admin/escalations`** (`admin_escalations.ts`) reads the kinds in
+  a **separate try, after the list's**, so a failed kind read never blanks the
+  lane. Each item gains:
+  - `licence_kind`: the branch's kind, or null when the ledger does not name
+    one;
+  - `kind_gate_failed`: true when `escalationKindsFor(licence_kind).hidden`
+    holds the item's own kind. The rule is reused, not restated. A
+    white-label's moderation row is not flagged, and an unknown kind hides
+    nothing.
+
+  The payload gains `licence_kinds_available`. When it is false it also
+  carries `licence_kinds_reason`, a sentence the server writes, and every
+  item's `kind_gate_failed` is **null**: not checked is not "passed".
+- **ContentPage** (the Localisation zone):
+  - a flagged row carries a line (`hq-localisation-gate-failed`) that says the
+    gate failed, which licence kind the branch runs, that HQ should have
+    refused the row before recording it, and the three ways such a row
+    exists;
+  - the line is drawn only when the server's flag is `true`. The page never
+    decides the gate from a licence kind itself, so a row whose kind is
+    unknown is not drawn as a failure;
+  - a lane whose kinds could not be read says **"Not checked against the kind
+    gate"** once, above the rows, with the server's reason. It is never a
+    per-row absence, and it is never shown when there are no rows;
+  - the scope note keeps every phrase D196's test pins. It now says that each
+    row is checked against its branch's licence kind, and that a failed row
+    is marked rather than hidden, where it used to say nothing could reach the
+    lane.
+
+### NOT BUILT
+
+- **H30's tenant switcher for a white-label.** It needs a white-label
+  deployment that answers, and with zero branches deployed view-as cannot
+  even be entered: D153's overlay reads a branch's `overview` over its
+  binding, and there is no binding.
+- **The same flag on the board's Brand approval cards** (`admin_content.ts`,
+  optional in the brief). D275 reshapes those cards, partitioning them by the
+  relation a submission records. Adding the flag here and then moving it there
+  would change the same lines twice, so it is left to that work or a
+  follow-up.
+
+**With zero branches deployed, the lane is empty today and the flag renders
+nowhere.** That is expected: the tests are what prove it.
+
+### VERIFIED
+
+`cloudflare-worker/test/escalation_gate_flag_d267.test.ts`, 7 tests, on
+D206's `hqDb` shape: the baseline's `territory_licences`, with migrations
+258, 259, 261, 279 and 288 off disk. Five rows are inserted by hand: a
+subsidiary content row, a white-label content row, a white-label moderation
+row, a content row from a code with no deployment, and one from a deployment
+whose licence is missing.
+- Exactly the white-label content row is flagged, and all five are still
+  listed.
+- The `kind=content` read the page makes flags the same row.
+- Both orphans read as a null kind and are not flagged.
+- `licenceKindsByCode` returns a Map with the orphan deployment as null, and
+  throws when the ledger is gone.
+- With `territory_licences` dropped, the lane still answers with every row,
+  `licence_kinds_available` is false with its sentence, and every flag is
+  null.
+- With `hq_escalations` dropped, the payload carries no kind verdict.
+
+`frontend/test/hq_kind_gate_flag_d267.test.mjs`, 5 tests:
+- the flagged row's line and its words;
+- nothing drawn for a subsidiary row, an unknown kind, an unchecked row, a
+  white-label moderation row, or a payload with no flag;
+- the "not checked" sentence: once, with the server's reason, and not when
+  the kinds answered, when no verdict was sent, or when there are no rows;
+- the lane mounts the flag on every row and the sentence once, outside the
+  rows, and the flag is read from `kind_gate_failed`;
+- the scope note's new claim.
+
+**Mutation checks: 10 of 10 caught.** Each ran alone, and every file was
+restored from a sha256-verified snapshot. The five the brief named:
+- the join written as `l.id = d.licence_uid`;
+- the kind read inside `listEscalations`' try;
+- flagging on the licence kind alone;
+- flagged rows filtered out;
+- the page flagging on "not a subsidiary".
+
+Five more:
+- an unchecked row reading `false`;
+- an INNER JOIN dropping the orphan deployment;
+- the kinds always reported available;
+- the "not checked" sentence shown with no rows;
+- the scope note reverting to "cannot reach this lane".
+
+**Full suite:** `npm run test:drift` on Node 22, after `npm ci` in all three
+packages, exits 0 on `main` at `299f7140`:
+- frontend 3282 (the five above are new);
+- worker 4345 passed with 3 skipped (the seven above are new);
+- retention 112.
+
+No test name from the baseline run is missing.
+
+`docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
+edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
+`check-folder-docs`, `check-api-drift` and `check-access-comments` exit 0.
+
 ## D269
 
 **Task 427: a migration already on main is never edited, deleted or renamed,
