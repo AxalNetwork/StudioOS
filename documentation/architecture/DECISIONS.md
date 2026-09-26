@@ -28248,6 +28248,10 @@ provider's text may travel clipped in a separate `upstream` field — never in
     `invalid_record` with our sentence.
   - Any other message starting `D1_ERROR` or containing `SQLITE_` is a
     logged 500.
+    *Corrected after merge: a CodeQL autofix committed onto #814 rewrote this
+    test as one anchored group, `/^(D1_ERROR|SQLITE_)/`, which lost "contains
+    `SQLITE_`". The follow-up restores it as two tests and pins a message
+    that contains `SQLITE_` without starting with `D1_ERROR`.*
   - Every sentence a route wrote passes through as before.
   - Its header now lists the statuses it can return.
   - `monitoring_analytics`' plan update now calls it instead of passing the
