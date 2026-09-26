@@ -25857,12 +25857,16 @@ held (#804) and were filed rather than edited.
 
 **No migration** — 297 stays free. **No new `/api/*` method.**
 
-**VERIFIED.** On the tree as landed, cut from `main` at `b556685bc` with the
+**VERIFIED.** On the tree as landed, cut from `main` at `78796f234` with the
 six D258 commits cherry-picked (zero conflicts; `docs/` rebuilt once by the
-root `npm run build`):
+root `npm run build`). It was first verified on `b556685bc`; `main` then took
+two merges (#807, #808), so it was re-landed and re-run rather than carried
+across, and every figure below is from that second run:
 - `npm run test:drift` exits 0, read as the exit code from a redirected log:
-  frontend 3318, worker 4378 (4375 pass plus the 3 pre-existing
-  environment-gated skips), retention 112, zero `not ok`. Every test in the
+  frontend 3322, worker 4378 (4375 pass plus the 3 pre-existing
+  environment-gated skips), retention 112, zero `not ok`. Frontend reads four
+  higher than the first run's 3318 because #807 and #808 each added tests to
+  `main`; none of the four is D258's, and nothing fell. Every test in the
   three new files is confirmed passing by name: `api_refusal_d258` (17),
   `code_through_message_d258` (6), `totp_wrong_code_d258` (10).
 - Both typechecks, `lint:undef`, `check-api-drift`, `check-decision-ids`,
@@ -25875,8 +25879,9 @@ root `npm run build`):
   eight — each of the four TOTP routes put back to 401, the message made
   code-shaped, enrol/confirm made to stop validating, one route given its own
   sentence, and the code renamed. All caught.
-- No migration: **297** is still the next free number, and **D276** the next
-  free decision id.
+- No migration. The highest on disk is **296**; this PR takes none. Decisions
+  on `main` end at **D282**, and D258 sits in numeric position between D257
+  and D259.
 
 ## D259
 
