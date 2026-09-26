@@ -55,6 +55,7 @@ export const COMMUNITY_CONSOLES = [
     key: 'events',
     label: 'Events',
     to: '/admin/events',
+    worker: 'admin_events.ts',
     scope: 'Moderation and analytics',
     what: 'Members write the events; this console approves, rejects, unpublishes, features, '
       + 'cancels and sets capacity, and reports on attendance. It does not author an event.',
@@ -63,6 +64,7 @@ export const COMMUNITY_CONSOLES = [
     key: 'jobs',
     label: 'Job board',
     to: '/admin/jobs',
+    worker: 'admin_jobs.ts',
     scope: 'Moderation only',
     what: 'Approve, reject or unpublish a posting somebody else wrote. There is no admin '
       + 'create, edit or delete — a job nobody posted cannot be added here.',
@@ -71,6 +73,7 @@ export const COMMUNITY_CONSOLES = [
     key: 'circles',
     label: 'Circles',
     to: '/admin/circles',
+    worker: 'admin_circles.ts',
     scope: 'Yours to author',
     what: 'The one community surface this branch writes outright: create, edit, publish, '
       + 'unpublish, feature and delete a circle.',
@@ -79,6 +82,7 @@ export const COMMUNITY_CONSOLES = [
     key: 'network-profiles',
     label: 'Network profiles',
     to: '/admin/network-profiles',
+    worker: 'admin_network_profiles.ts',
     scope: 'Yours to author',
     what: 'Create, edit, reorder and set a photo. It is not a member directory — nothing '
       + 'serves these to members except the photo itself, and what they feed is the Demo Day '
