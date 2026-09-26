@@ -75,22 +75,26 @@ test('the index says what documentation/ is and what docs/ is', () => {
   assert.match(s, /never be hand-edited/i);
 });
 
-// Two hand-maintained markdown files live inside the build directory. They are
-// NOT generated, and they are not swept: `scripts/build-frontend.mjs` writes
-// named outputs and prunes hashed assets on a retention window rather than
-// emptying the tree, so both survive every build. They are reachable as raw
-// markdown at the apex because the Worker's `[assets]` binding serves `docs/`
-// directly (as GitHub Pages did before 2026-09-01).
+// One hand-maintained markdown file lives inside the build directory. It is
+// NOT generated, and it is not swept: Vite (`emptyOutDir: true`) empties
+// `docs/` on every build and then copies `frontend/public/` back in
+// verbatim, so it survives every build because it is a real file under
+// `frontend/public/`, not because anything in `build-frontend.mjs` writes it.
+// It is reachable as raw markdown at the apex because the Worker's `[assets]`
+// binding serves `docs/` directly (as GitHub Pages did before 2026-09-01).
 //
-// They are allowlisted rather than moved: a raw URL that has been live cannot
-// be relocated on a tidying pass without knowing who links to it. This is
+// It is allowlisted rather than moved: a raw URL that has been live cannot be
+// relocated on a tidying pass without knowing who links to it. This is
 // recorded as an oddity to resolve deliberately, not as approval of the
 // pattern.
 //
-// NB: a bare `vite build` (rather than `npm run build`) DOES empty the
-// directory — emptyOutDir is on — which would delete both. That is one more
-// reason the project builds through the script.
-const DOCS_MD_ALLOWED = new Set(['CHANGELOG.md', 'CHANGELOG-user.md']);
+// `CHANGELOG.md` used to be here too, as a symlink from `frontend/public/`
+// to the root engineering changelog — the exact same "Vite copies public/
+// back in" mechanism, publishing the whole 800KB+ engineering log at
+// `/CHANGELOG.md` since 2026-05-21 with no reader anywhere in the repo
+// (task 433/D300). The symlink is deleted; only the user-facing changelog,
+// which `pages/docs/sections/changelog.js` reads, stays public on purpose.
+const DOCS_MD_ALLOWED = new Set(['CHANGELOG-user.md']);
 
 test('no NEW hand-written markdown appears in the build output', () => {
   const d = join(root, 'docs');
@@ -102,8 +106,8 @@ test('no NEW hand-written markdown appears in the build output', () => {
     `docs/ is build output — put documents under documentation/ instead: ${stray.join(', ')}`);
 });
 
-test('the two allowlisted changelogs are still actually there', () => {
-  // If they vanish, something started emptying the build directory, and the
+test('the one allowlisted changelog is still actually there', () => {
+  // If it vanishes, something started emptying the build directory, and the
   // allowlist above has become a lie rather than a record.
   const d = join(root, 'docs');
   if (!existsSync(d)) return;
@@ -111,6 +115,41 @@ test('the two allowlisted changelogs are still actually there', () => {
     assert.ok(existsSync(join(d, f)),
       `${f} is gone from docs/ — the build now empties the tree, or it was moved without updating this allowlist`);
   }
+});
+
+test('the deleted CHANGELOG.md symlink and test.html do not resurface in docs/', () => {
+  // task 433/D300: both were published with no reader anywhere in the repo.
+  // A resurrection would mean the symlink or the leftover smoke page came
+  // back into frontend/public/ and rode a build back into the assets Worker
+  // serves at the apex.
+  const d = join(root, 'docs');
+  if (!existsSync(d)) return;
+  assert.ok(!existsSync(join(d, 'CHANGELOG.md')),
+    'docs/CHANGELOG.md exists — the engineering changelog symlink is back under frontend/public/');
+  assert.ok(!existsSync(join(d, 'test.html')),
+    'docs/test.html exists — the leftover smoke page is back under frontend/public/');
+});
+
+test('no file under frontend/public is a symlink', () => {
+  // `stat` follows a symlink and sees whatever it points at as a regular
+  // file; `lstat` sees the link itself. The deleted CHANGELOG.md symlink is
+  // exactly the shape this refuses: a link inside frontend/public/ rides
+  // Vite's emptyOutDir copy-back into docs/ as if it were the linked file's
+  // full content, with no entry in this test file naming who reads it.
+  const pub = join(root, 'frontend/public');
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, entry.name);
+      if (entry.isSymbolicLink()) {
+        assert.fail(`${p.replace(root + '/', '')} is a symlink — every file under frontend/public/ `
+          + 'is published verbatim on every deploy, so a symlink publishes whatever it points at '
+          + '(this is exactly how the CHANGELOG.md symlink leaked the whole engineering log, D300)');
+      } else if (entry.isDirectory()) {
+        walk(p);
+      }
+    }
+  };
+  walk(pub);
 });
 
 test('every moved document is reachable from the index', () => {
