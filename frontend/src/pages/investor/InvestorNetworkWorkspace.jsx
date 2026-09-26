@@ -8,6 +8,7 @@ import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorNetworkWorkspace.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
+import { titleCase } from '../../lib/absence';
 
 /**
  * A section heading's right-hand detail, in the order the body already reads
@@ -26,7 +27,7 @@ const detailFor = (error, value, describe) => {
   return describe();
 };
 
-const typeLabel = (value) => String(value || 'relationship').replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+const typeLabel = (value) => titleCase(value) || 'Relationship';
 const personName = (relationship) => relationship?.other?.name || relationship?.other?.email || 'Unidentified relationship';
 const age = (value) => {
   if (!value) return 'Not recorded';

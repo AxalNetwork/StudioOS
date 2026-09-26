@@ -27335,6 +27335,72 @@ No test name from the baseline run is missing.
 edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
 `check-folder-docs`, `check-api-drift` and `check-access-comments` exit 0.
 
+## D268
+
+**Task 429: fifteen of the eighteen hand-written title-casers move onto
+lib/absence.js's titleCase.**
+
+**What was true on main.**
+- `absence_helpers_single_definition.test.mjs` held eighteen files on
+  `DEFERRED_TITLE_CASERS`. Each wrote its own
+  `.replace(/\b\w/g, …)`, and several passed a fallback through the caser.
+  `PartnerStudioHome` rendered an absence as "Not Recorded", the defect the
+  ledger's header describes.
+
+**What changed.**
+- **Fifteen files now import `titleCase`:**
+  - `lib/advisor/router.js` (`pageLabel`), `lib/assessmentMeta.js`
+    (`humanize`) and `lib/signalsMeta.js` (`prettify`);
+  - `FundPerformancePage`, `PortfolioGrowthPage`, `AdminLpApplications`
+    and `InsightsPage` (`sectionLabel`);
+  - the investor pages `InvestorFundLPs`, `InvestorFundLanding`,
+    `InvestorFundReporting`, `InvestorNetworkWorkspace` (`typeLabel`),
+    `InvestorPortfolioCanvas` and `InvestorPortfolioUpdates`;
+  - `PartnerStudioHome` and `pipeline/bucketing.js` (`prettyStage`).
+- **Each fallback is applied after casing, spelled as it renders.** The two
+  that relied on the caser to capitalise them are now written capitalised:
+  - `InvestorFundLanding`'s `'unrecorded'` becomes `'Unrecorded'`;
+  - `InvestorNetworkWorkspace`'s `'relationship'` becomes `'Relationship'`.
+
+  So no visible fallback changes, except the one that was wrong.
+- **What each helper did around the caser stays:**
+  - `pageLabel`'s route map and `''`;
+  - `prettyStage`'s `STAGE_LABELS` and `'—'`;
+  - `sectionLabel`'s `''`.
+- **The ledger shrinks by exactly fifteen, to three.** The header says why:
+  - `HqHomePage` and `SecurityPage`: Session 5 edits both this wave (task
+    340).
+  - `InvestorPortfolioPositions`: kept as the reference ordering.
+
+**Behaviour changes, each asserted in `title_casers_d268.test.mjs`.**
+- **Hyphens now become spaces** in `prettify` and in the page wrappers that
+  normalised only `_` before. For example, `co-invest_round` now reads
+  "Co Invest Round".
+- **Input is trimmed before casing** in `prettify` and every page wrapper.
+- **Whitespace-only input now takes the fallback.** It used to render
+  blank.
+- **`PartnerStudioHome`'s absence reads "Not recorded".**
+- **Runs of `_`/`-` still collapse in `humanize` and `prettyStage`.**
+  `titleCase` replaces each character with its own space. These two
+  receive stored slugs and stage names, so the collapse is kept at the call
+  site, before `titleCase`, and their output is unchanged.
+  `pipeline_bucketing.test.mjs`'s four pins pass untouched.
+
+**Tests.** `frontend/test/title_casers_d268.test.mjs` (8).
+- It imports the exported helpers.
+- It lifts each page-local wrapper, and `router.js`'s `pageLabel`, out of
+  its source and runs it with the real `titleCase`. The wrapper that runs
+  is the one on disk. `router.js` imports a JSON manifest the test loader
+  cannot load.
+
+**Mutations: 4 run, 4 caught.**
+- A local caser re-declared in `InvestorFundLPs`.
+- A fallback passed through `titleCase` in `InvestorNetworkWorkspace`.
+  Caught by the whitespace assertion, because the re-cased fallback happens
+  to read the same.
+- A converted file put back on the ledger.
+- `PartnerStudioHome` rendering "Not Recorded".
+
 ## D269
 
 **Task 427: a migration already on main is never edited, deleted or renamed,
