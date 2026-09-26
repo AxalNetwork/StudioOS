@@ -8,8 +8,8 @@ This folder contains the founder-specific workspace shell and the dedicated canv
 - `FounderBuildDesk.jsx` owns the Build weekly operating desk and hands off to the detailed Execution, Roadmap, and Metrics editors.
 - `FounderRaiseDesk.jsx` owns the A4 Raise landing: a selected-project, read-only capital and legal overview that hands off to the detailed Pitch, Capital, Legal, Data Room, and Liquidity tools.
 - `FounderGrowDesk.jsx` owns the A5 Grow landing at `/build/team` for founders; `?mode=workspace` retains the detailed Talent workspace.
-- `FounderNetworkDesk.jsx` owns the A6 Network overview at `/network` for founders. Workspace mode and all `tab`/`intro` deep links retain `NetworkPage`; the desk reads records only and hands off to those detailed tabs.
-- `FounderResearchDesk.jsx` owns the A7 Research overview at bare `/signals` for founders. It reads approved market, signal, company, project, and legal-document sources without running AI or mutations; `/signals?mode=workspace` and signal deep links retain the detailed Signals workspace.
+- `FounderNetworkDesk.jsx` owns the A6 Network overview at `/network` for founders. It reads records only and hands off to the three zones — `/network/relationships`, `/network/introductions`, `/network/organizations` — flagging going-cold contacts with `frontend/src/lib/networkBook.js`, the definition those zones share. Workspace mode and `tab`/`intro` deep links still reach `NetworkPage` until the legacy mounts retire.
+- `FounderResearchDesk.jsx` owns the A7 Research overview for founders. It reads market, signal, company, fund-research and library sources and hands off to the `/research/*` zones; its question box asks `/research/ask` only when the founder presses Ask, answering from their own library.
 - The CSS files beside those components are intentionally route-scoped so the dense canvas layouts do not leak into legacy tools.
 
 **Chrome rule:** the app `SidebarNav` owns licence navigation. Canvas pages here
