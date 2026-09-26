@@ -30607,6 +30607,119 @@ have completed the Spin-Out Lab", a typed track record;
   card — the other twelve PNGs were left byte-for-byte as committed).
   `prerender-og --check`, `generate-og-images --check` and `validate-og-tags` pass.
 
+## D390
+
+**Retiring `/partner/operations/*`, part 1a: the two jobs that existed
+nowhere else get canvas-built homes first — the firm profile card for Firm
+Settings (built, not mounted) and Founder reviews on Delivery · Health
+(mounted).** Session 11, item 1a. No migration, no new route, no new
+`api.js` method. The redirects and deletions are item 1b, after Session 15
+mounts the card; they take their own D-entry.
+
+**Why the retirement is split.** D304 lets an old page retire only into a
+canvas-built page that does its whole job. The gap map found two jobs on
+`/partner/operations/*` that no other page does: the firm profile edit
+(`api.partnerPortal.updateProfile`, only on `OverviewPage.jsx`) and the
+founder reviews (`api.listEngagementReviews`, only on `PerformancePage.jsx`
+and `PortfolioPage.jsx`). Those homes have to exist before anything is
+redirected.
+
+**The firm profile → Firm Settings, as a card.** Decided by the owner through
+Session 1: option A, widened. Option B (`/partners/portal`) was refused
+because `PartnerDealPortal.jsx` has no canvas, no ROUTE_MAP row and no
+sidebar row, so under D304 it cannot succeed anything. `/company-settings` is
+canvas-built (ROUTE_MAP row 62), and the Partner Operator Canvas's "Firm
+Settings" row points there (`shellConfig.js`). The three things I measured
+against it, and the answer to each:
+- *Different store.* `/company-settings` edits a `companies` row through the
+  active-company context. The partner profile is the `partners` row, keyed by
+  `users.partner_id` (`PATCH /partner-portal/profile`). The card's heading and
+  first sentence say which record it edits, and that it is not the company
+  record.
+- *The no-company gate.* `CompanySettingsPage` returns its create-a-company
+  on-ramp while no company is active (`if (!activeCompany)`), so a card
+  mounted below that line would never reach a partner who has no company.
+  Session 15 mounts it for partner accounts **above** that return.
+- *Ownership.* `CompanySettingsPage.jsx` is Session 15's this wave. I wrote
+  `pages/partner/PartnerFirmProfileCard.jsx` and its test; Session 15 imports
+  the default export in its item-5 PR and does not edit the file.
+
+The card is Overview's whole job, so item 1b can name it as the successor:
+name, company and specialisation (editable; blank company or specialisation
+saves as not recorded, and a blank name is refused, as the worker already
+did); email, status, partner-since, referral code and referral count
+(read-only; an absent value reads "Not recorded"; a count of 0 is a stored
+count and prints); the Founder introductions switch (`setAcceptingIntros`,
+the same `partners` row); and a read-only partner agreement summary from
+`myDeal`, since Offers · Perk deals renders `perks`, not `partner_deals`, so
+nothing else on a canvas-built page shows it. Overview's practice snapshot is
+already on `/pipeline/analytics` (the same `quotesAnalytics` read), so it does
+not move.
+
+**States.** The profile, the agreement and the intro switch each load and
+fail separately. A sign-in with no firm attached is a fact about the account
+and draws as one ("No partner profile is attached to this sign-in"). Any
+other failure is `Unreadable` with a retry. "No agreement on record" and
+"agreement unreadable" are different sentences. Nothing prints a zero where
+a read failed.
+
+**The refusal gets a code (Worker, `routes/partner_portal.ts`).** The card
+has to tell "unlinked" from "failed", and the rules say branch on `e.code`,
+never on the words. Before this, `GET`/`PATCH /partner-portal/profile`
+shipped `requirePartnerProfile`'s throw through `mapError` as a bare
+`{ detail }` 400, and `PATCH /accepting-intros` put the sentence itself in
+`error`. All three now answer `404 { error: 'no_partner_profile', message,
+detail }` via `refusalBody`, with the same sentence as before. That keeps
+`isNoPartnerProfile` in `pages/partner/kit.jsx`, which the zones still use on
+other routes, matching. Every other thrown refusal still goes through
+`mapError` unchanged; a founder is still refused with 403. The Studio home's
+`getProfile` read treats any failure as unavailable, so the status change
+does not move it.
+
+**Founder reviews → Delivery · Health (`delivery/FounderReviews.jsx`,
+mounted in `HealthZone.jsx`).** Health already holds the firm's own
+satisfaction remark, which must name its source; the review is the other
+side, what the founder recorded, so it sits beside it. Only `reviewer_role
+= 'founder'` rows count, and nothing on the page can write one.
+- *Scoped to the firm.* `GET /engagements` narrows a partner to their own
+  engagements but gives an admin every engagement on the platform, and
+  Health renders for an admin whose sign-in is attached to a firm. The
+  section reads the firm's own row (`getProfile`) and filters by
+  `partner_id`. Without that filter an admin would see every firm's reviews
+  under one firm's heading, which the retired pages would have shown.
+- *Mounted only in the linked branch* (`!unlinked`), so a sign-in with no
+  firm never makes the read at all.
+- *Bounded, and it says so.* There is no list-all-reviews route, so the
+  section reads the 12 most recently delivered engagements one by one, the
+  same bound the retired page used. When there are more, a footnote names
+  the window.
+- *Partial failures are counted.* One engagement whose reviews fail does not
+  blank the section, but it is no longer silently skipped as it was on
+  `PerformancePage`: the section says how many could not be read. A failed
+  engagement list is `Unreadable`, never "no reviews". An average with no
+  rated review is "Not recorded", not 0.
+
+**Retired by item 1b, not by this PR.** Named here so 1b is checkable
+against it: `/partner/operations/overview` → Firm Settings (this card,
+once mounted); `/partner/operations/performance` and `/portfolio` →
+`/delivery/health` (reviews, here) plus `/pipeline/analytics` (scorecard and
+forecast); `/partner/operations/engagements` → `/pipeline/proposals`;
+`/partner/operations/capabilities` → `/offers/catalog`.
+`PartnerDealPortal` (`/partners/portal`) stays: once the card is live, both
+of its jobs are covered on a canvas-built page, and retiring it is a
+separate D304 decision.
+
+**Verification.**
+- New tests: `frontend/test/partner_firm_profile_d390.test.mjs` (12) and
+  `cloudflare-worker/test/partner_portal_profile_refusal_d390.test.ts` (6).
+- Mutations: 23 of 23 caught, each with a non-zero exit and a `not ok` line,
+  restored from a sha256-checked snapshot. One escaped on the first pass:
+  making *every* thrown error `no_partner_profile` in `profileRefusal`. The
+  only non-profile refusal the test exercised was a validation 400, which is
+  returned inside the handler and never reaches the catch. I fixed the
+  assertion, not the code: a founder's thrown 403 must stay a 403. It is
+  caught now.
+
 ## D410
 
 **E-sign `/send` hardening: the signing link reaches only the recipient, a
