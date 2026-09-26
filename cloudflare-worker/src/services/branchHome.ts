@@ -68,7 +68,7 @@ export type ProgrammeClock = {
 
 export type BranchHome = {
   queue_pressure: QueuePressureLane[];
-  /** The lanes that could not be read, named. Empty when all four answered. */
+  /** The lanes that could not be read, named. Empty when every approval lane answered. */
   unreadable: string[];
   programme: ProgrammeClock;
   revenue: {

@@ -46,7 +46,8 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
-import { requireAuth } from '../auth';
+import { requireAdmin, requireAuth } from '../auth';
+import { ADMIN_BANK } from '../services/advisor/banks/admin';
 import {
   ROLE_DETECTOR,
   bankFor,
@@ -542,6 +543,15 @@ async function syncBankTotal(env: Env, conv: ConversationRow, bankLen: number, p
   conv.persona = persona;
 }
 
+/**
+ * THE LEDGER'S "ANSWERED" PREDICATE, written once. A question counts as
+ * answered when its reply was captured: 'saved' (mapped to a field) or 'noop'
+ * (a free-form reply with no structured column). 'skipped' is not an answer.
+ * refreshCounts, /answered, /progress and /admin-posture all read this string,
+ * so none of them can drift into a second definition of the same word.
+ */
+const CAPTURED_SQL = "saved_status IN ('saved', 'noop')";
+
 async function refreshCounts(env: Env, conversationId: number, currentQid: string | null): Promise<void> {
   try {
     // Task #57 — "answered" means the user actually provided a reply that was
@@ -552,7 +562,7 @@ async function refreshCounts(env: Env, conversationId: number, currentQid: strin
     // 'needs_evidence' / 'invalid' (no committed answer yet).
     const counts = await env.DB.prepare(
       `SELECT
-         SUM(CASE WHEN saved_status IN ('saved', 'noop') THEN 1 ELSE 0 END) AS answered,
+         SUM(CASE WHEN ${CAPTURED_SQL} THEN 1 ELSE 0 END) AS answered,
          SUM(CASE WHEN saved_status = 'skipped'          THEN 1 ELSE 0 END) AS skipped
        FROM advisor_answers WHERE conversation_id = ?`,
     ).bind(conversationId).first<{ answered: number | null; skipped: number | null }>();
@@ -1543,7 +1553,7 @@ advisor.get('/answered', async (c) => {
       `SELECT question_id, saved_to_table, saved_to_column, saved_to_id,
               saved_status, created_at
          FROM advisor_answers
-        WHERE conversation_id = ? AND saved_status IN ('saved', 'noop')
+        WHERE conversation_id = ? AND ${CAPTURED_SQL}
         ORDER BY created_at DESC, id DESC
         -- advisor_answers has UNIQUE(conversation_id, question_id), so a single
         -- conversation can hold at most one row per bank question (~210 total);
@@ -1574,6 +1584,129 @@ advisor.get('/answered', async (c) => {
     console.error('[advisor] /answered:', (e as Error).message);
     return c.json({ conversation_uid: null, answered: [] });
   }
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin-posture  —  D246, Studio's "Operating posture" strip.
+//
+// For each ADMIN_BANK question: its section, a short label, and a state read
+// from the ledger — `recorded` (the CAPTURED_SQL predicate /answered and
+// /progress use), `skipped`, or `not_recorded`. A recorded answer carries its
+// value, read from the store the write router put it in:
+//   - admin.preferences.digest_freq  → user_settings.digest_frequency
+//   - every other admin.* id         → user_advisor_extras.extras_json[id]
+//
+// A COLUMN DEFAULT IS NEVER AN ANSWER. user_settings.digest_frequency defaults
+// to 'weekly' and user_settings.timezone to 'UTC'; neither is read unless the
+// ledger says the question was answered, and the timezone answer lands in
+// extras, so user_settings.timezone is never read here at all.
+//
+// `bank_size` is ADMIN_BANK.length and `recorded` is counted from the ledger —
+// never from how many values happen to be on screen. Only the caller's own
+// rows are read: no user id is taken from the request.
+// ---------------------------------------------------------------------------
+const POSTURE_LABELS: Record<string, string> = {
+  'admin.preferences.digest_freq': 'Digest',
+  'admin.preferences.alert_channel': 'Alert channel',
+  'admin.preferences.timezone': 'Timezone',
+  'admin.oversight.review_cadence': 'Review cadence',
+  'admin.oversight.portfolio_focus': 'Metrics named',
+  'admin.oversight.risk_tolerance': 'Risk tolerance',
+  'admin.oversight.escalation_threshold': 'Escalation condition',
+  'admin.operations.intake_priority': 'Intake priority',
+  'admin.operations.onboarding_sla': 'Onboarding turnaround',
+  'admin.governance.data_retention_pref': 'Inactive record retention',
+  'admin.governance.access_review_cadence': 'Access-review cadence',
+};
+
+export type PostureField = {
+  id: string;
+  section: string;
+  label: string;
+  state: 'recorded' | 'skipped' | 'not_recorded';
+  value: string | null;
+  value_reason?: string;
+};
+
+export async function readAdminPosture(env: Env, userId: number): Promise<Record<string, unknown>> {
+  const bank = ADMIN_BANK;
+  const bank_size = bank.length;
+  try {
+    const conv = await env.DB.prepare(
+      'SELECT id FROM advisor_conversations WHERE user_id = ? ORDER BY id DESC LIMIT 1',
+    ).bind(userId).first<{ id: number }>();
+    const ids = new Set(bank.map((q) => q.id));
+    const status = new Map<string, 'recorded' | 'skipped'>();
+    if (conv) {
+      // UNIQUE(conversation_id, question_id) holds one row per question, so
+      // this is at most one row per bank question the caller was asked.
+      const rows = await env.DB.prepare(
+        `SELECT question_id,
+                CASE WHEN ${CAPTURED_SQL} THEN 'recorded'
+                     WHEN saved_status = 'skipped' THEN 'skipped' END AS state
+           FROM advisor_answers
+          WHERE conversation_id = ?`,
+      ).bind(conv.id).all<{ question_id: string; state: 'recorded' | 'skipped' | null }>();
+      for (const r of rows.results || []) {
+        if (ids.has(r.question_id) && r.state) status.set(r.question_id, r.state);
+      }
+    }
+    // Read even when nothing is answered: a missing store is reported as
+    // unreadable, not as eleven empty rows.
+    const extrasRow = await env.DB.prepare(
+      'SELECT extras_json FROM user_advisor_extras WHERE user_id = ?',
+    ).bind(userId).first<{ extras_json: string | null }>();
+    let extras: Record<string, unknown> = {};
+    if (extrasRow?.extras_json) {
+      try {
+        const parsed = JSON.parse(extrasRow.extras_json);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) extras = parsed;
+      } catch { /* malformed sidecar: values read as absent below */ }
+    }
+    let digest: string | null = null;
+    if (status.get('admin.preferences.digest_freq') === 'recorded') {
+      const row = await env.DB.prepare(
+        'SELECT digest_frequency FROM user_settings WHERE user_id = ?',
+      ).bind(userId).first<{ digest_frequency: string | null }>();
+      digest = row?.digest_frequency ?? null;
+    }
+    const fields: PostureField[] = bank.map((q) => {
+      const state = status.get(q.id) || 'not_recorded';
+      const field: PostureField = {
+        id: q.id,
+        section: q.section || '',
+        label: POSTURE_LABELS[q.id] || q.prompt,
+        state,
+        value: null,
+      };
+      if (state === 'recorded') {
+        const raw = q.id === 'admin.preferences.digest_freq' ? digest : extras[q.id];
+        const text = typeof raw === 'string' ? raw.trim() : raw == null ? '' : String(raw);
+        if (text) field.value = text;
+        else field.value_reason = 'The chat recorded a reply, but its store holds no value for it.';
+      }
+      return field;
+    });
+    return {
+      available: true,
+      bank_size,
+      recorded: fields.filter((f) => f.state === 'recorded').length,
+      fields,
+    };
+  } catch (e) {
+    console.error('[advisor] /admin-posture:', (e as Error).message);
+    return {
+      available: false,
+      bank_size,
+      reason: 'The posture answers could not be read, so this is not a claim that none are recorded.',
+    };
+  }
+}
+
+advisor.get('/admin-posture', async (c) => {
+  const user = await requireAdmin(c);
+  await ensureSchema(c.env);
+  return c.json(await readAdminPosture(c.env, user.id));
 });
 
 // ---------------------------------------------------------------------------
@@ -1658,7 +1791,7 @@ advisor.get('/progress', async (c) => {
   const capturedSet: Set<string> = new Set();
   if (conv) {
     const rows = await c.env.DB.prepare(
-      `SELECT question_id FROM advisor_answers WHERE conversation_id = ? AND saved_status IN ('saved', 'noop')`,
+      `SELECT question_id FROM advisor_answers WHERE conversation_id = ? AND ${CAPTURED_SQL}`,
     ).bind(conv.id).all<{ question_id: string }>();
     for (const r of (rows.results || [])) capturedSet.add(r.question_id);
   }
