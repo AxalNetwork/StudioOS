@@ -17,6 +17,7 @@ import {
 import { api } from '../lib/api';
 import { parseLinkedInCsv, PENDING_LINKEDIN_IMPORT_KEY } from '../lib/linkedinCsv';
 import { useToast } from '../components/useToast';
+import { Unreadable } from '../ui';
 import './referrals/referrals.css';
 import { appOrigin } from '../lib/branchHost';
 
@@ -394,6 +395,7 @@ export default function ReferralsPage({ embedded = false }) {
   const [overview, setOverview] = useState(null);
   const [rows, setRows] = useState([]);
   const [invites, setInvites] = useState([]);
+  const [invitesUnreadable, setInvitesUnreadable] = useState(false);
   const [pendingContacts, setPendingContacts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -414,14 +416,24 @@ export default function ReferralsPage({ embedded = false }) {
     setLoading(true);
     setLoadError('');
     try {
+      // D332 — a failed invites read used to be swallowed as `{ invites: [] }`,
+      // which is indistinguishable from "you have sent no invites". The two
+      // are opposite claims, so the failure is tracked on its own flag rather
+      // than folded into the empty state.
       const [ov, list, inv] = await Promise.all([
         api.referralOverview(),
         api.referralSubmissions(),
-        api.emailInvites().catch(() => ({ invites: [] })),
+        api.emailInvites().catch(() => null),
       ]);
       setOverview(ov);
       setRows(Array.isArray(list) ? list : []);
-      setInvites(Array.isArray(inv?.invites) ? inv.invites : []);
+      if (inv) {
+        setInvites(Array.isArray(inv?.invites) ? inv.invites : []);
+        setInvitesUnreadable(false);
+      } else {
+        setInvites([]);
+        setInvitesUnreadable(true);
+      }
     } catch (e) {
       setLoadError(e?.message || 'Could not load your referrals.');
     } finally {
@@ -657,8 +669,13 @@ export default function ReferralsPage({ embedded = false }) {
           showToast(reason, 'warning');
         }
       }
-      const inv = await api.emailInvites().catch(() => ({ invites: [] }));
-      setInvites(Array.isArray(inv?.invites) ? inv.invites : []);
+      const inv = await api.emailInvites().catch(() => null);
+      if (inv) {
+        setInvites(Array.isArray(inv?.invites) ? inv.invites : []);
+        setInvitesUnreadable(false);
+      } else {
+        setInvitesUnreadable(true);
+      }
     } catch (err) {
       showToast(err?.message || 'Could not send invite.', 'error');
     } finally {
@@ -742,6 +759,13 @@ export default function ReferralsPage({ embedded = false }) {
           <div className="flex items-center gap-2 py-12 text-sm text-zinc-500">
             <Loader2 size={16} className="animate-spin" /> Loading your referrals…
           </div>
+        ) : loadError ? (
+          // D332 — the tiles below read `overview?.counts?… ?? 0`, and
+          // `overview` is null on this branch (the Promise.all rejected before
+          // it was ever set). Rendering them here would print zeroes for a
+          // read that failed, not one that came back empty — the retry above
+          // already covers this state, so the page stops there instead.
+          null
         ) : (
           <>
             <div className="rf-stat-grid">
@@ -951,7 +975,11 @@ export default function ReferralsPage({ embedded = false }) {
                     );
                   })}
                   <div className="px-6 py-3 text-[11.5px] text-[#8b8798]">
-                    {sentInviteCount} of {contactRows.length} contacts invited. Each link is unique, so registrations attribute to the exact contact — not just to your code.
+                    {invitesUnreadable ? (
+                      <Unreadable what="Your sent invites" claim="" onRetry={load} />
+                    ) : (
+                      <>{sentInviteCount} of {contactRows.length} contacts invited. Each link is unique, so registrations attribute to the exact contact — not just to your code.</>
+                    )}
                   </div>
                 </div>
               )}

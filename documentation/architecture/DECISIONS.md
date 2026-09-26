@@ -30221,6 +30221,120 @@ half D301 deferred. No migration, no new route, no new `api.js` method.
   `check-folder-docs` and `check-api-drift` exit 0. Root `npm run build`,
   then `node scripts/check-docs-fresh.mjs --strict`, exits 0.
 
+## D332
+
+**"Unreadable", never zero, across notifications, referrals, events,
+wellbeing, calendar and the help layout.** Wave 8, Session 4, item 4, the
+gap map's point 4: seven places where a failed read rendered the same as a
+genuinely empty or genuinely zero one.
+
+**What was false, and what changed, file by file.**
+- `routes/notifications.ts` — a `notifications_inbox` table-setup failure
+  made GET `/`, GET `/unread-count` and POST `/mark-read` answer 200 with
+  `[]` / `0` / `{ updated: 0 }`: the exact shape a genuinely empty,
+  genuinely caught-up inbox produces. The bell always said "all caught up"
+  whether nothing was there or nothing could be READ. All three now refuse
+  (503, `notifications_unreadable`) through `refuse()`/`refusalBody()`
+  (D278); the frontend's existing `NotificationList`/`NotificationBell`
+  catch handling (D144) already distinguishes a thrown fetch from a 200 —
+  it simply never had one thrown at it before.
+- `ReferralsPage.jsx` — a failed invites read was swallowed as
+  `{ invites: [] }`, indistinguishable from having sent none; a new
+  `invitesUnreadable` flag tracks it instead and the sent-count line shows
+  `Unreadable` when set. Separately, a genuine `loadError` (the overview and
+  submissions reads rejecting) still let the summary tiles render, reading
+  `overview?.counts?.… ?? 0` off an `overview` that stayed `null` — five
+  zeroes under a visible error banner. The tiles no longer render on that
+  branch; the banner and its retry already cover it.
+- `MyEventsPage.jsx` — a failed `eventsApi.list()` showed a toast that
+  disappears, then fell back to `hosting: []` / `attending: []`, rendering
+  "You're not hosting any events yet." — the same screen a genuinely empty
+  account gets. A `loadError` state now renders `Unreadable` with a retry
+  in place of both lists.
+- `PublicEventsPage.jsx` (currency) — every priced event card printed a
+  bare `$`, regardless of the event's own `currency` column. Not a
+  false-zero, but the same family of defect (a value presented as certain
+  that isn't): moved onto a shared `formatEventPrice` (new
+  `lib/money.js`), which also absorbed `PublicEventDetailPage.jsx`'s
+  identical, previously un-exported, local copy — one formatter instead
+  of two.
+- `WellbeingPage.jsx` — two spots. `AdminAggregate`'s catch turned ANY
+  thrown error, not only a genuine 404, into
+  `{ insufficient_data: true, cohort_size: 0, … }` — the exact shape the
+  worker's own `/aggregate` catch block already sends for a real small
+  cohort (it never actually 404s; it degrades to 200 internally). So a
+  request that never reached the worker at all read as "not enough people
+  have checked in yet". Now any thrown error goes to the existing `err`
+  state, untouched. Separately, `quiet404` rewrote a failed `/resources` or
+  `/daily` read into the same shape as a genuinely empty one; both routes
+  are unconditionally mounted for a non-investor sign-in, so a 404 there is
+  a real defect the page should not absorb — removed, and both reads now
+  reach the outer `catch` like everything else on the page.
+- `CalendarPage.jsx` — a failed Google/Microsoft status READ set
+  `available: false`, which `providerState` reads as "this server has no
+  OAuth credentials configured" — a claim about the DEPLOYMENT, not about
+  one request failing. A new `unreadable` flag and provider state (checked
+  before `unconfigured`) carries its own card and a real "Retry" action
+  wired to the same load function; `available`/`configured` now only ever
+  reach `providerState` from the server's own, successfully-read answer.
+- `docs/DocsLayout.jsx` — `StillStuck`'s failed-probe path set
+  `overall: 'unknown'`, but `STATUS_LINE` had no `unknown` entry, so
+  `STATUS_LINE[overall]` was `undefined` and the whole status line vanished
+  — read as "nothing to report" by the same `{line && (…)}` guard the
+  comment above it says exists to keep the line silent until the probe
+  *first* answers. `unknown` now has its own label ("Status could not be
+  read"); the pre-answer silence (`overall === null`) is unchanged.
+
+**Measured and left alone.** `PublicEventDetailPage.jsx`'s `seats_taken`
+`|| 0` was on the gap map's list but does not fabricate a false claim on
+inspection: `services/eventCapacity.ts`'s `seatsTaken` is `COUNT(*)`, which
+SQLite never returns null or undefined for — a query failure throws instead
+of degrading to a fake row, and that throw already reaches this page's
+existing `error` state through its own catch. There is no live path where
+`data.seats_taken` is a successful-but-absent value for the `|| 0` to mask.
+Not fixed, because there is nothing to fix; recorded here rather than
+silently dropped from the sweep.
+
+**Worker + frontend.** No migration, no new route, no new `api.js` method.
+`frontend/src` moved, so `docs/` is rebuilt.
+
+### VERIFIED
+
+- New `cloudflare-worker/test/notifications_unreadable_d332.test.ts` (4
+  tests, real SQLite via `d1Over`, a `DB.prepare` override that fails only
+  the inbox's own `CREATE TABLE`): all three endpoints refuse
+  `notifications_unreadable` on a table-setup failure and a healthy table
+  still answers 200 with real data.
+- New `frontend/test/honesty_sweep_d332.test.mjs` (9 tests): `money.js`'s
+  `formatEventPrice` actually executed against three currencies and a
+  missing one; the rest over `codeOnly` source (neither page takes `api` as
+  an injectable prop, so there is no seam for a live-response test without
+  restructuring each page, out of this task's scope) — Referrals' invites
+  tracking and tile suppression, MyEvents' `Unreadable` render, both event
+  pages' shared formatter, Calendar's `unreadable` flag/ordering/retry
+  wiring, Wellbeing's removed `quiet404` and 404-coercion.
+- `frontend/test/docs_still_stuck_status.test.mjs`'s "renders no status
+  line until the probe answers" test re-aimed: it used to assert `unknown`
+  has NO label (pinning the defect); it now asserts `unknown` DOES, while
+  confirming the true pre-answer silence (`overall === null`) is untouched.
+- `frontend/test/calendar_page_c1.test.mjs`'s provider-states guard
+  re-aimed from five states to six, adding `unreadable` in its actual
+  position (second, before `unconfigured`) — caught by the full drift run
+  before this entry was written, exactly as the guard is built to do.
+- 10 mutations run, 10 caught (non-zero exit plus a `not ok` line), each
+  restored from a sha256-verified `/tmp` snapshot and diff-confirmed
+  byte-identical to the pre-mutation file afterward: notifications.ts's
+  GET / refusal reverted; ReferralsPage's invites tracking and its tile
+  suppression, separately; MyEventsPage's error render; PublicEventsPage's
+  formatter call; PublicEventDetailPage's local duplicate reintroduced;
+  CalendarPage's failure-handling and its retry action, separately;
+  WellbeingPage's 404-coercion and its `quiet404`, separately.
+- `npm run test:drift` exits 0 on Node 22 (3558 frontend tests, 0
+  failures, after the `calendar_page_c1` re-aim above). Both typechecks,
+  `check-decision-ids` (D1 through D421, in file order) and
+  `check-api-drift` exit 0. Root `npm run build`, then
+  `node scripts/check-docs-fresh.mjs --strict`, exits 0.
+
 ## D350
 
 **Lab Profiling reads Eadwyn's question ledger for the four elements it had
