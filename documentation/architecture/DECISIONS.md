@@ -29447,3 +29447,86 @@ migration.** `frontend/src` moved (the console list and the test), so
   order).
 - No migration, no route, no `api.js` method, so `check-api-drift` has
   nothing to say.
+
+## D350
+
+**Lab Profiling reads Eadwyn's question ledger for the four elements it had
+no source for.** Wave 8, Session 7, item 1. No route, no migration, no new
+`api.js` method: the store (`advisor_answers`) and three read-only routes
+over it already existed, and the page was drawing something else in their
+place.
+
+**What was false on the page.** Its header said "no answered-question count
+is exposed anywhere" and "no question bank exists"; both were untrue.
+`GET /api/advisor/progress` returns a `profiling` block — the four fit.*
+modules (Skills, Work values, Archetype, Axal Fit & values), each with a
+confidence-weighted `total`, `answered`, `percent` and `confident` flag —
+and `GET /api/advisor/queue` and `GET /api/advisor/answered` serve the
+ranked queue and the captured answers. So KPI 1 counted skills rated under
+its own label, "Next best questions" listed rating gaps, and "Last
+answered" became "Last activity".
+
+**What changed.**
+- `frontend/src/lib/profilingLedger.js` (new, pure) classifies each read as
+  `ok`, `refused` or `failed`, and derives four views — questions answered,
+  module rows, next questions, last answered — each with a `state`, so an
+  empty list never stands in for "we could not look".
+- `SpinoutLabProfilingPage.jsx`: KPI 1 is "Questions answered N / M · toward
+  a confident profile", from the ledger; the Assessment progress card gains
+  a "Question ledger · by module" block with each module's count and
+  Confident / Building; "Next best questions" lists the queue's own prompts,
+  head first, with the existing skills-rating gaps kept below as "Self-ratings
+  still open"; the Studio card says `Last answered: "<prompt>" · <date>`.
+  The ledger loads separately, so Retry re-reads it without the whole page.
+- **The reads are the read-only ones.** `/advisor/queue` is a peek that never
+  marks a question asked; `/advisor/next-question` can pin a question onto
+  the conversation, which is a write from a page that only looks, and is not
+  called. The queue is focused on `FIT`, the section `buildFitBank` stamps on
+  every fit.* question, so the list is profiling questions rather than the
+  week's build prompts.
+- **Refusals (D258).** A 423 — Eadwyn locked for this account, shadow-flagged
+  or switched off — prints the Worker's own sentence (`e.message`). The branch
+  is on `e.status === 423`; the advisor gate's 423 body carries no machine
+  code (`{ error: message, status: 'refused', reason }`), so the status is the
+  code. Any other failure is `Unreadable` with a retry. A role with no fit
+  bank (admin) is `Unrecorded` with that reason, never "0 / 0".
+- **Honest absences.** "Leadership style" and "Working style" stay as the
+  canvas's rows but render `Unrecorded` with the reason and draw no bar —
+  previously a bar at zero width beside "Not modelled yet". The canvas's
+  "Improves …" line and "Answer 4" counts are not reproduced: the queue makes
+  no such claim. "Nothing outstanding — your profile inputs are complete",
+  which the page printed whenever the rating gaps ran out, is gone; the
+  queue's own `complete` flag is the only thing that says so now.
+
+**Found and not fixed (not this session's file).** `GET /advisor/answered`
+catches its own read failure and returns `200 { answered: [] }`
+(`routes/advisor.ts`, the `/answered` handler's `catch`), so a failed ledger
+read reaches this page as "Nothing answered in Studio yet". The page cannot
+tell the two apart; the Worker would have to refuse instead. Reported to
+Session 1.
+
+**Still not built, and why.** Share and Export stay disabled with their
+reason (Lab share links are on the deferred owner-decision list); the
+archetype's Secondary + Blend stay stated as not modelled (one archetype per
+track is stored).
+
+### VERIFIED
+
+- `frontend/test/spinout_lab_profiling_ledger.test.mjs` (new, 19 tests): the
+  three read outcomes, the four views, the page's three calls and its
+  refusal to call `/next-question`, the FIT focus against `buildFitBank`,
+  `/queue` staying write-free, the fields `/progress` emits, each view's
+  absence drawn with a retry, the canvas's four elements, and none of its
+  fixtures ("54 / 79", "12 open Qs", its quoted question, "Answer 4").
+- Mutations: 19 on the first pass, 18 caught (non-zero exit and a `not ok`
+  line, each restored from a sha256-checked snapshot). One escaped —
+  dropping the queue's head question — because the fixture repeated the head
+  inside the queue; the assertion was fixed (the head is now unique and a
+  different id is repeated to prove the de-duplication), and a rerun of three
+  caught all three. Tally: 22 run, 21 caught, 1 escape fixed in the test.
+- `npm run test:drift`: exit 0. Frontend 3398 → 3417 (the 19 above, by
+  name in the log under `spinout_lab_profiling_ledger.test.mjs`), worker
+  4408 (4405 pass, 0 fail) unchanged, retention 112 unchanged; both
+  typechecks, `lint:undef` and every guard green, including
+  `check-decision-ids`, `check-folder-docs`, `check-api-drift` and
+  `check-docs-fresh --strict` after the root `npm run build`.
