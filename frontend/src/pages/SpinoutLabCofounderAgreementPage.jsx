@@ -34,10 +34,18 @@
 //   - Per-signer signature pills — the schema has one signed_by per DOCUMENT.
 //   - "Send for signature" / "Fully executed" — api.js has no method to sign a
 //     documents row. The finalize control is disabled with the reason in title.
-//   - Solo-founder declaration — no template exists in either runtime.
+//   - Solo-founder declaration DOCUMENT — no template exists in either
+//     runtime (a legal template is an owner decision). The solo path does read
+//     the stored Week-3 decision (projects.cofounder_decision_meta, migration
+//     162, written by Co-founder Match) and says what it records — D352.
 //   - Share and Preview-as-investor — disabled with reasons.
-//   - The generator is dev-only (no Worker route); the 404/405 at generate time
-//     raises an environment banner. Existing documents are unaffected.
+//   - The generator is the Worker's POST /api/legal/cofounder-agreement
+//     (routes/legal.ts). A 404/405 at generate time can only mean an
+//     environment without that route (the dev FastAPI), and raises the
+//     environment banner. Existing documents are unaffected.
+//
+// A failed project read renders Unreadable (D352): it is not "no startup
+// record yet", which would send a founder with a company to create another.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -51,6 +59,8 @@ import { pickLabProject } from './SpinoutLabStartupPage';
 import {
   buildCofounderAgreementViewModel, capTableSplit as capTableSplitFn, newDraft,
 } from '../lib/cofounderAgreementViewModel';
+import { buildDecisionModel } from '../lib/cofounderMatchViewModel';
+import { Unreadable } from '../ui';
 import StatusPill from '../components/cofounder/StatusPill';
 import ClauseRow from '../components/cofounder/ClauseRow';
 import { EDITORS, ReadOnlyClause } from '../components/cofounder/ClauseEditors';
@@ -92,6 +102,7 @@ export default function SpinoutLabCofounderAgreementPage() {
   const [envUnavailable, setEnvUnavailable] = useState(false);
   const [generated, setGenerated] = useState(null);
   const [showBuilder, setShowBuilder] = useState(false);
+  const [projectsFailed, setProjectsFailed] = useState(false);
 
   // UI-only state (no backend, nothing implied to be saved).
   const [path, setPath] = useState('multi');
@@ -117,12 +128,13 @@ export default function SpinoutLabCofounderAgreementPage() {
         const [st, me, projects] = await Promise.all([
           spinoutLab.state().catch(() => null),
           api.getMe(),
-          api.listProjects().catch(() => []),
+          api.listProjects().then((d) => ({ ok: true, d }), () => ({ ok: false })),
         ]);
         if (dead) return;
         setState(st);
         setUser(me);
-        const proj = pickLabProject(projects, me);
+        setProjectsFailed(!projects.ok);
+        const proj = projects.ok ? pickLabProject(projects.d, me) : null;
         setProject(proj || null);
         if (proj) {
           // Every one of these degrades to [] on failure — a missing upstream
@@ -182,10 +194,15 @@ export default function SpinoutLabCofounderAgreementPage() {
     return () => { dead = true; };
   }, []);
 
+  // The Week-3 decision Co-founder Match stored on the project (D352).
+  const decision = useMemo(
+    () => (project ? buildDecisionModel({ meta: project.cofounder_decision_meta, milestoneKeys: [] }) : null),
+    [project],
+  );
   const vm = useMemo(() => buildCofounderAgreementViewModel({
     user, project, labState: state, docs, capSplit, members, orders, trackers,
-    connections, draft, path, envUnavailable,
-  }), [user, project, state, docs, capSplit, members, orders, trackers, connections, draft, path, envUnavailable]);
+    connections, draft, path, envUnavailable, decision, projectUnreadable: projectsFailed,
+  }), [user, project, state, docs, capSplit, members, orders, trackers, connections, draft, path, envUnavailable, decision, projectsFailed]);
 
   const canEdit = vm.permission.canEdit;
   const canGenerate = vm.permission.canGenerate;
@@ -374,6 +391,17 @@ export default function SpinoutLabCofounderAgreementPage() {
           Finish your current week's deliverables to unlock founder legal paperwork.
         </p>
         <Link to="/spinout-lab" className="text-sm font-semibold text-violet-600 hover:underline">Back to Workspace</Link>
+      </div>
+    );
+  }
+  if (projectsFailed) {
+    return (
+      <div className="max-w-xl mx-auto mt-16" data-testid="cofounder-projects-unreadable">
+        <Unreadable
+          what="Your startup record"
+          claim="This is not a claim that you have none — do not create a second one."
+          onRetry={() => window.location.reload()}
+        />
       </div>
     );
   }
