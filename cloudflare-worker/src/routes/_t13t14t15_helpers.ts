@@ -151,7 +151,7 @@ export function mapError(c: Context<{ Bindings: Env }>, e: any) {
     }), 400);
   }
   // Any other D1 or SQLite failure is ours, not the caller's: 500, logged.
-  if (/^D1_ERROR|SQLITE_/.test(msg)) {
+  if (/^(D1_ERROR|SQLITE_)/.test(msg)) {
     return c.json(refusalBody({
       code: 'storage_error',
       message: 'Something went wrong saving or loading this. The failure has been logged.',
