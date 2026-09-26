@@ -366,7 +366,12 @@ const PROFILES = {
     // in the browser from the table already on screen, and `Download 1099
     // summary`, which fetches its own year rather than deriving one from the
     // reader's chosen window. Was 0, then 4, then 5, then 7.
-    handlers: 9,
+    // TEN NOW, because D392's Introductions brings `Consent log` — prose
+    // reading "consent is recorded per introduction, not as a log" on the
+    // premise that only this side's consent was returned. Both are, and the
+    // zone opens the partner panel's own log over its rows. Was 0, then 4,
+    // then 5, then 7, then 9.
+    handlers: 10,
     embeddedGuards: 0,
     // Both remaining exclusions are cards whose whole page IS the gap
     // statement, so there is nothing for a row to sit over. `expertise/

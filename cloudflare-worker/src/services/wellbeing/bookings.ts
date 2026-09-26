@@ -270,20 +270,27 @@ export async function mirrorBookingToCalendar(env: Env, bookingId: number): Prom
     // Google/Outlook sync below already writes to both attendees' external
     // calendars, so this is a gap in the in-app view only. Stated rather than
     // silently chosen.
+    // D331 (wave 8, item 3) — this row NEVER carries `notes`. `booker_note`
+    // is what a founder wrote in confidence to the expert; `calendar_events`
+    // feeds the page, the .ics feed and the Google/Outlook sync, none of
+    // which is the expert-facing surface that note is for (that's
+    // `fanoutBookingNotifications`, below, which already sends it to the
+    // expert directly). Always NULL here, not `b.booker_note || null` —
+    // there is no case where this column should carry it.
     await env.DB.prepare(
       `INSERT INTO calendar_events
          (uid, user_id, source, external_uri, kind, source_id, source_uid, title,
           start_at, end_at, status, location_kind, location_uri, organizer_email,
           attendees_json, notes)
-       VALUES (?, ?, 'axal', ?, 'expert_booking', ?, ?, ?, ?, ?, 'confirmed', 'video', ?, ?, ?, ?)
+       VALUES (?, ?, 'axal', ?, 'expert_booking', ?, ?, ?, ?, ?, 'confirmed', 'video', ?, ?, ?, NULL)
        ON CONFLICT(uid) DO UPDATE SET
          title = excluded.title, start_at = excluded.start_at, end_at = excluded.end_at,
          status = excluded.status, location_uri = excluded.location_uri,
-         attendees_json = excluded.attendees_json, notes = excluded.notes`,
+         attendees_json = excluded.attendees_json, notes = NULL`,
     ).bind(
       `expert_booking:${b.uid}`, b.user_id, `axal:expert_booking:${b.uid}`,
       b.id, b.uid, title, startIso, endIso,
-      meetLink, b.expert_email || null, attendees, b.booker_note || null,
+      meetLink, b.expert_email || null, attendees,
     ).run();
 
     // Sync to Google + Outlook for both attendees (best-effort).
@@ -300,7 +307,8 @@ export async function mirrorBookingToCalendar(env: Env, bookingId: number): Prom
       location_uri: meetLink,
       organizer_email: b.expert_email || null,
       attendees: JSON.parse(attendees),
-      notes: b.booker_note || null,
+      // D331 — never carried on the calendar sync either; see the insert above.
+      notes: null,
     };
     // onAxalSessionCreated resolves the relevant user calendars from the
     // event attendees itself, so a single call covers both founder and

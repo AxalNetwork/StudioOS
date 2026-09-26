@@ -205,6 +205,40 @@ test('it belongs to the booker and nobody else', async () => {
   assert.equal(theirs.length, 0, 'another user can read someone else’s booking');
 });
 
+test('D331 — an admin does not see another user’s expert booking either', async () => {
+  // Before D331, `directEvents`'s admin branch dropped the `user_id` filter
+  // for every direct-write kind, `expert_booking` included — so an admin's
+  // OWN /calendar and .ics feed showed every founder's wellbeing session,
+  // note and all. `role: 'admin'` here is the platform admin reading their
+  // own calendar (`userId = OTHER`), not an admin console reading someone
+  // else's on their behalf — there is no such route for this kind.
+  const db = freshDb();
+  seedBooking(db);
+  await mirrorBookingToCalendar(env(db), 11);
+  const asAdmin = await fetchUserEvents(env(db), OTHER, 'admin', WINDOW[0], WINDOW[1], ['expert_booking']);
+  assert.equal(asAdmin.length, 0,
+    'an admin reading their own calendar still sees a booking that is not theirs');
+  // And the booker themself, admin or not, still sees their own.
+  const own = await fetchUserEvents(env(db), FOUNDER, 'admin', WINDOW[0], WINDOW[1], ['expert_booking']);
+  assert.equal(own.length, 1, 'the owner-only fix also hid the booking from its own booker');
+});
+
+test('D331 — a booking never carries the founder’s note into the calendar', async () => {
+  // `booker_note` is what a founder wrote in confidence to the expert
+  // (`fanoutBookingNotifications` already sends it there directly).
+  // `calendar_events` feeds an admin's read, the .ics feed and the
+  // Google/Outlook sync — none of which is that expert-facing surface.
+  const db = freshDb();
+  seedBooking(db);
+  db.prepare("UPDATE expert_bookings SET booker_note = 'Please avoid discussing the Series A publicly' WHERE id = 11").run();
+  await mirrorBookingToCalendar(env(db), 11);
+
+  const row: any = db.prepare('SELECT notes FROM calendar_events WHERE source_uid = ?').get('bk1');
+  assert.equal(row.notes, null, 'the booker note was written into calendar_events.notes');
+  const events = await fetchUserEvents(env(db), FOUNDER, 'founder', WINDOW[0], WINDOW[1], ['expert_booking']);
+  assert.equal(events[0].notes, null, 'the note reached the reader even though the column is clear');
+});
+
 test('an axal row is not mistaken for a Calendly one, and vice versa', async () => {
   // The two readers of this table are told apart by `source`, not by `kind`.
   // If either filter slipped, one row would be returned twice under two kinds.
@@ -395,4 +429,53 @@ test('a missing sync-record table costs the pill, never the agenda', async () =>
   const out = await attachPushRecords(env(db), FOUNDER, [ev]);
   assert.equal(out.length, 1, 'the event was lost with the table');
   assert.equal(out[0].pushed_to, undefined);
+});
+
+test('D331 — migration 305 scrubs a stale note and is a no-op on a second run', () => {
+  const db = freshDb();
+  db.prepare(
+    `INSERT INTO calendar_events (uid, user_id, source, external_uri, kind, source_id, source_uid,
+                                  title, start_at, end_at, status, notes)
+     VALUES (?, ?, 'axal', ?, 'expert_booking', 7, 'bk1', 'Expert session', ?, ?, 'confirmed', ?)`,
+  ).run('expert_booking:bk1', FOUNDER, 'axal:expert_booking:bk1',
+        '2026-06-01T09:00:00Z', '2026-06-01T10:00:00Z', 'a note that predates this migration');
+  // A row this migration must NOT touch: same kind, already clear.
+  db.prepare(
+    `INSERT INTO calendar_events (uid, user_id, source, external_uri, kind, source_id, source_uid,
+                                  title, start_at, end_at, status, notes)
+     VALUES (?, ?, 'axal', ?, 'expert_booking', 8, 'bk2', 'Expert session', ?, ?, 'confirmed', NULL)`,
+  ).run('expert_booking:bk2', FOUNDER, 'axal:expert_booking:bk2',
+        '2026-06-02T09:00:00Z', '2026-06-02T10:00:00Z');
+  // A different kind carrying a note, which the migration must leave alone.
+  db.prepare(
+    `INSERT INTO calendar_events (uid, user_id, source, external_uri, kind, title, start_at, end_at, status, notes)
+     VALUES (?, ?, 'calendly', ?, 'calendly_event', 'Intro call', ?, ?, 'scheduled', ?)`,
+  ).run('calendly:c1', FOUNDER, 'https://calendly.com/x/c1',
+        '2026-06-03T09:00:00Z', '2026-06-03T09:30:00Z', 'a legitimate calendly note');
+
+  const migration = readFileSync(
+    resolve(process.cwd(), 'cloudflare-worker/sql/migrations/305_scrub_expert_booking_notes.sql'), 'utf8',
+  );
+  db.exec(migration);
+
+  assert.equal(
+    (db.prepare("SELECT notes FROM calendar_events WHERE source_uid = 'bk1'").get() as any).notes, null,
+    'the stale expert_booking note survived the migration',
+  );
+  assert.equal(
+    (db.prepare("SELECT notes FROM calendar_events WHERE uid = 'calendly:c1'").get() as any).notes,
+    'a legitimate calendly note',
+    'the migration scrubbed a kind it was never scoped to',
+  );
+
+  // Idempotent: a second run matches zero rows and changes nothing further.
+  const before = db.prepare('SELECT uid, notes FROM calendar_events ORDER BY uid').all();
+  db.exec(migration);
+  const after = db.prepare('SELECT uid, notes FROM calendar_events ORDER BY uid').all();
+  assert.deepEqual(after, before, 'the migration is not idempotent — a second run changed something');
+
+  for (const line of migration.split('\n')) {
+    assert.doesNotMatch(line, /^\s*(BEGIN\s*(TRANSACTION|DEFERRED|IMMEDIATE|EXCLUSIVE)?|COMMIT|ROLLBACK)\s*;/i,
+      `a transaction statement reached the migration: ${line}`);
+  }
 });

@@ -6,9 +6,9 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  * THE ADVISOR LICENCE SERVES EIGHT ZONES THAT CARRY A `filters:` ARRAY —
  * `/network/{relationships,introductions,organizations}` and
  * `/research/{ask,client-prep,markets,companies,library}`. All five Research
- * zones are here and so is `network/relationships`; `network/introductions` is
- * listed in `profile_zone_filters.test.mjs`'s `excluded` set with the reason it
- * is not yet, and `network/organizations` never will be (below). The table
+ * zones are here, and so are `network/relationships` and
+ * `network/introductions`; `network/organizations` never will be (below). The
+ * four Expertise zones with a body joined on D392. The table
  * fills one surface at a time, and the guard is what keeps that honest: an
  * exclusion cannot grow by accident and a stale one cannot linger.
  *
@@ -70,18 +70,13 @@ const NO_INTERACTION_DATE =
 const EVERY_ROW_IS_YOURS =
   'every relationship here is already one of yours; the list loads only rows you are a party to, so this would select all of them';
 
-// `/network/introductions`. `Gated` IS RELABELLED because the canvas's word
-// means the double opt-in and this page can only see one side of it: the
-// counterpart's consent is a separate `intro_propositions` row owned by
-// `target_user_id`, which the response never returns. What `status = 'pending'`
-// actually means is that YOU have not answered, so the chip says that.
-//
-// `Made` is the same asymmetry, and the zone's own docblock already argues it:
-// `accepted` means you accepted and "cannot distinguish 'waiting on them' from
-// 'you are already connected'". No `connected` value exists — the CHECK on
-// `status` would reject one.
-const NO_CONNECTED_STATE =
-  'accepting is recorded per side, so this page knows that you accepted and not whether they did; no connected state exists to mark an introduction as made';
+// `/network/introductions`. FOUR LIVE CHIPS, the partner panel's four (D392).
+// `Gated` was relabelled `Awaiting you` and `Made` was prose, both on the
+// premise that the response carried only this side's consent. It carries both
+// (`counterpart_status`), so `Gated` is the canvas's double opt-in again —
+// Requested or One side — and `Made` is `intro_terms.made_at`, which the zone
+// lets an advisor record once both sides have agreed. `Lapsed` has no chip and
+// is reachable through `All`, for the reason the partner row gives.
 
 export const ADVISOR_ZONE_FILTERS = {
   // ── Network ──────────────────────────────────────────────────────────────
@@ -101,8 +96,8 @@ export const ADVISOR_ZONE_FILTERS = {
 
   'network/introductions': [
     { canvas: 'All', key: 'all' },
-    { canvas: 'Gated', key: 'pending', label: 'Awaiting you' },
-    { canvas: 'Made', unbuilt: NO_CONNECTED_STATE },
+    { canvas: 'Gated', key: 'gated' },
+    { canvas: 'Made', key: 'made' },
     { canvas: 'Declined', key: 'declined' },
   ],
 
@@ -203,6 +198,50 @@ export const ADVISOR_ZONE_FILTERS = {
   // indexed once and later failed a re-index keeps its old count: the failure
   // path updates the state and leaves the number alone. Filtering on the number
   // would silently drop exactly the documents this chip is for.
+  // ── Expertise (D392) ─────────────────────────────────────────────────────
+  // Four of the five artboards, sixteen chips, twelve live. Every live chip
+  // reads a column the zone already loads; the four that are not name what is
+  // missing. `expertise/visibility` has no row: its page is the gap card
+  // ("Nothing counts profile views"), and four controls above a sentence
+  // explaining why there is nothing to count would be a filter over nothing.
+  //
+  // `Match-critical` IS NOT A JUDGEMENT. It is the fields the completeness
+  // meter already counts as "what every match surface reads" — the page's
+  // `MATCH_FIELDS`, which both the meter and the chip read, so they cannot
+  // disagree. `Gaps
+  // only` is those and the rest, empty in the SAVED record, so typing into a
+  // field does not make it vanish mid-edit.
+  'expertise/profile': [
+    { canvas: 'All fields', key: 'all' },
+    { canvas: 'Gaps only', key: 'gaps' },
+    { canvas: 'Match-critical', key: 'match' },
+    { canvas: 'Public preview', unbuilt: 'no public advisor profile page exists; the preview beside the form is what a founder is shown today', hover: 'No public advisor profile page exists to preview.' },
+  ],
+  // `kind` is a CHECKed column since migration 203, and the form writes it.
+  'expertise/services': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Fixed', key: 'fixed' },
+    { canvas: 'Package', key: 'package' },
+    { canvas: 'Retainer', key: 'retainer' },
+  ],
+  // The three states the stats strip above the list already counts:
+  // `attested` is the worker's (a named person answered through their own
+  // link), awaiting is an open request with no answer, self-stated is the rest.
+  'expertise/proof': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Attested', key: 'attested' },
+    { canvas: 'Awaiting consent', key: 'awaiting' },
+    { canvas: 'Self-stated', key: 'self' },
+  ],
+  // `articles.status` is draft or published. Nothing classifies a piece as an
+  // essay rather than a note or a post — there is no kind column on articles.
+  'expertise/thinking': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Published', key: 'published' },
+    { canvas: 'Drafts', key: 'draft' },
+    { canvas: 'Essays', unbuilt: 'an article records no kind, so nothing tells an essay from any other piece', hover: 'Articles carry no kind, so an essay cannot be told apart.' },
+  ],
+
   // ── Practice ─────────────────────────────────────────────────────────────
   //
   // ALL FIVE RUN, AND TWO OF THEM ARE DERIVED RATHER THAN STORED. `status` on
