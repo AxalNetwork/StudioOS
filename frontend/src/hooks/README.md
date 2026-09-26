@@ -6,6 +6,7 @@ page belongs in that page instead.
 | Hook | What it does |
 | --- | --- |
 | `useAuthSync.jsx` | The session: current user, role, tier. Most guards read this. |
+| `useBranchDeployment.js` | S21's strip model for the signed-in licence administrator (D287): one memoised read of `/api/licence/mine` per user, shared by the strip above the top bar and the badge inside it, put through `../lib/branchNotDeployed.js`. A 404 is "administers none" and no strip; any other failure is reported and no strip. Stores nothing. |
 | `useSpinoutLabState.js` | Enrolment and progress for the Spin-Out Lab. |
 | `useSpinoutDeckFields.js` | Deck field values shared across lab tools. |
 | `useIncorporationStatus.js` | Where an entity is in formation. |

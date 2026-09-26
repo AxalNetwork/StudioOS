@@ -621,12 +621,69 @@ r.get('/mine', async (c) => {
       ORDER BY created_at DESC, id DESC LIMIT 50`,
   ).bind(row.id).all<{ event: string; note: string | null; detail_json: string | null; created_at: string }>();
 
+  // D287 — the deployment record, read by licence_uid IN ITS OWN TRY, so a
+  // table this read cannot reach costs the strip its answer and nothing else
+  // on the page. The field never carries a time: `requested_at` is the
+  // request and `updated_at` is bumped by the RPC-hash write and by the
+  // failure paths, so neither is a step's time, and nothing records one.
+  const deployment = await deploymentField(c.env, row.uid);
+
   return c.json({
     licence: { ...licence, admin_role: row.admin_role },
     events: events.results || [],
+    deployment,
     ...DERIVED_UNAVAILABLE,
   });
 });
+
+/* ------------------------------------------------------------------ *
+ * The deployment on the licence — S21's strip reads this (D287)        *
+ * ------------------------------------------------------------------ */
+
+/**
+ * The one status that counts as live: `linked`, migration 258's last step,
+ * the point at which HQ knows the branch and the branch knows HQ. A Worker
+ * that answers (`worker_live`) on a hostname that resolves (`hostname_active`)
+ * but is not yet linked is a deployment in progress, and the administrator is
+ * still working on axal.vc until it is. `failed` is never live.
+ */
+export const DEPLOYMENT_LIVE_STATUS = 'linked';
+export const deploymentIsLive = (status: string | null | undefined): boolean =>
+  String(status ?? '') === DEPLOYMENT_LIVE_STATUS;
+
+export type DeploymentField =
+  | { readable: true; requested: false; live: false }
+  | { readable: true; requested: true; live: boolean; code: string; hostname: string; status: string; status_note: string | null }
+  | { readable: false; reason: string };
+
+/**
+ * "not requested" MEANS THERE IS NO ROW — never a stored value. Migration
+ * 258's nine statuses start at `requested`, and the INSERT writes that
+ * word; a row is a request by construction. A failed read is its own
+ * answer, distinct from "no row", because the strip renders the two
+ * differently and an unreadable ledger rendered as "not requested" would
+ * tell an administrator whose branch is half-built that nobody asked.
+ */
+export async function deploymentField(env: Env, licenceUid: string): Promise<DeploymentField> {
+  try {
+    const d = await env.DB.prepare(
+      'SELECT code, hostname, status, status_note FROM licence_deployments WHERE licence_uid = ?',
+    ).bind(licenceUid).first<{ code: string; hostname: string; status: string; status_note: string | null }>();
+    if (!d) return { readable: true, requested: false, live: false };
+    return {
+      readable: true,
+      requested: true,
+      live: deploymentIsLive(d.status),
+      code: d.code,
+      hostname: d.hostname,
+      status: d.status,
+      status_note: d.status_note ?? null,
+    };
+  } catch (e) {
+    console.warn('[licence] deployment unreadable', (e as Error).message);
+    return { readable: false, reason: 'The deployment record on this licence could not be read.' };
+  }
+}
 
 /* ------------------------------------------------------------------ *
  * The compliance ladder — the addressee's half (D135)                  *
