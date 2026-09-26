@@ -30497,8 +30497,9 @@ worker tests now share `cloudflare-worker/test/_esign_harness.ts`.
 
 ### VERIFIED
 
-- `npm run test:drift` exit 0; the counts are in the PR body. New tests, by
-  name:
+- `npm run test:drift` exit 0 on the merged head (main c8b5cc7e5). Main
+  alone: frontend 3463, worker 4432. With this change: frontend 3481 (+18),
+  worker 4455 (+23), retention 112. Nothing fell. New tests, by name:
   - `esign_send_for_signature_d411.test.ts`: 22 tests on real SQLite.
   - `send_for_signature_d411_contract.test.mjs`: 16 tests. Each canvas region
     is sliced at both ends: step 1, step 2, step 3 and the status view.
