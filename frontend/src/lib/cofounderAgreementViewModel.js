@@ -278,8 +278,14 @@ export const IP_RIDER_NOTE =
 export const SIGNATORY_NOTE =
   'Axal records one status per document, not per signer. The generated document carries wet-ink signature blocks for each person below.';
 
+// D354 — per-party e-signature is built up to one missing piece, named here:
+// the e-sign service (routes/esign.ts, Session 13's) sends only its stored
+// templates, and the stored `cofounder_agreement` template has a different
+// vocabulary from this draft, so an envelope today would carry the wrong text.
+// Signing each party through the hardened envelope flow needs that service to
+// send a generated draft's own text.
 export const EXECUTION_DISABLED_REASON =
-  'Axal has no in-app signing flow wired into this page — the generated copy carries wet-ink signature blocks. Sign it outside Axal and store it with your legal records.';
+  'Per-founder e-signature is not available yet: the e-sign service can only send its stored templates, not this generated draft, so an envelope would carry the wrong text. Sign the generated copy\u2019s wet-ink blocks outside Axal and store it with your legal records.';
 
 export const SOLO_BODY =
   'A solo-founder path means one person holds the founder equity, all business IP is assigned to the entity, and no co-founder rights are granted. There is no counterparty, so there is no agreement to negotiate — what it takes instead is 100% ownership recorded in the Cap Table and an IP assignment signed into the entity at formation.';

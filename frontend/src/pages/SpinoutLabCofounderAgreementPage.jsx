@@ -28,9 +28,11 @@
 //     orders, 83(b) trackers, and the builder inputs — see STATUS/CLAUSE_SPEC.
 //
 // What is deliberately disabled or omitted (no backend exists):
-//   - "Accept term" / "Needs alignment" clause workflow — there is no
-//     clause-state store; a clause reading "Accepted" when nothing recorded an
-//     acceptance is a fabricated legal fact.
+//   - (Built by D354.) "Accept term" / "Needs alignment" is each party's OWN
+//     recorded position (migration 309), read per clause for the newest
+//     generated draft. The Worker takes the actor from the session and refuses
+//     a body naming another party; a clause reads as agreed only when every
+//     party with an account accepted it.
 //   - Per-signer signature pills — the schema has one signed_by per DOCUMENT.
 //   - "Send for signature" / "Fully executed" — api.js has no method to sign a
 //     documents row. The finalize control is disabled with the reason in title.
@@ -60,7 +62,7 @@ import {
   buildCofounderAgreementViewModel, capTableSplit as capTableSplitFn, newDraft,
 } from '../lib/cofounderAgreementViewModel';
 import { buildDecisionModel } from '../lib/cofounderMatchViewModel';
-import { Unreadable } from '../ui';
+import { Unreadable, Unrecorded } from '../ui';
 import StatusPill from '../components/cofounder/StatusPill';
 import ClauseRow from '../components/cofounder/ClauseRow';
 import { EDITORS, ReadOnlyClause } from '../components/cofounder/ClauseEditors';
@@ -70,6 +72,8 @@ import IpRider from '../components/cofounder/IpRider';
 import DisputeCard from '../components/cofounder/DisputeCard';
 import ExecutionConsole from '../components/cofounder/ExecutionConsole';
 import SoloDeclaration from '../components/cofounder/SoloDeclaration';
+import ClausePositions from '../components/cofounder/ClausePositions';
+import { agreementTally, clauseRows, latestAgreementDoc } from '../lib/cofounderPositions';
 import { reportError } from '../lib/log';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
@@ -103,6 +107,10 @@ export default function SpinoutLabCofounderAgreementPage() {
   const [generated, setGenerated] = useState(null);
   const [showBuilder, setShowBuilder] = useState(false);
   const [projectsFailed, setProjectsFailed] = useState(false);
+  // D354 — positions on the newest generated draft: null while loading,
+  // { state: 'ok', data } or { state: 'failed' }.
+  const [positionsRead, setPositionsRead] = useState(null);
+  const latestDoc = useMemo(() => latestAgreementDoc(docs), [docs]);
 
   // UI-only state (no backend, nothing implied to be saved).
   const [path, setPath] = useState('multi');
@@ -213,6 +221,21 @@ export default function SpinoutLabCofounderAgreementPage() {
   const submitBlockedReason = needsOtherConfirm
     ? 'Confirm you mean to generate on this founder’s startup first.'
     : vm.permission.blockedReason;
+
+  const loadPositions = useCallback(async (docId) => {
+    if (!docId) { setPositionsRead(null); return; }
+    try {
+      setPositionsRead({ state: 'ok', data: await api.legalCofounderPositions(docId) });
+    } catch {
+      setPositionsRead({ state: 'failed' });
+    }
+  }, []);
+  useEffect(() => { loadPositions(latestDoc?.id); }, [latestDoc?.id, loadPositions]);
+  const recordPosition = useCallback(async (clauseKey, position, note) => {
+    if (!latestDoc?.id) return;
+    const data = await api.legalRecordClausePosition(latestDoc.id, clauseKey, { position, note });
+    setPositionsRead({ state: 'ok', data });
+  }, [latestDoc?.id]);
 
   // W4 deliverable — declared before every early return (Rules of Hooks).
   // Fires only from real document status; never from a UI toggle, a clause
@@ -712,6 +735,32 @@ export default function SpinoutLabCofounderAgreementPage() {
               </div>
             )}
 
+            {/* D354 — where the parties stand on the newest generated draft. */}
+            {latestDoc && (
+              <div className="mb-3" data-testid="positions-summary">
+                {positionsRead === null ? (
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500">Reading each founder’s positions…</p>
+                ) : positionsRead.state === 'failed' ? (
+                  <Unreadable
+                    what="Each founder’s clause positions"
+                    claim="This is not a claim that nobody has accepted a clause."
+                    onRetry={() => loadPositions(latestDoc.id)}
+                  />
+                ) : !positionsRead.data?.parties?.length ? (
+                  <p className="text-[11.5px] text-gray-500 dark:text-gray-400" data-testid="positions-no-parties">
+                    <Unrecorded reason="This draft was generated before the parties to a draft were recorded, so nobody can record a position on it.">Parties not recorded for this draft</Unrecorded> — draft a new version to record each founder’s position.
+                  </p>
+                ) : (() => {
+                  const t = agreementTally(positionsRead, vm.clauses.map((x) => x.key));
+                  return (
+                    <p className="text-[11.5px] text-gray-600 dark:text-gray-300" data-testid="positions-tally">
+                      {t.agreed} agreed by every founder · {t.alignment} need alignment · {t.open} still open
+                    </p>
+                  );
+                })()}
+              </div>
+            )}
+
             <div>
               {vm.clauses.map((c) => {
                 const Editor = c.editor ? EDITORS[c.editor] : null;
@@ -732,6 +781,14 @@ export default function SpinoutLabCofounderAgreementPage() {
                       />
                     ) : (
                       <ReadOnlyClause>{READONLY_PROSE[c.key] || c.value}</ReadOnlyClause>
+                    )}
+                    {latestDoc && positionsRead?.state === 'ok' && positionsRead.data?.parties?.length > 0 && (
+                      <ClausePositions
+                        clauseKey={c.key}
+                        rows={clauseRows(positionsRead, c.key)}
+                        canRecord={positionsRead.data.can_record === true}
+                        onRecord={recordPosition}
+                      />
                     )}
                   </ClauseRow>
                 );
