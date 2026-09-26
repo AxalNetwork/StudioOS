@@ -853,7 +853,11 @@ export default function AdminPage({ onImpersonate, section = null }) {
             <Shield size={24} className="text-violet-600" />
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Admin Console</h1>
           </div>
-          <p className="text-gray-600 mb-6">Manage users, roles, and partner profiles</p>
+          <p className="text-gray-600 mb-6">
+            Manage users, roles, and partner profiles.{' '}
+            <Link to="/admin/trash" data-testid="admin-trash-door" className="text-violet-600 dark:text-violet-300 hover:underline">Trash</Link>
+            {' '}holds soft-deleted projects.
+          </p>
 
           <AdminSectionNav
             value={tab}
