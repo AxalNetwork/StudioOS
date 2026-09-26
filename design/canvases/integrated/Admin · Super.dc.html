@@ -49,7 +49,7 @@
 
 <!-- ══════════ CHANGELOG ══════════ -->
 <section class="ab" id="changelog" style="padding-bottom:26px">
-  <div class="ab-hd"><a class="ab-id" href="#changelog">CHANGELOG</a><span class="ab-nm">Amendments to H1–H7 · new artboards H8–H34</span><span class="ab-sub">every in-place change listed · ids stable · new ids continue the series</span></div>
+  <div class="ab-hd"><a class="ab-id" href="#changelog">CHANGELOG</a><span class="ab-nm">Amendments to H1–H7 · new artboards H8–H38</span><span class="ab-sub">every in-place change listed · ids stable · new ids continue the series</span></div>
   <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-width:1440px">
     <sc-for list="{{ changelog }}" as="c" hint-placeholder-count="4">
       <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:10px;padding:11px 14px;display:flex;gap:11px;align-items:flex-start">
@@ -1990,6 +1990,153 @@ held by    {{ dmCollision }}</div>
     </div>
     <div class="rail"><dc-import name="AdminRail" tier="super" page="Home" scope="{{ wlPublic }}" hint-size="100%,560px"></dc-import></div>
   </div>
+</section>
+
+<!-- ══════════ H35 · PLACEMENT MAP ══════════ -->
+<section class="ab" id="h35">
+  <div class="ab-hd"><a class="ab-id" href="#h35">H35</a><span class="ab-nm">Placement map — where every legacy console lives</span><span class="ab-sub">design of record · nothing retires · {{ pmCount }} entries</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">Every entry of the old 50-row sidebar and every tab of the Admin Console at /admin, mapped to a tier and a row. "How" says what the operator sees there: a sub-navigation item, a card link, or an embedded panel. An entry without a home says so, and why.</div>
+  <div class="c" style="max-width:1440px;padding:6px 20px 14px">
+    <sc-raw-table style="width:100%;border-collapse:collapse">
+      <sc-raw-thead><sc-raw-tr><sc-raw-th class="th" style="padding-top:12px;width:22%">Legacy entry</sc-raw-th><sc-raw-th class="th" style="padding-top:12px;width:24%">Route</sc-raw-th><sc-raw-th class="th" style="padding-top:12px;width:22%">Tier · row</sc-raw-th><sc-raw-th class="th" style="padding-top:12px">How it appears</sc-raw-th></sc-raw-tr></sc-raw-thead>
+      <sc-raw-tbody>
+        <sc-for list="{{ placement }}" as="p" hint-placeholder-count="12">
+          <sc-if value="{{ p.isHead }}"><sc-raw-tr><sc-raw-td colspan="4" style="padding:16px 0 6px;font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#881337">{{ p.head }}</sc-raw-td></sc-raw-tr></sc-if>
+          <sc-if value="{{ p.isRow }}"><sc-raw-tr>
+            <sc-raw-td class="td" style="font-weight:700;color:#18181b">{{ p.legacy }}</sc-raw-td>
+            <sc-raw-td class="td mono" style="font-size:11px">{{ p.route }}</sc-raw-td>
+            <sc-raw-td class="td"><span style="{{ p.tierStyle }}">{{ p.tier }}</span></sc-raw-td>
+            <sc-raw-td class="td">{{ p.how }}</sc-raw-td>
+          </sc-raw-tr></sc-if>
+        </sc-for>
+      </sc-raw-tbody>
+    </sc-raw-table>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;max-width:1440px">
+    <sc-for list="{{ pmNotes }}" as="n" hint-placeholder-count="3"><div class="c" style="padding:10px 14px;font-size:11.5px;color:#3f3a49;line-height:1.55;flex:1;min-width:280px"><strong>{{ n.k }}</strong> {{ n.v }}</div></sc-for>
+  </div>
+</section>
+
+<!-- ══════════ H36 · SUB-NAVIGATION ══════════ -->
+<section class="ab" id="h36">
+  <div class="ab-hd"><a class="ab-id" href="#h36">H36</a><span class="ab-nm">Sub-navigation inside an HQ row — Platform and Content</span><span class="ab-sub">the row stays lit after landing in the old Admin Console</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navPlat }}" as="n" hint-placeholder-count="12"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq"><div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:800">Axal VC HQ</span><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">AXAL VC HQ</span></div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:rgba(255,255,255,.14);color:#fff">Messages</span><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:rgba(255,255,255,.14);color:#fff">Workspaces</span><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:rgba(255,255,255,.14);color:#fff">⌘K</span></div></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Platform</h1>
+        <div style="font-size:12.5px;color:#4a4553;margin-top:5px">After following <span class="mono" style="font-size:11.5px">{{ subSelRoute }}</span> — the item lands in the old Admin Console, and the strip and the Platform row stay.</div>
+        <div role="navigation" style="display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid #ececf1;margin-top:14px">
+          <sc-for list="{{ subPlat }}" as="s" hint-placeholder-count="9"><a href="{{ s.route }}" style="{{ s.style }}">{{ s.label }}</a></sc-for>
+        </div>
+        <div style="margin-top:16px;border:1.5px dashed #d4d2dc;border-radius:12px;min-height:300px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;background:#fbfbfc">
+          <div class="lbl">Legacy console body · not redrawn</div>
+          <div class="mono" style="font-size:12px;color:#3f3a49">{{ subSelRoute }}</div>
+          <div style="font-size:11.5px;color:#615c6e;max-width:420px;text-align:center;line-height:1.55">The existing Integration keys console renders here unchanged. Only the chrome around it is HQ.</div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Platform" hint-size="100%,560px"></dc-import></div>
+  </div>
+  <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start;margin-top:22px">
+    <div class="c" style="padding:16px 18px;width:680px">
+      <div class="lbl">Content · the same strip</div>
+      <div role="navigation" style="display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid #ececf1;margin-top:14px">
+          <sc-for list="{{ subCon }}" as="s" hint-placeholder-count="9"><a href="{{ s.route }}" style="{{ s.style }}">{{ s.label }}</a></sc-for>
+        </div>
+      <div class="lbl" style="margin-top:18px">Item states</div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;align-items:center">
+        <sc-for list="{{ subStates }}" as="s" hint-placeholder-count="3"><div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start"><span style="{{ s.style }}">{{ s.label }}</span><span style="font-size:10.5px;color:#615c6e">{{ s.note }}</span></div></sc-for>
+      </div>
+    </div>
+    <div style="width:390px;flex:none;background:#f8f7f7;border:1px solid rgba(24,24,27,.12);border-radius:22px;overflow:hidden">
+      <div class="hq" style="padding:9px 14px"><span style="font-size:12px;font-weight:800">Platform</span><span style="font-size:10px;font-weight:700;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 7px">390</span></div>
+      <div style="padding:12px 14px 16px">
+        <div class="lbl">Phone width · scrolls inside its own container</div>
+        <div style="overflow-x:auto;margin-top:8px;border-bottom:1px solid #ececf1">
+          <div style="display:flex;gap:4px;width:max-content"><sc-for list="{{ subPlat }}" as="s" hint-placeholder-count="9"><a href="{{ s.route }}" style="{{ s.style }}">{{ s.label }}</a></sc-for></div>
+        </div>
+        <div style="font-size:11px;color:#615c6e;margin-top:10px;line-height:1.55">The strip scrolls; the page never scrolls sideways. The selected item is brought into view by its container on load, not the window.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ H37 · WORKSPACES LAUNCHER + CMD+K ══════════ -->
+<section class="ab" id="h37">
+  <div class="ab-hd"><a class="ab-id" href="#h37">H37</a><span class="ab-nm">The Workspaces launcher, and ⌘K</span><span class="ab-sub">{{ wsCount }} working pages leave the sidebar · one launcher from the top bar</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navHome }}" as="n" hint-placeholder-count="12"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main" style="position:relative">
+      <div class="hq"><div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:800">Axal VC HQ</span><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">AXAL VC HQ</span></div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:rgba(255,255,255,.14);color:#fff">Messages</span><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:#fff;color:#881337">Workspaces</span><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:rgba(255,255,255,.14);color:#fff">⌘K</span></div></div>
+      <div class="inner" style="opacity:.35"><h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Home</h1><div style="height:860px"></div></div>
+      <div style="position:absolute;top:46px;right:18px;width:760px;background:#fff;border:1px solid #e2e1e8;border-radius:14px;box-shadow:0 18px 44px rgba(24,24,27,.16);padding:16px 18px 18px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline"><div class="zt">Workspaces</div><div class="zs">{{ wsCount }} pages · not admin consoles</div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 22px;margin-top:12px">
+          <sc-for list="{{ workspaces }}" as="g" hint-placeholder-count="4">
+            <div>
+              <div class="lbl" style="color:#881337">{{ g.group }} · <span class="num">{{ g.count }}</span></div>
+              <div style="display:flex;flex-direction:column;gap:2px;margin-top:6px">
+                <sc-for list="{{ g.items }}" as="w" hint-placeholder-count="8">
+                  <a href="{{ w.route }}" style="display:block;padding:5px 8px;border-radius:7px;color:#18181b;text-decoration:none">
+                    <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><span style="font-size:12px;font-weight:700">{{ w.label }}</span><span class="mono" style="font-size:10px;color:#615c6e">{{ w.route }}</span></div>
+                    <div style="font-size:11px;color:#615c6e;margin-top:1px">{{ w.what }}</div>
+                    <sc-if value="{{ w.founder }}"><div style="font-size:10px;font-weight:700;color:#6d28d9;margin-top:3px">Opens a founder page · {{ w.target }}</div></sc-if>
+                    <sc-if value="{{ w.hasFlag }}"><div style="font-size:10px;font-weight:700;color:#b45309;margin-top:3px;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:2px 6px;line-height:1.45">{{ w.flag }}</div></sc-if>
+                  </a>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Home" hint-size="100%,560px"></dc-import></div>
+  </div>
+  <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start;margin-top:22px">
+    <div class="c" style="width:560px;padding:0;overflow:hidden;box-shadow:0 12px 30px rgba(24,24,27,.1)">
+      <div style="padding:12px 16px;border-bottom:1px solid #ececf1;display:flex;align-items:center;gap:10px"><span class="mono" style="font-size:10px;font-weight:700;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:4px;padding:2px 6px">⌘K</span><span style="font-size:13px;color:#18181b">{{ ckQuery }}</span><span style="width:1px;height:14px;background:#881337"></span></div>
+      <div style="padding:8px 8px 10px">
+        <sc-for list="{{ ckGroups }}" as="g" hint-placeholder-count="3">
+          <div class="lbl" style="padding:8px 8px 4px">{{ g.group }}</div>
+          <sc-for list="{{ g.items }}" as="r" hint-placeholder-count="3"><div style="{{ r.style }}"><span style="font-weight:600">{{ r.label }}</span><span class="mono" style="font-size:10.5px;color:#615c6e">{{ r.route }}</span></div></sc-for>
+        </sc-for>
+      </div>
+    </div>
+    <div class="c" style="width:520px;padding:16px 18px">
+      <div class="lbl">What the palette indexes</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+        <sc-for list="{{ ckIndex }}" as="i" hint-placeholder-count="4"><div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;border-top:1px solid #f4f3f7;padding-top:8px"><span>{{ i.k }}</span><span class="num" style="font-weight:700">{{ i.v }}</span></div></sc-for>
+      </div>
+      <div style="font-size:11.5px;color:#3f3a49;margin-top:12px;line-height:1.6">{{ ckRule }}</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ H38 · PREVIEW SHELL (was "View as") ══════════ -->
+<section class="ab" id="h38">
+  <div class="ab-hd"><a class="ab-id" href="#h38">H38</a><span class="ab-nm">"View as", redrawn — the shell picker becomes Preview shell</span><span class="ab-sub">impersonation keeps its name and chrome (H4, H25)</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navHome }}" as="n" hint-placeholder-count="12"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main" style="position:relative">
+      <div class="hq"><div style="display:flex;align-items:center;gap:11px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:800">Axal VC HQ</span><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">AXAL VC HQ</span></div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:rgba(255,255,255,.14);color:#fff">Messages</span><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:rgba(255,255,255,.14);color:#fff">Workspaces</span><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:rgba(255,255,255,.14);color:#fff">⌘K</span><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:#fff;color:#881337">{{ psPickerLabel }} ▾</span></div></div>
+      <div style="background:#fff5f7;border-bottom:1px solid #fbcfe0;padding:8px 22px;display:flex;align-items:center;gap:10px;font-size:11.5px;color:#3f3a49"><span style="font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#881337;background:#fde8ee;border:1px solid #fbcfe0;border-radius:4px;padding:3px 7px">{{ psChip }}</span><span>{{ psChipNote }}</span><span class="vm" style="margin-left:auto">Back to HQ</span></div>
+      <div class="inner" style="opacity:.35"><h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Studio</h1><div style="height:360px"></div></div>
+      <div style="position:absolute;top:46px;right:18px;width:340px;background:#fff;border:1px solid #e2e1e8;border-radius:12px;box-shadow:0 18px 44px rgba(24,24,27,.16);padding:8px">
+        <div class="lbl" style="padding:6px 8px">{{ psPickerLabel }} · this browser only</div>
+        <sc-for list="{{ psOptions }}" as="o" hint-placeholder-count="6"><div style="{{ o.style }}"><div style="font-size:12px;font-weight:700">{{ o.label }}</div><div style="font-size:10.5px;color:#615c6e;margin-top:1px">{{ o.note }}</div></div></sc-for>
+        <div style="font-size:10.5px;color:#615c6e;padding:8px;border-top:1px solid #f4f3f7;margin-top:4px;line-height:1.5">{{ psFoot }}</div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="super" page="Home" hint-size="100%,520px"></dc-import></div>
+  </div>
+  <div class="c" style="max-width:1440px;margin-top:22px;padding:6px 20px 14px">
+    <sc-raw-table style="width:100%;border-collapse:collapse">
+      <sc-raw-thead><sc-raw-tr><sc-raw-th class="th" style="padding-top:12px;width:18%">Control</sc-raw-th><sc-raw-th class="th" style="padding-top:12px;width:18%">Where</sc-raw-th><sc-raw-th class="th" style="padding-top:12px;width:32%">What it changes</sc-raw-th><sc-raw-th class="th" style="padding-top:12px">Guards</sc-raw-th></sc-raw-tr></sc-raw-thead>
+      <sc-raw-tbody><sc-for list="{{ psCompare }}" as="r" hint-placeholder-count="2"><sc-raw-tr><sc-raw-td class="td" style="font-weight:700;color:#18181b">{{ r.name }}</sc-raw-td><sc-raw-td class="td">{{ r.where }}</sc-raw-td><sc-raw-td class="td">{{ r.what }}</sc-raw-td><sc-raw-td class="td">{{ r.guard }}</sc-raw-td></sc-raw-tr></sc-for></sc-raw-tbody>
+    </sc-raw-table>
+  </div>
 </section></x-dc>
 <script type="text/x-dc" data-dc-script="">
 class Component extends DCLogic {
@@ -2130,6 +2277,158 @@ class Component extends DCLogic {
       navHome:nav('Home'), navLic:nav('Licences'), navAcc:nav('Team'),
       navRev:nav('Revenue'), navCon:nav('Content'), navGov:nav('Security'),
       navPlat:nav('Platform'), navSup:nav('Support'),
+      // ══ H35–H38 · NAVIGATION LAYER — reaching the older consoles. No page body is redrawn. ══
+      ...(() => {
+        const HQs = 'font-size:10.5px;font-weight:700;color:' + OX + ';background:' + OXT + ';border:1px solid ' + OXE + ';border-radius:4px;padding:2px 7px';
+        const ADs = 'font-size:10.5px;font-weight:700;color:#334155;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:4px;padding:2px 7px';
+        const NOs = 'font-size:10.5px;font-weight:700;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:2px 7px';
+        const TOs = 'font-size:10.5px;font-weight:700;color:#3f3a49;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:4px;padding:2px 7px';
+        const P = (legacy, route, tier, how) => ({ isRow:true, isHead:false, legacy, route, tier, how,
+          tierStyle: tier.startsWith('HQ') ? HQs : tier.startsWith('Admin') ? ADs : (tier.startsWith('No home') ? NOs : TOs) });
+        const G = (head) => ({ isHead:true, isRow:false, head });
+        const placement = [
+          G('Home group · old sidebar'),
+          P('Studio', '/studio', 'Admin · Studio', 'Row 1 of the Admin shell. HQ\u2019s own landing stays /hq.'),
+          P('Messages', '/messages', 'Top bar · both shells', 'Top-bar button on HQ and Admin.'),
+          G('Admin group · old sidebar'),
+          P('Admin Console', '/admin', 'Stays reachable', 'Its 14 tabs are placed individually below.'),
+          P('Due Diligence', '/admin/due-diligence', 'Admin · Approvals', 'A lane.'),
+          P('Assessment Studio', '/admin/assessment', 'HQ · Content', 'Sub-navigation item (authoring). Admin · Programs shows the runs.'),
+          P('Best-Fit Console', '/admin/best-fit', 'Admin · Approvals', 'A lane.'),
+          P('Event Admin', '/admin/events', 'Admin · Community', 'Card link. Its approvals are also an Approvals lane.'),
+          P('Job Board Admin', '/admin/jobs', 'Admin · Community', 'Card link. Also an Approvals lane.'),
+          P('Communities Admin', '/admin/circles', 'Admin · Community', 'Card link. Also an Approvals lane.'),
+          P('Advisor Cohort Access', '/admin/advisor-cohorts', 'Admin · Programs', 'Card link. Also an Approvals lane.'),
+          P('Exploring Users', '/admin/exploring', 'Admin · Accounts', 'Embedded panel. Also an Approvals lane.'),
+          P('LP Applications', '/admin/lp-applications', 'Admin · Approvals', 'A core lane.'),
+          P('Monitoring', '/monitoring', 'HQ · Platform', 'Sub-navigation item.'),
+          P('Telegram Channels', '/admin/telegram', 'HQ · Platform', 'Sub-navigation item.'),
+          P('X (Twitter)', '/admin/x', 'No home · parked', 'In no navigation, by decision. The route still resolves.'),
+          P('Content Queue', '/admin/articles', 'HQ · Content', 'Sub-navigation item.'),
+          P('Publications', '/admin/publications', 'HQ · Content', 'Sub-navigation item.'),
+          P('Partner Invitations', '/admin/partners', 'Admin · Approvals', 'A lane.'),
+          P('Referral Review', '/admin/refer-earn', 'Admin · Approvals', 'The Referrals core lane.'),
+          P('Public Team Page', '/admin/team', 'HQ · Content', 'Sub-navigation item.'),
+          P('My Licence', '/admin/my-licence', 'Admin · Settings', 'Embedded panel.'),
+          P('Trash', '/admin/trash', 'HQ · Security · proposal', 'Proposed card link on Security. Not yet agreed.'),
+          G('Admin Console tabs · /admin?tab=…'),
+          P('Users', '/admin?tab=users', 'HQ · Team · Admin · Accounts', 'Already embedded on HQ · Team; embedded panel on Admin · Accounts.'),
+          P('Partner Profiles', '/admin?tab=profiles', 'Admin · Approvals', 'A lane.'),
+          P('KYC Queue', '/admin?tab=kyc', 'Admin · Approvals', 'A lane. HQ · Team carries a card link to it.'),
+          P('Spin-Out Lab', '/admin?tab=lab-applications', 'Admin · Programs', 'Embedded panel.'),
+          P('Legal', '/admin?tab=legal', 'HQ · Contracts · Admin · Contracts', 'Already embedded on HQ · Contracts; embedded on Admin · Contracts.'),
+          P('Personas', '/admin?tab=personas', 'HQ · Content', 'Sub-navigation item (the taxonomy). Retagging one person lives on Admin · Accounts.'),
+          P('Directory', '/admin?tab=directory', 'Admin · Approvals', 'A lane.'),
+          P('Integration keys', '/admin?tab=integration-keys', 'HQ · Platform', 'Sub-navigation item.'),
+          P('GitHub Sync', '/admin?tab=github', 'HQ · Platform', 'Sub-navigation item.'),
+          P('Payments', '/admin?tab=payments', 'HQ · Platform', 'Sub-navigation item.'),
+          P('Promo codes', '/admin?tab=promos', 'HQ · Platform', 'Sub-navigation item. Promo ceilings stay on Revenue.'),
+          P('Billing', '/admin?tab=billing', 'HQ · Revenue', 'Card link.'),
+          P('Advisors & Partners', '/admin?tab=network-profiles', 'HQ · Content · Admin · Community', 'Sub-navigation item on Content (the deck roster); card link on Community.'),
+          P('Wellbeing', '/admin?tab=wellbeing', 'No home yet', 'The owner decides. Admin · Subsidiary S22 draws the two options.'),
+          G('Workspace pages · old sidebar'),
+          P('29 working pages', 'see H37', 'Launcher · top bar', 'The Workspaces launcher and ⌘K. They leave the sidebar.'),
+        ];
+        const pmNotes = [
+          { k:'HQ rows with no legacy console:', v:'Licences, Funds, Support, Settings.' },
+          { k:'Analytics:', v:'HQ · Home keeps its card link to /admin/analytics, as it already does.' },
+          { k:'Rows:', v:'exactly eleven, unchanged: Home · Licences · Funds · Contracts · Team · Revenue · Content · Platform · Support · Security · Settings.' },
+        ];
+        const SUB = (sel) => (label, route) => ({ label, route,
+          style:'display:inline-block;white-space:nowrap;font-size:12px;padding:8px 11px 9px;text-decoration:none;border-radius:7px 7px 0 0;'
+            + (label === sel ? 'font-weight:700;color:' + OX + ';box-shadow:inset 0 -2px 0 ' + OX : 'font-weight:600;color:#3f3a49') });
+        const pSel = SUB('Integration keys');
+        const subPlat = [['Overview','/admin/platform'],['Switches','/admin/platform/switches'],['Topology','/admin/platform/topology'],['Integration keys','/admin?tab=integration-keys'],['GitHub Sync','/admin?tab=github'],['Payments','/admin?tab=payments'],['Promo codes','/admin?tab=promos'],['Monitoring','/monitoring'],['Telegram','/admin/telegram']].map(([l,r]) => pSel(l,r));
+        const cSel = SUB('Overview');
+        const subCon = [['Overview','/admin/content'],['Content queue','/admin/articles'],['Publications','/admin/publications'],['Assessment Studio','/admin/assessment'],['Personas','/admin?tab=personas'],['Advisors & Partners','/admin?tab=network-profiles'],['Public team page','/admin/team']].map(([l,r]) => cSel(l,r));
+        const subStates = [
+          { label:'Default', note:'link, 600', style:'font-size:12px;font-weight:600;color:#3f3a49;padding:8px 11px' },
+          { label:'Selected', note:'oxblood, 2px underline, aria-current', style:'font-size:12px;font-weight:700;color:' + OX + ';padding:8px 11px;box-shadow:inset 0 -2px 0 ' + OX },
+          { label:'Keyboard focus', note:'2px ring, offset 2', style:'font-size:12px;font-weight:600;color:#3f3a49;padding:8px 11px;border-radius:7px;outline:2px solid ' + OX + ';outline-offset:2px' },
+        ];
+        const W = (label, route, what, target) => ({ label, route, what, founder:!!target, target:target || '', hasFlag:false, flag:'' });
+        const workspaces = [
+          { group:'Studio', items:[
+            W('Pipeline Board','/pipeline','Deals by stage on one board.'),
+            W('Scoring Engine','/scoring','Venture-readiness scores and the evidence behind them.'),
+            W('Risk Matrix','/portfolio/risk-matrix','Portfolio companies by risk dimension.'),
+            W('Market Intelligence','/market-intel','Market readings with their sources.'),
+            W('Signals','/signals','External signals, grouped by theme.'),
+            Object.assign(W('AI Advisory Suite','/advisory','AI-assisted analysis tools.'), { hasFlag:true, flag:'Shipped label. The voice rule forbids calling the AI an advisor (it is Eadwyn). Rename to be decided on purpose.' }),
+            W('AI Matches','/matches','Suggested matches between members.'),
+            W('Deal Flow','/deals','Incoming deals and their status.'),
+          ]},
+          { group:'Capital & Legal', items:[
+            W('Capital & Investment','/capital','Rounds, commitments and instruments.'),
+            W('Liquidity & Exits','/liquidity','Secondaries and recorded exits.'),
+            W('Portfolio Health','/portfolio/health','Health signals per company.'),
+            W('Portfolio Coverage','/portfolio/coverage','Who covers which company.'),
+            W('Reserve Allocation','/portfolio/reserves','Follow-on reserves by company.'),
+            W('Exit Waterfall','/portfolio/waterfall','Proceeds by class at a given exit.'),
+            W('Watchlist & Journal','/watchlist','Tracked companies and notes.'),
+            W('Legal & Capital','/legal-capital','Documents and capital records.'),
+            W('Incorporate','/incorporate','Entity formation workflow.'),
+            W('Compliance Calendar','/compliance','Filings and their deadlines.'),
+          ]},
+          { group:'Network & Growth', items:[
+            W('Network','/network','Relationships and introductions.'),
+            W('Network Effects','/network-effects','How activity compounds across the network.'),
+            W('Jobs','/my/jobs','Open roles.','/build/team?tab=jobs'),
+            W('Service Catalogue','/services','Services offered to companies.','/build/marketplace?tab=services'),
+            W('Needs Board','/needs','Needs posted by founders.','/build/marketplace?tab=needs'),
+            W('Demand Insights','/partner/insights','Partner demand analytics.'),
+            W('Partner Office Hours','/partner/office-hours','Partner session bookings.'),
+            W('Co-Marketing Review','/comarketing','Co-marketing submissions to review.'),
+          ]},
+          { group:'More', items:[
+            W('Co-Founder Agreement','/incorporate/cofounder-agreement','Founder agreement drafting.'),
+            W('83(b) Tracker','/spinout-lab/83b','Election deadline tracking.'),
+            W('Perks','/perks','Partner perks and claims.'),
+          ]},
+        ].map(g => Object.assign(g, { count:g.items.length }));
+        const wsCount = workspaces.reduce((a, g) => a + g.count, 0);
+        const ckQuery = 'port';
+        const hqRows = ['Home','Licences','Funds','Contracts','Team','Revenue','Content','Platform','Support','Security','Settings'];
+        const placed = placement.filter(p => p.isRow && p.route.startsWith('/') && !p.tier.startsWith('No home'));
+        const hit = (s) => s.toLowerCase().includes(ckQuery);
+        const RS = 'display:flex;justify-content:space-between;gap:10px;padding:7px 8px;border-radius:7px;font-size:12px;';
+        const wsHits = [].concat.apply([], workspaces.map(g => g.items)).filter(w => hit(w.label) || hit(w.route));
+        const ckGroups = [
+          { group:'HQ rows', items: hqRows.filter(hit).map(r => ({ label:r, route:'/hq', style:RS })) },
+          { group:'Consoles · placed on H35', items: placed.filter(p => hit(p.legacy) || hit(p.route)).map(p => ({ label:p.legacy, route:p.route, style:RS })) },
+          { group:'Workspaces', items: wsHits.map((w, i) => ({ label:w.label, route:w.route, style: RS + (i === 0 ? 'background:' + OXT + ';color:' + OX : '') })) },
+        ].filter(g => g.items.length);
+        const ckIndex = [
+          { k:'HQ rows', v:String(hqRows.length) },
+          { k:'Consoles placed on H35', v:String(placed.length) },
+          { k:'Workspaces (H37)', v:String(wsCount) },
+          { k:'Old sidebar rows not on the map', v:'None' },
+        ];
+        const ckRule = 'The palette and the launcher list the same destinations. Today ⌘K indexes the old 50-row sidebar for every admin; after this, it indexes only what H35 places and H37 launches. Parked entries (X · /admin/x) and entries with no home yet (Wellbeing) are not indexed until they have one.';
+        const opt = (label, note, on) => ({ label, note, on, style:'padding:8px;border-radius:8px;' + (on ? 'background:' + OXT + ';box-shadow:inset 2px 0 0 ' + OX : '') });
+        const psOptions = [
+          opt('HQ', 'The eleven-row shell.'),
+          opt("HQ's own accounts", 'The eight-row Admin shell over accounts HQ holds directly (Subsidiary S20).'),
+          opt('Founder', 'The founder shell.', true),
+          opt('Investor', 'The investor shell.'),
+          opt('Partner', 'The operating partner shell.'),
+          opt('Advisor', 'The advisor shell.'),
+        ];
+        const psSel = psOptions.find(o => o.on);
+        return {
+          placement, pmNotes, pmCount: placement.filter(p => p.isRow).length,
+          subPlat, subCon, subStates, subSelRoute:'/admin?tab=integration-keys',
+          workspaces, wsCount, ckQuery, ckGroups, ckIndex, ckRule,
+          psPickerLabel:'Preview shell', psOptions,
+          psChip:'Previewing · ' + psSel.label + ' shell',
+          psChipNote:'This changes this browser\u2019s chrome only. Every write still goes out as the Super Admin.',
+          psFoot:'Not impersonation. To act as a person, use View As on their row in Team: a typed reason, the authenticator, 30 minutes, recorded in Security.',
+          psCompare: [
+            { name:'Preview shell', where:'Top bar, both tiers', what:'Swaps the sidebar and chrome to another shell in this browser. Data and permissions do not change.', guard:'A chip states that writes go out as the Super Admin.' },
+            { name:'View As', where:'A user\u2019s row in Team (H4)', what:'Opens an impersonation session as that person.', guard:'Typed reason, authenticator, 30 minutes, recorded in Security. Chrome unchanged (H4, H25).' },
+          ],
+        };
+      })(),
       // ── CHANGELOG (top of canvas) ──
       changelog: [
         { where:'H1–H7 · nav', what:'Sidebar is the eleven-row HQ group', why:'Home · Licences · Funds · Contracts · Team · Revenue · Content · Platform · Support · Security · Settings. Accounts is now Team; Governance lives under Security. The seven-row nav is not drawn anywhere.' },
@@ -2151,6 +2450,10 @@ class Component extends DCLogic {
         { where:'H26 · H32', what:'CORRECTION · domain configuration removed from HQ', why:'An earlier draft made Domain an HQ console. It is not: Super Admin stays on axal.vc and app.axal.vc and binds nothing else. The brand kit now collects no hostname of any kind — only the platform fallback is named, and that is issued by the deploy. A licence never waits on DNS.' },
         { where:'H31', what:'Licence strip is status + Detach only', why:'Read-only on every tenant, subsidiary and white-label alike, because both bind their own host. No Approve, no Add domain, no DNS editor for HQ to complete on their behalf. One emergency action, Detach, with a typed reason — platform safety, not domain setup.' },
         { where:'H33 · H34', what:'Collision and view-as, kept as read surfaces', why:'A collision refusal names the other operator\u2019s public name; Detach names HQ and the reason their admin reads. View-as shows the records and cannot write them — the records live in the tenant\u2019s own zone.' },
+        { where:'H35', what:'Placement map — design of record', why:'Every old sidebar entry and all 14 Admin Console tabs mapped to a tier, a row and a form (sub-navigation item, card link, embedded panel). X is parked by decision; Wellbeing has no home yet; Trash on Security is marked as a proposal.' },
+        { where:'H36', what:'Sub-navigation strip on Platform and Content', why:'Nine and seven consoles, each a link to a route that exists today. After landing in the old Admin Console the row stays lit and the strip stays visible. At phone width the strip scrolls in its own container.' },
+        { where:'H37', what:'Workspaces launcher and ⌘K', why:'The 29 working pages leave the sidebar for one top-bar launcher in four groups. Three open founder pages and say so. AI Advisory Suite keeps its shipped label with a flag, so the rename is a decision. ⌘K indexes only what H35 and H37 list.' },
+        { where:'H38', what:'"View as" picker renamed Preview shell', why:'Options HQ, HQ\u2019s own accounts, Founder, Investor, Partner, Advisor. A chip states writes still go out as the Super Admin. View As (impersonation) keeps its name and chrome.' },
         { where:'H11 · Y1 → H29 · H30', what:'Kind-gated behaviours', why:'Brand-approval lane empty by construction for white-label; escalation kinds reduced to Moderation · Seat increase · Other; viewing-as renders their chrome inside the frame with oxblood only on HQ\u2019s shell.' }
       ],
       mapSort: ['By state','A–Z'].map((l, i) => ({ label:l, style:seg(i === 0) })),

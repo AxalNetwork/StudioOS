@@ -82,14 +82,37 @@ lost by replacing them. Each carries its own CHANGELOG artboard listing the
 in-place amendments to the ids that already existed; that block, not this table,
 is the authority on what changed inside an artboard.
 
-**One asset could not be placed, and it stays an unresolved uuid on purpose.**
-`Admin · Subsidiary` references `4835ee6e-8882-4123-a5fb-fec77f0048df` as the
-34px Eadwyn mark on S1. `scripts/read-canvas.mjs` refuses to substitute an asset
-it does not recognise, and its header says why: *"a canvas that silently drops an
-asset is worse than one that says which asset it could not place."* The asset
-store was unreachable from here — the published artifact does not declare the
-`assets` capability, so a read of it answers `capability_disabled` — and pointing
-the tag at a different mark in `assets/` would make the canvas assert something
-the design does not show. So it renders as a broken 34px image, which is the
-decoder's contract working, and is the honest state until the artifact is
-republished with assets declared.
+**2026-09-26 (D282).** Both files were replaced again with fresh decodes of the
+same two artifacts, and again neither moved folder: **`integrated/` stays 66**.
+
+| canvas | was | is |
+| --- | --- | --- |
+| `Admin · Subsidiary` | 219 KB · S0–S19 | **244 KB · S0–S23** |
+| `Admin · Super` | 283 KB · H1–H34 | **315 KB · H1–H38** |
+
+Both are strict appends — every line main held is still there, checked with
+`diff` rather than assumed (five hunks on the Subsidiary, four on the Super) —
+and each carries four new CHANGELOG rows. The rail both canvases mount ships
+inside each bundle as an `ext_resources` entry the decoder does not write; it
+was extracted, is byte-identical in the two bundles, and replaces
+`backlog/AdminRail.dc.html` (10 KB → 13 KB: a scope chip, a decline card,
+"Eadwyn" for "Personal Advisor", and Programs, Community, Contracts and Settings
+page models). `backlog/` stays 25: a replacement moves no file. D282 lists
+where the new artboards disagree with each other and with the code.
+
+**The one asset that could not be placed has been identified, and the tag now
+points at the file it is.** Until 2026-09-26 `Admin · Subsidiary` referenced
+`4835ee6e-8882-4123-a5fb-fec77f0048df` as the 34px Eadwyn mark on S1,
+unresolvable because the artifact's asset store answered `capability_disabled`,
+and it rendered as a broken image on purpose — `scripts/read-canvas.mjs` refuses
+to substitute an asset it does not recognise, and its header says why: *"a canvas
+that silently drops an asset is worse than one that says which asset it could
+not place."* The 2026-09-26 export inlines the image in its bundle instead, and
+read out of the manifest it is `frontend/public/eadwyn-ai.png` with a C2PA
+`caBX` chunk added — byte-identical once that chunk is removed, checked by
+hashing both (D282). So line 132 now reads
+`src="../../../frontend/public/eadwyn-ai.png"`: it resolves from `integrated/`,
+it asserts exactly what the design shows, and it commits no second copy of the
+image. It is the one line in either canvas that is not the decoder's output. A
+future re-decode will put the uuid back and the decoder will report it; re-apply
+the path rather than resolving the asset into `assets/`.
