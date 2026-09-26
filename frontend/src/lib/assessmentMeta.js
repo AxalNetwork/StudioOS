@@ -8,6 +8,7 @@ import {
   Compass, Rocket, Ruler, Zap, Flag, Award, Medal, Sparkles, Trophy, Star,
   Mic, Network, Ticket, Target, Handshake, TrendingUp, Users, ClipboardCheck,
 } from 'lucide-react';
+import { titleCase } from './absence';
 
 // Value spectrums are bipolar (−2..+2). `low` = negative pole, `high` = positive
 // pole. Mirrors the founder spectrums measured by migration 108's seed.
@@ -199,10 +200,9 @@ export function iconFor(name) {
 }
 
 export function humanize(slug) {
-  return String(slug || '')
-    .replace(/[_-]+/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase())
-    .trim();
+  // D268 — the run of `_`/`-` still collapses HERE, before titleCase (which
+  // replaces each one with its own space), so a slug keeps its spacing.
+  return titleCase(String(slug || '').replace(/[_-]+/g, ' '));
 }
 
 export function valueLabel(slug) { return VALUE_SPECTRUMS[slug]?.label || humanize(slug); }

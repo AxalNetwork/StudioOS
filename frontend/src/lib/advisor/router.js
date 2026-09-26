@@ -23,6 +23,7 @@ import { BANKS } from './persona';
 // the manifest era. Worker bank changes ship to the client through
 // the manifest with no code edits required here.
 import WORKER_MANIFEST from '../../../../cloudflare-worker/src/services/advisor/banks.manifest.json';
+import { titleCase } from '../absence';
 
 const QUESTION_INDEX = (() => {
   const idx = new Map();
@@ -126,7 +127,7 @@ export function pageLabel(path) {
   if (map[path]) return map[path];
   // Fallback: last segment, title-cased.
   const seg = path.split('/').filter(Boolean).pop() || path;
-  return seg.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  return titleCase(seg);
 }
 
 /**

@@ -9,8 +9,9 @@ import './investorFundReporting.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
+import { titleCase as caseLabel } from '../../lib/absence';
 
-const titleCase = (value) => String(value || 'Unrecorded').replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+const titleCase = (value) => caseLabel(value) || 'Unrecorded';
 const periodOf = (row) => row.period || row.label || row.reporting_period || `Period ${row.id || 'unrecorded'}`;
 const statusOf = (row) => String(row.status || (row.issued_at ? 'published' : 'drafted')).toLowerCase();
 const date = (value) => value ? String(value).slice(0, 10) : 'Unrecorded';
