@@ -24313,6 +24313,89 @@ the request fetched the copy or tried to.
   never run against a real HQ binding. The tests drive it through a stub HQ over
   real `node:sqlite` databases on both sides.
 
+## D246
+
+**Task 320: Studio showed no operating posture and no "needs a decision"
+strip, and every failed read on it rendered as a store that does not exist.**
+
+**What was true on main (b2b99df06).**
+- **Two sentinels.** `AdminStudioHome.jsx` and `AdminStudioOverview.jsx` each
+  declared `const UNAVAILABLE = Symbol('unavailable')`. Two calls are two
+  symbols, so every `=== UNAVAILABLE` branch in the overview was unreachable.
+  A failed read fell into the "not recorded" helpers and rendered, for
+  example, "Not recorded — HQ has not published a median." No test passed a
+  failure in.
+- **The canvas's S1b and S1c were not built.** Only S1d, the seven cards,
+  shipped.
+- `branchHome.ts`'s `unreadable` comment said "all four" lanes; there are
+  eleven.
+
+**What changed.**
+- **One sentinel.** `pages/admin/adminStudioOverview.js` exports `UNAVAILABLE`;
+  every Studio file imports it. Every figure is now computed once, by the new
+  `studioGlances`, which the overview cards and the new strip both render
+  from. A failed read becomes `unreadable` with its own claim. That includes
+  the share rate and the median, which used to take a "not recorded" reason
+  when their read failed.
+- **S1b, `StudioPosture.jsx`, reading the new `GET /api/advisor/admin-posture`
+  (`requireAdmin`, `api.adminPosture`).**
+  - For each of the eleven `ADMIN_BANK` questions it returns the section, a
+    label, a state (`recorded`, `skipped`, `not_recorded`) and, when
+    recorded, the value from the store the write router used.
+  - "Recorded" is the ledger's predicate. `CAPTURED_SQL` is now one constant,
+    read by `refreshCounts`, `/answered`, `/progress` and this route. It is a
+    literal fragment, so `check-sql-prepare`'s baseline gains that one entry.
+  - A column default is never an answer. `user_settings.digest_frequency` is
+    read only once the ledger has the digest answered, and
+    `user_settings.timezone` is never read (that answer lands in extras).
+  - `bank_size` is `ADMIN_BANK.length`. `recorded` is counted from the
+    ledger, so a `noop` capture with no stored value still counts, and shows
+    "Answered, value not stored".
+  - No user id is taken from the request.
+  - A read that throws, including a missing `user_advisor_extras`, answers
+    `available: false` with a reason. The page draws one Unreadable with a
+    retry.
+  - It renders on and off a branch.
+- **S1c, `StudioNeedsDecision.jsx`. It makes no read of its own.**
+  - Four link tiles from `studioGlances`, ordered by `orderNeedsDecision`:
+    unreadable, then past the window (or seats over the licence), then due
+    within 24 hours (or a seat type at `AMBER_AT`), then sidebar order.
+  - The Seats tile's figure is the fullest measured seat type from
+    `accountLines`.
+  - The licence line gives the brand, territories and a state chip. The
+    chip's date comes from `suspended_at` via `freezeLine`, never invented.
+    The share rate is a `bpsPercent` chip linking to Insights, never an
+    amount.
+  - A suspended licence keeps every figure and marks each tile "Suspended —
+    writes are blocked".
+  - Off a branch it renders `offBranchReason()` once.
+- **Mounted** in `AdminStudioHome.jsx` in the canvas's order: chat (wrapped
+  in `#studio-chat`, which "Continue in the chat ↑" scrolls to), posture,
+  needs a decision, the overview.
+
+**Not built, on purpose.**
+- **WorkerRail on Studio.** The canvas removes it, and
+  `admin_studio_overview.test.mjs` still pins its absence.
+- **Any tile count the canvas types that no read supplies.** For example, the
+  canvas's rail sample says 14 bank questions; the bank has eleven and the
+  header reads `ADMIN_BANK.length`.
+
+**Tests.** `frontend/test/studio_strips_d246.test.mjs` (10) and
+`cloudflare-worker/test/admin_posture_d246.test.ts` (5). The render test
+passes the exported `UNAVAILABLE` to every overview prop and asserts
+Unreadable, never the unrecorded sentences.
+
+**Mutations: 12 run, 12 caught.**
+- A local `Symbol('unavailable')` in the home and in the overview.
+- The digest default shown as an answer.
+- The count taken from the values.
+- The header typing its numbers.
+- A skip counted as recorded.
+- The user id taken from the query.
+- A tile computing its own figure, and a second read in the strip.
+- The order typed, and the order reduced to sidebar order.
+- A share amount rendered.
+
 ## D247
 
 **Deactivating an administrator now takes demote's bar: a TOTP-minted

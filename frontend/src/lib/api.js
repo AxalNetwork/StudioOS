@@ -3372,6 +3372,8 @@ export const api = {
   // rate. The three blocks S1 draws that have no source arrive as
   // `unavailable`, each with its own reason, rather than as a silent gap.
   branchHome: () => request('/branch/home'),
+  // D246 — Studio's operating-posture strip: the caller's own admin-bank answers.
+  adminPosture: () => request('/advisor/admin-posture'),
   // D147 — HQ's master contract library as this branch holds it. A COPY: the
   // payload carries HQ's `pushed_at`, and `not_carried` names what deliberately
   // does not travel (the document bodies, and an archived-version state HQ's own
