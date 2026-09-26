@@ -28111,3 +28111,127 @@ Console's `?tab=` follow-the-URL behaviour and its comment are D285's.
 `frontend/src` moved (the module, its README row and the Trash link), so
 `docs/` is rebuilt. No route, no worker change, no migration, no `api.js`
 method.
+
+## D284
+
+**Tasks 420 and 408: one Workspaces launcher, Messages in the top bar, and a
+⌘K that indexes what the map places.**
+
+**What was true on main (`ab5c224fa`).**
+- `CommandPalette.jsx` built its pages from `SIDEBAR_GROUPS[role]`
+  (`buildPageItems`), called with `role || user.role || 'founder'` — so every
+  admin's ⌘K indexed the 50-row admin sidebar, the holder in HQ view
+  included.
+- Articles were fetched and built as `kind: 'article'`, and `KIND_ORDER`
+  listed the kind, but the grouping object was typed by hand without an
+  `article` key and the loop dropped any kind without one. No article result
+  ever rendered.
+- The 29 working pages were `SIDEBAR_GROUPS.admin`'s studio, capital, network
+  and more groups; Messages was a row in its home group.
+- Three pins were satisfied by an admin row this item moves:
+  `research_market_funds_retired` counted five `'/market-intel'` literals;
+  `network_consolidated` counted five `to: '/network'` rows;
+  `fund_surfaces_live` read "something lands on the portfolio workspace" off
+  the admin's Portfolio Health row.
+
+**What changed.**
+- **One list.** `WORKSPACES` in `lib/adminPlacement.js` — the 29 launcher
+  entries of the H35 map, with S23/H37's one-line descriptions added verbatim
+  — and `WORKSPACE_GROUPS`, the same 29 in the canvas's four groups with
+  `count` computed. The launcher and the palette both read it; D283's guard
+  still holds the 29 to App.jsx.
+- **The launcher.** `components/WorkspacesLauncher.jsx`: a top-bar button on
+  the HQ and Admin shells opening the four groups, each entry its label,
+  route and description; the header reads "{count} pages · not admin
+  consoles" from `WORKSPACES.length`, never a typed 29. Mounted in App.jsx's
+  header for `ADMIN_SHELLS` = `['admin', 'super_admin']`.
+  - **Not on `branch_admin`, by decision.** The branch shell's artboards
+    (S7–S19) draw no Workspaces button — D282's tension 8: the new top-bar
+    items appear only on the new artboards, which draw the HQ-held shell —
+    and the 29 are the studio's own working surfaces, not a branch's
+    consoles. A branch admin's shell is unchanged by this item.
+  - **"Opens a founder page" is not rendered.** `/my/jobs`, `/services` and
+    `/needs` redirect only when `user?.role === 'founder'` (App.jsx); an
+    admin lands on the page, so the note would be false for everyone who
+    sees this launcher. The guard reads those three route lines.
+  - **AI Advisory Suite keeps its shipped label and draws no flag.** H37's
+    flag — the voice rule forbids calling the AI an advisor — is filed here as
+    the owner's call: the rename is a product decision, not a build.
+- **The 29 rows leave `SIDEBAR_GROUPS.admin`, with Messages.** The admin
+  sidebar is now Home (Studio) and the Admin group. A workspace page lights
+  no sidebar row: no remaining admin row points at or `match`es one.
+  `sidebarConfig.js`'s eight now-unused icon imports are pruned;
+  `PROFILE_ROUTING.md` and `PAGE_INVENTORY.md` are regenerated from it.
+- **Messages in the top bar on both shells.** A `Link` beside the launcher,
+  offered to exactly the roles the `/messages` route admits — admin, founder,
+  partner, investor, advisor, exploring (`MESSAGES_ROLES`, held to the
+  route's own `guard([...])` by the test). So every role that can open
+  Messages gets the button on whatever shell it has; the exploring shell
+  keeps its row as well.
+- **⌘K for an admin shell** — `lib/paletteIndex.js`, pure. `pageItemsFor`
+  indexes the shell's own rows, the consoles H35 places (tier HQ or Admin, at
+  their real routes, hint "tier · row") and the 29 (hint "Workspaces ·
+  group"), de-duplicated by route. An `hqOnly` route is offered only to a
+  holder — including a sidebar row that points at one, which the plain
+  shell's Telegram row does. X is not indexed; Wellbeing is, because D283
+  gave it a home. The other shells' palettes are unchanged
+  (`sidebarPageItems` is the old builder, moved). Every entry's route is its
+  own; only the Home row goes to `/hq`, because `/hq` is Home.
+- **The article bucket is fixed.** `groupByKind` gives every kind in
+  `KIND_ORDER` a bucket, and the palette groups with it.
+
+**Three pins re-aimed at their properties, none loosened to "at least".**
+- `research_market_funds_retired`: every shell that offers Market
+  Intelligence reaches `/market-intel` — four by a row's `match`, the admin
+  by the launcher; exactly those five by `deepEqual`, and the route
+  registered.
+- `network_consolidated`: each of the four collapsed roles keeps exactly one
+  Network row (by `deepEqual`), and the admin reaches `/network` from the
+  launcher exactly once.
+- `fund_surfaces_live`: something still lands on the portfolio workspace —
+  the launcher's Portfolio Health entry, or a sidebar row.
+
+**Guard: `frontend/test/workspaces_launcher_d284.test.mjs`, 10 tests.**
+- *the launcher list is the canvas list: 29 pages in four groups, every one a
+  registered route* — the canvas's group, label and route pinned by
+  `deepEqual`, counts 8 · 10 · 8 · 3 computed, every description present;
+- *the count is computed from the list, never typed* — the component's CODE
+  (comments stripped) reads `WORKSPACES.length` and carries no literal 29;
+- *AI Advisory Suite keeps its shipped label and draws no flag; the founder
+  note is not drawn for an admin* — and the three redirects are
+  founder-only;
+- *the 29 rows and Messages have left the admin sidebar, and a workspace
+  page lights no row*;
+- *the launcher is mounted on the HQ and Admin shells only, and Messages for
+  exactly the roles /messages admits*;
+- *a holder in the HQ shell indexes the eleven rows, the placed consoles and
+  the 29, at their real routes* — Wellbeing in, X out, `/admin/telegram` in,
+  only Home at `/hq`, ids unique, every route registered;
+- *a plain admin is never offered an hqOnly route, and still gets the 29 and
+  Wellbeing* — the hqOnly set derived from App.jsx;
+- *the other shells index their own sidebar, as before*;
+- *an article result renders: every indexed kind has a bucket, in order*;
+- *the palette reads the index, not the sidebar*.
+
+**Mutations: 8 run, 8 caught** — each a non-zero exit with a `not ok` line,
+anchors unique, bytes proven changed, sources restored from a sha256-checked
+snapshot: the index falls through to `SIDEBAR_GROUPS[role]` for an admin
+shell; the palette component reads `SIDEBAR_GROUPS[r]` again; an `hqOnly`
+route offered to a plain admin; X indexed; the article bucket dropped; a
+launcher route that is not registered (`/perks` → `/perkz`); the founder note
+rendered for an admin; the count typed as 29.
+
+**Recorded verification, not a gate.** The built bundle was served
+statically with `/api/auth/me` stubbed as a holder and driven with the
+container's Chromium: the HQ shell rendered with Messages and Workspaces in
+the top bar; the panel read "29 pages · not admin consoles" with 29 links
+under "Studio · 8 | Capital & Legal · 10 | Network & Growth · 8 | More · 3";
+⌘K on "port" listed Support (HQ), Portfolio Health and Portfolio Coverage
+(Workspaces · Capital & Legal), Partner Invitations and Partner Profiles
+(Admin · Approvals) and Advisors & Partners (HQ · Content). The onboarding
+tour and the cookie banner overlay the header on a first load, which is why
+the probe dispatched its click. CI runs no browser; the gate is the Node
+guard.
+
+`frontend/src` moved, so `docs/` is rebuilt. No route, no worker change, no
+migration, no `api.js` method.

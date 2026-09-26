@@ -18,7 +18,13 @@ import {
 } from 'lucide-react';
 import { api, articles as articlesApi } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
-import { SIDEBAR_GROUPS, hasTier, hasInvestorTier } from '../sidebarConfig';
+import { useViewMode } from '../contexts/ViewModeContext';
+import { isSuperAdminUser } from '../lib/shellRole';
+// D284 — what the palette indexes is decided in one pure place. An admin
+// shell indexes its own rows, the consoles the H35 map places and the 29
+// working pages, never the old 50-row sidebar; the other shells index their
+// sidebar as before.
+import { pageItemsFor, groupByKind, KIND_ORDER } from '../lib/paletteIndex';
 import { SECTIONS, filterSectionsForRole } from '../pages/docs/sections';
 
 const REFRESH_MS = 5 * 60 * 1000;
@@ -30,7 +36,6 @@ const KIND_META = {
   activity: { label: 'Recent activity', icon: Activity },
   doc:      { label: 'Documentation',   icon: BookOpen },
 };
-const KIND_ORDER = ['page', 'action', 'article', 'activity', 'doc'];
 
 // Quick actions — role/tier-gated. Handler receives (navigate) and is
 // responsible for closing-side-effects (palette closes itself on any
@@ -72,27 +77,6 @@ const QUICK_ACTIONS = [
     run: (nav) => nav('/help'),
   },
 ];
-
-function buildPageItems(role, user) {
-  const groups = SIDEBAR_GROUPS[role] || SIDEBAR_GROUPS.founder || [];
-  const out = [];
-  for (const g of groups) {
-    for (const it of g.items || []) {
-      // Drop items the user can't afford — Cmd+K should not jump into a
-      // paywall flow, and the locked rail tile already provides that path.
-      if (it.requiredTier && !hasTier(user, it.requiredTier)) continue;
-      if (it.requiredInvestorTier && !hasInvestorTier(user, it.requiredInvestorTier)) continue;
-      out.push({
-        id: `page:${it.to}`,
-        kind: 'page',
-        label: it.label,
-        hint: g.label,
-        to: it.to,
-      });
-    }
-  }
-  return out;
-}
 
 function buildDocItems(role) {
   const sections = filterSectionsForRole(SECTIONS, role || 'founder');
@@ -140,6 +124,7 @@ function summarizeActivity(row) {
 export default function CommandPalette() {
   const navigate = useNavigate();
   const { user, role } = useAuth();
+  const { shellRole } = useViewMode();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [activity, setActivity] = useState([]);
@@ -219,7 +204,7 @@ export default function CommandPalette() {
   const allItems = useMemo(() => {
     if (!user) return [];
     const r = role || user.role || 'founder';
-    const pages = buildPageItems(r, user);
+    const pages = pageItemsFor({ role: r, shellRole, user, superAdmin: isSuperAdminUser(user) });
     const actions = buildQuickActions(r);
     const docs = buildDocItems(r);
     const activityItems = activity.map((row, i) => ({
@@ -237,7 +222,7 @@ export default function CommandPalette() {
       to: `/articles/${a.slug}`,
     }));
     return [...pages, ...actions, ...articleResults, ...activityItems, ...docs];
-  }, [user, role, activity, articleItems]);
+  }, [user, role, shellRole, activity, articleItems]);
 
   const fuse = useMemo(() => {
     return new Fuse(allItems, {
@@ -255,11 +240,10 @@ export default function CommandPalette() {
     const matched = q.trim()
       ? fuse.search(q.trim()).slice(0, 60).map((r) => r.item)
       : allItems.slice(0, 60);
-    const out = { page: [], action: [], activity: [], doc: [] };
-    for (const it of matched) {
-      if (out[it.kind]) out[it.kind].push(it);
-    }
-    return out;
+    // Every kind in KIND_ORDER gets a bucket. The object this replaced was
+    // typed by hand and had no `article` key, so the articles fetched and
+    // indexed above were dropped here and never rendered (D284).
+    return groupByKind(matched);
   }, [q, fuse, allItems]);
 
   const flat = useMemo(() => {
