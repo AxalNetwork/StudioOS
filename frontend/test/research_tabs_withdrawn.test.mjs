@@ -47,7 +47,15 @@ test('the section root and the market tab still redirect to the live surface', (
   // is a surface the advisor is allowed to open — read from each target's own
   // guard rather than from the target string.
   const app = read('frontend/src/App.jsx');
-  const target = (from) => app.match(new RegExp(`path="${from}" element=\\{<Navigate to="([^"]+)"`))?.[1];
+  // A plain string search, not a RegExp built from the argument (Semgrep's
+  // detect-non-literal-regexp, raised on this line in the first draft).
+  const target = (from) => {
+    const head = `path="${from}" element={<Navigate to="`;
+    const at = app.indexOf(head);
+    if (at < 0) return undefined;
+    const start = at + head.length;
+    return app.slice(start, app.indexOf('"', start));
+  };
   assert.equal(target('/advisor/research'), '/research');
   assert.equal(target('/advisor/research/market'), '/research/markets');
   for (const to of [target('/advisor/research'), target('/advisor/research/market')]) {
