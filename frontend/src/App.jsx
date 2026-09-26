@@ -384,6 +384,10 @@ const KeyboardShortcutsOverlay = lazy(() => import('./components/KeyboardShortcu
 import useInactivityTimeout from './hooks/useInactivityTimeout';
 import { ONBOARDING_COMPLETE_EVENT, ONBOARDING_LICENCE_CHOSEN_EVENT, TERMS_ACCEPTED_EVENT } from './lib/onboarding';
 import { shellRoleFor, branchOfUser, isSuperAdminUser, readHqView, writeHqView, clearHqView } from './lib/shellRole';
+import {
+  PREVIEW_SHELLS, PREVIEW_TRIGGER, PREVIEW_HEADER, PREVIEW_FOOTER,
+  previewOptionsFor, selectedPreviewKey, homePreviewKey, previewChip, previewNote,
+} from './lib/previewShells';
 
 // Phase B · Prompt 5 — sidebar groups now live in `frontend/src/sidebarConfig.js`.
 
@@ -669,18 +673,19 @@ function UserDropdown({ user, onLogout }) {
 
 function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, impersonatedUser, superAdmin = false, hqView = true, supportLeftMs = null, onExtendImpersonation }) {
   const [open, setOpen] = useState(false);
-  // "Super Admin" is a VIEW of the admin role, not a role: choosing it browses
-  // as admin with the HQ shell, choosing "Admin" browses as admin with the
-  // plain shell — exactly what a subsidiary admin sees, without impersonating
-  // anyone. The entry is offered only to a holder.
+  // D288 / H38 — "View as" is Preview shell. "HQ" is a VIEW of the admin
+  // role, not a role: choosing it browses as admin with the HQ shell,
+  // choosing "HQ's own accounts" browses as admin with the plain shell —
+  // exactly what an HQ-held admin sees, without impersonating anyone. HQ is
+  // offered only to a holder. The words are `lib/previewShells.js`'s.
   const hq = superAdmin && viewMode === 'admin' && hqView;
-  const viewOptions = [
-    ...(superAdmin ? [['super_admin', 'Super Admin']] : []),
-    ...Object.entries(ROLE_LABELS),
-  ];
-  const isActiveOption = (key) => (key === 'super_admin' ? hq : viewMode === key && !hq);
+  const previewOptions = previewOptionsFor(superAdmin);
+  const selectedKey = selectedPreviewKey(viewMode, hq);
+  const selected = PREVIEW_SHELLS.find((o) => o.key === selectedKey) || null;
+  const home = PREVIEW_SHELLS.find((o) => o.key === homePreviewKey(superAdmin));
+  const previewing = selected && home && selected.key !== home.key;
   const choose = (key) => {
-    if (key === 'super_admin') onViewModeChange('admin', { hq: true });
+    if (key === 'hq') onViewModeChange('admin', { hq: true });
     else if (key === 'admin') onViewModeChange('admin', { hq: false });
     else onViewModeChange(key);
   };
@@ -719,10 +724,11 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImp
         <div className="ml-2 relative">
           <button
             onClick={() => setOpen(!open)}
+            data-testid="preview-shell-trigger"
             className="flex items-center gap-2 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg transition-colors"
           >
             <Eye size={13} />
-            <span>View as: {hq ? 'Super Admin' : ROLE_LABELS[viewMode]}</span>
+            <span>{PREVIEW_TRIGGER}</span>
             <ChevronDown size={13} />
           </button>
           {open && (
@@ -733,26 +739,52 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImp
                 className="fixed inset-0 z-50 cursor-default bg-transparent"
                 onClick={() => setOpen(false)}
               />
-              <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-gray-200 py-1 min-w-[160px] z-50">
-                {/* Task #14 — 'exploring' is offered in View-as (it was filtered
-                    out in v1) so admins can preview the holding-state experience
-                    end-to-end: /exploring dashboard, the lean exploring sidebar,
-                    and RoleGuard bounces on non-exploring routes. Per-user
-                    review still lives at /admin/exploring. */}
-                {viewOptions.map(([key, label]) => (
+              <div
+                className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-gray-200 py-1 min-w-[280px] z-50"
+                data-testid="preview-shell-menu"
+              >
+                <div className="px-4 pt-1.5 pb-2 text-[10.5px] font-extrabold uppercase tracking-[.08em] text-gray-500">
+                  {PREVIEW_HEADER}
+                </div>
+                {/* Task #14 — 'exploring' stays offered (it was filtered out in
+                    v1) so admins can preview the holding-state experience
+                    end-to-end. H38 omits it; D288 keeps it, last. */}
+                {previewOptions.map((o) => (
                   <button
-                    key={key}
-                    onClick={() => { choose(key); setOpen(false); }}
+                    key={o.key}
+                    onClick={() => { choose(o.key); setOpen(false); }}
+                    data-preview-shell={o.key}
                     className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${
-                      isActiveOption(key) ? 'text-violet-700 font-medium bg-violet-50' : 'text-gray-700'
+                      selectedKey === o.key ? 'text-violet-700 font-medium bg-violet-50' : 'text-gray-700'
                     }`}
                   >
-                    {label}
+                    <span className="block">{o.label}</span>
+                    <span className="block text-[11px] text-gray-500">{o.what}</span>
                   </button>
                 ))}
+                <div className="mt-1 border-t border-gray-100 px-4 pt-2 pb-1.5 text-[11px] leading-snug text-gray-500">
+                  {PREVIEW_FOOTER}
+                </div>
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* H38's strip: while a shell other than the viewer's own is previewed,
+          the chip, the sentence about whose name the writes carry — "the
+          Super Admin" to the holder, "you" to anyone else — and the way back. */}
+      {!isImpersonating && previewing && (
+        <div className="ml-2 flex flex-wrap items-center gap-2 text-xs" data-testid="preview-shell-strip">
+          <span className="rounded-full bg-white/20 px-2 py-0.5 font-semibold">{previewChip(selected.label)}</span>
+          <span className="opacity-90">{previewNote(superAdmin)}</span>
+          <button
+            type="button"
+            onClick={() => choose(home.key)}
+            className="rounded-md bg-white/20 px-2 py-0.5 font-medium hover:bg-white/30"
+          >
+            Back to {home.label}
+          </button>
         </div>
       )}
 
