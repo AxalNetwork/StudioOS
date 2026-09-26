@@ -28,9 +28,23 @@
 // Recording a decision in this console does NOT invent a third key: an
 // "advance" outcome rides on the real interest-request milestone; a "solo"
 // outcome is a first-class decision record that points at the real
-// alternatives (advisor meeting for Week 3; the Week-4 solo declaration via
-// cofounder_agreement_signed). buildDecisionModel exposes exactly which real
-// milestones are done so the UI never overclaims.
+// alternative for Week 3 (an advisor meeting). The Co-founder Agreement page
+// READS this record on its solo path (D352); there is no solo-declaration
+// document to execute, and nothing here says there is. buildDecisionModel
+// exposes exactly which real milestones are done so the UI never overclaims.
+//
+// D352 — the canvas's five outcomes, finalists and sort chips. All of it lives
+// in the same `cofounder_decision_meta` blob (migration 162; the Worker only
+// requires a JSON object under 8000 characters), so no migration:
+//   * outcomes: advance · trial · references · searching · solo. "Run a trial
+//     project" and "Request references" record the DECISION; no trial tracker
+//     or reference-check store exists for a co-founder candidate
+//     (reference_checks is keyed to deals), so the page says so.
+//   * finalists: up to FINALIST_LIMIT candidate uids, compared side by side
+//     from the live /browse cards.
+//   * sort: total fit, complementarity (the matcher's two "gaps" parts) and
+//     values alignment — the three the /browse breakdown can order by. The
+//     canvas's "Evidence" sort has no per-candidate evidence figure behind it.
 
 // Radar-service gap rule (services/radar.ts: normCoverage < 60 → gap_axes).
 export const CAPABILITY_GAP_THRESHOLD = 60;
@@ -168,8 +182,21 @@ export function buildEvidenceModules({ brief, hasProfile, candidateCount, scorin
 export const DECISION_OUTCOMES = [
   {
     value: 'advance',
-    label: 'Advance with a candidate',
+    label: 'Proceed with a candidate',
     desc: 'Express interest — the real request marks the Week-3 milestone; the agreement itself is Week 4.',
+    needsCandidate: true,
+  },
+  {
+    value: 'trial',
+    label: 'Run a trial project',
+    desc: 'Records that you will scope a trial with this candidate. Axal has no trial tracker — the plan lives in your follow-ups.',
+    needsCandidate: true,
+  },
+  {
+    value: 'references',
+    label: 'Request references',
+    desc: 'Records that you will check references for this candidate. Axal stores no co-founder reference checks — track them in your follow-ups.',
+    needsCandidate: true,
   },
   {
     value: 'searching',
@@ -179,9 +206,52 @@ export const DECISION_OUTCOMES = [
   {
     value: 'solo',
     label: 'Document a solo path',
-    desc: 'A first-class outcome — not a failure state. The solo declaration executes in Week 4.',
+    desc: 'A first-class outcome — not a failure state. The Co-founder Agreement page reads this record on its solo path.',
   },
 ];
+
+/** How many finalists the compare card holds (the canvas draws two). */
+export const FINALIST_LIMIT = 3;
+
+/** The sort chips /browse's breakdown can honestly order by. */
+export const SORT_KEYS = [
+  { key: 'total', label: 'Total fit' },
+  { key: 'complementarity', label: 'Complementarity' },
+  { key: 'values', label: 'Values alignment' },
+];
+
+const part = (card, key) => {
+  const v = Number(card?.breakdown?.[key]);
+  return Number.isFinite(v) ? v : null;
+};
+
+/** A card's figure for one sort key, or null when the matcher gave none. */
+export function sortFigure(card, key) {
+  if (key === 'complementarity') {
+    const a = part(card, 'skill_complementarity');
+    const b = part(card, 'profile_skills');
+    return a == null && b == null ? null : (a ?? 0) + (b ?? 0);
+  }
+  if (key === 'values') return part(card, 'values_alignment');
+  const t = Number(card?.match_score);
+  return card?.match_score == null || !Number.isFinite(t) ? null : t;
+}
+
+/**
+ * Cards ordered by one key, highest first. A card with no figure for the key
+ * sorts LAST rather than as a zero — "the matcher had nothing to say" is not
+ * "the candidate scored nothing". Ties keep the matcher's own order.
+ */
+export function sortCards(cards, key) {
+  const list = (Array.isArray(cards) ? cards : []).map((c, i) => ({ c, i, v: sortFigure(c, key) }));
+  list.sort((a, b) => {
+    if (a.v == null && b.v == null) return a.i - b.i;
+    if (a.v == null) return 1;
+    if (b.v == null) return -1;
+    return b.v - a.v || a.i - b.i;
+  });
+  return list.map((x) => x.c);
+}
 
 /**
  * Decision console state from the stored blob + REAL milestone facts. The
@@ -200,6 +270,9 @@ export function buildDecisionModel({ meta, milestoneKeys } = {}) {
   return {
     outcome: DECISION_OUTCOMES.some((o) => o.value === stored?.outcome) ? stored.outcome : null,
     candidateUid: typeof stored?.candidate_uid === 'string' ? stored.candidate_uid : null,
+    finalists: Array.isArray(stored?.finalists)
+      ? [...new Set(stored.finalists.filter((f) => typeof f === 'string' && f))].slice(0, FINALIST_LIMIT)
+      : [],
     note: typeof stored?.note === 'string' ? stored.note : '',
     followups: Array.isArray(stored?.followups) ? stored.followups.filter((f) => typeof f === 'string') : [],
     decidedAt: typeof stored?.decided_at === 'string' ? stored.decided_at : null,
@@ -211,10 +284,13 @@ export function buildDecisionModel({ meta, milestoneKeys } = {}) {
 }
 
 /** Serialize the console back into the stored blob. */
-export function serializeDecision({ outcome, candidateUid, note, followups, decidedAt }) {
+export function serializeDecision({ outcome, candidateUid, note, followups, decidedAt, finalists }) {
+  const needsCandidate = DECISION_OUTCOMES.some((o) => o.value === outcome && o.needsCandidate);
   return {
     outcome: outcome || null,
-    candidate_uid: candidateUid || null,
+    // A candidate is only part of an outcome that is ABOUT one.
+    candidate_uid: needsCandidate ? (candidateUid || null) : null,
+    finalists: [...new Set((finalists || []).filter((f) => typeof f === 'string' && f))].slice(0, FINALIST_LIMIT),
     note: (note || '').slice(0, 2000),
     followups: (followups || []).filter(Boolean).map((f) => String(f).slice(0, 300)).slice(0, 10),
     decided_at: decidedAt || null,

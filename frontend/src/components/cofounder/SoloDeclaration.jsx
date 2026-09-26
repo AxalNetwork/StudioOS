@@ -1,9 +1,11 @@
 // Solo-founder path — a READ-ONLY readout, never a document flow.
 //
-// Why: the generator hard-rejects fewer than two founders, no solo-declaration
-// template exists in either runtime, and nothing in the schema records a "chose
-// solo" decision. Each signal below states what it does NOT prove, the caveat
-// is rendered prominently, and the action is permanently disabled.
+// Why: the generator hard-rejects fewer than two founders and no
+// solo-declaration template exists in either runtime (a legal template is an
+// owner decision). The Week-3 decision IS stored (cofounder_decision_meta,
+// migration 162) and is the first signal below; its caveat says what that
+// record is and is not (D352). Each signal states what it does NOT prove, and
+// the execute action stays disabled with its reason.
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { UserRound, AlertTriangle, Lock, ArrowRight } from 'lucide-react';

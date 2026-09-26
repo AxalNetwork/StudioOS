@@ -30073,6 +30073,80 @@ ICP definition module is item 4 (D353).
   (4405 pass, 0 fail) and retention 112 unchanged; typechecks, lint and
   every guard green, `check-docs-fresh --strict` after the root build.
 
+## D352
+
+**Co-founder Match and the Co-founder Agreement tell the truth about the
+Week-3 decision, and Match gains the canvas's five outcomes, finalists and
+sort chips.** Wave 8, Session 7, item 3. No route, no migration, no new
+`api.js` method: everything new is stored in `projects.cofounder_decision_meta`
+(migration 162), which the Worker accepts as any JSON object under 8000
+characters (`normalizeCofounderDecisionMeta`).
+
+**What was false.**
+- Agreement's solo path said "Axal does not store a 'chose solo' decision" —
+  true before migration 162, false since: Co-founder Match writes the
+  decision onto the project. The solo readout now leads with "Recorded
+  Week-3 decision" and its caveat follows what is stored: a solo decision is
+  "recorded, and not a signed declaration"; another outcome, none, and an
+  unreadable project are three further states, never collapsed into one.
+- Match's solo outcome promised "The solo declaration executes in Week 4".
+  No solo-declaration document exists in either runtime; the copy now says
+  the Agreement page reads the record and that recording it is the whole of
+  the record. The solo declaration *document* is a legal template — an owner
+  decision, not built.
+- Agreement's header said the generator was dev-only. It is the Worker's
+  `POST /api/legal/cofounder-agreement` (routes/legal.ts); the 404/405 banner
+  now describes an environment without that route.
+
+**What changed on Match.**
+- Five outcomes, the canvas's: proceed with a candidate, run a trial
+  project, request references, keep searching, document a solo path. Trial
+  and references record the decision and say that no tracker stores them
+  (`reference_checks` is keyed to deals). A candidate is stored only on the
+  three outcomes about one, and "Record decision" waits for one.
+- Finalists: up to three candidate uids in the blob, compared side by side
+  from the live `/browse` cards; a finalist missing from the current list says
+  so rather than showing stale numbers.
+- Sort chips: total fit, complementarity (the matcher's `skill_complementarity`
+  + `profile_skills`) and values alignment. A card with no figure sorts last,
+  never as a zero. The canvas's "Evidence" chip is rendered Not recorded — the
+  matcher has no per-candidate evidence figure.
+- A save failure prints the Worker's sentence.
+
+**Unreadable, never "no project".** Match and Agreement both ended
+`listProjects().catch(() => [])`, so a failed read showed "No startup record
+yet" / "Create a startup record first". Both now render Unreadable; on the
+Agreement page that is decided before the no-project screen.
+
+**Startup page links.** `SpinoutLabStartupPage`'s readiness row and "Document
+solo path" link go through `cofounderAgreementRoute(user)`: the Lab route for
+an admin or an account with `spinout_lab_active === 1` — exactly who the Lab
+route's `labRoles(['admin'])` guard admits — and the legacy wizard for
+everyone else, whom the Lab route would lock out. No route is retired:
+`/incorporate/cofounder-agreement` keeps its founder/partner audience, and
+retiring it stays on the deferred owner-decision list.
+
+**Filed, not fixed (Session 10's file).** The gap map's two stale claims in
+Session 10's files — `SpinoutLabWorkspace.jsx`'s "(or solo declaration)" row
+and `spinoutLabArsenal.js`'s every-tool-is-admin-only comment with its intro
+test — were both corrected by D380 before this landed. One neighbour remains:
+`lib/spinoutBrief.js`'s Structure gate lists "Co-founder decision or solo
+declaration", and no solo-declaration document exists; the recorded Week-3
+decision is the whole of the solo record.
+
+### VERIFIED
+
+- `frontend/test/spinout_lab_cofounder_truth.test.mjs` (new, 14 tests).
+- Mutations: 18 run, 17 caught on the first pass (non-zero exit and a
+  `not ok` line, each restored from a sha256-checked snapshot). One escaped —
+  "a missing figure sorts as zero" — because no fixture card had a real zero
+  to tie with; the fixture gained one (listed after the figureless card), and
+  the rerun caught it.
+- `npm run test:drift` on main 80809092: exit 0. Frontend 3481 → 3495 (the
+  14 above, under `spinout_lab_cofounder_truth.test.mjs` in the log), worker
+  4432 (4429 pass, 0 fail) and retention 112 unchanged; typechecks, lint and
+  every guard green, `check-docs-fresh --strict` after the root build.
+
 ## D360
 
 **The Spin-Out Lab's capital and legal tools say when a read failed, and
