@@ -1,0 +1,1 @@
+var e=[[`localises`,`localises it`],[`changes`,`asks for a change to it`]],t={localises:`Localises`,changes:`Changes`};function n(e){let n=t[e];return n?{lead:n,unrecorded:!1}:{lead:`About`,unrecorded:!0}}var r=`relation not recorded`,i=`Raised before a submission recorded whether it localises the item it names or asks for a change to it.`;export{n as i,r as n,i as r,e as t};

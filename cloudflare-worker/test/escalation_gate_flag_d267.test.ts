@@ -85,7 +85,7 @@ function hqDb() {
   for (const t of ['users', 'super_admins', 'territory_licences']) {
     db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   }
-  for (const m of ['258_licence_deployments', '259_hq_escalations', '261_branch_escalations', '279_licence_kind', '288_escalation_delivery']) {
+  for (const m of ['258_licence_deployments', '259_hq_escalations', '261_branch_escalations', '279_licence_kind', '288_escalation_delivery', '296_escalation_relation']) {
     run(db, migration(m));
   }
   db.prepare('INSERT INTO users (id, email, role, name) VALUES (?,?,?,?)').run(ADMIN, 'sue@axal.example', 'admin', 'Sue Hart');

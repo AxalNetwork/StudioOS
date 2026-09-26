@@ -723,6 +723,8 @@ export type BranchEscalationRow = {
   kind: string;
   subject: string;
   subject_ref: string | null;
+  /** D275 — `localises`, `changes`, or null: not recorded (every row before migration 296). */
+  relation: string | null;
   detail: string | null;
   raised_by_name: string | null;
   status: string;
@@ -795,7 +797,7 @@ export async function branchEscalations(
   const code = requireBranch(env);
   const cap = Math.max(1, Math.min(200, Number(limit) || 50));
   const rows = await env.DB.prepare(
-    `SELECT id, hq_uid, kind, subject, subject_ref, detail, raised_by_name, status,
+    `SELECT id, hq_uid, kind, subject, subject_ref, relation, detail, raised_by_name, status,
             delivery_error, due_at, answer, answered_by_name, answered_at, pushed_at, created_at
        FROM branch_escalations ORDER BY created_at DESC LIMIT ?`,
   ).bind(cap).all<BranchEscalationRow>();
