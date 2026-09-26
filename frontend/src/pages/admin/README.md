@@ -6,8 +6,10 @@ route, not in the component.
 
 `AdminStudioHome.jsx` is the admin profile's `/studio` landing (rendered by
 `Dashboard` when the active role is admin). It is Eadwyn, then
-`AdminStudioOverview.jsx`: one card per other Admin page. It is not an
-`/admin/*` route.
+`StudioPosture.jsx` (the admin bank on record), `StudioNeedsDecision.jsx` (four
+link tiles, worst first), then `AdminStudioOverview.jsx`: one card per other
+Admin page. All three read their figures and the one `UNAVAILABLE` sentinel
+from `adminStudioOverview.js` (D246). It is not an `/admin/*` route.
 
 Roughly grouped by what they administer: accounts and roles, the Spin-Out Lab
 cohort (applications, timing, journey preview), content (articles, publications,
