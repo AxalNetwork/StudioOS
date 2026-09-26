@@ -11,6 +11,20 @@
  */
 import { seatState } from '../branch/BranchAccounts';
 import { pctFromBps } from '../branch/BranchHome';
+import { inZone } from '../../lib/zoneTime';
+import { branchOfUser } from '../../lib/shellRole';
+
+/**
+ * D246 — THE ONE SENTINEL FOR A READ THAT FAILED.
+ *
+ * AdminStudioHome and AdminStudioOverview each used to declare their own
+ * `Symbol('unavailable')`. Two calls make two different symbols, so every
+ * `=== UNAVAILABLE` branch in the overview compared against a value the home
+ * page never sent: a failed read fell through to the "not recorded" helpers
+ * and an unreadable store read as a store that does not exist. Every Studio
+ * file imports this one.
+ */
+export const UNAVAILABLE = Symbol('unavailable');
 
 export const SEAT_TYPES = ['founder', 'investor', 'advisor', 'partner'];
 
@@ -84,7 +98,9 @@ export function approvalsGlance(lanes) {
     sla,
     `${worst.count} open`,
   ].filter(Boolean);
-  return { kind: 'ready', text: bits.join(' · ') };
+  // `sla` and `unreadable` ride along for the needs-a-decision strip, so its
+  // Approvals tile ranks from the same lane this card names.
+  return { kind: 'ready', text: bits.join(' · '), sla: worst.sla || null, unreadable: unreadable.length };
 }
 
 /**
@@ -227,4 +243,146 @@ function freezeDay(iso) {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return null;
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(ms);
+}
+
+/**
+ * D246 — EVERY STUDIO FIGURE, COMPUTED ONCE.
+ *
+ * The overview cards and the needs-a-decision tiles both render from this, so
+ * a tile and its card can never disagree: they are the same object. `null` is
+ * still being read; a prop equal to `UNAVAILABLE` is a read that failed and
+ * becomes `unreadable`, never one of the "not recorded" sentences.
+ */
+export function studioGlances({ user, home, licence, templates, insights }) {
+  const onBranch = Boolean(branchOfUser(user));
+  const absent = { kind: 'unrecorded', reason: OFF_BRANCH };
+  const failed = (what) => ({
+    kind: 'unreadable',
+    reason: `${what} could not be read. This is not a claim that the territory has none.`,
+  });
+
+  const lic = licence && licence !== UNAVAILABLE ? licence.licence || null : null;
+  const seats = !onBranch
+    ? absent
+    : licence === null
+      ? null
+      : licence === UNAVAILABLE
+        ? failed('Seats')
+        : (() => {
+          const lines = accountLines(lic?.seats_used_by_type, lic?.seats);
+          if (!lines) {
+            return {
+              kind: 'unrecorded',
+              reason: lic?.seats_used_basis || 'Seat use is not recorded on this copy, so it is not shown as zero.',
+            };
+          }
+          return { kind: 'ready', lines };
+        })();
+
+  const approvals = !onBranch
+    ? absent
+    : home === null
+      ? null
+      : home === UNAVAILABLE
+        ? failed('The queues')
+        : approvalsGlance(home.queue_pressure);
+
+  const programme = !onBranch
+    ? absent
+    : home === null
+      ? null
+      : home === UNAVAILABLE
+        ? failed('The programme clock')
+        : {
+          ...programmeGlance(home.programme, inZone(home.programme?.week_closes_at, home.programme?.zone)),
+          hoursToClose: Number.isFinite(home.programme?.hours_to_close) ? home.programme.hours_to_close : null,
+        };
+
+  // #308 / D199 — the agreements come from the DIGEST, not the template
+  // library: two stores, so two independent states.
+  const agreements = !onBranch
+    ? absent
+    : home === null
+      ? null
+      : home === UNAVAILABLE
+        ? failed('Agreements')
+        : agreementsGlance(home.agreements);
+
+  const contracts = !onBranch
+    ? { ...absent, agreements }
+    : (templates === null || home === null)
+      ? null
+      : templates === UNAVAILABLE
+        ? { ...failed('The template library'), agreements }
+        : { ...contractsGlance(templates), agreements };
+
+  let insightView;
+  if (!onBranch) insightView = { share: absent, median: absent };
+  else if (home === null || insights === null) insightView = null;
+  else {
+    const view = insightsGlance(
+      home === UNAVAILABLE ? null : home.revenue,
+      insights === UNAVAILABLE ? null : insights,
+    );
+    insightView = {
+      share: home === UNAVAILABLE ? failed('The share rate') : view.share,
+      median: insights === UNAVAILABLE ? failed('The benchmark copy') : view.median,
+    };
+  }
+
+  return { onBranch, lic, seats, approvals, programme, contracts, insights: insightView };
+}
+
+/** The sidebar's order, which breaks every tie in the strip. */
+export const NEEDS_DECISION_ORDER = ['seats', 'approvals', 'programme', 'contracts'];
+
+/**
+ * How urgent a tile is: 0 unreadable, 1 past its window (or seats over the
+ * licence), 2 due within 24 hours (or a seat type at AMBER_AT), 3 the rest.
+ * Read off the same glance the overview card renders.
+ */
+export function tileUrgency(key, glance) {
+  if (!glance) return 3;
+  if (glance.kind === 'unreadable') return 0;
+  if (key === 'approvals') {
+    if (glance.unreadable > 0) return 0;
+    if (glance.sla === 'past') return 1;
+    if (glance.sla === 'due_soon') return 2;
+    return 3;
+  }
+  if (key === 'seats' && glance.kind === 'ready') {
+    const states = glance.lines.tiles.filter((t) => !t.missing).map((t) => t.state);
+    if (states.includes('over')) return 1;
+    if (states.includes('tight')) return 2;
+    return 3;
+  }
+  if (key === 'programme' && glance.kind === 'ready') {
+    return glance.hoursToClose !== null && glance.hoursToClose <= 24 ? 2 : 3;
+  }
+  return 3;
+}
+
+/**
+ * WORST FIRST, COMPUTED — never typed. Unreadable, then past the window, then
+ * due within 24 hours or at AMBER_AT, then the rest in sidebar order.
+ *
+ * @param {{ key: string, glance: object|null }[]} tiles
+ */
+export function orderNeedsDecision(tiles) {
+  return tiles
+    .map((t) => ({ ...t, urgency: tileUrgency(t.key, t.glance) }))
+    .sort((a, b) => (a.urgency - b.urgency)
+      || (NEEDS_DECISION_ORDER.indexOf(a.key) - NEEDS_DECISION_ORDER.indexOf(b.key)));
+}
+
+/**
+ * The Seats tile's figure: the fullest measured seat type from `accountLines`.
+ * `null` when no type was measured.
+ */
+export function fullestSeat(lines) {
+  if (!lines) return null;
+  const measured = lines.tiles.filter((t) => !t.missing && t.state !== 'unlicensed');
+  if (!measured.length) return null;
+  const tight = lines.tightestType && measured.find((t) => t.type === lines.tightestType);
+  return tight || measured.slice().sort((a, b) => (b.used / Math.max(b.licensed, 1)) - (a.used / Math.max(a.licensed, 1)))[0];
 }

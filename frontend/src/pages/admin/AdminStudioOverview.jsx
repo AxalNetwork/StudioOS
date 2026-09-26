@@ -5,22 +5,10 @@
  */
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { branchLabel, branchOfUser } from '../../lib/shellRole';
-import { inZone } from '../../lib/zoneTime';
+import { branchLabel } from '../../lib/shellRole';
 import { titleCase, Card, Unrecorded, Unreadable } from '../../ui';
 import { COMMUNITY_CONSOLES } from '../branch/BranchCommunity';
-import {
-  accountLines,
-  agreementsGlance,
-  approvalsGlance,
-  contractsGlance,
-  freezeLine,
-  insightsGlance,
-  offBranchReason,
-  programmeGlance,
-} from './adminStudioOverview';
-
-const UNAVAILABLE = Symbol('unavailable');
+import { freezeLine, studioGlances } from './adminStudioOverview';
 
 function Glance({ glance }) {
   if (!glance) return <p className="mt-2 text-[12px] text-axal-muted">Reading…</p>;
@@ -56,79 +44,12 @@ function CardHead({ title, to }) {
 }
 
 export function AdminStudioOverview({ user, home, licence, templates, insights }) {
-  const onBranch = Boolean(branchOfUser(user));
-  const absent = { kind: 'unrecorded', reason: offBranchReason() };
-  const failed = (what) => ({
-    kind: 'unreadable',
-    reason: `${what} could not be read. This is not a claim that the territory has none.`,
-  });
-
-  const lic = licence && licence !== UNAVAILABLE ? licence.licence || null : null;
-  const seats = onBranch
-    ? (licence === null
-      ? null
-      : licence === UNAVAILABLE
-        ? failed('Seats')
-        : (() => {
-          const lines = accountLines(lic?.seats_used_by_type, lic?.seats);
-          if (!lines) {
-            return {
-              kind: 'unrecorded',
-              reason: lic?.seats_used_basis || 'Seat use is not recorded on this copy, so it is not shown as zero.',
-            };
-          }
-          return { kind: 'ready', lines };
-        })())
-    : absent;
-
-  const approvals = !onBranch
-    ? absent
-    : home === null
-      ? null
-      : home === UNAVAILABLE
-        ? failed('The queues')
-        : approvalsGlance(home.queue_pressure);
-
-  const programme = !onBranch
-    ? absent
-    : home === null
-      ? null
-      : home === UNAVAILABLE
-        ? failed('The programme clock')
-        : programmeGlance(home.programme, inZone(home.programme?.week_closes_at, home.programme?.zone));
-
-  // #308 / D199 — the agreements come from the DIGEST, not the template
-  // library: they are this branch's own contract rows, and the library is
-  // HQ's pushed copy. Two stores, so two independent states, and a library
-  // that failed to load says nothing about whether any agreement is ending.
-  const agreements = !onBranch
-    ? absent
-    : home === null
-      ? null
-      : home === UNAVAILABLE
-        ? failed('Agreements')
-        : agreementsGlance(home.agreements);
-
-  const contracts = !onBranch
-    ? { ...absent, agreements }
-    : (templates === null || home === null)
-      ? null
-      : templates === UNAVAILABLE
-        ? { ...failed('The template library'), agreements }
-        : { ...contractsGlance(templates), agreements };
-
-  const insightView = !onBranch
-    ? { share: absent, median: absent }
-    : (home === null || insights === null)
-      ? null
-      : insightsGlance(
-        home === UNAVAILABLE
-          ? { share_bps: null, reason: 'The digest could not be read, so the share rate is unknown rather than nil.' }
-          : home.revenue,
-        insights === UNAVAILABLE
-          ? { benchmarks_available: false, benchmarks_reason: 'The insights read did not complete.' }
-          : insights,
-      );
+  // D246 — every figure comes from studioGlances, which the needs-a-decision
+  // strip reads too, and a prop equal to the shared UNAVAILABLE sentinel
+  // renders as Unreadable.
+  const {
+    onBranch, lic, seats, approvals, programme, contracts, insights: insightView,
+  } = studioGlances({ user, home, licence, templates, insights });
 
   const territories = Array.isArray(user?.branch?.territories) ? user.branch.territories.filter(Boolean) : [];
   const status = user?.branch?.status;
