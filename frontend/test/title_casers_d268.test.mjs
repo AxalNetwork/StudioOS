@@ -22,10 +22,16 @@ const src = (rel) => readFileSync(resolve(root, rel), 'utf8');
 
 /** Evaluate `const <name> = …;` from a page, with titleCase bound under both import names. */
 function local(rel, name) {
-  const m = src(rel).match(new RegExp(`const ${name} = (\\([^)]*\\) => [^\\n]+);`));
-  assert.ok(m, `${rel}: ${name} is gone or no longer one line`);
+  // A literal search, not a RegExp built from `name`: Semgrep refuses a
+  // non-literal pattern, and the declaration is one line by construction.
+  const text = src(rel);
+  const head = `const ${name} = (`;
+  const at = text.indexOf(head);
+  assert.ok(at >= 0, `${rel}: ${name} is gone`);
+  const line = text.slice(at + head.length - 1, text.indexOf('\n', at)).replace(/;\s*$/, '');
+  assert.match(line, /^\([^)]*\) => /, `${rel}: ${name} is no longer a one-line arrow`);
   // eslint-disable-next-line no-new-func
-  return new Function('titleCase', 'caseLabel', `return ${m[1]};`)(titleCase, titleCase);
+  return new Function('titleCase', 'caseLabel', `return ${line};`)(titleCase, titleCase);
 }
 
 const PAGES = {
