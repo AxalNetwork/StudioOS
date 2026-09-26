@@ -93,8 +93,8 @@ export const NETWORK_ORG_COPY = {
  *
  * THE DISTINCTION IS THE WHOLE POINT, because collapsing it is how this gets
  * said wrongly in both directions. Saying "no store behind this yet" over
- * `/research/markets` is false — the signals feed is real, gathered on a
- * schedule, and the largest store in the product. Saying nothing is false too:
+ * `/research/markets` is false — the zone holds real, dated comparable
+ * readings (it once held the signals feed). Saying nothing is false too:
  * every filter the artboard draws for that zone is a view of a saved analysis
  * that no table holds, so a reader comparing the design to the page finds four
  * missing controls and no reason given. Both sentences are wrong; this is the
@@ -106,12 +106,20 @@ export const NETWORK_ORG_COPY = {
  * same coupling that put this whole file in one place.
  */
 export const RESEARCH_STORE_GAPS = {
+  // D392 — CORRECTED AND SCOPED. This said the page "reads instead ... the
+  // signals feed". It has not since `/research/markets` became `MarketZone`:
+  // comparable readings a person enters, dated and age-gated (migration 223),
+  // with the feed kept at `/signals`. The missing store it names is still
+  // missing and still what the founder and investor canvases narrow — so the
+  // entry stays for them. For partner and advisor, whose canvases draw exactly
+  // the readings `MarketZone` holds, it is not shown (`roles`).
   markets: {
+    roles: ['founder', 'investor'],
     eyebrow: 'Blocked on a store',
     blocks: 'a saved market analysis',
-    heading: 'Signals are stored. A saved market analysis is not.',
+    heading: 'Comparable readings are stored. A saved market analysis is not.',
     what: 'A deep-dive you ran and kept — its method, the date it was run, the documents it rests on, and whether it is current or retired.',
-    why: 'Nothing saves a market deep-dive, so there is no analysis to keep, retire, build or list the sources of. The artboard makes this plain: its instrument table is Analysis · Method · Run · State, and all four filters it draws are views of that object. What this page reads instead is the signals feed, gathered on a schedule — real, populated, and a different object from the one the design narrows.',
+    why: 'Nothing saves a market deep-dive, so there is no analysis to keep, retire, build or list the sources of. The artboard makes this plain: its instrument table is Analysis · Method · Run · State, and all four filters it draws are views of that object. What this page holds instead is comparable readings — ranges you entered, each with its run date and an age that decides whether it can still be used — a different object from the one the design narrows. The sector signals feed has its own page, Signals.',
   },
   companies: {
     eyebrow: 'Blocked on a store',
