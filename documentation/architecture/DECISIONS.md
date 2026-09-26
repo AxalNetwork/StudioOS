@@ -8023,6 +8023,10 @@ same failure the map's own comment records — a decision in two places — reac
 from the other side. The table now lives in `util/authErrors.ts` and both
 readers index it.
 
+*Corrected by D278: "31 route files" was 29 when this was written and 38 before D278
+(39 after it). The claim is every route file that calls `mapError`, which a count only
+states until the next route is added.*
+
 **Deliberately not here.** Sending a contract for signature (the row carries
 `status` and `envelope_uid` and nothing writes them yet — the e-signature leg is
 its own work), and the Deployments zone's rollout percentage and rollback, which
@@ -10468,6 +10472,9 @@ entry**; `app.onError` handled it as a special case *above* the lookup. So the
 **31 route files that catch their own throws and call `mapError`** — never
 reaching that handler — answered a step-up refusal with **400 Bad Request**,
 carrying neither the `code` the SPA prompts off nor the TTL it shows.
+
+*Corrected by D278: the count was not 31 then, and was 38 before D278 (39 after); the claim is
+every route file that calls `mapError`.*
 
 That is D110's finding one key over, and D110's own comment predicted it: *"not a
 message and a key drifting apart, but two tables of keys."* D134 is the PR that
@@ -28160,6 +28167,159 @@ edit. These exit 0:
   `check-sql-prepare`, `check-timestamp-comparisons` and
   `check-runtime-schema-declared`;
 - `migration-immutability-gate` (no migration on `main` changed).
+
+## D278
+
+**Task 435: provider and database text stopped reaching people it was never
+written for.**
+
+**Why now.** D258 made `e.message` the body's own sentence. Before it,
+`request()` hid a body's `message` behind a code-shaped `error`, so most of
+these bodies were invisible. After it, they are what the page prints. So a
+member's page would have read Stripe's JSON, Google Identity Platform's
+codes, DocuSign's errors or SQLite's `D1_ERROR … SQLITE_CONSTRAINT`.
+
+**The coordinator's decision, implemented as quoted.** "A refusal's `message`
+and `detail` are sentences we wrote, and `error` is always a code. Provider
+and exception text never reaches a member or the public: it goes to the log
+beside the code. Where the caller is the owner of the connected account the
+call used, or an admin on a console about one of Axal's own providers, the
+provider's text may travel clipped in a separate `upstream` field — never in
+`message`, `detail` or `error`."
+
+**What changed.**
+- **One helper, `util/refusal.ts`.**
+  - `refuse(c, status, opts)` and `refusalBody(opts)` log the raw text
+    beside the code. The log call's first argument is the constant
+    `'[refusal]'`.
+  - The body is `{ error: code, message, detail }`, both of the last two our
+    sentence.
+  - It adds `upstream`, clipped to 300 characters, only for the `owner` and
+    `admin` audiences.
+  - `extra` keys cannot overwrite any of those four.
+  - `rowFailureSentence` does the same for an import row, whose `error` the
+    import page prints as a sentence.
+- **The census, re-run rather than trusted.** 125 single-line sites matched
+  the pattern. 88 moved onto the helper. The other 37 lines are covered by 18
+  ledger entries (below); one entry can cover several identical lines, such
+  as cofounder's eleven gate catches. The multi-line helpers and
+  variable-carried sites the brief names moved too. The guard now counts 123
+  helper calls across the route files.
+  - **Member and public sites get our sentence only.** Each says what failed
+    and what the person can do:
+    - billing (13), payments (5), orders (3), legal (2) and the catalogue
+      read;
+    - SMS enrol and sign-in in `auth_sms` and `auth_recover`, through the new
+      `GCIP_SENTENCES` in `services/gcip.ts`;
+    - `trust` (DocuSign), `esign` (both), `decks` (four), `jobs_public`,
+      `telegram_join`, `crunchbase` and `market_intel`;
+    - `public.ts`'s three `error: String(ex)` bodies, which now carry a code;
+    - votes, notifications, monitoring, the two hard deletes, the settings
+      photo upload and Google unlink, and `github.ts`'s delivery refusal;
+    - `activity.ts`'s commit failure;
+    - a ticket comment's GitHub failure (the caller is a member, so GitHub's
+      text is logged, not sent).
+  - **Owner sites** carry the provider's reason on `upstream`:
+    - `imports.ts` (Carta, HubSpot, Affinity and the extract);
+    - `integrations.ts` (connect, sync, push, action);
+    - `progress.ts`'s Stripe import (nested `detail.message`, with
+      `upstream` beside it);
+    - `calendar.ts`'s Google and Microsoft syncs;
+    - `research.ts`'s two Sheets calls.
+
+    Calendar's two OAuth-start failures are our state store failing, not the
+    provider, so they get our sentence only. The same goes for the
+    integrations waitlist and webhook.
+  - **Admin consoles about one of Axal's own providers** carry `upstream`:
+    - `admin_stripe` (3), `admin_billing`'s `stripeErrorResponse` and
+      `admin_promos`' `stripeErr`;
+    - `admin_x`'s `xErrorPayload` and `admin_telegram`'s
+      `telegramErrorPayload`, each with a sentence per code;
+    - `admin_integration_keys` (`cfErrorJson`, test and delete) and
+      `admin_github` (both Cloudflare secret failures);
+    - `admin_publications` (browser rendering), `admin_deployments`'s
+      dispatch and the admin catalogue.
+
+    A database failure on an admin route is not a provider, so it gets our
+    sentence only.
+- **`mapError`** keeps its status reasoning and changes its words.
+  - A UNIQUE, FOREIGN KEY, NOT NULL or CHECK constraint failure is still a
+    400 refusal, now `already_exists`, `related_record_missing` or
+    `invalid_record` with our sentence.
+  - Any other message starting `D1_ERROR` or containing `SQLITE_` is a
+    logged 500.
+  - Every sentence a route wrote passes through as before.
+  - Its header now lists the statuses it can return.
+  - `monitoring_analytics`' plan update now calls it instead of passing the
+    thrown text through.
+- **`admin_support_sessions.ts`, measured.** Every refusal the branch's
+  support-session methods throw is written `rpc: …`, and a transport failure
+  never is. So the three sites keep the branch's sentence: the
+  `hq_unbind_admin_d262` pin still passes. Transport text goes to the log,
+  with `branch_unreachable`, a 502 and our sentence.
+- **`branch_escalations.ts`** (Session 2's task-355 PR had merged). HQ's
+  refusals are written `escalate: …` or `rpc: …` and are kept. Anything else
+  stores "HQ could not be reached" and logs the text.
+- **The stale "31" claims** now say "every route file that calls it" in
+  `authErrors.ts`, `index.ts`, `branch.ts` (two) and the D134 test comment.
+  D110 and D134 each gain a correction line in place.
+- **The guard, `scripts/check-refusal-bodies.mjs`**, in `test:guards`.
+  - It flags a `message`, `detail` or `error` key, under `routes/`, whose
+    value takes `e.message`, `e?.message`, `(e as Error).message`, `String(e…)`
+    or `.text()`.
+  - Its floor is 110 helper calls, so an empty tree fails.
+  - Its ledger holds 18 entries, each with a reason; a stale entry fails.
+  - The ledgered sites are:
+    - our own typed errors: `TemplateError`, the config-missing classes,
+      cofounder's `gate`, `BadRangeError`, `PlanCreateError`,
+      `ReferralError`, scoring's two, and settings' validation and LinkedIn
+      errors;
+    - the out-of-scope 200 and SSE bodies;
+    - one audit-log row.
+
+**Pins re-aimed, never loosened.**
+- `trust_intro.test.mjs` now asserts our sentence, no thrown text anywhere in
+  the body, and the thrown text in the log beside the code. It passes the
+  real `refusalBody` into its isolated evaluation.
+- `stripe_import_route.test.ts` now asserts our sentence in
+  `detail.message`, and the provider's reason clipped in `upstream`. What it
+  protected, "the upstream reason is surfaced, not swallowed", stays true.
+- `admin_licences_deploy.test.ts`'s non-403 dispatch test now reads GitHub's
+  reason on `upstream`, and `HTTP 422` in our sentence.
+
+**Not in scope, filed.**
+- 200-status bodies: `admin_github.ts`'s two network-error health bodies and
+  `infra.ts`'s health checks.
+- SSE error events and tool-call results: `assistant.ts` and `advisor.ts`.
+- **Left, and why:**
+  - `admin_licences.ts:898` interpolates a branch's `rpc:` text into a
+    `reason`. It was not in the census, and the guard reads keyed bodies
+    only.
+  - `branch_suspended_freeze.test.ts:254` still says "31". That file is
+    Session 4's this wave.
+  - Settings' validation errors put a sentence, not a code, in `error`. D258's
+    `readRefusal` reads it correctly; recasting them is a follow-up.
+  - The guard reads one line, so a raw value built on a line of its own
+    before the body is invisible to it.
+
+**Tests.** `cloudflare-worker/test/refusal_bodies_d278.test.ts` (11):
+- the helper, by audience;
+- extra keys that try to overwrite;
+- the import row;
+- `mapError` with a UNIQUE failure, a FOREIGN KEY failure, `SQLITE_BUSY` and
+  a route's own sentence;
+- the guard: a raw body fails, a helper body passes, a stale entry fails, an
+  empty tree fails on the floor, and the real tree passes.
+
+**Mutations: 6 run, 6 caught.**
+- A census site put back to `(e as Error).message`.
+- `upstream` sent on a member route.
+- The raw text copied into `message`.
+- `mapError` passing SQLite text again.
+- `mapError` swallowing a route's sentence.
+- The guard's floor set to 0.
+
+No migration.
 
 ## D282
 

@@ -41,6 +41,7 @@ import {
   type CredentialBlob,
 } from '../integrations/secrets';
 import { buildPkce, issueOauthState, consumeOauthState } from '../integrations/oauth';
+import { refuse } from '../util/refusal';
 
 const integrations = new Hono<{ Bindings: Env }>();
 
@@ -333,7 +334,7 @@ integrations.post('/connect', async (c) => {
       webhook_secret: body.webhook_secret,
     });
   } catch (e) {
-    return c.json({ error: 'connect_failed', message: (e as Error).message || 'Provider rejected the credentials.' }, 400);
+    return refuse(c, 400, { code: 'connect_failed', message: 'The connection could not be made. Check the credentials and try again.', raw: e, audience: 'owner' });
   }
 
   // Upsert. Insert with random uid, encrypt against that uid; on conflict
@@ -491,7 +492,7 @@ integrations.post('/:uid/sync', async (c) => {
       integration_id: row.id, user_id: user.id, provider_key: row.provider_key,
       direction: 'outbound', event_type: 'sync', status: 'error', response_summary: msg,
     });
-    return c.json({ error: 'sync_failed', message: msg }, 502);
+    return refuse(c, 502, { code: 'sync_failed', message: 'The sync did not complete. Check the connection and try again.', raw: msg, audience: 'owner' });
   }
 });
 
@@ -530,7 +531,7 @@ integrations.post('/:uid/push', async (c) => {
       integration_id: row.id, user_id: user.id, provider_key: row.provider_key,
       direction: 'outbound', event_type: 'push', status: 'error', response_summary: msg, payload,
     });
-    return c.json({ error: 'push_failed', message: msg }, 502);
+    return refuse(c, 502, { code: 'push_failed', message: 'The update could not be sent to the connected account. Check the connection and try again.', raw: msg, audience: 'owner' });
   }
 });
 
@@ -570,7 +571,7 @@ async function actionHandler(c: Context<{ Bindings: Env }>) {
       direction: 'outbound', event_type: `action:${name}`, status: 'error',
       response_summary: msg,
     });
-    return c.json({ error: 'action_failed', message: msg }, 502);
+    return refuse(c, 502, { code: 'action_failed', message: 'That action did not complete on the connected account. Check the connection and try again.', raw: msg, audience: 'owner' });
   }
 }
 integrations.get('/:uid/action/:name', actionHandler);
@@ -751,7 +752,7 @@ integrations.post('/webhook/:provider/:uid', async (c) => {
       integration_id: row.id, user_id: row.user_id, provider_key: provider,
       direction: 'inbound', event_type: 'webhook', status: 'error', response_summary: msg,
     });
-    return c.json({ error: 'webhook_failed', message: msg }, 500);
+    return refuse(c, 500, { code: 'webhook_failed', message: 'The webhook could not be processed.', raw: msg });
   }
 });
 
@@ -816,7 +817,7 @@ integrations.post('/waitlist', async (c) => {
       'ON CONFLICT(user_id, provider_key) DO UPDATE SET notes = excluded.notes',
     ).bind(user.id, key, notes).run();
   } catch (e) {
-    return c.json({ error: 'waitlist_failed', message: (e as Error).message }, 500);
+    return refuse(c, 500, { code: 'waitlist_failed', message: 'You could not be added to the waitlist. Try again in a moment.', raw: e });
   }
   return c.json({ ok: true, joined: true, provider_key: key });
 });

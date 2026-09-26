@@ -42,6 +42,7 @@ import {
   type CreatePriceBody,
 } from '../services/catalog';
 import { ensureAdminAuditLogTable } from './admin';
+import { refuse } from '../util/refusal';
 
 // ---------- public read ----------
 const catalog = new Hono<{ Bindings: Env }>();
@@ -62,7 +63,7 @@ catalog.get('/products', async (c) => {
     const products = await getCatalog(c.env, kind, audienceParam || undefined);
     return c.json({ products, audience_categories: AUDIENCE_CATEGORIES });
   } catch (e) {
-    return c.json({ error: 'catalog_read_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'catalog_read_failed', message: 'The catalogue could not be read. Try again in a moment.', raw: e, audience: 'member' });
   }
 });
 
@@ -98,7 +99,7 @@ adminCatalog.post('/sync', async (c) => {
     });
     return c.json({ ok: true, ...result });
   } catch (e) {
-    return c.json({ error: 'catalog_sync_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'catalog_sync_failed', message: 'The catalogue could not be synced with Stripe. Nothing changed; try again in a moment.', raw: e, audience: 'admin' });
   }
 });
 
@@ -115,7 +116,7 @@ adminCatalog.get('/products', async (c) => {
     const products = await getCatalog(c.env);
     return c.json({ products, mode: stripeMode(c.env), audience_categories: AUDIENCE_CATEGORIES });
   } catch (e) {
-    return c.json({ error: 'catalog_read_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'catalog_read_failed', message: 'The catalogue could not be read. Try again in a moment.', raw: e, audience: 'admin' });
   }
 });
 
@@ -162,7 +163,7 @@ adminCatalog.post('/products', async (c) => {
     });
     return c.json({ ok: true, product });
   } catch (e) {
-    return c.json({ error: 'create_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'create_failed', message: 'The product could not be created in Stripe. Nothing changed; try again in a moment.', raw: e, audience: 'admin' });
   }
 });
 
@@ -212,7 +213,7 @@ adminCatalog.patch('/products/:id', async (c) => {
     });
     return c.json({ ok: true });
   } catch (e) {
-    return c.json({ error: 'update_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'update_failed', message: 'The product could not be updated in Stripe. Nothing changed; try again in a moment.', raw: e, audience: 'admin' });
   }
 });
 
@@ -226,7 +227,7 @@ adminCatalog.post('/products/:id/archive', async (c) => {
     await writeAdminAudit(c.env, admin.id, 'catalog_product_archive', { product_id: id });
     return c.json({ ok: true });
   } catch (e) {
-    return c.json({ error: 'archive_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'archive_failed', message: 'The product could not be archived in Stripe. Nothing changed; try again in a moment.', raw: e, audience: 'admin' });
   }
 });
 
@@ -273,7 +274,7 @@ adminCatalog.post('/products/:id/prices', async (c) => {
     });
     return c.json({ ok: true, price });
   } catch (e) {
-    return c.json({ error: 'create_price_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'create_price_failed', message: 'The price could not be created in Stripe. Nothing changed; try again in a moment.', raw: e, audience: 'admin' });
   }
 });
 
@@ -304,7 +305,7 @@ adminCatalog.patch('/prices/:priceId', async (c) => {
     await writeAdminAudit(c.env, admin.id, 'catalog_price_update', { price_id: priceId, patch });
     return c.json({ ok: true });
   } catch (e) {
-    return c.json({ error: 'update_price_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'update_price_failed', message: 'The price could not be updated in Stripe. Nothing changed; try again in a moment.', raw: e, audience: 'admin' });
   }
 });
 
@@ -318,7 +319,7 @@ adminCatalog.post('/prices/:priceId/archive', async (c) => {
     await writeAdminAudit(c.env, admin.id, 'catalog_price_archive', { price_id: priceId });
     return c.json({ ok: true });
   } catch (e) {
-    return c.json({ error: 'archive_price_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'archive_price_failed', message: 'The price could not be archived in Stripe. Nothing changed; try again in a moment.', raw: e, audience: 'admin' });
   }
 });
 

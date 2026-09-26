@@ -29,6 +29,7 @@ import {
   resolveCoreOutcome,
   type StripeErrorKind,
 } from '../util/stripeError';
+import { refuse } from '../util/refusal';
 
 // Epic 6 — Market Intel Pro billing surface.
 //
@@ -173,7 +174,7 @@ billing.post('/mi-pro/checkout', async (c) => {
     const session = await stripeCall<{ url: string; id: string }>(c.env, '/checkout/sessions', params);
     return c.json({ url: session.url, session_id: session.id });
   } catch (e) {
-    return c.json({ error: 'checkout_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'checkout_failed', message: 'Checkout could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
   }
 });
 
@@ -192,7 +193,7 @@ billing.post('/mi-pro/portal', async (c) => {
     });
     return c.json({ url: session.url });
   } catch (e) {
-    return c.json({ error: 'portal_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'portal_failed', message: 'The billing portal could not be opened. Try again in a moment.', raw: e, audience: 'member' });
   }
 });
 
@@ -309,7 +310,7 @@ billing.post('/tier/checkout', async (c) => {
     const session = await stripeCall<{ url: string; id: string }>(c.env, '/checkout/sessions', params);
     return c.json({ url: session.url, session_id: session.id });
   } catch (e) {
-    return c.json({ error: 'checkout_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'checkout_failed', message: 'Checkout could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
   }
 });
 
@@ -324,7 +325,7 @@ billing.post('/tier/portal', async (c) => {
     });
     return c.json({ url: session.url });
   } catch (e) {
-    return c.json({ error: 'portal_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'portal_failed', message: 'The billing portal could not be opened. Try again in a moment.', raw: e, audience: 'member' });
   }
 });
 
@@ -509,7 +510,7 @@ billing.post('/investor/checkout', async (c) => {
     const session = await stripeCall<{ url: string; id: string }>(c.env, '/checkout/sessions', params);
     return c.json({ url: session.url, session_id: session.id });
   } catch (e) {
-    return c.json({ error: 'checkout_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'checkout_failed', message: 'Checkout could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
   }
 });
 
@@ -526,7 +527,7 @@ billing.post('/investor/portal', async (c) => {
     });
     return c.json({ url: session.url });
   } catch (e) {
-    return c.json({ error: 'portal_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'portal_failed', message: 'The billing portal could not be opened. Try again in a moment.', raw: e, audience: 'member' });
   }
 });
 
@@ -702,7 +703,7 @@ billing.post('/plan/checkout', async (c) => {
     }
     return c.json({ client_secret: clientSecret, subscription_id: sub.id, status: sub.status });
   } catch (e) {
-    return c.json({ error: 'checkout_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'checkout_failed', message: 'Checkout could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
   }
 });
 
@@ -1088,7 +1089,7 @@ async function setCancelAtPeriodEnd(c: Context<{ Bindings: Env }>, value: boolea
     );
     return c.json({ ok: true, subscription: normSub(updated) });
   } catch (e) {
-    return c.json({ error: value ? 'cancel_failed' : 'resume_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: value ? 'cancel_failed' : 'resume_failed', message: value ? "The subscription could not be cancelled. Nothing changed; try again in a moment." : "The subscription could not be resumed. Nothing changed; try again in a moment.", raw: e, audience: 'member' });
   }
 }
 
@@ -1132,7 +1133,7 @@ billing.post('/subscription/swap/preview', async (c) => {
       new_price_id: priceId,
     });
   } catch (e) {
-    return c.json({ error: 'preview_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'preview_failed', message: 'The plan change could not be previewed. Nothing changed; try again in a moment.', raw: e, audience: 'member' });
   }
 });
 
@@ -1190,7 +1191,7 @@ billing.post('/subscription/swap/confirm', async (c) => {
     }
     return c.json({ ok: true, subscription: normSub(updated) });
   } catch (e) {
-    return c.json({ error: 'swap_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'swap_failed', message: 'The plan could not be changed. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
   }
 });
 
@@ -1260,7 +1261,7 @@ billing.post('/payment-method/setup-intent', async (c) => {
     );
     return c.json({ client_secret: intent.client_secret, setup_intent_id: intent.id, status: intent.status });
   } catch (e) {
-    return c.json({ error: 'setup_intent_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'setup_intent_failed', message: 'A card could not be set up. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
   }
 });
 
@@ -1293,7 +1294,7 @@ billing.post('/payment-method/default', async (c) => {
     }
     return c.json({ ok: true, default_payment_method: pmId });
   } catch (e) {
-    return c.json({ error: 'set_default_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'set_default_failed', message: 'That card could not be made the default. Try again in a moment.', raw: e, audience: 'member' });
   }
 });
 
@@ -1314,7 +1315,7 @@ billing.post('/payment-method/detach', async (c) => {
     await stripeCall(c.env, `/payment_methods/${pmId}/detach`, {});
     return c.json({ ok: true, detached: pmId });
   } catch (e) {
-    return c.json({ error: 'detach_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'detach_failed', message: 'That card could not be removed. Try again in a moment.', raw: e, audience: 'member' });
   }
 });
 

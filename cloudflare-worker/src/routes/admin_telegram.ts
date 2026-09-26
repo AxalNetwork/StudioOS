@@ -49,6 +49,7 @@ import {
 } from '../services/telegramClient';
 import { lintForSend } from '../services/telegramRedactCheck';
 import { previewAll, previewAudience, runAggregator } from '../services/telegramAggregator';
+import { refusalBody } from '../util/refusal';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -181,21 +182,36 @@ function telegramErrorPayload(e: unknown): { body: Record<string, unknown>; stat
       e.code === 'telegram_breaker_open' ? 503 :
       e.code === 'telegram_chat_not_found' || e.code === 'telegram_forbidden' || e.code === 'telegram_unauthorized' ? 400 :
       502;
+    // D278 — Telegram's own text is an admin's to read, clipped, on
+    // `upstream`; `message` is our sentence for the code.
     return {
-      body: {
-        error: e.code,
+      body: refusalBody({
         code: e.code,
-        message: e.message,
-        ...(e.retryAfter ? { retry_after: e.retryAfter } : {}),
-      },
+        message: TELEGRAM_SENTENCES[e.code] || TELEGRAM_SENTENCES.telegram_upstream,
+        raw: e,
+        audience: 'admin',
+        extra: { code: e.code, ...(e.retryAfter ? { retry_after: e.retryAfter } : {}) },
+      }),
       status,
     };
   }
   return {
-    body: { error: 'telegram_unknown', code: 'telegram_unknown', message: (e as Error).message || String(e) },
+    body: refusalBody({ code: 'telegram_unknown', message: 'The call to Telegram failed. Try again in a moment.', raw: e, audience: 'admin', extra: { code: 'telegram_unknown' } }),
     status: 502,
   };
 }
+
+/** D278 — the sentence an admin reads for each Telegram failure code. */
+const TELEGRAM_SENTENCES: Record<string, string> = {
+  telegram_rate_limited: 'Telegram is rate-limiting the bot. Wait and try again.',
+  telegram_breaker_open: 'Calls to Telegram are paused after repeated failures. Try again in a few minutes.',
+  telegram_chat_not_found: 'Telegram does not know that chat. Check the channel id and that the bot was added to it.',
+  telegram_forbidden: 'Telegram refused this action. Check that the bot is an admin of the channel.',
+  telegram_unauthorized: 'Telegram rejected the bot token. Replace it in the integration keys.',
+  telegram_network: 'Telegram could not be reached. Try again in a moment.',
+  telegram_api_error: 'Telegram returned an error. Try again in a moment.',
+  telegram_upstream: 'Telegram returned an error. Try again in a moment.',
+};
 
 // ----------------------------- CHANNELS -----------------------------
 

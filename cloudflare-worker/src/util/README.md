@@ -12,6 +12,7 @@ belongs in `../services/`.
 | `branch.ts` | `branchOf`, `authCookieName`, `csrfCookieName` — which subsidiary this Worker serves, read from `BRANCH_CODE`, and the per-branch cookie names that keep a branch session on its host (D104). A malformed code **throws** rather than reading as HQ. |
 | `zip.ts` | Zip assembly for exports. |
 | `hashEmail.ts` | Email hashing for privacy-preserving lookups. |
+| `refusal.ts` | D278 — `refuse` / `refusalBody` build a refusal body when something we did not write failed: a code in `error`, our sentence in `message` and `detail`, the raw text logged beside the code and, for an owner or an admin console, clipped on `upstream`. `rowFailureSentence` does the same for an import row. `scripts/check-refusal-bodies.mjs` holds the routes to it. |
 | `stripeError.ts` | Parses Stripe errors into a status/code/type shape. |
 | `stripeTax.ts` | Tax handling. |
 | `paymentMode.ts` | Live vs test mode resolution. |

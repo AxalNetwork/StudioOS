@@ -63,6 +63,7 @@ import {
   parseSpreadsheetRef, pullFundsToSheet, pushFundsFromSheet, fundsAppBase,
   SUGGESTED_SHEET_URL,
 } from '../services/fundSheets';
+import { refuse } from '../util/refusal';
 
 const research = new Hono<{ Bindings: Env }>();
 
@@ -3607,7 +3608,7 @@ research.post('/funds/sheet/pull', async (c) => {
     const msg = String(e?.message || e);
     if (msg === 'not_connected') return c.json({ detail: 'Connect a Google account first' }, 409);
     if (msg === 'no_spreadsheet') return c.json({ detail: 'Save a spreadsheet URL first' }, 409);
-    return c.json({ detail: `Could not write to the sheet: ${msg}` }, 502);
+    return refuse(c, 502, { code: 'sheet_write_failed', message: 'Could not write to the sheet. Check that the connected Google account can edit it and try again.', raw: msg, audience: 'owner' });
   }
 });
 
@@ -3622,7 +3623,7 @@ research.post('/funds/sheet/push', async (c) => {
     const msg = String(e?.message || e);
     if (msg === 'not_connected') return c.json({ detail: 'Connect a Google account first' }, 409);
     if (msg === 'no_spreadsheet') return c.json({ detail: 'Save a spreadsheet URL first' }, 409);
-    return c.json({ detail: `Could not read the sheet: ${msg}` }, 502);
+    return refuse(c, 502, { code: 'sheet_read_failed', message: 'Could not read the sheet. Check that the connected Google account can open it and try again.', raw: msg, audience: 'owner' });
   }
 });
 

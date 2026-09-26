@@ -51,6 +51,8 @@ import {
 } from '../services/analyticsReports';
 import { ensureSubscriptionPlansSchema, listPlansFull, updatePlan, createPlan, deletePlan, PlanCreateError } from '../services/subscriptionPlans';
 import { bindingKey } from '../util/schemaBootstrap';
+import { refuse } from '../util/refusal';
+import { mapError } from './_t13t14t15_helpers';
 
 type AppCtx = Context<{ Bindings: Env }>;
 type ExportReport = 'overview' | 'users' | 'financial' | 'technical' | 'management';
@@ -530,7 +532,7 @@ r.post('/plans', async (c) => {
   } catch (e) {
     if (e instanceof PlanCreateError) return c.json({ detail: e.message }, e.status as 400 | 409 | 500);
     console.warn('[analytics] createPlan unexpected error:', (e as Error).message);
-    return c.json({ detail: (e as Error).message || 'Create failed' }, 500);
+    return refuse(c, 500, { code: 'plan_create_failed', message: 'The plan could not be created. Nothing was saved; try again in a moment.', raw: e });
   }
   await ensureSchema(c.env);
   try {
@@ -587,7 +589,9 @@ r.patch('/plans/:planId', async (c) => {
   }
   let updated;
   try { updated = await updatePlan(c.env, planId, patch); }
-  catch (e) { return c.json({ detail: (e as Error).message }, 400); }
+  // D278 — updatePlan throws our validation sentences; mapError passes those
+  // through and keeps a storage failure's text out of the body.
+  catch (e) { return mapError(c, e); }
   if (!updated) return c.json({ detail: 'Plan not found' }, 404);
   await ensureSchema(c.env);
   try {
@@ -613,7 +617,7 @@ r.delete('/plans/:planId', async (c) => {
   } catch (e) {
     if (e instanceof PlanCreateError) return c.json({ detail: e.message }, e.status as 400 | 409 | 500);
     console.warn('[analytics] deletePlan unexpected error:', (e as Error).message);
-    return c.json({ detail: (e as Error).message || 'Delete failed' }, 500);
+    return refuse(c, 500, { code: 'plan_delete_failed', message: 'The plan could not be deleted. Nothing changed; try again in a moment.', raw: e });
   }
   if (!deleted) return c.json({ detail: 'Plan not found' }, 404);
   await ensureSchema(c.env);

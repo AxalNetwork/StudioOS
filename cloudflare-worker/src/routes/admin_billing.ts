@@ -6,6 +6,7 @@ import { stripeCall } from './billing';
 import { ensureAdminAuditLogTable } from './admin';
 import { logAdminAction } from '../services/adminAudit';
 import { clawbackReferralCommissionForRefund, type ClawbackResult } from '../services/referralCommissions';
+import { refusalBody } from '../util/refusal';
 
 // Task #11 (II) — Admin billing actions. Mounted at `/api/admin/billing`
 // BEFORE the catch-all `/api/admin` in index.ts so the nested routes resolve
@@ -722,9 +723,15 @@ function stripeErrorResponse(c: Context<{ Bindings: Env }>, e: unknown) {
   }
   const m = /^stripe_error:(\d+):([\s\S]*)$/.exec(msg);
   const upstreamStatus = m ? Number(m[1]) : 502;
-  const detail = m ? m[2] : msg;
   const status = upstreamStatus >= 400 && upstreamStatus < 500 ? 400 : 502;
-  return c.json({ error: 'Stripe request failed', code: 'stripe_error', upstream_status: upstreamStatus, detail }, status);
+  // D278 — Stripe's JSON is the admin's to read on `upstream`, never `detail`.
+  return c.json(refusalBody({
+    code: 'stripe_error',
+    message: 'Stripe did not accept the request. Nothing changed; the upstream field says why.',
+    raw: m ? m[2] : msg,
+    audience: 'admin',
+    extra: { code: 'stripe_error', upstream_status: upstreamStatus },
+  }), status);
 }
 
 export default adminBilling;

@@ -38,6 +38,7 @@ import {
 import { getSQL } from '../db';
 import { companyKybScope } from '../services/tenancyScope';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
+import { refusalBody } from '../util/refusal';
 
 const trust = new Hono<{ Bindings: Env }>();
 
@@ -452,8 +453,15 @@ export async function requestIntroLogic(
       appUrl: env.APP_URL || 'https://axal.vc',
     });
   } catch (e) {
-    console.error('[trust] 3-way envelope creation failed', e);
-    return { status: 500, body: { error: 'envelope_creation_failed', message: (e as Error).message } };
+    // D278 — DocuSign's text goes to the log; the member reads our sentence.
+    return {
+      status: 500,
+      body: refusalBody({
+        code: 'envelope_creation_failed',
+        message: 'The NDA could not be sent for signature. Nothing was sent; try again in a moment.',
+        raw: e,
+      }),
+    };
   }
   await deps.upsertPairwise(env, founderUserId, investor.id, envelope.envelope_uuid);
 

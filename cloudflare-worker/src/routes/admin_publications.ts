@@ -26,6 +26,7 @@ import {
   uniqueSlug, periodLabel, K_MIN,
 } from '../services/publications';
 import { bindingKey } from '../util/schemaBootstrap';
+import { refusalBody } from '../util/refusal';
 
 type AppCtx = Context<{ Bindings: Env }>;
 const r = new Hono<{ Bindings: Env }>();
@@ -351,19 +352,23 @@ r.post('/:id{[0-9]+}/render', async (c: AppCtx) => {
       });
       if (!res.ok) {
         const txt = await res.text().catch(() => '');
-        return c.json({
-          error: 'browser_rendering_failed',
-          status: res.status,
-          message: txt.slice(0, 240),
-        }, 502);
+        return c.json(refusalBody({
+          code: 'browser_rendering_failed',
+          message: 'The page could not be rendered. Try again in a moment.',
+          raw: txt,
+          audience: 'admin',
+          extra: { status: res.status },
+        }), 502);
       }
       bytes = await res.arrayBuffer();
       contentType = format === 'png' ? 'image/png' : 'application/pdf';
     } catch (e) {
-      return c.json({
-        error: 'browser_rendering_failed',
-        message: (e as Error).message,
-      }, 502);
+      return c.json(refusalBody({
+        code: 'browser_rendering_failed',
+        message: 'The page could not be rendered. Try again in a moment.',
+        raw: e,
+        audience: 'admin',
+      }), 502);
     }
   }
 

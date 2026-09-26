@@ -29,6 +29,7 @@ import {
   crunchbaseResetEpoch,
   type CrunchbaseSnapshot,
 } from '../integrations/providers/crunchbase';
+import { refuse } from '../util/refusal';
 
 const crunchbase = new Hono<{ Bindings: Env }>();
 
@@ -75,8 +76,7 @@ async function withConn<T>(c: Context<{ Bindings: Env }>, user: User, fn: (apiKe
         connect_path: '/account/integrations',
       }, 412);
     }
-    const msg = (e as Error).message || 'crunchbase_failed';
-    return c.json({ error: 'crunchbase_failed', message: msg }, 502);
+    return refuse(c, 502, { code: 'crunchbase_failed', message: 'Crunchbase could not be read just now. Try again in a moment.', raw: e });
   }
 }
 

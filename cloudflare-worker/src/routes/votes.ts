@@ -28,6 +28,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { bindingKey } from '../util/schemaBootstrap';
+import { refuse } from '../util/refusal';
 
 const votes = new Hono<{ Bindings: Env }>();
 
@@ -223,7 +224,7 @@ votes.post('/:deal_id', async (c) => {
       },
     });
   } catch (e: any) {
-    return c.json({ error: e?.message || 'Failed to cast vote' }, 500);
+    return refuse(c, 500, { code: 'vote_failed', message: 'Your vote could not be recorded. Try again in a moment.', raw: e });
   }
 });
 
@@ -281,7 +282,7 @@ votes.get('/:deal_id', async (c) => {
 
     return c.json(payload);
   } catch (e: any) {
-    return c.json({ error: e?.message || 'Failed to load tally' }, 500);
+    return refuse(c, 500, { code: 'tally_unreadable', message: 'The tally could not be read. Try again in a moment.', raw: e });
   }
 });
 

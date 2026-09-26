@@ -257,7 +257,12 @@ test('a non-403 dispatch failure keeps its own reason rather than borrowing the 
   try {
     const r = await call(...deploy({ code: 'fr' }));
     assert.equal(r.status, 502);
-    assert.match(r.body.message, /No ref found/);
+    // RE-AIMED BY D278: GitHub's own reason is kept — on `upstream`, which an
+    // admin on this console may read — and `message` is our sentence, naming
+    // the status rather than borrowing the scope explanation.
+    assert.match(r.body.upstream, /No ref found/);
+    assert.match(r.body.message, /HTTP 422/);
+    assert.doesNotMatch(r.body.message, /No ref found/);
     assert.ok(!/actions: write/.test(r.body.message), 'only a 403 is a scope problem');
   } finally { s.restore(); }
 });

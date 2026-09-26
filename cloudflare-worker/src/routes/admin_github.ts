@@ -51,6 +51,7 @@ import type { Env } from '../types';
 import { requireAdmin, requireSuperAdminWriteBar } from '../auth';
 import { setSecret, deleteSecret } from '../services/cloudflareSecrets';
 import { logAdminAction } from '../services/adminAudit';
+import { refusalBody } from '../util/refusal';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -136,7 +137,7 @@ r.put('/', async (c) => {
         cf_status: res.status ?? null, cf_code: res.code ?? null,
       });
       const httpStatus = res.code === 'cloudflare_api_token_missing' ? 503 : 502;
-      return c.json({ error: res.code || 'cf_api_failed', detail: res.error || null, failed_secret: p.name }, httpStatus);
+      return c.json(refusalBody({ code: res.code || 'cf_api_failed', message: 'Cloudflare did not accept the secret change. The upstream field says why.', raw: res.error || null, audience: 'admin', extra: { failed_secret: p.name } }), httpStatus);
     }
     pushed.push(p.name);
   }
@@ -327,7 +328,7 @@ r.delete('/', async (c) => {
         secrets: names, failed_secret: name, outcome: 'failed',
         cf_status: res.status ?? null, cf_code: res.code ?? null,
       });
-      return c.json({ error: res.code || 'cf_api_failed', detail: res.error || null, failed_secret: name }, 502);
+      return c.json(refusalBody({ code: res.code || 'cf_api_failed', message: 'Cloudflare did not accept the secret change. The upstream field says why.', raw: res.error || null, audience: 'admin', extra: { failed_secret: name } }), 502);
     }
   }
   await logAdminAction(c.env, admin.id, admin.email, 'github_sync_secrets_delete', {

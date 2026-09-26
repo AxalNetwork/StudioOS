@@ -39,6 +39,7 @@ import { renderAgreementPdf, sha256Hex } from '../services/pdf';
 import { PDFDocument } from 'pdf-lib';
 import { bindingKey } from '../util/schemaBootstrap';
 import { clientIp } from '../util/clientIp';
+import { refuse } from '../util/refusal';
 
 const esign = new Hono<{ Bindings: Env }>();
 
@@ -1001,7 +1002,7 @@ esign.post('/sign/:token', async (c) => {
     console.error('[esign] PDF render/upload failed', e);
     // Roll the claim back so the recipient can retry.
     await c.env.DB.prepare(`UPDATE esign_recipients SET status = 'pending', signer_ip = NULL, signer_ua = NULL WHERE id = ? AND status = 'signing'`).bind(rec.id).run().catch(() => {});
-    return c.json({ error: 'Failed to generate signed PDF', detail: e?.message }, 500);
+    return refuse(c, 500, { code: 'signed_pdf_failed', message: 'The signed PDF could not be produced. Your signature was not recorded; open the link again and sign once more.', raw: e });
   }
 
   // Finalize the claim → 'signed'.
@@ -1178,7 +1179,7 @@ esign.post('/:id{[0-9]+}/forward', async (c) => {
     } catch (e) {
       const msg = (e as Error).message || 'Unknown PDF error';
       console.warn('[esign] PDF strip-last-page failed:', msg);
-      return c.json({ error: 'Failed to strip audit page from PDF', detail: msg }, 500);
+      return refuse(c, 500, { code: 'audit_page_strip_failed', message: 'The document could not be prepared for forwarding. Nothing was sent; try again in a moment.', raw: msg });
     }
   }
 

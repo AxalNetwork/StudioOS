@@ -5,6 +5,7 @@ import { requireAuth, requireAdmin } from '../auth';
 import type { ScoreSnapshotRow, AnomalyFlag } from '../services/scoreIntegrity';
 import analytics from './monitoring_analytics';
 import { loadAiUsageReport } from '../services/aiRouter';
+import { refuse } from '../util/refusal';
 
 const monitoring = new Hono<{ Bindings: Env }>();
 
@@ -22,7 +23,7 @@ monitoring.get('/ai-usage', async (c) => {
     const report = await loadAiUsageReport(c.env, days);
     return c.json(report);
   } catch (e) {
-    return c.json({ error: (e as Error).message || 'failed to load ai usage' }, 500);
+    return refuse(c, 500, { code: 'ai_usage_unreadable', message: 'AI usage could not be read. This is not a claim that there was none; try again in a moment.', raw: e });
   }
 });
 

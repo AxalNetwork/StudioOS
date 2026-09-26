@@ -70,6 +70,8 @@ import { send as sendEmail } from '../services/email/send';
 import { stripTrailingSlashes } from '../util/url';
 import { notify } from '../services/notify';
 import { withDeadline } from '../util/deadline';
+import { refuse } from '../util/refusal';
+import { gcipSentence } from '../services/gcip';
 
 // A stall is an outage, and this limiter fails closed on an outage. Both KV
 // calls carry a deadline because KV takes no AbortSignal: without one the catch
@@ -521,7 +523,7 @@ recover.post('/sms/start', async (c) => {
 
   const r = await sendVerificationCode(c.env, sms_.phone, body?.recaptcha_token || null);
   if (!r.ok) {
-    return c.json({ error: r.code, message: r.message }, r.code === 'recaptcha_required' ? 412 : 502);
+    return refuse(c, r.code === 'recaptcha_required' ? 412 : 502, { code: r.code, message: gcipSentence(r.code), raw: r.message });
   }
   const { id: ticketId, lookup_token } = await createTicket(c.env, user.id, 'sms', { sms_last4: sms_.last4 }, c);
   // Bind the GCIP session to the ticket so /sms/verify can atomically
@@ -554,7 +556,7 @@ recover.post('/sms/verify', async (c) => {
   const v = await signInWithPhoneNumber(c.env, sessionInfo, code);
   if (!v.ok) {
     if (v.code === 'invalid_code') await recoveryRefusal(c, 'sms', 'invalid_code', { email, userId: bound.user_id });
-    return c.json({ error: v.code, message: v.message }, v.code === 'invalid_code' ? 401 : 502);
+    return refuse(c, v.code === 'invalid_code' ? 401 : 502, { code: v.code, message: gcipSentence(v.code), raw: v.message });
   }
 
   const sql = getSQL(c.env);

@@ -55,6 +55,8 @@ import {
 } from '../services/xClient';
 import { lintForSend } from '../services/telegramRedactCheck';
 import { previewXAll, previewXAudience, runXAggregator, X_AUDIENCES, type XAudience } from '../services/xAggregator';
+import { refuse } from '../util/refusal';
+import { refusalBody } from '../util/refusal';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -93,16 +95,39 @@ function xErrorPayload(e: unknown): { body: Record<string, unknown>; status: 400
       e.code === 'x_breaker_open' ? 503 :
       e.code === 'x_unauthorized' || e.code === 'x_forbidden' || e.code === 'x_duplicate_content' ? 400 :
       502;
+    // D278 — X's own text is an admin's to read, clipped, on `upstream`;
+    // `message` is our sentence for the code.
     return {
-      body: {
-        error: e.code, code: e.code, message: e.message,
-        ...(e.retryAfter ? { retry_after: e.retryAfter } : {}),
-      },
+      body: refusalBody({
+        code: e.code,
+        message: X_SENTENCES[e.code] || X_SENTENCES.x_upstream,
+        raw: e,
+        audience: 'admin',
+        extra: { code: e.code, ...(e.retryAfter ? { retry_after: e.retryAfter } : {}) },
+      }),
       status,
     };
   }
-  return { body: { error: 'x_unknown', code: 'x_unknown', message: (e as Error).message || String(e) }, status: 502 };
+  return {
+    body: refusalBody({ code: 'x_unknown', message: 'The call to X failed. Try again in a moment.', raw: e, audience: 'admin', extra: { code: 'x_unknown' } }),
+    status: 502,
+  };
 }
+
+/** D278 — the sentence an admin reads for each X failure code. */
+const X_SENTENCES: Record<string, string> = {
+  rate_limited: 'X is rate-limiting this account. Wait and try again.',
+  x_breaker_open: 'Calls to X are paused after repeated failures. Try again in a few minutes.',
+  x_unauthorized: 'X rejected the stored credentials. Reconnect the X account.',
+  x_forbidden: 'X refused this action for the connected account.',
+  x_duplicate_content: 'X refused this post because it duplicates a recent one.',
+  x_media_error: 'X did not accept the media. Check the file and try again.',
+  x_network: 'X could not be reached. Try again in a moment.',
+  x_oauth_exchange_failed: 'Connecting the X account did not complete. Start the connection again.',
+  x_oauth_refresh_failed: 'The X session could not be renewed. Reconnect the X account.',
+  x_api_error: 'X returned an error. Try again in a moment.',
+  x_upstream: 'X returned an error. Try again in a moment.',
+};
 
 // Audit ------------------------------------------------------------------
 
@@ -676,7 +701,7 @@ r.post('/posts/:id/alt-text', async (c) => {
     });
     caption = String(out?.description || out?.response || '').trim().slice(0, 1000);
   } catch (e) {
-    return c.json({ error: 'ai_failed', message: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'ai_failed', message: 'The draft could not be generated. Try again in a moment.', raw: e, audience: 'admin' });
   }
   if (!caption) return c.json({ error: 'ai_empty' }, 502);
 

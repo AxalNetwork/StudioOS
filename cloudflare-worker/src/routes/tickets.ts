@@ -20,6 +20,7 @@ import {
   createIssue, updateIssue, addComment, setLabels, setAssignees,
   fetchIssue, fetchComments,
 } from '../services/githubSync';
+import { refusalBody } from '../util/refusal';
 
 const tickets = new Hono<{ Bindings: Env }>();
 
@@ -345,7 +346,7 @@ tickets.post('/:id{[0-9]+}/comments', async (c) => {
   const gh = await addComment(c.env, ticket.github_issue_number, body);
   if (!gh.ok) {
     await sql.end();
-    return c.json({ error: 'github_comment_failed', detail: gh.error || null, github_sync_status: 'failed' }, 502);
+    return c.json(refusalBody({ code: 'github_comment_failed', message: 'Your comment could not be posted to the linked issue. It was not saved; try again in a moment.', raw: gh.error || null, extra: { github_sync_status: 'failed' } }), 502);
   }
   await recordSyncEvent(c.env, {
     ticketId: ticket.id, issueNumber: ticket.github_issue_number, direction: 'outbound',

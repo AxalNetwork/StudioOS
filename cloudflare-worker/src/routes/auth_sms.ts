@@ -42,6 +42,8 @@ import {
 } from '../services/authSms';
 import { isGcipConfigured, sendVerificationCode, signInWithPhoneNumber, deleteGcipPhone } from '../services/gcip';
 import { withDeadline } from '../util/deadline';
+import { refuse } from '../util/refusal';
+import { gcipSentence } from '../services/gcip';
 
 // A stall is an outage, and this limiter fails closed on an outage. Both KV
 // calls carry a deadline because KV takes no AbortSignal: without one the catch
@@ -129,7 +131,7 @@ sms.post('/sms/start-enrollment', async (c) => {
   if (!(await rate(c.env, `sms-enroll-user:${user.id}`, 5, 60))) return c.json({ error: 'Too many requests' }, 429);
   const r = await sendVerificationCode(c.env, phone, recaptcha);
   if (!r.ok) {
-    return c.json({ error: r.code, message: r.message }, r.code === 'recaptcha_required' ? 412 : 502);
+    return refuse(c, r.code === 'recaptcha_required' ? 412 : 502, { code: r.code, message: gcipSentence(r.code), raw: r.message });
   }
   // Stash the candidate {phone, country} in KV against the sessionInfo so
   // the confirm step doesn't have to trust the client to round-trip these.
@@ -158,7 +160,7 @@ sms.post('/sms/confirm-enrollment', async (c) => {
     return c.json({ error: 'session_corrupted' }, 500);
   }
   const v = await signInWithPhoneNumber(c.env, sessionInfo, code);
-  if (!v.ok) return c.json({ error: v.code, message: v.message }, v.code === 'invalid_code' ? 401 : 502);
+  if (!v.ok) return refuse(c, v.code === 'invalid_code' ? 401 : 502, { code: v.code, message: gcipSentence(v.code), raw: v.message });
   // GCIP echoes back the verified phoneNumber; trust THAT, not the stash.
   // The stash is only authoritative for the country/jurisdiction binding.
   await persistSmsEnrollment(c.env, user.id, v.phoneNumber, country, v.localId);
@@ -239,7 +241,7 @@ sms.post('/sms/start-challenge', async (c) => {
   const sms_ = await loadSms(c.env, userId);
   if (!sms_) return c.json({ session_info: null });
   const r = await sendVerificationCode(c.env, sms_.phone, recaptcha);
-  if (!r.ok) return c.json({ error: r.code, message: r.message }, r.code === 'recaptcha_required' ? 412 : 502);
+  if (!r.ok) return refuse(c, r.code === 'recaptcha_required' ? 412 : 502, { code: r.code, message: gcipSentence(r.code), raw: r.message });
   // Bind the sessionInfo to (email, userId) so verify can't be replayed
   // against a different account.
   await withDeadline(c.env.RATE_LIMITS.put(
@@ -274,7 +276,7 @@ sms.post('/sms/verify-challenge', async (c) => {
   const v = await signInWithPhoneNumber(c.env, sessionInfo, code);
   if (!v.ok) {
     if (v.code === 'invalid_code') await smsRefuse('invalid_code', bound.user_id);
-    return c.json({ error: v.code, message: v.message }, v.code === 'invalid_code' ? 401 : 502);
+    return refuse(c, v.code === 'invalid_code' ? 401 : 502, { code: v.code, message: gcipSentence(v.code), raw: v.message });
   }
 
   // Cross-check the verified phone against the stored row. Defense-in-depth

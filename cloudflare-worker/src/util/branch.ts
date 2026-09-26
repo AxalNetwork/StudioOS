@@ -78,7 +78,7 @@ export const BRANCH_SUSPENDED = 'Branch suspended by HQ';
  * DECLARED HERE RATHER THAN IN THE ROUTE, because `AUTH_ERROR_STATUSES` keys
  * on the sentence. A route that threw its own wording would fall through
  * `mapError` to 400, and the SPA cannot tell a refusal from a bad request at
- * 400 — which is exactly the defect D110 found across 31 route files.
+ * 400 — which is exactly the defect D110 found across the route files that call it.
  */
 export const BRANCH_ONLY = 'Branch only';
 
@@ -100,8 +100,8 @@ export function branchOf(env: Pick<Env, 'BRANCH_CODE'> | undefined | null): stri
  * LIFTED OUT OF `routes/branch_escalations.ts` (D130) BECAUSE THE APPROVALS
  * BOARD IS THE SECOND BRANCH-ONLY SURFACE, and a second hand-written copy is
  * how one of them ends up throwing its own sentence — which `mapError` would
- * answer 400 rather than 403, the exact defect D110 found across 31 route
- * files. Throwing the SHARED constant is what makes `AUTH_ERROR_STATUSES` map
+ * answer 400 rather than 403, the exact defect D110 found across the route
+ * files that call it. Throwing the SHARED constant is what makes `AUTH_ERROR_STATUSES` map
  * it, so the thing worth sharing is the throw, not just the string.
  */
 export function requireBranchTier(env: Pick<Env, 'BRANCH_CODE'>): string {

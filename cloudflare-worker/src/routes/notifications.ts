@@ -19,6 +19,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { bindingKey } from '../util/schemaBootstrap';
+import { refuse } from '../util/refusal';
 
 const notifications = new Hono<{ Bindings: Env }>();
 
@@ -235,7 +236,7 @@ notifications.put('/prefs', async (c) => {
     ).bind(j, user.id).run();
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: e?.message || 'Failed to save' }, 500);
+    return refuse(c, 500, { code: 'save_failed', message: 'Your notification settings could not be saved. Nothing changed; try again in a moment.', raw: e });
   }
 });
 

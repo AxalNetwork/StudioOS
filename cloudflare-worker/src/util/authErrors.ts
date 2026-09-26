@@ -3,7 +3,7 @@
  *
  * WHY IT MOVED OUT OF `index.ts` (D110). There were two places deciding this
  * and they disagreed. `app.onError` read this map; `routes/_t13t14t15_helpers.
- * ts`'s `mapError` — which 31 route files call inside their own `try/catch`,
+ * ts`'s `mapError` — which every route file that calls it reaches inside its own `try/catch`,
  * so the app-level handler never sees their throws — had its own ternary that
  * knew `Unauthorized`, `Forbidden`, `Admin required` and `KYC required`, and
  * did not know `Super admin required`. The whole HQ licence ledger therefore

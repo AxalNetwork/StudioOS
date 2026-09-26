@@ -39,6 +39,7 @@ import { stripeCall } from './billing';
 import { stripeMode, getPublishableKey, setPublishableKey, maskPublishableKey } from '../services/catalog';
 import { setSecret } from '../services/cloudflareSecrets';
 import { logAdminAction } from '../services/adminAudit';
+import { refuse } from '../util/refusal';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -99,7 +100,7 @@ r.get('/webhook', async (c) => {
     });
     return c.json({ endpoints, required_events: REQUIRED_EVENTS, our_url: ourUrl });
   } catch (e) {
-    return c.json({ error: 'stripe_call_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'stripe_call_failed', message: 'Stripe did not accept the call. Nothing changed; check the Stripe settings and try again.', raw: e, audience: 'admin' });
   }
 });
 
@@ -185,7 +186,7 @@ r.post('/webhook', async (c) => {
         note: 'STRIPE_WEBHOOK_SECRET stored as Worker secret. Takes effect on next isolate boot.',
       });
     } catch (e) {
-      return c.json({ error: 'stripe_call_failed', detail: (e as Error).message }, 502);
+      return refuse(c, 502, { code: 'stripe_call_failed', message: 'Stripe did not accept the call. Nothing changed; check the Stripe settings and try again.', raw: e, audience: 'admin' });
     }
   } else if (action === 'update') {
     const endpointId = String(body.endpoint_id || '').trim();
@@ -208,7 +209,7 @@ r.post('/webhook', async (c) => {
       });
       return c.json({ ok: true, endpoint_id: ep.id, url: ep.url });
     } catch (e) {
-      return c.json({ error: 'stripe_call_failed', detail: (e as Error).message }, 502);
+      return refuse(c, 502, { code: 'stripe_call_failed', message: 'Stripe did not accept the call. Nothing changed; check the Stripe settings and try again.', raw: e, audience: 'admin' });
     }
   } else {
     return c.json({ error: 'invalid_action', allowed: ['register', 'update'] }, 400);
