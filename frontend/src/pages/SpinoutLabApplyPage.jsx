@@ -3,8 +3,9 @@ import { Link, useNavigate } from "react-router-dom";
 import { Check, Loader2, ArrowLeft } from "lucide-react";
 import { useAuth } from "../hooks/useAuthSync";
 import { spinoutLab } from "../lib/api";
-import { labJurisdiction, resolveOpenCohort } from "../lib/spinoutLab";
+import { labJurisdiction, resolveOpenCohort, useCohortPlaces, placesLabel } from "../lib/spinoutLab";
 import LabPageShell from "../components/spinout/LabPageShell";
+import { Unreadable } from "../ui";
 
 // Apply to the open cohort — signed-in application form (reference design:
 // Spin-Out Lab.dc.html APPLY VIEW). The heading used to read "Apply to Cohort
@@ -57,6 +58,9 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
   // application lands in + its DST-correct close deadline). Null until the
   // /state fetch resolves; preview mode keeps the static copy.
   const [appWindow, setAppWindow] = useState(null);
+  // The place count is `cohort.places` from /brief — the same read the
+  // Programme Brief prints — never a typed number.
+  const places = useCohortPlaces();
   // Client-side fallback when state hasn't loaded yet (mirrors Worker math).
   const fallbackCohort = useMemo(() => {
     try { const c = resolveOpenCohort(); return `Cohort ${c.cohortNum}`; } catch { return 'Next Cohort'; }
@@ -147,8 +151,18 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
               <p className="tabular-nums mt-2 mb-5 text-[14px] text-gray-500 dark:text-gray-400">
                 {appWindow?.closes_at
                   ? `Applications close ${new Date(appWindow.closes_at).toLocaleString(undefined, { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" })}. The cohort starts ${new Date(appWindow.starts_at).toLocaleDateString(undefined, { month: "long", day: "numeric" })}.`
-                  : "Applications close August 1, 2026. 8 spots available."}
+                  : "Applications close seven days before the cohort starts, at 23:59 Delaware time."}
+                {places.status === "ok" ? ` ${placesLabel(places.places)} in each cohort.` : null}
               </p>
+              {places.status === "error" ? (
+                <div className="-mt-3 mb-5">
+                  <Unreadable
+                    what="The number of places in a cohort"
+                    claim="This is not a statement that the cohort is full."
+                    onRetry={places.retry}
+                  />
+                </div>
+              ) : null}
 
               {/* Signed-in account */}
               <div className="flex items-center gap-3 bg-violet-50/50 dark:bg-violet-500/5 border border-violet-100 dark:border-violet-500/20 rounded-xl px-3.5 py-3 mb-5">

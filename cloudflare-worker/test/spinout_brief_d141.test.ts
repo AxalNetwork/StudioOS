@@ -7,9 +7,9 @@
  * by exactly the person who cannot authenticate. Two things therefore have to
  * hold, and neither is obvious from the handler:
  *
- *   1. THE ROUTE IS REACHABLE WITHOUT A TOKEN. `spinout_lab.ts`'s header says
- *      the file is "JWT-auth-gated for every route", which has not been true
- *      since `/stats` and `/cohort` shipped — auth here is per-handler, so a
+ *   1. THE ROUTE IS REACHABLE WITHOUT A TOKEN. `spinout_lab.ts`'s header said
+ *      the file was "JWT-auth-gated for every route" until D380, which had not
+ *      been true since `/stats` and `/cohort` shipped — auth here is per-handler, so a
  *      route is public by NOT calling `requireAuth`. That is easy to undo by
  *      accident, and undoing it empties the page for its whole audience.
  *   2. THE DATES SURVIVE AN EMPTY DATABASE. Five of the six come from
