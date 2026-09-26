@@ -16,14 +16,11 @@
 //   - Items must not appear in more than one group within a role.
 
 import {
-  LayoutDashboard, Target, FileText, Users, DollarSign,
-  Ticket, Handshake, Rocket, UserCircle,
-  Globe, Brain, Activity, Shield, ShieldCheck,
-  Network, Sparkles, Briefcase, TrendingUp, Layers, Scale,
-  MessageSquare, Package, Calendar, Heart, Bookmark, Megaphone, Send,
-  Gamepad2, ShieldAlert, Trash2,
-  Inbox, Radar, Wallet, Landmark,
-  Mail, Gift, Map, UserCog, Coins, FileStack, SlidersHorizontal,
+  LayoutDashboard, Target, FileText, Users, Ticket, Handshake, Rocket,
+  UserCircle, Activity, Shield, ShieldCheck, Network, Sparkles, Briefcase,
+  TrendingUp, MessageSquare, Package, Calendar, Send, Gamepad2,
+  Trash2, Inbox, Radar, Wallet, Landmark, Mail, Gift,
+  Map, UserCog, Coins, FileStack, SlidersHorizontal,
 } from 'lucide-react';
 
 // `workspaces/shellConfig.js` is a pure leaf module — it imports nothing — so
@@ -171,10 +168,14 @@ export const SIDEBAR_GROUPS = {
     ]},
   ],
 
+  // D284 — the 29 working pages (the former studio, capital, network and more
+  // groups) left this shell for the Workspaces launcher in the top bar, and
+  // Messages left it for a top-bar button on both admin shells. The list they
+  // moved to is `lib/adminPlacement.js` (`WORKSPACES`), read by the launcher
+  // and by the command palette; a workspace page lights no sidebar row.
   admin: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
-      { to: '/messages', icon: Mail, label: 'Messages' },
     ]},
     { key: 'admin', label: 'Admin', items: [
       { to: '/admin', icon: Shield, label: 'Admin Console' },
@@ -229,49 +230,6 @@ export const SIDEBAR_GROUPS = {
       // that does not come back. A destructive surface goes at the bottom, not
       // beside the everyday queues.
       { to: '/admin/trash', icon: Trash2, label: 'Trash' },
-    ]},
-    { key: 'studio', label: 'Studio', items: [
-      { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
-      { to: '/scoring', icon: Target, label: 'Scoring Engine' },
-      { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
-      { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
-      { to: '/signals', icon: Radar, label: 'Signals' },
-      { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
-      { to: '/matches', icon: Sparkles, label: 'AI Matches' },
-      { to: '/deals', icon: Handshake, label: 'Deal Flow' },
-    ]},
-    { key: 'capital', label: 'Capital & Legal', items: [
-      { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
-      { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
-      { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
-      { to: '/portfolio/coverage', icon: Network, label: 'Portfolio Coverage' },
-      { to: '/portfolio/reserves', icon: Layers, label: 'Reserve Allocation' },
-      { to: '/portfolio/waterfall', icon: TrendingUp, label: 'Exit Waterfall' },
-      { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
-      { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
-      { to: '/incorporate', icon: Scale, label: 'Incorporate' },
-      { to: '/compliance', icon: Calendar, label: 'Compliance Calendar' },
-    ]},
-    { key: 'network', label: 'Network & Growth', items: [
-      // Task #4 — "Referrals" moved into Settings (/settings/referrals); the
-      // /refer route redirects there. Removed from the admin nav.
-      // Task #1 — "Contacts" merged into this "Network" page (Contacts +
-      // Relationships tabs); /contacts and /relationships redirect to /network.
-      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
-      { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
-      { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
-      // "Integrations" merged into Settings (/settings/integrations); the
-      // /integrations route redirects there. Removed from the admin nav.
-      { to: '/services', icon: Package, label: 'Service Catalogue' },
-      { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
-      { to: '/partner/insights', icon: TrendingUp, label: 'Demand Insights' },
-      { to: '/partner/office-hours', icon: Calendar, label: 'Partner Office Hours' },
-      { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing Review' },
-    ]},
-    { key: 'more', label: 'More', items: [
-      { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement' },
-      { to: '/spinout-lab/83b', icon: Calendar, label: '83(b) Tracker' },
-      { to: '/perks', icon: Gift, label: 'Perks' },
     ]},
     // No 'account' group here on purpose. It once held Articles / Activity Log
     // / Support / Documentation; those moved to the user menu (7c93b83e and

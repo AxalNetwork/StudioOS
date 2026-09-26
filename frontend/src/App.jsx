@@ -25,7 +25,7 @@ import {
   Menu,
   Shield,
   ChevronDown, Eye, ArrowLeft, Sparkles,
-  Gift
+  Gift, Mail
 } from 'lucide-react';
 import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES, ONBOARDING_CANVAS_PATHS } from './sidebarConfig';
 import PaywallModal from './components/PaywallModal';
@@ -33,6 +33,8 @@ import AdminFrozenBar from './components/AdminFrozenBar';
 import BranchSuspendedBar from './components/BranchSuspendedBar';
 import HqSupportSessionBar from './components/HqSupportSessionBar';
 import HqViewingAsBar from './components/HqViewingAsBar';
+import WorkspacesLauncher from './components/WorkspacesLauncher';
+import { ADMIN_SHELLS, MESSAGES_ROLES } from './lib/paletteIndex';
 import { clearSupportSession } from './lib/supportSession';
 import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
@@ -1038,6 +1040,24 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 <FounderWellbeingMenu />
               </Suspense>
             )}
+            {/* D284 — Messages left the sidebar rows for the top bar. It is
+                offered to exactly the roles the /messages route admits, on
+                every shell those roles get. */}
+            {MESSAGES_ROLES.includes(activeRole) && (
+              <Link
+                to="/messages"
+                data-testid="messages-door"
+                className="hidden sm:inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors whitespace-nowrap"
+              >
+                <Mail size={14} />
+                Messages
+              </Link>
+            )}
+            {/* S23 · H37 — the 29 working pages, one launcher on the HQ and
+                Admin shells. Not on the branch shell: S7–S19 draw none, and
+                the pages are the studio's own working surfaces, not a
+                branch's consoles. */}
+            {ADMIN_SHELLS.includes(shellRole) && <WorkspacesLauncher />}
             <Suspense fallback={<span className="inline-block w-8 h-8" />}>
               <NotificationBell userId={user?.id} />
             </Suspense>
