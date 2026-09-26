@@ -3,6 +3,9 @@ import test from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
+import { WORKSPACES } from '../src/lib/adminPlacement.js';
+
 const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
 
@@ -52,17 +55,29 @@ test('the Funds research tab is withdrawn everywhere', () => {
 test('no nav still points at the retired research/market URL', () => {
   const sidebar = read('frontend/src/sidebarConfig.js');
   assert.doesNotMatch(sidebar, /'\/advisor\/research\/market'/);
+});
+
+test('every shell that offers Market Intelligence reaches /market-intel', () => {
   // Every role that had the tab keeps a route to the real page. D12 removed
   // twenty fixture rows and admin's emptied Research group, but deliberately
-  // left all five of these standing — a role losing its one live research
+  // left all five roles standing — a role losing its one live research
   // surface would be a regression hiding inside a withdrawal.
   //
-  // Counted inside SIDEBAR_GROUPS only. The file also lists `/market-intel` in
-  // INVESTOR_FULL_BLEED — a layout list, not a nav — and a whole-file count
-  // read that as a sixth role linking it.
-  const navs = sidebar.slice(0, sidebar.indexOf('export const FOUNDER_FULL_BLEED'));
-  assert.equal((navs.match(/'\/market-intel'/g) || []).length, 5,
-    'expected all five role navs to link /market-intel');
+  // Re-aimed in D284 from a count of five `'/market-intel'` literals inside
+  // SIDEBAR_GROUPS to the property that count stood for. Four shells offer it
+  // as a row's `match` (the Research or Studio row lights on it); the admin
+  // shell offers it from the Workspaces launcher, whose list is
+  // `lib/adminPlacement.js` — the row left the admin sidebar with the other
+  // 28 working pages. Exactly these five, named, never "at least".
+  const viaRows = Object.entries(SIDEBAR_GROUPS)
+    .filter(([, groups]) => groups.some((g) => (g.items || []).some((it) =>
+      it.to === '/market-intel' || (it.match || []).includes('/market-intel'))))
+    .map(([role]) => role);
+  const viaLauncher = WORKSPACES.some((w) => w.route === '/market-intel') ? ['admin'] : [];
+  assert.deepEqual([...viaRows, ...viaLauncher].sort(),
+    ['admin', 'advisor', 'founder', 'investor', 'partner'],
+    'expected all five roles to reach /market-intel: four by a row, admin by the launcher');
+  assert.match(read('frontend/src/App.jsx'), /path="\/market-intel"/, '/market-intel is no longer a route');
 });
 
 test('the research index lands on a surface that renders', () => {

@@ -195,6 +195,26 @@ function isEmail(v: string): boolean {
 
 const APP_URL = (env: Env) => env.APP_URL || 'https://axal.vc';
 
+// D258 — A WRONG AUTHENTICATOR CODE IS A 400, NEVER A 401, and the reason is on
+// the client. `request()` in frontend/src/lib/api.js treats any 401 from a
+// non-`/auth/` path on a protected page as an expired session: it clears the
+// token, sends the person to /login and throws "Session expired". Every route
+// below lives under `/settings/`, so a single typo in a six-digit code used to
+// sign the person out mid-enrolment — on the one screen they came to in order
+// to secure the account. The session is fine; the CODE is wrong, and that is a
+// refusal of the input.
+//
+// One body for all four routes (re-enrol confirm, enrol confirm, repair,
+// recovery-codes regenerate): `error` is the machine code a page branches on
+// (`e.code` after readRefusal) and `message` is the sentence it prints. Codes
+// rotate every 30 seconds and `validate` already allows one step either side,
+// so the likeliest cause after a typo is a device clock that has drifted —
+// which is what the sentence tells the person to check.
+const WRONG_TOTP_CODE = {
+  error: 'invalid_code',
+  message: "That code didn't match. Check the time on your device and try again.",
+} as const;
+
 // --- GET /api/settings ------------------------------------------------------
 
 function currentJtiFromRequest(c: Context<{ Bindings: Env }>): string | null {
@@ -616,7 +636,7 @@ settings.post('/totp/re-enrol/confirm', async (c) => {
   catch { await sql.end(); return c.json({ error: 'invalid_secret' }, 400); }
   if (totp.validate({ token: code, window: 1 }) === null) {
     await sql.end();
-    return c.json({ error: 'invalid_code' }, 401);
+    return c.json(WRONG_TOTP_CODE, 400);
   }
   // Mint fresh recovery codes alongside the new secret. Task #11 — must use
   // the canonical XXXX-XXXX-XXXX format: the previous generateToken().slice(0,10)
@@ -723,7 +743,7 @@ settings.post('/totp/enrol/confirm', async (c) => {
   try { totp = new TOTP({ secret: Secret.fromBase32(proposedSecret) }); }
   catch { return c.json({ error: 'invalid_secret' }, 400); }
   if (totp.validate({ token: code, window: 1 }) === null) {
-    return c.json({ error: 'invalid_code' }, 401);
+    return c.json(WRONG_TOTP_CODE, 400);
   }
   // Recovery codes in the canonical XXXX-XXXX-XXXX format — the only shape
   // tryConsumeRecoveryCode will redeem at login.
@@ -801,7 +821,7 @@ settings.post('/totp/repair', async (c) => {
   const current = new TOTP({ secret: Secret.fromBase32(totpRow.secret) });
   if (current.validate({ token: code, window: 1 }) === null) {
     await sql.end();
-    return c.json({ error: 'Invalid current TOTP code' }, 401);
+    return c.json(WRONG_TOTP_CODE, 400);
   }
 
   const secret = new Secret();
@@ -1018,7 +1038,7 @@ settings.post('/totp/recovery-codes/regenerate', async (c) => {
   const totp = new TOTP({ secret: Secret.fromBase32(totpRow.secret) });
   if (totp.validate({ token: code, window: 1 }) === null) {
     await sql.end();
-    return c.json({ error: 'Invalid current TOTP code' }, 401);
+    return c.json(WRONG_TOTP_CODE, 400);
   }
   // T5 — 10 codes (was 8) to match the audit-plan spec and the Settings UI
   // copy ("X of 10 remaining"). Single-use semantics are enforced on the

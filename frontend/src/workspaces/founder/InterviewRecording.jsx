@@ -78,11 +78,14 @@ export default function InterviewRecording({ interview, fillsOn, onChanged }) {
       await api.uploadInterviewRecording(interview.id, file, duration);
       onChanged?.();
     } catch (e) {
-      setNote(e?.body?.detail === 'unsupported_type'
+      // D258 — the route answers each of these as a bare `detail` code, which
+      // travels on `e.code`. Both matches used to read `e.body`, which nothing
+      // sets, so an oversized file showed the code `too_large` as its note.
+      setNote(e?.code === 'unsupported_type'
         ? 'That file type cannot be transcribed. Use a recording from your phone or browser.'
-        : e?.body?.detail === 'too_large'
+        : e?.code === 'too_large'
           ? 'That recording is too large. The limit is 20 MB, about 80 minutes of speech.'
-          : e?.body?.message || e?.message || 'The recording could not be attached.');
+          : e?.message || 'The recording could not be attached.');
     } finally {
       setBusy('');
       if (inputRef.current) inputRef.current.value = '';
@@ -97,7 +100,7 @@ export default function InterviewRecording({ interview, fillsOn, onChanged }) {
       if (r?.transcript === '') setNote('The recording has no speech in it. Nothing was written.');
       onChanged?.();
     } catch (e) {
-      setNote(e?.body?.message || e?.message || 'That could not be transcribed. Nothing was charged.');
+      setNote(e?.message || 'That could not be transcribed. Nothing was charged.');
     } finally {
       setBusy('');
     }

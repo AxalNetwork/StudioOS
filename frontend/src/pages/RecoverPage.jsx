@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Mail, MessageSquare, KeyRound, Users, ShieldAlert } from 'lucide-react';
 import AxalLogo from '../components/AxalLogo';
+import { refusalError } from '../lib/api';
 
 // Task #50 — Lost-TOTP recovery landing page. Lists available layers in
 // order of friction. Layers fan out into their own mini-flows below.
@@ -36,9 +37,10 @@ async function post(path, body) {
     headers: { 'content-type': 'application/json', ...csrfHeader() },
     body: JSON.stringify(body || {}),
   });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j?.message || j?.error || `HTTP ${r.status}`);
-  return j;
+  // D258 — a refusal becomes an Error through api.js's one definition, so its
+  // sentence is `e.message` and its code `e.code`, the same as everywhere else.
+  if (!r.ok) throw await refusalError(r, `HTTP ${r.status}`);
+  return r.json().catch(() => ({}));
 }
 
 function FrictionBadge({ level }) {
@@ -103,7 +105,10 @@ export default function RecoverPage() {
         const r = (isTrusted || isAdmin)
           ? await post('/claim', { token: linkToken, ticket_id: Number(linkTicket) })
           : await fetch(`/api/auth/recover/email/verify?token=${encodeURIComponent(linkToken)}&ticket=${encodeURIComponent(linkTicket)}`, { credentials: 'include' })
-              .then(async (res) => { const j = await res.json().catch(() => ({})); if (!res.ok) throw new Error(j?.message || j?.error || `HTTP ${res.status}`); return j; });
+              .then(async (res) => {
+                if (!res.ok) throw await refusalError(res, `HTTP ${res.status}`);
+                return res.json().catch(() => ({}));
+              });
         if (r?.token) localStorage.setItem('token', r.token);
         if (r?.user) localStorage.setItem('user', JSON.stringify(r.user));
         setInfo(r?.note || 'Recovery complete. Redirecting…');
@@ -178,9 +183,11 @@ export default function RecoverPage() {
       // — the trusted contacts get an email out-of-band.
       setInfo("If your account has at least two trusted contacts on file, they've each been emailed an attest link. Once both approve, you'll receive a claim link to finish recovery.");
     } catch (e) {
-      setError(e?.message === 'not_enough_trusted_contacts'
-        ? 'You need at least two active trusted contacts to use this layer.'
-        : e?.message || 'Could not start trusted-contact recovery.');
+      // D258 — this used to match `not_enough_trusted_contacts` through
+      // `e.message`. No Worker route sends that code: the start route answers
+      // the same shape whatever the account holds (no enumeration), so the
+      // branch could never run. What reaches here is a real failure.
+      setError(e?.message || 'Could not start trusted-contact recovery.');
     } finally { setBusy(false); }
   };
 

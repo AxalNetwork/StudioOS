@@ -28,7 +28,7 @@ import {
   AlertTriangle, ArrowLeft, Check, ChevronLeft, ChevronRight,
   Download, Loader2, Maximize2, Minimize2, Presentation, Share2, X,
 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, refusalError } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { reportError } from '../lib/log';
 import { useAuth } from '../hooks/useAuthSync';
@@ -201,8 +201,9 @@ export default function SpinoutLabPitchDeckPage() {
         setExportFilename(filename);
         setExportNote('Server PDF rendering is unavailable here — exported PowerPoint instead.');
       } else {
-        const err = await r.json().catch(() => ({}));
-        throw new Error(err.detail || err.message || `Export failed (${r.status})`);
+        // D258 — the one reading of a refusal body: its sentence, then its
+        // code, never `detail` ahead of `message` as this chain had it.
+        throw await refusalError(r, `Export failed (${r.status})`);
       }
       stopProgress();
       setExportPhase('done');

@@ -111,7 +111,11 @@ export default function ArticlesQueuePage() {
       toast.success(successMsg);
     } catch (e) {
       reportError('AdminArticles:action', e);
-      toast.error(e?.body?.error || 'Action failed');
+      // D258 — `e.message` is the refusal's sentence, or its code when the
+      // route sends only a code (every admin_articles.ts refusal does today).
+      // This read `e.body.error`, which nothing sets, so it always said
+      // "Action failed".
+      toast.error(e?.message || 'Action failed');
     } finally {
       setBusy(false);
     }

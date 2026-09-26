@@ -227,8 +227,11 @@ test('the reason is the server’s, and it is canvas H30’s sentence', () => {
 });
 
 test('a refusal renders its sentence, not its code', () => {
-  // `request()` puts a string `error` into `err.message` — `kind_not_available`
-  // here — and keeps the body on `err.data`, whose `message` is the sentence.
+  // The body rides on `err.data`, whose `message` is the sentence, and the page
+  // reads it first. Before D258 `request()` put a string `error` —
+  // `kind_not_available` here — into `err.message`, which is why the order
+  // mattered; since D258 `err.message` is the sentence too and the code is on
+  // `err.code`, but reading the body first stays right whatever builds the error.
   const at = CODE.indexOf('setSendError(err');
   assert.ok(at > 0, 'the raise no longer reports its failure');
   const line = CODE.slice(at, CODE.indexOf(';', at));
