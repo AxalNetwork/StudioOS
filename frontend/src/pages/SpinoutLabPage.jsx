@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Loader2, ArrowRight, FlaskConical, Globe } from "lucide-react";
+import { Loader2, ArrowRight, FlaskConical } from "lucide-react";
 import { spinoutLab } from "../lib/api";
 import { useAuth } from "../hooks/useAuthSync";
 import { reportError } from "../lib/log";
 import SpinoutLabMarketingPage from "./SpinoutLabMarketingPage";
 import SpinoutLabWorkspace from "./SpinoutLabWorkspace";
 import LabIntro from "../components/spinout/LabIntro";
+import { Unreadable } from "../ui";
 // The facts both surfaces read. They live in lib/ rather than here because
 // this file imports the marketing page and the marketing page renders the
 // intro — a cycle, if the intro had to reach back up here for them.
@@ -18,80 +19,15 @@ import {
   // thrown yet; the first caller that omits it would blank the page. Found by
   // ESLint's `no-undef`, which is the whole reason that step exists.
   LAB_APPLY_HREF,
-  LAB_JURISDICTIONS, labJurisdiction, LAB_APPLY_HREF_SIGNED_IN, LAB_CONTACT_HREF,
-  parseSqliteUtc, fmtRaised, useSpinoutStats, companiesLabel, openCohortCopy,
-  useCohortDirectory, useShippedFeed,
+  LAB_APPLY_HREF_SIGNED_IN, LAB_CONTACT_HREF,
+  parseSqliteUtc, fmtRaised, openCohortCopy,
+  useCohortDirectory, useShippedFeed, useCohortPlaces, placesLabel,
 } from "../lib/spinoutLab";
 import { DEFAULT_TRACK } from "../lib/spinoutLabArsenal";
 
-export const PHASE_THEMES = {
-  violet: {
-    bg: "bg-violet-50/50 dark:bg-violet-950/20", border: "border-violet-200 dark:border-violet-900/50",
-    chip: "bg-violet-100 dark:bg-violet-900/60", ink: "text-violet-700 dark:text-violet-300",
-    ring: "ring-violet-400 dark:ring-violet-500 shadow-violet-500/20", fill: "#8b5cf6"
-  },
-  blue: {
-    bg: "bg-blue-50/50 dark:bg-blue-950/20", border: "border-blue-200 dark:border-blue-900/50",
-    chip: "bg-blue-100 dark:bg-blue-900/60", ink: "text-blue-700 dark:text-blue-300",
-    ring: "ring-blue-400 dark:ring-blue-500 shadow-blue-500/20", fill: "#3b82f6"
-  },
-  teal: {
-    bg: "bg-teal-50/50 dark:bg-teal-950/20", border: "border-teal-200 dark:border-teal-900/50",
-    chip: "bg-teal-100 dark:bg-teal-900/60", ink: "text-teal-700 dark:text-teal-300",
-    ring: "ring-teal-400 dark:ring-teal-500 shadow-teal-500/20", fill: "#0d9488"
-  },
-  amber: {
-    bg: "bg-amber-50/50 dark:bg-amber-950/20", border: "border-amber-200 dark:border-amber-900/50",
-    chip: "bg-amber-100 dark:bg-amber-900/60", ink: "text-amber-700 dark:text-amber-300",
-    ring: "ring-amber-400 dark:ring-amber-500 shadow-amber-500/20", fill: "#d97706"
-  },
-  pink: {
-    bg: "bg-pink-50/50 dark:bg-pink-950/20", border: "border-pink-200 dark:border-pink-900/50",
-    chip: "bg-pink-100 dark:bg-pink-900/60", ink: "text-pink-700 dark:text-pink-300",
-    ring: "ring-pink-400 dark:ring-pink-500 shadow-pink-500/20", fill: "#db2777"
-  }
-};
-
-const DIconCorp = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 21V8l8-5 8 5v13"/><path d="M9 21v-6h6v6"/><path d="M9 11h.01M15 11h.01"/></svg>;
-const DIconCap = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 4"/></svg>;
-const DIconFile83 = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 15l2 2 4-4"/></svg>;
-const DIconDeck = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 16v4M8 20h8"/></svg>;
-const DIconModel = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M7 15l3-4 3 3 5-7"/></svg>;
-const DIconIntro = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5"/><path d="M16 11a3 3 0 0 0 0-6"/><path d="M21 20c0-2.5-1.3-4-3.5-4.6"/></svg>;
-const DIconAdvisor = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 21l-4.9-2.6.9-5.5-4-3.9L9.5 8z"/></svg>;
-const DIconDataroom = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>;
-const DIconBadge = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="9" r="6"/><path d="M9 14.5 8 22l4-2 4 2-1-7.5"/></svg>;
-
-// Rows [0] (entity) and [2] (equity filing) are jurisdiction-derived in the
-// design handoff — render via deliverablesFor(jurisdictionKey); this base
-// array carries the Delaware record's wording.
-export const DELIVERABLES = [
-  { icon: <DIconCorp />, name: "Delaware C-Corp", desc: "Fully incorporated entity with EIN and registered agent." },
-  { icon: <DIconCap />, name: "Vesting Cap Table", desc: "Founder equity with 4-year vest, 1-year cliff on Carta." },
-  { icon: <DIconFile83 />, name: "83(b) Election", desc: "Filed within the 30-day IRS window, archived in your data room." },
-  { icon: <DIconDeck />, name: "Pitch Deck", desc: "12-slide venture-standard deck, designed and reviewed." },
-  { icon: <DIconModel />, name: "Financial Model", desc: "3-year P&L, revenue model, and unit economics." },
-  { icon: <DIconIntro />, name: "Warm Introductions", desc: "5–10 curated intros to the Axal VC investor network." },
-  { icon: <DIconAdvisor />, name: "Advisor Network", desc: "2 matched advisors with equity agreements in place." },
-  { icon: <DIconDataroom />, name: "Data Room", desc: "Organized deal room ready for investor due diligence." },
-  { icon: <DIconBadge />, name: "Verified Badge", desc: "Spin-Out Lab Alumni badge for your profile." }
-];
-
-// Active-cohort tracker columns — LIVE data from GET /spinout-lab/cohort
-// (public; the section renders on the logged-out marketing page too). Only
-// the column theming below is presentational: weeks 1-4 map to the first
-// four columns; recent graduates fill "Incorporated".
-const TRACKER_COLUMNS = [
-  { key: 1, name: 'VALIDATE', accent: 'border-violet-500', tint: 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300' },
-  { key: 2, name: 'STRUCTURE', accent: 'border-blue-500', tint: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' },
-  { key: 3, name: 'BUILD', accent: 'border-teal-500', tint: 'bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300' },
-  { key: 4, name: 'PITCH & FUND', accent: 'border-amber-500', tint: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' },
-  { key: 5, name: 'INCORPORATED', accent: 'border-pink-500', tint: 'bg-pink-100 text-pink-700 dark:bg-pink-900/50 dark:text-pink-300' },
-];
-
 // Reference-design shared content (Spin-Out Lab.dc.html): graduate alumni
-// cards, jurisdiction chips, and the application CTA. Shared with
-// SpinoutLabMarketingPage so both surfaces stay in lockstep.
+// cards and the application CTA. Shared with SpinoutLabMarketingPage so both
+// surfaces stay in lockstep.
 
 // Graduate cards are LIVE data — GET /spinout-lab/graduates (public; the
 // section renders on the logged-out marketing page too). Only the avatar
@@ -121,53 +57,6 @@ function gradCohortLabel(cohort) {
   if (cohort == null || cohort === '') return 'Alumni';
   const s = String(cohort).trim();
   return /^\d+$/.test(s) ? `Cohort ${s}` : s;
-}
-
-// DELIVERABLES with rows [0] (entity) and [2] (equity filing) swapped in
-// from the selected jurisdiction's record (design: deliverables).
-export function deliverablesFor(jurisdictionKey) {
-  const j = labJurisdiction(jurisdictionKey);
-  const rows = [...DELIVERABLES];
-  rows[0] = { ...rows[0], name: j.entity, desc: j.entityDesc };
-  rows[2] = { ...rows[2], name: j.filingName, desc: j.filingDesc };
-  return rows;
-}
-
-// Jurisdiction selector bar (design: "Incorporation jurisdiction" chips).
-// Client-state only — the selection restyles copy across the program view.
-// Shared by the signed-in Dashboard and the logged-out marketing page.
-export function JurisdictionBar({ value, onChange }) {
-  return (
-    <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-3 px-4 mb-8 shadow-sm">
-      <div className="flex items-center gap-2">
-        <Globe className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-        <span className="text-[13px] font-bold text-gray-900 dark:text-gray-100">Incorporation jurisdiction</span>
-      </div>
-      <div className="flex gap-1.5 flex-wrap">
-        {LAB_JURISDICTIONS.map((j) => (
-          j.soon ? (
-            <button key={j.key} disabled className="h-[34px] px-3 rounded-lg bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-800 text-[13px] font-semibold opacity-60 cursor-not-allowed flex items-center gap-1.5">
-              {j.label} <span className="text-[9px] font-bold uppercase tracking-wider bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 rounded px-1.5 py-0.5">Soon</span>
-            </button>
-          ) : (
-            <button
-              key={j.key}
-              type="button"
-              onClick={() => onChange(j.key)}
-              className={`h-[34px] px-3 rounded-lg text-[13px] font-semibold transition-colors border ${
-                value === j.key
-                  ? 'bg-violet-600 text-white border-violet-600'
-                  : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800'
-              }`}
-            >
-              {j.label}
-            </button>
-          )
-        ))}
-      </div>
-      <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto hidden md:inline">Entity & equity filing update across the program →</span>
-    </div>
-  );
 }
 
 export function GraduatesSection() {
@@ -270,166 +159,6 @@ export function GraduatesSection() {
   );
 }
 
-// Hero stats panel — LIVE data from GET /spinout-lab/stats (public; the
-// hero also renders on the logged-out marketing page). Companies built and
-// total raised are real; the "28 days" row is the program's promise, not a
-// measurement. The raised row always shows: "$0" when there is no funding
-// recorded yet (dev has no funding columns; production sums
-// projects.total_funding).
-/**
- * The Lab's three headline outcome numbers, live from the public
- * `GET /spinout-lab/stats`.
- *
- * Shared because two surfaces quote them — the marketing hero and the
- * printable Program Brief — and the brief used to carry its own hardcoded
- * copies ("12 companies", "$2.4M") that no query produced. Two literals
- * claiming a track record are a liability the moment the real one moves, and
- * a brief is the artifact most likely to be forwarded to an investor.
- *
- * `companies`/`raised` are null while loading and on failure; both callers
- * render an em-dash rather than a zero, because "0 companies built" is a
- * worse thing to print than "we couldn't load this".
- */
-export function HeroStatsPanel() {
-  const { companies, raised } = useSpinoutStats();
-
-  return (
-    <div className="flex flex-col gap-[1px] min-w-[230px] bg-white/10 border border-white/20 rounded-[16px] overflow-hidden">
-      <div className="p-4 px-5 flex flex-col gap-0.5">
-        <div className="tabular-nums text-[26px] font-extrabold tracking-tight">
-          {companiesLabel(companies)}
-        </div>
-        <div className="text-[12.5px] text-[#a89fce]">Built to date</div>
-      </div>
-      <div className="p-4 px-5 flex flex-col gap-0.5 border-t border-white/10">
-        <div className="tabular-nums text-[26px] font-extrabold tracking-tight">{raised === null ? '—' : raised}</div>
-        <div className="text-[12.5px] text-[#a89fce]">Total capital raised by graduates</div>
-      </div>
-      <div className="p-4 px-5 flex flex-col gap-0.5 border-t border-white/10">
-        <div className="tabular-nums text-[26px] font-extrabold tracking-tight">28 days</div>
-        <div className="text-[12.5px] text-[#a89fce]">Average time to incorporation</div>
-      </div>
-    </div>
-  );
-}
-
-export function CohortTrackerSection() {
-  // null = loading, 'error' = fetch failed, [] = no active cohort
-  const [members, setMembers] = useState(null);
-
-  useEffect(() => {
-    let alive = true;
-    spinoutLab
-      .cohort()
-      .then((r) => {
-        if (alive) setMembers(Array.isArray(r) ? r : []);
-      })
-      .catch((e) => {
-        reportError('spinout-lab:cohort', e);
-        if (alive) setMembers('error');
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const list = Array.isArray(members) ? members : [];
-  const active = list.filter((m) => m.status === 'active');
-  // Subtitle facts are derived from the live members — no invented numbers.
-  const cohortLabel = gradCohortLabel(active.find((m) => m.cohort)?.cohort ?? null);
-  const earliestStart = active
-    .map((m) => parseSqliteUtc(m.started_at))
-    .filter(Boolean)
-    .sort((a, b) => a - b)[0];
-
-  return (
-    <section className="mb-12">
-      <div className="flex items-baseline justify-between flex-wrap gap-2 mb-1">
-        <h2 className="m-0 text-[20px] font-extrabold tracking-[-.02em]">Active cohort.</h2>
-        {active.length > 0 && (
-          <span className="inline-flex items-center gap-1.5 text-[12.5px] text-gray-500">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" style={{ animation: 'wsPulse 2s infinite' }}></span>Live tracker
-          </span>
-        )}
-      </div>
-      {active.length > 0 && (
-        <p className="m-0 mb-4 text-[13.5px] text-gray-500 tabular-nums">
-          {cohortLabel !== 'Alumni' ? `${cohortLabel} · ` : ''}
-          {earliestStart ? `Started ${earliestStart.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })} · ` : ''}
-          {active.length} {active.length === 1 ? 'company' : 'companies'}
-        </p>
-      )}
-      {members === null && (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] p-4 shadow-sm mt-4 animate-pulse" aria-hidden="true">
-          <div className="grid grid-cols-5 gap-3.5">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <div key={i}>
-                <div className="h-3 rounded bg-gray-100 dark:bg-gray-800 mb-3" />
-                <div className="h-16 rounded-xl bg-gray-50 dark:bg-gray-800/50" />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {members === 'error' && (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] p-6 mt-4 text-[13px] text-gray-500 dark:text-gray-400">
-          Couldn't load the cohort tracker right now — please try again later.
-        </div>
-      )}
-      {Array.isArray(members) && members.length === 0 && (
-        <div className="bg-white dark:bg-gray-900 border border-dashed border-gray-300 dark:border-gray-700 rounded-[16px] p-8 mt-4 text-center">
-          <div className="text-[14px] font-bold text-gray-700 dark:text-gray-300 mb-1">No cohort in session right now.</div>
-          <div className="text-[12.5px] text-gray-500 dark:text-gray-400">
-            Companies appear here in real time while their founders run the 4-week sprint.
-          </div>
-        </div>
-      )}
-      {Array.isArray(members) && members.length > 0 && (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] p-4 shadow-sm">
-          <div className="overflow-x-auto no-scrollbar">
-            <div className="grid grid-cols-5 gap-3.5 min-w-[820px]">
-              {TRACKER_COLUMNS.map((col) => {
-                const cards = list.filter((m) => (m.status === 'graduated' ? 5 : m.week) === col.key);
-                return (
-                  <div key={col.key}>
-                    <div className={`flex items-center justify-between px-1 pb-2.5 border-b-2 mb-3 ${col.accent}`}>
-                      <span className="text-[12.5px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">{col.name}</span>
-                      <span className="tabular-nums text-[11.5px] font-bold text-gray-400 bg-gray-100 dark:bg-gray-800 dark:text-gray-500 rounded-md px-2 py-0.5">{cards.length}</span>
-                    </div>
-                    <div className="flex flex-col gap-2.5 min-h-[40px]">
-                      {cards.map((m, ci) => {
-                        const t = GRAD_AVATAR_THEMES[list.indexOf(m) % GRAD_AVATAR_THEMES.length];
-                        return (
-                          <div key={`${m.name}-${ci}`} className="bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-xl p-3">
-                            <div className="flex items-center gap-2 mb-2">
-                              <div className={`w-8 h-8 rounded-lg flex-none font-extrabold text-[12px] flex items-center justify-center ${t.bg} ${t.ink}`}>
-                                {gradInitials(m.name)}
-                              </div>
-                              <div className="min-w-0">
-                                <div className="text-[13px] font-bold whitespace-nowrap overflow-hidden text-ellipsis">{m.name}</div>
-                                <div className="text-[11px] text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{m.sector || 'In the sprint'}</div>
-                              </div>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className={`tabular-nums text-[11px] font-bold rounded-md px-2 py-1 ${col.tint}`}>
-                                {m.status === 'graduated' ? (m.day ? `Done in ${m.day}d` : 'Incorporated') : `Day ${m.day}`}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
 // LP-facing counterpart to ApplyCtaSection. An investor browsing the program
 // is a prospective source of capital, not a cohort applicant, so the call to
 // action points at the LP workspace instead of the founder application.
@@ -466,13 +195,27 @@ export function ApplyCtaSection({ applyHref = LAB_APPLY_HREF }) {
     : 'Apply to the next cohort.';
 
   const sub = cohort
-    ? `Applications close ${cohort.deadlineLabel}. 8 spots available.`
-    : 'Applications are now open. 8 spots available.';
+    ? `Applications close ${cohort.deadlineLabel}.`
+    : 'Applications are now open.';
+  // The place count is read, never typed: `cohort.places` from /brief.
+  const places = useCohortPlaces();
 
   return (
     <section className="rounded-[20px] p-10 text-center relative overflow-hidden text-white" style={{ background: 'radial-gradient(900px 300px at 85% 120%,rgba(196,181,253,.35),transparent 60%),linear-gradient(115deg,#5b21b6,#7c3aed)' }}>
       <h2 className="m-0 text-[32px] font-black tracking-[-.03em]">{headline}</h2>
-      <p className="tabular-nums my-3 mb-6 text-[15px] text-[#e9d5ff]">{sub}</p>
+      <p className="tabular-nums my-3 mb-6 text-[15px] text-[#e9d5ff]" data-testid="apply-cta-sub">
+        {sub}
+        {places.status === 'ok' ? ` ${placesLabel(places.places)} in each cohort.` : null}
+      </p>
+      {places.status === 'error' ? (
+        <div className="-mt-3 mb-6 mx-auto w-fit rounded-lg bg-white dark:bg-gray-900 px-3 py-2">
+          <Unreadable
+            what="The number of places in a cohort"
+            claim="This is not a statement that the cohort is full."
+            onRetry={places.retry}
+          />
+        </div>
+      ) : null}
       <div className="flex gap-3 justify-center flex-wrap">
         <Link to={applyHref} className="h-11 px-5.5 rounded-[11px] bg-white dark:bg-gray-100 text-[#6d28d9] text-[14px] font-bold flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white transition-colors">
           Apply Now <span className="text-[16px]" aria-hidden="true">→</span>
@@ -484,6 +227,18 @@ export function ApplyCtaSection({ applyHref = LAB_APPLY_HREF }) {
       <p className="mt-6 text-[12px] text-[#c4b5fd]">Spin-Out Lab is open to all Axal VC users. Acceptance is selective. No equity taken by Axal VC.</p>
     </section>
   );
+}
+
+/**
+ * Why a strong application can be refused: the cohort's place count, read from
+ * `/brief`. While the read is in flight or has failed the sentence still holds
+ * without a number — it never borrows one.
+ */
+function CapacityReason() {
+  const places = useCohortPlaces();
+  return places.status === 'ok'
+    ? <>Each cohort has {placesLabel(places.places)}, so strong applications get turned down for space alone. </>
+    : <>Each cohort has a fixed number of places, so strong applications get turned down for space alone. </>;
 }
 
 /**
@@ -541,8 +296,8 @@ export function ApplicationStatusSection({ application }) {
         ) : (
           <>
             {decided ? <>We reviewed your application on {fmt(decided)}. </> : null}
-            Cohorts are capped at 8 companies, so strong applications get turned down for space
-            alone. You’re welcome to apply again below.
+            <CapacityReason />
+            You’re welcome to apply again below.
           </>
         )}
       </p>
@@ -584,9 +339,10 @@ export function CongratulationsScreen({ cohort, onStart, starting, startError })
               Congratulations — you're in.
             </h1>
             <p className="mt-4 mb-8 text-[16px] text-[#cbc4e8] font-medium leading-relaxed">
-              You've been admitted to the Spin-Out Lab. Over the next 28 days you'll go
-              from idea to incorporated — customer discovery, MVP scope,
-              venture-readiness scoring, and Delaware C-Corp formation.
+              You've been admitted to the Spin-Out Lab. The next 28 days are four
+              gates that open on evidence — Validate, Build, Pitch, Fund — with
+              every Lab tool on one company and one clock, and incorporation among
+              them for founders who still need an entity.
             </p>
             <button
               type="button"

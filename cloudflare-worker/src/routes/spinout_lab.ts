@@ -8,8 +8,12 @@
  * "pre-incorporation sprint", which described a restriction the code has
  * never implemented and which the public page repeated for months.
  *
- * Mounted at /api/spinout-lab. JWT-auth-gated for every route (no admin
- * escape hatch). The lab is detected from `users.spinout_lab_active`.
+ * Mounted at /api/spinout-lab. JWT-auth-gated (no admin escape hatch) for
+ * every route EXCEPT four public reads the logged-out Lab pages need:
+ * `/graduates`, `/stats`, `/brief` and `/cohort`. Those return company-level
+ * facts only — never a founder's identity, track or milestones — and anything
+ * added to them has to hold to that. The lab is detected from
+ * `users.spinout_lab_active`.
  *
  *   GET  /state      → current week, days remaining, milestones, unlocked
  *                       features for the caller
