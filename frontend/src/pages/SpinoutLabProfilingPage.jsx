@@ -47,21 +47,30 @@
 //   track is stored, with no runner-up or mix ratio) and are replaced by a
 //   one-line statement saying so.
 //
+// QUESTION LEDGER — D350. Eadwyn's conversation ledger (advisor_answers) is the
+//   store behind four canvas elements, read through `../lib/profilingLedger`:
+//   "Questions answered N / M" (KPI 1) and the per-module rows come from
+//   /advisor/progress → `profiling` (four fit.* modules, each with a
+//   confidence-weighted required count and a `confident` flag); "Next best
+//   questions" is /advisor/queue?focus=FIT, a read-only peek that never marks a
+//   question asked (/next-question can pin one — a write — and is not used);
+//   "Last answered" is the head of /advisor/answered. A 423 from any of them is
+//   the Worker's refusal, and its own sentence is printed; any other failure
+//   renders Unreadable with a retry, never an empty list or a zero.
+//
 // NO SOURCE → EXPLICIT EMPTY STATE, never a demo value:
-//   "Questions answered 54 / 79" and "12 open Qs"  → no answered-question count
-//     is exposed anywhere, so KPI 1 counts skills rated under its own label.
 //   Per-axis confidence bands                      → replaced by real coverage.
 //   Archetype secondary / "62 / 38" blend          → stated as not modelled.
-//   "Leadership style" / "Working style" progress  → kept as design rows but
-//     marked "Not modelled yet"; no such dimension exists in either taxonomy.
-//   Authored "next best questions" + "Answer 4"    → real gap-driven actions
-//     with real remaining counts, naming the dimension each one lifts.
+//   "Leadership style" / "Working style" progress  → kept as design rows,
+//     rendered Not recorded with the reason: no such dimension exists in the
+//     skills taxonomy, the values taxonomy or the profiling modules.
+//   "Improves …" / "Answer 4" on a next question   → the queue carries no such
+//     claim, so each row shows the question and its importance only. The
+//     skills-rating gaps (real remaining counts) stay as their own group.
 //   Timeline dates "Week 2 · Jul 13"               → real timestamps only
 //     (ratings updated_at, values updated_at, assessment created_at); no events
 //     means an explicit empty state, not three invented rows.
-//   `Last answered: "<question>"`                  → no question bank exists;
-//     the Studio card shows real last-activity instead.
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
@@ -84,6 +93,15 @@ import { archetypeMeta } from '../lib/assessmentMeta';
 import { FOUNDER_DIMENSIONS, buildFounderSkillsModel } from '../lib/founderDimensions';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
+import { Unrecorded, Unreadable } from '../ui';
+import {
+  PROFILING_FOCUS,
+  ledgerRead,
+  lastAnswered as readLastAnswered,
+  nextQuestions as readNextQuestions,
+  profilingModules as readProfilingModules,
+  questionsAnswered as readQuestionsAnswered,
+} from '../lib/profilingLedger';
 
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 const CARD = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm';
@@ -305,6 +323,30 @@ function SpectrumBar({ score, band }) {
   );
 }
 
+// Every non-`ok` state a ledger view can be in, drawn one way everywhere on
+// the page. A refusal prints the Worker's own sentence; a failed read is
+// Unreadable with a retry; a store with nothing for this account is
+// Unrecorded with the reason. Returns null for `ok`, so the caller draws data.
+function LedgerAbsence({ view, what, claim, onRetry, testId }) {
+  if (view == null) {
+    return <p className="text-[11.5px] text-gray-400 dark:text-gray-500" data-testid={`${testId}-loading`}>Reading the question ledger…</p>;
+  }
+  if (view.state === 'refused') {
+    return (
+      <p className="text-[12px] text-amber-700 dark:text-amber-400" role="status" data-testid={`${testId}-refused`}>
+        {view.message || 'The question ledger refused this read.'}
+      </p>
+    );
+  }
+  if (view.state === 'failed') {
+    return <span data-testid={`${testId}-unreadable`}><Unreadable what={what} claim={claim} onRetry={onRetry} /></span>;
+  }
+  if (view.state === 'unrecorded') {
+    return <span data-testid={`${testId}-unrecorded`}><Unrecorded reason={view.reason} /></span>;
+  }
+  return null;
+}
+
 export default function SpinoutLabProfilingPage() {
   const { user } = useAuth();
   const [state, setState] = useState(null);
@@ -313,6 +355,23 @@ export default function SpinoutLabProfilingPage() {
   const [results, setResults] = useState(null); // [..] | {unavailable}
   const [status, setStatus] = useState('loading');
   const [copied, setCopied] = useState(false); // transient "Copied ✓" state
+  // The question ledger — three classified reads (see ../lib/profilingLedger).
+  // Loaded on its own so "Retry" re-reads the ledger without the whole page.
+  const [ledger, setLedger] = useState(null); // {progress, queue, answered} | null while loading
+
+  const loadLedger = useCallback(async () => {
+    setLedger(null);
+    const [progress, queue, answered] = await Promise.all([
+      ledgerRead(api.advisor.progress()),
+      ledgerRead(api.advisor.queue(PROFILING_FOCUS)),
+      ledgerRead(api.advisor.answered()),
+    ]);
+    setLedger({ progress, queue, answered });
+  }, []);
+
+  useEffect(() => {
+    loadLedger();
+  }, [loadLedger]);
 
   useEffect(() => {
     let dead = false;
@@ -440,6 +499,12 @@ export default function SpinoutLabProfilingPage() {
     [skills, values, results],
   );
   const lastUpdated = evolution[0]?.date || null;
+
+  // Ledger views. `null` while the ledger is still loading.
+  const qAnswered = ledger ? readQuestionsAnswered(ledger.progress) : null;
+  const modules = ledger ? readProfilingModules(ledger.progress) : null;
+  const queued = ledger ? readNextQuestions(ledger.queue) : null;
+  const lastAns = ledger ? readLastAnswered(ledger.answered) : null;
 
   // Gap-driven next actions — the honest version of the design's authored
   // "next best questions" (there is no question-recommendation source). Each
@@ -608,16 +673,37 @@ export default function SpinoutLabProfilingPage() {
 
       {/* KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* The design labels this KPI "Questions answered" (54/79); no loaded
-            source exposes an answered-question count (/assessment/results/me
-            carries only vectors + confidence), so the honest skills-rated
-            count keeps its own label. */}
-        <div className={CARD} data-testid="kpi-skills-rated">
-          <div className="flex items-baseline justify-between">
-            <span className="text-xl font-bold text-gray-900 dark:text-gray-50 tabular-nums">{model ? `${model.ratedSkills} / ${model.totalSkills}` : '—'}</span>
-          </div>
-          <div className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-1">Skills rated</div>
-          <div className="mt-2"><Bar pct={model?.assessedPct || 0} band="High" /></div>
+        {/* "Questions answered" — the ledger's profiling count (D350). The
+            denominator is the questions that bring all four modules to
+            confidence, not the raw bank, so it is captioned that way. */}
+        <div className={CARD} data-testid="kpi-questions-answered">
+          {qAnswered?.state === 'ok' ? (
+            <>
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl font-bold text-gray-900 dark:text-gray-50 tabular-nums" data-testid="text-questions-answered">
+                  {qAnswered.answered} / {qAnswered.total}
+                </span>
+                <span className={`text-[10px] font-bold ${qAnswered.complete ? BAND_TEXT.High : BAND_TEXT.Medium}`}>
+                  {qAnswered.complete ? 'Confident' : 'Building'}
+                </span>
+              </div>
+              <div className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-1">Questions answered · toward a confident profile</div>
+              {qAnswered.percent != null && (
+                <div className="mt-2"><Bar pct={qAnswered.percent} band={qAnswered.complete ? 'High' : 'Medium'} /></div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="text-[11.5px] text-gray-500 dark:text-gray-400 mb-1.5">Questions answered</div>
+              <LedgerAbsence
+                view={qAnswered}
+                what="Your question count"
+                claim="This is not a claim that you have answered none."
+                onRetry={loadLedger}
+                testId="kpi-questions-answered"
+              />
+            </>
+          )}
         </div>
         <div className={CARD} data-testid="kpi-skills-graph">
           <div className="flex items-baseline justify-between">
@@ -930,39 +1016,123 @@ export default function SpinoutLabProfilingPage() {
                 { cat: 'Values', pct: valuesPct, na: !valuesModel?.rows.length, off: values?.unavailable, err: values?.failed },
                 { cat: 'Archetype', pct: archConfPct || 0, na: !latestResult, off: results?.unavailable, err: results?.failed },
                 // The design also lists these two. Neither exists in the skills
-                // taxonomy (8 categories / 128 skills) nor in the values
-                // taxonomy (10 core values + 5 founder spectrums), so there is
-                // nothing to bind: they stay at zero, explicitly not modelled,
-                // rather than carrying the design's 48% / 40% bars.
-                { cat: 'Leadership style', pct: 0, unmodelled: true },
-                { cat: 'Working style', pct: 0, unmodelled: true },
+                // taxonomy (8 categories / 128 skills), the values taxonomy
+                // (10 core values + 5 founder spectrums) or the four profiling
+                // modules, so there is nothing to bind: they render Not
+                // recorded with that reason and draw no bar at all, rather
+                // than the design's 48% / 40% or a zero-width one.
+                { cat: 'Leadership style', unmodelled: true },
+                { cat: 'Working style', unmodelled: true },
               ].map((row) => (
                 <div key={row.cat} data-testid={`progress-row-${row.cat.toLowerCase().replace(/\s+/g, '-')}`}>
                   <div className="flex justify-between gap-2 mb-1">
                     <span className="text-[12.5px] font-semibold text-gray-600 dark:text-gray-300">{row.cat}</span>
-                    <span
-                      className={`text-[11px] font-semibold flex-none ${row.err ? 'text-rose-500' : row.na || row.off || row.unmodelled ? 'text-gray-400' : BAND_TEXT[confidenceBand(row.pct)]}`}
-                      title={row.unmodelled ? 'This platform does not measure this dimension yet.' : undefined}
-                    >
-                      {row.unmodelled
-                        ? 'Not modelled yet'
-                        : row.err
+                    {row.unmodelled ? (
+                      <span className="text-[11px] flex-none">
+                        <Unrecorded reason="No skills, values or profiling module measures this dimension, so there is no figure to show." />
+                      </span>
+                    ) : (
+                      <span className={`text-[11px] font-semibold flex-none ${row.err ? 'text-rose-500' : row.na || row.off ? 'text-gray-400' : BAND_TEXT[confidenceBand(row.pct)]}`}>
+                        {row.err
                           ? "Couldn't load"
                           : row.off
                             ? 'Not available here'
                             : row.na
                               ? 'No data yet'
                               : `${row.pct}% · ${confidenceBand(row.pct)} confidence`}
-                    </span>
+                      </span>
+                    )}
                   </div>
-                  <Bar pct={row.na || row.off || row.err || row.unmodelled ? 0 : row.pct} band={confidenceBand(row.pct)} />
+                  {!row.unmodelled && <Bar pct={row.na || row.off || row.err ? 0 : row.pct} band={confidenceBand(row.pct)} />}
                 </div>
               ))}
+            </div>
+
+            {/* The ledger's four profiling modules (D350): how many of the
+                questions each module needs for confidence have been answered,
+                and whether it has reached confidence. */}
+            <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-800" data-testid="ledger-modules">
+              <div className={`${LBL} mb-1`}>Question ledger · by module</div>
+              <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-3">
+                Questions answered in Studio toward each module’s confidence target.
+              </p>
+              {modules?.state === 'ok' ? (
+                modules.rows.length ? (
+                  <div className="space-y-2.5">
+                    {modules.rows.map((m) => (
+                      <div key={m.key} data-testid={`ledger-module-${m.key}`}>
+                        <div className="flex justify-between gap-2 mb-1">
+                          <span className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">{m.label}</span>
+                          <span className={`text-[11px] font-semibold flex-none tabular-nums ${m.confident ? BAND_TEXT.High : BAND_TEXT.Medium}`}>
+                            {m.answered != null && m.total != null ? `${m.answered} / ${m.total} · ` : ''}
+                            {m.confident ? 'Confident' : 'Building'}
+                          </span>
+                        </div>
+                        {m.percent != null && <Bar pct={m.percent} band={m.confident ? 'High' : 'Medium'} />}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <Unrecorded reason="The ledger lists no profiling module for this account." />
+                )
+              ) : (
+                <LedgerAbsence
+                  view={modules}
+                  what="Your module progress"
+                  claim="This is not a claim that no module has started."
+                  onRetry={loadLedger}
+                  testId="ledger-modules"
+                />
+              )}
             </div>
           </div>
 
           <div className={CARD} data-testid="card-next-actions">
             <div className={`${LBL} mb-3`}>Next best questions · answer in Studio</div>
+            {/* The ledger's own queue, pinned to the profiling bank (D350).
+                Read-only: peeking here never marks a question asked. */}
+            <div className="mb-3" data-testid="ledger-next-questions">
+              {queued?.state === 'ok' ? (
+                <div className="space-y-2.5">
+                  {queued.rows.map((q) => (
+                    <div key={q.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 dark:border-gray-800" data-testid={`next-question-${q.id}`}>
+                      <span className="w-[34px] h-[34px] flex-none rounded-[9px] bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 flex items-center justify-center">
+                        <Fingerprint className="w-4 h-4" />
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12.5px] font-semibold text-gray-900 dark:text-gray-50">{q.prompt}</div>
+                        {(q.importance === 'critical' || q.importance === 'high') && (
+                          <div className="text-[11px] text-gray-400 capitalize">{q.importance} priority</div>
+                        )}
+                      </div>
+                      <Link
+                        to="/studio"
+                        className="text-[11.5px] font-semibold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border border-violet-100 dark:border-violet-800 rounded-lg px-3 py-1.5 whitespace-nowrap"
+                      >
+                        Answer →
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              ) : queued?.state === 'complete' ? (
+                <p className="text-[12.5px] text-gray-400 dark:text-gray-500" data-testid="ledger-next-questions-complete">
+                  Every profiling question available to you is answered.
+                </p>
+              ) : queued?.state === 'empty' ? (
+                <Unrecorded reason="The ledger has no profiling question open for you at this week and tier." />
+              ) : (
+                <LedgerAbsence
+                  view={queued}
+                  what="Your next questions"
+                  claim="This is not a claim that none are open."
+                  onRetry={loadLedger}
+                  testId="ledger-next-questions"
+                />
+              )}
+            </div>
+            {nextActions.length > 0 && (
+              <div className={`${LBL} mb-2 mt-4`}>Self-ratings still open</div>
+            )}
             {nextActions.length ? (
               <div className="space-y-2.5">
                 {nextActions.map((a) => {
@@ -986,9 +1156,7 @@ export default function SpinoutLabProfilingPage() {
                   );
                 })}
               </div>
-            ) : (
-              <p className="text-[12.5px] text-gray-400 dark:text-gray-500">Nothing outstanding — your profile inputs are complete.</p>
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -1063,14 +1231,23 @@ export default function SpinoutLabProfilingPage() {
               </span>
               <div className="flex-1">
                 <div className="text-[13px] font-bold text-gray-900 dark:text-gray-50">Resume assessment in Studio</div>
-                {/* The design quotes the last question answered. No question
-                    bank is exposed to this page, and a quoted string would read
-                    as a real answer — so this reports real last activity. */}
-                <p className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-1 leading-relaxed" data-testid="text-resume-note">
-                  {lastUpdated
-                    ? `Last activity ${fmtDate(lastUpdated)} — skills self-ratings and the values survey both live in Studio, and this report updates as you answer.`
-                    : 'Nothing answered yet — skills self-ratings and the values survey both live in Studio, and this report fills in as you answer.'}
-                </p>
+                {/* The design quotes the last question answered — the head of
+                    the ledger's /advisor/answered (D350), with its date. */}
+                <div className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-1 leading-relaxed" data-testid="text-last-answered">
+                  {lastAns?.state === 'ok' ? (
+                    <>Last answered: “{lastAns.label}”{lastAns.at && fmtDate(lastAns.at) ? ` · ${fmtDate(lastAns.at)}` : ''}</>
+                  ) : lastAns?.state === 'none' ? (
+                    'Nothing answered in Studio yet — this report fills in as you answer.'
+                  ) : (
+                    <LedgerAbsence
+                      view={lastAns}
+                      what="Your last answer"
+                      claim="This is not a claim that you have answered nothing."
+                      onRetry={loadLedger}
+                      testId="last-answered"
+                    />
+                  )}
+                </div>
               </div>
             </div>
             <Link
