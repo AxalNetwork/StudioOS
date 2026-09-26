@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowUpRight, ChevronRight, ClipboardCheck, KanbanSquare, LineChart, Route, Target } from 'lucide-react';
 import { api } from '../../lib/api';
-import { WorkerRail } from '../../ui';
+import { Unreadable, WorkerRail } from '../../ui';
+import { kindLabel, scheduleLabel } from '../../lib/cadence';
 import ExecutionPage from '../ExecutionPage';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import useAssistMode from '../../hooks/useAssistMode';
@@ -119,6 +120,10 @@ export default function FounderBuildDesk() {
   const [cards, setCards] = useState(() => seed?.cards ?? null);
   const [snapshots, setSnapshots] = useState(() => seed?.snapshots || []);
   const [summary, setSummary] = useState(() => seed?.summary || null);
+  // `undefined` while unread, `null` when the read failed. Migration 250's
+  // cadence store has served `/build/cadence` since it shipped; this card said
+  // "no cadence store" beside it.
+  const [cadence, setCadence] = useState(() => seed?.cadence);
   const [state, setState] = useState(() => seed ? 'ready' : 'loading');
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
@@ -171,9 +176,11 @@ export default function FounderBuildDesk() {
       // counts alone, so the notes need the rows — and this is the same read
       // `/build/board` already makes, not a new surface.
       api.pipelineDealDetail(projectId).catch(() => null),
-    ]).then(([roadmap, metrics, metricSummary, detail]) => {
+      api.getCadence(projectId).catch(() => null),
+    ]).then(([roadmap, metrics, metricSummary, detail, rituals]) => {
       if (!alive) return;
       setOkrs(roadmap?.okrs || []); setSnapshots(metrics?.snapshots || []); setSummary(metricSummary);
+      setCadence(rituals);
       setCards(detail ? (detail.tasks || []) : null); setState('ready'); setError('');
     }).catch((err) => {
       if (!alive) return;
@@ -213,7 +220,7 @@ export default function FounderBuildDesk() {
     return { now, commitments, board, boardTotal, roadmap, selectedDeal };
   }, [okrs, deals, cards, projectId]);
 
-  const navigationState = { founderBuildSeed: { projects, projectId, okrs, deals, cards, snapshots, summary } };
+  const navigationState = { founderBuildSeed: { projects, projectId, okrs, deals, cards, snapshots, summary, cadence } };
   if (workspace) return <ExecutionPage />;
   const query = projectId ? `?project_id=${projectId}` : '';
   const links = Object.fromEntries(SECTIONS.map(([, slug]) => [slug, `/build/${slug}${query}`]));
@@ -266,7 +273,7 @@ export default function FounderBuildDesk() {
           </nav>
         </header>
         {state === 'error' && <div className="build-error" data-testid="status-build-error"><AlertCircle size={16} /> {error} <button data-testid="button-retry-build" onClick={() => setReloadKey((value) => value + 1)}>Retry</button></div>}
-        <BuildSections loading={state === 'loading'} hasProjects={projects.length > 0} data={data} snapshots={snapshots} summary={summary} links={links} metricsLink={metricsLink} executionLink={executionLink} navigationState={navigationState} projectId={projectId} fillsOn={fillsOn} onSaved={() => setReloadKey((value) => value + 1)} />
+        <BuildSections loading={state === 'loading'} hasProjects={projects.length > 0} data={data} snapshots={snapshots} summary={summary} cadence={cadence} onRetry={() => setReloadKey((value) => value + 1)} links={links} metricsLink={metricsLink} executionLink={executionLink} navigationState={navigationState} projectId={projectId} fillsOn={fillsOn} onSaved={() => setReloadKey((value) => value + 1)} />
       </div>
       <WorkerRail
         workspace="Build"
@@ -283,7 +290,7 @@ export default function FounderBuildDesk() {
   </main>;
 }
 
-function BuildSections({ loading, hasProjects, data, snapshots, summary, links, metricsLink, executionLink, navigationState, projectId, fillsOn, onSaved }) {
+function BuildSections({ loading, hasProjects, data, snapshots, summary, cadence, onRetry, links, metricsLink, executionLink, navigationState, projectId, fillsOn, onSaved }) {
   const latest = snapshots[0];
   const previous = snapshots[1];
   const objectives = data.roadmap.reduce((count, column) => count + column.items.length, 0);
@@ -310,7 +317,8 @@ function BuildSections({ loading, hasProjects, data, snapshots, summary, links, 
         <p className="build-source">Cards are yours. This desk only ever proposes new ones or summarises movement — it never moves a card for you.</p>
         <Link data-testid="link-open-board-workspace" className="manage-link" to={links.board} state={navigationState}>Open detailed board <ChevronRight size={14} /></Link>
       </section>
-      <section className="build-card" id="build-2"><SectionHead icon={Route} title="Operating cadence" meta="Not recorded" /><div className="cadence-empty"><Route size={20} /><strong>No operating cadence recorded</strong><p>There is no cadence store connected to this operating desk, so no plan, standup or retro is assumed to exist. Once one is recorded, a Friday retro can be drafted from the board's own history — until then there is no history of a review to draft from.</p></div>
+      <section className="build-card" id="build-2"><SectionHead icon={Route} title="Operating cadence" meta={loading ? 'Reading cadence' : cadenceLabel(cadence)} />
+        {loading ? <Skeleton rows={2} /> : <Cadence cadence={cadence} onRetry={onRetry} />}
         <Link data-testid="link-open-cadence" className="manage-link" to={links.cadence} state={navigationState}>Open cadence <ChevronRight size={14} /></Link>
       </section>
     </div>
@@ -411,6 +419,37 @@ function KpiEntry({ projectId, latest, previous, summary, onSaved }) {
   </>;
 }
 
+/**
+ * A3's cadence card: the rituals a founder scheduled, from migration 250.
+ *
+ * THREE ABSENCES, KEPT APART. An unreadable read is not "no cadence"; a store
+ * the worker could not ready (`store_ready: false`) is not a founder who set
+ * nothing up; and a ready store with no ritual in it is the one real empty.
+ * The artboard's `Mon 9:00` has no column behind it — a ritual stores a weekday
+ * and a frequency, never a time — so the time is not drawn.
+ *
+ * THE FRIDAY RETRO DRAFT IS NAMED, NOT DRAWN. The artboard promises a retro
+ * summary "from the board's own history"; no draft surface for it exists in
+ * `DRAFT_SURFACES`, so a button here would be a control that does nothing.
+ */
+function Cadence({ cadence, onRetry }) {
+  if (cadence === null) return <Unreadable what="The operating cadence" claim="This is not a sign that no ritual is scheduled." onRetry={onRetry} />;
+  if (!cadence) return null;
+  if (cadence.store_ready === false) return <div className="cadence-empty"><Route size={20} /><strong>Cadence store not ready</strong><p>The cadence tables could not be prepared on this server, so no ritual can be read or scheduled yet.</p></div>;
+  const rituals = (cadence.rituals || []).filter((ritual) => ritual.active !== 0 && ritual.active !== false);
+  const adherence = cadence.stats?.adherence_pct;
+  return <>
+    {rituals.length ? <div className="cadence-list" data-testid="list-desk-rituals">{rituals.slice(0, 4).map((ritual) => <div className="cadence-row" key={ritual.id}><strong>{clean(ritual.name) || kindLabel(ritual.kind)}</strong><span>{scheduleLabel(ritual)}</span></div>)}</div>
+      : <div className="cadence-empty"><Route size={20} /><strong>No ritual is scheduled yet</strong><p>Schedule a Monday plan, a standup or a Friday retro on the cadence page; nothing is assumed to run until it is filed there.</p></div>}
+    <p className="build-source">{adherence == null ? 'No run has been logged as done or missed, so there is no adherence to report.' : `${adherence}% of logged runs were held · ${cadence.stats.runs_recorded} run${cadence.stats.runs_recorded === 1 ? '' : 's'} recorded.`} A drafted retro summary is not offered here: no retro draft surface exists yet, so none is drawn.</p>
+  </>;
+}
+function cadenceLabel(cadence) {
+  if (cadence === null) return 'Unreadable';
+  if (!cadence || cadence.store_ready === false) return 'Not recorded';
+  const active = (cadence.rituals || []).filter((ritual) => ritual.active !== 0 && ritual.active !== false).length;
+  return active ? `${active} ritual${active === 1 ? '' : 's'} scheduled` : 'No ritual scheduled';
+}
 /** The quarter a horizon's objectives were filed under, when they agree on one. */
 function periodOf(items) {
   const quarters = [...new Set(items.map((item) => clean(item.quarter)).filter(Boolean))];

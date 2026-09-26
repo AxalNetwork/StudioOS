@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, BriefcaseBusiness, ChevronRight, CircleDot, Handshake, Rocket, Sparkles, Target, Users } from 'lucide-react';
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router-dom';
 import { api, jobs as jobsApi } from '../../lib/api';
-import { WorkerRail } from '../../ui';
+import { Unreadable, WorkerRail } from '../../ui';
+import { COUNT_KEYS, PCT_KEYS, metricLabel, readTarget } from '../../lib/metricTargets';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import useAssistMode from '../../hooks/useAssistMode';
 import { zonePillClass } from './deskZoneNav';
@@ -136,6 +137,12 @@ export default function FounderGrowDesk() {
       // the desk summarised the same zone off co-marketing attributions alone,
       // so a founder whose launches were on the calendar saw an empty card.
       events: api.listCalendarEvents(calendarWindow()),
+      // A5's "14 of 25 paid trials": the plan number is `metric_targets`
+      // (migration 173, written from `/grow/focus`), which this desk never read.
+      targets: api.listMetricTargets(projectId),
+      // A5's capital match: the funds this founder researched, with the stage
+      // fit and path they recorded (migration 216).
+      funds: api.research.funds(),
     };
     Promise.allSettled(Object.entries(calls).map(async ([key, request]) => [key, await request])).then(async (results) => {
       if (!alive) return;
@@ -162,6 +169,7 @@ export default function FounderGrowDesk() {
         // that prints 0 tells a founder nobody applied.
         count: item.status === 'fulfilled' ? list(item.value, 'applications').length : null,
       }));
+      next.failed = failures;
       if (alive) { setRecords(next); setError(failures.length ? 'Some selected-project sources are unavailable.' : ''); }
     }).finally(() => alive && setLoading(false));
     return () => { alive = false; };
@@ -173,8 +181,13 @@ export default function FounderGrowDesk() {
     const jobs = list(records.jobs, 'jobs').filter((row) => linked(row, project));
     const applicants = records.applicants || [];
     const known = applicants.filter((row) => row.count !== null);
+    const snapshots = list(records.snapshots, 'snapshots');
+    const failed = new Set(records.failed || []);
     return {
-      snapshots: list(records.snapshots, 'snapshots'), customers,
+      snapshots, customers,
+      latest: latestSnapshot(snapshots),
+      targets: failed.has('targets') ? null : list(records.targets, 'items', 'targets'),
+      funds: failed.has('funds') ? null : list(records.funds, 'items'),
       jobs,
       liveRoles: jobs.filter((row) => text(row.status) === 'published' || text(row.status) === 'open'),
       applicants,
@@ -214,21 +227,22 @@ export default function FounderGrowDesk() {
 }
 
 function GrowSections({ data, project, loading, query, state, projectId, fillsOn }) {
-  const focus = data.snapshots[0];
+  const focus = data.latest;
+  const targets = data.targets === null ? null : data.targets.map((target) => readTarget(target, focus));
   const unavailable = Array.isArray(data.summary?.unavailable) ? data.summary.unavailable : [];
   const bandOn = fillsOn && Boolean(projectId);
   const scope = String(projectId || '');
   return <div className="a5-sections">
     <section className="a5-focus" id="a5-focus"><Head icon={Target} title="This month's focus" meta={project?.name || 'Selected startup'} />{loading ? <Skeleton rows={2} /> : !project ? <Empty icon={Target} title="No startup is available." body="Select a startup to read its operating records." /> : <>
       <div className="a5-focus-head">
-        <div><strong>{focus ? 'Latest stored metric snapshot' : 'No monthly metric recorded'}</strong><p>Everything else this month is subordinate to this number.</p></div>
+        <div><strong data-testid="text-grow-focus-headline">{focusHeadline(targets, focus)}</strong><p>Everything else this month is subordinate to this number.</p></div>
         <div className="a5-focus-stats">
           <Stat label="Leads captured" value={`${data.customers.length + data.brandWaitlist.length}`} />
           <Stat label="Trial → paid" value="Not recorded" note="No paid state is recorded against a customer" />
           <Stat label="Open roles" value={`${data.liveRoles.length}`} />
         </div>
       </div>
-      <div className="a5-focus-numbers"><span>{focus?.snapshot_date ? `Snapshot date ${focus.snapshot_date}` : 'Snapshot date not recorded'}</span><span>Target not recorded</span></div>
+      <div className="a5-focus-numbers"><span>{focus?.snapshot_date ? `Snapshot date ${focus.snapshot_date}` : 'Snapshot date not recorded'}</span><span data-testid="text-grow-target-state">{targetState(targets)}</span></div>
       <p>{focus ? 'Open Focus to inspect the stored snapshot fields.' : 'No metric snapshot is recorded for this startup.'}{unavailable.length ? ` ${unavailable.length} derived metric${unavailable.length === 1 ? '' : 's'} cannot be computed yet: ${unavailable.map(metricName).join(', ')}.` : ''}</p>
       {unavailable.length ? <ul className="a5-unavailable" data-testid="list-grow-unavailable">{unavailable.map((item) => <li key={item.metric || String(item)}><b>{metricName(item)}</b> — {text(item?.reason) || 'No reason recorded.'}</li>)}</ul> : null}
       <DeskLink testid="link-open-grow-focus" to={`${GROW_PAGES.focus}${query}`} state={state}>Open focus</DeskLink></>}</section>
@@ -264,12 +278,81 @@ function GrowSections({ data, project, loading, query, state, projectId, fillsOn
         <DeskLink testid="link-open-grow-customers" to={`${GROW_PAGES.customers}${query}`} state={state}>Open customers</DeskLink></Card>
     </div>
     <Card id="brand" icon={Sparkles} title="Brand & landing" meta={`${data.pages.length} page${data.pages.length === 1 ? '' : 's'} live · ${data.brandWaitlist.length} lead${data.brandWaitlist.length === 1 ? '' : 's'} captured`} loading={loading} wide><div className="a5-brand-status"><b>{text(data.landing?.headline || data.landing?.name) || 'Landing record not recorded'}</b><span>{data.brandWaitlist.length} brand waitlist record{data.brandWaitlist.length === 1 ? '' : 's'}</span></div><Rows rows={data.pages} empty="No brand pages are recorded for this startup." /><p className="a5-note">Hero imagery is not generated here and cannot be: no image model is wired into this build, so there is nothing to iterate variants with.</p><DeskLink testid="link-open-grow-brand" to={`${GROW_PAGES.brand}${query}`} state={state}>Open brand</DeskLink></Card>
-    <Card id="capital-match" icon={CircleDot} title="Capital match" meta={`${data.prospects.length} stored prospect${data.prospects.length === 1 ? '' : 's'}`} loading={loading} wide><Rows rows={data.prospects} empty="No stored investor prospects are recorded for this startup." /><p className="a5-note">Stored prospects only. This desk does not claim scored matches: no reranker runs here, so no fit score, no reason and no warm path is shown. Acting on any of these hands off to Raise; this zone only lists.</p><DeskLink testid="link-open-grow-capital" to={`${GROW_PAGES['capital-match']}${query}`} state={state}>Open capital match</DeskLink></Card>
+    <Card id="capital-match" icon={CircleDot} title="Capital match" meta={fundsLabel(data.funds)} loading={loading} wide><FundMatch funds={data.funds} /><p className="a5-note">Ranked by what you recorded on each fund in Research — right stage first, then a warm path. No fit score is computed: no reranker runs here, so none is shown. {data.prospects.length} investor prospect{data.prospects.length === 1 ? ' is' : 's are'} already in this startup&apos;s raise pipeline. Acting on any of these hands off to Raise; this zone only ranks.</p><DeskLink testid="link-open-grow-capital" to={`${GROW_PAGES['capital-match']}${query}`} state={state}>Open capital match</DeskLink></Card>
     <div className="a5-pair"><Card id="partnerships" icon={Handshake} title="Partnerships" meta={`${data.pitches.length} in motion`} loading={loading}><Rows rows={data.pitches} empty="No project-linked partnership records are recorded." /><DeskLink testid="link-open-grow-partnerships" to={`${GROW_PAGES.partnerships}${query}`} state={state}>Open partnerships</DeskLink></Card>
       <Card id="launch" icon={Rocket} title="Launch calendar" meta={launchLabel(data.events)} loading={loading}><div className="a5-launches">{data.events.slice(0, 5).map((event, index) => <div key={event.id || event.uid || index}><b>{title(event, 'Untitled entry')}</b><span>{dateLabel(event.start_at)}</span></div>)}{!data.events.length && <p className="a5-empty">No calendar entry is linked to this startup.</p>}</div><p className="a5-note">{data.attributions.length ? `${data.attributions.length} co-marketing attribution record${data.attributions.length === 1 ? '' : 's'} is also stored.` : 'Launch entries come from the calendar; co-marketing attributions are counted separately and there are none.'}</p><DeskLink testid="link-open-grow-launch" to={`${GROW_PAGES.launch}${query}`} state={state}>Open launch</DeskLink></Card></div>
   </div>;
 }
 
+/** The newest snapshot by its own date, so the read is not at the mercy of the wire order. */
+function latestSnapshot(rows) {
+  const stamp = (row) => Date.parse(`${String(row?.snapshot_date || '').slice(0, 10)}T12:00:00`);
+  return [...rows].sort((a, b) => (stamp(b) || 0) - (stamp(a) || 0) || Number(b.id || 0) - Number(a.id || 0))[0] || null;
+}
+const targetValue = (key, value) => {
+  if (value == null || !Number.isFinite(Number(value))) return 'not measured';
+  if (PCT_KEYS.has(key)) return `${Number(value)}%`;
+  if (COUNT_KEYS.has(key)) return Number(value).toLocaleString();
+  return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(value));
+};
+/**
+ * A5's headline — "14 of 25 paid trials" — read from a stored target.
+ *
+ * WHICH METRIC OWNS THE MONTH IS NOT RECORDED. A founder can set a target per
+ * metric, and nothing marks one of them as the month's; so with one target
+ * the headline is that target, and with several the first is shown and the
+ * state line says the choice is not a stored fact.
+ */
+function focusHeadline(targets, focus) {
+  if (targets === null) return focus ? 'Latest stored metric snapshot' : 'No monthly metric recorded';
+  const first = targets[0];
+  if (!first) return focus ? 'Latest stored metric snapshot · no target set' : 'No monthly metric recorded';
+  return `${targetValue(first.metric_key, first.actual)} of ${targetValue(first.metric_key, first.target_value)} · ${text(first.label) || metricLabel(first.metric_key)}`;
+}
+function targetState(targets) {
+  if (targets === null) return 'Targets could not be read';
+  if (!targets.length) return 'No target set';
+  const measured = targets.filter((target) => target.met !== null);
+  const met = measured.filter((target) => target.met === true).length;
+  const read = measured.length ? `${met} of ${measured.length} measured target${measured.length === 1 ? '' : 's'} met` : 'No target measured by the latest snapshot';
+  return targets.length > 1 ? `${read} · which of ${targets.length} owns the month is not recorded` : read;
+}
+const RANK = (fund) => (fund.stage_fit === 'right' ? 2 : 0) + (fund.path === 'warm' ? 1 : 0);
+function fundsLabel(funds) {
+  if (funds === null) return 'Unreadable';
+  const live = funds.filter((fund) => fund.status !== 'passed');
+  const warm = live.filter((fund) => fund.path === 'warm').length;
+  return `${live.length} researched fund${live.length === 1 ? '' : 's'} · ${warm} with a warm path`;
+}
+const cheque = (fund) => {
+  const fmt = (cents) => new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(Number(cents) / 100);
+  if (fund.cheque_min_cents == null && fund.cheque_max_cents == null) return 'Cheque not recorded';
+  if (fund.cheque_min_cents == null) return `Up to ${fmt(fund.cheque_max_cents)}`;
+  if (fund.cheque_max_cents == null) return `From ${fmt(fund.cheque_min_cents)}`;
+  return `${fmt(fund.cheque_min_cents)}–${fmt(fund.cheque_max_cents)}`;
+};
+/**
+ * A5's capital match, from `research_funds` (migration 216).
+ *
+ * THE RANK IS THE FOUNDER'S OWN RECORD, never a score: a fund they marked right
+ * stage outranks one they did not, and a warm path breaks the tie — the
+ * artboard's "a fund you can reach outranks a better thesis fit you can't". A
+ * fund they passed on is not a match. NULL stage fit or path reads as not
+ * assessed, never as wrong or cold.
+ */
+function FundMatch({ funds }) {
+  if (funds === null) return <Unreadable what="Your researched funds" claim="This is not a sign that none are recorded." />;
+  const ranked = funds.filter((fund) => fund.status !== 'passed')
+    .map((fund, index) => ({ fund, index }))
+    .sort((a, b) => RANK(b.fund) - RANK(a.fund) || a.index - b.index)
+    .slice(0, 3).map(({ fund }) => fund);
+  if (!ranked.length) return <p className="a5-empty">No fund is researched yet. Funds you add in Research, with their stage fit and path, are ranked here.</p>;
+  return <div className="a5-funds" data-testid="list-grow-funds">{ranked.map((fund) => <article key={fund.uid}>
+    <div><b>{text(fund.name) || 'Unnamed fund'}</b><span>{cheque(fund)}</span></div>
+    <p>{text(fund.thesis) || 'Thesis not recorded'}</p>
+    <small>{fund.stage_fit === 'right' ? 'Right stage' : fund.stage_fit === 'wrong' ? 'Wrong stage' : 'Stage fit not assessed'} · {fund.path === 'warm' ? 'Warm path' : fund.path === 'cold' ? 'No warm path' : 'Path not recorded'}</small>
+  </article>)}</div>;
+}
 /** A5's `Sep` — the month the next linked entry falls in, or nothing to name. */
 function launchLabel(events) {
   const next = events
