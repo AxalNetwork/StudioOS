@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { shellRoleFor, isSuperAdminUser, HQ_VIEW_KEY } from '../src/lib/shellRole.js';
+import { previewOptionsFor } from '../src/lib/previewShells.js';
 import { codeOnly } from './_codeOnly.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -99,9 +100,14 @@ test('the sidebar receives the shell role, so the HQ group opens on first visit'
   assert.match(APP_CODE, /<SidebarNav groups=\{sidebarGroups\} role=\{shellRole \|\| 'founder'\}/);
 });
 
-test('the mode bar says Super Admin Mode only on the flag, and the View-as list leads with it', () => {
+test('the mode bar says Super Admin Mode only on the flag, and the Preview shell list leads with HQ for the holder alone', () => {
   assert.match(APP_CODE, /superAdmin \? 'Super Admin Mode' : 'Admin Mode'/);
-  assert.match(APP_CODE, /\['super_admin', 'Super Admin'\]/, 'the HQ entry is offered only to a holder');
+  // D288 — the HQ entry is offered only to a holder. Until D288 this pinned
+  // the literal `['super_admin', 'Super Admin']` option; the list now lives in
+  // lib/previewShells.js, so the property is read off it.
+  assert.deepEqual(previewOptionsFor(true)[0].key, 'hq', 'the holder\'s list does not lead with HQ');
+  assert.ok(!previewOptionsFor(false).some((o) => o.key === 'hq'), 'the HQ entry is offered to an admin without the elevation');
+  assert.match(APP_CODE, /previewOptionsFor\(superAdmin\)/, 'the switcher no longer reads the list by the elevation');
   assert.match(APP_CODE, /onViewModeChange\('admin', \{ hq: true \}\)/, 'choosing Super Admin browses as admin with the HQ shell');
   assert.match(APP_CODE, /onViewModeChange\('admin', \{ hq: false \}\)/, 'choosing Admin browses as admin with the plain shell');
 });
