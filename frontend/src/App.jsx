@@ -24,7 +24,7 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 import {
   Menu,
   Shield,
-  ChevronDown, Eye, ArrowLeft, Sparkles,
+  ChevronDown, Eye, Sparkles,
   Gift, Mail, Globe
 } from 'lucide-react';
 import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES, ONBOARDING_CANVAS_PATHS } from './sidebarConfig';
@@ -34,12 +34,14 @@ import BranchSuspendedBar from './components/BranchSuspendedBar';
 import HqSupportSessionBar from './components/HqSupportSessionBar';
 import HqViewingAsBar from './components/HqViewingAsBar';
 import BranchNotDeployedBar from './components/BranchNotDeployedBar';
+import ImpersonationBar from './components/ImpersonationBar';
 import useBranchDeployment from './hooks/useBranchDeployment';
 import WorkspacesLauncher from './components/WorkspacesLauncher';
 import HqSubNavStrip, { StripLink } from './components/HqSubNavStrip';
 import { ADMIN_SHELLS, MESSAGES_ROLES } from './lib/paletteIndex';
 import { stripFor } from './lib/hqStrips';
 import { clearSupportSession } from './lib/supportSession';
+import { readStoredReason, clearStoredReason } from './lib/impersonationBar';
 import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
 // renders synchronously on first paint. It marks itself a no-auth-redirect
@@ -671,7 +673,7 @@ function UserDropdown({ user, onLogout }) {
 }
 
 
-function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, impersonatedUser, superAdmin = false, hqView = true, supportLeftMs = null, onExtendImpersonation }) {
+function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmin = false, hqView = true }) {
   const [open, setOpen] = useState(false);
   // D288 / H38 — "View as" is Preview shell. "HQ" is a VIEW of the admin
   // role, not a role: choosing it browses as admin with the HQ shell,
@@ -696,30 +698,13 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImp
       <span className="font-medium opacity-90">{superAdmin ? 'Super Admin Mode' : 'Admin Mode'}</span>
 
       {isImpersonating ? (
-        <div className="ml-2 flex items-center gap-2 bg-amber-500/20 px-3 py-1.5 rounded-lg">
-          <Eye size={13} />
-          {/* The canvas's words. "Impersonating" describes what the system
-              is doing; "support session" describes why, and why it ends. */}
-          <span>Viewing as {impersonatedUser?.name} — support session</span>
-          {supportLeftMs !== null && (
-            <span
-              className="tabular-nums font-semibold"
-              title="A support session is thirty minutes. It hands itself back when the timer runs out."
-            >
-              {String(Math.floor(supportLeftMs / 60000)).padStart(2, '0')}
-              :{String(Math.floor((supportLeftMs % 60000) / 1000)).padStart(2, '0')} left
-            </span>
-          )}
-          {onExtendImpersonation && (
-            <button
-              type="button"
-              onClick={onExtendImpersonation}
-              className="rounded-md bg-white/20 px-2 py-0.5 text-xs font-medium hover:bg-white/30"
-            >
-              Extend
-            </button>
-          )}
-        </div>
+        /* D290 / H25 — the support session's own chrome is `ImpersonationBar`,
+           mounted above this bar: who, as whom, why, the limit, the clock,
+           Extend and End session. Nothing about the session is drawn twice;
+           this bar only says why the picker is not offered. */
+        <span className="ml-2 text-xs opacity-80" data-testid="portal-switcher-support-note">
+          Support session in progress — the bar above says who, as whom, why and for how long.
+        </span>
       ) : (
         <div className="ml-2 relative">
           <button
@@ -788,20 +773,6 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImp
         </div>
       )}
 
-      {isImpersonating && (
-        <div className="ml-auto flex items-center gap-3">
-          <span className="text-xs opacity-75">
-            Logged in as {realUser?.name}
-          </span>
-          <button
-            onClick={onExitImpersonation}
-            className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-colors text-xs font-medium"
-          >
-            <ArrowLeft size={12} />
-            Exit Impersonation
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -818,7 +789,7 @@ const FULL_BLEED_BY_ROLE = {
   partner: PARTNER_FULL_BLEED,
 };
 
-function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, primaryPersonaId, hqView = true, supportLeftMs = null, onExtendImpersonation }) {
+function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, primaryPersonaId, hqView = true, supportLeftMs = null, onExtendImpersonation, supportReason = null }) {
   const location = useLocation();
   // Active-company context state — owned here so descendants (CompanySwitcher,
   // CompanySettingsPage, etc.) share the same reference without prop drilling.
@@ -1013,18 +984,31 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             the operator is not in by default. It draws nothing outside the
             overlay. */}
         <SafeMount name="HqViewingAsBar"><HqViewingAsBar /></SafeMount>
+        {/* D290 / H25 — ABOVE `PortalSwitcher`, for D142's reason on the
+            operator's own side: the ordinary admin chrome must never be the
+            only frame on a session the operator is not in by default. Global
+            chrome, so it frames every route the session can reach — until
+            D290 the strip lived inside `PortalSwitcher` and said neither who
+            nor why. Who · As · Why · Limit, the shell's clock, Extend and End
+            session. It draws nothing when nobody is being impersonated. */}
+        <SafeMount name="ImpersonationBar">
+          <ImpersonationBar
+            operator={isImpersonating ? realUser : null}
+            target={isImpersonating ? user : null}
+            reason={supportReason}
+            holder={superAdmin}
+            leftMs={supportLeftMs}
+            onExtend={onExtendImpersonation}
+            onExit={onExitImpersonation}
+          />
+        </SafeMount>
         {isAdmin && (
           <PortalSwitcher
             viewMode={viewMode}
             onViewModeChange={onViewModeChange}
             isImpersonating={isImpersonating}
-            onExitImpersonation={onExitImpersonation}
-            realUser={realUser}
-            impersonatedUser={isImpersonating ? user : null}
             superAdmin={superAdmin}
             hqView={hqView}
-            supportLeftMs={supportLeftMs}
-            onExtendImpersonation={onExtendImpersonation}
           />
         )}
 
@@ -1259,7 +1243,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   );
 }
 
-function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, hqView = true, supportLeftMs = null, onExtendImpersonation }) {
+function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, hqView = true, supportLeftMs = null, onExtendImpersonation, supportReason = null }) {
   const location = useLocation();
   const { oauthBootstrapping } = useAuth();
   const [kycStatus, setKycStatus] = useState(user?.kyc_status || null);
@@ -1612,6 +1596,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
       hqView={hqView}
       supportLeftMs={supportLeftMs}
       onExtendImpersonation={onExtendImpersonation}
+      supportReason={supportReason}
     >
       {children}
     </ProtectedLayout>
@@ -1709,7 +1694,11 @@ function AppInner() {
   // after the impersonation state commits — from an ancestor effect that
   // runs AFTER RoleGuard's — makes our destination win deterministically.
   const pendingImpersonationPathRef = useRef(null);
-  const handleImpersonate = (token, impersonatedUser, targetPath) => {
+  // D290 — `reason` is the text the worker STORED, as its response echoed it
+  // (null when its write failed). `beginSupportSession` passes it; a caller
+  // that passes nothing gets the copy `api.adminImpersonate` kept, which is
+  // the same echo. Nothing here reads the typed text back from a dialog.
+  const handleImpersonate = (token, impersonatedUser, targetPath, reason) => {
     const currentUser = safeReadJSON('user');
     const currentToken = localStorage.getItem('token');
     localStorage.setItem('realUser', JSON.stringify(currentUser));
@@ -1723,6 +1712,7 @@ function AppInner() {
     // `api.adminImpersonate` has just written this; lifting it into state is
     // what starts the banner's countdown.
     try { setImpersonationExpiresAt(localStorage.getItem('impersonationExpiresAt')); } catch { /* storage unavailable */ }
+    setImpersonationReason(typeof reason === 'string' && reason.trim() ? reason : readStoredReason());
     pendingImpersonationPathRef.current =
       targetPath || ROLE_DEFAULT_PATH[impersonatedUser.role] || '/studio';
     // T20 — bypass the 5-min /me throttle so the impersonated session is
@@ -1762,6 +1752,10 @@ function AppInner() {
     () => { try { return localStorage.getItem('impersonationExpiresAt'); } catch { return null; } },
   );
   const [impersonationLeftMs, setImpersonationLeftMs] = useState(null);
+  // D290 — the stored reason, beside the stored expiry, so a reload mid-session
+  // still draws H25's Why. Null reads "Not recorded" in the bar; it is never
+  // initialised from a literal.
+  const [impersonationReason, setImpersonationReason] = useState(() => readStoredReason());
 
   useEffect(() => {
     if (!isImpersonating || !impersonationExpiresAt) { setImpersonationLeftMs(null); return undefined; }
@@ -1803,6 +1797,10 @@ function AppInner() {
       }
       localStorage.removeItem('impersonationExpiresAt');
     } catch { /* storage unavailable */ }
+    // D290 — the reason goes with the session it explained: on End session
+    // here, and on the thirty-minute hand-back, which comes through here.
+    clearStoredReason();
+    setImpersonationReason(null);
     localStorage.removeItem('realUser');
     localStorage.removeItem('realToken');
     setUser(origUser);
@@ -1862,6 +1860,11 @@ function AppInner() {
     // told HQ was inside the account. `lib/supportSession.js` owns the key so
     // the purge and the reader cannot be renamed apart.
     clearSupportSession();
+    // D290 — and the operator's own stored reason, which would otherwise
+    // outlive sign-out on this browser and be drawn on the next session
+    // that impersonates from it.
+    clearStoredReason();
+    setImpersonationReason(null);
     clearHqView();
     // The active company is a per-BROWSER memory (localStorage), not a
     // per-account one. Left in place, the next account to sign in on this
@@ -1970,6 +1973,7 @@ function AppInner() {
     user, onLogout: logout, viewMode, onViewModeChange: handleViewModeChange, hqView,
     isImpersonating, onExitImpersonation: exitImpersonation, realUser, onImpersonate: handleImpersonate,
     supportLeftMs: impersonationLeftMs, onExtendImpersonation: extendImpersonation,
+    supportReason: impersonationReason,
   };
 
   const guard = (roles, component) => (
