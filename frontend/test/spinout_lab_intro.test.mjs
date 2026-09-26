@@ -236,7 +236,8 @@ test('no arsenal card is a link, and the arsenal says which tool routes a founde
   const routes = [...ARSENAL.matchAll(/route: '([^']+)'/g)].map((m) => m[1]);
   const founderOpen = [];
   for (const r of routes) {
-    const m = APP.match(new RegExp(`path="${r.replace(/[/.()]/g, '\\$&')}" element=\\{guard\\((labRoles\\(\\[[^\\]]*\\]\\))`));
+    const escaped = r.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+    const m = APP.match(new RegExp(`path="${escaped}" element=\\{guard\\((labRoles\\(\\[[^\\]]*\\]\\))`));
     assert.ok(m, `${r} is not behind a labRoles guard — the intro's inert cards rest on that`);
     if (/'founder'/.test(m[1])) founderOpen.push(r);
     else assert.equal(m[1], "labRoles(['admin'])", `${r} has a guard the arsenal does not describe`);
