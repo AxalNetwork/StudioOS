@@ -151,6 +151,16 @@ const S22_LANES = [
 ];
 
 /** The lanes as the JSX draws them: one `<tr data-lane>` each, cells in S22's order. */
+function stripTagsStable(input) {
+  let current = input;
+  let previous;
+  do {
+    previous = current;
+    current = current.replace(/<[^>]+>/g, '');
+  } while (current !== previous);
+  return current;
+}
+
 function drawnLanes() {
   const out = [];
   for (const m of CODE[LANDINGS.Approvals].matchAll(/<tr data-lane="(\d+)">([\s\S]*?)<\/tr>/g)) {
@@ -158,7 +168,7 @@ function drawnLanes() {
     assert.equal(cells.length, 5, `lane ${m[1]} draws ${cells.length} cells`);
     const link = /<Link to="([^"]+)"/.exec(cells[3]);
     out.push([Number(m[1]), cells[1].trim(), cells[2].trim(), link ? link[1] : null, cells[4].trim()]);
-    if (link) assert.equal(link[1], cells[3].replace(/<[^>]+>/g, '').trim(), `lane ${m[1]} shows a route it does not link`);
+    if (link) assert.equal(link[1], stripTagsStable(cells[3]).trim(), `lane ${m[1]} shows a route it does not link`);
   }
   return out;
 }
