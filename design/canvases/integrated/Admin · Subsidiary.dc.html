@@ -48,7 +48,7 @@
 
 <!-- ══════════ CHANGELOG ══════════ -->
 <section class="ab" id="changelog" style="padding-bottom:26px">
-  <div class="ab-hd"><a class="ab-id" href="#changelog">CHANGELOG</a><span class="ab-nm">Amendments to S0–S6 · new artboards S7–S19</span><span class="ab-sub">every in-place change listed · ids stable</span></div>
+  <div class="ab-hd"><a class="ab-id" href="#changelog">CHANGELOG</a><span class="ab-nm">Amendments to S0–S6 · new artboards S7–S23</span><span class="ab-sub">every in-place change listed · ids stable</span></div>
   <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-width:1440px">
     <sc-for list="{{ changelog }}" as="c" hint-placeholder-count="4">
       <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:10px;padding:11px 14px;display:flex;gap:11px;align-items:flex-start">
@@ -129,7 +129,7 @@
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;background:#f5f3ff;border-bottom:1px solid #ececf1;flex-wrap:wrap">
             <div style="display:flex;align-items:center;gap:11px"><!-- The mark, not a generic sparkle tile: no violet plate behind it — the artwork carries
                  its own colour and a fill would fight the pixel edges. -->
-            <img src="4835ee6e-8882-4123-a5fb-fec77f0048df" alt="Eadwyn" width="34" height="34" style="display:block;width:34px;height:34px;flex:none;object-fit:contain;image-rendering:pixelated"><div><div style="font-size:15px;font-weight:800;letter-spacing:-.015em">Eadwyn AI</div><div style="font-size:11.5px;color:#615c6e;margin-top:2px">admin · {{ stAnswered }}/{{ stTotal }} answered ({{ stPct }}%)</div></div></div>
+            <img src="../../../frontend/public/eadwyn-ai.png" alt="Eadwyn" width="34" height="34" style="display:block;width:34px;height:34px;flex:none;object-fit:contain;image-rendering:pixelated"><div><div style="font-size:15px;font-weight:800;letter-spacing:-.015em">Eadwyn AI</div><div style="font-size:11.5px;color:#615c6e;margin-top:2px">admin · {{ stAnswered }}/{{ stTotal }} answered ({{ stPct }}%)</div></div></div>
             <div style="display:flex;align-items:center;gap:14px"><span style="font-size:12px;font-weight:700;color:#7c3aed;cursor:pointer">⛶ Open a ticket</span><span style="font-size:13px;color:#615c6e;cursor:pointer" title="{{ f.maxTitle }}">{{ f.maxGlyph }}</span></div>
           </div>
           <sc-if value="{{ f.ticket }}">
@@ -1434,6 +1434,139 @@
   </div>
   <div class="cap">Recommended and not-recommended are stated side by side on S17 rather than left to inference: a CNAME at one host, or a nameserver change that takes the whole zone. The wizard never opens on the second one.</div>
 </section>
+
+<!-- ══════════ S20 · THE ADMIN SHELL ON HQ-HELD ACCOUNTS ══════════ -->
+<section class="ab" id="s20">
+  <div class="ab-hd"><a class="ab-id" href="#s20">S20</a><span class="ab-nm">The Admin shell on accounts HQ holds directly</span><span class="ab-sub">eight rows · axal.vc · every row links to an /admin console, never /branch/*</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">No branch is deployed yet, so these accounts have no branch database. The eight rows stay, in the same order, and each points at the console that already does that work on HQ. Pages under /branch/* refuse on HQ and are never linked from here.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navHome }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr"><div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">{{ hhTerr }}</span></div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:rgba(255,255,255,.14);color:#fff">Messages</span><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:rgba(255,255,255,.14);color:#fff">Workspaces</span><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">{{ hhBadge }}</span></div></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Where each row goes</h1>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px">
+          <sc-for list="{{ hhRows }}" as="r" hint-placeholder-count="8">
+            <div class="c" style="{{ r.cardStyle }}">
+              <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;display:block;flex:none;color:#334155" dangerouslySetInnerHTML="{{ r.icon }}"></span><span style="font-size:13px;font-weight:800">{{ r.row }}</span></div>
+              <sc-if value="{{ r.hasLinks }}"><div style="display:flex;flex-direction:column;gap:4px;margin-top:8px"><sc-for list="{{ r.links }}" as="l" hint-placeholder-count="2"><a href="{{ l.route }}" style="display:flex;justify-content:space-between;gap:10px;font-size:12px;color:#18181b;text-decoration:none"><span>{{ l.label }}</span><span class="mono" style="font-size:10.5px;color:#334155">{{ l.route }}</span></a></sc-for></div></sc-if>
+              <sc-if value="{{ r.absent }}"><div style="margin-top:8px;font-size:11.5px;color:#3f3a49;line-height:1.55;border:1px dashed #cbd5e1;border-radius:8px;padding:8px 10px;background:#f8fafc">{{ r.absentNote }}</div></sc-if>
+            </div>
+          </sc-for>
+        </div>
+        <div class="lbl" style="margin-top:20px">S0's four wall rules, as they are true here</div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px">
+          <sc-for list="{{ hhWall }}" as="w" hint-placeholder-count="4"><div class="c" style="padding:10px 13px;font-size:12px;color:#3f3a49;line-height:1.55"><strong style="color:#18181b">{{ w.k }}</strong> {{ w.v }}</div></sc-for>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Studio" scope="HQ-held accounts" hint-size="100%,640px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ S21 · BRANCH NOT DEPLOYED YET ══════════ -->
+<section class="ab" id="s21">
+  <div class="ab-hd"><a class="ab-id" href="#s21">S21</a><span class="ab-nm">A licence administrator whose branch is not deployed yet</span><span class="ab-sub">a strip that cannot be dismissed · stores nothing · gone once the branch is live</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navHome }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div style="background:#fffbeb;border-bottom:1px solid #fde68a;padding:11px 22px;display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <div style="font-size:12.5px;color:#18181b"><strong>{{ s21Licence }}</strong> · its branch has not been deployed. You are working on axal.vc until it is.</div>
+          <a href="/admin/my-licence" style="font-size:11.5px;font-weight:700;color:#334155">Licence summary in Settings →</a>
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+          <sc-for list="{{ s21Steps }}" as="s" hint-placeholder-count="9"><span style="{{ s.style }}">{{ s.label }}</span></sc-for>
+        </div>
+        <div style="font-size:11px;color:#615c6e">Recorded on the licence · last step <span class="mono">{{ s21Current }}</span> at <span class="mono">{{ s21At }}</span></div>
+      </div>
+      <div class="terr"><div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">{{ s21Terr }}</span></div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:rgba(255,255,255,.14);color:#fff">Messages</span><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:rgba(255,255,255,.14);color:#fff">Workspaces</span><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">{{ s21Badge }}</span></div></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Studio</h1>
+        <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.55;max-width:640px">The eight rows below the strip are the S20 shell. Nothing on this page reads the branch database, because it does not exist yet.</div>
+        <div style="margin-top:16px;border:1.5px dashed #cbd5e1;border-radius:12px;min-height:240px;display:flex;align-items:center;justify-content:center;background:#f8fafc"><div class="lbl">Studio body · not redrawn (S1)</div></div>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px">
+          <sc-for list="{{ s21Rules }}" as="r" hint-placeholder-count="3"><div class="c" style="padding:10px 13px;font-size:11.5px;color:#3f3a49;line-height:1.55"><strong style="color:#18181b">{{ r.k }}</strong> {{ r.v }}</div></sc-for>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Studio" hint-size="100%,520px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ S22 · EVERY LEFTOVER CONSOLE, PLACED ══════════ -->
+<section class="ab" id="s22">
+  <div class="ab-hd"><a class="ab-id" href="#s22">S22</a><span class="ab-nm">Every leftover console, placed inside the eight rows</span><span class="ab-sub">{{ s22LaneCount }} Approvals lanes · the rest by row · Wellbeing left for the owner</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navApp }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr"><div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">{{ hhTerr }}</span></div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:rgba(255,255,255,.14);color:#fff">Messages</span><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:rgba(255,255,255,.14);color:#fff">Workspaces</span><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">{{ hhBadge }}</span></div></div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Approvals · lanes</h1>
+        <div class="c" style="padding:4px 16px 10px;margin-top:14px">
+          <sc-raw-table style="width:100%;border-collapse:collapse">
+            <sc-raw-thead><sc-raw-tr><sc-raw-th class="th" style="padding-top:10px;width:14%">Kind</sc-raw-th><sc-raw-th class="th" style="padding-top:10px;width:28%">Lane</sc-raw-th><sc-raw-th class="th" style="padding-top:10px;width:30%">Console</sc-raw-th><sc-raw-th class="th" style="padding-top:10px">State here</sc-raw-th></sc-raw-tr></sc-raw-thead>
+            <sc-raw-tbody><sc-for list="{{ s22Lanes }}" as="l" hint-placeholder-count="16"><sc-raw-tr>
+              <sc-raw-td class="td"><span style="{{ l.kindStyle }}">{{ l.kind }}</span></sc-raw-td>
+              <sc-raw-td class="td" style="font-weight:700;color:#18181b">{{ l.lane }}</sc-raw-td>
+              <sc-raw-td class="td mono" style="font-size:11px">{{ l.route }}</sc-raw-td>
+              <sc-raw-td class="td"><span style="{{ l.stateStyle }}">{{ l.state }}</span></sc-raw-td>
+            </sc-raw-tr></sc-for></sc-raw-tbody>
+          </sc-raw-table>
+        </div>
+        <div class="lbl" style="margin-top:18px">The rest, by row</div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px">
+          <sc-for list="{{ s22Rest }}" as="r" hint-placeholder-count="4"><div class="c" style="padding:10px 13px;font-size:12px;color:#3f3a49;line-height:1.55"><strong style="color:#18181b">{{ r.row }}</strong> · {{ r.what }} <span class="mono" style="font-size:10.5px;color:#334155">{{ r.route }}</span></div></sc-for>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Approvals" hint-size="100%,760px"></dc-import></div>
+  </div>
+  <div style="margin-top:22px;max-width:1440px">
+    <div class="lbl">Wellbeing · no home yet · two placements, for the owner to choose</div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:10px">
+      <sc-for list="{{ s22Well }}" as="w" hint-placeholder-count="2">
+        <div class="c" style="padding:16px 18px;border-style:dashed">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span style="font-size:13.5px;font-weight:800">{{ w.title }}</span><span style="{{ w.tierStyle }}">{{ w.tier }}</span></div>
+          <div class="mono" style="font-size:11px;color:#334155;margin-top:6px">{{ w.route }}</div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.6;margin-top:8px">{{ w.consequence }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ S23 · WORKSPACES LAUNCHER, ADMIN SIDE ══════════ -->
+<section class="ab" id="s23">
+  <div class="ab-hd"><a class="ab-id" href="#s23">S23</a><span class="ab-nm">The Workspaces launcher, from the Admin side</span><span class="ab-sub">same entries and routes as the Super canvas H37 · {{ wsCount }} pages that never return to the eight rows</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navHome }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main" style="position:relative">
+      <div class="terr"><div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">{{ hhTerr }}</span></div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:rgba(255,255,255,.14);color:#fff">Messages</span><span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:#fff;color:#334155">Workspaces</span><span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">{{ hhBadge }}</span></div></div>
+      <div class="inner" style="opacity:.35"><h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Studio</h1><div style="height:860px"></div></div>
+      <div style="position:absolute;top:46px;right:18px;width:760px;background:#fff;border:1px solid #e2e1e8;border-radius:14px;box-shadow:0 18px 44px rgba(24,24,27,.16);padding:16px 18px 18px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline"><div class="zt">Workspaces</div><div class="zs">{{ wsCount }} pages · not admin consoles</div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 22px;margin-top:12px">
+          <sc-for list="{{ workspaces }}" as="g" hint-placeholder-count="4">
+            <div>
+              <div class="lbl" style="color:#334155">{{ g.group }} · <span class="num">{{ g.count }}</span></div>
+              <div style="display:flex;flex-direction:column;gap:2px;margin-top:6px">
+                <sc-for list="{{ g.items }}" as="w" hint-placeholder-count="8">
+                  <a href="{{ w.route }}" style="display:block;padding:5px 8px;border-radius:7px;color:#18181b;text-decoration:none">
+                    <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><span style="font-size:12px;font-weight:700">{{ w.label }}</span><span class="mono" style="font-size:10px;color:#615c6e">{{ w.route }}</span></div>
+                    <div style="font-size:11px;color:#615c6e;margin-top:1px">{{ w.what }}</div>
+                    <sc-if value="{{ w.founder }}"><div style="font-size:10px;font-weight:700;color:#6d28d9;margin-top:3px">Opens a founder page · {{ w.target }}</div></sc-if>
+                  </a>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Studio" hint-size="100%,520px"></dc-import></div>
+  </div>
+</section>
 </x-dc>
 <script type="text/x-dc" data-dc-script="">
 class Component extends DCLogic {
@@ -2030,8 +2163,94 @@ class Component extends DCLogic {
         };
       })(),
 
+      // ══ S20–S23 · NAVIGATION LAYER for accounts with no deployed branch. No page body redrawn. ══
+      ...(() => {
+        const RI = Object.fromEntries(ROWS);
+        const L = (label, route) => ({ label, route });
+        const R = (row, links, absentNote) => ({ row, icon: RI[row], links: links || [], hasLinks: !!(links && links.length), absent: !!absentNote, absentNote: absentNote || '',
+          cardStyle: 'padding:12px 14px;' + (row === 'Insights' ? 'border-style:dashed' : '') });
+        const hhRows = [
+          R('Studio', [L('Studio', '/studio')]),
+          R('Accounts', [L('Users table', '/admin'), L('Exploring board', '/admin/exploring')]),
+          R('Approvals', null, 'Sixteen lanes, each linking to its own console. The lanes and their routes are listed on S22.'),
+          R('Programs', [L('Spin-Out Lab applications', '/admin?tab=lab-applications'), L('Cohort calendar and applications', '/admin/spinout-lab'), L('Advisor cohort access', '/admin/advisor-cohorts')]),
+          R('Community', [L('Events', '/admin/events'), L('Jobs', '/admin/jobs'), L('Circles', '/admin/circles'), L('Advisors & Partners', '/admin?tab=network-profiles')]),
+          R('Contracts', [L('Template library · read-only', '/admin?tab=legal')]),
+          R('Insights', null, 'No console fits yet for HQ-held accounts. This row will hold the territory benchmark and activity funnel once there is a store for these accounts. It does not borrow an HQ-only page.'),
+          R('Settings', [L('My Licence', '/admin/my-licence')]),
+        ];
+        const hhWall = [
+          { k:'Counts', v:'are this database\u2019s: the accounts HQ holds on axal.vc. No branch figure appears.' },
+          { k:'Search', v:'says "Searching HQ-held accounts".' },
+          { k:'The rail', v:'declines a question about a branch and says there is no branch read behind it.' },
+          { k:'Licensing', v:'appears only as the read-only summary in Settings.' },
+        ];
+        const STEPS = ['not requested','requested','database created','schema applied','secrets present','principal seeded','worker live','hostname active','linked to HQ'];
+        const s21Current = 'schema applied';
+        const ci = STEPS.indexOf(s21Current);
+        const s21Steps = STEPS.map((label, i) => ({ label, style:'font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;'
+          + (i < ci ? 'background:#ecfdf5;color:#047857;border:1px solid #a7f3d0' : i === ci ? 'background:#334155;color:#fff;border:1px solid #334155' : 'background:#fff;color:#615c6e;border:1px solid #e2e1e8') }));
+        const s21Rules = [
+          { k:'Cannot be dismissed.', v:'It is the fact of the account, not a notice.' },
+          { k:'Stores nothing.', v:'It reads the deployment record on the licence.' },
+          { k:'Disappears', v:'the moment the branch is live; the shell then reads the branch database.' },
+        ];
+        const K = { core:'font-size:10px;font-weight:700;color:#fff;background:#334155;border-radius:4px;padding:2px 7px', abs:'font-size:10px;font-weight:700;color:#334155;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:4px;padding:2px 7px' };
+        const S = { ok:'font-size:10.5px;font-weight:700;color:#047857', none:'font-size:10.5px;font-weight:700;color:#b45309', na:'font-size:10.5px;font-weight:700;color:#615c6e' };
+        const lane = (kind, lane, route, state) => ({ kind: kind === 'core' ? 'Core' : 'Absorbed', kindStyle: K[kind], lane, route,
+          state: state || 'Links to its console', stateStyle: S[state ? (state.startsWith('Not applicable') ? 'na' : 'none') : 'ok'] });
+        const s22Lanes = [
+          lane('core', 'LP applications', '/admin/lp-applications'),
+          lane('core', 'Referrals', '/admin/refer-earn'),
+          lane('core', 'Cohort applications', '/admin/spinout-lab'),
+          lane('core', 'Spinout moderation', 'No console', 'No console exists anywhere yet'),
+          lane('core', 'Content to HQ', 'None', 'Not applicable to HQ-held accounts'),
+          lane('abs', 'KYC', '/admin?tab=kyc'),
+          lane('abs', 'Partner profiles', '/admin?tab=profiles'),
+          lane('abs', 'Directory', '/admin?tab=directory'),
+          lane('abs', 'Exploring', '/admin/exploring'),
+          lane('abs', 'Jobs', '/admin/jobs'),
+          lane('abs', 'Events', '/admin/events'),
+          lane('abs', 'Circles', '/admin/circles'),
+          lane('abs', 'Partner invitations', '/admin/partners'),
+          lane('abs', 'Best-Fit', '/admin/best-fit'),
+          lane('abs', 'Due diligence', '/admin/due-diligence'),
+          lane('abs', 'Advisor cohort access', '/admin/advisor-cohorts'),
+        ];
+        const s22Rest = [
+          { row:'Accounts', what:'also retags one person\u2019s persona; the taxonomy itself is HQ\u2019s.', route:'/admin?tab=personas' },
+          { row:'Programs', what:'also shows assessment runs, results only; authoring is HQ\u2019s.', route:'/admin/assessment' },
+          { row:'Settings', what:'holds My Licence.', route:'/admin/my-licence' },
+          { row:'Top bar', what:'Messages moves out of the rows.', route:'/messages' },
+        ];
+        const s22Well = [
+          { title:'As a Community zone', tier:'Admin · Community', route:'/admin?tab=wellbeing',
+            tierStyle:'font-size:10px;font-weight:700;color:#334155;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:4px;padding:2px 7px',
+            consequence:'If the roster is local, each territory curates its own experts, and HQ never sees one territory\u2019s roster from another.' },
+          { title:'As an HQ Content item', tier:'HQ · Content', route:'/admin?tab=wellbeing',
+            tierStyle:'font-size:10px;font-weight:700;color:#881337;background:#fde8ee;border:1px solid #fbcfe0;border-radius:4px;padding:2px 7px',
+            consequence:'If it is a platform catalog, HQ authors one list for every territory, and administrators only read it.' },
+        ];
+        const W = (label, route, what, target) => ({ label, route, what, founder:!!target, target:target || '' });
+        const workspaces = [
+          { group:'Studio', items:[ W('Pipeline Board','/pipeline','Deals by stage on one board.'), W('Scoring Engine','/scoring','Venture-readiness scores and the evidence behind them.'), W('Risk Matrix','/portfolio/risk-matrix','Portfolio companies by risk dimension.'), W('Market Intelligence','/market-intel','Market readings with their sources.'), W('Signals','/signals','External signals, grouped by theme.'), W('AI Advisory Suite','/advisory','AI-assisted analysis tools.'), W('AI Matches','/matches','Suggested matches between members.'), W('Deal Flow','/deals','Incoming deals and their status.') ]},
+          { group:'Capital & Legal', items:[ W('Capital & Investment','/capital','Rounds, commitments and instruments.'), W('Liquidity & Exits','/liquidity','Secondaries and recorded exits.'), W('Portfolio Health','/portfolio/health','Health signals per company.'), W('Portfolio Coverage','/portfolio/coverage','Who covers which company.'), W('Reserve Allocation','/portfolio/reserves','Follow-on reserves by company.'), W('Exit Waterfall','/portfolio/waterfall','Proceeds by class at a given exit.'), W('Watchlist & Journal','/watchlist','Tracked companies and notes.'), W('Legal & Capital','/legal-capital','Documents and capital records.'), W('Incorporate','/incorporate','Entity formation workflow.'), W('Compliance Calendar','/compliance','Filings and their deadlines.') ]},
+          { group:'Network & Growth', items:[ W('Network','/network','Relationships and introductions.'), W('Network Effects','/network-effects','How activity compounds across the network.'), W('Jobs','/my/jobs','Open roles.','/build/team?tab=jobs'), W('Service Catalogue','/services','Services offered to companies.','/build/marketplace?tab=services'), W('Needs Board','/needs','Needs posted by founders.','/build/marketplace?tab=needs'), W('Demand Insights','/partner/insights','Partner demand analytics.'), W('Partner Office Hours','/partner/office-hours','Partner session bookings.'), W('Co-Marketing Review','/comarketing','Co-marketing submissions to review.') ]},
+          { group:'More', items:[ W('Co-Founder Agreement','/incorporate/cofounder-agreement','Founder agreement drafting.'), W('83(b) Tracker','/spinout-lab/83b','Election deadline tracking.'), W('Perks','/perks','Partner perks and claims.') ]},
+        ].map(g => Object.assign(g, { count: g.items.length }));
+        return {
+          hhTerr:'HQ-held · axal.vc', hhBadge:'HQ-HELD', hhRows, hhWall,
+          s21Licence:'Axal VC France', s21Terr:'Axal VC France · on axal.vc', s21Badge:'BRANCH · NOT DEPLOYED', s21Steps, s21Current, s21At:'deployment.last_step_at', s21Rules,
+          s22Lanes, s22LaneCount: s22Lanes.length, s22Rest, s22Well,
+          workspaces, wsCount: workspaces.reduce((a, g) => a + g.count, 0),
+        };
+      })(),
       // ── CHANGELOG (top of canvas) ──
       changelog: [
+        { where:'S20', what:'Admin shell on accounts HQ holds directly', why:'Same eight rows, steel, on axal.vc, badge "HQ-held · axal.vc". Each row links to the /admin console that already does the work, never /branch/*. Insights states its absence. S0\u2019s wall rules restated for this database.' },
+        { where:'S21', what:'Branch-not-deployed strip', why:'Non-dismissible, names the licence, shows the deployment step recorded on the licence and when, links only to the licence summary. Stores nothing; gone once the branch is live.' },
+        { where:'S22', what:'Every leftover console placed', why:'Five core and eleven absorbed Approvals lanes, each to its console; Spinout moderation has no console yet; Content to HQ does not apply. Personas, assessment runs, My Licence and Messages placed. Wellbeing drawn both ways for the owner.' },
+        { where:'S23', what:'Workspaces launcher from the Admin top bar', why:'Same 29 entries and routes as Super H37; three open founder pages. Workspace pages never return to the eight rows.' },
         { where:'S0', what:'Badge reads BRANCH', why:'A branch is a deployment, not a division; the badge is fed by the deployment record (S7). Rows and wall unchanged.' },
         { where:'S1–S6', what:'No other in-place change', why:'Every existing screen already read as its own database. The additions are appended so the ids stay stable.' },
         { where:'S7–S13', what:'Appended, one per brief item', why:'S7 badge + suspended shell · S8 seat assignment · S9 To-HQ escalation drawer · S10 template picker as HQ copy · S11 benchmark tick + Settings owners · S12 branch rail · S13 HQ support session.' },

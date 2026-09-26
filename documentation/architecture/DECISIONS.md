@@ -27848,3 +27848,173 @@ edit. These exit 0:
   `check-sql-prepare`, `check-timestamp-comparisons` and
   `check-runtime-schema-declared`;
 - `migration-immutability-gate` (no migration on `main` changed).
+
+## D282
+
+**Task 414: the two admin canvases land with their eight new artboards, and
+this entry records where they disagree — with each other, and with the code.**
+
+`design/canvases/integrated/Admin · Subsidiary.dc.html` and `Admin ·
+Super.dc.html` were re-exported upstream with the navigation layer the Wave 7
+admin items build from: S20–S23 on the Subsidiary canvas, H35–H38 on the Super
+canvas. Decoded with `scripts/read-canvas.mjs` from the published artifacts
+(Subsidiary `dc92a281-57a0-48b5-adae-161926e11c95`, version `1790260478-62d4`;
+Super `c6bc9164-2ad4-45d9-9b4c-eba03cbf46f5`, version `1790260516-bf3c`), and
+measured rather than described:
+
+| canvas | was (D195) | is |
+| --- | --- | --- |
+| Admin · Subsidiary | 219 KB · 2,277 lines · S0–S19 | **244 KB · 2,496 lines · S0–S23** |
+| Admin · Super | 283 KB · 2,992 lines · H1–H34 | **315 KB · 3,295 lines · H1–H38** |
+
+**Both are strict appends.** `git diff -U0` against `b2b99df06` shows exactly
+five hunks on the Subsidiary — `:51` the CHANGELOG header "S7–S19" → "S7–S23";
+`:132` the Eadwyn mark, below; `1437–1569` the S20–S23 markup, 133 lines;
+`2166–2247` their data, 82 lines; `2250–2253` four changelog rows — and exactly
+four on the Super — `:52` "H8–H34" → "H8–H38"; `1993–2139` the H35–H38 markup,
+147 lines; `2280–2431` their data, 152 lines; `2453–2456` four changelog rows.
+No line either file already held changed, so nothing was lost by replacing
+them. The decoder exits 1 on the Subsidiary for the one asset below and 0 on
+the Super.
+
+**Two anchors other sessions hold moved, and the markup did not.** On the
+Subsidiary, Session 3's S1b/S1c data moved from `:1588–1641` to `:1721–1774`
+(the S1b and S1c artboards stay at `:213` and `:254`). On the Super, Session
+2's H24 data moved from `:2859–2866` to `:3162–3169` (the H24 artboard stays at
+`:1593`). Re-measured on `b2b99df06` and stated in the PR body.
+
+### What the new artboards are
+
+- **S20 · The Admin shell on accounts HQ holds directly.** Eight rows, steel,
+  on axal.vc, badge drawn "HQ-HELD"; each row links to the `/admin` console
+  that already does the work; Insights states its absence; S0's four wall rules
+  restated for this database.
+- **S21 · A licence administrator whose branch is not deployed yet.** A
+  non-dismissible strip above the top bar naming the licence, nine deployment
+  steps, three rules, linking only to `/admin/my-licence`.
+- **S22 · Every leftover console, placed inside the eight rows.** Sixteen
+  Approvals lanes — five core, eleven absorbed — each to its console, with
+  Spinout moderation "No console exists anywhere yet" and Content to HQ "Not
+  applicable to HQ-held accounts"; the rest by row; Wellbeing drawn both ways
+  for the owner.
+- **S23 · The Workspaces launcher, from the Admin side.** The same 29 entries
+  and routes as H37; three open founder pages.
+- **H35 · Placement map.** Thirty-seven entries: every old sidebar entry and
+  every one of the 14 Admin Console tabs mapped to a tier, a row and a form. X
+  parked by decision; Wellbeing "No home yet"; Trash on Security a proposal.
+- **H36 · Sub-navigation inside an HQ row.** Nine Platform and seven Content
+  items, each a route that exists today; the row stays lit after landing in the
+  old Admin Console; at phone width the strip scrolls in its own container.
+- **H37 · The Workspaces launcher, and ⌘K.** The 29 working pages leave the
+  sidebar for one top-bar launcher in four groups; ⌘K indexes only what H35
+  places and H37 launches.
+- **H38 · "View as", redrawn.** The shell picker becomes Preview shell with six
+  options and a chip stating that writes still go out as the Super Admin; View
+  As — impersonation — keeps its name and chrome.
+
+### "Nothing retires" overrules the canvas where the canvas says otherwise
+
+H16–H21's changelog rows still read "Retires /admin …" — the Platform tabs
+(H16 · H17), Content authoring (H18 · H19), the Users table (H20), Billing
+(H21). The standing rule is that every `/admin/*` route stays reachable and
+`frontend/test/admin_route_reachability.test.mjs` is not re-aimed; D195 §2
+recorded this for the earlier export and it holds for this one. H35's own
+subtitle agrees — "nothing retires" — so the retirement wording is a leftover
+of an earlier draft, not an instruction. Items 2–5 (D283–D286) build the
+placement additively.
+
+### Where the canvases disagree — with each other, and with the code
+
+Ten tensions, each read off the decoded files, none resolved here. The item
+that touches each one decides it and records the decision in its own entry.
+
+1. **S20's badge.** The artboard draws `hhBadge: 'HQ-HELD'` (Subsidiary
+   `:2242`); its changelog row says `badge "HQ-held · axal.vc"` (`:2250`).
+2. **S20's rail ignores `scope`.** S20 mounts
+   `<dc-import name="AdminRail" tier="subsidiary" page="Studio" scope="HQ-held accounts">`
+   (`:1463`), but the bundled AdminRail's non-HQ chip is the literal
+   `'Axal VC France'` and its decline card draws only behind a `decline` prop,
+   which S20 does not pass. So the rail on S20 names a branch the artboard says
+   does not exist, and declines nothing.
+3. **AdminRail has no Studio or Platform entry.** Its per-page model table
+   carries Home, Programs, Community, Contracts and Settings (the last four
+   added in this export) and falls back to Home for any other page
+   (`const page = this.props.page || 'Home'` at `:83`, `P[page] || P.Home` at
+   `:138`). S20–S23 pass `page="Studio"` and H36 `page="Platform"`, so both
+   render Home's offer.
+4. **H35 says "50-row" and lists 51.** Its intro reads "the old 50-row
+   sidebar"; its Admin-group entries include X (`/admin/x`), which
+   `sidebarConfig.js` carries only as a commented-out row. Fifty live rows plus
+   the parked one is 51, and the map lists all of them.
+5. **H16–H21 still say "Retires".** Above. H18 and H19's rows also write
+   `/admin/network-profiles` (Super `:2443`), which the code reaches as
+   `/admin?tab=network-profiles`; the bare route is EXEMPT in the reachability
+   test for exactly that reason.
+6. **The ⌘K count of 34 includes the Trash proposal.** `placed` is every H35
+   row whose route starts with `/` and whose tier does not start with "No
+   home" (Super `:2392`): 37 rows minus X, Wellbeing and the "29 working
+   pages" line is 34, and Trash — tier "HQ · Security · proposal" — counts as
+   placed. The coordinator's decision for item 2 is that the Trash proposal is
+   not adopted, so the indexed count will not be 34.
+7. **The ⌘K mock routes every HQ row to `/hq`** (Super `:2397`). Item 3 gives
+   every entry its real route.
+8. **The new top-bar items appear only on the new artboards.** Messages,
+   Workspaces and ⌘K are drawn on H36–H38, and Messages and Workspaces on
+   S20–S23; neither word appears anywhere in the previous export of either
+   canvas, and the Subsidiary top bar has no ⌘K on any artboard.
+9. **H38 renames the picker; H20's action list still says "View as a role
+   shell"** (Super `:3100`). Item 7 decides the wording it carries forward.
+10. **S20's subtitle says "every row links to an /admin console, never
+    /branch/*"** (Subsidiary `:1440`), while its own rows send Studio to
+    `/studio` (`:2173`), leave Insights linking nowhere (`:2179`) and draw
+    Approvals as a note rather than links (`:2175`). The "never /branch/*"
+    half is what the code guards; the "every row links to an /admin console"
+    half is not literally true of the artboard.
+
+**And one finding that is not a tension: every route the canvases draw exists
+in App.jsx.** Measured by extracting every quoted or `href` path from both
+decoded files (`?tab=` and `#` dropped, `{{ }}` placeholders and asset paths
+excluded): the Subsidiary draws 47 distinct routes, the Super 59, 60 in the
+union, and every one resolves against App.jsx's 394 distinct `path="…"` values
+with route params matched as wildcards. Zero missing.
+
+### The Eadwyn mark at `:132` — resolved to the file it is
+
+The Subsidiary's S1 draws a 34px Eadwyn mark whose `<img src>` is an asset
+uuid. D195 left main's copy pointing at
+`4835ee6e-8882-4123-a5fb-fec77f0048df`, unresolvable because the artifact's
+asset store answered `capability_disabled`. This export inlines the image in
+its manifest instead — `62df9ae2-0f59-48d8-bde3-cef2bb603509`, `image/png`,
+493,269 B — and the decoder, by contract, still refuses to substitute it. Read
+out of the manifest, its chunks are `IHDR · caBX · sRGB · pHYs · IDAT · IEND`,
+and with the 5,758-byte `caBX` chunk (a C2PA content-credentials manifest)
+removed it is **byte-identical to `frontend/public/eadwyn-ai.png`** (487,499
+B, sha256 `f383ba6e…eceef90`), checked by hashing both. So the design shows the
+mark the product already ships. `:132` now reads
+`src="../../../frontend/public/eadwyn-ai.png"`, which resolves from
+`integrated/` and commits no second copy of the image. It is the one line in
+either file that is not the decoder's output, and it is the one line the
+decoder reported. The README's asset paragraph is rewritten to say so.
+
+### The bundled AdminRail replaces `backlog/AdminRail.dc.html`
+
+Both artifacts ship the rail as an `ext_resources` entry (`./AdminRail.dc.html`,
+13,671 B, gzipped in the manifest, sha256 `2543662523e5…6a78a426be` in both —
+one file, bundled twice). The decoder does not write ext_resources, so it was
+extracted from the Subsidiary bundle and replaces the 10,218 B copy in
+`backlog/`. Five hunks: a scope chip at the top with a hint line, and a decline
+card behind a `decline` prop; "Personal Advisor" → "Eadwyn"; the old scope chip
+at the foot replaced by the note alone; four page models added (Programs,
+Community, Contracts, Settings); and the chip, hint and decline data. It still
+has no Studio and no Platform entry (tension 3). `backlog/` stays 25: a
+replacement moves no file.
+
+### What this decision does NOT do
+
+No route, no worker change, no migration and no `frontend/src` change, so no
+`docs/` rebuild is owed; no new assertion, so no mutation run is owed.
+`integrated/` stays **66** and `backlog/` **25**.
+`documentation/architecture/ROUTE_MAP.md` rows 40 and 41 gain an update block
+each naming the new artboards; `design/canvases/README.md` gains a dated
+amendment and its asset paragraph is corrected. Gates run: `check-folder-docs`,
+`check-decision-ids`, the LFS size gate, and the full `test:drift`.
