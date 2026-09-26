@@ -33,6 +33,7 @@ import {
   loadAssumptions, sanitizeAssumptions, saveAssumptions,
 } from '../services/marketAssumptions';
 import { fillsForRow, filledColumns } from '../services/fills/provenance';
+import { refuse } from '../util/refusal';
 
 const projects = new Hono<{ Bindings: Env }>();
 
@@ -829,7 +830,7 @@ projects.delete('/:id', async (c) => {
     } catch (e) {
       await sql.end();
       console.error('[projects:delete:hard] cascade failed for', id, (e as Error).message);
-      return c.json({ error: 'Could not hard-delete project', detail: (e as Error).message }, 409);
+      return refuse(c, 409, { code: 'hard_delete_failed', message: 'The project could not be deleted permanently: other records still point at it. Nothing was removed.', raw: e });
     }
     try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_delete', { type: 'project', id }); } catch {}
     await sql.end();

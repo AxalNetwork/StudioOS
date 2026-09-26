@@ -32,6 +32,7 @@ import { githubConfigured, dispatchWorkflow } from '../services/githubSync';
 import { fanOut, coverage, withRegistry, type BranchResult } from '../services/branches';
 import { loadBranchActionMirror, parseRange } from '../services/analyticsReports';
 import { BRANCH_CODE_RE } from '../util/branch';
+import { refusalBody } from '../util/refusal';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -179,11 +180,19 @@ r.post('/licences/:uid/deploy', async (c) => {
       // refused the action. Reporting it as "not configured" would send
       // someone to set a secret that is already set.
       ? 'GitHub refused the dispatch (403). The token authenticated but lacks the actions: write scope.'
-      : `GitHub refused the dispatch: ${res.error || `HTTP ${res.status}`}`;
+      : `GitHub refused the dispatch (HTTP ${res.status}). The upstream field says why.`;
     await c.env.DB.prepare(
       "UPDATE licence_deployments SET status = 'failed', status_note = ?, updated_at = ? WHERE code = ?",
     ).bind(note, nowIso(), code).run();
-    return c.json({ error: 'dispatch_failed', message: note, branch: code, status: res.status }, 502);
+    // D278 — GitHub's text rides on `upstream` (an admin console about one
+    // of Axal's own providers); `message` and the stored note are ours.
+    return c.json(refusalBody({
+      code: 'dispatch_failed',
+      message: note,
+      raw: res.error || null,
+      audience: 'admin',
+      extra: { branch: code, status: res.status },
+    }), 502);
   }
 
   return c.json({

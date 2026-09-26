@@ -76,6 +76,22 @@ import {
   CONCERN_KIND, BAD_CONCERN, listConcerns, parseConcern, resolveConcern,
   parseRelation, RELATION_REQUIRED, BAD_RELATION, RELATION_NEEDS_ITEM, RELATION_NOT_FOR_KIND,
 } from '../services/escalationConcerns';
+import { rawText, refusalBody } from '../util/refusal';
+
+/**
+ * D278 — HQ'S OWN REFUSAL IN HQ'S WORDS; A TRANSPORT FAILURE IN OURS.
+ * `rpc/hqOps.ts` writes every refusal it throws as `escalate: …` or `rpc: …`.
+ * Anything else reaching the catch is the transport, not HQ: its text goes to
+ * the log and the stored `delivery_error` says only that HQ was not reached.
+ */
+function hqWords(e: unknown): string {
+  const text = rawText(e);
+  const m = /^(?:escalate|rpc): ([\s\S]*)$/.exec(text);
+  if (m) return m[1].slice(0, 400);
+  refusalBody({ code: 'hq_unreachable', message: '', raw: e });
+  return 'HQ could not be reached. Send it again.';
+}
+
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -293,7 +309,7 @@ r.post('/escalations', async (c) => {
           raise_key: raiseKey,
         }) as HqEscalateAnswer | null;
       } catch (e) {
-        deliveryError = `HQ did not accept the escalation: ${(e as Error).message}`;
+        deliveryError = `HQ did not accept the escalation: ${hqWords(e)}`;
       }
       // D206 — HQ REFUSED, FROM ITS OWN LEDGER OR ITS OWN CHECKS. Same answer as
       // a local refusal and the same rule for the row: none. HQ recorded
@@ -396,7 +412,7 @@ r.post('/escalations/:id/retry', async (c) => {
           raise_key: raiseKey,
         }) as HqEscalateAnswer | null;
       } catch (e) {
-        deliveryError = `HQ did not accept the escalation: ${(e as Error).message}`;
+        deliveryError = `HQ did not accept the escalation: ${hqWords(e)}`;
       }
       // D275 — ANY refusal leaves the row undelivered WITH HQ's reason, so the
       // lane says why rather than showing the last transport error.

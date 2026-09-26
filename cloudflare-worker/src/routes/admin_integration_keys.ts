@@ -48,6 +48,7 @@ import {
 } from '../services/providerOauthKeys';
 import { testOauthCreds } from '../services/providerOauthTest';
 import { setSecret, deleteSecret, type CfSecretResult } from '../services/cloudflareSecrets';
+import { refusalBody } from '../util/refusal';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -86,7 +87,16 @@ function cfErrorJson(c: any, res: CfSecretResult, fallback = 'cf_api_failed') {
   // 502 for upstream API failures so the frontend distinguishes from 4xx
   // input validation errors.
   const httpStatus = code === 'cloudflare_api_token_missing' ? 503 : 502;
-  return c.json({ error: code, detail: res.error || null, cf_status: res.status }, httpStatus);
+  // D278 — Cloudflare's text is the admin's to read on `upstream`.
+  return c.json(refusalBody({
+    code,
+    message: code === 'cloudflare_api_token_missing'
+      ? 'The Cloudflare API token is not set, so keys cannot be changed from here.'
+      : 'Cloudflare did not accept the change. Nothing changed; the upstream field says why.',
+    raw: res.error || null,
+    audience: 'admin',
+    extra: { cf_status: res.status },
+  }), httpStatus);
 }
 
 // D227 — each key carries `state` (env | db | unset | unreadable) and the
@@ -244,7 +254,7 @@ r.post('/:provider/test', async (c) => {
   try {
     result = await testOauthCreds(c.env, provider);
   } catch (e: any) {
-    return c.json({ error: e?.message || 'test_failed' }, 500);
+    return c.json(refusalBody({ code: 'test_failed', message: 'The key could not be tested. Try again in a moment.', raw: e, audience: 'admin' }), 500);
   }
   // A probe with production's credentials is a privileged act even though it
   // writes nothing, so it is recorded — through the same helper as the writes.
@@ -290,7 +300,7 @@ r.delete('/:provider', async (c) => {
   try {
     result = await deleteOauthCredsAndDisconnect(c.env, provider);
   } catch (e: any) {
-    return c.json({ error: e?.message || 'delete_failed' }, 500);
+    return c.json(refusalBody({ code: 'delete_failed', message: 'The key could not be deleted. Nothing changed; try again in a moment.', raw: e, audience: 'admin' }), 500);
   }
 
   await audit(c.env, admin, {

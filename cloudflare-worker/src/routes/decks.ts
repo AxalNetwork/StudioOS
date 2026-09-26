@@ -29,6 +29,7 @@ import { type RenderableDeck } from '../services/decks/render';
 import { renderDeckPPTX, renderDeckPPTXWithImages } from '../services/decks/pptx';
 import { stripTrailingSlashes } from '../util/url';
 import { bindingKey } from '../util/schemaBootstrap';
+import { refuse } from '../util/refusal';
 
 const decks = new Hono<{ Bindings: Env }>();
 
@@ -819,7 +820,7 @@ decks.get('/share/:token', async (c) => {
     if (/expired/i.test(String(e?.message || ''))) {
       return c.json({ error: 'share link has expired' }, 410);
     }
-    return c.json({ error: e?.message || 'forbidden' }, 403);
+    return refuse(c, 403, { code: 'forbidden', message: 'This share link is not valid.', raw: e });
   }
   const m = /^deck:(\d+):v(\d+)$/.exec(String(payload?.k || ''));
   if (!m) return c.json({ error: 'bad token scope' }, 400);
@@ -1689,12 +1690,12 @@ decks.post('/:id/export', async (c) => {
       });
     } catch (e) {
       console.error('[decks/export] pdf browser fetch threw:', (e as Error).message);
-      return c.json({ error: 'pdf_render_failed', message: (e as Error).message }, 502);
+      return refuse(c, 502, { code: 'pdf_render_failed', message: 'The PDF could not be produced. Try again in a moment.', raw: e, audience: 'member' });
     }
     if (!r.ok) {
       const text = await r.text().catch(() => '');
       console.error('[decks/export] pdf render failed:', r.status, text.slice(0, 200));
-      return c.json({ error: 'pdf_render_failed', status: r.status, detail: text.slice(0, 240) }, 502);
+      return refuse(c, 502, { code: 'pdf_render_failed', message: 'The PDF could not be produced. Try again in a moment.', raw: text, extra: { status: r.status } });
     }
     const bytes = await r.arrayBuffer();
     return new Response(bytes, {
@@ -1746,12 +1747,12 @@ decks.post('/:id/export', async (c) => {
       });
     } catch (e) {
       console.error('[decks/export] pptx screenshot threw slide', i, (e as Error).message);
-      return c.json({ error: 'pptx_render_failed', slide: i, message: (e as Error).message }, 502);
+      return refuse(c, 502, { code: 'pptx_render_failed', message: 'The PowerPoint file could not be produced. Try again in a moment.', raw: e, audience: 'member', extra: { slide: i } });
     }
     if (!r.ok) {
       const text = await r.text().catch(() => '');
       console.error('[decks/export] pptx screenshot failed slide', i, r.status, text.slice(0, 200));
-      return c.json({ error: 'pptx_render_failed', slide: i, status: r.status, detail: text.slice(0, 240) }, 502);
+      return refuse(c, 502, { code: 'pptx_render_failed', message: 'The PowerPoint file could not be produced. Try again in a moment.', raw: text, extra: { slide: i, status: r.status } });
     }
     images.push(new Uint8Array(await r.arrayBuffer()));
   }

@@ -56,7 +56,9 @@ async function loadLogic() {
   const tsBody = src.slice(start, end).replace(/^export\s+/, '');
   const wrapped = `const __logic = (() => { ${tsBody}; return requestIntroLogic; })();`;
   const outputText = transpileTs(wrapped);
-  return new Function(`${outputText}; return __logic;`)();
+  // D278 — the body now calls util/refusal's refusalBody; hand it the real one.
+  const { refusalBody } = await import('../src/util/refusal.ts');
+  return new Function('refusalBody', `${outputText}; return __logic;`)(refusalBody);
 }
 
 /* ------------------------------------------------------------------ */
@@ -234,14 +236,21 @@ test('envelope creation throwing → 500 envelope_creation_failed', async () => 
   const { deps, calls } = makeDeps({
     createEnvelope: async () => { throw new Error('docusign down'); },
   });
-  // Silence the expected console.error noise for this branch.
+  // Capture the expected console.error: D278 sends DocuSign's text there.
   const origErr = console.error;
-  console.error = () => {};
+  const logged = [];
+  console.error = (...a) => { logged.push(a.map(String).join(' ')); };
   try {
     const r = await requestIntroLogic(ENV, INVESTOR, { founder_user_id: 200 }, deps);
     assert.equal(r.status, 500);
     assert.equal(r.body.error, 'envelope_creation_failed');
-    assert.match(r.body.message, /docusign down/);
+    // RE-AIMED BY D278: the member reads our sentence; the thrown text is in
+    // the log beside the code and nowhere in the body.
+    assert.match(r.body.message, /NDA could not be sent/);
+    assert.doesNotMatch(JSON.stringify(r.body), /docusign down/);
+    assert.equal(r.body.upstream, undefined);
+    assert.ok(logged.some((l) => l.includes('envelope_creation_failed') && l.includes('docusign down')),
+      'the provider text was not logged beside the code');
     assert.equal(calls.upsertPairwise.length, 0);
     assert.equal(calls.notify.length, 0);
   } finally {

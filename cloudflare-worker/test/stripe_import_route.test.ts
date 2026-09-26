@@ -249,9 +249,16 @@ test('upstream Stripe failure → 502 with detail.code stripe_sync_failed', with
   assert.equal(res.status, 502);
   const body = (await res.json()) as any;
   assert.equal(body.detail.code, 'stripe_sync_failed');
-  // The upstream reason is surfaced (not swallowed) so the page can show it.
+  // RE-AIMED BY D278, and what this protects stays true: the upstream reason
+  // is surfaced, not swallowed — on `upstream`, because the founder owns the
+  // Stripe account the import used. `detail.message` is our sentence and never
+  // the provider's text.
   assert.equal(typeof body.detail.message, 'string');
-  assert.ok(body.detail.message.length > 0);
+  assert.match(body.detail.message, /Stripe import did not complete/);
+  assert.doesNotMatch(body.detail.message, /boom/, 'the provider text reached the sentence');
+  assert.equal(typeof body.upstream, 'string');
+  assert.match(body.upstream, /boom/, 'the owner lost the upstream reason');
+  assert.ok(body.upstream.length <= 301, 'upstream is clipped');
   // A failed import must not leave a stripe snapshot row behind.
   assert.equal(stripeSnapshotCount(db), 0);
 }));

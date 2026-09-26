@@ -262,7 +262,7 @@ test('a TOTP session whose step-up has gone stale cannot appoint either', async 
   assert.equal(status, 403, 'a day-old TOTP session was treated as a person at a keyboard');
   // THIS ASSERTION FOUND A LIVE DEFECT AND IS WHY IT IS THREE LINES RATHER THAN
   // ONE. `step_up_required` was in `app.onError` as a special case and in
-  // `AUTH_ERROR_STATUSES` not at all, so `mapError` — which 31 route files reach
+  // `AUTH_ERROR_STATUSES` not at all, so `mapError` — which every route file that calls it reaches
   // INSTEAD of that handler — fell through to its 400 default. The status was
   // wrong and, worse, the body carried neither the code the SPA prompts off nor
   // the TTL it shows. Both readers now build it from one function.

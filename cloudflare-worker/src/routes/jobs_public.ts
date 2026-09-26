@@ -20,6 +20,7 @@ import { ensureJobBoardSchema } from '../services/jobBoardSchema';
 import { shapeJobPosting, safeHttpUrl, buildPublicJobFeedWhere } from '../services/jobBoardCommon';
 import { putResumeFromDataUri } from '../services/r2';
 import { notify } from '../services/notify';
+import { refuse } from '../util/refusal';
 
 const jobsPublic = new Hono<{ Bindings: Env }>();
 
@@ -131,7 +132,7 @@ jobsPublic.post('/jobs/:slug/apply', async (c) => {
       resumeKey = meta.file_key;
       resumeName = body.resume_name ? String(body.resume_name).slice(0, 255) : `${slug}.pdf`;
     } catch (e) {
-      return c.json({ error: 'resume_rejected', message: (e as Error).message }, 400);
+      return refuse(c, 400, { code: 'resume_rejected', message: 'The résumé could not be read. Upload a PDF of 5 MB or less and try again.', raw: e, audience: 'member' });
     }
   }
 

@@ -196,3 +196,22 @@ export async function signInWithPhoneNumber(
   }
   return { ok: true, phoneNumber: json.phoneNumber, localId: json.localId, idToken: json.idToken };
 }
+
+/**
+ * D278 — THE SENTENCE A PERSON READS FOR EACH SMS REFUSAL. `message` on the
+ * results above is Google Identity Platform's own text (a code such as
+ * `INVALID_CODE`, or an HTTP body); it goes to the log, and the body carries
+ * one of these instead.
+ */
+export const GCIP_SENTENCES: Record<string, string> = {
+  invalid_phone: 'That phone number could not be used. Check it, including the country code, and try again.',
+  quota_exceeded: 'Too many codes have been sent. Wait a few minutes and try again.',
+  recaptcha_required: 'Complete the check before a code can be sent.',
+  invalid_code: 'That code is not right. Check it and try again, or ask for a new one.',
+  session_expired: 'That code has expired. Ask for a new one.',
+  upstream_error: 'The code could not be sent or checked just now. Try again in a moment.',
+};
+
+export function gcipSentence(code: string): string {
+  return GCIP_SENTENCES[code] || GCIP_SENTENCES.upstream_error;
+}

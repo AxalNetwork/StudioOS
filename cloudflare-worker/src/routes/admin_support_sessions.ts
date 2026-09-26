@@ -48,6 +48,42 @@ import { mirrorBranchAction } from '../services/auditMirror';
 import { BRANCH_CODE_RE } from '../util/branch';
 import { SUPPORT_REASON_MIN, MOVE_REASON_MIN, UNBIND_REASON_MIN } from '../rpc/branchOps';
 import { logAdminAction } from '../services/adminAudit';
+import type { Context } from 'hono';
+import { rawText, refusalBody } from '../util/refusal';
+
+/**
+ * D278 — A BRANCH'S REFUSAL IS PASSED THROUGH; A TRANSPORT FAILURE IS NOT.
+ *
+ * Measured, not assumed: every refusal the support-session methods in
+ * `rpc/branchOps.ts` throw is written `rpc: …` — a reason under ten
+ * characters, an account that is not there, a `super_admins` row that should
+ * not exist. Those are HQ-authored inputs answered in the branch's own words,
+ * and `hq_unbind_admin_d262.test.ts` pins that they survive. Anything else
+ * that reaches this catch — the binding unreachable, the RPC transport's own
+ * error — has no `rpc: ` prefix and is not the branch talking, so it goes to
+ * the log and the operator reads our sentence instead.
+ */
+function branchWords(e: unknown): string | null {
+  const text = rawText(e);
+  return text.startsWith('rpc: ') ? text.slice('rpc: '.length, 'rpc: '.length + 400) : null;
+}
+
+/** A transport failure's own text goes to the log; the sentence says only that. */
+function logUnreachable(e: unknown): string {
+  refusalBody({ code: 'branch_unreachable', message: '', raw: e });
+  return 'the branch could not be reached';
+}
+
+function branchRefusal(c: Context<any>, e: unknown, code = 'branch_refused'): Response {
+  const words = branchWords(e);
+  if (words !== null) return c.json({ error: code, message: words }, 409);
+  return c.json(refusalBody({
+    code: 'branch_unreachable',
+    message: 'The branch could not be reached, so nothing was done there. Try again in a moment.',
+    raw: e,
+  }), 502);
+}
+
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -120,10 +156,7 @@ r.post('/branches/:code/support-session', async (c) => {
       // should not exist. Passing the message through beats a 500 that says
       // nothing, and these are all HQ-authored inputs rather than user content.
       mirrorBranchAction(c.env, 'support_session_opened', 'failed', code);
-      return c.json({
-        error: 'branch_refused',
-        message: String((e as Error).message || e).replace(/^rpc: /, '').slice(0, 400),
-      }, 409);
+      return branchRefusal(c, e);
     }
     mirrorBranchAction(c.env, 'support_session_opened', 'ok', code);
 
@@ -272,10 +305,7 @@ r.post('/branches/:code/accounts/:userId/move', async (c) => {
       // NOTHING HAS HAPPENED YET when this throws, so it is a clean refusal
       // rather than a partial move — the branch validates before it writes.
       mirrorBranchAction(c.env, 'account_moved_out', 'failed', from);
-      return c.json({
-        error: 'source_refused',
-        message: String((e as Error).message || e).replace(/^rpc: /, '').slice(0, 400),
-      }, 409);
+      return branchRefusal(c, e, 'source_refused');
     }
     mirrorBranchAction(c.env, 'account_moved_out', 'ok', from);
 
@@ -309,7 +339,7 @@ r.post('/branches/:code/accounts/:userId/move', async (c) => {
       invited = {
         ok: false,
         reason: `The account was closed on ${from} and the invitation on ${to} did not land: `
-          + `${String((e as Error).message || e).replace(/^rpc: /, '')}. `
+          + `${branchWords(e) ?? logUnreachable(e)}. `
           + `Retry the invitation alone — moving them out again would be refused, correctly.`,
       };
     }
@@ -414,10 +444,7 @@ r.post('/branches/:code/admins/:userId/unbind', async (c) => {
       // refusal (not an admin, already inactive, a super_admins row) is the
       // operator's business, passed through as words.
       mirrorBranchAction(c.env, 'admin_unbound', 'failed', code);
-      return c.json({
-        error: 'branch_refused',
-        message: String((e as Error).message || e).replace(/^rpc: /, '').slice(0, 400),
-      }, 409);
+      return branchRefusal(c, e);
     }
     mirrorBranchAction(c.env, 'admin_unbound', 'ok', code);
 

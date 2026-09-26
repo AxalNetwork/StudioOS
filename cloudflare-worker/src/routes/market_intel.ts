@@ -522,6 +522,7 @@ marketIntel.delete('/watchlist/:id', async (c) => {
 // counter-party id is hashed.
 // =============================================================================
 import { ensureExtractorSchema } from '../services/market_intel/extractor_schema';
+import { refuse } from '../util/refusal';
 
 marketIntel.use('/at1/*', async (c, next) => { await ensureExtractorSchema(c.env); await next(); });
 marketIntel.use('/sentiment',     async (c, next) => { await ensureExtractorSchema(c.env); await next(); });
@@ -805,7 +806,7 @@ marketIntel.post('/admin/reduce', async (c) => {
     await Jobs.enqueue(c.env, 'mi_reduce', { triggered_by: user.id, source: 'admin_refresh' });
     return c.json({ ok: true, enqueued: 'mi_reduce' });
   } catch (e) {
-    return c.json({ error: 'enqueue_failed', detail: (e as Error).message }, 500);
+    return refuse(c, 500, { code: 'enqueue_failed', message: 'The refresh could not be queued. Try again in a moment.', raw: e, audience: 'member' });
   }
 });
 

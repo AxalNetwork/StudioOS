@@ -27,6 +27,7 @@ import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
+import { refuse, rowFailureSentence } from '../util/refusal';
 
 const imports = new Hono<{ Bindings: Env }>();
 
@@ -393,7 +394,7 @@ imports.post('/universal/commit', async (c) => {
         await persistUniversalRow(c.env, user.id, target, mapped, importId);
         succeeded++;
       } catch (e: any) {
-        errors.push({ row: start + j + 2, error: String(e?.message || e || 'insert_failed').slice(0, 240) });
+        errors.push({ row: start + j + 2, error: rowFailureSentence(e) });
       }
     }
   }
@@ -593,7 +594,7 @@ imports.post('/angellist/commit', async (c) => {
       }
       succeeded++;
     } catch (e: any) {
-      errors.push({ row: i + 2, error: String(e?.message || e).slice(0, 240) });
+      errors.push({ row: i + 2, error: rowFailureSentence(e) });
     }
   }
 
@@ -664,7 +665,7 @@ imports.post('/portfolio/commit', async (c) => {
       ).run();
       succeeded++;
     } catch (e: any) {
-      errors.push({ row: i + 2, error: String(e?.message || e).slice(0, 240) });
+      errors.push({ row: i + 2, error: rowFailureSentence(e) });
     }
   }
   await finishImport(c.env, importId, rows.length, succeeded, rows.length - succeeded, errors);
@@ -734,8 +735,8 @@ imports.post('/carta', async (c) => {
     const succeeded = attempted - (counts.errors || 0);
     await finishImport(c.env, importId, attempted, Math.max(0, succeeded), counts.errors || 0, []);
   } catch (e: any) {
-    await finishImport(c.env, importId, 0, 0, 1, [{ row: 0, error: String(e?.message || e).slice(0, 240) }]);
-    return c.json({ error: 'carta_sync_failed', message: String(e?.message || e), import_id: importId }, 502);
+    await finishImport(c.env, importId, 0, 0, 1, [{ row: 0, error: rowFailureSentence(e) }]);
+    return refuse(c, 502, { code: 'carta_sync_failed', message: 'The Carta import did not complete. Nothing was saved from it; check the connection and try again.', raw: e, audience: 'owner', extra: { import_id: importId } });
   }
   return c.json({ import_id: importId, ok: true });
 });
@@ -755,7 +756,7 @@ imports.post('/hubspot/preview', async (c) => {
     const pipelines = (await mod.listHubspotPipelines?.(c.env, row.id).catch(() => null)) || [];
     return c.json({ pipelines });
   } catch (e: any) {
-    return c.json({ error: 'hubspot_list_failed', message: String(e?.message || e) }, 502);
+    return refuse(c, 502, { code: 'hubspot_list_failed', message: 'HubSpot could not be read. Check the connection and try again.', raw: e, audience: 'owner' });
   }
 });
 
@@ -779,8 +780,8 @@ imports.post('/hubspot/commit', async (c) => {
     // failed=1 so finishImport derives status='failed' and the Settings
     // UI's "View errors" drill-down opens (it keys off non-succeeded
     // status / non-zero failed count).
-    await finishImport(c.env, importId, 0, 0, 1, [{ row: 0, error: String(e?.message || e).slice(0, 240) }]);
-    return c.json({ error: 'hubspot_import_failed', message: String(e?.message || e), import_id: importId }, 502);
+    await finishImport(c.env, importId, 0, 0, 1, [{ row: 0, error: rowFailureSentence(e) }]);
+    return refuse(c, 502, { code: 'hubspot_import_failed', message: 'The HubSpot import did not complete. Nothing was saved from it; check the connection and try again.', raw: e, audience: 'owner', extra: { import_id: importId } });
   }
 });
 
@@ -799,7 +800,7 @@ imports.post('/affinity/preview', async (c) => {
     const lists = (await mod.listAffinityLists?.(c.env, row.id).catch(() => null)) || [];
     return c.json({ lists });
   } catch (e: any) {
-    return c.json({ error: 'affinity_list_failed', message: String(e?.message || e) }, 502);
+    return refuse(c, 502, { code: 'affinity_list_failed', message: 'Affinity could not be read. Check the connection and try again.', raw: e, audience: 'owner' });
   }
 });
 
@@ -823,8 +824,8 @@ imports.post('/affinity/commit', async (c) => {
   } catch (e: any) {
     // failed=1 so finishImport derives status='failed' and the Settings
     // UI surfaces the error drill-down.
-    await finishImport(c.env, importId, 0, 0, 1, [{ row: 0, error: String(e?.message || e).slice(0, 240) }]);
-    return c.json({ error: 'affinity_import_failed', message: String(e?.message || e), import_id: importId }, 502);
+    await finishImport(c.env, importId, 0, 0, 1, [{ row: 0, error: rowFailureSentence(e) }]);
+    return refuse(c, 502, { code: 'affinity_import_failed', message: 'The Affinity import did not complete. Nothing was saved from it; check the connection and try again.', raw: e, audience: 'owner', extra: { import_id: importId } });
   }
 });
 
@@ -888,8 +889,8 @@ imports.post('/deck', async (c) => {
       throw new Error('unsupported_format');
     }
   } catch (e: any) {
-    await finishImport(c.env, importId, 0, 0, 1, [{ row: 0, error: String(e?.message || e).slice(0, 240) }]);
-    return c.json({ error: 'extract_failed', message: String(e?.message || e) }, 415);
+    await finishImport(c.env, importId, 0, 0, 1, [{ row: 0, error: rowFailureSentence(e) }]);
+    return refuse(c, 415, { code: 'extract_failed', message: 'The file could not be read. Upload a CSV or spreadsheet and try again.', raw: e, audience: 'owner' });
   }
 
   // Pre-fill pitch_decks (best-effort; the user can edit in the builder).

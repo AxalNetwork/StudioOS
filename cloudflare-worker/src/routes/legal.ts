@@ -28,6 +28,7 @@ import {
   renderCofounderAgreement,
   totalEquityPct,
 } from '../services/cofounderAgreement';
+import { refuse } from '../util/refusal';
 
 const legal = new Hono<{ Bindings: Env }>();
 
@@ -484,7 +485,7 @@ legal.post('/incorporate/checkout', async (c) => {
     }, { idempotencyKey: `incorp_update_url:${session.id}` });
     return c.json({ url: session.url, incorporation_id: incId, session_id: session.id });
   } catch (e) {
-    return c.json({ error: 'checkout_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'checkout_failed', message: 'Checkout could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
   }
 });
 
@@ -716,7 +717,7 @@ legal.post('/incorporation/order', async (c) => {
       registered_agent: raOffer,
     });
   } catch (e) {
-    return c.json({ error: 'order_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'order_failed', message: 'The order could not be placed. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
   }
 });
 

@@ -3,6 +3,7 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
 import { clampLimit, parseOffset } from '../util/pagination';
+import { refusalBody } from '../util/refusal';
 
 const activity = new Hono<{ Bindings: Env }>();
 
@@ -189,11 +190,12 @@ activity.post('/sync-github', async (c) => {
     } else if (putRes.status === 404) {
       friendly = 'GitHub could not find the target repo (404). Check GITHUB_REPO_OWNER and GITHUB_REPO_NAME on the worker.';
     } else if (putRes.status === 422) {
-      friendly = `GitHub rejected the commit (422). ${ghMessage}`.trim();
+      friendly = 'GitHub rejected the commit (422). Nothing was committed; try again in a moment.';
     } else {
-      friendly = `GitHub commit failed (${putRes.status}).${ghMessage ? ' ' + ghMessage : ''}`;
+      friendly = `GitHub commit failed (${putRes.status}). Nothing was committed; try again in a moment.`;
     }
-    return c.json({ status: 'failed', message: friendly }, 502);
+    // D278 — GitHub's own message goes to the log, never the member's page.
+    return c.json(refusalBody({ code: 'github_commit_failed', message: friendly, raw: ghMessage || errText, extra: { status: 'failed' } }), 502);
   }
 
   const result: any = await putRes.json();

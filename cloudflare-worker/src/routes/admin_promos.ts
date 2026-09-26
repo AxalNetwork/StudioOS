@@ -11,6 +11,7 @@ import {
   normalizeCode,
   readProductIds,
 } from '../services/promos';
+import { refusalBody } from '../util/refusal';
 
 // Task #9 — Promo Code admin CRUD. Mounted at `/api/admin/promos` BEFORE the
 // catch-all `/api/admin` in index.ts so the nested routes resolve here (same
@@ -59,9 +60,18 @@ function stripeErr(e: unknown) {
   }
   const m = /^stripe_error:(\d+):([\s\S]*)$/.exec(msg);
   const upstream = m ? Number(m[1]) : 502;
-  const detail = m ? m[2] : msg;
   const status: 400 | 502 = upstream >= 400 && upstream < 500 ? 400 : 502;
-  return { body: { error: 'Stripe request failed', code: 'stripe_error', upstream_status: upstream, detail }, status };
+  // D278 — Stripe's JSON is the admin's to read on `upstream`, never `detail`.
+  return {
+    body: refusalBody({
+      code: 'stripe_error',
+      message: 'Stripe did not accept the request. Nothing changed; the upstream field says why.',
+      raw: m ? m[2] : msg,
+      audience: 'admin',
+      extra: { code: 'stripe_error', upstream_status: upstream },
+    }),
+    status,
+  };
 }
 
 async function audit(

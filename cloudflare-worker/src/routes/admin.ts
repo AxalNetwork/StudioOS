@@ -23,6 +23,7 @@ import { ensureExploringSchema } from '../services/exploringSchema';
 import { MILESTONES as SPINOUT_MILESTONES, unlockedFeaturesThrough } from '../services/spinoutLabCatalog';
 import { bindingKey } from '../util/schemaBootstrap';
 import { likeNeedle } from '../util/likeSearch';
+import { refuse } from '../util/refusal';
 
 const admin = new Hono<{ Bindings: Env }>();
 
@@ -2422,7 +2423,7 @@ admin.delete('/projects/:id/hard-delete', async (c) => {
     await hardDeleteProject(c.env, id);
   } catch (e) {
     console.error('[admin/hard-delete] failed', id, (e as Error).message);
-    return c.json({ error: 'Hard delete failed', detail: (e as Error).message }, 409);
+    return refuse(c, 409, { code: 'hard_delete_failed', message: 'The project could not be deleted permanently: other records still point at it. Nothing was removed.', raw: e });
   }
   try {
     const adminHash = await hashEmail(adminUser.email);

@@ -29,6 +29,7 @@ import {
 export { preflightOAuthSecrets };
 import { encryptString } from '../services/cryptoBox';
 import { bindingKey } from '../util/schemaBootstrap';
+import { refuse } from '../util/refusal';
 
 const calendar = new Hono<{ Bindings: Env }>();
 
@@ -728,7 +729,8 @@ export async function buildGoogleOAuthStartResponse(
       body: {
         error: {
           code: 'oauth_state_error',
-          message: `Could not start Google OAuth: ${e?.message || 'unknown error'}`,
+          // D278 — our state store failed, not Google: the text is logged above.
+          message: 'Could not start connecting Google Calendar. Nothing was saved; try again in a moment.',
         },
       },
     };
@@ -765,7 +767,8 @@ export async function buildMicrosoftOAuthStartResponse(
       body: {
         error: {
           code: 'oauth_state_error',
-          message: `Could not start Outlook OAuth: ${e?.message || 'unknown error'}`,
+          // D278 — our state store failed, not Outlook: the text is logged above.
+          message: 'Could not start connecting Outlook Calendar. Nothing was saved; try again in a moment.',
         },
       },
     };
@@ -1056,7 +1059,7 @@ calendar.post('/google/sync', safe('g_sync', 'Google sync failed', async (c) => 
     return c.json(await syncUserToGoogle(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString()));
   } catch (e: any) {
     if (e?.message === 'not_connected') return c.json({ detail: 'Connect a Google account first' }, 409);
-    return c.json({ detail: `Google sync failed: ${e?.message || e}` }, 502);
+    return refuse(c, 502, { code: 'google_sync_failed', message: 'The Google calendar sync did not complete. Check the connection and try again.', raw: e, audience: 'owner' });
   }
 }));
 
@@ -1177,7 +1180,7 @@ calendar.post('/microsoft/sync', safe('m_sync', 'Microsoft sync failed', async (
     return c.json(await syncUserToMicrosoft(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString()));
   } catch (e: any) {
     if (e?.message === 'not_connected') return c.json({ detail: 'Connect a Microsoft account first' }, 409);
-    return c.json({ detail: `Microsoft sync failed: ${e?.message || e}` }, 502);
+    return refuse(c, 502, { code: 'microsoft_sync_failed', message: 'The Microsoft calendar sync did not complete. Check the connection and try again.', raw: e, audience: 'owner' });
   }
 }));
 

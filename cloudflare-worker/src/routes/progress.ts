@@ -67,6 +67,7 @@ import { planImport } from '../services/metricsCsv';
 import { weekStartOf, weekWindows, type MoveRow } from '../services/okrWeeks';
 import { summarise as summariseSaasMetrics, sparkline as saasSparkline, type Snapshot as SaasSnapshot } from '../services/saasMetrics';
 import { bindingKey } from '../util/schemaBootstrap';
+import { refusalBody } from '../util/refusal';
 
 const progress = new Hono<{ Bindings: Env }>();
 
@@ -2628,10 +2629,16 @@ progress.post('/metrics/:projectId/import-stripe', async (c) => {
         },
       }, 400);
     }
-    // Any other failure (e.g. Stripe API error) → readable generic error.
-    return c.json({
-      detail: { code: 'stripe_sync_failed', message: result.detail || 'Stripe import failed.' },
-    }, 502);
+    // Any other failure (e.g. Stripe API error): our sentence in
+    // `detail.message`; the founder's own Stripe account's reason, clipped, in
+    // `upstream` (D278 — the owner of the connected account may read it).
+    const b = refusalBody({
+      code: 'stripe_sync_failed',
+      message: 'The Stripe import did not complete. Nothing was saved from it; check the connection and try again.',
+      raw: result.detail,
+      audience: 'owner',
+    });
+    return c.json({ detail: { code: 'stripe_sync_failed', message: b.message }, upstream: b.upstream }, 502);
   }
 
   // Connected, but the account has no usable billing data (no active/trialing

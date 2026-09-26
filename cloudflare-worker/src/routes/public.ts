@@ -17,6 +17,7 @@ import { ensureFollowsSchema } from './follows';
 import { kvGetJSON, kvPutJSON, createL1 } from '../kv';
 import { bindingKey } from '../util/schemaBootstrap';
 import { likeNeedleLower } from '../util/likeSearch';
+import { refuse } from '../util/refusal';
 
 const publicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -760,7 +761,7 @@ publicRoutes.post('/roadmap/votes', async (c) => {
       `INSERT OR IGNORE INTO roadmap_votes (user_id, item_id) VALUES (?, ?)`,
     ).bind(user.id, itemId).run();
   } catch (ex) {
-    return c.json({ detail: 'could not record vote', error: String(ex) }, 500);
+    return refuse(c, 500, { code: 'vote_failed', message: 'Your vote could not be recorded. Try again in a moment.', raw: ex });
   }
   return c.json({ ok: true, item_id: itemId });
 });
@@ -776,7 +777,7 @@ publicRoutes.delete('/roadmap/votes', async (c) => {
       `DELETE FROM roadmap_votes WHERE user_id = ? AND item_id = ?`,
     ).bind(user.id, itemId).run();
   } catch (ex) {
-    return c.json({ detail: 'could not remove vote', error: String(ex) }, 500);
+    return refuse(c, 500, { code: 'unvote_failed', message: 'Your vote could not be removed. Try again in a moment.', raw: ex });
   }
   return c.json({ ok: true, item_id: itemId });
 });
@@ -831,7 +832,7 @@ publicRoutes.post('/demo-request', async (c) => {
     ).bind(topic, name, email, company || null, message || null).run();
     insertedId = (r.meta?.last_row_id as number) || null;
   } catch (ex) {
-    return c.json({ detail: 'could not record request', error: String(ex) }, 500);
+    return refuse(c, 500, { code: 'request_failed', message: 'Your request could not be recorded. Try again in a moment.', raw: ex });
   }
 
   // Email the lead a confirmation out-of-band. Uses sendRawEmail rather

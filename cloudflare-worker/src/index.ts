@@ -1173,8 +1173,9 @@ app.onError((err: any, c) => {
   // on; `api.js` keys strictly on `code`.
   if (msg === BRANCH_SUSPENDED) return c.json(branchSuspendedBody(err), 423);
   if (msg === STEP_UP_REQUIRED) {
-    // D134 — the body comes from `util/authErrors.ts` so `mapError`, which 31
-    // route files reach instead of this handler, answers with the same object.
+    // D134 — the body comes from `util/authErrors.ts` so `mapError`, which
+    // every route file that calls it reaches instead of this handler, answers
+    // with the same object.
     return c.json(stepUpRefusalBody(err), 403);
   }
   const mapped = AUTH_ERROR_STATUSES[msg];

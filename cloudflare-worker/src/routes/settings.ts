@@ -63,6 +63,7 @@ import {
   type ImportProposal,
 } from '../services/linkedinImport';
 import { bindingKey } from '../util/schemaBootstrap';
+import { refuse } from '../util/refusal';
 
 const settings = new Hono<{ Bindings: Env }>();
 
@@ -420,7 +421,7 @@ settings.post('/headshot', async (c) => {
   try {
     meta = await putHeadshotFromDataUri(c.env, user.id, dataUri);
   } catch (e: any) {
-    return c.json({ error: e?.message || 'Upload failed' }, 400);
+    return refuse(c, 400, { code: 'upload_failed', message: 'The photo could not be uploaded. Use a JPEG, PNG or WebP image of 3 MB or less.', raw: e });
   }
 
   const sql = getSQL(c.env);
@@ -1963,7 +1964,7 @@ settings.post('/connected-accounts/google/unlink', async (c) => {
               VALUES ('google_account_unlinked', 'user unlinked Google sign-in', ${eh}, ${user.id})`;
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: e?.message || 'Unlink failed' }, 500);
+    return refuse(c, 500, { code: 'unlink_failed', message: 'Google sign-in could not be unlinked. Nothing changed; try again in a moment.', raw: e });
   } finally {
     try { await sql.end(); } catch {}
   }
