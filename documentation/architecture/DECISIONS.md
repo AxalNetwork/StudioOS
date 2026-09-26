@@ -29447,3 +29447,107 @@ migration.** `frontend/src` moved (the console list and the test), so
   order).
 - No migration, no route, no `api.js` method, so `check-api-drift` has
   nothing to say.
+
+## D380
+
+**The Spin-Out Lab honesty sweep: the seat count reads `/brief`'s `places`,
+`SpinoutLabPage`'s dead code goes, and eight stale claims are corrected.**
+Session 10, item 1 (the C3 gap map's PR 1). No migration, no route, no
+`api.js` method.
+
+**The seat count.** Three places typed a number no row held: the apply CTA
+("8 spots available", twice), the apply form's fallback line ("Applications
+close August 1, 2026. 8 spots available." — a date already past) and the
+refused-application note ("capped at 8 companies"). The stored value is
+`cohort_settings.max_cohort_size`, default `DEFAULT_MAX_COHORT_SIZE = 25`,
+already returned by the public `GET /spinout-lab/brief` as `cohort.places`
+(D141). A new hook, `useCohortPlaces` in `lib/spinoutLab.js`, reads it; each
+caller prints the count only when the read succeeded, prints `Unreadable`
+with a retry when it failed, and in the refused note says "a fixed number of
+places" without a number while it has none. The apply form's fallback now
+states the rule (seven days before the start, 23:59 Delaware time) instead of
+a date.
+*Measured and not changed:* nothing enforces `max_cohort_size` — the
+capacity job reads only the minimum — so the copy says a cohort "has N
+places", not that it is "capped". And `getCohortSizeSettings` swallows a
+failed read and answers the default, so `/brief` can print 25 on a D1 error
+after an admin set another number; that is filed for the lifecycle PR, which
+changes that service anyway.
+
+**Dead code in `SpinoutLabPage.jsx`.** `PHASE_THEMES`, `DELIVERABLES` (and
+its nine icons), `TRACKER_COLUMNS`, `deliverablesFor`, `JurisdictionBar`,
+`HeroStatsPanel` and `CohortTrackerSection` had rendered nowhere since the
+D38 intro replaced the hero they sat in. Deleted, with the imports only they
+used. `spinout_brief_live_data.test.mjs` pinned `HeroStatsPanel`'s hook call;
+it now pins the brief, the one surface that prints the track record.
+
+**Stale copy and comments corrected.**
+- `ogRegistry.js`'s `/spinout-lab` description, the congratulations screen
+  and the public certificate verifier said "idea to incorporated" (the OG
+  line also promised a "demo day"). D38 retired that positioning on the
+  page; the share card is what a link preview shows. Rewritten to the
+  intro's own terms. `docs/` rebuilt; the OG prerender is part of the build.
+- `SpinoutLabCertificatePage.jsx` said the `spinout_graduated` email "sends
+  on graduation". No worker code calls it (only the registry names it). The
+  modal now says nothing sends it yet and that delivery is not recorded.
+- `spinout_lab.ts`'s header said "JWT-auth-gated for every route" while
+  `/graduates`, `/stats`, `/brief` and `/cohort` are public; it now names
+  them and the rule they hold to (company-level facts, never a founder's
+  identity, track or milestones).
+- The Workspace's and the admin view's week-2 row read "Sign co-founder
+  agreement (or solo declaration)". The milestone is recorded only from a
+  signed document, and the agreement page's own solo banner says there is
+  no solo declaration document. The parenthesis is gone.
+- `spinoutLabArsenal.js`'s cards-are-not-links comment said every tool route
+  is `guard(labRoles(['admin']))`; `/spinout-lab/brand` and
+  `/spinout-lab/cofounder-match` are `labRoles(['admin', 'founder'])`. The
+  behaviour stays (the cards are inert on both surfaces); the comment now
+  states the split, and the intro test reads each route's guard from
+  `App.jsx` and fails if a founder-admitting route is not named.
+- `LabIntro.jsx`'s "a seat count — nothing stores one" and the intro test
+  that pinned it are corrected: the count is stored, and whether the intro's
+  hero draws it is the landing revision's call.
+- `ROUTE_MAP.md` rows *Apply and Status* (the shipped page is the older
+  canvas's APPLY VIEW, not this canvas), *Graduation Certificate* (reissue
+  has no route and would collide on `credential_id`; the profile badge has
+  no seed or mint; the admin tab has no UI; nothing records emailed or
+  downloaded) and *Programme Brief* (`/brief` exists, `places` is stored,
+  the print is letter portrait). The generated routing documents are
+  unchanged by the edit (`build-profile-routing` reports both unchanged).
+
+**Found and not mine, passed on through the session's person:**
+`templates/email/registry.ts`'s `spinout_admitted` body still says "from
+idea to incorporated" (Session 4 holds outbound mail);
+`pages/templates/SpinoutDemoDayPage.jsx` says the same, and
+`pages/templates/FounderHomePage.jsx` prints "From the 38 companies that
+have completed the Spin-Out Lab", a typed track record;
+`lib/spinoutFundModel.js`'s past `firstClose` is Session 9's.
+
+### VERIFIED
+
+- `npm run test:drift` exit 0. Frontend 3398 → 3403, worker 4408 (3
+  skipped) and retention 112 unchanged. New: `spinout_lab_honesty_d380
+  .test.mjs` (five tests: the header names every public route and only
+  those; the graduation email is not described as sent while nothing sends
+  it; no row offers a solo declaration the milestone rejects; the share card
+  and verifier do not say "idea to incorporated" or "demo day"; the page
+  exports nothing unrendered). Re-aimed: the intro's seat-count and
+  arsenal-link tests, the status test's capacity reason, the brief test's
+  track-record source.
+- Eighteen mutations run, each anchor asserted unique, bytes proven changed,
+  restored from a sha256-checked snapshot and re-run green: typed "8 spots"
+  in the CTA; the apply form printing places without the `ok` gate; each
+  page dropping its `Unreadable` branch; the hook reading another field; the
+  hook storing a literal; the worker typing `places: 8`; the arsenal comment
+  dropping `/spinout-lab/brand`; `/spinout-lab/startup` widened to founder;
+  the header dropping `/brief`; `/shipped` losing `requireAuth`; "sends on
+  graduation" restored; "(or solo declaration)" restored; "idea to
+  incorporated" in the OG line; `HeroStatsPanel` re-exported; "capped at 8"
+  in the refused note; the refused branch losing its reason; the brief
+  inlining its pluralisation. **One escaped on the first run** — the hook
+  reading `cohort.max` — because the assertion matched the null-check line,
+  which also names `cohort.places`. The assertion was fixed (it now pins
+  the parse and the stored value), not the code; 18 of 18 caught.
+- Both typechecks, `check-decision-ids`, `check-folder-docs`,
+  `check-api-drift` pass inside the drift run; `check-docs-fresh --strict`
+  exits 0 after the root `npm run build`.

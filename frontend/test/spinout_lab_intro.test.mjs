@@ -33,6 +33,8 @@ const LIB = read('../src/lib/spinoutLab.js');
 const MARKETING = read('../src/pages/SpinoutLabMarketingPage.jsx');
 const PAGE = read('../src/pages/SpinoutLabPage.jsx');
 const APP = read('../src/App.jsx');
+const APPLY = read('../src/pages/SpinoutLabApplyPage.jsx');
+const LAB_ROUTE = read('../../cloudflare-worker/src/routes/spinout_lab.ts');
 const COHORT_APPS = read('../../cloudflare-worker/src/services/cohortApplications.ts');
 
 const INTRO_CODE = codeOnly(INTRO);
@@ -85,13 +87,35 @@ test('not one of the canvas’s sample companies ships', () => {
   }
 });
 
-test('no seat count is drawn, because nothing stores one', () => {
-  // The canvas's "8 spots available" has no column behind it. Neither has any
-  // other number of places. (SpinoutLabBriefPage still carries an "8 spots"
-  // fallback string and SpinoutLabPage a "capped at 8 companies" refusal —
-  // both pre-existing, both pinned by their own tests, neither touched here.)
-  assert.doesNotMatch(INTRO_CODE, /\bspots?\s+(available|left|remaining)\b/i);
-  assert.doesNotMatch(INTRO_CODE, /\b\d+\s+(seats?|spots?|places)\b/i);
+test('no seat count is typed: every one drawn is the stored cohort.places', () => {
+  // The canvas's "8 spots available" was never a stored number — but a count
+  // IS stored: cohort_settings.max_cohort_size, returned by the public /brief
+  // as cohort.places. The Lab page, the apply form and this intro once typed
+  // their own "8" (and "capped at 8 companies") while the stored default was
+  // 25. So: no file on the Lab's apply path types a count of places, and the
+  // two that print one read it from /brief and only once the read succeeded.
+  const TYPED = /\b\d+\s+(seats?|spots?|places)\b|capped at \d+/i;
+  for (const [label, src] of [['LabIntro', INTRO_CODE], ['SpinoutLabPage', codeOnly(PAGE)],
+    ['SpinoutLabApplyPage', codeOnly(APPLY)], ['marketing page', codeOnly(MARKETING)]]) {
+    assert.doesNotMatch(src, TYPED, `${label} types a seat count`);
+  }
+  for (const [label, src] of [['SpinoutLabPage', codeOnly(PAGE)], ['SpinoutLabApplyPage', codeOnly(APPLY)]]) {
+    assert.match(src, /useCohortPlaces\(\)/, `${label} no longer reads the place count`);
+    assert.match(src, /places\.status === ["']ok["'] \?[^:]*placesLabel\(places\.places\)/,
+      `${label} prints a place count without the read having succeeded`);
+    assert.match(src, /places\.status === ["']error["'][\s\S]{0,120}<Unreadable/,
+      `${label} swallows a failed place-count read instead of saying so`);
+  }
+  // And the hook reads the /brief field the Programme Brief prints, which the
+  // worker fills from the stored setting rather than a literal.
+  const hook = codeOnly(LIB).slice(codeOnly(LIB).indexOf('export function useCohortPlaces'));
+  assert.match(hook.slice(0, 700), /spinoutLab\s*\.brief\(\)/);
+  // The number printed is the one read from cohort.places — not merely a
+  // mention of the field (the null check names it too).
+  assert.match(hook.slice(0, 900), /const n = Number\(r\?\.cohort\?\.places\);/);
+  assert.match(hook.slice(0, 900), /setRead\(\{ status: 'ok', places: n \}\)/);
+  assert.match(LAB_ROUTE, /const \{ max \} = await getCohortSizeSettings\(c\.env\);/);
+  assert.match(LAB_ROUTE, /places: max,/);
 });
 
 test('founder-to-founder asks are stated as absent, never drawn', () => {
@@ -204,11 +228,27 @@ test('every tool names a route that exists in App.jsx', () => {
   }
 });
 
-test('no arsenal card is a link, because none of them would open', () => {
-  // Every /spinout-lab/<tool> route is guard(labRoles(['admin'])), and
-  // labRoles widens the allowed list only when spinout_lab_active === 1. This
-  // surface IS the not-active branch, so every card would bounce off
-  // RoleGuard. A link that always fails is worse than no link.
+test('no arsenal card is a link, and the arsenal says which tool routes a founder could open', () => {
+  // The cards are inert on both surfaces. The comment explaining why once said
+  // every tool route was guard(labRoles(['admin'])); two were not. So the guard
+  // of each route is read out of App.jsx, and every route that also admits a
+  // founder has to be named in the arsenal's own explanation.
+  const routes = [...ARSENAL.matchAll(/route: '([^']+)'/g)].map((m) => m[1]);
+  const founderOpen = [];
+  for (const r of routes) {
+    const m = APP.match(new RegExp(`path="${r.replace(/[/.()]/g, '\\$&')}" element=\\{guard\\((labRoles\\(\\[[^\\]]*\\]\\))`));
+    assert.ok(m, `${r} is not behind a labRoles guard — the intro's inert cards rest on that`);
+    if (/'founder'/.test(m[1])) founderOpen.push(r);
+    else assert.equal(m[1], "labRoles(['admin'])", `${r} has a guard the arsenal does not describe`);
+  }
+  const why = ARSENAL.slice(ARSENAL.indexOf('`route` IS PROVENANCE'), ARSENAL.indexOf('export const LAB_TOOLS'));
+  assert.ok(why.length > 200, 'the arsenal explanation moved; this slice is stale');
+  for (const r of founderOpen) {
+    assert.ok(why.includes(`\`${r}\``), `${r} admits a founder, and the arsenal does not say so`);
+  }
+  assert.doesNotMatch(why, /every `\/spinout-lab\/<tool>` route is/,
+    'the arsenal claims one guard for every tool route again');
+
   const arsenal = INTRO_CODE.slice(
     INTRO_CODE.indexOf('export function LabArsenal'),
     INTRO_CODE.indexOf('export function LabJurisdictionCard'),

@@ -72,7 +72,7 @@ const WEEK_DELIVERABLES = [
       { label: 'File incorporation docs and receive EIN', keys: ['ein_received'], toolLabel: 'Open Incorporate' },
       { label: 'Issue founder stock with vesting', keys: ['founder_stock_issued'], toolLabel: 'Open Cap Table' },
       { label: 'File 83(b) election', keys: ['section83b_filed'], toolLabel: 'Open 83(b) Election' },
-      { label: 'Sign co-founder agreement (or solo declaration)', keys: ['cofounder_agreement_signed'], toolLabel: 'Open Co-founder Agreement' },
+      { label: 'Sign co-founder agreement', keys: ['cofounder_agreement_signed'], toolLabel: 'Open Co-founder Agreement' },
       { label: 'Lock the fundraise ask', keys: ['fundraise_ask_locked'], toolLabel: 'Open Capital' },
       { label: 'Fill in Use of Funds', keys: ['use_of_funds_filled'], toolLabel: 'Open Use of Funds' },
       { label: 'Secure ≥3 warm investor intros', keys: ['investor_intros_secured'], toolLabel: 'Open Capital' },

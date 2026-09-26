@@ -95,7 +95,7 @@ const ROUTES = [
     path: '/spinout-lab',
     title: 'Spin-Out Lab',
     description:
-      'A structured sprint that takes a company from idea to incorporated and funded — customer discovery, venture-readiness scoring, entity formation, and demo day.',
+      'Four weeks of execution with the whole arsenal and a cohort beside you: discovery, market sizing, formation and the raise, behind gates that open on evidence.',
     key: 'spinout-lab',
     type: 'website',
     section: 'spinout-lab',
