@@ -258,7 +258,9 @@ export const SIDEBAR_GROUPS = {
   // Raise · Grow · Network · Research · Trust · Company Settings). Eight land
   // here; Trust is deliberately absent, pinned out of every sidebar by
   // trust_center_navigation.test.mjs — it is reached from the user dropdown.
-  // Spin-Out Lab and Messages keep rows of their own on top of that, so ten.
+  // Spin-Out Lab keeps a row of its own on top of that, so nine. Messages is
+  // not a row here: since D284 it is a top-bar button on every shell the
+  // /messages route admits, and only the exploring group still carries a row.
   //
   // The twenty-one items this replaces all keep a door. Five rows own their
   // sections through FounderWorkspaceTabs, which wraps each route in App.jsx:
@@ -273,7 +275,8 @@ export const SIDEBAR_GROUPS = {
   // Seven destinations had ZERO inbound links anywhere outside this file —
   // /messages, /execution, /signals, /build/team, /build/metrics,
   // /network-effects and /raise/capital. Six of them are now reachable only
-  // because those bars exist; /messages keeps a row.
+  // because those bars exist; /messages is reached from the top-bar Messages
+  // button (D284), which replaced the row it kept here.
   //
   // /liquidity's `requiredTier: 'studio'` moved onto its tab rather than being
   // dropped: the route itself has no tier gate, so the nav was the whole gate.
@@ -387,10 +390,11 @@ export const SIDEBAR_GROUPS = {
   // TWO DEPARTURES FROM THE CANVAS, both deliberate:
   //   Home → /studio, not a new /home. Per the product owner, and it keeps
   //     /partner from becoming a root.
-  //   Messages is a ninth row. The canvas's eight rows have nowhere to put it,
-  //     and deleting the entry would leave a live surface reachable only by
-  //     typing the URL — the Wave 4 mistake in reverse. It stays until the
-  //     canvas says where a cross-cutting inbox lives.
+  //   Messages is not a row. The canvas's eight rows have nowhere to put it,
+  //     and until D284 it sat here as a ninth row so the live surface was not
+  //     reachable only by typing the URL — the Wave 4 mistake in reverse.
+  //     D284 put a Messages button in the top bar for every shell /messages
+  //     admits, which is where a cross-cutting inbox lives; the row went.
   // ── Partner / Operator — the canonical shell, now complete ─────────────────
   // Canvas ROWS: Home · Pipeline · Delivery · Offers · Network · Research ·
   // Trust · Firm Settings. "CANONICAL Partner shell — 8 rows, no tier gating
