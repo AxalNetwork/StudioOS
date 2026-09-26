@@ -254,11 +254,16 @@ test('the form: the picker is drawn for content only, and the pick rides the one
 });
 
 test('each raised escalation says what it was about, in the words HQ received', () => {
-  const at = APPROVALS.indexOf('data-testid="branch-escalation-about"');
-  assert.ok(at > 0, 'the lane rows do not show what an escalation concerns');
-  assert.match(APPROVALS.slice(at - 200, at), /\{it\.subject_ref && \(/,
+  // RE-AIMED IN D275, NOT RELAXED. The row moved into `EscalationAbout`, which
+  // leads with the relation the raise recorded; what is held is unchanged — a
+  // row with no label draws nothing, and the label is drawn as HQ received it.
+  const mount = APPROVALS.indexOf('<EscalationAbout subjectRef={it.subject_ref} relation={it.relation} />');
+  assert.ok(mount > 0, 'the lane rows do not show what an escalation concerns');
+  assert.match(APPROVALS.slice(mount - 200, mount), /\{it\.subject_ref && \($/m,
     'an escalation with no label draws an empty "About"');
-  assert.match(APPROVALS.slice(at, at + 200), /About <span className="font-mono">\{it\.subject_ref\}<\/span>/);
+  const at = APPROVALS.indexOf('data-testid="branch-escalation-about"');
+  assert.ok(at > 0);
+  assert.match(APPROVALS.slice(at, at + 200), /\{lead\} <span className="font-mono">\{subjectRef\}<\/span>/);
 });
 
 test('the SPA builds no label of its own — one format, the worker’s', () => {
@@ -283,10 +288,20 @@ test('the SPA builds no label of its own — one format, the worker’s', () => 
  * ------------------------------------------------------------------ */
 
 test('HQ’s lane row renders the label as it came', () => {
-  const html = renderToStaticMarkup(createElement(LocalisationRow, { subjectRef: `  ${A_LETTER.label} ` }));
-  assert.match(html, /data-testid="hq-localisation-about"/);
-  assert.match(html, /<span class="font-mono">/);
-  assert.equal(renderedText(html), `About ${A_LETTER.label}`);
+  // RE-AIMED IN D275, NOT RELAXED: the label is still drawn as it came, and
+  // now led by the relation the submission recorded. A row raised before the
+  // relation was recorded keeps "About" and says the relation is not recorded.
+  for (const [relation, words] of [
+    ['localises', `Localises ${A_LETTER.label}`],
+    ['changes', `Changes ${A_LETTER.label}`],
+    [null, `About ${A_LETTER.label} · relation not recorded`],
+    [undefined, `About ${A_LETTER.label} · relation not recorded`],
+  ]) {
+    const html = renderToStaticMarkup(createElement(LocalisationRow, { subjectRef: `  ${A_LETTER.label} `, relation }));
+    assert.match(html, /data-testid="hq-localisation-about"/);
+    assert.match(html, /<span class="font-mono">/);
+    assert.equal(renderedText(html), words);
+  }
 });
 
 test('a row with no label states its absence — never a blank "About"', () => {
@@ -303,30 +318,39 @@ test('the lane mounts the row on every item, and says a label is not a link', ()
   const lane = CONTENT_CODE.indexOf('data-testid="hq-localisation-lane"');
   const laneEnd = CONTENT_CODE.indexOf('</ul>', lane);
   assert.ok(lane > 0 && laneEnd > lane);
-  assert.match(CONTENT_CODE.slice(lane, laneEnd), /<LocalisationRow subjectRef=\{it\.subject_ref\} \/>/);
+  assert.match(CONTENT_CODE.slice(lane, laneEnd), /<LocalisationRow subjectRef=\{it\.subject_ref\} relation=\{it\.relation\} \/>/);
   const note = CONTENT_CODE.indexOf('data-testid="hq-localisation-label-note"');
   assert.ok(note > laneEnd, 'the label note is missing, or sits inside the list');
   assert.match(CONTENT_CODE.slice(note, note + 300), /a label, not a link/);
 });
 
-test('Localised stays unrecorded, for the narrower reason, on the page, the rail and the route', () => {
-  const stat = CONTENT_CODE.indexOf('<Stat label="Localised"');
+test('Localised is counted only from recorded relations, on the page, the rail and the route', () => {
+  // RE-AIMED IN D275, NOT RELAXED. This held Localised at null because naming
+  // an item did not record a localisation. Migration 296 records the relation,
+  // so the stat now counts it — from the lane read the page already makes,
+  // under submittedFigure's rule, and never from a row with no relation. What
+  // is pinned is that basis, not a number.
+  const stat = CONTENT_CODE.indexOf('label="Localised"');
   assert.ok(stat > 0);
   const tag = CONTENT_CODE.slice(stat, CONTENT_CODE.indexOf('/>', stat));
-  assert.match(tag, /value=\{null\}/);
-  assert.match(tag, /note="naming an item does not record a localisation"/);
+  assert.match(tag, /localisedFigure\(lane, laneItems\)/, 'the stat does not read the recorded relation');
+  assert.match(tag, /lane\.complete !== true[\s\S]*Not counted/, 'a cut lane would print a partial count');
+  assert.match(tag, /LOCALISED_BASIS/, 'the stat does not name its basis');
+  // The rail row is corrected, not removed: it names what is still not seen.
   assert.match(CONTENT_PAGE,
-    /\['Localisation link', 'A submission can name the item it concerns, as its branch labels it\. Nothing records whether it localises that item or asks for a change to it, so a count of localised items would still be a count of submissions\.'\]/);
+    /\['Localisation link', 'A submission that names an item records whether it localises that item or asks for a change to it\. A submission raised before that was recorded has no relation and is not counted as a localisation, and a branch that localises in its own database without sending it to HQ is not seen here\.'\]/);
 
   // The route's reason, with its string wraps mended the way the H6 test mends them.
   const joined = ADMIN_CONTENT.replace(/'\s*\n\s*\+ '/g, '');
   for (const phrase of [
     'can name the item it concerns',
     'a label the branch builds, not a link HQ can open',
+    'records whether it localises that item or asks for a change to it',
     'localisation of another',
-    'a count of submissions wearing the wrong name.',
+    'localises in its own database without sending it to HQ',
   ]) assert.ok(joined.includes(phrase), `localisation_reason no longer says: ${phrase}`);
   assert.match(ADMIN_CONTENT, /NARROWED IN D112, NOT DELETED/);
   assert.match(ADMIN_CONTENT, /NARROWED AGAIN IN D208/);
-  assert.match(codeOnly(ADMIN_CONTENT), /localisation_available: false,/);
+  assert.match(ADMIN_CONTENT, /NARROWED AGAIN IN D275/);
+  assert.match(codeOnly(ADMIN_CONTENT), /localisation_available: true,/);
 });

@@ -60,6 +60,7 @@ function hqDb() {
   db.exec(MIG_259);
   db.exec(read('cloudflare-worker/sql/migrations/261_branch_escalations.sql'));
   db.exec(read('cloudflare-worker/sql/migrations/288_escalation_delivery.sql'));
+  db.exec(read('cloudflare-worker/sql/migrations/296_escalation_relation.sql'));
   db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)')
     .run(HOLDER, 'admin', 'Sue Hart', 'sue@axal.example');
   db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(HOLDER);

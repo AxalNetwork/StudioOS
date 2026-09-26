@@ -42,6 +42,7 @@ import {
 } from '../src/services/supportQueues.ts';
 import { OPEN_ESCALATION_CEILING, openEscalations, openEscalationSummary } from '../src/rpc/hqOps.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { splitStatements } from './_baseline.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const HOLDER = 1;
@@ -57,6 +58,15 @@ const MIGRATIONS = [
   '279_licence_kind.sql',
 ];
 const migration = (f: string) => read(`cloudflare-worker/sql/migrations/${f}`);
+
+/**
+ * D275 — migration 296's `hq_escalations` half, off disk. The file also alters
+ * `branch_escalations`, which this fixture does not build, so the one
+ * statement is taken from it rather than retyped: every read of the table now
+ * names `relation`, and a fixture without it is the D133 trap.
+ */
+const M296_HQ = splitStatements(read('cloudflare-worker/sql/migrations/296_escalation_relation.sql'))
+  .find((st: string) => /^ALTER TABLE hq_escalations\b/.test(st)) as string;
 
 function ddl(name: string): string {
   const at = `\n${BASELINE}`.indexOf(`\nCREATE TABLE ${name} (`);
@@ -106,6 +116,7 @@ function freshDb(omit: Omit[] = []) {
     if (f.startsWith('273_') && (omit.includes('m273') || omit.includes('tickets'))) continue;
     db.exec(migration(f));
   }
+  if (!omit.includes('hq_escalations')) db.exec(M296_HQ);
   return db;
 }
 

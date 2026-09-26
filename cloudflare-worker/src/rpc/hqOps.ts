@@ -32,6 +32,9 @@ import { branchOf, BRANCH_CODE_RE } from '../util/branch';
 import { PERIOD_RE } from '../services/statements';
 import { verifySecret } from './secret';
 import { assembleLicenceRecord } from '../services/licencePush';
+import {
+  CONCERN_KIND, parseRelation, BAD_RELATION, RELATION_NEEDS_ITEM, RELATION_NOT_FOR_KIND,
+} from '../services/escalationConcerns';
 
 /** The four things a branch cannot decide for itself (migration 259). */
 export const ESCALATION_KINDS = ['moderation', 'content', 'seat_increase', 'other'] as const;
@@ -115,6 +118,18 @@ export type EscalationRefusal = {
   reason: string;
 };
 
+/**
+ * D275 — HQ refused the RELATION an escalation carried. Returned, never
+ * thrown, for the reason D206 gives the kind refusal: a throw reaches the
+ * branch as "HQ did not accept the escalation", which it stores `undelivered`
+ * and which reads as retryable, and a retry of a bad value is refused again.
+ */
+export type EscalationRelationRefusal = {
+  refused: 'bad_relation' | 'relation_needs_item' | 'relation_not_for_kind';
+  kind: EscalationKind;
+  reason: string;
+};
+
 export type EscalationInput = {
   kind: string;
   subject: string;
@@ -128,6 +143,13 @@ export type EscalationInput = {
    * returns the row already stored.
    */
   raise_key?: string | null;
+  /**
+   * D275 — what a content escalation that names an item is to that item:
+   * `localises` or `changes`. Absent from a branch built before migration 296,
+   * and from a retry of a row it raised; that is accepted and stored as NULL,
+   * "not recorded". Never inside `concerns`, which says which item.
+   */
+  relation?: string | null;
 };
 
 /**
@@ -226,7 +248,7 @@ function newUid(): string {
  */
 export async function recordEscalation(
   env: Env, callerCode: string, item: EscalationInput,
-): Promise<{ uid: string; due_at: string; status: 'open' } | EscalationRefusal> {
+): Promise<{ uid: string; due_at: string; status: 'open' } | EscalationRefusal | EscalationRelationRefusal> {
   requireHq(env);
 
   const code = String(callerCode ?? '').trim().toLowerCase();
@@ -244,6 +266,26 @@ export async function recordEscalation(
   }
   const subject = String(item?.subject ?? '').trim().slice(0, 300);
   if (!subject) throw new Error('escalate: a subject is required');
+  const subjectRef = item?.subject_ref ? String(item.subject_ref).slice(0, 300) : null;
+
+  // D275 — THE RELATION, CHECKED FOR ITS VALUE ONLY. The branch requires one
+  // whenever an item is picked; HQ cannot tell a pick from a label, so it does
+  // not require it — a NULL relation beside a `subject_ref` is what a branch
+  // built before migration 296 sends, and what a retry of such a row sends, and
+  // it is recorded as NULL: not recorded, never guessed. What HQ does refuse is
+  // a value that could not be stored honestly: an unknown one, one on a kind
+  // other than content, or one with no item named. Each is a refusal object,
+  // before the ledger is read and before anything is inserted.
+  const relation = parseRelation(item?.relation);
+  if (relation === null) {
+    return { refused: 'bad_relation', kind, reason: BAD_RELATION };
+  }
+  if (relation !== undefined && kind !== CONCERN_KIND) {
+    return { refused: 'relation_not_for_kind', kind, reason: RELATION_NOT_FOR_KIND };
+  }
+  if (relation !== undefined && !subjectRef) {
+    return { refused: 'relation_needs_item', kind, reason: RELATION_NEEDS_ITEM };
+  }
 
   // D206 — THE KIND GATE, AT THE DOOR THAT RECORDS. The branch refuses a
   // hidden kind before it calls, but a branch's copy can be stale or missing,
@@ -264,7 +306,6 @@ export async function recordEscalation(
   // The due date, not a band: a band stored at write time is wrong an hour
   // later, which is the whole reason migration 259 stores this column.
   const dueAt = new Date(Date.now() + SLA_HOURS[kind] * 3600_000).toISOString();
-  const subjectRef = item?.subject_ref ? String(item.subject_ref).slice(0, 300) : null;
   const detail = item?.detail ? String(item.detail).slice(0, 4000) : null;
   const raisedBy = item?.raised_by_name ? String(item.raised_by_name).slice(0, 200) : null;
   const raisedById = Number.isFinite(Number(item?.raised_by_branch_user_id))
@@ -279,10 +320,10 @@ export async function recordEscalation(
     const inserted = await env.DB.prepare(
       `INSERT INTO hq_escalations
          (uid, branch_code, kind, subject, subject_ref, detail,
-          raised_by_name, raised_by_branch_user_id, status, due_at, raise_key)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)
+          raised_by_name, raised_by_branch_user_id, status, due_at, raise_key, relation)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
        ON CONFLICT(branch_code, raise_key) WHERE raise_key IS NOT NULL DO NOTHING`,
-    ).bind(uid, code, kind, subject, subjectRef, detail, raisedBy, raisedById, dueAt, raiseKey).run();
+    ).bind(uid, code, kind, subject, subjectRef, detail, raisedBy, raisedById, dueAt, raiseKey, relation ?? null).run();
     const changes = Number((inserted as { meta?: { changes?: number } })?.meta?.changes ?? 0);
     if (changes === 0) {
       const existing = await env.DB.prepare(
@@ -297,9 +338,9 @@ export async function recordEscalation(
   await env.DB.prepare(
     `INSERT INTO hq_escalations
        (uid, branch_code, kind, subject, subject_ref, detail,
-        raised_by_name, raised_by_branch_user_id, status, due_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)`,
-  ).bind(uid, code, kind, subject, subjectRef, detail, raisedBy, raisedById, dueAt).run();
+        raised_by_name, raised_by_branch_user_id, status, due_at, relation)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)`,
+  ).bind(uid, code, kind, subject, subjectRef, detail, raisedBy, raisedById, dueAt, relation ?? null).run();
 
   return { uid, due_at: dueAt, status: 'open' };
 }
@@ -308,6 +349,8 @@ export type EscalationRow = {
   uid: string; branch_code: string; kind: string; subject: string; subject_ref: string | null;
   detail: string | null; raised_by_name: string | null; status: string; due_at: string | null;
   created_at: string; answer: string | null; answered_at: string | null;
+  /** D275 — `localises`, `changes`, or null: not recorded (every row before migration 296). */
+  relation: string | null;
 };
 
 /** The SLA band S3 and H1 both draw, derived on READ so it stays true. */
@@ -353,7 +396,7 @@ export async function openEscalationSummary(
 ): Promise<{ items: OpenEscalation[]; complete: boolean }> {
   const rows = await env.DB.prepare(
     `SELECT uid, branch_code, kind, subject, subject_ref, detail, raised_by_name,
-            status, due_at, created_at, answer, answered_at
+            status, due_at, created_at, answer, answered_at, relation
        FROM hq_escalations
       WHERE status = 'open'
       ORDER BY created_at ASC, id ASC
@@ -639,7 +682,7 @@ export async function answerEscalation(
 
   const row = await env.DB.prepare(
     `SELECT uid, branch_code, kind, subject, subject_ref, detail, raised_by_name,
-            status, due_at, created_at, answer, answered_at
+            status, due_at, created_at, answer, answered_at, relation
        FROM hq_escalations WHERE uid = ?`,
   ).bind(id).first<EscalationRow>();
 
@@ -683,28 +726,28 @@ export async function listEscalations(
   if (status && kind) {
     rows = await env.DB.prepare(
       `SELECT uid, branch_code, kind, subject, subject_ref, detail, raised_by_name,
-              status, due_at, created_at, answer, answered_at
+              status, due_at, created_at, answer, answered_at, relation
          FROM hq_escalations WHERE status = ? AND kind = ?
         ORDER BY created_at ASC LIMIT ?`,
     ).bind(status, kind, cap + 1).all<EscalationRow>();
   } else if (kind) {
     rows = await env.DB.prepare(
       `SELECT uid, branch_code, kind, subject, subject_ref, detail, raised_by_name,
-              status, due_at, created_at, answer, answered_at
+              status, due_at, created_at, answer, answered_at, relation
          FROM hq_escalations WHERE kind = ?
         ORDER BY created_at ASC LIMIT ?`,
     ).bind(kind, cap + 1).all<EscalationRow>();
   } else if (status) {
     rows = await env.DB.prepare(
       `SELECT uid, branch_code, kind, subject, subject_ref, detail, raised_by_name,
-              status, due_at, created_at, answer, answered_at
+              status, due_at, created_at, answer, answered_at, relation
          FROM hq_escalations WHERE status = ?
         ORDER BY created_at ASC LIMIT ?`,
     ).bind(status, cap + 1).all<EscalationRow>();
   } else {
     rows = await env.DB.prepare(
       `SELECT uid, branch_code, kind, subject, subject_ref, detail, raised_by_name,
-              status, due_at, created_at, answer, answered_at
+              status, due_at, created_at, answer, answered_at, relation
          FROM hq_escalations
         ORDER BY created_at ASC LIMIT ?`,
     ).bind(cap + 1).all<EscalationRow>();

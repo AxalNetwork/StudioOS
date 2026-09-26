@@ -24313,6 +24313,180 @@ the request fetched the copy or tried to.
   never run against a real HQ binding. The tests drive it through a stub HQ over
   real `node:sqlite` databases on both sides.
 
+## D245
+
+**HQ's Funds row now opens a registry of which deployment runs which fund
+(canvas H24) at `/admin/funds`, instead of the shared `/funds` product. The
+registry covers HQ's own funds as the row "HQ", then every branch in the
+fan-out's three states. It shows each fund's GP entity, committed figure and
+last issued report period, with no currency and no total.** Task 319, the H24
+half. H25 (the impersonation bar and `leftOnAdmin`) is Session 5's this wave,
+with the navigation reorg, and is not here.
+
+### THE GAP
+
+- **The Funds row opened the shared `/funds` product,** which is where any
+  admin lands: `FundOpsWorkspace` → `AdminFundsView`, reading
+  `GET /api/funds`. That product is HQ's own fund operations. H24 asks a
+  different question: which branches operate a fund, under which GP entity,
+  with how much committed, and whether their last report period issued.
+- **Nothing could answer it.** There was no HQ funds route and no
+  fund-returning RPC, and `HqEntrypoint` had no funds method.
+- **No fund table carries a branch, licence or territory column.** Which
+  branch a fund belongs to is which database holds the row.
+- **`vc_funds` has no currency column.**
+
+### WHAT CHANGED
+
+- **The branch read** (`rpc/branchOps.ts`):
+  - `readFundsRegistry(env)` is tier-neutral and lists this database's funds,
+    by name. Each carries:
+    - its status;
+    - its GP entity (migration 163), or null when blank;
+    - the committed figure;
+    - its newest ISSUED report period, since a draft is not an issue.
+  - It lists up to 200 funds and says when the list stopped.
+  - `branchFundsRegistry(env)` is the branch's answer, stamped with its code
+    and `as_of`. It is exposed as `HqEntrypoint.fundsRegistry()`.
+  - **It is a read, so it takes no secret.** That is the class's own rule
+    (`rpc/index.ts`, and `overview` and `searchAccounts`): "callable by any
+    Worker in the account" costs at most a read of fund names and figures.
+  - It is registered in `topology.ts`'s `RPC_SURFACE` as
+    `m('fundsRegistry', true)`, and its call site is in
+    `rpcEntrypoints.test.mjs`'s floor.
+- **"Committed" uses the funds product's own figure, decided.**
+  `rollUpFundRow` already defines it as `fund_size_cents` once set, else the
+  legacy `total_commitment` dollars. The read asks it rather than restating
+  the rule, and names which column the figure came from.
+  - Both columns default to 0, so 0 in both cannot be told apart from "never
+    set". That reads as null ("Not recorded"), not as a fund with nothing
+    committed.
+  - The limited partners' sum was not chosen. It is a third definition of
+    "committed", in dollars, that no other surface uses.
+- **The periods are their own read.** If `fund_report_periods` cannot be
+  read, the funds still answer, and each fund's last issue is absent, which
+  the page draws as Unreadable, never as "None issued".
+- **`GET /api/admin/hq/funds`** (`admin_hq.ts`, `requireSuperAdmin`):
+  - HQ's own `vc_funds` rows come first, through the same
+    `readFundsRegistry`, so there is one definition of a registry row.
+  - Then `fanOut(env, 'fundsRegistry')`, merged with the deployment registry
+    so a provisioned branch with no binding reads `not_deployed`.
+  - One result per branch: ok, unreadable or not deployed. An unreadable
+    branch never poisons the others, and `branches_coverage` says "of N
+    branches, M answered". HQ's own table failing is its own state too.
+  - **There is no total across funds.** The payload's `total` is
+    `{ shown: false, reason }`, and `committed_unit` is
+    `{ recorded: false, reason }`. Summing unlabelled amounts from different
+    branches would add euros to dollars.
+  - It is not scoped by H12's overlay, and says why (`open_in_branch`).
+- **`api.js`** gains one method, `hqFunds()`, in the same commit as the route.
+- **`pages/hq/HqFundsPage.jsx`** at `/admin/funds`, guarded
+  `guard(['admin'], hqOnly(…))`:
+  - H24's six columns in the canvas's own order: Fund · Branch · GP entity ·
+    Committed · Last issued · Read;
+  - the band is counted only from sources that answered ("{n} funds across
+    {m} deployments, HQ included · of N branches, M answered");
+  - one Unreadable row per branch that did not answer, one Not deployed row
+    for one with no binding, and one "No fund on this deployment" row for a
+    branch that answered empty;
+  - committed amounts carry **no currency symbol**, under a column head that
+    says the currency is not recorded;
+  - a `WorkerRail` with real coverage;
+  - a link to the shared `/funds` product for HQ's own fund operations.
+- **The two lines in Session 5's files, and one beside them:**
+  - `sidebarConfig.js`'s Funds row now points to `/admin/funds`;
+  - `App.jsx` gains the one `/admin/funds` route line, and the lazy import
+    the route needs, beside the other HQ page imports.
+
+  **Nothing retires.** `/funds` stays routed and reachable, and the new page
+  links it. `admin_route_reachability.test.mjs` is not re-aimed.
+- **`ROUTE_MAP.md`'s Admin · Super row claims `/admin/funds`.** H24 is an
+  artboard on that canvas. Without the claim, the regenerated
+  `PAGE_INVENTORY.md` said the page had "no canvas". `PROFILE_ROUTING.md` and
+  `PAGE_INVENTORY.md` were regenerated with `scripts/build-profile-routing.mjs`,
+  never hand-edited.
+
+### NOT BUILT
+
+- **Clicking a fund to open that branch's Funds console, viewing-as and
+  read-only** (H24's note). No branch RPC renders a fund console, and D153's
+  overlay reads only `overview` and `searchAccounts`. The page and the payload
+  say so.
+- **A currency, and so a total.** A currency column is a migration and a
+  product decision about which currency each vehicle trades in. Until one
+  exists, a sum across branches would be wrong by construction.
+
+### VERIFIED
+
+`cloudflare-worker/test/hq_funds_registry_d245.test.ts`, 8 tests, on the
+baseline's own `vc_funds` and `fund_report_periods`:
+- a branch lists its funds by name, with:
+  - the GP entity, and null when blank;
+  - `fund_size_cents` as the committed figure, or the legacy dollars;
+  - null when neither is set;
+  - the newest issued period, a newer draft ignored, and null when only a
+    draft exists;
+- the periods table dropped: the funds still answer, and no fund claims a
+  last issue;
+- the read takes no argument beyond `env` and refuses on HQ;
+- a list past the ceiling says it stopped;
+- the HQ route with three stub branches (one answers, one throws, one has no
+  binding):
+  - HQ first, the answering branch unchanged;
+  - the thrower Unreadable, never an empty list;
+  - coverage 1 of 3;
+- the payload's exact keys, with no sum of any two committed amounts on it;
+- HQ's own table dropped: its own state, with the branches still answering;
+- a plain admin refused 403.
+
+`frontend/test/hq_funds_d245.test.mjs`, 6 tests:
+- the six columns equal the canvas's, read off the H24 artboard, and are
+  drawn in that order;
+- the unreadable branch is one Unreadable row with no zero, and the band
+  counts only what answered;
+- the Not deployed and answered-empty rows, in the Worker's order;
+- no currency symbol or code in the rendered table;
+- the last-issued states;
+- the sidebar row's route is registered HQ-only, and `/funds` stays routed and
+  linked.
+
+**Mutation checks: 13 of 13 caught.** Each ran alone, and every file was
+restored from a sha256-verified snapshot. The five the brief named:
+- an unreadable branch counted as zero funds, both in the page and as the
+  route reporting an empty list;
+- a total summed across funds;
+- the route on `requireAdmin`, caught by the plain-admin test;
+- `fundsRegistry` missing from `RPC_SURFACE` while it is called, caught by
+  `topology_d209`'s class-surface test;
+- a currency symbol rendered.
+
+Seven more:
+- a draft read as issued;
+- two default zeros reported as a zero commitment;
+- unreadable periods reported as "none issued", both at the branch and on the
+  page;
+- HQ's own table failure taking the branches down;
+- the sidebar row back on `/funds`;
+- the branch read taking a secret.
+
+**Full suite:** `npm run test:drift` on Node 22 exits 0 on `main` at
+`5364303e`:
+- frontend 3295 (the six above are new);
+- worker 4365 passed with 3 skipped (the eight above are new);
+- retention 112.
+
+No test name from the previous run is missing.
+
+`docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
+edit. These exit 0:
+- `check-docs-fresh --strict`;
+- both typechecks;
+- `check-decision-ids`, `check-folder-docs`, `check-api-drift`,
+  `check-access-comments`, `check-sql-prepare`, `check-sqlite-dialect` and
+  `check-timestamp-comparisons`.
+
+No migration.
+
 ## D247
 
 **Deactivating an administrator now takes demote's bar: a TOTP-minted
@@ -27401,6 +27575,279 @@ tests,** against migration 295's own DDL and `branch_licence` built from
 - a failed retry thrown instead of reported;
 - the older-copy guard removed;
 - the seats route's push removed.
+
+## D275
+
+**A content escalation that names an item now records what it is to that
+item: `localises` or `changes` (migration 296). The relation is required
+whenever an item is picked, travels beside the pick, and is stored on both
+tiers. HQ's board splits its Localisation and Brand approval lanes on it, and
+the Localised stat counts it.** Task 355.
+
+**The decision, quoted rather than re-decided:** "A content escalation that
+names an item records an explicit relation, `localises` or `changes`, and the
+relation is required whenever an item is picked." It was built as stated.
+
+### THE GAP
+
+Since D208 a content escalation can name the item it concerns, as a label the
+branch builds. Nothing recorded what the submission was *to* that item: a
+French version of template X and "please fix clause 4 of template X" both
+name X. So HQ's Localisation lane had no source, the Localised stat stayed
+null, and `escalationConcerns.ts` filed the relation rather than guessing it.
+
+### WHAT CHANGED
+
+- **Migration 296**, one file for both tables, as 288 is: `relation TEXT
+  CHECK (relation IS NULL OR relation IN ('localises', 'changes'))` on
+  `hq_escalations` and on `branch_escalations`.
+  - D196 measured that `ADD COLUMN ... CHECK` is accepted and enforced. It was
+    re-measured against `node:sqlite` (SQLite 3.51) before the file was
+    written: the two values and NULL insert, while a third value, an empty
+    string and a capitalised value each raise `CHECK constraint failed`, on
+    INSERT and on UPDATE.
+  - No default and no BEGIN/COMMIT.
+  - **NULL means "not recorded".** That covers every row older than 296, every
+    row that names no item, and every non-content row.
+- **The vocabulary** lives in `services/escalationConcerns.ts`, whose header
+  now says what is recorded. It holds `CONCERN_RELATIONS`, `parseRelation`,
+  and the four refusal sentences, which both tiers read.
+- **The relation travels as a top-level sibling of `concerns`**, never inside
+  it: `{ kind, subject, detail, concerns, relation }`. The concern says which
+  item; the relation says what the submission is to it. `concernToSend` still
+  returns exactly `{ type, id }`.
+- **The branch POST** validates after D208's resolution and before HQ is
+  called. Each refusal is a 400 that says what to do, sends nothing and writes
+  no row:
+  - an item picked with no relation: `relation_required`;
+  - a value outside the two, an empty string included: `bad_relation`;
+  - a relation with no item picked: `relation_needs_item`;
+  - a relation on any kind but content: `relation_not_for_kind`;
+  - a relation tucked inside `concerns` is not read as one, so it answers
+    `relation_required`.
+
+  The resolved relation is stored on the local row, sent to HQ as `relation`,
+  and returned in the 201.
+- **HQ validates the value only.** An unknown value, a relation with no
+  `subject_ref`, or a relation on a non-content kind is a **refusal object,
+  never a throw**. A throw would store the row as undelivered, which reads as
+  retryable. The check runs before the ledger is read and before anything is
+  inserted.
+  - **A NULL relation beside a `subject_ref` is accepted and recorded as not
+    recorded.** HQ cannot tell a pick from a label, and this is what a branch
+    built before 296 sends, and what a retry of such a row sends.
+  - Both INSERTs, keyed (D243) and unkeyed, write the column.
+- **Every HQ refusal is a refusal.** The POST and the retry recognised only
+  `kind_not_available`, so any other code read as a delivery with no uid.
+  - On the POST, any `refused` now reaches the branch as a 400 with no row.
+  - On the retry, it leaves the row undelivered with HQ's reason, prefixed
+    "HQ refused it:".
+  - The kind's own fallback sentence is kept for the kind's refusal, and a
+    general one covers every other code.
+- **The retry re-sends the stored relation.** Its SELECT reads the column, and
+  a row stored before 296 re-sends NULL.
+- **Every column list moved together:**
+  - the four `listEscalations` statements;
+  - `openEscalationSummary`;
+  - `answerEscalation`'s re-read;
+  - `EscalationRow`;
+  - the branch's `branchEscalations` read and `BranchEscalationRow`, which
+    the lane payload spreads.
+- **BranchApprovals.jsx:**
+  - **The control.** When an item is picked, a required two-option control
+    ("This localises it" / "This asks for a change to it") appears beside the
+    picker, with nothing pre-chosen, and a new pick clears it.
+  - **The submit** refuses without it, as the route does. `needsRelation` is
+    added to both the handler's guard and the button's `disabled`, and every
+    existing term is kept.
+  - **The call** sends `relation` beside `concerns`.
+  - **The lane row** (`EscalationAbout`) reads "Localises {label}" or
+    "Changes {label}", and "About {label} · relation not recorded" for a NULL
+    relation beside a label.
+  - **The `request()` comment in `submit` is left as it is.** It describes
+    `request()`'s old precedence, and Session 1's D258 had not merged when
+    this was committed, so it is still true today.
+- **`lib/escalationRelation.js`** (new) holds the wording both tiers draw: the
+  two choices, and the lead word or "relation not recorded". It keeps the
+  branch lane and HQ's zone from wording one relation two ways.
+- **HQ's board** (`admin_content.ts`):
+  - **One read, two lanes.** The lanes partition the open content escalations
+    from the ONE `openEscalationSummary` read, never a second statement.
+    Localisation is relation `localises`. Brand approval is `changes` plus
+    every row with no relation: a legacy row that names an item is marked "relation
+    not recorded" on its card, and a row that names no item is a change by
+    construction.
+  - **Cards** carry `relation` and `subject_ref`.
+  - **Past the ceiling,** each lane's count is null with the reason Brand
+    approval already gave.
+  - **No double count.** The two lanes add up to every open content escalation
+    once, so the board's totals do not change.
+  - **The band** says "localisation as branches send it" instead of
+    "localisation not recorded".
+- **The Localised stat is counted now, decided.** It uses the lane read the
+  page already makes (`kind=content`, every status):
+  - `localisedFigure` follows `submittedFigure`'s rule: null unless that read
+    is complete;
+  - it counts only rows marked `localises`, never a legacy row;
+  - its note names the basis: content escalations marked "localises", any
+    status, none raised before that was recorded.
+- **`localisation_reason` is narrowed again, not deleted.** "NARROWED IN D112,
+  NOT DELETED" and "NARROWED AGAIN IN D208" stay, and "NARROWED AGAIN IN
+  D275" is added. It says what is still not recorded: the relation of rows
+  raised before 296, which are never counted as a localisation, and anything
+  a branch localises in its own database without sending it to HQ.
+- **`localisation_available` becomes true, decided.** The board now draws a
+  counted Localisation lane from a stored column, and a payload saying `false`
+  beside it would contradict its own board. The reason stays because what it
+  scopes out is real: true means "counted from what branches send HQ, from 296
+  on".
+- **The "Localisation link" rail row is corrected, not removed.** It now names
+  the same two things that are still not seen.
+
+### PINS, RE-AIMED, NEVER LOOSENED
+
+- **`escalation_concerns_d208.test.mjs`:**
+  - the lane row's words (now three wordings);
+  - the mount (now passes `relation`);
+  - the branch row (now `EscalationAbout`);
+  - Localised (it now counts only from the recorded relation, with its
+    basis);
+  - the rail row;
+  - the route's phrases, including the D275 marker;
+  - `localisation_available: true`.
+
+  The `Object.keys(sent)` pin still passes unchanged.
+- **`escalation_kind_gate_d206.test.mjs`:** the exact guard and `disabled=`
+  expressions, now with `needsRelation`, keeping every earlier term.
+- **`hq_content_platform_h6.test.mjs`:** the blank-stat loop. Localised left
+  it for the same reason the others did, acquiring a store, and is pinned to
+  its builder.
+- **`subsidiary_approvals_s3.test.mjs`:** Localised is pinned to
+  `localisedFigure`.
+- **`admin_content_platform.test.ts`:** `localisation_available` is true, and
+  the reason names both remaining gaps. `localised` is still undefined on the
+  route.
+- **`hq_content_h18_h19.test.mjs`:**
+  - the band;
+  - the board fixture's Localisation lane is now measured;
+  - the no-source test is held on a fixture lane, because the Worker no
+    longer produces that state and the component can still draw it.
+
+  The rail row appears exactly once, unchanged.
+- **`content_studio_d214.test.ts`:** the six-lane totals (Localisation 0) and
+  the card keys.
+- **`escalation_concerns_d208.test.ts`:** its three successful picks now send
+  a relation.
+
+**Fixtures widened to 296** (a fixture narrower than the schema is the D133
+trap):
+- d208, d206, d231, d243, the answer suite and D267's apply the file off
+  disk;
+- d204 and d214 build no `branch_escalations`, so they apply 296's
+  `hq_escalations` statement, taken from the file with `splitStatements`
+  (the header holds a `;`);
+- `branch_rpc_fanout`'s hand-written table gains the column and constraint,
+  copied.
+
+### VERIFIED
+
+`cloudflare-worker/test/escalation_relation_d275.test.ts`, 12 tests:
+- the column's CHECK on both tables, and `parseRelation`;
+- each branch refusal writing nothing and sending nothing;
+- a `localises` pick stored on both tiers and read back by HQ's list, the
+  board and the branch lane, with no `concerns` sent to HQ;
+- a `changes` pick, a legacy row and an unnamed row all landing in Brand
+  approval, and nothing counted as a localisation;
+- the two lanes being one read of `hq_escalations`;
+- both lanes null past the ceiling;
+- HQ's three refusals, never thrown and writing no row;
+- a NULL relation beside a label recorded as not recorded;
+- both insert paths writing the relation;
+- a new HQ refusal code reaching the branch as 400 with no row;
+- the retry re-sending the stored relation, and NULL for a legacy row;
+- a refused retry leaving the row undelivered with HQ's reason.
+
+`frontend/test/escalation_relation_d275.test.mjs`, 7 tests:
+- the drawer's two choices equal the Worker's, with none pre-chosen;
+- the control drawn only beside a sent pick;
+- `relationToSend` and `relationMissing`;
+- the submit's two locks and the top-level send;
+- the lane row's three wordings;
+- a legacy card's marker;
+- `localisedFigure` counting only `localises` on a complete read.
+
+**Mutation checks: 25 of 25 caught.** Each ran alone, and every file was
+restored from a sha256-verified snapshot. The seven the brief named, some in
+both tiers:
+- the relation put inside `concerns`, both in the SPA's call and as the route
+  reading it from there;
+- the relation optional when an item is picked, in the route and in the SPA;
+- a legacy row counted as a localisation, on the board and in the stat;
+- the lanes computed from a second statement;
+- the retry dropping the relation;
+- HQ throwing on an unknown value;
+- the POST handling only `kind_not_available`.
+
+Fourteen more:
+- a refused retry keeping no reason;
+- HQ storing no relation on the keyed insert, and on the unkeyed one;
+- the branch storing none locally;
+- the branch lane read, HQ's `kind` list and the board's cards each dropping
+  it;
+- a relation with no item, and one on another kind, allowed at the branch;
+- a relation with no item recorded at HQ;
+- a relation pre-chosen;
+- the lane row ignoring the relation;
+- the legacy card marker dropped;
+- the control drawn for any content raise;
+- the CHECK dropped from the migration.
+
+**The unkeyed-insert test was added from a reading of the tally, not after an
+escape.** No test raised a relation without a raise key, so dropping it from
+the unkeyed INSERT would have passed. The test was written, and that
+mutation is the one it catches.
+
+### FILED, NOT BUILT
+
+- **HQ Support's escalation row still says "About {label}"**
+  (`HqSupportPage.jsx`), without the relation it now receives. That file is
+  not this session's this wave.
+- **The Localised stat reads the lane's one page of 100.** Past it the stat
+  is "Not counted", like Submitted for approval. A count past the cap needs
+  its own aggregate read.
+- **What a branch localises in its own database without sending it to HQ**
+  remains invisible to HQ, by construction (D.2).
+
+**Migration 296 is to be confirmed read-only in production
+`schema_migrations` after the merge,** with "Apply pending D1 migrations"
+finishing before "Deploy" starts.
+
+**Full suite:** `npm run test:drift` on Node 22 exits 0 on `main` at
+`b2b99df0`:
+- frontend 3289 (the seven above are new);
+- worker 4357 passed with 3 skipped (the twelve above are new);
+- retention 112.
+
+**Three earlier test names changed, because the tests were re-aimed and
+renamed to say what they now hold.** None was dropped, and each runs under
+its new name:
+- "Localised stays unrecorded, for the narrower reason, …" is now "Localised
+  is counted only from recorded relations, …";
+- "localisation is refused for the ONE reason D112 left standing" is now
+  "localisation is counted from what branches send, and the reason names what
+  still is not recorded";
+- "the Localisation lane has no source: …" is now "a lane with no source: …".
+
+`docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
+edit. These exit 0:
+- `check-docs-fresh --strict`;
+- both typechecks;
+- `check-decision-ids`, `check-folder-docs`, `check-api-drift` and
+  `check-access-comments`;
+- the SQL checks: `check-sql-migrations`, `check-sqlite-dialect`,
+  `check-sql-prepare`, `check-timestamp-comparisons` and
+  `check-runtime-schema-declared`;
+- `migration-immutability-gate` (no migration on `main` changed).
 
 ## D282
 

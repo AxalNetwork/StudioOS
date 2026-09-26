@@ -35,6 +35,7 @@ import { sha256Hex, verifySecret } from './secret';
 import { createJWT, loadSuperAdminFlag } from '../auth';
 import { likeNeedle } from '../util/likeSearch';
 import { activeAccountsInWeek, weekAxis } from '../services/activeAccounts';
+import { rollUpFundRow } from '../services/fundRollup';
 
 /** Every branch answer carries the code, because a binding does not (D.7). */
 export type BranchAnswer<T> = T & { branch: string; as_of: string };
@@ -723,6 +724,8 @@ export type BranchEscalationRow = {
   kind: string;
   subject: string;
   subject_ref: string | null;
+  /** D275 — `localises`, `changes`, or null: not recorded (every row before migration 296). */
+  relation: string | null;
   detail: string | null;
   raised_by_name: string | null;
   status: string;
@@ -795,7 +798,7 @@ export async function branchEscalations(
   const code = requireBranch(env);
   const cap = Math.max(1, Math.min(200, Number(limit) || 50));
   const rows = await env.DB.prepare(
-    `SELECT id, hq_uid, kind, subject, subject_ref, detail, raised_by_name, status,
+    `SELECT id, hq_uid, kind, subject, subject_ref, relation, detail, raised_by_name, status,
             delivery_error, due_at, answer, answered_by_name, answered_at, pushed_at, created_at
        FROM branch_escalations ORDER BY created_at DESC LIMIT ?`,
   ).bind(cap).all<BranchEscalationRow>();
@@ -809,6 +812,144 @@ export async function branchEscalations(
     // which items are late.
     items: (rows.results || []).map((r) => ({ ...r, sla: slaBand(r.due_at, now) })),
   };
+}
+
+/* ------------------------------------------------------------------ *
+ * H24 — which funds a deployment runs (D245)                          *
+ * ------------------------------------------------------------------ */
+
+/** How many funds one registry read lists before it says it stopped. */
+export const FUNDS_REGISTRY_CAP = 200;
+
+export type RegistryFund = {
+  id: number;
+  name: string;
+  status: string;
+  /** The GP's legal entity (migration 163), or null when none is recorded. */
+  gp_entity: string | null;
+  /**
+   * The committed figure, in minor units of a currency NOTHING RECORDS: no
+   * fund table has a currency column. Null when neither store holds one.
+   */
+  committed_minor: number | null;
+  /** Which column the figure came from, so the page can say so. */
+  committed_source: 'fund_size_cents' | 'total_commitment' | null;
+  /**
+   * The newest ISSUED report period, null when none has issued. Absent (not
+   * null) when the periods could not be read — see `periods_available`.
+   */
+  last_issued?: { period: string; period_end: string; issued_at: string | null } | null;
+};
+
+export type FundsRegistry = {
+  funds: RegistryFund[];
+  /** False when the list was cut at FUNDS_REGISTRY_CAP. */
+  complete: boolean;
+  periods_available: boolean;
+  periods_reason?: string;
+};
+
+/**
+ * D245 — the funds THIS database holds, for HQ's registry (canvas H24).
+ *
+ * TIER-NEUTRAL ON PURPOSE. A branch answers it over `fundsRegistry`, and HQ
+ * reads its own row through the same function, so the "HQ" row and a branch's
+ * rows are one definition of what a registry row is. Which branch a fund
+ * belongs to is not a column — no fund table carries a branch, a licence or a
+ * territory — it is WHICH DATABASE answered.
+ *
+ * COMMITTED IS THE FUNDS PRODUCT'S OWN FIGURE. `rollUpFundRow` already decides
+ * it — `fund_size_cents` once set, else the legacy `total_commitment` dollars —
+ * so this asks it rather than restating the rule. Both columns default to 0,
+ * so 0 in both cannot be told apart from "never set": that reads as null, not
+ * recorded, rather than as a fund with nothing committed. The unit is minor
+ * units of a currency that is NOT recorded: there is no currency column, so
+ * the figure travels with its unit stated as unknown and nothing sums it.
+ *
+ * THE PERIODS ARE THEIR OWN READ. The newest issued period per fund is a
+ * second table (`fund_report_periods`); if it cannot be read, the funds still
+ * answer and each says its last issue is unreadable, rather than "none".
+ */
+export async function readFundsRegistry(env: Env): Promise<FundsRegistry> {
+  const rows = await env.DB.prepare(
+    `SELECT id, name, status, gp_entity, fund_size_cents, total_commitment
+       FROM vc_funds
+      ORDER BY name COLLATE NOCASE, id
+      LIMIT ?`,
+  ).bind(FUNDS_REGISTRY_CAP + 1).all<{
+    id: number; name: string; status: string | null; gp_entity: string | null;
+    fund_size_cents: number | null; total_commitment: number | null;
+  }>();
+  const all = rows.results || [];
+  const complete = all.length <= FUNDS_REGISTRY_CAP;
+  const kept = complete ? all : all.slice(0, FUNDS_REGISTRY_CAP);
+
+  const funds: RegistryFund[] = kept.map((r) => {
+    const committed = rollUpFundRow({
+      id: r.id, name: r.name, vintage_year: null, status: String(r.status || ''),
+      total_commitment: r.total_commitment, fund_size_cents: r.fund_size_cents,
+      deployed_capital: null, lp_rows: null, called_dollars: null, distributed_cents: null,
+      management_fee: null, carried_interest: null,
+    }).committed_cents;
+    const source = Number(r.fund_size_cents) > 0
+      ? 'fund_size_cents' as const
+      : Number(r.total_commitment) > 0 ? 'total_commitment' as const : null;
+    const gp = typeof r.gp_entity === 'string' ? r.gp_entity.trim() : '';
+    return {
+      id: Number(r.id),
+      name: String(r.name),
+      status: String(r.status || ''),
+      gp_entity: gp || null,
+      committed_minor: source ? committed : null,
+      committed_source: source,
+    };
+  });
+
+  let periodsAvailable = true;
+  let periodsReason: string | undefined;
+  if (funds.length) {
+    try {
+      const latest = await env.DB.prepare(
+        `SELECT fund_id, period, period_end, issued_at FROM (
+           SELECT fund_id, period, period_end, issued_at,
+                  ROW_NUMBER() OVER (PARTITION BY fund_id ORDER BY period_end DESC, id DESC) AS rn
+             FROM fund_report_periods
+            WHERE status = 'issued'
+         ) WHERE rn = 1`,
+      ).all<{ fund_id: number; period: string; period_end: string; issued_at: string | null }>();
+      const byFund = new Map((latest.results || []).map((p) => [Number(p.fund_id), p]));
+      for (const f of funds) {
+        const p = byFund.get(f.id);
+        f.last_issued = p
+          ? { period: String(p.period), period_end: String(p.period_end), issued_at: p.issued_at ?? null }
+          : null;
+      }
+    } catch (e) {
+      periodsAvailable = false;
+      periodsReason = 'The fund report periods could not be read on this database, so when each fund '
+        + `last issued is unknown rather than never: ${String((e as Error)?.message || e).slice(0, 200)}`;
+    }
+  }
+
+  return {
+    funds,
+    complete,
+    periods_available: periodsAvailable,
+    ...(periodsReason ? { periods_reason: periodsReason } : {}),
+  };
+}
+
+/**
+ * The branch's answer to HQ's `fundsRegistry` call: its own funds, stamped
+ * with its code and the time it read them. A READ, SO IT TAKES NO SECRET — the
+ * rule `rpc/index.ts`'s header gives for `overview` and `searchAccounts`:
+ * "callable by any Worker in the account" costs at most a read of fund names
+ * and figures HQ may already see, which is the class's accepted exposure.
+ */
+export async function branchFundsRegistry(env: Env): Promise<BranchAnswer<FundsRegistry>> {
+  const branch = requireBranch(env);
+  const read = await readFundsRegistry(env);
+  return { branch, as_of: nowIso(), ...read };
 }
 
 /* ------------------------------------------------------------------ *

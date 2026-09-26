@@ -129,7 +129,7 @@ canvas behind it still shows up here.
 | --- | --- | --- | --- |
 | HQ | Home | `/hq` | Admin · Super |
 | HQ | Licences | `/admin/licences` | Admin · Super |
-| HQ | Funds | `/funds` | Funds · Fabric |
+| HQ | Funds | `/admin/funds` | Admin · Super |
 | HQ | Contracts | `/admin/contracts` | Admin · Super, Contracts · Super |
 | HQ | Team | `/admin/accounts` | Admin · Super |
 | HQ | Revenue | `/admin/revenue` | — (no canvas; shipped ahead of the design corpus) |

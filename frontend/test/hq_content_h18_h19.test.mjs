@@ -117,9 +117,12 @@ const BOARD = {
       key: 'review', label: 'Review', total: 3,
       parts: [part('articles', ['submitted', 'in_review', 'changes_requested'], 3, [article({ id: 12, title: 'Piece in review', status: 'in_review' })])],
     },
+    // D275 — measured, as the Worker now sends it: the open content
+    // escalations marked `localises`, here none.
     {
-      key: 'localisation', label: 'Localisation', total: null, parts: [], recorded: false,
-      reason: 'A branch localises in its own database, and nothing records that one piece is a localisation of another.',
+      key: 'localisation', label: 'Localisation', total: 0,
+      parts: [part('escalations', ['open'], 0, [])],
+      note: 'Open content escalations a branch raised as localising the item they name.',
     },
     {
       key: 'brand_approval', label: 'Brand approval', total: 2,
@@ -272,10 +275,12 @@ test('every console is linked by a literal path, once, and the network-profiles 
 test('the band counts what is short of published and refuses "one meaning of published"', () => {
   assert.equal(bandLine({ loading: true }), '…');
   assert.equal(bandLine({ unreadable: true }), 'the content summary could not be read');
-  assert.equal(bandLine({ board: BOARD }), '9 in pipeline · localisation not recorded · two meanings of published');
+  // RE-AIMED IN D275: localisation is counted now, as branches send it, so the
+  // band says whose count it is rather than "not recorded".
+  assert.equal(bandLine({ board: BOARD }), '9 in pipeline · localisation as branches send it · two meanings of published');
   assert.equal(
     bandLine({ board: { ...BOARD, in_flight: null } }),
-    'in pipeline: not fully counted · localisation not recorded · two meanings of published',
+    'in pipeline: not fully counted · localisation as branches send it · two meanings of published',
   );
   // The canvas claims one meaning; the page never repeats the claim.
   assert.ok(H19.includes('one meaning of published'));
@@ -336,8 +341,17 @@ test('the board draws six lanes in the order given, each part named by its store
   assert.deepEqual(hrefs(html), ['/admin/articles', '/admin/publications']);
 });
 
-test('the Localisation lane has no source: "Not recorded" with its reason, never a number or "Unreadable"', () => {
-  const lane = laneSlice(render(ContentBoard, { board: BOARD }), 'localisation');
+test('a lane with no source: "Not recorded" with its reason, never a number or "Unreadable"', () => {
+  // RE-AIMED IN D275. The Localisation lane was the board's one lane with no
+  // source, and it has one now (migration 296). The component still draws a
+  // lane that has none — any lane can lose its store — so the state is held
+  // here on a fixture lane rather than on the Worker's shape, which no longer
+  // produces it. D275's own test draws the measured Localisation lane.
+  const board = withLane('localisation', {
+    total: null, parts: [], recorded: false, note: undefined,
+    reason: 'A branch localises in its own database, and nothing records that one piece is a localisation of another.',
+  });
+  const lane = laneSlice(render(ContentBoard, { board }), 'localisation');
   const seen = text(lane);
   assert.match(seen, /Localisation Not recorded/);
   assert.ok(lane.includes('data-testid="hq-content-lane-no-source"'));

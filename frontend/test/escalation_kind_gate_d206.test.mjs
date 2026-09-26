@@ -153,12 +153,15 @@ test('a kind picked while loading that turns out hidden is replaced, not sent', 
 test('the form sends the derived kind, and cannot submit without one', () => {
   assert.match(CODE, /const chosen = chosenKind\(offered, kind\);/, 'the choice is not derived from what is offered');
   assert.match(CODE, /api\.branchEscalate\(\{ kind: chosen,/, 'the raise sends the raw pick, not the offered one');
-  assert.match(CODE, /disabled=\{!subject\.trim\(\) \|\| sending \|\| !chosen\}/,
+  // RE-AIMED IN D275, EVERY TERM KEPT: the button and the handler gained a
+  // fourth refusal (an item picked with no relation), and the three below are
+  // still each required, in the same order.
+  assert.match(CODE, /disabled=\{!subject\.trim\(\) \|\| sending \|\| !chosen \|\| needsRelation\}/,
     'the submit stays enabled with no kind to send');
   // The handler refuses too, and not only the button. In a browser a disabled
   // default button also blocks Enter-to-submit, so this is the second lock —
   // but a mutation run showed dropping it changed nothing any test could see.
-  assert.match(CODE, /if \(!subject\.trim\(\) \|\| sending \|\| !chosen\) return;/,
+  assert.match(CODE, /if \(!subject\.trim\(\) \|\| sending \|\| !chosen \|\| needsRelation\) return;/,
     'the submit handler would send with no kind to send; only the button stops it');
 });
 
