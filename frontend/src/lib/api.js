@@ -3209,6 +3209,10 @@ export const api = {
     const r = String(range || '').trim();
     return request(`/admin/hq/analytics${r ? `?range=${encodeURIComponent(r)}` : ''}`);
   },
+  // D245 — H24 · Funds. HQ's own funds as the row "HQ", then every branch's,
+  // in the fan-out's three states. No total across funds: no fund table
+  // records a currency. Not scoped by the view-as overlay (see the route).
+  hqFunds: () => request('/admin/hq/funds'),
   // HQ · Revenue (canvas H5). D1 only — open disputes come from Stripe
   // through adminBillingListDisputes, read separately so an outage there
   // costs one zone rather than the page.

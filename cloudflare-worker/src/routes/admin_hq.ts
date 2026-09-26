@@ -7,6 +7,7 @@
  * cross-tenant view by design; their own licence is `GET /licence/mine`.
  *
  *   GET /overview      one payload, one round trip, for the HQ Home page
+ *   GET /funds         H24 — which branches run which funds (D245)
  *
  * WHAT IS REAL HERE. Accounts (every active user, by role); seats licensed
  * (the ledger's own sum); licences with territories, status, renewal date
@@ -38,7 +39,8 @@ import { hydrate, type LicenceRow } from './admin_licences';
 import { DERIVED_UNAVAILABLE } from './licence';
 import { fanOut, branchRead, coverage, withRegistry, type BranchResult } from '../services/branches';
 import { openEscalations } from '../rpc/hqOps';
-import type { BranchOverview, BranchAccountHit } from '../rpc/branchOps';
+import type { BranchOverview, BranchAccountHit, FundsRegistry } from '../rpc/branchOps';
+import { readFundsRegistry } from '../rpc/branchOps';
 import { FREEZING_STATUSES } from '../util/authErrors';
 import { ensureLastActiveColumn } from '../middleware/lastActive';
 import { ticketBacklog } from '../services/supportQueues';
@@ -701,6 +703,76 @@ r.get('/analytics', async (c) => {
     active_accounts,
     not_recorded: HQ_ANALYTICS_NOT_RECORDED,
     foot: 'Aggregates, never records.',
+  });
+});
+
+// GET /api/admin/hq/funds
+//
+// D245 — H24: which branches operate a fund, under which GP entity, with how
+// much committed, and when their last report period issued. A REGISTRY READ
+// ACROSS BRANCHES, not the shared /funds product, which is HQ's own fund
+// operations and stays where it is.
+//
+// HQ's own `vc_funds` rows come first, as the row "HQ", read with the same
+// function a branch answers `fundsRegistry` with — one definition of a row.
+// Then every branch, in the fan-out's three states, merged with the registry
+// so a provisioned branch with no binding reads `not_deployed` rather than
+// vanishing. An unreadable branch never poisons the others, and the coverage
+// says "of N branches, M answered".
+//
+// NO TOTAL ACROSS FUNDS, DELIBERATELY. No fund table records a currency, and
+// branches trade in different ones: summing unlabelled amounts from a French
+// and an American fund would add euros to dollars. So each figure travels with
+// its unit stated as not recorded, and the payload carries the reason no sum
+// is shown instead of a sum.
+//
+// NOT SCOPED BY H12's OVERLAY. The overlay reads a branch's `overview` and
+// `searchAccounts` only (D153); nothing renders a branch's fund console, so
+// there is no scoped read to answer with, and the page says so.
+r.get('/funds', async (c) => {
+  await requireSuperAdmin(c);
+  const env = c.env;
+  const readAt = new Date().toISOString();
+
+  let hq: { code: 'hq'; status: 'ok'; data: FundsRegistry; as_of: string }
+    | { code: 'hq'; status: 'unreadable'; reason: string };
+  try {
+    hq = { code: 'hq', status: 'ok', data: await readFundsRegistry(env), as_of: readAt };
+  } catch (e) {
+    hq = {
+      code: 'hq',
+      status: 'unreadable',
+      reason: `HQ's own fund table could not be read: ${String((e as Error)?.message || e).slice(0, 200)}`,
+    };
+  }
+
+  const registry = await deployedBranches(env);
+  const branches = withRegistry(await fanOut<FundsRegistry>(env, 'fundsRegistry'), registry);
+  // Labels only. A registry that cannot be read leaves every branch named by
+  // its code, which is what the fan-out knows it by.
+  const labels = await registryForAnalytics(env);
+  const brandOf = new Map(labels.readable ? labels.rows.map((row) => [row.code, row.brand_name]) : []);
+
+  return c.json({
+    read_at: readAt,
+    hq,
+    branches: branches.map((b) => ({ ...b, label: brandOf.get(b.code) || null })),
+    branches_coverage: coverage(branches),
+    committed_unit: {
+      recorded: false,
+      reason: 'No fund table records a currency, so each committed figure is shown as an amount '
+        + 'with its currency not recorded.',
+    },
+    total: {
+      shown: false,
+      reason: 'No total across funds: the currency of each figure is not recorded, and branches '
+        + 'trade in different ones, so a sum would add euros to dollars.',
+    },
+    open_in_branch: {
+      built: false,
+      reason: 'Opening a branch\'s Funds console from here is not built: no branch read renders a '
+        + 'fund console, and the view-as overlay reads only a branch\'s overview and its accounts.',
+    },
   });
 });
 

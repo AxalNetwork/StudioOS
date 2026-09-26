@@ -90,6 +90,7 @@ const HQ_TO_BRANCH_FLOOR = [
   ['fanOut', 'services/branchBenchmarks.ts', 'applyBenchmarks'],
   ['fanOut', 'routes/admin_hq.ts', 'overview'],
   ['fanOut', 'routes/admin_hq.ts', 'searchAccounts'],
+  ['fanOut', 'routes/admin_hq.ts', 'fundsRegistry'],
   // The method on the line after the generic.
   ['fanOut', 'routes/admin_deployments.ts', 'health'],
   // The method on the next line, and `c.env` rather than `env`.

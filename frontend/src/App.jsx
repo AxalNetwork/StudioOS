@@ -202,6 +202,7 @@ const HqPlatformTopologyPage = lazy(() => import('./pages/hq/PlatformTopologyPag
 const HqAnalyticsPage = lazy(() => import('./pages/hq/HqAnalyticsPage'));
 const HqSecurityPage = lazy(() => import('./pages/hq/SecurityPage'));
 const HqSupportPage = lazy(() => import('./pages/hq/HqSupportPage'));
+const HqFundsPage = lazy(() => import('./pages/hq/HqFundsPage'));
 const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
 const AdvisorsPage = lazy(() => import('./pages/AdvisorsPage'));
@@ -2210,6 +2211,7 @@ function AppInner() {
       {/* Territory licence ledger (migration 187). Admin only — it carries the
           fee, the revenue share and an exclusive grant over whole countries. */}
       <Route path="/admin/licences" element={guard(['admin'], hqOnly(<AdminLicences />))} />
+      <Route path="/admin/funds" element={guard(['admin'], hqOnly(<HqFundsPage />))} />
       {/* A subsidiary admin reads their OWN licence; /admin/licences is HQ's ledger of every one. */}
       <Route path="/admin/my-licence" element={guard(['admin'], <MyLicencePage />)} />
       {/* D107 — the eight subsidiary rows (Admin · Subsidiary S0–S6). Each one
