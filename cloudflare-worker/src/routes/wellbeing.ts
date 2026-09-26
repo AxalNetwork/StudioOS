@@ -31,7 +31,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth } from '../auth';
+import { requireAuth, requireAdmin, requireBranchNotSuspended } from '../auth';
 import { decryptInt, decryptString } from '../services/cryptoBox';
 import {
   validateDailyBody, encryptOrFallback,
@@ -76,6 +76,24 @@ function todayUTC(): string {
 }
 function uuidHex(): string {
   return crypto.randomUUID().replace(/-/g, '');
+}
+
+// D303 — the admin routes below used to check `role(user) === 'admin'`
+// directly off `requireAuth`, which is what the HQ compliance freeze
+// (`requireAdmin`'s `refuseWhileFrozen`, D135) and the branch-suspension gate
+// (`requireBranchNotSuspended`, D142) both attach to. Neither freeze reached
+// Wellbeing before this: an admin under an overdue HQ notice, or a suspended
+// branch, could still publish a resource or verify/un-hide an expert here
+// while every other Admin · Community console already refused. `admin(c)`
+// mirrors the `admin_jobs.ts` / `admin_circles.ts` helper shape so a caller
+// gets the same 401-vs-403 split those consoles give.
+async function admin(c: any) {
+  try {
+    return await requireAdmin(c);
+  } catch (e) {
+    const msg = (e as Error)?.message;
+    return c.json({ detail: msg || 'Admin required' }, msg === 'Unauthorized' ? 401 : 403);
+  }
 }
 
 // --------------------------------------------------------------------------
@@ -495,8 +513,10 @@ wellbeing.get('/daily', async (c) => {
 // Aggregate (admin only)
 // ---------------------------------------------------------------------------
 wellbeing.get('/aggregate', async (c) => {
-  const user = await requireAuth(c);
-  if (role(user) !== 'admin') return c.json({ detail: 'Admin only' }, 403);
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  // A read — D135's freeze and D142's suspension gate both never gate a
+  // read, and an aggregate an admin cannot see is worse than a stale one.
   const days = Number(c.req.query('days') ?? 30);
   if (!ALLOWED_AGGREGATE_WINDOWS.includes(days as 30 | 90)) {
     return c.json({
@@ -532,7 +552,7 @@ wellbeing.get('/aggregate', async (c) => {
     const cohort = distinct.size;
 
     console.info(
-      `wellbeing aggregate access by admin user_id=${user.id} window_days=${days} cohort=${cohort}`,
+      `wellbeing aggregate access by admin user_id=${a.id} window_days=${days} cohort=${cohort}`,
     );
 
     if (cohort < MIN_AGGREGATE_COHORT) {
@@ -670,9 +690,14 @@ wellbeing.get('/resources', async (c) => {
 });
 
 wellbeing.post('/resources', async (c) => {
-  const user = await requireAuth(c);
-  if (role(user) !== 'admin') return c.json({ detail: 'Admin only' }, 403);
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  const user = a;
   await ensureWellbeingSchema(c.env);
+  // D142 — a suspended branch cannot put anything NEW under the brand. The
+  // gate is after the admin check, so an anonymous caller still gets 401
+  // rather than learning the licence state.
+  await requireBranchNotSuspended(c);
   const body = await c.req.json().catch(() => ({}));
   const category = String((body as any)?.category || '');
   if (!ALLOWED_RESOURCE_CATEGORIES.has(category)) {
@@ -700,8 +725,10 @@ wellbeing.post('/resources', async (c) => {
 });
 
 wellbeing.delete('/resources/:id', async (c) => {
-  const user = await requireAuth(c);
-  if (role(user) !== 'admin') return c.json({ detail: 'Admin only' }, 403);
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  // A takedown, not a publish — D142's FREEZE_RULE lets a suspended branch
+  // still remove something under its own brand, so no suspension gate here.
   await ensureWellbeingSchema(c.env);
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
@@ -1618,11 +1645,15 @@ wellbeing.get('/bookings/mine', async (c) => {
 
 // --- admin review-hide ---
 wellbeing.post('/admin/experts/:uid/hide', async (c) => {
-  const user = await requireAuth(c);
-  if (role(user) !== 'admin') return c.json({ detail: 'admin only' }, 403);
+  const a = await admin(c);
+  if (a instanceof Response) return a;
   await ensureWellbeingSchema(c.env);
   const body = await c.req.json().catch(() => ({}));
   const hidden = body?.hidden ? 1 : 0;
+  // D142 — `hidden: true` is a takedown (stays open on a suspended branch);
+  // `hidden: false` restores the expert to the directory, which is the "put
+  // something NEW under the brand" case FREEZE_RULE gates.
+  if (!hidden) await requireBranchNotSuspended(c);
   const res = await c.env.DB.prepare(
     'UPDATE experts SET hidden_by_admin = ? WHERE uid = ?',
   ).bind(hidden, c.req.param('uid')).run();
@@ -1630,11 +1661,15 @@ wellbeing.post('/admin/experts/:uid/hide', async (c) => {
 });
 
 wellbeing.post('/admin/experts/:uid/verify', async (c) => {
-  const user = await requireAuth(c);
-  if (role(user) !== 'admin') return c.json({ detail: 'admin only' }, 403);
+  const a = await admin(c);
+  if (a instanceof Response) return a;
   await ensureWellbeingSchema(c.env);
   const body = await c.req.json().catch(() => ({}));
   const verified = body?.verified ? 1 : 0;
+  // D142 — verifying is what unlocks an expert's directory listing, so it is
+  // the publish-shaped write; removing verification is a takedown and stays
+  // open on a suspended branch.
+  if (verified) await requireBranchNotSuspended(c);
   await c.env.DB.prepare('UPDATE experts SET verified = ? WHERE uid = ?').bind(verified, c.req.param('uid')).run();
   return c.json({ ok: true, verified: !!verified });
 });

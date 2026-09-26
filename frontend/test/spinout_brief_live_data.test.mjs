@@ -171,20 +171,26 @@ test('companiesLabel returns an em-dash for null and is singular-correct', () =>
 // The two surfaces share one source, so they cannot disagree.
 // ---------------------------------------------------------------------------
 
-test('the hero panel and the brief use the same hook and label helper', () => {
+test('the track record has one source, and the brief reads it', () => {
+  // `HeroStatsPanel` was the other reader. It had not rendered since the D38
+  // intro replaced the hero it sat in, and D380 deleted it rather than keep a
+  // second, invisible copy of the figures; the brief is the one surface that
+  // prints them.
   assert.match(LIB, /export function useSpinoutStats/);
   assert.match(LIB, /export function companiesLabel/);
   assert.match(LIB, /export function openCohortCopy/);
-  // And the page must not have grown its own copy on the way past.
+  // The page must not have grown its own copy on the way past.
   assert.doesNotMatch(PAGE, /function useSpinoutStats/);
   assert.doesNotMatch(PAGE, /function companiesLabel/);
   assert.doesNotMatch(PAGE, /function openCohortCopy/);
-  // The hero must consume them rather than keeping its own inlined copy.
-  assert.match(PAGE, /const \{ companies, raised \} = useSpinoutStats\(\)/);
+  assert.doesNotMatch(PAGE, /function HeroStatsPanel/, 'the dead hero stats panel came back');
+  // The brief consumes the shared hook and label rather than inlining either.
+  assert.match(BRIEF_CODE, /const \{ companies, raised \} = useSpinoutStats\(\)/);
+  assert.match(BRIEF_CODE, /companiesLabel\(companies\)/);
   assert.doesNotMatch(
-    PAGE,
-    /companies === 1 \? 'company' : 'companies'\s*\}`\s*\}\s*<\/div>/,
-    'the hero re-inlined the pluralisation instead of using companiesLabel',
+    BRIEF_CODE,
+    /companies === 1 \? 'company' : 'companies'/,
+    'the brief re-inlined the pluralisation instead of using companiesLabel',
   );
 });
 

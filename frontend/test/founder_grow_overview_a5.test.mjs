@@ -15,6 +15,12 @@
  *                       alone, so a founder whose launches were on the calendar
  *                       read an empty card
  *   two proposal bands  the outreach sequence and the applicant ranking
+ *   the focus target    "14 of 25 paid trials" is a `metric_targets` row
+ *                       (migration 173); the desk printed "Target not
+ *                       recorded" over a store `/grow/focus` writes (D420)
+ *   the capital match   "warm path via …" is `research_funds.path`, and
+ *                       stage fit is `research_funds.stage_fit` (migration
+ *                       216); the desk said no warm path could be shown (D420)
  *
  * AND WHAT IT ASKS FOR THAT THIS PRODUCT CANNOT DO (D56/D68):
  *
@@ -25,8 +31,8 @@
  *   "Trial → paid"      the same absence, stated on the stat rather than
  *                       computed from a state that does not exist
  *   the hero imagery    no image model is wired into this build
- *   the fit scores      no reranker runs, so no score, no reason and no warm
- *                       path is shown beside a prospect
+ *   the fit scores      no reranker runs, so no score is shown; the rank is
+ *                       the founder's own recorded stage fit and path
  *   "Move to screen"    nothing writes `job_applications.status`, so the band
  *                       produces a reading and says so
  */
@@ -232,6 +238,58 @@ test('A5 never turns canvas fixtures into product data or claims', () => {
   assert.doesNotMatch(page, /14 of 25|38 in play|61 leads|37%|Nadia Okonkwo|Verwood|Latitude Seed|Thornbury Capital|Verwood Ventures|Mistral|FLUX|flux-|GPT-OSS|BGE-M3|DeepSeek|Llama|QwQ|Granite|\$14\.20|\$0\.0000528|Generate 4 more|See all 14 ranked/i);
   // The three claims about capability that A5 makes and this build cannot.
   assert.match(page, /Hero imagery is not generated here and cannot be: no image model is wired into this build/);
-  assert.match(page, /no reranker runs here, so no fit score, no reason and no warm path is shown/);
-  assert.match(page, /Acting on any of these hands off to Raise; this zone only lists\./);
+  assert.match(page, /No fit score is computed: no reranker runs here, so none is shown\./);
+  assert.match(page, /Acting on any of these hands off to Raise; this zone only ranks\./);
+});
+
+test('the focus card reads the plan number from metric_targets, and says when it cannot', () => {
+  // D420. `/grow/focus` has written targets since task 194; this desk printed
+  // "Target not recorded" beside them.
+  assert.ok(!/Target not recorded/.test(page), 'the focus card still denies a store that exists');
+  assert.match(page, /targets: api\.listMetricTargets\(projectId\),/, 'the desk does not read metric targets');
+  assert.match(progress, /progress\.get\('\/metrics\/:projectId\/targets'/, 'the targets read the desk calls is gone');
+  // ONE JUDGEMENT. The desk reads a target with the same `readTarget` the
+  // Focus zone uses, so "met" cannot mean two things on two pages — and
+  // `direction` (a burn target is met BELOW its number) is honoured here too.
+  assert.match(page, /import \{ [^}]*\breadTarget\b[^}]*\} from '\.\.\/\.\.\/lib\/metricTargets';/);
+  assert.match(page, /data\.targets\.map\(\(target\) => readTarget\(target, focus\)\)/,
+    'targets are not read against the latest snapshot');
+  // THREE STATES: unreadable, none set, set. A failed read is not "no target".
+  assert.match(page, /targets: failed\.has\('targets'\) \? null :/, 'a failed targets read collapses into "none set"');
+  assert.match(page, /if \(targets === null\) return 'Targets could not be read';/);
+  assert.match(page, /if \(!targets\.length\) return 'No target set';/);
+  // AN UNMEASURED TARGET IS NOT A MISSED ONE: only measured targets are counted.
+  assert.match(page, /const measured = targets\.filter\(\(target\) => target\.met !== null\);/);
+  // AND WHICH TARGET OWNS THE MONTH IS SAID TO BE UNRECORDED rather than chosen
+  // silently, because nothing stores that choice.
+  assert.match(page, /owns the month is not recorded/);
+  // The latest snapshot is chosen by its own date, not by wire order.
+  assert.match(page, /latest: latestSnapshot\(snapshots\),/);
+  assert.match(page, /const focus = data\.latest;/);
+});
+
+test('capital match ranks the founder’s researched funds by what they recorded', () => {
+  // D420. `research_funds` carries stage_fit and path (migration 216); the desk
+  // said no warm path could be shown.
+  assert.match(page, /funds: api\.research\.funds\(\),/, 'the desk does not read researched funds');
+  assert.match(worker, /research\.get\('\/funds'/);
+  for (const field of ['stage_fit: r.stage_fit', 'path: r.path']) {
+    assert.ok(worker.includes(field), `the funds DTO stopped returning ${field}`);
+  }
+  // A PASSED FUND IS NOT A MATCH.
+  const match = page.slice(page.indexOf('function FundMatch'));
+  assert.match(match, /funds\.filter\(\(fund\) => fund\.status !== 'passed'\)/, 'a fund the founder passed on is ranked as a match');
+  // RIGHT STAGE OUTRANKS A WARM PATH, and a warm path breaks the tie — the
+  // artboard's "a fund you can reach outranks a better thesis fit you can't"
+  // applies between funds at the right stage.
+  assert.match(page, /const RANK = \(fund\) => \(fund\.stage_fit === 'right' \? 2 : 0\) \+ \(fund\.path === 'warm' \? 1 : 0\);/);
+  assert.match(match, /RANK\(b\.fund\) - RANK\(a\.fund\) \|\| a\.index - b\.index/, 'the rank is not stable, or not descending');
+  // NULL IS "NOT ASSESSED", never wrong or cold.
+  assert.match(match, /fund\.stage_fit === 'wrong' \? 'Wrong stage' : 'Stage fit not assessed'/);
+  assert.match(match, /fund\.path === 'cold' \? 'No warm path' : 'Path not recorded'/);
+  // UNREADABLE IS NOT EMPTY.
+  assert.match(page, /funds: failed\.has\('funds'\) \? null :/);
+  assert.match(match, /if \(funds === null\) return <Unreadable /);
+  assert.match(css, /(^|\n)\.a5-funds article\{/, 'the fund cards have no light-mode style');
+  assert.match(css, /\.dark \.a5-funds article\{/, 'the fund cards have no dark-mode style');
 });

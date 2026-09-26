@@ -217,29 +217,36 @@ test('the assessment runs gap is true: the worker lists no sessions or results',
 });
 
 test('every community card points at a route App.jsx registers', () => {
-  assert.equal(COMMUNITY_CONSOLES.length, 4, 'the console list changed size');
+  assert.equal(COMMUNITY_CONSOLES.length, 5, 'the console list changed size');
   // One card per console, keyed from the list rather than hand-written — so a
-  // fifth entry gets a card without anyone remembering to add one, and two
+  // sixth entry gets a card without anyone remembering to add one, and two
   // entries cannot share a key and collapse into one.
   assert.match(COMM_RAW, /data-testid=\{`branch-community-\$\{con\.key\}`\}/,
     'the cards are not rendered from COMMUNITY_CONSOLES');
-  assert.equal(new Set(COMMUNITY_CONSOLES.map((c) => c.key)).size, 4,
+  assert.equal(new Set(COMMUNITY_CONSOLES.map((c) => c.key)).size, 5,
     'two consoles share a key, so one card would replace the other');
   for (const con of COMMUNITY_CONSOLES) {
-    assert.ok(APP.includes(`path="${con.to}"`),
+    // D303 — Wellbeing's `to` is `/admin?tab=wellbeing`, a tab on the /admin
+    // route rather than a route of its own, so the query string is split off
+    // the same way `admin_route_reachability.test.mjs`'s `toRoute` does before
+    // checking App.jsx registers the path.
+    const route = con.to.split('?')[0];
+    assert.ok(APP.includes(`path="${route}"`),
       `${con.label} links to ${con.to}, which is not a registered route`);
     assert.ok(con.key && con.label && con.scope && con.what,
       `${con.label} is missing one of the four fields a card renders`);
   }
 });
 
-test('the four community consoles really are reachable on a branch', () => {
+test('the five community consoles really are reachable on a branch', () => {
   // task 385 / D302: "the roster stays branch-local" is the coordinator's
   // decision, and the guard now asks EACH CARD which worker file serves it
   // (via its own `worker` field) rather than a hard-coded list of four —
   // so a fifth console added without naming its worker is caught by the
   // COMMUNITY_CONSOLES-length assertion above, and every one of the several
   // ways a route can be made HQ-only is refused here, not only one of them.
+  // D303 added the fifth entry (wellbeing.ts); this test needed no change to
+  // cover it, which is the point of reading the worker field off the card.
   for (const con of COMMUNITY_CONSOLES) {
     assert.ok(con.worker, `${con.label} names no worker file — the card cannot be checked for an HQ gate`);
     const path = `cloudflare-worker/src/routes/${con.worker}`;
@@ -266,6 +273,31 @@ export function handler() { return true; }
   const cleaned = codeOnly(fixture);
   assert.ok(!/\brequireSuperAdmin\b/.test(cleaned),
     'codeOnly left a bare-comment mention of requireSuperAdmin in place — the negative control is not exercising codeOnly');
+});
+
+test('wellbeing gained the admin gate the wave brief asked for (D303)', () => {
+  const src = raw('cloudflare-worker/src/routes/wellbeing.ts');
+  // The five admin routes (aggregate, the two resource writes, hide, verify)
+  // used to check `role(user) === 'admin'` straight off `requireAuth`, which
+  // never reaches D135's HQ compliance freeze or D142's branch-suspension
+  // gate. requireAdmin attaches the first; the writes that publish or promote
+  // something now also call requireBranchNotSuspended. `/experts/:uid/book`'s
+  // own unrelated `role(user) !== 'admin'` completion-bypass check is untouched
+  // by this decision and stays out of this assertion.
+  for (const route of [
+    "wellbeing.get('/aggregate'", "wellbeing.post('/resources'",
+    "wellbeing.delete('/resources/:id'", "wellbeing.post('/admin/experts/:uid/hide'",
+    "wellbeing.post('/admin/experts/:uid/verify'",
+  ]) {
+    const at = src.indexOf(route);
+    assert.ok(at >= 0, `${route} is no longer defined in wellbeing.ts`);
+    const body = src.slice(at, src.indexOf('\n});', at));
+    assert.ok(!/role\(user\) !== 'admin'\)/.test(body),
+      `${route} still checks role(user) directly instead of requireAdmin`);
+    assert.ok(/await admin\(c\)/.test(body), `${route} never adopted the requireAdmin-backed gate`);
+  }
+  assert.ok(/requireBranchNotSuspended/.test(src),
+    'wellbeing.ts never adopted the branch-suspension gate for its publishing writes');
 });
 
 test('the job board card does not claim an authoring power it lacks', () => {

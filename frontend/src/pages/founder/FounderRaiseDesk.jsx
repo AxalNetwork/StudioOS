@@ -88,6 +88,9 @@ export default function FounderRaiseDesk() {
       prospects: api.raiseProspects(projectId),
       legal: api.listDocuments(projectId),
       deck: api.deckListVersions(projectId),
+      // The waterfall A4's liquidity card draws. `/raise/liquidity` has read it
+      // off this same scenario since it was built; this desk said none existed.
+      capTable: api.getCapTableByProject(projectId),
       room: project?.uid ? api.dataRoom(project.uid) : Promise.reject(new Error('Project room identifier is unavailable.')),
     };
     Promise.allSettled(Object.entries(calls).map(async ([key, request]) => [key, await request])).then((results) => {
@@ -111,6 +114,7 @@ export default function FounderRaiseDesk() {
     const room = records.room || {};
     return {
       prospects, docs, versions, room,
+      scenario: records.capTable?.scenario || null,
       roundInfo: records.round || { round: null, raised: 0, committed_count: 0 },
       progress: records.round?.progress || null,
       inPlay: prospects.filter((row) => RAISE_STAGES_IN_PLAY.includes(clean(row.stage))).length,
@@ -151,7 +155,7 @@ function RaiseSections({ loading, project, data, errors, query, state, projectId
   // list narrowed to the three stages that are actually in play, and the full
   // count survives where it belongs — the rail's coverage line, off `data`.
   // CodeQL raised the leftover binding (alert 6054).
-  const { roundInfo, progress, docs, versions, room, inPlay } = data;
+  const { roundInfo, progress, docs, versions, room, inPlay, scenario } = data;
   const round = roundInfo.round;
   const target = round?.target_amount;
   const files = asList(room, 'files'); const folders = asList(room, 'folders'); const grants = asList(room, 'grants');
@@ -228,7 +232,8 @@ function RaiseSections({ loading, project, data, errors, query, state, projectId
       <DeskLink testid="link-open-data-room" to={`/raise/data-room${query}`} state={state}>Open data room</DeskLink></>}</section>
     <section className="raise-card" id="raise-pitch"><Head icon={Sparkles} title="Pitch" meta={loading ? 'Reading versions' : deckLabel(current, versions)} />{loading ? <Skeleton rows={2} /> : errors.deck ? <Unavailable /> : <><div className="deck-list">{versions.slice(0, 4).map((deck, index) => <div key={deck.id || index}><strong>{clean(deck.name || deck.title) || `Version ${deck.version ?? index + 1}`}</strong><span>{slideCount(deck)}</span><small>{status(deck.status || deck.updated_at || deck.created_at)}</small></div>)}{!versions.length && <Empty icon={Sparkles} title="No deck version is recorded." body="Create or edit a deck in the detailed workspace." />}</div><p className="source-note">Cover imagery is not generated here, and nothing investor-facing passes a content review before it is shared — neither exists in this build.</p><DeskLink testid="link-open-pitch-workspace" to={`/raise/pitch${query}`} state={state}>Open pitch</DeskLink></>}</section>
     <section className="raise-card exits" id="raise-liquidity"><Head icon={Landmark} title="Liquidity & exits" meta="Nothing live — modelled, not marketed" />
-      <p>No secondary is open, and none should be at seed. This zone exists so the waterfall is understood <em>before</em> terms are signed rather than after — but no liquidation preference, participation right or exit model is recorded for this company, so there is no waterfall to draw and this desk does not invent one.</p>
+      <p>No secondary is open, and none should be at seed. This zone exists so the waterfall is understood <em>before</em> terms are signed rather than after.</p>
+      {loading ? <Skeleton rows={2} /> : errors.capTable ? <Unavailable /> : <ExitWaterfall scenario={scenario} />}
       {bandOn ? <ZoneDraft
         surface="raise/liquidity"
         scopeKey={scope}
@@ -244,6 +249,39 @@ function RaiseSections({ loading, project, data, errors, query, state, projectId
   </div>;
 }
 
+/**
+ * A4's waterfall, from the project's canonical cap-table scenario.
+ *
+ * `result.waterfall` is written by the cap-table simulator whenever the
+ * scenario carries an exit value (`services/captable.ts`), and `/raise/liquidity`
+ * renders it in full. The desk draws its two headline figures — what the
+ * founders take and what preference takes — and the SIMULATOR'S OWN
+ * ASSUMPTIONS beside them, because those are modelling terms (1× non-
+ * participating), not a term sheet: nothing here reads the preference clause
+ * out of a signed document, and the sentence under the bar says so.
+ */
+function ExitWaterfall({ scenario }) {
+  const waterfall = scenario?.result?.waterfall;
+  if (!waterfall) {
+    return <p className="source-note" data-testid="text-raise-no-waterfall">{scenario
+      ? 'The stored cap-table scenario models no exit value, so there is no waterfall to draw and this desk does not invent one.'
+      : 'No cap-table scenario is recorded for this company, so there is no waterfall to draw and this desk does not invent one.'}</p>;
+  }
+  const rows = asList(waterfall.rows);
+  const exit = Number(waterfall.exit_value);
+  const founders = rows.filter((row) => clean(row.type) === 'founder').reduce((sum, row) => sum + (Number(row.payout) || 0), 0);
+  const preference = Number(waterfall.totals?.preference_paid);
+  const share = (value) => (exit > 0 && Number.isFinite(value) ? Math.max(0, Math.min(100, value / exit * 100)) : 0);
+  return <div className="raise-waterfall" data-testid="chart-raise-waterfall">
+    <div className="raise-waterfall-head"><strong>Exit at {money(exit)}</strong><span>{rows.length} holder{rows.length === 1 ? '' : 's'} paid</span></div>
+    <div className="raise-progress"><i className="is-committed" style={{ width: `${share(founders)}%` }} /><i className="is-soft" style={{ width: `${share(preference)}%` }} /></div>
+    <div className="raise-legend">
+      <span className="is-committed">{money(founders)} to founders</span>
+      <span className="is-soft">{Number.isFinite(preference) ? money(preference) : 'Not recorded'} to preference</span>
+    </div>
+    <p className="source-note">Modelled in {clean(scenario.name) || 'the cap-table scenario'}: {asList(waterfall.assumptions).join(' ') || 'assumptions not recorded.'} No preference clause is read from a signed document.</p>
+  </div>;
+}
 /** A4's eyebrow: the round's own name and how long it has been open. */
 function roundLabel(round) {
   if (!round) return 'No round recorded';

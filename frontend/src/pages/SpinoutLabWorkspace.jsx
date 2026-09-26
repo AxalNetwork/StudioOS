@@ -229,7 +229,7 @@ export const WEEK_DEFS = [
       { label: 'File incorporation docs and receive EIN', keys: ['ein_received'], tool: 'incorporate' },
       { label: 'Issue founder stock with vesting', keys: ['founder_stock_issued'], tool: 'captable' },
       { label: 'File 83(b) election', keys: ['section83b_filed'], tool: 'section-83b' },
-      { label: 'Sign co-founder agreement (or solo declaration)', keys: ['cofounder_agreement_signed'], tool: 'cofounder-agreement' },
+      { label: 'Sign co-founder agreement', keys: ['cofounder_agreement_signed'], tool: 'cofounder-agreement' },
       { label: 'Lock the fundraise ask', keys: ['fundraise_ask_locked'], tool: 'capital' },
       { label: 'Fill in Use of Funds', keys: ['use_of_funds_filled'], tool: 'use-of-funds' },
       // Warm intros & the data room live on the Capital raise workspace —
