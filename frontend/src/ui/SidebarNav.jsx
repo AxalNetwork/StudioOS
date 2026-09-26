@@ -4,7 +4,7 @@ import { Building2, ChevronDown, ChevronLeft, ChevronRight, Lock as LockIcon, Se
 import { openPaywall } from '../components/PaywallModal';
 import { defaultOpenGroups, hasTier, hasInvestorTier } from '../sidebarConfig';
 import { safeReadJSON } from '../lib/storage';
-import { hqRowFor } from '../lib/hqStrips.js';
+import { hqRowFor, adminRowFor } from '../lib/hqStrips.js';
 import CompanySwitcher from './CompanySwitcher';
 
 /**
@@ -80,7 +80,11 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
   // path: /admin?tab=integration-keys is Platform's, /admin?tab=legal is
   // Contracts'. The map says which; when it names a row, that row and no
   // other is active, and the path-only rules below decide nothing.
-  const derivedRow = role === 'super_admin' ? hqRowFor(navLocation.pathname, navLocation.search) : null;
+  // D286 — the same on the S20 Admin shell: an /admin tab lights the Admin
+  // row the map places it on, and a tab placed on none lights no row.
+  const derivedRow = role === 'super_admin' ? hqRowFor(navLocation.pathname, navLocation.search)
+    : role === 'admin' ? adminRowFor(navLocation.pathname, navLocation.search)
+      : null;
   // When the user types, force-expand any group with a match so the
   // matching items are visible without manual clicking.
   const effectiveOpen = q

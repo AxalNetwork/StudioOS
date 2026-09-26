@@ -71,6 +71,14 @@ export const ACCENT = {
   // "steel", which is the one thing that tells their chrome apart from HQ's
   // oxblood at a glance.
   branch_admin: { ink: '#334155', deep: '#1e293b', tint: '#f8fafc', border: '#cbd5e1', deepDark: '#94a3b8', tintDark: '#151a22' },
+  // D286 — the plain Admin shell, which today is the shell on accounts HQ
+  // holds directly (canvas S20). Steel, the same pair as `branch_admin`, on
+  // purpose: S20 is the subsidiary shell's eight rows pointed at HQ's
+  // consoles, and every plain admin is HQ-held until a branch is deployed.
+  // Not a new shell key — `shellRoleFor` still answers `'admin'` — because a
+  // key that named "held" would have to be retired the day a branch goes
+  // live, and the accent is the only thing the shell needed from this table.
+  admin: { ink: '#334155', deep: '#1e293b', tint: '#f8fafc', border: '#cbd5e1', deepDark: '#94a3b8', tintDark: '#151a22' },
 };
 
 /**

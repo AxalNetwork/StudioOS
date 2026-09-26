@@ -16,10 +16,10 @@
 //   - Items must not appear in more than one group within a role.
 
 import {
-  LayoutDashboard, Target, FileText, Users, Ticket, Handshake, Rocket,
-  UserCircle, Activity, Shield, ShieldCheck, Network, Sparkles, Briefcase,
-  TrendingUp, MessageSquare, Package, Calendar, Send, Gamepad2,
-  Trash2, Inbox, Radar, Wallet, Landmark, Mail, Gift,
+  LayoutDashboard, Target, FileText, Users, Handshake, Rocket,
+  UserCircle, Shield, ShieldCheck, Network, Sparkles, Briefcase,
+  TrendingUp, MessageSquare, Package, Calendar,
+  Inbox, Radar, Wallet, Landmark, Mail,
   Map, UserCog, Coins, FileStack, SlidersHorizontal,
 } from 'lucide-react';
 
@@ -168,68 +168,54 @@ export const SIDEBAR_GROUPS = {
     ]},
   ],
 
-  // D284 — the 29 working pages (the former studio, capital, network and more
-  // groups) left this shell for the Workspaces launcher in the top bar, and
-  // Messages left it for a top-bar button on both admin shells. The list they
-  // moved to is `lib/adminPlacement.js` (`WORKSPACES`), read by the launcher
-  // and by the command palette; a workspace page lights no sidebar row.
+  // D286 — THE ADMIN SHELL ON ACCOUNTS HQ HOLDS DIRECTLY (canvas S20). No
+  // branch is deployed yet (`infra/branches` holds only `_example.json`, and
+  // `tenancyScope.ts` leaves `admin` unscoped), so every plain admin today
+  // administers accounts on HQ's own database, on axal.vc. S20 draws that as
+  // the branch shell's eight rows, in the same order, with every row pointing
+  // at the `/admin` console that already does that work on HQ — never at
+  // `/branch/*`, which refuses on HQ.
+  //
+  // WHAT THIS REPLACED, AND WHERE IT WENT. Until D286 this shell was the old
+  // admin sidebar: Studio, then an Admin group of nineteen live console rows
+  // (twenty with the parked X), after D284 had already moved the 29 working
+  // pages to the Workspaces launcher and Messages to the top bar. The H35
+  // placement map (`lib/adminPlacement.js`, D283) is the record of where each
+  // of those rows lives now, and `admin_placement_h35.test.mjs` pins the
+  // legacy list by value so the map keeps answering for it. Five rows are
+  // landings of their own (`pages/admin/Held*.jsx`), each carrying its
+  // consoles as literal links so `admin_route_reachability.test.mjs` can walk
+  // to them; three point straight at the console that IS the row.
+  //
+  // `match` lists the consoles a landing leads to, so the row stays lit
+  // inside them. A path can light one row only, so a console placed on two
+  // rows (Exploring: Accounts, and an Approvals lane) matches its FIRST
+  // placement in the map. The `/admin` tabs light rows by QUERY, not path —
+  // `adminRowFor` in `lib/hqStrips.js`, read from the same map — which is why
+  // the Contracts row can point at `/admin?tab=legal` without lighting on
+  // every other tab.
   admin: [
-    { key: 'home', label: 'Home', items: [
-      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
-    ]},
     { key: 'admin', label: 'Admin', items: [
-      { to: '/admin', icon: Shield, label: 'Admin Console' },
-      { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
-      { to: '/admin/assessment', icon: Gamepad2, label: 'Assessment Studio' },
-      { to: '/admin/best-fit', icon: Sparkles, label: 'Best-Fit Console' },
-      { to: '/admin/events', icon: Ticket, label: 'Event Admin' },
-      { to: '/admin/jobs', icon: Briefcase, label: 'Job Board Admin' },
-      { to: '/admin/circles', icon: Network, label: 'Communities Admin' },
-      // Which advisor may read which Lab cohort's founders. Its own row rather
-      // than a Spin-Out Lab tab: that console is Lab-owned, and this grant is
-      // advisor-domain — the backend already draws the same line.
-      { to: '/admin/advisor-cohorts', icon: UserCog, label: 'Advisor Cohort Access' },
-      // Task #9 — chat-onboarded users awaiting binding agreement + role assignment.
-      { to: '/admin/exploring', icon: UserCircle, label: 'Exploring Users' },
-      // GP review queue for Spin-Out Fund I LP applications (migration 165).
-      { to: '/admin/lp-applications', icon: Inbox, label: 'LP Applications' },
-      { to: '/monitoring', icon: Activity, label: 'Monitoring' },
-      // HQ's broadcast console (D216, #337): the worker answers only the super
-      // admin, and a plain admin who follows this row meets SuperAdminOnlyNotice.
-      { to: '/admin/telegram', icon: Send, label: 'Telegram Channels' },
+      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+      { to: '/admin/held/accounts', icon: Users, label: 'Accounts', match: ['/admin/exploring', '/admin/trash'] },
+      { to: '/admin/held/approvals', icon: Inbox, label: 'Approvals',
+        match: ['/admin/lp-applications', '/admin/refer-earn', '/admin/best-fit', '/admin/due-diligence', '/admin/partners'] },
+      { to: '/admin/held/programs', icon: Calendar, label: 'Programs',
+        match: ['/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/assessment'] },
+      { to: '/admin/held/community', icon: Network, label: 'Community', match: ['/admin/events', '/admin/jobs', '/admin/circles'] },
+      // The template library, on the Admin Console's Legal tab. Not "read-only":
+      // `requireHqAuthoring` refuses only on a branch, so a plain HQ admin
+      // authors templates today. Whether they should is D286's filed question.
+      { to: '/admin?tab=legal', icon: FileText, label: 'Contracts' },
+      { to: '/admin/held/insights', icon: TrendingUp, label: 'Insights' },
+      // Licensing appears only here, as the administrator's own read of their
+      // licence (S20's wall rule 4). HQ's ledger of every licence
+      // (/admin/licences) is super-admin-only server-side and lives in the HQ
+      // group above; a row for it here was a door that opened onto 403s.
+      { to: '/admin/my-licence', icon: UserCog, label: 'Settings' },
       // X (Twitter) broadcaster temporarily hidden — OAuth not provisioned yet.
       // Re-enable once X_CLIENT_ID/SECRET are bound on the prod worker.
       // { to: '/admin/x', icon: Megaphone, label: 'X (Twitter)' },
-      { to: '/admin/articles', icon: FileText, label: 'Content Queue' },
-      // The five rows below were added because their pages had NO door at all:
-      // every one is a working, API-backed surface reachable only by typing the
-      // URL. `admin_route_reachability.test.mjs` is the guard that found them and
-      // now keeps every /admin route either linked or explicitly exempt.
-      //
-      // "Publications" opens the list page, and that one row un-strands three
-      // routes: the list, /admin/publications/new and /admin/publications/:id
-      // already linked to each other but formed a closed cycle with no way in.
-      { to: '/admin/publications', icon: FileStack, label: 'Publications' },
-      // The partner INVITATION flow (App.jsx says so where it retired the old
-      // /partners page) — not the public directory at /directory.
-      { to: '/admin/partners', icon: Handshake, label: 'Partner Invitations' },
-      { to: '/admin/refer-earn', icon: Gift, label: 'Referral Review' },
-      // NOT "Team". The Team row in the HQ group points at /admin/accounts, the
-      // cross-tenant accounts table; THIS is the public team-page editor, and the
-      // comment above this block has warned about the collision since the HQ shell
-      // landed. Labelled for what it edits so the two cannot be confused.
-      { to: '/admin/team', icon: Users, label: 'Public Team Page' },
-      // A subsidiary administrator's read of their OWN licence — terms,
-      // territories, seats licensed, history. HQ's ledger of every licence
-      // (/admin/licences) is NOT here: every call behind it is
-      // super-admin-only server-side, so a row for it in the plain admin shell
-      // was a door that opened onto 403s. It lives in the HQ group above.
-      // GET /licence/mine 404s for anyone who administers none.
-      { to: '/admin/my-licence', icon: Map, label: 'My Licence' },
-      // Last in the group deliberately: soft-deleted projects, with a hard-delete
-      // that does not come back. A destructive surface goes at the bottom, not
-      // beside the everyday queues.
-      { to: '/admin/trash', icon: Trash2, label: 'Trash' },
     ]},
     // No 'account' group here on purpose. It once held Articles / Activity Log
     // / Support / Documentation; those moved to the user menu (7c93b83e and

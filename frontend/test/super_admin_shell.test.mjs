@@ -133,10 +133,26 @@ test('the plain admin shell no longer offers HQ\'s ledger', () => {
   assert.ok(adminRows.find((r) => r.to === '/admin/my-licence'), 'My Licence stays for a subsidiary admin');
 });
 
-test('a super admin keeps every admin destination', () => {
-  // The elevation adds a power; it must not remove the product.
-  assert.ok(adminRows.length > rows.length,
-    'the HQ shell is a lens over the admin product, not a replacement for it');
+test('a super admin keeps every admin destination, whether HQ view is on or off', () => {
+  // The elevation adds a power; it must not remove the product. Until D286
+  // this compared row COUNTS ("the HQ shell is a lens over the admin product,
+  // not a replacement for it"), which S20's eight-row Admin shell fails while
+  // the property still holds. The property: with HQ view off the holder gets
+  // the plain Admin shell exactly, and with it on, every Admin row still
+  // points at a route that admits an admin — nothing is registered only for
+  // the elevation, and nothing the plain shell offers is taken away.
+  const holder = { role: 'admin', is_super_admin: 1 };
+  assert.equal(shellRoleFor('admin', holder, false), 'admin', 'HQ view off is the plain Admin shell');
+  assert.equal(shellRoleFor('admin', holder, true), 'super_admin');
+  assert.ok(adminRows.length > 0, 'the Admin shell has rows');
+  for (const r of adminRows) {
+    const path = r.to.split('?')[0];
+    const line = APP.split('\n').find((l) => l.includes(`path="${path}"`));
+    assert.ok(line, `${r.label} → ${r.to} is not registered`);
+    // `/studio` wraps its list in `labRoles(...)`; the admission is still the literal.
+    assert.match(line, /guard\((?:labRoles\()?\[[^\]]*'admin'/, `${r.to} does not admit an admin`);
+    assert.doesNotMatch(line, /hqOnly\(/, `${r.to} is an Admin row wrapped in hqOnly — the elevation took a destination`);
+  }
 });
 
 test('the HQ toggle is per browser and dies with the session', () => {

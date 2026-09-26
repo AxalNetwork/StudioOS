@@ -850,12 +850,14 @@ export default function AdminPage({ onImpersonate, section = null }) {
   // Task #9 follow-up — new signups land in `exploring` pending admin review,
   // so it is often the largest bucket; it keeps its own filter.
   // S0 WALL RULE 2 — "search says what it searches". On a branch there is one
-  // territory and the caption names it; on HQ there is no territory to name, so
-  // there is no caption rather than a vague one. `null` renders nothing at all:
-  // an empty chip would be the doubled-chrome this repo keeps deleting.
+  // territory and the caption names it. Off a branch the table is HQ's own
+  // database — the accounts HQ holds on axal.vc — and since D286 the caption
+  // says so (S20's wall rule 2, precedent BranchAccounts.jsx's resting label)
+  // rather than saying nothing: "all accounts" would be vague, and no caption
+  // left the question open on the one shell where every admin sits today.
   const accountScope = branchOfUser(viewer)
     ? `Searching ${viewer.branch.name || viewer.branch.code} accounts`
-    : null;
+    : 'Searching HQ-held accounts';
   const ROLE_TILES = ['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'];
   const counts = totals
     ? { all: totals.total, ...Object.fromEntries(ROLE_TILES.map(r => [r, Number(totals.by_role?.[r]) || 0])) }
