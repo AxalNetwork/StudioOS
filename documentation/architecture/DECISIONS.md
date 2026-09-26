@@ -29668,6 +29668,113 @@ migration.** `frontend/src` moved (the console list and the test), so
 - No migration, no route, no `api.js` method, so `check-api-drift` has
   nothing to say.
 
+## D303
+
+**Wellbeing goes to Admin · Community.** Task 409, the coordinator's
+decision quoted rather than re-decided.
+
+**Measured first: the placement half was already done.**
+`frontend/src/lib/adminPlacement.js` already reads
+`tab('wellbeing', 'Wellbeing', admin('Community', 'card link'), …)` — a
+prior session (D283/D284, tasks 421/420/408) had already moved Wellbeing's
+tab entry to Admin · Community. What had NOT happened is the two things
+that decision actually implies once a console sits beside Events, Jobs and
+Circles: `routes/wellbeing.ts`'s five admin routes still checked
+`role(user) !== 'admin'` straight off `requireAuth`, never reaching D135's
+HQ compliance freeze or D142's branch-suspension gate the other three
+Community consoles already carry; and Branch · Community's own index
+(`BranchCommunity.jsx`, D302) had four cards, not five, so a branch admin
+following the sidebar to Community never saw Wellbeing listed there at
+all. Re-measuring before writing anything avoided redoing the placement
+work D283/D284 already did.
+
+**What changed.**
+- `cloudflare-worker/src/routes/wellbeing.ts`: `GET /aggregate`,
+  `POST /resources`, `DELETE /resources/:id`,
+  `POST /admin/experts/:uid/hide` and `POST /admin/experts/:uid/verify` now
+  gate through a `admin(c)` helper (`await requireAdmin(c)`, mirroring
+  `admin_jobs.ts` / `admin_circles.ts`'s shape) instead of a bare
+  `role(user) !== 'admin'` check, so an admin under an overdue HQ notice is
+  refused here exactly as on the other three consoles. `/aggregate` is a
+  read and carries no further gate (D135 and D142 both state a read is
+  never gated). `POST /resources` always calls
+  `requireBranchNotSuspended` (a new resource is new content under the
+  brand). `hide` and `verify` carry the gate CONDITIONALLY, because each
+  route does two opposite things depending on its body: hiding an expert
+  (`hidden: true`) is a takedown and stays open on a suspended branch;
+  un-hiding (`hidden: false`) restores it to the directory and is gated.
+  Verifying (`verified: true`) is the publish-shaped write and is gated;
+  removing verification (`verified: false`) is a takedown and stays open.
+- `frontend/src/lib/branchFreeze.js`: `wellbeing.ts` joins the Community
+  row's `gatedIn`, and the row's note now names Wellbeing alongside
+  Events, jobs and circles.
+- `frontend/src/pages/branch/BranchCommunity.jsx`: a fifth
+  `COMMUNITY_CONSOLES` card, `key: 'wellbeing'`. Its `to` is
+  `/admin?tab=wellbeing` rather than a path of its own — `AdminPage.jsx`
+  renders `WellbeingExpertsPanel` as a tab, not a route, the same shape
+  every other `admin(...)` placement in `adminPlacement.js` uses — and its
+  `scope`/`what` are read off that panel rather than invented: it verifies
+  or hides an expert on the founder-facing directory and nothing else.
+  Measured separately: `api.js` defines `wellbeingResourceCreate` and
+  `wellbeingResourceDelete`, but nothing in the admin product calls
+  either — the resource directory has a worker route and no console — so
+  the card says that too instead of implying a CRUD screen exists.
+- `pages/hq/SuperAdminOnlyNotice.jsx`'s docblock is corrected. It claimed
+  the notice is "also what the Super Admin sees after choosing 'Admin' in
+  View-as" — false, measured against `App.jsx`'s own `hqOnly`: the gate is
+  `isSuperAdminUser(user)`, keyed on the real signed-in account, not
+  `effectiveRole`, the browsed identity View-as sets. A Super Admin who
+  picks "Admin" in View-as still passes `isSuperAdminUser(user)` and sees
+  the real page, never this notice. The corrected text states the simpler,
+  true fact: this is what an admin account that has never held the
+  super-admin elevation sees, full stop.
+- Freeze-guard floors move with the new gates: `branch_suspended_freeze.test.ts`
+  16 → 19 (three new gated writes: the resource POST, the conditional hide,
+  the conditional verify); `branch_shell_s7_s13.test.mjs` 9 → 10 (a fourth
+  Community file now calls `requireBranchNotSuspended`).
+- **Deliberately untouched**, per the wave brief: the sidebar/launcher row
+  (Session 5's task 410) and the tab's name.
+
+**Worker + frontend. No migration, no new `api.js` method, no new route** —
+`wellbeing.ts`'s five routes already existed; only their gate changed. So
+`check-api-drift` has nothing new to say. `frontend/src` moved
+(`BranchCommunity.jsx`, `SuperAdminOnlyNotice.jsx`), so `docs/` is
+rebuilt and re-verified fresh.
+
+### VERIFIED
+
+- `frontend/test/branch_programs_s4.test.mjs`: 18 tests, exit 0. Two
+  changed (`COMMUNITY_CONSOLES.length` 4 → 5; the reachability loop now
+  includes `wellbeing`), one new (`wellbeing gained the admin gate the
+  wave brief asked for`, reading each of the five handler bodies out of
+  the worker source and asserting `admin(c)` replaced the bare role
+  check, scoped so `/experts/:uid/book`'s unrelated admin-bypass check is
+  not swept in).
+- `cloudflare-worker/test/branch_suspended_freeze.test.ts`: 11 tests, exit
+  0. `wellbeing.ts` added to the admin-gate-precedes-freeze-gate `FILES`
+  list and to the takedown-cases table; two new direct assertions pin the
+  hide/verify conditionals by regex, since the handler-substring check
+  used for the other files' unconditional gates cannot distinguish a
+  conditional gate's two branches.
+- `frontend/test/branch_shell_s7_s13.test.mjs`: 28 tests, exit 0. Floor
+  raised to 10; the S7/worker parity assertion needs no other change,
+  since it already compares `FROZEN.gatedIn` against every file that
+  calls the gate.
+- Five mutations run, five caught (non-zero exit + a `not ok` line), each
+  restored from a sha256-verified `/tmp` snapshot: `/aggregate` reverted
+  to the bare `role(user) !== 'admin'` check; the conditional hide gate
+  deleted outright; the conditional hide gate's condition inverted
+  (`if (hidden)` instead of `if (!hidden)`); `wellbeing.ts` dropped from
+  `branchFreeze.js`'s Community `gatedIn`; the wellbeing card's `to`
+  pointed at an unregistered path.
+- `npm run test:drift` exits 0 on Node 22 (see the drift log for exact
+  counts at merge time). Both typechecks
+  (`cd cloudflare-worker && npx tsc --noEmit`;
+  `npx tsc --noEmit -p frontend/tsconfig.json`) exit 0.
+- `node scripts/check-docs-fresh.mjs --strict` and `check-decision-ids.mjs`
+  (D1 through D303, in file order — D302 merged to main while this task was
+  in progress; this branch merged it in ahead of this entry) exit 0.
+
 ## D350
 
 **Lab Profiling reads Eadwyn's question ledger for the four elements it had
