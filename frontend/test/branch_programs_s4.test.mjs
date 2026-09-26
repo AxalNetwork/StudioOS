@@ -24,7 +24,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 
@@ -234,14 +234,38 @@ test('every community card points at a route App.jsx registers', () => {
 });
 
 test('the four community consoles really are reachable on a branch', () => {
-  // "Entirely local" is the canvas's claim and it is only true while none of
-  // the four is HQ-gated. Read out of the worker, so a gate added later fails
-  // here rather than turning a card into a 403 nobody predicted.
-  for (const f of ['admin_events', 'admin_jobs', 'admin_circles', 'admin_network_profiles']) {
-    const src = raw(`cloudflare-worker/src/routes/${f}.ts`);
-    assert.ok(!/requireHqAuthoring/.test(src),
-      `${f}.ts is HQ-gated now, so its Community card would 403 on a branch`);
+  // task 385 / D302: "the roster stays branch-local" is the coordinator's
+  // decision, and the guard now asks EACH CARD which worker file serves it
+  // (via its own `worker` field) rather than a hard-coded list of four —
+  // so a fifth console added without naming its worker is caught by the
+  // COMMUNITY_CONSOLES-length assertion above, and every one of the several
+  // ways a route can be made HQ-only is refused here, not only one of them.
+  for (const con of COMMUNITY_CONSOLES) {
+    assert.ok(con.worker, `${con.label} names no worker file — the card cannot be checked for an HQ gate`);
+    const path = `cloudflare-worker/src/routes/${con.worker}`;
+    assert.ok(existsSync(resolve(process.cwd(), path)), `${con.label}'s worker field names ${con.worker}, which does not exist`);
+    const src = codeOnly(raw(path));
+    for (const gate of ['requireHqAuthoring', 'requireSuperAdmin', 'requireSuperAdminWriteBar']) {
+      assert.ok(!new RegExp(`\\b${gate}\\b`).test(src),
+        `${con.worker} calls ${gate}(), so its Community card would 403 on a branch`);
+    }
+    assert.ok(!/\bHQ_ONLY\b/.test(src) && !/\bHQ_AUTHORING_ONLY\b/.test(src),
+      `${con.worker} throws an HQ-only refusal, so its Community card would 403 on a branch`);
   }
+});
+
+test('a comment mentioning requireSuperAdmin in a console file does not trip the gate check (negative control)', () => {
+  // codeOnly strips exactly the prose shapes a defensive comment would use to
+  // explain an absence — proving the check above reads CODE, not comments,
+  // the same way a mention of "watermarked" or a 403 in prose does not fail
+  // the assertions those words guard elsewhere in this suite.
+  const fixture = `
+// This console deliberately never calls requireSuperAdmin() — it stays open to any branch admin.
+export function handler() { return true; }
+`;
+  const cleaned = codeOnly(fixture);
+  assert.ok(!/\brequireSuperAdmin\b/.test(cleaned),
+    'codeOnly left a bare-comment mention of requireSuperAdmin in place — the negative control is not exercising codeOnly');
 });
 
 test('the job board card does not claim an authoring power it lacks', () => {
