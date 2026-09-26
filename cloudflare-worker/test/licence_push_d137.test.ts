@@ -206,7 +206,11 @@ test('every licence transition reports the push beside its own outcome', () => {
   // return `pushed`. The behaviour of `pushed` itself is asserted above.
   const src = readFileSync(new URL('../src/routes/admin_licences.ts', import.meta.url), 'utf8');
   const calls = [...src.matchAll(/await pushLicenceToBranch\(c\.env, licence\.id\)/g)];
-  assert.equal(calls.length, 5, `expected five transitions to push, found ${calls.length}`);
+  // D272 — ten: the five status transitions, plus the five changes that alter
+  // the copy without a status change (territories, seats, terms, a new
+  // contract, and a notice review that reinstates). Still exact, so a push
+  // added or dropped moves this figure on purpose.
+  assert.equal(calls.length, 10, `expected ten licence changes to push, found ${calls.length}`);
   for (const status of ['active', 'suspended', 'terminated']) {
     assert.ok(
       new RegExp(`status: '${status}'[^}]*pushed`).test(src) || src.includes(`status: '${status}', pushed }`),

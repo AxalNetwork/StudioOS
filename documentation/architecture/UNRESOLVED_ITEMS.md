@@ -300,6 +300,10 @@ Workers Static Assets as the only host. `.github/workflows/cloudflare-pages-depl
 and `frontend/public/_worker.js` are deleted, `scripts/build-frontend.mjs` no
 longer writes the `.assetsignore` that hid the entry script from the Worker
 upload, and every document that called the project a mirror now dates it.
+*(2026-09-25, D271: the build writes a `docs/.assetsignore` again — for a
+different reason. It withholds the retention ledger and the build stamp from the
+upload, and lists `/_worker.js` because its presence switches off wrangler's own
+refusal of one. The entry script itself stays deleted.)*
 Deleting the Pages project itself is a dashboard act for the owner — the
 Worker carries the same name, `studioos`, so the entry of type *Pages* is the
 one to remove. The evidence and the two cases below stay as the record of why

@@ -27079,3 +27079,187 @@ caught.
 `docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
 edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
 `check-folder-docs`, `check-api-drift` and `check-access-comments` exit 0.
+
+## D271
+
+**Task 428: the build writes `docs/.assetsignore`, so the Worker's asset upload
+stops publishing the build's own bookkeeping at public URLs on both hosts.**
+
+**What was public.** `docs/` is the Worker's `[assets]` directory, and wrangler
+uploads every file under it — dotfiles included — unless `docs/.assetsignore`
+names it. `scripts/build-frontend.mjs` writes two files into `docs/` for its own
+use: the retention ledger `.asset-retention.json` (step 4, every build; the
+file's own comment calls it 45 KB that churns wholesale, and it names every
+retained asset hash) and the source stamp `.build-source` (step 7, D103). The
+deploy workflow runs that build before `wrangler deploy`, so every deploy since
+those files existed has served `/.asset-retention.json` and `/.build-source`
+on `axal.vc` and `app.axal.vc`. Neither holds a secret. Both are build state
+that says nothing to a visitor, and a deploy should publish what it means to.
+Not observed live: `axal.vc:443` is refused at CONNECT from this environment,
+so the exposure is established from the build and wrangler's source, not from
+a fetch.
+
+**Wrangler's rules, read from the version that deploys** (4.131.1,
+`cloudflare-worker/node_modules/wrangler`, not from memory or a doc page, which
+is unreachable here):
+
+- `createAssetsIgnoreFunction` always skips `/.assetsignore`, `/_redirects` and
+  `/_headers`, then appends the lines of `.assetsignore`, matched with the
+  bundled gitignore implementation. Nothing else is skipped by default — so
+  neither bookkeeping file ever was.
+- `errorOnLegacyPagesWorkerJSAsset` refuses to upload a Pages `_worker.js`
+  **only while no `.assetsignore` exists**. Writing this file therefore switches
+  that refusal off, which is why `/_worker.js` is on the list: the outcome is put
+  back, and a stray entry script stays private instead of being served as source.
+  `apex_truth_doc.test.mjs` still fails the build if one appears at all.
+- `_headers` is read by path to set the static security headers. It is NOT
+  listed: wrangler already skips it, and if a later wrangler consulted this list
+  before parsing it, listing it would switch those headers off on every shell
+  route.
+
+**What shipped.** `scripts/lib/assetsIgnore.mjs` holds the three filenames as
+constants and the list, each entry carrying the reason it stays private, which
+is written into the file as a comment. Every line is `/` plus one literal file
+name — anchored, no glob — because a broader pattern (`.*`, `*.json`) would also
+hide `/.well-known/security.txt`. The helper throws on anything else. The build
+writes the file after Vite (which empties `docs/`) and after the prerender, and
+names every file it writes into `docs/` through the module's constants.
+
+**The rule for the next file.** Anything `build-frontend.mjs` writes into
+`docs/` other than Vite's output and the prerendered shells is published the
+moment it lands. So it gets a constant and a line in `ASSETS_IGNORE_ENTRIES`
+with its reason; `assetsIgnore.test.mjs` refuses a `path.join(docsDir, …)` it
+cannot trace to a constant there, and refuses any `writeFileSync` target outside
+the three it knows.
+
+**The guard, and the one assertion that could go stale.** Ten tests, one of
+them a tripwire on wrangler itself: it reads the installed CLI, extracts the
+three default filenames and the defaults list from `createAssetsIgnoreFunction`,
+and checks `errorOnLegacyPagesWorkerJSAsset` still refuses only when no
+`.assetsignore` exists. A wrangler upgrade that changes any of that fails the
+suite with the version and a pointer to this entry, rather than leaving the
+reasoning above silently false. `ignore` is imported as wrangler's own
+dependency and stays transitive on purpose: the test must match with the
+implementation that deploys, not a pinned copy of it.
+
+**Corrected in passing.** `apex_truth_doc.test.mjs` asserted the build no
+longer writes an `.assetsignore` (D36's reason: nothing needed hiding). The
+reason expired; the assertion now checks the file lists `/_worker.js` and not
+`/_headers`. U9 in `UNRESOLVED_ITEMS.md` gains a dated note.
+
+**Two findings while building it, both recorded rather than acted on here:**
+
+- **A stale `node_modules` makes the build non-reproducible.** The first build
+  in this session rewrote 913 files under `docs/` with an unchanged
+  `.build-source`, because the local `frontend/node_modules` held React 19.2.8
+  against a lockfile pinning 19.3.0. `npm ci` in `frontend/`,
+  `cloudflare-worker/` and the root made the second build byte-identical to
+  `main` apart from the new file. `check-docs-fresh` cannot see this: it hashes
+  the source, not the toolchain.
+- **A local no-ledger build prunes retained assets, and those deletions must not
+  be committed.** The rebuild removed 362 older retained files. The deploy seeds
+  its retention window from the committed `docs/assets` (D252), so committing
+  the pruning would shrink the window production can serve to a stale tab. Only
+  `docs/.assetsignore` is committed.
+
+**Filed, not fixed:** `frontend/public/CHANGELOG.md` is a symlink to the root
+engineering changelog, so every build publishes it at `/CHANGELOG.md` and
+nothing in the SPA reads it; and `frontend/public/test.html` is public for no
+stated reason. Each is a decision about what the site publishes, not about
+build bookkeeping, so neither is on this list.
+
+**VERIFIED** — `npm run test:drift` exit 0, read as the exit code from a redirected log: frontend 3267, worker 4299 (4296 pass plus the same 3 pre-existing environment-gated skips), retention 112 with the ten new tests confirmed by name, zero `not ok`. `check-docs-fresh --strict`, `check-docs-assets-closure` (9320 references across 934 chunks), `check-folder-docs` and `check-decision-ids` (D1 through D271) exit 0. Eleven mutations applied, eleven caught, each on a non-zero exit and a `not ok` line, every anchor asserted unique first and every file restored from a snapshot and checked by sha256: `_headers` listed; the write moved before Vite; `.build-source` dropped from the list; the validator admitting a glob; a literal filename in the build; the write deleted; `/_worker.js` dropped from the list; the validator admitting a nested path; `/_headers` added to the committed file; `/_worker.js` removed from it; and the apex test wanting the file gone again.
+
+No migration. 292 is still the highest on disk. No `frontend/src` change, so
+`docs/.build-source` does not move.
+
+## D272
+
+**Task 431: a licence change that failed to reach a branch was never re-sent.**
+
+**What was true on main (79b1fa69).**
+- **A branch that holds a copy never pulls.** `routes/licence.ts` pulls only
+  when `branch_licence` has no row (D244).
+- **A failed push was reported and dropped.** `pushLicenceToBranch` answers
+  `ok: false` and stops, whether the branch had no binding yet, was
+  unreachable or refused. The compliance ladder only logs it.
+- So a branch kept its old licence until some later transition happened to
+  push, and nothing guarantees there will be one.
+- **`applyLicenceCopy` overwrote unconditionally.**
+- **Five changes that alter the copy never pushed at all:**
+  - territories;
+  - seats;
+  - commercial terms;
+  - a new contract, which moves `template_version`;
+  - the reinstatement that accepting a notice performs. The `/reinstate`
+    route already pushed; the notice-review path did not.
+
+**Chosen: an HQ-side retry, not a branch-side staleness check.**
+- **A staleness check needs a new HQ method.** A cheap version read,
+  authenticated like `licence()`, would live in `rpc/hqOps.ts`, which this
+  session does not hold. It also puts a call to HQ on the read path, and
+  D244's throttle exists because a broken binding would otherwise call HQ on
+  every page load.
+- **A retry needs only what HQ already knows.** HQ knows exactly which push
+  failed and why.
+
+**What changed.**
+- **Migration 295, `licence_push_pending`.** It holds one row per licence
+  whose last push to a DEPLOYED branch did not land: its code, the reason, the
+  attempt count, and the first and last attempt times.
+  - `pushLicenceToBranch` writes or bumps the row on failure, and deletes it
+    when a push lands. A branch holding the current copy is therefore never
+    re-sent it.
+  - A licence with no deployment writes nothing, because its branch pulls on
+    its first read.
+  - Recording the outcome never throws. A database without 295 loses the
+    retry, not the push.
+- **`retryPendingLicencePushes`** re-sends each row whose last attempt is at
+  least 60 minutes old, at most 20 per run.
+  - It reads the licence fresh, so the retry carries the current record.
+  - A retry that fails again bumps the row and is reported, never thrown.
+  - HQ's scheduled handler runs it every ten minutes (`% 10 === 3`), gated on
+    `hqCadences`. The per-row window is the throttle: a broken binding costs
+    one call per licence per hour, not one per tick.
+- **The five routes above now push,** and each returns `pushed` beside its
+  answer, like the transitions that already did. Changes to licence admins,
+  brand kits, domains and notices are not in the copy, so they need not push.
+  Licence creation needs not push either: no branch is deployed yet, and the
+  branch pulls when it is.
+- **`applyLicenceCopy` never lets an older copy overwrite a newer one.** The
+  upsert's `DO UPDATE` carries
+  `WHERE branch_licence.pushed_at IS NULL OR datetime(excluded.pushed_at) >= datetime(branch_licence.pushed_at)`.
+  Re-sending makes out-of-order arrival possible.
+
+**Authentication.** `applyLicence` is an HQ-authored push. `rpc/index.ts`
+takes no secret for it, as with `publishTemplate`, because a call from any
+Worker in the account costs at most a stale copy. The retry travels the same
+path. The secret that matters to this item guards the PULL: `licenceForBranch`
+checks the branch's `RPC_SECRET` against the deployment's hash. This change
+leaves it untouched, and the mutation below proves its existing tests still
+catch its removal.
+
+**Tests: new `cloudflare-worker/test/licence_push_retry_d272.test.ts`, 8
+tests,** against migration 295's own DDL and `branch_licence` built from
+256/257/265/284:
+- a failed push to a deployed branch is recorded, and one with no deployment
+  is not;
+- a failed push is retried exactly once per window, and landing clears it;
+- a current copy is never re-sent;
+- a retry that fails again, by throwing or by refusing, is reported and stays
+  pending with its attempt counted;
+- without 295 the push still lands and the retry reports itself unreadable;
+- an older copy never overwrites a newer one;
+- each of the five changes pushes;
+- the retry block is gated on `hqCadences`.
+
+**Re-aimed, not loosened:** `licence_push_d137`'s wiring test counted exactly five push calls in `admin_licences.ts`; it now counts exactly ten, the five status transitions and the five changes above.
+
+**Mutations: 6 run, 6 caught:**
+- the throttle bypassed, with the cutoff set to now;
+- a current copy re-sent, with the delete on success removed;
+- `licenceForBranch`'s wrong-secret check dropped, caught by
+  `licence_pull_d244`'s existing tests;
+- a failed retry thrown instead of reported;
+- the older-copy guard removed;
+- the seats route's push removed.

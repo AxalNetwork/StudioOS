@@ -508,7 +508,10 @@ r.put('/:uid/territories', async (c) => {
     // rather than double-recording it.
     await c.env.DB.batch(stmts);
     await logEvent(c.env, licence.id, 'territory_changed', admin.id, { countries: wanted });
-    return c.json({ ok: true, countries: wanted });
+    // D272 — this changes what the branch's copy holds, so it pushes like
+    // every status transition; a push that does not land is retried.
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, countries: wanted, pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -534,7 +537,10 @@ r.put('/:uid/seats', async (c) => {
         .bind(nowIso(), licence.id),
     ]);
     await logEvent(c.env, licence.id, 'seats_changed', admin.id, seats);
-    return c.json({ ok: true, seats });
+    // D272 — this changes what the branch's copy holds, so it pushes like
+    // every status transition; a push that does not land is retried.
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, seats, pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -572,7 +578,10 @@ r.patch('/:uid/terms', async (c) => {
       terms.token_split_bps, terms.starts_on, terms.renews_on, nowIso(), licence.id,
     ).run();
     await logEvent(c.env, licence.id, 'terms_changed', admin.id, terms);
-    return c.json({ ok: true, ...terms });
+    // D272 — this changes what the branch's copy holds, so it pushes like
+    // every status transition; a push that does not land is retried.
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, ...terms, pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -1357,6 +1366,10 @@ r.post('/:uid/notices/:noticeUid/review', async (c) => {
       await logEvent(c.env, licence.id, 'reinstated', admin.id, { notice_uid: notice.uid }, note || null);
       reinstated = true;
     }
+    // D272 — a reinstatement changes the copy's status, like the /reinstate
+    // route, which already pushes. A review that does not reinstate changes
+    // nothing the branch holds, so it pushes nothing.
+    const pushed = reinstated ? await pushLicenceToBranch(c.env, licence.id) : null;
     await notifyLicenceAdmins(c.env, licence.id, {
       type: next === 'accepted' ? 'compliance_accepted' : 'compliance_rejected',
       title: next === 'accepted'
@@ -1369,7 +1382,7 @@ r.post('/:uid/notices/:noticeUid/review', async (c) => {
         : `Your account stays frozen.${note ? ` HQ's note: ${note}` : ''}`,
       payload: { notice_uid: notice.uid, decision: next },
     });
-    return c.json({ ok: true, status: next, freeze_holders: holders, reinstated });
+    return c.json({ ok: true, status: next, freeze_holders: holders, reinstated, pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -1878,6 +1891,9 @@ r.post('/:uid/contract', async (c) => {
       contract_uid: uid, template_slug: tpl.slug, template_version: tpl.version,
       unfilled_fields: unfilled,
     });
+    // D272 — the copy carries the latest contract's template_version, so a
+    // new contract changes what the branch holds.
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
 
     return c.json({
       uid,
@@ -1890,6 +1906,7 @@ r.post('/:uid/contract', async (c) => {
       // Said here because the screen's next control is Activate, and the rule
       // is the canvas's own.
       note: 'Instantiated unsigned. A pending signature does not block activation; a territory conflict does.',
+      pushed,
     }, 201);
   } catch (e) { return mapError(c, e); }
 });

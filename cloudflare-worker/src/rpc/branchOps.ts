@@ -372,7 +372,12 @@ export async function applyLicenceCopy(
        signatory_name = excluded.signatory_name, signatory_title = excluded.signatory_title,
        term_years = excluded.term_years, terminated_at = excluded.terminated_at,
        kind = excluded.kind,
-       pushed_at = excluded.pushed_at, updated_at = datetime('now')`,
+       pushed_at = excluded.pushed_at, updated_at = datetime('now')
+     -- D272 — HQ now RE-SENDS a push that did not land, so two pushes can
+     -- arrive out of order. An older copy never overwrites a newer one:
+     -- pushed_at is HQ's clock for when it asserted the content.
+     WHERE branch_licence.pushed_at IS NULL
+        OR datetime(excluded.pushed_at) >= datetime(branch_licence.pushed_at)`,
   ).bind(
     s('licence_uid') ?? '', s('licence_ref'), s('legal_entity'), s('brand_name'),
     s('territory') ?? '', s('status') ?? 'active', s('seats_json'),
