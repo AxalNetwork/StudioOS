@@ -79,10 +79,12 @@ export const HQ_ONLY_ACTIONS = [
   },
   {
     key: 'role_shell',
-    name: 'View as a role shell',
+    // D288 / H38 — "View as" is Preview shell; View As, on a row below, is
+    // impersonation and keeps its name. The two were one word for two things.
+    name: 'Preview shell',
     hq: false,
-    gate: 'Not HQ’s alone: every admin is offered it, a branch admin included. It swaps the sidebar and chrome in this browser only — every write still goes out as you.',
-    where: 'The View as picker in the top bar.',
+    gate: 'Not HQ’s alone: every admin is offered it, a branch admin included. It swaps the sidebar and chrome to another shell in this browser; data and permissions do not change, and a chip states that every write still goes out as you — as the Super Admin, for the holder.',
+    where: 'Preview shell in the top bar, both tiers.',
     recorded: 'No — nothing leaves the browser, so there is nothing to record.',
   },
   {
