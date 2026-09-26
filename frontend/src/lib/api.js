@@ -2004,6 +2004,13 @@ export const api = {
   // cloudflare-worker/src/services/esignOriginators.ts. Distinct from
   // adminListLegalTemplates, which is the full catalogue behind requireAdmin.
   esignTemplates: () => request('/legal/esign/templates'),
+  // D411 — one template's body and its fields, for the preview on /legal/send.
+  esignTemplate: (docType) => request(`/legal/esign/templates/${encodeURIComponent(docType)}`),
+  // D411 — the sender's two actions on an envelope they sent. Both are
+  // sender-scoped on the Worker (404 for anyone else) and metered by esign_send.
+  esignVoid: (id, reason) =>
+    request(`/legal/esign/${id}/void`, { method: 'POST', body: JSON.stringify({ reason: reason || undefined }) }),
+  esignRemind: (id) => request(`/legal/esign/${id}/remind`, { method: 'POST', body: '{}' }),
   // The territory licence the caller administers, or 404. Migration 190 —
   // licence_admins is what makes "which licence is this admin's?" answerable.
   myLicence: () => request('/licence/mine'),

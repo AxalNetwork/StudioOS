@@ -42,6 +42,11 @@ export const COMPANY_INVITE_SEND = /^\/api\/company\/[^/]+\/invitations(\/[^/]+\
 // riding the generic fail-open one. Anchored, digits only for the id.
 export const ESIGN_FORWARD = /^\/api\/(legal\/)?esign\/\d+\/forward$/;
 
+// The sender's two actions on an envelope (D411): POST `/:id/remind` mails the
+// signing link again, and POST `/:id/void` is a write on a legal record. Both
+// join origination and forwarding in `esign_send`. Same anchoring as above.
+export const ESIGN_SENDER_ACTION = /^\/api\/(legal\/)?esign\/\d+\/(remind|void)$/;
+
 /**
  * The founder's advisory-session charge — `POST /bookings/:id/pay`, D81.
  *
@@ -116,7 +121,7 @@ const BUCKETS: Bucket[] = [
     name: 'esign_send',
     limit: 10,
     windowSec: 3600,
-    test: (p, m) => m === 'POST' && (p === '/api/legal/esign/send' || p === '/api/esign/send' || ESIGN_FORWARD.test(p)),
+    test: (p, m) => m === 'POST' && (p === '/api/legal/esign/send' || p === '/api/esign/send' || ESIGN_FORWARD.test(p) || ESIGN_SENDER_ACTION.test(p)),
     scope: 'user',
     failClosed: true,
   },

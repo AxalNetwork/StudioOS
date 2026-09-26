@@ -108,8 +108,33 @@ test('what the canvas asked for and did not get is stated, not silently dropped'
   // message nobody reads later.
   assert.match(registry, /SAFE/);
   assert.match(registry, /Term Sheet/);
-  assert.match(page, /spinout-lab\/cofounder-agreement/,
-    'the page should send founders to the real co-founder flow');
+  // D411 re-aimed the co-founder link. It pointed at /spinout-lab/cofounder-agreement,
+  // which only admins and active Spin-Out Lab members can open, so the founder
+  // it was written for landed on a guard. It now travels with the registry's
+  // NOT_OFFERED entry, and the page renders whatever path that entry names.
+  const cofounder = registry.slice(registry.indexOf("name: 'Co-founder Agreement'"));
+  assert.match(cofounder.slice(0, 400), /instead: \{ path: '\/incorporate\/cofounder-agreement'/,
+    'the Co-founder Agreement must point founders at the flow they can open');
+  assert.doesNotMatch(page, /spinout-lab\/cofounder-agreement/, 'the Lab-only link is back');
+  assert.match(page, /<Link to=\{t\.instead\.path\}/, 'the page no longer renders the registry’s link');
+});
+
+test('the co-founder flow the registry names is routed, and a founder can open it', () => {
+  const line = app.split('\n').find((l) => l.includes('path="/incorporate/cofounder-agreement"'));
+  assert.ok(line, '/incorporate/cofounder-agreement is not routed');
+  assert.match(line, /'founder'/, 'founders cannot open the co-founder flow the page links them to');
+});
+
+test('completion notices link to /legal/send only for roles its guard admits (D411)', () => {
+  // esign.ts decides per reader whether the envelope's status view is a link
+  // they can open. Its role set and App.jsx's guard must be the same set, or a
+  // notice sends someone to a page that turns them away.
+  const line = app.split('\n').find((l) => l.includes('path="/legal/send"'));
+  const guard = new Set([...line.matchAll(/'([a-z]+)'/g)].map((m) => m[1]));
+  const decl = /STATUS_VIEW_ROLES: ReadonlySet<string> = new Set\(\[([^\]]+)\]\)/.exec(route);
+  assert.ok(decl, 'STATUS_VIEW_ROLES is gone from esign.ts');
+  const worker = new Set([...decl[1].matchAll(/'([a-z]+)'/g)].map((m) => m[1]));
+  assert.deepEqual([...worker].sort(), [...guard].sort());
 });
 
 test('/legal has no path-scoped Worker route — the assets binding serves it', () => {

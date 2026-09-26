@@ -30014,6 +30014,173 @@ capability, and the full suite shows no other test changed.
   download and both forwards now use the same `esignEnvelopeScope` clause
   as the detail route, whose values are bound too.
 
+## D411
+
+**Send for Signature is rebuilt from its canvas. The preview is the text the
+envelope will hash, no field can be left blank, the sender can remind and void
+an envelope, and `/legal/send?envelope=<id>` shows its status.** Wave 8,
+Session 13, item 2. Worker first. No migration. Three new routes and three new
+`api.js` methods.
+
+**What was there, measured on 3daa53d8.** `/legal/send` did two things: a
+template picker and an email field. `POST /send` hashed whatever the template
+text was, so a `{{token}}` left unfilled went into the signed document. The
+page ignored `?envelope=`, so ContractsPage's "open status" link was dead.
+Remind and void existed only in the admin console. The admin void also marks
+recipients `rejected`, so a signer read "declined" for a decision they never
+made, and `GET /sign/:token` kept serving a voided document. The co-founder
+link pointed at `/spinout-lab/cofounder-agreement`, which only admins and
+active Lab members can open. The completion notice sent the subject to
+`/legal`, which only admins and founders can open. Every template-backed
+envelope was titled with its raw doc type (`founder_nda_v1`) in the email, the
+PDF and the list.
+
+**Worker (`routes/esign.ts`).**
+- **`GET /templates`** now also returns `role`, `not_offered` and `absent`.
+  `not_offered` lists what the canvas offers this role and the page cannot
+  send, each with its reason. `absent` holds the server's sentences for what
+  no store holds. Both are declared in `services/esignOriginators.ts`
+  (`NOT_OFFERED`, `SEND_ABSENCES`, `ENVELOPE_ABSENCES`). The page prints those
+  sentences and never writes its own.
+- **`GET /templates/:doc_type`** returns the template's body before merge and
+  its fields. Each field is marked `filled_by: 'sender'` or `'send'`; the
+  second covers `recipient_*`, `counterparty_name`, `effective_date` and
+  `counterparty.*`. A doc type the caller's role may not send gets the same
+  404 as an unknown one.
+- **One body resolver.** `templateBodyFor(env, docType)` checks the D1 store
+  first, then the bundled markdown. The preview and `createAndSendEnvelope`
+  both use it, so a store override appears in both (tested).
+- **Blank fields are refused.** `createAndSendEnvelope({ refuseUnfilled })`
+  throws `UnfilledFieldsError` before anything is written. `POST /send` sets
+  it and answers `422 unfilled_fields` with a `fields` list. The operator
+  flows (`profiling`, `admin_exploring`, `partner_onboarding`) keep their
+  existing behaviour.
+- **`POST /:id/void`** (optional `reason`, ≤ 500 characters) is open only to
+  the sender (`created_by`). Everyone else, a non-sending admin included,
+  gets the missing-id 404; the admin console's own void is untouched. It
+  works on in-house envelopes only; a DocuSign envelope gets `409
+  provider_managed`. Envelope and recipients change in one batch, and the
+  change is conditional on no recipient being `signing` or `signed`. This is
+  the canvas's "until the first signature lands", and it closes the race with
+  an in-flight `POST /sign/:token`. Recipients become `void`, never
+  `rejected`.
+- **The signer routes refuse a voided envelope with `410 envelope_voided`.**
+  That covers `GET /sign/:token`, `POST /sign/:token` and `/reject`, and both
+  spellings in the tree: `void` (admin_contracts) and `voided`
+  (admin_partners). This also fixes the signer's view of an admin void
+  without touching admin_contracts.
+- **`POST /:id/remind`** is sender-only too. It re-sends the signing email to
+  each pending recipient. The link goes to their inbox and never into the
+  response (D410). A lapsed link is replaced with a fresh 7-day one; a live
+  link is re-sent unchanged. At most one successful reminder per envelope a
+  day (`429 remind_too_soon` with `next_reminder_at`); a failed send does not
+  count against the day. It is audited as `reminder_sent` or
+  `reminder_failed`.
+- **Both routes join the fail-closed `esign_send` bucket** through
+  `ESIGN_SENDER_ACTION`, anchored, digits-only id, both mounts.
+  `RATE_LIMIT_EXEMPT` is unchanged.
+- **`GET /:id` adds `can_manage`** (true only for the sender) and `absent`.
+- **The completion notices link to the status view**,
+  `/legal/send?envelope=<id>`. A subject whose role the route's guard turns
+  away (for example `exploring`) is linked to `/account` instead.
+  `STATUS_VIEW_ROLES` is held equal to App.jsx's guard by a test. This
+  supersedes D410's `/account` link for the sender, and D410's test is
+  updated to match.
+- **Envelopes are titled with the registry's name** (`originatorName`), for
+  example "Founder Mutual NDA". A doc type outside the registry keeps its own
+  string.
+
+**Page (`pages/legal/SendForSignaturePage.jsx`), rebuilt in place.** The
+route and its guard are unchanged, and nothing is retired.
+- **Step 1** lists the role's templates. It also shows "Not sent from this
+  page" with each reason, and the Co-founder Agreement links to
+  `/incorporate/cofounder-agreement`. It ends with the counsel note ("not
+  legal advice").
+- **Step 2** has Change template and the server's pre-fill absence. The
+  document preview is the template body with the sender's values in it,
+  showing "n of m fields filled" and two signature blocks; the sender's own
+  block carries the ordered-signers absence. Then come the recipient fields
+  and one input per sender field. Continue stays disabled until every field
+  and a valid email are set, which is the same rule the server enforces.
+- **Step 3** shows the final terms and the one signer, the ordered-signers
+  and pre-send-checks absences, and Send. A `422 unfilled_fields` sends the
+  sender back to step 2.
+- **The status view (`?envelope=<id>`, digits only)** shows:
+  - the lifecycle, Sent → Viewed → Signed, or Voided or Declined, from the
+    audit rows;
+  - the signers, with Remind when `can_manage`;
+  - an Outstanding card with the link's expiry and a Void with an optional
+    reason;
+  - a Fully executed card with Download executed PDF, View audit trail and
+    the data-room absence;
+  - the audit trail, with the IP absence.
+- The WorkerRail is mounted once. Its coverage lines are real, and its
+  unavailable list uses the server's sentences.
+
+**Where the canvas and the page differ, and why.**
+- **Role switch:** dropped. A signed-in person has one role, and the Worker
+  decides it.
+- **"Simulate next event":** dropped. It is a canvas demo device.
+- **"Copy signing link":** became Remind. The link is the recipient's
+  credential (D410).
+- **"Signers · in order", and the sender signing:** each shows the server's
+  absence. There is no order column and one recipient per envelope, and
+  building it needs a migration. This session's two numbers are held for
+  perks and messages, so the page names the missing store rather than
+  borrowing a number.
+- **Pre-send checks:** no rules store, so shown as an absence.
+- **Pre-fill from a deal, quote or match:** not read yet, so shown as an
+  absence.
+- **"Filed to your data room":** nothing writes one, so shown as an absence.
+- **Signer IPs:** held in the audit record and not printed. Whether the other
+  party may see them is the owner's decision, which is standing rule (c).
+- **Templates without a wired body** are listed with their reason: SAFE and
+  Term Sheet for founders; the White-Label Service Agreement for partners;
+  the Advisory Agreement and Advisory Retainer for advisors.
+- **Link expiry:** follows the code (7 days), not the canvas's 14.
+- **Accent:** the rail's accent is the literal `founder`, the canvas's violet
+  for every role. `branch_rail_mount.test.mjs` caps computed rail roles at
+  five, and this page does not raise that cap.
+
+**Outside Session 13's files.** `services/trust.ts` and
+`lib/trustCenter.js` (Session 15's) each gain three label lines:
+`envelope_voided`, `reminder_sent` and `reminder_failed`.
+`trust_envelope_history.test.ts` requires a label, on both sides, for every
+action esign.ts appends, and no open PR held either file. The D410 and D411
+worker tests now share `cloudflare-worker/test/_esign_harness.ts`.
+
+**Filed, not fixed.**
+- **Session 4 (outbound mail).** The signing email every `/legal/send`
+  envelope uses, `sendAgreementAssignedEmail`, says "Your Closing Binder is
+  ready" and "has reviewed and verified your partner profile". Neither is
+  true of a founder's NDA or an advisor's disclaimer.
+- **Session 5 (nav).** No sidebar row changes. `/legal/send` keeps its route.
+- **Out of this PR's scope:** `admin_partners.ts` voids with `voided` while
+  `admin_contracts.ts`'s `mapEsignStatus` knows only `void`, so a
+  partner-voided envelope lists as "sent" in the admin contracts union.
+
+### VERIFIED
+
+- `npm run test:drift` exit 0; the counts are in the PR body. New tests, by
+  name:
+  - `esign_send_for_signature_d411.test.ts`: 22 tests on real SQLite.
+  - `send_for_signature_d411_contract.test.mjs`: 16 tests. Each canvas region
+    is sliced at both ends: step 1, step 2, step 3 and the status view.
+  - `esign_originators.test.mjs`: two more, for the co-founder route and for
+    status-view roles equal to the guard. Its link assertion is re-aimed.
+  - `rateLimit_esign_send.test.ts`: one more, for remind and void in the
+    bucket.
+- 31 mutations, 31 caught. Each had a non-zero exit and a `not ok` line, was
+  restored from a sha256-checked snapshot, and passed again. 23 were in the
+  Worker, covering every route rule above; 8 were on the page: Continue never
+  held, Remind for everyone, the IP printed, the blank refusal not returning
+  to step 2, a page-written reason, the unvalidated `?envelope=`, "Copy
+  signing link" restored, and a computed rail role.
+- Chromium probe (recorded, not a gate) of the built SPA with `/api/*`
+  stubbed: 19 of 19 checks passed with no page errors. It walked pick →
+  fill (Continue held with one blank, the preview carries the values) →
+  review → send → `?envelope=7` → remind → void.
+
 ## D420
 
 **The founder desks A2–A5 read the stores that already exist.** Wave 8,
