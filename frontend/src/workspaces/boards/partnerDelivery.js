@@ -3,24 +3,32 @@ import { count, day, summary, title, top } from './format.js';
 /*
  * `/delivery` — Partner Operator Canvas P4, "Ship the work".
  *
- * THREE OF THE FIVE SECTION SUBTITLES THE CANVAS WRITES ARE CLAIMS THIS
- * PRODUCT REFUSES, and each is refused in the worker with its reason attached,
- * which is what this board prints instead of the canvas's line.
+ * TWO OF THE FIVE SECTION SUBTITLES THE CANVAS WRITES ARE ANSWERED ONLY IN
+ * PART, and each section prints the worker's own sentence about the part it
+ * cannot answer rather than the canvas's line.
  *
- *   · "{{ overCount }} over" — `GET /delivery/capacity` returns
- *     `cap_hours: null` beside "No capacity cap is recorded anywhere in this
- *     product. Hours are real; a threshold to be over is not". The canvas
- *     hardcodes 40; adopting it would invent the firm's cap and then present
- *     it back as a finding.
+ *   · "{{ overCount }} over" — migration 230 lets the FIRM state a cap, firm-
+ *     wide or per person, and `GET /delivery/capacity` counts people over the
+ *     cap that was stated (`over_committed_count`). Until one is stated that
+ *     count is null and `cap_note` says why: hours are real, a threshold nobody
+ *     set is not. The canvas's hardcoded 40 is still never used.
  *   · "Shipped and acknowledged" — `GET /delivery/deliverables` returns
  *     `median_days_to_open: null` because `opened_at` is the client's to set
  *     and nothing in this product sets it. Every sent deliverable therefore
  *     reads unopened, which makes the COUNT true and the median meaningless.
  *     The worker's own `unopened_note` says to read it as "we do not know"
  *     rather than "the client ignored it".
- *   · "satisfaction where it exists" — health is computed from milestones,
- *     blockers, deliverables and utilisation. No satisfaction input exists
- *     anywhere, so the word does not appear.
+ *
+ * THE HEALTH SECTION HAS THE ARTBOARD'S COLUMNS (D391). P4 heads it
+ * `Client · Scope vs SOW · Flag · Satisfaction · Read`, and this board used to
+ * draw three of them under a footnote saying "no satisfaction input exists
+ * anywhere in this product". It does: migration 232 holds the firm's stated
+ * scope assessment and a satisfaction score that cannot be saved without its
+ * source, and `GET /delivery/health` has returned both (`scope_state`,
+ * `satisfaction`, `satisfaction_source`) since. An unassessed scope reads
+ * absent, never "within"; a score always prints with where it was heard; and
+ * the worker's `satisfaction_note` says why the firm-wide average is withheld
+ * while any live engagement is unscored.
  *
  * Health also carries `unrated_note` — "Silence is not good news" — so a
  * mostly-green board cannot be read as a mostly-healthy book when it is really
@@ -80,7 +88,12 @@ export default function partnerDeliveryBoard(role, api) {
         cols: '1.4fr 1fr 1fr',
         columns: ['Person', 'Hours', 'Seats'],
         empty: 'No hours and no embedded seats are recorded for this period.',
-        summary: (d) => summary(count(Array.isArray(d?.people) ? d.people.length : null, 'person', 'people')),
+        // `over_committed_count` is null until the firm states a cap, so the
+        // second half of this line is absent rather than "0 over" until then.
+        summary: (d) => summary(
+          count(Array.isArray(d?.people) ? d.people.length : null, 'person', 'people'),
+          count(d?.over_committed_count, 'over cap', 'over cap'),
+        ),
         rows: (d) => top(d?.people).map((p) => [
           p.name,
           p.hours === null || p.hours === undefined ? null : p.hours,
@@ -113,20 +126,33 @@ export default function partnerDeliveryBoard(role, api) {
         title: 'Engagement health',
         span: 'full',
         source: 'health',
-        cols: '1.3fr 1fr .9fr 2fr',
-        columns: ['Client', 'State', 'Blockers', 'Why'],
-        empty: 'No engagement has a milestone, a blocker or a deliverable recorded yet.',
-        summary: (d) => summary(count(d?.unrated_count, 'unrated', 'unrated')),
-        rows: (d) => top((d?.items || []).filter((e) => e.health)).map((e) => [
+        cols: '1.2fr .9fr .8fr 1.1fr 1.8fr',
+        columns: ['Client', 'Scope vs SOW', 'Flag', 'Satisfaction', 'Read'],
+        empty: 'No engagement has anything recorded to rate it by yet.',
+        summary: (d) => summary(
+          count(d?.unrated_count, 'unrated', 'unrated'),
+          count(d?.drift_count, 'drifting', 'drifting'),
+          count(d?.scope_unassessed_count, 'scope unassessed', 'scope unassessed'),
+        ),
+        rows: (d) => top((d?.items || []).filter(
+          (e) => e.health || e.scope_state || (e.satisfaction !== null && e.satisfaction !== undefined),
+        )).map((e) => [
           e.founder_name,
+          // Never defaulted: an engagement nobody assessed is not "within".
+          title(e.scope_state),
           title(e.health),
-          Array.isArray(e.open_blockers) ? e.open_blockers.length : null,
+          // A score never prints without the place it was heard (232's CHECK
+          // makes one impossible without the other).
+          e.satisfaction === null || e.satisfaction === undefined
+            ? null
+            : `${e.satisfaction} of five · ${e.satisfaction_source}`,
           Array.isArray(e.health_reasons) && e.health_reasons.length ? e.health_reasons.join('; ') : null,
         ]),
-        footnote: () =>
-          'Health is read from milestones, blockers, deliverables and retainer use, and is '
-          + 'computed rather than stored. The canvas also asks for client satisfaction; no '
-          + 'satisfaction input exists anywhere in this product, so it is not part of the rating.',
+        footnote: (d) => summary(
+          'Health is computed from milestones, blockers, deliverables and retainer use. Scope and '
+          + 'satisfaction are what somebody at this firm stated, each with its source; nothing here asks a client anything.',
+          d?.satisfaction_note,
+        ),
       },
     ],
   };
