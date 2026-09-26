@@ -29381,6 +29381,144 @@ scope.
 `frontend/src` moved, so `docs/` is rebuilt. No route, no worker change, no
 migration, no `api.js` method.
 
+## D290
+
+**Task 319, the H25 half: the impersonation bar becomes global chrome and
+says who, as whom, why and for how long.**
+
+**What was true on main (`ff796344d`).**
+- The impersonation strip was drawn by `PortalSwitcher`, so it existed only
+  where that bar did, and it said "Viewing as {name} — support session", the
+  countdown and Extend; "Logged in as {name}" and Exit Impersonation sat at
+  the bar's far end. It never said why. H25 draws Who · As · Why · Limit —
+  the fields S13 draws on the branch's own bar for the same session — and
+  the canvas's sentence is "neither side can see a session the other
+  cannot".
+- The reason was sent and never kept. `api.adminImpersonate` sent it as
+  `?context=` and stored only the session id and the expiry; the worker
+  wrote it best-effort to `impersonation_sessions.context` and answered
+  without it; `beginSupportSession` passed on `res.token` and `res.user`
+  alone. Nothing on the operator's side could draw it.
+
+**What changed.**
+- **The worker echoes the reason it stored.** `POST /api/admin/impersonate/:id`
+  answers `reason`: the text on the `impersonation_sessions` row, or `null`
+  when that best-effort insert failed. The session is still granted (D111);
+  what is not echoed is a reason the audit does not hold.
+  `cloudflare-worker/test/impersonate_reason_echo_d290.test.ts` (2 tests)
+  reads the echo back against the row, and refuses the insert to see null.
+- **`lib/impersonationBar.js` is the bar's words and the reason's one
+  owner.** `impersonationFields` gives Who (the operator, "· Axal VC HQ" for
+  the holder, "· Admin" otherwise), As (the target and their role), Why (the
+  reason, quoted) and Limit ("30 min · hard", held equal to the worker's
+  `IMPERSONATION_EXPIRY_MINUTES`) in the artboard's order. `whyValue(null)`
+  is "Not recorded" — `lib/absence.js`'s word — never a stand-in.
+  `storeReason` / `readStoredReason` / `clearStoredReason` own the key
+  `impersonationReason`, spelled once, on D142's rule for `supportSession.js`.
+- **`api.adminImpersonate` keeps the echo beside the expiry**, so a reload
+  mid-session still draws Why; a null echo clears it. `beginSupportSession`
+  passes `res.reason ?? null` on as the fourth argument of `onImpersonate`;
+  `handleImpersonate` sets the shell's `impersonationReason` from it, or from
+  the stored copy for a caller that passes nothing (the Spin-Out Lab's
+  "Open workspace", which is not touched). The state is initialised from the
+  stored copy and from nothing else.
+- **`components/ImpersonationBar.jsx` is global chrome**, mounted in
+  `ProtectedLayout` above `PortalSwitcher`, after `HqViewingAsBar`, for
+  D142's reason on the operator's own side. It draws the four fields, the
+  shell's clock in the branch bar's `mm:ss left`, Extend (gated on the
+  callback, as before) and **End session** — H25's word; "Exit
+  Impersonation" is not on the canvas. It reads no route and returns null on
+  one condition: nobody is being impersonated. `PortalSwitcher` no longer
+  carries any of it; while impersonating it says "Support session in
+  progress — the bar above says who, as whom, why and for how long." in
+  place of the Preview shell picker, which is still not offered
+  mid-session. The header chip "Impersonating {name}" is unchanged.
+- **Purged on the three paths.** `clearSession` (sign-out), `exitImpersonation`
+  (End session) and the thirty-minute hand-back, which reaches
+  `exitImpersonation` through the ref the H4 guard explains, all clear the
+  stored copy and the state. Before D290 sign-out left `impersonationExpiresAt`
+  in place; the reason is not given the same leniency.
+- **Not one bar with `HqSupportSessionBar`, by decision.** That bar is the
+  TARGET side: a payload `SupportRedeemPage` stored, with its own expiry, no
+  control the branch may use, and "Raise a concern" as its one action. This is
+  the OPERATOR side: live shell state, Extend and End. Same four fields, same
+  clock format (`timeLeftLabel` is shared), different facts and different
+  powers; one component would draw both from two sources it cannot
+  reconcile. H25's "Raise a concern" is the branch's control and stays where
+  it is. S13's fifth field, "You can", is the branch's ("Watch · raise a
+  concern"); the operator's "what you can do" is the two controls
+  themselves.
+
+**H25's "left on /admin on purpose — not swallowed", recorded here rather
+than drawn.** The canvas lists six things that stay a branch's own console
+decisions, which HQ reads and never takes over through this bar or any other:
+Approvals — a KYC decision on a person ("a branch decides who it admits; HQ
+reads the outcome"); Programs — admitting a founder to the Lab ("the cohort
+roster is the territory's"); Community — events, jobs, circles ("local, no HQ
+approval unless escalated"); Approvals — partner-profile approval ("persona,
+entity, agreement — reviewed where the partner operates"); Accounts — the
+persona retag of one person ("the schema is HQ's; assigning it is not");
+Programs — an advisor cohort access grant ("which advisor sees which cohort
+is a territory call"). On this codebase those are the S20 Admin shell's
+Approvals, Programs, Community and Accounts rows (D286), reached by a branch
+admin on their own deployment and by HQ only through a support session that
+this bar now names. `leftOnAdmin` exists nowhere in App.jsx and is not built:
+the list is a statement about who decides, not a screen.
+
+**Guard: `frontend/test/impersonation_bar_h25_d290.test.mjs`, 6 tests.**
+- *the bar is global chrome*: mounted in `ProtectedLayout` above
+  `PortalSwitcher` (anchored on the mounts), before the first `<Routes`, reading
+  no route, with exactly one `return null`; the switcher carries no clock,
+  Extend, Exit or "Logged in as";
+- *Who · As · Why · Limit in H25's order*: the keys read off the artboard's
+  `impBar`, the four values for a holder and for a plain admin,
+  `SUPPORT_SESSION_MINUTES` equal to the worker's literal, the fields drawn
+  from the list;
+- *a null reason reads "Not recorded"*: six empty shapes, the word equal to
+  `lib/absence.js`'s, no `||`/`??` fallback in the bar or the lib, the exact
+  store / init / set expressions in `api.js` and App.jsx, and the store
+  through a fake `localStorage`;
+- *the worker echoes the stored reason or null, and the dialog passes it on*:
+  the response line inside the impersonate handler, the dialog's call, the
+  four-argument `handleImpersonate`, and the prop chain to the mount;
+- *purged on sign-out, End session and the hand-back, one owner for the
+  key*: the three code slices, the hand-back still calling
+  `exitImpersonationRef.current()`, the key spelled once in the lib and never
+  in App.jsx, `api.js`, the bar or the dialog;
+- *Extend and End session work, the chip stays, the clock is the shell's*:
+  both buttons gated and labelled from the lib, `timeLeftLabel` imported from
+  `supportSession.js`, the mount's seven props, `authProps` still handing out
+  the clock and Extend, "Impersonating {user.name}" still in the header.
+
+Two pins re-aimed at their properties, both in Session 5's own files:
+`support_session_h4`'s banner test now slices `ImpersonationBar` (countdown
+and Extend gated on their callback, the mount given the shell's clock and
+both callbacks); `preview_shell_h38_d288`'s "keeps its name and chrome" test
+now reads the bar for End session and Extend and the switcher for its
+sentence.
+
+**Mutations: 18 run, 18 caught** — each a non-zero exit with a `not ok` line,
+anchors unique, bytes proven changed, sources restored from a sha256-checked
+snapshot: the four the brief names — the reason not purged on sign-out, on
+End session, and on the hand-back (the effect no longer ending the session);
+an invented reason (in `whyValue`, in `api.js`'s store, in
+`handleImpersonate`); the bar mounted below `PortalSwitcher`; Extend dropped
+— plus the bar gated on the route; End session dropped; the worker echoing
+the typed reason when its write failed; the worker dropping the echo; the
+dialog passing nothing on; a sixty-minute limit; As before Who; the mount not
+given End session; the key spelled out a second time in App.jsx; the strip
+returning to the switcher.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA
+fallback and `/api/*` stubbed; an admin session with `realUser` and a founder
+`user` in storage, an expiry twenty minutes out and a stored reason: the bar
+draws above the admin bar on `/studio` and on `/settings` with the four
+fields, the clock, Extend and End session; with the stored reason removed the
+Why field reads "Not recorded"; with no `realUser` the bar is absent.
+
+`frontend/src` moved, so `docs/` is rebuilt. One worker response field, no
+route, no migration, no `api.js` method.
+
 ## D300
 
 **Every file in `frontend/public` has to have a named reader — one did not,
@@ -29857,6 +29995,204 @@ track is stored).
   typechecks, `lint:undef` and every guard green, including
   `check-decision-ids`, `check-folder-docs`, `check-api-drift` and
   `check-docs-fresh --strict` after the root `npm run build`.
+
+## D360
+
+**The Spin-Out Lab's capital and legal tools say when a read failed, and
+stop claiming what they do not do.** Wave 8, Session 8, PR 1 of 5 — frontend
+only: no migration, no route, no `api.js` method.
+
+**The defect.** Seven Lab pages (83(b), Cap Table, Revenue, Capital,
+Compliance, Use of Funds, Incorporate) caught each read into an empty value
+— `.catch(() => [])`, `.catch(() => null)`, `|| 0` — so a failed read
+rendered as a fact. Measured before the change:
+- 83(b): a failed tracker read painted "No 83(b) tracker yet" beside a
+  statutory deadline and lit the "Not required" chip; a failed project read
+  said "create your company record first".
+- Cap Table: a failed scenario read normalized to empty inputs; the first
+  edit plus Save would have upserted that partial data over the project's
+  one canonical scenario (`POST /captable/scenarios` is an upsert).
+- Revenue: a failed log read showed "0" snapshots and "Never" synced.
+- Compliance: a failed Lab-state read showed every Week 4 item open and
+  "Not started"; a failed tracker read "Opens on stock transfer"; a failed
+  documents read "0 documents on file".
+- Capital: an empty raise body became `{ raised: 0 }`; soft-circled and
+  weighted pipeline added prospects with no check size as $0.
+- Incorporate: a failed orders read offered "Pay" (an order may already be
+  paid); a failed members read printed "1 founder".
+- Every page's failed project read said "No startup record yet".
+
+**What changed.**
+- Each read records that it failed and the page renders `Unreadable` (with
+  a retry) in place of the empty state, or closes the write it would have
+  enabled. No state chip is derived from a failed read.
+- Cap Table: `canEdit` requires a readable scenario, `save` refuses on its
+  own before any request, and the ledger/founders/SAFEs/dilution grid is
+  not rendered over data the page never saw. A failed tracker read badges
+  each founder "83(b) unreadable".
+- 83(b): the tracker is created only from a taxpayer name and a
+  stock-transfer date the founder typed or confirmed — no "Founder"
+  fallback, no "today" default, both required. The proof row for the
+  generated election says "Generated — sign it before mailing", never
+  "Signed". The Shares tile now reads the scenario's founders
+  (`{scenario: {inputs}}`); it read `capTable.inputs` before, which the
+  route never returns, so it always showed a dash.
+- No `|| 0` / `?? 0` on a figure on the seven pages; sums add only values
+  that exist and say how many do not ("N without a check size"). An
+  unpriced milestone is no longer counted as funded, and an emptied cost
+  input stores no cost rather than $0.
+- **Use of Funds runway divides by a recorded net burn.** The design's
+  allocation-intensity model (eng%·$700 + gtm%·$1,200 + ops%·$450 a month)
+  was invented and drove a card headed "Runway at current burn". Burn is
+  now the newest `project_metrics.net_burn`; with none, runway reads "Not
+  recorded" and links to the Revenue page, whose snapshot form gains net
+  burn and cash balance inputs (`POST /progress/metrics/:projectId`
+  already accepted both). "Largest driver" became "Largest allocation": no
+  store splits burn by bucket. The canvas draws a burn driver; this entry
+  records that disagreement.
+- Use of Funds' "Share" was the same clipboard call as "Copy link" and is
+  dropped; Copy link reports a refused clipboard. "Axal VC Spin-Out
+  format / Export" only ever stamped a timestamp, so it is now "Record
+  Axal hand-off — stamps today's date, no file is generated".
+- Lab links land on Lab pages: Revenue and Use of Funds' `/build/deck` and
+  Capital's `/raise/pitch` → `/spinout-lab/pitch-deck`; Capital's data-room
+  `/incorporate` → `/spinout-lab/incorporate`. `/build/brand` stays linked
+  from the Brand page — layout and media editing have not been ported —
+  and App.jsx's comment no longer says the Lab page replaces it.
+- Copy: the arsenal's deck blurb names eleven slides (`SLIDE_META`), the
+  cap table blurb drops "vesting" and "waterfall" (neither is tracked), the
+  Incorporate blurb drops "by jurisdiction" (Delaware only today);
+  `SpinoutLabWorkspace`'s cap-table row says "dilution", not "vesting";
+  `LAB_JURISDICTIONS`' 83(b) line no longer says the filing is "archived in
+  your data room" — nothing archives it there.
+
+**Guard.** `frontend/test/spinout_lab_honest_reads_d360.test.mjs`, fifteen
+tests: source-text for the `useEffect` render paths (bounded to each block,
+comments stripped), runtime for `latestRecordedBurn`/`runwayMonths`, and
+the deck blurb checked against `SLIDE_META.length` rather than a literal.
+Mutation-checked both ways: 29 of 29 defects caught (non-zero exit and a
+`not ok` line each), every file restored by sha256. One fixture was
+reordered before the tally so the "newest recorded burn wins" check could
+fail — with the newest row first, dropping the sort escaped by position.
+
+**Not in this PR, each with its owner.** The 83(b) "Mark as filed" still
+stamps the click time — PR 2 (migration 310) adds the filed date. The
+Incorporate price is still hard-coded and paid state still reads a
+client-written field — PR 3. Filed rather than fixed, because they are
+Worker code and this PR is frontend-only: `GET /progress/metrics/:projectId`
+catches a failed SELECT and returns an empty list, so the Revenue log and
+the Use of Funds burn can still read a failed query as "none recorded";
+`routes/brand.ts`' page DTO (`views_count: row.views_count || 0`) and
+`routes/contacts.ts`' pro-rata `post_round_stake_pct` inputs carry `|| 0`
+(PR 5 wires pro-rata and meets the second).
+
+## D380
+
+**The Spin-Out Lab honesty sweep: the seat count reads `/brief`'s `places`,
+`SpinoutLabPage`'s dead code goes, and eight stale claims are corrected.**
+Session 10, item 1 (the C3 gap map's PR 1). No migration, no route, no
+`api.js` method.
+
+**The seat count.** Three places typed a number no row held: the apply CTA
+("8 spots available", twice), the apply form's fallback line ("Applications
+close August 1, 2026. 8 spots available." — a date already past) and the
+refused-application note ("capped at 8 companies"). The stored value is
+`cohort_settings.max_cohort_size`, default `DEFAULT_MAX_COHORT_SIZE = 25`,
+already returned by the public `GET /spinout-lab/brief` as `cohort.places`
+(D141). A new hook, `useCohortPlaces` in `lib/spinoutLab.js`, reads it; each
+caller prints the count only when the read succeeded, prints `Unreadable`
+with a retry when it failed, and in the refused note says "a fixed number of
+places" without a number while it has none. The apply form's fallback now
+states the rule (seven days before the start, 23:59 Delaware time) instead of
+a date.
+*Measured and not changed:* nothing enforces `max_cohort_size` — the
+capacity job reads only the minimum — so the copy says a cohort "has N
+places", not that it is "capped". And `getCohortSizeSettings` swallows a
+failed read and answers the default, so `/brief` can print 25 on a D1 error
+after an admin set another number; that is filed for the lifecycle PR, which
+changes that service anyway.
+
+**Dead code in `SpinoutLabPage.jsx`.** `PHASE_THEMES`, `DELIVERABLES` (and
+its nine icons), `TRACKER_COLUMNS`, `deliverablesFor`, `JurisdictionBar`,
+`HeroStatsPanel` and `CohortTrackerSection` had rendered nowhere since the
+D38 intro replaced the hero they sat in. Deleted, with the imports only they
+used. `spinout_brief_live_data.test.mjs` pinned `HeroStatsPanel`'s hook call;
+it now pins the brief, the one surface that prints the track record.
+
+**Stale copy and comments corrected.**
+- `ogRegistry.js`'s `/spinout-lab` description, the congratulations screen
+  and the public certificate verifier said "idea to incorporated" (the OG
+  line also promised a "demo day"). D38 retired that positioning on the
+  page; the share card is what a link preview shows. Rewritten to the
+  intro's own terms. `docs/` rebuilt; the OG prerender is part of the build.
+- `SpinoutLabCertificatePage.jsx` said the `spinout_graduated` email "sends
+  on graduation". No worker code calls it (only the registry names it). The
+  modal now says nothing sends it yet and that delivery is not recorded.
+- `spinout_lab.ts`'s header said "JWT-auth-gated for every route" while
+  `/graduates`, `/stats`, `/brief` and `/cohort` are public; it now names
+  them and the rule they hold to (company-level facts, never a founder's
+  identity, track or milestones).
+- The Workspace's and the admin view's week-2 row read "Sign co-founder
+  agreement (or solo declaration)". The milestone is recorded only from a
+  signed document, and the agreement page's own solo banner says there is
+  no solo declaration document. The parenthesis is gone.
+- `spinoutLabArsenal.js`'s cards-are-not-links comment said every tool route
+  is `guard(labRoles(['admin']))`; `/spinout-lab/brand` and
+  `/spinout-lab/cofounder-match` are `labRoles(['admin', 'founder'])`. The
+  behaviour stays (the cards are inert on both surfaces); the comment now
+  states the split, and the intro test reads each route's guard from
+  `App.jsx` and fails if a founder-admitting route is not named.
+- `LabIntro.jsx`'s "a seat count — nothing stores one" and the intro test
+  that pinned it are corrected: the count is stored, and whether the intro's
+  hero draws it is the landing revision's call.
+- `ROUTE_MAP.md` rows *Apply and Status* (the shipped page is the older
+  canvas's APPLY VIEW, not this canvas), *Graduation Certificate* (reissue
+  has no route and would collide on `credential_id`; the profile badge has
+  no seed or mint; the admin tab has no UI; nothing records emailed or
+  downloaded) and *Programme Brief* (`/brief` exists, `places` is stored,
+  the print is letter portrait). The generated routing documents are
+  unchanged by the edit (`build-profile-routing` reports both unchanged).
+
+**Found and not mine, passed on through the session's person:**
+`templates/email/registry.ts`'s `spinout_admitted` body still says "from
+idea to incorporated" (Session 4 holds outbound mail);
+`pages/templates/SpinoutDemoDayPage.jsx` says the same, and
+`pages/templates/FounderHomePage.jsx` prints "From the 38 companies that
+have completed the Spin-Out Lab", a typed track record;
+`lib/spinoutFundModel.js`'s past `firstClose` is Session 9's.
+
+### VERIFIED
+
+- `npm run test:drift` exit 0. Frontend 3398 → 3403, worker 4408 (3
+  skipped) and retention 112 unchanged. New: `spinout_lab_honesty_d380
+  .test.mjs` (five tests: the header names every public route and only
+  those; the graduation email is not described as sent while nothing sends
+  it; no row offers a solo declaration the milestone rejects; the share card
+  and verifier do not say "idea to incorporated" or "demo day"; the page
+  exports nothing unrendered). Re-aimed: the intro's seat-count and
+  arsenal-link tests, the status test's capacity reason, the brief test's
+  track-record source.
+- Eighteen mutations run, each anchor asserted unique, bytes proven changed,
+  restored from a sha256-checked snapshot and re-run green: typed "8 spots"
+  in the CTA; the apply form printing places without the `ok` gate; each
+  page dropping its `Unreadable` branch; the hook reading another field; the
+  hook storing a literal; the worker typing `places: 8`; the arsenal comment
+  dropping `/spinout-lab/brand`; `/spinout-lab/startup` widened to founder;
+  the header dropping `/brief`; `/shipped` losing `requireAuth`; "sends on
+  graduation" restored; "(or solo declaration)" restored; "idea to
+  incorporated" in the OG line; `HeroStatsPanel` re-exported; "capped at 8"
+  in the refused note; the refused branch losing its reason; the brief
+  inlining its pluralisation. **One escaped on the first run** — the hook
+  reading `cohort.max` — because the assertion matched the null-check line,
+  which also names `cohort.places`. The assertion was fixed (it now pins
+  the parse and the stored value), not the code; 18 of 18 caught.
+- Both typechecks, `check-decision-ids`, `check-folder-docs`,
+  `check-api-drift` pass inside the drift run; `check-docs-fresh --strict`
+  exits 0 after the root `npm run build`.
+- The share-card image carries the description, so `frontend/public/og/spinout-lab.png`
+  and its `ogManifest.js` hash are regenerated (`generate-og-images.mjs`; only that
+  card — the other twelve PNGs were left byte-for-byte as committed).
+  `prerender-og --check`, `generate-og-images --check` and `validate-og-tags` pass.
 
 ## D410
 

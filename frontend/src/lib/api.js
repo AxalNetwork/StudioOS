@@ -1,5 +1,6 @@
 import { reportError } from './log';
 import { csrfCookieNameFor } from './branchHost';
+import { storeReason } from './impersonationBar';
 
 const BASE = '/api';
 
@@ -2135,6 +2136,10 @@ export const api = {
       if (res?.expires_at) localStorage.setItem('impersonationExpiresAt', String(res.expires_at));
       else localStorage.removeItem('impersonationExpiresAt');
     } catch { /* storage unavailable */ }
+    // D290 — the reason the worker STORED, echoed back, kept beside the
+    // expiry so the H25 bar survives a reload. A missing or null echo clears
+    // the key; the bar then reads "Not recorded", never a stand-in.
+    storeReason(typeof res?.reason === 'string' ? res.reason : null);
     return res;
   },
   /**

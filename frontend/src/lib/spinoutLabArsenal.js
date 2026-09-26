@@ -38,14 +38,19 @@ export const TOOL_GROUPS = ['Company', 'Evidence', 'Build', 'Formation', 'Capita
  *
  * `route` IS PROVENANCE, NOT A LINK. The intro's test asserts each one against
  * `App.jsx`, so the "nineteen working tools" claim is checkable and a renamed
- * route breaks the build. But the cards do not link anywhere, because nobody
- * reading this page could follow them: every `/spinout-lab/<tool>` route is
- * `guard(labRoles(['admin']))`, and `labRoles` (App.jsx) widens the allowed
- * list only when `user.spinout_lab_active === 1`. The signed-in intro is by
- * construction the NOT-active branch — it is what a member sees before they
- * have applied — so every card would bounce off RoleGuard, and a logged-out
- * visitor has no session at all. A link that always fails is worse than a card
- * that never claimed to be one, so the arsenal renders inert and says why.
+ * route breaks the build. But the cards do not link anywhere, because the
+ * people reading this page mostly could not follow them. Seventeen of the
+ * nineteen routes are `guard(labRoles(['admin']))`, and `labRoles` (App.jsx)
+ * widens the allowed list to the member's own role only when
+ * `user.spinout_lab_active === 1` — which the signed-in intro, the NOT-active
+ * branch, never is. The other two, `/spinout-lab/brand` and
+ * `/spinout-lab/cofounder-match`, are `labRoles(['admin', 'founder'])`, so a
+ * founder-role member could open those two; nobody else on this page could,
+ * and a logged-out visitor has no session at all. Two live links among
+ * seventeen that bounce would read as nineteen broken ones, so the arsenal
+ * renders inert, one design on both surfaces, and says a cohort admits you
+ * first. The intro's test reads each route's guard out of App.jsx and fails if
+ * that split moves without this paragraph moving with it.
  */
 export const LAB_TOOLS = [
   { id: 'record', group: 'Company', name: 'Company record', blurb: 'One record every tool writes into.', route: '/spinout-lab/startup' },
@@ -60,10 +65,10 @@ export const LAB_TOOLS = [
 
   { id: 'roadmap', group: 'Build', name: 'Roadmap and OKRs', blurb: 'MVP scope, value-rated.', route: '/spinout-lab/roadmap' },
   { id: 'brand', group: 'Build', name: 'Brand and landing pages', blurb: 'Sixteen templates, with lead routing.', route: '/spinout-lab/brand' },
-  { id: 'deck', group: 'Build', name: 'Pitch deck', blurb: 'Twelve slides from your own data.', route: '/spinout-lab/pitch-deck' },
+  { id: 'deck', group: 'Build', name: 'Pitch deck', blurb: 'Eleven slides from your own data.', route: '/spinout-lab/pitch-deck' },
 
-  { id: 'inc', group: 'Formation', name: 'Incorporation', blurb: 'The entity, by jurisdiction.', route: '/spinout-lab/incorporate' },
-  { id: 'cap', group: 'Formation', name: 'Cap table', blurb: 'Vesting, dilution, waterfall.', route: '/spinout-lab/captable' },
+  { id: 'inc', group: 'Formation', name: 'Incorporation', blurb: 'Entity choice and Delaware formation documents.', route: '/spinout-lab/incorporate' },
+  { id: 'cap', group: 'Formation', name: 'Cap table', blurb: 'Ownership, SAFEs and dilution, modeled.', route: '/spinout-lab/captable' },
   { id: 'e83b', group: 'Formation', name: '83(b) tracking', blurb: 'The 30-day window, counted for you.', route: '/spinout-lab/83b' },
   { id: 'coagree', group: 'Formation', name: 'Co-founder agreement', blurb: 'Clause by clause, then e-signed.', route: '/spinout-lab/cofounder-agreement' },
   { id: 'comply', group: 'Formation', name: 'Compliance', blurb: 'Formation, equity, filings, records.', route: '/spinout-lab/compliance' },

@@ -504,8 +504,9 @@ export default function SpinoutLabCertificatePage() {
               </p>
               <span className="inline-block text-[12.5px] font-bold text-white bg-violet-600 px-4 py-2.5 rounded-lg">Open dashboard</span>
               <p className="text-[11.5px] text-gray-400 dark:text-gray-500 mt-5 pt-4 border-t border-gray-200 dark:border-gray-700 leading-relaxed">
-                This is the real <span className="font-mono text-[11px]">spinout_graduated</span> template that sends on graduation.
-                The design's richer copy — and attaching the certificate PDF — would be a change to that template, not to this page.
+                This is the real <span className="font-mono text-[11px]">spinout_graduated</span> template as it is registered.
+                Nothing sends it yet — no code path calls it when a founder graduates — so whether it reached you is not recorded.
+                The design's richer copy, and attaching the certificate PDF, would be a change to that template, not to this page.
               </p>
             </div>
           </div>

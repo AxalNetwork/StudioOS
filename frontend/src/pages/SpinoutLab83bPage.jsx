@@ -30,6 +30,18 @@
 //     plausible-looking number.
 //   - The checklist is the server's six real items, not the design's nine.
 //
+// Honest reads (D360). Each of the three reads on this page can fail on its
+// own, and before D360 every one of them was caught into an empty value: a
+// failed tracker read painted "No 83(b) tracker yet" against a statutory
+// deadline, a failed project read said "create your company record first",
+// and a failed cap-table read showed the founder's shares as a dash. Each
+// failure now renders `Unreadable` with a retry, and the create flow is not
+// offered while the page cannot tell whether a tracker already exists.
+// The tracker is created only from a taxpayer name and a stock-transfer date
+// the founder typed or confirmed: the name no longer falls back to "Founder"
+// and the date no longer defaults to today, because either default writes a
+// wrong 30-day deadline onto an IRS filing.
+//
 // Same rule the Customer Discovery page documents: derive honestly from real
 // records, or show an explicit empty state.
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -46,6 +58,7 @@ import {
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
+import { Unreadable, Unrecorded } from '../ui';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import LabPageHeader from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
@@ -157,21 +170,39 @@ export default function SpinoutLab83bPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [creating, setCreating] = useState(false);
-  const [grantDate, setGrantDate] = useState(() => new Date().toISOString().slice(0, 10));
+  // Both start from what the founder supplies: no "today", no "Founder".
+  const [grantDate, setGrantDate] = useState('');
+  const [taxpayerName, setTaxpayerName] = useState('');
+  // Which reads failed. A failed read is never folded into an empty one.
+  const [unread, setUnread] = useState({ projects: false, trackers: false, capTable: false });
 
   const load = useCallback(async () => {
     setStatus('loading');
     try {
-      const projects = await api.listProjects().catch(() => []);
-      const p = pickLabProject(projects, user);
+      const failed = { projects: false, trackers: false, capTable: false };
+      const projects = await api.listProjects().catch((e) => {
+        reportError('SpinoutLab83bPage:projects', e);
+        failed.projects = true;
+        return null;
+      });
+      const p = failed.projects ? null : pickLabProject(projects, user);
       setProject(p);
       const [tr, ct] = await Promise.all([
-        api.legal83bList(p?.id).catch(() => []),
-        p ? api.getCapTableByProject(p.id).catch(() => null) : Promise.resolve(null),
+        failed.projects ? null : api.legal83bList(p?.id).catch((e) => {
+          reportError('SpinoutLab83bPage:trackers', e);
+          failed.trackers = true;
+          return null;
+        }),
+        p ? api.getCapTableByProject(p.id).catch((e) => {
+          reportError('SpinoutLab83bPage:capTable', e);
+          failed.capTable = true;
+          return null;
+        }) : Promise.resolve(null),
       ]);
       const list = Array.isArray(tr) ? tr : tr?.trackers || [];
       setTrackers(list);
       setCapTable(ct);
+      setUnread(failed);
       setActiveId((cur) => cur ?? list[0]?.id ?? null);
       setStatus('ready');
     } catch (e) {
@@ -186,20 +217,28 @@ export default function SpinoutLab83bPage() {
     () => trackers.find((t) => t.id === activeId) || trackers[0] || null,
     [trackers, activeId],
   );
-  const scen = scenarioFor(tracker);
-  const tone = TONE[scen];
+  // A failed read derives no state: "Not required" is only ever reached by a
+  // tracker list that was READ and is empty, never by one that failed.
+  const readFailed = unread.projects || unread.trackers;
+  const scen = readFailed ? null : scenarioFor(tracker);
+  const tone = TONE[scen] || TONE.none;
   const checklist = tracker?.checklist || [];
   const timeline = useMemo(() => timelineFor(tracker, checklist), [tracker, checklist]);
 
   // Founder share count from the cap-table scenario, matched on the taxpayer
-  // name the tracker was created with. No match → "—", never a placeholder.
+  // name the tracker was created with. A failed cap-table read says so; no
+  // match says "Not recorded" with the reason, never a placeholder.
   const shares = useMemo(() => {
-    const founders = capTable?.inputs?.founders || capTable?.founders || [];
+    if (unread.capTable) return <Unrecorded reason="The cap table could not be read. Reload to try again.">Unreadable</Unrecorded>;
+    const scenario = capTable?.scenario || capTable;
+    const founders = scenario?.inputs?.founders || scenario?.founders || [];
     const want = String(tracker?.taxpayer_name || '').trim().toLowerCase();
     const hit = founders.find((f) => String(f?.name || '').trim().toLowerCase() === want);
     const n = Number(hit?.shares);
-    return Number.isFinite(n) && n > 0 ? `${n.toLocaleString('en-US')} restricted` : '—';
-  }, [capTable, tracker]);
+    return Number.isFinite(n) && n > 0
+      ? `${n.toLocaleString('en-US')} restricted`
+      : <Unrecorded reason="No founder on the saved cap table has this taxpayer name." />;
+  }, [capTable, tracker, unread.capTable]);
 
   const daysLeft = Number(tracker?.days_left);
   const countNum = scen === 'filed' ? '✓' : Number.isFinite(daysLeft) ? String(daysLeft) : '—';
@@ -212,7 +251,9 @@ export default function SpinoutLab83bPage() {
   }, [tracker, daysLeft]);
 
   const proofs = useMemo(() => ([
-    { name: 'Signed 83(b) election', have: tracker?.election_doc_id != null, meta: tracker?.election_doc_id != null ? 'On file' : 'Not generated' },
+    // The server GENERATES the election statement when the tracker is created;
+    // nothing records a signature, so this row never says "signed".
+    { name: '83(b) election statement', have: tracker?.election_doc_id != null, meta: tracker?.election_doc_id != null ? 'Generated — sign it before mailing' : 'Not generated' },
     { name: 'Certified-mail receipt', have: tracker?.receipt_doc_id != null, meta: tracker?.receipt_doc_id != null ? 'On file' : 'Awaiting mailing' },
     { name: 'Company acknowledgment', have: String(tracker?.status || '') === 'confirmed', meta: String(tracker?.status || '') === 'confirmed' ? 'Confirmed' : 'Pending' },
   ]), [tracker]);
@@ -266,15 +307,25 @@ export default function SpinoutLab83bPage() {
     }
   };
 
+  // Both fields are the founder's own: the name is prefilled from the account
+  // when "Start a tracker" opens, but it is shown and editable, and neither
+  // has a fallback. canCreate gates the button; createTracker re-checks.
+  const canCreate = Boolean(project && taxpayerName.trim() && /^\d{4}-\d{2}-\d{2}$/.test(grantDate));
   const createTracker = () => act(async () => {
     if (!project) throw new Error('Create your company record first.');
+    if (!taxpayerName.trim()) throw new Error('Enter the taxpayer name exactly as it will appear on the election.');
+    if (!grantDate) throw new Error('Enter the date the stock was transferred to you.');
     await api.legal83bCreate({
       project_id: Number(project.id),
-      taxpayer_name: (user?.name || user?.display_name || '').trim() || 'Founder',
+      taxpayer_name: taxpayerName.trim(),
       grant_date: grantDate,
     });
     setCreating(false);
   }, 'create');
+  const startCreating = () => {
+    setTaxpayerName((cur) => cur || String(user?.name || user?.display_name || '').trim());
+    setCreating(true);
+  };
 
   if (status === 'loading') {
     return (
@@ -293,7 +344,7 @@ export default function SpinoutLab83bPage() {
         icon={FileText}
         title="83(b) Election Tracker"
         subtitle="Track your 83(b) filing deadline, documents, and proof of submission."
-        status={tracker ? 'Active' : 'Not started'}
+        status={readFailed ? 'Unreadable' : tracker ? 'Active' : 'Not started'}
       />
 
       {/* State band. The design ships these as a clickable scenario switcher;
@@ -353,8 +404,16 @@ export default function SpinoutLab83bPage() {
         <p role="alert" data-testid="text-83b-error" className="text-[12.5px] font-semibold text-rose-600 dark:text-rose-400">{err}</p>
       )}
 
-      {/* No tracker yet — honest empty state, plus the real create flow. */}
-      {!tracker ? (
+      {/* A failed read is not an empty one: no "No tracker yet", no create. */}
+      {readFailed ? (
+        <div className={`${CARD} p-6`} data-testid="unreadable-83b">
+          <Unreadable
+            what={unread.projects ? 'Your company record' : 'Your 83(b) trackers'}
+            claim="This is not a claim that no tracker exists — check again before you rely on the deadline."
+            onRetry={load}
+          />
+        </div>
+      ) : !tracker ? (
         <div className={`${CARD} p-8 text-center`} data-testid="empty-83b">
           <Calendar size={26} className="mx-auto text-gray-300 dark:text-gray-600 mb-3" />
           <div className="text-base font-bold text-gray-900 dark:text-gray-50">No 83(b) tracker yet</div>
@@ -365,15 +424,24 @@ export default function SpinoutLab83bPage() {
           {creating ? (
             <div className="mt-5 inline-flex items-end gap-2 flex-wrap justify-center">
               <div className="text-left">
+                <label htmlFor="taxpayer-name" className={`${LBL} block mb-1`}>Taxpayer name</label>
+                <input
+                  id="taxpayer-name" type="text" value={taxpayerName} data-testid="input-taxpayer-name"
+                  required placeholder="As it appears on your tax return"
+                  onChange={(e) => setTaxpayerName(e.target.value)}
+                  className="h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 text-[13px] text-gray-800 dark:text-gray-100"
+                />
+              </div>
+              <div className="text-left">
                 <label htmlFor="grant-date" className={`${LBL} block mb-1`}>Stock transfer date</label>
                 <input
-                  id="grant-date" type="date" value={grantDate} data-testid="input-grant-date"
+                  id="grant-date" type="date" value={grantDate} data-testid="input-grant-date" required
                   onChange={(e) => setGrantDate(e.target.value)}
                   className="h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 text-[13px] text-gray-800 dark:text-gray-100"
                 />
               </div>
               <button
-                type="button" onClick={createTracker} disabled={busy || !project} data-testid="button-create-tracker"
+                type="button" onClick={createTracker} disabled={busy || !canCreate} data-testid="button-create-tracker"
                 className="h-9 px-4 rounded-lg bg-violet-600 text-white text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-50"
               >
                 {busy && <Loader2 size={13} className="animate-spin" />} Create tracker
@@ -381,7 +449,7 @@ export default function SpinoutLab83bPage() {
             </div>
           ) : (
             <button
-              type="button" onClick={() => setCreating(true)} data-testid="button-start-tracker"
+              type="button" onClick={startCreating} data-testid="button-start-tracker"
               className="mt-5 h-9 px-4 rounded-lg bg-violet-600 text-white text-xs font-bold"
             >
               + Start a tracker
@@ -524,7 +592,7 @@ export default function SpinoutLab83bPage() {
                       { k: 'Submitted', v: tracker.mailed_at ? fmtDate(tracker.mailed_at) : 'Not sent' },
                       { k: 'Proof uploaded', v: tracker.receipt_doc_id != null ? 'Yes' : 'Pending' },
                       { k: 'Company acknowledged', v: String(tracker.status) === 'confirmed' ? 'Confirmed' : 'Pending' },
-                      { k: 'Tracking number', v: 'Not recorded' },
+                      { k: 'Tracking number', v: <Unrecorded reason="The tracker has no tracking-number field yet." /> },
                     ].map((m) => (
                       <div key={m.k} className="flex items-center justify-between gap-2.5 px-3.5 py-3 bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 rounded-xl">
                         <span className="text-[11.5px] text-gray-500 dark:text-gray-400">{m.k}</span>

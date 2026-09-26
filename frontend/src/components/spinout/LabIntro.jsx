@@ -57,7 +57,12 @@ import {
  *     directory reads the live `/cohort` endpoint and the feed reads
  *     `/shipped`; when either is empty it says so.
  *
- *   · A SEAT COUNT ("8 spots available"). Nothing stores one.
+ *   · A SEAT COUNT ("8 spots available") — not the canvas's 8, and not here.
+ *     The count IS stored: `cohort_settings.max_cohort_size`, returned as
+ *     `cohort.places` by the public `GET /spinout-lab/brief`. The apply CTA,
+ *     the apply form and the refused-application note print it through
+ *     `useCohortPlaces` (lib/spinoutLab.js); whether the intro's hero draws it
+ *     too is the landing revision's call, so nothing here types a number.
  *
  * WHY THE ARSENAL CARDS ARE NOT LINKS: see `lib/spinoutLabArsenal.js`. Every
  * `/spinout-lab/<tool>` route is guarded on `spinout_lab_active === 1`, and

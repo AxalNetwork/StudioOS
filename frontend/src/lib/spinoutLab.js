@@ -141,6 +141,55 @@ export function openCohortCopy(nowMs = Date.now()) {
   }
 }
 
+/**
+ * How many places a cohort has — `cohort.places` from the public
+ * `GET /spinout-lab/brief`, the same value the Programme Brief prints.
+ *
+ * WHERE THE NUMBER LIVES. `cohort_settings.max_cohort_size`, which an admin
+ * sets from the cohort console; unset, the worker answers its own default
+ * (`DEFAULT_MAX_COHORT_SIZE` in services/cohortApplications.ts). The apply CTA,
+ * the apply form and the refused-application note all used to type "8"
+ * instead, a number no row held while the stored default was 25.
+ *
+ * `status` is 'loading', 'ok' or 'error'; `places` is a number only on 'ok'.
+ * A caller never prints a count it did not read — on 'error' it says the read
+ * failed and offers `retry`.
+ */
+export function useCohortPlaces() {
+  const [read, setRead] = useState({ status: 'loading', places: null });
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    spinoutLab
+      .brief()
+      .then((r) => {
+        const n = Number(r?.cohort?.places);
+        if (!alive) return;
+        if (r?.cohort?.places == null || !Number.isFinite(n)) setRead({ status: 'error', places: null });
+        else setRead({ status: 'ok', places: n });
+      })
+      .catch((e) => {
+        reportError('spinout-lab:places', e);
+        if (alive) setRead({ status: 'error', places: null });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [attempt]);
+
+  const retry = () => {
+    setRead({ status: 'loading', places: null });
+    setAttempt((a) => a + 1);
+  };
+  return { ...read, retry };
+}
+
+/** "25 places", singular-correct. Only ever called with a read number. */
+export function placesLabel(places) {
+  return `${places} ${places === 1 ? 'place' : 'places'}`;
+}
+
 // ---------------------------------------------------------------------------
 // The four weeks — one definition, for everyone
 // ---------------------------------------------------------------------------
@@ -244,13 +293,13 @@ export const LAB_JURISDICTIONS = [
     key: 'de', label: 'Delaware, USA', entity: 'Delaware C-Corp',
     incLine: 'Delaware C-Corp incorporation', entityDesc: 'Fully incorporated entity with EIN and registered agent.',
     filingBadge: '83(b) Filed', filingName: '83(b) Election', filingInc: '83(b) election filing',
-    filingDesc: 'Filed within the 30-day IRS window, archived in your data room.',
+    filingDesc: 'Filed within the 30-day IRS window, with the mailing proof on your 83(b) tracker.',
   },
   {
     key: 'wy', label: 'Wyoming, USA', entity: 'Wyoming C-Corp',
     incLine: 'Wyoming C-Corp incorporation', entityDesc: 'Fully incorporated Wyoming entity with EIN and registered agent.',
     filingBadge: '83(b) Filed', filingName: '83(b) Election', filingInc: '83(b) election filing',
-    filingDesc: 'Filed within the 30-day IRS window, archived in your data room.',
+    filingDesc: 'Filed within the 30-day IRS window, with the mailing proof on your 83(b) tracker.',
   },
   {
     key: 'sg', label: 'Singapore', soon: true, entity: 'Singapore Pte Ltd',
