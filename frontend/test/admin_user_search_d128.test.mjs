@@ -75,14 +75,16 @@ test('the search box exists, is bound, and is gated at two characters', () => {
   assert.match(PAGE, /setTimeout\(/, 'the search is not debounced, so every keystroke is a request');
 });
 
-test('the scope caption names a territory only where there is one', () => {
-  // S0 wall rule 2. On HQ there is no territory, so there is no caption rather
-  // than a vague one — `null` renders nothing, which is what stops this
-  // becoming a second chip answering the badge's question.
+test('the scope caption names what it searches: the territory on a branch, HQ-held accounts off one', () => {
+  // S0 wall rule 2. On a branch the caption names the territory. Off a branch
+  // it said nothing until D286; now it says "HQ-held accounts" (S20's wall
+  // rule 2), because that is what the table reads and "all accounts" would be
+  // the vague caption this test always refused.
   assert.match(PAGE, /const accountScope = branchOfUser\(viewer\)/,
     'the caption is not fed from the branch fact');
   assert.match(PAGE, /Searching \$\{viewer\.branch\.name \|\| viewer\.branch\.code\} accounts/);
-  assert.match(PAGE, /\{accountScope && \(/, 'HQ renders an empty caption element');
+  assert.match(PAGE, /: 'Searching HQ-held accounts';/, 'off a branch the caption no longer says HQ-held accounts');
+  assert.match(PAGE, /\{accountScope && \(/, 'the caption element is unconditional');
   // The same reader the territory badge uses, so the two cannot disagree.
   assert.match(PAGE, /import \{ branchOfUser \} from '\.\.\/lib\/shellRole'/);
 });

@@ -81,3 +81,34 @@ export function hqRowFor(pathname, search = '') {
   const row = stripFor(pathname, search);
   return row ? (HQ_ROW_ROUTE[row] ?? null) : null;
 }
+
+/** Admin row label → the row's route, read off the shell rather than typed (D286). */
+export const ADMIN_ROW_ROUTE = Object.fromEntries(
+  (SIDEBAR_GROUPS.admin || []).flatMap((g) => g.items || []).map((it) => [it.label, it.to]),
+);
+
+/**
+ * "This location lights no row" — distinct from `null`, which hands the
+ * decision back to the path rules. On `/admin` the path rules cannot be
+ * trusted: the Contracts row points at `/admin?tab=legal`, and `NavLink`
+ * compares pathnames only, so it would light on every tab.
+ */
+export const NO_ROW = '';
+
+/**
+ * The Admin row a location lights on the S20 shell (D286), by route; `NO_ROW`
+ * for an `/admin` tab the map places on no Admin row (Integration keys,
+ * GitHub, Payments, Promo codes and Billing are HQ's); `null` everywhere
+ * else, where the path — a row's own `to`, or its `match` list — decides.
+ *
+ * READ FROM THE H35 MAP, NOT TYPED: the `users` tab lights Accounts because
+ * the map places it there (`also`), `legal` lights Contracts, `kyc`
+ * Approvals, `wellbeing` Community. A bare `/admin` is the Users tab.
+ */
+export function adminRowFor(pathname, search = '') {
+  if (pathname !== '/admin') return null;
+  const tab = new URLSearchParams(search || '').get('tab') || 'users';
+  const entry = ADMIN_PLACEMENT.find((e) => e.key === `tab:${tab}`);
+  const onAdmin = entry && [entry, ...(entry.also || [])].find((p) => p.tier === 'Admin');
+  return onAdmin ? (ADMIN_ROW_ROUTE[onAdmin.row] ?? NO_ROW) : NO_ROW;
+}

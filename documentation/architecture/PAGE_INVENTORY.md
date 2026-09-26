@@ -59,30 +59,18 @@ canvas behind it still shows up here.
 | Headerless | Network | `/network` | Partner Operator Canvas |
 | Headerless | Research | `/research` | — (no canvas; shipped ahead of the design corpus) |
 
-## `admin` — 20 destinations in 2 groups
+## `admin` — 8 destinations in 1 group
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
-| Home | Studio | `/studio` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Admin Console | `/admin` | Contracts · Subsidiary |
-| Admin | Due Diligence | `/admin/due-diligence` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Assessment Studio | `/admin/assessment` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Best-Fit Console | `/admin/best-fit` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Event Admin | `/admin/events` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Job Board Admin | `/admin/jobs` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Communities Admin | `/admin/circles` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Advisor Cohort Access | `/admin/advisor-cohorts` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Exploring Users | `/admin/exploring` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | LP Applications | `/admin/lp-applications` | GP Application Review |
-| Admin | Monitoring | `/monitoring` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Telegram Channels | `/admin/telegram` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Content Queue | `/admin/articles` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Publications | `/admin/publications` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Partner Invitations | `/admin/partners` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Referral Review | `/admin/refer-earn` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Public Team Page | `/admin/team` | Team · Authority |
-| Admin | My Licence | `/admin/my-licence` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Trash | `/admin/trash` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Studio | `/studio` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Accounts | `/admin/held/accounts` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Approvals | `/admin/held/approvals` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Programs | `/admin/held/programs` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Community | `/admin/held/community` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Contracts | `/admin?tab=legal` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Insights | `/admin/held/insights` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Settings | `/admin/my-licence` | — (no canvas; shipped ahead of the design corpus) |
 
 ## `exploring` — 4 destinations in 2 groups
 
@@ -124,7 +112,7 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-43 of the 74 sidebar rows above are not claimed
+34 of the 62 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
@@ -140,23 +128,14 @@ rather than merely absent.
 - partner · Headerless · Delivery (`/delivery`)
 - partner · Headerless · Offers (`/offers`)
 - partner · Headerless · Research (`/research`)
-- admin · Home · Studio (`/studio`)
-- admin · Admin · Due Diligence (`/admin/due-diligence`)
-- admin · Admin · Assessment Studio (`/admin/assessment`)
-- admin · Admin · Best-Fit Console (`/admin/best-fit`)
-- admin · Admin · Event Admin (`/admin/events`)
-- admin · Admin · Job Board Admin (`/admin/jobs`)
-- admin · Admin · Communities Admin (`/admin/circles`)
-- admin · Admin · Advisor Cohort Access (`/admin/advisor-cohorts`)
-- admin · Admin · Exploring Users (`/admin/exploring`)
-- admin · Admin · Monitoring (`/monitoring`)
-- admin · Admin · Telegram Channels (`/admin/telegram`)
-- admin · Admin · Content Queue (`/admin/articles`)
-- admin · Admin · Publications (`/admin/publications`)
-- admin · Admin · Partner Invitations (`/admin/partners`)
-- admin · Admin · Referral Review (`/admin/refer-earn`)
-- admin · Admin · My Licence (`/admin/my-licence`)
-- admin · Admin · Trash (`/admin/trash`)
+- admin · Admin · Studio (`/studio`)
+- admin · Admin · Accounts (`/admin/held/accounts`)
+- admin · Admin · Approvals (`/admin/held/approvals`)
+- admin · Admin · Programs (`/admin/held/programs`)
+- admin · Admin · Community (`/admin/held/community`)
+- admin · Admin · Contracts (`/admin?tab=legal`)
+- admin · Admin · Insights (`/admin/held/insights`)
+- admin · Admin · Settings (`/admin/my-licence`)
 - exploring · Home · Studio (`/exploring`)
 - exploring · Home · Spin-Out Lab (`/spinout-lab`)
 - exploring · Home · Messages (`/messages`)
