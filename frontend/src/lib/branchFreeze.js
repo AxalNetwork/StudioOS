@@ -54,9 +54,13 @@ export const FROZEN = [
     gatedIn: ['admin.ts', 'kyc.ts'],
   },
   {
+    // D303 — Wellbeing joined the other three Community consoles behind
+    // this gate: a new resource, an un-hidden expert or a freshly verified
+    // one are all "something new under the brand"; a takedown (delete a
+    // resource, hide an expert, remove a verification) still works.
     row: 'Community',
-    note: 'Events, jobs and circles cannot be published or featured. Existing pages stay up, and a takedown still works.',
-    gatedIn: ['admin_events.ts', 'admin_jobs.ts', 'admin_circles.ts'],
+    note: 'Events, jobs, circles and Wellbeing cannot be published, verified or restored. Existing pages stay up, and a takedown still works.',
+    gatedIn: ['admin_events.ts', 'admin_jobs.ts', 'admin_circles.ts', 'wellbeing.ts'],
   },
 ];
 

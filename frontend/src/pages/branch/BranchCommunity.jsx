@@ -44,11 +44,21 @@ import BranchZone from './BranchZone';
  */
 
 /**
- * The four consoles, with what each one can actually do.
+ * The five consoles, with what each one can actually do.
+ *
+ * D303 — Wellbeing joined this index because the coordinator's decision was
+ * *"Wellbeing goes to Admin · Community"*: `frontend/src/lib/adminPlacement.js`
+ * already places its tab there (`admin('Community', 'card link')`), so the
+ * gap was only this card and the worker-side gate below, not the placement.
+ * Its `to` carries `?tab=wellbeing` rather than a path of its own, because
+ * `AdminPage.jsx` renders it as one of that page's tabs
+ * (`tab === 'wellbeing' && <WellbeingExpertsPanel />`), the same shape as
+ * every other `admin(...)` tab in `adminPlacement.js` — there is no
+ * `/admin/wellbeing` route to link to instead.
  *
  * EXPORTED so the test reads this list rather than restating it — and so a
- * fifth console added here without a route is caught by the same assertion
- * that checks these four.
+ * sixth console added here without a route is caught by the same assertion
+ * that checks these five.
  */
 export const COMMUNITY_CONSOLES = [
   {
@@ -83,6 +93,17 @@ export const COMMUNITY_CONSOLES = [
     what: 'Create, edit, reorder and set a photo. It is not a member directory — nothing '
       + 'serves these to members except the photo itself, and what they feed is the Demo Day '
       + "deck's Team & Network slide.",
+  },
+  {
+    key: 'wellbeing',
+    label: 'Wellbeing',
+    to: '/admin?tab=wellbeing',
+    worker: 'wellbeing.ts',
+    scope: 'Expert directory only',
+    what: 'Verify or hide an expert on the founder-facing directory; a hidden or unverified '
+      + 'expert stops appearing to founders, and a takedown always works. Curated resources '
+      + 'have no console of their own here — POST and DELETE /resources exist on the worker '
+      + 'but nothing in the admin product calls them yet.',
   },
 ];
 
