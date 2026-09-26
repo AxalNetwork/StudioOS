@@ -29022,6 +29022,137 @@ no browser; the gate is the Node guard.
 landings, no worker change, no migration, no `api.js` method.
 `admin_route_reachability.test.mjs` passes unedited.
 
+## D287
+
+**Task 417: the branch-not-deployed strip (canvas S21).**
+
+**What was true on main (`13fac41d7`).**
+- A licence administrator on HQ — bound in `licence_admins`, no branch
+  deployed — got the S20 Admin shell (D286) with nothing saying that their
+  branch does not exist yet. The licence payload (`/api/licence/mine`, HQ
+  arm) never read `licence_deployments`; only HQ's Platform screen did.
+- Nothing advances `licence_deployments.status` past `requested` except to
+  `failed`: the INSERT writes `requested`, `admin_deployments.ts` writes
+  `failed` on its two refusals, `branch-provision.yml` bumps `updated_at`
+  when it stores the RPC secret hash, and no writer exists for the seven
+  intermediate statuses migration 258 documents. So `updated_at` is
+  whichever write came last, `requested_at` is the request, and S21's
+  `deployment.last_step_at` exists nowhere. HQ's deploy timeline (D110,
+  D149) has the same gap and states it.
+
+**What changed.**
+- **`deployment` on the HQ arm of `/api/licence/mine`** (`routes/licence.ts`,
+  `deploymentField`): read by `licence_uid` in its own try, so a failed read
+  costs the strip its answer and nothing else on the page. Three shapes:
+  `{readable: true, requested: false, live: false}` when there is no row —
+  **"not requested" means there is no row, never a stored value**;
+  `{readable: true, requested: true, live, code, hostname, status,
+  status_note}` when there is; `{readable: false, reason}` when the read
+  failed. The field carries no time, because none on the record is a step's.
+- **Live is `linked`, and nothing else** — `DEPLOYMENT_LIVE_STATUS`,
+  `deploymentIsLive`, decided by the worker so the SPA never re-derives it.
+  `linked` is migration 258's last step, the point at which HQ knows the
+  branch and the branch knows HQ; a Worker that answers on a hostname that
+  resolves but is not yet linked is a deployment in progress, and the
+  administrator is still working on axal.vc until it is. `failed` is never
+  live.
+- **The strip** — `components/BranchNotDeployedBar.jsx`, mounted in App.jsx
+  above the top bar, for the plain Admin shell off a branch, on the person's
+  own session. S21's copy: "**{brand}** · its branch has not been deployed.
+  You are working on axal.vc until it is." with "Licence summary in Settings
+  →" (`/admin/my-licence`, a literal door); the nine chips in S21's order and
+  words, lit to the step the record reached (`not requested` lit when there
+  is no row; every chip unknown on `failed`, with the record's note, on
+  `lib/deployTimeline.js`'s rule that which step failed is not recorded); the
+  sub-line; the three rules verbatim. It cannot be dismissed — no button, no
+  state of its own — and stores nothing (`AdminFrozenBar`'s rule): it draws
+  the model it is given and disappears the moment the worker says `live`.
+- **The read** — `hooks/useBranchDeployment.js`: one memoised read of
+  `/api/licence/mine` per user id, shared by the strip and the top bar so the
+  two cannot disagree for a beat; put through `lib/branchNotDeployed.js`'s
+  `notDeployedStrip`, pure. A 404 is "administers no licence" and no strip; any
+  other failure is reported and no strip, because a licence the hook could
+  not read is not one it can make a claim about. The deployment sub-read's
+  own failure is different: the worker answers `readable: false` and the
+  strip renders **"Unreadable"** with every chip unknown — never "not
+  requested".
+- **The top bar** (S21): in the territory badge's slot, "{brand} · on
+  axal.vc" and the badge "BRANCH · NOT DEPLOYED" while the strip is up; D286's
+  "HQ-held · axal.vc" pair otherwise.
+- **The time: none shown, and the writer filed.** The caption reads
+  "Recorded on the licence · no step time is recorded: provisioning writes
+  only “requested” and “failed” today, and the time on the record is the
+  request or whichever write came last, not a step’s." in place of S21's
+  `deployment.last_step_at`. The brief offered migration 299 and a real step
+  writer instead; not built here, by decision: the writer is seven
+  `wrangler d1 execute --remote` steps in `branch-provision.yml` (on the RPC
+  hash step's precedent) plus a `last_step_at` column, a workflow this
+  environment cannot run and CI does not exercise, and a strip that reads
+  `requested_at` or `updated_at` as a step's time would be the false claim
+  this item exists to avoid. **Filed: migration 299 (`last_step_at` on
+  `licence_deployments`, or a per-step ledger, D149's open question) and the
+  writer in `branch-provision.yml`, one UPDATE per step, on D235's
+  declared-object rule; HQ's timeline (D110) gains the same time when it
+  lands.** Migration 299 stays reserved and unused.
+
+**Guards.**
+- `frontend/test/branch_not_deployed_d287.test.mjs`, 14 tests: the strip
+  shows for a licence admin without a live deployment, lit to the step the
+  record reached; the nine chips and three rules are S21's verbatim; gone
+  once live — the worker's word, not a status read here; no strip for
+  someone who administers none or when the worker answered no field; "not
+  requested" is `requested === false` and never a stored value; an
+  unreadable read renders Unreadable, every chip unknown, never "not
+  requested"; a failed deployment says so with the record's note; the brand
+  is the licence's or its entity or its reference; no time is drawn or
+  labelled (no `requested_at`, `updated_at`, `last_step_at` or `live_at` in
+  the bar, the lib or the hook; the worker's SELECT names exactly `code,
+  hostname, status, status_note`); the strip stores nothing and cannot be
+  dismissed; S21's copy; one memoised read per user, a 404 no error; the
+  shell mounts it above the top bar for the plain Admin shell off a branch
+  and the badge reads BRANCH · NOT DEPLOYED; the worker decides live.
+- `cloudflare-worker/test/licence_mine_deployment_d287.test.ts`, 6 tests,
+  driving `/licence/mine` over `licence_deployments` sliced off migration
+  258: live is `linked` and nothing else; a requested deployment answers
+  requested, not live, with no `_at` key; "not requested" is the absence of a
+  row (a row whose status reads `not_requested` is still a request; another
+  licence's row is not this licence's); every earlier step and `failed` are
+  not live; a read that fails answers unreadable with a reason while the
+  licence still answers 200; an admin who administers none still gets the
+  404.
+
+**Mutations: 19 run, 19 caught** — each a non-zero exit with a `not ok`
+line, anchors unique, bytes proven changed, sources restored from a
+sha256-checked snapshot: the strip made dismissible; `updated_at` labelled
+as the last step; `requested_at` carried by the lib as a last-step time;
+"not requested" read from a stored value (worker, and lib); an unreadable
+read rendered as "not requested"; live decided by `worker_live` (worker,
+and seen by the frontend guard); `failed` counted as live; the strip shown
+when live; live re-derived from the status in the lib; the deployment read
+outside its own try; a time carried on the field; a time selected off the
+record; a storage write in the hook; the read no longer confined to off a
+branch; the badge wording changed; a 404 treated as a failure; the bar
+keeping state of its own.
+
+**Recorded verification, not a gate.** The built bundle was served
+statically with `/api/auth/me` stubbed as a plain admin and
+`/api/licence/mine` stubbed five ways, and driven with the container's
+Chromium. At `schema_applied` the strip drew above the header with the
+S21 sentence naming Axal VC France, the nine chips lit requested · database
+created · schema applied and the rest waiting, the no-time caption, the
+Settings link, the three rules, no button, and nothing in `localStorage`;
+the top bar read "Axal VC France · on axal.vc" and "BRANCH · NOT DEPLOYED"
+with no HQ-held pair. At `linked` (live) there was no strip and the HQ-held
+pair returned. On `readable: false` the strip drew with every chip unknown
+and the caption "Unreadable — The deployment record on this licence could
+not be read." On a 404 there was no strip. With no row, the first chip lit
+alone. In every case `/api/licence/mine` was called once for the strip and
+the badge together. CI runs no browser; the gates are the two Node suites.
+
+`frontend/src` moved, so `docs/` is rebuilt. One worker route gains a
+field; no new route, no migration (299 stays reserved), no `api.js` method
+(`myLicence` already existed).
+
 ## D300
 
 **Every file in `frontend/public` has to have a named reader — one did not,
