@@ -97,6 +97,11 @@ test('mapError: any other D1 or SQLite failure is a logged 500, not a refusal', 
   const r = await thrown('D1_ERROR: database is locked: SQLITE_BUSY');
   assert.equal(r.status, 500);
   assert.doesNotMatch(JSON.stringify(r.body), /locked|SQLITE/);
+  // A message that CONTAINS SQLITE_ without starting with D1_ERROR is SQLite
+  // talking too — the case an anchored alternation lost.
+  const mid = await thrown('Error: SQLITE_BUSY: database is locked');
+  assert.equal(mid.status, 500);
+  assert.doesNotMatch(JSON.stringify(mid.body), /locked|SQLITE/);
 });
 
 test('mapError: a sentence a route wrote passes through unchanged', async () => {
