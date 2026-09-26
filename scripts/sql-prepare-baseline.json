@@ -200,6 +200,7 @@
     "where.join(' AND ') @ services/referralSubmissions.ts": 1,
     "whereSql @ routes/admin_telegram.ts": 2,
     "whereSql @ routes/admin_x.ts": 2,
+    "WINDOW @ services/xAggregator.ts": 1,
     "wWhere @ routes/watchlist.ts": 1
   }
 }

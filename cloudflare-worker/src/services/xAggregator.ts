@@ -6,8 +6,13 @@
  *   - Hashtags appended from the audience tag
  *   - Body split into a thread when > 280 chars (returns array of strings)
  *
- * Counter reads are wrapped in try/catch — missing tables degrade to zero,
- * never to a 500 (matches replit.md pending-migrations posture).
+ * task 434 / D301 — `safeCount` used to collapse "the table doesn't exist"
+ * into a plain `0`; the founders and advisors drafts read two tables no
+ * migration ever created (advisor_sessions, introductions), and the
+ * advisors draft's only figure (partner_office_hours) never existed either.
+ * `safeCount` now distinguishes a real count from an unreadable one, every
+ * query reads a store that actually exists, and the advisors draft — with
+ * nothing left to measure — is not drafted at all. See D301.
  */
 import type { Env } from '../types';
 import { splitIntoThread, tweetLength } from './xClient';
@@ -25,12 +30,17 @@ const AUDIENCE_HASHTAGS: Record<string, string[]> = {
 
 export type XAudience = keyof typeof AUDIENCE_HASHTAGS;
 
-async function safeCount(env: Env, sql: string, ...binds: unknown[]): Promise<number> {
+/** Every count query in this file shares this one window predicate. */
+const WINDOW = `datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)`;
+
+type Count = { ok: true; n: number } | { ok: false; reason: string };
+
+async function safeCount(env: Env, sql: string, ...binds: unknown[]): Promise<Count> {
   try {
     const r = await env.DB.prepare(sql).bind(...binds).first<{ n: number }>();
-    return Number(r?.n ?? 0);
-  } catch {
-    return 0;
+    return { ok: true, n: Number(r?.n ?? 0) };
+  } catch (e) {
+    return { ok: false, reason: (e as Error)?.message || 'read failed' };
   }
 }
 
@@ -43,7 +53,7 @@ async function safeTopSectors(env: Env, periodStart: string, periodEnd: string, 
     const rs = await env.DB.prepare(
       `SELECT sector, COUNT(*) AS n FROM projects
         WHERE sector IS NOT NULL AND sector <> ''
-          AND datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)
+          AND ${WINDOW}
         GROUP BY sector ORDER BY n DESC LIMIT ?`,
     ).bind(periodStart, periodEnd, limit).all<{ sector: string; n: number }>();
     return (rs?.results || [])
@@ -87,6 +97,9 @@ export interface XDraft {
   hashtags: string[];
   needs_media: boolean;            // hint to admin: attach an MI-chart if available
   payload: Record<string, unknown>;
+  /** false only when every figure this draft could carry has no store behind it. */
+  drafted: boolean;
+  reason?: string;
 }
 
 interface BuildInput { periodDays: number; periodStart: string; periodEnd: string }
@@ -98,21 +111,19 @@ function append(body: string, tags: string[]): string {
 
 async function buildPublicDraft(env: Env, w: BuildInput): Promise<XDraft> {
   const ventures = await safeCount(
-    env,
-    `SELECT COUNT(*) AS n FROM projects WHERE datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)`,
-    w.periodStart, w.periodEnd,
+    env, `SELECT COUNT(*) AS n FROM projects WHERE ${WINDOW}`, w.periodStart, w.periodEnd,
   );
   const deals = await safeCount(
-    env,
-    `SELECT COUNT(*) AS n FROM partner_deals WHERE datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)`,
-    w.periodStart, w.periodEnd,
+    env, `SELECT COUNT(*) AS n FROM partner_deals WHERE ${WINDOW}`, w.periodStart, w.periodEnd,
   );
-  const safeV = ventures >= K_MIN ? ventures : null;
-  const safeD = deals >= K_MIN ? deals : null;
+  const safeV = ventures.ok && ventures.n >= K_MIN ? ventures.n : null;
+  const safeD = deals.ok && deals.n >= K_MIN ? deals.n : null;
   const lines = [`Axal weekly pulse — last ${w.periodDays}d:`];
   if (safeV) lines.push(`• ${safeV} new ventures in motion`);
   if (safeD) lines.push(`• ${safeD} partner introductions`);
-  if (!safeV && !safeD) lines.push(`• Quiet week — heads down building.`);
+  if (!ventures.ok) lines.push(`• New ventures — unreadable.`);
+  if (!deals.ok) lines.push(`• Partner introductions — unreadable.`);
+  if (ventures.ok && deals.ok && !safeV && !safeD) lines.push(`• Quiet week — heads down building.`);
   lines.push(``, `axal.vc`);
   const sectors = await safeTopSectors(env, w.periodStart, w.periodEnd);
   const hasMI = await safeHasMIChart(env, w.periodStart);
@@ -123,23 +134,32 @@ async function buildPublicDraft(env: Env, w: BuildInput): Promise<XDraft> {
     body, thread: splitIntoThread(body),
     hashtags: tags,
     needs_media: hasMI,
-    payload: { ventures, deals, sectors, has_mi_chart: hasMI, k_min: K_MIN, period_days: w.periodDays },
+    payload: {
+      ventures: ventures.ok ? ventures.n : null,
+      deals: deals.ok ? deals.n : null,
+      sectors, has_mi_chart: hasMI, k_min: K_MIN, period_days: w.periodDays,
+    },
+    drafted: true,
   };
 }
 
 async function buildFoundersDraft(env: Env, w: BuildInput): Promise<XDraft> {
+  // "sessions" reads advisor_bookings — the store that actually exists.
   const sessions = await safeCount(
     env,
-    `SELECT COUNT(*) AS n FROM advisor_sessions WHERE datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)`,
+    `SELECT COUNT(*) AS n FROM advisor_bookings WHERE ${WINDOW} AND status != 'cancelled'`,
     w.periodStart, w.periodEnd,
   );
+  // "intros" is rewritten to what investor_introductions records.
   const intros = await safeCount(
-    env,
-    `SELECT COUNT(*) AS n FROM introductions WHERE datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)`,
-    w.periodStart, w.periodEnd,
+    env, `SELECT COUNT(*) AS n FROM investor_introductions WHERE ${WINDOW}`, w.periodStart, w.periodEnd,
   );
+  const sessionsLine = sessions.ok ? `${sessions.n} advisor sessions booked` : 'advisor sessions booked — unreadable';
+  const introsLine = intros.ok
+    ? `${intros.n} introductions requested by investors`
+    : 'investor-requested introductions — unreadable';
   const body = append(
-    `Founders, this week at Axal:\n• ${sessions} advisor sessions booked\n• ${intros} deal-room intros opened\n\nIf you're building, we want to meet you.`,
+    `Founders, this week at Axal:\n• ${sessionsLine}\n• ${introsLine}\n\nIf you're building, we want to meet you.`,
     AUDIENCE_HASHTAGS.founders,
   );
   return {
@@ -147,21 +167,25 @@ async function buildFoundersDraft(env: Env, w: BuildInput): Promise<XDraft> {
     body, thread: splitIntoThread(body),
     hashtags: AUDIENCE_HASHTAGS.founders,
     needs_media: false,
-    payload: { sessions, intros, period_days: w.periodDays },
+    payload: {
+      sessions: sessions.ok ? sessions.n : null,
+      investor_introductions: intros.ok ? intros.n : null,
+      period_days: w.periodDays,
+    },
+    drafted: true,
   };
 }
 
 async function buildInvestorsDraft(env: Env, w: BuildInput): Promise<XDraft> {
   const newDeals = await safeCount(
-    env,
-    `SELECT COUNT(*) AS n FROM deals WHERE datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)`,
-    w.periodStart, w.periodEnd,
+    env, `SELECT COUNT(*) AS n FROM deals WHERE ${WINDOW}`, w.periodStart, w.periodEnd,
   );
   const sectors = await safeTopSectors(env, w.periodStart, w.periodEnd);
   const hasMI = await safeHasMIChart(env, w.periodStart);
   const tags = [...AUDIENCE_HASHTAGS.investors, ...sectors];
+  const dealsLine = newDeals.ok ? `${newDeals.n} new deals` : 'unreadable deal count';
   const body = append(
-    `Investors — ${newDeals} new deals in the Axal pipeline this week. DM for diligence access.`,
+    `Investors — ${dealsLine} in the Axal pipeline this week. DM for diligence access.`,
     tags,
   );
   return {
@@ -169,37 +193,33 @@ async function buildInvestorsDraft(env: Env, w: BuildInput): Promise<XDraft> {
     body, thread: splitIntoThread(body),
     hashtags: tags,
     needs_media: hasMI,
-    payload: { new_deals: newDeals, sectors, has_mi_chart: hasMI, period_days: w.periodDays },
+    payload: { new_deals: newDeals.ok ? newDeals.n : null, sectors, has_mi_chart: hasMI, period_days: w.periodDays },
+    drafted: true,
   };
 }
 
-async function buildAdvisorsDraft(env: Env, w: BuildInput): Promise<XDraft> {
-  const requests = await safeCount(
-    env,
-    `SELECT COUNT(*) AS n FROM partner_office_hours WHERE datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)`,
-    w.periodStart, w.periodEnd,
-  );
-  const body = append(
-    `Shout-out to the Axal advisor bench — ${requests} office-hours requests fielded this week. Thank you.`,
-    AUDIENCE_HASHTAGS.advisors,
-  );
+async function buildAdvisorsDraft(_env: Env, w: BuildInput): Promise<XDraft> {
+  // The only figure this draft ever carried, "office-hours requests", read
+  // partner_office_hours — a table no migration has ever created. No other
+  // store backs an X advisors figure, so there is nothing left to draft.
   return {
     audience: 'advisors', kind: 'advisors_brief', title: 'Advisors brief',
-    body, thread: splitIntoThread(body),
+    body: '', thread: [],
     hashtags: AUDIENCE_HASHTAGS.advisors,
     needs_media: false,
-    payload: { requests, period_days: w.periodDays },
+    payload: { period_days: w.periodDays },
+    drafted: false,
+    reason: 'no measured store backs an X advisors figure (partner_office_hours was never built)',
   };
 }
 
 async function buildPartnersDraft(env: Env, w: BuildInput): Promise<XDraft> {
   const deals = await safeCount(
-    env,
-    `SELECT COUNT(*) AS n FROM partner_deals WHERE datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)`,
-    w.periodStart, w.periodEnd,
+    env, `SELECT COUNT(*) AS n FROM partner_deals WHERE ${WINDOW}`, w.periodStart, w.periodEnd,
   );
+  const dealsLine = deals.ok ? `${deals.n} new deals` : 'an unreadable count of deals';
   const body = append(
-    `Operating partners moved ${deals} new deals through the Axal desk this week.`,
+    `Operating partners moved ${dealsLine} through the Axal desk this week.`,
     AUDIENCE_HASHTAGS.partners,
   );
   return {
@@ -207,7 +227,8 @@ async function buildPartnersDraft(env: Env, w: BuildInput): Promise<XDraft> {
     body, thread: splitIntoThread(body),
     hashtags: AUDIENCE_HASHTAGS.partners,
     needs_media: false,
-    payload: { deals, period_days: w.periodDays },
+    payload: { deals: deals.ok ? deals.n : null, period_days: w.periodDays },
+    drafted: true,
   };
 }
 
@@ -222,6 +243,7 @@ async function buildAlumniDraft(_env: Env, w: BuildInput): Promise<XDraft> {
     hashtags: AUDIENCE_HASHTAGS.alumni,
     needs_media: false,
     payload: { period_days: w.periodDays },
+    drafted: true,
   };
 }
 
@@ -253,7 +275,8 @@ export async function previewXAudience(env: Env, audience: XAudience, periodDays
 }
 
 /**
- * Run aggregator and persist one DRAFT post per audience. Posts default to
+ * Run aggregator and persist one DRAFT post per audience whose draft has at
+ * least one measured figure (`drafted !== false`). Posts default to
  * `account_id = ?` — the caller must pass the canonical X account id (the
  * @axalvc connection). Thread continuations are persisted as additional
  * `x_posts` rows with `thread_continuation_of` pointing at the head.
@@ -266,6 +289,7 @@ export async function runXAggregator(env: Env, opts: {
   const drafted: Array<{ audience: string; post_id: number; thread_size: number }> = [];
   const drafts = await previewXAll(env, opts.periodDays);
   for (const d of drafts) {
+    if (!d.drafted) continue;
     const head = d.thread[0];
     const ins = await env.DB.prepare(
       `INSERT INTO x_posts (account_id, status, body, hashtags, source, source_kind, thread_position, created_by)
