@@ -28916,3 +28916,130 @@ following it.
 - No migration: migrations on disk unaffected. `frontend/src` did not move
   (only `frontend/test/` and `frontend/public/`), but `docs/` still moved
   (the two deletions), so it was rebuilt and re-verified fresh regardless.
+
+## D301
+
+**An aggregator counts what exists, and says when it cannot.** Task 434.
+
+**The defect.** `services/telegramAggregator.ts`'s and
+`services/xAggregator.ts`'s `safeCount` returned `0` on ANY failure —
+table-not-found included — so five queries posted a confident zero every
+single week, on every deploy, because the tables they read have never
+existed: `advisor_sessions`, `introductions`, `matches`,
+`partner_office_hours`, `refer_earn_payouts`. All five were already on
+`scripts/sqlite-tables-baseline.json`, each entry naming this exact
+symptom. Telegram's founders draft (advisor sessions, intros, matches),
+its advisors draft (sessions, office-hours requests) and its partners
+draft (partner deals — real — plus sourcing rewards) all carried at least
+one fabricated line; X's founders draft (sessions, intros) and its
+advisors draft (office-hours requests, its ONLY figure) did too.
+
+**A second, independent defect in the same file.** Every count query in
+`telegramAggregator.ts` compared `created_at >= ?` against an ISO bind
+(`new Date().toISOString()`) directly, with no `datetime()` normalisation.
+The stored timestamps are SQLite-format (`YYYY-MM-DD HH:MM:SS`, a space),
+the bind has a `T` in the same position, and `' ' < 'T'` lexically — so
+every row from the window's first day compared as earlier than the bind
+and was silently dropped. `xAggregator.ts` already wrapped every
+comparison in `datetime(...)` and did not have this bug. This is D162's
+blind spot (D162 built a sweep for exactly this shape of defect): the ISO
+binds travel through an `AggInput` object field (`w.periodStart`) and a
+rest-parameter forwarder (`...binds` in `safeCount`), a shape the sweep's
+literal-bind extractor cannot see. **Filed, not built**: extending D162's
+sweep to follow binds through an object field or a rest parameter is a
+separate, larger change than this task, and the behavioural test added
+here (below) is what actually gates the regression until that sweep
+exists.
+
+**What changed, in both files.**
+- `safeCount` now returns `{ ok: true, n }` or `{ ok: false, reason }` —
+  never a bare number, so a caller can no longer conflate "counted zero"
+  with "could not be read".
+- One shared `WINDOW` string constant
+  (`` `datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)` ``)
+  replaces every ad hoc comparison in both files, so the fix cannot drift
+  back to a bare comparison one query at a time.
+- Each line is repointed to the store that actually backs its claim, or
+  dropped:
+  - **"sessions booked"**, on the Telegram founders draft, the Telegram
+    advisors draft and the X founders draft, now reads `advisor_bookings`
+    — the real booking store, written by `routes/advisors.ts:638` —
+    excluding `status = 'cancelled'` (a `no_show` was still booked, so it
+    counts).
+  - **"intros opened"** is rewritten, on the Telegram and X founders
+    drafts, to what `investor_introductions` actually records: an
+    investor asking to be introduced to a founder. The line now reads
+    "N introductions requested by investors". `intro_propositions`
+    (reciprocal proposition rows, a different and unrelated store) is
+    never counted here — it would double-count.
+  - **"matches"** (Telegram founders), **"office-hours requests"**
+    (Telegram and X advisors) and **"sourcing rewards posted"** (Telegram
+    partners) have no store anywhere in the schema and are dropped
+    outright, not rewritten.
+- **A draft whose every figure line was dropped is not drafted.** Measured
+  rather than assumed: after the rewrites above, that is the X advisors
+  draft alone — its only figure was `partner_office_hours`, which had no
+  replacement. `DraftPayload` and `XDraft` both gain `drafted: boolean` and
+  an optional `reason`; `runAggregator` and `runXAggregator` skip
+  persisting any draft with `drafted: false`, so no orphan `telegram_posts`
+  or `x_posts` row is ever written for it. `previewAll` / `previewXAll`
+  return it anyway, with `drafted: false` and the reason, for the page to
+  render — but `AdminX.jsx` and `AdminTelegram.jsx` need no edit this wave,
+  since neither currently reads a per-draft `drafted` flag; a page change
+  to surface the reason is filed for after Session 1's D258 (the shared
+  refusal-reading work) merges, so the two changes don't collide on the
+  same render logic.
+- **"Quiet week"** (both files' public draft) now appears only when BOTH
+  reads succeeded and both figures are below `K_MIN`. A failed read is
+  reported as unreadable and never folds into the quiet state — the two
+  states are opposite claims ("nothing happened" vs "we don't know") and
+  conflating them was the same defect as the false zeros, one level up.
+- The five now-dead entries come off `scripts/sqlite-tables-baseline.json`.
+  `check-sqlite-tables.mjs` fails on a baseline entry whose query no longer
+  exists, so their removal is itself the proof the fictitious reads are
+  gone, not an assertion resting on this document.
+- `xAggregator.ts`'s one direct `.prepare(\`...${WINDOW}...\`)` call
+  (`safeTopSectors`) is a new entry in `scripts/sql-prepare-baseline.json`
+  — `WINDOW` is a module-level literal-string constant, never
+  user-controlled, and every other `WINDOW` usage in both files travels
+  through `safeCount`'s own parameterised `.prepare(sql)`, which the guard
+  does not flag at all.
+
+**Worker only. No migration, no route, no `api.js` method, no
+`frontend/src` change** — so `check-api-drift` has nothing to say and
+`docs/` is not rebuilt.
+
+### VERIFIED
+
+- New `cloudflare-worker/test/aggregator_false_zeros_d301.test.ts`, 8
+  tests, on real `node:sqlite` via `d1Over`, against a fresh build from the
+  full baseline (every table these queries touch predates the
+  `BASELINE_CUTOFF`, so no migration replay is needed): a booking on the
+  window's first day is counted (the `datetime()` fix); a missing table
+  reads unreadable, never 0; a failed read never prints "Quiet week"; the
+  X advisors draft is not drafted, says why, and writes no `x_posts` row;
+  a cancelled booking is excluded and a `no_show` is counted;
+  `investor_introductions` is counted and `intro_propositions` never is;
+  the five fictitious tables are gone from both files' source (a regex
+  scan, scoped to `FROM <table>` so the files' own explanatory comments
+  naming the old tables don't trip it); `runAggregator` still persists all
+  six Telegram audiences, since none of them lost every figure.
+- Six mutations run, six caught (non-zero exit + a `not ok` line), each
+  restored from a sha256-verified `/tmp` snapshot: `safeCount` returning
+  `{ok:true, n:0}` on a caught exception again; the `WINDOW` constant
+  reverted to a bare comparison; a dropped line (`matches`) put back; the
+  Quiet-week gate no longer requiring both reads to have succeeded;
+  `intro_propositions` substituted for `investor_introductions`; the
+  `cancelled` exclusion removed from the booking count.
+- `node scripts/check-sqlite-tables.mjs` exits 0 (4 known gaps remain on
+  record — `compliance_tasks`, `linkedin_oauth_tokens`,
+  `spinout_lab_state`, `subscription_events`; the five this task removed
+  are gone).
+- `node scripts/check-sql-prepare.mjs` exits 0 after recording the one new
+  literal-fragment site, per the review above.
+- `node scripts/check-sqlite-dialect.mjs`, `check-timestamp-comparisons.mjs`,
+  `check-runtime-schema-declared.mjs`, `check-api-drift.mjs`,
+  `check-folder-docs.mjs` and `check-decision-ids.mjs` (D1 through D301, in
+  file order) all exit 0.
+- Both typechecks (`cd cloudflare-worker && npx tsc --noEmit`;
+  `npx tsc --noEmit -p frontend/tsconfig.json`) exit 0.
