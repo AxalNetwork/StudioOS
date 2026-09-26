@@ -541,16 +541,35 @@ r.get('/summary', async (c) => {
     // D214 corrected the decision it names: HQ answers or declines an
     // escalation (`ESCALATION_STATUSES`, and HQ Support offers exactly those
     // two), where this said "an approve or request-changes decision".
-    localisation_available: false,
+    //
+    // NARROWED AGAIN IN D275. The relation is recorded now: a content
+    // escalation that names an item says whether it localises that item or
+    // asks for a change to it, and the relation is required whenever an item
+    // is picked (migration 296). So "is this submission a localisation of
+    // another" has a stored answer, and the board's Localisation lane counts
+    // it. What is still not recorded, and what this sentence now says: the
+    // relation of any row raised before 296 — such a row stays in Brand
+    // approval marked "relation not recorded", never counted as a localisation
+    // — and anything a branch localises in its own database without sending it
+    // to HQ, which HQ cannot see at all.
+    //
+    // `localisation_available` IS TRUE FROM D275, decided: the board draws a
+    // counted Localisation lane from a stored column, and a payload that said
+    // `false` beside it would contradict its own board. The reason stays,
+    // because what it scopes out is real: true means "counted from what
+    // branches send HQ, from 296 on", not "every localisation there is".
+    localisation_available: true,
     localisation_reason:
-      'Brand approval, per-subsidiary attribution and the item a submission concerns exist now: a '
-      + 'branch submits content as an escalation of kind "content", which carries its branch code, '
-      + 'is answered or declined by HQ, and can name the item it concerns — a label '
-      + 'the branch builds, not a link HQ can open. The lane is read from '
-      + '/api/admin/escalations?kind=content. What is still not recorded is the RELATION — naming '
-      + 'an item does not say that the submission is a localisation of another rather than a change '
-      + 'to it, so a count of localised items would be a count of submissions wearing the wrong '
-      + 'name.',
+      'Brand approval, per-subsidiary attribution, the item a submission concerns and what the '
+      + 'submission is to that item all exist now: a branch submits content as an escalation of kind '
+      + '"content", which carries its branch code, is answered or declined by HQ, can name the item '
+      + 'it concerns — a label the branch builds, not a link HQ can open — and, when it names one, '
+      + 'records whether it localises that item or asks for a change to it. The lane is read from '
+      + '/api/admin/escalations?kind=content. What is still not recorded: the relation of any '
+      + 'submission raised before that was recorded, which is never counted as a localisation of '
+      + 'another, and anything a branch localises in its own database without sending it to HQ, '
+      + 'so a count of localised items is a count of what branches sent HQ and said was a '
+      + 'localisation, not a count of every translation there is.',
     localisation_lane_endpoint: '/api/admin/escalations?kind=content',
 
     ...DERIVED_UNAVAILABLE,
@@ -600,53 +619,73 @@ async function readBoard(
     return { store: 'publications', statuses: [status], n, cards };
   }
 
-  // Brand approval: the open escalations of kind "content", oldest first,
-  // from the one statement HQ Home and HQ Support also read — never a second
-  // `WHERE status = 'open'`.
+  // Localisation and Brand approval: the open escalations of kind "content",
+  // oldest first, from the one statement HQ Home and HQ Support also read —
+  // never a second `WHERE status = 'open'`.
+  //
+  // D275 — THE TWO LANES PARTITION THAT ONE READ, BY THE RELATION A SUBMISSION
+  // RECORDS. Localisation is `localises`. Brand approval is `changes` plus
+  // every row with no relation: a row older than migration 296 that names an
+  // item is legacy, and its card says "relation not recorded" rather than
+  // guessing; a row that names no item is a change by construction. So the two
+  // lanes add up to every open content escalation, each counted once, and a
+  // legacy row is never counted as a localisation.
+  const escalationCard = (e: { uid: string; subject: string; branch_code: string; created_at: string;
+    sla: string; subject_ref: string | null; relation: string | null }) => ({
+    store: 'escalation',
+    uid: e.uid,
+    subject: e.subject,
+    branch_code: e.branch_code,
+    created_at: e.created_at,
+    sla: e.sla,
+    subject_ref: e.subject_ref,
+    relation: e.relation,
+  });
+  const cutReason = `More than ${OPEN_ESCALATION_CEILING} escalations are open, so the read stopped counting and `
+    + 'this lane shows the oldest rather than a total.';
+  let localisation: BoardPart;
   let brand: BoardPart;
   try {
     const summary = await openEscalationSummary(env);
     const content = summary.items.filter((e) => e.kind === 'content');
-    brand = {
+    const localises = content.filter((e) => e.relation === 'localises');
+    const changes = content.filter((e) => e.relation !== 'localises');
+    const partOf = (rows: typeof content): BoardPart => ({
       store: 'escalations',
       statuses: ['open'],
-      n: summary.complete ? content.length : null,
-      cards: content.slice(0, BOARD_CARDS).map((e) => ({
-        store: 'escalation',
-        uid: e.uid,
-        subject: e.subject,
-        branch_code: e.branch_code,
-        created_at: e.created_at,
-        sla: e.sla,
-      })),
-      ...(summary.complete ? {} : {
-        reason: `More than ${OPEN_ESCALATION_CEILING} escalations are open, so the read stopped counting and `
-          + 'this lane shows the oldest rather than a total.',
-      }),
-    };
+      n: summary.complete ? rows.length : null,
+      cards: rows.slice(0, BOARD_CARDS).map(escalationCard),
+      ...(summary.complete ? {} : { reason: cutReason }),
+    });
+    localisation = partOf(localises);
+    brand = partOf(changes);
   } catch {
-    brand = {
+    const failed = (): BoardPart => ({
       store: 'escalations', statuses: ['open'], n: null, cards: null,
       reason: 'The escalations table could not be read.',
-    };
+    });
+    localisation = failed();
+    brand = failed();
   }
 
   const lanes = [
     { key: 'draft', label: 'Draft', parts: [await articlesPart(lane('draft')), await publicationsPart('draft')] },
     { key: 'review', label: 'Review', parts: [await articlesPart(lane('review'))] },
     {
-      key: 'localisation', label: 'Localisation', parts: [] as BoardPart[], recorded: false,
-      reason:
-        'A branch localises in its own database, and nothing records that one piece is a localisation '
-        + 'of another, so this lane has no source. What a branch sends HQ for approval is the Brand '
-        + 'approval lane; which of those are localisations is a decision not yet taken.',
+      key: 'localisation', label: 'Localisation', parts: [localisation],
+      note:
+        'Open content escalations a branch raised as localising the item they name. Only what a '
+        + 'branch sends HQ is here: a branch that localises in its own database without sending it '
+        + 'is not counted, and neither is a submission raised before its relation was recorded.',
     },
     {
       key: 'brand_approval', label: 'Brand approval', parts: [brand],
       note:
-        'Content escalations a branch raised and HQ has not answered. Axal subsidiaries only: HQ '
-        + 'refuses a white-label\'s content escalation before recording it, because a white-label has '
-        + 'no brand desk to send it to.',
+        'Content escalations a branch raised and HQ has not answered, other than localisations: '
+        + 'those asking for a change to the item they name, those that name none, and those raised '
+        + 'before the relation was recorded, which say so. Axal subsidiaries only: HQ refuses a '
+        + 'white-label\'s content escalation before recording it, because a white-label has no brand '
+        + 'desk to send it to.',
     },
     {
       key: 'scheduled', label: 'Scheduled', parts: [await articlesPart(lane('scheduled'))],
@@ -682,8 +721,10 @@ async function readBoard(
 
   return {
     lanes,
-    // Every item in a measured lane; the Localisation lane has no source and
-    // adds nothing. Null when any lane could not be counted.
+    // Every item in a measured lane. Since D275 the Localisation lane is
+    // measured too; it and Brand approval partition the open content
+    // escalations, so none is counted twice. Null when any lane could not be
+    // counted.
     total: anyNull ? null : sum(measured),
     // Everything short of Published — what the band calls "in pipeline".
     in_flight: anyNull ? null : sum(measured.filter((l) => l.key !== 'published')),

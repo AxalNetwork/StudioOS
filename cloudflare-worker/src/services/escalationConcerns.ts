@@ -22,12 +22,18 @@
  * stale the moment the item moves, and the escalation's own `created_at`
  * already dates the label.
  *
- * WHAT IT STILL DOES NOT SAY. Naming an item is not saying the submission is a
- * localisation of it: a French version of template X and "please fix clause 4
- * of template X" both name X. HQ's "Localised" count therefore stays
- * unrecorded, with a narrower reason (D111's pattern). Recording the relation
- * is a product decision about what a localisation is, and it is filed rather
- * than guessed.
+ * WHAT IT SAID IT DID NOT SAY, AND D275 NOW RECORDS. Naming an item is not
+ * saying the submission is a localisation of it: a French version of template
+ * X and "please fix clause 4 of template X" both name X. That was filed here
+ * rather than guessed, and the decision has since been taken: a content
+ * escalation that names an item records an explicit RELATION, `localises` or
+ * `changes`, and the relation is required whenever an item is picked
+ * (migration 296). It travels beside the pick, never inside it — the concern
+ * says which item, the relation says what the submission is to it — and its
+ * vocabulary and refusals live at the bottom of this file, so the branch route
+ * and HQ's `recordEscalation` read one list. What is still not recorded: the
+ * relation of any row raised before 296, and anything a branch localises in
+ * its own database without sending it to HQ.
  *
  * THE LIST NEVER THROWS. Each source is read in its own try and answers for
  * itself; the lane GET builds this outside its own try, so a branch without
@@ -237,3 +243,40 @@ export async function resolveConcern(env: Env, c: ParsedConcern): Promise<Concer
   }
   return { ok: true, label: concernLabel(c.type, row) };
 }
+
+/* ------------------------------------------------------------------ *
+ * D275 — what the submission is TO the item it names                  *
+ * ------------------------------------------------------------------ */
+
+/**
+ * The two relations a content escalation that names an item can record
+ * (migration 296 closes the same list with a CHECK). A third is a product
+ * decision, not a new value.
+ */
+export const CONCERN_RELATIONS = ['localises', 'changes'] as const;
+export type ConcernRelation = (typeof CONCERN_RELATIONS)[number];
+
+/**
+ * A relation as sent, normalised; `undefined` when none was sent, `null` when
+ * what was sent is not one of the two. Absent is `undefined` or `null` on the
+ * wire — anything else, an empty string included, is a value that must be one
+ * of the two, because an empty string is a client sending the field, not
+ * leaving it out.
+ */
+export function parseRelation(raw: unknown): ConcernRelation | null | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const v = String(raw).trim().toLowerCase();
+  return (CONCERN_RELATIONS as readonly string[]).includes(v) ? (v as ConcernRelation) : null;
+}
+
+/** The refusals, one sentence each, shared by the branch route and HQ. */
+export const RELATION_REQUIRED =
+  'A content escalation that names an item says what it is to that item: that it localises it, '
+  + 'or that it asks for a change to it. Choose one, or raise it without naming an item.';
+export const BAD_RELATION =
+  'relation must be "localises" or "changes". Nothing was sent to HQ.';
+export const RELATION_NEEDS_ITEM =
+  'A relation says what a submission is to the item it names, so it needs an item. Pick the '
+  + 'item it concerns, or leave the relation out.';
+export const RELATION_NOT_FOR_KIND =
+  'Only a content escalation that names an item records a relation. Leave it out for this kind.';

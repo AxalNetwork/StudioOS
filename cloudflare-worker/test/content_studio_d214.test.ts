@@ -46,6 +46,7 @@ import {
 } from '../src/services/decks/deckRoster.ts';
 import { loadNetworkProfiles } from '../src/services/decks/axalSpinoutDemoDay.ts';
 import { codeOnly } from './_codeOnly.mjs';
+import { splitStatements } from './_baseline.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const SUPER = 801;
@@ -112,6 +113,15 @@ function publicationsDdl(): string {
 const M259 = read('cloudflare-worker/sql/migrations/259_hq_escalations.sql');
 const M267 = read('cloudflare-worker/sql/migrations/267_hq_escalation_sla_claim.sql');
 
+/**
+ * D275 — migration 296's `hq_escalations` half, off disk. The file also alters
+ * `branch_escalations`, which this fixture does not build, so the one
+ * statement is taken from it rather than retyped: every read of the table now
+ * names `relation`, and a fixture without it is the D133 trap.
+ */
+const M296_HQ = splitStatements(read('cloudflare-worker/sql/migrations/296_escalation_relation.sql'))
+  .find((st: string) => /^ALTER TABLE hq_escalations\b/.test(st)) as string;
+
 /** The tables the three panels read. The board reads the pipeline's and 259's. */
 const PANEL_TABLES = [
   'assessment_games', 'assessment_chapters', 'assessment_archetypes', 'assessment_items',
@@ -129,7 +139,7 @@ function freshDb(opts: { without?: string[] } = {}) {
     if (!without.has(t)) db.exec(ddl(t));
   }
   if (!without.has('admin_publications')) db.exec(publicationsDdl());
-  if (!without.has('hq_escalations')) { db.exec(M259); db.exec(M267); }
+  if (!without.has('hq_escalations')) { db.exec(M259); db.exec(M267); db.exec(M296_HQ); }
   db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)')
     .run(SUPER, 'admin', 'The Holder', 'holder@example.test');
   db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(SUPER);
@@ -325,16 +335,22 @@ test('the board draws six lanes in H19\'s order, from the two stores and the esc
     ['Draft', 'Review', 'Localisation', 'Brand approval', 'Scheduled', 'Published']);
 
   const totals = Object.fromEntries(body.board.lanes.map((l: any) => [l.key, l.total]));
+  // RE-AIMED IN D275, NOT RELAXED. Localisation was refused with no source
+  // until a content escalation recorded what it is to the item it names
+  // (migration 296). It is measured now, from the same one read as Brand
+  // approval, and the seed's two open content rows record no relation — so
+  // they are Brand approval's, and Localisation counts a real zero.
   assert.deepEqual(totals, {
-    draft: 3, review: 3, localisation: null, brand_approval: 2, scheduled: 1, published: 3,
+    draft: 3, review: 3, localisation: 0, brand_approval: 2, scheduled: 1, published: 3,
   });
-  // Localisation is refused with its reason, never given a number.
   const loc = laneOf(body, 'localisation');
-  assert.deepEqual(loc.parts, []);
-  assert.equal(loc.recorded, false);
-  assert.match(loc.reason, /nothing records that one piece is a localisation/i);
+  assert.deepEqual(loc.parts.map((p: any) => [p.store, p.n]), [['escalations', 0]]);
+  assert.equal(loc.recorded, undefined, 'the lane still says it has no source');
+  assert.match(loc.note, /localising the item they name/);
 
-  // Every item in a measured lane, and everything short of Published.
+  // Every item in a measured lane, and everything short of Published. The two
+  // content lanes partition one read, so adding Localisation counts nothing
+  // twice: the totals are unchanged.
   assert.equal(body.board.total, 12);
   assert.equal(body.board.in_flight, 9);
 });
@@ -421,7 +437,10 @@ test('Brand approval counts open content escalations only, oldest first, from th
   assert.equal(part.n, 2, 'answered, declined or non-content escalations were counted');
   assert.deepEqual(part.cards.map((c: any) => c.uid), [oldest, newer]);
   for (const c of part.cards) {
-    assert.deepEqual(Object.keys(c).sort(), ['branch_code', 'created_at', 'sla', 'store', 'subject', 'uid']);
+    // D275 — a card carries its label and relation, so a row raised before the
+    // relation was recorded can say so on the card.
+    assert.deepEqual(Object.keys(c).sort(),
+      ['branch_code', 'created_at', 'relation', 'sla', 'store', 'subject', 'subject_ref', 'uid']);
     assert.equal(c.store, 'escalation');
     assert.equal(c.branch_code, 'fr');
   }

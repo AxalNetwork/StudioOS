@@ -17,8 +17,10 @@
  * Scheduled, Published — built from the same by-status reads the route
  * reports beside them, every row labelled with its store. The canvas's "one
  * meaning of published" is refused in the band, because there are still two.
- * Localisation has no source, so its lane says why instead of holding a
- * number; Brand approval is the content escalations HQ has not answered.
+ * Localisation and Brand approval split the content escalations HQ has not
+ * answered by the relation each records (D275): Localisation is what a branch
+ * said localises the item it names; Brand approval is the rest, a submission
+ * from before the relation was recorded saying so on its card.
  *
  * THE OTHER THREE PANELS ARE READ-ONLY SUMMARIES OF CONSOLES THAT STAY WHERE
  * THEY ARE (D214). H18 and H19's changelog says they retire the assessment
@@ -45,6 +47,7 @@ import { Link } from 'react-router-dom';
 import { FileStack } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import { relationLead, RELATION_NOT_RECORDED, RELATION_NOT_RECORDED_REASON } from '../../lib/escalationRelation';
 import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import { ConsoleLinkBody, CONSOLE_LINK, CONSOLE_TILE } from './ConsoleLink';
 
@@ -111,20 +114,30 @@ function StatedAbsence({ label, reason, testid }) {
  *
  * A LABEL, NOT A LINK. The item lives in the branch's database, which HQ cannot
  * open, so the branch sends the name it gives the item and this renders that
- * name as it came — the same "About" line HQ Support draws for this field, so
- * one field has one word.
+ * name as it came.
+ *
+ * D275 — AND WHAT THE SUBMISSION IS TO IT. A submission that names an item
+ * records whether it localises that item or asks for a change to it, so the
+ * row leads with that verb: "Localises {label}" or "Changes {label}". A row
+ * raised before the relation was recorded still names its item, and says the
+ * relation is not recorded rather than guessing one — "About {label}", the
+ * word HQ Support draws for this field, with the absence beside it.
  *
  * AN ABSENT LABEL IS STATED, NEVER BLANK. A submission raised without naming an
  * item, or before a submission could carry a label at all, has none. That row
  * says so with its reason rather than drawing an empty "About", which would read
  * as a label that failed to load.
  */
-export function LocalisationRow({ subjectRef }) {
+export function LocalisationRow({ subjectRef, relation }) {
   const label = typeof subjectRef === 'string' ? subjectRef.trim() : '';
   if (label) {
+    const { lead, unrecorded } = relationLead(relation);
     return (
       <p className="mt-1 text-[10.5px] text-axal-muted" data-testid="hq-localisation-about">
-        About <span className="font-mono">{label}</span>
+        {lead} <span className="font-mono">{label}</span>
+        {unrecorded && (
+          <> · <Unrecorded reason={RELATION_NOT_RECORDED_REASON}>{RELATION_NOT_RECORDED}</Unrecorded></>
+        )}
       </p>
     );
   }
@@ -204,7 +217,9 @@ export function bandLine({ loading, unreadable, board }) {
   if (unreadable) return 'the content summary could not be read';
   const n = board ? board.in_flight : null;
   const head = n === null || n === undefined ? 'in pipeline: not fully counted' : `${num(n)} in pipeline`;
-  return `${head} · localisation not recorded · two meanings of published`;
+  // D275 — localisation is counted now, but only as branches send it to HQ,
+  // so the band says whose count it is rather than "not recorded".
+  return `${head} · localisation as branches send it · two meanings of published`;
 }
 
 /* ── C3 · the board ──────────────────────────────────────────────────────── */
@@ -220,7 +235,13 @@ const SLA_WORD = { past: 'past SLA', due_soon: 'due soon', ok: 'inside SLA' };
  */
 export function cardMeta(card) {
   if (card.store === 'escalation') {
-    return ['escalation', card.created_at ? `raised ${day(card.created_at)}` : null, SLA_WORD[card.sla] || null]
+    // D275 — a card that names an item but records no relation was raised
+    // before the relation was recorded. It sits in Brand approval, and says
+    // why rather than passing for a change. A card that names no item is a
+    // change by construction, so it says nothing more.
+    const legacy = !card.relation && typeof card.subject_ref === 'string' && card.subject_ref.trim()
+      ? RELATION_NOT_RECORDED : null;
+    return ['escalation', card.created_at ? `raised ${day(card.created_at)}` : null, SLA_WORD[card.sla] || null, legacy]
       .filter(Boolean).join(' · ');
   }
   return [card.store, card.status, day(card.updated_at)].filter(Boolean).join(' · ');
@@ -654,6 +675,22 @@ export function submittedFigure(lane, laneItems) {
   return String(laneItems.length);
 }
 
+/**
+ * D275 — the Localised stat, from the read the page already makes.
+ *
+ * SUBMITTEDFIGURE'S RULE: null unless the lane read was complete, so a cut
+ * list is never counted as the total. Its BASIS is named in the stat's note:
+ * content escalations, any status, whose recorded relation is `localises`. A
+ * row with no relation — every row raised before the relation was recorded —
+ * is never counted, because nobody said it was a localisation.
+ */
+export function localisedFigure(lane, laneItems) {
+  if (!laneItems || lane.complete !== true) return null;
+  return String(laneItems.filter((it) => it.relation === 'localises').length);
+}
+
+const LOCALISED_BASIS = 'content escalations marked "localises", any status; none raised before that was recorded';
+
 /** The localisation lane's count note — reading, unreadable, cut and not offered are different things. */
 function submittedNote(lane, laneItems) {
   if (laneItems && lane.complete === true) return 'escalations of kind content';
@@ -741,9 +778,12 @@ export default function ContentPage() {
         // decision. "Localisation" stays and is NARROWER: what is missing is
         // the link between a piece and the one it localises, not the lane.
         // D208 — NARROWER AGAIN. A submission can now name the item it
-        // concerns, so "which item" is answered; "what the submission is to
-        // it" is not, and that is the part a localisation count needs.
-        ['Localisation link', 'A submission can name the item it concerns, as its branch labels it. Nothing records whether it localises that item or asks for a change to it, so a count of localised items would still be a count of submissions.'],
+        // concerns, so "which item" is answered.
+        // D275 — CORRECTED, NOT REMOVED. "What the submission is to it" is
+        // recorded now too; what this row still names is the part nothing
+        // stores: a relation from before it was recorded, and a localisation a
+        // branch never sends.
+        ['Localisation link', 'A submission that names an item records whether it localises that item or asks for a change to it. A submission raised before that was recorded has no relation and is not counted as a localisation, and a branch that localises in its own database without sending it to HQ is not seen here.'],
         ['Per-article attribution', 'An escalation names the branch that submitted it; an ARTICLE still names no licence (U1).'],
         // D214 — what H18 and H19 draw that nothing stores.
         ['Publish time', 'Scheduled means approved; publishing is a manual step, and nothing stores when a piece goes out.'],
@@ -777,8 +817,8 @@ export default function ContentPage() {
           <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
             Six lanes, from Draft to Published, drawn from the stores that exist: articles, publications, and the
             content escalations branches send HQ. Every row names its store, because the two stores still mean two
-            different things by &ldquo;published&rdquo;, and a lane with no source says why rather than holding a
-            number. Below it, the deck roster, the Assessment Studio and the personas taxonomy — each a read-only
+            different things by &ldquo;published&rdquo;, and a lane that cannot be counted says why rather than
+            holding a number. Below it, the deck roster, the Assessment Studio and the personas taxonomy — each a read-only
             summary of its console, ending in a link to it.
           </p>
         </header>
@@ -836,7 +876,9 @@ export default function ContentPage() {
                   takes a decision (brand approval). What still does not exist
                   is a LINK saying which piece a submission localises — so this
                   lane counts submissions, and the refusal below says that
-                  rather than being deleted.
+                  rather than being deleted. D275 recorded the link: a
+                  submission that names an item says whether it localises it or
+                  asks for a change to it, and each row below leads with that.
 
                   D206 — THE KIND IS SETTLED WHERE THE ESCALATION IS RECORDED,
                   NOT HERE. This note used to say the lane did not filter on
@@ -894,7 +936,7 @@ export default function ContentPage() {
                             {it.branch_code} · raised {it.created_at}
                             {it.sla === 'past' ? ' · past SLA' : it.sla === 'due_soon' ? ' · due soon' : ''}
                           </div>
-                          <LocalisationRow subjectRef={it.subject_ref} />
+                          <LocalisationRow subjectRef={it.subject_ref} relation={it.relation} />
                           <KindGateFailedRow item={it} />
                         </div>
                         <span className={`${PILL} ${it.answer ? PILL_GREEN : PILL_AMBER}`}>
@@ -925,13 +967,20 @@ export default function ContentPage() {
                     : submittedFigure(lane, laneItems)}
                   note={submittedNote(lane, laneItems)}
                 />
-                {/* STILL PERMANENTLY BLANK, and for the one reason that did not
-                    change: counting localisations needs a link between two
-                    pieces, and nothing records one. D208 lets a submission
-                    NAME its item, which is not the same thing — a French
-                    version of X and a fix to X both name X — so the check the
-                    task asked for came out "stays null, narrower reason". */}
-                <Stat label="Localised" value={null} note="naming an item does not record a localisation" />
+                {/* D275 — COUNTED NOW, FROM THE READ ABOVE. Until migration 296
+                    this stayed blank: naming an item (D208) is not saying the
+                    submission localises it. A submission that names an item now
+                    records that relation, so the lane read already holds the
+                    answer. The figure follows submittedFigure's rule — null
+                    unless the read was complete — and counts only rows marked
+                    `localises`, never a row whose relation was not recorded. */}
+                <Stat
+                  label="Localised"
+                  value={laneItems && lane.complete !== true
+                    ? <Unrecorded reason="More content escalations than one read returns, so no count is shown.">Not counted</Unrecorded>
+                    : localisedFigure(lane, laneItems)}
+                  note={laneItems && lane.complete === true ? LOCALISED_BASIS : submittedNote(lane, laneItems)}
+                />
               </div>
               <p className="mt-3 text-[12px] leading-relaxed text-axal-muted" data-testid="hq-localisation-reason">
                 {ready ? data.localisation_reason : loading ? 'Reading the content summary…' : 'The content summary could not be read.'}

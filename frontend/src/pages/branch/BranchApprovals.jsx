@@ -56,6 +56,9 @@ import { Link } from 'react-router-dom';
 import { Send } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import {
+  RELATION_CHOICES, relationLead, RELATION_NOT_RECORDED, RELATION_NOT_RECORDED_REASON,
+} from '../../lib/escalationRelation';
 import { Card, Unrecorded, Unreadable } from '../../ui';
 import BranchZone from './BranchZone';
 
@@ -220,6 +223,56 @@ export function concernToSend(chosen, offered, key) {
 }
 
 /**
+ * D275 — the relation a raise sends: what the submission is to the item it
+ * names. Sent only beside a pick that is itself sent — derived from what is on
+ * screen at send time, like `concernToSend`, so a relation held from an
+ * earlier pick never travels without one — and only when it is one of the two.
+ * It rides BESIDE `concerns`, never inside it: the concern says which item,
+ * the relation says what the submission is to it.
+ */
+export function relationToSend(chosen, offered, key, relation) {
+  if (!concernToSend(chosen, offered, key)) return undefined;
+  return RELATION_CHOICES.some(([v]) => v === relation) ? relation : undefined;
+}
+
+/**
+ * D275 — true when an item is picked and no relation is chosen: the form's
+ * refusal, the one the route makes (`relation_required`), made first.
+ */
+export function relationMissing(chosen, offered, key, relation) {
+  return Boolean(concernToSend(chosen, offered, key)) && !relationToSend(chosen, offered, key, relation);
+}
+
+/**
+ * D275 — "What is this to that item?", REQUIRED whenever an item is picked
+ * (the coordinator's decision, quoted in D275). Two radios, no default: a
+ * pre-selected answer would record a relation nobody chose.
+ */
+export function RelationPicker({ value, onChoose }) {
+  return (
+    <fieldset data-testid="branch-escalate-relation">
+      <legend className="text-[11.5px] font-bold">What is this to that item? (required)</legend>
+      <div className="mt-1 flex flex-wrap gap-3">
+        {RELATION_CHOICES.map(([v, words]) => (
+          <label key={v} className="flex items-center gap-1.5 text-[12px]">
+            <input
+              type="radio"
+              name="branch-escalate-relation"
+              value={v}
+              checked={value === v}
+              required
+              onChange={() => onChoose(v)}
+              data-testid={`branch-escalate-relation-${v}`}
+            />
+            This {words}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+/**
  * The content raise's optional "which item" choice (D208).
  *
  * A SELECT WHOSE OPTION TEXT IS THE WORKER'S LABEL, grouped by source, with a
@@ -284,6 +337,24 @@ export function ConcernsPicker({ offered, value, onChoose }) {
         <p className="mt-1 text-[11px] leading-relaxed text-axal-muted" data-testid="branch-escalate-concern-note">
           {offered.note}
         </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * D275 — one raised escalation's "what it concerns" line, in the words HQ
+ * received, led by the relation it records. The same wording HQ's Localisation
+ * zone uses (`lib/escalationRelation.js`), so one relation reads one way on
+ * both tiers.
+ */
+export function EscalationAbout({ subjectRef, relation }) {
+  const { lead, unrecorded } = relationLead(relation);
+  return (
+    <div className="mt-0.5 text-[10.5px] text-axal-muted" data-testid="branch-escalation-about">
+      {lead} <span className="font-mono">{subjectRef}</span>
+      {unrecorded && (
+        <> · <Unrecorded reason={RELATION_NOT_RECORDED_REASON}>{RELATION_NOT_RECORDED}</Unrecorded></>
       )}
     </div>
   );
@@ -424,6 +495,7 @@ export default function BranchApprovals({ user }) {
   const [laneFilter, setLaneFilter] = useState(null);
   const [kind, setKind] = useState('other');
   const [concern, setConcern] = useState('');       // D208 — the picked item's key, or none
+  const [relation, setRelation] = useState('');     // D275 — what the raise is to that item, or none yet
   const [subject, setSubject] = useState('');
   const [detail, setDetail] = useState('');
   const [sending, setSending] = useState(false);
@@ -458,17 +530,22 @@ export default function BranchApprovals({ user }) {
   // D208 — the items a content raise can name, from the same lane read.
   const concerns = concernsOffered(lane);
 
+  // D275 — the form refuses a pick with no relation, as the route does.
+  const needsRelation = relationMissing(chosen, concerns, concern, relation);
+
   const submit = async (e) => {
     e.preventDefault();
-    if (!subject.trim() || sending || !chosen) return;
+    if (!subject.trim() || sending || !chosen || needsRelation) return;
     setSending(true);
     setSendError('');
     try {
       await api.branchEscalate({ kind: chosen, subject: subject.trim(), detail: detail.trim() || undefined,
-        concerns: concernToSend(chosen, concerns, concern) });
+        concerns: concernToSend(chosen, concerns, concern),
+        relation: relationToSend(chosen, concerns, concern, relation) });
       setSubject('');
       setDetail('');
       setConcern('');
+      setRelation('');
       load();
     } catch (err) {
       reportError('branch-escalate', err);
@@ -551,7 +628,11 @@ export default function BranchApprovals({ user }) {
           {/* D208 — for content only: the one kind whose subject is an item
               this branch holds. Every other kind describes itself in words. */}
           {chosen === 'content' && (
-            <ConcernsPicker offered={concerns} value={concern} onChoose={setConcern} />
+            <ConcernsPicker offered={concerns} value={concern} onChoose={(v) => { setConcern(v); setRelation(''); }} />
+          )}
+          {/* D275 — only beside a pick that will be sent; a new pick clears it. */}
+          {concernToSend(chosen, concerns, concern) && (
+            <RelationPicker value={relation} onChoose={setRelation} />
           )}
           <input
             className="w-full rounded-xl border border-axal-hairline bg-axal-ground p-2.5 text-[12.5px]"
@@ -572,7 +653,7 @@ export default function BranchApprovals({ user }) {
           <div className="flex items-center gap-3">
             <button
               type="submit"
-              disabled={!subject.trim() || sending || !chosen}
+              disabled={!subject.trim() || sending || !chosen || needsRelation}
               className="rounded-xl bg-slate-700 px-3 py-2 text-[12px] font-bold text-white disabled:opacity-50 dark:bg-slate-300 dark:text-slate-900"
             >
               {sending ? 'Raising…' : 'Raise to HQ'}
@@ -631,12 +712,11 @@ export default function BranchApprovals({ user }) {
                       {it.sla && SLA_LABEL[it.sla] ? ` · ${SLA_LABEL[it.sla]}` : ''}
                     </div>
                     {/* D208 — the item it was raised about, in the words HQ
-                        received. "About" is the word HQ Support already uses
-                        for this field, so one field has one word. */}
+                        received. D275 — led by what the raise is to it:
+                        "Localises" or "Changes", or "About" with the relation
+                        stated as not recorded on a row raised before it was. */}
                     {it.subject_ref && (
-                      <div className="mt-0.5 text-[10.5px] text-axal-muted" data-testid="branch-escalation-about">
-                        About <span className="font-mono">{it.subject_ref}</span>
-                      </div>
+                      <EscalationAbout subjectRef={it.subject_ref} relation={it.relation} />
                     )}
                   </div>
                   <span className={STATUS_PILL[it.status] || STATUS_PILL.open}>{it.status}</span>

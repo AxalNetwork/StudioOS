@@ -182,13 +182,15 @@ test('H6\'s localisation refusal is NARROWED, not deleted', () => {
   // The lane reads the escalation board, on its own state and its own retry.
   assert.match(content, /api\.escalations\(\{ kind: 'content' \}\)/, 'the lane does not read content escalations');
   assert.match(content, /onRetry=\{loadLane\}/, 'an unreadable lane cannot be retried on its own');
-  // And the ONE stat that must stay blank is still blank, for the one reason
-  // that did not change.
+  // RE-AIMED IN D275, NOT RELAXED. The ONE stat that stayed blank acquired a
+  // store: a submission that names an item records whether it localises it.
+  // What is held now is that it counts only that — through localisedFigure,
+  // which counts rows marked `localises` and never one with no relation.
   const at = content.indexOf('label="Localised"');
   assert.ok(at >= 0, 'the Localised stat is gone');
   const end = content.indexOf('/>', at);
-  assert.match(content.slice(at, end), /value=\{null\}/,
-    'the Localised stat acquired a value — nothing records that one piece localises another');
+  assert.match(content.slice(at, end), /localisedFigure\(lane, laneItems\)/,
+    'the Localised stat no longer counts from the recorded relation');
 });
 
 test('no absent figure on the branch lane is defaulted to a number', () => {

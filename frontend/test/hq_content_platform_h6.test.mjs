@@ -165,19 +165,22 @@ test('no absent figure is defaulted to a number, on either page', () => {
   // counted the absence of, so they now count what it holds — asserted below
   // and rendered in hq_platform_switches_d203.test.mjs, where an unreadable
   // store must draw as unreadable and never as none thrown.
-  // "Localised" STAYS, for the one part of H6's refusal that did not change:
-  // nothing records that one piece is a localisation of another.
-  for (const [src, label] of [[C, 'Localised']]) {
-    const at = src.indexOf(`label="${label}"`);
-    assert.ok(at >= 0, `the ${label} stat is gone`);
+  // "Localised" LEFT IN D275, the last of the four, and for the same reason
+  // as the others: it acquired a store. A content escalation that names an
+  // item records whether it localises it (migration 296). So what is held now
+  // is that it reads its figure through ONE builder over the lane read — never
+  // a literal, and never `|| 0` (the loop above) — the shape the two below have.
+  {
+    const at = C.indexOf('label="Localised"');
+    assert.ok(at >= 0, 'the Localised stat is gone');
     // BOUNDED TO THE ELEMENT, not to a character count. `at + 160` ran past
-    // the closing tag into the NEXT <Stat>, so replacing this one's
-    // value={null} with value={0} still matched the neighbour's — both
-    // mutations escaped. The slice ends at this element's own `/>`.
-    const end = src.indexOf('/>', at);
-    assert.ok(end > at, `the ${label} stat is not a self-closing element any more`);
-    assert.match(src.slice(at, end), /value=\{null\}/,
-      `the ${label} stat acquired a value — there is no source for one`);
+    // the closing tag into the NEXT <Stat>, so a mutation in one stat matched
+    // its neighbour's text. The slice ends at this element's own `/>`.
+    const end = C.indexOf('/>', at);
+    assert.ok(end > at, 'the Localised stat is not a self-closing element any more');
+    assert.ok(C.slice(at, end).includes('localisedFigure(lane, laneItems)'),
+      'the Localised stat no longer reads its figure through localisedFigure');
+    assert.doesNotMatch(C.slice(at, end), /value=\{\d/, 'the Localised stat was given a literal');
   }
   // …and the two that left read their figure from ONE builder each, over the
   // registry payload, rather than a literal. Bounded to the element for the
