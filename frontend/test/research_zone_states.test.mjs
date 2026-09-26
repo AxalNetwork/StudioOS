@@ -195,9 +195,12 @@ test('which sources failed is tracked, not just that some did', () => {
     'the failed keys must reach state, not just the banner');
   assert.match(DESK, /const \[failedKeys, setFailedKeys\]/, 'and be held there');
   // A retry that succeeds must clear the flag, or the card lies in the other
-  // direction — permanently unavailable after one transient failure.
-  assert.match(DESK, /next\.delete\('documents'\)/,
-    'a later success must clear the failure it recovered from');
+  // direction — permanently unavailable after one transient failure. Every
+  // source now loads in the one batch (D421 moved the library into it), and a
+  // retry REPLACES the set rather than adding to it, which is what clears it.
+  assert.ok(!/setFailedKeys\(\(previous\) => new Set\(previous\)\.add/.test(DESK) || /next\.delete\(/.test(DESK),
+    'a failure is accumulated with nothing to clear it on a later success');
+  assert.match(DESK, /\}, \[retry\]\);/, 'the batch no longer re-runs on retry, so nothing can clear a failure');
 });
 
 test('an empty store reports zero rather than blaming the connection', () => {
