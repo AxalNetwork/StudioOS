@@ -273,9 +273,12 @@ const OUTCOME_PLACEHOLDER = {
 /**
  * A refusal in words, and whether reloading is the next step.
  *
- * `request()` puts a string `error` code into `err.message` and keeps the body
- * on `err.data`, so the sentence is read from `err.data.message` first — the
- * code is not a sentence (#343).
+ * The sentence is read from `err.data.message` first: it is what the route
+ * wrote, whatever builds the thrown error. Before D258 it was also the only
+ * place the sentence survived, because `request()` put a string `error` code
+ * into `err.message`. Since D258 `err.message` carries the body's sentence and
+ * `err.code` carries the code, so the two reads agree whenever the body sends a
+ * `message` — and the code is still never shown as the reason.
  *
  * A FAILURE WITH NO STATUS, OR A 5xx, IS NOT A REFUSAL. A timeout, a dropped
  * connection, or a server failure after the write can each leave the decision

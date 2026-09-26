@@ -9,8 +9,9 @@ import './investorFundLPs.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
+import { titleCase as caseLabel } from '../../lib/absence';
 
-const titleCase = (value) => String(value || 'Unrecorded').replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+const titleCase = (value) => caseLabel(value) || 'Unrecorded';
 const cents = (value) => value == null || value === '' ? null : Number(value);
 const lpCommitment = (lp) => lp?.commitment_cents != null ? cents(lp.commitment_cents) / 100 : lp?.commitment_amount != null ? Number(lp.commitment_amount) : null;
 const lpPaid = (lp) => lp?.paid_cents != null ? cents(lp.paid_cents) / 100 : lp?.invested_amount != null ? Number(lp.invested_amount) : null;

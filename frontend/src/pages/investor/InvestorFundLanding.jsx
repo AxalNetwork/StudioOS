@@ -7,8 +7,9 @@ import { WorkerRail } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorFundLanding.css';
+import { titleCase as caseLabel } from '../../lib/absence';
 
-const titleCase = (value) => String(value || 'unrecorded').replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+const titleCase = (value) => caseLabel(value) || 'Unrecorded';
 const dollarsToCents = (value) => Math.round((Number(value) || 0) * 100);
 const callDollars = (call) => call?.amount_cents != null ? Number(call.amount_cents) / 100 : Number(call?.amount);
 const date = (value) => value ? String(value).slice(0, 10) : 'Unrecorded';

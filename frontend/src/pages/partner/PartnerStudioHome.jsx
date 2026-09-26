@@ -8,6 +8,7 @@ import { api } from '../../lib/api';
 import PersonalAdvisor from '../../components/advisor/PersonalAdvisor';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
 import './partnerStudioHome.css';
+import { titleCase as caseLabel } from '../../lib/absence';
 
 const loading = { state: 'loading' };
 const unavailable = (message) => ({ state: 'unavailable', message: message || 'Not available from a connected source.' });
@@ -19,8 +20,9 @@ const asItems = (data) => {
   }
   return [];
 };
-const label = (value) => String(value || 'Not recorded').replace(/[_-]/g, ' ');
-const titleCase = (value) => label(value).replace(/\b\w/g, (letter) => letter.toUpperCase());
+// D268 — the fallback is applied AFTER casing, so an absence reads
+// "Not recorded" and never "Not Recorded".
+const titleCase = (value) => caseLabel(value) || 'Not recorded';
 
 function money(value) {
   if (value == null || value === '') return 'Not recorded';

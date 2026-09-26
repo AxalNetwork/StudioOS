@@ -85,28 +85,18 @@ test('NOT_RECORDED has one definition, and the two libs re-export it', () => {
 });
 
 /**
- * The title-casers this PR did not convert, with the reason they are deferred.
+ * The three title-casers still written by hand, and why each stays (D268).
  *
- * Each is the same shape with its OWN fallback, and the HQ pair uses
- * `replaceAll('_', ' ')` rather than a regex. They convert in the follow-up;
- * doing them here would put a founder refactor and an investor copy change
- * behind one review. The list may only ever shrink.
+ * D268 moved fifteen of the eighteen onto lib/absence.js's titleCase. The
+ * list may only ever shrink.
  */
 const DEFERRED_TITLE_CASERS = [
-  'lib/advisor/router.js', 'lib/assessmentMeta.js', 'lib/signalsMeta.js',
-  'pages/FundPerformancePage.jsx', 'pages/PortfolioGrowthPage.jsx',
-  'pages/admin/AdminLpApplications.jsx',
+  // Session 5 edits both HQ pages in the same wave (task 340); converting them
+  // here would put two sessions on adjacent lines. They convert afterwards.
   'pages/hq/HqHomePage.jsx', 'pages/hq/SecurityPage.jsx',
-  'pages/insights/InsightsPage.jsx',
-  'pages/investor/InvestorFundLPs.jsx', 'pages/investor/InvestorFundLanding.jsx',
-  'pages/investor/InvestorFundReporting.jsx',
-  'pages/investor/InvestorNetworkWorkspace.jsx',
-  'pages/investor/InvestorPortfolioCanvas.jsx',
   // Kept deliberately: it is the reference for the correct ordering — it cases
   // first and falls back after, which is why its null reads "Not recorded".
   'pages/investor/InvestorPortfolioPositions.jsx',
-  'pages/investor/InvestorPortfolioUpdates.jsx',
-  'pages/partner/PartnerStudioHome.jsx', 'pages/pipeline/bucketing.js',
 ];
 
 test('no new title-caser appears, and the deferred list only shrinks', () => {

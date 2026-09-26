@@ -141,12 +141,22 @@ test('a 404 has its own sentence, and a refusal reads its sentence rather than i
   assert.match(gone.text, /no longer on HQ’s board/);
   assert.equal(gone.reload, true);
 
-  // request() puts a string `error` code into `message`; the sentence is on `data`.
+  // Before D258, request() put a string `error` code into `message`, so the
+  // sentence survived only on `data`. That shape is kept here: it proves the
+  // body is read ahead of the thrown error's own text.
   const refused = decisionError(Object.assign(new Error('answer_required'), {
     status: 400, data: { error: 'answer_required', message: 'A decision needs its reason.' },
   }));
   assert.equal(refused.text, 'A decision needs its reason.');
   assert.equal(refused.reload, false);
+
+  // D258's shape: the sentence on `message`, the code on `code`. The code is a
+  // flag for the page to branch on, never the reason the operator reads.
+  const refusedNow = decisionError(Object.assign(new Error('A decision needs its reason.'), {
+    status: 400, code: 'answer_required',
+    data: { error: 'answer_required', message: 'A decision needs its reason.' },
+  }));
+  assert.equal(refusedNow.text, 'A decision needs its reason.');
 
   const denied = decisionError(Object.assign(new Error('Super admin required'), { status: 403, data: { detail: 'Super admin required' } }));
   assert.equal(denied.text, 'Super admin required');

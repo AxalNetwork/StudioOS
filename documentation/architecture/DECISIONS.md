@@ -25803,6 +25803,169 @@ so `check-runtime-schema-declared` (D235) has nothing new to check either.
   `check-folder-docs.mjs` all exit 0.
 - `node scripts/check-decision-ids.mjs` exits 0 (D1 through D257).
 
+## D258
+
+**A refusal is read in one place: `e.message` is its sentence and `e.code`
+its machine flag (task 343, C5).** `request()` in `frontend/src/lib/api.js`
+built the message as `errorObj.message || string error || detailObj.message
+|| string detail || …`, so a string `error` CODE beat the body's own
+`message`. About 190 Worker bodies send `{ error: '<code>', message:
+'<sentence>' }`, so every page that printed `e.message` printed
+`kind_not_available` instead of the sentence written for the reader — and an
+HTTP refusal carried no `e.code` at all, although `request()` itself reads
+the body's `code` three times (423 `admin_frozen`, 423 `branch_suspended`,
+403 `step_up_required`). Fixed once, at the root, rather than at the ~580
+call sites that print `e.message`: a helper every page must adopt leaves the
+defect in every page that has not, and in every page written tomorrow.
+
+**The rule, `readRefusal(raw)` → `{ message, code }`.** A code is a string
+matching `REFUSAL_CODE = /^[a-z][a-z0-9_]*$/`.
+
+- `message` = `error.message` (object) → the body's string `message` →
+  `detail.message` (object) → a SENTENCE-shaped `error` → a string `detail`
+  → a CODE-shaped `error` → the caller's own `statusText` / fallback.
+- `code` = the body's string `code` → `error.code` → `detail.code` → a
+  code-shaped string `error` → a code-shaped string `detail`. A sentence in
+  `error` never becomes a code; a numeric `code` is dropped.
+- `'timeout'` is never an HTTP `e.code`. It belongs to `timeoutError()`, and
+  `_analyticsRead` stops retrying on it. The task said no Worker route
+  returns `error: 'timeout'`; measured, `routes/competitors.ts:374` can
+  (`services/webFetch.ts` sets `page.error = 'timeout'` on an abort). So the
+  reservation is enforced in `readRefusal`, not asserted of the Worker.
+- `e.data` and `e.field` are exactly what they were, so every site that read
+  a code off `e.data` keeps working.
+
+**Why a code-shaped `error` is demoted below `detail` but a sentence one is
+not.** The census of every Worker error body (5,416 `c.json` sites, parsed
+with the TypeScript compiler) found 13 bodies pairing a code-shaped `error`
+with a human `detail` (`'SAM cannot exceed TAM'`), where `detail` must win —
+and 7 sites, 13 call paths, pairing a SENTENCE `error` with a raw technical
+`detail` (`'Stripe refund failed'` beside Stripe's JSON). The task's literal
+"string `detail` before string `error`" would have replaced *Stripe refund
+failed* with a JSON fragment on every Stripe refund, billing and promo
+failure. No body pairs a sentence `error` with a `message` or an object
+`detail`, so `message` first is safe.
+
+**Nine roots, not one.** Eight raw-`fetch` helpers in `api.js`
+(`downloadFinancialModelXlsx`, `adminFormPreviewBlob`,
+`adminTemplateStorePreviewPdfBlob`, `downloadFundLpa`, `orderInvoiceBlob`,
+`esignFetchByToken`, `esignSubmitSignature`, `esignReject`) each built their
+own Error from a body, in three different orders, and none read `message`.
+All nine now call `readRefusal`, each keeping its own fallback sentence; a
+single-definition assertion over `codeOnly(api.js)` refuses a second
+`err?.error ||` / `err?.detail ||` chain.
+
+**What shipped, in four commits.**
+1. `admin_deployments.ts`'s three refusals carried the branch code (`'fr'`)
+   in the `code` key, so `e.code` would have read `'fr'`. The key is now
+   `branch`; `admin_licences_deploy.test.ts` re-aimed at `body.branch`, its
+   message unchanged.
+2. `readRefusal`, `request()`, the eight helpers, and
+   `frontend/test/api_refusal_d258.test.mjs` driving the real `request()`
+   over the body table above.
+3. Every site that matched a code through the message moved onto `e.code`:
+   IntegrationsPage (`slack_webhook_unconfigured` — it would otherwise have
+   BROKEN, since `telegram_join.ts` sends a `message` that now wins),
+   PublicJobDetailPage's seven-key map (likewise: `jobs_public.ts:134` sends
+   a raw R2 `message`), AdminX's two, PitchDeckPage, ProjectDetail,
+   ContactPage, InviteRsvpPage, PublicEventDetailPage, MarketReading,
+   ZoneDraft and TotpEnrollment. AdminTelegram's eight catches read `e.body`,
+   which NOTHING in the SPA sets — so a PII-lint refusal showed "Send failed"
+   and dropped its findings; they read `e.code`, `e.data` and `e.message`
+   now. RecoverPage's `'not_enough_trusted_contacts'` match was deleted: no
+   route sends that code, and the route is constant by design
+   (anti-enumeration). BranchAccounts needed no change — the root fixes it.
+   3b is the guard, `frontend/test/code_through_message_d258.test.mjs`: no
+   regex holding a snake_case token is `.test()`ed against a message, no
+   `.message ===` compares a snake_case literal, no `.message?.includes()`
+   takes one, and nothing reads `e.body`. Measured before the fix: seven
+   sites, so it starts at zero with no baseline. Its first draft reported 11
+   false positives (a variable later compared to a code, a value that is not
+   a message); `stillTheValue` narrows the match to the message itself.
+   3b also fixed BoardDialogs and RoadmapDialogs, whose 409 handlers read
+   `cause.body` first — nothing sets it, so the WIP-limit and cycle refusals
+   fell through to the generic message.
+4. **A mistyped authenticator code signed the person out.** `request()`'s 401
+   branch clears the token and redirects to /login for any non-`/auth/` path
+   on a protected page, and FOUR `/api/settings` routes answered a wrong TOTP
+   code with 401 — `/totp/re-enrol/confirm`, `/totp/enrol/confirm`,
+   `/totp/repair`, and `/totp/recovery-codes/regenerate`, which the plan's
+   three missed. All four now send one body, `{ error: 'invalid_code',
+   message: <sentence> }`, with 400, and the dev FastAPI mirror raises the
+   same body as `detail`. The four routes are on `getCurrentUser`'s relock
+   allowlist, so a relocked account still reaches re-enrolment and gets the
+   400, not a relock refusal — asserted.
+
+**Deviations, each measured.** IncorporatePage's code match moved onto
+`e.code` rather than staying a comment fix. ApiBridgePage is allowlisted in
+the guard: the flagged chain sits inside the code sample the page shows
+developers, which is text and not code this app runs. SettingsPage's remove
+receives a raw Response and now reads the refusal's body at all;
+ProjectDetail's Crunchbase catch reads `e.code` and drops its regex arm.
+ContentPage's comment is moot (it reads `e.data`). The D205 test
+(`hq_support_answer_d205`) gained a D258 fixture rather than a loosened
+assertion. Sentence matches that are verified against their route
+(RegisterPage `/already registered/`, `'TOTP required'` ×4, partner
+`isNoPartnerProfile`) are left alone. CompanyCandidate is allowlisted and
+filed with task 435: `POST /competitors/fetch` answers 200 `{ok:false,
+error:<code>}`, and the Worker should refuse instead. Two comments that describe the old precedence sit in files an open PR
+held (#804) and were filed rather than edited.
+
+**Filed, not folded in.**
+- Task 442: `/totp/recovery-codes/regenerate` writes only
+  `users.totp_recovery_codes`, while `/totp/repair` reads the stale
+  `auth_totp.recovery_hashes` and mirrors those OLD hashes back — so
+  regenerate-then-repair revives the discarded codes and kills the new ones.
+  The fix is for regenerate to call `updateRecoveryHashes`. (The route's
+  header also says 8 codes; it generates 10.)
+- 28 hand-written 401s outside `routes/auth*` (deck_share_actions 9,
+  notifications 8, realtime 2, integrations 2, customer_chat 2, and one each
+  in votes, jobs, github, events and assessment) need classifying for the same
+  sign-out class: a 401 is right only when the session is genuinely gone.
+- About 79 bodies put raw provider or exception text where a reader now
+  sees it (Stripe's JSON in `billing.ts`, `payments.ts`, `orders.ts`,
+  `legal.ts`, `admin_stripe.ts`; `String(e?.message)` in `imports.ts`,
+  `integrations.ts`, `auth_sms.ts`, `auth_recover.ts`, `decks.ts`,
+  `admin_publications.ts`, `admin_x.ts`, `trust.ts`; `jobs_public.ts:134`;
+  deck `pdf_render_failed`; legal `order_failed`) — no worse for a reader
+  than a code, more useful to support, and a Worker defect either way.
+- Four bodies send a technical `error` beside a human `detail`
+  (`public.ts:763/779/834`, `founder_validate.ts:882`); no client order can
+  fix them. Bare-code refusals remain in `admin_articles.ts` and in
+  `auth_recover`'s trusted-contact codes.
+- The `mapError` comment says 31 call sites; there are 368.
+  `PitchDeckPage:442` passes an object to `reportError`. `CapTablePage.jsx`
+  cites the dev backend. The settings TOTP routes call no
+  `recordSecurityEvent`, so a wrong code there is not on H23's ledger.
+
+**No migration** — 297 stays free. **No new `/api/*` method.**
+
+**VERIFIED.** On the tree as landed, cut from `main` at `78796f234` with the
+six D258 commits cherry-picked (zero conflicts; `docs/` rebuilt once by the
+root `npm run build`). It was first verified on `b556685bc`; `main` then took
+two merges (#807, #808), so it was re-landed and re-run rather than carried
+across, and every figure below is from that second run:
+- `npm run test:drift` exits 0, read as the exit code from a redirected log:
+  frontend 3322, worker 4378 (4375 pass plus the 3 pre-existing
+  environment-gated skips), retention 112, zero `not ok`. Frontend reads four
+  higher than the first run's 3318 because #807 and #808 each added tests to
+  `main`; none of the four is D258's, and nothing fell. Every test in the
+  three new files is confirmed passing by name: `api_refusal_d258` (17),
+  `code_through_message_d258` (6), `totp_wrong_code_d258` (10).
+- Both typechecks, `lint:undef`, `check-api-drift`, `check-decision-ids`,
+  `check-folder-docs`, `check-unused-imports`, `check-react-hook-imports` and
+  `check-docs-fresh --strict` exit 0.
+- Mutations, each counted caught only on a non-zero exit and a `not ok`,
+  every file restored from a snapshot and verified by sha256: commit 2's
+  precedence, code-shape, `'timeout'` reservation and single-definition
+  assertions; commit 3's migrated sites and the guard's rules; commit 4's
+  eight — each of the four TOTP routes put back to 401, the message made
+  code-shaped, enrol/confirm made to stop validating, one route given its own
+  sentence, and the code renamed. All caught.
+- No migration. The highest on disk is **296**; this PR takes none. Decisions
+  on `main` end at **D282**, and D258 sits in numeric position between D257
+  and D259.
+
 ## D259
 
 **HQ's cross-host support session (D120) gets its screen. A Support control
@@ -27172,6 +27335,72 @@ No test name from the baseline run is missing.
 edit. `check-docs-fresh --strict`, both typechecks, `check-decision-ids`,
 `check-folder-docs`, `check-api-drift` and `check-access-comments` exit 0.
 
+## D268
+
+**Task 429: fifteen of the eighteen hand-written title-casers move onto
+lib/absence.js's titleCase.**
+
+**What was true on main.**
+- `absence_helpers_single_definition.test.mjs` held eighteen files on
+  `DEFERRED_TITLE_CASERS`. Each wrote its own
+  `.replace(/\b\w/g, …)`, and several passed a fallback through the caser.
+  `PartnerStudioHome` rendered an absence as "Not Recorded", the defect the
+  ledger's header describes.
+
+**What changed.**
+- **Fifteen files now import `titleCase`:**
+  - `lib/advisor/router.js` (`pageLabel`), `lib/assessmentMeta.js`
+    (`humanize`) and `lib/signalsMeta.js` (`prettify`);
+  - `FundPerformancePage`, `PortfolioGrowthPage`, `AdminLpApplications`
+    and `InsightsPage` (`sectionLabel`);
+  - the investor pages `InvestorFundLPs`, `InvestorFundLanding`,
+    `InvestorFundReporting`, `InvestorNetworkWorkspace` (`typeLabel`),
+    `InvestorPortfolioCanvas` and `InvestorPortfolioUpdates`;
+  - `PartnerStudioHome` and `pipeline/bucketing.js` (`prettyStage`).
+- **Each fallback is applied after casing, spelled as it renders.** The two
+  that relied on the caser to capitalise them are now written capitalised:
+  - `InvestorFundLanding`'s `'unrecorded'` becomes `'Unrecorded'`;
+  - `InvestorNetworkWorkspace`'s `'relationship'` becomes `'Relationship'`.
+
+  So no visible fallback changes, except the one that was wrong.
+- **What each helper did around the caser stays:**
+  - `pageLabel`'s route map and `''`;
+  - `prettyStage`'s `STAGE_LABELS` and `'—'`;
+  - `sectionLabel`'s `''`.
+- **The ledger shrinks by exactly fifteen, to three.** The header says why:
+  - `HqHomePage` and `SecurityPage`: Session 5 edits both this wave (task
+    340).
+  - `InvestorPortfolioPositions`: kept as the reference ordering.
+
+**Behaviour changes, each asserted in `title_casers_d268.test.mjs`.**
+- **Hyphens now become spaces** in `prettify` and in the page wrappers that
+  normalised only `_` before. For example, `co-invest_round` now reads
+  "Co Invest Round".
+- **Input is trimmed before casing** in `prettify` and every page wrapper.
+- **Whitespace-only input now takes the fallback.** It used to render
+  blank.
+- **`PartnerStudioHome`'s absence reads "Not recorded".**
+- **Runs of `_`/`-` still collapse in `humanize` and `prettyStage`.**
+  `titleCase` replaces each character with its own space. These two
+  receive stored slugs and stage names, so the collapse is kept at the call
+  site, before `titleCase`, and their output is unchanged.
+  `pipeline_bucketing.test.mjs`'s four pins pass untouched.
+
+**Tests.** `frontend/test/title_casers_d268.test.mjs` (8).
+- It imports the exported helpers.
+- It lifts each page-local wrapper, and `router.js`'s `pageLabel`, out of
+  its source and runs it with the real `titleCase`. The wrapper that runs
+  is the one on disk. `router.js` imports a JSON manifest the test loader
+  cannot load.
+
+**Mutations: 4 run, 4 caught.**
+- A local caser re-declared in `InvestorFundLPs`.
+- A fallback passed through `titleCase` in `InvestorNetworkWorkspace`.
+  Caught by the whitespace assertion, because the re-cased fallback happens
+  to read the same.
+- A converted file put back on the ledger.
+- `PartnerStudioHome` rendering "Not Recorded".
+
 ## D269
 
 **Task 427: a migration already on main is never edited, deleted or renamed,
@@ -28436,3 +28665,90 @@ the Node guard.
 
 `frontend/src` moved, so `docs/` is rebuilt. No route, no worker change, no
 migration, no `api.js` method.
+
+## D300
+
+**Every file in `frontend/public` has to have a named reader — one did not,
+and had been publishing the whole engineering changelog at the site's apex
+for over four months.** Task 433.
+
+**What was public, and since when.**
+- `frontend/public/CHANGELOG.md` was a git symlink (mode 120000, added
+  05487e0e1, 2026-05-21) to `../../CHANGELOG.md`, the root engineering
+  changelog. `vite.config.js`'s `emptyOutDir: true` means every build empties
+  `docs/` and copies `frontend/public/` back in, following the symlink — so
+  `docs/CHANGELOG.md` was the whole engineering log (829,860 bytes at the
+  time this was found) and every deploy has published it at `/CHANGELOG.md`
+  on both `axal.vc` and `app.axal.vc` since 21 May. Nothing in the repo reads
+  it: the user-facing changelog is a different file
+  (`CHANGELOG-user.md`, read by `pages/docs/sections/changelog.js`) and stays.
+- `frontend/public/test.html` (365 bytes, added 91250a099, 2026-08-05) was a
+  leftover smoke page — `<title>Test</title>`, "✅ Page loads correctly" —
+  published at `/test.html` since 5 August, also with no reader.
+- Before deleting the symlink, the engineering changelog it exposed was
+  scanned for anything shaped like a key, a token or an internal hostname.
+  Nothing was found: the file's references to secrets are all prose naming
+  environment-variable and Worker-secret NAMES (`ANTHROPIC_API_KEY`,
+  `JWT_SECRET`, `SCORING_HMAC_SECRET`, and similar), never a value.
+
+**Why this was missed for four months.** `frontend/test/repo_layout.test.mjs`
+allowlisted both changelogs under `DOCS_MD_ALLOWED` and asserted they were
+"still actually there" — but its own comment described the wrong mechanism,
+saying `scripts/build-frontend.mjs` writes them as named outputs. It does
+not: Vite's `emptyOutDir` + public-directory copy-back is what puts them in
+`docs/`, and that mechanism follows a symlink exactly as readily as it copies
+a real file. A test built on the wrong mechanism could not have caught a
+symlink doing the exact thing it should have flagged.
+
+**What shipped.**
+- Both files are deleted: the `frontend/public/CHANGELOG.md` symlink and
+  `frontend/public/test.html`.
+- `repo_layout.test.mjs`: `DOCS_MD_ALLOWED` now holds `CHANGELOG-user.md`
+  only; its comment describes what Vite actually does; a new test asserts
+  `docs/CHANGELOG.md` and `docs/test.html` are absent after a build; and a
+  new test refuses any symlink anywhere under `frontend/public`, using
+  `readdirSync(..., { withFileTypes: true })`'s `isSymbolicLink()` (which,
+  like `lstat`, reports the link itself rather than following it the way
+  `stat` would) — the guard for the next file someone links in rather than
+  writes.
+- `replit.md`'s line describing `CHANGELOG.md` as "also symlinked at
+  `frontend/public/CHANGELOG.md`" is corrected.
+- `docs/` is rebuilt; the build's own deletions of `docs/CHANGELOG.md` and
+  `docs/test.html` are committed.
+
+**No fallback needed.** The brief allowed keeping either file (listed in
+`scripts/lib/assetsIgnore.mjs`'s `ASSETS_IGNORE_ENTRIES`, D271's mechanism)
+if a reader turned up unexpectedly. None did for either file, so both are
+deleted outright rather than ignored-but-kept.
+
+**Correction to D256, found and NOT made.** The wave brief asked this session
+to correct D256's sentence "`git log -S advisor_compass_v1` traces the wrong
+name to `6dae4f57` (2026-09-21, #695)" to instead name `fb36dd5fe`. Measured:
+`git log -S advisor_compass_v1 -- cloudflare-worker/src/services/assessmentSchema.ts
+frontend/src/pages/admin/assessment/jsonFields.js` returns exactly two
+commits, `6dae4f570` (2026-09-21, #695) and `424e6452f` (#782) — precisely
+what D256 already says. `fb36dd5fe` does not resolve to any commit reachable
+in this repository's history at all (a different, real commit by that short
+hash is cited elsewhere in this file, at a point about a Demo Day deck
+heading, unrelated to this track key). D256's attribution stands unchanged;
+this is filed here rather than acted on, per the standing rule to stop and
+report when the code contradicts an instruction rather than silently
+following it.
+
+### VERIFIED
+
+- `frontend/test/repo_layout.test.mjs`: 9 tests, exit 0 (2 new: the
+  docs-absence check and the no-symlinks-under-`frontend/public` check).
+- Three mutations, each restored from a `/tmp` snapshot verified byte-
+  identical by sha256 before and after: the `CHANGELOG.md` symlink restored
+  under `frontend/public` (caught by the no-symlinks test); `test.html`
+  restored and `docs/` rebuilt (caught by the docs-absence test); both the
+  symlink AND its `DOCS_MD_ALLOWED` entry restored together (caught by both
+  tests at once — the allowlist alone does not save a symlink from the
+  dedicated symlink guard).
+- `node scripts/check-docs-fresh.mjs --strict` exits 0 after the rebuild.
+- `node scripts/check-folder-docs.mjs` and `node scripts/check-decision-ids.mjs`
+  (D1 through D300 in file order) exit 0.
+- No migration: migrations on disk unaffected. `frontend/src` did not move
+  (only `frontend/test/` and `frontend/public/`), but `docs/` still moved
+  (the two deletions), so it was rebuilt and re-verified fresh regardless.

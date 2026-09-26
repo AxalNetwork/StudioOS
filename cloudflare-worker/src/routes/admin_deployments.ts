@@ -107,7 +107,10 @@ r.post('/licences/:uid/deploy', async (c) => {
       message: existing.licence_uid === licence.uid
         ? `${licence.licence_ref} already has the deployment ${existing.code} (${existing.status}).`
         : `The code ${code} belongs to ${existing.licence_uid}.`,
-      code: existing.code,
+      // `branch`, never `code`: from D258 the SPA reads a body's `code` as the
+      // refusal's machine code (e.code), so a branch code there would read as
+      // the refusal being called "fr".
+      branch: existing.code,
       status: existing.status,
     }, 409);
   }
@@ -153,7 +156,7 @@ r.post('/licences/:uid/deploy', async (c) => {
         + 'secret, and GITHUB_REPO_OWNER and GITHUB_REPO_NAME set in wrangler.toml\'s [vars]. Until then '
         + 'the provisioning workflow can still be '
         + 'run by hand from the repository\'s Actions tab — nothing else about a branch waits on this.',
-      code,
+      branch: code,
       workflow: PROVISION_WORKFLOW,
     }, 409);
   }
@@ -180,7 +183,7 @@ r.post('/licences/:uid/deploy', async (c) => {
     await c.env.DB.prepare(
       "UPDATE licence_deployments SET status = 'failed', status_note = ?, updated_at = ? WHERE code = ?",
     ).bind(note, nowIso(), code).run();
-    return c.json({ error: 'dispatch_failed', message: note, code, status: res.status }, 502);
+    return c.json({ error: 'dispatch_failed', message: note, branch: code, status: res.status }, 502);
   }
 
   return c.json({

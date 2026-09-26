@@ -8,7 +8,7 @@ import {
   LayoutGrid, FileText, FileCode2, Settings, X, Check,
   GripVertical, Eye, Clock, Ban,
 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, refusalError } from '../lib/api';
 import { deckReadinessState } from '../lib/deckReadiness';
 import { deckShareState } from '../lib/deckShares';
 import { downloadDeckPdf } from '../lib/deckPdf.jsx';
@@ -382,7 +382,9 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
       setTemplateCoverage(Array.isArray(r?.coverage) ? r.coverage : null);
       addToast(`Refilled from project (${r?.coverage_pct ?? 0}% covered)`, 'success');
     } catch (e) {
-      if (e.status === 409 || /no_method_id/i.test(e.message || '')) {
+      // D258 — the refusal's code travels on `e.code`, compared whole. The
+      // 409 disjunct stays: no_method_id is the route's only 409.
+      if (e?.status === 409 || e?.code === 'no_method_id') {
         addToast('Pick a template first — then refill.', 'info');
         setPickerOpen(true);
       } else if (e.status === 402) {
@@ -447,8 +449,10 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
           addToast(`Server ${format.toUpperCase()} export unavailable in this environment.`, 'error');
           return;
         }
-        const err = await r.json().catch(() => ({}));
-        throw new Error(err.error || `Export failed (${r.status})`);
+        // D258 — one definition of how a refusal becomes a sentence and a
+        // code. This used to put the body's `error` first, so a failed
+        // render read `pptx_render_failed` rather than what went wrong.
+        throw await refusalError(r, `Export failed (${r.status})`);
       }
       const blob = await r.blob();
       // Task #2 — PNG cover was removed; only pdf + pptx remain.
