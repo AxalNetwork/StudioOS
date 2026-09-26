@@ -30175,6 +30175,83 @@ every `design/incoming` mention found the other three.
 - No migration, no route, no `api.js` method. Migration 307 and D306–D309 are
   unused, and 296 is the highest migration on disk.
 
+## D331
+
+**Wellbeing out of the calendar.** Wave 8, Session 4, item 3, the gap map's
+"Wellbeing privacy leak": an admin's `/calendar` and `.ics` feed showed
+every founder's wellbeing expert booking, including the note the founder
+wrote in confidence to the expert.
+
+**The defect, measured.** `services/calendar.ts`'s `directEvents` — the
+reader for every kind written straight into `calendar_events` rather than
+its own table — dropped the `user_id` filter whenever `isAdmin` was true,
+for every such kind. `expert_booking` is one of them, and unlike the other
+direct-write kinds (`ic_meeting`, `partner_office_hour`), it is not
+something an admin has any legitimate platform-wide reason to browse: it is
+a paid, private wellbeing session. Separately, `services/wellbeing/bookings.ts`'s
+`mirrorBookingToCalendar` wrote the founder's `booker_note` — private
+correspondence to the expert — straight into `calendar_events.notes`, which
+feeds the page, the `.ics` export and the Google/Outlook sync for BOTH
+attendees' calendars. Together, an admin's own `/calendar` view showed
+every founder's booking, note included, contradicting the Wellbeing page's
+own stated promise that only the founder reads their own check-ins and an
+admin sees only aggregate averages.
+
+**What changed.**
+- `directEvents` now takes the owner-only path whenever `kind ===
+  'expert_booking'`, regardless of `isAdmin`. Scoped by exclusion rather
+  than an allowlist of admin-readable kinds, so a future direct-write kind
+  defaults to owner-only and must opt INTO the admin-wide read, not out of
+  it.
+- `mirrorBookingToCalendar` never writes `booker_note` into
+  `calendar_events.notes` (always `NULL`, on both insert and the
+  `ON CONFLICT` update) and never carries it onto the Google/Outlook sync
+  event either. The note still reaches the expert directly — that is what
+  `fanoutBookingNotifications` (unchanged) already does — this only stops
+  it riding along on a surface with a wider, un-consented audience.
+- New migration **305** (`305_scrub_expert_booking_notes.sql`): an
+  `UPDATE calendar_events SET notes = NULL WHERE kind = 'expert_booking' AND
+  notes IS NOT NULL`. An UPDATE, not additive — permitted here because it
+  removes data that should never have been written, per the standing rule.
+  Idempotent (a second run matches zero rows, proven in the test below) and
+  scoped to the one kind (a sibling test proves a `calendly_event` row's
+  note survives it untouched).
+- **Measured against production before writing the migration**, read-only,
+  aggregate only: `SELECT COUNT(*) FROM calendar_events WHERE kind =
+  'expert_booking' AND notes IS NOT NULL` → **0**; `SELECT COUNT(*) FROM
+  calendar_events WHERE kind = 'expert_booking'` → **0** (total). No
+  `expert_booking` row exists in production yet, so the migration is a
+  documented no-op there today and takes effect the moment the first
+  booking is confirmed under the old code path on any deployment that has
+  not yet applied it.
+
+**Worker only.** No new route, no new `api.js` method — `directEvents` and
+`mirrorBookingToCalendar` are both internal to `services/`. `frontend/src`
+untouched, so `docs/` is not rebuilt for this entry (it was rebuilt for
+D330 in the same session's other PR).
+
+### VERIFIED
+
+- `cloudflare-worker/test/calendar_events_writes.test.ts`: 15 tests, exit 0
+  (3 new): an admin reading their OWN calendar does not see another user's
+  expert booking, and the booking's real owner still sees their own; a
+  booker note never reaches `calendar_events.notes` nor the reader that
+  serves it back; migration 305 clears a stale note, leaves an
+  already-clear row and a differently-kinded row alone, and is byte-for-byte
+  idempotent on a second run (asserted by comparing the full table before
+  and after), with no transaction statement.
+- 3 mutations run, 3 caught (non-zero exit plus a `not ok` line), each
+  restored from a sha256-verified `/tmp` snapshot: the `expert_booking`
+  exclusion dropped from the owner-only check; the note write restored on
+  both the insert and the `ON CONFLICT` branch; the migration's `kind`
+  scoping removed.
+- `node scripts/check-sql-migrations.mjs`, `check-sqlite-dialect.mjs`,
+  `check-runtime-schema-declared.mjs` and `migration-immutability-gate.mjs`
+  all exit 0 — migration 305 carries no transaction statement, no foreign
+  dialect, and edits nothing already on `origin/main`.
+- `npm run test:drift` exits 0 on Node 22. Both typechecks and
+  `check-decision-ids` (D1 through D421, in file order) exit 0.
+
 ## D350
 
 **Lab Profiling reads Eadwyn's question ledger for the four elements it had
