@@ -244,7 +244,10 @@ const PROFILES = {
     // specifying no filters. That is the same blind spot PR0 fixed in
     // `profile_zone_actions.test.mjs`, one file later.
     canvasDirs: ['design/incoming', 'design/canvases/integrated'],
-    canvas: /^(Pages · Advisor (Network|Research)\.dc\.html$|Advisor Detail · Practice)/,
+    // D392 widened this to Expertise, which D305 graduated into integrated/
+    // already normalised; its four chip-bearing artboards are the four rows
+    // `advisorZoneFilters.js` gained, and Visibility is excluded below.
+    canvas: /^(Pages · Advisor (Network|Research|Expertise)\.dc\.html$|Advisor Detail · Practice)/,
     // PR5 is a pointer to D4 in the backlog canvas — see `alsoZones` in
     // `canvasFilters` for why the file is read by route and not by directory.
     alsoZones: [['practice/earnings', 'design/canvases/backlog/Detail Layer Canvas II.dc.html']],
@@ -255,8 +258,10 @@ const PROFILES = {
     // `practice/delivery` its third on PR3, `practice/sessions` its fourth on
     // PR4. Every number moved because an artboard landed, not because anyone
     // edited a count.
-    zones: 12,
-    mounted: 12,
+    // → 16 on D392: the four Expertise zones with a body (profile, services,
+    // proof, thinking) each gained a filter row when the canvas came into scope.
+    zones: 16,
+    mounted: 16,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.advisor },
     // THE ONE EXCLUSION THAT IS NOT A DEFERRAL. Founder and investor left this
     // list; advisor and partner do not follow, and the reason is not that their
@@ -268,6 +273,11 @@ const PROFILES = {
     // founder and advisor mount DIFFERENT files for organizations.
     excluded: [
       'network/organizations',
+      // A REFUSAL, like the one above and for the same reason: Visibility's
+      // page is the gap card ("Nothing counts profile views") and nothing else.
+      // Four chips — by engagements, requests, views, zero-conversion — above a
+      // sentence saying no impression is counted would narrow nothing (D392).
+      'expertise/visibility',
       // ONE DEFERRAL LEFT, NOT A REFUSAL, and it arrived here as a side effect
       // worth stating. Widening `canvasDirs`/`canvas` above to see the
       // Practice canvas pulls ALL FOUR of its artboards into scope at once —

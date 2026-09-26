@@ -30884,6 +30884,142 @@ included:
 - a score printed without its source;
 - the old footnote, columns, comment and Markets blurb restored.
 
+## D392
+
+**The graduated advisor canvases catch up with the stores: Introductions
+shows both sides of the consent, `/advisor/research` lands on the Research
+bucket, the Markets gap card stops describing the signals feed, and the
+Expertise zones get the canvas's filter rows.** Session 11, item 3 (the gap
+map's PR 3). No migration, no route, no new `api.js` method. The canvas moves
+the gap map listed were already done by D305 (Research, Network and Expertise
+are in `integrated/`, Expertise normalised), so this PR moves no file.
+
+**Network · Introductions (AN2).** The zone's docblock, its stated limit, its
+`Gated` chip (relabelled "Awaiting you"), its `Made` chip (prose) and its
+`Consent log` op (prose) all rested on one premise: that
+`GET /introductions/propositions` returns only the caller's own row. It has
+not done that since the partner side's consent work. `propositionDto` returns
+`counterpart_status` and `counterpart_responded_at` from the mirror row, and
+the partner `IntroductionsPanel` draws the gate from them. The advisor zone
+now uses the panel's exported `stateOf` and `consentRecord`, so one
+introduction reads the same on both licences:
+- the states are Requested · One side · Both agreed · Made, with Declined and
+  Lapsed terminal;
+- a proposition with no mirror row reads "has not been asked", never "not
+  answered".
+
+The four chips are live:
+- `Gated` is Requested or One side;
+- `Made` is `intro_terms.made_at`;
+- `Declined` is either side declining.
+
+`Consent log` is a handler that opens the panel's `ConsentLog`, now exported
+(the only edit to that file).
+
+`Made` needed a way to be recorded, or the chip would select nothing on every
+advisor account. `PUT /propositions/:uid/terms` writes only the caller's own
+row and is not role-gated, so once both sides have agreed the card offers
+"Record as made". It asks for the date, favour or referral (a referral must
+state its fee, as the store's CHECK requires) and an optional outcome. The
+heading's "a decline is never reported back" is corrected: the counterpart's
+answer is part of the caller's own record, and a decline still sends no
+notification. AN1 (the advisor's relationship book) and AN3 stay unbuilt. The
+book routes are owner-scoped to the partner, and giving an advisor one is a
+decision (listed below), not a gap.
+
+**Research.**
+- *`/advisor/research` → `/research`, `/advisor/research/market` →
+  `/research/markets`.* Both went to `/signals`, repointed there when the
+  signals feed was the advisor's only live research surface (724dfc9f). The
+  canvas-built Research bucket is now that surface, and `/research/markets` is
+  the comparable-readings zone AR3 draws. Both targets' guards admit
+  `advisor`. `research_tabs_withdrawn` and `research_market_funds_retired`
+  are re-aimed; they still pin the property they were written for, that the
+  destination admits the advisor, read from its guard. No sidebar row points
+  at either path (a test pins that).
+- *`RESEARCH_STORE_GAPS.markets`.* The card said the page "reads instead ...
+  the signals feed". `/research/markets` has been `MarketZone`, comparable
+  readings with a run date and an age gate (migration 223), since that zone
+  was rebuilt. The missing store it names, a saved market deep-dive, is still
+  missing and is still what the founder and investor canvases narrow. So the
+  entry is corrected, not deleted, and gains `roles: ['founder', 'investor']`.
+  `ResearchWorkspace` draws it, and reports it on the rail, only for a licence
+  it names. Partner and advisor, whose canvases draw exactly the readings the
+  zone holds, no longer see it. The zone intro's "Signals from the sectors
+  you work in" is corrected with it. `research_zone_states.test.mjs` pinned
+  the rendered variable by name; it is re-aimed at `gap`, and the four
+  properties it guards are unchanged.
+
+**Expertise filter rows (AX1–AX4).** The canvas draws four chips on each of
+five artboards. No `expertise/*` row existed, and the filters guard's canvas
+regex skipped the file. The regex now includes it, and the advisor profile's
+`zones`/`mounted` move from 12 to 16. `expertise/visibility` is excluded as a
+refusal, like `network/organizations`: its page is the gap card and there is
+nothing to narrow. Twelve chips are live and two are unbuilt with their
+reason; the other two artboards' four "All" chips are the unfiltered views.
+- *Profile.* `All fields`, `Gaps only`, `Match-critical`.
+  - `Match-critical` is the completeness meter's own list, now a keyed
+    `MATCH_FIELDS` that the meter and the chip both read, so they cannot
+    disagree. `advisor_expertise_canvas` is re-aimed to find it there and
+    still refuses a field counted twice.
+  - `Gaps only` reads the saved record, not the draft, so a field does not
+    vanish while someone types into it.
+  - `Public preview` stays unbuilt: no public advisor profile page exists.
+- *Services.* Fixed · Package · Retainer, over `kind` (migration 203).
+- *Proof.* Attested · Awaiting consent · Self-stated: the three counts the
+  strip above the list already shows, as views.
+- *Thinking.* Published · Drafts, the shelf pill's own two states. `Essays`
+  stays unbuilt, since an article records no kind.
+
+Each zone's toolbar now sits above `ZoneBody` (as Introductions' already
+did), and each export takes the narrowed rows. `profile_zone_actions`'s
+advisor `handlers` count moves 9 → 10, for Consent log.
+
+**Two honesty fixes in the same zones.** The Proof strip's "Credential
+verified" tile printed a bare "—"; it now reads Not recorded. Thinking printed
+`views ?? 0` and `word_count || 0`. A published piece whose counter did not
+come back is now Not recorded, and a draft reads "Not public yet" instead of
+a dash.
+
+**ROUTE_MAP.** The Network and Research rows (the gap map's 339/340) record
+the above. The Cohorts row (its 132) said `/guidance` and `/calendar` "state
+their gap"; both have been live since migration 212 and the Calendar join.
+`PROFILE_ROUTING.md` is regenerated.
+
+**Decisions still missing, named rather than guessed:**
+- the advisor relationship book (AN1/AN3: an advisor-owned book, or a grant
+  onto a partner's);
+- Visibility impressions (an impression pipeline, not a table);
+- whether `Public preview` means a public advisor profile route.
+
+**Verification.** New test: `frontend/test/advisor_canvases_graduate_d392.test.mjs`
+(9). Re-aimed: `research_tabs_withdrawn`, `research_market_funds_retired`,
+`research_zone_states`, `advisor_expertise_canvas`, `profile_zone_filters`
+and `profile_zone_actions`. Mutations: 29 of 29 caught across those seven
+files, each with a non-zero exit and a `not ok` line, restored from a
+sha256-checked snapshot.
+
+One defect got past the first draft's test and was caught by `lint:undef`
+inside the drift run instead. The Consent log modal was mounted twice: once
+in the zone, where it belongs, and once in the made form, where `logOpen` does
+not exist. The test had asserted only that the mount appeared somewhere in the
+file. It now requires the mount inside `IntroductionsZone` and nowhere before
+it, and both directions (mounted in the form, missing from the zone) are among
+the 29.
+
+The mutations included:
+- the one-sided chip restored, and the consent record dropped;
+- "Record as made" hidden, or offered after a decline;
+- `Gated` widened to Both agreed, and `Made` read from `status`;
+- the old relabel, prose and signals claims restored;
+- the role scope dropped;
+- both redirects pointed back at `/signals`;
+- `Match-critical` widened to everything, and an empty list counted as
+  filled;
+- an unfiltered draw or export, a key typo, and an unwired chip row;
+- the dash and the zero fallback restored;
+- `Essays` made live, and Visibility un-excluded.
+
 ## D410
 
 **E-sign `/send` hardening: the signing link reaches only the recipient, a
