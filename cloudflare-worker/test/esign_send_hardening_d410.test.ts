@@ -23,128 +23,11 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
-import { SignJWT } from 'jose';
-import { Hono } from 'hono';
-
-import esign from '../src/routes/esign.ts';
 import { ESIGN_FORWARD } from '../src/middleware/rateLimit.ts';
-
-const app = new Hono<any>();
-app.route('/', esign);
-app.onError((err: any, c) => {
-  if (String(err?.message || '') === 'Unauthorized') return c.json({ detail: 'Unauthorized' }, 401);
-  throw err;
-});
-
-const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
-const SENDER = 1;        // a founder who sends
-const OTHER_SENDER = 2;  // a second founder, a different tenant
-const RECIPIENT = 3;     // an investor with an account
-const STRANGER = 4;      // signed in, nothing to do with any envelope
-const ADMIN = 5;
-
-function coerce(a: any[]): any[] {
-  return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
-}
-function makeD1(db: InstanceType<typeof DatabaseSync>) {
-  const stmt = (sql: string) => {
-    let b: any[] = [];
-    const api: any = {
-      bind: (...x: any[]) => { b = coerce(x); return api; },
-      async first() { return db.prepare(sql).get(...b) ?? null; },
-      async all() { return { results: db.prepare(sql).all(...b) }; },
-      async run() {
-        const r = db.prepare(sql).run(...b);
-        return { meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } };
-      },
-    };
-    return api;
-  };
-  return {
-    prepare: stmt,
-    async exec(sql: string) { db.exec(sql); return { count: 0, duration: 0 }; },
-    // D1 runs a batch as one transaction; so does this.
-    async batch(x: any[]) {
-      db.exec('BEGIN');
-      try {
-        const out = [];
-        for (const st of x || []) out.push(await st.run());
-        db.exec('COMMIT');
-        return out;
-      } catch (e) { db.exec('ROLLBACK'); throw e; }
-    },
-  };
-}
-
-function freshDb() {
-  const db = new DatabaseSync(':memory:', {
-    enableForeignKeyConstraints: false,
-    enableDoubleQuotedStringLiterals: true,
-  });
-  db.exec(`
-    CREATE TABLE users (
-      id INTEGER PRIMARY KEY, role TEXT NOT NULL, email TEXT, name TEXT,
-      is_active INTEGER NOT NULL DEFAULT 1, jwt_min_iat INTEGER,
-      founder_id INTEGER, partner_id INTEGER,
-      founder_public_id TEXT, partner_public_id TEXT,
-      access_level TEXT, kyc_status TEXT
-    );
-    CREATE TABLE activity_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, details TEXT, actor TEXT, user_id INTEGER,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    INSERT INTO users (id, role, email, name) VALUES
-      (${SENDER},       'founder',  'sender@example.test',   'Sam Sender'),
-      (${OTHER_SENDER}, 'founder',  'other@example.test',    'Olu Other'),
-      (${RECIPIENT},    'investor', 'Investor@Example.test', 'Ivy Investor'),
-      (${STRANGER},     'founder',  'stranger@example.test', 'Stu Stranger'),
-      (${ADMIN},        'admin',    'admin@example.test',    'Ada Admin');
-  `);
-  return db;
-}
-
-// A private R2 stand-in: puts are kept, gets return what was put (or a
-// placeholder PDF for a key a test seeded directly into D1).
-function fakeR2() {
-  const objects = new Map<string, Uint8Array>();
-  return {
-    objects,
-    async put(key: string, bytes: Uint8Array) { objects.set(key, bytes); },
-    async get(key: string) {
-      const bytes = objects.get(key) ?? new TextEncoder().encode('%PDF-1.4 placeholder');
-      return { arrayBuffer: async () => bytes.slice().buffer };
-    },
-  };
-}
-
-const envFor = (db: InstanceType<typeof DatabaseSync>, files = fakeR2()) =>
-  ({ JWT_SECRET, ENVIRONMENT: 'development', APP_URL: 'https://app.example.test', DB: makeD1(db), FILES: files });
-
-async function token(userId: number, role: string): Promise<string> {
-  return new SignJWT({ user_id: userId, role })
-    .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
-    .sign(new TextEncoder().encode(JWT_SECRET));
-}
-
-const ROLE: Record<number, string> = {
-  [SENDER]: 'founder', [OTHER_SENDER]: 'founder', [RECIPIENT]: 'investor', [STRANGER]: 'founder', [ADMIN]: 'admin',
-};
-
-async function call(e: any, method: string, path: string, who: number | null, body?: any, extraHeaders: Record<string, string> = {}) {
-  const headers: Record<string, string> = { ...extraHeaders };
-  if (who) headers.Authorization = `Bearer ${await token(who, ROLE[who])}`;
-  const init: RequestInit = { method, headers };
-  if (body !== undefined) {
-    headers['Content-Type'] = 'application/json';
-    (init as any).body = JSON.stringify(body);
-  }
-  const res = await app.request(path, init, e);
-  const text = await res.text();
-  let parsed: any = null;
-  try { parsed = JSON.parse(text); } catch { parsed = text; }
-  return { status: res.status, body: parsed };
-}
+import {
+  SENDER, OTHER_SENDER, RECIPIENT, STRANGER, ADMIN,
+  freshDb, envFor, call,
+} from './_esign_harness.ts';
 
 const DOC = 'founder_nda_v1';   // a founder may originate it (esignOriginators.ts)
 const send = (e: any, who: number, email: string, extra: Record<string, unknown> = {}) =>
@@ -362,7 +245,9 @@ test('when the last signer signs, the sender is notified as well as the subject'
   const inbox = db.prepare(`SELECT user_id, type, link FROM notifications_inbox ORDER BY user_id`).all();
   assert.deepEqual(inbox.map((n: any) => n.user_id), [SENDER, RECIPIENT], 'one notice each for the sender and the subject');
   assert.ok(inbox.every((n: any) => n.type === 'contract_signed'));
-  assert.equal(inbox.find((n: any) => n.user_id === SENDER).link, '/account');
+  // D410 linked the sender to '/account'; D411 built the envelope's status
+  // view and points the notice there.
+  assert.equal(inbox.find((n: any) => n.user_id === SENDER).link, `/legal/send?envelope=${rec.envelope_id}`);
 });
 
 test('a sender who is also the subject is notified once, not twice', async () => {

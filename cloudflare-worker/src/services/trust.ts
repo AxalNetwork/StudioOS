@@ -946,6 +946,10 @@ export const ENVELOPE_EVENT_LABELS: Record<string, string> = {
   document_downloaded: 'Downloaded',
   document_downloaded_by_recipient: 'Downloaded',
   document_forwarded: 'Forwarded',
+  // D411 — Session 13's sender actions on an envelope (routes/esign.ts).
+  envelope_voided: 'Voided',
+  reminder_sent: 'Reminder sent',
+  reminder_failed: 'Reminder not delivered',
 };
 
 /**

@@ -72,3 +72,9 @@ test('forwarding a signed PDF joins the bucket (D410)', () => {
   assert.match(bucket, /m === 'POST' && \(/, 'the POST-only guard must cover the forward arm too');
 });
 
+
+test('remind and void join the bucket (D411)', () => {
+  // Remind mails the signing link again; void is a write on a legal record.
+  // The pattern's own matches are pinned in esign_send_for_signature_d411.test.ts.
+  assert.match(bucket, /ESIGN_SENDER_ACTION\.test\(p\)/, 'remind/void are not in the esign_send bucket');
+});
