@@ -549,9 +549,11 @@ export default function BranchApprovals({ user }) {
       load();
     } catch (err) {
       reportError('branch-escalate', err);
-      // THE SENTENCE BEFORE THE CODE. `request()` puts a string `error` into
-      // `err.message` — here `kind_not_available` — and keeps the whole body
-      // on `err.data`, whose `message` is the reason written for a person.
+      // THE SENTENCE BEFORE THE CODE. `err.data.message` is the reason the
+      // route wrote for a person, so it is read first whatever builds the
+      // thrown error. Before D258 `request()` put a string `error` —
+      // here `kind_not_available` — into `err.message`; since D258
+      // `err.message` carries the same sentence and `err.code` the code.
       setSendError(err?.data?.message || err?.message || 'The escalation could not be raised.');
     } finally {
       setSending(false);

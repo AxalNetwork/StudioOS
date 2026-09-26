@@ -484,12 +484,15 @@ function PostsTab({ posts, accounts, onReload, toast, mode }) {
       setOverrideFor(null);
       onReload();
     } catch (e) {
-      if (e?.status === 422 || /pii_linter_blocked/.test(e?.message || '')) {
-        const findings = e?.data?.findings || e?.body?.findings || [];
+      // D258 — the refusal's code travels on `e.code` and the body on
+      // `e.data`. The linter's `e.message` is its sentence now, so a match on
+      // the code through the message could never fire; nothing sets `e.body`.
+      if (e?.status === 422 || e?.code === 'pii_linter_blocked') {
+        const findings = e?.data?.findings || [];
         setOverrideFor({ id, findings });
         return;
       }
-      if (e?.status === 429 || /daily_cap_reached/.test(e?.message || '')) {
+      if (e?.status === 429 || e?.code === 'daily_cap_reached') {
         toast('Daily send cap reached for this account', 'error');
         onReload();
         return;

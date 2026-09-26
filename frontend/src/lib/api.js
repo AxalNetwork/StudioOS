@@ -384,6 +384,98 @@ export function timeoutError(path, ms, method) {
   return e;
 }
 
+/**
+ * D258 — ONE DEFINITION OF HOW A REFUSAL BECOMES A SENTENCE AND A CODE.
+ *
+ * `request()` used to build its message as errorObj.message, then a string
+ * `error`, then detailObj.message, then a string `detail`, and only then the
+ * body's own `message` — fifth. About 190 Worker refusals are shaped
+ * `{ error: '<code>', message: '<sentence>' }`, so every page that prints
+ * `e.message` printed `kind_not_available` instead of the sentence somebody
+ * wrote for the person reading it. And an HTTP refusal carried no `e.code` at
+ * all, although this module reads the body's `code` three times itself (the
+ * two 423 banners and the step-up retry). Fifteen raw-fetch helpers further
+ * down built their own Error: twelve read a body, in FOUR different orders
+ * (`detail` first, `error` first, `error` alone, `message` first — only one of
+ * the twelve read `message`), and three threw a fixed sentence without
+ * reading the body at all.
+ *
+ * THE MESSAGE ORDER, and the one place it is not the obvious one:
+ *   errorObj.message → the body's `message` → detailObj.message → a string
+ *   `error` that reads as a SENTENCE → a string `detail` → a string `error`
+ *   that reads as a CODE, as the last resort before the caller's fallback.
+ *   A code in `error` steps below `detail`, so `{ error: 'bad_market',
+ *   detail: 'SAM cannot exceed TAM' }` reads the detail. A sentence in `error`
+ *   keeps its place AHEAD of `detail`, because seven Worker sites pair a
+ *   sentence `error` with a provider's raw text in `detail` —
+ *   `{ error: 'Stripe refund failed', detail: '<Stripe's JSON>' }` — and
+ *   "detail first" would put that JSON on the screen of every refund, billing
+ *   and promo failure.
+ *
+ * THE CODE: the body's string `code` (not shape-checked — `PAYWALL_PREMIUM_
+ * METHOD` travels this way), then errorObj.code, then detailObj.code, then a
+ * bare `error` or `detail` only when it is shaped like a code. A sentence
+ * never becomes a code, and a numeric `code` (a 503 body) is dropped by the
+ * string check.
+ *
+ * 'timeout' BELONGS TO timeoutError ALONE. `_analyticsRead` stops retrying on
+ * it, and `routes/competitors.ts` can answer 422 `{ error: 'timeout' }` when a
+ * web fetch it made was aborted — measured, so the reservation is enforced
+ * here rather than asserted of the Worker.
+ *
+ * `e.data` and `e.field` are NOT this function's business: request() builds
+ * them exactly as it always has, and the pages that read a code off `e.data`
+ * keep working unchanged.
+ */
+export const REFUSAL_CODE = /^[a-z][a-z0-9_]*$/;
+
+export function readRefusal(raw) {
+  const b = raw && typeof raw === 'object' ? raw : {};
+  const str = (v) => (typeof v === 'string' && v.trim() ? v : null);
+  const shaped = (v) => (typeof v === 'string' && REFUSAL_CODE.test(v) ? v : null);
+  const errorObj = b.error && typeof b.error === 'object' ? b.error : null;
+  const detailObj = b.detail && typeof b.detail === 'object' ? b.detail : null;
+  const errorStr = str(b.error);
+  const errorIsCode = shaped(errorStr) !== null;
+  const message = str(errorObj?.message)
+    || str(b.message)
+    || str(detailObj?.message)
+    || (errorIsCode ? null : errorStr)
+    || str(b.detail)
+    || (errorIsCode ? errorStr : null)
+    || null;
+  const code = str(b.code)
+    || str(errorObj?.code)
+    || str(detailObj?.code)
+    || shaped(b.error)
+    || shaped(b.detail)
+    || null;
+  return { message, code: code === 'timeout' ? null : code };
+}
+
+/**
+ * The raw-fetch helpers' half of D258: a failed response they fetched
+ * themselves (a blob, a public token route) becomes an Error through the SAME
+ * definition `request()` uses, never a precedence order of its own — a second
+ * order anywhere in this file is how one root became fifteen. Each caller
+ * keeps its own fallback sentence for a refusal with no readable body.
+ * `res.statusText` sits between the two, as it already did in eleven of the
+ * fifteen; over HTTP/2 it is empty, so in production the fallback is what
+ * shows.
+ *
+ * EXPORTED for the handful of pages that still receive a raw `Response` from
+ * an api.js method (a blob export) and turn a refusal into an Error
+ * themselves: they call this rather than writing a sixteenth order.
+ */
+export async function refusalError(res, fallback) {
+  const body = await res.json().catch(() => null);
+  const { message, code } = readRefusal(body);
+  const e = new Error(message || res.statusText || fallback);
+  e.status = res.status;
+  if (code) e.code = code;
+  return e;
+}
+
 export async function request(path, options = {}) {
   // Armed per attempt, never per call: the step-up retry below re-enters
   // `request()` after a modal the user may sit on for a minute, and that wait
@@ -475,16 +567,16 @@ export async function request(path, options = {}) {
       // things like a live cooldown countdown without regex-parsing the msg.
       const detailObj = (err && typeof err.detail === 'object') ? err.detail : null;
       const errorObj = (err && typeof err.error === 'object') ? err.error : null;
-      const msg =
-        (errorObj && errorObj.message) ||
-        (typeof err.error === 'string' && err.error) ||
-        (detailObj && detailObj.message) ||
-        (typeof err.detail === 'string' && err.detail) ||
-        err.message ||
-        res.statusText ||
-        'Request failed';
+      // D258 — the sentence and the machine code come from ONE definition,
+      // `readRefusal` above, shared with every raw-fetch helper in this file.
+      // `e.message` is the sentence written for the person reading it and
+      // `e.code` is the flag a page branches on; a page that matched a code
+      // through the message was matching the wrong field.
+      const refusal = readRefusal(err);
+      const msg = refusal.message || res.statusText || 'Request failed';
       const e = new Error(msg);
       e.status = res.status;
+      if (refusal.code) e.code = refusal.code;
       e.data = detailObj || errorObj || err || null;
       // Task #16 — surface per-field validation errors (e.g. ProfileValidationError)
       // so form components can highlight the offending input.
@@ -1205,7 +1297,7 @@ export const api = {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       credentials: 'include',
     });
-    if (!res.ok) throw new Error('Failed to download data room');
+    if (!res.ok) throw await refusalError(res, 'Failed to download data room');
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1321,18 +1413,9 @@ export const api = {
       credentials: 'include',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
-    if (!res.ok) {
-      let detail = res.statusText || 'Export failed';
-      try {
-        const err = await res.json();
-        detail = err?.detail || err?.error || detail;
-      } catch {
-        // Body wasn't JSON (e.g. plain text or empty) — keep statusText.
-      }
-      const e = new Error(detail);
-      e.status = res.status;
-      throw e;
-    }
+    // A body that isn't JSON (plain text, empty) keeps statusText, then the
+    // fallback — `refusalError` reads the rest through D258's one definition.
+    if (!res.ok) throw await refusalError(res, 'Export failed');
     const blob = await res.blob();
     const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || 'financials.xlsx';
     const url = URL.createObjectURL(blob);
@@ -1403,13 +1486,9 @@ export const api = {
       credentials: 'include',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
-    if (!res.ok) {
-      // The worker answers a refusal as JSON with a `detail`, so a 403 reads
-      // as "Forbidden" rather than as a downloaded file containing the word.
-      let detail = res.statusText || 'Export failed';
-      try { const e = await res.json(); detail = e?.detail || e?.error || detail; } catch { /* not JSON */ }
-      const err = new Error(detail); err.status = res.status; throw err;
-    }
+    // The worker answers a refusal as JSON, so a 403 reads as its sentence
+    // rather than as a downloaded file containing the word.
+    if (!res.ok) throw await refusalError(res, 'Export failed');
     const blob = await res.blob();
     const filename = (res.headers.get('Content-Disposition') || '')
       .match(/filename="?([^"]+)"?/)?.[1] || fallbackName;
@@ -1902,13 +1981,7 @@ export const api = {
       credentials: 'include',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
-    if (!res.ok) {
-      let detail = res.statusText || 'Preview failed';
-      try { const err = await res.json(); detail = err?.error || err?.detail || detail; } catch { /* non-JSON */ }
-      const e = new Error(detail);
-      e.status = res.status;
-      throw e;
-    }
+    if (!res.ok) throw await refusalError(res, 'Preview failed');
     const blob = await res.blob();
     const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || `axal-form-${id}.pdf`;
     return { blob, url: URL.createObjectURL(blob), filename };
@@ -1920,13 +1993,7 @@ export const api = {
       credentials: 'include',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
-    if (!res.ok) {
-      let detail = res.statusText || 'PDF generation failed';
-      try { const err = await res.json(); detail = err?.error || err?.detail || detail; } catch { /* non-JSON */ }
-      const e = new Error(detail);
-      e.status = res.status;
-      throw e;
-    }
+    if (!res.ok) throw await refusalError(res, 'PDF generation failed');
     const blob = await res.blob();
     const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || `${slug}-preview.pdf`;
     return { blob, url: URL.createObjectURL(blob), filename };
@@ -2027,8 +2094,8 @@ export const api = {
   adminDownloadEsignDocumentBlob: (id) => {
     const url = `/api/legal/esign/${id}/document`;
     const token = localStorage.getItem('token');
-    return fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(r => {
-      if (!r.ok) throw new Error('Download failed');
+    return fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(async (r) => {
+      if (!r.ok) throw await refusalError(r, 'Download failed');
       return r.blob();
     });
   },
@@ -2178,10 +2245,7 @@ export const api = {
   // is reachable without a logged-in session.
   esignFetchByToken: async (token) => {
     const res = await fetch(`/api/legal/esign/sign/${encodeURIComponent(token)}`);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err?.error || res.statusText || 'Failed to load signing envelope');
-    }
+    if (!res.ok) throw await refusalError(res, 'Failed to load signing envelope');
     return await res.json();
   },
   esignSubmitSignature: async (token, payload) => {
@@ -2190,10 +2254,7 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err?.error || res.statusText || 'Signing failed');
-    }
+    if (!res.ok) throw await refusalError(res, 'Signing failed');
     return await res.json();
   },
   esignReject: async (token, reason) => {
@@ -2202,10 +2263,7 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason }),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err?.error || res.statusText || 'Could not decline');
-    }
+    if (!res.ok) throw await refusalError(res, 'Could not decline');
     return await res.json();
   },
 
@@ -2298,11 +2356,7 @@ export const api = {
       credentials: 'include',
       body: JSON.stringify(opts || {}),
     });
-    if (!res.ok) {
-      let msg = `Export failed (${res.status})`;
-      try { const j = await res.json(); if (j?.error) msg = j.error; } catch {}
-      throw new Error(msg);
-    }
+    if (!res.ok) throw await refusalError(res, `Export failed (${res.status})`);
     const blob = await res.blob();
     const filename =
       (res.headers.get('Content-Disposition') || '')
@@ -2796,11 +2850,7 @@ export const api = {
       credentials: 'include',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
-    if (!res.ok) {
-      let detail = res.statusText || 'Export failed';
-      try { const e = await res.json(); detail = e?.detail || e?.error || detail; } catch {}
-      const e = new Error(detail); e.status = res.status; throw e;
-    }
+    if (!res.ok) throw await refusalError(res, 'Export failed');
     const blob = await res.blob();
     const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || 'plan-change-history.csv';
     const url = URL.createObjectURL(blob);
@@ -2890,21 +2940,11 @@ export const api = {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       credentials: 'include',
     });
-    if (!res.ok) {
-      // The server distinguishes "you may not have it" (403) from "there is
-      // nothing to give you" (404), and the drawer says which — so the
-      // detail is carried rather than flattened into one failure sentence.
-      let detail = res.statusText || 'Download failed';
-      try {
-        const err = await res.json();
-        detail = err?.error || err?.detail || detail;
-      } catch {
-        // Not JSON — keep statusText rather than inventing a reason.
-      }
-      const e = new Error(detail);
-      e.status = res.status;
-      throw e;
-    }
+    // The server distinguishes "you may not have it" (403) from "there is
+    // nothing to give you" (404), and the drawer says which — so the refusal
+    // is carried rather than flattened into one failure sentence. A body that
+    // is not JSON keeps statusText rather than inventing a reason.
+    if (!res.ok) throw await refusalError(res, 'Download failed');
     const blob = await res.blob();
     const filename = (res.headers.get('Content-Disposition') || '')
       .match(/filename="?([^"]+)"?/)?.[1] || `lpa-fund-${id}.txt`;
@@ -3005,7 +3045,7 @@ export const api = {
   // The export endpoint streams a JSON file; we want the raw blob, not parsed JSON.
   exportMyData: async () => {
     const res = await fetch(`${BASE}/settings/data-export`, { headers: getAuthHeaders() });
-    if (!res.ok) throw new Error('Export failed');
+    if (!res.ok) throw await refusalError(res, 'Export failed');
     return await res.blob();
   },
   listSessions: () => request('/settings/sessions'),
@@ -3579,13 +3619,7 @@ export const api = {
       credentials: 'include',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
-    if (!res.ok) {
-      let detail = res.statusText || 'Invoice download failed';
-      try { const err = await res.json(); detail = err?.error || err?.detail || detail; } catch { /* non-JSON */ }
-      const e = new Error(detail);
-      e.status = res.status;
-      throw e;
-    }
+    if (!res.ok) throw await refusalError(res, 'Invoice download failed');
     const blob = await res.blob();
     const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || `${orderRef}.pdf`;
     return { blob, url: URL.createObjectURL(blob), filename };
@@ -4875,11 +4909,7 @@ export const publications = {
       headers: { 'content-type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({ format }),
     });
-    if (!res.ok) {
-      let msg = res.statusText || `Render failed (${res.status})`;
-      try { const j = await res.json(); msg = j.message || j.error || msg; } catch { /* not json */ }
-      throw new Error(msg);
-    }
+    if (!res.ok) throw await refusalError(res, `Render failed (${res.status})`);
     const blob = await res.blob();
     const objectUrl = URL.createObjectURL(blob);
     // Trigger download with a server-derived filename so the user gets

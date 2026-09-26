@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { api } from '../lib/api';
+import { api, refusalError } from '../lib/api';
 import { EXPLAINERS } from '../lib/explainers';
 import { useToast } from '../components/useToast';
 import {
@@ -2064,8 +2064,11 @@ function TrustedContactsPanel({ flash }) {
     setErr('');
     try {
       const r = await fetch('/api/auth/recover/trusted-contacts', { credentials: 'include' });
+      // D258 — `r.ok` first: a refusal is read by `refusalError`, which takes
+      // the body's sentence ahead of its code. Parsing first threw a JSON error
+      // on any non-JSON answer, and `j.error` printed the code.
+      if (!r.ok) throw await refusalError(r, 'Failed to load');
       const j = await r.json();
-      if (!r.ok) throw new Error(j?.error || 'Failed to load');
       setContacts(j.contacts || []);
     } catch (e) { setErr(e?.message || 'Failed to load'); }
   };
@@ -2079,8 +2082,7 @@ function TrustedContactsPanel({ flash }) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ contact_email: email.trim(), display_name: name.trim() || null }),
       });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j?.error || 'Failed');
+      if (!r.ok) throw await refusalError(r, 'Failed to add');
       setEmail(''); setName('');
       flash && flash('Trusted contact added.');
       await load();
@@ -2094,7 +2096,7 @@ function TrustedContactsPanel({ flash }) {
       const r = await fetch(`/api/auth/recover/trusted-contacts/${id}`, {
         method: 'DELETE', credentials: 'include',
       });
-      if (!r.ok) throw new Error('Failed to remove');
+      if (!r.ok) throw await refusalError(r, 'Failed to remove');
       flash && flash('Removed.');
       await load();
     } catch (e) { setErr(e?.message || 'Failed to remove'); }
@@ -2156,8 +2158,8 @@ function RecoveryActivityPanel() {
     (async () => {
       try {
         const r = await fetch('/api/auth/recover/activity', { credentials: 'include' });
+        if (!r.ok) throw await refusalError(r, 'Failed to load');
         const j = await r.json();
-        if (!r.ok) throw new Error(j?.error || 'Failed');
         setRows(j.activity || []);
       } catch (e) { setErr(e?.message || 'Failed to load'); }
     })();

@@ -87,11 +87,13 @@ const LICENCE_TONE = {
  * The route needs TOTP and a recent step-up; a refusal is shown, not swallowed.
  */
 /**
- * D259 — a refusal in words. `request()` puts the route's machine code in
- * `message` and the whole body in `data`; every refusal this route writes
- * (409 `hq_rpc_secret_unset`, `branch_not_bound`, `branch_refused` with the
+ * D259 — a refusal in words. Every refusal this route writes (409
+ * `hq_rpc_secret_unset`, `branch_not_bound`, `branch_refused` with the
  * branch's own reason, 423 during a recovery cool-off) carries a sentence in
- * `data.message`, so that is what the operator reads.
+ * `data.message`, so that is what the operator reads. Before D258 `request()`
+ * put the route's machine code in `message`, which is why the body is read
+ * first; since D258 `ex.message` carries the same sentence and `ex.code` the
+ * code, so the fallback below reads a sentence too.
  */
 function branchRefusal(ex, fallback) {
   const d = ex?.data;
