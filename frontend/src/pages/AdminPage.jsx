@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { reportError } from '../lib/log';
 import { api } from '../lib/api';
 import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, XCircle, CheckCircle2, FileText, Send, Download, Ban, Search, RefreshCw, Sparkles, Loader2, ShieldAlert, KeyRound, Trash2, AlertTriangle, Heart, Eye, EyeOff, BadgeCheck, Ticket, Plus, CreditCard, Package, Zap, GitBranch as Github, Copy, FlaskConical } from 'lucide-react';
@@ -460,8 +460,10 @@ const TRACK_BADGES = {
 
 // Task #15 — single ordered source for the Admin Console section nav. The
 // dropdown trigger and menu both render from this list instead of a hardcoded
-// row of 12 tab buttons. Pending counts are computed per-render in the page
-// and passed in via `badges` keyed by section value.
+// row of tab buttons — fourteen sections today, one per entry below (the
+// comment said twelve until D285; the list had grown twice). Pending counts
+// are computed per-render in the page and passed in via `badges` keyed by
+// section value.
 const ADMIN_SECTIONS = [
   { value: 'users', label: 'Users', Icon: Users },
   { value: 'profiles', label: 'Partner Profiles', Icon: Briefcase },
@@ -577,6 +579,23 @@ export default function AdminPage({ onImpersonate, section = null }) {
     const t = new URLSearchParams(window.location.search).get('tab');
     return t && ADMIN_SECTION_VALUES.has(t) ? t : 'users';
   });
+  const location = useLocation();
+  const navigate = useNavigate();
+  // D285 — the tab FOLLOWS the URL while the page is mounted, not only on the
+  // first render: the H36 strips link one `?tab=` after another without
+  // remounting this page. `section` still wins — a host that locked the
+  // console to one panel is not steered by the address bar.
+  useEffect(() => {
+    if (section) return;
+    const t = new URLSearchParams(location.search).get('tab');
+    if (t && ADMIN_SECTION_VALUES.has(t)) setTab(t);
+  }, [location.search, section]);
+  // …and a pick writes back to the URL with `replace`, so the address bar
+  // says which panel is open and Back does not step through every tab.
+  const pickTab = useCallback((value) => {
+    setTab(value);
+    if (!section) navigate({ search: `?tab=${value}` }, { replace: true });
+  }, [navigate, section]);
   const [users, setUsers] = useState([]);
   // Task #40 — batched trust-score map keyed by user_id, populated by a
   // single POST /api/trust/score/batch after each users-list refresh.
@@ -861,7 +880,7 @@ export default function AdminPage({ onImpersonate, section = null }) {
 
           <AdminSectionNav
             value={tab}
-            onChange={setTab}
+            onChange={pickTab}
             badges={{
               profiles: pendingProfiles,
               kyc: kycFilter === 'pending' ? kycQueue.length : 0,

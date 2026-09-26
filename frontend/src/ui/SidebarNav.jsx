@@ -4,6 +4,7 @@ import { Building2, ChevronDown, ChevronLeft, ChevronRight, Lock as LockIcon, Se
 import { openPaywall } from '../components/PaywallModal';
 import { defaultOpenGroups, hasTier, hasInvestorTier } from '../sidebarConfig';
 import { safeReadJSON } from '../lib/storage';
+import { hqRowFor } from '../lib/hqStrips.js';
 import CompanySwitcher from './CompanySwitcher';
 
 /**
@@ -75,6 +76,11 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
   }, [persistOpen]);
 
   const q = query.trim().toLowerCase();
+  // D285 / H36 — in the HQ shell a row can be lit by the QUERY, not only the
+  // path: /admin?tab=integration-keys is Platform's, /admin?tab=legal is
+  // Contracts'. The map says which; when it names a row, that row and no
+  // other is active, and the path-only rules below decide nothing.
+  const derivedRow = role === 'super_admin' ? hqRowFor(navLocation.pathname, navLocation.search) : null;
   // When the user types, force-expand any group with a match so the
   // matching items are visible without manual clicking.
   const effectiveOpen = q
@@ -237,7 +243,9 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
                   onClick={onNavigate}
                   title={collapsed ? label : undefined}
                   className={({ isActive }) => {
-                    const active = manualActive === null ? isActive : manualActive;
+                    const active = derivedRow !== null
+                      ? to === derivedRow
+                      : (manualActive === null ? isActive : manualActive);
                     return collapsed
                       ? `flex flex-col items-center gap-0.5 px-1 py-2 text-[10px] transition-colors ${
                           active

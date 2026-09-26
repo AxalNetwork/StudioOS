@@ -34,7 +34,9 @@ import BranchSuspendedBar from './components/BranchSuspendedBar';
 import HqSupportSessionBar from './components/HqSupportSessionBar';
 import HqViewingAsBar from './components/HqViewingAsBar';
 import WorkspacesLauncher from './components/WorkspacesLauncher';
+import HqSubNavStrip, { StripLink } from './components/HqSubNavStrip';
 import { ADMIN_SHELLS, MESSAGES_ROLES } from './lib/paletteIndex';
+import { stripFor } from './lib/hqStrips';
 import { clearSupportSession } from './lib/supportSession';
 import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
@@ -901,6 +903,12 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // landscape stops short of the sidebar and the bottom of the body.
   const onboardingCanvas = ONBOARDING_CANVAS_PATHS.includes(location.pathname);
   const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user, hqView);
+  // D285 / H36 — which sub-navigation strip this location sits under, in the
+  // HQ shell only. The strips are written below as LITERAL links rather than
+  // mapped from `HQ_STRIPS`, because the reachability guard reads navigation
+  // syntax and a `.map` over data is not a door it can see; the guard holds
+  // this markup equal to that list.
+  const hqStrip = shellRole === 'super_admin' ? stripFor(location.pathname, location.search) : null;
 
   // Auto-logout after 20 minutes of inactivity, with a 60-second warning modal.
   // Tracks mouse/keyboard/scroll/touch on `window`. Disabled when no user is
@@ -1093,6 +1101,30 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             {...(onboardingCanvas ? { 'data-onboarding-canvas': '' } : {})}
             className={`flex flex-1 flex-col overflow-y-auto ${onboardingCanvas ? '' : 'bg-gray-50 dark:bg-gray-950'}`}
           >
+            {hqStrip === 'Platform' && (
+              <HqSubNavStrip label="Platform">
+                <StripLink to="/admin/platform">Overview</StripLink>
+                <StripLink to="/admin/platform/switches">Switches</StripLink>
+                <StripLink to="/admin/platform/topology">Topology</StripLink>
+                <StripLink to="/admin?tab=integration-keys">Integration keys</StripLink>
+                <StripLink to="/admin?tab=github">GitHub Sync</StripLink>
+                <StripLink to="/admin?tab=payments">Payments</StripLink>
+                <StripLink to="/admin?tab=promos">Promo codes</StripLink>
+                <StripLink to="/monitoring">Monitoring</StripLink>
+                <StripLink to="/admin/telegram">Telegram</StripLink>
+              </HqSubNavStrip>
+            )}
+            {hqStrip === 'Content' && (
+              <HqSubNavStrip label="Content">
+                <StripLink to="/admin/content">Overview</StripLink>
+                <StripLink to="/admin/articles">Content queue</StripLink>
+                <StripLink to="/admin/publications">Publications</StripLink>
+                <StripLink to="/admin/assessment">Assessment Studio</StripLink>
+                <StripLink to="/admin?tab=personas">Personas</StripLink>
+                <StripLink to="/admin?tab=network-profiles">Advisors &amp; Partners</StripLink>
+                <StripLink to="/admin/team">Public team page</StripLink>
+              </HqSubNavStrip>
+            )}
             {/* Keyed on the active company so a switch REMOUNTS every page
                 below the sidebar. Pages do not read the company from context —
                 it rides in the X-Company-Id header on each request — so
