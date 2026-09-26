@@ -15,18 +15,30 @@
 //     mapping, deck/Axal sync timestamps.
 //   - Milestones: real Roadmap OKRs (GET /progress/roadmap/:projectId); costs
 //     live in meta because OKRs carry no cost field.
-//   - Burn model (from the design): burn = eng%·$700 + gtm%·$1,200 + ops%·$450
-//     per month — an allocation-intensity model, not a stored burn field.
+//   - Burn (D360): the latest RECORDED net burn — `project_metrics.net_burn`,
+//     logged with a metrics snapshot on the Revenue page (GET
+//     /progress/metrics/:projectId). The design's allocation-intensity model
+//     (eng%·$700 + gtm%·$1,200 + ops%·$450 a month) was retired: those rates
+//     were invented, and the card headed "Runway at current burn" was showing
+//     a burn nobody had recorded. With no recorded burn, runway reads "Not
+//     recorded" with the reason and a link to where it is logged; a failed
+//     metrics read reads Unreadable. "Largest driver" became "Largest
+//     allocation": no store splits burn by bucket.
+//   - Honest reads (D360): a failed project read is Unreadable, not "No
+//     startup record yet"; an unpriced milestone is never counted as funded;
+//     an emptied cost input stores no cost rather than $0.
 //
 // Persistence pattern: debounced autosave of allocation + raise + meta via the
-// real project update route; "Sync to deck" / "Axal export" stamp timestamps
-// in meta. Any allocation/raise change marks the deck sync stale.
+// real project update route; "Sync to deck" / "Record Axal hand-off" stamp
+// timestamps in meta — neither generates a file, and the copy says so. Any
+// allocation/raise change marks the deck sync stale. "Share" was the same
+// clipboard action as "Copy link" and was dropped (D360); Copy link stays.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   DollarSign, Loader2, Lock, AlertTriangle, FileText,
-  Presentation, Map as MapIcon, Calculator, Share2, Download, Link2, Eye,
+  Presentation, Map as MapIcon, Calculator, Download, Link2, Eye,
   Check, ChevronDown, X, RefreshCw,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
@@ -36,6 +48,7 @@ import { FUND_SECTIONS } from '../components/FundAllocator';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
 import { reportError } from '../lib/log';
+import { Unreadable, Unrecorded } from '../ui';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -45,9 +58,9 @@ const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:t
 // ---------------------------------------------------------------------------
 
 export const BUCKETS = [
-  { key: 'eng', name: 'Engineering', color: '#4f46e5', intensity: 700, section: 'Product & engineering' },
-  { key: 'gtm', name: 'GTM', color: '#0891b2', intensity: 1200, section: 'GTM: sales and marketing' },
-  { key: 'ops', name: 'Operations', color: '#7c3aed', intensity: 450, section: 'Operations, legal & compliance' },
+  { key: 'eng', name: 'Engineering', color: '#4f46e5', section: 'Product & engineering' },
+  { key: 'gtm', name: 'GTM', color: '#0891b2', section: 'GTM: sales and marketing' },
+  { key: 'ops', name: 'Operations', color: '#7c3aed', section: 'Operations, legal & compliance' },
 ];
 
 // Collapse a stored use_of_funds value into [eng, gtm, ops] percentages.
@@ -111,12 +124,19 @@ export function normalizeBuckets(pcts) {
   return next;
 }
 
-// Design burn model: $ / month per allocation point.
-export function modelBurn(pcts) {
-  return Math.round(pcts[0] * BUCKETS[0].intensity + pcts[1] * BUCKETS[1].intensity + pcts[2] * BUCKETS[2].intensity);
-}
-
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+
+/**
+ * The newest metrics snapshot that records a net burn, as { amount, date },
+ * or null when none does. `num(null)` is 0, so absence is tested first — a
+ * snapshot without the field is not a $0 burn.
+ */
+export function latestRecordedBurn(snapshots) {
+  const rows = (Array.isArray(snapshots) ? snapshots : [])
+    .filter((s) => s && s.net_burn != null && s.net_burn !== '' && num(s.net_burn) !== null && num(s.net_burn) > 0)
+    .sort((a, b) => String(b.snapshot_date || '').localeCompare(String(a.snapshot_date || '')));
+  return rows[0] ? { amount: num(rows[0].net_burn), date: rows[0].snapshot_date } : null;
+}
 
 export function fmtMoney(v) {
   const n = num(v);
@@ -268,7 +288,10 @@ export default function SpinoutLabUseOfFundsPage() {
   const [saveState, setSaveState] = useState('idle'); // idle | saving | saved | error
   const [saveError, setSaveError] = useState('');
   const [exportOpen, setExportOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState(''); // '' | 'ok' | 'fail'
+  const [projectsUnread, setProjectsUnread] = useState(false);
+  // The recorded net burn read: loading until it lands, 'failed' is Unreadable.
+  const [burnRead, setBurnRead] = useState({ status: 'loading', burn: null });
   const [previewOpen, setPreviewOpen] = useState(false);
   const [, forceTick] = useState(0);
 
@@ -287,11 +310,13 @@ export default function SpinoutLabUseOfFundsPage() {
     (async () => {
       try {
         const [st, me, projects] = await Promise.all([
-          spinoutLab.state(), api.getMe(), api.listProjects().catch(() => []),
+          spinoutLab.state(), api.getMe(),
+          api.listProjects().catch((e) => { reportError('spinout-uof:projects', e); return null; }),
         ]);
         if (dead) return;
         setState(st); setUser(me); userRef.current = me;
-        const proj = pickLabProject(projects, me);
+        setProjectsUnread(projects === null);
+        const proj = projects === null ? null : pickLabProject(projects, me);
         setProject(proj || null); projectRef.current = proj || null;
         if (proj) {
           // Legacy/rounded allocations may not total exactly 100; normalize
@@ -305,6 +330,14 @@ export default function SpinoutLabUseOfFundsPage() {
             const rd = await api.listOkrs(proj.id);
             if (!dead) setOkrs(Array.isArray(rd?.okrs) ? rd.okrs : (Array.isArray(rd) ? rd : []));
           } catch { /* roadmap optional */ }
+          try {
+            const res = await api.listMetricsSnapshots(proj.id);
+            const rows = Array.isArray(res?.snapshots) ? res.snapshots : Array.isArray(res?.items) ? res.items : [];
+            if (!dead) setBurnRead({ status: 'ok', burn: latestRecordedBurn(rows) });
+          } catch (e) {
+            reportError('spinout-uof:burn', e);
+            if (!dead) setBurnRead({ status: 'failed', burn: null });
+          }
         }
         setStatus('ready');
       } catch (e) {
@@ -402,36 +435,43 @@ export default function SpinoutLabUseOfFundsPage() {
   };
 
   const syncDeck = () => saveNow({ deck_synced_at: new Date().toISOString() });
+  // Records the date of the hand-off only — no file is generated or sent.
   const exportAxal = () => saveNow({ axal_exported_at: new Date().toISOString() });
 
   const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch { /* clipboard blocked */ }
+      setCopied('ok');
+    } catch (e) {
+      reportError('spinout-uof:copy-link', e);
+      setCopied('fail');
+    }
+    setTimeout(() => setCopied(''), 2000);
   };
 
   // ---- derived model ----
-  const burn = modelBurn(pcts);
+  // Recorded net burn only (see header). null → runway is "Not recorded".
+  const burn = burnRead.burn ? burnRead.burn.amount : null;
   const months = runwayMonths(raise, burn);
   const threshold = Number(meta.alert_threshold_months) || 6;
   const band = months === null ? null : (months > 12 ? 'healthy' : months >= 6 ? 'tight' : 'critical');
   const belowAlert = months !== null && months < threshold;
-  const driverIdx = pcts.reduce((best, p, i) => (p * BUCKETS[i].intensity > pcts[best] * BUCKETS[best].intensity ? i : best), 0);
+  // The largest ALLOCATION — a stored fact — not a burn driver, which no store has.
+  const largestIdx = pcts.reduce((best, p, i) => (p > pcts[best] ? i : best), 0);
 
   const milestoneCosts = meta.milestone_costs || {};
   const mappedMilestones = useMemo(() => okrs.map((o) => {
     const mc = milestoneCosts[o.id] || {};
     const bucket = mc.bucket || guessBucket(o.objective);
-    const cost = num(mc.cost) ?? 0;
+    // No cost entered → null, not $0: an unpriced milestone is never "funded".
+    const cost = mc.cost == null || mc.cost === '' ? null : num(mc.cost);
     return { id: o.id, name: o.objective, done: o.kanban_status === 'done', bucket, cost };
   }), [okrs, milestoneCosts]);
 
   const bucketDollars = (i, r = raise) => (pcts[i] / 100) * r;
   const bucketMapping = BUCKETS.map((b, i) => {
     const items = mappedMilestones.filter((m) => m.bucket === b.key);
-    const mapped = items.reduce((a, m) => a + m.cost, 0);
+    const mapped = items.filter((m) => m.cost !== null).reduce((a, m) => a + m.cost, 0);
     const dollars = bucketDollars(i);
     return { ...b, i, items, mapped, dollars, unmapped: Math.max(0, dollars - mapped), over: mapped > dollars };
   });
@@ -441,7 +481,7 @@ export default function SpinoutLabUseOfFundsPage() {
     for (const b of BUCKETS.map((bk, i) => ({ key: bk.key, budget: (pcts[i] / 100) * r }))) {
       let left = b.budget;
       for (const m of mappedMilestones.filter((x) => x.bucket === b.key)) {
-        if (m.cost <= left) { covered += 1; left -= m.cost; }
+        if (m.cost !== null && m.cost <= left) { covered += 1; left -= m.cost; }
       }
     }
     return covered;
@@ -495,6 +535,17 @@ export default function SpinoutLabUseOfFundsPage() {
       </div>
     );
   }
+  if (projectsUnread) {
+    return (
+      <div className="max-w-xl mx-auto mt-16" data-testid="uof-projects-unreadable">
+        <Unreadable
+          what="Your startup record"
+          claim="This is not a claim that you have no startup — reload before you create one."
+          onRetry={() => window.location.reload()}
+        />
+      </div>
+    );
+  }
   if (!project) {
     return (
       <div className="max-w-xl mx-auto mt-16 text-center" data-testid="uof-no-project">
@@ -526,9 +577,6 @@ export default function SpinoutLabUseOfFundsPage() {
         subtitle="Allocate your raise, model runway, and map capital to milestones. Your pitch deck's ASK slide reads this allocation live."
         actions={(
           <>
-            <button type="button" onClick={copyLink} data-testid="button-share" className={labBtn('secondary')}>
-              <Share2 size={LAB_ICON_SIZE} /> Share
-            </button>
             {/* `relative` stays on this wrapper — it is the anchor the export
                 menu positions against. */}
             <div className="relative">
@@ -541,13 +589,13 @@ export default function SpinoutLabUseOfFundsPage() {
                     Pitch Deck format <span className="block text-[10px] font-normal text-gray-400">Syncs THE ASK slide data</span>
                   </button>
                   <button type="button" disabled={!canEdit} onClick={() => { setExportOpen(false); exportAxal(); }} data-testid="export-axal" className="w-full text-left text-[12px] font-semibold text-gray-700 dark:text-gray-200 rounded-lg px-3 py-2 hover:bg-violet-50 dark:hover:bg-violet-900/20 disabled:opacity-40">
-                    Axal VC Spin-Out format <span className="block text-[10px] font-normal text-gray-400">28-day program export</span>
+                    Record Axal hand-off <span className="block text-[10px] font-normal text-gray-400">Stamps today's date — no file is generated</span>
                   </button>
                 </div>
               )}
             </div>
             <button type="button" onClick={copyLink} data-testid="button-copy-link" className={labBtn('secondary')}>
-              {copied ? <Check size={LAB_ICON_SIZE} className="text-emerald-500" /> : <Link2 size={LAB_ICON_SIZE} />} {copied ? 'Copied' : 'Copy link'}
+              {copied === 'ok' ? <Check size={LAB_ICON_SIZE} className="text-emerald-500" /> : <Link2 size={LAB_ICON_SIZE} />} {copied === 'ok' ? 'Copied' : copied === 'fail' ? 'Copy failed — try again' : 'Copy link'}
             </button>
             <button type="button" onClick={() => setPreviewOpen(true)} data-testid="button-investor-preview" className={labBtn('primary')}>
               <Eye size={LAB_ICON_SIZE} /> Preview as investor
@@ -562,8 +610,8 @@ export default function SpinoutLabUseOfFundsPage() {
           <AlertTriangle size={16} className="text-rose-500 shrink-0 mt-0.5" />
           <p className="text-[12.5px] text-rose-800 dark:text-rose-300">
             <span className="font-bold">Runway below your {threshold}-month alert.</span>{' '}
-            At this allocation you'd burn {fmtMoney(burn)}/mo — {BUCKETS[driverIdx].name} is the largest burn driver
-            ({pcts[driverIdx]}% at ${BUCKETS[driverIdx].intensity}/point). Trim it or raise more.
+            At your recorded net burn of {fmtMoney(burn)}/mo ({burnRead.burn?.date ? `snapshot of ${burnRead.burn.date}` : 'latest snapshot'}),
+            this raise lasts {months.toFixed(1)} months. Lower the burn or raise more.
           </p>
         </div>
       )}
@@ -623,7 +671,7 @@ export default function SpinoutLabUseOfFundsPage() {
 
           {/* Runway */}
           <div className={CARD} data-testid="card-runway">
-            <div className={`${LBL} mb-2`}>Runway at current burn</div>
+            <div className={`${LBL} mb-2`}>Runway at recorded net burn</div>
             {months !== null ? (
               <>
                 <div className="flex items-baseline gap-2">
@@ -637,20 +685,30 @@ export default function SpinoutLabUseOfFundsPage() {
                     <div className="text-[9.5px] text-gray-400">Monthly burn</div>
                   </div>
                   <div>
-                    <div className="text-[12px] font-bold text-gray-900 dark:text-gray-50" data-testid="text-burn-driver">{BUCKETS[driverIdx].name}</div>
-                    <div className="text-[9.5px] text-gray-400">Largest driver</div>
+                    <div className="text-[12px] font-bold text-gray-900 dark:text-gray-50" data-testid="text-largest-allocation">{BUCKETS[largestIdx].name}</div>
+                    <div className="text-[9.5px] text-gray-400">Largest allocation</div>
                   </div>
                   <div>
                     <div className="text-[12px] font-bold text-gray-900 dark:text-gray-50">{cashOutLabel(months)}</div>
                     <div className="text-[9.5px] text-gray-400">Cash-out</div>
                   </div>
                 </div>
-                <p className="text-[9.5px] text-gray-400 mt-2">
-                  Modeled from allocation intensity: Eng $700 · GTM $1,200 · Ops $450 per point / month.
+                <p className="text-[9.5px] text-gray-400 mt-2" data-testid="text-burn-source">
+                  Net burn from your metrics snapshot of {burnRead.burn?.date || 'the latest date'} · raise ÷ burn, before any revenue growth.
                 </p>
               </>
-            ) : (
+            ) : burnRead.status === 'failed' ? (
+              <div data-testid="runway-unreadable">
+                <Unreadable what="Your recorded net burn" claim="Runway is not shown, which is not a claim that none is recorded." onRetry={() => window.location.reload()} />
+              </div>
+            ) : !(raise > 0) ? (
               <p className="text-[11.5px] text-gray-500 dark:text-gray-400" data-testid="runway-empty">Set a raise target to model runway.</p>
+            ) : (
+              <p className="text-[11.5px] text-gray-500 dark:text-gray-400" data-testid="runway-unrecorded">
+                <Unrecorded reason="Runway needs a recorded net burn; no metrics snapshot carries one yet." />{' — '}
+                log net burn with a metrics snapshot on the{' '}
+                <Link to="/spinout-lab/revenue" className="text-violet-600 hover:underline">Revenue</Link> page.
+              </p>
             )}
           </div>
 
@@ -661,7 +719,7 @@ export default function SpinoutLabUseOfFundsPage() {
               {months !== null && (
                 <div
                   className={`absolute inset-y-0 left-0 rounded-full ${band === 'critical' ? 'bg-rose-500' : band === 'tight' ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                  style={{ width: `${Math.min(100, ((months || 0) / 36) * 100)}%` }}
+                  style={{ width: `${Math.min(100, (months / 36) * 100)}%` }}
                 />
               )}
               {[3, 6, 12].map((t) => (
@@ -726,9 +784,9 @@ export default function SpinoutLabUseOfFundsPage() {
                           <span className={`flex-1 min-w-0 truncate ${m.done ? 'text-gray-400 line-through' : 'text-gray-700 dark:text-gray-200'}`} title={m.name}>{m.name}</span>
                           {canEdit ? (
                             <input
-                              type="number" min="0" step="5000" value={m.cost || ''}
+                              type="number" min="0" step="5000" value={m.cost === null ? '' : m.cost}
                               placeholder="$"
-                              onChange={(e) => setMilestone(m.id, { cost: Number(e.target.value) || 0, bucket: m.bucket })}
+                              onChange={(e) => setMilestone(m.id, { cost: e.target.value === '' || num(e.target.value) === null ? null : num(e.target.value), bucket: m.bucket })}
                               className="w-[68px] rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-1.5 py-0.5 text-[10.5px] text-right tabular-nums text-gray-900 dark:text-gray-100"
                               data-testid={`input-cost-${m.id}`}
                             />
@@ -796,12 +854,12 @@ export default function SpinoutLabUseOfFundsPage() {
                     <div className="flex justify-between text-[11px]">
                       <span className="text-gray-400">Runway</span>
                       <span className={`font-bold tabular-nums ${m !== null && m > 12 ? 'text-emerald-600 dark:text-emerald-400' : m !== null && m >= 6 ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                        {m !== null ? `${m.toFixed(1)}mo` : '—'}
+                        {m !== null ? `${m.toFixed(1)}mo` : <Unrecorded reason="No recorded net burn to divide by." />}
                       </span>
                     </div>
                     <div className="flex justify-between text-[11px]">
                       <span className="text-gray-400">Burn/mo</span>
-                      <span className="font-bold tabular-nums text-gray-700 dark:text-gray-200">{fmtMoney(burn)}</span>
+                      <span className="font-bold tabular-nums text-gray-700 dark:text-gray-200">{burn === null ? <Unrecorded reason="No metrics snapshot records a net burn." /> : fmtMoney(burn)}</span>
                     </div>
                     <div className="flex justify-between text-[11px]">
                       <span className="text-gray-400">Milestones</span>
@@ -823,7 +881,7 @@ export default function SpinoutLabUseOfFundsPage() {
                   <div className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Pitch Deck · THE ASK slide</div>
                   <div className="text-[10.5px] text-gray-400">
                     {meta.deck_synced_at ? `Last synced ${agoLabel(meta.deck_synced_at)}` : 'Not synced since last change'}
-                    {' · '}<Link to="/build/deck" className="text-violet-600 hover:underline">open deck</Link>
+                    {' · '}<Link to="/spinout-lab/pitch-deck" className="text-violet-600 hover:underline">open deck</Link>
                   </div>
                 </div>
                 <button type="button" disabled={!canEdit || saveState === 'saving'} onClick={syncDeck} data-testid="button-sync-deck" className="inline-flex items-center gap-1 text-[11px] font-bold text-white bg-violet-600 hover:bg-violet-700 rounded-lg px-2.5 py-1.5 disabled:opacity-40">
@@ -833,11 +891,11 @@ export default function SpinoutLabUseOfFundsPage() {
               <div className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-2.5" data-testid="sync-axal">
                 <FileText size={15} className="text-teal-500 shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Axal VC · 28-day Spin-Out export</div>
-                  <div className="text-[10.5px] text-gray-400">{meta.axal_exported_at ? `Last exported ${agoLabel(meta.axal_exported_at)}` : 'Not exported yet'}</div>
+                  <div className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Axal VC · Spin-Out hand-off</div>
+                  <div className="text-[10.5px] text-gray-400">{meta.axal_exported_at ? `Hand-off recorded ${agoLabel(meta.axal_exported_at)}` : 'No hand-off recorded'} · records the date only, no file is sent</div>
                 </div>
                 <button type="button" disabled={!canEdit || saveState === 'saving'} onClick={exportAxal} data-testid="button-export-axal" className="inline-flex items-center gap-1 text-[11px] font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg px-2.5 py-1.5 disabled:opacity-40">
-                  <Download size={11} /> Export
+                  <Download size={11} /> Record
                 </button>
               </div>
             </div>
@@ -872,7 +930,7 @@ export default function SpinoutLabUseOfFundsPage() {
                   </div>
                 ))}
                 <div className="text-[11px] text-gray-400 pt-1">
-                  {months !== null ? `${months.toFixed(1)} months runway at ${fmtMoney(burn)}/mo modeled burn · cash-out ${cashOutLabel(months)}` : 'Set a raise to model runway.'}
+                  {months !== null ? `${months.toFixed(1)} months runway at ${fmtMoney(burn)}/mo recorded net burn · cash-out ${cashOutLabel(months)}` : 'Runway not shown — no recorded net burn and raise to compute it from.'}
                 </div>
               </div>
             </div>
@@ -892,7 +950,7 @@ export default function SpinoutLabUseOfFundsPage() {
             )}
             <div className="rounded-xl bg-teal-900/30 border border-teal-800/60 px-4 py-3 text-[11.5px] text-teal-200" data-testid="preview-axal-block">
               <span className="font-bold">Axal VC Spin-Out summary:</span>{' '}
-              {fmtMoney(raise)} across {BUCKETS.map((b, i) => `${b.name} ${pcts[i]}%`).join(' · ')} — {months !== null ? `${months.toFixed(1)}mo runway` : 'runway TBD'}, {milestonesCovered(raise)}/{mappedMilestones.length || 0} milestones funded.
+              {fmtMoney(raise)} across {BUCKETS.map((b, i) => `${b.name} ${pcts[i]}%`).join(' · ')} — {months !== null ? `${months.toFixed(1)}mo runway` : 'runway not recorded'}, {milestonesCovered(raise)}/{mappedMilestones.length} milestones funded.
             </div>
           </div>
         </div>

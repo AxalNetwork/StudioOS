@@ -2157,8 +2157,10 @@ function AppInner() {
       <Route path="/spinout-lab/captable" element={guard(labRoles(['admin']), <SpinoutLabCapTablePage />)} />
       <Route path="/spinout-lab/pitch-deck" element={guard(labRoles(['admin']), <SpinoutLabPitchDeckPage />)} />
       {/* New Brand & Landing Pages tool (design: Brand & Landing Page.dc) —
-          replaces /build/brand as the founders' entry point, so it keeps the
-          same roles as the old route (any founder, plus active lab members). */}
+          the founders' entry point for brand work. It does NOT replace
+          /build/brand: layout and media editing still live there and the Lab
+          page links to it (D360). It keeps the same roles as the old route
+          (any founder, plus active lab members). */}
       <Route path="/spinout-lab/brand" element={guard(labRoles(['admin', 'founder']), founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><SpinoutLabBrandPage /></FounderWorkspaceTabs>))} />
       <Route path="/spinout-lab/cofounder-agreement" element={guard(labRoles(['admin']), <SpinoutLabCofounderAgreementPage />)} />
       {/* Co-founder Match tool page (design: Co-founder Match.dc) — the Lab
