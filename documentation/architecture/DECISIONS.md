@@ -28018,3 +28018,96 @@ No route, no worker change, no migration and no `frontend/src` change, so no
 each naming the new artboards; `design/canvases/README.md` gains a dated
 amendment and its asset paragraph is corrected. Gates run: `check-folder-docs`,
 `check-decision-ids`, the LFS size gate, and the full `test:drift`.
+
+## D283
+
+**Task 421: the H35 placement map lands as data, with a guard that nothing
+legacy is left unplaced.**
+
+**What was true on main (`78796f234`).**
+- `SIDEBAR_GROUPS.admin` (`frontend/src/sidebarConfig.js`) carries 50 live
+  rows in six groups — home 2, admin 19, studio 8, capital 10, network 8,
+  more 3 — plus the X row commented out beside Telegram.
+- `ADMIN_SECTIONS` (`AdminPage.jsx`) holds 14 tabs; the comment above it still
+  says "row of 12 tab buttons" (D285 corrects it, with the tab state it owns).
+- H35 (D282) places every row and tab on a tier and a row — in prose, on a
+  canvas. Nothing in the code read it, and the palette indexed the 50 rows.
+
+**The coordinator's two decisions, implemented as quoted.**
+- *"Wellbeing goes to Admin · Community."* — `tab:wellbeing` is Admin ·
+  Community, a card link beside Events, Jobs and Circles.
+- *"The Trash proposal is not adopted: /admin/trash gets a literal door on the
+  Admin Console."* — `<Link to="/admin/trash">` in the Admin Console's own
+  header (`AdminPage.jsx`, inside the `!section` block, so HQ's Accounts page,
+  which embeds the console with `section="users"`, does not draw it). On the
+  map Trash is Admin · Accounts, card link; H35's "HQ · Security · proposal"
+  is not recorded as a placement, and the guard refuses a second placement on
+  Security.
+
+**What changed.**
+- **`frontend/src/lib/adminPlacement.js`** — in `lib/`, beside the other pure
+  data modules, so it imports nothing and a Node test reads it directly.
+  Sixty-four entries: the 49 legacy rows that have a placement, the parked X,
+  and the 14 tabs. Each carries `key`, `kind`, `label`, `route`, `tier`,
+  `row`, `form`, `hqOnly` and H35's `how` — and `also` for the entries H35
+  draws on two rows: Users embedded on HQ · Team and on Admin · Accounts;
+  Legal on both Contracts rows; KYC, Personas and Advisors & Partners with a
+  second placement; the Community and Programs cards that are also Approvals
+  lanes; Assessment Studio, whose runs Admin · Programs shows. Messages is the
+  Admin top bar, also the HQ top bar.
+- **Vocabulary.** Tiers `HQ · Admin · launcher · parked`. Forms `sub-nav ·
+  card link · embedded · lane · top bar · launcher`, plus `row` for the one
+  entry that IS a shell row (Studio, "Row 1 of the Admin shell") — a seventh
+  form rather than a false one. Rows are `HQ_ROWS` (H35's eleven) and
+  `ADMIN_ROWS` (S20's eight), plus `TOP_BAR`.
+- **`UNPLACED`: exactly one.** The Admin Console, `/admin` — H35's "Stays
+  reachable. Its 14 tabs are placed individually." That is not a tier on the
+  canvas and is not given one here.
+- **The 29 working pages** are launcher entries carrying their S23/H37 group.
+  D284 adds their descriptions and renders them; nothing renders from this
+  list yet.
+- **`hqOnly` is typed on every entry and held to App.jsx** by the guard:
+  `/monitoring`, `/admin/articles`, `/admin/publications` and `/admin/team`
+  are `guard(['admin'])` with no elevation and read false — H35 places them on
+  HQ rows regardless, which D286 takes up; `/admin/telegram` and `/admin/x`
+  read true; no tab is hqOnly, because `/admin` is not.
+
+**Guard: `frontend/test/admin_placement_h35.test.mjs`, 8 tests.**
+- *the question is the size it was measured at* — the 50 legacy routes are
+  PINNED in the test, because D286 replaces the live array and the map must
+  keep answering for what was there; the tabs are read out of
+  `ADMIN_SECTIONS` live, so a new tab is a new console with no placement; the
+  map's length must equal rows + tabs + X − exceptions, which is 64;
+- *every legacy row, every tab and X has exactly one placement, or a recorded
+  reason for none* — `UNPLACED` pinned by `deepEqual` to `['/admin']`;
+- *nothing is placed twice, and nothing outside the legacy set is placed*;
+- *every placed route is registered in App.jsx, and every `?tab=` is a
+  section*;
+- *`hqOnly` restates App.jsx* — derived from the `hqOnly(` wrappers on each
+  `<Route>` line, never believed;
+- *every placement names a real tier, a real row of that tier, and a real
+  form* — and exactly 29 launcher entries;
+- *the three decided placements hold* — Wellbeing on Admin · Community; X
+  parked with H35's reason verbatim and no other home; Trash on the Admin
+  shell, never Security, with the literal `<Link to="/admin/trash">` present
+  in the header block;
+- *Messages is a top-bar button on both shells*.
+
+**Mutations: 7 run, 7 caught** — each a non-zero exit with a `not ok` line,
+each anchor unique before it was applied, bytes proven changed, source restored
+from a sha256-checked snapshot:
+- a tab left unplaced (billing removed);
+- an unregistered route placed (`/perks` → `/perkz`);
+- one entry placed twice (My Licence duplicated);
+- Wellbeing unplaced;
+- the exception list widened (Trash added to `UNPLACED`);
+- an `hqOnly` flag that disagrees with App.jsx (`/monitoring` → true);
+- the Trash door deleted from the Admin Console header.
+
+**Not decided here.** S20's badge wording and the rest of D282's tensions stay
+with their items; H35's "50-row" wording stays on the canvas. The Admin
+Console's `?tab=` follow-the-URL behaviour and its comment are D285's.
+
+`frontend/src` moved (the module, its README row and the Trash link), so
+`docs/` is rebuilt. No route, no worker change, no migration, no `api.js`
+method.
