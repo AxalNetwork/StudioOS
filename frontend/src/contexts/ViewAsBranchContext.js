@@ -13,8 +13,12 @@ import { createContext, useContext } from 'react';
  *
  * IT PERSISTS NOTHING, on `AdminFrozenBar`'s stated rule: a mode the viewer
  * must not be able to forget they are in does not survive a reload or a sign-
- * out into somebody else's session. `clearSession` clears it for the same
- * reason it clears the support-session payload.
+ * out into somebody else's session. No `clearSession` line is needed for it,
+ * and none exists (D289 corrected this sentence, which used to claim one):
+ * the scope is shell state `ProtectedLayout` holds in plain React state and
+ * never stores — no localStorage, no sessionStorage, no URL — so signing out
+ * unmounts the layout, which IS the purge. The support-session payload needs
+ * a `clearSession` line because it is stored; this is the reason this is not.
  *
  * Its own module rather than App.jsx, for the reason `ViewModeContext` gives:
  * mixing component and non-component exports breaks Fast Refresh.
