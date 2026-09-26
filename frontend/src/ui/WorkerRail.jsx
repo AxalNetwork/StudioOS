@@ -311,14 +311,18 @@ export default function WorkerRail({
       // only report: the saved choice is the problem, so it goes. Leaving it
       // would have every subsequent click fail the same way with no way out
       // short of clearing site data.
-      if (e?.body?.refusal === 'model_not_offered') {
+      //
+      // D258 — the body rides on `e.data` and its sentence is `e.message`.
+      // This read `e.body`, which nothing sets, so a stale model choice was
+      // never dropped and every later click failed the same way.
+      if (e?.data?.refusal === 'model_not_offered') {
         setChosen(null);
         safeWriteJSON(modelKeyFor(workspace), null);
       }
       setRun({
         state: 'failed',
         text: '',
-        note: e?.body?.message || e?.message || 'The model could not be reached. Nothing was run.',
+        note: e?.message || 'The model could not be reached. Nothing was run.',
         usage: null,
       });
     }

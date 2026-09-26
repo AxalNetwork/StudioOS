@@ -54,7 +54,11 @@ function ChannelsTab({ channels, refresh, toast }) {
       toast.success(`Sent hello to channel (msg #${res.message_id})`);
       refresh();
     } catch (e) {
-      const msg = e?.body?.message || e?.body?.code || e.message;
+      // D258 — a refusal's sentence is `e.message` and its body is `e.data`.
+      // Every catch on this page used to read `e.body`, which nothing in the
+      // SPA sets, so each toast showed its fallback and never the server's
+      // own reason.
+      const msg = e?.message || 'no reason was given';
       toast.error(`Test failed: ${msg}`);
       refresh();
     } finally {
@@ -69,7 +73,7 @@ function ChannelsTab({ channels, refresh, toast }) {
       toast.success('Channel removed');
       refresh();
     } catch (e) {
-      toast.error(e?.body?.message || e?.body?.error || 'Delete failed');
+      toast.error(e?.message || 'Delete failed');
     }
   };
 
@@ -137,7 +141,7 @@ function ChannelRow({ ch, testingId, onTest, onRemove, onSaved, toast }) {
       setEditingChat(false);
       onSaved();
     } catch (e) {
-      toast.error(e?.body?.message || 'Save failed');
+      toast.error(e?.message || 'Save failed');
     } finally {
       setBusy(false);
     }
@@ -151,7 +155,7 @@ function ChannelRow({ ch, testingId, onTest, onRemove, onSaved, toast }) {
       setEditingSig(false);
       onSaved();
     } catch (e) {
-      toast.error(e?.body?.message || 'Save failed');
+      toast.error(e?.message || 'Save failed');
     } finally {
       setBusy(false);
     }
@@ -162,7 +166,7 @@ function ChannelRow({ ch, testingId, onTest, onRemove, onSaved, toast }) {
       await api.updateChannel(ch.id, { enabled: !ch.enabled });
       onSaved();
     } catch (e) {
-      toast.error(e?.body?.message || 'Toggle failed');
+      toast.error(e?.message || 'Toggle failed');
     }
   };
 
@@ -272,7 +276,7 @@ function AddChannelModal({ onClose, onSaved, toast }) {
       toast.success('Channel added');
       onSaved();
     } catch (e) {
-      toast.error(e?.body?.message || e?.body?.error || 'Create failed');
+      toast.error(e?.message || 'Create failed');
     } finally {
       setBusy(false);
     }
@@ -344,7 +348,7 @@ function DraftsTab({ channels, refresh, toast, onEdit }) {
       const res = await api.listPosts({ status: 'draft', limit: 100 });
       setDrafts(res.posts || []);
     } catch (e) {
-      toast.error(e?.body?.message || 'Load failed');
+      toast.error(e?.message || 'Load failed');
     } finally {
       setLoading(false);
     }
@@ -359,7 +363,7 @@ function DraftsTab({ channels, refresh, toast, onEdit }) {
       toast.success(`Aggregator ran — drafted ${res.drafted.length} posts`);
       reload();
     } catch (e) {
-      toast.error(e?.body?.message || 'Aggregator failed');
+      toast.error(e?.message || 'Aggregator failed');
     } finally {
       setRunning(false);
     }
@@ -371,7 +375,7 @@ function DraftsTab({ channels, refresh, toast, onEdit }) {
       await api.removePost(id);
       reload();
     } catch (e) {
-      toast.error(e?.body?.message || 'Delete failed');
+      toast.error(e?.message || 'Delete failed');
     }
   };
 
@@ -479,7 +483,7 @@ function ComposeTab({ channels, toast, editingId, setEditingId, onSent }) {
       setScheduleAt(toLocalInput(found?.scheduled_for));
     } catch (e) {
       setPost(null);
-      toast.error(e?.body?.error || e?.body?.message || 'Load draft failed');
+      toast.error(e?.message || 'Load draft failed');
     } finally {
       setLoading(false);
     }
@@ -506,7 +510,7 @@ function ComposeTab({ channels, toast, editingId, setEditingId, onSent }) {
       setEditingId(res.id);
       setNewForm({ channel_id: '', title: '', body_md: '' });
     } catch (e) {
-      toast.error(e?.body?.message || 'Create failed');
+      toast.error(e?.message || 'Create failed');
     } finally {
       setBusy(false);
     }
@@ -520,7 +524,7 @@ function ComposeTab({ channels, toast, editingId, setEditingId, onSent }) {
       toast.success('Saved');
       loadDraft(post.id);
     } catch (e) {
-      toast.error(e?.body?.message || 'Save failed');
+      toast.error(e?.message || 'Save failed');
     } finally {
       setBusy(false);
     }
@@ -536,7 +540,7 @@ function ComposeTab({ channels, toast, editingId, setEditingId, onSent }) {
       if (res.ok) toast.success('Linter passed — no PII detected');
       else toast.error(`Linter flagged ${res.findings.length} issue(s)`);
     } catch (e) {
-      toast.error(e?.body?.message || 'Lint failed');
+      toast.error(e?.message || 'Lint failed');
     } finally {
       setBusy(false);
     }
@@ -559,7 +563,7 @@ function ComposeTab({ channels, toast, editingId, setEditingId, onSent }) {
       toast.success('Media attached');
       loadDraft(post.id);
     } catch (e) {
-      toast.error(e?.body?.message || 'Upload failed');
+      toast.error(e?.message || 'Upload failed');
     } finally {
       setBusy(false);
     }
@@ -580,12 +584,15 @@ function ComposeTab({ channels, toast, editingId, setEditingId, onSent }) {
       setEditingId(null);
       onSent();
     } catch (e) {
-      if (e?.body?.code === 'pii_linter_blocked') {
-        setLintResult({ ok: false, findings: e.body.findings || [] });
+      // D258 — the code is `e.code` and the findings ride the body on `e.data`.
+      // Read off `e.body`, a send the linter refused showed "Send failed" and
+      // dropped its findings, so the override only opened through Lint.
+      if (e?.code === 'pii_linter_blocked') {
+        setLintResult({ ok: false, findings: e?.data?.findings || [] });
         setShowOverride(true);
         toast.error('Linter blocked the send — provide an override reason.');
       } else {
-        toast.error(e?.body?.message || e?.body?.code || 'Send failed');
+        toast.error(e?.message || 'Send failed');
       }
     } finally {
       setBusy(false);
@@ -601,7 +608,7 @@ function ComposeTab({ channels, toast, editingId, setEditingId, onSent }) {
       toast.success(`Scheduled for ${new Date(iso).toLocaleString()}`);
       loadDraft(post.id);
     } catch (e) {
-      toast.error(e?.body?.message || 'Schedule failed');
+      toast.error(e?.message || 'Schedule failed');
     } finally {
       setBusy(false);
     }
@@ -793,7 +800,7 @@ function HistoryTab({ toast }) {
       setPosts(res.posts || []);
       setTotal(res.total || 0);
     } catch (e) {
-      toast.error(e?.body?.message || 'Load failed');
+      toast.error(e?.message || 'Load failed');
     } finally {
       setLoading(false);
     }
@@ -863,7 +870,7 @@ export default function AdminTelegram() {
       const res = await api.listChannels();
       setChannels(res.channels || []);
     } catch (e) {
-      toast.error(e?.body?.message || 'Load failed');
+      toast.error(e?.message || 'Load failed');
     }
   }, [toast.error]);
 

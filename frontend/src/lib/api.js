@@ -462,8 +462,12 @@ export function readRefusal(raw) {
  * `res.statusText` sits between the two, as it already did in eleven of the
  * fifteen; over HTTP/2 it is empty, so in production the fallback is what
  * shows.
+ *
+ * EXPORTED for the handful of pages that still receive a raw `Response` from
+ * an api.js method (a blob export) and turn a refusal into an Error
+ * themselves: they call this rather than writing a sixteenth order.
  */
-async function refusalError(res, fallback) {
+export async function refusalError(res, fallback) {
   const body = await res.json().catch(() => null);
   const { message, code } = readRefusal(body);
   const e = new Error(message || res.statusText || fallback);

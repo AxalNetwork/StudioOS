@@ -194,14 +194,21 @@ export default function PublicJobDetailPage() {
       }
       setStatus({ state: 'sent', error: '', result: res });
     } catch (err) {
-      const raw = err?.message || '';
-      const msg = APPLY_ERROR_MESSAGES[raw] || raw || 'Something went wrong. Please try again.';
+      // D258 — the table is keyed by the refusal's CODE, which travels on
+      // `err.code`. It used to be keyed by `err.message`, which held the code
+      // only while `request()` put a code there; `resume_rejected` arrives
+      // with the storage layer's own exception text as its `message`, so
+      // keying on the message showed that text instead of this page's sentence.
+      const known = Object.hasOwn(APPLY_ERROR_MESSAGES, err?.code ?? '')
+        ? APPLY_ERROR_MESSAGES[err.code]
+        : null;
+      const msg = known || err?.message || 'Something went wrong. Please try again.';
       setStatus({ state: 'error', error: msg, result: null });
       if (TURNSTILE_SITE_KEY && turnstileWidgetId.current !== null) {
         try { window.turnstile.reset(turnstileWidgetId.current); } catch {}
         setTurnstileToken('');
       }
-      if (!APPLY_ERROR_MESSAGES[raw]) reportError('PublicJobDetailPage:apply', err);
+      if (!known) reportError('PublicJobDetailPage:apply', err);
     }
   };
 
