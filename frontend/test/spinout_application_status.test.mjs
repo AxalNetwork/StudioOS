@@ -151,7 +151,16 @@ test('a pending founder is told not to re-apply', () => {
 });
 
 test('a refused founder is given the capacity reason, not a bare rejection', () => {
-  assert.match(PAGE, /capped at 8 companies/);
+  // The reason is the cohort's place count as stored (cohort.places from
+  // /brief), never a typed one — the page said "capped at 8" while the stored
+  // default was 25. Without a successful read the sentence stands without a
+  // number rather than borrowing one.
+  const refused = PAGE.slice(PAGE.indexOf('function CapacityReason'));
+  assert.match(refused.slice(0, 600), /const places = useCohortPlaces\(\)/);
+  assert.match(refused.slice(0, 600), /places\.status === 'ok'\s*\?\s*<>Each cohort has \{placesLabel\(places\.places\)\}/);
+  assert.match(refused.slice(0, 600), /:\s*<>Each cohort has a fixed number of places/);
+  assert.match(PAGE, /: \(\s*<>[\s\S]{0,200}<CapacityReason \/>/, 'the refused branch lost its capacity reason');
+  assert.doesNotMatch(PAGE, /capped at \d/);
 });
 
 test('the status block is addressable for e2e and analytics', () => {
