@@ -115,15 +115,23 @@ test('the two cards carry H20\'s names, verbatim and in its order', () => {
   assert.equal(HQ_CANVAS.length, 5, 'the canvas list could not be parsed — the names below would compare nothing');
   assert.equal(ADMIN_CANVAS.length, 4, 'the canvas list could not be parsed — the names below would compare nothing');
 
-  assert.deepEqual(HQ_ONLY_ACTIONS.map((a) => a.name), HQ_CANVAS.map((a) => a.name),
-    'an HQ-only row was renamed, dropped or reordered against H20');
+  // D288 / H38 renames the top-bar picker "Preview shell"; H20's action list
+  // still says "View as a role shell" (D282, tension 9). The picker's own
+  // artboard wins for the one row that names it, and the row says the new
+  // name — every other name is H20's verbatim.
+  const RENAMED_BY_H38 = { 'View as a role shell': 'Preview shell' };
+  const hqExpected = HQ_CANVAS.map((a) => ({ ...a, name: RENAMED_BY_H38[a.name] || a.name }));
+  assert.ok(HQ_CANVAS.some((a) => a.name === 'View as a role shell'),
+    'H20 no longer names the picker "View as a role shell" — drop the H38 override here');
+  assert.deepEqual(HQ_ONLY_ACTIONS.map((a) => a.name), hqExpected.map((a) => a.name),
+    'an HQ-only row was renamed, dropped or reordered against H20 (the picker row excepted, per H38)');
   assert.deepEqual(ADMIN_ACTIONS.map((a) => a.name), ADMIN_CANVAS.map((a) => a.name),
     'an admin row was renamed, dropped or reordered against H20');
 
   // And the rendered card draws them in that order — the data could be right
   // and the render could drop one.
   const plain = text(PLAIN);
-  const at = [...HQ_CANVAS, ...ADMIN_CANVAS].map(({ name }) => plain.indexOf(name));
+  const at = [...hqExpected, ...ADMIN_CANVAS].map(({ name }) => plain.indexOf(name));
   assert.ok(at.every((i) => i >= 0), 'a row the canvas names is not rendered');
   assert.deepEqual([...at].sort((x, y) => x - y), at, 'the rendered rows are out of the canvas\'s order');
 });

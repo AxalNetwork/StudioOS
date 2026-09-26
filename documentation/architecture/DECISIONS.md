@@ -29161,6 +29161,127 @@ the badge together. CI runs no browser; the gates are the two Node suites.
 field; no new route, no migration (299 stays reserved), no `api.js` method
 (`myLicence` already existed).
 
+## D288
+
+**Tasks 423 and 404: "View as" becomes Preview shell, and says as whom
+writes go out (canvas H38).**
+
+**What was true on main (`a533769b7`).**
+- One name for two things. `PortalSwitcher`'s trigger read "View as:
+  Super Admin" or "View as: Founder" and swapped the sidebar and chrome in
+  this browser — data and permissions unchanged, every write the viewer's
+  own — while "View As" on a user's row in the directory opened an
+  impersonation session as that person: a typed reason, the authenticator,
+  thirty minutes, recorded in Security. HqTeamActions' `role_shell` row
+  called the picker "View as a role shell". Nothing in the picker said whose
+  name writes carry.
+- The options were `['super_admin', 'Super Admin']` for the holder plus
+  `ROLE_LABELS` in its object order (Admin, Founder, Partner, Investor,
+  Advisor, Exploring).
+
+**What changed.**
+- **The picker is Preview shell**, in H38's words, verbatim, from
+  `lib/previewShells.js`: the trigger "Preview shell ▾"; the menu's header
+  "Preview shell · this browser only"; the options in H38's order, each
+  with its sentence — HQ "The eleven-row shell." · HQ's own accounts "The
+  eight-row Admin shell over accounts HQ holds directly (Subsidiary S20)." ·
+  Founder "The founder shell." · Investor "The investor shell." · Partner
+  "The operating partner shell." · Advisor "The advisor shell."; the footer
+  "Not impersonation. To act as a person, use View As on their row in Team:
+  a typed reason, the authenticator, 30 minutes, recorded in Security."
+- **Exploring stays, last, by decision.** H38 omits it; the picker has
+  offered it since task #14 so an admin can preview the holding-state
+  experience end to end, and nothing retires. Its sentence, "The exploring
+  shell.", is in H38's shape.
+- **HQ is offered to the holder alone** (`holderOnly`, `previewOptionsFor`)
+  and sets `{ hq: true }`; "HQ's own accounts" sets `{ hq: false }`; the
+  four licence shells set the view mode as before. The two calls the shell
+  reads are still literal in `choose()`, and `super_admin_shell` reads the
+  list by the elevation instead of pinning the old option literal.
+- **The strip**, while a shell other than the viewer's own is previewed:
+  the chip built as the artboard builds it (`'Previewing · ' + label + '
+  shell'`), the sentence "This changes this browser’s chrome only. Every
+  write still goes out as the Super Admin." — **"the Super Admin" to the
+  holder and "you" to anyone else** (`writesAs`), because a plain admin
+  previewing the founder shell is not the Super Admin and a chip that said
+  so would be the chrome claiming an elevation the session does not have —
+  and the way back, "Back to HQ" for the holder and "Back to HQ's own
+  accounts" for a plain admin, derived from `homePreviewKey`.
+- **View As — impersonation — keeps its name and chrome**, which closes
+  task 404: the strip inside the switcher ("Viewing as {name} — support
+  session", the timer, Extend, Exit Impersonation), the `impersonate` row
+  in Team and the directory's "View As" control are untouched.
+- **HqTeamActions' `role_shell` row follows the rename**: "Preview shell",
+  "Preview shell in the top bar, both tiers.", and a gate sentence that
+  says what H38's compare table says — data and permissions do not change,
+  and a chip states as whom writes go out. Its pin in `hq_team_h20`
+  ("the two cards carry H20's names, verbatim and in its order") is
+  re-aimed for that one row: H20's action list still says "View as a role
+  shell" (D282, tension 9), the picker's own artboard wins for the row that
+  names it, and the test asserts H20 still carries the old name so the
+  override cannot outlive it.
+- **`SuperAdminOnlyNotice.jsx` is not edited.** Its comment (:16) still says
+  "choosing "Admin" in View-as"; Session 4's correction has not merged, so
+  the one word is left to Session 4, as the brief directs.
+- The mode bar's "Super Admin Mode" / "Admin Mode" label is unchanged; it
+  names the session, not a preview.
+
+**Two pins re-aimed at their properties, none loosened.**
+- `super_admin_shell` "the mode bar says Super Admin Mode only on the
+  flag, and the View-as list leads with it": the holder's list leads with
+  HQ and the plain admin's has no HQ, read off `previewOptionsFor`, and
+  the switcher reads the list by the elevation.
+- `hq_team_h20` "the two cards carry H20's names, verbatim and in its
+  order": every name is H20's verbatim except the picker row, which is
+  H38's, and the override is asserted against H20 still carrying the old
+  name.
+
+**Guard: `frontend/test/preview_shell_h38_d288.test.mjs`, 6 tests.**
+- *the options are H38's, in H38's order and words, with Exploring kept last
+  by decision* — labels and sentences by `deepEqual`, the trigger, header,
+  footer and chip verbatim, the chip's construction pinned;
+- *HQ is offered to the holder alone and sets hq: true; HQ's own accounts
+  sets hq: false* — both lists by `deepEqual`, an unknown elevation not
+  offered HQ, the two `onViewModeChange` calls literal in `choose()`;
+- *the chip says "the Super Admin" to the holder and "you" to anyone else*
+  — `writesAs`, `previewNote`, the strip worded by the elevation and
+  carrying no unconditional "Super Admin";
+- *the selected and home keys follow the shell state, so the strip shows
+  only while previewing* — and the way back is the viewer's own shell;
+- *the trigger reads Preview shell, the menu carries the header, every
+  option with its sentence, and the footer* — and "View as:" is gone;
+- *View As — impersonation — keeps its name and chrome (task 404), and the
+  Team row follows the rename*.
+
+**Mutations: 16 run, 16 caught** — each a non-zero exit with a `not ok`
+line, anchors unique, bytes proven changed, sources restored from a
+sha256-checked snapshot: "Super Admin" shown to someone without the
+elevation (in the lib, and hard-coded into the strip); "HQ" offered to
+someone without the elevation (caught by this guard and, separately, by
+`super_admin_shell`); two options swapped; "HQ's own accounts" not setting
+`hq: false`; the footer dropped; the header dropped; the trigger reverted
+to "View as:"; the chip built another way; Exploring dropped; the strip
+shown at home too; the way back sending the holder to HQ's own accounts;
+the Team row un-renamed (caught by this guard and, separately, by the H20
+pin); the impersonation row renamed.
+
+**Recorded verification, not a gate.** The built bundle was served
+statically with `/api/auth/me` stubbed twice — a holder, and an admin
+without the elevation — and driven with the container's Chromium. For the
+holder the trigger read "Preview shell", no strip drew at home, the menu
+opened with the header, the seven options in order with their sentences
+(HQ selected) and the footer; choosing Founder swapped the sidebar to the
+founder rows and drew "Previewing · Founder shell · This changes this
+browser’s chrome only. Every write still goes out as the Super Admin. ·
+Back to HQ", and Back to HQ restored the eleven HQ rows with no strip. For
+the plain admin the menu had no HQ option and led with HQ's own accounts
+(selected); Founder drew the same chip with "…goes out as you." and "Back
+to HQ’s own accounts", which restored the S20 rows. CI runs no browser;
+the gate is the Node guard.
+
+`frontend/src` moved, so `docs/` is rebuilt. No route, no worker change, no
+migration, no `api.js` method.
+
 ## D300
 
 **Every file in `frontend/public` has to have a named reader — one did not,
