@@ -28318,3 +28318,121 @@ guard.
 
 `frontend/src` moved, so `docs/` is rebuilt. No route, no worker change, no
 migration, no `api.js` method.
+
+## D285
+
+**Task 422: H36's two sub-navigation strips, an HQ row that stays lit after
+landing in the old Admin Console, and a tab that follows the address bar.**
+
+**What was true on main (`a43953515`).**
+- The HQ shell's Platform and Content rows led to their overview pages and
+  nothing else. The consoles H35 places under them as sub-navigation items
+  — nine under Platform, seven under Content — were reached by the plain
+  admin shell's Admin group rows, or by typing the address. Following one
+  of the four that live in the Admin Console (`/admin?tab=…`) lit no HQ row
+  at all: `SidebarNav` decided the active row by path (`NavLink`'s
+  `isActive`, or a row's `match`), and `/admin` is no row's path.
+- `AdminPage` read `?tab=` once, in the `useState` initialiser. A second
+  `?tab=` while the page was mounted — the strip's case exactly — changed
+  nothing, and picking a tab wrote nothing back, so the address bar said
+  whatever it had said on arrival. Its tab-row comment counted twelve
+  sections; `ADMIN_SECTIONS` had fourteen.
+
+**What changed.**
+- **The strips as data.** `lib/hqStrips.js`: `HQ_STRIPS` — Platform's nine
+  (Overview, Switches, Topology, Integration keys, GitHub Sync, Payments,
+  Promo codes, Monitoring, Telegram) and Content's seven (Overview, Content
+  queue, Publications, Assessment Studio, Personas, Advisors & Partners,
+  Public team page) — in H36's order, each a route that exists today;
+  `stripFor(pathname, search)` says which strip a location is on;
+  `hqRowFor(pathname, search)` says which HQ row it lights.
+- **The strips as chrome.** `components/HqSubNavStrip.jsx` renders one
+  strip; App.jsx mounts the two inside `<main>`, above the routed page, in
+  the HQ shell only (`shellRole === 'super_admin'`). **The items are
+  literal `<StripLink to="…">` JSX in App.jsx, not a `.map` over
+  `HQ_STRIPS`, by decision:** `admin_route_reachability` walks navigation
+  *syntax* — a literal `to="/…"` is a door, a mapped datum is not — and
+  the strips are meant to be the door that survives when the Admin group
+  rows go (`/admin/team` in particular, which the brief names). The guard
+  holds the chrome literals equal to `HQ_STRIPS`, and both equal to H36,
+  so the two copies cannot drift. `ContentPage.jsx` is not edited; the
+  shell frames it.
+- **H36's states.** Default is a 600-weight link; selected is oxblood, a
+  2px inset underline and `aria-current="page"`; keyboard focus a 2px
+  ring at offset 2. At phone width the strip scrolls inside its own
+  container (`overflow-x-auto` on the container, `w-max` on the row) and
+  brings the selected item into view by setting the container's
+  `scrollLeft` — never `scrollIntoView`, never `window.scrollTo`, which
+  would move the page to reach a strip that sits at its top. `<main>` sets
+  no `overflow-x`, so the page never scrolls sideways.
+- **A query-aware active row, derived from the map.** In the HQ shell,
+  `SidebarNav` lights `hqRowFor(pathname, search)` when it answers: on
+  `/admin?tab=…` the row H35 places that tab on (`integration-keys`,
+  `github`, `payments`, `promos` → Platform; `personas`,
+  `network-profiles` → Content; `users` → Team; `legal` → Contracts;
+  `billing` → Revenue; the `also` placements count), and on a strip's own
+  pages the strip's row. Everywhere it answers `null` — `/hq`, `/admin`
+  bare or with a `?tab=` that is no section, `/admin/analytics`, every
+  other shell — the path rules decide exactly as before; the analytics
+  `match` pins are untouched.
+- **The tab follows the URL.** `AdminPage` keeps its initialiser and adds
+  an effect on `location.search`: a known `?tab=` sets the tab; an unknown
+  one is ignored; the `section` prop still wins, because a host that
+  locked the console to one panel is not steered by the address bar. A
+  pick writes `?tab=` back with `replace`, so the address bar names the
+  open panel and Back does not step through every tab. The comment now
+  says fourteen, and the guard holds it to `ADMIN_SECTIONS.length`.
+
+**One pin re-aimed at its property.** `admin_role_picker` matched the
+literal line `import { Link } from 'react-router-dom';`; it now matches
+`Link` among the router's named imports on that line, which is what it was
+protecting (a client-side link, not a reload). Mutated once — `Link`
+removed from the import — and caught.
+
+**Guard: `frontend/test/hq_subnav_h36_d285.test.mjs`, 9 tests.**
+- *the strips are H36's, in H36's order, in the list the highlight reads* —
+  label and route by `deepEqual`, nine and seven;
+- *the shell renders both strips as literal links, in the same order, and
+  only in the HQ shell* — the literals parsed out of App.jsx's chrome,
+  equal to `HQ_STRIPS`, mounted under the `super_admin` gate;
+- *every strip route is registered, and every `?tab=` is a section*;
+- *the strips are held to the H35 map: every sub-nav placement is in its
+  strip, and every strip console is placed there* — both directions;
+- *a `?tab=` lights the HQ row the map places it on* — Platform on
+  `integration-keys`, Team on `users`, Contracts on `legal`, Revenue on
+  `billing`, Content on `personas`, a strip page its row, `null` for
+  `/hq`, `/admin` bare, `/admin?tab=wellbeing` (no such section) and
+  `/admin/analytics`;
+- *SidebarNav lights the derived row in the HQ shell and keeps the path
+  rules elsewhere* — and the analytics pins still hold;
+- *the Admin Console tab follows `location.search`, writes back with
+  `replace`, and `section` still wins*;
+- *the strip draws H36's states*;
+- *the strip's own container owns the overflow, and brings the selected
+  item into view itself*.
+
+**Mutations: 11 run, 11 caught** — each a non-zero exit with a `not ok`
+line, anchors unique, bytes proven changed, sources restored from a
+sha256-checked snapshot: path-only matching restored in `SidebarNav`; the
+derived row ignores the query; the write-back removed; the write-back
+pushes instead of replacing; the `section` override dropped; the tab no
+longer follows `location.search`; two strip items swapped in the chrome
+literal; the strips rendered in every shell; two items swapped in the list
+the highlight reads; `overflow-x-auto` removed from the container; the
+strip scrolls the window instead of its container. Plus the one re-aim
+above: 12 of 12.
+
+**Recorded verification, not a gate.** The built bundle was served
+statically with `/api/auth/me` stubbed as a holder and driven with the
+container's Chromium. On `/admin/platform/switches` the Platform strip
+rendered its nine items in H36's order with Switches selected and the
+Content strip absent; at 390px the strip's container scrolled (content
+wider than the container, the page's document no wider than the window)
+and had brought the last item, Telegram, into view on load. On
+`/admin?tab=integration-keys` the Platform strip stayed, Integration keys
+selected, the Platform row lit; picking Users rewrote the address to
+`?tab=users` and moved the light to Team. CI runs no browser; the gate is
+the Node guard.
+
+`frontend/src` moved, so `docs/` is rebuilt. No route, no worker change, no
+migration, no `api.js` method.

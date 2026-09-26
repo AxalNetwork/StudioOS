@@ -146,7 +146,10 @@ test('the note and the queue link cannot be scrolled out of the menu', () => {
 test('the route out is a client-side link, not a page reload', () => {
   // AdminPage carries unsaved filter and tab state; an <a href> would throw it
   // away and refetch the whole console to move one route.
-  assert.match(src, /^import \{ Link \} from 'react-router-dom';$/m,
+  // The pin is the property — `Link` among the router's named imports — not
+  // the literal line, which D285 widened to `Link, useLocation, useNavigate`
+  // when the tab began following the address bar.
+  assert.match(src, /^import \{[^}]*\bLink\b[^}]*\} from 'react-router-dom';$/m,
     'Link is not imported — the queue link would be a full page load');
   assert.doesNotMatch(dropdown(), /<a href="\/admin\/exploring"/,
     'the queue link is a raw anchor');
