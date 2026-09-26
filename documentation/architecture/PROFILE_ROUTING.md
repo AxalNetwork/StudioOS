@@ -145,11 +145,11 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Admin · Super | `/hq` · `/admin/licences` · `/admin/accounts` · `/admin/contracts` · `/admin` · `/admin/*` | HQ | Full page | Sidebar → HQ → Home | UPGRADE | High |
+| Admin · Super | `/hq` · `/admin/licences` · `/admin/accounts` · `/admin/contracts` · `/admin/funds` · `/admin` · `/admin/*` | HQ | Full page | Sidebar → HQ → Home | UPGRADE | High |
 | Contracts · Super | `/admin/contracts` | HQ | Full page | Sidebar → HQ → Contracts | UPGRADE | High |
 | Founder Journey Map | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
-| Fund Administration | `/funds/performance` · `/funds/lp-workspace` · `/lp-reports` · `/portfolio/waterfall` | HQ | Full page | Sidebar → HQ → Funds | UPGRADE | High |
-| Funds · Fabric | `/admin/fabric` · `/funds` | HQ | Full page (proposed) | Sidebar → HQ → Funds | NEW | Low |
+| Fund Administration | `/funds/performance` · `/funds/lp-workspace` · `/lp-reports` · `/portfolio/waterfall` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Funds · Fabric | `/admin/fabric` · `/funds` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Support Security · Super | `/admin/security` · `/admin/hq-support` · `/help` | HQ | Full page | Sidebar → HQ → Security | UPGRADE | High |
 | Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 
@@ -215,8 +215,8 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 70 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 35 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| High | 69 | Live route, reachable from that workspace’s sidebar. |
+| Medium | 36 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 29 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts

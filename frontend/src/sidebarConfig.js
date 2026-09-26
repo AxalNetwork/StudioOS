@@ -111,7 +111,7 @@ export const SIDEBAR_GROUPS = {
       // The one row this tier exists for. Every route behind it is
       // super-admin-only server-side (routes/admin_licences.ts).
       { to: '/admin/licences', icon: Map, label: 'Licences' },
-      { to: '/funds', icon: Landmark, label: 'Funds' },
+      { to: '/admin/funds', icon: Landmark, label: 'Funds' },
       // The master template library. The doc-type REGISTRY the Contracts ·
       // Super canvas draws above it has no store; the page says so.
       { to: '/admin/contracts', icon: FileText, label: 'Contracts' },

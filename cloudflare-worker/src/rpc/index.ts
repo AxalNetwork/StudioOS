@@ -29,7 +29,7 @@ import {
   branchHealth, branchOverview, branchSearchAccounts, applyLicenceCopy,
   applyPromoCeiling, applyEscalationAnswer, applyTemplateCopy,
   applyBenchmarks, openSupportSession,
-  moveAccountOut, inviteAccount, unbindAdmin,
+  moveAccountOut, inviteAccount, unbindAdmin, branchFundsRegistry,
   type SupportSessionRequest, type MoveOutRequest, type InviteRequest, type UnbindRequest,
 } from './branchOps';
 import {
@@ -44,6 +44,10 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
   overview() { return branchOverview(this.env); }
 
   searchAccounts(q: string, limit?: number) { return branchSearchAccounts(this.env, q, limit); }
+
+  // D245 — the funds this branch runs, for HQ's Funds registry (H24). A read,
+  // so no secret: the rule above for `overview` and `searchAccounts`.
+  fundsRegistry() { return branchFundsRegistry(this.env); }
 
   applyLicence(record: Record<string, unknown>) { return applyLicenceCopy(this.env, record); }
 

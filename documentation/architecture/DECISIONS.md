@@ -24313,6 +24313,180 @@ the request fetched the copy or tried to.
   never run against a real HQ binding. The tests drive it through a stub HQ over
   real `node:sqlite` databases on both sides.
 
+## D245
+
+**HQ's Funds row now opens a registry of which deployment runs which fund
+(canvas H24) at `/admin/funds`, instead of the shared `/funds` product. The
+registry covers HQ's own funds as the row "HQ", then every branch in the
+fan-out's three states. It shows each fund's GP entity, committed figure and
+last issued report period, with no currency and no total.** Task 319, the H24
+half. H25 (the impersonation bar and `leftOnAdmin`) is Session 5's this wave,
+with the navigation reorg, and is not here.
+
+### THE GAP
+
+- **The Funds row opened the shared `/funds` product,** which is where any
+  admin lands: `FundOpsWorkspace` → `AdminFundsView`, reading
+  `GET /api/funds`. That product is HQ's own fund operations. H24 asks a
+  different question: which branches operate a fund, under which GP entity,
+  with how much committed, and whether their last report period issued.
+- **Nothing could answer it.** There was no HQ funds route and no
+  fund-returning RPC, and `HqEntrypoint` had no funds method.
+- **No fund table carries a branch, licence or territory column.** Which
+  branch a fund belongs to is which database holds the row.
+- **`vc_funds` has no currency column.**
+
+### WHAT CHANGED
+
+- **The branch read** (`rpc/branchOps.ts`):
+  - `readFundsRegistry(env)` is tier-neutral and lists this database's funds,
+    by name. Each carries:
+    - its status;
+    - its GP entity (migration 163), or null when blank;
+    - the committed figure;
+    - its newest ISSUED report period, since a draft is not an issue.
+  - It lists up to 200 funds and says when the list stopped.
+  - `branchFundsRegistry(env)` is the branch's answer, stamped with its code
+    and `as_of`. It is exposed as `HqEntrypoint.fundsRegistry()`.
+  - **It is a read, so it takes no secret.** That is the class's own rule
+    (`rpc/index.ts`, and `overview` and `searchAccounts`): "callable by any
+    Worker in the account" costs at most a read of fund names and figures.
+  - It is registered in `topology.ts`'s `RPC_SURFACE` as
+    `m('fundsRegistry', true)`, and its call site is in
+    `rpcEntrypoints.test.mjs`'s floor.
+- **"Committed" uses the funds product's own figure, decided.**
+  `rollUpFundRow` already defines it as `fund_size_cents` once set, else the
+  legacy `total_commitment` dollars. The read asks it rather than restating
+  the rule, and names which column the figure came from.
+  - Both columns default to 0, so 0 in both cannot be told apart from "never
+    set". That reads as null ("Not recorded"), not as a fund with nothing
+    committed.
+  - The limited partners' sum was not chosen. It is a third definition of
+    "committed", in dollars, that no other surface uses.
+- **The periods are their own read.** If `fund_report_periods` cannot be
+  read, the funds still answer, and each fund's last issue is absent, which
+  the page draws as Unreadable, never as "None issued".
+- **`GET /api/admin/hq/funds`** (`admin_hq.ts`, `requireSuperAdmin`):
+  - HQ's own `vc_funds` rows come first, through the same
+    `readFundsRegistry`, so there is one definition of a registry row.
+  - Then `fanOut(env, 'fundsRegistry')`, merged with the deployment registry
+    so a provisioned branch with no binding reads `not_deployed`.
+  - One result per branch: ok, unreadable or not deployed. An unreadable
+    branch never poisons the others, and `branches_coverage` says "of N
+    branches, M answered". HQ's own table failing is its own state too.
+  - **There is no total across funds.** The payload's `total` is
+    `{ shown: false, reason }`, and `committed_unit` is
+    `{ recorded: false, reason }`. Summing unlabelled amounts from different
+    branches would add euros to dollars.
+  - It is not scoped by H12's overlay, and says why (`open_in_branch`).
+- **`api.js`** gains one method, `hqFunds()`, in the same commit as the route.
+- **`pages/hq/HqFundsPage.jsx`** at `/admin/funds`, guarded
+  `guard(['admin'], hqOnly(…))`:
+  - H24's six columns in the canvas's own order: Fund · Branch · GP entity ·
+    Committed · Last issued · Read;
+  - the band is counted only from sources that answered ("{n} funds across
+    {m} deployments, HQ included · of N branches, M answered");
+  - one Unreadable row per branch that did not answer, one Not deployed row
+    for one with no binding, and one "No fund on this deployment" row for a
+    branch that answered empty;
+  - committed amounts carry **no currency symbol**, under a column head that
+    says the currency is not recorded;
+  - a `WorkerRail` with real coverage;
+  - a link to the shared `/funds` product for HQ's own fund operations.
+- **The two lines in Session 5's files, and one beside them:**
+  - `sidebarConfig.js`'s Funds row now points to `/admin/funds`;
+  - `App.jsx` gains the one `/admin/funds` route line, and the lazy import
+    the route needs, beside the other HQ page imports.
+
+  **Nothing retires.** `/funds` stays routed and reachable, and the new page
+  links it. `admin_route_reachability.test.mjs` is not re-aimed.
+- **`ROUTE_MAP.md`'s Admin · Super row claims `/admin/funds`.** H24 is an
+  artboard on that canvas. Without the claim, the regenerated
+  `PAGE_INVENTORY.md` said the page had "no canvas". `PROFILE_ROUTING.md` and
+  `PAGE_INVENTORY.md` were regenerated with `scripts/build-profile-routing.mjs`,
+  never hand-edited.
+
+### NOT BUILT
+
+- **Clicking a fund to open that branch's Funds console, viewing-as and
+  read-only** (H24's note). No branch RPC renders a fund console, and D153's
+  overlay reads only `overview` and `searchAccounts`. The page and the payload
+  say so.
+- **A currency, and so a total.** A currency column is a migration and a
+  product decision about which currency each vehicle trades in. Until one
+  exists, a sum across branches would be wrong by construction.
+
+### VERIFIED
+
+`cloudflare-worker/test/hq_funds_registry_d245.test.ts`, 8 tests, on the
+baseline's own `vc_funds` and `fund_report_periods`:
+- a branch lists its funds by name, with:
+  - the GP entity, and null when blank;
+  - `fund_size_cents` as the committed figure, or the legacy dollars;
+  - null when neither is set;
+  - the newest issued period, a newer draft ignored, and null when only a
+    draft exists;
+- the periods table dropped: the funds still answer, and no fund claims a
+  last issue;
+- the read takes no argument beyond `env` and refuses on HQ;
+- a list past the ceiling says it stopped;
+- the HQ route with three stub branches (one answers, one throws, one has no
+  binding):
+  - HQ first, the answering branch unchanged;
+  - the thrower Unreadable, never an empty list;
+  - coverage 1 of 3;
+- the payload's exact keys, with no sum of any two committed amounts on it;
+- HQ's own table dropped: its own state, with the branches still answering;
+- a plain admin refused 403.
+
+`frontend/test/hq_funds_d245.test.mjs`, 6 tests:
+- the six columns equal the canvas's, read off the H24 artboard, and are
+  drawn in that order;
+- the unreadable branch is one Unreadable row with no zero, and the band
+  counts only what answered;
+- the Not deployed and answered-empty rows, in the Worker's order;
+- no currency symbol or code in the rendered table;
+- the last-issued states;
+- the sidebar row's route is registered HQ-only, and `/funds` stays routed and
+  linked.
+
+**Mutation checks: 13 of 13 caught.** Each ran alone, and every file was
+restored from a sha256-verified snapshot. The five the brief named:
+- an unreadable branch counted as zero funds, both in the page and as the
+  route reporting an empty list;
+- a total summed across funds;
+- the route on `requireAdmin`, caught by the plain-admin test;
+- `fundsRegistry` missing from `RPC_SURFACE` while it is called, caught by
+  `topology_d209`'s class-surface test;
+- a currency symbol rendered.
+
+Seven more:
+- a draft read as issued;
+- two default zeros reported as a zero commitment;
+- unreadable periods reported as "none issued", both at the branch and on the
+  page;
+- HQ's own table failure taking the branches down;
+- the sidebar row back on `/funds`;
+- the branch read taking a secret.
+
+**Full suite:** `npm run test:drift` on Node 22 exits 0 on `main` at
+`5364303e`:
+- frontend 3295 (the six above are new);
+- worker 4365 passed with 3 skipped (the eight above are new);
+- retention 112.
+
+No test name from the previous run is missing.
+
+`docs/` was rebuilt with the root `npm run build` after the last `frontend/src`
+edit. These exit 0:
+- `check-docs-fresh --strict`;
+- both typechecks;
+- `check-decision-ids`, `check-folder-docs`, `check-api-drift`,
+  `check-access-comments`, `check-sql-prepare`, `check-sqlite-dialect` and
+  `check-timestamp-comparisons`.
+
+No migration.
+
 ## D247
 
 **Deactivating an administrator now takes demote's bar: a TOTP-minted
