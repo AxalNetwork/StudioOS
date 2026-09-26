@@ -80,7 +80,10 @@ const HQ_SCHEMA = `
     branch_code TEXT NOT NULL, kind TEXT NOT NULL, subject TEXT NOT NULL, subject_ref TEXT, detail TEXT,
     raised_by_name TEXT, raised_by_branch_user_id INTEGER, status TEXT NOT NULL DEFAULT 'open',
     due_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), answer TEXT,
-    answered_by_user_id INTEGER, answered_at TEXT, updated_at TEXT NOT NULL DEFAULT (datetime('now')));
+    answered_by_user_id INTEGER, answered_at TEXT, updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    -- D275 — migration 296's column and constraint, copied rather than relaxed:
+    -- every read of this table now names it, and HQ writes it on every insert.
+    relation TEXT CHECK (relation IS NULL OR relation IN ('localises', 'changes')));
   -- D206 — HQ reads a licence's kind before it records a content escalation,
   -- and FAILS CLOSED when it cannot: a fixture without this table would have
   -- every content escalation refused as unreadable. Migration 279's column,

@@ -137,6 +137,8 @@ export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
       m('health', true),
       m('overview', true),
       m('searchAccounts', true),
+      // D245 — HQ's Funds registry fans out to it (admin_hq.ts). A read, no secret.
+      m('fundsRegistry', true),
       m('applyLicence', true),
       m('applyPromoCeiling', true),
       m('applyEscalationAnswer', true),

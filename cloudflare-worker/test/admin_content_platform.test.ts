@@ -217,18 +217,30 @@ test('the template library is pointed at, not rebuilt', async () => {
     'the summary does not say which page owns the library');
 });
 
-test('localisation is refused for the ONE reason D112 left standing', async () => {
+test('localisation is counted from what branches send, and the reason names what still is not recorded', async () => {
   // NARROWED IN D112, NOT LIFTED. The refusal used to cover three absences —
   // no localisation link, no brand-approval state, no per-subsidiary
   // attribution. Two of them acquired a store (a content escalation carries
   // its branch code and takes a decision), so this assertion moved with the
-  // sentence rather than being deleted: what must still be refused is the
-  // LINK, and what must now be POINTED AT is the lane that closed the others.
+  // sentence rather than being deleted.
+  //
+  // RE-AIMED IN D275, NOT RELAXED. The third acquired a store too: a content
+  // escalation that names an item records whether it localises it (migration
+  // 296), and the board's Localisation lane counts that. So the payload says
+  // localisation is available — and the reason, which stays, must name the two
+  // things that are still not recorded rather than the link that now is.
   const db = freshDb();
   const r = await call(content, db, SUPER);
-  assert.equal(r.body.localisation_available, false);
-  assert.match(String(r.body.localisation_reason), /localisation of another/,
-    'the reason stopped naming the link nothing records');
+  assert.equal(r.body.localisation_available, true);
+  const reason = String(r.body.localisation_reason);
+  assert.match(reason, /localisation of another/,
+    'the reason stopped saying a pre-296 row is never counted as a localisation');
+  assert.match(reason, /raised before that was recorded/,
+    'the reason no longer says rows older than the relation are not recorded');
+  assert.match(reason, /localises in its own database without sending it to HQ/,
+    'the reason no longer says a branch-local localisation is invisible here');
+  assert.doesNotMatch(reason, /What is still not recorded is the RELATION/,
+    'the reason still says the relation is not recorded, which D275 made false');
   assert.doesNotMatch(String(r.body.localisation_reason), /no brand-approval state/,
     'the reason still claims there is no brand-approval state, which D112 made false');
   assert.equal(r.body.localisation_lane_endpoint, '/api/admin/escalations?kind=content',

@@ -114,6 +114,7 @@ function branchDb(opts: {
     run(db, migration('259_hq_escalations'));
     run(db, migration('261_branch_escalations'));
     run(db, migration('288_escalation_delivery'));
+    run(db, migration('296_escalation_relation'));
   }
   if (opts.templates !== false) run(db, migration('268_branch_templates'));
   if (opts.articles !== false) db.exec(stripForeignKeys(tableFromBaseline(BASELINE, 'articles')));
@@ -156,7 +157,7 @@ const lane = (db: InstanceType<typeof DatabaseSync>) =>
 function hqDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(stripForeignKeys(tableFromBaseline(BASELINE, 'territory_licences')));
-  for (const m of ['258_licence_deployments', '259_hq_escalations', '261_branch_escalations', '279_licence_kind', '288_escalation_delivery']) run(db, migration(m));
+  for (const m of ['258_licence_deployments', '259_hq_escalations', '261_branch_escalations', '279_licence_kind', '288_escalation_delivery', '296_escalation_relation']) run(db, migration(m));
   db.prepare(
     `INSERT INTO territory_licences (id, uid, licence_ref, legal_entity_name, brand_name, status, kind)
      VALUES (1, 'lic_fr', 'AXL-001', 'Axal VC France SAS', 'Axal VC France', 'active', 'subsidiary')`,
@@ -421,8 +422,10 @@ test('a picked template’s label is the same bytes in the list, at HQ, on the l
   assert.equal(listed.label, 'HQ template · Licence agreement · v4 · licence-agreement');
 
   // A label sent by the client is not read: the route reads the row again.
+  // D275 — a pick carries the relation it now requires, beside it.
   const r = await call('/escalations', raise('content', 'French version of the licence agreement', {
     concerns: { type: 'template', id: 'licence-agreement', label: 'Something the client made up' },
+    relation: 'localises',
   }));
   assert.equal(r.status, 201, JSON.stringify(r.body));
   assert.equal(r.body.status, 'open');
@@ -439,7 +442,7 @@ test('an article is picked by its id, as a number or as the string a form sends'
     const db = branchDb(); seedArticles(db);
     const hq = stubHq();
     const r = await branchApp({ ...BRANCH, DB: makeD1(db), HQ: hq.HQ })(
-      '/escalations', raise('content', 'Localised launch post', { concerns: { type: 'article', id } }),
+      '/escalations', raise('content', 'Localised launch post', { concerns: { type: 'article', id }, relation: 'localises' }),
     );
     assert.equal(r.status, 201, `${JSON.stringify(id)}: ${JSON.stringify(r.body)}`);
     assert.equal(r.body.subject_ref, 'Article · Launch post · launch-post');
@@ -469,13 +472,13 @@ test('the pick is read again at the raise: a retitled template goes out under it
 
   // HQ's next push lands between the list and the raise.
   db.prepare("UPDATE branch_templates SET title = 'Licence agreement (2027)', version = 5 WHERE slug = 'licence-agreement'").run();
-  const r = await call('/escalations', raise('content', 'x', { concerns: { type: 'template', id: 'licence-agreement' } }));
+  const r = await call('/escalations', raise('content', 'x', { concerns: { type: 'template', id: 'licence-agreement' }, relation: 'changes' }));
   assert.equal(r.status, 201);
   assert.equal(r.body.subject_ref, 'HQ template · Licence agreement (2027) · v5 · licence-agreement');
   assert.notEqual(r.body.subject_ref, before.label, 'the raise sent the name the list showed a minute ago');
 
   db.prepare("DELETE FROM branch_templates WHERE slug = 'service-agreement'").run();
-  const gone = await call('/escalations', raise('content', 'y', { concerns: { type: 'template', id: 'service-agreement' } }));
+  const gone = await call('/escalations', raise('content', 'y', { concerns: { type: 'template', id: 'service-agreement' }, relation: 'changes' }));
   assert.equal(gone.status, 400);
   assert.equal(gone.body.error, 'concerns_not_found');
   assert.match(gone.body.message, /Nothing was sent to HQ/);

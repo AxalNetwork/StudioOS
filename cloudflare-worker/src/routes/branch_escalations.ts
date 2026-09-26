@@ -48,6 +48,22 @@
  * other kind keeps the free-text passthrough migration 259 gave it. Naming is
  * optional, and all of it happens before HQ is called, so a pick that no longer
  * resolves sends nothing and stores nothing.
+ *
+ * D275 — A PICK SAYS WHAT THE SUBMISSION IS TO IT. The coordinator's decision:
+ * "A content escalation that names an item records an explicit relation,
+ * `localises` or `changes`, and the relation is required whenever an item is
+ * picked." The POST takes it as `relation`, a TOP-LEVEL sibling of `concerns`
+ * and never inside it: the concern says which item, the relation says what the
+ * submission is to it. It is validated after the pick resolves and before HQ
+ * is called — required with a pick, one of the two values, refused with no
+ * pick and on any other kind — and each refusal is a 400 that sends nothing
+ * and stores nothing. The resolved relation is stored on the local row, sent
+ * to HQ, and re-sent exactly by the retry.
+ *
+ * D275 — EVERY HQ REFUSAL IS A REFUSAL. The POST and the retry used to
+ * recognise only `kind_not_available`, so any other code HQ returned read as
+ * a delivery with no uid. Any `refused` now reaches the branch as a 400 with
+ * no row (POST), or leaves the row undelivered with HQ's reason (retry).
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -58,6 +74,7 @@ import { branchEscalations, branchLicenceKind } from '../rpc/branchOps';
 import { ESCALATION_KINDS, escalationKindsFor } from '../rpc/hqOps';
 import {
   CONCERN_KIND, BAD_CONCERN, listConcerns, parseConcern, resolveConcern,
+  parseRelation, RELATION_REQUIRED, BAD_RELATION, RELATION_NEEDS_ITEM, RELATION_NOT_FOR_KIND,
 } from '../services/escalationConcerns';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -76,6 +93,18 @@ type HqEscalateAnswer = {
   reason?: string;
   licence_kind?: string | null;
 };
+
+/**
+ * The sentence for an HQ refusal that came back without one. The kind's own
+ * sentence is kept for the kind's refusal (the drawer's fallback quotes it);
+ * any other code — D275's relation refusals, or one this build does not know —
+ * gets the general one, which still says nothing was recorded.
+ */
+function hqRefusalFallback(code: string): string {
+  return code === 'kind_not_available'
+    ? 'HQ does not take this kind of escalation from this branch.'
+    : 'HQ refused this escalation and recorded nothing.';
+}
 
 // GET /api/branch/escalations
 r.get('/escalations', async (c) => {
@@ -128,7 +157,7 @@ r.get('/escalations', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-// POST /api/branch/escalations  { kind, subject, subject_ref?, concerns?, detail? }
+// POST /api/branch/escalations  { kind, subject, subject_ref?, concerns?, relation?, detail? }
 r.post('/escalations', async (c) => {
   try {
     const admin = await requireAdmin(c);
@@ -218,6 +247,25 @@ r.post('/escalations', async (c) => {
       subjectRef = typedRef || null;
     }
 
+    // D275 — WHAT THE SUBMISSION IS TO THE ITEM IT NAMES, settled after the
+    // pick resolves and before HQ is called. Required with a pick; refused
+    // without one and on every other kind. `parseRelation` answers undefined
+    // for "none sent" and null for "sent, and not one of the two".
+    const relationIn = parseRelation(b?.relation);
+    if (relationIn === null) {
+      return c.json({ error: 'bad_relation', message: BAD_RELATION }, 400);
+    }
+    if (kind !== CONCERN_KIND && relationIn !== undefined) {
+      return c.json({ error: 'relation_not_for_kind', message: RELATION_NOT_FOR_KIND, kind }, 400);
+    }
+    if (kind === CONCERN_KIND && namesItem && relationIn === undefined) {
+      return c.json({ error: 'relation_required', message: RELATION_REQUIRED }, 400);
+    }
+    if (kind === CONCERN_KIND && !namesItem && relationIn !== undefined) {
+      return c.json({ error: 'relation_needs_item', message: RELATION_NEEDS_ITEM }, 400);
+    }
+    const relation = relationIn ?? null;
+
     const detail = str(b?.detail, 4000) || null;
     const raisedBy = str((admin as { name?: string }).name, 200) || null;
     const now = nowIso();
@@ -240,22 +288,25 @@ r.post('/escalations', async (c) => {
       let res: HqEscalateAnswer | null = null;
       try {
         res = await hq.escalate(code, {
-          kind, subject, subject_ref: subjectRef, detail,
+          kind, subject, subject_ref: subjectRef, relation, detail,
           raised_by_name: raisedBy, raised_by_branch_user_id: admin.id,
           raise_key: raiseKey,
         }) as HqEscalateAnswer | null;
       } catch (e) {
         deliveryError = `HQ did not accept the escalation: ${(e as Error).message}`;
       }
-      // D206 — HQ REFUSED THE KIND, FROM ITS OWN LEDGER. Same answer as the
-      // local gate and the same rule for the row: none. HQ recorded nothing, and
-      // an `undelivered` row here would invite a retry HQ would refuse again.
-      if (res && res.refused === 'kind_not_available') {
+      // D206 — HQ REFUSED, FROM ITS OWN LEDGER OR ITS OWN CHECKS. Same answer as
+      // a local refusal and the same rule for the row: none. HQ recorded
+      // nothing, and an `undelivered` row here would invite a retry HQ would
+      // refuse again. D275 — ANY refusal code, not only the kind's: a code this
+      // build does not know is still HQ saying no.
+      const refused = res ? str(res.refused, 60) : '';
+      if (refused) {
         return c.json({
-          error: 'kind_not_available',
-          message: str(res.reason, 300) || 'HQ does not take this kind of escalation from this branch.',
+          error: refused,
+          message: str(res?.reason, 300) || hqRefusalFallback(refused),
           kind,
-          licence_kind: res.licence_kind ?? null,
+          ...(refused === 'kind_not_available' ? { licence_kind: res?.licence_kind ?? null } : {}),
         }, 400);
       }
       if (!deliveryError) {
@@ -267,11 +318,11 @@ r.post('/escalations', async (c) => {
 
     const res = await c.env.DB.prepare(
       `INSERT INTO branch_escalations
-         (hq_uid, kind, subject, subject_ref, detail, raised_by_user_id, raised_by_name,
+         (hq_uid, kind, subject, subject_ref, relation, detail, raised_by_user_id, raised_by_name,
           status, delivery_error, due_at, created_at, updated_at, raise_key)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     ).bind(
-      hqUid, kind, subject, subjectRef, detail, admin.id, raisedBy,
+      hqUid, kind, subject, subjectRef, relation, detail, admin.id, raisedBy,
       hqUid ? 'open' : 'undelivered', deliveryError, dueAt, now, now, raiseKey,
     ).run();
 
@@ -281,6 +332,7 @@ r.post('/escalations', async (c) => {
       kind,
       subject,
       subject_ref: subjectRef,
+      relation,
       due_at: dueAt,
       status: hqUid ? 'open' : 'undelivered',
       ...(deliveryError ? { delivery_error: deliveryError } : {}),
@@ -301,13 +353,13 @@ r.post('/escalations/:id/retry', async (c) => {
       return c.json({ error: 'bad_id', message: 'An escalation id is required.' }, 400);
     }
     const row = await c.env.DB.prepare(
-      `SELECT id, kind, subject, subject_ref, detail, raised_by_user_id, raised_by_name,
+      `SELECT id, kind, subject, subject_ref, relation, detail, raised_by_user_id, raised_by_name,
               status, raise_key
          FROM branch_escalations WHERE id = ?`,
     ).bind(id).first<{
-      id: number; kind: string; subject: string; subject_ref: string | null; detail: string | null;
-      raised_by_user_id: number | null; raised_by_name: string | null; status: string;
-      raise_key: string | null;
+      id: number; kind: string; subject: string; subject_ref: string | null; relation: string | null;
+      detail: string | null; raised_by_user_id: number | null; raised_by_name: string | null;
+      status: string; raise_key: string | null;
     }>();
     if (!row) return c.json({ error: 'not_found' }, 404);
     if (row.status !== 'undelivered') {
@@ -335,6 +387,9 @@ r.post('/escalations/:id/retry', async (c) => {
           kind: row.kind,
           subject: row.subject,
           subject_ref: row.subject_ref,
+          // D275 — the stored relation, exactly: NULL on a row raised before
+          // migration 296, which HQ records as not recorded.
+          relation: row.relation,
           detail: row.detail,
           raised_by_name: row.raised_by_name,
           raised_by_branch_user_id: row.raised_by_user_id,
@@ -343,11 +398,20 @@ r.post('/escalations/:id/retry', async (c) => {
       } catch (e) {
         deliveryError = `HQ did not accept the escalation: ${(e as Error).message}`;
       }
-      if (res && res.refused === 'kind_not_available') {
+      // D275 — ANY refusal leaves the row undelivered WITH HQ's reason, so the
+      // lane says why rather than showing the last transport error.
+      const refused = res ? str(res.refused, 60) : '';
+      if (refused) {
+        const reason = str(res?.reason, 300) || hqRefusalFallback(refused);
+        await c.env.DB.prepare(
+          `UPDATE branch_escalations SET delivery_error = ?, updated_at = ? WHERE id = ? AND status = 'undelivered'`,
+        ).bind(`HQ refused it: ${reason}`, nowIso(), id).run();
         return c.json({
-          error: 'kind_not_available',
-          message: str(res.reason, 300) || 'HQ does not take this kind of escalation from this branch.',
+          error: refused,
+          message: reason,
           kind: row.kind,
+          id,
+          status: 'undelivered',
         }, 400);
       }
       if (!deliveryError) {

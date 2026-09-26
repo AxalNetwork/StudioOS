@@ -56,6 +56,7 @@ function hqDb() {
   db.exec(read('cloudflare-worker/sql/migrations/259_hq_escalations.sql'));
   db.exec(read('cloudflare-worker/sql/migrations/261_branch_escalations.sql'));
   db.exec(read('cloudflare-worker/sql/migrations/288_escalation_delivery.sql'));
+  db.exec(read('cloudflare-worker/sql/migrations/296_escalation_relation.sql'));
   db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)').run(7, 'admin', 'Sue Hart', 'sue@axal.example');
   db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(7);
   db.prepare(`INSERT INTO licence_deployments (licence_uid, code, hostname, worker_name, d1_name) VALUES (?,?,?,?,?)`)
@@ -72,6 +73,7 @@ function branchDb() {
   db.exec(read('cloudflare-worker/sql/migrations/259_hq_escalations.sql'));
   db.exec(read('cloudflare-worker/sql/migrations/261_branch_escalations.sql'));
   db.exec(read('cloudflare-worker/sql/migrations/288_escalation_delivery.sql'));
+  db.exec(read('cloudflare-worker/sql/migrations/296_escalation_relation.sql'));
   db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)').run(7, 'admin', 'Sue Hart', 'sue@axal.example');
   db.prepare('INSERT INTO branch_licence (id, status, pushed_at) VALUES (1,?,?)').run('suspended', '2026-09-15T00:00:00Z');
   return db;
