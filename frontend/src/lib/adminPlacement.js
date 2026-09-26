@@ -46,8 +46,9 @@ const row = (label, route, place, hqOnly, extra = {}) => ({ key: route, kind: 'r
 // An Admin Console tab. `key` is `tab:<value>`; the route is the deep link.
 // /admin is `guard(['admin'])` with no elevation, so no tab is hqOnly.
 const tab = (value, label, place, extra = {}) => ({ key: `tab:${value}`, kind: 'tab', tabValue: value, label, route: `/admin?tab=${value}`, hqOnly: false, ...place, ...extra });
-// One of the 29 working pages: S23/H37's launcher.
-const page = (group, label, route) => ({ key: route, kind: 'page', group, label, route, hqOnly: false, tier: 'launcher', row: null, form: 'launcher' });
+// One of the 29 working pages: S23/H37's launcher, with the canvas's own
+// one-line description of what the page is.
+const page = (group, label, route, what) => ({ key: route, kind: 'page', group, label, route, what, hqOnly: false, tier: 'launcher', row: null, form: 'launcher' });
 
 export const ADMIN_PLACEMENT = [
   // ── Home group ──────────────────────────────────────────────────────────
@@ -116,36 +117,56 @@ export const ADMIN_PLACEMENT = [
     { how: 'Sub-navigation item on Content (the deck roster); card link on Community.', also: [admin('Community', 'card link')] }),
 
   // ── The 29 working pages → the Workspaces launcher (S23 · H37) ──────────
-  page('Studio', 'Pipeline Board', '/pipeline'),
-  page('Studio', 'Scoring Engine', '/scoring'),
-  page('Studio', 'Risk Matrix', '/portfolio/risk-matrix'),
-  page('Studio', 'Market Intelligence', '/market-intel'),
-  page('Studio', 'Signals', '/signals'),
-  page('Studio', 'AI Advisory Suite', '/advisory'),
-  page('Studio', 'AI Matches', '/matches'),
-  page('Studio', 'Deal Flow', '/deals'),
-  page('Capital & Legal', 'Capital & Investment', '/capital'),
-  page('Capital & Legal', 'Liquidity & Exits', '/liquidity'),
-  page('Capital & Legal', 'Portfolio Health', '/portfolio/health'),
-  page('Capital & Legal', 'Portfolio Coverage', '/portfolio/coverage'),
-  page('Capital & Legal', 'Reserve Allocation', '/portfolio/reserves'),
-  page('Capital & Legal', 'Exit Waterfall', '/portfolio/waterfall'),
-  page('Capital & Legal', 'Watchlist & Journal', '/watchlist'),
-  page('Capital & Legal', 'Legal & Capital', '/legal-capital'),
-  page('Capital & Legal', 'Incorporate', '/incorporate'),
-  page('Capital & Legal', 'Compliance Calendar', '/compliance'),
-  page('Network & Growth', 'Network', '/network'),
-  page('Network & Growth', 'Network Effects', '/network-effects'),
-  page('Network & Growth', 'Jobs', '/my/jobs'),
-  page('Network & Growth', 'Service Catalogue', '/services'),
-  page('Network & Growth', 'Needs Board', '/needs'),
-  page('Network & Growth', 'Demand Insights', '/partner/insights'),
-  page('Network & Growth', 'Partner Office Hours', '/partner/office-hours'),
-  page('Network & Growth', 'Co-Marketing Review', '/comarketing'),
-  page('More', 'Co-Founder Agreement', '/incorporate/cofounder-agreement'),
-  page('More', '83(b) Tracker', '/spinout-lab/83b'),
-  page('More', 'Perks', '/perks'),
+  // "AI Advisory Suite" keeps its shipped label. H37 flags it — the voice
+  // rule forbids calling the AI an advisor — and the rename is the owner's
+  // call (D284); the launcher draws the label and no flag.
+  page('Studio', 'Pipeline Board', '/pipeline', 'Deals by stage on one board.'),
+  page('Studio', 'Scoring Engine', '/scoring', 'Venture-readiness scores and the evidence behind them.'),
+  page('Studio', 'Risk Matrix', '/portfolio/risk-matrix', 'Portfolio companies by risk dimension.'),
+  page('Studio', 'Market Intelligence', '/market-intel', 'Market readings with their sources.'),
+  page('Studio', 'Signals', '/signals', 'External signals, grouped by theme.'),
+  page('Studio', 'AI Advisory Suite', '/advisory', 'AI-assisted analysis tools.'),
+  page('Studio', 'AI Matches', '/matches', 'Suggested matches between members.'),
+  page('Studio', 'Deal Flow', '/deals', 'Incoming deals and their status.'),
+  page('Capital & Legal', 'Capital & Investment', '/capital', 'Rounds, commitments and instruments.'),
+  page('Capital & Legal', 'Liquidity & Exits', '/liquidity', 'Secondaries and recorded exits.'),
+  page('Capital & Legal', 'Portfolio Health', '/portfolio/health', 'Health signals per company.'),
+  page('Capital & Legal', 'Portfolio Coverage', '/portfolio/coverage', 'Who covers which company.'),
+  page('Capital & Legal', 'Reserve Allocation', '/portfolio/reserves', 'Follow-on reserves by company.'),
+  page('Capital & Legal', 'Exit Waterfall', '/portfolio/waterfall', 'Proceeds by class at a given exit.'),
+  page('Capital & Legal', 'Watchlist & Journal', '/watchlist', 'Tracked companies and notes.'),
+  page('Capital & Legal', 'Legal & Capital', '/legal-capital', 'Documents and capital records.'),
+  page('Capital & Legal', 'Incorporate', '/incorporate', 'Entity formation workflow.'),
+  page('Capital & Legal', 'Compliance Calendar', '/compliance', 'Filings and their deadlines.'),
+  page('Network & Growth', 'Network', '/network', 'Relationships and introductions.'),
+  page('Network & Growth', 'Network Effects', '/network-effects', 'How activity compounds across the network.'),
+  page('Network & Growth', 'Jobs', '/my/jobs', 'Open roles.'),
+  page('Network & Growth', 'Service Catalogue', '/services', 'Services offered to companies.'),
+  page('Network & Growth', 'Needs Board', '/needs', 'Needs posted by founders.'),
+  page('Network & Growth', 'Demand Insights', '/partner/insights', 'Partner demand analytics.'),
+  page('Network & Growth', 'Partner Office Hours', '/partner/office-hours', 'Partner session bookings.'),
+  page('Network & Growth', 'Co-Marketing Review', '/comarketing', 'Co-marketing submissions to review.'),
+  page('More', 'Co-Founder Agreement', '/incorporate/cofounder-agreement', 'Founder agreement drafting.'),
+  page('More', '83(b) Tracker', '/spinout-lab/83b', 'Election deadline tracking.'),
+  page('More', 'Perks', '/perks', 'Partner perks and claims.'),
 ];
+
+// S23 / H37's launcher groups, in the canvas's order.
+export const WORKSPACE_GROUP_ORDER = ['Studio', 'Capital & Legal', 'Network & Growth', 'More'];
+
+/**
+ * The 29 working pages, the one list the Workspaces launcher and the command
+ * palette both read (D284). Derived from the map, never typed twice.
+ */
+export const WORKSPACES = ADMIN_PLACEMENT
+  .filter((e) => e.tier === 'launcher')
+  .map(({ group, label, route, what }) => ({ group, label, route, description: what }));
+
+/** The same 29, grouped for rendering. `count` is computed, never typed. */
+export const WORKSPACE_GROUPS = WORKSPACE_GROUP_ORDER.map((group) => {
+  const items = WORKSPACES.filter((w) => w.group === group);
+  return { group, items, count: items.length };
+});
 
 // Legacy entries with no placement of their own, each with its reason. The
 // guard pins this list by value, so it cannot grow quietly.

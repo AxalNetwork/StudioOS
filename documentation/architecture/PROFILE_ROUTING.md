@@ -136,8 +136,8 @@ it, where in their nav, and how do they get there.*
 | Admin · Subsidiary | `/admin/subsidiary` | Admin | Full page (proposed) | Sidebar → Admin → Admin Console | NEW | Low |
 | Contracts · Subsidiary | `/admin` · `/esign/:token` | Admin | Full page | Sidebar → Admin → Admin Console | UPGRADE | High |
 | GP Application Review | `/admin/lp-applications` | Admin | Full page + review drawer | Sidebar → Admin → LP Applications | UPGRADE | High |
-| Legal & Capital Engine | `/legal-capital` | Capital & Legal | Full page | Sidebar → Capital & Legal → Legal & Capital | UPGRADE | High |
-| Scoring Engine v2 | `/scoring` | Studio | Full page | Sidebar → Studio → Scoring Engine | UPGRADE | High |
+| Legal & Capital Engine | `/legal-capital` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Support · Subsidiary | `/help` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | Admin | Full page | Sidebar → Admin → Public Team Page | NEW | High |
 
@@ -215,8 +215,8 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 69 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 36 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| High | 67 | Live route, reachable from that workspace’s sidebar. |
+| Medium | 38 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 29 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts

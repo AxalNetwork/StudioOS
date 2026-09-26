@@ -59,12 +59,11 @@ canvas behind it still shows up here.
 | Headerless | Network | `/network` | Partner Operator Canvas |
 | Headerless | Research | `/research` | — (no canvas; shipped ahead of the design corpus) |
 
-## `admin` — 50 destinations in 6 groups
+## `admin` — 20 destinations in 2 groups
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
 | Home | Studio | `/studio` | — (no canvas; shipped ahead of the design corpus) |
-| Home | Messages | `/messages` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Admin Console | `/admin` | Contracts · Subsidiary |
 | Admin | Due Diligence | `/admin/due-diligence` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Assessment Studio | `/admin/assessment` | — (no canvas; shipped ahead of the design corpus) |
@@ -84,35 +83,6 @@ canvas behind it still shows up here.
 | Admin | Public Team Page | `/admin/team` | Team · Authority |
 | Admin | My Licence | `/admin/my-licence` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Trash | `/admin/trash` | — (no canvas; shipped ahead of the design corpus) |
-| Studio | Pipeline Board | `/pipeline` | — (no canvas; shipped ahead of the design corpus) |
-| Studio | Scoring Engine | `/scoring` | Scoring Engine v2 |
-| Studio | Risk Matrix | `/portfolio/risk-matrix` | — (no canvas; shipped ahead of the design corpus) |
-| Studio | Market Intelligence | `/market-intel` | — (no canvas; shipped ahead of the design corpus) |
-| Studio | Signals | `/signals` | — (no canvas; shipped ahead of the design corpus) |
-| Studio | AI Advisory Suite | `/advisory` | — (no canvas; shipped ahead of the design corpus) |
-| Studio | AI Matches | `/matches` | — (no canvas; shipped ahead of the design corpus) |
-| Studio | Deal Flow | `/deals` | — (no canvas; shipped ahead of the design corpus) |
-| Capital & Legal | Capital & Investment | `/capital` | — (no canvas; shipped ahead of the design corpus) |
-| Capital & Legal | Liquidity & Exits | `/liquidity` | — (no canvas; shipped ahead of the design corpus) |
-| Capital & Legal | Portfolio Health | `/portfolio/health` | — (no canvas; shipped ahead of the design corpus) |
-| Capital & Legal | Portfolio Coverage | `/portfolio/coverage` | — (no canvas; shipped ahead of the design corpus) |
-| Capital & Legal | Reserve Allocation | `/portfolio/reserves` | — (no canvas; shipped ahead of the design corpus) |
-| Capital & Legal | Exit Waterfall | `/portfolio/waterfall` | — (no canvas; shipped ahead of the design corpus) |
-| Capital & Legal | Watchlist & Journal | `/watchlist` | — (no canvas; shipped ahead of the design corpus) |
-| Capital & Legal | Legal & Capital | `/legal-capital` | Legal & Capital Engine |
-| Capital & Legal | Incorporate | `/incorporate` | — (no canvas; shipped ahead of the design corpus) |
-| Capital & Legal | Compliance Calendar | `/compliance` | — (no canvas; shipped ahead of the design corpus) |
-| Network & Growth | Network | `/network` | — (no canvas; shipped ahead of the design corpus) |
-| Network & Growth | Network Effects | `/network-effects` | — (no canvas; shipped ahead of the design corpus) |
-| Network & Growth | Jobs | `/my/jobs` | — (no canvas; shipped ahead of the design corpus) |
-| Network & Growth | Service Catalogue | `/services` | — (no canvas; shipped ahead of the design corpus) |
-| Network & Growth | Needs Board | `/needs` | — (no canvas; shipped ahead of the design corpus) |
-| Network & Growth | Demand Insights | `/partner/insights` | — (no canvas; shipped ahead of the design corpus) |
-| Network & Growth | Partner Office Hours | `/partner/office-hours` | — (no canvas; shipped ahead of the design corpus) |
-| Network & Growth | Co-Marketing Review | `/comarketing` | — (no canvas; shipped ahead of the design corpus) |
-| More | Co-Founder Agreement | `/incorporate/cofounder-agreement` | — (no canvas; shipped ahead of the design corpus) |
-| More | 83(b) Tracker | `/spinout-lab/83b` | — (no canvas; shipped ahead of the design corpus) |
-| More | Perks | `/perks` | — (no canvas; shipped ahead of the design corpus) |
 
 ## `exploring` — 4 destinations in 2 groups
 
@@ -154,7 +124,7 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-71 of the 104 sidebar rows above are not claimed
+43 of the 74 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
@@ -171,7 +141,6 @@ rather than merely absent.
 - partner · Headerless · Offers (`/offers`)
 - partner · Headerless · Research (`/research`)
 - admin · Home · Studio (`/studio`)
-- admin · Home · Messages (`/messages`)
 - admin · Admin · Due Diligence (`/admin/due-diligence`)
 - admin · Admin · Assessment Studio (`/admin/assessment`)
 - admin · Admin · Best-Fit Console (`/admin/best-fit`)
@@ -188,33 +157,6 @@ rather than merely absent.
 - admin · Admin · Referral Review (`/admin/refer-earn`)
 - admin · Admin · My Licence (`/admin/my-licence`)
 - admin · Admin · Trash (`/admin/trash`)
-- admin · Studio · Pipeline Board (`/pipeline`)
-- admin · Studio · Risk Matrix (`/portfolio/risk-matrix`)
-- admin · Studio · Market Intelligence (`/market-intel`)
-- admin · Studio · Signals (`/signals`)
-- admin · Studio · AI Advisory Suite (`/advisory`)
-- admin · Studio · AI Matches (`/matches`)
-- admin · Studio · Deal Flow (`/deals`)
-- admin · Capital & Legal · Capital & Investment (`/capital`)
-- admin · Capital & Legal · Liquidity & Exits (`/liquidity`)
-- admin · Capital & Legal · Portfolio Health (`/portfolio/health`)
-- admin · Capital & Legal · Portfolio Coverage (`/portfolio/coverage`)
-- admin · Capital & Legal · Reserve Allocation (`/portfolio/reserves`)
-- admin · Capital & Legal · Exit Waterfall (`/portfolio/waterfall`)
-- admin · Capital & Legal · Watchlist & Journal (`/watchlist`)
-- admin · Capital & Legal · Incorporate (`/incorporate`)
-- admin · Capital & Legal · Compliance Calendar (`/compliance`)
-- admin · Network & Growth · Network (`/network`)
-- admin · Network & Growth · Network Effects (`/network-effects`)
-- admin · Network & Growth · Jobs (`/my/jobs`)
-- admin · Network & Growth · Service Catalogue (`/services`)
-- admin · Network & Growth · Needs Board (`/needs`)
-- admin · Network & Growth · Demand Insights (`/partner/insights`)
-- admin · Network & Growth · Partner Office Hours (`/partner/office-hours`)
-- admin · Network & Growth · Co-Marketing Review (`/comarketing`)
-- admin · More · Co-Founder Agreement (`/incorporate/cofounder-agreement`)
-- admin · More · 83(b) Tracker (`/spinout-lab/83b`)
-- admin · More · Perks (`/perks`)
 - exploring · Home · Studio (`/exploring`)
 - exploring · Home · Spin-Out Lab (`/spinout-lab`)
 - exploring · Home · Messages (`/messages`)
