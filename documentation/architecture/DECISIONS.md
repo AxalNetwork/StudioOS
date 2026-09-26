@@ -25857,7 +25857,26 @@ held (#804) and were filed rather than edited.
 
 **No migration** — 297 stays free. **No new `/api/*` method.**
 
-**VERIFIED.** @@D258_VERIFIED@@
+**VERIFIED.** On the tree as landed, cut from `main` at `b556685bc` with the
+six D258 commits cherry-picked (zero conflicts; `docs/` rebuilt once by the
+root `npm run build`):
+- `npm run test:drift` exits 0, read as the exit code from a redirected log:
+  frontend 3318, worker 4378 (4375 pass plus the 3 pre-existing
+  environment-gated skips), retention 112, zero `not ok`. Every test in the
+  three new files is confirmed passing by name: `api_refusal_d258` (17),
+  `code_through_message_d258` (6), `totp_wrong_code_d258` (10).
+- Both typechecks, `lint:undef`, `check-api-drift`, `check-decision-ids`,
+  `check-folder-docs`, `check-unused-imports`, `check-react-hook-imports` and
+  `check-docs-fresh --strict` exit 0.
+- Mutations, each counted caught only on a non-zero exit and a `not ok`,
+  every file restored from a snapshot and verified by sha256: commit 2's
+  precedence, code-shape, `'timeout'` reservation and single-definition
+  assertions; commit 3's migrated sites and the guard's rules; commit 4's
+  eight — each of the four TOTP routes put back to 401, the message made
+  code-shaped, enrol/confirm made to stop validating, one route given its own
+  sentence, and the code renamed. All caught.
+- No migration: **297** is still the next free number, and **D276** the next
+  free decision id.
 
 ## D259
 
