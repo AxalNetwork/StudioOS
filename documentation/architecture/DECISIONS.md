@@ -28547,3 +28547,90 @@ guard.
 
 `frontend/src` moved, so `docs/` is rebuilt. No route, no worker change, no
 migration, no `api.js` method.
+
+## D300
+
+**Every file in `frontend/public` has to have a named reader — one did not,
+and had been publishing the whole engineering changelog at the site's apex
+for over four months.** Task 433.
+
+**What was public, and since when.**
+- `frontend/public/CHANGELOG.md` was a git symlink (mode 120000, added
+  05487e0e1, 2026-05-21) to `../../CHANGELOG.md`, the root engineering
+  changelog. `vite.config.js`'s `emptyOutDir: true` means every build empties
+  `docs/` and copies `frontend/public/` back in, following the symlink — so
+  `docs/CHANGELOG.md` was the whole engineering log (829,860 bytes at the
+  time this was found) and every deploy has published it at `/CHANGELOG.md`
+  on both `axal.vc` and `app.axal.vc` since 21 May. Nothing in the repo reads
+  it: the user-facing changelog is a different file
+  (`CHANGELOG-user.md`, read by `pages/docs/sections/changelog.js`) and stays.
+- `frontend/public/test.html` (365 bytes, added 91250a099, 2026-08-05) was a
+  leftover smoke page — `<title>Test</title>`, "✅ Page loads correctly" —
+  published at `/test.html` since 5 August, also with no reader.
+- Before deleting the symlink, the engineering changelog it exposed was
+  scanned for anything shaped like a key, a token or an internal hostname.
+  Nothing was found: the file's references to secrets are all prose naming
+  environment-variable and Worker-secret NAMES (`ANTHROPIC_API_KEY`,
+  `JWT_SECRET`, `SCORING_HMAC_SECRET`, and similar), never a value.
+
+**Why this was missed for four months.** `frontend/test/repo_layout.test.mjs`
+allowlisted both changelogs under `DOCS_MD_ALLOWED` and asserted they were
+"still actually there" — but its own comment described the wrong mechanism,
+saying `scripts/build-frontend.mjs` writes them as named outputs. It does
+not: Vite's `emptyOutDir` + public-directory copy-back is what puts them in
+`docs/`, and that mechanism follows a symlink exactly as readily as it copies
+a real file. A test built on the wrong mechanism could not have caught a
+symlink doing the exact thing it should have flagged.
+
+**What shipped.**
+- Both files are deleted: the `frontend/public/CHANGELOG.md` symlink and
+  `frontend/public/test.html`.
+- `repo_layout.test.mjs`: `DOCS_MD_ALLOWED` now holds `CHANGELOG-user.md`
+  only; its comment describes what Vite actually does; a new test asserts
+  `docs/CHANGELOG.md` and `docs/test.html` are absent after a build; and a
+  new test refuses any symlink anywhere under `frontend/public`, using
+  `readdirSync(..., { withFileTypes: true })`'s `isSymbolicLink()` (which,
+  like `lstat`, reports the link itself rather than following it the way
+  `stat` would) — the guard for the next file someone links in rather than
+  writes.
+- `replit.md`'s line describing `CHANGELOG.md` as "also symlinked at
+  `frontend/public/CHANGELOG.md`" is corrected.
+- `docs/` is rebuilt; the build's own deletions of `docs/CHANGELOG.md` and
+  `docs/test.html` are committed.
+
+**No fallback needed.** The brief allowed keeping either file (listed in
+`scripts/lib/assetsIgnore.mjs`'s `ASSETS_IGNORE_ENTRIES`, D271's mechanism)
+if a reader turned up unexpectedly. None did for either file, so both are
+deleted outright rather than ignored-but-kept.
+
+**Correction to D256, found and NOT made.** The wave brief asked this session
+to correct D256's sentence "`git log -S advisor_compass_v1` traces the wrong
+name to `6dae4f57` (2026-09-21, #695)" to instead name `fb36dd5fe`. Measured:
+`git log -S advisor_compass_v1 -- cloudflare-worker/src/services/assessmentSchema.ts
+frontend/src/pages/admin/assessment/jsonFields.js` returns exactly two
+commits, `6dae4f570` (2026-09-21, #695) and `424e6452f` (#782) — precisely
+what D256 already says. `fb36dd5fe` does not resolve to any commit reachable
+in this repository's history at all (a different, real commit by that short
+hash is cited elsewhere in this file, at a point about a Demo Day deck
+heading, unrelated to this track key). D256's attribution stands unchanged;
+this is filed here rather than acted on, per the standing rule to stop and
+report when the code contradicts an instruction rather than silently
+following it.
+
+### VERIFIED
+
+- `frontend/test/repo_layout.test.mjs`: 9 tests, exit 0 (2 new: the
+  docs-absence check and the no-symlinks-under-`frontend/public` check).
+- Three mutations, each restored from a `/tmp` snapshot verified byte-
+  identical by sha256 before and after: the `CHANGELOG.md` symlink restored
+  under `frontend/public` (caught by the no-symlinks test); `test.html`
+  restored and `docs/` rebuilt (caught by the docs-absence test); both the
+  symlink AND its `DOCS_MD_ALLOWED` entry restored together (caught by both
+  tests at once — the allowlist alone does not save a symlink from the
+  dedicated symlink guard).
+- `node scripts/check-docs-fresh.mjs --strict` exits 0 after the rebuild.
+- `node scripts/check-folder-docs.mjs` and `node scripts/check-decision-ids.mjs`
+  (D1 through D300 in file order) exit 0.
+- No migration: migrations on disk unaffected. `frontend/src` did not move
+  (only `frontend/test/` and `frontend/public/`), but `docs/` still moved
+  (the two deletions), so it was rebuilt and re-verified fresh regardless.
