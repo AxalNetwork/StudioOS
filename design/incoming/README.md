@@ -10,12 +10,12 @@ material. The app never reads it at runtime.
 ## Where the existing canvases live
 
 The triaged canvases live in `design/canvases/`, sorted by whether a live route
-exists for each — not by how far each has been built. Counts as of 2026-09-12:
+exists for each — not by how far each has been built. Counts as of 2026-09-26:
 
 | Folder | Meaning |
 | --- | --- |
-| `canvases/integrated/` | 61 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
-| `canvases/backlog/` | 26 — graded `NEW` or `DEFERRED`: no route yet. |
+| `canvases/integrated/` | 74 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
+| `canvases/backlog/` | 29 — graded `NEW` or `DEFERRED`: no route yet. |
 | `canvases/out-of-scope/` | 27 — deliberately not being built. |
 
 (`canvases/uploads/` holds 3 more that were never part of the triage split, and
@@ -24,6 +24,11 @@ had moved from `backlog/` to `integrated/` without the count following it, and
 two more moved out of this folder in the commit that corrected it. It read
 57 / 26 / 27 until 2026-09-07, when the two below left, and 59 / 26 / 27 until
 2026-09-12, when the Partner four were resolved — see the section on them below.
+It then read 61 / 26 / 27 until 2026-09-26, while the folders moved to
+66 / 25 / 27. Five arrivals and one graduation went uncounted here, which is
+exactly the drift this rule exists to prevent. 74 / 29 / 27 was counted on
+2026-09-26, after Calendar and the three Advisor canvases left this queue and
+eight new canvases arrived, four into each folder (D305).
 **If you move a file, move the number.**)
 
 **A canvas whose bodies are built does not belong in this folder.** Move it to
@@ -91,8 +96,10 @@ of the four whose canvas was already committed — it is in
 when a newer export of it arrived; that duplicate is gone again as of
 2026-09-12, see "The Partner four" below.
 
-**Four of the eight have since left** — two on 2026-09-07 and the two Partner
-ones on 2026-09-12 — and what remains is the honest list:
+**Four of the eight had left by 2026-09-12** — two on 2026-09-07 and the two
+Partner ones on 2026-09-12. **The three below left on 2026-09-26**, graduating
+to `canvases/integrated/` once their routes were confirmed live (D305). The
+table stays as the record of what each governed when it left:
 
 | Canvas | Governs | Grade | Still outstanding |
 | --- | --- | --- | --- |
@@ -340,7 +347,7 @@ intent is to land a canvas.**
 | Pages · Founder Build / Grow / Raise / Network / Research | `canvases/integrated/` |
 | Pages · Founder Validate | `canvases/integrated/` (moved from `incoming/`, 2026-09-07) |
 | Pages · Investor Deals / Portfolio / Fund / Research | `canvases/integrated/` |
-| Pages · Advisor Expertise / Network / Research | `incoming/` |
+| Pages · Advisor Expertise / Network / Research | `canvases/integrated/` (moved from `incoming/`, 2026-09-26) |
 | Pages · Advisor Cohorts | `canvases/backlog/` |
 | Pages · Partner Pipeline | `canvases/integrated/` |
 | Pages · Partner Delivery / Offers | `canvases/integrated/` (moved from `incoming/`, 2026-09-04) |
@@ -452,7 +459,7 @@ Decoding all three and diffing them against `canvases/` gave the triage:
 
 | Artifact | Verdict |
 | --- | --- |
-| Refer & Earn | **Genuinely newer.** 67 literals added, 3 removed, every one of them in the share card — a post-and-story block the shipped page has no trace of. It is in this queue. |
+| Refer & Earn | **Genuinely newer.** 67 literals added, 3 removed, every one of them in the share card — a post-and-story block the shipped page has no trace of. It was in this queue until 2026-09-26, when it replaced the `integrated/` copy in place (D305). |
 | Trust Center | **Already held.** Identical to `Trust Center v2.dc.html`, which was already committed. |
 | Help Center | **Already held.** Identical to `Help Center.dc.html`, which was already committed. |
 
@@ -524,7 +531,7 @@ than canvas source and is not in the committed file.
 
 | Canvas | Governs | Grade | Still outstanding |
 | --- | --- | --- | --- |
-| `Calendar.dc.html` | `/calendar`, all five licences | UPGRADE — **built 2026-09-10** | Six boards (C1–C6) are **states of one page**, not per-profile designs; the only role variation drawn is whether the viewer may create an IC meeting, which matches `canScheduleIc` exactly. All six states are now in `CalendarPage.jsx` and parsed back out of this file by `frontend/test/calendar_page_c1.test.mjs`. **Two deliberate departures, both recorded there:** the page draws six kinds where the canvas draws five (see below), and it withholds the push control on a Calendly event, which the canvas draws and `PUSHABLE_KINDS` refuses with a 400. |
+| `Calendar.dc.html` | `/calendar`, all five licences | UPGRADE — **built 2026-09-10**; graduated to `canvases/integrated/` 2026-09-26 (D305) | Six boards (C1–C6) are **states of one page**, not per-profile designs; the only role variation drawn is whether the viewer may create an IC meeting, which matches `canScheduleIc` exactly. All six states are now in `CalendarPage.jsx` and parsed back out of this file by `frontend/test/calendar_page_c1.test.mjs`. **Two deliberate departures, both recorded there:** the page draws six kinds where the canvas draws five (see below), and it withholds the push control on a Calendly event, which the canvas draws and `PUSHABLE_KINDS` refuses with a 400. |
 
 **The canvas caught a bug that was actually there.** It says its kind list
 exists *"so `partner_office_hour` cannot lose its chip again"* — and on

@@ -64,7 +64,8 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   //
   // 113 as of 2026-09-21. `Pages · Company` — `/research/companies/:analysisId/:candidateId`.
   // 114 as of 2026-09-21. `Pages · Market reading` — `/research/markets/:uid`.
-  assert.equal(recs.length, 114);
+  // 125 as of 2026-09-26 (D305): the three Advisor canvases that graduated without a row, and the eight that arrived.
+  assert.equal(recs.length, 125);
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
     assert.ok(r.status.length > 0, `row "${r.canvas}" has no status`);
