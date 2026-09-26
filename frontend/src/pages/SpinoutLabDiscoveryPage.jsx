@@ -61,6 +61,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import LogInterviewModal, { ICP_FIT_OPTIONS } from '../components/discovery/LogInterviewModal';
+import IcpDefinitionCard from '../components/discovery/IcpDefinitionCard';
+import { readIcpDefinition } from '../lib/icpDefinition';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
 import { api, spinoutLab } from '../lib/api';
@@ -440,15 +442,20 @@ export default function SpinoutLabDiscoveryPage() {
     };
   }, [interviews, signups, painData]);
 
-  // W1 deliverable — the ICP working definition is real once it is fully
-  // derivable: 3+ interviews with a leading segment and a primary pain.
+  const icpDef = useMemo(() => readIcpDefinition(project?.icp_definition_meta), [project?.icp_definition_meta]);
+
+  // W1 deliverable — `icp_defined`.
   useEffect(() => {
     if (!state?.active) return;
-    if (derived.ivs?.length >= 3 && derived.topRole && derived.topPain) {
+    // D353 — re-aimed at the STORED definition: a confirmed ICP (the Worker
+    // refuses to confirm one with a required answer missing) on top of the
+    // program's interview gate. A derived segment is evidence, not a
+    // definition, and no longer marks the deliverable by itself.
+    if (!failed.interviews && derived.ivs?.length >= MIN_INTERVIEWS && icpDef.state === 'confirmed') {
       markMilestone(user, 'icp_defined');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state?.active, derived.ivs?.length, derived.topRole, derived.topPain]);
+  }, [state?.active, failed.interviews, derived.ivs?.length, icpDef.state]);
 
   const leadAction = async (signup, kind) => {
     if (!project) return;
@@ -1087,6 +1094,15 @@ export default function SpinoutLabDiscoveryPage() {
                   </div>
                 )}
               </div>
+
+              {/* The stored ICP definition (D353, migration 308). */}
+              {project && (
+                <IcpDefinitionCard
+                  project={project}
+                  canEdit={user?.role !== 'investor'}
+                  onSaved={(updated) => setProject((p) => ({ ...p, ...(updated || {}) }))}
+                />
+              )}
 
               {/* Recurring themes */}
               <div className={CARD} data-testid="discovery-themes">

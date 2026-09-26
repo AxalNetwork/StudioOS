@@ -30409,6 +30409,96 @@ decision is the whole of the solo record.
   4432 (4429 pass, 0 fail) and retention 112 unchanged; typechecks, lint and
   every guard green, `check-docs-fresh --strict` after the root build.
 
+## D353
+
+**The ICP definition gets a store: `projects.icp_definition_meta`
+(migration 308), its normaliser in `routes/projects.ts`, and the Customer
+Discovery module and five-step wizard that write it.** Wave 8, Session 7,
+item 4. No new `/api` method: it is written through the existing
+`PUT /api/projects/:id` (`api.updateProject`).
+
+**Why `projects`.** `users` is at D1's 100-column cap, but this is a
+per-project fact, and `projects` has 68 columns on a fresh build (measured by
+building `schema_baseline.sql` plus every migration above cutoff 219 on main
+80809092). It follows migrations 158 / 159 / 162: one additive nullable TEXT
+column holding a JSON blob, declared by the migration, with a runtime
+`ALTER … ADD COLUMN` safety net whose readiness is cached in a WeakMap keyed on
+`bindingKey(env)` (D235). The migration stands alone and uses no
+transaction.
+
+**The normaliser is the rule.** `normalizeIcpDefinitionMeta(raw, previous,
+now)`:
+- keeps only the canvas's nineteen fields (`ICP_FIELDS`, five steps); a
+  choice field must be one of the canvas's options; text is trimmed and
+  capped (200 characters, 600 for the long answers);
+- refuses to CONFIRM while any of the seventeen required answers is empty (the
+  two secondary pains are optional, as on the canvas); a draft may be partial;
+- sets `version`, `confirmed_at` and `updated_at` itself from the STORED row
+  and the server clock — a request that sends its own is ignored. A version
+  is a confirmation: it moves only when a definition is confirmed; editing
+  back to a draft keeps the last confirmation;
+- refuses with a code and our sentence through `refuse()` (D258/D278).
+
+Investors see the column as they see every other `*_meta` column: masked to
+`null` by `maskFounderForInvestor`'s allowlist unless a pairwise NDA is active.
+
+**The page.** `components/discovery/IcpDefinitionCard.jsx` draws the canvas's
+three states — Not started, In progress (overall and per-step counts), and
+Confirmed (persona, segment, the six summary rows, tone, version and date) —
+and a stored blob that cannot be read is Unreadable, never "Not started".
+Every "Save & continue" writes a draft, so closing the wizard loses nothing;
+"Confirm ICP" is disabled until every required answer is filled, and the
+Worker refuses it regardless. A refusal prints the Worker's sentence.
+`lib/icpDefinition.js` mirrors the Worker's field list, and a test holds the
+two equal key for key and option for option.
+
+**`icp_defined` is re-aimed.** It was marked when three interviews produced a
+most-interviewed role and a top pain — a derived segment, not a definition.
+It is now marked when a CONFIRMED definition is stored AND the interview log
+(read successfully) meets the program's gate of three. The derived "working
+definition" card stays as evidence beside it.
+
+**Built up to the line (owner decision).** "Generate landing page →" from the
+ICP is not built and says so on the card: the landing-template content
+sanitizer (`landingTemplates.ts`, Session 8's Brand page) accepts no ICP input,
+so there is nothing for a generator to write into. Wiring it means deciding
+which ICP answers map to which template sections — the canvas's preview is a
+proposal, not that decision.
+
+**Filed, not fixed (guard gap).** `check-runtime-schema-declared.mjs` and the
+post-deploy `check-baseline-drift.mjs` compare object NAMES (tables, indexes,
+triggers, views), never columns: with migration 308 removed, the runtime
+`ADD COLUMN icp_definition_meta` still passes both. This PR's worker test pins
+the migration's declaration directly; widening the guards to columns is a
+separate change for whoever owns them.
+
+**Production D1.** This session cannot read production D1; Session 1 confirms
+migration 308 in `schema_migrations` after the deploy.
+
+### VERIFIED
+
+- `cloudflare-worker/test/projects_icp_definition_d353.test.ts` (new, 9
+  tests) and `frontend/test/spinout_lab_icp_definition.test.mjs` (new, 9
+  tests).
+- Mutations: 21 run, 21 caught (non-zero exit and a `not ok` line, each
+  restored from a sha256-checked snapshot) — 13 on the Worker normaliser,
+  route and migration, 8 on the page, card and field-list parity. A
+  twenty-second probe, removing migration 308 against the repo's own
+  `check-runtime-schema-declared`, was NOT caught by that guard — the gap
+  filed above, which is why the worker test pins the declaration itself.
+- SQL guards green: check-sql-migrations, check-sqlite-dialect,
+  check-sql-prepare, check-timestamp-comparisons,
+  check-runtime-schema-declared, check-schema-readiness,
+  check-migration-column-shapes, check-sqlite-columns,
+  check-migration-declarations, check-refusal-bodies, check-schema-pair-drift,
+  check-sqlite-tables.
+- `npm run test:drift` on main c92c9296: exit 0. Frontend 3515 → 3524 and
+  worker 4455 → 4464 (4461 pass, 0 fail) — the 9 + 9 above, by name under
+  `spinout_lab_icp_definition.test.mjs` and
+  `projects_icp_definition_d353.test.ts` in the log; retention 112
+  unchanged; typechecks, lint and every guard green, `check-docs-fresh
+  --strict` after the root build.
+
 ## D360
 
 **The Spin-Out Lab's capital and legal tools say when a read failed, and
