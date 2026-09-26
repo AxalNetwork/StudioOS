@@ -10,9 +10,10 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
+import { titleCase } from '../../lib/absence';
 
 const money = (value) => value == null || !Number.isFinite(Number(value)) ? '—' : `$${Math.round(Number(value)).toLocaleString()}`;
-const title = (value, fallback = 'Not recorded') => String(value ?? '').trim().replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) || fallback;
+const title = (value, fallback = 'Not recorded') => titleCase(value) || fallback;
 const dateLabel = (value) => value ? new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;

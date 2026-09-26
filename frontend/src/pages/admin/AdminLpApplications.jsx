@@ -29,6 +29,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Check, Loader2, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import { titleCase } from '../../lib/absence';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
 const LBL = 'text-[10.5px] font-bold uppercase tracking-[0.11em] text-gray-400 dark:text-gray-500';
@@ -65,7 +66,6 @@ const ACTIONS = [
 ];
 
 const money = (n) => (n == null ? '—' : `$${Number(n).toLocaleString('en-US')}`);
-const titleCase = (s) => String(s || '').replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
 
 function StatusChip({ status, label }) {
   return (
