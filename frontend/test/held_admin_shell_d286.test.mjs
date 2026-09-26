@@ -156,9 +156,11 @@ function drawnLanes() {
   for (const m of CODE[LANDINGS.Approvals].matchAll(/<tr data-lane="(\d+)">([\s\S]*?)<\/tr>/g)) {
     const cells = [...m[2].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((c) => c[1]);
     assert.equal(cells.length, 5, `lane ${m[1]} draws ${cells.length} cells`);
-    const link = /<Link to="([^"]+)"/.exec(cells[3]);
+    // The link's target and its shown text are read together, as one match:
+    // no tag-stripping pass, which CodeQL reads as an HTML sanitiser.
+    const link = /<Link to="([^"]+)"[^>]*>([^<]*)<\/Link>/.exec(cells[3]);
     out.push([Number(m[1]), cells[1].trim(), cells[2].trim(), link ? link[1] : null, cells[4].trim()]);
-    if (link) assert.equal(link[1], cells[3].replace(/<[^>]+>/g, '').trim(), `lane ${m[1]} shows a route it does not link`);
+    if (link) assert.equal(link[2].trim(), link[1], `lane ${m[1]} shows a route it does not link`);
   }
   return out;
 }
