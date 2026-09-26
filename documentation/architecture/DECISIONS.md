@@ -29381,6 +29381,144 @@ scope.
 `frontend/src` moved, so `docs/` is rebuilt. No route, no worker change, no
 migration, no `api.js` method.
 
+## D290
+
+**Task 319, the H25 half: the impersonation bar becomes global chrome and
+says who, as whom, why and for how long.**
+
+**What was true on main (`ff796344d`).**
+- The impersonation strip was drawn by `PortalSwitcher`, so it existed only
+  where that bar did, and it said "Viewing as {name} — support session", the
+  countdown and Extend; "Logged in as {name}" and Exit Impersonation sat at
+  the bar's far end. It never said why. H25 draws Who · As · Why · Limit —
+  the fields S13 draws on the branch's own bar for the same session — and
+  the canvas's sentence is "neither side can see a session the other
+  cannot".
+- The reason was sent and never kept. `api.adminImpersonate` sent it as
+  `?context=` and stored only the session id and the expiry; the worker
+  wrote it best-effort to `impersonation_sessions.context` and answered
+  without it; `beginSupportSession` passed on `res.token` and `res.user`
+  alone. Nothing on the operator's side could draw it.
+
+**What changed.**
+- **The worker echoes the reason it stored.** `POST /api/admin/impersonate/:id`
+  answers `reason`: the text on the `impersonation_sessions` row, or `null`
+  when that best-effort insert failed. The session is still granted (D111);
+  what is not echoed is a reason the audit does not hold.
+  `cloudflare-worker/test/impersonate_reason_echo_d290.test.ts` (2 tests)
+  reads the echo back against the row, and refuses the insert to see null.
+- **`lib/impersonationBar.js` is the bar's words and the reason's one
+  owner.** `impersonationFields` gives Who (the operator, "· Axal VC HQ" for
+  the holder, "· Admin" otherwise), As (the target and their role), Why (the
+  reason, quoted) and Limit ("30 min · hard", held equal to the worker's
+  `IMPERSONATION_EXPIRY_MINUTES`) in the artboard's order. `whyValue(null)`
+  is "Not recorded" — `lib/absence.js`'s word — never a stand-in.
+  `storeReason` / `readStoredReason` / `clearStoredReason` own the key
+  `impersonationReason`, spelled once, on D142's rule for `supportSession.js`.
+- **`api.adminImpersonate` keeps the echo beside the expiry**, so a reload
+  mid-session still draws Why; a null echo clears it. `beginSupportSession`
+  passes `res.reason ?? null` on as the fourth argument of `onImpersonate`;
+  `handleImpersonate` sets the shell's `impersonationReason` from it, or from
+  the stored copy for a caller that passes nothing (the Spin-Out Lab's
+  "Open workspace", which is not touched). The state is initialised from the
+  stored copy and from nothing else.
+- **`components/ImpersonationBar.jsx` is global chrome**, mounted in
+  `ProtectedLayout` above `PortalSwitcher`, after `HqViewingAsBar`, for
+  D142's reason on the operator's own side. It draws the four fields, the
+  shell's clock in the branch bar's `mm:ss left`, Extend (gated on the
+  callback, as before) and **End session** — H25's word; "Exit
+  Impersonation" is not on the canvas. It reads no route and returns null on
+  one condition: nobody is being impersonated. `PortalSwitcher` no longer
+  carries any of it; while impersonating it says "Support session in
+  progress — the bar above says who, as whom, why and for how long." in
+  place of the Preview shell picker, which is still not offered
+  mid-session. The header chip "Impersonating {name}" is unchanged.
+- **Purged on the three paths.** `clearSession` (sign-out), `exitImpersonation`
+  (End session) and the thirty-minute hand-back, which reaches
+  `exitImpersonation` through the ref the H4 guard explains, all clear the
+  stored copy and the state. Before D290 sign-out left `impersonationExpiresAt`
+  in place; the reason is not given the same leniency.
+- **Not one bar with `HqSupportSessionBar`, by decision.** That bar is the
+  TARGET side: a payload `SupportRedeemPage` stored, with its own expiry, no
+  control the branch may use, and "Raise a concern" as its one action. This is
+  the OPERATOR side: live shell state, Extend and End. Same four fields, same
+  clock format (`timeLeftLabel` is shared), different facts and different
+  powers; one component would draw both from two sources it cannot
+  reconcile. H25's "Raise a concern" is the branch's control and stays where
+  it is. S13's fifth field, "You can", is the branch's ("Watch · raise a
+  concern"); the operator's "what you can do" is the two controls
+  themselves.
+
+**H25's "left on /admin on purpose — not swallowed", recorded here rather
+than drawn.** The canvas lists six things that stay a branch's own console
+decisions, which HQ reads and never takes over through this bar or any other:
+Approvals — a KYC decision on a person ("a branch decides who it admits; HQ
+reads the outcome"); Programs — admitting a founder to the Lab ("the cohort
+roster is the territory's"); Community — events, jobs, circles ("local, no HQ
+approval unless escalated"); Approvals — partner-profile approval ("persona,
+entity, agreement — reviewed where the partner operates"); Accounts — the
+persona retag of one person ("the schema is HQ's; assigning it is not");
+Programs — an advisor cohort access grant ("which advisor sees which cohort
+is a territory call"). On this codebase those are the S20 Admin shell's
+Approvals, Programs, Community and Accounts rows (D286), reached by a branch
+admin on their own deployment and by HQ only through a support session that
+this bar now names. `leftOnAdmin` exists nowhere in App.jsx and is not built:
+the list is a statement about who decides, not a screen.
+
+**Guard: `frontend/test/impersonation_bar_h25_d290.test.mjs`, 6 tests.**
+- *the bar is global chrome*: mounted in `ProtectedLayout` above
+  `PortalSwitcher` (anchored on the mounts), before the first `<Routes`, reading
+  no route, with exactly one `return null`; the switcher carries no clock,
+  Extend, Exit or "Logged in as";
+- *Who · As · Why · Limit in H25's order*: the keys read off the artboard's
+  `impBar`, the four values for a holder and for a plain admin,
+  `SUPPORT_SESSION_MINUTES` equal to the worker's literal, the fields drawn
+  from the list;
+- *a null reason reads "Not recorded"*: six empty shapes, the word equal to
+  `lib/absence.js`'s, no `||`/`??` fallback in the bar or the lib, the exact
+  store / init / set expressions in `api.js` and App.jsx, and the store
+  through a fake `localStorage`;
+- *the worker echoes the stored reason or null, and the dialog passes it on*:
+  the response line inside the impersonate handler, the dialog's call, the
+  four-argument `handleImpersonate`, and the prop chain to the mount;
+- *purged on sign-out, End session and the hand-back, one owner for the
+  key*: the three code slices, the hand-back still calling
+  `exitImpersonationRef.current()`, the key spelled once in the lib and never
+  in App.jsx, `api.js`, the bar or the dialog;
+- *Extend and End session work, the chip stays, the clock is the shell's*:
+  both buttons gated and labelled from the lib, `timeLeftLabel` imported from
+  `supportSession.js`, the mount's seven props, `authProps` still handing out
+  the clock and Extend, "Impersonating {user.name}" still in the header.
+
+Two pins re-aimed at their properties, both in Session 5's own files:
+`support_session_h4`'s banner test now slices `ImpersonationBar` (countdown
+and Extend gated on their callback, the mount given the shell's clock and
+both callbacks); `preview_shell_h38_d288`'s "keeps its name and chrome" test
+now reads the bar for End session and Extend and the switcher for its
+sentence.
+
+**Mutations: 18 run, 18 caught** — each a non-zero exit with a `not ok` line,
+anchors unique, bytes proven changed, sources restored from a sha256-checked
+snapshot: the four the brief names — the reason not purged on sign-out, on
+End session, and on the hand-back (the effect no longer ending the session);
+an invented reason (in `whyValue`, in `api.js`'s store, in
+`handleImpersonate`); the bar mounted below `PortalSwitcher`; Extend dropped
+— plus the bar gated on the route; End session dropped; the worker echoing
+the typed reason when its write failed; the worker dropping the echo; the
+dialog passing nothing on; a sixty-minute limit; As before Who; the mount not
+given End session; the key spelled out a second time in App.jsx; the strip
+returning to the switcher.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA
+fallback and `/api/*` stubbed; an admin session with `realUser` and a founder
+`user` in storage, an expiry twenty minutes out and a stored reason: the bar
+draws above the admin bar on `/studio` and on `/settings` with the four
+fields, the clock, Extend and End session; with the stored reason removed the
+Why field reads "Not recorded"; with no `realUser` the bar is absent.
+
+`frontend/src` moved, so `docs/` is rebuilt. One worker response field, no
+route, no migration, no `api.js` method.
+
 ## D300
 
 **Every file in `frontend/public` has to have a named reader — one did not,
