@@ -101,27 +101,37 @@ test('the reason reaches the worker as the column it fills', () => {
 test('the banner says what the session is, and how long is left', () => {
   const board = h4();
   assert.ok(board.includes('support session'), 'the artboard no longer calls it a support session');
-  assert.match(APP, /Viewing as \{impersonatedUser\?\.name\} — support session/,
-    'the banner no longer names the session the way the artboard does');
-  // Sliced to the impersonating branch. `onExtendImpersonation` appears all
-  // through the prop chain, so matching the whole file said nothing about
-  // whether the BUTTON is rendered — deleting it escaped.
-  const a = APP.indexOf('{isImpersonating ? (');
-  assert.ok(a >= 0, 'the impersonation branch of the bar is gone');
-  const b = APP.indexOf(') : (', a);
-  assert.ok(b > a, "the branch's end marker moved — this slice would run past it");
-  const banner = APP.slice(a, b);
-  assert.match(banner, /supportLeftMs !== null &&/, 'the countdown is gone');
-  assert.match(banner, /onClick=\{onExtendImpersonation\}/,
+  // D290 / H25 — the banner is `ImpersonationBar`, global chrome above
+  // `PortalSwitcher`, rather than a strip inside it. The words it draws are
+  // `lib/impersonationBar.js`'s; the bar under the picker only says why the
+  // picker is not offered, in the artboard's own words for the session.
+  const BAR = codeOnly(raw('frontend/src/components/ImpersonationBar.jsx'));
+  assert.match(APP, /Support session in progress — the bar above says who, as whom, why and for how long\./,
+    'the admin bar no longer names the session the way the artboard does');
+  assert.match(APP, /<SafeMount name="ImpersonationBar">/, 'the impersonation bar is not mounted');
+  assert.match(BAR, /support session/, 'the bar no longer calls it a support session');
+  // Sliced to the bar's render. `onExtend` is a prop name, so matching the
+  // whole file said nothing about whether the BUTTON is rendered — deleting
+  // it escaped.
+  const a = BAR.indexOf('return (');
+  assert.ok(a >= 0, 'the bar renders nothing');
+  const banner = BAR.slice(a);
+  assert.match(banner, /leftMs !== null &&/, 'the countdown is gone');
+  assert.match(banner, /onClick=\{onExtend\}/,
     'the banner renders no control that extends the session');
-  assert.match(banner, />\s*Extend\s*<\/button>/, 'the extend control has no label');
+  assert.match(banner, /\{EXTEND_LABEL\}/, 'the extend control has no label');
   // The CONDITION as well as the markup. This is source text, not a render:
   // gating the button on `false` leaves every line of it in the file, so
   // deleting the control by disabling it escaped both assertions above.
-  assert.match(banner, /\{onExtendImpersonation && \(/,
+  assert.match(banner, /\{onExtend && \(/,
     'the extend control is gated on something other than the callback existing');
-  assert.match(banner, /\{supportLeftMs !== null && \(/,
+  assert.match(banner, /\{leftMs !== null && \(/,
     'the countdown is gated on something other than there being a time left');
+  // And the shell hands the bar its clock and its two callbacks.
+  const mount = APP.slice(APP.indexOf('<SafeMount name="ImpersonationBar">'), APP.indexOf('<PortalSwitcher'));
+  assert.match(mount, /leftMs=\{supportLeftMs\}/, 'the bar is not given the shell clock');
+  assert.match(mount, /onExtend=\{onExtendImpersonation\}/, 'the bar is not given Extend');
+  assert.match(mount, /onExit=\{onExitImpersonation\}/, 'the bar is not given End session');
 });
 
 test('the session is handed back before it can 401 the admin out', () => {

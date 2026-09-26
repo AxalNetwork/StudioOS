@@ -92,7 +92,7 @@ export const TOOL_INFO = {
   'office-hours': { label: 'Office Hours', to: '/spinout-lab/office-hours', desc: 'Investors, lawyers & operators', icon: CalendarCheck },
   'cofounder-match': { label: 'Co-founder Match', to: '/spinout-lab/cofounder-match', desc: 'Co-founder sourcing', icon: Users },
   incorporate: { label: 'Incorporate', to: '/spinout-lab/incorporate', desc: 'Entity formation', icon: Landmark },
-  captable: { label: 'Cap Table', to: '/spinout-lab/captable', desc: 'Founder stock & vesting', icon: PieChart },
+  captable: { label: 'Cap Table', to: '/spinout-lab/captable', desc: 'Founder stock & dilution', icon: PieChart },
   'section-83b': { label: '83(b) Election', to: '/spinout-lab/83b', desc: 'File within 30 days of your stock grant', icon: FileText },
   'cofounder-agreement': { label: 'Co-founder Agreement', to: '/spinout-lab/cofounder-agreement', desc: 'Signed founder terms', icon: FileSignature },
   // The credential itself, not a deliverable: it is CONFERRED by finishing
@@ -229,7 +229,7 @@ export const WEEK_DEFS = [
       { label: 'File incorporation docs and receive EIN', keys: ['ein_received'], tool: 'incorporate' },
       { label: 'Issue founder stock with vesting', keys: ['founder_stock_issued'], tool: 'captable' },
       { label: 'File 83(b) election', keys: ['section83b_filed'], tool: 'section-83b' },
-      { label: 'Sign co-founder agreement (or solo declaration)', keys: ['cofounder_agreement_signed'], tool: 'cofounder-agreement' },
+      { label: 'Sign co-founder agreement', keys: ['cofounder_agreement_signed'], tool: 'cofounder-agreement' },
       { label: 'Lock the fundraise ask', keys: ['fundraise_ask_locked'], tool: 'capital' },
       { label: 'Fill in Use of Funds', keys: ['use_of_funds_filled'], tool: 'use-of-funds' },
       // Warm intros & the data room live on the Capital raise workspace —

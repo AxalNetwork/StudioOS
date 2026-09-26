@@ -6,8 +6,11 @@
 // documents, revenue-mix confidence bars, investor-preview toggle — has NO
 // backend in either runtime and is intentionally NOT reproduced. Everything
 // here is live data:
-//   - Revenue log: real `metrics_snapshots` (both runtimes) with source
-//     badges (stripe/manual), manual logging, and deletion.
+//   - Revenue log: real metric snapshots — the Worker's `project_metrics`
+//     table (migration 249; GET/POST /progress/metrics/:projectId) — with
+//     source badges (stripe/manual), manual logging, and deletion. The
+//     snapshot form also records net burn and cash balance, which the Use
+//     of Funds runway reads (D360) instead of a modeled burn.
 //   - Stripe sync: Worker-only POST /progress/metrics/:id/import-stripe.
 //     ONLY a 404 means "not in this environment" (dev) — other failures
 //     (stripe_not_connected, sync errors) are shown honestly.
@@ -17,6 +20,10 @@
 //     (dev DTO gained Worker parity for these fields in this change).
 //   - Deck-ready traction: a sentence assembled ONLY from stored fields,
 //     shown only when real numbers exist.
+//   - Honest reads (D360): a failed log read renders `Unreadable` with a
+//     retry, and the two KPIs computed from the log ("Metric snapshots",
+//     "Last synced") say Unreadable rather than 0 and "Never". A failed
+//     project read is not "No startup record yet".
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -30,12 +37,14 @@ import { pickLabProject } from './SpinoutLabStartupPage';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
 import { reportError } from '../lib/log';
+import { Unreadable, Unrecorded } from '../ui';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 const INPUT = 'w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-[13px] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500/40';
 
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+const LOG_UNREADABLE = <Unrecorded reason="The revenue log could not be read. Reload to try again.">Unreadable</Unrecorded>;
 
 export const PPS_LABELS = {
   paid: 'Paid customers',
@@ -73,6 +82,7 @@ export function tractionLine(project, latestMrr) {
 
 export default function SpinoutLabRevenuePage() {
   const [status, setStatus] = useState('loading');
+  const [projectsUnread, setProjectsUnread] = useState(false);
   const [state, setState] = useState(null);
   const [user, setUser] = useState(null);
   // '' | 'ok' | 'fail'. Tri-state, matching SpinoutLabScoringPage's own copy
@@ -93,7 +103,7 @@ export default function SpinoutLabRevenuePage() {
   // the busy flag is teardown, not an outcome.
   const [deleteError, setDeleteError] = useState('');
   // Snapshot form
-  const [sf, setSf] = useState({ snapshot_date: new Date().toISOString().slice(0, 10), mrr: '', active_users: '', new_users: '', notes: '' });
+  const [sf, setSf] = useState({ snapshot_date: new Date().toISOString().slice(0, 10), mrr: '', active_users: '', new_users: '', net_burn: '', cash_balance: '', notes: '' });
   // Proof form
   const [pf, setPf] = useState({ revenue: '', mrr: '', paying_customers: '', first_payment_date: '', paid_pilot_status: '', growth_signals: '' });
 
@@ -117,12 +127,13 @@ export default function SpinoutLabRevenuePage() {
         const [st, me, projects] = await Promise.all([
           spinoutLab.state().catch(() => null),
           api.getMe(),
-          api.listProjects().catch(() => []),
+          api.listProjects().catch((e) => { reportError('spinout-revenue:projects', e); return null; }),
         ]);
         if (dead) return;
         setState(st);
         setUser(me);
-        const proj = pickLabProject(projects, me);
+        setProjectsUnread(projects === null);
+        const proj = projects === null ? null : pickLabProject(projects, me);
         setProject(proj || null);
         if (proj) {
           setPf({
@@ -156,8 +167,9 @@ export default function SpinoutLabRevenuePage() {
   const lastStripe = sorted.find((s) => s.source === 'stripe') || null;
 
   const trend = useMemo(() => {
-    const chron = [...sorted].reverse().slice(-8);
-    const max = Math.max(1, ...chron.map((s) => num(s.mrr) || 0));
+    // Only snapshots that RECORD an MRR are bars; one without it is not a $0 month.
+    const chron = [...sorted].reverse().filter((s) => s.mrr != null && s.mrr !== '' && num(s.mrr) !== null).slice(-8);
+    const max = Math.max(1, ...chron.map((s) => num(s.mrr)));
     return { bars: chron, max };
   }, [sorted]);
 
@@ -178,11 +190,13 @@ export default function SpinoutLabRevenuePage() {
       if (sf.mrr !== '') body.mrr = Number(sf.mrr);
       if (sf.active_users !== '') body.active_users = Number(sf.active_users);
       if (sf.new_users !== '') body.new_users = Number(sf.new_users);
+      if (sf.net_burn !== '') body.net_burn = Number(sf.net_burn);
+      if (sf.cash_balance !== '') body.cash_balance = Number(sf.cash_balance);
       if (sf.notes.trim()) body.notes = sf.notes.trim();
       await api.createMetricsSnapshot(project.id, body);
       await loadSnapshots(project.id);
       setModal(null);
-      setSf({ snapshot_date: new Date().toISOString().slice(0, 10), mrr: '', active_users: '', new_users: '', notes: '' });
+      setSf({ snapshot_date: new Date().toISOString().slice(0, 10), mrr: '', active_users: '', new_users: '', net_burn: '', cash_balance: '', notes: '' });
     } catch (e) {
       reportError('spinout-revenue:save-snapshot', e);
       setFormError(e?.data?.detail?.error || e?.data?.detail || e?.message || 'Could not save the snapshot.');
@@ -307,6 +321,17 @@ export default function SpinoutLabRevenuePage() {
       </div>
     );
   }
+  if (projectsUnread) {
+    return (
+      <div className="max-w-xl mx-auto mt-16" data-testid="revenue-projects-unreadable">
+        <Unreadable
+          what="Your startup record"
+          claim="This is not a claim that you have no startup — reload before you create one."
+          onRetry={() => window.location.reload()}
+        />
+      </div>
+    );
+  }
   if (!project) {
     return (
       <div className="max-w-xl mx-auto mt-16 text-center" data-testid="revenue-no-project">
@@ -322,14 +347,20 @@ export default function SpinoutLabRevenuePage() {
   }
 
   const week = num(user?.spinout_lab_week) || state?.week || 3;
+  // A failed log read is not an empty log: nothing derived from it is a figure.
+  const logUnread = Boolean(snapshots?.failed);
   const line = tractionLine(project, latest?.mrr);
 
   const kpis = [
     { key: 'revenue', label: 'Revenue to date', value: fmtMoney(project.revenue), sub: 'self-reported, lifetime' },
     { key: 'mrr', label: 'MRR', value: fmtMoney(latest?.mrr ?? project.mrr), sub: latest?.mrr != null ? `latest snapshot · ${fmtDate(latest.snapshot_date)}` : 'from traction proof' },
     { key: 'customers', label: 'Paying customers', value: num(project.paying_customers) ?? '—', sub: project.first_payment_date ? `first payment ${fmtDate(project.first_payment_date)}` : 'no first payment date yet' },
-    { key: 'snapshots', label: 'Metric snapshots', value: rows.length, sub: `${rows.filter((s) => s.source === 'stripe').length} Stripe-synced` },
-    { key: 'stripe', label: 'Last synced (Stripe)', value: lastStripe ? fmtDate(lastStripe.snapshot_date) : 'Never', sub: lastStripe ? 'auto-imported' : 'sync below when connected' },
+    logUnread
+      ? { key: 'snapshots', label: 'Metric snapshots', value: LOG_UNREADABLE, sub: 'the revenue log could not be read' }
+      : { key: 'snapshots', label: 'Metric snapshots', value: rows.length, sub: `${rows.filter((s) => s.source === 'stripe').length} Stripe-synced` },
+    logUnread
+      ? { key: 'stripe', label: 'Last synced (Stripe)', value: LOG_UNREADABLE, sub: 'the revenue log could not be read' }
+      : { key: 'stripe', label: 'Last synced (Stripe)', value: lastStripe ? fmtDate(lastStripe.snapshot_date) : 'Never', sub: lastStripe ? 'auto-imported' : 'sync below when connected' },
   ];
 
   return (
@@ -486,8 +517,12 @@ export default function SpinoutLabRevenuePage() {
               </div>
             )}
             {snapshots?.failed ? (
-              <div className="text-[12.5px] text-amber-600 dark:text-amber-400 py-6 text-center" data-testid="log-error">
-                Couldn't load your revenue log right now.
+              <div className="py-6" data-testid="log-error">
+                <Unreadable
+                  what="Your revenue log"
+                  claim="This is not a claim that nothing is logged."
+                  onRetry={() => loadSnapshots(project.id)}
+                />
               </div>
             ) : visible.length === 0 ? (
               <div className="text-center py-8" data-testid="log-empty">
@@ -550,17 +585,19 @@ export default function SpinoutLabRevenuePage() {
 
           <div className={CARD} data-testid="card-trend">
             <div className={`${LBL} mb-3`}>MRR trend</div>
-            {trend.bars.length < 2 ? (
+            {logUnread ? (
+              <div data-testid="trend-unreadable"><Unrecorded reason="The revenue log could not be read.">Unreadable</Unrecorded></div>
+            ) : trend.bars.length < 2 ? (
               <div className="text-[11.5px] text-gray-500 dark:text-gray-400" data-testid="trend-empty">
-                Log at least two snapshots to see a trend.
+                Log at least two snapshots with an MRR to see a trend.
               </div>
             ) : (
               <div className="flex items-end gap-3 h-28" data-testid="trend-bars">
                 {trend.bars.map((s) => {
-                  const v = num(s.mrr) || 0;
+                  const v = num(s.mrr);
                   return (
                     <div key={s.id} className="flex-1 flex flex-col items-center gap-1 min-w-0">
-                      <div className="text-[9.5px] tabular-nums text-gray-400">{v ? `$${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}` : '—'}</div>
+                      <div className="text-[9.5px] tabular-nums text-gray-400">{`$${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}`}</div>
                       <div
                         className={`w-full max-w-[38px] rounded-t-md ${s.source === 'stripe' ? 'bg-emerald-400 dark:bg-emerald-500' : 'bg-teal-300 dark:bg-teal-600'}`}
                         style={{ height: `${Math.max(4, (v / trend.max) * 80)}px` }}
@@ -627,7 +664,7 @@ export default function SpinoutLabRevenuePage() {
               <>
                 <div className="text-[14px] font-extrabold mb-3" data-testid="text-traction-line">{line}</div>
                 <Link
-                  to="/build/deck"
+                  to="/spinout-lab/pitch-deck"
                   data-testid="link-open-deck"
                   className="inline-block text-[11.5px] font-bold bg-white dark:bg-gray-100 text-teal-800 rounded-lg px-3 py-1.5 hover:bg-teal-50 dark:hover:bg-gray-200"
                 >
@@ -644,7 +681,7 @@ export default function SpinoutLabRevenuePage() {
           <div className={CARD} data-testid="card-feeds-into">
             <div className={`${LBL} mb-3`}>Feeds into</div>
             <div className="space-y-2">
-              <Link to="/build/deck" className="flex items-center gap-2 text-[12px] font-semibold text-gray-700 dark:text-gray-200 hover:text-teal-600" data-testid="feeds-deck">
+              <Link to="/spinout-lab/pitch-deck" className="flex items-center gap-2 text-[12px] font-semibold text-gray-700 dark:text-gray-200 hover:text-teal-600" data-testid="feeds-deck">
                 <Presentation size={13} className="text-teal-500" /> Pitch Deck Builder <span className="text-gray-400 font-normal">· traction slide</span>
               </Link>
               <Link to="/spinout-lab/scoring" className="flex items-center gap-2 text-[12px] font-semibold text-gray-700 dark:text-gray-200 hover:text-teal-600" data-testid="feeds-scoring">
@@ -686,6 +723,16 @@ export default function SpinoutLabRevenuePage() {
                   <label className="block">
                     <span className={LBL}>New users</span>
                     <input type="number" min="0" className={INPUT} value={sf.new_users} onChange={(e) => setSf({ ...sf, new_users: e.target.value })} placeholder="—" data-testid="input-snapshot-new-users" />
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className={LBL}>Net burn / mo (USD)</span>
+                    <input type="number" min="0" className={INPUT} value={sf.net_burn} onChange={(e) => setSf({ ...sf, net_burn: e.target.value })} placeholder="—" data-testid="input-snapshot-net-burn" />
+                  </label>
+                  <label className="block">
+                    <span className={LBL}>Cash balance (USD)</span>
+                    <input type="number" min="0" className={INPUT} value={sf.cash_balance} onChange={(e) => setSf({ ...sf, cash_balance: e.target.value })} placeholder="—" data-testid="input-snapshot-cash" />
                   </label>
                 </div>
                 <label className="block">
