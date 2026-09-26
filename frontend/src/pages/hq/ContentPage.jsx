@@ -135,6 +135,49 @@ export function LocalisationRow({ subjectRef }) {
   );
 }
 
+/**
+ * D267 — a row the kind gate should have refused, said on that row.
+ *
+ * D206 refuses a white-label's content escalation at both ends, so a flagged
+ * row is a gate regression, a row inserted by hand, or one older than D206.
+ * The row is MARKED, NOT HIDDEN: hiding it would make the failure the one thing
+ * the lane could not show.
+ *
+ * THE SERVER'S FLAG, NEVER THE PAGE'S GUESS. `kind_gate_failed` is computed by
+ * the Worker with the same rule `recordEscalation` applies, against the row's
+ * own kind. Anything but `true` draws nothing here: a row whose licence kind is
+ * unknown (an orphan deployment) is not a failed gate, and a row that was not
+ * checked is said once for the whole lane, not on every row.
+ */
+export function KindGateFailedRow({ item }) {
+  if (!item || item.kind_gate_failed !== true) return null;
+  const licenceKind = String(item.licence_kind || '').replace(/_/g, '-');
+  return (
+    <p className="mt-1 text-[10.5px] font-semibold text-red-700 dark:text-red-300" data-testid="hq-localisation-gate-failed">
+      Kind gate failed: {item.branch_code} runs a {licenceKind} licence, which cannot raise{' '}
+      <code>{item.kind}</code>, so HQ should have refused this before recording it. A gate
+      regression, a row inserted by hand, or a row older than D206.
+    </p>
+  );
+}
+
+/**
+ * D267 — the one sentence for a lane whose rows could not be checked against
+ * the kind gate: the licence ledger did not answer. Said once, above the rows,
+ * never as an absence on each of them; and never when the lane has no rows,
+ * where there is nothing to check.
+ */
+export function KindsUncheckedNote({ lane, count }) {
+  if (!lane || lane.licence_kinds_available !== false || !count) return null;
+  return (
+    <p className="mb-2 text-[11px] leading-relaxed text-axal-muted" data-testid="hq-localisation-kinds-unchecked">
+      <span className="font-semibold text-axal-ink dark:text-white">Not checked against the kind gate.</span>{' '}
+      {lane.licence_kinds_reason
+        || 'The licence ledger could not be read, so no row here was checked against the kind of licence its branch runs under.'}
+    </p>
+  );
+}
+
 function Stat({ label, value, note }) {
   return (
     <div className="rounded-xl border border-axal-hairline bg-axal-ground p-3">
@@ -806,13 +849,23 @@ export default function ContentPage() {
                   a second copy of a rule that already has one home.
 
                   D214 — this zone is the full list behind the board's Brand
-                  approval lane, which shows only the oldest three. */}
+                  approval lane, which shows only the oldest three.
+
+                  D267 — "CANNOT REACH" WAS A CLAIM NOTHING CHECKED. The gate
+                  holds at the write, but a gate regression, a row inserted by
+                  hand or one older than D206 would sit here looking like any
+                  other submission. So each row is now checked against its
+                  branch's licence kind as it is read, and a row the gate should
+                  have refused is marked on the row — never filtered out, which
+                  would hide exactly the failure the check exists to show. */}
               <p className="mb-3 text-[12px] leading-relaxed text-axal-muted" data-testid="hq-brand-desk-scope">
                 Brand approval is for Axal subsidiaries. A white-label has no HQ brand desk, so HQ refuses
                 a white-label&rsquo;s content escalation before recording it, reading the kind from its
-                own licence ledger. Nothing here filters by kind because no white-label submission can
-                reach this lane.
+                own licence ledger. Nothing here filters by kind; instead each row is checked against the
+                kind of licence its branch runs under, and a row the gate should have refused is marked
+                on the row rather than hidden.
               </p>
+              {laneItems && <KindsUncheckedNote lane={lane} count={laneItems.length} />}
               {lane === UNAVAILABLE && (
                 <Unreadable
                   what="Content submissions"
@@ -842,6 +895,7 @@ export default function ContentPage() {
                             {it.sla === 'past' ? ' · past SLA' : it.sla === 'due_soon' ? ' · due soon' : ''}
                           </div>
                           <LocalisationRow subjectRef={it.subject_ref} />
+                          <KindGateFailedRow item={it} />
                         </div>
                         <span className={`${PILL} ${it.answer ? PILL_GREEN : PILL_AMBER}`}>
                           {it.answer ? 'decided' : 'awaiting'}
