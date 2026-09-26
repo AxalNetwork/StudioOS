@@ -145,7 +145,8 @@ export default function FillProposals({ projectId, kind, enabled, onApplied }) {
       // The worker distinguishes "there is nothing here to work from" from "the
       // model could not be reached", and both are sentences worth showing —
       // one is about the venture's evidence, the other about the platform.
-      setNote(e?.body?.message || e?.message || 'That could not be run. Nothing was charged.');
+      // D258 — that sentence is `e.message`; nothing sets `e.body`.
+      setNote(e?.message || 'That could not be run. Nothing was charged.');
     } finally {
       setBusy('');
     }
@@ -168,7 +169,7 @@ export default function FillProposals({ projectId, kind, enabled, onApplied }) {
       setEditing(null);
       if (how === 'accept') onApplied?.();
     } catch (e) {
-      setNote(e?.body?.detail || e?.message || 'That could not be applied.');
+      setNote(e?.message || 'That could not be applied.');
       await load();
     } finally {
       setBusy('');

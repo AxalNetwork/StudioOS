@@ -146,8 +146,14 @@ test('the download is fetched with the session, not linked to', () => {
   assert.match(method, /\/funds\/\$\{id\}\/lpa\/download/, 'the download points somewhere else');
   assert.match(method, /createObjectURL/, 'the response is no longer clicked client-side');
   // The server distinguishes 403 from 404 and the drawer says which, so the
-  // reason must survive the transport.
-  assert.match(method, /err\?\.error \|\| err\?\.detail/, 'the server\'s own reason is thrown away');
+  // reason must survive the transport. Since D258 it survives through the one
+  // definition every raw-fetch helper shares — `refusalError`, which carries
+  // the sentence, the code and the status. This used to match the two-field
+  // chain the helper built by hand; the behaviour is now driven end to end in
+  // api_refusal_d258.test.mjs ("the LPA download keeps the server's two
+  // refusals apart").
+  assert.match(method, /if \(!res\.ok\) throw await refusalError\(res, 'Download failed'\);/,
+    'the server\'s own reason is thrown away — the refusal no longer goes through refusalError');
 });
 
 test('the page keeps the envelope instead of throwing it away', () => {

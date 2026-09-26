@@ -177,8 +177,10 @@ export function BulkMoveDialog({ count, lanes, onClose, onMove }) {
       await onMove(body);
     } catch (cause) {
       // THE 409'S FIELDS, NOT ITS MESSAGE. `would_be` and `wip_limit` are what let
-      // the founder decide whether to raise the limit or move fewer cards.
-      const detail = cause?.body || cause?.data || null;
+      // the founder decide whether to raise the limit or move fewer cards. They
+      // arrive on `cause.data`, where request() puts the body; nothing sets
+      // `cause.body`, so the read that used to come first found nothing (D258).
+      const detail = cause?.data || null;
       if (detail?.wip_limit != null) setRefusal(detail);
       else setError(cause?.message || 'The move could not be applied.');
       setBusy(false);

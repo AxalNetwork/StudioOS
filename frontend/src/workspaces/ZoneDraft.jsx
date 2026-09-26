@@ -128,8 +128,8 @@ export default function ZoneDraft({
       // 409 is the honest refusal, not a failure: there was nothing on the page
       // to draft over, and the worker declines rather than letting the model
       // write from its own knowledge in the voice of a grounded draft.
-      const detail = String(e?.message || '');
-      setNote(detail.includes('nothing_to_draft')
+      // D258 — the refusal's code travels on `e.code`, compared whole.
+      setNote(e?.code === 'nothing_to_draft'
         ? (nothingToDraft || 'There is nothing on this page to draft over yet.')
         : 'That draft could not be written right now.');
     } finally { setBusy(''); }

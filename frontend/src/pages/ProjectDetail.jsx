@@ -554,8 +554,12 @@ function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
         setResults(res?.results || []);
       } catch (e) {
         const msg = e?.message || '';
-        const code = e?.data?.error || '';
-        if (code === 'crunchbase_not_connected' || /not_connected/i.test(msg)) setNotConnected(true);
+        // D258 — the code is matched as a code, read from `e.code`. A second
+        // arm used to look for it inside `e.message`, which now carries the
+        // route's own sentence ("Connect Crunchbase from Settings…"), so it
+        // could never match.
+        const code = e?.code || '';
+        if (code === 'crunchbase_not_connected') setNotConnected(true);
         else if (code === 'crunchbase_rate_limited' || e?.status === 429) {
           setRateLimitedUntil(Number(e?.data?.reset_epoch) || (Date.now() + 60 * 60 * 1000));
         } else setErr(msg || 'Search failed');

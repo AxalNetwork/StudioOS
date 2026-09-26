@@ -54,7 +54,9 @@ export function DependenciesDialog({ items, dependencies, onClose, onAdd, onRemo
     } catch (cause) {
       // THE 409'S OWN FIELD, not its message: `cycle` is what distinguishes
       // "these two would trap each other" from "you already recorded this".
-      const detail = cause?.body || cause?.data || null;
+      // It arrives on `cause.data`, where request() puts the body; nothing sets
+      // `cause.body` (D258).
+      const detail = cause?.data || null;
       if (detail?.cycle) {
         setError('Those two would block each other, and neither could ever be cleared. Remove the existing link first.');
       } else {

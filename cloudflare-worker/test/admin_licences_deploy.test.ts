@@ -171,6 +171,8 @@ test('without the token the deploy is 409 with a named reason, and the attempt l
 
   assert.equal(r.status, 409, 'an unset credential is a state, not a 500');
   assert.equal(r.body.error, 'github_not_configured');
+  assert.equal(r.body.branch, 'fr', 'D258: the branch code travels as `branch`');
+  assert.equal(r.body.code, undefined, 'D258: `code` is the refusal code the SPA reads into e.code');
   // The exact things to set, named. "Not configured" covers three different
   // things and only one of them is this one.
   assert.match(r.body.message, /GITHUB_ACCESS_TOKEN/);
@@ -236,6 +238,8 @@ test('a 403 from GitHub is reported as the SCOPE, not as an unset secret', async
     const r = await call(...deploy({ code: 'fr' }));
     assert.equal(r.status, 502);
     assert.equal(r.body.error, 'dispatch_failed');
+    assert.equal(r.body.branch, 'fr', 'D258: the branch code travels as `branch`');
+    assert.equal(r.body.code, undefined, 'D258: `code` is the refusal code the SPA reads into e.code');
     assert.match(r.body.message, /actions: write/);
     assert.match(r.body.message, /authenticated/);
     assert.ok(
@@ -270,7 +274,10 @@ test('a licence that already has a deployment is already_deployed; a taken code 
   assert.equal(again.status, 409);
   assert.equal(again.body.error, 'already_deployed', 'this licence, under a different code');
   assert.match(again.body.message, /AXL-001/);
-  assert.equal(again.body.code, 'fr', 'the answer names the deployment that exists, not the one asked for');
+  assert.equal(again.body.branch, 'fr', 'the answer names the deployment that exists, not the one asked for');
+  // D258: a body's `code` is the refusal's machine code, read into e.code by the
+  // SPA, so a branch code must never travel under that key.
+  assert.equal(again.body.code, undefined, 'the branch code travels as `branch`, never as `code`');
 
   const taken = await call(...deploy({ code: 'fr' }, 'lic_empty'));
   assert.equal(taken.status, 409);

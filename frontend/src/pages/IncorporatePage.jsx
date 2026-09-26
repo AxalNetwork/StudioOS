@@ -840,18 +840,20 @@ export default function IncorporatePage({ embedded = false }) {
       //     filing isn't set up for this jurisdiction yet — a setup gap, not a
       //     transient error, so retrying won't help.
       //   order_failed (502) / other 5xx / network → genuinely transient.
-      // api.js surfaces the parsed body on `e.data` and the code on `e.message`.
-      const code = (
-        (typeof e?.data?.error === 'string' && e.data.error) || e?.message || ''
-      ).toLowerCase();
+      // D258 — api.js puts the code on `e.code` and the body's sentence on
+      // `e.message`. This read the code out of `e.data.error` and fell back to
+      // the message, so one local held a code or a sentence depending on the
+      // body; the code and the sentence are two reads now.
+      const code = e?.code || '';
+      const sentence = String(e?.message || '').toLowerCase();
       const jLabel = selected?.label || 'this jurisdiction';
-      if (status === 404 || code.includes('not found')) {
+      if (status === 404 || sentence.includes('not found')) {
         setErr("The selected project or jurisdiction is no longer available. Please refresh and try again.");
       } else if (status === 401 || status === 403) {
         setErr('Your session expired or you do not have access to this startup. Please sign in again.');
-      } else if (code.includes('stripe_not_configured') || code.includes('catalog_price_missing')) {
+      } else if (code === 'stripe_not_configured' || code === 'catalog_price_missing') {
         setErr(`Online incorporation filing isn't set up for ${jLabel} yet — contact the studio team at support@axal.vc to file your company manually.`);
-      } else if (code.includes('order_failed') || (typeof status === 'number' && status >= 500)) {
+      } else if (code === 'order_failed' || (typeof status === 'number' && status >= 500)) {
         setErr("We couldn't start the payment for this filing. Please try again in a moment, or contact support if it keeps happening.");
       } else {
         setErr('Submission failed. Please retry in a moment, or contact support if it persists.');

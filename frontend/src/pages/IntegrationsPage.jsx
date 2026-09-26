@@ -283,10 +283,13 @@ export default function IntegrationsPage({ embedded = false }) {
       setTelegramRequested(true);
       showToast('Request sent — an admin will message you the invite link.');
     } catch (e) {
-      const msg = e?.message || 'Could not send the request.';
-      const friendly = /slack_webhook_unconfigured/i.test(msg)
+      // D258 — the refusal's code travels on `e.code`. This used to match it
+      // through `e.message`, and stopped working the day `request()` began
+      // showing the route's own sentence there: telegram_join.ts sends both
+      // `error: 'slack_webhook_unconfigured'` and a `message`.
+      const friendly = e?.code === 'slack_webhook_unconfigured'
         ? 'The studio Slack inbox isn\'t configured on this deployment yet — please ping an admin directly.'
-        : msg;
+        : (e?.message || 'Could not send the request.');
       setTelegramTileError({ kind: 'error', text: friendly });
     }
   };

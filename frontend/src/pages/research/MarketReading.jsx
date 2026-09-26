@@ -160,12 +160,14 @@ export default function MarketReading({ role = 'founder' }) {
       else await load();
       setNotice({ ok: true, text: 'Recorded as a new reading. The one you opened is unchanged.' });
     } catch (err) {
-      const code = String(err?.message || '');
-      const text = code.includes('range_required')
+      // D258 — the refusal's code travels on `err.code`, and is compared
+      // whole: research.ts answers each of these as a bare `detail` code.
+      const code = err?.code || '';
+      const text = code === 'range_required'
         ? 'High is below low. Nothing is saved until the range reads forward.'
-        : code.includes('comparable_count_required')
+        : code === 'comparable_count_required'
           ? 'How many engagements the range came from. Refused if 0.'
-          : code.includes('ran_at_required')
+          : code === 'ran_at_required'
             ? 'A reading needs the date you ran it.'
             : (err?.message || 'That reading could not be saved.');
       setNotice({ ok: false, text });
@@ -183,10 +185,10 @@ export default function MarketReading({ role = 'founder' }) {
       await load();
       setNotice({ ok: true, text: 'Attached. The range and its run date travel with that quote.' });
     } catch (err) {
-      const code = String(err?.message || '');
+      // D258 — the code is `err.code`; `err.message` is its sentence.
       setNotice({
         ok: false,
-        text: code.includes('reading_stale')
+        text: err?.code === 'reading_stale'
           ? 'This reading is past ninety days. Record a fresh one before attaching it.'
           : 'That proposal is not on your account, so nothing was attached.',
       });

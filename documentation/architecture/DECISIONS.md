@@ -25803,6 +25803,169 @@ so `check-runtime-schema-declared` (D235) has nothing new to check either.
   `check-folder-docs.mjs` all exit 0.
 - `node scripts/check-decision-ids.mjs` exits 0 (D1 through D257).
 
+## D258
+
+**A refusal is read in one place: `e.message` is its sentence and `e.code`
+its machine flag (task 343, C5).** `request()` in `frontend/src/lib/api.js`
+built the message as `errorObj.message || string error || detailObj.message
+|| string detail || …`, so a string `error` CODE beat the body's own
+`message`. About 190 Worker bodies send `{ error: '<code>', message:
+'<sentence>' }`, so every page that printed `e.message` printed
+`kind_not_available` instead of the sentence written for the reader — and an
+HTTP refusal carried no `e.code` at all, although `request()` itself reads
+the body's `code` three times (423 `admin_frozen`, 423 `branch_suspended`,
+403 `step_up_required`). Fixed once, at the root, rather than at the ~580
+call sites that print `e.message`: a helper every page must adopt leaves the
+defect in every page that has not, and in every page written tomorrow.
+
+**The rule, `readRefusal(raw)` → `{ message, code }`.** A code is a string
+matching `REFUSAL_CODE = /^[a-z][a-z0-9_]*$/`.
+
+- `message` = `error.message` (object) → the body's string `message` →
+  `detail.message` (object) → a SENTENCE-shaped `error` → a string `detail`
+  → a CODE-shaped `error` → the caller's own `statusText` / fallback.
+- `code` = the body's string `code` → `error.code` → `detail.code` → a
+  code-shaped string `error` → a code-shaped string `detail`. A sentence in
+  `error` never becomes a code; a numeric `code` is dropped.
+- `'timeout'` is never an HTTP `e.code`. It belongs to `timeoutError()`, and
+  `_analyticsRead` stops retrying on it. The task said no Worker route
+  returns `error: 'timeout'`; measured, `routes/competitors.ts:374` can
+  (`services/webFetch.ts` sets `page.error = 'timeout'` on an abort). So the
+  reservation is enforced in `readRefusal`, not asserted of the Worker.
+- `e.data` and `e.field` are exactly what they were, so every site that read
+  a code off `e.data` keeps working.
+
+**Why a code-shaped `error` is demoted below `detail` but a sentence one is
+not.** The census of every Worker error body (5,416 `c.json` sites, parsed
+with the TypeScript compiler) found 13 bodies pairing a code-shaped `error`
+with a human `detail` (`'SAM cannot exceed TAM'`), where `detail` must win —
+and 7 sites, 13 call paths, pairing a SENTENCE `error` with a raw technical
+`detail` (`'Stripe refund failed'` beside Stripe's JSON). The task's literal
+"string `detail` before string `error`" would have replaced *Stripe refund
+failed* with a JSON fragment on every Stripe refund, billing and promo
+failure. No body pairs a sentence `error` with a `message` or an object
+`detail`, so `message` first is safe.
+
+**Nine roots, not one.** Eight raw-`fetch` helpers in `api.js`
+(`downloadFinancialModelXlsx`, `adminFormPreviewBlob`,
+`adminTemplateStorePreviewPdfBlob`, `downloadFundLpa`, `orderInvoiceBlob`,
+`esignFetchByToken`, `esignSubmitSignature`, `esignReject`) each built their
+own Error from a body, in three different orders, and none read `message`.
+All nine now call `readRefusal`, each keeping its own fallback sentence; a
+single-definition assertion over `codeOnly(api.js)` refuses a second
+`err?.error ||` / `err?.detail ||` chain.
+
+**What shipped, in four commits.**
+1. `admin_deployments.ts`'s three refusals carried the branch code (`'fr'`)
+   in the `code` key, so `e.code` would have read `'fr'`. The key is now
+   `branch`; `admin_licences_deploy.test.ts` re-aimed at `body.branch`, its
+   message unchanged.
+2. `readRefusal`, `request()`, the eight helpers, and
+   `frontend/test/api_refusal_d258.test.mjs` driving the real `request()`
+   over the body table above.
+3. Every site that matched a code through the message moved onto `e.code`:
+   IntegrationsPage (`slack_webhook_unconfigured` — it would otherwise have
+   BROKEN, since `telegram_join.ts` sends a `message` that now wins),
+   PublicJobDetailPage's seven-key map (likewise: `jobs_public.ts:134` sends
+   a raw R2 `message`), AdminX's two, PitchDeckPage, ProjectDetail,
+   ContactPage, InviteRsvpPage, PublicEventDetailPage, MarketReading,
+   ZoneDraft and TotpEnrollment. AdminTelegram's eight catches read `e.body`,
+   which NOTHING in the SPA sets — so a PII-lint refusal showed "Send failed"
+   and dropped its findings; they read `e.code`, `e.data` and `e.message`
+   now. RecoverPage's `'not_enough_trusted_contacts'` match was deleted: no
+   route sends that code, and the route is constant by design
+   (anti-enumeration). BranchAccounts needed no change — the root fixes it.
+   3b is the guard, `frontend/test/code_through_message_d258.test.mjs`: no
+   regex holding a snake_case token is `.test()`ed against a message, no
+   `.message ===` compares a snake_case literal, no `.message?.includes()`
+   takes one, and nothing reads `e.body`. Measured before the fix: seven
+   sites, so it starts at zero with no baseline. Its first draft reported 11
+   false positives (a variable later compared to a code, a value that is not
+   a message); `stillTheValue` narrows the match to the message itself.
+   3b also fixed BoardDialogs and RoadmapDialogs, whose 409 handlers read
+   `cause.body` first — nothing sets it, so the WIP-limit and cycle refusals
+   fell through to the generic message.
+4. **A mistyped authenticator code signed the person out.** `request()`'s 401
+   branch clears the token and redirects to /login for any non-`/auth/` path
+   on a protected page, and FOUR `/api/settings` routes answered a wrong TOTP
+   code with 401 — `/totp/re-enrol/confirm`, `/totp/enrol/confirm`,
+   `/totp/repair`, and `/totp/recovery-codes/regenerate`, which the plan's
+   three missed. All four now send one body, `{ error: 'invalid_code',
+   message: <sentence> }`, with 400, and the dev FastAPI mirror raises the
+   same body as `detail`. The four routes are on `getCurrentUser`'s relock
+   allowlist, so a relocked account still reaches re-enrolment and gets the
+   400, not a relock refusal — asserted.
+
+**Deviations, each measured.** IncorporatePage's code match moved onto
+`e.code` rather than staying a comment fix. ApiBridgePage is allowlisted in
+the guard: the flagged chain sits inside the code sample the page shows
+developers, which is text and not code this app runs. SettingsPage's remove
+receives a raw Response and now reads the refusal's body at all;
+ProjectDetail's Crunchbase catch reads `e.code` and drops its regex arm.
+ContentPage's comment is moot (it reads `e.data`). The D205 test
+(`hq_support_answer_d205`) gained a D258 fixture rather than a loosened
+assertion. Sentence matches that are verified against their route
+(RegisterPage `/already registered/`, `'TOTP required'` ×4, partner
+`isNoPartnerProfile`) are left alone. CompanyCandidate is allowlisted and
+filed with task 435: `POST /competitors/fetch` answers 200 `{ok:false,
+error:<code>}`, and the Worker should refuse instead. Two comments that describe the old precedence sit in files an open PR
+held (#804) and were filed rather than edited.
+
+**Filed, not folded in.**
+- Task 442: `/totp/recovery-codes/regenerate` writes only
+  `users.totp_recovery_codes`, while `/totp/repair` reads the stale
+  `auth_totp.recovery_hashes` and mirrors those OLD hashes back — so
+  regenerate-then-repair revives the discarded codes and kills the new ones.
+  The fix is for regenerate to call `updateRecoveryHashes`. (The route's
+  header also says 8 codes; it generates 10.)
+- 28 hand-written 401s outside `routes/auth*` (deck_share_actions 9,
+  notifications 8, realtime 2, integrations 2, customer_chat 2, and one each
+  in votes, jobs, github, events and assessment) need classifying for the same
+  sign-out class: a 401 is right only when the session is genuinely gone.
+- About 79 bodies put raw provider or exception text where a reader now
+  sees it (Stripe's JSON in `billing.ts`, `payments.ts`, `orders.ts`,
+  `legal.ts`, `admin_stripe.ts`; `String(e?.message)` in `imports.ts`,
+  `integrations.ts`, `auth_sms.ts`, `auth_recover.ts`, `decks.ts`,
+  `admin_publications.ts`, `admin_x.ts`, `trust.ts`; `jobs_public.ts:134`;
+  deck `pdf_render_failed`; legal `order_failed`) — no worse for a reader
+  than a code, more useful to support, and a Worker defect either way.
+- Four bodies send a technical `error` beside a human `detail`
+  (`public.ts:763/779/834`, `founder_validate.ts:882`); no client order can
+  fix them. Bare-code refusals remain in `admin_articles.ts` and in
+  `auth_recover`'s trusted-contact codes.
+- The `mapError` comment says 31 call sites; there are 368.
+  `PitchDeckPage:442` passes an object to `reportError`. `CapTablePage.jsx`
+  cites the dev backend. The settings TOTP routes call no
+  `recordSecurityEvent`, so a wrong code there is not on H23's ledger.
+
+**No migration** — 297 stays free. **No new `/api/*` method.**
+
+**VERIFIED.** On the tree as landed, cut from `main` at `78796f234` with the
+six D258 commits cherry-picked (zero conflicts; `docs/` rebuilt once by the
+root `npm run build`). It was first verified on `b556685bc`; `main` then took
+two merges (#807, #808), so it was re-landed and re-run rather than carried
+across, and every figure below is from that second run:
+- `npm run test:drift` exits 0, read as the exit code from a redirected log:
+  frontend 3322, worker 4378 (4375 pass plus the 3 pre-existing
+  environment-gated skips), retention 112, zero `not ok`. Frontend reads four
+  higher than the first run's 3318 because #807 and #808 each added tests to
+  `main`; none of the four is D258's, and nothing fell. Every test in the
+  three new files is confirmed passing by name: `api_refusal_d258` (17),
+  `code_through_message_d258` (6), `totp_wrong_code_d258` (10).
+- Both typechecks, `lint:undef`, `check-api-drift`, `check-decision-ids`,
+  `check-folder-docs`, `check-unused-imports`, `check-react-hook-imports` and
+  `check-docs-fresh --strict` exit 0.
+- Mutations, each counted caught only on a non-zero exit and a `not ok`,
+  every file restored from a snapshot and verified by sha256: commit 2's
+  precedence, code-shape, `'timeout'` reservation and single-definition
+  assertions; commit 3's migrated sites and the guard's rules; commit 4's
+  eight — each of the four TOTP routes put back to 401, the message made
+  code-shaped, enrol/confirm made to stop validating, one route given its own
+  sentence, and the code renamed. All caught.
+- No migration. The highest on disk is **296**; this PR takes none. Decisions
+  on `main` end at **D282**, and D258 sits in numeric position between D257
+  and D259.
+
 ## D259
 
 **HQ's cross-host support session (D120) gets its screen. A Support control
