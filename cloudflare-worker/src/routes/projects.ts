@@ -34,6 +34,7 @@ import {
 } from '../services/marketAssumptions';
 import { fillsForRow, filledColumns } from '../services/fills/provenance';
 import { refuse } from '../util/refusal';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const projects = new Hono<{ Bindings: Env }>();
 
@@ -182,6 +183,117 @@ export function normalizeCofounderDecisionMeta(raw: unknown): { value?: string |
   }
   const out = JSON.stringify(obj);
   if (out.length > 8000) return { error: 'cofounder_decision_meta too large' };
+  return { value: out };
+}
+
+// D353 — lazy bootstrap for `projects.icp_definition_meta`. Migration 308 is
+// the declaration and the canonical apply path; this is the safety net for a
+// cold isolate on a database the ledger has not reached (D235). Readiness is
+// cached per binding, never in a module-level boolean.
+const _icpDefinitionReady = new WeakMap<object, true>();
+export async function ensureProjectIcpDefinitionColumn(env: Env): Promise<void> {
+  const key = bindingKey(env);
+  if (_icpDefinitionReady.has(key)) return;
+  try { await env.DB.exec(`ALTER TABLE projects ADD COLUMN icp_definition_meta TEXT`); } catch (_e) { /* duplicate column on re-run is fine */ }
+  _icpDefinitionReady.set(key, true);
+}
+
+/**
+ * The ICP definition's fields, exactly the Customer Discovery canvas's five
+ * wizard steps. `choice` fields accept only the canvas's options; `text` and
+ * `area` are trimmed and capped. A key not listed here is dropped, so the blob
+ * can never grow a field no screen reads.
+ */
+export const ICP_FIELDS: Record<string, { step: 1 | 2 | 3 | 4 | 5; kind: 'choice' | 'text' | 'area'; options?: readonly string[]; optional?: boolean }> = {
+  type: { step: 1, kind: 'choice', options: ['B2B', 'B2C', 'Both'] },
+  industry: { step: 1, kind: 'text' },
+  size: { step: 1, kind: 'choice', options: ['1–20 employees', '20–50 employees', '50–500 employees', '500+ employees'] },
+  persona: { step: 1, kind: 'text' },
+  geo: { step: 1, kind: 'text' },
+  pain1: { step: 2, kind: 'area' },
+  pain2: { step: 2, kind: 'text', optional: true },
+  pain3: { step: 2, kind: 'text', optional: true },
+  alternative: { step: 2, kind: 'text' },
+  whyFail: { step: 2, kind: 'area' },
+  outcome: { step: 3, kind: 'area' },
+  trigger: { step: 3, kind: 'text' },
+  metric: { step: 3, kind: 'text' },
+  urgency: { step: 4, kind: 'choice', options: ['Active — looking now', 'Aware — not yet looking', 'Latent — does not know it is a problem'] },
+  budget: { step: 4, kind: 'choice', options: ['Low — free or near-free', 'Mid — $200/mo per team ceiling', 'High — budget exists, needs a case'] },
+  objection: { step: 4, kind: 'area' },
+  valueProp: { step: 5, kind: 'area' },
+  differentiator: { step: 5, kind: 'area' },
+  tone: { step: 5, kind: 'choice', options: ['Confident', 'Technical', 'Friendly', 'Premium'] },
+};
+const ICP_TEXT_MAX = 200;
+const ICP_AREA_MAX = 600;
+
+/** Required fields the blob does not fill — confirming needs none missing. */
+export function icpMissingFields(fields: Record<string, string>): string[] {
+  return Object.entries(ICP_FIELDS)
+    .filter(([k, spec]) => !spec.optional && !(fields[k] || '').trim())
+    .map(([k]) => k);
+}
+
+/**
+ * Validate + canonicalise the ICP definition (D353). `previous` is the stored
+ * column, so `version`, `confirmed_at` and `updated_at` come from the server's
+ * own record and clock — a request cannot set them. Confirming requires every
+ * non-optional field; a draft may be partial. `null` / '' clears the store.
+ */
+export function normalizeIcpDefinitionMeta(
+  raw: unknown,
+  previous: unknown,
+  now: string,
+): { value?: string | null; error?: string; message?: string } {
+  if (raw === null || raw === undefined || raw === '') return { value: null };
+  let obj: unknown = raw;
+  if (typeof raw === 'string') {
+    if (raw.length > 16000) return { error: 'icp_definition_too_large', message: 'The ICP definition is too long to save. Shorten a few answers and try again.' };
+    try { obj = JSON.parse(raw); } catch { return { error: 'icp_definition_invalid', message: 'The ICP definition could not be read. Reload the page and try again.' }; }
+  }
+  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
+    return { error: 'icp_definition_invalid', message: 'The ICP definition could not be read. Reload the page and try again.' };
+  }
+  const o = obj as Record<string, unknown>;
+  const status = o.status === 'confirmed' ? 'confirmed' : o.status === 'draft' ? 'draft' : null;
+  if (!status) return { error: 'icp_definition_invalid', message: 'The ICP definition must be saved as a draft or confirmed.' };
+  const stepN = Number(o.step);
+  const step = Number.isInteger(stepN) && stepN >= 1 && stepN <= 5 ? stepN : 1;
+
+  const inFields = o.fields && typeof o.fields === 'object' && !Array.isArray(o.fields) ? o.fields as Record<string, unknown> : {};
+  const fields: Record<string, string> = {};
+  for (const [k, spec] of Object.entries(ICP_FIELDS)) {
+    const v = inFields[k];
+    if (v === undefined || v === null) continue;
+    const t = String(v).trim();
+    if (!t) continue;
+    if (spec.kind === 'choice') {
+      if (!(spec.options || []).includes(t)) {
+        return { error: 'icp_definition_invalid_choice', message: `That answer is not one of the options for "${k}". Pick one of the listed choices.` };
+      }
+      fields[k] = t;
+    } else {
+      fields[k] = t.slice(0, spec.kind === 'area' ? ICP_AREA_MAX : ICP_TEXT_MAX);
+    }
+  }
+  if (status === 'confirmed') {
+    const missing = icpMissingFields(fields);
+    if (missing.length) {
+      return { error: 'icp_definition_incomplete', message: `The ICP definition cannot be confirmed yet: ${missing.length} required answer${missing.length === 1 ? ' is' : 's are'} still empty.` };
+    }
+  }
+
+  // The server's own record, never the request's.
+  let prev: Record<string, unknown> = {};
+  if (typeof previous === 'string' && previous) {
+    try { const p = JSON.parse(previous); if (p && typeof p === 'object' && !Array.isArray(p)) prev = p; } catch { /* unreadable previous is no previous */ }
+  }
+  const prevVersion = Number.isInteger(Number(prev.version)) && Number(prev.version) > 0 ? Number(prev.version) : 0;
+  // A version is a CONFIRMATION: it moves only when a definition is confirmed.
+  const version = status === 'confirmed' ? prevVersion + 1 : prevVersion;
+  const confirmedAt = status === 'confirmed' ? now : (typeof prev.confirmed_at === 'string' ? prev.confirmed_at : null);
+  const out = JSON.stringify({ status, step, fields, version, confirmed_at: confirmedAt, updated_at: now });
   return { value: out };
 }
 
@@ -704,6 +816,14 @@ projects.put('/:id', async (c) => {
     if (meta.error) { await sql.end(); return c.json({ error: meta.error, code: 'invalid_cofounder_decision_meta' }, 400); }
     data.cofounder_decision_meta = meta.value;
   }
+  // D353 — the ICP definition. Normalised against the STORED row so version
+  // and timestamps are the server's; a refusal carries our sentence.
+  if (data.icp_definition_meta !== undefined) {
+    await ensureProjectIcpDefinitionColumn(c.env);
+    const meta = normalizeIcpDefinitionMeta(data.icp_definition_meta, (project as any).icp_definition_meta, new Date().toISOString());
+    if (meta.error) { await sql.end(); return refuse(c, 400, { code: meta.error, message: meta.message || 'The ICP definition was not saved.' }); }
+    data.icp_definition_meta = meta.value;
+  }
   // Task #31 — Product demo source columns are owner-editable (founders
   // manage their own demo media on the project detail page). Trim URLs/text;
   // explicit '' / null clears the column.
@@ -735,7 +855,7 @@ projects.put('/:id', async (c) => {
       return c.json({ error: 'invalid_market_sizing', detail: 'SOM cannot exceed SAM' }, 400);
     }
   }
-  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'som', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'use_of_funds_meta', 'incorporation_meta', 'cofounder_decision_meta', 'data_room_url', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status', 'product_demo_video_url', 'product_demo_live_url', 'product_demo_caption', 'product_demo_screenshot_url', 'website'];
+  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'som', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'use_of_funds_meta', 'incorporation_meta', 'cofounder_decision_meta', 'icp_definition_meta', 'data_room_url', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status', 'product_demo_video_url', 'product_demo_live_url', 'product_demo_caption', 'product_demo_screenshot_url', 'website'];
   // Normalise: coerce boolean → 0/1 for the NDA flag, trim URL, allow
   // explicit null to clear either field.
   if (data.data_room_nda_required !== undefined) {
