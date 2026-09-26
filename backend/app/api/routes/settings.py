@@ -968,6 +968,17 @@ def email_change_revoke(payload: _TokenPayload, session: Session = Depends(get_s
 
 # --- TOTP repair ------------------------------------------------------------
 
+# D258 — a wrong authenticator code is a 400, never a 401. The SPA's request()
+# reads any 401 from a non-/auth/ path as an expired session and signs the
+# person out, so a typo on /settings used to end the session it was typed in.
+# Same body as the worker (cloudflare-worker/src/routes/settings.ts,
+# WRONG_TOTP_CODE), shaped for FastAPI: readRefusal() in frontend/src/lib/api.js
+# takes the sentence from detail.message and the code from detail.code.
+_WRONG_TOTP_CODE = {
+    "code": "invalid_code",
+    "message": "That code didn't match. Check the time on your device and try again.",
+}
+
 
 class _TotpRepair(BaseModel):
     totp_code: str
@@ -985,7 +996,7 @@ def totp_repair(
     if not user.password_hash:
         raise HTTPException(status_code=400, detail="TOTP is not configured for this account")
     if not pyotp.TOTP(user.password_hash).verify(payload.totp_code or "", valid_window=1):
-        raise HTTPException(status_code=401, detail="Invalid current TOTP code")
+        raise HTTPException(status_code=400, detail=_WRONG_TOTP_CODE)
 
     new_secret = pyotp.random_base32()
     new_uri = pyotp.TOTP(new_secret).provisioning_uri(name=user.email, issuer_name="Axal VC StudioOS")
@@ -1194,7 +1205,7 @@ def regenerate_recovery_codes(
     if not user.password_hash:
         raise HTTPException(status_code=400, detail="TOTP is not configured for this account")
     if not pyotp.TOTP(user.password_hash).verify(payload.totp_code or "", valid_window=1):
-        raise HTTPException(status_code=401, detail="Invalid current TOTP code")
+        raise HTTPException(status_code=400, detail=_WRONG_TOTP_CODE)
     plain = [_generate_recovery_code() for _ in range(10)]
     hashes = [_hash_token(c) for c in plain]
     session.exec(
