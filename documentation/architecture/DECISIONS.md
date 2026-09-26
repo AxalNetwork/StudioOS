@@ -29673,11 +29673,12 @@ exists.
   persisting any draft with `drafted: false`, so no orphan `telegram_posts`
   or `x_posts` row is ever written for it. `previewAll` / `previewXAll`
   return it anyway, with `drafted: false` and the reason, for the page to
-  render — but `AdminX.jsx` and `AdminTelegram.jsx` need no edit this wave,
-  since neither currently reads a per-draft `drafted` flag; a page change
-  to surface the reason is filed for after Session 1's D258 (the shared
-  refusal-reading work) merges, so the two changes don't collide on the
-  same render logic.
+  render. **[Corrected by D330.]** This entry originally filed the page
+  change for after Session 1's D258 merged, reasoning the two would
+  otherwise collide on the same render logic — but D258 (#811) had already
+  merged before this PR (#817) was even opened, so the filing was stale on
+  arrival. D330 does the page change: `AdminX.jsx` and `AdminTelegram.jsx`
+  now read `drafted` and print the reason.
 - **"Quiet week"** (both files' public draft) now appears only when BOTH
   reads succeeded and both figures are below `K_MIN`. A failed read is
   reported as unreadable and never folds into the quiet state — the two
@@ -30174,6 +30175,51 @@ every `design/incoming` mention found the other three.
   #829, #832), with no conflict in any of them.
 - No migration, no route, no `api.js` method. Migration 307 and D306–D309 are
   unused, and 296 is the highest migration on disk.
+
+## D330
+
+**AdminX.jsx and AdminTelegram.jsx say why no draft was made.** Wave 8,
+Session 4, item 2. D301 (task 434, #817) fixed `runAggregator` and
+`runXAggregator` so a draft whose every figure line was dropped sets
+`drafted: false` and a reason, and is never persisted — but its own
+D-entry left the page-side fix filed for later, reasoning it would collide
+with Session 1's D258. That reasoning was already stale when D301 merged:
+D258 (#811) had landed before D301's PR was even opened. **[Corrected in
+D301's own entry above, in place, as this PR's first commit.]**
+
+**What changed.** Both pages already call the worker's existing
+`GET /aggregator/preview` route (`api.previewAggregator`) — `AdminX.jsx`'s
+`AggregatorTab` already did, for the Persist step's preview; `AdminTelegram.jsx`
+gained a matching Preview button and panel in its Drafts tab, since it had
+none. In both, a preview card whose `drafted === false` no longer renders an
+empty thread or body: it shows "No draft was made: `<reason>`." (or "no
+reason was given" if the worker sent none), and the persisted-drafts list
+below is unaffected — a `drafted: false` draft was never written there to
+begin with, so there is nothing to distinguish there.
+
+**Worker only in the sense that nothing worker-side changed.** Both routes
+and their `Count`/`reason` shape already existed from D301; this is the page
+half D301 deferred. No migration, no new route, no new `api.js` method.
+`frontend/src` moved, so `docs/` is rebuilt.
+
+### VERIFIED
+
+- New `frontend/test/admin_aggregator_drafted_d330.test.mjs`, 5 tests, over
+  `codeOnly` source (neither page takes `api` as an injectable prop, so
+  there is no seam for a live-response test without restructuring the page,
+  which is out of this task's scope): both pages branch on `d.drafted`;
+  both print the worker's `reason` with the same honest fallback; Telegram's
+  panel calls `previewAggregator` and stores the response; neither
+  not-drafted branch renders the empty `body_md`/`thread` fields.
+- 6 mutations run, 6 caught (non-zero exit plus a `not ok` line), each
+  restored from a sha256-verified `/tmp` snapshot. One escaped on the first
+  pass: removing only the FIRST of AdminX.jsx's two `d.drafted === false`
+  occurrences (the badge) left the second (the ternary) intact, so the
+  drafted-check assertion still passed. Fixed by mutating every occurrence,
+  not the code; the fix caught it and a rerun confirmed all six.
+- `npm run test:drift` exits 0. Both typechecks, `check-decision-ids`,
+  `check-folder-docs` and `check-api-drift` exit 0. Root `npm run build`,
+  then `node scripts/check-docs-fresh.mjs --strict`, exits 0.
 
 ## D331
 
@@ -30774,6 +30820,91 @@ have completed the Spin-Out Lab", a typed track record;
   card — the other twelve PNGs were left byte-for-byte as committed).
   `prerender-og --check`, `generate-og-images --check` and `validate-og-tags` pass.
 
+## D381
+
+**The Spin-Out Lab Workspace's three deltas: the header counts
+deliverables, "graduated" is apart from "exited", and the completed Week 1
+summary shows the founder's own record.** Session 10, item 2 (the C3 gap
+map's PR 3). No migration, no route, no new `api.js` method: every value
+below already had a store and a read.
+
+**The header.** The canvas draws a 22% ring beside "4 of 18 deliverables" —
+the ring IS that share (4/18). The shipped ring was days elapsed (and 100%
+in the admin preview), a different number under the same ring. It is now
+`deliverablePct(done, total)` over the same `countDeliverables` the
+scorecard uses (27 counted rows today, not the canvas's 18), with
+"N of M deliverables" beside it. The day count stays where it already was:
+the week chip and the segmented bar.
+
+**Graduated versus exited.** `users.is_incorporated` is set by two paths:
+`recordMilestone` when week 4 is met — whose only requirement is
+`incorporation_completed` — and the `/exit` escape hatch, which records no
+milestone. The Workspace read the flag alone, so a founder who quit in week
+2 saw "Graduated · Program complete · Incorporated". `labStanding` in the
+new `lib/labWeekSummary.js` reads the milestone, the signal `/graduates` and
+`/stats` already use. An exited founder now sees "Exited", "Left the
+programme in Week N", their week marked "Left" (not "Locked", not "Active"),
+no countdown and no upcoming-week previews. A graduate's view is unchanged.
+*Measured, not changed:* `featureUnlocked` still treats a graduate as
+having every tool, while every tool route is `labRoles`-guarded on
+`spinout_lab_active`, which graduation turns off — the gap map's "lab role
+gate" trap. That is a routing question outside this delta, filed below.
+
+**The Week 1 summary.** The canvas gives it four blocks. Three have a store
+and are read when the summary is opened (`WeekOneRecord`):
+- the startup record — the project `pickLabProject` chooses, with "created
+  · Day N" counted from the Lab start (and a date instead when the record
+  predates the Lab, never a negative day);
+- TAM / SAM from `projects.tam/.sam`, with what they were derived from
+  (`GET /projects/:id/market-assumptions`, migration 247). The canvas cites
+  Gartner and CB Insights under them; nothing stores a citation against the
+  figure, so "Cited sources" reads Not recorded with that reason;
+- interviews from `GET /progress/discovery/:id`, "Key insight" being the
+  first logged pain — the field the Discovery page leads with. No pain
+  reads "No pain logged", never a line borrowed from the notes.
+The fourth, "Personal advisor: Week 1 question bank complete", is Eadwyn.
+Its ledger (D350's `/advisor/progress`) counts answers against the
+questions visible now and keeps no record of which week's bank was
+finished, so the row is titled "Eadwyn · Week 1 questions" and rendered Not
+recorded with that sentence. Each of the three reads has its own
+`Unreadable` with a retry; a failed interview read never falls through to
+"No interviews logged yet". Weeks 2–4 keep their deliverables-and-tools
+summary: the canvas draws rich content for Week 1 only.
+
+**The admin journey preview** (`AdminSpinoutJourneyPreview.jsx`) renders the
+Workspace in two stages. Both now pass `WEEK1_FIXTURE`, which the record
+labels "Sample data" on screen, so opening the preview never reads the
+admin's own projects as though they were a founder's.
+
+**Filed, not fixed:** the Lab tool routes' guard for graduates (above); the
+canvas's per-week "Completed <date>" meta already reads milestone
+timestamps and is unchanged.
+
+### VERIFIED
+
+- `spinout_workspace_deltas_d381.test.mjs` (new, 16 tests) RENDERS the
+  Workspace and the Week 1 record with `react-dom/server` and asserts on
+  what a founder reads: the header count and the ring (read off its own
+  element — the page's run-on text joins "Day 10" and "0%" into "100%"),
+  graduated / exited / active, the record's blocks, each Not recorded, the
+  preview's sample label, plus the pure helpers. It slices the canvas at
+  both ends of the Week 1 summary and asserts each element claimed.
+- Seventeen mutations, each anchor unique, bytes proven changed, restored
+  from a sha256-checked snapshot and re-run green: `labStanding` ignoring
+  the milestone; the workspace reading the bare flag; the ring counting
+  days; the header losing its total; the exited badge saying Graduated; the
+  record unmounted; a failed interview read shown as empty; an insight
+  borrowed from the notes; an unsized market printing $0; the canvas's
+  citation drawn; the Eadwyn row claiming completion; a preview stage
+  dropping its fixture; `recordDay` counting a record older than the Lab;
+  an interview count drawn with no project; `derivationParts` returning an
+  empty list; the exited week marked Locked; the live record not reading
+  assumptions. **Two escaped on the first run** — the preview check matched
+  the other stage's line, and the "Left" check matched the header sentence
+  rather than the week's badge. Both assertions were fixed (every preview
+  mount must pass the fixture; "Left" is read off the week's own card), not
+  the code: 17 of 17 caught.
+
 ## D390
 
 **Retiring `/partner/operations/*`, part 1a: the two jobs that existed
@@ -30960,6 +31091,142 @@ included:
 - scope defaulted to "within";
 - a score printed without its source;
 - the old footnote, columns, comment and Markets blurb restored.
+
+## D392
+
+**The graduated advisor canvases catch up with the stores: Introductions
+shows both sides of the consent, `/advisor/research` lands on the Research
+bucket, the Markets gap card stops describing the signals feed, and the
+Expertise zones get the canvas's filter rows.** Session 11, item 3 (the gap
+map's PR 3). No migration, no route, no new `api.js` method. The canvas moves
+the gap map listed were already done by D305 (Research, Network and Expertise
+are in `integrated/`, Expertise normalised), so this PR moves no file.
+
+**Network · Introductions (AN2).** The zone's docblock, its stated limit, its
+`Gated` chip (relabelled "Awaiting you"), its `Made` chip (prose) and its
+`Consent log` op (prose) all rested on one premise: that
+`GET /introductions/propositions` returns only the caller's own row. It has
+not done that since the partner side's consent work. `propositionDto` returns
+`counterpart_status` and `counterpart_responded_at` from the mirror row, and
+the partner `IntroductionsPanel` draws the gate from them. The advisor zone
+now uses the panel's exported `stateOf` and `consentRecord`, so one
+introduction reads the same on both licences:
+- the states are Requested · One side · Both agreed · Made, with Declined and
+  Lapsed terminal;
+- a proposition with no mirror row reads "has not been asked", never "not
+  answered".
+
+The four chips are live:
+- `Gated` is Requested or One side;
+- `Made` is `intro_terms.made_at`;
+- `Declined` is either side declining.
+
+`Consent log` is a handler that opens the panel's `ConsentLog`, now exported
+(the only edit to that file).
+
+`Made` needed a way to be recorded, or the chip would select nothing on every
+advisor account. `PUT /propositions/:uid/terms` writes only the caller's own
+row and is not role-gated, so once both sides have agreed the card offers
+"Record as made". It asks for the date, favour or referral (a referral must
+state its fee, as the store's CHECK requires) and an optional outcome. The
+heading's "a decline is never reported back" is corrected: the counterpart's
+answer is part of the caller's own record, and a decline still sends no
+notification. AN1 (the advisor's relationship book) and AN3 stay unbuilt. The
+book routes are owner-scoped to the partner, and giving an advisor one is a
+decision (listed below), not a gap.
+
+**Research.**
+- *`/advisor/research` → `/research`, `/advisor/research/market` →
+  `/research/markets`.* Both went to `/signals`, repointed there when the
+  signals feed was the advisor's only live research surface (724dfc9f). The
+  canvas-built Research bucket is now that surface, and `/research/markets` is
+  the comparable-readings zone AR3 draws. Both targets' guards admit
+  `advisor`. `research_tabs_withdrawn` and `research_market_funds_retired`
+  are re-aimed; they still pin the property they were written for, that the
+  destination admits the advisor, read from its guard. No sidebar row points
+  at either path (a test pins that).
+- *`RESEARCH_STORE_GAPS.markets`.* The card said the page "reads instead ...
+  the signals feed". `/research/markets` has been `MarketZone`, comparable
+  readings with a run date and an age gate (migration 223), since that zone
+  was rebuilt. The missing store it names, a saved market deep-dive, is still
+  missing and is still what the founder and investor canvases narrow. So the
+  entry is corrected, not deleted, and gains `roles: ['founder', 'investor']`.
+  `ResearchWorkspace` draws it, and reports it on the rail, only for a licence
+  it names. Partner and advisor, whose canvases draw exactly the readings the
+  zone holds, no longer see it. The zone intro's "Signals from the sectors
+  you work in" is corrected with it. `research_zone_states.test.mjs` pinned
+  the rendered variable by name; it is re-aimed at `gap`, and the four
+  properties it guards are unchanged.
+
+**Expertise filter rows (AX1–AX4).** The canvas draws four chips on each of
+five artboards. No `expertise/*` row existed, and the filters guard's canvas
+regex skipped the file. The regex now includes it, and the advisor profile's
+`zones`/`mounted` move from 12 to 16. `expertise/visibility` is excluded as a
+refusal, like `network/organizations`: its page is the gap card and there is
+nothing to narrow. Twelve chips are live and two are unbuilt with their
+reason; the other two artboards' four "All" chips are the unfiltered views.
+- *Profile.* `All fields`, `Gaps only`, `Match-critical`.
+  - `Match-critical` is the completeness meter's own list, now a keyed
+    `MATCH_FIELDS` that the meter and the chip both read, so they cannot
+    disagree. `advisor_expertise_canvas` is re-aimed to find it there and
+    still refuses a field counted twice.
+  - `Gaps only` reads the saved record, not the draft, so a field does not
+    vanish while someone types into it.
+  - `Public preview` stays unbuilt: no public advisor profile page exists.
+- *Services.* Fixed · Package · Retainer, over `kind` (migration 203).
+- *Proof.* Attested · Awaiting consent · Self-stated: the three counts the
+  strip above the list already shows, as views.
+- *Thinking.* Published · Drafts, the shelf pill's own two states. `Essays`
+  stays unbuilt, since an article records no kind.
+
+Each zone's toolbar now sits above `ZoneBody` (as Introductions' already
+did), and each export takes the narrowed rows. `profile_zone_actions`'s
+advisor `handlers` count moves 9 → 10, for Consent log.
+
+**Two honesty fixes in the same zones.** The Proof strip's "Credential
+verified" tile printed a bare "—"; it now reads Not recorded. Thinking printed
+`views ?? 0` and `word_count || 0`. A published piece whose counter did not
+come back is now Not recorded, and a draft reads "Not public yet" instead of
+a dash.
+
+**ROUTE_MAP.** The Network and Research rows (the gap map's 339/340) record
+the above. The Cohorts row (its 132) said `/guidance` and `/calendar` "state
+their gap"; both have been live since migration 212 and the Calendar join.
+`PROFILE_ROUTING.md` is regenerated.
+
+**Decisions still missing, named rather than guessed:**
+- the advisor relationship book (AN1/AN3: an advisor-owned book, or a grant
+  onto a partner's);
+- Visibility impressions (an impression pipeline, not a table);
+- whether `Public preview` means a public advisor profile route.
+
+**Verification.** New test: `frontend/test/advisor_canvases_graduate_d392.test.mjs`
+(9). Re-aimed: `research_tabs_withdrawn`, `research_market_funds_retired`,
+`research_zone_states`, `advisor_expertise_canvas`, `profile_zone_filters`
+and `profile_zone_actions`. Mutations: 29 of 29 caught across those seven
+files, each with a non-zero exit and a `not ok` line, restored from a
+sha256-checked snapshot.
+
+One defect got past the first draft's test and was caught by `lint:undef`
+inside the drift run instead. The Consent log modal was mounted twice: once
+in the zone, where it belongs, and once in the made form, where `logOpen` does
+not exist. The test had asserted only that the mount appeared somewhere in the
+file. It now requires the mount inside `IntroductionsZone` and nowhere before
+it, and both directions (mounted in the form, missing from the zone) are among
+the 29.
+
+The mutations included:
+- the one-sided chip restored, and the consent record dropped;
+- "Record as made" hidden, or offered after a decline;
+- `Gated` widened to Both agreed, and `Made` read from `status`;
+- the old relabel, prose and signals claims restored;
+- the role scope dropped;
+- both redirects pointed back at `/signals`;
+- `Match-critical` widened to everything, and an empty list counted as
+  filled;
+- an unfiltered draw or export, a key typo, and an unwired chip row;
+- the dash and the zero fallback restored;
+- `Essays` made live, and Visibility un-excluded.
 
 ## D410
 

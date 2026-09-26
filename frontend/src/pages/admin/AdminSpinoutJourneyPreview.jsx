@@ -43,6 +43,18 @@ const WORKSPACE_STATE = {
   unlocked_features: [],
 };
 
+// The Week 1 summary's record for the preview (D381). The real Workspace reads
+// the founder's project, assumptions and interviews; the preview must read no
+// one's, so it hands the component this sample, which the page labels as such.
+const WEEK1_FIXTURE = {
+  project: { name: 'Sample Co', created_at: '2026-07-02 10:00:00', tam: 2400000000, sam: 340000000 },
+  assumptions: { assumptions: { methodology: 'Bottom-up', category: 'Workflow automation', geography: 'Global' } },
+  interviews: [
+    { id: 1, name: 'Interviewee A', date: 'Jul 2', insight: 'Current tools do not handle async workflows' },
+    { id: 2, name: 'Interviewee B', date: 'Jul 3', insight: null },
+  ],
+};
+
 const GRADUATION_STATE = {
   active: false,
   admitted: true,
@@ -237,10 +249,10 @@ export default function AdminSpinoutJourneyPreview() {
       );
       break;
     case 'workspace':
-      content = <SpinoutLabWorkspace state={WORKSPACE_STATE} previewAllUnlocked />;
+      content = <SpinoutLabWorkspace state={WORKSPACE_STATE} previewAllUnlocked week1Fixture={WEEK1_FIXTURE} />;
       break;
     case 'graduation':
-      content = <SpinoutLabWorkspace state={GRADUATION_STATE} />;
+      content = <SpinoutLabWorkspace state={GRADUATION_STATE} week1Fixture={WEEK1_FIXTURE} />;
       break;
     case 'marketing':
     default:

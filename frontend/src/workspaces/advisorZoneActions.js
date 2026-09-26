@@ -170,9 +170,13 @@ export const ADVISOR_ZONE_ACTIONS = {
     { label: 'Add person', unbuilt: 'an advisor’s book is built from accepted introductions, not typed in' },
     { label: 'Export', kind: 'export' },
   ],
+  // `Consent log` IS A HANDLER (D392), for the reason the partner row gives:
+  // the consents ARE the log — one row per side, each with its own date — and
+  // the response has carried the counterpart's since the partner side's work.
+  // The zone opens the partner panel's own `ConsentLog` over its rows.
   'network/introductions': [
     { label: 'New introduction', unbuilt: 'introductions arrive as propositions; none is composed here' },
-    { label: 'Consent log', unbuilt: 'consent is recorded per introduction, not as a log' },
+    { label: 'Consent log', kind: 'handler', handler: 'consentLog' },
     { label: 'Export', kind: 'export' },
   ],
 
