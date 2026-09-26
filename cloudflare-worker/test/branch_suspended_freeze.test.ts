@@ -280,6 +280,9 @@ test('every gated write sits AFTER its own admin gate, in every file', () => {
     'cloudflare-worker/src/routes/admin_events.ts',
     'cloudflare-worker/src/routes/admin_jobs.ts',
     'cloudflare-worker/src/routes/admin_circles.ts',
+    // D303 — Wellbeing's three publish-shaped writes: a new curated resource,
+    // restoring a hidden expert to the directory, and verifying one.
+    'cloudflare-worker/src/routes/wellbeing.ts',
     // D260 — the admin acts on an account's access: KYC approve and reject,
     // the grant of limited access, Lab admission and the application decide.
     'cloudflare-worker/src/routes/admin.ts',
@@ -323,8 +326,9 @@ test('every gated write sits AFTER its own admin gate, in every file', () => {
   }
   // A floor, so deleting gates cannot quietly shrink what this covers.
   // D260 raised it from 11: two KYC verdicts, the access grant, Lab admission
-  // and the application decide.
-  assert.ok(checked >= 16, `only ${checked} gated writes were examined; the four lanes, seven community writes and five access writes is 16`);
+  // and the application decide. D303 raised it from 16: Wellbeing's new
+  // resource, its restore-from-hidden and its verify.
+  assert.ok(checked >= 19, `only ${checked} gated writes were examined; the four lanes, ten community writes and five access writes is 19`);
 });
 
 test('a suspended branch can still TAKE DOWN what it published', () => {
@@ -340,6 +344,11 @@ test('a suspended branch can still TAKE DOWN what it published', () => {
       ["adminJobs.post('/:id/reject'", "adminJobs.post('/:id/unpublish'"]],
     ['cloudflare-worker/src/routes/admin_circles.ts',
       ["adminCircles.post('/:id/unpublish'", "adminCircles.delete('/:id'"]],
+    // D303 — deleting a resource, hiding an expert (takedown) and removing an
+    // expert's verification are the mirror image of the three gated writes.
+    ['cloudflare-worker/src/routes/wellbeing.ts',
+      ["wellbeing.delete('/resources/:id'", "wellbeing.post('/admin/experts/:uid/hide'",
+        "wellbeing.post('/admin/experts/:uid/verify'"]],
   ];
   for (const [f, handlers] of cases) {
     const src = read(f);
@@ -351,6 +360,14 @@ test('a suspended branch can still TAKE DOWN what it published', () => {
         .map((m) => src.indexOf(m, at + h.length))
         .filter((n) => n > 0);
       const body = src.slice(at, next.length ? Math.min(...next) : src.length);
+      if (f.endsWith('wellbeing.ts') && /experts\/:uid\/(hide|verify)/.test(h)) {
+        // These two handlers carry the gate CONDITIONALLY — hide is a takedown
+        // only when `hidden` is true, verify only when `verified` is false — so
+        // the file-level check below is what proves the takedown branch is
+        // ungated; this handler-wide substring check would wrongly fail on the
+        // gate that guards the OTHER branch.
+        continue;
+      }
       assert.ok(
         !body.includes('requireBranchNotSuspended'),
         `${f}: ${h} is a TAKEDOWN and must not be frozen — a branch that cannot `
@@ -358,4 +375,11 @@ test('a suspended branch can still TAKE DOWN what it published', () => {
       );
     }
   }
+  // The conditional takedown branches, asserted directly instead: the gate
+  // must be reachable only through the publish-shaped condition.
+  const wb = read('cloudflare-worker/src/routes/wellbeing.ts');
+  assert.match(wb, /if \(!hidden\) await requireBranchNotSuspended\(c\)/,
+    "wellbeing.ts: hiding an expert (a takedown) must not require an unsuspended branch — only un-hiding, which restores it, may");
+  assert.match(wb, /if \(verified\) await requireBranchNotSuspended\(c\)/,
+    'wellbeing.ts: removing verification (a takedown) must not require an unsuspended branch — only verifying, which publishes it, may');
 });
