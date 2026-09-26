@@ -30856,6 +30856,80 @@ separate D304 decision.
   assertion, not the code: a founder's thrown 403 must stay a 403. It is
   caught now.
 
+## D391
+
+**The partner boards read what their zones read: Pipeline's leads come from
+the Leads zone's endpoint, Delivery's health section gets the artboard's
+columns, and four sentences the stores contradict are corrected.**
+Session 11, item 2. No migration, no route, no new `api.js` method.
+
+**Pipeline · Lead sources (`boards/partnerPipeline.js`).** The `/pipeline`
+board read `api.listNeeds()`, the raw marketplace list. Its footnote said a
+posted need has no source, no match score and no written read, so those
+columns were absent. `LeadsZone.jsx` has read `api.listPartnerLeads()` (`GET
+/partner/pipeline/leads`) since that route was written. The route returns
+the open needs this firm has not passed on, each with `source_label`, a
+`score` counted from the firm's own fit rules, and the receipts behind the
+score. The board now reads the same call, so board and zone show one list.
+
+The columns follow P3: Lead · Source · Match · Budget, plus a fifth headed
+**Receipts** rather than the canvas's "Read". Nothing stores a written read
+about a lead, and the receipts are the stored reason for the match. An
+excluded lead reads "Excluded" and quotes the firm's own rule, never a low
+number. An unscored lead reads absent. The summary drops a null
+`strong_fit_count` instead of printing 0. The footnote is the worker's
+`scoring_note`, which says what the score is counted from, or that nothing
+is scored because the firm has stated no rule.
+
+**Delivery · Engagement health (`boards/partnerDelivery.js`).** The section
+drew Client · State · Blockers · Why. Its footnote said "no satisfaction
+input exists anywhere in this product". Migration 232 holds a stated
+`scope_state` and a `satisfaction` score that cannot be saved without a
+`satisfaction_source`, and `GET /delivery/health` returns both. The section
+now has P4's columns: Client · Scope vs SOW · Flag · Satisfaction · Read.
+- An unassessed scope reads absent, never "Within".
+- A score always prints with where it was heard ("4.2 of five · said on the
+  QBR call").
+- A row with nothing recorded is not drawn as a rating.
+- The summary adds the drift and unassessed-scope counts the worker returns.
+- The footnote adds the worker's `satisfaction_note`, which explains why the
+  firm-wide average is withheld.
+
+**Delivery · Capacity.** The docblock said nothing records a cap, which
+stopped being true at migration 230. The firm states a cap, firm-wide or per
+person, and `/delivery/capacity` returns `over_committed_count` against it.
+The summary now prints "N over cap" when that count exists and nothing while
+it is null. So a firm that has stated no cap is never told "0 over", and the
+canvas's hard-coded 40 is still never used. The same stale sentence is
+corrected in `PartnerBucketRoutes.jsx`'s bucket comment.
+
+**Research (`boards/research.js`, shared by partner and advisor).**
+- *Library footnote.* "Nobody can send you a document" stopped being true
+  for an advisor at migration 218: a founder can open their data room to a
+  named advisor, and Client prep reads those files under the grant. The
+  footnote now says the library is only what you uploaded yourself. The
+  advisor's version adds where a founder's granted files are read, and that
+  Ask cannot cite them.
+- *Markets card.* It described "signals from the sectors you work in", but
+  the zone it opens is `MarketZone`: comparable ranges the firm enters
+  (migration 223), each with a run date and an age gate. The blurb now says
+  that. `RESEARCH_STORE_GAPS.markets` in `noStoreCopy.js` makes the same
+  stale claim on the zone itself and is item 3's.
+
+**Verification.** New test: `frontend/test/partner_boards_read_zones_d391.test.mjs`
+(8). It drives the real registries through `boardFor` with a fake `api` and
+real-shaped payloads, and pins what reaches a cell, a summary and a
+footnote. The two health column lists are compared with the canvas's own
+`<span class="th">` rows. Mutations: 19 of 19 caught, each with a non-zero
+exit and a `not ok` line, restored from a sha256-checked snapshot. They
+included:
+- reading `listNeeds` again;
+- an exclusion printed as a score, and an unscored lead printed as 0;
+- `?? 0` on the strong-fit and over-cap counts;
+- scope defaulted to "within";
+- a score printed without its source;
+- the old footnote, columns, comment and Markets blurb restored.
+
 ## D410
 
 **E-sign `/send` hardening: the signing link reaches only the recipient, a
