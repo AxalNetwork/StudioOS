@@ -45,10 +45,12 @@ let mailFails = false;
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: any, init?: any) => {
   const url = String(input?.url ?? input);
-  if (url.includes('oauth2.googleapis.com')) {
+  let host = '';
+  try { host = new URL(url).hostname; } catch {}
+  if (host === 'oauth2.googleapis.com') {
     return new Response(JSON.stringify({ access_token: 'test-access', expires_in: 3600 }), { status: 200 });
   }
-  if (url.includes('gmail.googleapis.com')) {
+  if (host === 'gmail.googleapis.com') {
     if (mailFails) return new Response('{"error":"down"}', { status: 503 });
     const body = JSON.parse(String(init?.body ?? '{}'));
     const raw = Buffer.from(String(body.raw).replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
