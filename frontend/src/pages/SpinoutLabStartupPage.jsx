@@ -77,6 +77,19 @@ function shortDate(iso) {
 // member of, in no guaranteed order — /spinout-lab/state carries no project
 // id to correlate, so select deterministically: own record first (founder_id
 // match), spin-out track preferred, oldest first. Never trust list order.
+/**
+ * Where "Co-founder agreement" goes for this viewer (D352). The Lab route is
+ * guarded by `labRoles(['admin'])`, which admits admins and any account with
+ * `spinout_lab_active === 1` (App.jsx). Anyone else — a founder who has left
+ * the Lab or never joined — keeps the legacy wizard, which admits founders and
+ * partners; sending them to the Lab route would lock them out.
+ */
+export function cofounderAgreementRoute(user) {
+  return user?.role === 'admin' || user?.spinout_lab_active === 1
+    ? '/spinout-lab/cofounder-agreement'
+    : '/incorporate/cofounder-agreement';
+}
+
 export function pickLabProject(projects, user) {
   if (!Array.isArray(projects) || projects.length === 0) return null;
   const ranked = [...projects].sort((a, b) => {
@@ -173,7 +186,7 @@ export default function SpinoutLabStartupPage() {
           : { chip: 'Not started', cls: CHIP.notStarted }),
       },
       {
-        label: 'Co-founder agreement', note: 'Draft & execute in Week 4', to: '/incorporate/cofounder-agreement', testid: 'readiness-cofounder-agreement',
+        label: 'Co-founder agreement', note: 'Draft & execute in Week 4', to: cofounderAgreementRoute(user), testid: 'readiness-cofounder-agreement',
         ...(wk(4) ? { chip: wk(4), cls: CHIP.locked, locked: true }
           : { chip: 'Not started', cls: CHIP.notStarted }),
       },
@@ -242,7 +255,7 @@ export default function SpinoutLabStartupPage() {
     activity.push({ title: nextAction.title, time: 'Upcoming', done: false });
 
     return { pct, weekDef, readiness, docs, docsReady, activity, nextAction };
-  }, [state, doneKeys, currentWeek, graduated]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state, doneKeys, currentWeek, graduated, user?.role, user?.spinout_lab_active]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (status === 'loading') {
     return (
@@ -627,7 +640,7 @@ export default function SpinoutLabStartupPage() {
               )}
               {currentWeek >= 4 ? (
                 <Link
-                  to="/incorporate/cofounder-agreement"
+                  to={cofounderAgreementRoute(user)}
                   data-testid="link-solo-path"
                   className="flex-1 h-9 rounded-lg text-xs font-semibold inline-flex items-center justify-center border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300"
                 >

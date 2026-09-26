@@ -131,7 +131,7 @@ test('the completeness meter counts each profile field once', () => {
  * different copy, this fails and the table is what has to move.
  */
 const CANVAS = readFileSync(
-  resolve(process.cwd(), 'design/incoming/Pages · Advisor Expertise.dc.html'), 'utf8');
+  resolve(process.cwd(), 'design/canvases/integrated/Pages · Advisor Expertise.dc.html'), 'utf8');
 const ROUTES = readFileSync(
   resolve(process.cwd(), 'frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx'), 'utf8');
 

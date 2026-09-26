@@ -581,6 +581,32 @@ class Component extends DCLogic {
         icon:'building', anchor:'#settings-entity' });
     }
 
+    // An advisor is admitted after review, holds no entity, and is paid for sessions — so the
+    // obligation set is the advisor agreement, a disclaimer that keeps sessions out of
+    // regulated-advice territory, KYC before any payout, and the archetype assessment that
+    // gates matching. No KYB: an advisor practises as a person, not a firm.
+    if (role === 'advisor') {
+      R.push({ key:'agr', label:'Advisor agreement', req:'Required', status:'Signed',
+        meta:'Envelope AX-1290 · signed Apr 2, 2026 · renews Apr 2, 2027', icon:'pen',
+        expiresAt:'2027-04-02', anchor:'#settings-docs' });
+      R.push({ key:'disc', label:'Engagement disclaimer', req:'Required',
+        status: full ? 'Signed' : 'Not started',
+        meta: full ? 'Envelope AX-1291 · signed Apr 2, 2026'
+          : 'Confirms sessions are practitioner experience, not regulated advice',
+        source: full ? null : 'One signature, no fields to complete',
+        action: full ? null : 'Sign in Settings →', icon:'doc', anchor:'#settings-docs' });
+      R.push({ key:'kyc', label:'Identity verification (KYC)', req:'Required',
+        status: full ? 'Verified' : 'In review',
+        meta: full ? 'Verified Apr 9, 2026 · valid 24 months'
+          : 'Submitted Sep 4 · required before your first payout',
+        icon:'id', expiresAt: full ? '2028-04-09' : null, anchor:'#settings-identity' });
+      R.push({ key:'assess', label:'Skills & values assessment', req:'Required',
+        status: full ? 'Satisfied' : 'In review',
+        meta: full ? 'Completed Apr 4, 2026 · archetype on file'
+          : 'Submitted Sep 5 · matching stays closed until it clears',
+        icon:'badge', anchor:'#settings-identity' });
+    }
+
     if (role === 'admin') {
       R.push({ key:'nda', label:'Staff confidentiality undertaking', req:'Required', status:'Signed',
         meta:'Envelope AX-0004 · renews Feb 1, 2027', icon:'pen', expiresAt:'2027-02-01', anchor:'#settings-docs' });
@@ -635,13 +661,18 @@ class Component extends DCLogic {
     const score = Math.max(0, Math.min(100, Math.round(reqScore * 100) - reqGates - penalty));
 
     // ---- score history: last month's score per role, independent of the live demo toggle ----
-    const PREV_SCORE = { founder:47, investor:58, partner:39, admin:81 };
-    const prevScore = PREV_SCORE[role] != null ? PREV_SCORE[role] : score;
-    const scoreDelta = score - prevScore;
-    const deltaNote = scoreDelta === 0 ? 'Unchanged from last month (' + prevScore + ').'
+    // An advisor admitted in April has a prior score like any other role; the absent-history
+    // branch below is what protects a role added later. Falling back to the live score would
+    // print a delta of zero against itself — a claim about the past derived from the present.
+    const PREV_SCORE = { founder:47, investor:58, advisor:22, partner:39, admin:81 };
+    const hasPrev = PREV_SCORE[role] != null;
+    const prevScore = hasPrev ? PREV_SCORE[role] : null;
+    const scoreDelta = hasPrev ? score - prevScore : 0;
+    const deltaNote = !hasPrev ? 'No prior score recorded — this is your first month.'
+      : (scoreDelta === 0 ? 'Unchanged from last month (' + prevScore + ').'
       : (scoreDelta > 0 ? '+' + scoreDelta + ' since last month (was ' + prevScore + ')'
-                         : String(scoreDelta) + ' since last month (was ' + prevScore + ')');
-    const deltaTone = scoreDelta > 0 ? 'ok' : (scoreDelta < 0 ? 'bad' : 'neutral');
+                         : String(scoreDelta) + ' since last month (was ' + prevScore + ')'));
+    const deltaTone = !hasPrev ? 'neutral' : (scoreDelta > 0 ? 'ok' : (scoreDelta < 0 ? 'bad' : 'neutral'));
 
     const band = score >= 90 ? 'ok' : (score >= 60 ? 'prog' : 'bad');
     const bandC = this.tone(band);
@@ -698,7 +729,7 @@ class Component extends DCLogic {
             : 'color:#4a4553;border-bottom:2px solid transparent')
     }));
 
-    const roleTabs = ['founder','investor','partner','admin'].map(r => ({
+    const roleTabs = ['founder','investor','advisor','partner','admin'].map(r => ({
       label: r.charAt(0).toUpperCase() + r.slice(1),
       go: () => this.setState({ role:r, tab:'overview' }),
       style: 'font-size:12.5px;font-weight:700;padding:6px 13px;border-radius:8px;cursor:pointer;'
@@ -798,6 +829,13 @@ class Component extends DCLogic {
            action: full ? null : 'Sign →',
            history: full ? [ ['Sent','Jun 28, 2026, 9:00 AM'], ['Viewed','Jun 29, 2026, 4:12 PM'], ['Signed','Jul 1, 2026, 11:00 AM'] ]
                           : [ ['Sent','Aug 21, 2026, 9:00 AM'] ] }]
+      : role === 'advisor'
+      ? [{ key:'r-anda', label:'Advisor agreement', status:'Signed', meta:'Envelope AX-1290 · signed Apr 2, 2026 · renews Apr 2, 2027',
+           history:[ ['Sent','Mar 30, 2026, 10:00 AM'], ['Viewed','Mar 31, 2026, 8:05 AM'], ['Signed','Apr 2, 2026, 1:20 PM'] ] },
+         { key:'r-adisc', label:'Engagement disclaimer', status: full ? 'Signed' : 'Sent',
+           meta: full ? 'Envelope AX-1291 · signed Apr 2, 2026' : 'Envelope AX-1291 · sent Sep 4, 2026 · awaiting your signature',
+           history: full ? [ ['Sent','Mar 30, 2026, 10:00 AM'], ['Viewed','Mar 31, 2026, 8:06 AM'], ['Signed','Apr 2, 2026, 1:22 PM'] ]
+                          : [ ['Sent','Sep 4, 2026, 9:00 AM'], ['Viewed','Sep 5, 2026, 7:41 AM'] ] }]
       : role === 'partner'
       ? [{ key:'r-pnda', label:'Partner mutual NDA', status:'Signed', meta:'Envelope AX-1402 · signed Jun 1, 2026 · renews Jun 1, 2027',
            history:[ ['Sent','May 28, 2026, 9:00 AM'], ['Viewed','May 29, 2026, 2:40 PM'], ['Signed','Jun 1, 2026, 9:50 AM'] ] },
@@ -831,6 +869,17 @@ class Component extends DCLogic {
          { key:'p-hs', label:'Halverton', status: full ? 'Signed' : 'Pending', meta: full ? 'Mutual NDA · signed Aug 2, 2026' : 'Sent Aug 22 · awaiting founder',
            history: full ? [ ['Sent','Jul 30, 2026, 9:00 AM'], ['Viewed','Jul 31, 2026, 1:20 PM'], ['Signed','Aug 2, 2026, 10:05 AM'] ]
                           : [ ['Sent','Aug 22, 2026, 9:00 AM'] ] }]
+      // An advisor signs one NDA per founder they take on, so the list is per client — and a
+      // declined one stays visible: a founder who withdrew is a real outcome, not an error.
+      : role === 'advisor'
+      ? [{ key:'p-anl', label:'Novacraft Labs, Inc.', status:'Signed', meta:'Client NDA · signed Aug 14, 2026',
+           history:[ ['Sent','Aug 11, 2026, 9:30 AM'], ['Viewed','Aug 11, 2026, 6:02 PM'], ['Signed','Aug 14, 2026, 10:11 AM'] ] },
+         { key:'p-ahv', label:'Halverton', status: full ? 'Signed' : 'Pending',
+           meta: full ? 'Client NDA · signed Aug 28, 2026' : 'Sent Sep 3 · awaiting the founder',
+           history: full ? [ ['Sent','Aug 25, 2026, 9:00 AM'], ['Viewed','Aug 26, 2026, 8:14 AM'], ['Signed','Aug 28, 2026, 4:30 PM'] ]
+                          : [ ['Sent','Sep 3, 2026, 9:00 AM'], ['Viewed','Sep 4, 2026, 7:50 AM'] ] },
+         { key:'p-akb', label:'Kelp Bio', status:'Expired', meta:'Envelope lapsed Aug 22 · engagement did not proceed',
+           history:[ ['Sent','Jul 22, 2026, 11:00 AM'], ['Viewed','Jul 23, 2026, 9:12 AM'], ['Expired','Aug 22, 2026, 12:00 AM'] ] }]
       : [{ key:'p-nl2', label:'Novacraft Labs, Inc.', status:'Signed', meta:'Engagement NDA · signed Jul 6, 2026',
            history:[ ['Sent','Jul 2, 2026, 9:00 AM'], ['Viewed','Jul 3, 2026, 2:15 PM'], ['Signed','Jul 6, 2026, 11:40 AM'] ] }];
 

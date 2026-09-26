@@ -762,7 +762,7 @@ class Component extends DCLogic {
     const NEXT = {
       apply:{ h:'Application not yet submitted', s:'Advisors apply to this cohort specifically — not to a general network. Matching stays locked until admin approval, assessment clearance, and a signed agreement are all in place.', step:'Complete and submit the Spin-Out Lab advisor application.', cta:'Start application', go:()=>this.set('stage','apply') },
       review:{ h:'Under admin review', s:'The fund team is scoring expertise and founder relevance. No founder data is accessible while review is open.', step:'Awaiting admin decision — typically 5 business days from submission.', cta:'View clearance', go:()=>this.set('stage','review') },
-      assessment:{ h:'Assessment required', s:'Approved in principle. Complete the Personal Advisor assessment so your skills and values archetype can be scored against founder Profiling gaps.', step:'Complete the skills and values-archetype assessment.', cta:'Open assessment', go:()=>this.set('stage','assessment') },
+      assessment:{ h:'Assessment required', s:'Approved in principle. Complete the Eadwyn assessment so your skills and values archetype can be scored against founder Profiling gaps.', step:'Complete the skills and values-archetype assessment.', cta:'Open assessment', go:()=>this.set('stage','assessment') },
       agreement:{ h: st.signed ? 'Agreement signed · awaiting activation' : 'Agreement signature required', s:'Assessment cleared. The advisor agreement defines scope, cadence, and the default equity band before any founder engagement begins.', step: st.signed ? 'All preconditions met — admin will enable matching.' : 'Review and sign the advisor agreement (FAST) and NDA.', cta: st.signed ? 'Continue' : 'Sign agreement', go: () => st.signed ? this.set('stage','approved') : this.set('signed', true) },
       approved:{ h:'Matching enabled', s:'All four preconditions are satisfied. Cohort matches are proposed by the fund team based on your assessment against founder needs.', step:'Review proposed matches and agree advisory terms with each founder.', cta:'Review matches', go:()=>{} },
       admin:{ h:'Admin · access decisioning', s:'Approve, decline, or request more information. Approval unlocks matching only when assessment and agreement are also complete.', step:'Work the review queue below.', cta:'Open queue', go:()=>{} },
@@ -807,7 +807,7 @@ class Component extends DCLogic {
       cRow('Admin review', 'Identity verification, expertise scoring, founder-relevance check',
         sState(met.reviewed, stage==='review'),
         stage==='review' ? 'In progress · day 2 of 5. No founder data is accessible during review.' : 'Approved in principle Aug 4 by H. Kaur.'),
-      cRow('Skills & values assessment', 'Personal Advisor assessment — scores your archetype against founder Profiling gaps',
+      cRow('Skills & values assessment', 'Eadwyn assessment — scores your archetype against founder Profiling gaps',
         sState(met.assessed, stage==='assessment'), '',
         stage==='assessment' ? 'Start assessment' : '', () => this.set('stage','agreement')),
       cRow('Advisor agreement', 'FAST agreement + NDA · scope, cadence, default equity band',

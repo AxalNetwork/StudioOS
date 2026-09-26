@@ -6,19 +6,220 @@
 </head>
 <body>
 <x-dc>
-<helmet>
+<helmet data-dc-atomics="">
   <meta name="design_doc_mode" content="canvas">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
   <style>
-    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeeec;color:#18181b}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeeec;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#b45309;text-decoration:none}
+    .ab{padding:40px 46px 32px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px;flex-wrap:wrap}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:rgba(24,24,27,.6);max-width:1040px;margin:0 0 18px}
+    .mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .eye{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+    .nm{font-size:13px;font-weight:800;letter-spacing:-.01em}
+    .body{font-size:12px;line-height:1.55}
+    .pill{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;line-height:1.5}
+    .nr{display:inline-flex;font-size:10px;font-weight:700;border-radius:4px;padding:2px 7px;white-space:nowrap}
+    .card{border-radius:14px;padding:16px 18px;box-sizing:border-box}
+    .inp{width:100%;box-sizing:border-box;border-radius:9px;padding:9px 12px;font-size:12.5px;font-family:inherit}
+    .btn{font-size:11.5px;font-weight:700;padding:7px 13px;border-radius:8px;cursor:pointer;white-space:nowrap}
+    .nav{display:flex;align-items:center;gap:9px;padding:7px 14px;font-size:12px;font-weight:600;border-radius:8px}
+    .zp{font-size:11px;font-weight:700;padding:5px 12px;border-radius:99px;white-space:nowrap}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;text-align:left;padding:0 0 8px}
+    .cap{font-size:11px;color:rgba(24,24,27,.58);line-height:1.5;margin-top:9px}
+    .ph{width:390px;min-width:390px;flex:none;border-radius:34px;box-shadow:0 4px 22px rgba(24,24,27,.16),0 0 0 9px #1a1a1c;overflow:hidden}
   </style>
 </helmet>
-<!--
-  Pages · Market reading. Route /research/markets/:uid.
-  The published artifact rendered its frames in the host; this file keeps the
-  design's own DCLogic, which is the contract the page was built from
-  (age from ran_at, thin below 6, catalog price never folded into the range).
--->
+<!-- Pages · Market reading. Route /research/markets/:uid. -->
+
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="5">
+  <section class="ab" id="{{ b.id }}">
+    <div class="ab-hd"><a class="ab-id" href="#{{ b.id }}">{{ b.badge }}</a><span class="ab-nm">{{ b.title }}</span><span class="mono" style="font-size:11px;color:#615c6e">/research/markets/{{ b.r.uid }}</span></div>
+    <div class="ab-sub">{{ b.blurb }}</div>
+
+    <!-- ══ DESKTOP 1280 ══ -->
+    <sc-if value="{{ b.desktop }}">
+      <div style="width:1280px;min-width:1280px;display:flex;border-radius:14px;overflow:hidden;box-shadow:0 2px 14px rgba(24,24,27,.08);background:{{ b.t.ground }}">
+        <div style="width:200px;flex:none;background:{{ b.t.card }};border-right:1px solid {{ b.t.hair }};padding:16px 10px">
+          <div style="display:flex;align-items:center;gap:8px;padding:4px 14px 16px"><img src="../assets/axal-dossier-mark.png" alt="Axal VC" width="16" height="16" style="display:block;object-fit:contain"><span style="font-size:12px;font-weight:800;letter-spacing:-.01em;color:{{ b.t.ink }}">StudioOS</span></div>
+          <sc-for list="{{ b.nav }}" as="n" hint-placeholder-count="8"><div class="nav" style="{{ n.style }}">{{ n.label }}</div></sc-for>
+        </div>
+        <div style="flex:1;min-width:0;padding:22px 30px 30px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:{{ b.t.muted }};flex-wrap:wrap"><span>Research</span><span>‹</span><span>Markets</span><span>‹</span><span style="color:{{ b.t.ink }};font-weight:700">{{ b.r.metric }}</span></div>
+            <span class="pill" style="background:#f0fdff;color:#0e7490;border:1px solid #a5edf5;letter-spacing:.05em">ANALYTICS</span>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:12px"><sc-for list="{{ b.zones }}" as="z" hint-placeholder-count="4"><span class="zp" style="{{ z.style }}">{{ z.t }}</span></sc-for></div>
+
+          <!-- 1 · header -->
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.headHair }};margin-top:16px;{{ b.headTint }}">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap">
+              <div style="min-width:0">
+                <div class="eye" style="color:{{ b.t.muted }}">Market reading</div>
+                <h1 style="margin:7px 0 0;font-size:24px;font-weight:800;letter-spacing:-.025em;color:{{ b.t.ink }}">{{ b.r.metric }}</h1>
+                <div style="margin-top:5px">
+                  <sc-if value="{{ b.r.scope }}"><span class="body" style="color:{{ b.t.muted }}">{{ b.r.scope }}</span></sc-if>
+                  <sc-if value="{{ b.noScope }}"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></sc-if>
+                  <sc-if value="{{ b.catalogLine }}"><span class="body" style="color:{{ b.t.muted }};margin-left:10px">· {{ b.catalogLine }}</span></sc-if>
+                </div>
+              </div>
+              <div style="text-align:right">
+                <div style="display:flex;align-items:center;gap:8px;justify-content:flex-end;flex-wrap:wrap"><span class="pill" style="{{ b.ageStyle }}">{{ b.ageLabel }}</span><span class="pill" style="{{ b.attachStyle }}">{{ b.attachLabel }}</span></div>
+                <div class="mono" style="font-size:11px;color:{{ b.t.muted }};margin-top:8px">ran {{ b.r.ran_at }} · {{ b.ageDays }} d old</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2 · tiles -->
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px">
+            <sc-for list="{{ b.tiles }}" as="tl" hint-placeholder-count="4">
+              <div class="card" style="background:{{ b.t.card }};border:1px solid {{ tl.hair }}">
+                <div class="eye" style="color:{{ b.t.muted }}">{{ tl.k }}</div>
+                <div class="mono" style="font-size:{{ tl.size }};font-weight:700;letter-spacing:-.025em;margin-top:5px;color:{{ tl.ink }}">{{ tl.v }}</div>
+                <div class="body" style="color:{{ b.t.muted }};margin-top:4px">{{ tl.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- 3 · range editors -->
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:12px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><span class="eye" style="color:{{ b.t.muted }}">Record this reading</span><span class="body" style="color:{{ b.t.muted }}">A save writes a new run date. It does not edit the old one.</span></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px;align-items:end;margin-top:11px">
+              <div><div class="eye" style="color:{{ b.t.muted }};font-size:9px;margin-bottom:4px">Low (USD)</div><div class="inp mono" style="background:{{ b.t.chipBg }};border:1px solid {{ b.lowHair }};color:{{ b.t.ink }}">{{ b.lowText }}</div></div>
+              <div><div class="eye" style="color:{{ b.t.muted }};font-size:9px;margin-bottom:4px">High (USD)</div><div class="inp mono" style="background:{{ b.t.chipBg }};border:1px solid {{ b.highHair }};color:{{ b.t.ink }}">{{ b.highText }}</div></div>
+              <div><div class="eye" style="color:{{ b.t.muted }};font-size:9px;margin-bottom:4px">Comparables</div><div class="inp mono" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.t.ink }}">{{ b.r.comparable_count }}</div></div>
+              <div><div class="eye" style="color:{{ b.t.muted }};font-size:9px;margin-bottom:4px">Run date</div><div class="inp mono" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.runInk }}">{{ b.runField }}</div></div>
+              <span class="btn" style="background:{{ b.accent }};color:#fff">Record this reading</span>
+            </div>
+            <div class="body" style="color:{{ b.t.muted }};margin-top:8px">How many engagements the range came from. Refused if 0.</div>
+            <sc-if value="{{ b.rangeError }}">
+              <div style="display:flex;gap:9px;align-items:flex-start;background:{{ b.dangerFill }};border:1px solid {{ b.t.dangerHair }};border-radius:10px;padding:10px 13px;margin-top:10px"><span style="color:{{ b.t.danger }};font-weight:800;flex:none">!</span><span class="body" style="color:{{ b.t.danger }}">High is below low. Nothing is saved until the range reads forward.</span></div>
+            </sc-if>
+          </div>
+
+          <!-- 4 · comparables basis -->
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:12px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><span class="eye" style="color:{{ b.t.muted }}">Comparables basis</span><span class="mono" style="font-size:11px;color:{{ b.t.muted }}">{{ b.r.comparable_count }} counted · 0 named</span></div>
+            <div style="display:grid;grid-template-columns:1fr 1.4fr 1.2fr 1.4fr;gap:12px;margin-top:11px">
+              <span class="th" style="color:{{ b.t.muted }}">Date</span><span class="th" style="color:{{ b.t.muted }}">Engagement went for</span><span class="th" style="color:{{ b.t.muted }}">Source</span><span class="th" style="color:{{ b.t.muted }}">URL or file</span>
+            </div>
+            <div style="border:1.5px dashed {{ b.t.hair }};border-radius:12px;padding:18px 20px">
+              <div class="nm" style="color:{{ b.t.ink }}">The count has no names behind it</div>
+              <div class="body" style="color:{{ b.t.body }};margin-top:6px;max-width:680px">The product stores comparable_count only. A client will ask “which eleven?”. Add the engagements you actually used, or leave this blank — never type a count so the form accepts.</div>
+              <span class="btn" style="border:1px solid {{ b.t.hair }};color:{{ b.t.ink }};background:transparent;display:inline-block;margin-top:12px">Add an engagement</span>
+            </div>
+          </div>
+
+          <!-- 5 · attachment -->
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.attachHair }};margin-top:12px;{{ b.attachTint }}">
+            <div class="eye" style="color:{{ b.t.muted }}">Proposal attachment</div>
+            <sc-if value="{{ b.stale }}">
+              <div class="body" style="color:{{ b.t.danger }};margin-top:8px;max-width:760px">A client shown a range from {{ b.staleMonth }}, presented as current reasoning behind a September quote, is worse than a proposal with no market figure.</div>
+              <div style="display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap"><span class="btn" style="background:{{ b.accent }};color:#fff">Record a fresh reading</span><span class="body" style="color:{{ b.t.muted }}">Prefills the metric, blanks the dollars, sets the run date to today.</span></div>
+            </sc-if>
+            <sc-if value="{{ b.attachable }}">
+              <div class="body" style="color:{{ b.t.body }};margin-top:8px">The range and its run date travel together onto the quote. {{ b.ageingNote }}</div>
+              <span class="btn" style="border:1px solid {{ b.t.hair }};color:{{ b.t.ink }};background:transparent;display:inline-block;margin-top:12px">Attach to a proposal →</span>
+            </sc-if>
+            <sc-if value="{{ b.attached }}">
+              <div style="display:flex;align-items:center;gap:9px;margin-top:9px;flex-wrap:wrap"><span class="pill" style="{{ b.okStyle }}">Attached</span><span class="body" style="color:{{ b.t.muted }}">proposal name: <span class="nr" style="{{ b.t.nr }}">Not recorded</span></span></div>
+              <div class="body" style="color:{{ b.t.muted }};margin-top:8px">The product records that a reading is attached; it does not store which proposal, so nothing here names one.</div>
+            </sc-if>
+          </div>
+
+          <!-- 6 · zonedraft -->
+          <div style="border:1px solid {{ b.draftHair }};background:{{ b.draftBg }};border-radius:14px;padding:14px 18px;margin-top:12px">
+            <div style="display:flex;align-items:center;gap:9px"><span class="pill" style="background:{{ b.accent }};color:#fff;letter-spacing:.06em">ZONEDRAFT</span><span class="nm" style="color:{{ b.t.ink }}">Reading · demand movement</span></div>
+            <div class="body" style="color:{{ b.t.ink }};margin-top:9px;max-width:820px">{{ b.draft }}</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap">
+              <span class="btn" style="background:{{ b.accent }};color:#fff">Draft</span><span class="btn" style="{{ b.acceptBtn }}">Accept</span><span class="btn" style="color:{{ b.t.muted }};padding:7px 6px">Discard</span>
+              <span class="body" style="color:{{ b.t.muted }};margin-left:auto">Run dates carried into any attachment.</span>
+            </div>
+          </div>
+
+          <!-- 7 · stated limit -->
+          <div style="background:{{ b.t.sunk }};border:1px solid {{ b.t.hair }};border-radius:14px;padding:16px 18px;margin-top:12px">
+            <div class="eye" style="color:{{ b.t.muted }}">Where these numbers come from</div>
+            <div style="display:grid;gap:8px;margin-top:8px;max-width:820px">
+              <div class="body" style="color:{{ b.t.body }}">A reading is what you found, recorded by you. There is no comparables database, and there is not going to be one this product invents.</div>
+              <div class="body" style="color:{{ b.t.body }}">A range is refused without the number of comparables and the date you ran it. Both travel onto any proposal.</div>
+              <div class="body" style="color:{{ b.t.body }}">Sector signals live on Signals. This page is about prices.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ══ MOBILE 390 ══ -->
+    <sc-if value="{{ b.mobile }}">
+      <div class="ph" style="background:{{ b.t.ground }}">
+        <div style="height:44px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 6px;font-size:11px;font-weight:700;background:{{ b.t.card }};color:{{ b.t.ink }}"><span class="mono">9:41</span><span style="font-size:10px;letter-spacing:.06em">▮▮▮ ◗</span></div>
+        <div style="background:{{ b.t.card }};padding:4px 16px 12px;border-bottom:1px solid {{ b.t.hair }};{{ b.headTint }}">
+          <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:{{ b.t.muted }}"><span style="font-weight:700;color:{{ b.accent }}">‹ Markets</span><span>·</span><span>Research</span></div>
+          <div class="eye" style="color:{{ b.t.muted }};margin-top:8px">Market reading</div>
+          <h1 style="margin:5px 0 0;font-size:20px;font-weight:800;letter-spacing:-.024em;color:{{ b.t.ink }}">{{ b.r.metric }}</h1>
+          <div style="margin-top:4px"><sc-if value="{{ b.r.scope }}"><span class="body" style="color:{{ b.t.muted }};font-size:11px">{{ b.r.scope }}</span></sc-if><sc-if value="{{ b.noScope }}"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></sc-if></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap"><span class="pill" style="background:#f0fdff;color:#0e7490;border:1px solid #a5edf5;letter-spacing:.05em">ANALYTICS</span><span class="pill" style="{{ b.ageStyle }}">{{ b.ageLabel }}</span><span class="pill" style="{{ b.attachStyle }}">{{ b.attachLabel }}</span></div>
+          <div class="mono" style="font-size:10.5px;color:{{ b.t.muted }};margin-top:6px">ran {{ b.r.ran_at }} · {{ b.ageDays }} d old</div>
+        </div>
+        <div style="padding:12px 14px 22px;display:grid;gap:10px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <sc-for list="{{ b.tiles }}" as="tl" hint-placeholder-count="4">
+              <div class="card" style="background:{{ b.t.card }};border:1px solid {{ tl.hair }};padding:11px 12px">
+                <div class="eye" style="color:{{ b.t.muted }};font-size:9px">{{ tl.k }}</div>
+                <div class="mono" style="font-size:{{ tl.msize }};font-weight:700;letter-spacing:-.025em;margin-top:4px;color:{{ tl.ink }}">{{ tl.v }}</div>
+                <div class="body" style="color:{{ b.t.muted }};margin-top:3px;font-size:10.5px">{{ tl.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px">
+            <div class="eye" style="color:{{ b.t.muted }}">Record this reading</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px">
+              <div><div class="eye" style="color:{{ b.t.muted }};font-size:9px;margin-bottom:4px">Low (USD)</div><div class="inp mono" style="background:{{ b.t.chipBg }};border:1px solid {{ b.lowHair }};color:{{ b.t.ink }};font-size:12px">{{ b.lowText }}</div></div>
+              <div><div class="eye" style="color:{{ b.t.muted }};font-size:9px;margin-bottom:4px">High (USD)</div><div class="inp mono" style="background:{{ b.t.chipBg }};border:1px solid {{ b.highHair }};color:{{ b.t.ink }};font-size:12px">{{ b.highText }}</div></div>
+              <div><div class="eye" style="color:{{ b.t.muted }};font-size:9px;margin-bottom:4px">Comparables</div><div class="inp mono" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.t.ink }};font-size:12px">{{ b.r.comparable_count }}</div></div>
+              <div><div class="eye" style="color:{{ b.t.muted }};font-size:9px;margin-bottom:4px">Run date</div><div class="inp mono" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.runInk }};font-size:12px">{{ b.runField }}</div></div>
+            </div>
+            <span class="btn" style="background:{{ b.accent }};color:#fff;display:inline-block;margin-top:10px">Record this reading</span>
+            <div class="body" style="color:{{ b.t.muted }};margin-top:7px;font-size:11px">How many engagements the range came from. Refused if 0.</div>
+          </div>
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between"><span class="eye" style="color:{{ b.t.muted }}">Comparables basis</span><span class="mono" style="font-size:10.5px;color:{{ b.t.muted }}">{{ b.r.comparable_count }} counted · 0 named</span></div>
+            <div style="border:1.5px dashed {{ b.t.hair }};border-radius:12px;padding:13px 14px;margin-top:9px">
+              <div class="nm" style="color:{{ b.t.ink }};font-size:12.5px">The count has no names behind it</div>
+              <div class="body" style="color:{{ b.t.body }};margin-top:5px;font-size:11px">The product stores comparable_count only. A client will ask “which eleven?”. Add the engagements you actually used, or leave this blank — never type a count so the form accepts.</div>
+              <span class="btn" style="border:1px solid {{ b.t.hair }};color:{{ b.t.ink }};background:transparent;display:inline-block;margin-top:10px;padding:6px 11px">Add an engagement</span>
+            </div>
+          </div>
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.attachHair }};padding:13px 15px;{{ b.attachTint }}">
+            <div class="eye" style="color:{{ b.t.muted }}">Proposal attachment</div>
+            <sc-if value="{{ b.stale }}"><div class="body" style="color:{{ b.t.danger }};margin-top:7px;font-size:11.5px">A client shown a range from {{ b.staleMonth }}, presented as current reasoning behind a September quote, is worse than a proposal with no market figure.</div><span class="btn" style="background:{{ b.accent }};color:#fff;display:inline-block;margin-top:10px">Record a fresh reading</span></sc-if>
+            <sc-if value="{{ b.attachable }}"><div class="body" style="color:{{ b.t.body }};margin-top:7px;font-size:11.5px">The range and its run date travel together onto the quote. {{ b.ageingNote }}</div><span class="btn" style="border:1px solid {{ b.t.hair }};color:{{ b.t.ink }};background:transparent;display:inline-block;margin-top:10px">Attach to a proposal →</span></sc-if>
+            <sc-if value="{{ b.attached }}"><div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap"><span class="pill" style="{{ b.okStyle }}">Attached</span><span class="body" style="color:{{ b.t.muted }};font-size:11px">proposal name: <span class="nr" style="{{ b.t.nr }}">Not recorded</span></span></div></sc-if>
+          </div>
+          <div style="border:1px solid {{ b.draftHair }};background:{{ b.draftBg }};border-radius:14px;padding:13px 15px">
+            <div style="display:flex;align-items:center;gap:8px"><span class="pill" style="background:{{ b.accent }};color:#fff;letter-spacing:.06em">ZONEDRAFT</span><span class="nm" style="color:{{ b.t.ink }}">Reading · demand movement</span></div>
+            <div class="body" style="color:{{ b.t.ink }};margin-top:8px;font-size:11.5px">{{ b.draft }}</div>
+            <div style="display:flex;gap:7px;margin-top:10px"><span class="btn" style="background:{{ b.accent }};color:#fff;padding:6px 11px">Draft</span><span class="btn" style="{{ b.acceptBtn }};padding:6px 11px">Accept</span></div>
+          </div>
+          <div style="background:{{ b.t.sunk }};border:1px solid {{ b.t.hair }};border-radius:14px;padding:13px 15px">
+            <div class="eye" style="color:{{ b.t.muted }}">Where these numbers come from</div>
+            <div style="display:grid;gap:7px;margin-top:7px">
+              <div class="body" style="color:{{ b.t.body }};font-size:11.5px">A reading is what you found, recorded by you. There is no comparables database, and there is not going to be one this product invents.</div>
+              <div class="body" style="color:{{ b.t.body }};font-size:11.5px">A range is refused without the number of comparables and the date you ran it. Both travel onto any proposal.</div>
+              <div class="body" style="color:{{ b.t.body }};font-size:11.5px">Sector signals live on Signals. This page is about prices.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+    <div class="cap" style="width:{{ b.capW }}">{{ b.cap }}</div>
+  </section>
+</sc-for>
+</x-dc>
 <script type="text/x-dc" data-dc-script="">
 class Component extends DCLogic {
   renderVals() {

@@ -5,8 +5,8 @@ The corpus the first integration pass worked from. Sorted by one question:
 
 | Folder | Count | Meaning |
 | --- | --- | --- |
-| `integrated/` | 66 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
-| `backlog/` | 25 | Graded `NEW` or `DEFERRED`. No route yet. |
+| `integrated/` | 74 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
+| `backlog/` | 29 | Graded `NEW` or `DEFERRED`. No route yet. |
 | `out-of-scope/` | 27 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
 | `shared/` | 6 | The dc-runtime bundle every canvas loads, plus two standalone pitch-deck exports. Generated — both code scanners ignore this tree. Every canvas asks for it as `src="./support.js"`, which resolves next to the canvas and **not** to this folder, so opening one straight from `integrated/` in a browser gets a blank page: copy `shared/support.js` beside it first. Nothing runs these at runtime, so the reference is nominal — it is a convention marking "the shared runtime, not an inlined 69KB copy", and `scripts/read-canvas.mjs` reproduces it when it decodes a new export. |
 | `assets/`, `scraps/`, `uploads/` | — | Images and stale duplicates from the export. Not part of the 107. |
@@ -35,17 +35,36 @@ when `Pages · Market reading` arrived for `/research/markets/:uid`.
 `backlog/` did not change: the markets list was already live, and this canvas
 is one reading.
 
-**The `107` below is stale and this pass did not fix it**, which is worth saying
-rather than leaving to be rediscovered. It is `54 + 26 + 27` — the sum as it
-stood when `integrated/` read 54 — so it has drifted every time that count moved
-and is now `66 + 25 + 27 = 118`. Correcting the number here would assert that
-`ROUTE_MAP.md` carries 115 rows, and that was not counted; the sentence below is
-the one making the claim, so the count belongs in the same pass that reads it.
+**2026-09-26 (D305), the wave-8 canvas PR, moved all three numbers that move.**
+`integrated/` went **66 → 70** when four canvases graduated out of
+`design/incoming/`: `Calendar` (its page shipped 2026-09-10) and
+`Pages · Advisor Expertise`, `Pages · Advisor Network` and
+`Pages · Advisor Research`, whose routes run on the advisor licence. None came
+from `backlog/`, so `backlog/` did not move for them. `integrated/` then went
+**70 → 74** when four new canvases arrived for routes that are already live —
+graded `UPGRADE` on arrival, the Programme Brief precedent —
+`Spin-Out Lab · Landing` (`/spinout-lab`), `Pages · Funds and fund research`
+(`/research/funds`, `/funds`), `Studio · Archetype preview` (`/studio`,
+`/studio/archetype`) and `Studio · Persona hubs` (the five Studio homes). And
+`backlog/` went **25 → 29** when four arrived for routes that do not exist
+yet: `Pages · Benchmark`, `Pages · Diligence file`, `Pages · Diligence room`
+and `Pages · Company analysis`. `Refer & Earn` was replaced in place, which
+moves no number (below).
+
+**The `107` in the title is the first audit's corpus, not today's total.** It
+is `54 + 26 + 27` — the sum as it stood when `integrated/` read 54. The three
+folders hold `74 + 29 + 27 = 130` as of 2026-09-26, counted by listing them,
+and the title keeps 107 because the paragraph below uses it for the audit it
+names.
 
 Sorting is derived from the grade in
 `documentation/architecture/ROUTE_MAP.md`, which has a row for every one of the
 107 — plus the later rows in its part 5 and the canvases that arrived after
-the audit, 113 rows in all — and is the authority on *what* shipped
+the audit, **125 rows in all as of 2026-09-26**, counted by the parser
+`profile_routing_fresh.test.mjs` pins. Five canvases in these folders still
+carry no row: `Pages · Partner Delivery`, `· Network`, `· Offers` and
+`· Research`, and `out-of-scope/Spin-Out Lab`. That gap is D305's to report and not to fill. The
+ledger is the authority on *what* shipped
 from each canvas — which zones were
 built, which were not, and why. This folder only answers the coarse question of
 whether a route exists at all.
@@ -116,3 +135,52 @@ it asserts exactly what the design shows, and it commits no second copy of the
 image. It is the one line in either canvas that is not the decoder's output. A
 future re-decode will put the uuid back and the decoder will report it; re-apply
 the path rather than resolving the asset into `assets/`.
+
+**2026-09-26 (D305).** Two re-exports, six copy corrections and five image
+resolutions, all in place. None moves a number.
+
+- `Pages · Market reading` took the ANALYTICS markup from artifact `c2cc013f`:
+  the `boards` loop and its atomics block, +209/−8. Its DCLogic is unchanged,
+  and its one unplaced image points at `../assets/axal-dossier-mark.png`.
+- `Refer & Earn` was replaced by the copy that waited in `design/incoming/`
+  (68,003 B over 56,492 B). That copy is byte-identical to a fresh decode of
+  artifact `55827507` (sha256 `6d978942…`, compared rather than assumed).
+  Measured as sets of quoted literals and `{{ }}` bindings, it is not a literal
+  superset: about a hundred literals are added (the count moves with the
+  extractor — 67, 100 and 103 across three passes) and three are removed, each
+  confirmed by a direct search. Read, all three are a rename and a restyle, not
+  a loss. `{{ sharePlatforms }}` (LinkedIn, X, WhatsApp, Telegram) becomes
+  `{{ shareLink }}`, which draws the same four plus Facebook, beside two new
+  lists (`shareQuick`, seven quick actions; `shareMedia`, three story and card
+  formats). The other two are the old share modal's container styles; that
+  modal now uses the 460px box the canvas's other modal already used. So
+  nothing the old canvas drew is gone, which is what the strict-superset rule
+  protects; D305 records the measurement.
+- Six copy corrections:
+  - `Use of Funds` — `exportAxal VC` and `icAxal VC` back to `exportAxal` and
+    `icAxal`, a find-and-replace that had reached identifiers;
+  - `Trust Center v2` — the advisor obligations, the advisor role tab and its
+    envelopes, and a first-month delta that no longer reads a previous score
+    that does not exist;
+  - `Founder Studio` — `Personal Advisor` becomes Eadwyn;
+  - `Advisor Studio` — two lines become "Eadwyn assessment";
+  - `DetailRail` and `InvRail` — `AI fills the blanks`.
+
+  `Emails` was checked and needed nothing.
+- Images:
+  - **The five asset uuids** left unplaced (Benchmark, Diligence file,
+    Diligence room, Company analysis, Persona hubs) are each byte-identical to
+    `assets/axal-dossier-mark.png` (7,770 B, sha256 `1157074b…`). So each
+    points there.
+  - **`Spin-Out Lab · Landing`'s hero** was a 522 KB JPEG data URI. It is a
+    lossy encode of `frontend/public/axal-vc-future.png`: 51.7 dB PSNR, mean
+    |d| 0.40/255, compared at 192 px. So it points at
+    `../../../frontend/public/axal-vc-future.png`, and the file drops from
+    744 KB to 47 KB, under the 500 KB LFS gate.
+  - **The landing's other image** is an 8.9 KB mark inside an `sf.app` branch
+    the landing never renders. It matches no repo file closely enough to name:
+    24 dB against the dossier mark. So it stays inline rather than being
+    pointed at a guess.
+- `Spin-Out Lab · Landing` does not replace `Spin-Out Lab · Intro`. The landing
+  draws one surface and drops the app surface the Intro carries, so it is not a
+  superset, and both stay.

@@ -287,8 +287,45 @@ export const SOLO_BODY =
 export const SOLO_REASON =
   'There is no solo-founder declaration document in Axal — the agreement generator requires two or more named founders.';
 
-export const SOLO_CAVEAT =
-  'These signals show that no co-founder is on record. Axal does not store a “chose solo” decision, so none of them confirm one.';
+// D352 — the Week-3 decision IS stored (projects.cofounder_decision_meta,
+// migration 162, written by Co-founder Match), so the caveat depends on what
+// that record says. The old copy ("Axal does not store a chose-solo decision")
+// was true before migration 162 and false after it.
+export const SOLO_CAVEAT_RECORDED =
+  'Your recorded Week-3 decision is a solo path. A recorded decision is not a signed declaration: Axal has no solo-declaration document, so nothing here is executed.';
+export const SOLO_CAVEAT_OTHER =
+  'Your recorded Week-3 decision is not a solo path. The signals below show who is on record; change the decision in Co-founder Match if you have chosen to go solo.';
+export const SOLO_CAVEAT_NONE =
+  'No Week-3 decision is recorded yet. The signals below show who is on record, and none of them is a decision — record one in Co-founder Match.';
+export const SOLO_CAVEAT_UNREADABLE =
+  'Your startup record could not be read, so whether a Week-3 decision is recorded is unknown.';
+
+const OUTCOME_LABEL = {
+  advance: 'Proceed with a candidate',
+  trial: 'Run a trial project',
+  references: 'Request references',
+  searching: 'Keep searching',
+  solo: 'Solo path',
+};
+
+/**
+ * The stored Week-3 decision, as the solo path reads it. Accepts the
+ * match view model's `buildDecisionModel` output (or null when the project
+ * could not be read, which is reported as unreadable — never as "none").
+ */
+export function soloDecisionFacts(decision, { unreadable = false } = {}) {
+  if (unreadable) return { state: 'unreadable', caveat: SOLO_CAVEAT_UNREADABLE };
+  const outcome = decision?.outcome || null;
+  if (!outcome) return { state: 'none', caveat: SOLO_CAVEAT_NONE };
+  return {
+    state: outcome === 'solo' ? 'solo' : 'other',
+    outcome,
+    label: OUTCOME_LABEL[outcome] || outcome,
+    decidedAt: decision?.decidedAt || null,
+    note: typeof decision?.note === 'string' && decision.note.trim() ? decision.note.trim() : null,
+    caveat: outcome === 'solo' ? SOLO_CAVEAT_RECORDED : SOLO_CAVEAT_OTHER,
+  };
+}
 
 export const READONLY_REASON =
   'This startup belongs to another founder — you can review the draft, but not edit or generate.';
@@ -884,9 +921,24 @@ export function buildCofounderAgreementViewModel(input) {
   /* ---- solo path ------------------------------------------------------- */
   const displayName = trimmed(user?.name) || trimmed(user?.full_name);
   const activeConnections = connections.filter((c) => s(c?.status) === 'active').length;
+  const decisionFacts = soloDecisionFacts(inp.decision || null, { unreadable: inp.projectUnreadable === true });
+  const decidedOn = decisionFacts.decidedAt ? String(decisionFacts.decidedAt).slice(0, 10) : null;
   const solo = {
     headline: displayName ? `${displayName} — sole founder path` : 'Sole founder path',
+    decision: decisionFacts,
     items: [
+      {
+        label: 'Recorded Week-3 decision',
+        value: decisionFacts.state === 'unreadable'
+          ? 'Unreadable'
+          : decisionFacts.state === 'none'
+            ? 'Not recorded'
+            : `${decisionFacts.label}${decidedOn ? ` · ${decidedOn}` : ''}`,
+        tone: decisionFacts.state === 'solo' ? 'emerald' : decisionFacts.state === 'unreadable' ? 'amber' : 'gray',
+        detail: decisionFacts.note
+          ? `From Co-founder Match. Your note: “${decisionFacts.note.slice(0, 200)}”`
+          : 'From Co-founder Match (projects.cofounder_decision_meta).',
+      },
       {
         label: 'Co-founders on this project record',
         value: `${cofounderMembers.length} recorded`,
@@ -913,7 +965,7 @@ export function buildCofounderAgreementViewModel(input) {
       },
     ],
     body: SOLO_BODY,
-    caveat: SOLO_CAVEAT,
+    caveat: decisionFacts.caveat,
     canExecute: false,
     reason: SOLO_REASON,
     nextSteps: [

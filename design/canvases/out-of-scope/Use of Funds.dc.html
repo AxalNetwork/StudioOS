@@ -62,7 +62,7 @@
       <sc-if value="{{ exportMenuOpen }}">
         <div style="position:absolute;top:38px;left:0;z-index:30;width:250px;background:#fff;border:1px solid #ececf1;border-radius:12px;box-shadow:0 12px 32px rgba(24,24,27,.16);padding:6px">
           <button onClick="{{ exportDeck }}" style="display:flex;width:100%;align-items:center;gap:10px;font-size:12.5px;font-weight:500;color:#3f3f46;background:transparent;border:none;border-radius:8px;padding:10px 11px;cursor:pointer;text-align:left"><span style="width:15px;height:15px;display:flex;color:#7c3aed" dangerouslySetInnerHTML="{{ icDeck }}"></span>Pitch Deck format</button>
-          <button onClick="{{ exportAxal VC }}" style="display:flex;width:100%;align-items:center;gap:10px;font-size:12.5px;font-weight:500;color:#3f3f46;background:transparent;border:none;border-radius:8px;padding:10px 11px;cursor:pointer;text-align:left"><span style="width:15px;height:15px;display:flex;color:#0d9488" dangerouslySetInnerHTML="{{ icAxal VC }}"></span>Axal VC Spin-Out format</button>
+          <button onClick="{{ exportAxal }}" style="display:flex;width:100%;align-items:center;gap:10px;font-size:12.5px;font-weight:500;color:#3f3f46;background:transparent;border:none;border-radius:8px;padding:10px 11px;cursor:pointer;text-align:left"><span style="width:15px;height:15px;display:flex;color:#0d9488" dangerouslySetInnerHTML="{{ icAxal }}"></span>Axal VC Spin-Out format</button>
         </div>
       </sc-if>
     </div>
@@ -214,7 +214,7 @@
             <button onClick="{{ syncDeckNow }}" style="font-size:12px;font-weight:600;color:#fff;background:#7c3aed;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;white-space:nowrap">Sync</button>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
-            <div style="display:flex;align-items:center;gap:11px"><span style="width:32px;height:32px;border-radius:9px;background:#ecfdf5;color:#0d9488;display:flex;align-items:center;justify-content:center;padding:7px" dangerouslySetInnerHTML="{{ icAxal VC }}"></span><div><div style="font-size:13px;font-weight:600">Axal VC 30-Day Spin-Out export</div><div style="font-size:11px;color:#a1a1aa">{{ axalSyncFull }}</div></div></div>
+            <div style="display:flex;align-items:center;gap:11px"><span style="width:32px;height:32px;border-radius:9px;background:#ecfdf5;color:#0d9488;display:flex;align-items:center;justify-content:center;padding:7px" dangerouslySetInnerHTML="{{ icAxal }}"></span><div><div style="font-size:13px;font-weight:600">Axal VC 30-Day Spin-Out export</div><div style="font-size:11px;color:#a1a1aa">{{ axalSyncFull }}</div></div></div>
             <button onClick="{{ syncAxalNow }}" style="font-size:12px;font-weight:600;color:#0d9488;background:#ecfdf5;border:1px solid #99f6e4;border-radius:8px;padding:8px 14px;cursor:pointer;white-space:nowrap">Export</button>
           </div>
         </div>
@@ -264,7 +264,7 @@
         <!-- axal format -->
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin:24px 0 10px">Axal VC 30-Day Spin-Out export</div>
         <div style="border:1px solid #d7f0ec;background:#f0fdfa;border-radius:12px;padding:20px 22px">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><span style="width:26px;height:26px;border-radius:7px;background:#0d9488;color:#fff;display:flex;align-items:center;justify-content:center;padding:6px" dangerouslySetInnerHTML="{{ icAxal VC }}"></span><span style="font-size:14px;font-weight:800;color:#0f766e">Capital Plan · Cohort 3 Demo Day</span></div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><span style="width:26px;height:26px;border-radius:7px;background:#0d9488;color:#fff;display:flex;align-items:center;justify-content:center;padding:6px" dangerouslySetInnerHTML="{{ icAxal }}"></span><span style="font-size:14px;font-weight:800;color:#0f766e">Capital Plan · Cohort 3 Demo Day</span></div>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
             <div><div style="font-size:11px;color:#5b8c85">Raise target</div><div class="uf-mono" style="font-size:19px;font-weight:600;color:#0f766e;margin-top:3px">{{ raiseLabel }}</div></div>
             <div><div style="font-size:11px;color:#5b8c85">Runway</div><div class="uf-mono" style="font-size:19px;font-weight:600;color:#0f766e;margin-top:3px">{{ runwayLabel }} mo</div></div>
@@ -398,7 +398,7 @@ class Component extends DCLogic {
       exportMenuOpen:st.exportMenuOpen, previewOpen:st.previewOpen,
       toggleExport:()=>this.setState({exportMenuOpen:!st.exportMenuOpen}),
       exportDeck:()=>this.setState({exportMenuOpen:false,deckSync:'just now'}),
-      exportAxal VC:()=>this.setState({exportMenuOpen:false,axalSync:'just now'}),
+      exportAxal:()=>this.setState({exportMenuOpen:false,axalSync:'just now'}),
       syncDeckNow:()=>this.setState({deckSync:'just now'}), syncAxalNow:()=>this.setState({axalSync:'just now'}),
       openPreview:()=>this.setState({previewOpen:true,exportMenuOpen:false}), closePreview:()=>this.setState({previewOpen:false}),
       stop:(e)=>e.stopPropagation(), back:(e)=>{e.preventDefault(); try{window.parent&&window.parent.postMessage({type:'uf-back'},'*');}catch(x){}},
@@ -411,7 +411,7 @@ class Component extends DCLogic {
       icCopy:ic('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
       icEye:ic('<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/>'),
       icDeck:ic('<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>'),
-      icAxal VC:ic('<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>'),
+      icAxal:ic('<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>'),
       icAlert:ic('<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',2),
       icX:ic('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',2.2),
     };
