@@ -33,6 +33,8 @@ import AdminFrozenBar from './components/AdminFrozenBar';
 import BranchSuspendedBar from './components/BranchSuspendedBar';
 import HqSupportSessionBar from './components/HqSupportSessionBar';
 import HqViewingAsBar from './components/HqViewingAsBar';
+import BranchNotDeployedBar from './components/BranchNotDeployedBar';
+import useBranchDeployment from './hooks/useBranchDeployment';
 import WorkspacesLauncher from './components/WorkspacesLauncher';
 import HqSubNavStrip, { StripLink } from './components/HqSubNavStrip';
 import { ADMIN_SHELLS, MESSAGES_ROLES } from './lib/paletteIndex';
@@ -917,6 +919,14 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // syntax and a `.map` over data is not a door it can see; the guard holds
   // this markup equal to that list.
   const hqStrip = shellRole === 'super_admin' ? stripFor(location.pathname, location.search) : null;
+  // D287 / S21 — read only where the strip could apply: the plain Admin
+  // shell off a branch, the person's own session. The hook memoises one read
+  // per user; the strip above the top bar and the badge inside it both draw
+  // from this one model.
+  const notDeployed = useBranchDeployment(
+    !branchFact && shellRole === 'admin' && activeRole === 'admin' && !isImpersonating,
+    user?.id,
+  );
 
   // Auto-logout after 20 minutes of inactivity, with a 60-second warning modal.
   // Tracks mouse/keyboard/scroll/touch on `window`. Disabled when no user is
@@ -985,6 +995,12 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             onExtendImpersonation={onExtendImpersonation}
           />
         )}
+
+        {/* D287 / S21 — ABOVE THE TOP BAR: the fact of a licence
+            administrator's account whose branch is not deployed yet. It
+            cannot be dismissed and stores nothing; it draws nothing for
+            everyone else, and nothing once the branch is live. */}
+        <SafeMount name="BranchNotDeployedBar"><BranchNotDeployedBar strip={notDeployed} /></SafeMount>
 
         {/* ── Carta-style global top header ─────────────────────────────── */}
         <header className="z-40 h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 shrink-0">
@@ -1059,14 +1075,30 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 1: the changelog's wording is the chip's, the badge's is the
                 badge's). Not for the holder in HQ view, whose chip says HQ. */}
             {!branchFact && shellRole === 'admin' && activeRole === 'admin' && !isImpersonating && (
-              <span
-                data-testid="hq-held-badge"
-                className="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-semibold text-slate-700 dark:text-slate-300"
-              >
-                <Globe size={12} aria-hidden="true" />
-                HQ-held · axal.vc
-                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200">HQ-HELD</span>
-              </span>
+              notDeployed
+                /* D287 / S21 — the same slot for a licence administrator whose
+                   branch is not deployed: "{brand} · on axal.vc" and the badge
+                   "BRANCH · NOT DEPLOYED", as the artboard draws them. */
+                ? (
+                  <span
+                    data-testid="branch-not-deployed-badge"
+                    className="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-semibold text-slate-700 dark:text-slate-300"
+                  >
+                    <Globe size={12} aria-hidden="true" />
+                    {notDeployed.brand || 'This licence'} · on axal.vc
+                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200">BRANCH · NOT DEPLOYED</span>
+                  </span>
+                )
+                : (
+                  <span
+                    data-testid="hq-held-badge"
+                    className="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-semibold text-slate-700 dark:text-slate-300"
+                  >
+                    <Globe size={12} aria-hidden="true" />
+                    HQ-held · axal.vc
+                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200">HQ-HELD</span>
+                  </span>
+                )
             )}
             {(activeRole === 'founder' || activeRole === 'admin') && (
               <Suspense fallback={<span className="inline-block h-8 w-8" />}>
