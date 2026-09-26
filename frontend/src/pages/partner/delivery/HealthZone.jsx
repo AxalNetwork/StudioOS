@@ -14,6 +14,7 @@ import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, Legend, NotRecorded } from '../../../workspaces/canvasKit';
+import FounderReviews from './FounderReviews';
 
 /**
  * Delivery · Health — `/delivery/health`.
@@ -793,6 +794,14 @@ export default function PartnerHealthZone() {
               ))}
           </div>
         </Section>
+
+        {/* D390 — WHAT THE FOUNDER RECORDED, beside what the firm heard. The
+            reviews moved here from the retired /partner/operations/performance
+            and /portfolio tabs; FounderReviews.jsx says why this is their home
+            and how the read is bounded. Inside the live branch only, so an
+            unlinked sign-in (an admin with no firm) never reads every firm's
+            reviews through the admin-wide engagement list. */}
+        {!unlinked && <FounderReviews />}
 
         <StatedLimit title="How this rating is made, and what it cannot see">
           <p>
