@@ -29673,11 +29673,12 @@ exists.
   persisting any draft with `drafted: false`, so no orphan `telegram_posts`
   or `x_posts` row is ever written for it. `previewAll` / `previewXAll`
   return it anyway, with `drafted: false` and the reason, for the page to
-  render — but `AdminX.jsx` and `AdminTelegram.jsx` need no edit this wave,
-  since neither currently reads a per-draft `drafted` flag; a page change
-  to surface the reason is filed for after Session 1's D258 (the shared
-  refusal-reading work) merges, so the two changes don't collide on the
-  same render logic.
+  render. **[Corrected by D330.]** This entry originally filed the page
+  change for after Session 1's D258 merged, reasoning the two would
+  otherwise collide on the same render logic — but D258 (#811) had already
+  merged before this PR (#817) was even opened, so the filing was stale on
+  arrival. D330 does the page change: `AdminX.jsx` and `AdminTelegram.jsx`
+  now read `drafted` and print the reason.
 - **"Quiet week"** (both files' public draft) now appears only when BOTH
   reads succeeded and both figures are below `K_MIN`. A failed read is
   reported as unreadable and never folds into the quiet state — the two
@@ -30174,6 +30175,51 @@ every `design/incoming` mention found the other three.
   #829, #832), with no conflict in any of them.
 - No migration, no route, no `api.js` method. Migration 307 and D306–D309 are
   unused, and 296 is the highest migration on disk.
+
+## D330
+
+**AdminX.jsx and AdminTelegram.jsx say why no draft was made.** Wave 8,
+Session 4, item 2. D301 (task 434, #817) fixed `runAggregator` and
+`runXAggregator` so a draft whose every figure line was dropped sets
+`drafted: false` and a reason, and is never persisted — but its own
+D-entry left the page-side fix filed for later, reasoning it would collide
+with Session 1's D258. That reasoning was already stale when D301 merged:
+D258 (#811) had landed before D301's PR was even opened. **[Corrected in
+D301's own entry above, in place, as this PR's first commit.]**
+
+**What changed.** Both pages already call the worker's existing
+`GET /aggregator/preview` route (`api.previewAggregator`) — `AdminX.jsx`'s
+`AggregatorTab` already did, for the Persist step's preview; `AdminTelegram.jsx`
+gained a matching Preview button and panel in its Drafts tab, since it had
+none. In both, a preview card whose `drafted === false` no longer renders an
+empty thread or body: it shows "No draft was made: `<reason>`." (or "no
+reason was given" if the worker sent none), and the persisted-drafts list
+below is unaffected — a `drafted: false` draft was never written there to
+begin with, so there is nothing to distinguish there.
+
+**Worker only in the sense that nothing worker-side changed.** Both routes
+and their `Count`/`reason` shape already existed from D301; this is the page
+half D301 deferred. No migration, no new route, no new `api.js` method.
+`frontend/src` moved, so `docs/` is rebuilt.
+
+### VERIFIED
+
+- New `frontend/test/admin_aggregator_drafted_d330.test.mjs`, 5 tests, over
+  `codeOnly` source (neither page takes `api` as an injectable prop, so
+  there is no seam for a live-response test without restructuring the page,
+  which is out of this task's scope): both pages branch on `d.drafted`;
+  both print the worker's `reason` with the same honest fallback; Telegram's
+  panel calls `previewAggregator` and stores the response; neither
+  not-drafted branch renders the empty `body_md`/`thread` fields.
+- 6 mutations run, 6 caught (non-zero exit plus a `not ok` line), each
+  restored from a sha256-verified `/tmp` snapshot. One escaped on the first
+  pass: removing only the FIRST of AdminX.jsx's two `d.drafted === false`
+  occurrences (the badge) left the second (the ternary) intact, so the
+  drafted-check assertion still passed. Fixed by mutating every occurrence,
+  not the code; the fix caught it and a rerun confirmed all six.
+- `npm run test:drift` exits 0. Both typechecks, `check-decision-ids`,
+  `check-folder-docs` and `check-api-drift` exit 0. Root `npm run build`,
+  then `node scripts/check-docs-fresh.mjs --strict`, exits 0.
 
 ## D350
 
