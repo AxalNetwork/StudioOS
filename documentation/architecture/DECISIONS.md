@@ -30697,6 +30697,91 @@ have completed the Spin-Out Lab", a typed track record;
   card — the other twelve PNGs were left byte-for-byte as committed).
   `prerender-og --check`, `generate-og-images --check` and `validate-og-tags` pass.
 
+## D381
+
+**The Spin-Out Lab Workspace's three deltas: the header counts
+deliverables, "graduated" is apart from "exited", and the completed Week 1
+summary shows the founder's own record.** Session 10, item 2 (the C3 gap
+map's PR 3). No migration, no route, no new `api.js` method: every value
+below already had a store and a read.
+
+**The header.** The canvas draws a 22% ring beside "4 of 18 deliverables" —
+the ring IS that share (4/18). The shipped ring was days elapsed (and 100%
+in the admin preview), a different number under the same ring. It is now
+`deliverablePct(done, total)` over the same `countDeliverables` the
+scorecard uses (27 counted rows today, not the canvas's 18), with
+"N of M deliverables" beside it. The day count stays where it already was:
+the week chip and the segmented bar.
+
+**Graduated versus exited.** `users.is_incorporated` is set by two paths:
+`recordMilestone` when week 4 is met — whose only requirement is
+`incorporation_completed` — and the `/exit` escape hatch, which records no
+milestone. The Workspace read the flag alone, so a founder who quit in week
+2 saw "Graduated · Program complete · Incorporated". `labStanding` in the
+new `lib/labWeekSummary.js` reads the milestone, the signal `/graduates` and
+`/stats` already use. An exited founder now sees "Exited", "Left the
+programme in Week N", their week marked "Left" (not "Locked", not "Active"),
+no countdown and no upcoming-week previews. A graduate's view is unchanged.
+*Measured, not changed:* `featureUnlocked` still treats a graduate as
+having every tool, while every tool route is `labRoles`-guarded on
+`spinout_lab_active`, which graduation turns off — the gap map's "lab role
+gate" trap. That is a routing question outside this delta, filed below.
+
+**The Week 1 summary.** The canvas gives it four blocks. Three have a store
+and are read when the summary is opened (`WeekOneRecord`):
+- the startup record — the project `pickLabProject` chooses, with "created
+  · Day N" counted from the Lab start (and a date instead when the record
+  predates the Lab, never a negative day);
+- TAM / SAM from `projects.tam/.sam`, with what they were derived from
+  (`GET /projects/:id/market-assumptions`, migration 247). The canvas cites
+  Gartner and CB Insights under them; nothing stores a citation against the
+  figure, so "Cited sources" reads Not recorded with that reason;
+- interviews from `GET /progress/discovery/:id`, "Key insight" being the
+  first logged pain — the field the Discovery page leads with. No pain
+  reads "No pain logged", never a line borrowed from the notes.
+The fourth, "Personal advisor: Week 1 question bank complete", is Eadwyn.
+Its ledger (D350's `/advisor/progress`) counts answers against the
+questions visible now and keeps no record of which week's bank was
+finished, so the row is titled "Eadwyn · Week 1 questions" and rendered Not
+recorded with that sentence. Each of the three reads has its own
+`Unreadable` with a retry; a failed interview read never falls through to
+"No interviews logged yet". Weeks 2–4 keep their deliverables-and-tools
+summary: the canvas draws rich content for Week 1 only.
+
+**The admin journey preview** (`AdminSpinoutJourneyPreview.jsx`) renders the
+Workspace in two stages. Both now pass `WEEK1_FIXTURE`, which the record
+labels "Sample data" on screen, so opening the preview never reads the
+admin's own projects as though they were a founder's.
+
+**Filed, not fixed:** the Lab tool routes' guard for graduates (above); the
+canvas's per-week "Completed <date>" meta already reads milestone
+timestamps and is unchanged.
+
+### VERIFIED
+
+- `spinout_workspace_deltas_d381.test.mjs` (new, 16 tests) RENDERS the
+  Workspace and the Week 1 record with `react-dom/server` and asserts on
+  what a founder reads: the header count and the ring (read off its own
+  element — the page's run-on text joins "Day 10" and "0%" into "100%"),
+  graduated / exited / active, the record's blocks, each Not recorded, the
+  preview's sample label, plus the pure helpers. It slices the canvas at
+  both ends of the Week 1 summary and asserts each element claimed.
+- Seventeen mutations, each anchor unique, bytes proven changed, restored
+  from a sha256-checked snapshot and re-run green: `labStanding` ignoring
+  the milestone; the workspace reading the bare flag; the ring counting
+  days; the header losing its total; the exited badge saying Graduated; the
+  record unmounted; a failed interview read shown as empty; an insight
+  borrowed from the notes; an unsized market printing $0; the canvas's
+  citation drawn; the Eadwyn row claiming completion; a preview stage
+  dropping its fixture; `recordDay` counting a record older than the Lab;
+  an interview count drawn with no project; `derivationParts` returning an
+  empty list; the exited week marked Locked; the live record not reading
+  assumptions. **Two escaped on the first run** — the preview check matched
+  the other stage's line, and the "Left" check matched the header sentence
+  rather than the week's badge. Both assertions were fixed (every preview
+  mount must pass the fixture; "Left" is read off the week's own card), not
+  the code: 17 of 17 caught.
+
 ## D390
 
 **Retiring `/partner/operations/*`, part 1a: the two jobs that existed
