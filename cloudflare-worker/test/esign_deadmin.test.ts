@@ -107,6 +107,24 @@ test('an out-of-scope envelope is a 404, never a 403', () => {
   assert.doesNotMatch(h, /403/);
 });
 
+test('download and both forward routes compose the same scope, and never answer 403 (D410)', () => {
+  // They checked `envelope.user_id` AFTER finding the row: the sender got a
+  // 403 on their own agreement, and 403-versus-404 told any signed-in caller
+  // which ids exist. esign_send_hardening_d410.test.ts proves the rows; this
+  // pins the shape so a refactor cannot quietly restore a local check.
+  for (const sig of [
+    "esign.get('/:id{[0-9]+}/document'",
+    "esign.post('/:id{[0-9]+}/forward'",
+    "esign.get('/:id{[0-9]+}/forward'",
+  ]) {
+    const h = handler(sig);
+    assert.match(h, /esignEnvelopeScope\(user\)/, `${sig} must use the shared scope`);
+    assert.match(h, /\.bind\(id, \.\.\.scope\.binds\)/, `${sig} must bind the scope with the id`);
+    assert.doesNotMatch(h, /403|'Forbidden'/, `${sig} must not distinguish "not yours" from "not there"`);
+    assert.doesNotMatch(h, /user_id !== user\.id/, `${sig} re-grew a local ownership check`);
+  }
+});
+
 // ---------- origination ----------
 
 test('origination is rate-limited by a fail-closed bucket', () => {
@@ -128,4 +146,18 @@ test('the docusign tier gate follows the sender', () => {
   // Studio-only provider. Gating on a stale `admin` binding would have thrown
   // a ReferenceError on the first non-native send rather than returning 402.
   assert.match(handler("esign.post('/send'"), /userMeetsTier\(sender, 'studio'\)/);
+});
+
+test('the signing URL never reaches a non-admin sender or the audit meta (D410)', () => {
+  const h = handler("esign.post('/send'");
+  assert.match(h, /if \(sender\.role === 'admin'\) return c\.json\(result\)/);
+  assert.match(h, /const \{ signing_url: _withheld, \.\.\.forSender \} = result/);
+  assert.match(h, /return c\.json\(forSender\)/);
+  assert.doesNotMatch(src, /meta: \{[^}]*signing_url/, 'a signing URL is written into audit meta again');
+});
+
+test('the recipient account comes from the email, not the body (D410)', () => {
+  const h = handler("esign.post('/send'");
+  assert.match(h, /SELECT id FROM users WHERE LOWER\(email\) = \?/);
+  assert.doesNotMatch(h, /recipientUserId = body/, 'the body decides whose account must sign again');
 });
