@@ -23,11 +23,14 @@
  * `supportSession.js`).
  */
 
+import { NOT_RECORDED } from './absence';
+
 /** The one name for the stored reason. */
 export const REASON_KEY = 'impersonationReason';
 
-/** What a null reason reads as. Never a stand-in reason. */
-export const NOT_RECORDED = 'Not recorded';
+/** What a null reason reads as — `lib/absence.js`'s one word, re-exported so
+ *  the bar and its guard name it here. Never a stand-in reason. */
+export { NOT_RECORDED };
 
 /**
  * How long a support session lasts, in the bar's Limit field. The worker's
