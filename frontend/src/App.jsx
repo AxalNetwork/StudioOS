@@ -25,7 +25,7 @@ import {
   Menu,
   Shield,
   ChevronDown, Eye, ArrowLeft, Sparkles,
-  Gift, Mail
+  Gift, Mail, Globe
 } from 'lucide-react';
 import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES, ONBOARDING_CANVAS_PATHS } from './sidebarConfig';
 import PaywallModal from './components/PaywallModal';
@@ -93,6 +93,14 @@ const AdminTeam = lazy(() => import('./pages/admin/AdminTeam'));
 // Task #9 — 'exploring' holding-state surfaces.
 const ExploringDashboard = lazy(() => import('./pages/ExploringDashboard'));
 const AdminExploring = lazy(() => import('./pages/admin/AdminExploring'));
+// D286 — the five landings of the Admin shell on accounts HQ holds directly
+// (canvas S20). Under /admin/held/ so none can collide with an HQ console:
+// /admin/accounts is HQ's Team, and the HQ consoles are flat /admin/<noun>.
+const HeldAccounts = lazy(() => import('./pages/admin/HeldAccounts'));
+const HeldApprovals = lazy(() => import('./pages/admin/HeldApprovals'));
+const HeldPrograms = lazy(() => import('./pages/admin/HeldPrograms'));
+const HeldCommunity = lazy(() => import('./pages/admin/HeldCommunity'));
+const HeldInsights = lazy(() => import('./pages/admin/HeldInsights'));
 const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications'));
 const AdminLicences = lazy(() => import('./pages/admin/AdminLicences'));
 const AdminNetworkProfiles = lazy(() => import('./pages/admin/AdminNetworkProfiles'));
@@ -1041,6 +1049,23 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                     they can do. */}
                 {branchFact.status && branchFact.status !== 'active'
                   && ` · ${String(branchFact.status).toUpperCase()}`}
+              </span>
+            )}
+            {/* D286 / S20 — the same slot, the same question, for the plain
+                Admin shell off a branch: whose data am I looking at. HQ's own
+                — the accounts HQ holds on axal.vc — because no branch is
+                deployed. The scope chip reads "HQ-held · axal.vc" and the
+                badge "HQ-HELD", each as the artboard draws it (D282's tension
+                1: the changelog's wording is the chip's, the badge's is the
+                badge's). Not for the holder in HQ view, whose chip says HQ. */}
+            {!branchFact && shellRole === 'admin' && activeRole === 'admin' && !isImpersonating && (
+              <span
+                data-testid="hq-held-badge"
+                className="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-semibold text-slate-700 dark:text-slate-300"
+              >
+                <Globe size={12} aria-hidden="true" />
+                HQ-held · axal.vc
+                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200">HQ-HELD</span>
               </span>
             )}
             {(activeRole === 'founder' || activeRole === 'admin') && (
@@ -2266,6 +2291,14 @@ function AppInner() {
       <Route path="/admin/funds" element={guard(['admin'], hqOnly(<HqFundsPage />))} />
       {/* A subsidiary admin reads their OWN licence; /admin/licences is HQ's ledger of every one. */}
       <Route path="/admin/my-licence" element={guard(['admin'], <MyLicencePage />)} />
+      {/* D286 — S20's five landings. `guard(['admin'])` and never `hqOnly`:
+          this is the plain admin's own shell. Each carries its consoles as
+          literal links, which is how the reachability walk reaches them. */}
+      <Route path="/admin/held/accounts" element={guard(['admin'], <HeldAccounts />)} />
+      <Route path="/admin/held/approvals" element={guard(['admin'], <HeldApprovals />)} />
+      <Route path="/admin/held/programs" element={guard(['admin'], <HeldPrograms />)} />
+      <Route path="/admin/held/community" element={guard(['admin'], <HeldCommunity />)} />
+      <Route path="/admin/held/insights" element={guard(['admin'], <HeldInsights />)} />
       {/* D107 — the eight subsidiary rows (Admin · Subsidiary S0–S6). Each one
           has a route so no sidebar row can 404; the ones whose artboards are
           not built state what they will show and which PR builds them.

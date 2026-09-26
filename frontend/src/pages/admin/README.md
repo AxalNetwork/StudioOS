@@ -16,6 +16,17 @@ cohort (applications, timing, journey preview), content (articles, publications,
 templates), the network (profiles, partners, referrals), and integrations
 (Telegram, X).
 
+`HeldZone.jsx` and the five `Held*.jsx` landings are the Admin shell on
+accounts HQ holds directly (canvas S20, D286): `HeldAccounts.jsx` (embeds the
+console's Users panel; links Exploring, Personas, Trash), `HeldApprovals.jsx`
+(S22's sixteen lanes as literal rows), `HeldPrograms.jsx`, `HeldCommunity.jsx`
+and `HeldInsights.jsx` (links nowhere, by S20). Mounted at `/admin/held/*` —
+a prefix of their own so none can collide with an HQ console such as
+`/admin/accounts`. Every console link on them is literal, because
+`frontend/test/admin_route_reachability.test.mjs` reads navigation syntax,
+and `HeldZone` carries the always-visible scope sentence and the shell's one
+Worker AI rail mount.
+
 `assessment/` holds the assessment game editor — see its own README.
 
 ## Rules

@@ -133,13 +133,13 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Admin · Subsidiary | `/admin/subsidiary` | Admin | Full page (proposed) | Sidebar → Admin → Admin Console | NEW | Low |
-| Contracts · Subsidiary | `/admin` · `/esign/:token` | Admin | Full page | Sidebar → Admin → Admin Console | UPGRADE | High |
-| GP Application Review | `/admin/lp-applications` | Admin | Full page + review drawer | Sidebar → Admin → LP Applications | UPGRADE | High |
+| Admin · Subsidiary | `/admin/subsidiary` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
+| Contracts · Subsidiary | `/admin` · `/esign/:token` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| GP Application Review | `/admin/lp-applications` | Admin | Full page + review drawer | Sidebar → Admin → Approvals | UPGRADE | High |
 | Legal & Capital Engine | `/legal-capital` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Support · Subsidiary | `/help` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | Admin | Full page | Sidebar → Admin → Public Team Page | NEW | High |
+| Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 
 ## Super Admin — 7 canvases
 
@@ -215,8 +215,8 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 67 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 38 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| High | 65 | Live route, reachable from that workspace’s sidebar. |
+| Medium | 40 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 29 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts

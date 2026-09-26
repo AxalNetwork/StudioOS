@@ -149,7 +149,9 @@ test('a ?tab= lights the HQ row the map places it on: Platform on integration-ke
 });
 
 test('SidebarNav lights the derived row in the HQ shell and keeps the path rules elsewhere', () => {
-  assert.match(SIDEBAR_NAV, /const derivedRow = role === 'super_admin' \? hqRowFor\(navLocation\.pathname, navLocation\.search\) : null;/,
+  // The pin is the HQ arm — the HQ shell derives its row from the map — not
+  // the whole line: D286 gave the Admin shell an arm of its own beside it.
+  assert.match(SIDEBAR_NAV, /const derivedRow = role === 'super_admin' \? hqRowFor\(navLocation\.pathname, navLocation\.search\)/,
     'SidebarNav no longer derives the HQ row from the map');
   assert.match(SIDEBAR_NAV, /const active = derivedRow !== null\s*\? to === derivedRow\s*: \(manualActive === null \? isActive : manualActive\);/,
     'path-only matching is back: the derived row does not decide the active row');

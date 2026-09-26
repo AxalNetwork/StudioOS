@@ -28826,6 +28826,198 @@ the Node guard.
 `frontend/src` moved, so `docs/` is rebuilt. No route, no worker change, no
 migration, no `api.js` method.
 
+## D286
+
+**Tasks 415, 416, 418 and 419: the eight-row Admin shell on accounts HQ
+holds directly, its wall rules, and every leftover console placed.** Closes
+task 410, the umbrella for D283–D286; task 410 takes no D-number.
+
+**What was true on main (`822bf3805`).**
+- `shellRoleFor` gives a plain admin on axal.vc `SIDEBAR_GROUPS.admin`, which
+  after D284 was Studio plus an Admin group of nineteen live console rows
+  (twenty with the parked X). No branch is provisioned (`infra/branches`
+  holds only `_example.json`; `tenancyScope.ts` leaves `admin` unscoped), so
+  every plain admin is HQ-held today and that shell was the only one they
+  had.
+- `SIDEBAR_GROUPS.branch_admin` already carried S20's eight labels in S20's
+  order, pointing at `/branch/*`, which refuses on HQ. `ACCENT` had
+  `super_admin` and `branch_admin` and no `admin`.
+- The Admin Console's search caption read `null` off a branch (S0 wall rule
+  2 as "no caption rather than a vague one"), so the one shell every admin
+  sat on said nothing about what it searched.
+- `super_admin_shell.test.mjs` asserted `adminRows.length > rows.length`
+  ("the HQ shell is a lens over the admin product, not a replacement for
+  it"), a count S20's eight rows fail while the property holds.
+- Three of S22's labels are false on HQ: "Template library · read-only" and
+  "results only; authoring is HQ's" — `requireHqAuthoring` (auth.ts)
+  refuses only on a branch, and its own doc says a plain HQ admin authors
+  these today. "No console exists anywhere yet" (Spinout moderation) is true
+  of the SPA: the worker mounts the route and `approvalSources.ts` carries
+  the lane, and nothing calls `adminSpinoutModeration`.
+- Replacing the admin rows orphans, measured with the reachability walk:
+  `/admin/refer-earn`, `/admin/partners`, `/admin/lp-applications`,
+  `/admin/my-licence`, `/admin/best-fit`, `/admin/events`, `/admin/jobs`,
+  `/admin/circles`, `/admin/due-diligence`, `/admin/advisor-cohorts` (D283
+  gave `/admin/trash` its door, D285 `/admin/team`).
+
+**What changed.**
+- **`SIDEBAR_GROUPS.admin` is S20's eight rows**, one group, in S20's order:
+  Studio → `/studio`; Accounts → `/admin/held/accounts`; Approvals →
+  `/admin/held/approvals`; Programs → `/admin/held/programs`; Community →
+  `/admin/held/community`; Contracts → `/admin?tab=legal`; Insights →
+  `/admin/held/insights`; Settings → `/admin/my-licence`. The parked X row
+  and its "Re-enable once …" sentence stay in the file; the reachability
+  guard reads both. The eight now-unused icon imports are pruned;
+  `PROFILE_ROUTING.md` and `PAGE_INVENTORY.md` are regenerated.
+- **The five landings, `pages/admin/Held*.jsx`, under `/admin/held/`** — a
+  prefix of their own so none can collide with an HQ console (`/admin/accounts`
+  is HQ's Team, `hqOnly`; the HQ consoles are flat `/admin/<noun>`). Each is
+  `guard(['admin'])`, never `hqOnly`, has a `match` list where it leads to
+  consoles, and carries its doors as literal `<Link to="…">` in its own file,
+  because the reachability walk reads navigation syntax and ten routes have
+  these pages as their only door on this shell.
+  - **Approvals**: S22's sixteen lanes as sixteen literal `<tr>` rows — Kind ·
+    Lane · Console · State here, verbatim. Spinout moderation and Content to
+    HQ link nowhere and say why.
+  - **Community**: Events, Jobs, Circles, Advisors & Partners at
+    `/admin?tab=network-profiles` (never the standalone route, whose EXEMPT
+    entry would go stale) and Wellbeing at `/admin?tab=wellbeing` (D283).
+    The prose for the first three is `BranchCommunity`'s `COMMUNITY_CONSOLES`,
+    read and not edited; the links are literal.
+  - **Programs**: the Lab applications tab, the Lab console, advisor cohort
+    access, and the Assessment Studio — labelled for what the route grants.
+  - **Accounts**: the Users table → `/admin` (S20's own arrow; an earlier
+    draft embedded the console's Users panel as HQ · Team does, and the
+    reachability guard refused it because a second mount has to be declared
+    in its `SECOND_MOUNTS`, which this item does not edit), the Exploring
+    board, one person's persona (`/admin?tab=personas`; "the taxonomy itself
+    is HQ's"), and Trash.
+  - **Insights**: S20's sentence verbatim and no link — it borrows neither
+    `/admin/analytics` (hqOnly) nor `/branch/insights` (refuses on HQ).
+- **`HeldZone.jsx`** is the frame: the always-visible scope sentence
+  ("HQ-held accounts · axal.vc — No branch is deployed yet, so these accounts
+  have no branch database …") and the shell's one Worker AI rail mount, with
+  a note that says there is no branch read behind it — a question about a
+  branch is one it cannot ask rather than one it declines, which is what
+  `BranchZone` already says for a branch and what D282's tension 2 found S20's
+  AdminRail could not honestly draw.
+- **The wall rules.** Search says "Searching HQ-held accounts" off a branch
+  (`AdminPage`, S0 rule 2 restated for S20; precedent `BranchAccounts`'s
+  resting label). Counts are this database's: no landing draws a figure, and
+  the rail's coverage says where they live. The rail's scope sentence is the
+  frame's. Licensing appears only as Settings → My Licence; the guard holds
+  the admin rows to exactly one licence route. Wherever a rule holds only
+  because no branch exists yet, the frame says so.
+- **A query-aware active row on this shell too** — `adminRowFor` in
+  `lib/hqStrips.js`, read from the H35 map: `/admin?tab=kyc` lights
+  Approvals, `legal` Contracts, `users` (and a bare `/admin`) Accounts,
+  `personas` Accounts, `lab-applications` Programs, `wellbeing` and
+  `network-profiles` Community; a tab the map places only on HQ
+  (integration-keys, github, payments, promos, billing) lights **no row**
+  (`NO_ROW`), which is what lets the Contracts row point at a query without
+  lighting on every tab (`NavLink` compares pathnames only). Off `/admin` the
+  path decides, as before.
+- **The top bar** (tension 1 of D282 decided): in the territory badge's slot,
+  for the plain Admin shell off a branch, a globe chip reading "HQ-held ·
+  axal.vc" and a badge reading "HQ-HELD" — the changelog's wording is the
+  chip's and the artboard's is the badge's, each where S20 draws it. Not for
+  the holder in HQ view, whose chip says HQ; not while impersonating.
+  Messages and Workspaces are D284's.
+- **The accent**: `ACCENT.admin`, steel, the same pair as `branch_admin`, by
+  the brief's recommendation. No new shell key: `shellRoleFor` still answers
+  `'admin'`, because a key that named "held" would have to be retired the
+  day a branch goes live, and the accent is the only thing the shell needed.
+- **The three false labels are not rendered**, and no gate moves. Filed here
+  as the owner's question: whether a plain HQ admin should author templates
+  (`admin_contracts.ts` :1333, :1371, :1391) and assessments (about
+  seventeen writes behind `requireHqAuthoring`). Today they may, and the
+  shell says so.
+- **The four HQ-placed `guard(['admin'])` consoles** — `/monitoring`,
+  `/admin/articles`, `/admin/publications`, `/admin/team` — are recorded as
+  HQ's: the H35 map places them on Platform and Content, their door is the
+  HQ strip (D285), and their gate is not raised. Filed: whether it should
+  rise to `hqOnly` now that a plain admin has no row to them.
+- **Stale "50-row" comments**: the brief's anchors (:79, :203, :313-317,
+  :332, :446, :452-453, :531 on `299f71405`) no longer exist on main —
+  D284's rewrite of the admin group's comment and its import pruning removed
+  them — and `grep` finds no "50-row", "50 rows" or "fifty" left in the file.
+  The new group comment records what the shell replaced and where it went.
+
+**Two pins re-aimed at their properties, none loosened.**
+- `super_admin_shell` "a super admin keeps every admin destination": with HQ
+  view off the holder gets the plain Admin shell exactly
+  (`shellRoleFor(…, false) === 'admin'`), and with it on every Admin row
+  still points at a registered route that admits an admin and is not
+  `hqOnly` — never a count.
+- `admin_user_search_d128` "the scope caption names a territory only where
+  there is one": the caption names what it searches — the territory on a
+  branch, HQ-held accounts off one.
+- `hq_subnav_h36_d285`'s SidebarNav pin narrows to the HQ arm of the derived
+  row, since the Admin shell now has an arm beside it.
+
+**Guard: `frontend/test/held_admin_shell_d286.test.mjs`, 13 tests.**
+- *the eight rows are S20's, in S20's order, one group, each an /admin
+  console or /studio and never /branch/** — labels and routes by `deepEqual`,
+  every `to` and every `match` registered, the parked X line intact;
+- *the five landings are guard(['admin']) without hqOnly, under a prefix no
+  HQ console can collide with* — each lazy-imported, each inside `HeldZone`;
+- *every console link on a landing is literal, registered, and never under
+  /branch/* — 4 · 14 · 4 · 5 · 0 doors, no `.map` into a link;
+- *Approvals draws S22's sixteen lanes verbatim and in order; moderation and
+  Content-to-HQ link nowhere* — the rows parsed out of the JSX and compared to
+  the table by `deepEqual`, and every linked console held to the map's
+  Admin · Approvals placements;
+- *Community links its five consoles at their own routes — Advisors &
+  Partners at the tab, never the standalone route*;
+- *Programs links its four consoles; Accounts links the Users table,
+  Exploring, Personas and Trash*;
+- *Insights carries S20's sentence verbatim and links nowhere*;
+- *the three false labels are not rendered, and no gate was narrowed or
+  raised* — and the four HQ-placed consoles are on a strip;
+- *the ten routes that lost their sidebar row have a literal door on this
+  shell*;
+- *an /admin tab lights the Admin row the H35 map places it on, and a tab
+  placed only on HQ lights no row*;
+- *the top bar says whose data: "HQ-held · axal.vc" and the HQ-HELD badge,
+  on the plain Admin shell off a branch only*;
+- *the accent is steel and the shell key is still admin*;
+- *the wall rules: search says HQ-held accounts, the scope sentence is the
+  frame's, licensing is only Settings*.
+
+**Mutations: 20 run, 20 caught** — each a non-zero exit with a `not ok` line,
+anchors unique, bytes proven changed, sources restored from a sha256-checked
+snapshot: a landing route that is not registered; a `/branch/` link on a
+landing; a landing door deleted, leaving an orphan (caught by this guard and,
+separately, by the reachability walk); a sidebar row pointing at an
+unregistered route; moderation given a console; "read-only" restored on
+Contracts; "results only" restored on Programs; Community linking the
+standalone roster route; Insights borrowing the HQ analytics page; an
+HQ-only tab lighting an Admin row; SidebarNav dropping the Admin arm; the
+badge gated on every shell; the badge reading the changelog wording; the
+accent removed; the scope sentence removed; search no longer saying HQ-held
+accounts; the gate on `/admin/team` raised; a landing wrapped in `hqOnly`;
+the rows reordered.
+
+**Recorded verification, not a gate.** The built bundle was served
+statically with `/api/auth/me` stubbed as a plain admin (no elevation, no
+branch) and every other call answering an empty list, and driven with the
+container's Chromium. The sidebar drew Studio, Accounts, Approvals, Programs,
+Community, Contracts, Insights, Settings, in that order, at the eight routes
+above; the top bar drew the globe chip "HQ-held · axal.vc" and the badge
+"HQ-HELD", with no territory badge, beside Messages and Workspaces; the
+Approvals landing drew the scope sentence, sixteen lanes with fourteen links,
+and one rail. The Approvals row was lit on `/admin?tab=kyc`, Contracts on
+`/admin?tab=legal`, Accounts on a bare `/admin` (where the Users table's
+caption read "Searching HQ-held accounts"), Community on `/admin/events`, and
+no row at all on `/admin?tab=github`. The Community landing's five links were
+its five routes; the Insights landing drew its sentence and no link of its own
+(the two links in `<main>` were the app footer's Terms and Privacy). CI runs
+no browser; the gate is the Node guard.
+
+`frontend/src` moved, so `docs/` is rebuilt. No route beyond the five
+landings, no worker change, no migration, no `api.js` method.
+`admin_route_reachability.test.mjs` passes unedited.
+
 ## D300
 
 **Every file in `frontend/public` has to have a named reader — one did not,
