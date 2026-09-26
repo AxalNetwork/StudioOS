@@ -13,9 +13,16 @@ import { Card } from '../../ui';
  * indistinguishable from a broken one. This states the boundary instead, the
  * way `AdvisorPreviewNotice` does for a role preview.
  *
- * It is also what the Super Admin sees after choosing "Admin" in View-as: the
- * point of that switch is to see exactly what a subsidiary admin sees, and a
- * subsidiary admin sees this.
+ * D303 — CORRECTED: this is NOT what View-as shows. `App.jsx`'s `hqOnly`
+ * gates on `isSuperAdminUser(user)` — the real signed-in identity — not on
+ * `effectiveRole`, the browsed identity View-as sets. So a Super Admin who
+ * chooses "Admin" in View-as still passes this check and sees the actual
+ * page, never this notice; View-as changes what a preview shows on the
+ * PARTNER/founder/advisor/investor surfaces (`AdvisorPreviewNotice` and its
+ * siblings), which key off `effectiveRole` on purpose, but it has no effect
+ * here. What this notice states is simpler than the deleted sentence claimed:
+ * it is what an admin account that has never held the super-admin elevation
+ * sees, full stop.
  */
 export default function SuperAdminOnlyNotice() {
   return (
