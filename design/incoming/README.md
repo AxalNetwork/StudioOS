@@ -459,7 +459,7 @@ Decoding all three and diffing them against `canvases/` gave the triage:
 
 | Artifact | Verdict |
 | --- | --- |
-| Refer & Earn | **Genuinely newer.** 67 literals added, 3 removed, every one of them in the share card — a post-and-story block the shipped page has no trace of. It was in this queue until 2026-09-26, when it replaced the `integrated/` copy in place (D305). |
+| Refer & Earn | **Genuinely newer.** 67 literals added, 3 removed, every one of them in the share card — a post-and-story block the shipped page had no trace of at triage (#477 built one the same day). It was in this queue until 2026-09-26, when it replaced the `integrated/` copy in place (D305). |
 | Trust Center | **Already held.** Identical to `Trust Center v2.dc.html`, which was already committed. |
 | Help Center | **Already held.** Identical to `Help Center.dc.html`, which was already committed. |
 

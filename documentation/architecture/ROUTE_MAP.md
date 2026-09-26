@@ -126,8 +126,11 @@ the gap, not the intent.
 
 The eleven rows after `Pages · Company` were written 2026-09-26 (D305): three for
 the Advisor canvases that graduated that day with no row, and eight for the
-canvases that arrived. Four `Pages · Partner *` canvases in `integrated/`
-still carry none; D305 reports the gap and does not fill it.
+canvases that arrived. Five canvases in the three folders still carry none —
+`Pages · Partner Delivery`, `· Network`, `· Offers` and `· Research` in
+`integrated/`, and `Spin-Out Lab` in `out-of-scope/` — counted by matching
+every file name against this table's first column. D305 reports the gap and
+does not fill it.
 
 ## Investor / advisor / partner / chrome — part 3 (24 canvases)
 

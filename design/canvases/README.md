@@ -143,9 +143,19 @@ resolutions, all in place. None moves a number.
   the `boards` loop and its atomics block, +209/−8. Its DCLogic is unchanged,
   and its one unplaced image points at `../assets/axal-dossier-mark.png`.
 - `Refer & Earn` was replaced by the copy that waited in `design/incoming/`
-  (68,003 B over 56,492 B). It is an exact decode of artifact `55827507` and a
-  strict superset of what it replaced. A strict superset is the only condition
-  under which a re-export may replace a working canvas.
+  (68,003 B over 56,492 B). That copy is byte-identical to a fresh decode of
+  artifact `55827507` (sha256 `6d978942…`, compared rather than assumed).
+  Measured as sets of quoted literals and `{{ }}` bindings, it is not a literal
+  superset: about a hundred literals are added (the count moves with the
+  extractor — 67, 100 and 103 across three passes) and three are removed, each
+  confirmed by a direct search. Read, all three are a rename and a restyle, not
+  a loss. `{{ sharePlatforms }}` (LinkedIn, X, WhatsApp, Telegram) becomes
+  `{{ shareLink }}`, which draws the same four plus Facebook, beside two new
+  lists (`shareQuick`, seven quick actions; `shareMedia`, three story and card
+  formats). The other two are the old share modal's container styles; that
+  modal now uses the 460px box the canvas's other modal already used. So
+  nothing the old canvas drew is gone, which is what the strict-superset rule
+  protects; D305 records the measurement.
 - Six copy corrections:
   - `Use of Funds` — `exportAxal VC` and `icAxal VC` back to `exportAxal` and
     `icAxal`, a find-and-replace that had reached identifiers;

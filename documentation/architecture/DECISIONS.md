@@ -29913,6 +29913,260 @@ rebuilt and re-verified fresh.
   (D1 through D303, in file order — D302 merged to main while this task was
   in progress; this branch merged it in ahead of this entry) exit 0.
 
+## D304
+
+**"Nothing retires" is superseded. An old page retires when — and only when —
+a canvas-built page does its whole job, and then by redirect, never a 404.
+This entry records the rule the wave-8 sessions build under; it retires
+nothing itself.** Task 448. No route, no migration, no `api.js` method.
+
+**What the owner said.** *"As you know, everything should be wired, and all the
+backend build with all the features and options."* — and then: *"Even if that
+means retiring the old UIs."*
+
+**What it supersedes.** D195 §2 (*"**Nothing retires**: the instruction is
+explicit that `/admin` routes stay … Any retirement is its own decision,
+later."*) and D282's subsection *"Nothing retires" overrules the canvas where
+the canvas says otherwise*. Many later entries repeat the phrase in their own
+scope lines; each was true under the rule of its day and is left as written.
+An entry records what was decided when; this is the one place that says the
+rule changed.
+
+**The rule.** Retire an old page only when a canvas-built page does the same
+job — one the retiring PR builds, or one already on `main` that the retiring
+PR's D-entry shows, route by route, covers every job, deep link and query
+string of the old one. Then:
+
+- the old route becomes a `<Navigate replace>` redirect to the new one, never
+  a 404, and every deep link and query string it accepted still lands
+  somewhere sensible;
+- the old component, and any code only it used, is deleted rather than left
+  orphaned;
+- an `api.js` method is removed only when nothing else calls it, and its
+  Worker route only when nothing in the tree calls that route;
+- `frontend/test/admin_route_reachability.test.mjs`'s `REDIRECTS` list changes
+  only when retiring an `/admin/*` route is the point of the PR, and then the
+  route is added rather than the test loosened;
+- the D-entry names each retired route and where it now points.
+
+Retire nothing without such a successor. A legacy page with no canvas-built
+successor stays; "it looks old" is not a replacement. A sidebar row that points
+at a retired route keeps working through the redirect: the PR leaves the row,
+names it in its body, and tells Session 5 — `sidebarConfig.js` is Session 5's —
+the old route, the new one, and each row, match entry or comment it leaves
+stale.
+
+**Why each clause.**
+
+- *Redirect, never 404:* a bookmarked, emailed or notified link is a promise
+  already made — D144 was a notification link that led every recipient to a
+  404 — and a redirect costs one line.
+- *Query strings:* links such as `/admin?tab=…` carry state; dropping it lands
+  the reader on a different page from the one the link named.
+- *Delete, don't orphan:* D164's two guards and `check-unused-imports` catch a
+  stranded name; the clause states what they enforce.
+- *Methods and routes last:* `check-api-drift` reads `api.js` → Worker only, so
+  a route removed while a workflow, script, test or second method still calls
+  it would 404 a live caller with nothing failing.
+- *`REDIRECTS` moves on purpose:* the list is derived from the route table and
+  pinned to `['/admin/news']`; a redirect that appears without being the point
+  of a PR is how a console disappears by accident.
+
+**A canvas is still a proposal.** A canvas that stops drawing an element the
+page renders is not an instruction to delete it: removal is a retirement and
+needs the successor test. D305's Refer & Earn replacement looked like such a
+case, and measured it is not one — the element the new copy seemed to drop was
+renamed, not removed.
+
+**What this entry does not do.** It retires nothing: no route, component,
+`api.js` method or Worker route moves; `REDIRECTS` still reads
+`['/admin/news']`; no guard changes.
+
+## D305
+
+**Wave 8's canvas PR: eight new canvases, four graduations, two re-exports,
+six copy corrections and five image resolutions land in `design/canvases/`,
+and the ledgers move with them.** Task 448. No route, no migration, no
+`api.js` method, no `frontend/src` change.
+
+### The eight arrivals
+
+Each is a decode of the artifact named, placed by the folder rule: `integrated/`
+when a live route exists — graded `UPGRADE` on arrival, D123's precedent — and
+`backlog/` when none does.
+
+| artifact | placed as | route | grade | size |
+| --- | --- | --- | --- | --- |
+| `3522163f` | `integrated/Spin-Out Lab · Landing` | `/spinout-lab` | UPGRADE | 47,484 B |
+| `c0834993` | `integrated/Pages · Funds and fund research` | `/research/funds`, `/funds` | UPGRADE | 63,828 B |
+| `f2eb2046` | `backlog/Pages · Benchmark` | — | NEW | 37,070 B |
+| `96463a46` | `backlog/Pages · Diligence file` | — | NEW | 24,876 B |
+| `b6a5f992` | `backlog/Pages · Diligence room` | — | NEW | 37,116 B |
+| `90eb4cf2` | `backlog/Pages · Company analysis` | — | NEW | 46,389 B |
+| `ec6c3ada` | `integrated/Studio · Archetype preview` | `/studio`, `/studio/archetype` | UPGRADE | 28,584 B |
+| `69dc42f3` | `integrated/Studio · Persona hubs` | the five Studio homes | UPGRADE | 42,948 B |
+
+`c0834993` carries no title of its own. Its artboards span a founder's fund
+research and the GP's own fund, and `Pages · Fund dossier` is already taken — it
+arrived on 2026-09-21 for `/research/funds/:uid` — so the file is named for both
+halves rather than for one.
+
+### Four graduations from `design/incoming/`
+
+- `Calendar` — normalised as the decode of `8476884d`; its page shipped on
+  2026-09-10.
+- `Pages · Advisor Expertise` — normalised as the decode of `83d319cd`.
+- `Pages · Advisor Network` and `Pages · Advisor Research` — plain moves.
+
+Two tests followed their canvases: `frontend/test/calendar_page_c1.test.mjs` and
+`frontend/test/advisor_expertise_canvas.test.mjs` read the new paths.
+
+### Two re-exports in place
+
+- **`Pages · Market reading`** took artifact `c2cc013f`'s ANALYTICS markup — the
+  `boards` loop and its atomics block, +209/−8. Its DCLogic is unchanged; its
+  one unplaced image points at the dossier mark; a comment names the route.
+- **`Refer & Earn`** was replaced, on Session 1's brief, by the copy that waited
+  in `design/incoming/` (68,003 B over 56,492 B). That copy is byte-identical
+  to a fresh decode of artifact `55827507` (sha256 `6d978942…`). The
+  replacement was measured before it was recorded:
+  - as sets of quoted literals and `{{ }}` bindings it is not a literal
+    superset — about a hundred literals are added (67, 100 and 103 across three
+    extractors) and three are removed, each confirmed by a direct search;
+  - read, all three are a rename and a restyle, not a loss.
+    `{{ sharePlatforms }}` (LinkedIn, X, WhatsApp, Telegram) becomes
+    `{{ shareLink }}`, which draws the same four plus Facebook beside two new
+    lists (`shareQuick`, seven quick actions; `shareMedia`, three story and
+    card formats). The other two are the old share modal's container styles,
+    and that modal now uses the 460px box the canvas's other modal already used;
+  - so nothing the old canvas drew is gone, which is what the strict-superset
+    rule protects.
+
+  The first draft of the README entry called it a strict superset without the
+  measurement; a second, written from the literal diff alone, said it dropped
+  the share list. Both were corrected before merge. A literal diff reads a
+  rename as a loss; what settles it is what the new canvas draws.
+
+### Six copy corrections
+
+- `Use of Funds` — `exportAxal VC` and `icAxal VC` back to `exportAxal` and
+  `icAxal`, identifiers a find-and-replace had reached;
+- `Trust Center v2` — the advisor obligations, the advisor role tab and its
+  envelopes, and a first-month delta that no longer reads a previous score that
+  does not exist;
+- `Founder Studio` — "Personal Advisor" becomes Eadwyn;
+- `Advisor Studio` — two lines become "Eadwyn assessment";
+- `DetailRail` (eight places) and `InvRail` — "AI fills the blanks".
+
+`Emails` was checked and needed nothing.
+
+### Five image resolutions, and one refusal
+
+- The five asset uuids left unplaced — Benchmark, Diligence file, Diligence
+  room, Company analysis, Persona hubs — are each byte-identical to
+  `assets/axal-dossier-mark.png` (7,770 B, sha256 `1157074b…`), so each points
+  there.
+- `Spin-Out Lab · Landing`'s hero was a 522 KB JPEG data URI, a lossy encode of
+  `frontend/public/axal-vc-future.png` (51.7 dB PSNR, mean |d| 0.40/255,
+  compared at 192 px). It points at `../../../frontend/public/axal-vc-future.png`,
+  and the file drops from 744 KB to 47 KB, under the 500 KB LFS gate.
+- The landing's other image, an 8.9 KB mark inside an `sf.app` branch the
+  landing never renders, matches no repo file closely enough to name (24 dB
+  against the dossier mark), so it stays inline rather than pointing at a guess.
+
+The landing does not replace `Spin-Out Lab · Intro`: it draws one surface and
+drops the app surface the Intro carries, so both stay.
+
+### The numbers that move
+
+- `integrated/` **66 → 70** (the four graduations) **→ 74** (the four UPGRADE
+  arrivals); `backlog/` **25 → 29**; `out-of-scope/` stays **27**. The three
+  hold **130**, counted by listing them. The README title keeps 107, the first
+  audit's corpus, which the paragraph under it names.
+- `design/incoming/README.md`'s folder table read 61/26/27 and now reads
+  74/29/27.
+- `ROUTE_MAP.md` gains eleven rows, **114 → 125**: three for the Advisor
+  canvases that graduated with no row of their own, and eight for the arrivals.
+  `PROFILE_ROUTING.md` and `PAGE_INVENTORY.md` are regenerated, and
+  `profile_routing_fresh.test.mjs` pins 125.
+- Five canvases in the three folders still carry no row — `Pages · Partner
+  Delivery`, `· Network`, `· Offers` and `· Research` in `integrated/`, and
+  `Spin-Out Lab` in `out-of-scope/` — counted by matching every file name
+  against the table's first column. This entry reports the gap and does not
+  fill it. The first draft of the ROUTE_MAP paragraph said four; the count
+  corrected it.
+
+### Reserved and unused
+
+Session 1 held D304–D309 and migration 307. This PR uses D304 and D305; **D306,
+D307, D308, D309 and migration 307 are unused**, and stay free.
+
+### Left for their owners
+
+Six comments still say a canvas this PR moved lives in `design/incoming/`. Each
+sits in a file another session holds, so they are named here rather than
+changed. The four under `frontend/src` would also move that tree and owe a
+`docs/` rebuild:
+
+- Session 4: `frontend/src/pages/CalendarPage.jsx:2` and
+  `frontend/src/pages/calendarPage.css:2` (`Calendar`);
+- Session 11: `frontend/src/workspaces/advisorZoneFilters.js:24-26` and
+  `frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx:298`
+  (`Pages · Advisor …`);
+- the advisor blocks of the two shared zone guards,
+  `frontend/test/profile_zone_actions.test.mjs:314-318` and
+  `frontend/test/profile_zone_filters.test.mjs:236-238` (whose partner half has
+  been stale since task 155). Only the comments went stale: each guard opens both
+  folders, so the moved canvases are still read. VERIFIED below measures that.
+
+The first draft of this list named three. It came from searching for the moved
+file names, which missed a line that puts the name before the path; sweeping
+every `design/incoming` mention found the other three.
+
+### What this unblocks
+
+- Session 10 reads `Spin-Out Lab · Landing` (`3522163f`).
+- Session 3 reads the two Studio canvases.
+- Session 9 reads the GP side of `Pages · Funds and fund research`.
+
+### VERIFIED
+
+- `npm run test:drift` exits 0 on the merged tree (`main` through #827, D360,
+  plus this change), read as the exit code from a redirected log: frontend
+  3463 (none skipped), worker 4432 (4429 pass and the same 3
+  environment-gated skips), retention 112, zero `not ok`. This PR adds and
+  removes no test, so no count falls on its account:
+  `profile_routing_fresh.test.mjs` 8, `calendar_page_c1.test.mjs` 21 and
+  `advisor_expertise_canvas.test.mjs` 9, each confirmed by name in the log,
+  the last two reading their new `integrated/` paths.
+- Three mutations run, three caught (non-zero exit + a `not ok` line), each
+  restored from a sha256-verified snapshot:
+  - ROUTE_MAP's `Pages · Benchmark` row deleted: `profile_routing_fresh.test.mjs`
+    fails `not ok 1` (the generated docs are stale) and `not ok 3`
+    (`124 !== 125`). Run before #827 merged; `ROUTE_MAP.md` and the test are
+    byte-identical after it.
+  - `design/canvases/integrated` dropped from the advisor block of
+    `profile_zone_actions.test.mjs` (`not ok 31`) and of
+    `profile_zone_filters.test.mjs` (`not ok 25`). So both guards read the
+    moved Advisor canvases, rather than passing without them.
+- `node scripts/build-profile-routing.mjs` regenerates `PROFILE_ROUTING.md` and
+  `PAGE_INVENTORY.md` with no change.
+- `node scripts/check-docs-fresh.mjs --strict` exits 0; `frontend/src` does not
+  move.
+- `node scripts/check-decision-ids.mjs` exits 0 (D1 through D420, in file order;
+  D360 merged to `main` during this work and sits after D350).
+- `check-folder-docs` (50 folders) and `check-api-drift` exit 0.
+- `node scripts/lfs-size-gate.mjs --against=origin/main` exits 0 over the 24
+  files this PR adds or changes. The gate prints nothing when it passes, so the
+  count was taken from the same `git diff`, and no canvas in the three folders
+  is over 500 KB.
+- `Refer & Earn` is byte-identical to a fresh decode of `55827507` (sha256
+  `6d978942…`).
+- `main` was merged in three times while this was built (#826, #831, #827),
+  with no conflict in any of them.
+- No migration, no route, no `api.js` method. Migration 307 and D306–D309 are
+  unused, and 296 is the highest migration on disk.
+
 ## D350
 
 **Lab Profiling reads Eadwyn's question ledger for the four elements it had
