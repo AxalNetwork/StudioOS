@@ -35,6 +35,13 @@ type Bucket = {
 // the word, and `[^/]+` rather than `.+` so it cannot span a segment.
 export const COMPANY_INVITE_SEND = /^\/api\/company\/[^/]+\/invitations(\/[^/]+\/resend)?$/;
 
+// The e-sign routes that mail a signed PDF onward: POST
+// `/api/legal/esign/<id>/forward` (and the `/api/esign` remount index.ts warns
+// against). D410 opened forwarding to the envelope's sender as well as its
+// subject, so it joins origination in the `esign_send` bucket rather than
+// riding the generic fail-open one. Anchored, digits only for the id.
+export const ESIGN_FORWARD = /^\/api\/(legal\/)?esign\/\d+\/forward$/;
+
 /**
  * The founder's advisory-session charge — `POST /bookings/:id/pay`, D81.
  *
@@ -109,7 +116,7 @@ const BUCKETS: Bucket[] = [
     name: 'esign_send',
     limit: 10,
     windowSec: 3600,
-    test: (p, m) => m === 'POST' && (p === '/api/legal/esign/send' || p === '/api/esign/send'),
+    test: (p, m) => m === 'POST' && (p === '/api/legal/esign/send' || p === '/api/esign/send' || ESIGN_FORWARD.test(p)),
     scope: 'user',
     failClosed: true,
   },

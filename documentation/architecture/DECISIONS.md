@@ -29857,3 +29857,159 @@ track is stored).
   typechecks, `lint:undef` and every guard green, including
   `check-decision-ids`, `check-folder-docs`, `check-api-drift` and
   `check-docs-fresh --strict` after the root `npm run build`.
+
+## D410
+
+**E-sign `/send` hardening: the signing link reaches only the recipient, a
+duplicate is judged per sender and recipient, and every envelope route reads
+through one scope.** Wave 8, Session 13, item 1. Worker only: no migration,
+no new `/api` method, no page. Sessions 7 and 8 wait on this before they
+touch signing.
+
+**What was wrong, measured on a533769b.** Five defects in
+`cloudflare-worker/src/routes/esign.ts`, each letting one signed-in user act
+on or learn about an agreement that was not theirs:
+
+1. **Cross-tenant send collision.** `createAndSendEnvelope`'s duplicate check
+   keyed on `(document_type, COALESCE(user_id, -1), deal_id)`. Its comment
+   claimed an email fallback that did not exist, and the sender was not in
+   the key. POST `/send` never had a user id to pass, so every
+   `/legal/send` envelope of one document type was one key platform-wide:
+   the second sender got the first sender's envelope id back, no mail went
+   out, and the page said "Sent". The admin bulk-send modal
+   (`AdminPage.jsx`, "New envelope (admin)") hit the same wall on its
+   second recipient.
+2. **The signer check never ran.** POST `/sign/:token` refuses a caller who
+   is not the recipient only when the recipients row carries a `user_id`,
+   and `/send` took that id from an optional body field no client sends.
+3. **The signing URL went to the sender.** `/send` returned it; the
+   `email_sent` audit row stored it in `meta`; `appendAudit` mirrored it to
+   `activity_logs`; GET `/:id` served it back. With 2, a sender could sign
+   in place of any recipient.
+4. **Download and forward checked ownership after finding the row**, against
+   `envelope.user_id` only: the sender got a 403 on their own agreement
+   (including from Settings' Documents & agreements link), and 403 versus
+   404 told any signed-in caller which sequential ids exist.
+5. **The completion notice went only to `envelope.user_id`**, so the person
+   who asked for a signature was never told, although the send page says
+   they "will be emailed when it is executed".
+
+**What changed.**
+- **The duplicate key is (document, sender, recipient, deal).**
+  `created_by` is in it. The recipient matches in one of two ways: by
+  email on a recipients row (an in-house envelope, account or not), or,
+  for an envelope with no recipients row (DocuSign, which emails the signer
+  itself), by the known account that the `user_id` equality already pins.
+  A DocuSign envelope for an address with no account is never treated as a
+  duplicate, so a second send creates a second envelope. That is the safe
+  way to fail: nobody is handed an envelope that is not theirs. The
+  in-house path writes the envelope and its recipients row in one
+  `DB.batch` (one D1 transaction), so the row the predicate reads exists as
+  soon as the envelope does, and two identical concurrent sends cannot
+  both land. A duplicate now returns `already_pending: true`. Before, a
+  duplicate returned only `email_sent: false`, which read like a mail
+  failure. The other three callers keep working. `profiling.ts` runs its
+  own pre-check first. `admin_exploring.ts` stores the latest envelope id.
+  `partner_onboarding.ts` has one fixed sender per invitation and keeps
+  `deal_id` in the key.
+- **The recipient's account is looked up by email** (`LOWER(email)`) in
+  `/send`. If the body sends a `recipient_user_id` that is not that
+  address's account, `/send` refuses with 400 `recipient_user_mismatch`. A
+  caller-chosen id would be worse than none: pointing it at yourself makes
+  you the only person who can sign what someone else is mailed. If the
+  lookup itself fails, `/send` refuses with 503 `recipient_lookup_failed`
+  and sends nothing.
+- **The signing URL is withheld from non-admin senders.** Admins keep it
+  for operator flows. It is no longer written into audit `meta`. GET `/:id`
+  redacts it from older rows on the way out, for every caller, and marks
+  them `signing_url_redacted: true`. The stored rows are not changed,
+  because the audit table is append-only. `envelope_created` now records
+  the sender's real client IP (`actorIp`) and a `sender` key. It used to
+  record `ip: 'admin'` and an `admin` key for every sender. The admin-only
+  callers pass no IP and keep the `'admin'` marker.
+- **Download, POST forward and GET forward read through
+  `esignEnvelopeScope`**, the same clause as the list and the detail.
+  Anyone outside that scope gets a 404 identical to the one for an id that
+  does not exist. The sender (`created_by`) and account-holding recipients
+  can now download and forward.
+- **Forwarding joins the fail-closed `esign_send` bucket.** The forward
+  route (`ESIGN_FORWARD` in `middleware/rateLimit.ts`, anchored, digits-only
+  id, both mounts) mails an attachment to up to ten arbitrary addresses.
+  Widening it to senders without a limit would have added an outbound-mail
+  surface on the generic fail-open bucket. `RATE_LIMIT_EXEMPT` is
+  unchanged.
+- **On completion the sender is notified** (`contract_signed`, in-app,
+  email and Slack by their preferences), linked to `/account`, where
+  Documents & agreements lists the executed PDF for every role. The notice
+  is skipped when the sender is also the subject, who already got one. It
+  runs after the subject's notice, in its own try.
+- The file header no longer labels the authenticated routes "(admin)".
+
+**Test infrastructure.** `cloudflare-worker/test/_ts-loader-hook.mjs` gains
+a `load` hook that reads `.md` as a text module, the way wrangler.toml's
+`[[rules]] type = "Text"` bundles it. `services/legalTemplates.ts` imports
+every legal template as `…/x.md?raw`, so until now no test could load a
+route that reaches `createAndSendEnvelope`. The hook only adds a
+capability, and the full suite shows no other test changed.
+
+**Left as found, and filed.**
+- **Links already handed out stay live until they expire.** Tokens that
+  earlier `/send` responses gave to senders still work for up to 7 days
+  (`TOKEN_TTL_MS`) after deploy. Rotating them would break the link in each
+  recipient's inbox. The read-side redaction closes the one surface that
+  kept serving them.
+- **Signer IP and user agent** still reach every party in the envelope's
+  scope through GET `/:id` (the gap map's trap 5). That is PII, and the
+  owner has to decide what counterparties may see. Nothing here widened
+  it.
+- **An account holder must now be signed in to sign.** That is the check
+  this entry restores, not a new rule. A recipient with an account who
+  opens the emailed link while signed out can read the document. On
+  submit, the signer page (`ESignPage.jsx`) prints the Worker's sentence,
+  "You must be signed in as the intended recipient…", with no sign-in link.
+  Cookie auth works for the bare same-origin `fetch`, so signing in and
+  opening the link again is enough. A sign-in affordance on the
+  `signer_identity_mismatch` code belongs to whoever next owns that page.
+  The gap map leaves the signer page's tests untouched.
+- **The subject's own completion link is `/legal`**, which only admins and
+  founders can open. A recipient with another role lands on the guard. It
+  was left alone so that this entry stays about the sender. Item 2 re-aims
+  both links at the `?envelope=` status view once that view exists.
+
+### VERIFIED
+
+- `npm run test:drift` exit 0. Baseline on origin/main a533769b: frontend
+  3398, worker 4408 (4405 pass), retention 112. After: frontend 3398,
+  worker 4430 (4427 pass, +22), retention 112. Nothing fell.
+- New tests, by name: `esign_send_hardening_d410.test.ts`, 18 tests on
+  real SQLite (two no-account invitations to different emails; two senders
+  with one address; a same-sender re-send; a completed envelope not
+  blocking a new one; the account found by email; a mismatched body id
+  refused; the sender unable to sign for an account holder; no URL for a
+  non-admin while an admin still gets it; no token in any audit or activity
+  row; the sender's IP and name on `envelope_created`; legacy redaction;
+  the sender's download; a recipient's download; out of scope equal to
+  absent on all three routes; the sender's forward log; the sender
+  notified; notified once when sender is subject; the `ESIGN_FORWARD`
+  pattern). `esign_deadmin.test.ts` gains three: the shared scope with no
+  403 on download and both forwards, the URL withheld and kept out of
+  audit meta, and the account taken from the email.
+  `rateLimit_esign_send.test.ts` gains one: forwarding in the bucket.
+- 20 mutations, 20 caught (non-zero exit and a `not ok` line). Each was
+  restored from a sha256-checked snapshot and passed again. They covered
+  the sender and the email each dropped from the key; the account taken
+  from the body (checked two ways); the mismatch let through; the URL
+  handed to every sender; the URL back in audit meta; no read redaction;
+  download, POST forward and GET forward each unscoped; the sender not
+  notified; the sender-subject notified twice; `actorIp` dropped; forward
+  out of the bucket; the pattern unanchored; the pattern given a `/g`
+  flag; orphan recipient rows on a
+  duplicate; `already_pending` dropped; a local 403 restored in download.
+- Both typechecks, `check-decision-ids`, `check-folder-docs`,
+  `check-api-drift` and `check-refusal-bodies` exit 0.
+- `scripts/sql-prepare-baseline.json` gains two lines, and a regenerate
+  touches nothing else. `SAME_PENDING_SEND @ routes/esign.ts` is a literal
+  predicate constant declared beside its two uses; every value in it is a
+  bound `?`. `scope.sql @ routes/esign.ts` goes from 1 to 4 because
+  download and both forwards now use the same `esignEnvelopeScope` clause
+  as the detail route, whose values are bound too.
