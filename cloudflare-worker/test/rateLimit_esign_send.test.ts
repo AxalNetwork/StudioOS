@@ -62,3 +62,13 @@ test('it matches the mounted path, and the path a remount would use', () => {
   assert.match(bucket, /'\/api\/esign\/send'/, 'and the one index.ts warns against, defensively');
   assert.match(bucket, /m === 'POST'/, 'origination is a POST; reads are covered elsewhere');
 });
+
+test('forwarding a signed PDF joins the bucket (D410)', () => {
+  // D410 opened POST /:id/forward to the envelope's sender. It mails an
+  // attachment to up to ten arbitrary addresses, so it is metered with
+  // origination rather than on the generic fail-open bucket. The pattern's
+  // own matches are pinned in esign_send_hardening_d410.test.ts.
+  assert.match(bucket, /ESIGN_FORWARD\.test\(p\)/, 'the forward route is not in the esign_send bucket');
+  assert.match(bucket, /m === 'POST' && \(/, 'the POST-only guard must cover the forward arm too');
+});
+

@@ -29668,6 +29668,113 @@ migration.** `frontend/src` moved (the console list and the test), so
 - No migration, no route, no `api.js` method, so `check-api-drift` has
   nothing to say.
 
+## D303
+
+**Wellbeing goes to Admin · Community.** Task 409, the coordinator's
+decision quoted rather than re-decided.
+
+**Measured first: the placement half was already done.**
+`frontend/src/lib/adminPlacement.js` already reads
+`tab('wellbeing', 'Wellbeing', admin('Community', 'card link'), …)` — a
+prior session (D283/D284, tasks 421/420/408) had already moved Wellbeing's
+tab entry to Admin · Community. What had NOT happened is the two things
+that decision actually implies once a console sits beside Events, Jobs and
+Circles: `routes/wellbeing.ts`'s five admin routes still checked
+`role(user) !== 'admin'` straight off `requireAuth`, never reaching D135's
+HQ compliance freeze or D142's branch-suspension gate the other three
+Community consoles already carry; and Branch · Community's own index
+(`BranchCommunity.jsx`, D302) had four cards, not five, so a branch admin
+following the sidebar to Community never saw Wellbeing listed there at
+all. Re-measuring before writing anything avoided redoing the placement
+work D283/D284 already did.
+
+**What changed.**
+- `cloudflare-worker/src/routes/wellbeing.ts`: `GET /aggregate`,
+  `POST /resources`, `DELETE /resources/:id`,
+  `POST /admin/experts/:uid/hide` and `POST /admin/experts/:uid/verify` now
+  gate through a `admin(c)` helper (`await requireAdmin(c)`, mirroring
+  `admin_jobs.ts` / `admin_circles.ts`'s shape) instead of a bare
+  `role(user) !== 'admin'` check, so an admin under an overdue HQ notice is
+  refused here exactly as on the other three consoles. `/aggregate` is a
+  read and carries no further gate (D135 and D142 both state a read is
+  never gated). `POST /resources` always calls
+  `requireBranchNotSuspended` (a new resource is new content under the
+  brand). `hide` and `verify` carry the gate CONDITIONALLY, because each
+  route does two opposite things depending on its body: hiding an expert
+  (`hidden: true`) is a takedown and stays open on a suspended branch;
+  un-hiding (`hidden: false`) restores it to the directory and is gated.
+  Verifying (`verified: true`) is the publish-shaped write and is gated;
+  removing verification (`verified: false`) is a takedown and stays open.
+- `frontend/src/lib/branchFreeze.js`: `wellbeing.ts` joins the Community
+  row's `gatedIn`, and the row's note now names Wellbeing alongside
+  Events, jobs and circles.
+- `frontend/src/pages/branch/BranchCommunity.jsx`: a fifth
+  `COMMUNITY_CONSOLES` card, `key: 'wellbeing'`. Its `to` is
+  `/admin?tab=wellbeing` rather than a path of its own — `AdminPage.jsx`
+  renders `WellbeingExpertsPanel` as a tab, not a route, the same shape
+  every other `admin(...)` placement in `adminPlacement.js` uses — and its
+  `scope`/`what` are read off that panel rather than invented: it verifies
+  or hides an expert on the founder-facing directory and nothing else.
+  Measured separately: `api.js` defines `wellbeingResourceCreate` and
+  `wellbeingResourceDelete`, but nothing in the admin product calls
+  either — the resource directory has a worker route and no console — so
+  the card says that too instead of implying a CRUD screen exists.
+- `pages/hq/SuperAdminOnlyNotice.jsx`'s docblock is corrected. It claimed
+  the notice is "also what the Super Admin sees after choosing 'Admin' in
+  View-as" — false, measured against `App.jsx`'s own `hqOnly`: the gate is
+  `isSuperAdminUser(user)`, keyed on the real signed-in account, not
+  `effectiveRole`, the browsed identity View-as sets. A Super Admin who
+  picks "Admin" in View-as still passes `isSuperAdminUser(user)` and sees
+  the real page, never this notice. The corrected text states the simpler,
+  true fact: this is what an admin account that has never held the
+  super-admin elevation sees, full stop.
+- Freeze-guard floors move with the new gates: `branch_suspended_freeze.test.ts`
+  16 → 19 (three new gated writes: the resource POST, the conditional hide,
+  the conditional verify); `branch_shell_s7_s13.test.mjs` 9 → 10 (a fourth
+  Community file now calls `requireBranchNotSuspended`).
+- **Deliberately untouched**, per the wave brief: the sidebar/launcher row
+  (Session 5's task 410) and the tab's name.
+
+**Worker + frontend. No migration, no new `api.js` method, no new route** —
+`wellbeing.ts`'s five routes already existed; only their gate changed. So
+`check-api-drift` has nothing new to say. `frontend/src` moved
+(`BranchCommunity.jsx`, `SuperAdminOnlyNotice.jsx`), so `docs/` is
+rebuilt and re-verified fresh.
+
+### VERIFIED
+
+- `frontend/test/branch_programs_s4.test.mjs`: 18 tests, exit 0. Two
+  changed (`COMMUNITY_CONSOLES.length` 4 → 5; the reachability loop now
+  includes `wellbeing`), one new (`wellbeing gained the admin gate the
+  wave brief asked for`, reading each of the five handler bodies out of
+  the worker source and asserting `admin(c)` replaced the bare role
+  check, scoped so `/experts/:uid/book`'s unrelated admin-bypass check is
+  not swept in).
+- `cloudflare-worker/test/branch_suspended_freeze.test.ts`: 11 tests, exit
+  0. `wellbeing.ts` added to the admin-gate-precedes-freeze-gate `FILES`
+  list and to the takedown-cases table; two new direct assertions pin the
+  hide/verify conditionals by regex, since the handler-substring check
+  used for the other files' unconditional gates cannot distinguish a
+  conditional gate's two branches.
+- `frontend/test/branch_shell_s7_s13.test.mjs`: 28 tests, exit 0. Floor
+  raised to 10; the S7/worker parity assertion needs no other change,
+  since it already compares `FROZEN.gatedIn` against every file that
+  calls the gate.
+- Five mutations run, five caught (non-zero exit + a `not ok` line), each
+  restored from a sha256-verified `/tmp` snapshot: `/aggregate` reverted
+  to the bare `role(user) !== 'admin'` check; the conditional hide gate
+  deleted outright; the conditional hide gate's condition inverted
+  (`if (hidden)` instead of `if (!hidden)`); `wellbeing.ts` dropped from
+  `branchFreeze.js`'s Community `gatedIn`; the wellbeing card's `to`
+  pointed at an unregistered path.
+- `npm run test:drift` exits 0 on Node 22 (see the drift log for exact
+  counts at merge time). Both typechecks
+  (`cd cloudflare-worker && npx tsc --noEmit`;
+  `npx tsc --noEmit -p frontend/tsconfig.json`) exit 0.
+- `node scripts/check-docs-fresh.mjs --strict` and `check-decision-ids.mjs`
+  (D1 through D303, in file order — D302 merged to main while this task was
+  in progress; this branch merged it in ahead of this entry) exit 0.
+
 ## D350
 
 **Lab Profiling reads Eadwyn's question ledger for the four elements it had
@@ -29750,3 +29857,263 @@ track is stored).
   typechecks, `lint:undef` and every guard green, including
   `check-decision-ids`, `check-folder-docs`, `check-api-drift` and
   `check-docs-fresh --strict` after the root `npm run build`.
+
+## D410
+
+**E-sign `/send` hardening: the signing link reaches only the recipient, a
+duplicate is judged per sender and recipient, and every envelope route reads
+through one scope.** Wave 8, Session 13, item 1. Worker only: no migration,
+no new `/api` method, no page. Sessions 7 and 8 wait on this before they
+touch signing.
+
+**What was wrong, measured on a533769b.** Five defects in
+`cloudflare-worker/src/routes/esign.ts`, each letting one signed-in user act
+on or learn about an agreement that was not theirs:
+
+1. **Cross-tenant send collision.** `createAndSendEnvelope`'s duplicate check
+   keyed on `(document_type, COALESCE(user_id, -1), deal_id)`. Its comment
+   claimed an email fallback that did not exist, and the sender was not in
+   the key. POST `/send` never had a user id to pass, so every
+   `/legal/send` envelope of one document type was one key platform-wide:
+   the second sender got the first sender's envelope id back, no mail went
+   out, and the page said "Sent". The admin bulk-send modal
+   (`AdminPage.jsx`, "New envelope (admin)") hit the same wall on its
+   second recipient.
+2. **The signer check never ran.** POST `/sign/:token` refuses a caller who
+   is not the recipient only when the recipients row carries a `user_id`,
+   and `/send` took that id from an optional body field no client sends.
+3. **The signing URL went to the sender.** `/send` returned it; the
+   `email_sent` audit row stored it in `meta`; `appendAudit` mirrored it to
+   `activity_logs`; GET `/:id` served it back. With 2, a sender could sign
+   in place of any recipient.
+4. **Download and forward checked ownership after finding the row**, against
+   `envelope.user_id` only: the sender got a 403 on their own agreement
+   (including from Settings' Documents & agreements link), and 403 versus
+   404 told any signed-in caller which sequential ids exist.
+5. **The completion notice went only to `envelope.user_id`**, so the person
+   who asked for a signature was never told, although the send page says
+   they "will be emailed when it is executed".
+
+**What changed.**
+- **The duplicate key is (document, sender, recipient, deal).**
+  `created_by` is in it. The recipient matches in one of two ways: by
+  email on a recipients row (an in-house envelope, account or not), or,
+  for an envelope with no recipients row (DocuSign, which emails the signer
+  itself), by the known account that the `user_id` equality already pins.
+  A DocuSign envelope for an address with no account is never treated as a
+  duplicate, so a second send creates a second envelope. That is the safe
+  way to fail: nobody is handed an envelope that is not theirs. The
+  in-house path writes the envelope and its recipients row in one
+  `DB.batch` (one D1 transaction), so the row the predicate reads exists as
+  soon as the envelope does, and two identical concurrent sends cannot
+  both land. A duplicate now returns `already_pending: true`. Before, a
+  duplicate returned only `email_sent: false`, which read like a mail
+  failure. The other three callers keep working. `profiling.ts` runs its
+  own pre-check first. `admin_exploring.ts` stores the latest envelope id.
+  `partner_onboarding.ts` has one fixed sender per invitation and keeps
+  `deal_id` in the key.
+- **The recipient's account is looked up by email** (`LOWER(email)`) in
+  `/send`. If the body sends a `recipient_user_id` that is not that
+  address's account, `/send` refuses with 400 `recipient_user_mismatch`. A
+  caller-chosen id would be worse than none: pointing it at yourself makes
+  you the only person who can sign what someone else is mailed. If the
+  lookup itself fails, `/send` refuses with 503 `recipient_lookup_failed`
+  and sends nothing.
+- **The signing URL is withheld from non-admin senders.** Admins keep it
+  for operator flows. It is no longer written into audit `meta`. GET `/:id`
+  redacts it from older rows on the way out, for every caller, and marks
+  them `signing_url_redacted: true`. The stored rows are not changed,
+  because the audit table is append-only. `envelope_created` now records
+  the sender's real client IP (`actorIp`) and a `sender` key. It used to
+  record `ip: 'admin'` and an `admin` key for every sender. The admin-only
+  callers pass no IP and keep the `'admin'` marker.
+- **Download, POST forward and GET forward read through
+  `esignEnvelopeScope`**, the same clause as the list and the detail.
+  Anyone outside that scope gets a 404 identical to the one for an id that
+  does not exist. The sender (`created_by`) and account-holding recipients
+  can now download and forward.
+- **Forwarding joins the fail-closed `esign_send` bucket.** The forward
+  route (`ESIGN_FORWARD` in `middleware/rateLimit.ts`, anchored, digits-only
+  id, both mounts) mails an attachment to up to ten arbitrary addresses.
+  Widening it to senders without a limit would have added an outbound-mail
+  surface on the generic fail-open bucket. `RATE_LIMIT_EXEMPT` is
+  unchanged.
+- **On completion the sender is notified** (`contract_signed`, in-app,
+  email and Slack by their preferences), linked to `/account`, where
+  Documents & agreements lists the executed PDF for every role. The notice
+  is skipped when the sender is also the subject, who already got one. It
+  runs after the subject's notice, in its own try.
+- The file header no longer labels the authenticated routes "(admin)".
+
+**Test infrastructure.** `cloudflare-worker/test/_ts-loader-hook.mjs` gains
+a `load` hook that reads `.md` as a text module, the way wrangler.toml's
+`[[rules]] type = "Text"` bundles it. `services/legalTemplates.ts` imports
+every legal template as `…/x.md?raw`, so until now no test could load a
+route that reaches `createAndSendEnvelope`. The hook only adds a
+capability, and the full suite shows no other test changed.
+
+**Left as found, and filed.**
+- **Links already handed out stay live until they expire.** Tokens that
+  earlier `/send` responses gave to senders still work for up to 7 days
+  (`TOKEN_TTL_MS`) after deploy. Rotating them would break the link in each
+  recipient's inbox. The read-side redaction closes the one surface that
+  kept serving them.
+- **Signer IP and user agent** still reach every party in the envelope's
+  scope through GET `/:id` (the gap map's trap 5). That is PII, and the
+  owner has to decide what counterparties may see. Nothing here widened
+  it.
+- **An account holder must now be signed in to sign.** That is the check
+  this entry restores, not a new rule. A recipient with an account who
+  opens the emailed link while signed out can read the document. On
+  submit, the signer page (`ESignPage.jsx`) prints the Worker's sentence,
+  "You must be signed in as the intended recipient…", with no sign-in link.
+  Cookie auth works for the bare same-origin `fetch`, so signing in and
+  opening the link again is enough. A sign-in affordance on the
+  `signer_identity_mismatch` code belongs to whoever next owns that page.
+  The gap map leaves the signer page's tests untouched.
+- **The subject's own completion link is `/legal`**, which only admins and
+  founders can open. A recipient with another role lands on the guard. It
+  was left alone so that this entry stays about the sender. Item 2 re-aims
+  both links at the `?envelope=` status view once that view exists.
+
+### VERIFIED
+
+- `npm run test:drift` exit 0. Baseline on origin/main a533769b: frontend
+  3398, worker 4408 (4405 pass), retention 112. After: frontend 3398,
+  worker 4430 (4427 pass, +22), retention 112. Nothing fell.
+- New tests, by name: `esign_send_hardening_d410.test.ts`, 18 tests on
+  real SQLite (two no-account invitations to different emails; two senders
+  with one address; a same-sender re-send; a completed envelope not
+  blocking a new one; the account found by email; a mismatched body id
+  refused; the sender unable to sign for an account holder; no URL for a
+  non-admin while an admin still gets it; no token in any audit or activity
+  row; the sender's IP and name on `envelope_created`; legacy redaction;
+  the sender's download; a recipient's download; out of scope equal to
+  absent on all three routes; the sender's forward log; the sender
+  notified; notified once when sender is subject; the `ESIGN_FORWARD`
+  pattern). `esign_deadmin.test.ts` gains three: the shared scope with no
+  403 on download and both forwards, the URL withheld and kept out of
+  audit meta, and the account taken from the email.
+  `rateLimit_esign_send.test.ts` gains one: forwarding in the bucket.
+- 20 mutations, 20 caught (non-zero exit and a `not ok` line). Each was
+  restored from a sha256-checked snapshot and passed again. They covered
+  the sender and the email each dropped from the key; the account taken
+  from the body (checked two ways); the mismatch let through; the URL
+  handed to every sender; the URL back in audit meta; no read redaction;
+  download, POST forward and GET forward each unscoped; the sender not
+  notified; the sender-subject notified twice; `actorIp` dropped; forward
+  out of the bucket; the pattern unanchored; the pattern given a `/g`
+  flag; orphan recipient rows on a
+  duplicate; `already_pending` dropped; a local 403 restored in download.
+- Both typechecks, `check-decision-ids`, `check-folder-docs`,
+  `check-api-drift` and `check-refusal-bodies` exit 0.
+- `scripts/sql-prepare-baseline.json` gains two lines, and a regenerate
+  touches nothing else. `SAME_PENDING_SEND @ routes/esign.ts` is a literal
+  predicate constant declared beside its two uses; every value in it is a
+  bound `?`. `scope.sql @ routes/esign.ts` goes from 1 to 4 because
+  download and both forwards now use the same `esignEnvelopeScope` clause
+  as the detail route, whose values are bound too.
+
+## D420
+
+**The founder desks A2–A5 read the stores that already exist.** Wave 8,
+Session 14, item 1. No migration, no new `/api/*` method, no route: every
+store below was built by an earlier task and already served the zone page
+next door; the desk that summarises that zone said it did not exist.
+
+**What each desk read, and what it reads now.**
+- **A2 Validate** (`FounderValidatePage.jsx`). The hypotheses card and the
+  living verdict flattened `discovery_interviews.hypotheses_json`, while the
+  proposal band on the same card, and `/validate/hypotheses`, write the
+  project-level `hypotheses` table (migration 211). An accepted claim never
+  appeared on the card it was accepted from. Both now read
+  `api.getValidationBoard` — the worker's derived verdict, lane, For/Against
+  counts and bar note — and a retired claim is left off. `verdict: null` is
+  rendered "Fit not recorded", never "Unproven". Each verdict clause is a link
+  to `/validate/hypotheses`, where the claim's pain links and interviews are
+  laid out: that is the artboard's "every clause links to the quotes behind
+  it". The interview card mounts the artboard's pain-tag band — the same
+  `FillProposals kind="pain_tag"` the pain map mounts, gated on the same
+  Validate mode.
+- **A3 Build** (`FounderBuildDesk.jsx`). The cadence card said "no cadence
+  store"; migration 250 and `/api/founder/cadence` serve `/build/cadence`. The
+  card lists the active rituals with the schedule phrase the cadence page uses
+  (`scheduleLabel`, moved from `FounderBuildCadence.jsx` into
+  `lib/cadence.js` so both print one phrase) and the server's adherence, null
+  said rather than printed as 0%.
+- **A4 Raise** (`FounderRaiseDesk.jsx`). The liquidity card said no exit
+  model was recorded; the project's canonical cap-table scenario carries
+  `result.waterfall` whenever it models an exit value, and `/raise/liquidity`
+  renders it in full. The card draws what the `founder` rows take against
+  `totals.preference_paid`, with the simulator's own assumptions beside them.
+- **A5 Grow** (`FounderGrowDesk.jsx`). The focus card printed "Target not
+  recorded" over `metric_targets` (migration 173, written from `/grow/focus`
+  since task 194); it now reads the targets with the same `readTarget` the
+  Focus zone uses. Capital match said no warm path could be shown; it ranks
+  the founder's `research_funds` (migration 216) by the stage fit and path
+  they recorded — right stage first, a warm path breaking the tie — and
+  leaves out a fund they passed on.
+
+**Three absences, kept apart on every new read.** A failed read renders
+`Unreadable` (or the desk's existing `Unavailable`) with a retry; a store
+with nothing in it says so; a figure no store holds says "Not recorded" with
+its reason. None of the four new reads folds a failure into an empty list.
+
+**What stays not recorded, each said on screen with its reason.**
+- The Friday retro draft on the cadence card: no `DRAFT_SURFACES` entry
+  exists for it, so no control is drawn. It belongs with the desks' rail and
+  proposal anatomy (item 3).
+- The time of day on a ritual (`Mon 9:00`): a ritual stores a weekday and a
+  frequency, never a time.
+- Which target "owns the month": a founder may set one per metric and nothing
+  marks one as the month's. With several set, the first is headlined and the
+  state line says the choice is not a stored fact.
+- A fit *score* on capital match: no reranker runs, so the rank is the
+  founder's own record, never a number.
+- The preference clause behind the waterfall: the figures are the cap-table
+  simulator's model (1× non-participating), and the card says no clause is
+  read from a signed document.
+- Commitment owner and at-risk state, raise blockers, trial → paid, screened
+  sharing and image generation are unchanged from before this entry: each
+  still needs a store (the gap map's list), and each already says so.
+
+**Where the canvas disagrees and the product keeps its own rule.** The
+fund names on the Grow desk are not links to `/research/funds/:uid`:
+`founder_overview_subpage_links.test.mjs` holds that an overview hands off
+only inside its own bucket, and the Capital match zone is the Grow page that
+card summarises.
+
+### VERIFIED
+
+- `npm run test:drift` exit 0 on Node 22. Frontend tests 3398 → 3405; worker
+  4408 (4405 pass, 3 skipped, as on main); retention 112. The seven new tests:
+  `founder_validate_overview_a2` — "the hypotheses card and the verdict read
+  the board the band writes to", "every verdict clause links to the receipts
+  behind it", "the interview card carries the artboard's pain-tag band, the
+  same one the pain map mounts"; `founder_build_overview_a3` — "the cadence
+  card reads the rituals the cadence page files";
+  `founder_raise_overview_a4` — "the liquidity card draws the waterfall the
+  cap-table scenario already carries"; `founder_grow_overview_a5` — "the
+  focus card reads the plan number from metric_targets, and says when it
+  cannot", "capital match ranks the founder's researched funds by what they
+  recorded".
+- Four stale pins re-aimed at what is now true, none loosened: the A4 pair
+  (`founder_raise_a4_contract`, `founder_raise_overview_a4`) pinned "no exit
+  model is recorded" and now pin the two named absences (no scenario; a
+  scenario with no exit value); the A5 pin on "no reranker … no warm path"
+  now pins "no fit score is computed" and "this zone only ranks"; A3's
+  docblock no longer says no cadence store exists.
+- 29 mutations, 29 caught (non-zero exit and a `not ok` line), each applied
+  at a unique anchor and restored from a sha256-checked snapshot: 10 on A2
+  (board read removed, card rebuilt from interview JSON, retired claim shown,
+  withheld verdict read as unproven, unreadable board folded into empty, bar
+  note dropped, clause unlinked, withheld claim dropped from the verdict,
+  pain-tag band ungated, dark style renamed), 6 on A3, 4 on A4, 9 on A5
+  (targets read removed, targets not read against the snapshot, a failed read
+  folded into "none set", unmeasured counted as missed, a passed fund ranked,
+  rank reversed, warm path outranking stage fit, null path read as cold,
+  unreadable funds). None escaped.
+- Both typechecks, `check-decision-ids`, `check-folder-docs`,
+  `check-api-drift` and `check-dark-mode` exit 0. Root `npm run build`, then
+  `node scripts/check-docs-fresh.mjs --strict` exits 0. No browser probe was
+  run; CI runs none, and every gate above is a Node test.

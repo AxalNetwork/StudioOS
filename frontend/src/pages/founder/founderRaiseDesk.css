@@ -16,3 +16,9 @@
 .dark .raise-headline>div:first-child span,.dark .raise-legend span{color:#bbb3c2}
 .dark .raise-progress{background:#3b3446}
 @media(max-width:600px){.raise-headline .status-grid{grid-template-columns:1fr}}
+.raise-waterfall{margin-top:12px;border:1px solid #ece9f0;background:#fbfbfc;border-radius:10px;padding:12px 13px}
+.raise-waterfall-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:8px}
+.raise-waterfall-head strong{font-size:13px;font-variant-numeric:tabular-nums}
+.raise-waterfall-head span{font-size:11px;color:#615c6e}
+.dark .raise-waterfall{background:#2b2634;border-color:#423b4b}
+.dark .raise-waterfall-head span{color:#bbb3c2}
