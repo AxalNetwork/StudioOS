@@ -3031,10 +3031,12 @@ function AppInner() {
           redirected into the hash-anchored docs surface. */}
       <Route path="/docs/admin/*" element={<AdminDocsPathGuard />} />
       <Route path="/docs" element={<DocsRedirect />} />
-      {/* Task #17 — investor "Profile" nav lands on the self-profile surface
-          (the Settings profile section rendered at its own path so the sidebar
-          item highlights independently of Settings). */}
-      <Route path="/profile" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
+      {/* Task #17 mounted SettingsPage a second time at /profile so an investor
+          "Profile" nav row could highlight independently of Settings. That row
+          is gone; the exploring sidebar's "My Profile" now points at /account
+          itself. D433 retires the duplicate on D304's shape: a redirect, never
+          a 404, with the query and hash carried through. */}
+      <Route path="/profile" element={<SettingsRedirect />} />
       <Route path="/account" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/settings" element={<SettingsRedirect />} />
 
