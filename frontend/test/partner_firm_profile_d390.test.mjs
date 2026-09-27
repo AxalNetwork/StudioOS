@@ -4,8 +4,8 @@
  *
  *   1. The firm profile edit, the founder-introductions toggle and the partner
  *      agreement summary (Overview's whole job) → `PartnerFirmProfileCard`,
- *      for Firm Settings (`/company-settings`). Built and tested here; the
- *      mount is Session 15's line in CompanySettingsPage.jsx.
+ *      for Firm Settings (`/company-settings`). Built and tested here; D395
+ *      mounts it (partner_operations_retired_d395.test.mjs pins the mount).
  *   2. Founder reviews (Performance's and Portfolio's) → a section on
  *      Delivery · Health, mounted.
  *

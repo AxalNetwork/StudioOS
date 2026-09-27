@@ -140,6 +140,7 @@ partnerDelivery.get('/board', async (c) => {
 
     const engagements = await c.env.DB.prepare(
       `SELECT e.id, e.uid, e.status, e.price, e.delivered_at, e.cancelled_at,
+              e.invoiced_at, e.invoice_id,
               n.title AS need_title, f.name AS founder_name,
               r.id AS retainer_id, r.retained_hours
          FROM engagements e
@@ -258,6 +259,15 @@ partnerDelivery.get('/board', async (c) => {
         client: e.founder_name ?? null,
         scope: e.need_title ?? null,
         price: e.price === null || e.price === undefined ? null : Number(e.price),
+        // D395 — THE LIFECYCLE THE BOARD NOW DRIVES. `/partner/operations/
+        // engagements` was the one canvas-less page that started, delivered,
+        // invoiced and cancelled an engagement; its successor is this board,
+        // so the row carries the dates the ledger under it prints. Each is the
+        // engagement's own column, null until that step happened.
+        delivered_at: e.delivered_at ?? null,
+        invoiced_at: e.invoiced_at ?? null,
+        invoice_id: e.invoice_id ?? null,
+        cancelled_at: e.cancelled_at ?? null,
         mode: seat ? 'embedded' : 'project',
         // What the founder granted, in their own words — `engagement_seats
         // .scope` is free text for exactly that reason.

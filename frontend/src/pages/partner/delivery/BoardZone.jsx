@@ -9,6 +9,7 @@ import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, Legend, NotRecorded } from '../../../workspaces/canvasKit';
+import EngagementLifecycle from './EngagementLifecycle';
 
 /**
  * Delivery · Board — `/delivery/board`.
@@ -250,6 +251,12 @@ export default function PartnerDeliveryBoardZone() {
               No engagement is in this state. {items.length} on the board in total.
             </p>
           )}
+
+          {/* D395 — the lifecycle and the invoice ledger, moved here from the
+              retired `/partner/operations/engagements`. Over every row the
+              board read, not the chip-narrowed set: an invoice waiting is
+              waiting whichever chip is selected. */}
+          <EngagementLifecycle rows={items} onChanged={load} />
 
           <ZoneDraft
             surface="delivery/board"

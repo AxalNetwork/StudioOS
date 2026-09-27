@@ -28,6 +28,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { srcFilesWith } from './_srcFilesWith.mjs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 
@@ -69,15 +70,13 @@ test('the route stopped rendering the shared engagements page', () => {
   assert.ok(/proposals: \(\) => <PartnerProposals \/>,/.test(routes),
     'the proposals zone is not mounted');
   assert.ok(routes.includes('pipeline/ProposalsZone'), 'the proposals zone is not imported');
-  // AND `EngagementsPage` NO LONGER CLAIMS THE ZONE. Two files building one
-  // zone's action row is how a header row comes to describe a page the reader
-  // is not on.
-  const engagements = read('frontend/src/pages/partner/operations/EngagementsPage.jsx');
-  assert.ok(!engagements.includes("partnerZoneActions('pipeline/proposals'"),
-    'EngagementsPage is building the proposals action row again');
-  const engRaw = flat(raw('frontend/src/pages/partner/operations/EngagementsPage.jsx'));
-  assert.ok(engRaw.includes('pipeline/ProposalsZone` took that one'),
-    'the removal is no longer recorded, so the next reader re-adds it');
+  // AND NO OTHER FILE CLAIMS THE ZONE. Two files building one zone's action
+  // row is how a header row comes to describe a page the reader is not on.
+  // This read `EngagementsPage` by name until D395 deleted it; the property is
+  // "the zone is the only builder", so the whole tree is walked.
+  assert.deepEqual(srcFilesWith("partnerZoneActions('pipeline/proposals'"),
+    ['frontend/src/pages/partner/pipeline/ProposalsZone.jsx'],
+    'a second file is building the proposals action row');
 });
 
 test('the two tiles that need a read receipt are absent, with the reason', () => {
