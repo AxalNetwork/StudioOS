@@ -98,8 +98,19 @@ function RecordCard({ record }) {
   );
 }
 
+/**
+ * Removal is confirmed by typing the bound hostname. A different string is
+ * not a confirm, and an empty one is not either. The comparison is exact:
+ * the route will be asked to refuse a body that does not match the row.
+ */
+export function hostnameConfirmsRemoval(typed, bound) {
+  const host = String(bound ?? '');
+  return host.length > 0 && String(typed) === host;
+}
+
 export default function DomainWizard({ domain, available, reason, onChanged }) {
   const [host, setHost] = useState('');
+  const [confirmHost, setConfirmHost] = useState('');
   const [busy, setBusy] = useState('');
   const [err, setErr] = useState('');
   const [check, setCheck] = useState(null);
@@ -242,15 +253,30 @@ export default function DomainWizard({ domain, available, reason, onChanged }) {
                     : <RefreshCw size={13} className="inline" aria-hidden="true" />}
                   {' '}Check now
                 </button>
-                <button
-                  type="button"
-                  onClick={() => run('remove', () => api.myDomainRemove())}
-                  disabled={busy === 'remove'}
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-[12.5px] text-gray-600 disabled:opacity-40 dark:border-gray-700 dark:text-gray-400"
-                  data-testid="domain-remove"
-                >
-                  <Trash2 size={13} className="inline" aria-hidden="true" /> Remove
-                </button>
+                <label className="flex flex-wrap items-center gap-2 text-[12px] text-gray-600 dark:text-gray-400">
+                  <span>Type the hostname to confirm</span>
+                  <input
+                    value={confirmHost}
+                    onChange={(e) => setConfirmHost(e.target.value)}
+                    aria-label="Type the hostname to confirm"
+                    autoComplete="off"
+                    spellCheck="false"
+                    data-testid="domain-remove-hostname"
+                    className="min-w-[12rem] rounded-lg border border-gray-300 px-2 py-1.5 font-mono text-[12.5px] dark:border-gray-700 dark:bg-gray-900"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!hostnameConfirmsRemoval(confirmHost, domain.hostname)) return;
+                      run('remove', () => api.myDomainRemove(confirmHost));
+                    }}
+                    disabled={!hostnameConfirmsRemoval(confirmHost, domain.hostname) || busy === 'remove'}
+                    className="rounded-lg border border-gray-300 px-3 py-1.5 text-[12.5px] text-gray-600 disabled:opacity-40 dark:border-gray-700 dark:text-gray-400"
+                    data-testid="domain-remove"
+                  >
+                    <Trash2 size={13} className="inline" aria-hidden="true" /> Remove
+                  </button>
+                </label>
                 {domain.last_checked_at && (
                   <span className="text-[11.5px] text-gray-500 dark:text-gray-400" data-testid="domain-last-checked">
                     Last checked {String(domain.last_checked_at).replace('T', ' ').slice(0, 16)}
