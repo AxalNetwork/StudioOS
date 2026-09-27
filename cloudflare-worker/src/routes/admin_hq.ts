@@ -49,6 +49,7 @@ import {
   weekAxis, weeklyKpi,
 } from '../services/activeAccounts';
 import { loadActiveAccountsByBranchWeek } from '../services/analyticsReports';
+import { subsidiaryUsageCoverage } from '../services/subsidiaryUsageCoverage';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -257,6 +258,8 @@ r.get('/overview', async (c) => {
     };
   }
 
+  const usageCoverage = await subsidiaryUsageCoverage(env);
+
   return c.json({
     accounts: { total: accountsTotal, by_role: byRole, active_only: true },
     seats_licensed: seatsLicensed,
@@ -277,6 +280,7 @@ r.get('/overview', async (c) => {
     // which is correct and different from "could not read them".
     branches,
     branches_coverage: branchCoverage,
+    usage_coverage: usageCoverage,
     ...DERIVED_UNAVAILABLE,
   });
 });

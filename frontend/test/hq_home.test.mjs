@@ -133,7 +133,10 @@ test('every per-subsidiary figure renders Not recorded, and nothing renders an i
   assert.match(PAGE, /a branch that did not answer says so rather than reading as a zero/);
   // A tile renders Not recorded for any null value, so MTD revenue — which
   // has no source at all — is passed as null rather than as a number.
-  assert.match(PAGE, /label="MTD revenue" value=\{null\}/);
+  assert.match(PAGE, /label="MTD revenue"[\s\S]*?value=\{null\}/);
+  assert.match(PAGE, /mtd_revenue_reason/);
+  assert.doesNotMatch(PAGE, /no subsidiary attribution/);
+  assert.match(PAGE, /revenueAbsenceForLicence/);
   assert.match(PAGE, /\{value \?\? <Unrecorded \/>\}/, 'a null tile value must render Not recorded');
   assert.match(PAGE, /utilised:/);
   assert.match(PAGE, /const seatsUtilised = useMemo/,
