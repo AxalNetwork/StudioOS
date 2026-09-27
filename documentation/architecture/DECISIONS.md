@@ -33415,6 +33415,144 @@ admin can read a conversation.
     header, and the hint chips with Eadwyn and Tickets.
   - No page errors.
 
+## D415
+
+**Messages can carry files. Migration 323 stores which file rides on which
+message; the bytes go to R2 under their own `messages/` prefix. The only way
+to a file is a signed, single-use, five-minute link, minted only for a member
+of the thread.** Wave 8, Session 13, item 6. Worker first. Migration 323.
+Two new routes and two new `api.js` methods.
+
+**What was there, measured on 5c1297642.** The canvas draws a paperclip in
+the composer and says "Attachments are visible to both parties only".
+Migration 185 says of itself "NOT here: reactions, attachments…". So D414
+disabled the paperclip and printed the Worker's reason instead.
+
+**Migration 323, `message_attachments`.** One row per file. Columns:
+- `uid`, `thread_id`, `message_id`, `uploader_user_id`
+- `r2_key`, with `CHECK (r2_key LIKE 'messages/%')`
+- `filename`, `content_type`, `size_bytes` (`CHECK > 0`), `sha256`, and
+  `created_at`
+
+It has indexes on thread, message and uploader. It creates one new table,
+stands alone, and is idempotent. No bytes are kept in D1.
+
+**Worker (`routes/messages.ts`).**
+- **`POST /:uid/attachments`.** Multipart `file`, plus an optional `body`.
+  It sends one message carrying the file.
+  - **Who:** a member of an open thread. Anyone else gets the same 404 as
+    before, and an archived thread gets 409.
+  - **What:** the type is sniffed from the file's own first bytes by
+    `sniffAttachment`, never taken from the browser's header. Accepted:
+    PDF, PNG, JPEG and WebP. Word, Excel and PowerPoint files are accepted
+    by their ZIP signature plus a matching extension; any other ZIP is
+    refused. Anything else gets `415 file_type_refused`, with a sentence
+    naming the kinds.
+  - **Limits:** at most 10 MB (`413 file_too_large`). An empty file is
+    refused. Each account may send 50 files in any 24 hours
+    (`429 attachment_limit`), counted from the store per uploader.
+  - **Where:** `messages/<thread uid>/<attachment uid>/<name>`. The name is
+    cleaned by `safeAttachmentName`: path parts dropped, only letters,
+    digits, `.`, `-` and `_` kept, at most 100 characters, and ending in
+    the sniffed type's extension.
+  - **Order:** the object is written to R2 first. The message and the
+    attachment row then go in one D1 batch, which also moves
+    `last_message_at` and marks the sender's own read. If the batch fails,
+    the object is deleted, so R2 never holds a file no message points to.
+- **`POST /:uid/attachments/:att/link`.** For a member only. The file must
+  belong to this thread; a file in another thread and a made-up id get the
+  same 404. It returns a link from the shared signed-download primitive
+  (`services/signedDownload.ts`): HMAC-signed, five minutes, single use.
+  `routes/files.ts` streams it as an attachment and writes the download to
+  `activity_logs`. The page never builds a path to the bytes.
+- **`GET /:uid`** lists each message's files by `uid`, name, type and size,
+  never the R2 key.
+- **`GET /`** previews a file-only message as "Attachment: <name>".
+- **`absent.attachments`** is served now only where no FILES bucket is
+  bound, and then says exactly that.
+
+**Frontend.**
+- **Composer:** the paperclip opens a file picker offering what the Worker
+  accepts. The chosen file shows above the textarea. Send posts it with
+  whatever was typed, as one message. The page's 10 MB check only saves an
+  upload the Worker would refuse. A refusal prints the Worker's sentence.
+- **Bubbles:** a file on a message is a chip that asks for a link and
+  follows it.
+- **The canvas's note** — "Attachments are visible to both parties only" — is
+  printed now, because it has become true.
+- **Pure half:** `lib/messagesView.js` gains `ATTACHMENT_MAX_BYTES`,
+  `ATTACHMENT_ACCEPT` and `fileSize`.
+
+**Not built, by decision.**
+- **Deleting a file.** Messages cannot be deleted either. A file goes when
+  its thread's rows go (`ON DELETE CASCADE`), and its R2 object does not.
+- **A tighter rate-limit bucket.** Uploads sit under the generic
+  per-minute limit plus this route's own daily count. A bucket belongs in
+  `middleware/rateLimit.ts`, which is not this session's.
+- **Virus scanning.** Nothing in the product scans files. The type check
+  and the attachment-only download are the defence: a file is never
+  rendered inline.
+
+**Filed, not fixed.**
+- **Session 1.** A deleted thread would leave its files in R2. Nothing
+  deletes threads today, but a future cleanup should list
+  `messages/<thread uid>/`.
+
+### VERIFIED
+
+- **Drift.** `npm run test:drift` exits 0 on main 37547e561 plus this
+  change. Main alone: frontend 3842, worker 4702, retention 112. With the
+  change: frontend 3849 (+7), worker 4713 (+11), retention 112. No count
+  fell.
+- **The first run caught one defect.** `iso_bind_comparisons_d160.test.ts`
+  failed: the daily count compared `created_at` against a raw ISO bind.
+  Rows written here carry a `T`, and the column default does not, so a
+  bare comparison mixes the two formats. Both sides now go through
+  `datetime()`, and the guard passes.
+- **New tests, by name.**
+  - `messages_attachments_d415.test.ts`: 11 tests through the routes, on
+    migrations 185, 201, 238 and 323 read off disk, with an in-memory R2
+    bucket and KV namespace. A minted link is followed through
+    `routes/files.ts` to the bytes. A second use is refused (403), and the
+    download is written to `activity_logs`.
+  - `messages_attachments_d415_contract.test.mjs`: 7 tests.
+- **Re-aimed.** Both changes are D414's own tests, re-aimed because D415
+  made the old assertions untrue.
+  - `messages_context_d414.test.ts`: the fixture gains migration 323, and
+    each message now carries `attachments`.
+  - `messages_d414_contract.test.mjs`: the paperclip is enabled, and the
+    attachments sentence is printed now that it is true.
+- **Mutations.** 26 were run: 18 on the Worker and 8 on the page, its pure
+  half and the note. 24 were caught first time. Two escaped, and the
+  assertions were fixed, not the code:
+  - **A7**, the cap counting every account: the test now has B send while
+    A is at the cap.
+  - **A9**, no R2 cleanup on a failed batch: dropping the table broke the
+    count before anything was stored, so the test proved nothing. The
+    table is now dropped inside the batch hook, and the test asserts the
+    object existed before the batch.
+  - Both were caught on re-run. After the `datetime()` change, A6 to A8
+    were re-run too. 26 of 26. Each failure was a non-zero exit with a
+    `not ok` line, restored from a sha256-checked snapshot, and passed
+    again.
+- **Build and checks.** Both typechecks, `check-decision-ids`,
+  `check-folder-docs`, `check-api-drift`, `check-sql-prepare`,
+  `check-sqlite-tables`, `check-sqlite-columns`, `check-sql-migrations`,
+  `check-migration-declarations`, `check-migration-column-shapes`,
+  `check-schema-pair-drift`, `check-refusal-bodies` and
+  `check-unused-imports` pass. `docs/` was rebuilt at the root with the
+  asset-retention file moved aside. `check-docs-fresh --strict` passes.
+- **Chromium probe.** This is recorded verification, not a gate. The built
+  SPA was run with stubbed routes, and all 12 checks passed:
+  - an attachment chip on a bubble, the paperclip enabled, and the
+    canvas's note printed
+  - a chosen file shown, and Send enabled with only a file
+  - the upload sent as multipart with the file and the text, the chip
+    cleared, and the sent file listed on the thread
+  - opening a file POSTs for a link, then follows it to a download
+  - an 11 MB file refused before any upload, with the Worker's sentence
+  - no page errors
+
 ## D420
 
 **The founder desks A2–A5 read the stores that already exist.** Wave 8,

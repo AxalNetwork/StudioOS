@@ -2,7 +2,8 @@
  * D414 — Messages: who the other person is, and what a thread is about.
  *
  * Built from the migrations that ship (185 messages, 201 advisors, 238 advisor
- * engagements, read off disk), through the route itself:
+ * engagements, and since D415 323 attachments, read off disk), through the
+ * route itself:
  *
  *   * the counterparty is a card: handle, role, headline, and a name and photo
  *     only where their privacy_prefs show them on their public profile;
@@ -41,7 +42,7 @@ function freshDb() {
     display_name TEXT, headline TEXT, privacy_prefs TEXT, headshot_r2_key TEXT,
     is_active INTEGER NOT NULL DEFAULT 1, jwt_min_iat INTEGER, subscription_tier TEXT, subscription_status TEXT
   );`);
-  for (const m of ['185_messages.sql', '201_advisors_table_in_ledger.sql', '238_advisor_engagements.sql']) db.exec(MIG(m));
+  for (const m of ['185_messages.sql', '201_advisors_table_in_ledger.sql', '238_advisor_engagements.sql', '323_message_attachments.sql']) db.exec(MIG(m));
   const u = db.prepare('INSERT INTO users (id, role, name, uid, headline, display_name, privacy_prefs, email, headshot_r2_key) VALUES (?,?,?,?,?,?,?,?,?)');
   for (const [id, role, name, uid, headline, dn, pp] of USERS) u.run(id, role, name, uid, headline, dn, pp, `${uid}@example.test`, `headshots/${uid}.png`);
   db.prepare(`INSERT INTO advisors (id, uid, user_id, display_name) VALUES (10, 'adv-10', ?, 'Ada A.')`).run(ADVISOR);
@@ -113,7 +114,8 @@ test('the thread serves cards and sender ids, never a name or address on each me
   const d = await call('GET', `/${created.body.uid}`, FOUNDER);
   assert.equal(d.status, 200);
   assert.deepEqual(d.body.me, { user_id: FOUNDER });
-  assert.deepEqual(Object.keys(d.body.messages[0]).sort(), ['body', 'created_at', 'sender_user_id', 'uid']);
+  // D415 adds each message's files, by id and name only.
+  assert.deepEqual(Object.keys(d.body.messages[0]).sort(), ['attachments', 'body', 'created_at', 'sender_user_id', 'uid']);
   assert.deepEqual(d.body.participants.map((p: any) => p.user_id), [ADVISOR], 'the reader is not their own counterparty');
   assert.ok(!JSON.stringify(d.body).includes('@example.test'), 'an email address reached the thread');
 });
