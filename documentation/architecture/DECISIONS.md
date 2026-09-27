@@ -30181,6 +30181,138 @@ every `design/incoming` mention found the other three.
 - No migration, no route, no `api.js` method. Migration 307 and D306–D309 are
   unused, and 296 is the highest migration on disk.
 
+## D306
+
+**`POST /api/auth/register` refuses every verified account, not only one with
+an authenticator.** A security fix. No new route, no migration, no `api.js`
+method; `frontend/src` changes one condition in `RegisterPage.jsx`, so `docs/`
+is rebuilt. D305 recorded D306 as reserved by Session 1 and unused; this entry
+takes it.
+
+**The defect, measured.** `/register` is unauthenticated — Turnstile, no
+session. Its existing-account branch answered 409 only when the row was
+`email_verified` AND `hasTotpConfigured(...)` (`services/authTotp.ts`). Every
+other existing row took the incomplete-signup path: `UPDATE users SET name =
+<the request's>, role = 'exploring'`, the request's lane written over the
+suggested role (`upsertSuggestedRole`), a `user_spinout_flags` write for
+`product=spinout-lab`, an `embed_entity` job, and a fresh verification email —
+or, with `defer_email`, a 200 that the page follows with a sign-in link.
+Magic-link and Google members never enrol TOTP, so anyone who knew such a
+member's address could rename them and send them back to the review queue as
+'exploring'; and a member who came back through `/register` themselves did the
+same to their own account. Measured read-only against production on
+2026-09-27: **27 accounts exposed — 24 of 26 partners and 3 of 8 founders; 0
+admins** (both admin accounts have TOTP).
+
+**How the test came to be wrong.** It was right once. The Worker's first
+`/register` (`25eeb38099`, 2026-04-13) refused `email_verified &&
+password_hash`, when the TOTP secret lived in `password_hash` and an
+authenticator was mandatory: a verified row without one was a signup abandoned
+between its two steps, and running `/register` again was the way back in. Task
+#1 (`a1f45ce6ce`, 2026-05-09) swapped the column for `hasTotpConfigured`. Task
+#11 (`0bcde04090`, 2026-07-08) made TOTP optional and corrected the same
+assumption in `/resend-verification` — a verified row there gets the generic
+answer and nothing is reset — but not here. The register page's magic-link and
+Google sign-ups (Tasks #10 and #51) create verified rows that never have an
+authenticator, and partner-deal activation (`services/partnerDeals.ts`) and
+branch invitations (`routes/branch_invitations.ts`) insert verified rows with
+none.
+
+**The rule.** An unauthenticated request may only overwrite an account whose
+email has never been proven. A verified row is refused 409 whatever factor it
+signs in with, and nothing is written. An unverified row takes the path exactly
+as before. TOTP is the wrong test because it says how an account signs in, not
+whether anyone has proven the address — and the members this protects, magic
+link and Google, are exactly the ones who never enrol it.
+
+**Does a legitimate flow need the path for a verified account with no
+authenticator? No, and each way in was checked rather than assumed.**
+
+- The page's primary button (`registerWithMagic`) already treats the 409 as
+  "send a sign-in link instead" and calls `/auth/magic/start`. `/magic/verify`
+  signs an existing row in without touching its name or role. So that person
+  still ends up signed in, only without the rename and the demotion.
+- Google links a verified row and signs it in unchanged, and refuses an
+  unverified one until the address is proven (`routes/auth_google.ts`, Rules 2
+  and 3) — the line this entry draws.
+- `/login` takes an authenticator or recovery code only. A member without one
+  never used it, before or after.
+- The classic link ("Verify by email and set one up") was the one place the old
+  path gave a verified member something: a verification email whose link
+  minted a session and a TOTP setup token. That member now signs in by link or
+  Google and enrols from Settings → Security (`routes/settings.ts`
+  `/totp/enrol/start` and `/confirm`, Task #11).
+- `defer_email` (Task #50) is followed on the page by `magicStart`, never by
+  `/resend-verification` as its comment still says, and `/resend-verification`
+  sends nothing to a verified row. So the deferred path never produced a
+  verification email for one.
+- A signed-in member applies to Spin-Out Lab at `/spinout-lab/apply`
+  (`LAB_APPLY_HREF_SIGNED_IN`); `/register?product=spinout-lab` is the
+  logged-out call to action.
+- `api.register` has two call sites, both in `RegisterPage.jsx`, and nothing
+  else in `frontend/src` or the Worker calls the route.
+
+**The refusal.** `409 { error: 'email_already_registered', message: 'This email
+is already registered. Please sign in instead.' }` — D258's shape, so `e.code`
+carries the code and `e.message` the sentence. It is one body for every
+verified account, so it no longer tells a caller whether an account has an
+authenticator. The primary path now branches on `e.code ===
+'email_already_registered'` instead of testing the message for `/already
+registered/i`. The sentence keeps those two words, so a tab loaded before this
+deploy still reaches the sign-in link. The classic link prints the sentence,
+above the page's own "Already have an account? Sign in".
+
+**What this does not change.** An unverified row still takes the path, and that
+includes one that holds a session: deck-share signup
+(`routes/deck_share_actions.ts`) inserts `email_verified = 0` and mints a 7-day
+session, so a caller who knows such a viewer's address can still rename them
+and reset 'investor' to 'exploring', as before this entry. Nobody has proven
+that address, so the rule admits it; whether a row with a session counts as
+claimed is a separate decision, left open. The 10/min/IP `register` bucket
+(`middleware/rateLimit.ts`) is unchanged.
+
+### VERIFIED
+
+- New `cloudflare-worker/test/register_verified_d306.test.ts`, 6 tests, drives
+  the real `routes/auth.ts` on `node:sqlite` sliced from `schema_baseline.sql`
+  (`users`, `user_role_review`, `user_spinout_flags`, `auth_totp`,
+  `queue_jobs`, `email_send_log`, `notifications_inbox`, `activity_logs`) and
+  compares the account's whole state before and after. `fetch` is a recorder
+  that refuses, and the Gmail credentials are dummies, so a send attempt shows
+  up both as rows and as a call to Google's token endpoint.
+  - (a) A verified member with no authenticator is refused 409 on both request
+    shapes the page sends. Name, role, suggested role, spin-out flag, jobs,
+    token and sends are unchanged, and nothing is fetched.
+  - (b) A verified member with TOTP is refused as before, and its enrolment is
+    untouched.
+  - (c) An unverified row still gets the new name, 'exploring', the suggested
+    role, the spin-out flag and the embed job, and the classic request still
+    attempts the verification email. That attempt is also the check that the
+    recorder sees a real send, so its silence in (a) and (b) means something.
+  - (d) The body is a code-shaped `error` plus a sentence that says to sign in,
+    identical with or without TOTP, and `RegisterPage.jsx` keys on that same
+    code.
+- 4 mutations, 4 caught (non-zero exit plus `not ok`), each restored from a
+  sha256-verified snapshot and re-run green:
+  - the old `email_verified && hasTotpConfigured` condition: `not ok` 1, 2, 5
+    and 6. The diff is the defect itself — the rename, 'partner' →
+    'exploring', the overwritten suggested role, a minted token, a verification
+    email attempted and an embed job queued;
+  - refusing every existing row: `not ok 4`, so (c) holds the other direction;
+  - the page back on the sentence match: `not ok 6`;
+  - the Worker's code renamed under the page: `not ok` 1, 2, 3, 5 and 6.
+- `npm run test:drift` exits 0 on Node 22, read as the exit code of a
+  redirected log: frontend 3714 (none skipped), worker 4616 (4613 pass and the
+  3 environment-gated skips), retention 112, zero `not ok`. The six D306 tests
+  are in the worker count, confirmed by title in the log. Re-run after landing
+  on `main` at `dc951c056` (#867, D442), which added its own tests: frontend
+  3727, worker 4624 (4621 pass and the same 3 skips), retention 112, zero
+  `not ok`, exit 0.
+- Root `npm run build`, then `node scripts/check-docs-fresh.mjs --strict`,
+  exits 0.
+- `check-decision-ids`, `check-api-drift`, `check-folder-docs` and the worker's
+  `tsc --noEmit` exit 0.
+
 ## D330
 
 **AdminX.jsx and AdminTelegram.jsx say why no draft was made.** Wave 8,
@@ -33201,6 +33333,18 @@ removed (`companyKybStart` gains an optional second argument).
 
 **Mutations: 6 run, 6 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: the invitation link put back on `/invite/`; the preview effect calling accept; the accept route skipping `requireBranchTier`; an active account taking the invitation's role; a failed create leaving the invitation accepted; the support notice dropped.
 
+## D442
+
+**Spinout moderation has a console, and a case closed by `resolved_at` leaves the approvals lane.** Wave 8, Session 6, item 3. No migration: `spinout_moderation_cases.resolved_at` already exists (migration 287 and the route's own `CREATE TABLE`). No live branch exercised this.
+
+**The list.** `GET /api/admin/spinout-moderation` returns cases whose `resolved_at` is null, oldest first, with `open_count` from the same predicate. Closing a case stamps `resolved_at` and does not change `status`, so a decided case can still say `under_review`. The approvals lane (`approvalSources.ts`, key `moderation`) now requires both `status = 'under_review'` and `resolved_at IS NULL`. The per-member history and the action (`POST /api/admin/spinout-moderation/:userId`) are unchanged: an action still moves `spinout_lab_active` and never `users.is_active`.
+
+**The page.** `pages/admin/SpinoutModerationPage.jsx` at `/admin/spinout-moderation` lists those cases and records an action through the existing method. A failed list is unreadable. An empty list says it was read. `api.adminSpinoutModerationOpen` is the new method; `adminSpinoutModeration` and `adminSpinoutModerate` already existed.
+
+**The door.** `BranchApprovals` links the moderation lane, and the page itself, to `/admin/spinout-moderation`. That link is literal so the admin-route walk can see it. `HeldApprovals.jsx` row 4 (`data-lane="4"`, Spinout moderation) still says "No console" / "No console exists anywhere yet", and `held_admin_shell_d286.test.mjs` pins that row as having no console. Those files are Session 5's. The row the console needs is that one, pointed at `/admin/spinout-moderation`. `AdminPage.jsx` is not edited.
+
+**Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: the lane's `resolved_at` predicate removed; the list's `resolved_at` predicate removed; the board's literal door pointed at the Lab page instead.
+
 ## D450
 
 **HQ consoles tell the truth about what was read.** Wave 8, Session 16, item 1
@@ -33263,6 +33407,52 @@ pins send wiring.
 
 *Corrected by D451: D110's "Deliberately not here" e-sign leg — `envelope_uid`
 is now written on send and status on read follows the envelope.*
+
+## D452
+
+**Deployments record last_version; licences polish (kind filter, clash actions,
+white-label overlay).** Wave 8, Session 16, item 3. No migration.
+
+**`last_version`.** Migration 258's column was never written. Branch
+`health()` now returns `deploy_version` from the optional
+`WORKER_DEPLOY_VERSION` binding; `GET /api/admin/deployments` persists
+`last_health_at`, `last_health_ok`, and `last_version` on each successful
+health read (best-effort batch). Platform → Deployments and the licence Deploy
+step show the stored or live value.
+
+**Licences polish (H28).** `AdminLicences` and HQ Home gain All / Axal /
+White-label filters; list rows and health cards carry a kind pill and a
+white-label swatch when a brand kit exists. Territory step clash rows add
+**Open holder** and **Remove from list** (save stays disabled while a clash
+remains).
+
+**White-label overlay (H29).** Scoped `GET /admin/hq/overview?branch=` returns
+`licence` (kind, public name, brand kit); `HqBranchOverlay` draws the
+operator chrome inside HQ's read-only frame.
+
+**Tests.** `deployments_last_version_d452.test.ts`;
+`hq_licences_polish_d452.test.mjs`.
+
+## D453
+
+**The statement ledger is drawn and entered from HQ · Revenue (H10).** Wave 8,
+Session 16, item 4. No migration; no new `/api/*` method — `POST
+/api/admin/statements/draw` and `PATCH /api/admin/statements/:uid` existed
+since D111 and were filed without a caller in D266.
+
+**Draw.** `StatementDrawEditor` on the Statements zone: licence (only those
+with a revenue share) and period (`YYYY-Qn`), calling `api.statementDraw`.
+Re-draw replaces a draft; issued statements still refuse on the server.
+
+**HQ entry.** `StatementActions` on each row: issue (`draft` → `issued`),
+record payment (`paid_cents` + note), record dispute (amount + required
+reason), mark paid in full, void. Amounts leave as integer minor units with
+client-side refusal of over-payment and dispute-without-reason.
+
+**Copy.** The empty ledger points at Draw draft; the D266 “no caller” comment
+is removed.
+
+**Tests.** `hq_revenue_statements_d453.test.mjs`.
 
 ## D460
 

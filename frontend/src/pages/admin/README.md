@@ -12,7 +12,8 @@ Admin page. All three read their figures and the one `UNAVAILABLE` sentinel
 from `adminStudioOverview.js` (D246). It is not an `/admin/*` route.
 
 Roughly grouped by what they administer: accounts and roles, the Spin-Out Lab
-cohort (applications, timing, journey preview), content (articles, publications,
+cohort (applications, timing, journey preview, and `SpinoutModerationPage.jsx`
+at `/admin/spinout-moderation`), content (articles, publications,
 templates), the network (profiles, partners, referrals), and integrations
 (Telegram, X).
 

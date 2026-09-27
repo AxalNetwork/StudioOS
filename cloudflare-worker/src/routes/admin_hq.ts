@@ -125,6 +125,25 @@ async function stampLicence<T>(env: Env, one: BranchResult<T>): Promise<BranchRe
   return one;
 }
 
+/** D452 / H29 — operator chrome for the view-as overlay when the branch is white-label. */
+async function licenceShellFor(env: Env, licenceUid: string | null | undefined) {
+  const uid = String(licenceUid || '').trim();
+  if (!uid) return null;
+  try {
+    const row = await env.DB.prepare('SELECT * FROM territory_licences WHERE uid = ?').bind(uid).first<LicenceRow>();
+    if (!row) return null;
+    const [full] = await hydrate(env, [row]);
+    return {
+      uid: full.uid,
+      kind: full.kind,
+      brand_name: full.brand_name,
+      brand_kit: full.brand_kit ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 r.get('/overview', async (c) => {
   await requireSuperAdmin(c);
   const env = c.env;
@@ -136,6 +155,7 @@ r.get('/overview', async (c) => {
   const scoped = scopeOf(c);
   if (scoped) {
     const one = await stampLicence(env, await branchRead<BranchOverview>(env, scoped, 'overview'));
+    const licence = await licenceShellFor(env, one.licence_uid ?? null);
     return c.json({
       scope: {
         branch: one.code,
@@ -146,6 +166,7 @@ r.get('/overview', async (c) => {
         read_at: new Date().toISOString(),
         ...(one.reason ? { reason: one.reason } : {}),
       },
+      licence,
       branches: [one],
       branches_coverage: coverage([one]),
     });
