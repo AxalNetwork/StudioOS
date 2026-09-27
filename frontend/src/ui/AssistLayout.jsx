@@ -35,7 +35,7 @@ import useAssistMode from '../hooks/useAssistMode';
  * as "nothing spent" rather than "not loaded".
  */
 export default function AssistLayout({ surface, children, className = '' }) {
-  const { spend, pricing, loading } = useAiSpend();
+  const { spend, pricing, loading, reload } = useAiSpend();
   const config = (!loading && spend) ? eadwynConfig({ surface, spend, pricing }) : null;
   // THE SWITCH WAS ALREADY BUILT AND HAD NOTHING BEHIND IT. `AssistRail` renders
   // the toggle when its config declares `kind: 'choice'` and takes `mode` /
@@ -60,6 +60,7 @@ export default function AssistLayout({ surface, children, className = '' }) {
         mode={mode}
         onModeChange={setMode}
         lastRun={spend?.last_run}
+        onRetrySpend={reload}
         className="hidden xl:flex sticky top-20"
       />
     </div>

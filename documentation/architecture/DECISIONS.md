@@ -33103,6 +33103,127 @@ removes them.
 - `needs_envelope` drops the deleted page from its list.
 - `partner_shell` drops its read of the deleted workspace.
 
+## D400
+
+**The AI rails say when a read failed, the model badge says "Default", and
+the assistant is no longer labelled as advice (Session 12, item 1).** No
+migration, no route, no `api.js` method. Frontend and comments only, plus one
+comment in `services/aiSpend.ts`.
+
+**What was false on screen, and what it says now.**
+
+| Where | Before | Now |
+| --- | --- | --- |
+| WorkerRail, Usage this month, when `/api/ai/me/spend` failed or answered `recorded: false` | "Not recorded" | `Unreadable` ("Your AI usage" / "The usage log could not be read. That is not a claim that nothing was spent.") with a Retry |
+| WorkerRail, Model · this page, when `/api/ai/pricing` failed | the block vanished, so the page looked like one with no model | the block's label plus `Unreadable` ("The model price list … unknown, not free") with a Retry; no model and no rate is named |
+| AssistRail (Advisory, Brand builder, Deck reviewer and the Lab pages), This month, on `recorded: false` | **"$0.00 / $50.00"** — `eadwynConfig` passed `spend_usd ?? 0`, and a null total fell through to Σ `p.spend ?? 0` over pages that carry no spend | "Unreadable" and "The usage log could not be read…", with a Retry wired through `AssistLayout` |
+| The `advisory` surface's mode card | "Advisory assist" | "Score explainer assist" |
+| The model menu's badge | RECOMMENDED | DEFAULT |
+
+`useAiSpend` now keeps `spendError` and `pricingError` apart and returns a
+`reload` (a counter in the fetch effect's dependency list). It used to keep
+one `error`, set only by the spend read; a failed pricing read was dropped.
+`error` stays, as the spend error, for the callers that read it.
+
+**No zero stands in for a figure on either rail.** WorkerRail's
+`cap_usd ?? 0` became a null cap (no "of $…", no bar); `eadwynConfig`'s
+`planCap`/`totalSpend` pass null rather than 0; AssistRail's page-sum
+fallback is gone (`eadwynConfig` is its only caller and passes the total or
+null); and `eadwynConfig`'s `tin: 0, pin: priced?.pin ?? 0` run profile,
+which spelled "nothing modelled" as zeros, is now empty.
+
+**The badge: measured, then named.** The voice rule forbids
+"recommendation" about what the assistant produces, and the decision given
+for this item was: measure what the badge marks; if it is the router's
+default for the surface, it says "Default". Measured on `d3ee831a5`: the
+badge was drawn from `railModels.js`'s typed `RECOMMENDED_BY_TASK`, whose
+only entry mapped `workspace_explain` to
+`@cf/meta/llama-3.3-70b-instruct-fp8-fast`, and `aiRouter.ts`'s
+`ROUTE.workspace_explain.model` is `MID_LLAMA`, the same id. So the badge
+marked the router's default, and it now says DEFAULT (upper case, like the
+canvas's chip). The decision said to rename the constant with the label;
+this goes one step further and **deletes it**. `modelsForTask` sets
+`isDefault: id === route.model` from the same `/api/ai/pricing` response the
+menu is built from. "Default" is a router fact, and a typed copy of a router
+fact is one nobody re-checks when the primary changes. That is the same
+reason the menu's ids and rates are derived rather than typed.
+`worker_rail_models` pins that `railModels.js` holds no `_BY_TASK` map,
+and it checks the derivation with a primary that is deliberately not first
+in `alternates`.
+
+**'Advisory' → 'Score explainer'.** The label renders as `${label} assist`.
+The regulated-wording scanner treats a one-word literal as an identifier, so
+it could not catch this. The surface runs `advisor_explain`, which explains
+scores and next steps, and the label now says so. The `/advisory` route keeps
+its name because that page also holds the human advisors, who are a real
+persona. The new test checks every `ASSIST_SURFACES` label, not only this
+one.
+
+**Stale claims corrected (the gap map's list, re-measured):**
+- WorkerRail's receipt comment said `/api/ai/me/spend` returns no latest
+  row. It returns `last_run` (without token counts, which is item 2).
+- WorkerRail's header said the mode is "still fixed". Validate passes
+  `fills`. It also said the rail served "six founder desks and twenty-four
+  investor surfaces", when there are 69 mounts across every licence.
+- `ui/index.js` said mode persistence and model choice "do not exist yet".
+  Both exist (D45, D13's condition met).
+- AssistRail said every surface is `kind: 'fixed'`. Two (`workspace`,
+  `market`) declare a choice.
+- AssistRail and `aiSpend.ts` said "sixteen task classes". The `TaskClass`
+  union has twenty-three, and the test derives the word from the union.
+- `ui/README.md` described AssistRail as "the single AI rail" and WorkerRail
+  as founder and investor only. It now also lists `railModels.js` and
+  `Honesty.jsx`.
+- `shellConfig.js` said the archetype badge colours are "identical across all
+  eighteen canvas files". The two Detail Layer canvases disagree with the
+  per-bucket ones, and with each other. The comment now says which palette is
+  followed, and not to repaint.
+
+**Not changed here, and passed to their owners:**
+- `design/incoming/README.md:298` still says "The model card cannot honestly
+  ship yet"; it shipped. That file is Session 1's.
+- `InvestorDealsWorkspace.jsx:202` and `InvestorDealsRoutes.jsx:123` pass the
+  rail a note reading "Scores and recommendations appear only when they exist
+  in the live deal record". Those are deal-record fields, not assistant
+  output, but the notes a page passes are not scanned. The pages are not
+  Session 12's.
+- `FounderRaiseLegal.jsx:176`'s "does not … provide legal advice" is a
+  negation and correct as written.
+
+**Verification.**
+- New test file `worker_rail_honesty_d400.test.mjs`, 12 tests. Two of them
+  render AssistRail against an unreadable and a readable spend response.
+- `worker_rail_models`: three RECOMMENDED tests re-aimed at the derived
+  default, plus one behavioural test.
+- `ui_assist_rail_and_sidebar`'s meter test is re-aimed, not loosened. The
+  gate moved from `spendKnown` onto `meter`, which is now null unless both
+  the figure and the cap are known.
+- `ai_spend_self`'s hook-boundary test is re-aimed the same way. Success
+  still sets the response, and failure leaves `spend` null and records why.
+  The failure branch now also clears an earlier success, because Retry can
+  re-run the fetch. A mutation that drops that clear is caught.
+- Mutations: 19 run, 19 caught. Each was counted on a non-zero exit plus a
+  `not ok` line, and each file was restored from a sha256-checked snapshot.
+  - dropped retry
+  - usage block saying "Not recorded"
+  - pricing block gated off
+  - pricing error dropped in the hook
+  - retry counter removed from the effect's dependencies
+  - default taken as the first alternate
+  - badge back to RECOMMENDED
+  - a typed `DEFAULT_BY_TASK` map
+  - rail `cap ?? 0`
+  - `totalSpend ?? 0`
+  - `planCap ?? 0`
+  - the 'Advisory' label
+  - AssistRail `totalSpend ?? 0`
+  - AssistRail retry removed
+  - AssistRail "Not recorded"
+  - the `ui/index.js` claim
+  - the `aiSpend.ts` count
+  - the receipt comment
+  - the hook's failure branch no longer clearing `spend`
+
 ## D410
 
 **E-sign `/send` hardening: the signing link reaches only the recipient, a
@@ -35220,6 +35341,18 @@ record could not be read. Nothing here is drawn from a guess. Retry".
 **One open count.** Awaiting a decision is `status = 'under_review' AND resolved_at IS NULL`, exported once and read by the console and by the approvals lane. A suspension or an ejection that has not been closed is a sanction in force, listed and counted apart, and not added into the lane. Close stamps `resolved_at` and does not change Lab access, so a sanction can leave the list without reinstating. The page does not preselect an action. A list that is not an array is unreadable. A missing count is not shown as zero. The list is capped at 200 and says how many of the count it is showing.
 
 **Mutations: 5 run, 5 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: a plain admin reinstating a peer admin; a decision with no audit row; the freeze not reaching the post; the console and the lane disagreeing on a flag; a malformed payload read as an empty list.
+
+## D449
+
+**The domain wizard names the registrar and copies a whole DNS record.** Frontend only. No migration. No new `/api` method. No live branch exercised this. `AdminStudioOverview.jsx` is not edited.
+
+**Registrar chips.** The three-step checklist stays. Above the records, six chips name Cloudflare, Google / Squarespace, Route 53, Namecheap, GoDaddy and Other. None is pressed until the person presses one, because a preselected Cloudflare would claim that is where they bought the name. Pressing one names that registrar and says the name, the value and the TTL do not change with it. Pressing it again clears the choice. The records still come from the licence payload. The choice is not stored.
+
+**Copy all.** Each record card copies Type, Name, Value and, when the TTL is a finite number, TTL, in one action, beside the per-field copies. A TTL that is not a finite number is left off the clipboard rather than written as zero. A refused clipboard uses the same sentence as a refused per-field copy.
+
+**Not on this screen.** Certificate, make primary, email DNS, and apex guidance. The canvas's recommended and not-recommended pair is not drawn.
+
+**Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: Copy all dropping the name and the TTL; a chip pressed before the person presses it; the chip list gone.
 
 ## D450
 

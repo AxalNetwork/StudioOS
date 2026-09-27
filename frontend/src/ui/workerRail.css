@@ -206,7 +206,7 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
   color: var(--fwr-accent); background: var(--fwr-accent-soft);
   border: 1px solid var(--fwr-accent); border-radius: 3px; padding: 2px 5px;
 }
-/* The inline rate a NON-recommended entry carries instead of the fuller
+/* The inline rate a NON-default entry carries instead of the fuller
    treatment — in / out, on one line, in the corner the badge would occupy. */
 .fwr-model-inline {
   flex: none; font-style: normal; font-size: 10px;
