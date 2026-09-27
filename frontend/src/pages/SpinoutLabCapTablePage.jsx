@@ -13,9 +13,15 @@
 //   - Carta: /captable/live is Worker-only and user-scoped; the chip renders
 //     only from a real response (hidden in dev). There is no push-to-Carta
 //     backend, so no "Push to Carta" button.
-//   - Omitted (no backend): vesting schedules/progress bars (vesting terms
-//     live only inside the generated Co-founder Agreement — linked instead),
-//     accelerator what-if, share/copy-link, pitch-deck export. The investor
+//   - Vesting: GET /captable/equity-plan (D364) shows the Carta-synced option
+//     pools and grants, per account, as Carta reported them. Without Carta
+//     there is no store — the terms live inside the generated Co-founder
+//     Agreement, linked instead.
+//   - Share (D364): the Worker's audience-scoped links (POST
+//     /captable/scenarios/:uid/share), with what each audience sees stated
+//     before minting and the named holders' consent confirmed for an investor
+//     or full link (components/spinout/CapTableShareModal.jsx).
+//   - Omitted (no backend): accelerator what-if, pitch-deck export. The investor
 //     preview IS built — a read-only client-side view over the saved
 //     scenario result — and CSV export is real and kept.
 //   - Honest reads (D360): a scenario read that FAILED is not an empty cap
@@ -35,7 +41,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   PieChart, Loader2, Lock, AlertTriangle, FileText, Plus, X,
-  Download, ExternalLink, CheckCircle2, Clock, Eye,
+  Download, ExternalLink, CheckCircle2, Clock, Eye, Share2,
 } from 'lucide-react';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
@@ -44,6 +50,8 @@ import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import { reportError } from '../lib/log';
 import { Unreadable } from '../ui';
+import CapTableShareModal from '../components/spinout/CapTableShareModal';
+import EquityPlanCard from '../components/spinout/EquityPlanCard';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -140,6 +148,9 @@ export default function SpinoutLabCapTablePage() {
   const [filter, setFilter] = useState('all');
   const [addModal, setAddModal] = useState(null); // {kind:'founder'|'safe'|'round', form:{}}
   const [investorPreview, setInvestorPreview] = useState(false); // client-side read-only view
+  const [shareOpen, setShareOpen] = useState(false);
+  // Carta option pools + vesting: null = absent (dev 404) or not loaded.
+  const [equityPlan, setEquityPlan] = useState({ plan: null, failed: false });
   // Which reads failed. `scenario` closes every write path: saving over a
   // scenario the page could not read would replace it with whatever was typed.
   const [unread, setUnread] = useState({ projects: false, scenario: false, trackers: false });
@@ -161,10 +172,11 @@ export default function SpinoutLabCapTablePage() {
         const proj = projects === null ? null : pickLabProject(projects, me);
         setProject(proj || null);
         if (proj) {
-          const [capRes, tRes, liveRes] = await Promise.allSettled([
+          const [capRes, tRes, liveRes, planRes] = await Promise.allSettled([
             api.getCapTableByProject(proj.id),
             api.legal83bList(proj.id),
             api.liveCapTable(), // Worker-only; 404 in dev → chip hidden
+            api.getEquityPlan(), // Worker-only; 404 in dev → card hidden
           ]);
           if (dead) return;
           if (capRes.status === 'rejected') reportError('spinout-captable:scenario', capRes.reason);
@@ -178,6 +190,7 @@ export default function SpinoutLabCapTablePage() {
           setResult(s?.result || null);
           setTrackers(tRes.status === 'fulfilled' ? (tRes.value?.trackers || []) : []);
           setCarta(liveRes.status === 'fulfilled' ? liveRes.value : null);
+          applyEquityPlan(planRes);
         } else if (projects === null) {
           setUnread({ projects: true, scenario: false, trackers: false });
         }
@@ -189,6 +202,17 @@ export default function SpinoutLabCapTablePage() {
     })();
     return () => { dead = true; };
   }, []);
+
+  function applyEquityPlan(res) {
+    if (res.status === 'fulfilled') { setEquityPlan({ plan: res.value || null, failed: false }); return; }
+    if (res.reason?.status === 404) { setEquityPlan({ plan: null, failed: false }); return; }
+    reportError('spinout-captable:equity-plan', res.reason);
+    setEquityPlan({ plan: null, failed: true });
+  }
+  const reloadEquityPlan = async () => {
+    const [res] = await Promise.allSettled([api.getEquityPlan()]);
+    applyEquityPlan(res);
+  };
 
   const markDirty = (next) => { inputsRef.current = next; setInputs(next); setDirty(true); };
 
@@ -418,6 +442,18 @@ export default function SpinoutLabCapTablePage() {
                 className={labBtn('ghost')}
               >
                 <Eye size={LAB_ICON_SIZE} /> Preview as investor
+              </button>
+            )}
+            {/* Sharing hands the table to an outsider: the Worker requires
+                scenario WRITE access, so the button follows canEdit. */}
+            {scenario && canEdit && (
+              <button
+                type="button"
+                onClick={() => setShareOpen(true)}
+                data-testid="button-share-captable"
+                className={labBtn('ghost')}
+              >
+                <Share2 size={LAB_ICON_SIZE} /> Share
               </button>
             )}
             {scenario && (
@@ -814,8 +850,14 @@ export default function SpinoutLabCapTablePage() {
               10–15% is the investor-normal range. Changing it re-computes founder dilution when you preview or save.
             </p>
           </div>
+
+          <EquityPlanCard plan={equityPlan.plan} failed={equityPlan.failed} onRetry={reloadEquityPlan} />
         </div>
       </div>
+      )}
+
+      {shareOpen && scenario && (
+        <CapTableShareModal scenarioUid={scenario.uid} onClose={() => setShareOpen(false)} />
       )}
 
       {/* Add modal */}

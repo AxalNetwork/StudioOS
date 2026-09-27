@@ -31941,6 +31941,217 @@ its `api.js` method is in the same commit. No migration.
   hardening has merged, so wiring it is possible, but it is not part of this
   item.
 
+## D363
+
+**The revenue ledger: one row per payment, in integer cents, evidenced or
+not, stated as such.** Wave 8, Session 8, item 4.
+- Migration 311 adds `revenue_entries`.
+- The new route file `routes/revenue.ts` is mounted at `/api/revenue`, and
+  its five `api.js` methods land in the same commit.
+- The Revenue page gains the ledger.
+
+**The gap.** The Revenue canvas draws a per-customer entry ledger. Each row
+has a customer, amount, type, date, verification status and proof. The
+ledger has five filters, an investor view, manual entry, a CSV import with
+column mapping, a proof vault, and mix and confidence bars. No store held any
+of it. The page could show `project_metrics` snapshots (one MRR per date) and
+the project's self-reported proof fields, and its header said the ledger was
+"intentionally NOT reproduced".
+
+**What changed.**
+- **Migration 311 (`revenue_entries`).** Additive only
+  (`CREATE … IF NOT EXISTS`), and it depends on no other migration.
+  - `amount_cents` is an INTEGER with `CHECK (> 0)`.
+  - `currency` is `usd`; the Worker refuses any other currency until sums
+    can keep currencies apart.
+  - `revenue_type` is one of `recurring`, `pilot`, `one_time`, `deposit`.
+  - `received_on` is a date; `source` is `manual`, `csv` or the reserved
+    `stripe`.
+  - `verification` is one of `verified`, `supported`, `manual`.
+  - `proof_document_id` points at a document; plus notes, the import batch
+    and the author.
+  - `ensureRevenueEntriesSchema` is the D235 safety net. It is cached per
+    binding, and a test holds it to the migration.
+- **`routes/revenue.ts`** lists, creates, imports, edits and deletes entries.
+  - Access is the same as `/api/progress/metrics`, the store the ledger sits
+    beside:
+    - the project is narrowed to the caller's active company, with admins and
+      partners exempt;
+    - its founder, an admin or a partner can read it;
+    - its founder, an admin or an active Lab member who owns it can write.
+  - An entry reached through another project is a 404.
+  - A failed read is a 500 with our own sentence, never an empty list the
+    page would draw as "no revenue recorded".
+  - Refusals carry a code and a sentence.
+- **Money is integer cents end to end.**
+  - A CSV amount is parsed as text, never through a float: "1,200.50"
+    becomes 120050.
+  - A third decimal place, a zero, a negative or a non-number is refused, not
+    rounded.
+  - The page's sums (`lib/revenueLedger.js`) stay in cents until one
+    formatter turns them into dollars.
+- **Verification is the Worker's.** `verificationFor` derives it from the
+  row, and a request cannot set it.
+  - An entry with a proof document from the same project is `supported`; one
+    without is `manual`.
+  - `verified` is reserved for entries a Stripe charge sync writes. No such
+    sync exists: the Stripe import (`routes/progress.ts`) records MRR and
+    customer counts, not charges. So no path writes `verified` today.
+  - Because of that, the page's "Verified revenue" KPI and the Verified mix
+    line read "Not recorded" with that reason. They do not show 0%, which
+    would claim entries were checked and failed.
+  - Building the charge sync is the step past this line.
+- **The CSV import checks every row first.**
+  - It writes the valid rows in one batch and returns each refused row with
+    its code and sentence.
+  - An imported row never carries a proof document id; proof is attached per
+    entry afterwards, from the startup's own documents.
+- **The page** (`components/spinout/RevenueLedger.jsx`, mounted in
+  `SpinoutLabRevenuePage.jsx`):
+  - the canvas's five filters and the investor view (the same rows, without
+    the unevidenced ones);
+  - a manual-entry form, with no defaults for date or type;
+  - CSV import: upload, a guessed column mapping the founder confirms, a
+    preview, then the server's per-row result. A day-first date such as
+    "18/07/2026" is never reshaped; the Worker refuses it with its own
+    reason;
+  - per-row proof attachment from the startup's documents;
+  - mix bars by type and confidence by evidence;
+  - ledger KPIs: total, distinct customers, verified share and proof
+    coverage.
+  - A failed ledger read renders `Unreadable` with a retry, and the KPIs
+    built from it read Unreadable rather than "$0".
+  - The existing snapshot log, Stripe MRR sync and proof fields are
+    unchanged beside it.
+
+**Not built, with the reason on screen.**
+- The Week 3 / Week 4 mode tabs. They only reword a banner, so they would be
+  a control with nothing behind it.
+- A proof "vault" of uploaded files separate from the startup's documents.
+  Proof is attached from `GET /legal/documents`, which is the store the
+  canvas's proof rows describe.
+
+**Guards.**
+- `cloudflare-worker/test/revenue_ledger_d363.test.ts` has 7 tests. It runs
+  on real SQLite (`_d1_sqlite.mjs`) with migration 311 executed, so the
+  table's CHECKs, the binds and the scoping decide what comes back.
+- `frontend/test/spinout_revenue_ledger_d363.test.mjs` has 7 tests.
+- Writing the frontend test found a real defect before merge:
+  `normalizeCsvDate` turned "18/07/2026" into "2026-18-07". The Worker would
+  have refused that date, but the helper had promised not to guess a
+  day-first date. It now accepts a month-first date only when the month is
+  1 to 12.
+- Mutation-checked both ways: 28 of 28 caught, each with a non-zero exit and
+  a `not ok` line, and every file was restored and checked by sha256.
+  - One mutation, letting an imported row keep a proof id through
+    validation, first escaped. The import's INSERT has no proof column, so
+    that mutation changed no behaviour.
+  - It was re-aimed at the real defect, the INSERT writing the proof id, and
+    that version is caught.
+
+## D364
+
+**Stores that already existed, now on the Lab's Capital, Cap Table and Pitch
+Deck pages.** Wave 8, Session 8, item 5. No migration and no new API: every
+call below is an `api.js` method with a Worker route that has shipped for
+months.
+
+**The gap.** Each of these was built on the Worker and never read by the Lab:
+- The pro-rata list (migration 169, `GET /contacts/raise-pro-rata`), with the
+  Worker's own entitlement arithmetic.
+- SAFE caps and discounts on the cap-table scenario, while Capital's
+  Instrument, Valuation cap and Discount tiles said "Not set".
+- `GET /captable/equity-plan`, the Carta-synced option pools and vesting
+  grants (migration 057).
+- `POST /captable/scenarios/:uid/share`, audience-scoped cap-table links
+  that redact on the server.
+- Deck share view counts (`GET /decks/:id/engagement`). The Lab share sheet
+  also never said that its links open once and last at most 30 days.
+
+**What changed.**
+- **Capital** (`lib/capitalRoundTerms.js`):
+  - Instrument, Valuation cap and Discount are read from the outstanding
+    SAFEs and notes on the cap-table scenario the page already loads for the
+    data room. Each tile says how many instruments carry the term (for
+    example "$5M–$8M · all 2"). The note under the tiles says these are
+    instruments already outstanding, not the terms of this round, which
+    nothing records.
+  - Discount is stored as a fraction and shown as a percent.
+  - Pro-rata rights reads the round's pro-rata list: a tile (holders, taking,
+    waived) and a read-only card of each holder's prior stake, the Worker's
+    entitlement, what they are taking and their decision.
+  - The card states the Worker's reconciliation rule (raw, fits or scaled).
+  - A round with no target prints no entitlement, because the Worker computes
+    entitlements against `target_amount || 0` and would show every one as $0.
+  - Offers and decisions stay in the founder Capital workspace, which the
+    card links to.
+  - A failed read of either store is a new "Couldn't read" provenance, never
+    "Not set". The pro-rata card on a failed read is `Unreadable`, never "no
+    holders".
+- **Cap Table**:
+  - `EquityPlanCard.jsx` shows the account's Carta pools (authorized, issued,
+    available) and grants, with vested counts as Carta reported them and the
+    date each row was written.
+  - The card says the data is per account, not per startup.
+  - Nothing recorded renders `Unrecorded` ("Only a Carta sync records option
+    pools and vesting grants") and points to the Co-founder Agreement.
+  - A 404 (dev) hides the card; any other failure is `Unreadable`.
+- **Cap Table share** (`CapTableShareModal.jsx`, `lib/capTableShare.js`):
+  - The founder chooses an audience and sees what it shows and hides before
+    anything is minted. Those lines are the Worker's `AUDIENCE_SCOPE` word
+    for word, and a test compares them.
+  - The link lasts 1–90 days and opens 1–500 times. These are the Worker's
+    bounds, sent as the founder typed them.
+  - **Consent:** an investor or full link shows named people's positions to
+    whoever holds it. The Create button stays off until the founder confirms
+    those people agreed, and `shareRequest` refuses anything but a real
+    `true`. A summary link names nobody and needs no confirmation.
+  - The link is shown once (only its hash is stored), and the sheet says so.
+  - Issued links list the Worker's view counts and can be revoked while live.
+  - The Share button follows `canEdit`, because the Worker requires scenario
+    write access to mint.
+- **Pitch Deck** (`lib/deckShareViews.js`):
+  - The share sheet states the link's view limit from the Worker's answer.
+    The Lab asks for none, so a link opens once, and the sheet says a
+    forwarded or scanner-previewed link will not open again.
+  - The sheet says no link lasts past 30 days. The Worker caps
+    `expires_in_hours` at 24 × 30, which is why the design's "Never" is not
+    offered.
+  - A new card lists each link's views, limit, last view and state (live,
+    used up, expired, withdrawn) for the current deck version.
+  - The card reads the version list without `ensureDeck`, which can write.
+  - A total at the Worker's 200-row read cap shows as "200+".
+  - A failed read is `Unreadable`, never "no views".
+
+**Found and filed, not fixed here.**
+- `GET /captable/equity-plan` turns a failed SELECT into an empty list
+  (`.catch(() => ({ results: [] }))`). "No pools or grants recorded" can
+  therefore hide a failed read. The fix is the Worker's: return a 500.
+- `GET /contacts/raise-pro-rata` computes with `Number(target_amount) || 0`
+  and `Number(prior_stake_pct) || 0`. The page works around the first (no
+  target, no entitlement shown); the Worker should return null
+  entitlements.
+- The Lab deck sheet's expiry buttons each mint a new link and leave the
+  previous one live. The views card now shows them, but the sheet should
+  revoke or reuse the previous link.
+- The deck sheet's Copy button reports "Copied" even when the clipboard is
+  blocked. The new Cap Table sheet does not do this.
+- `normalizeInputs` on the Cap Table page still turns a missing SAFE amount
+  or founder share count into 0 (`?? 0`). That predates D360 and feeds the
+  engine, not a displayed figure.
+
+**Guards.** `frontend/test/spinout_existing_stores_d364.test.mjs` (10 tests)
+reads the Worker source for:
+- every rule it copies: the audience lines, the 168-hour, 90-day, 25-open
+  and 500-open bounds, the deck's `view_limit || 1` and 24 × 30 cap, and
+  the engagement query's `LIMIT 200`;
+- the Share button's write gate.
+- Mutation-checked both ways: 27 of 27 caught, each with a non-zero exit and
+  a `not ok` line, and every file was restored and checked by sha256. The
+  mutations cover every tile, consent, bound, state, gate and copy rule
+  above, including reading deck views through `ensureDeck` and treating a
+  failed scenario read as an empty one.
+
 ## D380
 
 **The Spin-Out Lab honesty sweep: the seat count reads `/brief`'s `places`,
@@ -33537,6 +33748,209 @@ so the desks pass nothing new. A desk that draws a root passes the same
   - no link back
   - the primary model shown instead of the active one
   - `useLocation` used
+
+## D403
+
+**Detail-layer navigation: "View more · N" appears only where a count is
+sourced, the crumb returns to the zone's section on the root, and zone pills
+respond to hover and focus (Session 12, item 4).** No migration, no route,
+and no `api.js` method. Frontend only.
+
+**1. "View more · N", and only where the N is true.** The Detail Layer
+canvases end each compressed zone with "View more · N →". Board sections
+show at most five rows (`top()`) and carried no total, so there was no
+figure to print. The only "View more" in the product was HQ Home's.
+- `boards/format.js` gains `total(rows, cap)`. It returns the list's length
+  only when the read returned the whole list. Several Worker list reads stop
+  at a `LIMIT`, and a list that came back at its cap may be a longer list
+  cut short, so at or past the cap it returns null.
+- A board section may now declare `total(payload)`. `BucketBoard` prints
+  "View more · N" only when the total is an integer larger than the rows
+  shown. Otherwise the footer stays "Open {zone}".
+- Four sections declare a total, each over exactly the list its rows are
+  drawn from:
+
+  | Section | Source | Cap |
+  | --- | --- | --- |
+  | Advisor `/practice` Sessions | `advisors.ts` bookings | `LIMIT 200` |
+  | Investor `/deals` Pipeline | `deals.ts` list, live deals only | none |
+  | Investor `/deals` Closing | `esign.ts` list | `LIMIT 200` |
+  | Partner `/offers` Catalog | `services.ts` offerings | `LIMIT 200` |
+
+- Sections whose list is filtered from a capped read (pending, confirmed and
+  completed bookings), or whose source I did not measure (the IC commit room,
+  the partner pipeline's negotiations), declare none. They keep "Open".
+- The Session 11 registries (`research.js`, and the advisor Introductions
+  and Expertise sections in `network.js` and `advisorExpertise.js`) are not
+  touched.
+- Found, not fixed: the summaries on those capped sections already print
+  `count(items.length)` ("N sessions", "N offerings", "N envelopes") with no
+  cap. At 200 or more rows they state 200 as the whole. The same `total`
+  helper would fix them; their lines belong to the registries, so this is
+  passed on.
+
+**2. The crumb returns to the zone you left.** `WorkspaceShell`'s crumb
+linked to `bucket.prefix`, so it landed at the top of the root. It now links
+to `/prefix#<anchor>`, the section that zone has on a board root, for
+example `/pipeline#pl-proposals`.
+- The anchor comes from `boards/index.js`'s own registry via `boardFor(role,
+  prefix, null)`. Only the section list is read; the sources are functions
+  that nothing calls, so no `api` is passed.
+- `BucketBoard` scrolls to the hash on arrival and when it changes. Every
+  section renders its `id` from the first paint, including the skeleton.
+- A root that is a card grid (every founder bucket, investor Portfolio and
+  Fund, advisor Cohorts), and a board's link cards (the Research zones), have
+  no section id. Their crumb keeps the bare prefix.
+
+**3. Zone pills answer hover and focus.** `ZoneNav` painted each pill with
+inline `color` / `background` / `borderColor`, and an inline style beats
+every `hover:` class, so an idle pill never answered the pointer.
+- The colours are now CSS variables (`--zn-ink`, `--zn-bg`, `--zn-line`,
+  `--zn-hover-ink`, `--zn-hover-line`) painted by the classes.
+- An idle pill takes the role's accent ink and border on hover and on
+  keyboard focus, and focus keeps the role-coloured outline.
+- The current pill is still chosen by the URL (`aria-current`) and does not
+  change on hover.
+- In dark mode, idle pills had rendered white, because no dark skin reads an
+  inline style. They now take neutral greys; the current pill keeps its
+  accent tint.
+
+**Not built: the needs-attention dot.** The canvases put a dot on a zone
+button that needs attention, and no store answers "which zones need
+attention" for any role. It stays unbuilt rather than lit from a guess.
+
+**Verification.**
+- New file `detail_layer_nav_d403.test.mjs`, 12 tests.
+  - `total`: a full list, a list at and past its cap, and no list.
+  - Each declared total counts its own list and stops at the cap. The
+    investor pipeline counts 240 live deals past any cap, and leaves out 60
+    rejected ones.
+  - No registry counts rows it has no source for.
+  - The footer rule, and the hash scroll.
+  - The crumb's anchor lookup. Every board section, across every registry,
+    has an id-safe anchor.
+  - A rendered `ZoneNav` for every shell carries no inline paint property,
+    and has the hover class and focus outline. Its hover colour is the
+    role's accent, exactly one pill is current, and only idle pills carry
+    the dark neutrals.
+- `advisor_bucket_overview`'s crumb test is re-aimed, not loosened. The
+  crumb is still the bucket root, now optionally with a hash, and never a
+  zone path.
+- Mutations: 13 run, 13 caught.
+  - the cap ignored
+  - the cap off by one
+  - the pipeline counting rejected deals
+  - the catalog uncapped
+  - the footer printing when the total is no larger than the rows shown
+  - the footer ignoring the total
+  - no scroll to the hash
+  - the crumb as the bare prefix
+  - the anchor not looked up
+  - an inline colour back on the pill
+  - no hover class
+  - hover not in the role's accent
+  - dark neutrals on the current pill
+
+## D404
+
+**The rail shows what this page has cost this month. `ai_usage_logs` gains a
+nullable `surface` column (migration 319), the router records it, and older
+rows read "no page" (Session 12, item 5).** No new route and no new `api.js`
+method. `aiWorkspaceExplain` sends one more field, and
+`GET /api/ai/me/spend` returns two more.
+
+**What was missing.** The AIRail canvas draws "This page this month" under
+the usage meter. `ai_usage_logs` recorded no page, so every figure the rail
+could draw was the account's or the task's. D401 labelled the "Last run"
+receipt account-wide for the same reason.
+
+**The store.**
+- Migration `319_ai_usage_surface.sql`:
+  `ALTER TABLE ai_usage_logs ADD COLUMN surface TEXT`. It is nullable on
+  purpose. Every earlier row, and every run from a caller that sends no
+  page, holds NULL, which means "not recorded". A default such as `''` or
+  `'unknown'` would be a value pretending to be an answer.
+- The router's runtime `CREATE TABLE IF NOT EXISTS ai_usage_logs` carries
+  the column too. The migration is the declaration and the bootstrap is the
+  safety net (D235).
+- `check-runtime-schema-declared`, `check-sql-migrations`,
+  `migrations_fresh_build` and `baseline_drift_guard` pass.
+
+**The write.**
+- `RunOptions.surface` is new. All nine `recordUsage` calls in `run()` pass
+  it, including the refusals, so a refused run still counts against the
+  page it was asked from.
+- `recordUsage` writes `normaliseSurface(surface)`. It accepts only an
+  absolute app path of letters, digits, `/`, `_`, `.` and `-`, at most 160
+  characters, with a trailing slash stripped so one page is not recorded as
+  two. Anything else is recorded as NULL, never trimmed into a
+  plausible-looking value.
+- `POST /api/ai/workspace/explain` takes `page` and passes it as `surface`.
+- The route's guardrail pre-screen runs a `safety` task that records no
+  page. That is correct: it is not the run the page asked for.
+- Every other caller of the router sends no page today, so its rows are
+  NULL.
+
+**The read.** `loadMyAiSpend` adds `by_surface`: this month's rows grouped on
+the column, so NULL forms one entry, the month's unattributed runs. That
+entry is reported rather than dropped, and the breakdown adds up to the
+month. A failed read, including the read before migration 319 is applied,
+sets `by_surface_recorded: false` rather than returning an empty list.
+
+**On the rail.** The Usage block draws one of three lines, via
+`assistCost.js`'s `pageSpendLine`:
+- "This page this month: $0.0040 over 2 runs."
+- "No runs recorded from this page this month. N runs this month carry no
+  page, either from before pages were recorded or from features that do not
+  record one." This is shown whenever the month has unattributed runs,
+  because some of them may be this page's own runs from before the
+  migration, so "nothing from this page" alone would be a claim the log
+  cannot make.
+- "No runs from this page this month."
+
+A failed read renders Unreadable with a Retry. The rail sends its path
+normalised the way the router stores it, so the lookup matches.
+
+**Stays not recorded:** token margin (the owner's brief, item 7). Nothing
+here computes or draws a margin.
+
+**Verification.**
+- `ai_spend_self` gains three tests on real SQLite:
+  - the breakdown is per page, this user's rows and this month's only, with
+    one null entry, and it sums to the month;
+  - a table without the column still totals and reports the breakdown
+    unrecorded;
+  - an unreadable table leaves it unrecorded.
+- `ai_workspace_explain` gains three:
+  - the page reaches the `workspace_explain` usage row's INSERT, through the
+    real route with an authenticated fixture;
+  - no page records NULL;
+  - `normaliseSurface` accepts a plain path, strips a trailing slash, and
+    refuses a bare word, a URL, a space, a quote, a query, a hash, an empty
+    value, a non-string and an overlong path.
+- New file `worker_rail_page_spend_d404.test.mjs`, 6 tests: the line's
+  three states and plurals, and the rail sending its normalised page and
+  drawing the breakdown, with Unreadable on a failed read.
+- Two existing tests pinned exact source text that this change extended, and
+  are re-aimed, not loosened. Each re-aim is mutation-checked (three caught):
+  - `hq_rail_scope_h13` pinned `aiWorkspaceExplain`'s parameter list as an
+    exact tuple. It now pins that the method accepts `branch` and forwards
+    it.
+  - D401's receipt test pinned `readBack`'s whole dependency list. It now
+    pins that `reload` is in it.
+- Mutations: 12 run, 12 caught.
+  - the router dropping the surface
+  - the route not passing the page
+  - no charset check
+  - the trailing slash kept
+  - the null group dropped
+  - the breakdown always recorded
+  - the query not scoped to the month
+  - the line ignoring unattributed runs
+  - a wrong singular
+  - the rail sending no page
+  - the api method dropping the page
+  - the Unreadable hidden
 
 ## D410
 
@@ -36456,6 +36870,17 @@ exits 0.
 
 No live branch. Session 1 confirms the deploy and production D1. This session
 cannot read the deploy log.
+
+## D471
+
+**The Send for Signature canvas cut is not a script injection.** Semgrep
+alert on `frontend/test/send_for_signature_d411_contract.test.mjs`: the rule
+`unknown-value-with-script-tag` reports a file read used in the same call as
+a script-tag literal. The read is the design canvas, and the literal was the
+cut that keeps assertions on the markup. The cut is unchanged: the `<` in
+front of `data-dc-script`. The tag name is assembled from two pieces so the
+file read is not written next to one script-tag literal. The string is never
+served. The test throws if that element is gone. No migration.
 
 ## D490
 

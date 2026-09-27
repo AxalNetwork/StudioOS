@@ -64,7 +64,12 @@ test('Research root renders an overview for advisors', () => {
 
 test('the shell crumb links to the bucket root, not the first zone', () => {
   const code = codeOnly(shell);
-  assert.match(code, /to=\{bucket\.prefix\}/, 'the crumb must link to the bucket root');
+  // RE-AIMED IN D403: the crumb may now carry the zone's section anchor on a
+  // board root (`/pipeline#pl-proposals`). It is still the bucket ROOT — the
+  // prefix, optionally with a hash — and never a zone path.
+  assert.match(code, /const crumbTo = bucket \? \(crumbAnchor \? `\$\{bucket\.prefix\}#\$\{crumbAnchor\}` : bucket\.prefix\) : null;/,
+    'the crumb must link to the bucket root');
+  assert.match(code, /<Link to=\{crumbTo\}/, 'the crumb link must use that root path');
   assert.doesNotMatch(code, /to=\{`\$\{bucket\.prefix\}\/\$\{bucket\.zones\[0\]\.slug\}`\}/,
     'the crumb must not link to the first zone');
 });

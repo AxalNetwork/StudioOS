@@ -21,6 +21,12 @@
 // (the app renders inside its authenticated shell), its per-slide image upload
 // zones and share password/PIN toggle (no backend — omitted rather than shipped
 // as dead controls), and its simulated export timer (the real export drives it).
+//
+// D364 — share links and their views. The Worker has counted every view since
+// Task #53 (GET /decks/:id/engagement); this page now shows them, per link,
+// for the current deck version, and a failed read is Unreadable rather than
+// "no views". The share sheet states the link's view limit from the Worker's
+// answer: this page asks for none, so each link opens once.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -31,6 +37,8 @@ import {
 import { api, refusalError } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { reportError } from '../lib/log';
+import { Unreadable } from '../ui';
+import { SHARE_STATE_LABEL, summarizeDeckShares } from '../lib/deckShareViews';
 import { useAuth } from '../hooks/useAuthSync';
 import { useSpinoutDeckFields } from '../hooks/useSpinoutDeckFields';
 import SpinoutSlideEditor from '../components/SpinoutSlideEditor';
@@ -81,6 +89,9 @@ export default function SpinoutLabPitchDeckPage() {
   const [sharing, setSharing] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
   const [expiryHours, setExpiryHours] = useState(24);
+  const [shareViewLimit, setShareViewLimit] = useState(null);
+  // Views of this deck's share links: loading | none (no deck yet) | ready | failed.
+  const [views, setViews] = useState({ status: 'loading', summary: null });
 
   useEffect(() => () => clearInterval(progressTimer.current), []);
 
@@ -215,6 +226,27 @@ export default function SpinoutLabPitchDeckPage() {
     }
   };
 
+  // Read-only: resolves the current version without creating one (ensureDeck
+  // may apply the method, which writes), then reads its engagement.
+  const loadViews = async () => {
+    if (!projectId) return;
+    setViews((v) => ({ ...v, status: 'loading' }));
+    try {
+      const versions = await api.deckListVersions(projectId);
+      const list = Array.isArray(versions?.versions) ? versions.versions : Array.isArray(versions) ? versions : null;
+      if (!list) throw new Error('deck versions returned no list');
+      const current = list.find((v) => v.is_current) || list[0];
+      if (!current) { setViews({ status: 'none', summary: null }); return; }
+      const summary = summarizeDeckShares(await api.deckEngagement(current.id));
+      if (!summary) throw new Error('deck engagement returned no share list');
+      setViews({ status: 'ready', summary });
+    } catch (e) {
+      reportError('SpinoutLabPitchDeckPage:views', e);
+      setViews({ status: 'failed', summary: null });
+    }
+  };
+  useEffect(() => { loadViews(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [projectId]);
+
   const onShare = async (hours = expiryHours) => {
     if (!projectId) return;
     setShareOpen(true); setSharing(true); setError('');
@@ -223,6 +255,8 @@ export default function SpinoutLabPitchDeckPage() {
       const r = await api.deckShare(deck.id, { expires_in_hours: hours });
       const path = r?.share_path || (r?.token && `/share/deck/${r.token}`);
       setShareUrl(r?.url || (path ? `${window.location.origin}${path}` : ''));
+      setShareViewLimit(Number.isInteger(r?.view_limit) ? r.view_limit : null);
+      loadViews();
     } catch (e) {
       setShareOpen(false);
       setError(e?.message || 'Share failed');
@@ -365,6 +399,68 @@ export default function SpinoutLabPitchDeckPage() {
               <Loader2 size={12} className="animate-spin" /> Refreshing from your Lab data…
             </div>
           )}
+
+          {/* ---- share links & views (D364) ---- */}
+          <div className={`${CARD} p-5 mt-7`} data-testid="card-deck-views">
+            <div className="flex items-baseline justify-between gap-3 mb-3">
+              <div className={LBL}>Share links · views</div>
+              {views.status === 'ready' && (
+                <div className="text-[12px] text-gray-500 dark:text-gray-400 tabular-nums" data-testid="deck-views-total">
+                  {views.summary.totalViews === null
+                    ? 'Views not reported'
+                    : `${views.summary.totalViews}${views.summary.viewsAtLeast ? '+' : ''} view${views.summary.totalViews === 1 ? '' : 's'}`}
+                  {' · '}{views.summary.live} live link{views.summary.live === 1 ? '' : 's'}
+                </div>
+              )}
+            </div>
+            {views.status === 'loading' ? (
+              <div className="text-[12px] text-gray-400 flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> Loading views…</div>
+            ) : views.status === 'failed' ? (
+              <div data-testid="deck-views-unreadable">
+                <Unreadable
+                  what="Your deck's share links and views"
+                  claim="This is not a claim that nobody has opened your deck."
+                  onRetry={loadViews}
+                />
+              </div>
+            ) : views.status === 'none' ? (
+              <p className="text-[12px] text-gray-500 dark:text-gray-400" data-testid="deck-views-none">
+                No deck has been saved yet, so no link has been shared. Share Link saves one.
+              </p>
+            ) : views.summary.links.length === 0 ? (
+              <p className="text-[12px] text-gray-500 dark:text-gray-400" data-testid="deck-views-empty">
+                No links shared from this deck version yet.
+              </p>
+            ) : (
+              <table className="w-full text-[12px]" data-testid="deck-views-table">
+                <thead>
+                  <tr className="text-left text-[10.5px] uppercase tracking-wider text-gray-400">
+                    <th className="py-1 pr-3 font-bold">Shared</th>
+                    <th className="py-1 pr-3 font-bold">Expires</th>
+                    <th className="py-1 pr-3 font-bold text-right">Views</th>
+                    <th className="py-1 pr-3 font-bold">Last viewed</th>
+                    <th className="py-1 font-bold">State</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {views.summary.links.map((l) => (
+                    <tr key={l.id} className="border-t border-gray-100 dark:border-gray-800 text-gray-700 dark:text-gray-200">
+                      <td className="py-1.5 pr-3">{String(l.created_at || '').slice(0, 10) || '—'}</td>
+                      <td className="py-1.5 pr-3">{String(l.expires_at || '').slice(0, 10) || '—'}</td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums">
+                        {l.view_count === null ? '—' : l.view_count}{l.view_limit === null ? '' : ` of ${l.view_limit}`}
+                      </td>
+                      <td className="py-1.5 pr-3">{l.last_viewed_at ? String(l.last_viewed_at).slice(0, 10) : 'Not opened'}</td>
+                      <td className="py-1.5">{SHARE_STATE_LABEL[l.state]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-3">
+              Counts are the server's, for the current deck version. Links from this page open once and last at most 30 days.
+            </p>
+          </div>
         </>
       ) : (
         /* ---- editor view (design L136-221) ---- */
@@ -460,6 +556,7 @@ export default function SpinoutLabPitchDeckPage() {
         busy={sharing}
         expiryHours={expiryHours}
         onExpiryChange={changeExpiry}
+        viewLimit={shareViewLimit}
         onClose={() => setShareOpen(false)}
       />
     </LabPageShell>

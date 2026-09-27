@@ -430,3 +430,47 @@ test('D401: an unreadable usage table leaves both reads unrecorded', async () =>
   assert.equal(r.last_run_recorded, false);
   assert.equal(r.by_task_recorded, false);
 });
+
+// ---------- D404: spend per page ----------
+
+const WITH_SURFACE = SCHEMA.replace('created_at TEXT NOT NULL\n);', 'created_at TEXT NOT NULL,\n  surface TEXT\n);');
+
+test('D404: the month is broken down by the page each run was asked from', async () => {
+  assert.notEqual(WITH_SURFACE, SCHEMA, 'the fixture schema did not gain the column');
+  const { DB } = makeD1(WITH_SURFACE, `
+INSERT INTO ai_usage_logs (user_id, task, model, est_cost_usd, created_at, surface) VALUES
+  (11, 'workspace_explain', 'm', 0.0010, '2026-08-20 10:00:00', '/validate/interviews'),
+  (11, 'workspace_explain', 'm', 0.0030, '2026-08-21 10:00:00', '/validate/interviews'),
+  (11, 'workspace_explain', 'm', 0.0020, '2026-08-22 10:00:00', '/build/board'),
+  (11, 'advisor_explain',   'm', 0.0040, '2026-08-23 10:00:00', NULL),
+  (11, 'workspace_explain', 'm', 0.0500, '2026-07-30 10:00:00', '/validate/interviews'),
+  (12, 'workspace_explain', 'm', 9.0000, '2026-08-22 10:00:00', '/validate/interviews');
+`);
+  const r = await loadMyAiSpend({ DB } as any, { id: 11, role: 'founder' }, AT);
+  assert.equal(r.by_surface_recorded, true);
+  const by = new Map(r.by_surface.map((s) => [s.surface, s]));
+  // Only this user's rows, only this month's.
+  assert.equal(by.get('/validate/interviews')?.calls, 2);
+  assert.equal(Number(by.get('/validate/interviews')?.spend_usd.toFixed(4)), 0.004);
+  assert.equal(by.get('/build/board')?.calls, 1);
+  // The unattributed runs are ONE entry, reported rather than dropped.
+  assert.equal(by.get(null)?.calls, 1, 'the month\'s runs with no page were dropped');
+  const sum = r.by_surface.reduce((s, x) => s + x.spend_usd, 0);
+  assert.equal(Number(sum.toFixed(4)), Number(r.month.spend_usd!.toFixed(4)),
+    'the per-page breakdown does not add up to the month');
+});
+
+test('D404: before migration 319 the breakdown is unrecorded, not empty', async () => {
+  // The fixture without the column is production before the migration runs.
+  const { env: e } = env();
+  const r = await loadMyAiSpend(e, { id: 7, role: 'investor' }, AT);
+  assert.equal(r.recorded, true, 'the totals must still read');
+  assert.equal(r.by_surface_recorded, false);
+  assert.deepEqual(r.by_surface, []);
+});
+
+test('D404: an unreadable usage table leaves the breakdown unrecorded', async () => {
+  const { DB } = makeD1('CREATE TABLE unrelated (id INTEGER);');
+  const r = await loadMyAiSpend({ DB } as any, { id: 7, role: 'investor' }, AT);
+  assert.equal(r.by_surface_recorded, false);
+});

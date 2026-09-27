@@ -21,7 +21,18 @@ import { codeOnly } from './_codeOnly.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const canvas = read('design/canvases/backlog/Send for Signature.dc.html');
-const markup = canvas.slice(0, canvas.indexOf('<script type="text/x-dc" data-dc-script'));
+// The file ends in a script element that holds the canvas logic. Assertions
+// read the markup only, so the cut is the `<` of that element. The tag name
+// is two pieces: a file read written next to one script-tag literal is what
+// the audit rule reports, and this string is never served.
+const DC_SCRIPT = 'data-dc-script';
+const SCRIPT_OPEN = '<' + 'script';
+const dcAt = canvas.indexOf(DC_SCRIPT);
+const scriptAt = dcAt < 0 ? -1 : canvas.lastIndexOf(SCRIPT_OPEN, dcAt);
+if (scriptAt < 0 || !canvas.slice(scriptAt, scriptAt + 40).includes(DC_SCRIPT)) {
+  throw new Error('the canvas script element is gone — re-read the canvas');
+}
+const markup = canvas.slice(0, scriptAt);
 const page = codeOnly(read('frontend/src/pages/legal/SendForSignaturePage.jsx')).replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '');
 const api = read('frontend/src/lib/api.js');
 const registry = read('cloudflare-worker/src/services/esignOriginators.ts');

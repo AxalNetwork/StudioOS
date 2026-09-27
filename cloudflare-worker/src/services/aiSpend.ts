@@ -89,6 +89,17 @@ export interface AiSpendReport {
   by_task: Array<{ task: string; calls: number; spend_usd: number }>;
   /** The same split for the task breakdown the rail's average is drawn from. */
   by_task_recorded: boolean;
+  /**
+   * This month's spend per page (D404, migration 319): one entry per recorded
+   * `surface`, plus ONE entry with `surface: null` for the month's runs that
+   * carry no page — every row written before migration 319, and every run
+   * from a caller that sends none. The null entry is reported rather than
+   * dropped, so a reader can see how much of the month is unattributed
+   * instead of reading a page's figure as the whole.
+   */
+  by_surface: Array<{ surface: string | null; calls: number; spend_usd: number }>;
+  /** False when that read failed — including before migration 319 is applied. */
+  by_surface_recorded: boolean;
 }
 
 /** UTC, sortable, no locale drift — the same keys aiRouter writes. */
@@ -215,6 +226,8 @@ export async function loadMyAiSpend(env: Env, actor: Actor, now: Date): Promise<
   // were unreadable neither query runs, and both stay false.
   let last_run_recorded = false;
   let by_task_recorded = false;
+  let by_surface: AiSpendReport['by_surface'] = [];
+  let by_surface_recorded = false;
   if (recorded) {
     try {
       // Bounded by `now`, like every other figure in this report. Without the
@@ -273,7 +286,26 @@ export async function loadMyAiSpend(env: Env, actor: Actor, now: Date): Promise<
       }));
       by_task_recorded = true;
     } catch { /* the totals above still stand; the breakdown is unrecorded, not empty */ }
+
+    try {
+      // Grouped on the column itself, so NULL is one group: the month's
+      // unattributed runs. A missing column (migration 319 not yet applied)
+      // throws here and leaves the breakdown unrecorded rather than empty.
+      const rows = await env.DB.prepare(
+        `SELECT u.surface AS surface, COUNT(*) AS calls, COALESCE(SUM(u.est_cost_usd), 0) AS spend
+           FROM ai_usage_logs u
+          WHERE ${scope.sql} AND substr(u.created_at, 1, 7) = ?
+          GROUP BY u.surface
+          ORDER BY spend DESC`,
+      ).bind(...scope.binds, mKey).all<{ surface: string | null; calls: number; spend: number }>();
+      by_surface = (rows.results || []).map((t) => ({
+        surface: t.surface == null ? null : String(t.surface),
+        calls: Number(t.calls) || 0,
+        spend_usd: Number(t.spend) || 0,
+      }));
+      by_surface_recorded = true;
+    } catch { /* unrecorded, not empty */ }
   }
 
-  return { recorded, month, today, last_run, last_run_recorded, by_task, by_task_recorded };
+  return { recorded, month, today, last_run, last_run_recorded, by_task, by_task_recorded, by_surface, by_surface_recorded };
 }
