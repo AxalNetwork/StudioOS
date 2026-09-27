@@ -61,7 +61,7 @@ it, where in their nav, and how do they get there.*
 | Office Hours | `/spinout-lab/office-hours` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Pages · Benchmark | `/research/benchmarking` | Home | Full page | Sidebar → Home → Research | NEW | High |
 | Pages · Company | `/research/companies/:analysisId/:candidateId` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Pages · Company analysis | `/research/companies/:id` | Home | Full page (proposed) | Sidebar → Home → Research | NEW | Low |
+| Pages · Company analysis | `/research/companies/:id` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Pages · Diligence file | `/research/diligence/:grantUid/files/:fileUid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Pages · Diligence room | `/research/diligence/:grantUid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Pages · Founder Build | `/execution` · `/build/metrics` | Home | Full page | Sidebar → Home → Build | UPGRADE | High |
@@ -229,9 +229,9 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 73 | Live route, reachable from that workspace’s sidebar. |
+| High | 74 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 41 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 34 | Not routed. Proposed route only. |
+| Low | 33 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s
