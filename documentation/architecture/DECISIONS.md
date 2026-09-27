@@ -32375,3 +32375,18 @@ the enrolment batch dropping the `auth_totp` write.
 
 No migration, no route, no `api.js` method, no `frontend/src` change, so
 `docs/` is untouched.
+
+## D440
+
+**HQ-held Studio and My Licence stop pointing at pages that refuse, and stop printing zero for a seat or a host that was not confirmed.** No branch is provisioned (`infra/branches/` holds only the example), and every `/api/branch/*` handler calls `requireBranchTier`, so a card that opens `/branch/*` on HQ renders Unreadable. S20's rule is that those pages are never linked from the HQ-held shell.
+
+**What changed.**
+
+- `AdminStudioOverview` reads each card's Open target from `SIDEBAR_GROUPS`: `admin` off a branch (the S20 row — Accounts, Approvals, Programs, Community, Contracts, Insights, Settings), `branch_admin` on a branch. A label with no row is not given a path invented on the card. The figures stay unrecorded off a branch; only the doors moved. The Settings card's sentence names the branch Settings page as where the HQ-owned-row count is derived, because off a branch Open is My Licence.
+- My Licence's freeze appeal stays a link to `/branch/approvals` on a branch, where that page answers. Off a branch it does not link there. The page says there is no appeal from here, with the reason: that page refuses on HQ, and nothing on HQ records a licence appeal from the holder.
+- A seat key the licence copy does not carry renders Not recorded. A measured zero stays zero.
+- Domain removal asks for the bound hostname to be typed. The button stays disabled until the typed value equals the bound host, and `myDomainRemove` sends that string in the DELETE body. `DELETE /api/licence/mine/domain` ignores the body today. The route is Session 5's HQ arm and is not edited here. Until it refuses a hostname that does not match the bound one, a client that skips the confirm can still delete.
+
+**No migration. No new route.** `myDomainRemove` already existed; the body is new and the route still mounts it. No live branch exercised this. `docs/` was rebuilt because `frontend/src` moved.
+
+**Mutations: 5 run, 5 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: the card target hard-coded to `/branch/accounts`; a missing seat returned as `0`; any string accepted as the hostname confirm; the HQ-held appeal forced down the branch link; Remove calling `myDomainRemove()` with no argument on the click.
