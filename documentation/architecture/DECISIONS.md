@@ -36172,6 +36172,105 @@ real SQLite rows through `recordFill`, the accept path's own writer.
 `validate_fills_the_blanks` and `founder_raise_overview_a4` were re-aimed as
 described above.
 
+## D425
+
+**The phone gets a tab bar, founder first: four tabs and a More sheet, built
+from the sidebar's own rows, with the page tag and the body made safe-area
+aware.** Wave 8, Session 14, item 6 (Mobile canvas M1, with M5's 44pt and
+safe-area rules). No migration, no route, no `api.js` change, and no App.jsx
+edit: the shell's mobile chrome is Session 5's. This PR ships the component,
+its plan and its tests. The mount is one import and one element for the shell:
+`<MobileTabBar role={shellRole} />` beside the drawer's backdrop, passed the
+role the sidebar gets but without its `|| 'founder'` default, so a viewer with
+no role gets no bar.
+
+**Why a bar.** Below 1024px the sidebar is a drawer behind the hamburger, so
+every destination is two taps and a scan away, and after D284 moved Messages to
+the top bar (which hides it below 640px) a phone had no Messages door at all.
+
+**The plan is the sidebar's, not a second list** (`lib/mobileTabs.js`).
+- **Tabs.** The canvas's founder tabs are Home, Build, Raise and Grow. Each
+  tab IS the founder sidebar row with that route — its label, icon and
+  `match` — so the canvas's "Home" reads "Studio", as the sidebar does, and a
+  rename in the sidebar renames the tab.
+- **More.** Every other sidebar row goes to More in the sidebar's order, so a
+  row Session 5 adds reaches the phone without an edit here. Then come the
+  three doors a phone otherwise lacks: Messages, Trust and Company Settings,
+  each a route whose guard admits a founder.
+- **Where it departs from the canvas.** The canvas's More list (Validate,
+  Network, Research, Trust, Company Settings) leaves out Spin-Out Lab, a live
+  sidebar row, and Messages. Both are in More; "nothing is dropped" is the
+  canvas's own rule.
+- **Which tab is lit.** `rowActive` is `SidebarNav`'s own rule: a row with
+  `match` owns its `to` and its listed prefixes, never its own subtree, so
+  `/build/discovery` lights Validate and `/build/team` lights Grow, not Build.
+  A row without `match` is the sidebar's `NavLink end`, which is exact. More
+  lights when the page belongs to one of its rows.
+
+**The bar and the sheet** (`components/MobileTabBar.jsx`).
+- **Hit areas.** Five 56px targets, each a fifth of the width, above the 44pt
+  floor, with the canvas's 10px labels.
+- **The sheet.** More opens a bottom sheet, never a screen (M1's caption),
+  with 52px rows. It is a real dialog (`aria-modal`, labelled by its heading),
+  and focus moves into it and back to More.
+- **Closing it.** A tap on the backdrop, a swipe down past 60px, Escape or the
+  close button (44px) closes it, and so do following a row or any route
+  change.
+- **Where it shows.** Only below 1024px (`lg:hidden`), the breakpoint the
+  hamburger already uses.
+
+**Safe areas.**
+- **The page tag.** `index.html`'s viewport now says `viewport-fit=cover`.
+  Without it every safe-area inset reads 0, so nothing could clear the home
+  indicator.
+- **The bar and the sheet.** Both pad by the bottom and side insets, and while
+  a bar is drawn the page's own content (`[data-app-main]`, inside the scroll
+  container) is padded by `--mobile-tabbar-h` so its last row is never under
+  the bar. The attribute that padding keys off leaves with the bar.
+- **The body.** `cover` also lets content reach under a phone's notch in
+  landscape, so `body` pads by the side insets (0 on every screen without a
+  notch). That is horizontal only, so no full-height container grows.
+- **The top inset.** The installed app's status bar is `black-translucent`,
+  which already drew the page under the status bar before this change. Padding
+  the header by the top inset is the shell's (Session 5), and now possible,
+  because the inset is no longer 0.
+
+**Licences.** Founder first: `mobilePlan` returns null for every other licence
+and the bar draws nothing for it. The investor, advisor and partner
+allocations are on the canvas and are the next step.
+
+**M2 is the owner's call and is not built.** The canvas's hub shows one lens at
+a time, "no route change": the zone chips swap the lens in place. That
+contradicts SHELL_MIGRATION rule 2 and `founder_shell.test.mjs`, which hold
+that a zone pill navigates to its route, and the pills keep navigating. Which
+rule wins is a product decision this entry does not make.
+
+**Not built here, each with its owner.**
+- The AI rail as a floating button plus bottom sheet (M5) is Session 12's.
+  `--mobile-tabbar-h` gives its button a place to sit, at
+  `calc(var(--mobile-tabbar-h) + 16px)`.
+- The detail reflows (M3, M4).
+- Pull-to-refresh and long-press (M5's gesture list). Swipe-back is the
+  platform's own, because every detail screen is already a pushed route.
+
+**Verification.** 18 mutations, 18 caught, each with a non-zero exit and a
+`not ok` line, restored from a sha256-checked snapshot:
+- **The plan:** a retyped tab, a dropped row, a new sidebar row not reaching
+  More, a door to a missing route, the plan handed to every licence.
+- **The lit tab:** a `match` row or a plain row claiming its subtree, More
+  never lit, two tabs claiming a page.
+- **The bar and the sheet:** tabs under 44pt, More rows under 52pt, the bar on
+  desktop, a sheet that is not modal, Escape ignored.
+- **Safe areas:** no `viewport-fit`, the page not padded, the attribute left
+  behind, the body ignoring the notch.
+
+One assertion was fixed along the way: the licence test's render helper
+defaulted a missing role to founder, so the undefined-role case drew a bar in
+the test and not in the component. The helper now takes the role as given.
+
+New test: `mobile_tab_bar_d425.test.mjs` (10 tests), which renders the bar and
+the sheet with `react-dom/server` under a `MemoryRouter`.
+
 ## D430
 
 **Recovery codes get a single writer: regenerating them and then re-pairing

@@ -152,6 +152,12 @@ body {
   margin: 0;
   background: var(--app-bg);
   color: var(--app-text);
+  /* D425 — the page tag asks for `viewport-fit=cover`, which lets content
+     reach under a phone's notch in landscape. These keep every page clear of
+     it on both sides; they are 0 on every screen without a notch. Horizontal
+     only, so no full-height container grows by an inset. */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 /* Force legible input text. We previously hardcoded white/black, which
