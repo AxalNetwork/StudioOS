@@ -106,6 +106,7 @@ function Tile({ label, value, note, tone = 'text-axal-ink' }) {
 export default function HqHomePage() {
   const [data, setData] = useState(null);       // null = loading, UNAVAILABLE = failed
   const [tenant, setTenant] = useState('');     // '' = all subsidiaries; else a licence uid
+  const [kindFilter, setKindFilter] = useState('all'); // all | subsidiary | white_label (H28)
   // D153 / H12 — the view-as scope, from the shell. `setViewAs` is what a
   // health card's own button calls; the way OUT is the shell bar's "Return to
   // HQ view", which is chrome rather than a control on this page, because the
@@ -126,7 +127,10 @@ export default function HqHomePage() {
   const ready = data && data !== UNAVAILABLE;
   const licences = ready ? data.licences || [] : [];
   const selected = tenant ? licences.find((l) => l.uid === tenant) || null : null;
-  const shown = selected ? [selected] : licences;
+  const kindScoped = kindFilter === 'all'
+    ? licences
+    : licences.filter((l) => l.kind === kindFilter);
+  const shown = selected ? [selected] : kindScoped;
   const events = useMemo(() => {
     if (!ready) return [];
     const all = data.events || [];
@@ -330,6 +334,28 @@ export default function HqHomePage() {
           </p>
         )}
 
+        <div className="mt-2 flex flex-wrap gap-2" data-testid="hq-kind-filter">
+          {[
+            ['all', 'All'],
+            ['subsidiary', 'Axal'],
+            ['white_label', 'White-label'],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              disabled={!ready}
+              onClick={() => setKindFilter(id)}
+              className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${
+                kindFilter === id
+                  ? 'border-white bg-white/20 text-white'
+                  : 'border-white/40 text-white/90 hover:bg-white/10'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         <header className="mt-4">
           <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             <Landmark size={13} /> HQ · Home
@@ -417,8 +443,20 @@ export default function HqHomePage() {
                 return (
                 <div key={l.uid} data-branch-state={b ? b.status : 'none'} className={`rounded-xl border p-3 ${l.status === 'suspended' ? 'border-amber-200 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20' : 'border-axal-hairline bg-axal-ground'}`}>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[12.5px] font-extrabold tracking-tight">{l.brand_name}</span>
+                    <span className="flex min-w-0 items-center gap-1.5 truncate">
+                      {l.kind === 'white_label' && l.brand_kit?.primary_hex && (
+                        <span
+                          aria-hidden="true"
+                          className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm border border-black/10"
+                          style={{ backgroundColor: l.brand_kit.primary_hex }}
+                        />
+                      )}
+                      <span className="truncate text-[12.5px] font-extrabold tracking-tight">{l.brand_name}</span>
+                    </span>
                     <Pill status={l.status} />
+                  </div>
+                  <div className="mt-0.5 text-[10px] font-semibold text-axal-faint" data-testid="hq-card-kind-pill">
+                    {l.kind === 'white_label' ? 'White-label' : 'Axal subsidiary'}
                   </div>
                   {/* D153 / H12 — the way IN, and it is drawn only where there
                       is something behind it. A licence whose branch is not

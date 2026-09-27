@@ -46,6 +46,8 @@ export type BranchHealth = {
   licence_pushed_at: string | null;
   licence_status: string | null;
   db_ok: boolean;
+  /** Set when WORKER_DEPLOY_VERSION is bound on this Worker; else null. */
+  deploy_version: string | null;
   /** Present only when something is wrong; never a stack trace. */
   detail?: string;
 };
@@ -127,11 +129,13 @@ export async function branchHealth(env: Env): Promise<BranchAnswer<BranchHealth>
     detail = String((e as Error).message || e).slice(0, 200);
   }
   const licence = await licenceCopy(env);
+  const deployVersion = String(env.WORKER_DEPLOY_VERSION || '').trim() || null;
   return {
     ok: dbOk,
     db_ok: dbOk,
     licence_status: licence.status,
     licence_pushed_at: licence.pushed_at,
+    deploy_version: deployVersion,
     ...(detail ? { detail } : {}),
     branch,
     as_of: nowIso(),
