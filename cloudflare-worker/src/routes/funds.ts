@@ -19,9 +19,15 @@ import { Distributions } from '../models/distributions';
 import { logActivity } from './partnernet';
 import { clampLimit } from '../util/pagination';
 import { ensureFundGpColumns } from '../services/fundGpSchema';
-import { lpMembershipScope, lpSelfScope, fundGpScope } from '../services/tenancyScope';
+import { lpMembershipScope, lpSelfScope, fundGpScope, NO_ROWS } from '../services/tenancyScope';
 import { refuse } from '../util/refusal';
 import { claimLpRowsByEmail } from '../services/lpClaim';
+import { userMeetsInvestorTier } from '../middleware/requireInvestorTier';
+import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
+import { splitCall } from '../services/fundCallSplit';
+import {
+  issueFundCall, recordReceipt, readLine, readFundCalls, readFundLedger,
+} from '../services/fundCallLedger';
 import {
   rollUpFundRow, totalFundRollups, FUND_METRIC_UNAVAILABLE,
   type FundRollup, type FundRollupRow,
@@ -72,17 +78,32 @@ funds.get('/', async (c) => {
   const status = c.req.query('status') || undefined;
   if (user.role === 'admin') {
     const list = await Funds.list(c.env, status);
-    return c.json({ ok: true, items: list.results || [] });
+    // An admin operates every fund through `requireFundGp`'s bypass.
+    return c.json({ ok: true, items: (list.results || []).map((f: any) => ({ ...f, can_manage: true })) });
   }
   await claimLpRowsByEmail(c.env, Number(user.id), (user as any).email);
   const scope = visibleFundsScope(user, { includeLp: true });
   const where = [scope.sql];
   const binds = [...scope.binds];
   if (status) { where.push('f.status = ?'); binds.push(status); }
+  // `can_manage` (D371): whether `requireFundGp` would let this caller operate
+  // the fund — the institutional tier, then the same GP-and-active-company
+  // predicate the gate runs. The list carries LP-only funds too, and the fund
+  // pages used to open `items[0]`, which 404'd whenever that was one of them.
+  const tierOk = userMeetsInvestorTier(user as any, 'institutional');
+  const companyId = tierOk
+    ? await resolveActiveCompany(c.env, user as any, c.req.header(ACTIVE_COMPANY_HEADER))
+    : null;
+  if (companyId !== null) await ensureFundGpColumns(c.env);
+  const manage = tierOk ? fundGpScope(user as any, companyId, 'f') : NO_ROWS;
   const rows = await c.env.DB.prepare(
-    `SELECT f.* FROM vc_funds f WHERE ${where.join(' AND ')} ORDER BY f.created_at DESC`,
-  ).bind(...binds).all();
-  return c.json({ ok: true, items: rows.results || [] });
+    `SELECT f.*, CASE WHEN ${manage.sql} THEN 1 ELSE 0 END AS can_manage
+       FROM vc_funds f WHERE ${where.join(' AND ')} ORDER BY f.created_at DESC`,
+  ).bind(...manage.binds, ...binds).all();
+  return c.json({
+    ok: true,
+    items: (rows.results || []).map((f: any) => ({ ...f, can_manage: Number(f.can_manage) === 1 })),
+  });
 });
 
 funds.get('/lp-portal', async (c) => {
@@ -748,7 +769,7 @@ funds.get('/:id/lp-report/:lpId', async (c) => {
 
 funds.post('/:id/lps', async (c) => {
   const fundId = parseInt(c.req.param('id'), 10);
-  await requireFundGp(c, fundId);
+  const { user } = await requireFundGp(c, fundId);
   const body = await c.req.json();
   const lp = await LPs.create(c.env, { ...body, fund_id: fundId });
   if (!lp) return c.json({ error: 'create failed' }, 500);
@@ -762,6 +783,8 @@ funds.post('/:id/lps', async (c) => {
       amount_cents: body.first_call_cents,
       call_uid: crypto.randomUUID(),
       due_date: body?.first_call_due_date || null,
+      // D371: the call header records who issued it.
+      issued_by: Number(user.id),
     });
   }
   return c.json({ ok: true, lp }, 201);
@@ -785,32 +808,214 @@ funds.post('/lps/:lpId/sign-lpa', async (c) => {
   return c.json({ ok: true, lp: updated });
 });
 
-// ---------- Capital call (event-driven → enqueue notices) ----------
+// ---------- Capital calls: issue, preview, receipts, ledger (D371) ----------
+
+/** A real calendar date written YYYY-MM-DD, or null. */
+function isoDate(raw: unknown): string | null {
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(`${s}T00:00:00Z`);
+  return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === s ? s : null;
+}
+
+const todayUtc = () => new Date().toISOString().slice(0, 10);
+
+/** The amount a request names, in cents: `amount_cents`, or `amount` in dollars. */
+function requestCents(body: { amount_cents?: unknown; amount?: unknown }): number | null {
+  const cents = body.amount_cents != null
+    ? Number(body.amount_cents)
+    : Math.round(Number(body.amount ?? NaN) * 100);
+  return Number.isSafeInteger(cents) && cents > 0 ? cents : null;
+}
+
+const BAD_AMOUNT = {
+  code: 'invalid_amount',
+  message: 'A capital call needs an amount above zero, in whole cents.',
+};
+
+/**
+ * Issue a call: the header, one line per billed LP and the notices, written
+ * now rather than queued. The route used to enqueue `capital_call_notice` and
+ * answer before anything existed, so the page a GP issued from could not show
+ * the call it had just made. The job still exists — an LP's first call is
+ * enqueued from `POST /:id/lps` — and runs the same `issueFundCall`.
+ *
+ * `due_date` is passed through and NEVER DEFAULTED (task 197): a deadline an LP
+ * acts on is one the GP typed. It must be a real date when given.
+ */
 funds.post('/:id/capital-call', async (c) => {
   const fundId = parseInt(c.req.param('id'), 10);
-  await requireFundGp(c, fundId);
+  const { user } = await requireFundGp(c, fundId);
   const body = await c.req.json<{
-    amount_cents?: number; amount?: number; note?: string; due_date?: string;
-  }>();
-  const amountCents = Math.round(body.amount_cents ?? Number(body.amount ?? 0) * 100);
-  if (!amountCents || amountCents <= 0) return c.json({ error: 'amount/amount_cents must be > 0' }, 400);
-  // Task #197 — two new fields on the payload, for two different reasons.
-  //
-  // `call_uid` identifies this call so the job's `capital_calls` rows survive a
-  // retry without doubling, and so two deliberate presses stay two calls. It is
-  // minted HERE rather than in the job because the job is the thing that gets
-  // re-run — see `_capital_call_writes.ts`.
-  //
-  // `due_date` is passed through and NEVER DEFAULTED. A capital call's due date
-  // is a deadline an LP acts on; a date the platform invented would carry legal
-  // weight nobody typed. Absent means the row says "no due date recorded".
-  const dueDate = typeof body.due_date === 'string' && body.due_date.trim()
-    ? body.due_date.trim() : null;
-  const job = await Jobs.enqueue(c.env, 'capital_call_notice', {
-    fund_id: fundId, amount_cents: amountCents, note: body.note,
-    call_uid: crypto.randomUUID(), due_date: dueDate,
+    amount_cents?: number; amount?: number; note?: string; purpose?: string; due_date?: string;
+  }>().catch(() => ({} as any));
+  const amountCents = requestCents(body);
+  if (amountCents === null) return refuse(c, 400, BAD_AMOUNT);
+  const rawDue = typeof body.due_date === 'string' ? body.due_date.trim() : '';
+  const dueDate = rawDue ? isoDate(rawDue) : null;
+  if (rawDue && !dueDate) {
+    return refuse(c, 400, { code: 'invalid_due_date', message: 'The due date must be a real date, written YYYY-MM-DD.' });
+  }
+  const purposeRaw = String(body.purpose ?? body.note ?? '').trim();
+  const purpose = purposeRaw ? purposeRaw.slice(0, 500) : null;
+
+  const issued = await issueFundCall(c.env, {
+    fundId, amountCents, callUid: crypto.randomUUID(), dueDate, purpose, issuedBy: Number(user.id),
   });
-  return c.json({ ok: true, enqueued_job: job, due_date: dueDate });
+  if (!issued.call) {
+    return refuse(c, 409, {
+      code: 'no_billable_lps',
+      message: 'This fund has no committed or active LP with a commitment, so a call would bill nobody. Add an LP first.',
+    });
+  }
+  await logActivity(c.env, Number(user.id), 'capital_call_issued', {
+    entityType: 'fund', entityId: fundId,
+    metadata: { call_number: issued.call.call_number, amount_cents: amountCents, lines: issued.written.length },
+  }).catch(() => {});
+  return c.json({ ok: true, call: issued.call, lines_written: issued.written.length, due_date: dueDate }, 201);
+});
+
+/**
+ * What a call of this amount would ask each LP for, before it is issued. The
+ * same `splitCall` the issue runs, over the same billed LPs, so the preview
+ * and the ledger cannot disagree about a line.
+ */
+funds.post('/:id/capital-calls/preview', async (c) => {
+  const fundId = parseInt(c.req.param('id'), 10);
+  await requireFundGp(c, fundId);
+  const body = await c.req.json<{ amount_cents?: number; amount?: number }>().catch(() => ({} as any));
+  const amountCents = requestCents(body);
+  if (amountCents === null) return refuse(c, 400, BAD_AMOUNT);
+  const lps = (await c.env.DB.prepare(
+    `SELECT lp.id, lp.commitment_amount, lp.user_id,
+            COALESCE(u.name, lp.name) AS name, COALESCE(u.email, lp.email) AS email,
+            u.kyc_status AS kyc_status
+       FROM limited_partners lp
+       LEFT JOIN users u ON u.id = lp.user_id
+      WHERE lp.fund_id = ? AND lp.status IN ('committed', 'active')
+      ORDER BY lp.id`,
+  ).bind(fundId).all<any>()).results || [];
+  const split = splitCall(amountCents, lps);
+  const byId = new Map(lps.map((lp: any) => [Number(lp.id), lp]));
+  const next = await c.env.DB.prepare(
+    `SELECT COALESCE(MAX(call_number), 0) + 1 AS n FROM fund_capital_calls WHERE fund_id = ?`,
+  ).bind(fundId).first<{ n: number }>();
+  const who = (id: number) => {
+    const lp: any = byId.get(id) || {};
+    return {
+      lp_id: id, name: lp.name ?? null, email: lp.email ?? null, has_account: lp.user_id != null,
+      kyc_status: lp.user_id != null ? (lp.kyc_status ?? null) : null,
+    };
+  };
+  return c.json({
+    ok: true,
+    amount_cents: amountCents,
+    next_call_number: Number(next?.n ?? 1),
+    total_commitment_cents: split.totalCommitmentCents,
+    residual_cents: split.residualCents,
+    residual_lp_id: split.residualLpId,
+    lines: split.lines.map((l) => ({
+      ...who(l.lpId), commitment_cents: l.commitmentCents, share_cents: l.shareCents, residual: l.residual,
+    })),
+    excluded: split.excluded.map((x) => ({ ...who(x.lpId), reason: x.reason })),
+  });
+});
+
+/** Every call on the fund, each with its LP lines, and the fund's call totals. */
+funds.get('/:id/capital-calls', async (c) => {
+  const fundId = parseInt(c.req.param('id'), 10);
+  const { fund } = await requireFundGp(c, fundId);
+  try {
+    const ledger = await readFundCalls(c.env, fundId, todayUtc());
+    return c.json({ ok: true, fund: { id: fund.id, name: fund.name }, today: todayUtc(), ...ledger });
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'call_ledger_unreadable',
+      message: "This fund's call ledger could not be read. Nothing here says the fund has no calls; try again.",
+      raw: e,
+    });
+  }
+});
+
+/**
+ * The fund's capital ledger — calls issued and receipts recorded, newest
+ * first. `?lp=<id>` narrows it to one LP's history, and that LP must be on
+ * this fund.
+ */
+funds.get('/:id/ledger', async (c) => {
+  const fundId = parseInt(c.req.param('id'), 10);
+  await requireFundGp(c, fundId);
+  const lpRaw = c.req.query('lp');
+  let lpId: number | null = null;
+  if (lpRaw != null && lpRaw !== '') {
+    lpId = /^\d+$/.test(lpRaw) ? Number(lpRaw) : NaN;
+    const onFund = Number.isSafeInteger(lpId) && await c.env.DB.prepare(
+      `SELECT 1 AS yes FROM limited_partners WHERE id = ? AND fund_id = ?`,
+    ).bind(lpId, fundId).first();
+    if (!onFund) return refuse(c, 404, { code: 'lp_not_on_fund', message: 'That LP is not on this fund.' });
+  }
+  try {
+    const ledger = await readFundLedger(c.env, fundId, lpId);
+    return c.json({ ok: true, lp_id: lpId, ...ledger });
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'ledger_unreadable',
+      message: "This fund's ledger could not be read. Nothing here says no money has moved; try again.",
+      raw: e,
+    });
+  }
+});
+
+/**
+ * The GP records a wire against one LP's line: how much, the date it landed,
+ * its reference. Append-only (migration 312); the line is paid once its
+ * receipts reach what it owes. The line must be on this fund — a line id from
+ * another fund is the same 404 as one that does not exist.
+ */
+funds.post('/:id/capital-calls/lines/:lineId/receipts', async (c) => {
+  const fundId = parseInt(c.req.param('id'), 10);
+  const lineId = parseInt(c.req.param('lineId'), 10);
+  const { user } = await requireFundGp(c, fundId);
+  const notFound = () => refuse(c, 404, { code: 'call_line_not_found', message: 'That call line is not on this fund.' });
+  if (!Number.isSafeInteger(lineId) || lineId <= 0) return notFound();
+  const line = await readLine(c.env, lineId);
+  if (!line || Number(line.fund_id) !== fundId) return notFound();
+
+  const body = await c.req.json<{ amount_cents?: number; received_on?: string; reference?: string }>()
+    .catch(() => ({} as any));
+  const cents = Number(body.amount_cents);
+  if (!Number.isSafeInteger(cents) || cents <= 0) {
+    return refuse(c, 400, { code: 'invalid_amount', message: 'A receipt is an amount above zero, in whole cents.' });
+  }
+  const receivedOn = isoDate(body.received_on);
+  const latest = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  if (!receivedOn || receivedOn > latest) {
+    return refuse(c, 400, {
+      code: 'invalid_received_on',
+      message: 'The date the wire landed must be a real date, written YYYY-MM-DD, and not in the future.',
+    });
+  }
+  const reference = String(body.reference ?? '').trim().slice(0, 120) || null;
+
+  const outcome = await recordReceipt(c.env, {
+    lineId, amount: cents, receivedOn, reference, source: 'receipt', recordedBy: Number(user.id),
+  });
+  if (outcome.kind === 'not_found') return notFound();
+  if (outcome.kind === 'already_paid') {
+    return refuse(c, 409, { code: 'line_already_paid', message: 'This line is already paid in full; nothing was recorded.' });
+  }
+  if (outcome.kind === 'exceeds_outstanding') {
+    return refuse(c, 409, {
+      code: 'receipt_exceeds_outstanding',
+      message: 'That is more than this line still owes, so nothing was recorded. Record the amount outstanding, or less.',
+      extra: { outstanding_cents: outcome.outstandingCents },
+    });
+  }
+  await logActivity(c.env, Number(user.id), 'capital_call_receipt_recorded', {
+    entityType: 'capital_call', entityId: lineId,
+    metadata: { fund_id: fundId, amount_cents: cents, received_on: receivedOn, paid: outcome.paid },
+  }).catch(() => {});
+  return c.json({ ok: true, receipt: outcome.receipt, line: outcome.line, paid: outcome.paid }, 201);
 });
 
 // ---------- Distributions ----------

@@ -21,7 +21,7 @@ import { aiGenerateLPA } from '../../ai-workers/lpa';
 import { Listings, Matches } from '../models/liquidity';
 import { Funds } from '../models/funds';
 import { Distributions } from '../models/distributions';
-import { insertCapitalCalls } from '../routes/_capital_call_writes';
+import { issueFundCall } from './fundCallLedger';
 import {
   recentSnapshots, metricPointsFrom, recordReview, latestMomentum,
 } from './tractionSnapshots';
@@ -324,16 +324,6 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       const fundId = payload.fund_id;
       const amountCents = Math.round(payload.amount_cents ?? 0);
       if (!fundId || amountCents <= 0) throw new Error('fund_id and amount_cents required');
-      const lps = await env.DB.prepare(
-        `SELECT lp.*, u.email, u.name AS user_name FROM limited_partners lp
-         LEFT JOIN users u ON u.id = lp.user_id
-         WHERE lp.fund_id = ? AND lp.status IN ('committed','active')`
-      ).bind(fundId).all<{ id: number; user_id: number; email: string; commitment_amount: number }>();
-      const rows = lps.results || [];
-      if (!rows.length) return;
-      const totalCommit = rows.reduce((s, r) => s + Number(r.commitment_amount || 0), 0);
-      if (totalCommit <= 0) return;
-      const amountDollars = amountCents / 100;
 
       // The call's identity, minted by the enqueueing route. A payload without
       // one predates this change or came from `/api/infra/enqueue` by hand; it
@@ -347,42 +337,20 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       const dueDate = typeof payload.due_date === 'string' && payload.due_date.trim()
         ? payload.due_date.trim() : null;
 
-      // Each LP's share, computed ONCE so the ledger row and the notice text
-      // cannot disagree about what this LP owes.
-      const shares = rows.map((lp) => ({
-        lp,
-        share: (Number(lp.commitment_amount || 0) / totalCommit) * amountDollars,
-      }));
-
-      // A zero share means an LP with no commitment. A zero-dollar receivable is
-      // noise on a page whose job is to say what is owed, so it is skipped here
-      // rather than rejected in the writer — `POST /capital/capitalCall` still
-      // accepts 0 and this is not the place to change that.
-      const billable = shares.filter((s) => s.share > 0);
-      if (!billable.length) return;
-
-      // ONE ROW PER LP, IDEMPOTENT ON `uid`. `insertCapitalCalls` batches them
-      // into a single round-trip and reports which ones were actually new.
-      const writes = await insertCapitalCalls(env, billable.map(({ lp, share }) => ({
-        limitedPartnerId: lp.id,
-        amount: share,
+      // D371: the header, one line per billed LP in integer cents with the
+      // rounding residual on one named line, and a notice to each LP whose
+      // line this run wrote — `issueFundCall`, the same function `POST
+      // /api/funds/:id/capital-call` runs. Every write is keyed on `callUid`,
+      // so a re-run writes nothing it already has.
+      await issueFundCall(env, {
+        fundId: Number(fundId),
+        amountCents,
+        callUid,
         dueDate,
-        uid: `cc:${callUid}:${lp.id}`,
-      })));
-
-      // Notices go ONLY to the LPs whose row was just created, so a retry that
-      // fills in the rows it missed does not tell everyone again.
-      const notices = billable
-        .map((s, i) => ({ ...s, inserted: writes[i]?.inserted }))
-        .filter((s) => s.inserted)
-        .map(({ lp, share }) => env.DB.prepare(
-          `INSERT INTO activity_logs (action, details, actor, user_id)
-           VALUES ('capital_call_notice', ?, 'system', ?)`
-        ).bind(
-          `Capital call from fund #${fundId}: $${share.toFixed(2)} due (pro-rata of $${amountDollars.toFixed(0)}).`,
-          lp.user_id ?? null,
-        ));
-      if (notices.length) await env.DB.batch(notices);
+        purpose: typeof payload.note === 'string' && payload.note.trim() ? payload.note.trim().slice(0, 500) : null,
+        issuedBy: Number.isSafeInteger(Number(payload.issued_by)) && Number(payload.issued_by) > 0
+          ? Number(payload.issued_by) : null,
+      });
 
       // AND THIS HANDLER NO LONGER TOUCHES `vc_funds.deployed_capital`. It used
       // to bump it by the call amount here, and removing that is a deliberate,

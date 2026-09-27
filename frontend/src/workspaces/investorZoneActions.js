@@ -122,28 +122,22 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Comms log', unbuilt: 'no LP correspondence is stored' },
   ],
   'funds/calls': [
-    // THE GAP MOVED, AND THE REASON HAD TO MOVE WITH IT — twice now, which is
-    // why the history is kept.
+    // THE GAP MOVED THREE TIMES, AND THE LAST MOVE CLOSED IT (D371).
     //
-    // It first said a form was missing. That was wrong: a form would have
-    // returned 200 over an empty ledger, because `POST
-    // /api/funds/:id/capital-call` enqueued a `capital_call_notice` job that
-    // wrote an activity line per LP and **no `capital_calls` row at all**. So the
-    // reason was rewritten to name the ledger as the thing that was missing.
-    //
-    // Task #197 built the ledger. The job now writes one `capital_calls` row per
-    // committed or active LP, pro-rata by commitment, idempotent on a per-call
-    // uid — so the second reason is false in its turn, and the ORIGINAL diagnosis
-    // is now the true one: what is missing is the screen. `api.fundCapitalCall`
-    // exists and `funds.ts` serves it for the fund's own GP; nothing in the SPA
-    // calls it. A form wired to it would now land rows this page can show.
-    //
-    // `POST /api/capital/calls` remains the wrong route to wire here regardless:
-    // it is ADMIN-ONLY (`role !== 'admin'` → 403), so an investor pressing it
-    // would be refused every time.
-    { label: 'New call', unbuilt: 'no screen offers the form yet — the route and the ledger behind it are both live, so this is a form away from working', hover: 'Issuing a call is served by the API and records a row per LP; no screen offers the form yet.' },
-    { label: 'Send reminders', unbuilt: 'nothing on this desk sends mail' },
-    { label: 'Export wires', unbuilt: 'no wire schedule is stored to export' },
+    // It first said a form was missing, which was wrong: `POST
+    // /api/funds/:id/capital-call` enqueued a job that wrote no `capital_calls`
+    // row. Task 197 built the ledger rows, which made "a form away from
+    // working" true again. Migration 312 then gave a call a header, a number,
+    // an exact cents split and receipts, and the Calls page is the form: New
+    // call previews the split and issues it.
+    { label: 'New call', kind: 'handler', handler: 'newCall' },
+    // A reason still, and a narrower one than "nothing on this desk sends
+    // mail": a notice is logged per LP account when a call is issued, and the
+    // overdue lines are listed on the page. What nobody builds is the chase.
+    { label: 'Send reminders', unbuilt: 'a notice is logged per LP account when a call is issued, but no reminder is drafted or sent for an overdue line from this desk', hover: 'Overdue lines are listed here; sending a reminder is not built yet.' },
+    // Was "no wire schedule is stored to export" — true until migration 312's
+    // receipts. It exports the wire trail the page shows.
+    { label: 'Export wires', kind: 'export' },
   ],
   'funds/ledger': [
     { label: 'Export journal', unbuilt: 'no journal source is connected to this desk' },
