@@ -103,6 +103,24 @@ export interface RunOptions {
   // primary: reporting success under a model the caller did not ask for is
   // the class of lie this router exists to avoid.
   model?: string;
+  // The app path the run was asked from (`/validate/interviews`), written to
+  // `ai_usage_logs.surface` (migration 319, D404) so a page can show its own
+  // spend. Optional, and absent for every internal caller: NULL is "not
+  // recorded". Re-validated in `recordUsage` against SURFACE_RE, so a caller
+  // that forwards a request field cannot put anything else into the column.
+  surface?: string;
+}
+
+/**
+ * What a recorded surface may look like: an absolute app path of letters,
+ * digits, `/`, `_`, `.` and `-`, at most 160 characters. Anything else is
+ * recorded as NULL rather than trimmed into something that looks valid.
+ */
+export const SURFACE_RE = /^\/[A-Za-z0-9/_.-]{0,159}$/;
+export function normaliseSurface(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const path = value.trim().replace(/\/+$/, '') || (value.trim() === '/' ? '/' : '');
+  return SURFACE_RE.test(path) ? path : null;
 }
 
 export interface UsageMeta {
@@ -645,7 +663,7 @@ async function ensureLogSchema(env: Env): Promise<void> {
   if (LOG_SCHEMA_READY.get(env.DB as unknown as object)) return;
   try {
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))",
+      "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), surface TEXT)",
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_user_created ON ai_usage_logs(user_id, created_at DESC)");
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_task_created ON ai_usage_logs(task, created_at DESC)");
@@ -655,12 +673,12 @@ async function ensureLogSchema(env: Env): Promise<void> {
   }
 }
 
-async function recordUsage(env: Env, userId: number | null, usage: UsageMeta, refusal: RefusalReason | null): Promise<void> {
+async function recordUsage(env: Env, userId: number | null, usage: UsageMeta, refusal: RefusalReason | null, surface?: string): Promise<void> {
   await ensureLogSchema(env);
   try {
     await env.DB.prepare(
-      `INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal, surface)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       userId,
       usage.task,
@@ -673,6 +691,7 @@ async function recordUsage(env: Env, userId: number | null, usage: UsageMeta, re
       usage.fallback_used ? 1 : 0,
       usage.cached ? 1 : 0,
       refusal,
+      normaliseSurface(surface),
     ).run();
   } catch (e) {
     console.warn('[aiRouter] recordUsage:', (e as Error).message);
@@ -877,7 +896,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
       prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
       fallback_used: false, cached: false, safety_score: null,
     };
-    await recordUsage(env, opts.userId, usage, 'misconfigured');
+    await recordUsage(env, opts.userId, usage, 'misconfigured', opts.surface);
     return { ok: false, refusal: 'misconfigured', error: `unknown task ${opts.task}`, usage };
   }
 
@@ -901,7 +920,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
       prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
       fallback_used: false, cached: false, safety_score: null,
     };
-    await recordUsage(env, opts.userId, usage, 'model_not_offered');
+    await recordUsage(env, opts.userId, usage, 'model_not_offered', opts.surface);
     return {
       ok: false,
       refusal: 'model_not_offered',
@@ -928,7 +947,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
             prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
             fallback_used: false, cached: true, safety_score: null,
           };
-          await recordUsage(env, opts.userId, usage, null);
+          await recordUsage(env, opts.userId, usage, null, opts.surface);
           return {
             ok: true,
             output: hit.output ?? '',
@@ -948,7 +967,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
         prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
         fallback_used: false, cached: false, safety_score: null,
       };
-      await recordUsage(env, opts.userId, usage, 'kill_switch');
+      await recordUsage(env, opts.userId, usage, 'kill_switch', opts.surface);
       return { ok: false, refusal: 'kill_switch', error: 'org-wide AI budget exhausted', usage };
     }
     const dayKey   = `user:${opts.userId}:${todayKey()}`;
@@ -965,7 +984,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
         prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
         fallback_used: false, cached: false, safety_score: null,
       };
-      await recordUsage(env, opts.userId, usage, 'budget_user_day');
+      await recordUsage(env, opts.userId, usage, 'budget_user_day', opts.surface);
       return { ok: false, refusal: 'budget_user_day', error: `daily cap ${caps.userDay} USD reached`, usage };
     }
     if (m >= caps.userMonth) {
@@ -974,7 +993,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
         prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
         fallback_used: false, cached: false, safety_score: null,
       };
-      await recordUsage(env, opts.userId, usage, 'budget_user_month');
+      await recordUsage(env, opts.userId, usage, 'budget_user_month', opts.surface);
       return { ok: false, refusal: 'budget_user_month', error: `monthly cap ${caps.userMonth} USD reached`, usage };
     }
     if (o >= caps.orgMonth) {
@@ -984,7 +1003,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
         prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
         fallback_used: false, cached: false, safety_score: null,
       };
-      await recordUsage(env, opts.userId, usage, 'budget_org_month');
+      await recordUsage(env, opts.userId, usage, 'budget_org_month', opts.surface);
       return { ok: false, refusal: 'budget_org_month', error: `org cap ${caps.orgMonth} USD reached`, usage };
     }
   }
@@ -1079,7 +1098,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   };
 
   if (!attempt.ok) {
-    await recordUsage(env, opts.userId, usage, 'all_models_failed');
+    await recordUsage(env, opts.userId, usage, 'all_models_failed', opts.surface);
     return { ok: false, refusal: 'all_models_failed', error: lastError || 'provider failed', usage };
   }
 
@@ -1124,7 +1143,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     }
   }
 
-  await recordUsage(env, opts.userId, usage, null);
+  await recordUsage(env, opts.userId, usage, null, opts.surface);
 
   return {
     ok: true,

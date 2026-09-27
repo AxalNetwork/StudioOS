@@ -2859,11 +2859,15 @@ export const api = {
   // row saying a named branch was read back. Omitted means nothing privileged
   // happened and nothing is logged, which is what D150 correctly refused to
   // pretend otherwise about.
-  aiWorkspaceExplain: ({ workspace, zone, coverage, model, branch }) =>
+  //
+  // `page` is the app path the rail sits on (D404). The router records it as
+  // the run's `surface`, which is what lets the rail show "This page this
+  // month"; it is a path, never page content.
+  aiWorkspaceExplain: ({ workspace, zone, coverage, model, branch, page }) =>
     request('/ai/workspace/explain', {
       method: 'POST',
       timeoutMs: 60_000,
-      body: JSON.stringify({ workspace, zone, coverage, model, branch }),
+      body: JSON.stringify({ workspace, zone, coverage, model, branch, page }),
     }),
 
   // ---------- Monitoring → Analytics (admin, Task #3 / Task #13) ----------

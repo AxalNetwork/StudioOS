@@ -114,7 +114,9 @@ test('a successful run re-reads the report, so the receipt is current', () => {
   const body = src.slice(src.indexOf('const readBack = useCallback'), src.indexOf('} catch (e) {', src.indexOf('const readBack = useCallback')));
   assert.match(body, /setRun\(\{ state: 'done'[^\n]*\n[\s\S]*?reload\(\);/,
     'a run completes and the lasting receipt keeps describing the one before it');
-  assert.match(src, /\}, \[workspace, stance, coverage, activeModel, scopeBranch, reload\]\);/,
+  // The dependency list, not its exact spelling: D404 added `pagePath` to it.
+  const deps = src.slice(src.indexOf('} catch (e) {', src.indexOf('const readBack = useCallback')));
+  assert.match(deps, /^[\s\S]*?\}, \[[^\]]*\breload\b[^\]]*\]\);/,
     'readBack closes over a stale reload');
 });
 

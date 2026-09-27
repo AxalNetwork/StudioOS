@@ -5,7 +5,7 @@ import useAiSpend, { modelsForTask, priceForTask } from '../hooks/useAiSpend';
 import useAssistMode from '../hooks/useAssistMode';
 import { api } from '../lib/api';
 import { safeReadJSON, safeWriteJSON } from '../lib/storage';
-import { formatCost, formatRate, formatSpend, lastRunReceipt, spendMeter } from './assistCost';
+import { formatCost, formatRate, formatSpend, lastRunReceipt, pageSpendLine, spendMeter } from './assistCost';
 import { ASSIST_SURFACES, EADWYN_GUARDRAIL, observedRunCost } from './eadwynConfig';
 import { MODEL_COPY } from './railModels';
 import { Unreadable } from './Honesty';
@@ -312,6 +312,9 @@ export default function WorkerRail({
   // a link back to where it is chosen, rather than a menu whose every click
   // silently changes the whole workspace.
   const pathname = useRailPathname();
+  // The page as the router records it: no trailing slash, the same shape
+  // `normaliseSurface` stores, so the lookup below matches the rows (D404).
+  const pagePath = String(pathname || '').replace(/\/+$/, '') || (pathname === '/' ? '/' : '');
   const inherited = railInheritance(role, pathname);
   const activeEntry = models.find((m) => m.id === activeModel) || null;
 
@@ -332,6 +335,9 @@ export default function WorkerRail({
         // an unscoped run is not about a branch and must not write a row
         // claiming it was (D150's reason, narrowed rather than reversed).
         branch: scopeBranch || undefined,
+        // The page this run is asked from, recorded as its `surface` (D404) so
+        // "This page this month" below can count it. A path, never content.
+        page: pagePath || undefined,
       });
       setRun({ state: 'done', text: r?.text || '', note: '', usage: r?.usage || null });
       // The run wrote a row, so the month's figures and the lasting "Last
@@ -363,7 +369,7 @@ export default function WorkerRail({
         usage: null,
       });
     }
-  }, [workspace, stance, coverage, activeModel, scopeBranch, reload]);
+  }, [workspace, stance, coverage, activeModel, scopeBranch, reload, pagePath]);
 
   // `recorded` false, or no report at all, are the same thing to a reader: the
   // platform cannot say what has been spent. Neither draws a bar.
@@ -725,6 +731,33 @@ export default function WorkerRail({
                     Unreadable, not "no runs"; the Worker reports the two apart
                     with `last_run_recorded`.
                   */}
+                  {/*
+                    THIS PAGE THIS MONTH (D404) — the canvas's per-page figure,
+                    from `by_surface`, which groups the month's rows by the
+                    page they were asked from (migration 319). Three honest
+                    states and no fourth:
+                      · the read failed           → Unreadable, with a retry;
+                      · this page has rows        → its spend and run count;
+                      · it has none               → "No runs from this page
+                        this month", and — when the month has runs that carry
+                        no page — how many, because those may include this
+                        page's own runs from before pages were recorded.
+                  */}
+                  {spend.by_surface_recorded === false
+                    ? (
+                      <div data-testid="text-worker-rail-page-spend">
+                        <Unreadable
+                          what="This page's spend"
+                          claim="That is not a claim that this page has cost nothing."
+                          onRetry={reload}
+                        />
+                      </div>
+                    )
+                    : Array.isArray(spend.by_surface) && (
+                      <p className="fwr-page-spend" data-testid="text-worker-rail-page-spend">
+                        {pageSpendLine(spend.by_surface, pagePath)}
+                      </p>
+                    )}
                   {spend.last_run_recorded === false
                     ? (
                       <div data-testid="text-worker-rail-last-run">
