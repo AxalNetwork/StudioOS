@@ -3212,6 +3212,12 @@ export const api = {
   perkUpdate: (uid, data) =>
     request(`/perks/partner/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
   perkStats: (uid) => request(`/perks/partner/${encodeURIComponent(uid)}/stats`),
+  // D412 — the partner's claims list and mark-redeemed, and the founder's rating.
+  perkClaimsForListing: (uid) => request(`/perks/partner/${encodeURIComponent(uid)}/claims`),
+  perkRedeem: (uid, data) =>
+    request(`/perks/partner/${encodeURIComponent(uid)}/redeem`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  perkRate: (uid, stars) =>
+    request(`/perks/${encodeURIComponent(uid)}/rating`, { method: 'POST', body: JSON.stringify({ stars }) }),
   perkReviewQueue: () => request('/perks/admin/queue'),
   perkReview: (uid, data) =>
     request(`/perks/admin/${encodeURIComponent(uid)}/review`, { method: 'POST', body: JSON.stringify(data || {}) }),
