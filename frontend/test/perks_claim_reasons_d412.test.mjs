@@ -51,7 +51,8 @@ test('every reason the Worker gives has its own label on the page', () => {
 });
 
 test('the card reads the label map, not a two-way ternary that calls everything a balance problem', () => {
-  assert.match(page, /p\.claimable \? 'Claim' : \(UNCLAIMABLE_LABEL\[p\.reason\] \|\| 'Not claimable'\)/);
+  // D413: a paid engagement's CTA is `Request` — nothing is bought here.
+  assert.match(page, /p\.claimable \? \(p\.kind === 'money' \? 'Request' : 'Claim'\) : \(UNCLAIMABLE_LABEL\[p\.reason\] \|\| 'Not claimable'\)/);
   assert.doesNotMatch(page, /'Needs an upgrade' : 'Not enough credits'/);
 });
 

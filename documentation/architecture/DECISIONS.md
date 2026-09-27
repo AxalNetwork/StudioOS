@@ -32357,6 +32357,162 @@ founder used the offer.
     a `not ok` line, restored from a sha256-checked snapshot, and passed
     again.
 
+## D413
+
+**Perks & Products is rebuilt from its canvas. Founders get the Marketplace,
+My perks and a two-step claim modal on `/perks`. Partners get Submit a perk
+and Performance in `/offers/perk-deals`, so a partner who opens `/perks` is
+now sent there. The zone stops calling claims "redeemed".** Wave 8, Session 13,
+item 4. Worker first. No migration. No new route and no new `api.js` method:
+the page now calls `perkStats`, `perkClaimsForListing`, `perkRedeem` and
+`perkRate`, which item 3 (D412) built and nothing called.
+
+**What was there, measured on c38d972f0.**
+- **One tabbed page for every role.** `/perks` drew a catalogue, a "My perks"
+  table, a "My listings" console and an admin queue. The canvas draws a
+  founder side (Marketplace, My perks, claim modal) and a partner side (Submit
+  a perk, Performance). Featured listings, category counts, the affordability
+  switch, ratings, the claim before-and-after and the running ledger balance
+  were missing. So was all of Performance.
+- **The `po2` zone counted claims as redemptions.** Its lifecycle cell printed
+  `claim_count` as "N redeemed", the `Grants revoked` tile summed
+  `claim_count` as "redeemers", and the zone export put `claim_count` under a
+  "Redeemed" header. The number was only right while nothing could mark a
+  claim redeemed. D412 added that writer, so the label became false.
+- **Two sentences on the page were false.** The claim drawer told a founder
+  with an intro perk that the partner "has your details and will be in
+  touch". The partner has no such details: `GET /partner/:uid/claims`
+  withholds who claimed, because no founder's consent to share is recorded.
+  Also, on a failed read the catalogue and My perks showed an empty result,
+  so "No perks are listed yet" could mean "the request failed".
+
+**Worker (`routes/perks.ts`), additive fields only.**
+- `GET /partner` emits `redeemed_count` beside `claim_count`, on both its
+  queries, plus `absent.review_criteria`. The canvas's four review criteria
+  are not written down anywhere a reviewer reads or a route enforces, so the
+  zone prints the Worker's sentence instead.
+- `GET /mine` gives each claim `days_left` and `expiring`. It also returns
+  `stats {claimed, credits_spent, expiring, expiring_within_days}`, counted
+  with the same `PERK_EXPIRING_WITHIN_DAYS` the partner zone uses. The count
+  comes from the new exported `claimDaysLeft`. It is null for an open-ended,
+  redeemed or expired claim, never zero. The page does no date arithmetic.
+- `GET /:uid` returns `absent.partner_contact` for an intro perk or a paid
+  engagement. Both need the partner to reach the founder, and the partner is
+  not told who claimed. The modal prints the sentence. The founder carries the
+  claim reference, and the partner marks the claim redeemed by it.
+- `GET /partner/:uid/stats` adds `cost_per_founder_cents`, the canvas's
+  "value × redeemed ÷ reached", in integer cents. It is null when the listing
+  states no value or has no claims. It also adds `absent.bd_console`,
+  `absent.redemption_rate` and `absent.cost_per_founder`, each only when the
+  figure is absent.
+
+**Frontend.**
+- `PerksPage.jsx` is rebuilt. `/perks` has the Marketplace (featured with
+  Axal's editorial quote, category chips with counts, the canvas's three
+  affordability views, cards with a rating or "Not yet rated", the canvas's
+  CTAs and gate note), the claim modal (review step with cost header and
+  before-to-after, done step with code or claim reference) and My perks (the
+  Worker's three tiles, claims with expiry and days left, stars for a redeemed
+  claim, and a ledger with a running balance). There is one `WorkerRail`,
+  with a literal `role="founder"`.
+- The admin Review queue stays. It can now set `featured` and the editorial
+  quote, which the review route already accepted.
+- The embedded zone keeps everything `po2` pins, and adds Performance and
+  Submit as sections, not tabs, since `po2` draws no tab row.
+  - **Performance:** the canvas's four tiles and four funnel steps, the cap
+    bar with Raise the cap, and the claims on the listing with Mark redeemed
+    (by row or by code).
+  - **Submit:** the canvas's seven fields (duration writes the end date),
+    a live preview that is the marketplace card itself, and the list of the
+    partner's submissions.
+- The lifecycle row now draws "N redeemed" with "M of CAP claimed" under it.
+  The bar is claims over the claim cap. `Grants revoked` sums
+  `redeemed_count`. The zone export (`PartnerBucketRoutes.jsx`) has both
+  `Claimed` and `Redeemed` columns.
+- **Retired route: `/perks` for a partner.** `App.jsx`'s `/perks` route
+  gains `effectiveRole === 'partner' ? <Navigate replace
+  to="/offers/perk-deals" />`. Founders keep the Grow workspace mount. Admin,
+  investor, advisor and exploring keep the marketplace in the Offers tab
+  shell. The old "My listings" tab is gone from `/perks`; that console is the
+  zone. No component is deleted: `PerksPage` serves both mounts.
+
+**What the canvas draws that ships as an absence or not at all, by decision.**
+- **Stays not recorded, the Worker's sentence on screen:** card
+  impressions, which founders claimed, the BD console, an expiry reminder,
+  and what review looks at.
+- **Absent by earlier decision:** the ledger's allowance, referral and
+  annual-bonus lines (no allowance exists, and `perks_live.test.mjs` pins
+  it). "Credits refresh on the 8th" (nothing refreshes). The "Instant"
+  method (migration 186's CHECK admits three; see 322's header). Platform
+  products priced in money (they go through `/api/payments` and
+  `/api/orders`, never as a perk).
+- **Not drawn because nothing backs them:** the canvas's claims that
+  "roughly one in three submissions goes live", "review takes about five
+  business days", that a partner "can pause the listing at any time" (the
+  partner PATCH cannot change status), and the funnel's "insight" paragraph.
+  The contract test fails if any of them appears.
+- **Not drawn, the product says otherwise:** a paid engagement's CTA is
+  "Request", not "Buy", because nothing is charged. The featured note says
+  Axal's reviewers pick and quote. It does not repeat the canvas's claim
+  about why.
+
+**A partner's legacy claims.** Since D412 a partner cannot claim. A claim a
+partner made before that is no longer shown to them, because the redirect
+takes them off My perks. It is still in D1 and still redeemable by its
+reference.
+
+**Filed, not fixed.**
+- **Session 5.** These now point partners at a redirect:
+  - `sidebarConfig.js:434` (partner Offers `match` includes `'/perks'`)
+  - `sidebarConfig.js:650` (legacy list)
+  - `PartnerWorkspaceTabs.jsx:53` (`{ to: '/perks', label: 'Perk deals' }`)
+  - `shellConfig.js:381` (`legacy: '/perks'`)
+
+  Each still lands correctly, one hop later. The tab row's `/perks` entry
+  still serves admin, investor, advisor and exploring.
+- **Session 2.** `research.ts`'s "N redeemed" (filed under D412) still stands.
+
+### VERIFIED
+
+- **Drift.** `npm run test:drift` exits 0 on main c38d972f0 plus this
+  change. Main alone: frontend 3596, worker 4512, retention 112. With the
+  change: frontend 3617 (+21), worker 4519 (+7), retention 112. No count fell.
+- **New tests, by name.**
+  - `perks_ui_d413.test.ts`: 7 tests through the route, on the schema built
+    from the shipped migrations.
+  - `perks_products_d413_contract.test.mjs`: 21 tests. The canvas is sliced
+    at both ends of every section it reads.
+- **Test harness.** `_perks_harness.ts` is the D412 suite's harness, lifted
+  out unchanged so both suites share it. D412 still has 19 of 19.
+- **Re-aimed.** Each assertion was changed because the code it pinned
+  changed; each is named in the diff.
+  - `offers_perk_deals_lifecycle.test.mjs`: redeemers, the lifecycle cell,
+    and the `Marketplace` label.
+  - `partner_operations_live.test.mjs`: the two aliases.
+  - `perks_claim_reasons_d412.test.mjs`: `Request` for money.
+  - `perks_live.test.mjs`: `catalog.allowance_configured`.
+- **Mutations.** 41 were run: 16 on the Worker and 25 on the page, zone,
+  route and export. All 41 were caught first time. Each was a non-zero exit
+  with a `not ok` line. Each file was restored from a sha256-checked
+  snapshot and passed again.
+- **Build and checks.** Both typechecks, `check-decision-ids`,
+  `check-folder-docs`, `check-api-drift`, `check-sql-prepare` and
+  `check-unused-imports` pass. `docs/` was rebuilt at the root with the
+  asset-retention file moved aside. `check-docs-fresh --strict` passes.
+- **Chromium probe.** This is recorded verification, not a gate. The built
+  SPA was run with stubbed `/api/perks*`, and all 24 checks passed.
+  - **Founder:** featured card with its quote, "Not yet rated", the
+    Upgrade and Not-enough CTAs, the gate note, and the affordability
+    filter. Then the claim modal's before-to-after, the done step's claim
+    reference, the three My perks tiles, the reminder absence, and the
+    running ledger balance.
+  - **Partner:** `/perks` lands on `/offers/perk-deals`. Also checked: the
+    Performance tiles, "3 of 10 claimed" in the lifecycle row, Mark redeemed
+    posting `claim_uid`, and the submit button held until the canvas's three
+    fields are filled. The submit posts `value_cents: 165000` and a
+    six-month `ends_at`, and the review-criteria absence is printed.
+  - No page errors in either run.
+
 ## D420
 
 **The founder desks A2–A5 read the stores that already exist.** Wave 8,
