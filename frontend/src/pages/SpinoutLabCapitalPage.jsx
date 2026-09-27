@@ -19,10 +19,15 @@
 //     already-loaded prospects/data-room rows), investor preview (read-only
 //     render of loaded data), next-best-actions + weighted pipeline (derived
 //     from real rows and labeled as derived).
+//   - Round terms from stores that hold them (D364, lib/capitalRoundTerms.js):
+//     Instrument, Valuation cap and Discount read the OUTSTANDING SAFEs/notes
+//     on the cap-table scenario, labelled as such — not terms of this round.
+//     Pro-rata rights read /contacts/raise-pro-rata (migration 169) with the
+//     Worker's own entitlement arithmetic, shown read-only in a card.
 //   - Omitted (no backend): warm-intro probabilities, conviction scores,
 //     per-prospect next steps/statuses, SAFE generator, pitch-feedback
-//     objection counts, instrument/valuation-cap/discount/MFN round terms
-//     (rendered as honest "Not set" tiles), share/copy-link, projected-close
+//     objection counts, MFN and lead-profile round terms (rendered as honest
+//     "Not set" tiles), share/copy-link, projected-close
 //     pacing and meetings-this-week (no stage-transition/meeting timestamps).
 //   - Honest reads (D360): the committed total is the server's own SUM, and
 //     when it is absent the tile says "Not recorded" rather than $0. The two
@@ -46,6 +51,7 @@ import LabPageShell from '../components/spinout/LabPageShell';
 import IncomingLeadsStrip from '../components/IncomingLeadsStrip';
 import { reportError, reportWarn } from '../lib/log';
 import { Unreadable, Unrecorded } from '../ui';
+import { instrumentTiles, proRataTile, proRataRuleCopy } from '../lib/capitalRoundTerms';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -101,6 +107,9 @@ const STAGE_BADGE = {
 // committed 100% · passed 0%.
 const STAGE_PROBABILITY = { to_contact: 0.05, contacted: 0.1, meeting: 0.25, diligence: 0.5, committed: 1, passed: 0 };
 
+// raise_pro_rata.state → what the holder has decided.
+const PRO_RATA_DECISION = { offered: 'Offered, no answer', taking: 'Taking', waived: 'Waived', expired: 'Expired' };
+
 // A14 — shared sync-provenance vocabulary for round fields, applied
 // truthfully:
 //   synced  — the value is read live from another tool's real data
@@ -112,6 +121,8 @@ const PROVENANCE = {
   manual: () => ({ cls: 'text-amber-600 dark:text-amber-400', text: 'Manual' }),
   default: () => ({ cls: 'text-emerald-600 dark:text-emerald-400', text: 'Default' }),
   unset: () => ({ cls: 'text-gray-400 dark:text-gray-500', text: 'Not set' }),
+  // The store exists but the read failed: not the same claim as "Not set".
+  unreadable: () => ({ cls: 'text-rose-500 dark:text-rose-400', text: "Couldn't read" }),
 };
 
 // Data-room readiness statuses. 'unknown' (the check itself failed) is shown
@@ -159,6 +170,10 @@ export default function SpinoutLabCapitalPage() {
   const [stages, setStages] = useState(Object.keys(STAGE_LABELS));
   const [updates, setUpdates] = useState([]);
   const [dataroom, setDataroom] = useState([]);
+  // D364 — the cap-table scenario read (for the instrument tiles) and the
+  // pro-rata read, each kept with its own status so a failure is not "Not set".
+  const [capRead, setCapRead] = useState(null);
+  const [proRata, setProRata] = useState(null);
   // Pipeline view (A16): priority | kanban | table over the same prospects.
   const [view, setView] = useState('priority');
   // Quick actions (A6/A8)
@@ -209,6 +224,19 @@ export default function SpinoutLabCapitalPage() {
     }
   };
 
+  const loadProRata = async (projectId) => {
+    try {
+      const data = await api.raiseProRata(projectId);
+      if (!data || typeof data !== 'object') throw new Error('raise-pro-rata returned no body');
+      setProRata({ status: 'ready', data });
+    } catch (e) {
+      // 404 = the raise routes are not in this environment (dev FastAPI).
+      if (e?.status === 404) { setProRata({ status: 'unavailable' }); return; }
+      reportError('spinout-capital:pro-rata', e);
+      setProRata({ status: 'failed' });
+    }
+  };
+
   const buildDataroom = async (proj, st) => {
     const msDone = (key) => (st?.milestones || []).some((m) => m.key === key && m.completed_at);
     // Independent detectors; each failure degrades to 'unknown' honestly.
@@ -218,6 +246,7 @@ export default function SpinoutLabCapitalPage() {
       api.listInterviews(proj.id),
       api.listOkrs(proj.id),
     ]);
+    setCapRead(capRes.status === 'fulfilled' ? { status: 'ready', scenario: capRes.value?.scenario || null } : { status: 'failed' });
     const rows = [];
     rows.push({
       key: 'deck', name: 'Pitch deck', source: 'Pitch Deck Builder', to: '/spinout-lab/pitch-deck',
@@ -300,7 +329,7 @@ export default function SpinoutLabCapitalPage() {
         const proj = projects === null ? null : pickLabProject(projects, me);
         setProject(proj || null);
         if (proj) {
-          await Promise.all([loadRaise(proj.id), buildDataroom(proj, st)]);
+          await Promise.all([loadRaise(proj.id), buildDataroom(proj, st), loadProRata(proj.id)]);
         }
         if (!dead) setStatus('ready');
       } catch (e) {
@@ -377,19 +406,18 @@ export default function SpinoutLabCapitalPage() {
     return acts.slice(0, 3);
   }, [raiseAvailable, prospects, dataroom]);
 
-  // A13 — the design's 8-field round control center. Only Target close and
-  // Min/Ideal/Max have real backing data (raise_rounds.close_date and the
-  // Use-of-Funds raise target). The other six terms aren't tracked anywhere,
-  // so they keep the design's presence as honest "— / Not set" tiles instead
-  // of fabricated values.
+  // A13 — the design's 8-field round control center. Target close and
+  // Min/Ideal/Max come from raise_rounds.close_date and the Use-of-Funds raise
+  // target; D364 syncs Instrument, Valuation cap and Discount from the
+  // cap-table scenario's outstanding SAFEs and Pro-rata from the round's
+  // pro-rata list. MFN and Lead profile are tracked nowhere, so they keep the
+  // design's presence as honest "— / Not set" tiles.
   const overviewTiles = useMemo(() => {
     const unset = (key, label) => ({ key, label, value: '—', prov: 'unset' });
     const ideal = num(project?.funding_needed);
     return [
-      unset('instrument', 'Instrument'),
-      unset('valuation-cap', 'Valuation cap'),
-      unset('discount', 'Discount'),
-      unset('pro-rata', 'Pro-rata rights'),
+      ...instrumentTiles(capRead),
+      proRataTile(proRata),
       unset('mfn', 'MFN'),
       unset('lead-profile', 'Lead profile'),
       round?.close_date
@@ -401,7 +429,7 @@ export default function SpinoutLabCapitalPage() {
         ? { key: 'min-ideal-max', label: 'Min / Ideal / Max', value: `— / ${fmtAmt(ideal)} / —`, prov: 'synced', tool: 'Use of Funds' }
         : unset('min-ideal-max', 'Min / Ideal / Max'),
     ];
-  }, [round, project]);
+  }, [round, project, capRead, proRata]);
 
   // A6 — both exports serialize state already on the page.
   const exportPipelineCsv = () => {
@@ -754,11 +782,78 @@ export default function SpinoutLabCapitalPage() {
               );
             })}
           </div>
-          <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-3">
-            Instrument terms (SAFE cap, discount, pro-rata) aren't tracked here yet — model the raise in{' '}
-            <Link to="/spinout-lab/use-of-funds" className="text-violet-600 hover:underline">Use of Funds</Link>{' '}
-            and your <Link to="/spinout-lab/captable" className="text-violet-600 hover:underline">Cap Table</Link>.
+          <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-3" data-testid="overview-terms-note">
+            Instrument, cap and discount describe the SAFEs and notes already outstanding on your{' '}
+            <Link to="/spinout-lab/captable" className="text-violet-600 hover:underline">Cap Table</Link>, not the terms of this round,
+            which are not recorded anywhere yet. The raise target comes from{' '}
+            <Link to="/spinout-lab/use-of-funds" className="text-violet-600 hover:underline">Use of Funds</Link>.
           </p>
+        </div>
+      )}
+
+      {/* D364 — pro-rata rights in the active round, read-only. The Worker
+          computes each entitlement per request from the round size and the
+          holder's prior stake, so it cannot drift; decisions are recorded in
+          the founder Capital workspace. */}
+      {raiseAvailable && proRata && proRata.status !== 'unavailable' && (
+        <div className={CARD} data-testid="card-pro-rata">
+          <div className={`${LBL} mb-3`}>Pro-rata rights · this round</div>
+          {proRata.status === 'failed' ? (
+            <div data-testid="pro-rata-unreadable">
+              <Unreadable
+                what="Pro-rata rights in this round"
+                claim="This is not a claim that no holder has rights."
+                onRetry={() => loadProRata(project.id)}
+              />
+            </div>
+          ) : !proRata.data.round ? (
+            <p className="text-[12px] text-gray-500 dark:text-gray-400" data-testid="pro-rata-no-round">Set up the round first — pro-rata rights are scoped to it.</p>
+          ) : (proRata.data.holders || []).length === 0 ? (
+            <p className="text-[12px] text-gray-500 dark:text-gray-400" data-testid="pro-rata-empty">
+              No holders tracked for this round. Import them from the cap table in the{' '}
+              <Link to="/raise/capital" className="text-violet-600 hover:underline">Capital workspace</Link>.
+            </p>
+          ) : (
+            <>
+              {proRataRuleCopy(proRata.data.result) && (
+                <p className="text-[11.5px] text-gray-600 dark:text-gray-300 mb-2" data-testid="pro-rata-rule">{proRataRuleCopy(proRata.data.result)}</p>
+              )}
+              {!(Number(proRata.data.round.target_amount) > 0) && (
+                <p className="text-[11.5px] text-amber-700 dark:text-amber-300 mb-2" data-testid="pro-rata-no-target">
+                  The round has no target amount, so no entitlement can be computed — set the target above.
+                </p>
+              )}
+              <table className="w-full text-[12px]" data-testid="pro-rata-table">
+                <thead>
+                  <tr className="text-left text-[10.5px] uppercase tracking-wider text-gray-400">
+                    <th className="py-1 pr-3 font-bold">Holder</th>
+                    <th className="py-1 pr-3 font-bold text-right">Prior stake</th>
+                    <th className="py-1 pr-3 font-bold text-right">Entitlement</th>
+                    <th className="py-1 pr-3 font-bold text-right">Taking</th>
+                    <th className="py-1 font-bold">Decision</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {proRata.data.holders.map((h) => (
+                    <tr key={h.uid} className="border-t border-gray-100 dark:border-gray-800 text-gray-700 dark:text-gray-200">
+                      <td className="py-1.5 pr-3">{h.holder_name}</td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums">{h.prior_stake_pct == null ? '—' : `${Number(h.prior_stake_pct).toFixed(2)}%`}</td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums">
+                        {!(Number(proRata.data.round.target_amount) > 0) || h.entitlement == null ? '—' : fmtAmt(num(h.entitlement))}
+                        {h.scaled ? ' (scaled)' : ''}
+                      </td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums">{h.taking_amount == null ? '—' : fmtAmt(num(h.taking_amount))}</td>
+                      <td className="py-1.5">{PRO_RATA_DECISION[h.state] || h.state}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-2">
+                Offers and decisions are recorded in the{' '}
+                <Link to="/raise/capital" className="text-violet-600 hover:underline">Capital workspace</Link>.
+              </p>
+            </>
+          )}
         </div>
       )}
 
