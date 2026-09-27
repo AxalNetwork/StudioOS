@@ -35433,6 +35433,12 @@ claims, which would have passed with the query's project scope removed. It now
 hands over every claim, so only the scope keeps venture 8's mark off venture
 7's board.
 
+CodeQL raised alert 6191 (incomplete multi-character sanitization, high) on
+the first push, against the new test's own `replace(/<[^>]+>/g, '')` helper.
+The test now reads text through `_renderedText.mjs`, the repo's character scan
+that never returns a `<`, and the four mutations that read rendered text were
+re-run: all four caught.
+
 New tests: `founder_desk_rail_anatomy_d424.test.mjs` and
 `cloudflare-worker/test/validate_claim_provenance_d424.test.ts`, which runs
 real SQLite rows through `recordFill`, the accept path's own writer.

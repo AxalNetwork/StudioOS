@@ -27,11 +27,15 @@ import { resolve } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { codeOnly } from './_codeOnly.mjs';
+import { renderedText } from './_renderedText.mjs';
 import RunEstimate, { runEstimate } from '../src/workspaces/RunEstimate.jsx';
 import ZoneDraft, { DRAFT_TASK } from '../src/workspaces/ZoneDraft.jsx';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const text = (html) => html.replace(/<[^>]+>/g, '').replace(/&#x27;/g, "'");
+// The repo's character scan, not a regex strip: `renderedText` never returns
+// a `<`, which is the property CodeQL asks of anything shaped like a
+// sanitizer (alert 6191 on this file's first push).
+const text = renderedText;
 
 const SPEND = {
   recorded: true,
