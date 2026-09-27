@@ -31342,6 +31342,87 @@ The mutations included:
 - the dash and the zero fallback restored;
 - `Essays` made live, and Visibility un-excluded.
 
+## D393
+
+**Cohorts alignment: the five archetypes are the canvas's own, with a guard;
+Founders draws the week lanes from the Lab's week record; Calendar gets its
+four chips and a client-side .ics export.** Session 11, item 4. No
+migration, no route, no new `api.js` method. The canvas stays in `backlog/`:
+moving it would pull it into the actions guard, which its markup does not
+yet parse (the gap map's filing trap), and that move is Session 1's.
+
+**Archetypes.** All five Cohorts zones in `shellConfig.js` disagreed with the
+Cohorts canvas. The shell had COLLECTION / WORK BOARD ×3 / ANALYTICS; the
+canvas's artboard headers say WORK BOARD / FEED / COLLECTION / FEED /
+COLLECTION. The archetype is what the zone nav and badge advertise, so the
+nav described the wrong page type on every Cohorts route, and nothing
+checked it: `advisor_shell_canvas` pins only Practice. The shell now carries
+the canvas's five. `advisor_cohorts_alignment_d393.test.mjs` reads them out
+of the canvas's `ab-nm` headers and compares label and archetype, in order,
+so the guard cannot pass on a shell that agrees with a typo.
+
+**Founders (C1).** The page was a name-and-email table. It now also reads
+`GET /me/cohort/:id/weeks`, the route This week already uses, which returns
+the cycle's windows, the batch's `current_week` and each founder's per-week
+status and deliverable counts.
+- *Lanes, one per week window.* "Lanes come from the cohort, not the
+  founder" (the canvas's own note), so every card sits in the current week's
+  lane. With one batch on screen at a time, the other lanes read "Nobody here
+  yet". The canvas's per-cohort chips are the batch picker the page already
+  has.
+- *No windows, or no week open yet, means no lanes.* The page says why
+  instead of putting everyone in Week 1.
+- *A card* has the name and "x of y deliverables · p%" for the current week.
+  A founder with no status row reads "Progress not recorded", and a week with
+  nothing required reads as such; neither is ever 0%.
+- *Behind plan* (under half this week's deliverables, the canvas's
+  threshold) is the one flag drawn.
+- *Chips.* `All` · `Behind plan` narrow the lanes.
+- *Tiles.* Assigned, Behind plan and Complete are counted from the same
+  cards. `Flagged` is Not recorded: the canvas derives it partly from the
+  guidance queue, and nothing records a founder's open question or a missed
+  reply.
+- *The roster table stays* beneath the lanes; it is the only place the
+  contact address is shown.
+
+Kept, and recorded against the canvas: the card carries **no company line**.
+The founders read returns none, and `advisor_cohorts.test.mjs` pins that
+Founders draws no Company or Stage. `Bulk: nudge behind-plan` is drawn
+disabled, with its reason: nothing sends a founder a message from a cohort.
+
+**Calendar (C4).**
+- *Chips.* `Next 14 days` · `Cohort only` · `Client only` · `Demo Day`,
+  over the `kind` every item already carries. The tiles stay counted over the
+  whole stream.
+- *`Export to calendar`.* It builds an .ics in the browser from the rows on
+  screen. A Lab date (a week opening, a deadline, Demo Day) has no end, so it
+  is written as a point in time (DTSTART only), never as an invented
+  one-hour meeting.
+- *Shared builder.* It is `lib/ics.js`, lifted out of
+  `SessionsZone.jsx` so Practice · Sessions and Cohorts · Calendar share one
+  escaping rule. `advisor_practice_pr4` is re-aimed to require that Sessions
+  calls it and that it emits a calendar.
+- *Still not recorded:* Milestone kind, Recording, prep readiness and a
+  clash note, as the zone's stated limit already says.
+
+**Not built, named:** the founder half of Guidance (the ask and acknowledge
+flow, which needs a founder-side route and an owner decision); C3 materials
+and modules; C5 outcome consent; and the Cohorts AI bands. The gap map
+defers all four.
+
+**Verification.** New test: `frontend/test/advisor_cohorts_alignment_d393.test.mjs`
+(8). Re-aimed: `advisor_practice_pr4`. Mutations: 20 of 20 caught, each with
+a non-zero exit and a `not ok` line, restored from a sha256-checked snapshot.
+They included:
+- an archetype reverted;
+- Week 1 used as the default, or week 1 read instead of the current week;
+- nothing-required or no-row shown as 0%, and a changed behind threshold;
+- every lane holding everyone, and the no-window reason removed;
+- the flag dropped, Flagged shown as 0, and the nudge enabled;
+- the chips unwired, a wrong kind filter, and an unnarrowed list or export;
+- an invented one-hour end, no escaping, and a bad start written;
+- Sessions' own builder restored.
+
 ## D410
 
 **E-sign `/send` hardening: the signing link reaches only the recipient, a
