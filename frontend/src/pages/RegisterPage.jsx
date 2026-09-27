@@ -231,8 +231,10 @@ export default function RegisterPage() {
   // Task #10 — primary email path: create/refresh the account (deferring the
   // classic verification email), then send a magic sign-in link. One tap on
   // the link both verifies the address and signs the user in (BLOCK-AUTH-01).
-  // If the account already exists with TOTP configured, /register answers 409
-  // — the magic link still signs them in, so we proceed identically.
+  // If the address belongs to a verified account — with or without an
+  // authenticator — /register answers 409 `email_already_registered` (D306)
+  // and changes nothing; the magic link still signs them in, so we proceed
+  // identically.
   const registerWithMagic = async () => {
     if (!validateStep1()) return;
     if (TURNSTILE_SITE_KEY && !turnstileFailed && !turnstileToken) { setError('Please complete the verification challenge'); return; }
@@ -249,7 +251,10 @@ export default function RegisterPage() {
         try {
           await api.register({ ...form, turnstileToken, ref_code: refCode || undefined, defer_email: true, role: laneRole, product: productIntent || undefined });
         } catch (e) {
-          if (!/already registered/i.test(e?.message || '')) throw e;
+          // Keyed on the code, not the sentence (D258): a copy edit to the
+          // Worker's wording must not turn every returning member's sign-in
+          // link into an error.
+          if (e?.code !== 'email_already_registered') throw e;
         }
       }
       await api.magicStart(form.email.trim());

@@ -2433,6 +2433,7 @@ export const api = {
   // (spinout_lab_active = 0); it never deactivates the platform account the
   // way adminToggleActive does. Reason code is mandatory on every action,
   // reinstatement included.
+  adminSpinoutModerationOpen: () => request('/admin/spinout-moderation'),
   adminSpinoutModeration: (userId) => request(`/admin/spinout-moderation/${userId}`),
   adminSpinoutModerate: (userId, data) =>
     request(`/admin/spinout-moderation/${userId}`, { method: 'POST', body: JSON.stringify(data) }),
@@ -4598,6 +4599,12 @@ export const api = {
     request(`/positions/${projectUid}/marks`, { method: 'POST', body: JSON.stringify(data) }),
   positionDistributionCreate: (projectUid, data) =>
     request(`/positions/${projectUid}/distributions`, { method: 'POST', body: JSON.stringify(data) }),
+  // D464 — the chase (IP2's "Chase all overdue" / the Portfolio canvas's
+  // Nudge). Logged per company and the founder is notified; a repeat chase
+  // inside the hour answers the existing row.
+  portfolioChases: () => request('/portfolio/chases'),
+  portfolioChase: (projectIds) =>
+    request('/portfolio/chase', { method: 'POST', body: JSON.stringify({ project_ids: projectIds }) }),
 
   // ---------- Contacts (inbound relationship hub) ----------
   contactsList: (opts = {}) => {
