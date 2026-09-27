@@ -1,5 +1,6 @@
 /**
- * ESLint, for one rule: `no-undef`.
+ * ESLint, for three rules that need scope analysis: `no-undef`, then
+ * `no-unused-vars` (D164) and `no-use-before-define` (D307). It began as one.
  *
  * WHY A LINTER AND NOT ANOTHER `check-*.mjs`. This repo already carries two
  * bespoke guards aimed at this bug class, and one of them says in its own header
@@ -51,8 +52,11 @@
  * The division of labour across the three checks is now clean, and each covers
  * what the others structurally cannot:
  *
- *   this config          `.js`/`.jsx` — undefined names, and unused ones
- *   frontend tsconfig    `.ts`/`.tsx` — both, via tsc
+ *   this config          `.js`/`.jsx` — undefined names, unused ones, and
+ *                        (D307) names read in their own scope before the
+ *                        line that declares them
+ *   frontend tsconfig    `.ts`/`.tsx` — all three, via tsc (TS2448 is the
+ *                        third)
  *   check-unused-imports five trees this config never sees, imports and
  *                        destructured locals, including the worker and tests
  */
@@ -172,6 +176,48 @@ export default [
         ignoreRestSiblings: true,
         varsIgnorePattern: '^(React|_)$',
       }],
+      /**
+       * D307 — a name read before its `const` runs, in the same scope.
+       *
+       * #871 put a `useMemo` in `InvestorNetworkWorkspace.jsx` whose dependency
+       * array named `visibleRelationships` thirty lines ABOVE the `const` that
+       * declares it. A dependency array is evaluated when the hook is CALLED,
+       * during render, so the read hit the temporal dead zone and every render
+       * of every investor `/network` zone threw "Cannot access
+       * 'visibleRelationships' before initialization". `no-undef` cannot see it —
+       * the name IS defined, just later — and neither can a bundler, because a
+       * TDZ read is a runtime error, the same reason the header gives for why
+       * this file exists at all.
+       *
+       * TWO OPTIONS, each measured across the SPA's `.js`/`.jsx` with a scratch
+       * config (`--no-config-lookup` silently ignores `.jsx`, so that run's
+       * "zero" covered `.js` only and was thrown away):
+       *
+       *   defaults                        1576 findings
+       *   functions: false                  74
+       *   functions: false, variables: false 0
+       *
+       *   functions: false — a function DECLARATION is hoisted with its body, so
+       *     calling one above where it is written is correct JavaScript, and
+       *     1502 of the 1576 were exactly that: helpers kept at the bottom of a
+       *     module, which is house style.
+       *
+       *   variables: false — the remaining 74 were all a closure in one scope
+       *     reading a `const` from an enclosing one (a handler, an effect, a
+       *     callback that runs AFTER the declaration line has executed). Sampled
+       *     and every one safe. With this option the rule still reports a read
+       *     in the SAME scope as its declaration — which is exactly the TDZ
+       *     shape: a dependency array, a hook argument, or any expression that
+       *     runs during render above the line that initialises it.
+       *
+       * Verified against the defect rather than argued: with the original
+       * ordering restored the rule reports it at the dependency array
+       * (`InvestorNetworkWorkspace.jsx`, 255:7), and with the rule removed the
+       * same ordering lints clean. `classes` stays at its default; it changed no
+       * finding either way. `.ts`/`.tsx` are covered by `tsc`, which refuses a
+       * same-scope use before declaration as TS2448 in `test:types:frontend`.
+       */
+      'no-use-before-define': ['error', { functions: false, variables: false }],
     },
   },
   {

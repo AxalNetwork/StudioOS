@@ -245,15 +245,6 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
     try { await api.partnerReminderDone(uid, true); load(); }
     catch (cause) { setActionError(cause?.message || 'The reminder could not be updated.'); }
   };
-  // The op opens the panel on the first cold tie if one is showing, else the
-  // first row — the reminder is for a tie, and the cold ones are the point.
-  // (Named for the table's handler key, not the state setter above.)
-  const setRemindersOp = useMemo(() => {
-    const target = (visibleRelationships || [])[0];
-    if (!target) return { onClick: () => {}, disabled: true, title: 'No relationship is showing, so there is nothing to remind you about.' };
-    return { onClick: () => { setActionError(''); setReminderFor(target.id); } };
-  }, [visibleRelationships]);
-
   const resolveIntro = async (prop, decision) => {
     setBusyUid(prop.uid); setActionError('');
     try {
@@ -291,6 +282,22 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
     const d = daysSince(lastTouchAt(item));
     return d !== null && d > COLD_AFTER_DAYS;
   }).length;
+  // The op opens the reminder panel on the first row the current view shows —
+  // under `Going cold` that is the first cold tie, under any other view the
+  // first row. (Named for the table's handler key, not the state setter.)
+  //
+  // IT SITS BELOW `visibleRelationships` ON PURPOSE (D307). A hook's
+  // dependency array is evaluated when the hook is called, during render, so
+  // a memo placed above the `const` it depends on reads it in its temporal
+  // dead zone and EVERY render throws. That shipped once and took every
+  // investor /network zone down; investor_network_render_d307.test.mjs now
+  // renders the page, and `no-use-before-define` in eslint.config.mjs refuses
+  // the ordering in any component.
+  const setRemindersOp = useMemo(() => {
+    const target = visibleRelationships[0];
+    if (!target) return { onClick: () => {}, disabled: true, title: 'No relationship is showing, so there is nothing to remind you about.' };
+    return { onClick: () => { setActionError(''); setReminderFor(target.id); } };
+  }, [visibleRelationships]);
   const pending = propositionRows.filter((item) => item.status === 'pending');
 
   // No zone means the overview, where every section shows. An unknown slug
