@@ -109,13 +109,31 @@ test('no research route takes an identity from the request', () => {
  * safety is a different property. Bounding the slice is what keeps each rule on
  * the statement it is a rule about.
  */
+const DILIGENCE_AT = routes.indexOf("research.get('/diligence'");
+// The slice ends at the next thing declared at the top level after the list
+// handler — the grant-keyed room reads follow it, and they are a DIFFERENT
+// property (a single grant the caller holds), tested below and in
+// `research_diligence_room.test.ts`. The old end, "the next `/funds` route or
+// the end of the file", silently swallowed them into this slice.
 const DILIGENCE = routes.slice(
-  routes.indexOf("research.get('/diligence'"),
-  routes.indexOf("research.get('/funds'") > routes.indexOf("research.get('/diligence'")
-    ? routes.indexOf("research.get('/funds'")
-    : routes.length,
+  DILIGENCE_AT,
+  (() => {
+    const next = routes.slice(DILIGENCE_AT + 1).search(/\n(?:research\.|const |async function |export )/);
+    return next < 0 ? routes.length : DILIGENCE_AT + 1 + next;
+  })(),
 );
 assert.ok(DILIGENCE.includes('data_room_grants'), 'the diligence handler could not be found');
+
+/**
+ * The grant-keyed room and document reads, with the helper that resolves the
+ * grant. They read another founder's project too, and their safety is the
+ * grant: resolved only among rows naming the caller as the investor, then
+ * handed to the data room's own `activeGrant`.
+ */
+const ROOM_AT = routes.indexOf('async function heldRoom(');
+const ROOM = routes.slice(ROOM_AT, routes.indexOf('export default research'));
+assert.ok(ROOM_AT > 0 && ROOM.includes("research.get('/diligence/:grantUid/files/:fileUid'"),
+  'the grant-keyed room reads could not be found');
 
 test('the diligence read is scoped to the caller as the grantee', () => {
   // This one reads ANOTHER user's project, which is the point of a grant. The
@@ -148,7 +166,7 @@ test('every other room read in this file is bound to an owned project', () => {
   // asserting against, and it needs saying in its own right.
   for (const table of ['data_room_grants', 'data_room_files', 'data_room_folders', 'data_room_access_log']) {
     for (const stmt of touching(routes, table)) {
-      if (DILIGENCE.includes(stmt)) continue;
+      if (DILIGENCE.includes(stmt) || ROOM.includes(stmt)) continue;
       assert.match(stmt, /project_id = \?|f\.project_id = \?/,
         `a ${table} statement outside /diligence reads without narrowing to one project`);
       // And the binding for it is `pid`, which only `founderProject` produces.
@@ -158,6 +176,34 @@ test('every other room read in this file is bound to an owned project', () => {
     }
   }
   assert.match(routes, /async function founderProject\(/, 'the founder ownership check is gone');
+});
+
+test('the room reads resolve a grant only among the caller’s own, and read only its project', () => {
+  // The one statement that turns a uid from the URL into a project names the
+  // caller as the investor; liveness is then the data room's own check, not a
+  // second copy of its predicate.
+  const lookups = touching(ROOM, 'data_room_grants');
+  assert.equal(lookups.length, 1, 'the room reads grew a second grant lookup');
+  assert.match(lookups[0], /uid = \? AND investor_user_id = \?/);
+  assert.match(ROOM, /activeGrant\(env, held\.project_id, userId\)/);
+  assert.match(routes, /import \{ activeGrant, ndaActive, logAccess \} from '\.\/data_room'/);
+  // Every room table read after that is narrowed to the grant's project and
+  // bound to `pid`, which only the grant produces.
+  for (const table of ['data_room_files', 'data_room_folders', 'data_room_access_log']) {
+    const stmts = touching(ROOM, table);
+    assert.ok(stmts.length, `the room reads no longer read ${table}`);
+    for (const stmt of stmts) {
+      assert.match(stmt, /project_id = \?/, `a ${table} read in the room is not narrowed to one project`);
+      const tail = ROOM.slice(ROOM.indexOf(stmt) + stmt.length, ROOM.indexOf(stmt) + stmt.length + 200);
+      assert.match(tail, /\)\s*\.bind\((?:c\.req\.param\('fileUid'\), )?pid\b/,
+        `a ${table} read in the room binds something other than the grant's project`);
+    }
+  }
+  // And the log is read for the caller alone: the founder's view of the same
+  // table carries every investor's email.
+  for (const stmt of touching(ROOM, 'data_room_access_log')) {
+    assert.match(stmt, /user_id = \?/, 'the room reads another investor’s activity');
+  }
 });
 
 test('the project read behind the cheque-overlap figure goes through companyScope', () => {

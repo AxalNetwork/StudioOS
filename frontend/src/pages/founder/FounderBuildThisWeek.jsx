@@ -129,7 +129,7 @@ export default function FounderBuildThisWeek() {
       <div className="fb-week-shell">
         <section className="fb-week-main">
           <header className="fb-week-header">
-            <div className="fb-week-crumb"><Link to="/execution" data-testid="link-week-back"><ArrowLeft size={13} /> Execution</Link><span>/</span><strong>This week</strong></div>
+            <div className="fb-week-crumb"><Link to="/build" data-testid="link-week-back"><ArrowLeft size={13} /> Build</Link><span>/</span><strong>This week</strong></div>
             <div className="fb-week-title-row">
               <div><h1>This week · {weekRange()}</h1><p className="fb-week-subtitle">Current commitments read from the selected startup's roadmap.</p></div>
             </div>
@@ -283,5 +283,5 @@ function PageRail({ project, commitmentCount }) {
     footer="Read-only summary · no automated actions"
   />;
 }
-function EmptyWeek() { return <div className="fb-week-empty" data-testid="empty-week"><ClipboardCheck size={24} /><h2>No startup is available</h2><p>This founder desk can only display authenticated roadmap records. There is no project to inspect yet.</p><Link to="/execution">Back to execution</Link></div>; }
+function EmptyWeek() { return <div className="fb-week-empty" data-testid="empty-week"><ClipboardCheck size={24} /><h2>No startup is available</h2><p>This founder desk can only display authenticated roadmap records. There is no project to inspect yet.</p><Link to="/build">Back to Build</Link></div>; }
 function WeekSkeleton() { return <div className="fb-week-loading" data-testid="status-week-loading"><i /><i /><div><i /><i /><i /></div></div>; }

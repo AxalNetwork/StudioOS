@@ -193,7 +193,7 @@ export default function FounderBuildCadence() {
         <section className="fb-cadence-main">
           <header className="fb-cadence-header">
             <div className="fb-cadence-crumb">
-              <Link to={`/execution${query}`}><ArrowLeft size={13} /> Execution</Link><span>/</span><strong>Cadence</strong>
+              <Link to={`/build${query}`}><ArrowLeft size={13} /> Build</Link><span>/</span><strong>Cadence</strong>
             </div>
             <div className="fb-cadence-title-row">
               <div>
@@ -510,7 +510,7 @@ function EmptyCadence() {
       <CalendarClock size={24} />
       <h2>No startup is available</h2>
       <p>Cadence is scoped to an authenticated startup.</p>
-      <Link to="/execution">Back to execution</Link>
+      <Link to="/build">Back to Build</Link>
     </div>
   );
 }
