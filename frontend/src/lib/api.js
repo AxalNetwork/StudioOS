@@ -182,7 +182,13 @@ export function isPublicPath(pathname) {
     // they do not have — which is the whole reason the hand-off exists.
     // EXACT, not a `/support/` prefix: bare `/support` is the help-centre
     // redirect and everything else under it is unwritten.
-    || currentPath === '/support/session';
+    || currentPath === '/support/session'
+    // D441 — accepting a move onto this branch. The person has no account
+    // here yet, so a background settings/me 401 is the expected state, and
+    // bouncing them to /login before they can accept would strand the link.
+    // The token shape is the whole allow-list: /join itself and anything
+    // that is not an invitation token stay gated.
+    || /^\/join\/invt_[0-9a-f]{64}$/.test(currentPath);
 }
 
 /**
@@ -727,6 +733,12 @@ export const api = {
   // in a link. Branch Workers only: HQ answers 404 with `hq_only_surface`.
   redeemSupportSession: (code) =>
     request('/auth/support/redeem', { method: 'POST', body: JSON.stringify({ code }) }),
+  // D441 — a move onto this branch. Preview does not spend the token.
+  // Accept creates or reactivates the account and does not return a session.
+  branchInvitationPreview: (token) =>
+    request(`/branch/invitations/preview?token=${encodeURIComponent(token)}`),
+  branchInvitationAccept: (token) =>
+    request('/branch/invitations/accept', { method: 'POST', body: JSON.stringify({ token }) }),
   // T6 — server-side logout: clears the httpOnly auth + CSRF cookies and
   // revokes the current user_sessions row. App.jsx calls this before wiping
   // localStorage so a stolen Bearer copy of the JWT can no longer be used.

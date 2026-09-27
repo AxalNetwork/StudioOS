@@ -253,6 +253,7 @@ const NetworkPage = lazy(() => import('./pages/NetworkPage'));
 const LegalCapitalPage = lazy(() => import('./pages/LegalCapitalPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
 const SupportRedeemPage = lazy(() => import('./pages/SupportRedeemPage'));
+const JoinBranchPage = lazy(() => import('./pages/JoinBranchPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 const TeamPage = lazy(() => import('./pages/TeamPage'));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
@@ -3090,6 +3091,10 @@ function AppInner() {
           POST /api/auth/support/redeem on the branch. `isPublicPath` lists the
           same path for the same reason. */}
       <Route path="/support/session" element={<SupportRedeemPage />} />
+      {/* D441 — a move onto this branch. The invitee has no account here
+          yet, so the route is not behind the sign-in gate. /invite/:token
+          stays the events RSVP page. */}
+      <Route path="/join/:token" element={<JoinBranchPage />} />
 
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/contact" element={<ContactPage />} />
