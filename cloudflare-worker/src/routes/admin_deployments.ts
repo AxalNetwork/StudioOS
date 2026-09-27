@@ -56,6 +56,14 @@ type DeploymentRow = {
   last_health_at: string | null; last_health_ok: number | null; last_version: string | null;
 };
 
+/** Payload from each branch's `health` RPC (D452 — includes deploy_version). */
+type BranchHealthLive = {
+  ok: boolean;
+  licence_status: string | null;
+  licence_pushed_at: string | null;
+  deploy_version?: string | null;
+};
+
 // POST /api/admin/licences/:uid/deploy
 r.post('/licences/:uid/deploy', async (c) => {
   const admin = await requireSuperAdmin(c);
@@ -229,14 +237,9 @@ r.get('/deployments', async (c) => {
 
   // Live health, per branch, with the same isolation every other cross-branch
   // read uses: one unreachable branch reports itself and nothing else (D108).
-  const asked = await fanOut<{
-    ok: boolean;
-    licence_status: string | null;
-    licence_pushed_at: string | null;
-    deploy_version?: string | null;
-  }>(env, 'health');
+  const asked = await fanOut<BranchHealthLive>(env, 'health');
   const live = withRegistry(asked, rows.map((d) => ({ code: d.code, hostname: d.hostname, status: d.status })));
-  const byCode = new Map(live.map((l: BranchResult<unknown>) => [l.code, l]));
+  const byCode = new Map(live.map((l) => [l.code, l] as const));
 
   // D452 — persist the last successful health read (version + ok + time).
   // Best-effort: a failed write must not block the console response.
