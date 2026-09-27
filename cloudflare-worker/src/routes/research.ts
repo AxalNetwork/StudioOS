@@ -1256,6 +1256,13 @@ async function founderProject(
 const DRAFT_SURFACES: Record<string, {
   instruction: string;
   gather: (c: { env: Env }, userId: number, scope: string) => Promise<string[]>;
+  /**
+   * What Accept writes BESIDES stamping the draft, for a surface whose canvas
+   * says Accept writes somewhere ("Accept writes the note"). It runs before
+   * the stamp; a string it returns is a refusal code, and then nothing is
+   * written at all — neither the record nor `accepted_at`.
+   */
+  accept?: (c: { env: Env }, userId: number, scope: string, body: string) => Promise<string | null>;
 }> = {
   'research/ask': {
     instruction: [
@@ -3322,6 +3329,22 @@ const DRAFT_SURFACES: Record<string, {
     ].join(' '),
     gather: (c, userId, scope) => roomMaterial(c.env, userId, scope),
   },
+
+  // The founder's pre-meeting brief on ONE researched fund (canvas c0834993,
+  // FS4d, "Proposal · pre-meeting brief"). The scope key is the fund uid and
+  // the material is that row alone, read owner-scoped. Accept writes the
+  // brief into the fund's note, after what the founder already wrote.
+  'research/funds': {
+    instruction: [
+      'Write a short pre-meeting brief for a founder about to meet the fund below.',
+      'Quote their thesis back in their own words if it is given. Use only the facts listed.',
+      'Turn every fact marked "not recorded" into a question to ask, not a fact to assert.',
+      'Do not name a partner, cite a fund size or an investment, or assume an introduction.',
+      'Do not score the fund or tell the founder what to decide.',
+    ].join(' '),
+    gather: (c, userId, scope) => fundMaterial(c.env, userId, scope),
+    accept: (c, userId, scope, body) => writeBriefIntoNote(c.env, userId, scope, body),
+  },
 };
 
 research.get('/drafts', async (c) => {
@@ -3405,6 +3428,19 @@ research.patch('/drafts/:uid', async (c) => {
   const edited = typeof body?.body === 'string' ? body.body.trim().slice(0, 8000) : null;
   if (edited !== null && !edited) return c.json({ detail: 'body_empty' }, 400);
 
+  // A surface whose Accept writes a record writes it FIRST, and a refusal
+  // leaves the draft unaccepted — never a stamped draft over a record that
+  // was not written.
+  const current = await c.env.DB.prepare(
+    `SELECT * FROM research_zone_drafts WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, user.id).first<ZoneDraftRow>();
+  if (!current) return c.json({ detail: 'not_found' }, 404);
+  const hook = DRAFT_SURFACES[current.surface]?.accept;
+  if (hook) {
+    const refused = await hook(c, user.id, current.scope_key || '', edited || current.body);
+    if (refused) return c.json({ error: refused, message: ACCEPT_REFUSALS[refused] || 'That could not be written.' }, 409);
+  }
+
   if (edited) {
     await c.env.DB.prepare(
       `UPDATE research_zone_drafts SET body = ?, accepted_at = datetime('now') WHERE uid = ? AND owner_user_id = ?`
@@ -3469,6 +3505,9 @@ const fundDto = (r: FundRow) => ({
   note: r.note,
   source_url: r.source_url,
   created_at: r.created_at,
+  // The dossier's "Last updated" tile. Every write to the row stamps it —
+  // PATCH, and a brief accepted into the note.
+  updated_at: r.updated_at,
 });
 
 const clampText = (v: unknown, max: number): string | null => {
@@ -3787,6 +3826,61 @@ research.get('/funds/:uid', async (c) => {
     overlap_note: fundOverlapNote(row, askCents),
   });
 });
+
+/** The longest note a fund row takes, the same cap PATCH applies. */
+const FUND_NOTE_MAX = 2000;
+
+const ACCEPT_REFUSALS: Record<string, string> = {
+  fund_not_found: 'This fund is not on your list any more, so the brief was not written into a note.',
+  note_full: 'Your note and this brief together are over 2,000 characters. Shorten one of them, then accept again.',
+};
+
+/**
+ * The facts a pre-meeting brief is drafted from: one fund row the caller owns.
+ * Empty — so the model is never reached — when the row is not theirs, or when
+ * it holds neither a thesis nor a note, because a brief over a name alone
+ * would be written from the model's own knowledge of the fund.
+ */
+async function fundMaterial(env: Env, userId: number, fundUid: string): Promise<string[]> {
+  if (!fundUid) return [];
+  const f = await env.DB.prepare(
+    `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(fundUid, userId).first<FundRow>();
+  if (!f || (!f.thesis && !f.note)) return [];
+  const usdOf = (cents: number | null) => (cents == null ? null : `$${Math.round(cents / 100).toLocaleString('en-US')}`);
+  const nr = 'not recorded';
+  return [
+    `Fund: ${f.name}`,
+    `Their thesis, in their words: ${f.thesis ? `"${f.thesis}"` : nr}`,
+    `The founder's research note: ${f.note || nr}`,
+    `Cheque range: ${usdOf(f.cheque_min_cents) ?? nr} to ${usdOf(f.cheque_max_cents) ?? nr}`,
+    `Stage fit (the founder's read): ${f.stage_fit || nr}`,
+    `Route in: ${f.path === 'warm' ? 'warm path' : f.path === 'cold' ? 'no route in' : nr}`,
+    `Status: ${f.status}${f.status === 'passed' ? `, reason: ${f.pass_reason || nr}` : ''}`,
+    `Source: ${f.source_url || nr}`,
+    `Partner who will be in the room: ${nr}`,
+    `Public fund size and what they have funded: ${nr}`,
+  ];
+}
+
+/**
+ * Accept on the brief: append it to the fund's note, after the founder's own
+ * words, and stamp the row. It never replaces the note, and it refuses rather
+ * than truncating either text to fit the column.
+ */
+async function writeBriefIntoNote(env: Env, userId: number, fundUid: string, brief: string): Promise<string | null> {
+  const f = await env.DB.prepare(
+    `SELECT note FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(fundUid, userId).first<{ note: string | null }>();
+  if (!f) return 'fund_not_found';
+  const text = brief.trim();
+  const next = f.note ? `${f.note.trim()}\n\nPre-meeting brief:\n${text}` : `Pre-meeting brief:\n${text}`;
+  if (next.length > FUND_NOTE_MAX) return 'note_full';
+  await env.DB.prepare(
+    `UPDATE research_funds SET note = ?, updated_at = ? WHERE uid = ? AND owner_user_id = ?`
+  ).bind(next, nowIso(), fundUid, userId).run();
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Benchmarks (migration 217)

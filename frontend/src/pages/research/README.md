@@ -15,7 +15,8 @@ zones: one record each, reached from a zone's list.
 | `diligenceRead.js` | The size, date and file-state readings those two pages and their tests share. |
 | `ClientPrepZone.jsx` | Advisor and partner client prep. |
 | `FundsZone.jsx` | The founder shortlist at `/research/funds`. Stage, path and status stay three columns. |
-| `FundDossier.jsx` | `/research/funds/:uid`. One row. A blank cheque stays blank. The draft restates the page and does not email the fund. |
+| `FundDossier.jsx` | `/research/funds/:uid`. One row. A blank cheque stays blank. The pre-meeting brief is drafted from this row on the press, and Accept appends it to the note; it does not email the fund. |
+| `fundDossierRead.js` | The dossier's checklist and Last-updated readings. A fact no store holds is Not recorded, never a gap. |
 | `CompanyCandidate.jsx` | `/research/companies/:analysisId/:candidateId`. One competitor. A blank relevance stays blank. The draft restates the summary and the source titles. |
 | `companyCandidateRead.js` | The readings that page and its tests share. |
 

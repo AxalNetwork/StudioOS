@@ -141,7 +141,7 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
       )}
       <ZoneHeading
         title="Fund research"
-        sub="Investor research and fit scores — every fund you have looked into, and why it is on or off the list."
+        sub="Thesis in their words, stage and path as separate facts — every fund you have looked into, and why it is on or off the list."
         right={data ? <Pill tone={data.warm_path_count ? 'ok' : 'neutral'}>{`${data.warm_path_count} with a route in`}</Pill> : null}
       />
 

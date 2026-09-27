@@ -30643,6 +30643,103 @@ shown one company's memo on another company's room.
 - The canvas's "COLLECTION" mark and scope chip are shell chrome, drawn by
   `WorkspaceShell`, not by these pages.
 
+## D312
+
+**The fund dossier gets its Last-updated tile, a "What's missing"
+checklist from the row's own columns, and a model-drafted pre-meeting brief
+whose Accept writes into the note.** Session 2, wave 8, item 5. It builds
+canvas c0834993's FS4d on `/research/funds/:uid`. No migration and no new
+route: the brief is a new draft surface on the existing `/research/drafts`.
+
+**Last updated.** `fundDto` now carries `updated_at`; the column always
+existed and every write already stamped it. The tile replaces the Pass tile,
+as FS4d draws four tiles: Cheque, Stage, Path, Last updated. A passed fund is
+still shown three ways: the status pill, the "Passed with no reason recorded"
+warning, and the pass-reason card. A row with no stamp reads Not recorded.
+
+**The checklist counts only what this page can close.**
+- Rows derived from the fund's columns are done or a gap: thesis quoted,
+  cheque range complete, stage assessed, path assessed, and source recorded.
+  A pass reason is added only for a passed fund, as FS4d's own note says.
+- FS4d also draws a sourced investment, a public size and the partner who
+  will be in the room. No store holds any of them, so they read Not recorded,
+  with the reason, and are never counted as gaps.
+- A cheque with one end recorded is a gap. A zero is a recorded end, not a
+  missing one.
+
+**Public size and "What they have funded" read Not recorded, with their
+reason.** Both need a new store, and Session 2's prompt says the second
+migration number that needs comes from Session 1. Nothing is drawn from
+them in the meantime: no chart, no rows and no count.
+
+**The brief.** `research/funds` is a new `DRAFT_SURFACES` entry, on its own
+lines at the end of the map.
+- Its material is the one fund row, read with `owner_user_id = ?`. It holds
+  the thesis quoted in their words, the note, the cheque with a missing end
+  written "not recorded", stage, path, status, pass reason and source. The
+  partner, size and investments are each written "not recorded", so the
+  instruction turns them into questions to ask.
+- It drafts nothing, and never reaches the model, for a fund the caller does
+  not own, or for a row with neither a thesis nor a note. A brief over a
+  fund's name alone would be written from the model's own knowledge of that
+  fund.
+- It is never drafted on page load. The band is `ZoneDraft`, scoped to the
+  fund uid (D311's `scoped`).
+
+**What Accept writes.** `DRAFT_SURFACES` entries gain an optional `accept`
+hook, and `PATCH /research/drafts/:uid` runs it before stamping
+`accepted_at`.
+- The funds hook appends the brief, or the reader's edit of it, to the note
+  under "Pre-meeting brief:", after the founder's own words, and stamps the
+  row's `updated_at`. It never replaces the note.
+- A note and brief over the 2,000-character column cap that `PATCH /funds`
+  enforces are refused as `note_full`, with our sentence. Neither text is
+  truncated, and nothing is written: not the note, and not `accepted_at`.
+- Surfaces with no hook accept exactly as before.
+- `ZoneDraft` gains `onAccepted`, which the dossier uses to re-read the note
+  Accept wrote. A 409 from Accept now prints the Worker's own sentence.
+
+**Why the old band went.** The dossier's local "Fund · approach note"
+ZONEDRAFT put its own explanatory sentence into the preview when Draft was
+pressed ("Draft restates only what is on this page: …"). Accept then saved
+that sentence as the founder's note. It is replaced, not repaired.
+
+**Other lines this made stale, fixed.**
+- `FundsZone`'s subtitle said "Investor research and fit scores", but the
+  product stores no fit score. It now says "Thesis in their words, stage and
+  path as separate facts", which is FS4's own sub.
+- `founderZoneActions.js`'s list-level "Brief me" op said no per-fund brief
+  is generated. It stays unbuilt on the list, because a brief is about one
+  fund, and its reason now says the brief is drafted on the fund's dossier.
+  It is still on `profile_zone_actions`'s reviewed elsewhere-claims list,
+  because it still names where the op happens.
+- ROUTE_MAP's Fund dossier row said the draft does not call
+  `research_zone_drafts`. It now describes the brief.
+
+**Tests.**
+- `research_fund_brief.test.ts` (new, 6 tests, real SQLite over migrations
+  216 and 221) covers:
+  - `updated_at` on the read;
+  - no draft over another founder's fund, a bare fund or no scope, with the
+    model never reached;
+  - the prompt quotes the thesis and marks the gaps;
+  - Accept appends after the founder's words and stamps the row, and an
+    edited brief is what gets written;
+  - an overflow is refused with nothing written and nothing stamped;
+  - another founder cannot accept into the note, and a hookless surface
+    still only stamps.
+- `research_fund_dossier_fs4d.test.mjs` (new, 6 tests) slices FS4d from the
+  canvas, asserts each element at both ends, and runs the checklist and
+  Last-updated readings.
+- `research_fund_dossier.test.mjs` is re-aimed:
+  - The stated limit read "or drafts an approach", which is now false. It now
+    pins "or writes to the fund".
+  - Its ban on the page naming the draft store becomes a pin on the one
+    `ZoneDraft` band: `research/funds`, scoped to `fund.uid`, re-reading
+    after Accept. It also refuses the local restatement coming back.
+  - The other five sentences it pins are kept word for word on the page,
+    three of them in the new band.
+
 ## D320
 
 **The archetype banks go from three probes per trait to five, and every one

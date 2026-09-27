@@ -3,7 +3,9 @@ import { useParams } from 'react-router-dom';
 import { Card, Pill, WorkerRail } from '../../ui';
 import { api } from '../../lib/api';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
+import ZoneDraft from '../../workspaces/ZoneDraft';
 import { Field, StatedLimit } from '../advisor/expertise/kit';
+import { NO_STORE, gapCount, missingChecklist, updatedAgo } from './fundDossierRead';
 
 /**
  * `/research/funds/:uid` — one fund the founder has researched.
@@ -13,9 +15,18 @@ import { Field, StatedLimit } from '../advisor/expertise/kit';
  * "wrong". A cold path is neutral, not a penalty. A pass with no reason is a
  * warning, not a blank.
  *
- * THE DRAFT IS A RESTATEMENT, NOT A MODEL. It can only repeat the thesis, the
- * note and the two reads already on the page. Accept writes that text into
- * `note`. It does not email the fund and it does not call the AI draft store.
+ * THE BRIEF IS DRAFTED FROM THIS ROW ALONE (D312). The `research/funds` draft
+ * surface reads this one fund, owner-scoped, and marks every unrecorded fact
+ * as a question to ask rather than a fact. It is never drafted on page load,
+ * and not at all while the row holds neither a thesis nor a note. Accept
+ * appends it to `note`, after what is already written; it does not email the
+ * fund. The local "approach note" band it replaced put its own explanatory
+ * sentence into the note on Accept.
+ *
+ * THE CHECKLIST COUNTS ONLY WHAT THIS PAGE CAN CLOSE. Rows derived from the
+ * fund's columns are done or a gap. The canvas also draws a sourced
+ * investment, a public size and the partner in the room; no store holds
+ * those, so they read Not recorded with the reason and are not counted.
  *
  * A BLANK CHEQUE IS NOT ZERO. Empty inputs PATCH null. The overlap sentence is
  * the worker's `overlap_note`, which leaves an unrecorded end open and refuses
@@ -60,18 +71,6 @@ function exampleHost(value) {
   }
 }
 
-function draftRestatement(fund) {
-  if (!fund?.thesis && !fund?.note) {
-    return 'Record a thesis or a note first — there is nothing to draft from.';
-  }
-  const parts = [];
-  if (fund.thesis) parts.push('their thesis');
-  if (fund.note) parts.push('your note');
-  return 'Draft restates only what is on this page: '
-    + `${parts.join(', ')}, ${stageLabel(fund.stage_fit).toLowerCase()}, ${pathLabel(fund.path).toLowerCase()}. `
-    + 'It will not name a partner, cite an AUM, or assume an introduction.';
-}
-
 const inputClass =
   'mt-1 w-full rounded-lg border border-axal-hairline bg-axal-ground px-2.5 py-1.5 text-[12.5px] text-axal-ink '
   + 'placeholder:text-axal-faint focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 '
@@ -98,7 +97,7 @@ function Nr() {
   );
 }
 
-function Tile({ k, v, sub, nr, tone = 'ink', warnBorder = false }) {
+function Tile({ k, v, sub, nr, tone = 'ink' }) {
   const ink = tone === 'ok'
     ? 'text-emerald-700 dark:text-emerald-300'
     : tone === 'warn'
@@ -107,7 +106,7 @@ function Tile({ k, v, sub, nr, tone = 'ink', warnBorder = false }) {
         ? 'text-red-700 dark:text-red-300'
         : 'text-axal-ink';
   return (
-    <Card className={warnBorder ? 'border-red-200 dark:border-red-800' : ''}>
+    <Card>
       <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{k}</div>
       {nr
         ? <div className="mt-2"><Nr /></div>
@@ -131,7 +130,6 @@ export default function FundDossier({ role = 'founder' }) {
   const [editingSource, setEditingSource] = useState(false);
   const [loText, setLoText] = useState('');
   const [hiText, setHiText] = useState('');
-  const [preview, setPreview] = useState('');
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -194,8 +192,9 @@ export default function FundDossier({ role = 'founder' }) {
     await apply({ [key]: parsed.cents });
   };
 
-  const canDraft = Boolean(fund?.thesis || fund?.note);
-  const restatement = draftRestatement(fund);
+  const checklist = missingChecklist(fund);
+  const gaps = gapCount(checklist);
+  const updated = updatedAgo(fund?.updated_at);
   const ch = fund ? chequeTile(fund.cheque_min_cents, fund.cheque_max_cents) : null;
   const passed = fund?.status === 'passed';
   const passMissing = passed && !fund?.pass_reason;
@@ -216,7 +215,8 @@ export default function FundDossier({ role = 'founder' }) {
             ? `${fund.name}: ${stageLabel(fund.stage_fit)} · ${pathLabel(fund.path)} · ${statusLabel(fund.status)}`
             : 'One researched fund']}
           unavailable={[
-            ['A fit score', 'Nothing here scores a fund, ranks the list, or drafts an approach.'],
+            ['A fit score', 'Nothing here scores a fund or ranks the list. The brief restates this row and asks about its gaps.'],
+            ['Fund size and investments', 'No store holds a fund’s public size or what it has funded yet.'],
             ['An email', 'Accept writes your note. It does not email them.'],
           ]}
         />
@@ -361,11 +361,10 @@ export default function FundDossier({ role = 'founder' }) {
                 tone={fund.path === 'warm' ? 'ok' : 'ink'}
               />
               <Tile
-                k="Pass"
-                v={passed ? 'Passed' : 'Live'}
-                sub={passed ? (fund.pass_reason || 'no reason recorded') : 'still researching'}
-                tone={passed ? 'danger' : 'ink'}
-                warnBorder={passMissing}
+                k="Last updated"
+                nr={!updated}
+                v={updated}
+                sub={updated ? 'by you' : 'this row carries no update stamp'}
               />
             </div>
 
@@ -495,59 +494,69 @@ export default function FundDossier({ role = 'founder' }) {
               </Card>
             </div>
 
-            <div
-              data-testid="fund-dossier-draft"
-              className="rounded-[14px] border border-violet-200 bg-violet-50 px-4 py-3.5 dark:border-violet-900 dark:bg-indigo-950/50"
-            >
-              <div className="flex items-center gap-2">
-                <span className="rounded-full bg-violet-700 px-2 py-0.5 text-[10px] font-extrabold tracking-[.06em] text-white">ZONEDRAFT</span>
-                <span className="text-[13px] font-extrabold tracking-tight">Fund · approach note</span>
-              </div>
-              <p className="mt-2 text-[12px] leading-relaxed text-axal-ink">{restatement}</p>
-              {preview && (
-                <textarea
-                  aria-label="Draft preview"
-                  className={`${inputClass} min-h-[72px]`}
-                  value={preview}
-                  onChange={(e) => setPreview(e.target.value)}
-                />
-              )}
-              <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  className={primaryBtn}
-                  disabled={!canDraft || busy}
-                  onClick={() => setPreview(restatement)}
-                >
-                  Draft the note
-                </button>
-                <button
-                  type="button"
-                  className={ghostBtn}
-                  disabled={!preview.trim() || busy}
-                  onClick={async () => {
-                    const saved = await apply({ note: preview });
-                    if (saved) setPreview('');
-                  }}
-                >
-                  Accept note
-                </button>
-                <button
-                  type="button"
-                  className="px-1.5 py-1.5 text-[12px] font-semibold text-axal-muted disabled:opacity-40"
-                  disabled={!preview || busy}
-                  onClick={() => setPreview('')}
-                >
-                  Discard
-                </button>
-                <span className="text-[12px] text-axal-muted sm:ml-auto">
-                  Accept writes your note. It does not email them.
-                </span>
-              </div>
+            <div className="grid gap-3 lg:grid-cols-2">
+              <Card data-testid="fund-dossier-size">
+                <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Public size, if you recorded it</div>
+                <div className="mt-2.5"><Nr /></div>
+                <p className="mt-1.5 text-[12px] leading-relaxed text-axal-muted">
+                  {NO_STORE.size} A missing year would be drawn as a gap, never as a fund that shrank.
+                </p>
+              </Card>
+              <Card data-testid="fund-dossier-funded">
+                <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">What they have funded</div>
+                <div className="mt-2.5"><Nr /></div>
+                <p className="mt-1.5 text-[12px] leading-relaxed text-axal-muted">
+                  {NO_STORE.investments} An empty list here would not mean they have funded nothing.
+                </p>
+              </Card>
             </div>
 
+            <Card data-testid="fund-dossier-missing">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">What’s missing before a meeting</span>
+                <span className={`text-[11px] font-bold ${gaps ? 'text-amber-800 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}`}>
+                  {gaps ? `${gaps} ${gaps === 1 ? 'gap' : 'gaps'}` : 'nothing this page can close'}
+                </span>
+              </div>
+              <ul className="mt-2.5 grid gap-x-6 gap-y-2 sm:grid-cols-2">
+                {checklist.map((r) => (
+                  <li key={r.key} className="flex items-start gap-2 text-[12px]">
+                    <span
+                      aria-hidden="true"
+                      className={`mt-0.5 font-extrabold ${r.done === true ? 'text-emerald-700 dark:text-emerald-300' : r.done === false ? 'text-amber-800 dark:text-amber-300' : 'text-axal-faint'}`}
+                    >
+                      {r.done === true ? '✓' : r.done === false ? '○' : '–'}
+                    </span>
+                    <span>
+                      <span className={`font-semibold ${r.done === false ? 'text-axal-ink dark:text-gray-100' : 'text-axal-muted'}`}>{r.label}</span>
+                      {r.done === null ? <span className="ml-1.5"><Nr /></span> : null}
+                      <span className="block text-[11px] text-axal-muted">{r.sub}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2.5 text-[11px] text-axal-muted">
+                Rows marked Not recorded have no store yet, so they are not counted as gaps you can close here.
+              </p>
+            </Card>
+
+            <ZoneDraft
+              surface="research/funds"
+              scopeKey={fund.uid}
+              scoped
+              accent="violet"
+              label="Proposal · pre-meeting brief"
+              run="Draft the brief"
+              accept="Write into the note"
+              empty="A short brief from this row alone: their thesis quoted back, your note, and every gap above turned into a question to ask. It will not name a partner, cite an AUM, or assume an introduction."
+              nothingToDraft="Record a thesis or a note first — there is nothing to draft from."
+              foot="Accept writes your note. It does not email them."
+              onAccepted={load}
+            />
+
             <StatedLimit title="What this page will not do">
-              Nothing here scores a fund for you, ranks your list, or drafts an approach.
+              Nothing here scores a fund for you, ranks your list, or writes to the fund. The brief is drafted
+              only when you press for it, from this row alone.
             </StatedLimit>
           </>
         )}
