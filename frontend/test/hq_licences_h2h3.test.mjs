@@ -283,7 +283,12 @@ test('step 5 instantiates from a named template version and never blanks a field
   assert.match(PAGE, /\{step === 5 && <ContractStep/);
   assert.match(PAGE, /api\.licenceContract\(/);
   assert.match(PAGE, /api\.licenceContractCreate\(/);
+  assert.match(PAGE, /api\.licenceContractSend\(/);
   assert.match(PAGE, /data-testid="licence-contract-step"/);
+  assert.match(PAGE, /data-testid="licence-contract-send"/);
+  assert.doesNotMatch(PAGE, /Unsigned\./, 'status is derived from the envelope, not a fixed Unsigned line');
+  assert.match(PAGE, /HQ countersignature:/);
+  assert.match(PAGE, /countersignature\?\.reason/);
   // The version travels with the row, so a reader can see which text was
   // agreed rather than which text is current.
   assert.match(PAGE, /template_version/);
