@@ -23,9 +23,11 @@ test('priority maps to tiers the filing UI already stores', () => {
 });
 
 test('ticketSlaBand matches escalation due-soon window semantics on age', () => {
+  // P1 limit 24h: due_soon is the last 24h before the limit, so any age > 0 is due_soon until past.
   assert.equal(ticketSlaBand(10, 24), 'due_soon');
   assert.equal(ticketSlaBand(25, 24), 'past');
-  assert.equal(ticketSlaBand(5, 24), 'ok');
+  assert.equal(ticketSlaBand(0, 24), 'ok');
+  assert.equal(ticketSlaBand(5, 96), 'ok');
   assert.equal(ticketSlaBand(null, 24), null);
 });
 
