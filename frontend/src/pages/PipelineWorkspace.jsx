@@ -35,13 +35,13 @@ export default function PipelineWorkspace() {
     { to: '/deals/screening', label: 'Screening', icon: ClipboardCheck, roles: ['admin', 'investor'] },
     { to: '/deals/commit', label: 'Commit', icon: Gavel, roles: ['admin', 'investor'] },
     { to: '/deals/closing', label: 'Closing', icon: Receipt, roles: ['admin', 'investor'] },
-    // The two that were already doors. Neither /deals nor /raise/data-room
+    // The two that were already doors. Neither /deals nor the data rooms
     // renders this workspace, so arriving there drops the tab bar. Roles mirror
-    // each route's own guard in App.jsx: /deals is admin+partner+investor,
-    // /raise/data-room is admin+founder+investor — minus founder, who keeps a
-    // Data Room row of their own in the founder nav.
+    // each route's own guard in App.jsx: /deals is admin+partner+investor, and
+    // an investor's rooms are /research/diligence (admin+investor, D311) —
+    // /raise/data-room is the founder's own room and redirects an investor.
     { to: '/deals', label: 'Deal Flow', icon: Handshake, roles: ['admin', 'partner', 'investor'] },
-    { to: '/raise/data-room', label: 'Data Room', icon: Shield, roles: ['admin', 'investor'] },
+    { to: '/research/diligence', label: 'Data Room', icon: Shield, roles: ['admin', 'investor'] },
   ].filter((t) => !role || t.roles.includes(role));
 
   return (

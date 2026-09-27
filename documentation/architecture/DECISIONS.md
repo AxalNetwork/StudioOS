@@ -30509,6 +30509,134 @@ pages, the investor `/raise/data-room` redirect and deleting
 `SharedRooms`. The memo the room canvas drafts on Accept needs a draft
 surface and lands with the page.
 
+## D311
+
+**The investor reads a data room and its documents under Research ·
+Diligence. The investor drawer on `/raise/data-room` is retired and that
+route's investor branch redirects.** Session 2, wave 8, item 2. It builds
+canvases b6a5f992 (the room) and 96463a46 (the document) on D310's
+grant-keyed reads. No migration. It adds one query parameter to an existing
+route, and no new route.
+
+**The pages.**
+- `/research/diligence/:grantUid` is `DiligenceRoom`. It draws every element
+  of the room canvas:
+  - the header, the four tiles and the scope table;
+  - the open-file list, with its three states (files listed, every file
+    behind an NDA, nothing staged), each saying something different;
+  - the NDA panel, and Deal stage shown as Not recorded with the Worker's own
+    reason;
+  - the reader's own activity;
+  - the "Room · what is thin" memo band;
+  - the stated limit, and the missing-grant state ("This room is not open to
+    you.").
+- `/research/diligence/:grantUid/files/:fileUid` is `DiligenceFile`. It
+  shows the document's name, its size (formatted from bytes, so the header
+  and the tile cannot disagree), its type, the visibility pill, Download with
+  its single-use note, the three tiles, the reader's own download history,
+  the stated limit, and the NDA state.
+- Both routes are guarded to admin and investor, the same licences as the
+  list.
+- `DiligenceZone` now links each company, and its "Open the room →", to that
+  room. Both used to go to `/raise/data-room`.
+
+**A gated document has no name anywhere.** The Worker's `nda_required`
+refusal carries the room and nothing about the file. The page's gated
+branch, its shell title and its crumb are built without `file.name`. A test
+slices the gated branch and refuses any reference to one.
+
+**The memo is wired to a real store.** The canvas says "Accept writes your
+memo."
+- `research/diligence` is a new `DRAFT_SURFACES` entry in `research.ts`, on
+  its own lines. Its material comes from `roomMaterial`, which goes through
+  D310's `heldRoom`.
+- A grant uid the caller does not hold, or one that has lapsed, drafts
+  nothing. The route answers `nothing_to_draft`, and the model is never
+  reached.
+- Files behind an NDA the caller has not signed are sent to the model as a
+  count and never by name.
+- Accept stamps `accepted_at` on the `research_zone_drafts` row (migration
+  221), exactly as every other band does. It does not email the founder or
+  request files.
+
+**One memo per room.** `GET /research/drafts` returned the surface's newest
+drafts, whichever record they were about. A room page would therefore have
+shown one company's memo on another company's room.
+- The route now takes an optional `scope_key`, and `api.research.zoneDrafts`
+  passes it.
+- `ZoneDraft` gains a `scoped` prop, which the room sets. Every existing band
+  omits it and reads exactly what it read before.
+- `ZoneDraft` also gains an `indigo` accent, because the investor canvas
+  draws the band in `#4f46e5`.
+
+**Retired, with where each now points.**
+- **The `SharedRooms` component in `DataRoomPage.jsx` is deleted.** It was
+  the investor drawer: a list of shared rooms, and a side panel that listed
+  files and downloaded them. Every job it did is now done by the room and
+  document pages: the list is `/research/diligence`, the panel is the room
+  page, and the download is the document page, through the same
+  `dataRoomDownload` route. The page's non-founder arm now renders
+  `<Navigate to="/research/diligence" replace />`, and the icon imports only
+  the drawer used are removed. Nothing else in that file changed.
+- **`/raise/data-room`, investor branch:** `<Navigate to="/research/diligence"
+  replace />`. The route's guard still admits investor, so the redirect can
+  run. The founder branches are unchanged, and the route took no query
+  string that meant anything to an investor.
+- **`api.dataRoomsSharedWithMe` and `api.dataRoomShared` are removed.** Only
+  the drawer called them.
+- **Left in place on purpose:** the Worker routes behind those two methods,
+  `GET /api/data-room/shared` and `GET /api/data-room/shared/:projectUid`.
+  Nothing in the tree calls them any more, but `data_room.ts` is Session 9's
+  file after this PR and its data-room rebuild. Session 9 is told they are
+  now uncalled.
+- **Links re-pointed to `/research/diligence`:**
+  `InvestorDealsWorkspace.jsx`'s "Open shared data rooms" and
+  `PipelineWorkspace.jsx`'s Data Room tab.
+- **Left for Session 5:** `sidebarConfig.js`'s investor Deals row still lists
+  `/raise/data-room` in its `match` array. It keeps working through the
+  redirect, and Session 5 is told.
+
+**Tests re-aimed, none loosened.**
+- `investor_workspaces.test.mjs` pins the investor arm as the redirect,
+  still first and ahead of any founder shell. It refuses the drawer's mount
+  coming back, and pins the room's own guard.
+- The Deals rail link assertion now reads `/research/diligence`.
+- `data_room_live.test.mjs`'s watermark test read `DataRoomPage.jsx`. With
+  the drawer gone, only its docblock would still satisfy it, so it now reads
+  the two pages an investor downloads from.
+- `research_ask_session.test.mjs`'s "the band's read is gone" now admits the
+  scoped read. It still pins that the band loads its surface's drafts and
+  nothing else, and never drafts on mount.
+- `route_role_zone_contract.test.mjs`'s `BRANCHED` row for `/raise/data-room`
+  still holds unchanged, because the redirect is an `effectiveRole ===
+  'investor'` branch.
+- `branch_rail_mount`'s ceiling of five computed rail roles is kept. Both
+  new pages pass the literal `role="investor"` to `WorkerRail`, as that
+  test's note asks of a sixth mount.
+
+**New tests.**
+- `research_diligence_pages.test.mjs` (10 tests) asserts each element twice:
+  the canvas draws it and the page renders it, for both canvases. It also
+  runs the pure readings in `diligenceRead.js`, pins the routes, the scoped
+  band and the retirement, and bans the canvases' fixtures.
+- `research_diligence_room.test.ts` gains 3 tests:
+  - the memo is drafted only over a held grant, and the model is never
+    reached otherwise;
+  - the model is sent the NDA count and never the names;
+  - a room page reads only its own room's memo.
+
+**Differs from the canvas, deliberately.**
+- A history line says a link was "issued". The access log records the link
+  being issued, not followed (D310), so "link used once, then expired" is not
+  claimed.
+- The canvas sends only `open` files to the document page. An investor whose
+  NDA with the founder is live may open `nda` files too, as the download
+  route already allows, so such a file reaches the page with an "NDA ·
+  signed" pill. Nothing draws the NDA-signed state, which the gap map named
+  as a canvas gap.
+- The canvas's "COLLECTION" mark and scope chip are shell chrome, drawn by
+  `WorkspaceShell`, not by these pages.
+
 ## D330
 
 **AdminX.jsx and AdminTelegram.jsx say why no draft was made.** Wave 8,
