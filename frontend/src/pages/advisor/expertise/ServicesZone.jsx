@@ -7,6 +7,8 @@ import {
   buttonClass, dollarsToCents, ghostButtonClass, inputClass, money,
 } from './kit';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
+import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 
 /**
  * Expertise · Services — what you sell, and what you charge for it.
@@ -41,6 +43,8 @@ export default function ServicesZone() {
   const [draft, setDraft] = useState(BLANK);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
+  // D392 — the canvas's chips over `kind`, the column the form above writes.
+  const [view, setView] = useState('all');
 
   const load = useCallback(async () => {
     setState((c) => ({ ...c, loading: true, error: '' }));
@@ -136,6 +140,8 @@ export default function ServicesZone() {
     ? state.items.reduce((a, b) => ((unitsFor(b) ?? 0) > (unitsFor(a) ?? 0) ? b : a), state.items[0])
     : null;
 
+  const shown = view === 'all' ? state.items : state.items.filter((r) => r.kind === view);
+
   const empty = (
     <NothingYet
       title="No services recorded yet"
@@ -213,11 +219,19 @@ export default function ServicesZone() {
         </form>
       </Card>
 
+      <ZoneToolbar
+        className="mb-3"
+        role="advisor"
+        filters={advisorZoneFilters('expertise/services', { value: view, onChange: setView })}
+        actions={advisorZoneActions('expertise/services', { view: { header: ['Service', 'Kind', 'Active', 'Price (cents)', 'Units sold'], rows: shown, cells: (r) => [r.title, r.kind, r.is_active, r.price_cents, r.units_sold] } })}
+      />
       <ZoneBody loading={state.loading} error={state.error} onRetry={load}
-        actions={advisorZoneActions('expertise/services', { view: { header: ['Service', 'Active', 'Price (cents)', 'Units sold'], rows: state.items, cells: (r) => [r.title, r.is_active, r.price_cents, r.units_sold] } })}
         isEmpty={state.items.length === 0} empty={empty}>
+        {shown.length === 0 && (
+          <p className="text-[12.5px] text-axal-muted">{`No ${view} service is listed. ${state.items.length} in total.`}</p>
+        )}
         <div className="space-y-3">
-          {state.items.map((row) => (
+          {shown.map((row) => (
             <Card key={row.id} padding="md">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">

@@ -172,7 +172,7 @@ const ZONE_BLURB = {
   funds: 'Every fund you have researched, whether they write at your stage, and whether you have a route in.',
   diligence: 'The rooms founders have opened to you, and how much of each they actually staged.',
   benchmarking: 'What you are measuring, what the peer set says, and how many it was measured over.',
-  markets: 'Signals from the sectors you work in, with the date each one was gathered.',
+  markets: 'Comparable ranges you entered, each with the date it was run and how old it is.',
   companies: 'The competitor and market analyses you have run yourself.',
   library: 'Documents you have added, and which of them Ask can actually read.',
   ask: 'Questions answered only from your own library, with the passage each answer used.',
@@ -379,6 +379,12 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
   // four missing controls and no reason given. `noStoreCopy.js` says why each
   // one is recorded and what `blocks` is compared against.
   const storeGap = !isRoot && slug ? RESEARCH_STORE_GAPS[slug] : null;
+  // D392 — AN ENTRY MAY NAME THE LICENCES IT IS TRUE FOR. `markets` is: the
+  // saved deep-dive it names is what the founder and investor canvases draw,
+  // while the partner and advisor canvases draw comparable readings, which is
+  // what `MarketZone` is. A gap card over a zone that already holds the
+  // canvas's object would tell those two licences the page lacks what it has.
+  const gap = storeGap && (!storeGap.roles || storeGap.roles.includes(role)) ? storeGap : null;
 
   // Companies has a live store for everyone, but for an advisor the store holds
   // only what they ran themselves — saying it "reads a live source" and stopping
@@ -434,19 +440,19 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
             // only on the page below it. One object feeds both, so the rail
             // cannot be gentler than the body — the guarantee `noStoreCopy.js`
             // exists to make structural.
-            ...(storeGap ? [[`No ${storeGap.blocks}`, storeGap.why]] : []),
+            ...(gap ? [[`No ${gap.blocks}`, gap.why]] : []),
           ]}
         />
       )}
       intro={isRoot ? 'Know more than the room — research over your own documents, markets, and companies.' : (INTRO[slug] || INTRO.ask)}
     >
-      {storeGap && (
+      {gap && (
         <div className="mb-4">
           <NoStoreYet
-            eyebrow={storeGap.eyebrow}
-            heading={storeGap.heading}
-            what={storeGap.what}
-            why={storeGap.why}
+            eyebrow={gap.eyebrow}
+            heading={gap.heading}
+            what={gap.what}
+            why={gap.why}
             accentClass={accentClass}
           />
         </div>

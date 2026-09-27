@@ -269,7 +269,10 @@ test('nothing absent renders as a dash or a plausible zero', () => {
   // Every "Not recorded" on the rail is followed by the reason it is missing.
   const spec = page.match(/const SPEC = \{([\s\S]*?)\n  \};/)?.[1] || '';
   const states = [...spec.matchAll(/^ {4}(\w+): \{/gm)].map((m) => m[1]);
-  assert.deepEqual(states, ['reading', 'unconfigured', 'off', 'connected', 'failed'],
+  // D332 — 'unreadable' joined the set: a failed STATUS READ (the request
+  // itself never came back) is a different claim from 'unconfigured' (the
+  // server answered that this deployment has no OAuth credentials at all).
+  assert.deepEqual(states, ['reading', 'unreadable', 'unconfigured', 'off', 'connected', 'failed'],
     'the provider states changed without this guard');
   assert.equal([...spec.matchAll(/whyNoSync: /g)].length, states.length,
     'a provider state can show "Not recorded" with no reason beside it');

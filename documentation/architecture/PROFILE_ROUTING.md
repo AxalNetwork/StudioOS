@@ -96,7 +96,7 @@ it, where in their nav, and how do they get there.*
 | Advisor Studio | `/spinout-lab/advisors` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Advisory Practice | `/expertise/*` · `/practice/*` | Home | Full page | Sidebar → Home → Expertise | DONE | High |
 | Detail Layer Canvas II | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
-| Pages · Advisor Cohorts | `/cohorts/founders` · `/this-week` · `/outcomes` · `/guidance` · `/calendar` · `/admin/advisor-cohorts` | Home | Full page | Sidebar → Home → Cohorts | PARTIAL | High |
+| Pages · Advisor Cohorts | `/guidance` · `/calendar` · `/admin/advisor-cohorts` | — (no nav entry) | Full page | Deep link / in-page action | PARTIAL | Medium |
 | Pages · Advisor Expertise | `/expertise` · `/expertise/{profile` | Home | Full page (proposed) | Sidebar → Home → Expertise | UPGRADE | Low |
 | Pages · Advisor Network | `/network/*` | Home | Full page (proposed) | Sidebar → Home → Network | UPGRADE | Low |
 | Pages · Advisor Research | `/research/*` | Home | Full page (proposed) | Sidebar → Home → Research | UPGRADE | Low |
@@ -229,8 +229,8 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 73 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 40 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| High | 72 | Live route, reachable from that workspace’s sidebar. |
+| Medium | 41 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 35 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts

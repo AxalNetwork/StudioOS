@@ -30221,6 +30221,197 @@ half D301 deferred. No migration, no new route, no new `api.js` method.
   `check-folder-docs` and `check-api-drift` exit 0. Root `npm run build`,
   then `node scripts/check-docs-fresh.mjs --strict`, exits 0.
 
+## D331
+
+**Wellbeing out of the calendar.** Wave 8, Session 4, item 3, the gap map's
+"Wellbeing privacy leak": an admin's `/calendar` and `.ics` feed showed
+every founder's wellbeing expert booking, including the note the founder
+wrote in confidence to the expert.
+
+**The defect, measured.** `services/calendar.ts`'s `directEvents` — the
+reader for every kind written straight into `calendar_events` rather than
+its own table — dropped the `user_id` filter whenever `isAdmin` was true,
+for every such kind. `expert_booking` is one of them, and unlike the other
+direct-write kinds (`ic_meeting`, `partner_office_hour`), it is not
+something an admin has any legitimate platform-wide reason to browse: it is
+a paid, private wellbeing session. Separately, `services/wellbeing/bookings.ts`'s
+`mirrorBookingToCalendar` wrote the founder's `booker_note` — private
+correspondence to the expert — straight into `calendar_events.notes`, which
+feeds the page, the `.ics` export and the Google/Outlook sync for BOTH
+attendees' calendars. Together, an admin's own `/calendar` view showed
+every founder's booking, note included, contradicting the Wellbeing page's
+own stated promise that only the founder reads their own check-ins and an
+admin sees only aggregate averages.
+
+**What changed.**
+- `directEvents` now takes the owner-only path whenever `kind ===
+  'expert_booking'`, regardless of `isAdmin`. Scoped by exclusion rather
+  than an allowlist of admin-readable kinds, so a future direct-write kind
+  defaults to owner-only and must opt INTO the admin-wide read, not out of
+  it.
+- `mirrorBookingToCalendar` never writes `booker_note` into
+  `calendar_events.notes` (always `NULL`, on both insert and the
+  `ON CONFLICT` update) and never carries it onto the Google/Outlook sync
+  event either. The note still reaches the expert directly — that is what
+  `fanoutBookingNotifications` (unchanged) already does — this only stops
+  it riding along on a surface with a wider, un-consented audience.
+- New migration **305** (`305_scrub_expert_booking_notes.sql`): an
+  `UPDATE calendar_events SET notes = NULL WHERE kind = 'expert_booking' AND
+  notes IS NOT NULL`. An UPDATE, not additive — permitted here because it
+  removes data that should never have been written, per the standing rule.
+  Idempotent (a second run matches zero rows, proven in the test below) and
+  scoped to the one kind (a sibling test proves a `calendly_event` row's
+  note survives it untouched).
+- **Measured against production before writing the migration**, read-only,
+  aggregate only: `SELECT COUNT(*) FROM calendar_events WHERE kind =
+  'expert_booking' AND notes IS NOT NULL` → **0**; `SELECT COUNT(*) FROM
+  calendar_events WHERE kind = 'expert_booking'` → **0** (total). No
+  `expert_booking` row exists in production yet, so the migration is a
+  documented no-op there today and takes effect the moment the first
+  booking is confirmed under the old code path on any deployment that has
+  not yet applied it.
+
+**Worker only.** No new route, no new `api.js` method — `directEvents` and
+`mirrorBookingToCalendar` are both internal to `services/`. `frontend/src`
+untouched, so `docs/` is not rebuilt for this entry (it was rebuilt for
+D330 in the same session's other PR).
+
+### VERIFIED
+
+- `cloudflare-worker/test/calendar_events_writes.test.ts`: 15 tests, exit 0
+  (3 new): an admin reading their OWN calendar does not see another user's
+  expert booking, and the booking's real owner still sees their own; a
+  booker note never reaches `calendar_events.notes` nor the reader that
+  serves it back; migration 305 clears a stale note, leaves an
+  already-clear row and a differently-kinded row alone, and is byte-for-byte
+  idempotent on a second run (asserted by comparing the full table before
+  and after), with no transaction statement.
+- 3 mutations run, 3 caught (non-zero exit plus a `not ok` line), each
+  restored from a sha256-verified `/tmp` snapshot: the `expert_booking`
+  exclusion dropped from the owner-only check; the note write restored on
+  both the insert and the `ON CONFLICT` branch; the migration's `kind`
+  scoping removed.
+- `node scripts/check-sql-migrations.mjs`, `check-sqlite-dialect.mjs`,
+  `check-runtime-schema-declared.mjs` and `migration-immutability-gate.mjs`
+  all exit 0 — migration 305 carries no transaction statement, no foreign
+  dialect, and edits nothing already on `origin/main`.
+- `npm run test:drift` exits 0 on Node 22. Both typechecks and
+  `check-decision-ids` (D1 through D421, in file order) exit 0.
+
+## D332
+
+**"Unreadable", never zero, across notifications, referrals, events,
+wellbeing, calendar and the help layout.** Wave 8, Session 4, item 4, the
+gap map's point 4: seven places where a failed read rendered the same as a
+genuinely empty or genuinely zero one.
+
+**What was false, and what changed, file by file.**
+- `routes/notifications.ts` — a `notifications_inbox` table-setup failure
+  made GET `/`, GET `/unread-count` and POST `/mark-read` answer 200 with
+  `[]` / `0` / `{ updated: 0 }`: the exact shape a genuinely empty,
+  genuinely caught-up inbox produces. The bell always said "all caught up"
+  whether nothing was there or nothing could be READ. All three now refuse
+  (503, `notifications_unreadable`) through `refuse()`/`refusalBody()`
+  (D278); the frontend's existing `NotificationList`/`NotificationBell`
+  catch handling (D144) already distinguishes a thrown fetch from a 200 —
+  it simply never had one thrown at it before.
+- `ReferralsPage.jsx` — a failed invites read was swallowed as
+  `{ invites: [] }`, indistinguishable from having sent none; a new
+  `invitesUnreadable` flag tracks it instead and the sent-count line shows
+  `Unreadable` when set. Separately, a genuine `loadError` (the overview and
+  submissions reads rejecting) still let the summary tiles render, reading
+  `overview?.counts?.… ?? 0` off an `overview` that stayed `null` — five
+  zeroes under a visible error banner. The tiles no longer render on that
+  branch; the banner and its retry already cover it.
+- `MyEventsPage.jsx` — a failed `eventsApi.list()` showed a toast that
+  disappears, then fell back to `hosting: []` / `attending: []`, rendering
+  "You're not hosting any events yet." — the same screen a genuinely empty
+  account gets. A `loadError` state now renders `Unreadable` with a retry
+  in place of both lists.
+- `PublicEventsPage.jsx` (currency) — every priced event card printed a
+  bare `$`, regardless of the event's own `currency` column. Not a
+  false-zero, but the same family of defect (a value presented as certain
+  that isn't): moved onto a shared `formatEventPrice` (new
+  `lib/money.js`), which also absorbed `PublicEventDetailPage.jsx`'s
+  identical, previously un-exported, local copy — one formatter instead
+  of two.
+- `WellbeingPage.jsx` — two spots. `AdminAggregate`'s catch turned ANY
+  thrown error, not only a genuine 404, into
+  `{ insufficient_data: true, cohort_size: 0, … }` — the exact shape the
+  worker's own `/aggregate` catch block already sends for a real small
+  cohort (it never actually 404s; it degrades to 200 internally). So a
+  request that never reached the worker at all read as "not enough people
+  have checked in yet". Now any thrown error goes to the existing `err`
+  state, untouched. Separately, `quiet404` rewrote a failed `/resources` or
+  `/daily` read into the same shape as a genuinely empty one; both routes
+  are unconditionally mounted for a non-investor sign-in, so a 404 there is
+  a real defect the page should not absorb — removed, and both reads now
+  reach the outer `catch` like everything else on the page.
+- `CalendarPage.jsx` — a failed Google/Microsoft status READ set
+  `available: false`, which `providerState` reads as "this server has no
+  OAuth credentials configured" — a claim about the DEPLOYMENT, not about
+  one request failing. A new `unreadable` flag and provider state (checked
+  before `unconfigured`) carries its own card and a real "Retry" action
+  wired to the same load function; `available`/`configured` now only ever
+  reach `providerState` from the server's own, successfully-read answer.
+- `docs/DocsLayout.jsx` — `StillStuck`'s failed-probe path set
+  `overall: 'unknown'`, but `STATUS_LINE` had no `unknown` entry, so
+  `STATUS_LINE[overall]` was `undefined` and the whole status line vanished
+  — read as "nothing to report" by the same `{line && (…)}` guard the
+  comment above it says exists to keep the line silent until the probe
+  *first* answers. `unknown` now has its own label ("Status could not be
+  read"); the pre-answer silence (`overall === null`) is unchanged.
+
+**Measured and left alone.** `PublicEventDetailPage.jsx`'s `seats_taken`
+`|| 0` was on the gap map's list but does not fabricate a false claim on
+inspection: `services/eventCapacity.ts`'s `seatsTaken` is `COUNT(*)`, which
+SQLite never returns null or undefined for — a query failure throws instead
+of degrading to a fake row, and that throw already reaches this page's
+existing `error` state through its own catch. There is no live path where
+`data.seats_taken` is a successful-but-absent value for the `|| 0` to mask.
+Not fixed, because there is nothing to fix; recorded here rather than
+silently dropped from the sweep.
+
+**Worker + frontend.** No migration, no new route, no new `api.js` method.
+`frontend/src` moved, so `docs/` is rebuilt.
+
+### VERIFIED
+
+- New `cloudflare-worker/test/notifications_unreadable_d332.test.ts` (4
+  tests, real SQLite via `d1Over`, a `DB.prepare` override that fails only
+  the inbox's own `CREATE TABLE`): all three endpoints refuse
+  `notifications_unreadable` on a table-setup failure and a healthy table
+  still answers 200 with real data.
+- New `frontend/test/honesty_sweep_d332.test.mjs` (9 tests): `money.js`'s
+  `formatEventPrice` actually executed against three currencies and a
+  missing one; the rest over `codeOnly` source (neither page takes `api` as
+  an injectable prop, so there is no seam for a live-response test without
+  restructuring each page, out of this task's scope) — Referrals' invites
+  tracking and tile suppression, MyEvents' `Unreadable` render, both event
+  pages' shared formatter, Calendar's `unreadable` flag/ordering/retry
+  wiring, Wellbeing's removed `quiet404` and 404-coercion.
+- `frontend/test/docs_still_stuck_status.test.mjs`'s "renders no status
+  line until the probe answers" test re-aimed: it used to assert `unknown`
+  has NO label (pinning the defect); it now asserts `unknown` DOES, while
+  confirming the true pre-answer silence (`overall === null`) is untouched.
+- `frontend/test/calendar_page_c1.test.mjs`'s provider-states guard
+  re-aimed from five states to six, adding `unreadable` in its actual
+  position (second, before `unconfigured`) — caught by the full drift run
+  before this entry was written, exactly as the guard is built to do.
+- 10 mutations run, 10 caught (non-zero exit plus a `not ok` line), each
+  restored from a sha256-verified `/tmp` snapshot and diff-confirmed
+  byte-identical to the pre-mutation file afterward: notifications.ts's
+  GET / refusal reverted; ReferralsPage's invites tracking and its tile
+  suppression, separately; MyEventsPage's error render; PublicEventsPage's
+  formatter call; PublicEventDetailPage's local duplicate reintroduced;
+  CalendarPage's failure-handling and its retry action, separately;
+  WellbeingPage's 404-coercion and its `quiet404`, separately.
+- `npm run test:drift` exits 0 on Node 22 (3558 frontend tests, 0
+  failures, after the `calendar_page_c1` re-aim above). Both typechecks,
+  `check-decision-ids` (D1 through D421, in file order) and
+  `check-api-drift` exit 0. Root `npm run build`, then
+  `node scripts/check-docs-fresh.mjs --strict`, exits 0.
+
 ## D350
 
 **Lab Profiling reads Eadwyn's question ledger for the four elements it had
@@ -31014,6 +31205,142 @@ included:
 - scope defaulted to "within";
 - a score printed without its source;
 - the old footnote, columns, comment and Markets blurb restored.
+
+## D392
+
+**The graduated advisor canvases catch up with the stores: Introductions
+shows both sides of the consent, `/advisor/research` lands on the Research
+bucket, the Markets gap card stops describing the signals feed, and the
+Expertise zones get the canvas's filter rows.** Session 11, item 3 (the gap
+map's PR 3). No migration, no route, no new `api.js` method. The canvas moves
+the gap map listed were already done by D305 (Research, Network and Expertise
+are in `integrated/`, Expertise normalised), so this PR moves no file.
+
+**Network · Introductions (AN2).** The zone's docblock, its stated limit, its
+`Gated` chip (relabelled "Awaiting you"), its `Made` chip (prose) and its
+`Consent log` op (prose) all rested on one premise: that
+`GET /introductions/propositions` returns only the caller's own row. It has
+not done that since the partner side's consent work. `propositionDto` returns
+`counterpart_status` and `counterpart_responded_at` from the mirror row, and
+the partner `IntroductionsPanel` draws the gate from them. The advisor zone
+now uses the panel's exported `stateOf` and `consentRecord`, so one
+introduction reads the same on both licences:
+- the states are Requested · One side · Both agreed · Made, with Declined and
+  Lapsed terminal;
+- a proposition with no mirror row reads "has not been asked", never "not
+  answered".
+
+The four chips are live:
+- `Gated` is Requested or One side;
+- `Made` is `intro_terms.made_at`;
+- `Declined` is either side declining.
+
+`Consent log` is a handler that opens the panel's `ConsentLog`, now exported
+(the only edit to that file).
+
+`Made` needed a way to be recorded, or the chip would select nothing on every
+advisor account. `PUT /propositions/:uid/terms` writes only the caller's own
+row and is not role-gated, so once both sides have agreed the card offers
+"Record as made". It asks for the date, favour or referral (a referral must
+state its fee, as the store's CHECK requires) and an optional outcome. The
+heading's "a decline is never reported back" is corrected: the counterpart's
+answer is part of the caller's own record, and a decline still sends no
+notification. AN1 (the advisor's relationship book) and AN3 stay unbuilt. The
+book routes are owner-scoped to the partner, and giving an advisor one is a
+decision (listed below), not a gap.
+
+**Research.**
+- *`/advisor/research` → `/research`, `/advisor/research/market` →
+  `/research/markets`.* Both went to `/signals`, repointed there when the
+  signals feed was the advisor's only live research surface (724dfc9f). The
+  canvas-built Research bucket is now that surface, and `/research/markets` is
+  the comparable-readings zone AR3 draws. Both targets' guards admit
+  `advisor`. `research_tabs_withdrawn` and `research_market_funds_retired`
+  are re-aimed; they still pin the property they were written for, that the
+  destination admits the advisor, read from its guard. No sidebar row points
+  at either path (a test pins that).
+- *`RESEARCH_STORE_GAPS.markets`.* The card said the page "reads instead ...
+  the signals feed". `/research/markets` has been `MarketZone`, comparable
+  readings with a run date and an age gate (migration 223), since that zone
+  was rebuilt. The missing store it names, a saved market deep-dive, is still
+  missing and is still what the founder and investor canvases narrow. So the
+  entry is corrected, not deleted, and gains `roles: ['founder', 'investor']`.
+  `ResearchWorkspace` draws it, and reports it on the rail, only for a licence
+  it names. Partner and advisor, whose canvases draw exactly the readings the
+  zone holds, no longer see it. The zone intro's "Signals from the sectors
+  you work in" is corrected with it. `research_zone_states.test.mjs` pinned
+  the rendered variable by name; it is re-aimed at `gap`, and the four
+  properties it guards are unchanged.
+
+**Expertise filter rows (AX1–AX4).** The canvas draws four chips on each of
+five artboards. No `expertise/*` row existed, and the filters guard's canvas
+regex skipped the file. The regex now includes it, and the advisor profile's
+`zones`/`mounted` move from 12 to 16. `expertise/visibility` is excluded as a
+refusal, like `network/organizations`: its page is the gap card and there is
+nothing to narrow. Twelve chips are live and two are unbuilt with their
+reason; the other two artboards' four "All" chips are the unfiltered views.
+- *Profile.* `All fields`, `Gaps only`, `Match-critical`.
+  - `Match-critical` is the completeness meter's own list, now a keyed
+    `MATCH_FIELDS` that the meter and the chip both read, so they cannot
+    disagree. `advisor_expertise_canvas` is re-aimed to find it there and
+    still refuses a field counted twice.
+  - `Gaps only` reads the saved record, not the draft, so a field does not
+    vanish while someone types into it.
+  - `Public preview` stays unbuilt: no public advisor profile page exists.
+- *Services.* Fixed · Package · Retainer, over `kind` (migration 203).
+- *Proof.* Attested · Awaiting consent · Self-stated: the three counts the
+  strip above the list already shows, as views.
+- *Thinking.* Published · Drafts, the shelf pill's own two states. `Essays`
+  stays unbuilt, since an article records no kind.
+
+Each zone's toolbar now sits above `ZoneBody` (as Introductions' already
+did), and each export takes the narrowed rows. `profile_zone_actions`'s
+advisor `handlers` count moves 9 → 10, for Consent log.
+
+**Two honesty fixes in the same zones.** The Proof strip's "Credential
+verified" tile printed a bare "—"; it now reads Not recorded. Thinking printed
+`views ?? 0` and `word_count || 0`. A published piece whose counter did not
+come back is now Not recorded, and a draft reads "Not public yet" instead of
+a dash.
+
+**ROUTE_MAP.** The Network and Research rows (the gap map's 339/340) record
+the above. The Cohorts row (its 132) said `/guidance` and `/calendar` "state
+their gap"; both have been live since migration 212 and the Calendar join.
+`PROFILE_ROUTING.md` is regenerated.
+
+**Decisions still missing, named rather than guessed:**
+- the advisor relationship book (AN1/AN3: an advisor-owned book, or a grant
+  onto a partner's);
+- Visibility impressions (an impression pipeline, not a table);
+- whether `Public preview` means a public advisor profile route.
+
+**Verification.** New test: `frontend/test/advisor_canvases_graduate_d392.test.mjs`
+(9). Re-aimed: `research_tabs_withdrawn`, `research_market_funds_retired`,
+`research_zone_states`, `advisor_expertise_canvas`, `profile_zone_filters`
+and `profile_zone_actions`. Mutations: 29 of 29 caught across those seven
+files, each with a non-zero exit and a `not ok` line, restored from a
+sha256-checked snapshot.
+
+One defect got past the first draft's test and was caught by `lint:undef`
+inside the drift run instead. The Consent log modal was mounted twice: once
+in the zone, where it belongs, and once in the made form, where `logOpen` does
+not exist. The test had asserted only that the mount appeared somewhere in the
+file. It now requires the mount inside `IntroductionsZone` and nowhere before
+it, and both directions (mounted in the form, missing from the zone) are among
+the 29.
+
+The mutations included:
+- the one-sided chip restored, and the consent record dropped;
+- "Record as made" hidden, or offered after a decline;
+- `Gated` widened to Both agreed, and `Made` read from `status`;
+- the old relabel, prose and signals claims restored;
+- the role scope dropped;
+- both redirects pointed back at `/signals`;
+- `Match-critical` widened to everything, and an empty list counted as
+  filled;
+- an unfiltered draw or export, a key typo, and an unwired chip row;
+- the dash and the zero fallback restored;
+- `Essays` made live, and Visibility un-excluded.
 
 ## D410
 
