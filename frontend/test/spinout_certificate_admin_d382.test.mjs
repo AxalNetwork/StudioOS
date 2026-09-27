@@ -151,7 +151,7 @@ test('Issue sends only the graduate; the worker builds the credential from their
   const code = codeOnly(TAB);
   assert.match(code, /api\.spinoutCertificateIssue\(\{ user_id: row\.userId \}\)/);
   assert.doesNotMatch(code, /spinoutCertificateIssue\(\{[^}]*public_name/, 'the tab sends an admin-typed name');
-  assert.match(code, /api\.spinoutCertificateRevoke\(row\.id, reason\.trim\(\)\)/);
+  assert.match(code, /api\.spinoutCertificateRevoke\(Number\(row\.id\), reason\.trim\(\)\)/);
   // A refusal prints the worker's own sentence.
   assert.match(code, /setRowError\(\(m\) => \(\{ \.\.\.m, \[row\.key\]: e\?\.message/);
 });

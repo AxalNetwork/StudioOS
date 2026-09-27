@@ -31259,6 +31259,18 @@ graduate is also kept out of the Issue queue for the same reason.
   verification page is a different shape and is still scanned. Reproduced
   with gitleaks 8.21.2 (the version CI pins) over the PR's commits: 2
   findings before, none after.
+- **CodeQL on the PR.** Two alerts.
+  - *Missing space in string concatenation* (warning): the test's
+    `'Not recorded' + 'Eligible'` assertion could never fail. It now reads the
+    Eligible KPI's own value.
+  - *Clear-text storage of sensitive information* (high): the query reads
+    anything under `certificates` as sensitive. It traced a registry row's id
+    into the revoke URL, which `api.js` writes into its session-expiry and
+    timeout logs, which keep a ring buffer in `localStorage`. The value is an
+    integer row id, not a secret. The tab passes it as `Number(row.id)`.
+    CodeQL 2.27.1, run locally with the alert's query: 3 results before, 0
+    after. The shared logger was not suppressed: a pragma at its sink would
+    hide every future finding there.
 
 ## D390
 

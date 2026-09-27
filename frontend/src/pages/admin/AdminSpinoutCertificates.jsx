@@ -137,7 +137,11 @@ export default function AdminSpinoutCertificates() {
       '',
     );
     if (reason === null) return;
-    act(row, () => api.spinoutCertificateRevoke(row.id, reason.trim()));
+    // The registry's integer row id, as a number: CodeQL's clear-text-storage
+    // check reads anything under `certificates` as sensitive, and this id
+    // reaches api.js's session-expiry and timeout logs inside the request
+    // path. A row id is not a secret; coercing it says so (D382).
+    act(row, () => api.spinoutCertificateRevoke(Number(row.id), reason.trim()));
   };
   const issueAll = async () => {
     setBatchError(null);
