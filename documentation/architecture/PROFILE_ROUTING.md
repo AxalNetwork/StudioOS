@@ -31,7 +31,7 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| 83b Election Tracker | `/spinout-lab/83b` · `/incorporate/83b` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| 83b Election Tracker | `/spinout-lab/83b` · `/raise/legal-engine/equity` · `/incorporate/83b` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Raise | OUT OF SCOPE | High |
 | Advisors | `/spinout-lab/advisors` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Apply and Status | `/spinout-lab/apply` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Brand & Landing Page | `/spinout-lab/brand` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Grow | OUT OF SCOPE | High |

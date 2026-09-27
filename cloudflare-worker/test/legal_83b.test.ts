@@ -429,3 +429,19 @@ test('D361 patch: company acknowledgment and tax-return copy dates are stored an
   assert.equal(notes.tax_return_copy_at, '2026-06-07');
   assert.equal(notes.mailed_at, null);
 });
+
+test('D361: every column ensureSection83bSchema can add is declared by a migration (D235)', async () => {
+  // check-runtime-schema-declared compares object NAMES, so a runtime
+  // ADD COLUMN with no migration behind it passes that guard. This one reads
+  // the columns the safety net adds and finds each in a migration file.
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const { resolve } = await import('node:path');
+  const svc = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/services/section83b.ts'), 'utf8');
+  const added = [...svc.matchAll(/ALTER TABLE section_83b_trackers ADD COLUMN (\w+)/g)].map((m) => m[1]);
+  assert.deepEqual(added.sort(), ['company_ack_at', 'filing_method', 'irs_service_center', 'tax_return_copy_at', 'tracking_number']);
+  const dir = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
+  const sql = readdirSync(dir).filter((f) => f.endsWith('.sql')).map((f) => readFileSync(resolve(dir, f), 'utf8')).join('\n');
+  for (const col of added) {
+    assert.match(sql, new RegExp(`^ALTER TABLE section_83b_trackers ADD COLUMN ${col} TEXT;$`, 'm'), `${col} has no migration`);
+  }
+});
