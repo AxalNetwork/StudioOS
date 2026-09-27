@@ -140,7 +140,9 @@ const PROFILES = {
     links: 1,
     // Fourteenth export: `portfolio/value-add`'s. Was a gap reading "there is
     // no support history to export", which was TRUE — see the handler note.
-    exports: 14,
+    // Fifteenth: `funds/calls`'s `Export wires`, whose reason "no wire schedule
+    // is stored to export" was true until migration 312's receipts (D371).
+    exports: 15,
     // Five page-supplied ops: `research/ask`'s `New brief`,
     // `research/library`'s `Upload`, `portfolio/positions`'s `Mark history`,
     // and `portfolio/value-add`'s `Log support` and `Per-company view`. Was 0,
@@ -192,7 +194,10 @@ const PROFILES = {
     //
     // FOURTEENTH: `network/relationships`'s `Set reminders` — migration 338
     // built the reminder store, and D465 wired the op.
-    handlers: 14,
+    //
+    // FIFTEENTH: `funds/calls`'s `New call` — migration 312 built the call
+    // header and receipts, and D371 put the form on the Calls page.
+    handlers: 15,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -1323,74 +1328,54 @@ test('a gap note describes the screen, never a capability the API already has', 
   // `kind: 'handler'` now, which is what "if it was wired, delete this row"
   // below always meant. `investor_deals_id3.test.mjs` asserts the wiring.
   //
-  // `funds/calls` WAS A THIRD THING AND HAS SINCE BECOME THE FIRST AGAIN, which
-  // is the whole reason this assertion is worth its length.
+  // `funds/calls` WAS A THIRD THING, THEN THE FIRST AGAIN, AND NOW HAS LEFT THE
+  // LOOP THE SAME WAY `funds/lps` DID (D371).
   //
-  // It used to be that both of its routes were real and neither gave this page a
-  // row to show: `POST /api/capital/calls` writes a `capital_calls` row but is
-  // admin-only, so an investor is refused; `POST /api/funds/:id/capital-call` is
-  // open to the fund's own GP and only enqueued a notice job, which wrote an
-  // activity line per LP and bumped `vc_funds.deployed_capital` without creating
-  // a call row at all. "Served by the API, no screen yet" was true of the route
-  // and false about the outcome — a form there would have returned 200 over an
-  // empty ledger, so this test DEMANDED the reason name the ledger and FORBADE
-  // the missing-screen phrasing.
+  // Its first reason denied the ledger when only a form was missing; task 197
+  // built the ledger rows and the reason became "no screen offers the form
+  // yet", which this test then DEMANDED. Migration 312 gave a call a header,
+  // an exact cents split and receipts, and the Calls page is now that form:
+  // New call previews the split and issues it. So `New call` is a handler, and
+  // the loop over stated gaps has no zone left in it — "if it was wired,
+  // delete this row" is what happened to both of its rows.
   //
-  // TASK #197 BUILT THE LEDGER, so both of those demands inverted. The job writes
-  // one `capital_calls` row per committed or active LP, pro-rata and idempotent
-  // (`cloudflare-worker/test/capital_call_ledger.test.ts`), and it no longer
-  // touches `deployed_capital` — that figure moves when an LP pays, which is the
-  // only reading its own labels support. A form here would now land rows this
-  // page can show, so the missing screen is once again the true gap and the
-  // ledger claim is the false one. The assertions below are flipped to match,
-  // and this paragraph is why: the demand was right when written and is wrong
-  // now, which is a property of the product changing rather than of the test.
-  //
-  // The tie runs both ways. If the method is removed, the note stops being true
-  // in the OTHER direction and this fails; if the note goes back to denying the
-  // capability, this fails too.
+  // The ties that made the old demand worth its length are kept: the method
+  // and the route still exist, the page supplies the handler, and the job that
+  // an LP's first call enqueues still writes the rows through the same
+  // function the route runs, without moving the figure that means money paid.
   const api = read('frontend/src/lib/api.js');
   const worker = read('cloudflare-worker/src/routes/funds.ts');
   const table = read('frontend/src/workspaces/investorZoneActions.js');
-  const DENIALS = /nothing writes|never issued|no such|is not stored|cannot be/i;
 
-  // Wired, so it is asserted as a handler rather than as a well-worded gap.
+  // Wired, so each is asserted as a handler rather than as a well-worded gap.
   assert.match(table, /\{ label: 'Add LP', kind: 'handler', handler: 'addLp' \}/,
-    'Add LP is neither a handler nor in the gap loop below — it is unaccounted for');
-
-  for (const [zone, label, method, route] of [
-    ['funds/calls', 'New call', 'fundCapitalCall', "post('/:id/capital-call'"],
-  ]) {
-    assert.match(api, new RegExp(`\\n  ${method}:`), `api.js no longer declares ${method}`);
-    assert.ok(worker.includes(route), `funds.ts no longer serves ${route}`);
-    const at = table.indexOf(`'${zone}'`);
-    assert.ok(at > 0, `${zone} left the table`);
-    const entry = table.slice(at, table.indexOf('],', at));
-    const note = entry.match(new RegExp(`\\{ label: '${label}', unbuilt: '([^']*)'`));
-    assert.ok(note, `${zone}'s "${label}" is no longer a stated gap — if it was wired, delete this row`);
-    assert.doesNotMatch(note[1], DENIALS,
-      `${zone} "${label}" denies a capability ${method} provides: "${note[1]}"`);
-    // WHERE THE GAP IS — AND FOR THIS ZONE IT IS THE SCREEN AGAIN, since #197.
-    // The reason must say a screen is what is missing, because that is now true
-    // and because it is what tells the next reader the form is worth building.
-    assert.match(note[1], /no screen offers the form yet/,
-      `${zone} "${label}" must say the screen is what is missing — the route and ledger are live`);
-    // AND IT MUST NOT GO BACK TO BLAMING THE LEDGER. That claim was true for one
-    // release and is now the stale one: a reason saying nothing reaches the
-    // ledger would talk a reader out of building the one thing left to build.
-    assert.doesNotMatch(note[1], /nothing reaches the ledger|rather than a call row/,
-      `${zone} "${label}" still says the ledger is empty, which #197 fixed`);
-    // The tie to the store, so this cannot drift back silently: the job writes
-    // the rows, and it does not move the figure that means money paid out.
-    const job = read('cloudflare-worker/src/services/queueWorker.ts');
-    const at2 = job.indexOf("case 'capital_call_notice'");
-    assert.ok(at2 > 0, 'the capital call job is gone');
-    const handler = job.slice(at2, job.indexOf('\n    case ', at2 + 10));
-    assert.match(handler, /insertCapitalCalls\(env, billable\.map\(/,
-      'the call job no longer writes a capital_calls row, so this reason is wrong again');
-    assert.doesNotMatch(handler, /SET deployed_capital = deployed_capital \+/,
-      'the call job bumps deployed_capital again, which double-counts against the pay path');
-  }
+    'Add LP is neither a handler nor a stated gap — it is unaccounted for');
+  assert.match(table, /\{ label: 'New call', kind: 'handler', handler: 'newCall' \}/,
+    'New call is neither a handler nor a stated gap — it is unaccounted for');
+  const page = read('frontend/src/pages/investor/InvestorFundCalls.jsx');
+  assert.match(page, /handlers: \{ newCall \}/, 'the Calls page does not supply the New call handler');
+  assert.match(api, /\n  fundsCapitalCallV2:/, 'api.js no longer declares fundsCapitalCallV2');
+  assert.match(api, /\n  fundsCallPreview:/, 'api.js no longer declares the preview the form reads first');
+  assert.ok(worker.includes("post('/:id/capital-call'"), "funds.ts no longer serves post('/:id/capital-call'");
+  // The tie to the store: the queued path writes through the ledger's one
+  // writer, and it does not move the figure that means money paid out.
+  const job = read('cloudflare-worker/src/services/queueWorker.ts');
+  const at2 = job.indexOf("case 'capital_call_notice'");
+  assert.ok(at2 > 0, 'the capital call job is gone');
+  const handler = job.slice(at2, job.indexOf('\n    case ', at2 + 10));
+  assert.match(handler, /await issueFundCall\(env, \{/,
+    'the call job no longer writes through the ledger, so the queued path and the form can disagree');
+  assert.doesNotMatch(handler, /SET deployed_capital = deployed_capital \+/,
+    'the call job bumps deployed_capital again, which double-counts against the receipts');
+  // The zone's one remaining gap must not deny what exists either: a notice IS
+  // logged per LP account when a call is issued, so "nothing sends" or "no
+  // notice is stored" would be this test's original error in a new place.
+  const at = table.indexOf("'funds/calls'");
+  const entry = table.slice(at, table.indexOf('],', at));
+  const reminders = entry.match(/\{ label: 'Send reminders', unbuilt: '([^']*)'/);
+  assert.ok(reminders, "funds/calls' Send reminders is no longer a stated gap — if it was wired, assert the handler");
+  assert.doesNotMatch(reminders[1], /nothing on this desk sends|no (call )?notice is (stored|sent|logged)/i,
+    `Send reminders denies the notice the call already logs: "${reminders[1]}"`);
 });
 
 test('the shared surfaces dispatch on the role, and refuse an unknown one', () => {

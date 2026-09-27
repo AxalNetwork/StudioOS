@@ -109,13 +109,16 @@ function CapitalCallModal({ fund, onClose }) {
   useEscapeClose(() => onClose());
   const [amountM, setAmountM] = useState('');
   const [note, setNote] = useState('');
+  // D371: the due date the worker always accepted and this form never sent.
+  // Blank stays blank — a deadline an LP acts on is never defaulted.
+  const [dueDate, setDueDate] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true); setErr('');
     try {
-      await api.fundsCapitalCallV2(fund.id, Math.round(Number(amountM || 0) * 1_000_000 * 100), note);
+      await api.fundsCapitalCallV2(fund.id, Math.round(Number(amountM || 0) * 1_000_000 * 100), note, dueDate || null);
       onClose(true);
     } catch (e) { setErr(e.message); }
     finally { setBusy(false); }
@@ -131,6 +134,7 @@ function CapitalCallModal({ fund, onClose }) {
         </div>
         {err && <div className="bg-red-50 text-red-700 text-xs rounded px-2 py-1 mb-2">{err}</div>}
         <Field label="Amount ($M)" type="number" step="0.01" value={amountM} onChange={setAmountM} required />
+        <div className="mt-3"><Field label="Due date (optional)" type="date" value={dueDate} onChange={setDueDate} /></div>
         <div className="mt-3"><Field label="Note (optional)" value={note} onChange={setNote} /></div>
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={() => onClose()} className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg dark:border-gray-700">Cancel</button>

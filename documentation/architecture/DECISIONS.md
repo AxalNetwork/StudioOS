@@ -32927,6 +32927,207 @@ The 1,792 existing tests that touch it still pass.
     restored; the dead read restored on the page; the test database's
     rollback removed.
 
+## D371
+
+**The fund call ledger: a call is a numbered header whose LP lines are an
+exact split in whole cents, money is recorded as append-only receipts, and
+the Calls page issues calls and records receipts (Session 9, item 2).**
+Migration 312. Five new routes, four new `api.js` methods, one route
+retired.
+
+**What was there, measured on `62ff5e946c` (D370 merged).**
+
+- A call existed only as a queue payload. `POST /api/funds/:id/capital-call`
+  enqueued `capital_call_notice` and answered before anything was written.
+  The job wrote one `capital_calls` row per LP as an unrounded REAL dollar
+  share: three equal LPs on a $1,000 call owed 333.333… each, and no line
+  said which LP would be asked for the extra cent. No row named the call it
+  belonged to — no number, no purpose, no total.
+- Recording a payment flipped a status and moved two dollar figures. No
+  receipt said when the wire landed, how much of it, or who recorded it.
+- The Calls page (`InvestorFundCalls`) was a static notice claiming the
+  call records "are not linked to a specific VC fund register". They are:
+  every line joins its fund through `limited_partners.fund_id`.
+- `InvestorFundLPs` and `InvestorFundReporting` opened `items[0]` of the
+  fund list. Since D370 that list carries the funds a caller invests in as
+  well as the ones they run, so the first row could be a fund whose GP
+  controls answer 404.
+- `LPs.listByFund` did not select `kyc_status`, so the LP page's KYC column
+  and "KYC pending" filter read nothing.
+- `api.fundsCapitalCallV2` dropped `due_date`, which the worker accepts, and
+  the Fund Ops call modal had no field for it.
+
+**The rulings.**
+
+- **A call has a header.** `fund_capital_calls`: the fund, a per-fund
+  `call_number` assigned when it is written (`UNIQUE (fund_id,
+  call_number)`), `amount_cents`, the purpose and due date the GP typed,
+  `line_count`, who issued it, and the one line that absorbed the rounding.
+  `capital_calls` gains `fund_call_id` and `amount_cents`. Lines written
+  before 312 keep both NULL, and every reader treats them as "issued before
+  calls were numbered". Their dollar `amount` is rounded to the cent.
+- **Money is integer cents; the residual goes to one named line.**
+  `services/fundCallSplit.ts` floors each LP's share (`amount × commitment ÷
+  total`, in BigInt, because the product passes 2^53 on large funds). The
+  leftover cents — fewer than the number of lines — go to the largest
+  commitment, the lowest LP id on a tie. The header records `residual_cents`
+  and `residual_lp_id`. The lines always sum to the call. The dollar column
+  is derived from the cents, never passed beside them.
+- **One writer.** `services/fundCallLedger.ts`'s `issueFundCall` is what both
+  the route and the queue job run. The header and every line are one batch,
+  `INSERT OR IGNORE` on uids derived from the call's uid, so a retry writes
+  nothing it already has. A retry that finds lines missing fills them only if
+  the register still splits the call exactly as the header records. If an LP
+  joined in between, it throws rather than bill a different set of shares
+  against a call its LPs were already told about.
+- **Issuing is synchronous.** The route writes the call before it answers,
+  so the page that issued it can show it. A fund with nobody to bill gets
+  `409 no_billable_lps` instead of an empty call. A due date must be a real
+  `YYYY-MM-DD`, and is still never defaulted (task 197).
+- **Receipts are append-only, in the database.** `capital_call_receipts`
+  records the amount in cents, the date the wire landed, the reference, the
+  source (`receipt` or `mark_paid`) and who recorded it. Triggers refuse
+  every UPDATE and DELETE on it and on the header, from any writer, as
+  migration 269 did for the audit tables. A mistake is answered by the next
+  receipt.
+- **A receipt moves money once.** `recordReceipt` runs one batch:
+  - the insert, only while the line is unpaid and the amount fits what is
+    outstanding, re-checked inside the batch;
+  - the two credits (`invested_amount`, `deployed_capital`), each only if
+    this request's receipt row exists;
+  - the flip to paid, once the line's receipts reach what it owes, dated the
+    day the last wire landed.
+  More than is outstanding is `409 receipt_exceeds_outstanding` with the
+  outstanding amount. A paid line is `409 line_already_paid`. Every receipt
+  is logged against its recorder in `activity_logs`.
+- **A receipt outlives its project.** `services/projectTrash.ts`'s purge
+  deleted `capital_calls` by `project_id`. A receipt references its line, so
+  for a project-linked line (`POST /capital/calls` writes them) with a
+  receipt, that delete fails on the foreign key. The loop swallows the
+  failure, and the line's own `project_id` then fails the final `DELETE FROM
+  projects`, so the project would sit in the trash for ever. The purge now
+  detaches such a line (`project_id = NULL`) first, as it already does for
+  `activity_logs`. A line with no receipt still goes with its project.
+- **Mark Paid is a receipt.** D370's `POST /api/capital/calls/:id/pay` is now
+  a receipt for whatever the line still owes, dated today, through the same
+  writer. A line paid there has the receipt the ledger reads. After a part
+  payment it credits only the remainder: the old path would have credited
+  the whole line again.
+- **The reads.**
+  - `GET /api/funds/:id/capital-calls` returns each call with its lines. Each
+    line carries owed, received and outstanding cents, a state (`paid`,
+    `part_received`, `overdue` with its days, `pending`), and the account's
+    KYC status — NULL for an LP with no account, never "pending". Lines from
+    before numbering come back separately. The totals include
+    `paid_before_receipts_cents`, so a line marked paid before receipts
+    existed is not counted as a receipt.
+  - `GET /api/funds/:id/ledger` returns calls and receipts, newest first.
+    `?lp=` narrows it to one LP's lines and receipts, and that LP must be on
+    the fund.
+  - `POST /api/funds/:id/capital-calls/preview` runs the same split and
+    writes nothing.
+  - `POST /api/funds/:id/capital-calls/lines/:lineId/receipts` records a
+    receipt. A line from another fund is the same 404 as a missing one.
+  All five go through `requireFundGp`.
+- **Which fund a page opens.** `GET /funds` marks each row `can_manage`: the
+  institutional tier, then the same GP-and-active-company predicate
+  `requireFundGp` runs. `pages/investor/managedFund.jsx` picks only among
+  those, honours `?fund=`, and never picks a fund the caller cannot operate,
+  even when the URL names it. The Calls, LPs and Reporting zones use it.
+- **The Calls page is the ledger.**
+  - Four stats: called to date against commitments; collected, with
+    marked-paid-before-receipts said separately; outstanding; the current
+    call.
+  - The canvas's six columns: LP, commitment, owed, received, state, age.
+    Each LP name carries its KYC note.
+  - New call previews the split — the residual line named, KYC per LP, who is
+    not billed and why — then issues exactly the amount previewed. Editing
+    the amount drops the preview.
+  - Record receipt sits on each unpaid line.
+  - The wire trail, and Export wires writes it.
+  - Filters: Current call, All calls, Outstanding (which reaches the lines
+    from before numbering).
+  - Every failed read is `Unreadable` with a retry. No figure is defaulted to
+    zero.
+  The LP register's total also stopped summing an unrecorded commitment as
+  zero, and its three "no writes here" claims were corrected: Add LP writes.
+
+**Retired.** `/funds/capital-calls` → `/funds/calls`, a `<Navigate replace>`
+that keeps the query string and hash. It rendered Fund Ops' Capital Calls
+tab, a read-only list with one job per role:
+
+| Old job | Where it is now |
+| --- | --- |
+| An admin's studio-wide list of every call, fund or not | `/capital` (`CapitalPage`, `listCapitalCalls`, all rows for an admin) |
+| An investor's own calls as an LP | `/lp-portal`, the same `fundsLpPortal` source |
+| A GP's calls on their fund | `/funds/calls`, now with numbers, receipts and writes |
+
+The tab took no query string of its own. `CapitalCallsPanel` and the helpers
+only it used are deleted. `InvestorFundLanding`'s ledger link opens
+`/funds/calls` directly. The Calls zone's `legacy: '/funds/capital-calls'` in
+`shellConfig.js` stays: it is now exactly what App.jsx does, as
+`legacyRedirects` reports. `sidebarConfig.js` has no row for the old path.
+
+**Not built, said on the page.**
+- Send reminders: a notice is logged per LP account when a call is issued,
+  but no reminder is drafted or sent.
+- The Notices filter: no delivery is tracked, so there is no notice state to
+  filter by.
+- Eadwyn's reminder letters: the rail lists them as unavailable.
+
+**Found, not changed.**
+- Fund Ops' `FundsAdminTeaser` still draws three sample funds under a blur.
+  It is on the gap map's retirement list, not item 2's.
+- `/lp-reports`, `/funds/accounting` and `/funds/performance` still render
+  Fund Ops tabs. The gap map retires them into `/funds/reporting` and
+  `/funds/ledger`, which do not yet cover their jobs.
+
+**Tests.**
+- `cloudflare-worker/test/fund_call_ledger_d371.test.ts` (31) runs on
+  node:sqlite with migration 312 applied from its own file. It covers:
+  - the split: the residual named, BigInt exactness, zero shares;
+  - issuing: numbering; the refused side for an LP, another GP, a lapsed GP
+    and a founder; bad amounts and dates; the empty fund;
+  - the preview matching what the issue writes;
+  - receipts: part and full payments; over-payment; the seals; Mark Paid
+    after a part payment; two receipts read together under a batch barrier,
+    for part and for full amounts;
+  - the reads, `can_manage` and `kyc_status`;
+  - a project purge keeping a receipted line, detached;
+  - the job: `issued_by`, retry, and the loud failure on a changed
+    register.
+- `frontend/test/fund_calls_if2_d371.test.mjs` (18) covers the page's
+  arithmetic and labels, the fund rule, the page's reads and writes, and the
+  IF2 artboard sliced at both ends: heading, the four stats, the six columns
+  in order, and every filter and op.
+- Re-aimed:
+  - `capital.test.ts` and `capital_call_ledger.test.ts` apply migration 312.
+  - `funds_deadmin.test.ts` lists the four new controls.
+  - `lp_money_authz_d370.test.ts`: the panel it pinned is retired.
+  - `investor_fund_i6.test.mjs`: the landing's handoff opens `/funds/calls`,
+    and the old path redirects.
+  - `profile_zone_actions.test.mjs`: New call and Export wires are wired
+    (handlers and exports 14 → 15), and its gap loop, whose last row was
+    New call, is replaced by the handler assertion.
+- `scripts/sql-prepare-baseline.json` gains five entries. Four are the
+  ledger's module-constant SQL fragments; the fifth is `manage.sql`, a
+  `tenancyScope` predicate whose values are bound.
+- Mutations: 41 run, 41 caught — 24 against the Worker, 17 against the
+  page.
+  - Three escaped at first. Dropping the in-batch outstanding check, or
+    crediting without this request's receipt, passed: the concurrency test
+    let one request finish before the other read the line, so the
+    JavaScript pre-check answered alone. The tests now hold both requests
+    at the batch and use part payments.
+  - A plain `INSERT` for the header is caught by `capital_call_ledger`'s
+    gap-fill retry, not by this file.
+  - A fourth mutation's anchor matched two zones; re-anchored, it was
+    caught.
+- `npm run test:drift`: the baseline on `a0e0f83ad7`, in a clean worktree,
+  was frontend 4045, worker 4804 pass, retention 112. With D371 it is
+  frontend 4063 (+18), worker 4835 pass (+31), retention 112, `EXIT=0`.
+  Nothing fell.
+
 ## D374
 
 **The founder's data room is rebuilt on the "Data Room" canvas, and the room's
@@ -36298,6 +36499,105 @@ New tests: `founder_desk_rail_anatomy_d424.test.mjs` and
 real SQLite rows through `recordFill`, the accept path's own writer.
 `validate_fills_the_blanks` and `founder_raise_overview_a4` were re-aimed as
 described above.
+
+## D425
+
+**The phone gets a tab bar, founder first: four tabs and a More sheet, built
+from the sidebar's own rows, with the page tag and the body made safe-area
+aware.** Wave 8, Session 14, item 6 (Mobile canvas M1, with M5's 44pt and
+safe-area rules). No migration, no route, no `api.js` change, and no App.jsx
+edit: the shell's mobile chrome is Session 5's. This PR ships the component,
+its plan and its tests. The mount is one import and one element for the shell:
+`<MobileTabBar role={shellRole} />` beside the drawer's backdrop, passed the
+role the sidebar gets but without its `|| 'founder'` default, so a viewer with
+no role gets no bar.
+
+**Why a bar.** Below 1024px the sidebar is a drawer behind the hamburger, so
+every destination is two taps and a scan away, and after D284 moved Messages to
+the top bar (which hides it below 640px) a phone had no Messages door at all.
+
+**The plan is the sidebar's, not a second list** (`lib/mobileTabs.js`).
+- **Tabs.** The canvas's founder tabs are Home, Build, Raise and Grow. Each
+  tab IS the founder sidebar row with that route — its label, icon and
+  `match` — so the canvas's "Home" reads "Studio", as the sidebar does, and a
+  rename in the sidebar renames the tab.
+- **More.** Every other sidebar row goes to More in the sidebar's order, so a
+  row Session 5 adds reaches the phone without an edit here. Then come the
+  three doors a phone otherwise lacks: Messages, Trust and Company Settings,
+  each a route whose guard admits a founder.
+- **Where it departs from the canvas.** The canvas's More list (Validate,
+  Network, Research, Trust, Company Settings) leaves out Spin-Out Lab, a live
+  sidebar row, and Messages. Both are in More; "nothing is dropped" is the
+  canvas's own rule.
+- **Which tab is lit.** `rowActive` is `SidebarNav`'s own rule: a row with
+  `match` owns its `to` and its listed prefixes, never its own subtree, so
+  `/build/discovery` lights Validate and `/build/team` lights Grow, not Build.
+  A row without `match` is the sidebar's `NavLink end`, which is exact. More
+  lights when the page belongs to one of its rows.
+
+**The bar and the sheet** (`components/MobileTabBar.jsx`).
+- **Hit areas.** Five 56px targets, each a fifth of the width, above the 44pt
+  floor, with the canvas's 10px labels.
+- **The sheet.** More opens a bottom sheet, never a screen (M1's caption),
+  with 52px rows. It is a real dialog (`aria-modal`, labelled by its heading),
+  and focus moves into it and back to More.
+- **Closing it.** A tap on the backdrop, a swipe down past 60px, Escape or the
+  close button (44px) closes it, and so do following a row or any route
+  change.
+- **Where it shows.** Only below 1024px (`lg:hidden`), the breakpoint the
+  hamburger already uses.
+
+**Safe areas.**
+- **The page tag.** `index.html`'s viewport now says `viewport-fit=cover`.
+  Without it every safe-area inset reads 0, so nothing could clear the home
+  indicator.
+- **The bar and the sheet.** Both pad by the bottom and side insets, and while
+  a bar is drawn the page's own content (`[data-app-main]`, inside the scroll
+  container) is padded by `--mobile-tabbar-h` so its last row is never under
+  the bar. The attribute that padding keys off leaves with the bar.
+- **The body.** `cover` also lets content reach under a phone's notch in
+  landscape, so `body` pads by the side insets (0 on every screen without a
+  notch). That is horizontal only, so no full-height container grows.
+- **The top inset.** The installed app's status bar is `black-translucent`,
+  which already drew the page under the status bar before this change. Padding
+  the header by the top inset is the shell's (Session 5), and now possible,
+  because the inset is no longer 0.
+
+**Licences.** Founder first: `mobilePlan` returns null for every other licence
+and the bar draws nothing for it. The investor, advisor and partner
+allocations are on the canvas and are the next step.
+
+**M2 is the owner's call and is not built.** The canvas's hub shows one lens at
+a time, "no route change": the zone chips swap the lens in place. That
+contradicts SHELL_MIGRATION rule 2 and `founder_shell.test.mjs`, which hold
+that a zone pill navigates to its route, and the pills keep navigating. Which
+rule wins is a product decision this entry does not make.
+
+**Not built here, each with its owner.**
+- The AI rail as a floating button plus bottom sheet (M5) is Session 12's.
+  `--mobile-tabbar-h` gives its button a place to sit, at
+  `calc(var(--mobile-tabbar-h) + 16px)`.
+- The detail reflows (M3, M4).
+- Pull-to-refresh and long-press (M5's gesture list). Swipe-back is the
+  platform's own, because every detail screen is already a pushed route.
+
+**Verification.** 18 mutations, 18 caught, each with a non-zero exit and a
+`not ok` line, restored from a sha256-checked snapshot:
+- **The plan:** a retyped tab, a dropped row, a new sidebar row not reaching
+  More, a door to a missing route, the plan handed to every licence.
+- **The lit tab:** a `match` row or a plain row claiming its subtree, More
+  never lit, two tabs claiming a page.
+- **The bar and the sheet:** tabs under 44pt, More rows under 52pt, the bar on
+  desktop, a sheet that is not modal, Escape ignored.
+- **Safe areas:** no `viewport-fit`, the page not padded, the attribute left
+  behind, the body ignoring the notch.
+
+One assertion was fixed along the way: the licence test's render helper
+defaulted a missing role to founder, so the undefined-role case drew a bar in
+the test and not in the component. The helper now takes the role as given.
+
+New test: `mobile_tab_bar_d425.test.mjs` (10 tests), which renders the bar and
+the sheet with `react-dom/server` under a `MemoryRouter`.
 
 ## D430
 

@@ -120,7 +120,7 @@ it, where in their nav, and how do they get there.*
 | Pages · Diligence room | `/research/diligence/:grantUid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Pages · Funds and fund research | `/research/funds` · `/research/funds/:uid` · `/funds` · `/research/companies/:id` · `/research/companies/:analysisId/:candidateId` · `/funds/:id` | Home | Full page | Sidebar → Home → Fund | UPGRADE | High |
 | Pages · Investor Deals | `/deals` · `/pipeline` · `/pipeline/screening\|commit\|transactions` · `/deals/screening\|commit\|closing` | Home | Full page | Sidebar → Home → Deals | UPGRADE | High |
-| Pages · Investor Fund | `/funds` · `/funds/capital-calls` · `/funds/accounting` · `/lp-reports` | Home | Full page (proposed) | Sidebar → Home → Fund | UPGRADE | Low |
+| Pages · Investor Fund | `/funds` · `/funds/calls` · `/funds/accounting` · `/lp-reports` | Home | Full page (proposed) | Sidebar → Home → Fund | UPGRADE | Low |
 | Pages · Investor Network | `/network` | Home | Full page | Sidebar → Home → Network | RESKIN | High |
 | Pages · Investor Portfolio | `/portfolio/positions` · `/portfolio/updates` | Home | Full page (proposed) | Sidebar → Home → Portfolio | UPGRADE | Low |
 | Pages · Investor Research | `/advisor/research*` · `/market-intel` · `/research/ask` | Home | Full page | Sidebar → Home → Research | RESKIN | High |

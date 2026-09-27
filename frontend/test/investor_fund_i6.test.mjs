@@ -41,9 +41,16 @@ test('I6 composes live fund sources and preserves detailed tools', () => {
   }
   // And the legacy ops tool keeps its own doors, named as handoffs in the card
   // bodies rather than sitting where a zone link belongs.
-  for (const route of ['/funds/accounting', '/funds/capital-calls', '/lp-reports']) {
+  for (const route of ['/funds/accounting', '/lp-reports']) {
     assert.ok(page.includes(route), `the landing dropped the handoff to ${route}`);
   }
+  // Re-aimed by D371: `/funds/capital-calls` retired into the Calls zone, so
+  // the call-ledger handoff opens `/funds/calls` itself rather than a route
+  // that only redirects there — and the old path still lands somewhere.
+  assert.ok(!page.includes('/funds/capital-calls'), 'the landing links a retired route');
+  assert.match(page, /<Link to="\/funds\/calls" data-testid="link-review-call-ledger">/);
+  assert.match(app, /path="\/funds\/capital-calls" element=\{<FundCapitalCallsRedirect \/>\}/);
+  assert.match(app, /function FundCapitalCallsRedirect\(\)[\s\S]{0,200}?pathname: '\/funds\/calls', search: loc\.search, hash: loc\.hash/);
   assert.match(app, /path="\/funds\/performance"[^\n]+<FundOpsWorkspace \/>/);
 });
 

@@ -367,10 +367,20 @@ test('the fund pages read the live calls ledger, and the legacy method no longer
   const m = /capitalCalls: \(\) => request\('\/legalcap\/capital\/calls'\)([^,\n]*)/.exec(api);
   assert.ok(m, 'api.capitalCalls was not found');
   assert.doesNotMatch(m[1], /\.catch/, 'a failed read is again reported as "no calls"');
-  for (const page of ['frontend/src/pages/FundOpsWorkspace.jsx', 'frontend/src/pages/investor/InvestorFundLanding.jsx']) {
-    const src = read(page);
-    assert.match(src, /api\.listCapitalCalls\(\)/, `${page} does not read the live ledger`);
-    assert.doesNotMatch(src, /api\.capitalCalls\(\)/, `${page} still reads the dead shape`);
+  // Re-aimed by D371: the other page D370 swapped, FundOpsWorkspace's Capital
+  // Calls panel, was retired into the Calls zone, which reads the fund's own
+  // call ledger. The property is unchanged — no fund page reads the dead
+  // shape — and the landing still reads the live one.
+  assert.match(read('frontend/src/pages/investor/InvestorFundLanding.jsx'), /api\.listCapitalCalls\(\)/,
+    'the landing does not read the live ledger');
+  assert.match(read('frontend/src/pages/investor/InvestorFundCalls.jsx'), /api\.fundsCallLedger\(/,
+    'the Calls zone does not read the fund call ledger');
+  for (const page of [
+    'frontend/src/pages/FundOpsWorkspace.jsx',
+    'frontend/src/pages/investor/InvestorFundLanding.jsx',
+    'frontend/src/pages/investor/InvestorFundCalls.jsx',
+  ]) {
+    assert.doesNotMatch(read(page), /api\.capitalCalls\(\)/, `${page} reads the dead shape`);
   }
 });
 
