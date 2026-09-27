@@ -20936,7 +20936,8 @@ sidebar stays the canvas's eight (#322 is already a decision about it).
   for programme throughput at all; the cohort timeline returns every week's
   outcomes. It now says the true half: week outcomes are readable, and the
   Analytics page draws them; assessment runs are not, because no route lists
-  them (D140).
+  them (D140). D446 lists those runs for one cycle and rewrites the sentence
+  again: the two counts are not added into one figure.
 - **Branch Home called HQ's cut "your share".** The statement computes what is
   owed to HQ as gross times this rate, so the label told a branch it kept the
   part it pays. It reads *"owed to HQ · you keep N%"* now, and a test holds
@@ -33175,6 +33176,161 @@ reference.
     six-month `ends_at`, and the review-criteria absence is printed.
   - No page errors in either run.
 
+## D414
+
+**Messages is rebuilt from its canvas. The other person is a card that
+follows their own privacy settings. No email address is served any more.
+A thread's subject becomes a context strip, re-checked against the reader's
+access on every open. A thread can no longer be pinned to an engagement its
+starter cannot open.** Wave 8, Session 13, item 5. Worker first. No migration,
+no new route and no new `api.js` method.
+
+**What was there, measured on 69c0e6218.**
+- **Emails, served to every participant.** `GET /api/messages` returned each
+  counterparty's name and email. `GET /:uid` returned the email of every
+  participant and every sender. Nothing on the page needed an address: it
+  used one only as a label when a name was missing.
+- **An unchecked subject.** `POST /` stored any `subject_type` from the
+  allow-list with any `subject_id`. Nothing resolved the pair, so there was
+  no strip to leak yet. But the gap map's point 8 stood: a resolver that
+  trusted the stored id would show anyone in the thread the title and amount
+  of an engagement they have no part in.
+- **Half the canvas missing.** The page drew rows, bubbles and a one-line
+  composer. It had none of these:
+  - the unread subtitle, search, chips with counts, avatars, context chips
+  - the role line, View profile, the context strip, day and run grouping
+  - mobile back, the growing textarea, and two of the three empty states
+
+**Worker (`routes/messages.ts`).**
+- **The counterparty card.** `personCard` builds `{user_id, handle, role,
+  name, headline, headshot_url, profile_path}` from the public profile's own
+  `effectiveFlags`. That function is exported from `routes/public.ts` for
+  this, a one-word change to that file. So a member who hides their name or
+  photo on `/u/:handle` is not named or pictured here either, and the page
+  prints `absent.name`. The headline and role are what the public card
+  always shows.
+- **No emails, no per-message names.** No read selects an email any more.
+  Messages carry `sender_user_id` only, and the page names senders from the
+  cards. The thread returns `me` and the other participants, not the reader.
+- **The context resolver.** `CONTEXT_RESOLVERS` resolves only what something
+  writes. `engagement` means `advisor_engagements`, because the advisor
+  Delivery zone's nudge is the only code that pins a thread. The reader must
+  be the advisor on it or the founder it is for.
+  - The strip is `{kind, title, amount_cents, status, link}`. The link is
+    `/practice/engagements` for the advisor. A founder has no page for it,
+    and `absent.context_link` says so.
+  - It is resolved on every read, so moving or deleting the engagement takes
+    the strip away.
+  - "Cannot see" and "no longer exists" are one sentence, so the strip
+    cannot prove an object exists.
+  - The other five types (`introduction`, `match`, `service`, `session`,
+    `job`) have no writer. Each could mean several tables. They get the
+    Worker's sentence, not a guess.
+- **Pinned only to what the starter can open.** `POST /` refuses a subject
+  its starter cannot resolve with `404 subject_not_found`, and the same body
+  for a made-up id. A non-integer id gets `400 subject_invalid`.
+- **Served absences:**
+  - `auto_threads`: the canvas says threads appear when an introduction is
+    accepted or a match is made, and nothing does that.
+  - `attachments`: there is no store until item 6.
+  - `search_scope`: search covers the 100 threads the list returns.
+- **`unread_total`** is counted in the Worker, for the header.
+
+**Frontend.** `MessagesPage.jsx` is rebuilt in place, on the same route with
+no redirect.
+- **The page:**
+  - the header subtitle
+  - search over the card, subject and preview
+  - the canvas's seven chips with counts, using the gap map's mapping:
+    `engagement` and `service` are Engagements, `session` is Advisory
+  - rows with an avatar, a context chip and a two-line preview
+  - the thread header with its role line, View profile and Archive (Archive
+    is not on the canvas and is kept)
+  - the context strip, or the Worker's reason
+  - day separators, with the name on the first message of a run and the
+    avatar and time on the last
+  - the paperclip, disabled with the Worker's reason
+  - a growing textarea (Ctrl/Cmd+Enter sends)
+  - the canvas's three empty states
+- **Refresh.** The page re-reads on window focus, since there is no push
+  channel.
+- **`lib/messagesView.js`** is the page's pure half (chips, search and
+  grouping), so a test can run it.
+- **No WorkerRail**, by decision. The canvas draws none. A rail over a
+  private inbox is not something to add without the owner.
+- **Not printed**, because nothing makes them true: "Conversations appear
+  here when an introduction is accepted…", "Attachments are visible to both
+  parties only", and "via Axal VC". The four empty-state hint chips stay as
+  labels, without the canvas's "when" lines.
+
+**Unchanged, and still pinned by `messages_live.test.mjs`:** membership is
+the only key, a thread you are not in is a 404, unread is derived, and no
+admin can read a conversation.
+
+**Filed, not fixed.**
+- **Session 1, account-existence probe (gap-map security point 10).**
+  `POST /` answers "No account with that address" under only the generic
+  60/min limit, so an account can test which emails have accounts. A tighter
+  bucket belongs in `middleware/rateLimit.ts`, which is not this session's,
+  and the owner should decide whether the product keeps saying so at all.
+- **Whoever next pins a thread to an object.** Use a subject type whose table
+  is unambiguous, and add its resolver to `CONTEXT_RESOLVERS`. `engagement`
+  now means an advisor engagement.
+- **Session 5.** Nothing. The stale Messages comments in `sidebarConfig.js`
+  the brief named are already current.
+
+### VERIFIED
+
+- **Drift.** `npm run test:drift` exits 0 on main 69c0e6218 plus this
+  change. Main alone: frontend 3782, worker 4662, retention 112. With the
+  change: frontend 3794 (+12), worker 4671 (+9), retention 112. No count
+  fell.
+- **New tests, by name.**
+  - `messages_context_d414.test.ts`: 9 tests through the route, on
+    migrations 185, 201 and 238 read off disk.
+  - `messages_d414_contract.test.mjs`: 12 tests. The canvas is sliced at
+    both ends of every section it reads. It runs `lib/messagesView.js`
+    rather than reading it.
+  - `messages_live.test.mjs` and the three shell tests the brief named
+    (`admin_placement_h35`, `founder_shell`, `advisor_shell`) pass
+    unchanged. The route, the guard and the top-bar entry did not move, so
+    none needed re-aiming.
+- **Mutations.** 37 were run: 19 on the Worker and 18 on the page and its
+  pure half. 35 were caught first time. Two escaped, and the assertions
+  were fixed, not the code:
+  - **W3**, `u.email` added to the list query: `personCard` never copies
+    it, so no output changed. The source guard is in the contract test.
+    Re-run against it: caught.
+  - **W14**, `unread_total` counted threads: the fixture had one thread with
+    one unread. The test now sends two messages in one thread. Re-run:
+    caught.
+  - 37 of 37. Each failure was a non-zero exit with a `not ok` line,
+    restored from a sha256-checked snapshot, and passed again.
+- **Build and checks.** Both typechecks, `check-decision-ids`,
+  `check-folder-docs`, `check-sql-prepare`, `check-sqlite-columns`,
+  `check-refusal-bodies` and `check-unused-imports` pass.
+  - The card's columns are written out in both queries, not interpolated,
+    so `check-sqlite-columns` reads them.
+  - `docs/` was rebuilt at the root with the asset-retention file moved
+    aside. `check-docs-fresh --strict` passes.
+- **Chromium probe.** This is recorded verification, not a gate. The built
+  SPA was run with stubbed `/api/messages*`, and all 26 checks passed.
+  - **Desktop:**
+    - the header subtitle, the seven chips with counts, "Name not shared",
+      and no email anywhere on the page
+    - the "Select a conversation", "Nothing matches" and clearing-filters
+      states, and search matching a headline
+    - the thread header with its role line and View profile, the context
+      strip ($4,200, Signed), and the founder's link absence
+    - day separators, the name once per run, the paperclip disabled with
+      the Worker's reason, the composer note, send, and the unresolved
+      context sentence
+  - **390px:** the list and thread swap, back returns, and there is no
+    horizontal scroll.
+  - **Empty inbox:** "Your inbox is ready" with the Worker's sentence, the
+    header, and the hint chips with Eadwyn and Tickets.
+  - No page errors.
+
 ## D420
 
 **The founder desks A2–A5 read the stores that already exist.** Wave 8,
@@ -34316,6 +34472,37 @@ record could not be read. Nothing here is drawn from a guess. Retry".
 
 **Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: the body reason put `licence_contracts` back; the page stopped calling `adminListContracts`; a missing `pending_signature` was rendered as zero pending.
 
+## D445
+
+**Approvals, Accounts and Settings share one raise, and the form is not blank when a row sent the person there.** Wave 8, Session 6, item 6. No migration. No new `/api` method. No live branch exercised this.
+
+**Prefill.** `/branch/approvals` reads `?kind=` and `?subject=` once, through `prefillFromSearch` in `frontend/src/lib/escalationPrefill.js`. The kinds are `moderation`, `content`, `seat_increase` and `other`. An unknown kind is ignored and the form keeps its own default. The subject is trimmed and cut at 300 characters, the route's own limit. Settings' HQ-owned rows link with both already set: the subsidiary name, the territory, data residency and the domain as `other`, and the brand kit as `content`. Staff & roles, and the licence summary's request for seats, go to `/branch/accounts`. `HqSupportSessionBar.jsx` is Session 5's and is not edited. Its "Raise a concern" link is `/branch/approvals` with no query. The prefill a concern from that bar would use is `?kind=other&subject=`.
+
+**Seats.** Accounts asks for a type and a whole number from 1 to 500 and sends them as the subject and the detail of one `seat_increase` escalation. There is no second store. The detail names how many of that type this territory is using only when both figures are finite numbers; a missing figure is left out rather than written as zero. The quantity is a text field. Nothing on the page writes the licence.
+
+**Deactivation.** A non-admin row that `drawsAccountControls` would draw gets Deactivate or Reactivate, which calls the existing `PATCH /api/admin/users/:id/toggle-active` with no reason. The viewer's own row draws nothing. An admin-role row is not offered a button: closing one needs a written reason, a step-up and the super admin, and this page collects none of those. The row says a super admin closes it and this branch has none.
+
+**Password reset.** Named, not built. The rail and a sentence on the members card say the owner has not decided it. There is no control.
+
+**Eleven lanes.** The Approvals board, its coverage line and Branch Home's loading line and link say eleven lanes (D215). The sentences that still said four queues were stale.
+
+**Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: an unknown seat type accepted; the escalation kind dropped; an admin row offered a button.
+
+## D446
+
+**A branch reads the support sessions on its own database, and lists assessment runs for one cycle.** Wave 8, Session 6, item 7. No migration. No live branch exercised this. `routes/assessment.ts` and `rpc/branchOps.ts` are not edited. `HqSupportSessionBar.jsx` is Session 5's and is not edited.
+
+**The audit line.** `GET /api/branch/support-sessions` (`routes/branch_support_sessions.ts`, mounted at `/api/branch` beside the other branch reads). `requireAdmin` and `requireBranchTier`. It selects `impersonation_sessions` where `admin_user_id = 0` and `context` starts `hq_support:`, which is the row `redeemSupportCode` writes, and it joins the target account on this database. It does not create the table. Creating it on the read would turn "could not be read" into an empty list, and an empty list is what the page says when no session has been opened. A missing or failed read is `available: false` with a sentence of ours; the database's text stays in the log, and `BranchAccounts` draws Unreadable. An empty table is `available: true` and `items: []`, and the page says the record exists and is empty. A read made during a session is not a row in this table, and HQ's Security copy is a different store. Both stay unrecorded, with reasons the route returns. The actor is the name stored in `context`, because that row is not joined to a local user.
+
+**The cycle filter.** `GET /api/admin/assessment/sessions` on the assessment router that was already mounted at `/api/admin/assessment`. `requireAdmin`, so a branch can read it; the writes stay `requireHqAuthoring`. `?cycle=` is a cohort cycle id. `assessment_sessions` has no cycle column, so a run is kept when `datetime(started_at)` is at or after that cycle's `start_at` and before its `end_at`. An id that matches nothing is `cycle_found: false` and lists nothing. A cycle with a blank start or end is `filterable: false` and is not answered with the unfiltered population. A missing `cohort_cycles` table is `available: false`, which is not "no cycle with that id". Omitting `?cycle=` lists the runs on this database, `filtered: false`. The list is capped at 200. There is still no `GET /results`. A result on a run is the archetype label when a result row was written, and "No result" when it was not. The assessment router's existing bootstrap still creates the assessment tables on the way in, so this route does not report a missing `assessment_sessions` table as unreadable; that is the bootstrap that was already there.
+
+**Throughput.** The reason on `GET /api/branch/insights` no longer says there is no route that lists assessment runs. Week outcomes and assessment runs are two counts. They are not added into one figure, because a week gate and an assessment completion count different things.
+
+**Who reads it.** `BranchAccounts` draws the audit line. `BranchPrograms` draws the run list, filtered by the cycle the calendar already loaded.
+
+**Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: a missing support-session table answered as an empty list; a cycle with no end falling through to every run; the cycle window keeping every run.
+
+
 ## D450
 
 **HQ consoles tell the truth about what was read.** Wave 8, Session 16, item 1
@@ -34485,6 +34672,31 @@ HQ · Revenue draws a **Revenue per subsidiary** table beside Token P&L.
 **Tests.** `subsidiary_usage_coverage_d456.test.ts`;
 `hq_revenue_per_sub_d456.test.mjs`; `hq_home.test.mjs` and `hq_revenue_h5.test.mjs`
 re-aimed; `admin_revenue.test.ts` updated.
+
+## D457
+
+**#865 review fixes: territory drafts, deploy version, Home filter, overlay shell.** Wave 9,
+Session 16, item 1. No migration.
+
+**Territory draft.** `AdminLicences` keys `<Detail>` on the selected licence uid so a
+territory draft typed for one licence cannot be saved onto another when the operator
+uses Open holder.
+
+**Deploy version.** `cloudflare-worker-deploy.yml` passes
+`WORKER_DEPLOY_VERSION:${{ github.sha }}` on HQ and branch redeploys. The Platform and
+Licences consoles render `<Unrecorded>` when no version is known; live health’s
+`deploy_version` wins over a stale `last_version`, and null live versions no longer
+wipe a stored SHA (`COALESCE` on persist).
+
+**HQ Home.** Kind filter chips sit on the oxblood bar (visible contrast), carry
+`aria-pressed`, and empty filter states are named.
+
+**View-as overlay.** Scoped overview returns `licence_shell` with readable/unreadable
+states; failed licence reads no longer draw white-label chrome; 3-digit brand hex
+expands before alpha gradients.
+
+**Tests.** `hq_licences_d457.test.mjs`; `deployments_last_version_d452.test.ts` extended;
+`hq_licences_polish_d452.test.mjs` re-aimed.
 
 ## D460
 

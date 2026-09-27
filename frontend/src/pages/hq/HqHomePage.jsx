@@ -328,6 +328,28 @@ export default function HqHomePage() {
             )}
           </label>
           <span className="rounded bg-white/15 px-2 py-0.5 text-[10px] font-bold tracking-[.05em]">AXAL VC HQ</span>
+          <div className="flex w-full flex-wrap gap-2 pt-1 sm:w-auto sm:pt-0" data-testid="hq-kind-filter">
+            {[
+              ['all', 'All'],
+              ['subsidiary', 'Axal'],
+              ['white_label', 'White-label'],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                disabled={!ready}
+                aria-pressed={kindFilter === id}
+                onClick={() => setKindFilter(id)}
+                className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${
+                  kindFilter === id
+                    ? 'border-white bg-white/25 text-white'
+                    : 'border-white/50 text-white/95 hover:bg-white/15'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         {selected && (
           <p className="mt-2 text-[11.5px] text-axal-faint">
@@ -335,28 +357,6 @@ export default function HqHomePage() {
             to read that tenant's database — the tenant switcher here does not change other routes.
           </p>
         )}
-
-        <div className="mt-2 flex flex-wrap gap-2" data-testid="hq-kind-filter">
-          {[
-            ['all', 'All'],
-            ['subsidiary', 'Axal'],
-            ['white_label', 'White-label'],
-          ].map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              disabled={!ready}
-              onClick={() => setKindFilter(id)}
-              className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${
-                kindFilter === id
-                  ? 'border-white bg-white/20 text-white'
-                  : 'border-white/40 text-white/90 hover:bg-white/10'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
 
         <header className="mt-4">
           <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
@@ -434,6 +434,11 @@ export default function HqHomePage() {
             <p className="text-[12.5px] text-axal-muted">
               No licences have been issued yet. The ledger is empty, which is a different fact from every
               subsidiary being healthy. <Link to="/admin/licences" className="underline">Issue the first licence →</Link>
+            </p>
+          )}
+          {ready && licences.length > 0 && shown.length === 0 && (
+            <p className="text-[12.5px] text-axal-muted" data-testid="hq-kind-filter-empty">
+              No licences match this filter. Choose All, Axal subsidiary, or White-label above.
             </p>
           )}
           {ready && shown.length > 0 && (
