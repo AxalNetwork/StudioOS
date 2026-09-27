@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useContext, useEffect, useId, useState } from 'react';
 import { PanelRightClose, PanelRightOpen, ShieldCheck } from 'lucide-react';
+import { Link, UNSAFE_LocationContext, useInRouterContext } from 'react-router-dom';
 import useAiSpend, { modelsForTask, priceForTask } from '../hooks/useAiSpend';
 import useAssistMode from '../hooks/useAssistMode';
 import { api } from '../lib/api';
@@ -8,6 +9,7 @@ import { formatCost, formatRate, formatSpend, lastRunReceipt, spendMeter } from 
 import { ASSIST_SURFACES, EADWYN_GUARDRAIL, observedRunCost } from './eadwynConfig';
 import { MODEL_COPY } from './railModels';
 import { Unreadable } from './Honesty';
+import { railInheritance } from './railInheritance';
 import { ACCENT } from '../workspaces/shellConfig';
 import './workerRail.css';
 
@@ -162,6 +164,26 @@ const modelKeyFor = (workspace) => `${MODEL_KEY_PREFIX}${String(workspace || '')
 const RAIL_COLLAPSED_ATTR = 'data-worker-rail';
 
 /**
+ * The current pathname, without requiring a router (D402).
+ *
+ * `useLocation()` throws outside a router, and a rail is not worth a blank
+ * page: several tests render pages that mount it with no router around them.
+ * The location context reads as null there instead, and the rail falls back
+ * to the window's own path, which is the same value inside the app.
+ */
+function useRailPathname() {
+  const ctx = useContext(UNSAFE_LocationContext);
+  if (ctx?.location?.pathname != null) return ctx.location.pathname;
+  return typeof window !== 'undefined' ? window.location?.pathname || '' : '';
+}
+
+/** A link to the workspace root, as a router Link inside the app and a plain anchor outside one. */
+function RootLink({ to, children, ...rest }) {
+  const inRouter = useInRouterContext();
+  return inRouter ? <Link to={to} {...rest}>{children}</Link> : <a href={to} {...rest}>{children}</a>;
+}
+
+/**
  * The one ASSIST_SURFACES key every workspace zone shares, on all four
  * licences. One surface rather than one per bucket because the task is the
  * same everywhere — read back the lines the page is already showing — and
@@ -284,6 +306,14 @@ export default function WorkerRail({
   // renders something selected rather than nothing, and the run that follows
   // is one the worker will accept.
   const activeModel = models.some((m) => m.id === chosen) ? chosen : (models[0]?.id ?? null);
+
+  // ZONE OR ROOT (D402). On a zone below a workspace the model is the
+  // workspace's — the same stored key — and the rail shows it read-only with
+  // a link back to where it is chosen, rather than a menu whose every click
+  // silently changes the whole workspace.
+  const pathname = useRailPathname();
+  const inherited = railInheritance(role, pathname);
+  const activeEntry = models.find((m) => m.id === activeModel) || null;
 
   // Shared with the page, which decides whether to offer proposals, through a
   // module store rather than a provider — see hooks/useAssistMode.js.
@@ -487,7 +517,36 @@ export default function WorkerRail({
             <span>Model · this page</span>
             {surface.modeNote && <p className="fwr-mode-note">{surface.modeNote}</p>}
 
-            {models.length > 1 ? (
+            {inherited && models.length > 1 ? (
+              <>
+                {/* The canvas's dashed card and chip (DetailRail, EmberRail,
+                    and the Validate zones). Named after the WORKSPACE the page
+                    passed, because that is the key the choice is stored under —
+                    never after the zone, which is EmberRail's "Inherited from
+                    Analytics" defect. */}
+                <div className="fwr-inherited" data-testid="worker-rail-inherited">
+                  <i className="fwr-badge fwr-badge-inherited">INHERITED</i>
+                  <p>
+                    {`Inherited from ${workspace}. Mode and model are chosen on the workspace, not re-picked here. Change the model there and this page follows.`}
+                  </p>
+                  <RootLink to={inherited.to} className="fwr-inherited-link" data-testid="link-worker-rail-inherited">
+                    {`Change it on ${workspace}`}
+                  </RootLink>
+                </div>
+                {activeEntry && (
+                  <div className="fwr-model fwr-model-readonly" data-selected="true" data-testid="text-worker-rail-model">
+                    <span className="fwr-model-head">
+                      <b>{activeEntry.name}</b>
+                      {activeEntry.isDefault && <i className="fwr-badge">DEFAULT</i>}
+                    </span>
+                    <span className="fwr-model-id">{activeEntry.id}</span>
+                    <span className="fwr-model-rate">
+                      {`${formatRate(activeEntry.pin)} / M in · ${formatRate(activeEntry.pout)} / M out`}
+                    </span>
+                  </div>
+                )}
+              </>
+            ) : models.length > 1 ? (
               <>
                 {/* Real radios, visually hidden behind the cards. A group of
                     buttons would need arrow-key handling and an aria-checked
