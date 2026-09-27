@@ -76,6 +76,10 @@ async function detailDto(env: Env, c: Company, viewer: User): Promise<any> {
   out.created_at = c.created_at;
   out.updated_at = c.updated_at;
   const isMember = await viewerIsMember(env, c.id, viewer);
+  // D431 — economics are the member's and the editors'. `canEdit` is the rule
+  // that already decides who may WRITE carry; the same rule decides who may
+  // read it, so a reader who could not change a figure is never shown it.
+  const editor = await canEdit(env, c, viewer);
   const links = await env.DB.prepare('SELECT * FROM user_company_links WHERE company_id = ?')
     .bind(c.id).all<Link>();
   const members: any[] = [];
@@ -93,7 +97,15 @@ async function detailDto(env: Env, c: Company, viewer: User): Promise<any> {
       // Analyst on VIEW would be inventing a fact about a real person.
       title: (lnk as any).title ?? null,
       authority: (lnk as any).authority ?? null,
-      carry_bps: (lnk as any).carry_bps ?? null,
+      // D431 — carry is served to its holder and to an editor, and to nobody
+      // else: the FIELD is absent for a refused reader, not null, because null
+      // already means "not recorded" and a reader must not confuse "withheld"
+      // with "none". Canvas T4: economics are locked when the viewer is
+      // neither the member nor a partner, "visible as a locked section,
+      // because a hidden one teaches people the wrong shape of the org".
+      ...(editor || lnk.user_id === viewer.id
+        ? { carry_bps: (lnk as any).carry_bps ?? null }
+        : {}),
       joined_at: lnk.created_at,
     });
   }

@@ -32187,3 +32187,91 @@ the enrolment batch dropping the `auth_totp` write.
 
 No migration, no route, no `api.js` method, no `frontend/src` change, so
 `docs/` is untouched.
+
+## D431
+
+**The economics gate: a member's carry is served to that member and to an
+editor, and to nobody else — the field is absent for a refused reader, never
+null.** Session 15's item 2; a disclosure fix (the gap map's trap 1).
+
+**What was true on main (`c38d972f02`).** `detailDto` in `routes/company.ts`
+put `carry_bps` on every member row for every member of the company (and
+every platform admin): an Analyst reading the settings page's own payload —
+`GET /company/:uid`, `/company/me`, `/company/memberships`, and the body
+every member write answers with — could read every partner's carry.
+`CompanySettingsPage` then drew the carry input on every row for every
+viewer, disabled for non-editors but showing the value.
+
+**What changed.**
+- **The read gate is the write gate.** `canEdit` — a platform admin, the
+  primary admin, or an Owner, Admin or Founder by `role_in_company` — already
+  decides who may change a member's carry. `detailDto` computes it once per
+  payload and spreads `carry_bps` into a row only when the viewer is an
+  editor or is that member. Every payload that carries members goes through
+  `detailDto`, so the gate is applied everywhere at once.
+- **Absent, not null.** `null` already means "not recorded" (team_authority's
+  pin, kept unchanged), and a reader must not be able to mistake "withheld
+  from you" for "this person holds no carry". A refused reader's row has no
+  `carry_bps` key at all; the rest of the row — name, email, role, title,
+  authority — is untouched, because withholding one figure hides nobody.
+- **The page branches on whether the field arrived.** An editor gets the
+  input (no longer drawn-then-disabled for anyone else); the member gets
+  their own figure read-only ("Carry 1.5%", or "Carry — not recorded" for
+  null, through the one bps formatter); everyone else gets a locked chip,
+  "Economics · locked", whose note is the canvas's: "Visible to the member
+  and to an Owner, Admin or Founder only. You see that carry exists and not
+  what it is."
+- **Locked, not hidden, by the canvas's own rule.** Team · Authority T4:
+  economics are locked when the viewer is neither the member nor a partner,
+  "visible as a locked section, because a hidden one teaches people the wrong
+  shape of the org". The brief's "hidden for everyone else" is read as the
+  INPUT hidden; the lock is drawn. T4 says "Partner+"; this codebase has no
+  partner rung on `user_company_links` yet (item 6 builds Team · Authority's
+  stores), so the editors are the three edit roles the page already names,
+  and the note says so rather than promising a wider audience than the
+  server serves. When item 6 lands a title ladder, the gate can widen to it
+  in one place.
+- **Reading your own carry is not writing it.** The PATCH stays the editor's
+  (a non-editor's write on their own row is still 403), and its response
+  carries the gated payload it always did.
+
+**Guard.**
+- `cloudflare-worker/test/carry_bps_gate_d431.test.ts`, 6 tests, through the
+  real router on in-memory SQLite: an editor by primary-admin, by role and by
+  platform role reads every carry, null included; a non-editor reads their
+  own and no one else's, with the field absent and the rest of the row
+  intact; a member with no carry recorded sees their own null, never a lock;
+  `/company/me` and `/company/memberships` apply the same gate; a non-editor's
+  write on their own row is refused and an editor's write answers with the
+  gated payload; a source guard holds the gate to `canEdit`, applied once per
+  payload, spread in conditionally and never nulled.
+- `frontend/test/carry_gate_d431.test.mjs`, 4 tests: the row branches on the
+  field's presence with the lock, the input and the read-only figure as its
+  three arms and the input gated on `canChange` with no `!canChange`
+  disabling; the lock quotes T4's sentence (read from the canvas) and says
+  who can see through it; the member's own null reads "not recorded", never
+  a lock; the page's `EDIT_ROLES`, the server's `canEdit` and the lock note
+  name the same three roles.
+- `team_authority.test.mjs`'s "null means NOT RECORDED" pin still matches
+  the spread expression and is not edited.
+
+**Mutations: 10 run, 10 caught** — each a non-zero exit with a `not ok`
+line, anchors unique, bytes proven changed, sources restored from a
+sha256-checked snapshot: the gate removed; a refused reader given null
+instead of no field; the member unable to read their own; an editor by role
+refused; the gate loosened to membership; the page drawing the input for
+absent and null alike; the lock dropped; the input drawn for a non-editor
+and merely disabled; the lock note promising every member; the member's
+own null drawn through `|| 0`.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA
+fallback, `/api/company/*` stubbed as the worker now shapes it. Signed in as
+the Owner, the Analyst's and Associate's rows draw the carry input (25 and
+empty) and the Owner's own primary-admin row draws "Carry 15%" read-only; as
+the Analyst, the Owner's and Associate's rows draw "Economics · locked" with
+the T4 note as its title and the Analyst's own row "Carry 0.25%"; as the
+Associate, whose carry is null, the own row reads "Carry — not recorded" and
+the other two are locked.
+
+`frontend/src` moved, so `docs/` is rebuilt. No migration, no route, no
+`api.js` method.
