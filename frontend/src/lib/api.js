@@ -1657,6 +1657,18 @@ export const api = {
   updateMvpFeature: (id, data) => request(`/progress/mvp-scope/feature/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteMvpFeature: (id) => request(`/progress/mvp-scope/feature/${id}`, { method: 'DELETE' }),
   listMetricsSnapshots: (projectId) => request(`/progress/metrics/${projectId}`),
+  // D363 — the revenue ledger (migration 311). Amounts are integer cents;
+  // verification is set by the Worker, never sent from here.
+  revenueEntries: (projectId) =>
+    request(`/revenue/projects/${encodeURIComponent(projectId)}/entries`),
+  revenueEntryCreate: (projectId, entry) =>
+    request(`/revenue/projects/${encodeURIComponent(projectId)}/entries`, { method: 'POST', body: JSON.stringify(entry) }),
+  revenueEntriesImport: (projectId, rows) =>
+    request(`/revenue/projects/${encodeURIComponent(projectId)}/entries/import`, { method: 'POST', body: JSON.stringify({ rows }) }),
+  revenueEntryUpdate: (projectId, uid, patch) =>
+    request(`/revenue/projects/${encodeURIComponent(projectId)}/entries/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  revenueEntryDelete: (projectId, uid) =>
+    request(`/revenue/projects/${encodeURIComponent(projectId)}/entries/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
   createMetricsSnapshot: (projectId, data) => request(`/progress/metrics/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   deleteMetricsSnapshot: (id) => request(`/progress/metrics/${id}`, { method: 'DELETE' }),
   // Task #194 — metric targets. `metric_targets` shipped in migration 173 and

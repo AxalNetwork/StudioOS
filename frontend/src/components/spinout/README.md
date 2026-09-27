@@ -9,6 +9,7 @@ they share lives here, so a tool page and its admin preview draw the same thing.
 | `LabPageShell.jsx` | The outer wrapper of every Lab tool page: gutters and per-tool max width. |
 | `LabPageHeader.jsx` | The one tool-page header. |
 | `LabPageIcon.jsx` | The violet icon tile in that header. |
+| `RevenueLedger.jsx` | The Revenue page's per-customer entry ledger (D363): filters, investor view, manual entry, CSV import with column mapping, proof attachment, mix and confidence, over `/api/revenue`. Sums are integer cents via `../../lib/revenueLedger.js`. |
 | `LabBackLink.jsx` | "← Back to Workspace", the Lab's return control. |
 | `labStyles.js` | The shared status chip and quick-action button classes. |
 | `LabIntro.jsx` | The programme introduction, on both `/spinout-lab` surfaces. |

@@ -31831,6 +31831,114 @@ its `api.js` method is in the same commit. No migration.
   hardening has merged, so wiring it is possible, but it is not part of this
   item.
 
+## D363
+
+**The revenue ledger: one row per payment, in integer cents, evidenced or
+not, stated as such.** Wave 8, Session 8, item 4.
+- Migration 311 adds `revenue_entries`.
+- The new route file `routes/revenue.ts` is mounted at `/api/revenue`, and
+  its five `api.js` methods land in the same commit.
+- The Revenue page gains the ledger.
+
+**The gap.** The Revenue canvas draws a per-customer entry ledger. Each row
+has a customer, amount, type, date, verification status and proof. The
+ledger has five filters, an investor view, manual entry, a CSV import with
+column mapping, a proof vault, and mix and confidence bars. No store held any
+of it. The page could show `project_metrics` snapshots (one MRR per date) and
+the project's self-reported proof fields, and its header said the ledger was
+"intentionally NOT reproduced".
+
+**What changed.**
+- **Migration 311 (`revenue_entries`).** Additive only
+  (`CREATE … IF NOT EXISTS`), and it depends on no other migration.
+  - `amount_cents` is an INTEGER with `CHECK (> 0)`.
+  - `currency` is `usd`; the Worker refuses any other currency until sums
+    can keep currencies apart.
+  - `revenue_type` is one of `recurring`, `pilot`, `one_time`, `deposit`.
+  - `received_on` is a date; `source` is `manual`, `csv` or the reserved
+    `stripe`.
+  - `verification` is one of `verified`, `supported`, `manual`.
+  - `proof_document_id` points at a document; plus notes, the import batch
+    and the author.
+  - `ensureRevenueEntriesSchema` is the D235 safety net. It is cached per
+    binding, and a test holds it to the migration.
+- **`routes/revenue.ts`** lists, creates, imports, edits and deletes entries.
+  - Access is the same as `/api/progress/metrics`, the store the ledger sits
+    beside:
+    - the project is narrowed to the caller's active company, with admins and
+      partners exempt;
+    - its founder, an admin or a partner can read it;
+    - its founder, an admin or an active Lab member who owns it can write.
+  - An entry reached through another project is a 404.
+  - A failed read is a 500 with our own sentence, never an empty list the
+    page would draw as "no revenue recorded".
+  - Refusals carry a code and a sentence.
+- **Money is integer cents end to end.**
+  - A CSV amount is parsed as text, never through a float: "1,200.50"
+    becomes 120050.
+  - A third decimal place, a zero, a negative or a non-number is refused, not
+    rounded.
+  - The page's sums (`lib/revenueLedger.js`) stay in cents until one
+    formatter turns them into dollars.
+- **Verification is the Worker's.** `verificationFor` derives it from the
+  row, and a request cannot set it.
+  - An entry with a proof document from the same project is `supported`; one
+    without is `manual`.
+  - `verified` is reserved for entries a Stripe charge sync writes. No such
+    sync exists: the Stripe import (`routes/progress.ts`) records MRR and
+    customer counts, not charges. So no path writes `verified` today.
+  - Because of that, the page's "Verified revenue" KPI and the Verified mix
+    line read "Not recorded" with that reason. They do not show 0%, which
+    would claim entries were checked and failed.
+  - Building the charge sync is the step past this line.
+- **The CSV import checks every row first.**
+  - It writes the valid rows in one batch and returns each refused row with
+    its code and sentence.
+  - An imported row never carries a proof document id; proof is attached per
+    entry afterwards, from the startup's own documents.
+- **The page** (`components/spinout/RevenueLedger.jsx`, mounted in
+  `SpinoutLabRevenuePage.jsx`):
+  - the canvas's five filters and the investor view (the same rows, without
+    the unevidenced ones);
+  - a manual-entry form, with no defaults for date or type;
+  - CSV import: upload, a guessed column mapping the founder confirms, a
+    preview, then the server's per-row result. A day-first date such as
+    "18/07/2026" is never reshaped; the Worker refuses it with its own
+    reason;
+  - per-row proof attachment from the startup's documents;
+  - mix bars by type and confidence by evidence;
+  - ledger KPIs: total, distinct customers, verified share and proof
+    coverage.
+  - A failed ledger read renders `Unreadable` with a retry, and the KPIs
+    built from it read Unreadable rather than "$0".
+  - The existing snapshot log, Stripe MRR sync and proof fields are
+    unchanged beside it.
+
+**Not built, with the reason on screen.**
+- The Week 3 / Week 4 mode tabs. They only reword a banner, so they would be
+  a control with nothing behind it.
+- A proof "vault" of uploaded files separate from the startup's documents.
+  Proof is attached from `GET /legal/documents`, which is the store the
+  canvas's proof rows describe.
+
+**Guards.**
+- `cloudflare-worker/test/revenue_ledger_d363.test.ts` has 7 tests. It runs
+  on real SQLite (`_d1_sqlite.mjs`) with migration 311 executed, so the
+  table's CHECKs, the binds and the scoping decide what comes back.
+- `frontend/test/spinout_revenue_ledger_d363.test.mjs` has 7 tests.
+- Writing the frontend test found a real defect before merge:
+  `normalizeCsvDate` turned "18/07/2026" into "2026-18-07". The Worker would
+  have refused that date, but the helper had promised not to guess a
+  day-first date. It now accepts a month-first date only when the month is
+  1 to 12.
+- Mutation-checked both ways: 28 of 28 caught, each with a non-zero exit and
+  a `not ok` line, and every file was restored and checked by sha256.
+  - One mutation, letting an imported row keep a proof id through
+    validation, first escaped. The import's INSERT has no proof column, so
+    that mutation changed no behaviour.
+  - It was re-aimed at the real defect, the INSERT writing the proof id, and
+    that version is caught.
+
 ## D380
 
 **The Spin-Out Lab honesty sweep: the seat count reads `/brief`'s `places`,
@@ -36448,6 +36556,17 @@ exits 0.
 
 No live branch. Session 1 confirms the deploy and production D1. This session
 cannot read the deploy log.
+
+## D471
+
+**The Send for Signature canvas cut is not a script injection.** Semgrep
+alert on `frontend/test/send_for_signature_d411_contract.test.mjs`: the rule
+`unknown-value-with-script-tag` reports a file read used in the same call as
+a script-tag literal. The read is the design canvas, and the literal was the
+cut that keeps assertions on the markup. The cut is unchanged: the `<` in
+front of `data-dc-script`. The tag name is assembled from two pieces so the
+file read is not written next to one script-tag literal. The string is never
+served. The test throws if that element is gone. No migration.
 
 ## D490
 
