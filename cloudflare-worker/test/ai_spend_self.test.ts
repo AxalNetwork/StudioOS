@@ -344,7 +344,11 @@ test('the hook keeps "no record" distinguishable from "$0" at the boundary', () 
     resolve(process.cwd(), 'frontend/src/hooks/useAiSpend.js'), 'utf8');
   // A failed fetch must leave `spend` null rather than substituting an
   // empty-looking object, or the component cannot tell the two apart.
-  assert.match(hookSrc, /if \(s && !s\.__err\) setSpend\(s\); else setError/);
+  // RE-AIMED IN D400: the hook now keeps a separate error per read and a
+  // retry can run the fetch again, so the failure branch also clears a
+  // previous success. The property is the same — success sets the response,
+  // failure leaves `spend` null and records why.
+  assert.match(hookSrc, /if \(s && !s\.__err\) \{ setSpend\(s\); setSpendError\(null\); \} else \{ setSpend\(null\); setSpendError\(/);
   assert.doesNotMatch(hookSrc, /setSpend\(\{\s*\}\)|setSpend\(\{ *spend_usd: *0/,
     'a failure must not be turned into a zero reading');
 });

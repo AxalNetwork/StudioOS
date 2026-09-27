@@ -35,7 +35,14 @@ export const ASSIST_SURFACES = {
   // routes/advisor.ts → aiRouterRun({ task: 'advisor_explain' })
   advisory: {
     task: 'advisor_explain',
-    label: 'Advisory',
+    // 'Score explainer', not 'Advisory' (D400). The mode card renders
+    // `${label} assist`, so this read "Advisory assist" — the assistant
+    // named as giving advice, which the voice rule forbids. The regulated-
+    // wording scanner treats a one-word literal as an identifier and missed
+    // it. The surface explains scores and next steps, and the label says so.
+    // The ROUTE `/advisory` keeps its name: that page also holds the human
+    // advisors, who are a real persona.
+    label: 'Score explainer',
     unit: 'per explanation',
     modeNote: 'Eadwyn explains scores and next steps on request.',
     footer: { kind: 'screened', note: 'Every answer passes a safety screen first.' },
@@ -191,8 +198,12 @@ export function eadwynConfig({ surface, spend, pricing }) {
       : { kind: 'fixed', label: `${s.label} assist` },
     guardrail: EADWYN_GUARDRAIL,
     defaultPage: surface,
-    planCap: spend?.month?.cap_usd ?? 0,
-    totalSpend: spend?.month?.spend_usd ?? 0,
+    // NULL, NEVER ZERO (D400). These were `?? 0`, and a `recorded: false`
+    // response — the usage table could not be read, `spend_usd: null` — came
+    // out as a $0.00 meter: a failed read drawn as a fact. `null` is what
+    // AssistRail reads as "unknown".
+    planCap: typeof spend?.month?.cap_usd === 'number' ? spend.month.cap_usd : null,
+    totalSpend: spend?.recorded && typeof spend?.month?.spend_usd === 'number' ? spend.month.spend_usd : null,
     pages: {
       [surface]: {
         modeNote: s.mode?.kind === 'choice' ? s.mode.note : s.modeNote,
@@ -204,10 +215,12 @@ export function eadwynConfig({ surface, spend, pricing }) {
         run: {
           unit: s.unit,
           label: s.label,
-          // Zero token counts on purpose: runCost() then returns 0 and the
-          // caller uses `observed` instead. The rail never quotes a modelled
-          // figure, because nothing here has modelled one.
-          tin: 0, tout: 0, pin: priced?.pin ?? 0, pout: priced?.pout ?? 0,
+          // No token counts and no rates, on purpose: nothing here has
+          // modelled a run, so there is nothing to multiply. runCost() of an
+          // empty profile is 0, AssistRail treats a 0 model as "no modelled
+          // figure", and the card falls back to `observed` or says it has
+          // none. (This used to type `tin: 0` and `pin: priced?.pin ?? 0` —
+          // the same absence, spelled as zeros. D400.)
         },
         observed,
         assistLabel: observed

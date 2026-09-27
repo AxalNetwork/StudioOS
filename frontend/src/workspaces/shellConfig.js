@@ -16,9 +16,10 @@
  * investor workspaces all solving the same problem four ways.
  *
  * THE ARCHETYPES are the canvases' own taxonomy and they are load-bearing, not
- * decoration: a zone's archetype says what kind of surface it is, and the six
- * badge colours are identical across all eighteen canvas files. They are
- * carried here so a page cannot drift from the canvas that specifies it.
+ * decoration: a zone's archetype says what kind of surface it is. The badge
+ * colours follow the per-bucket canvases; the two Detail Layer canvases draw
+ * a different palette (Canvas I and II disagree with each other too), and the
+ * tests pin this one, so do not repaint from the Detail Layer files (D400).
  *
  * WHAT IS DELIBERATELY ABSENT. Spin-Out Lab keeps its own route tree and is
  * referenced only as a sidebar row target — no Lab route is defined, renamed
@@ -31,7 +32,7 @@
  * to exactly one shell.
  */
 
-// The six archetypes, with the badge palette every canvas file uses verbatim:
+// The six archetypes, with the per-bucket canvases' badge palette:
 // [background, ink, border]. Do not re-derive these per surface.
 export const ARCHETYPE = {
   WORK_BOARD:   { label: 'WORK BOARD',   colors: ['#eff6ff', '#1d4ed8', '#dbeafe'] },
