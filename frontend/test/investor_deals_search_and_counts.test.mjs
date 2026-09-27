@@ -79,7 +79,7 @@ test('a count is only ever claimed where the page supplies one', () => {
   const supplied = {
     'deals/pipeline': ['all', 'unassigned', 'stale', 'passed'],
     'deals/screening': ['scored', 'flags'],
-    'deals/closing': ['close', 'documents'],
+    'deals/closing': ['close', 'documents', 'blocking'],
   };
   for (const [zone, keys] of Object.entries(supplied)) {
     const rows = INVESTOR_ZONE_FILTERS[zone];
@@ -101,7 +101,7 @@ test('each page passes the counts its labels promise', () => {
   const pages = {
     PipelineZone: ['all:', 'unassigned:', 'stale:', 'passed:'],
     ScreeningZone: ['scored:', 'flags:'],
-    ClosingZone: ['close:', 'documents:'],
+    ClosingZone: ['close:', 'documents:', 'blocking:'],
   };
   for (const [file, keys] of Object.entries(pages)) {
     const z = ZONE(file);

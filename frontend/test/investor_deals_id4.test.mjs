@@ -151,23 +151,34 @@ test('executed means completed, and a ratio is never mistaken for it', () => {
   assert.doesNotMatch(Z, /\|\|\s*0\b(?!\s*[;,)])/, 'an absent figure falls back to 0');
 });
 
-test('the zone adds no endpoint, because both reads were already served and scoped', () => {
+test('every read the zone makes is a scoped one', () => {
   // ID3's finding was that a second copy of a scoped query is how a tenancy
-  // hole reopens. ID4's answer is to add neither a route nor a query.
+  // hole reopens. ID4 composes three reads, each scoped at its own route: the
+  // deals (this fund's), the paper (the envelope scope) and — since D461 —
+  // the open conditions (the decision scope, in ic.ts where that predicate
+  // lives).
   assert.match(Z, /api\.listDeals\(undefined, 'mine'\)/);
   assert.match(Z, /api\.esignList\(\)/);
+  assert.match(Z, /api\.icConditions\('open'\)/);
   // The endpoint behind `esignList` puts the scope in FIRST and unconditionally.
   assert.match(ESIGN, /const scope = esignEnvelopeScope\(user\);\s*\n\s*const where: string\[\] = \[scope\.sql\];/,
     'esign.get(/) stopped opening its WHERE clause with the scope');
-  // And the zone touches no store directly — the two calls above are the whole
-  // data layer, so a third would be a new dependency this zone does not need.
+  // And the conditions read rides the decision scope rather than a second
+  // copy of it — the same rule this zone's own design was written under.
+  const IC = read('cloudflare-worker/src/routes/ic.ts');
+  const condAt = IC.indexOf("r.get('/conditions'");
+  assert.ok(condAt >= 0, 'the conditions list route is gone');
+  assert.match(IC.slice(condAt, condAt + 1400), /icDecisionScope\(user\)/,
+    'the conditions list stopped riding the decision scope');
+  // And the zone touches no store directly — the three calls above are the
+  // whole data layer.
   const calls = [...new Set([...Z.matchAll(/api\.([A-Za-z]+)\(/g)].map((m) => m[1]))].sort();
-  assert.deepEqual(calls, ['esignList', 'listDeals'],
-    'the zone gained an API call, so it is no longer composing two existing reads');
+  assert.deepEqual(calls, ['esignList', 'icConditions', 'listDeals'],
+    'the zone gained an API call beyond the three scoped reads');
   for (const table of ['esign_envelopes', 'legal_templates']) {
     assert.ok(!fetching().includes(table), `the zone reads ${table} directly, which is the worker's job`);
   }
-  // A new /deals or /ic route for this zone would be the regression.
+  // A new /deals route for this zone would be the regression.
   const DEALS = read('cloudflare-worker/src/routes/deals.ts');
   assert.ok(!DEALS.includes("deals.get('/closing'"), 'a closing endpoint was added that nothing needed');
 });
@@ -263,15 +274,16 @@ test('an unreadable tile names WHICH read is missing, not just that one is', () 
   }
 });
 
-test('no row is drawn as blocking, because the condition it would come from has no store', () => {
+test('a blocking row is an open Commit condition, read from the store the hand-off runs on', () => {
   // The artboard's note makes this explicit: the blocking item "arrived from
-  // the Commit vote". ID3 established that no condition is stored, so ID4
-  // inherits the gap rather than inventing a local one.
+  // the Commit vote". D461 built that hand-off — `ic_conditions` (migration
+  // 334) — so the chip is live and the rows are the commit room's, never
+  // typed locally.
   assert.match(id4(), /arrived from the Commit vote/, 'the artboard changed its premise');
   const at = FILTERS.indexOf("'deals/closing': [");
   assert.ok(at >= 0, 'the closing filter row is gone');
   const rowsrc = FILTERS.slice(at, FILTERS.indexOf('],', at));
-  assert.match(rowsrc, /canvas: 'Blocking', unbuilt:/, 'Blocking is offered as a live chip');
+  assert.match(rowsrc, /canvas: 'Blocking', key: 'blocking'/, 'Blocking is not the live chip the store now serves');
   assert.match(rowsrc, /canvas: 'Wires', unbuilt:/, 'Wires is offered as a live chip');
   for (const canvas of ['This close', 'Documents']) {
     assert.match(rowsrc, new RegExp(`canvas: '${canvas}', key:`), `${canvas} narrows nothing`);
@@ -284,7 +296,11 @@ test('no row is drawn as blocking, because the condition it would come from has 
     [...rowsrc.matchAll(/canvas: '([^']+)'/g)].map((m) => m[1]),
     'the closing filter row drifted from the artboard',
   );
-  assert.match(ZONE, /Nothing here can be blocking/);
+  // The page reads the open conditions and narrows them to deals at closing.
+  assert.match(ZONE, /api\.icConditions\('open'\)/, 'the zone never reads the conditions store');
+  assert.match(ZONE, /cond\.deal_id != null && ids\.has\(cond\.deal_id\)/,
+    'the blocking rows must narrow to the deals at closing');
+  assert.match(ZONE, /Blocking is real, and lives in the commit room/);
 });
 
 test('the AI band is allow-listed and forbidden from inventing the condition', () => {
