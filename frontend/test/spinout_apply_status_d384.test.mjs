@@ -62,13 +62,18 @@ test('the canvas still draws what this page answers', () => {
 });
 
 test('the client offers exactly the worker’s closed sets', () => {
-  const setOf = (name) => JSON.parse(
-    WORKER.match(new RegExp(`export const ${name} = \\[([\\s\\S]*?)\\] as const`))[1].trim().replace(/'/g, '"').replace(/,\s*$/, '')
-      .replace(/^/, '[').replace(/$/, ']'),
-  );
-  assert.deepEqual(ORIGIN_OPTIONS.map((o) => o.key), setOf('ORIGINS'));
-  assert.deepEqual(TTO_OPTIONS.map((o) => o.key), setOf('TTO_STATUSES'));
-  assert.deepEqual(IP_OPTIONS.map((o) => o.key), setOf('IP_FLAGS'));
+  // Literal patterns, one per set: the worker file is read, never a pattern built from a name.
+  const setOf = (re) => {
+    const m = WORKER.match(re);
+    assert.ok(m, `the worker no longer declares ${re}`);
+    return [...m[1].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]);
+  };
+  const ORIGINS = setOf(/export const ORIGINS = \[([\s\S]*?)\] as const/);
+  const TTO_STATUSES = setOf(/export const TTO_STATUSES = \[([\s\S]*?)\] as const/);
+  const IP_FLAGS = setOf(/export const IP_FLAGS = \[([\s\S]*?)\] as const/);
+  assert.deepEqual(ORIGIN_OPTIONS.map((o) => o.key), ORIGINS);
+  assert.deepEqual(TTO_OPTIONS.map((o) => o.key), TTO_STATUSES);
+  assert.deepEqual(IP_OPTIONS.map((o) => o.key), IP_FLAGS);
 });
 
 test('what a submission must carry matches the worker, case by case', () => {
@@ -151,7 +156,8 @@ test('the stage the timeline rings is the stage the lede names', () => {
     const now = timelineFor(a).filter((s) => s.state === 'now');
     assert.equal(now.length, 1);
     assert.equal(now[0].name.toLowerCase(), name);
-    assert.match(statusLede(a), new RegExp(`at (the )?${name}`));
+    const lede = statusLede(a);
+    assert.ok(lede.includes(`at ${name}.`) || lede.includes(`at the ${name}.`), `the lede does not name ${name}`);
   }
 });
 
