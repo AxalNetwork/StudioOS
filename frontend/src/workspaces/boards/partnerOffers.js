@@ -1,4 +1,4 @@
-import { count, summary, title, top, usd, usdCents } from './format.js';
+import { count, summary, title, top, usd, usdCents, total } from './format.js';
 
 /*
  * `/offers` — Partner Operator Canvas P5, "Package what we sell".
@@ -51,6 +51,8 @@ export default function partnerOffersBoard(role, api) {
         // artboard's instMeta is "Prices stored as integers, formatted once",
         // and feeding a cents integer to the dollars formatter reads $480,000
         // where the page reads $4,800.
+        // services.ts reads offerings with LIMIT 200 (D403).
+        total: (d) => total(d?.items, 200),
         rows: (d) => top(d?.items).map((o) => [o.title, title(o.category), usdCents(o.price_cents)]),
         footnote: () =>
           'The catalog is what a founder browsing the network sees. Each entry carries its own '

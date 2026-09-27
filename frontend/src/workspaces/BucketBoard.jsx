@@ -1,5 +1,5 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { Card, Skeleton } from '../ui';
 import { accentLinkClass, zonePath } from './shellConfig';
 import NoStoreYet from './NoStoreYet';
@@ -66,6 +66,16 @@ const SECTION = 'scroll-mt-24';
 export default function BucketBoard({ bucket, role = 'founder', board, className = '' }) {
   const sources = board?.sources || EMPTY;
   const byKey = useBucketSources(sources);
+  // BACK TO THE ZONE YOU LEFT (D403). A zone page's crumb links to
+  // `/prefix#<section anchor>`, and React Router does not scroll to a hash on
+  // its own. Every section renders its `id` from the first paint (a skeleton
+  // while its source loads), so the element exists when this runs.
+  const { hash } = useLocation();
+  useEffect(() => {
+    const id = decodeURIComponent(String(hash || '').replace(/^#/, ''));
+    if (!id || typeof document === 'undefined') return;
+    document.getElementById(id)?.scrollIntoView({ block: 'start' });
+  }, [hash]);
   if (!bucket?.zones?.length || !board?.sections?.length) return null;
   const zoneBySlug = new Map(bucket.zones.map((z) => [z.slug, z]));
 
@@ -175,6 +185,8 @@ function Head({ title, to, sub }) {
 function Body({ section, payload, to }) {
   const rows = section.rows ? section.rows(payload) || [] : [];
   const note = section.footnote ? section.footnote(payload) : null;
+  const n = section.total ? section.total(payload) : null;
+  const more = Number.isInteger(n) && n > rows.length ? n : null;
   if (!rows.length) {
     return (
       <>
@@ -210,7 +222,17 @@ function Body({ section, payload, to }) {
       </div>
       {note && <Note>{note}</Note>}
       <p className="mt-3 text-[11px]">
-        <Link to={to} className="font-semibold text-gray-600 underline dark:text-gray-300">Open {section.title || 'the zone'}</Link>
+        {/* "View more · N" (the Detail Layer canvases' footer), and ONLY where
+            the section declares a sourced `total` larger than what it shows
+            (D403). No total, or one the read cannot vouch for, keeps the plain
+            link: a number here is a claim about how many rows the zone holds. */}
+        {more !== null ? (
+          <Link to={to} className="font-semibold text-gray-600 underline dark:text-gray-300" data-testid={`link-view-more-${section.slug}`}>
+            {`View more · ${more}`}
+          </Link>
+        ) : (
+          <Link to={to} className="font-semibold text-gray-600 underline dark:text-gray-300">Open {section.title || 'the zone'}</Link>
+        )}
       </p>
     </>
   );
