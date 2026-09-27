@@ -7,11 +7,13 @@
  * Copy is static per-slug metadata, not user data. Missing banner files hide
  * that slot rather than leaving a hole.
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { api, assessment } from '../lib/api';
 import { reportError } from '../lib/log';
+import { Unreadable } from '../ui';
+import { XpBar } from '../components/profile/xpBar';
 import {
   archetypeAudienceFromRole,
   archetypeBanner,
@@ -50,9 +52,13 @@ export default function ArchetypeCardPage({ activeRole }) {
   const audience = archetypeAudienceFromRole(activeRole);
   const [fit, setFit] = useState({ data: null, error: '' });
   const [results, setResults] = useState({ data: null, error: '' });
+  const [xp, setXp] = useState({ state: 'loading', data: null });
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     let alive = true;
+    setFit({ data: null, error: '' });
+    setResults({ data: null, error: '' });
     const wire = (p, set, onErr) => p
       .then((d) => { if (alive) set({ data: d, error: '' }); })
       .catch((e) => {
@@ -62,7 +68,16 @@ export default function ArchetypeCardPage({ activeRole }) {
     wire(api.bestFit.me(), setFit, (e) => reportError('ArchetypeCard:bestFit', e));
     wire(assessment.myResults(), setResults, (e) => reportError('ArchetypeCard:results', e));
     return () => { alive = false; };
+  }, [retry]);
+
+  // D325 — the Level / XP bar reads its own source, and retries on its own.
+  const readXp = useCallback(() => {
+    setXp({ state: 'loading', data: null });
+    assessment.myXp()
+      .then((d) => setXp({ state: 'ready', data: d }))
+      .catch((e) => { reportError('ArchetypeCard:xp', e); setXp({ state: 'unreadable', data: null }); });
   }, []);
+  useEffect(() => { readXp(); }, [readXp]);
 
   const fitData = fit.data;
   const conv = fitData?.archetype && fitData.archetype.slug
@@ -127,9 +142,8 @@ export default function ArchetypeCardPage({ activeRole }) {
       )}
 
       {failed && (
-        <div className="acp-card bg-white dark:bg-gray-900 border border-[#ececf1] dark:border-gray-700 p-[22px] flex items-start gap-2 text-[12.5px] font-medium text-red-700 dark:text-red-400">
-          <AlertCircle size={16} className="mt-[2px] shrink-0" />
-          <span>Couldn’t load your archetype. {fit.error || results.error}</span>
+        <div className="acp-card bg-white dark:bg-gray-900 border border-[#ececf1] dark:border-gray-700 p-[22px]" data-testid="archetype-unreadable">
+          <Unreadable what="Your archetype" claim="This is not a claim that you have none." onRetry={() => setRetry((n) => n + 1)} />
         </div>
       )}
 
@@ -165,6 +179,7 @@ export default function ArchetypeCardPage({ activeRole }) {
           </div>
 
           <div className="p-[22px] flex flex-col gap-5">
+            <XpBar xp={xp} onRetry={readXp} />
             {meta?.lean && (
               <div className="acp-lbl text-[#7c3aed] dark:text-violet-300">{meta.lean}</div>
             )}

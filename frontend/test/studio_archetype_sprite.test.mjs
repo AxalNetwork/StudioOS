@@ -50,9 +50,10 @@ test('archetypeIllustration maps known slugs to male and female paths', () => {
 
 test('studio compact archetype does not use the 300px two-column grid', () => {
   assert.doesNotMatch(fitCode, /md:grid-cols-\[300px/);
-  assert.match(fitCode, /<ArchetypeCard state=\{results\} fitState=\{fit\} audience=\{audience\} compact \/>/);
+  // D325 — the card also takes onRetry; the pin is that /studio mounts the compact card.
+  assert.match(fitCode, /<ArchetypeCard state=\{results\} fitState=\{fit\} audience=\{audience\} compact\b/);
   assert.match(fitCode, /max-w-\[180px\]/);
-  assert.match(fitCode, /<ArchetypeArt slug=\{latest\.slug\} sex=\{sex\} compact \/>/);
+  assert.match(fitCode, /<ArchetypeArt slug=\{latest\.slug\} sex=\{sex\} compact\b/);
 });
 
 test('full archetype holds the pair in a 280px column, not 300px', () => {
@@ -61,7 +62,8 @@ test('full archetype holds the pair in a 280px column, not 300px', () => {
 });
 
 test('the studio card renders the matching sex sprite, or the pair when unknown', () => {
-  assert.match(fitCode, /function ArchetypeArt\(\{ slug, sex, compact = false \}\)/);
+  // D325 — ArchetypeArt also takes the archetype's name, for the sprites' alt text.
+  assert.match(fitCode, /function ArchetypeArt\(\{ slug, sex, compact = false\b/);
   assert.match(fitCode, /if \(sex === 'm' \|\| sex === 'f'\)/);
   assert.match(fitCode, /variant="f"/);
   assert.match(fitCode, /variant="m"/);

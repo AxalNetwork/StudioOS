@@ -5590,6 +5590,8 @@ export const adminCircles = {
 // worker (api-drift guard checks this prefix).
 export const assessment = {
   myResults: () => request('/assessment/results/me'),
+  // D325 — the archetype card's Level / XP bar (GET /api/assessment/xp/me).
+  myXp: () => request('/assessment/xp/me'),
   results: (userId) => request(`/assessment/results/${userId}`),
 };
 
