@@ -92,11 +92,20 @@ via sidebar `match` arrays and `FounderWorkspaceTabs` on wrapped legacy routes.
 
 ### Still open (from canvas A1 / Founder Workspaces)
 
-- Mode toggle, model card, 44px collapsed rail spine.
-- Proposal anatomy: cost before run, receipt after, accept/edit/discard,
-  amber overwrite confirm, provenance mark on accepted output.
-- Per-workspace `ASSIST_SURFACES` registration so the rail can name a model
-  honestly.
+Most of this list has shipped: the model card and menu (D400), the 44px
+collapsed spine, the lasting receipt (D401), the inherited model on zones
+(D402), and — D424 — the mode switch on the four desks that have proposal
+bands, the cost before a run on every desk band, and Eadwyn's provenance mark
+on the Validate board's claims. What remains:
+
+- The spine's status dot and vertical spend (the rail's own files).
+- A proposal band's cost per page: D404 records `ai_usage_logs.surface`
+  (migration 319) for the rail's read-back, but the zone-draft route sends
+  none, so a band's estimate is per task.
+- Amber strike-through with a second confirm for an overwrite: not yet
+  applicable, because no fill overwrites a value.
+- The Friday retro draft on the Build cadence card: it needs a
+  `DRAFT_SURFACES` entry in `routes/research.ts`, and the card says so.
 
 ---
 
