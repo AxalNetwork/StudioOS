@@ -253,6 +253,7 @@ const NetworkPage = lazy(() => import('./pages/NetworkPage'));
 const LegalCapitalPage = lazy(() => import('./pages/LegalCapitalPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
 const SupportRedeemPage = lazy(() => import('./pages/SupportRedeemPage'));
+const JoinBranchPage = lazy(() => import('./pages/JoinBranchPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 const TeamPage = lazy(() => import('./pages/TeamPage'));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
@@ -2754,6 +2755,9 @@ function AppInner() {
       <Route path="/ic" element={guard(['admin', 'partner', 'investor'], <ICDecisionsPage />)} />
       <Route path="/ic/:uid" element={guard(['admin', 'partner', 'investor'], <ICDecisionPage />)} />
       <Route path="/lp-reports" element={guard(['admin', 'investor'], investorFundWorkspace(<FundOpsWorkspace />))} />
+      {/* D463 — the guard stays ['admin','investor']: this is a zone route of
+          the portfolio shell, and the founder's shell has no such zone. The
+          founder's composer is the Investor update card on /build/metrics. */}
       <Route path="/portfolio/updates" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/portfolio/positions" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       {/* Advisor sections shell — three tabbed workspaces (Network, Advisory,
@@ -3031,10 +3035,12 @@ function AppInner() {
           redirected into the hash-anchored docs surface. */}
       <Route path="/docs/admin/*" element={<AdminDocsPathGuard />} />
       <Route path="/docs" element={<DocsRedirect />} />
-      {/* Task #17 — investor "Profile" nav lands on the self-profile surface
-          (the Settings profile section rendered at its own path so the sidebar
-          item highlights independently of Settings). */}
-      <Route path="/profile" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
+      {/* Task #17 mounted SettingsPage a second time at /profile so an investor
+          "Profile" nav row could highlight independently of Settings. That row
+          is gone; the exploring sidebar's "My Profile" now points at /account
+          itself. D433 retires the duplicate on D304's shape: a redirect, never
+          a 404, with the query and hash carried through. */}
+      <Route path="/profile" element={<SettingsRedirect />} />
       <Route path="/account" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/settings" element={<SettingsRedirect />} />
 
@@ -3090,6 +3096,10 @@ function AppInner() {
           POST /api/auth/support/redeem on the branch. `isPublicPath` lists the
           same path for the same reason. */}
       <Route path="/support/session" element={<SupportRedeemPage />} />
+      {/* D441 — a move onto this branch. The invitee has no account here
+          yet, so the route is not behind the sign-in gate. /invite/:token
+          stays the events RSVP page. */}
+      <Route path="/join/:token" element={<JoinBranchPage />} />
 
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/contact" element={<ContactPage />} />

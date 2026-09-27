@@ -1020,6 +1020,8 @@ export type SupportSessionOffer = {
   code: string;
   expires_at: string;
   redeem_path: string;
+  /** D441 — whether the notice reached the person's inbox. Reported, never assumed. */
+  target_notified: boolean;
   target: { id: number; name: string | null; email: string | null; role: string };
 };
 
@@ -1066,6 +1068,42 @@ function newHandoffCode(): string {
  * boundary there is nobody above HQ to escalate to — supporting a branch's own
  * administrator is the ordinary case, not a privilege grab.
  */
+/**
+ * Tell the account HQ just authorised a session on (D441).
+ *
+ * Mirrors D248's notice without editing notify.ts. `security` is a critical
+ * category, so quiet hours cannot hold it. The session has not started yet —
+ * the code is redeemed later — so the sentence says "authorised" and names
+ * 30 minutes as the length once it is opened. A failure here is logged and
+ * reported as false; it does not fail the authorisation.
+ */
+async function tellBranchOfSupportSession(
+  env: Env, targetId: number, actor: string, reason: string, branch: string,
+): Promise<boolean> {
+  try {
+    const { notify } = await import('../services/notify');
+    const rowId = await notify(env, {
+      userId: targetId,
+      type: 'hq_branch_support_session',
+      title: 'Axal VC HQ authorised a support session on your account',
+      body: `${actor} authorised a support session on your account on this branch. When they open it, they can see and act as you for ${SUPPORT_SESSION_MINUTES} minutes. The reason they gave: "${reason}". If you did not expect this, sign out everywhere from your Security settings, which ends a session that has started, and contact Axal.`,
+      link: '/account/security',
+      payload: {
+        hq_actor_name: actor,
+        reason,
+        minutes: SUPPORT_SESSION_MINUTES,
+        branch,
+      },
+      channels: ['in_app', 'email'],
+      category: 'security',
+    });
+    return rowId !== null;
+  } catch (e) {
+    console.warn('[rpc:openSupportSession] target notice failed', (e as Error).message);
+    return false;
+  }
+}
+
 export async function openSupportSession(
   env: Env, secret: string, req: SupportSessionRequest,
 ): Promise<BranchAnswer<SupportSessionOffer>> {
@@ -1144,9 +1182,17 @@ export async function openSupportSession(
     console.warn('[rpc:openSupportSession] audit row failed', (e as Error).message);
   }
 
+  // D441 — the person on the branch is told. D259 filed this and left it:
+  // openSupportSession imported no notify function, so the session was
+  // recorded and the account heard nothing. The notice is best-effort.
+  // D111: a side effect after a recorded act never turns that act into a
+  // failed request. notify.ts is not edited; this calls it.
+  const targetNotified = await tellBranchOfSupportSession(env, targetId, actor, reason, branch);
+
   return {
     code,
     expires_at: expiresAt,
+    target_notified: targetNotified,
     // The PATH, not a URL. The branch knows its own hostname from APP_URL, but
     // HQ is the side that has to open the browser and already holds the
     // registry entry — so it builds the link, and there is one place that does.
@@ -1661,7 +1707,11 @@ export async function inviteAccount(
   ).first<{ expires_at: string }>();
 
   const base = String(env.APP_URL || '').replace(/\/+$/, '');
-  const link = `${base}/invite/${rawToken}`;
+  // /join/:token, NOT /invite/:token. The second path is the events RSVP
+  // page (App.jsx), and the Worker's only /invite/:token handler is the
+  // public events router. A move invitation sent there asks the person to
+  // respond to an event. D441.
+  const link = `${base}/join/${rawToken}`;
 
   let sent = false;
   let emailReason: string | undefined;

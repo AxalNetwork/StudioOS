@@ -1,0 +1,24 @@
+-- 336_deal_source.sql — where a deal came from (D463, wave 8, Session 17,
+-- item 4).
+--
+-- Canvas ID1's fourth tile counts deals "From the Lab" and the Deal Flow
+-- canvas draws a source-quality table — but `deals` has no column for where a
+-- deal came from, so the tile counted on-platform deals instead and the
+-- stage-analytics route states `source_quality_unavailable`. This adds the
+-- column:
+--
+--   deals.source TEXT   -- free text, trimmed and capped by the Worker
+--
+-- WHY FREE TEXT AND NOT A CHECK: the source taxonomy is the owner's call
+-- (which sources exist, and which of them count as "the Lab"), and a CHECK
+-- written before that decision would either refuse the owner's first value or
+-- enshrine a guess. The column, the draft and the edit writes, and the read
+-- side all ship; the decided vocabulary is named as missing on screen and in
+-- D463 (standing rule (c)).
+--
+-- STANDS ALONE and additive. NON-IDEMPOTENT (D1's ALTER TABLE has no IF NOT
+-- EXISTS) — apply through the ledger-driven runner, which runs it once:
+--
+--   npm run d1:migrate:remote
+
+ALTER TABLE deals ADD COLUMN source TEXT;

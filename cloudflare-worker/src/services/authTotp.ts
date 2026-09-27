@@ -130,6 +130,21 @@ export async function replaceRecoveryHashes(
  * pattern, lazily migrate it to `auth_totp` and clear the legacy column.
  * Returns null if the user has no TOTP secret of any kind.
  */
+/**
+ * D433 — when the authenticator now in use was paired. `auth_totp.created_at`
+ * is stamped by `persistNewTotpEnrolment` on every enrolment and re-pair, so
+ * it is the pairing date the Account page's factor row reads. Null when no
+ * authenticator row exists (a legacy `users.password_hash` secret has no date
+ * until `loadTotp` migrates it).
+ */
+export async function loadTotpPairedAt(env: Env, userId: number): Promise<string | null> {
+  await ensureSchema(env);
+  const row = await env.DB.prepare(
+    `SELECT created_at FROM auth_totp WHERE user_id = ?`
+  ).bind(userId).first<{ created_at: string | null }>();
+  return row?.created_at ?? null;
+}
+
 export async function loadTotp(
   env: Env,
   userId: number,

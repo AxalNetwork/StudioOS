@@ -240,7 +240,9 @@ test('an invitation stores a token DIGEST and reports that nobody was told', asy
   // And the link the operator is told to pass on is actually handed to them —
   // which is what makes `token_hash` provably the digest OF that token.
   assert.ok(res.invite_link, 'the mail did not send and no link was returned, so the advice is a dead end');
-  const token = String(res.invite_link).split('/invite/')[1];
+  assert.ok(!String(res.invite_link).includes('/invite/'),
+    'the link still opens the events RSVP page');
+  const token = String(res.invite_link).split('/join/')[1];
   assert.match(token, /^invt_[0-9a-f]+$/);
   assert.equal(row.token_hash, await sha256Hex(token),
     'the stored value is not the digest of the token that was issued');
