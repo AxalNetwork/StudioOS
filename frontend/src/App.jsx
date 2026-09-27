@@ -245,9 +245,9 @@ const CofounderPage = lazy(() => import('./pages/CofounderPage'));
 // Co-Founder / Jobs tabs were the discovery surfaces; those open inside the
 // Advisors and Hiring tabs here, so the founder redirects below still land.
 const FounderTeamPage = lazy(() => import('./pages/founder/FounderTeamPage'));
-// Task #20 — /skills and /values are consolidated into the advisor flow.
-// The underlying SkillsProfilePage/ValuesAssessmentPage files are kept intact on
-// disk (data stores), but their routes now redirect to /studio.
+// Task #20 — /skills and /values are consolidated into the advisor flow, and
+// their routes redirect to /studio, where the profile band draws both. The two
+// pages were imported by nothing and were deleted in D323.
 const AdminBestFitPage = lazy(() => import('./pages/admin/AdminBestFitPage'));
 const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage'));
 const RiskMatrixPage = lazy(() => import('./pages/RiskMatrixPage'));
