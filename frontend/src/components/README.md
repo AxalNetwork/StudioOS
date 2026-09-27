@@ -28,6 +28,14 @@ building blocks.
 | `signals/` | Signal cards and evidence drawers. |
 | `spinout/` | Spin-Out Lab shared pieces. |
 
+## Top-level shell pieces
+
+- `MobileTabBar.jsx` (D425) — the phone's four tabs and More sheet below
+  1024px, founder first, from `../lib/mobileTabs.js`. `mobileTabBar.css` holds its
+  safe-area insets and `--mobile-tabbar-h`, which pads the page's content while
+  a bar is drawn. The shell (App.jsx) mounts it; it renders nothing for a
+  licence with no plan.
+
 ## Rules
 
 - Presentational by default. Fetching belongs to the page; a component that
