@@ -8,6 +8,7 @@ import { eventsApi } from '../../lib/eventsApi';
 import { useToast } from '../../components/useToast';
 import PageExplainer from '../../components/PageExplainer';
 import EventQRCode from '../../components/events/EventQRCode';
+import { Unreadable } from '../../ui';
 
 const STATUS_STYLES = {
   draft: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
@@ -52,16 +53,22 @@ export default function MyEventsPage() {
   const [hosting, setHosting] = useState([]);
   const [attending, setAttending] = useState([]);
   const [loading, setLoading] = useState(true);
+  // D332 — a failed read used to fall back to `[]` and render "not hosting
+  // any events yet", which is the same screen a genuinely empty account
+  // gets. The toast that told the truth disappears; this does not.
+  const [loadError, setLoadError] = useState('');
   const { toast, showToast } = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const res = await eventsApi.list();
       setHosting(Array.isArray(res?.hosting) ? res.hosting : (Array.isArray(res) ? res : []));
       setAttending(Array.isArray(res?.attending) ? res.attending : []);
     } catch (e) {
       showToast({ kind: 'error', msg: e?.message || 'Could not load your events.' });
+      setLoadError(e?.message || 'Could not load your events.');
       setHosting([]); setAttending([]);
     } finally {
       setLoading(false);
@@ -104,6 +111,10 @@ export default function MyEventsPage() {
 
       {loading ? (
         <p className="py-12 text-center text-gray-500 dark:text-gray-400">Loading…</p>
+      ) : loadError ? (
+        <div className="py-12 text-center">
+          <Unreadable what="Your events" claim="" onRetry={load} />
+        </div>
       ) : tab === 'hosting' ? (
         <HostingList events={hosting} />
       ) : (
