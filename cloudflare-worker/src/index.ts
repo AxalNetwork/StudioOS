@@ -155,6 +155,7 @@ import calendarRoutes from './routes/calendar';
 import financialsRoutes from './routes/financials';
 import progressRoutes from './routes/progress';
 import metricsRoutes from './routes/metrics';
+import revenueRoutes from './routes/revenue';
 import wellbeingRoutes from './routes/wellbeing';
 import complianceRoutes from './routes/compliance';
 import captableRoutes from './routes/captable';
@@ -1037,6 +1038,8 @@ app.route('/api/venture-risk', ventureRiskRoutes);
 app.route('/api/progress', progressRoutes);
 // Task #3 (DF) — `/api/metrics/*` alias of /api/progress/metrics/* + /series.
 app.route('/api/metrics', metricsRoutes);
+// D363 — the Spin-Out Lab revenue ledger (migration 311).
+app.route('/api/revenue', revenueRoutes);
 app.route('/api/wellbeing', wellbeingRoutes);
 // T12 — Compliance calendar + Cap-table simulator + Co-founder matching.
 app.route('/api/compliance', complianceRoutes);
