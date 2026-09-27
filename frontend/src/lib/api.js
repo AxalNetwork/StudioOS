@@ -2070,7 +2070,8 @@ export const api = {
   myDomainBind: (hostname) =>
     request('/licence/mine/domain', { method: 'POST', body: JSON.stringify({ hostname }) }),
   myDomainCheck: () => request('/licence/mine/domain/check', { method: 'POST' }),
-  myDomainRemove: () => request('/licence/mine/domain', { method: 'DELETE' }),
+  myDomainRemove: (hostname) =>
+    request('/licence/mine/domain', { method: 'DELETE', body: JSON.stringify({ hostname }) }),
   licenceDomainDetach: (uid, reason) =>
     request(`/admin/licences/${encodeURIComponent(uid)}/domain/detach`, {
       method: 'POST', body: JSON.stringify({ reason }),

@@ -8,6 +8,9 @@ import { bpsPercent } from '../../lib/bps';
 import { FROZEN, STILL_READABLE, FREEZE_RULE } from '../../lib/branchFreeze';
 import { reportError } from '../../lib/log';
 import { FREEZING_STATUSES, noticeKindLabel } from '../../lib/notices';
+import { branchOfUser } from '../../lib/shellRole';
+import { useAuth } from '../../hooks/useAuthSync';
+import { Unrecorded } from '../../ui';
 import DomainWizard from '../../components/licence/DomainWizard';
 
 /**
@@ -64,6 +67,47 @@ const STATUS_TONE = {
 const SEAT_LABEL = {
   founder: 'Founder', investor: 'Investor / LP', advisor: 'Advisor', partner: 'Service Partner',
 };
+
+/**
+ * A licensed count the copy did not carry is not zero. Zero is a measured
+ * count; a missing key was never read.
+ */
+export function seatFigure(value) {
+  if (value == null) {
+    return (
+      <Unrecorded reason="This seat type was not on the licence copy, so it is not shown as zero." />
+    );
+  }
+  return value;
+}
+
+/**
+ * The way out of a freeze. On a branch that is an escalation, and
+ * /branch/approvals answers. Off a branch that page refuses, and no page on
+ * HQ records a licence appeal from the holder, so the absence is named.
+ */
+export function LicenceAppeal({ onBranch }) {
+  if (onBranch) {
+    return (
+      <p className="mt-3 text-[12.5px] text-rose-900 dark:text-rose-200">
+        There is no field on this branch that can change the licence status. The way out is an
+        appeal to HQ, which is an escalation like any other —{' '}
+        <Link to="/branch/approvals" className="font-semibold underline underline-offset-2">
+          open one
+        </Link>
+        .
+      </p>
+    );
+  }
+  return (
+    <p className="mt-3 text-[12.5px] text-rose-900 dark:text-rose-200" data-testid="licence-appeal-absent">
+      There is no field on this page that can change the licence status.{' '}
+      <Unrecorded reason="This account is not on a branch deployment. An appeal is an escalation raised on the branch approvals page, and that page refuses here. Nothing on HQ records a licence appeal from the holder of this account.">
+        No appeal from this page
+      </Unrecorded>
+    </p>
+  );
+}
 
 function Panel({ icon: Icon, title, children }) {
   return (
@@ -323,6 +367,8 @@ export function LicencePullNote({ pull }) {
 }
 
 export default function MyLicencePage() {
+  const { user } = useAuth();
+  const onBranch = Boolean(branchOfUser(user));
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
   // D136 — A SECOND, INDEPENDENT READ. The notices are not part of
@@ -537,15 +583,9 @@ export default function MyLicencePage() {
           </div>
           {/* THE ONE DOOR OUT, and it is deliberately not gated by the freeze:
               `routes/branch_escalations.ts` says so in its own header, because
-              gating the appeal would freeze the way out of the freeze. */}
-          <p className="mt-3 text-[12.5px] text-rose-900 dark:text-rose-200">
-            There is no field on this branch that can change the licence status. The way out is an
-            appeal to HQ, which is an escalation like any other —{' '}
-            <Link to="/branch/approvals" className="font-semibold underline underline-offset-2">
-              open one
-            </Link>
-            .
-          </p>
+              gating the appeal would freeze the way out of the freeze. Off a
+              branch that door refuses, so the absence is named instead. */}
+          <LicenceAppeal onBranch={onBranch} />
         </section>
       )}
 
@@ -596,7 +636,7 @@ export default function MyLicencePage() {
             <div key={k} className="rounded-lg border border-gray-200 p-3 dark:border-gray-800">
               <div className="text-xs text-gray-500 dark:text-gray-400">{SEAT_LABEL[k]}</div>
               <div className="mt-0.5 text-2xl font-bold tabular-nums text-gray-900 dark:text-gray-100">
-                {seats[k] ?? 0}
+                {seatFigure(seats[k])}
               </div>
             </div>
           ))}

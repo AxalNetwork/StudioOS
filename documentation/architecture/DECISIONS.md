@@ -30933,6 +30933,113 @@ the Use of Funds burn can still read a failed query as "none recorded";
 `routes/contacts.ts`' pro-rata `post_round_stake_pct` inputs carry `|| 0`
 (PR 5 wires pro-rata and meets the second).
 
+## D361
+
+**The 83(b) filing record is stored, every date in it is the founder's, and
+Section83bPage retires into the Lab tracker.** Wave 8, Session 8, item 2.
+Migration 310. No new route and no new `api.js` method: the existing PATCH
+body gains fields.
+
+**The defect.** The canvas draws a filing record (method, tracking number,
+IRS service center, company acknowledgment, tax-return copy) that
+`section_83b_trackers` did not store. "Mark as filed" sent
+`new Date().toISOString()` as `mailed_at`, so the moment of the click was
+recorded as the postmark of an IRS filing. The receipt upload did the same
+when no date was on record. D360 recorded both and left them for this item.
+
+**What changed.**
+- **Migration 310** adds five nullable `TEXT` columns: `filing_method`,
+  `tracking_number`, `irs_service_center`, `company_ack_at` and
+  `tax_return_copy_at`. They use additive `ALTER`s only and stand alone.
+  `ensureSection83bSchema` carries the same five as its D235 safety net, and
+  the tracker DTO returns them.
+- **`validateFilingPatch`** (`services/section83b.ts`) gates the PATCH:
+  - `mailed_on`, `company_ack_on` and `tax_return_copy_on` must be real
+    calendar dates. Each must fall no earlier than the grant date and no later
+    than today plus one day. The extra day is there because "today" is UTC
+    and a founder east of UTC is already on tomorrow's date.
+  - `filing_method` must be one of `certified_mail`, `private_delivery` or
+    `irs_online`. The value records what the founder did. No option is a
+    default and none is suggested.
+  - The tracking number is limited to 40 letters, digits, spaces or hyphens.
+    The service center is limited to 120 characters on one line.
+  - `confirmed` (IRS delivery, the green card) is refused until a mailing
+    date is on record.
+  - Each refusal is `{ error: code, message }` with our own sentence.
+  - An unrelated PATCH (notes, a receipt id) leaves every recorded field
+    where it was.
+  - The pre-D361 `mailed_at` field is still accepted and is held to the same
+    bounds.
+- **The receipt upload no longer writes a mailing date.** A receipt proves a
+  mailing happened, so a pending tracker becomes `mailed`, but the upload
+  time is not the postmark. `mailed_at` stays null until the founder records
+  it. `legal_83b.test.ts` asserted the old stamp; that assertion now pins
+  its absence.
+- **The Lab page** (`SpinoutLab83bPage.jsx`):
+  - "Mark as filed" (or "Edit filing record") opens a form. It needs a
+    typed date and a chosen method, and offers optional tracking number and
+    service center fields.
+  - The company's acknowledgment and the tax-return copy are dated the same
+    way, from their rows in the submission record.
+  - "Confirm IRS delivery" appears only once a mailing date is on record.
+  - The timeline, proof coverage and checklist read the new columns. The
+    checklist's `copy_company` item ticks on `company_ack_at`, or on the
+    `confirmed` status that ticked it before.
+  - Operator assist and deadline reminders render `Unrecorded` with their
+    reasons. Operator review is an owner decision, and no Worker job sends
+    83(b) reminders.
+- **Section83bPage is deleted.** The Legal Engine's "Equity Elections" card
+  (`/raise/legal-engine/equity`) embeds the Lab page instead.
+  - In `embedded` mode the page drops the Lab header and gutters, because
+    the card has its own.
+  - The card's Studio gate is unchanged.
+  - Route by route, the old page's jobs were: listing trackers, creating one
+    with a project picker, uploading a receipt, marking it mailed, and
+    confirming delivery. The Lab page already did all of them for the
+    founder's startup. The old page's project picker is not carried over:
+    #181 removed every in-body project picker on the decision "one company,
+    one startup", the sidebar's CompanySwitcher is the single writer of
+    scope, and `check-inline-project-pickers` refuses a new one. A switcher
+    added in this item's first draft was caught by that guard and removed.
+  - The old page read no query string.
+  - `PageExplainer`'s `section_83b` entry stays, because the Settings page
+    lists it.
+- **`/incorporate/83b`** stays a `<Navigate replace>`. It now sends Lab
+  members and admins to `/spinout-lab/83b` and every other founder to
+  `/raise/legal-engine/equity`.
+  - Until now it sent everyone to `/spinout-lab/83b`, whose `labRoles(['admin'])`
+    guard refused a founder outside the Lab.
+  - The gap map proposed widening that guard instead. That was not done:
+    widening it to every founder would let a founder without the Studio plan
+    past the Legal Engine card's Studio gate, and that is the owner's
+    decision, not this item's.
+  - No sidebar row points at `/incorporate/83b`.
+- **The Legal Engine's status pill** was hard-coded to "Not set up" on all
+  four cards, even for a founder with a filed election. It now renders
+  `Unrecorded` with its reason, because the hub reads no tool's records.
+- **ROUTE_MAP row "83b Election Tracker"** now names the card, the redirect's
+  two targets and the filing record. `PROFILE_ROUTING.md` was regenerated.
+
+**Guards.**
+- `cloudflare-worker/test/legal_83b.test.ts` goes from 11 tests to 17:
+  - five D361 tests for the PATCH;
+  - one pinning each runtime `ADD COLUMN` to a migration.
+    `check-runtime-schema-declared` compares object names, not columns, so
+    it passed with migration 310 deleted. This test fails in that case.
+- `frontend/test/spinout_83b_filing_record_d361.test.mjs` adds 8 tests.
+  - The page's filing methods are checked against the Worker's
+    `FILING_METHODS`, read from its source, not against a literal list.
+- Mutation-checked both ways: 22 of 22 caught (11 in the Worker, 10 in the
+  page, 1 migration deletion). Each needed a non-zero exit and a `not ok`
+  line, and every file was restored and checked by sha256.
+
+**Not in this item.**
+- The 30-day deadline with no weekend roll is still a question for counsel.
+- The dev FastAPI's `_tracker_dto` does not carry the five fields. It is
+  dev-only and not ported, per CLAUDE.md.
+- The Legal Engine's jurisdiction select is still local-only and
+  presentational, as its own TODO says.
+
 ## D380
 
 **The Spin-Out Lab honesty sweep: the seat count reads `/brief`'s `places`,
@@ -31125,6 +31232,152 @@ timestamps and is unchanged.
   rather than the week's badge. Both assertions were fixed (every preview
   mount must pass the fixture; "Left" is read off the week's own card), not
   the code: 17 of 17 caught.
+
+## D382
+
+**The certificate admin tab, over the registry's existing list, issue and
+revoke — with Emailed, Downloaded and Reissue stated rather than drawn.**
+Session 10, item 3 (the C3 gap map's PR 4). No migration, no new route, no
+new `api.js` method: three routes change behaviour, and their existing
+methods (`spinoutCertificateList`, `spinoutCertificateIssue`,
+`spinoutCertificateRevoke`, `spinoutCertificateBackfill`) get their first
+caller.
+
+**The tab.** `AdminSpinoutLab.jsx` gains a Certificates tab rendering
+`AdminSpinoutCertificates.jsx`, the Graduation Certificate canvas's admin
+artboard. Its parts:
+- **KPIs.** Eligible (graduated), from the `incorporation_completed`
+  milestone. Issued, from the rows.
+- **The issuance table.** Graduates awaiting a certificate first, then the
+  registry. Each row offers only what the worker will do:
+  - Issue, on an awaiting graduate;
+  - Revoke, on an issued credential, with a reason;
+  - Preview, which opens the public `/verify/:token` page, and only when the
+    holder has left sharing on.
+- **Preview batch** narrows the table to the graduates the batch would
+  issue.
+- **Issue all eligible** is the backfill that used to sit under Participants.
+  That row is deleted, not kept beside the tab.
+- **The activity log** is built from the registry's own `issued_at` and
+  `revoked_at`, with who issued each: an admin by name, or "issued
+  automatically on graduation".
+- **The issuance states** are awaiting, issued, revoked and public
+  verification off.
+
+**What the canvas draws that no store holds**, and what the tab does instead:
+- **Emailed.** Nothing sends `spinout_graduated` (D380). The KPI, the column
+  and the state read Not recorded with that reason. **Resend** is not drawn:
+  there is no send to repeat.
+- **Downloaded.** The PDF is built in the graduate's browser. It reads Not
+  recorded with that reason.
+- **"Badge awarded" and "Template updated" in the activity log.** No badge is
+  minted and no template history is kept. The log says it omits them.
+- **Reissue.** Not offered. See below.
+
+**The routes, changed where the tab exposed them:**
+- **Issue** (`POST /certificates` with only `user_id`) now runs
+  `issueOnGraduation`, the path graduation itself uses, so the snapshot comes
+  from the graduate's records and never from what an admin typed. It passes
+  the admin's id as `issued_by_user_id` (the automatic path still writes
+  NULL) and logs `spinout_certificate_issued` through `logAdminAction`. Its
+  refusals are codes with our sentence:
+  - `not_graduated` (409);
+  - `insufficient_data` (422);
+  - `reissue_blocked` (409);
+  - `error` (500).
+
+  The older manual body (with `public_name`) stays, logged the same way.
+- **Revoke** now requires a reason (`reason_required`, 400) and logs
+  `spinout_certificate_revoked`. It used to write the row and record no
+  actor. Revoking an already revoked row logs nothing further.
+- **List** also returns `issued_by_name`, `awaiting` and `eligible_total`.
+  `awaiting` means graduates with no certificate row at all, whether issued
+  or revoked. `eligible_total` is the count of graduates. A failed read of
+  either returns `null` with a reason in `unavailable`, never an empty queue.
+
+**The credential-id collision, measured and refused rather than solved.**
+`credential_id` is UNIQUE and derived from the cohort, the date and the
+account. So after a revoke, issuing again for the same graduate derives the
+same id:
+- the automatic path's `INSERT OR IGNORE` swallowed the conflict and
+  reported `already_issued`, for a graduate who holds no live credential;
+- the manual path's plain INSERT would have thrown the database's own error.
+
+Both now check first and return `reissue_blocked`. The tab states the
+collision on the revoked row instead of drawing a Reissue button. The fix
+itself — a reissue suffix, or keying uniqueness differently — changes what
+the public verifier resolves, so it is filed, not chosen here. The revoked
+graduate is also kept out of the Issue queue for the same reason.
+
+**Filed, not fixed:**
+- **The freeze gate.** The certificate routes still gate on
+  `user.role === 'admin'` rather than `requireAdmin`, so D135's compliance
+  freeze does not reach them. Moving them would also move
+  `lib/branchFreeze.js`'s row, which is outside this item.
+- **Refusal bodies.** The routes' older refusals (`{ detail: 'Forbidden' }`)
+  predate D258 and are unchanged.
+
+### VERIFIED
+
+- `cloudflare-worker/test/spinout_certificates_admin_d382.test.ts` (new, 10
+  tests) drives the real route on real `node:sqlite`, with every table from
+  `schema_baseline.sql` and a minted admin JWT. It covers:
+  - issue built from the records and attributed and logged;
+  - idempotence;
+  - `not_graduated`;
+  - revoke requiring a reason and logging once;
+  - `reissue_blocked` on both paths;
+  - the list's issuer name and queue;
+  - a revoked graduate kept out of the queue;
+  - an unreadable queue reported as unavailable;
+  - founders refused on all three routes.
+
+  `certificateIssuance.test.ts` gains two tests (an admin id bound; the
+  collision blocked with no insert attempted). Its "NULL" test is re-aimed
+  from the SQL literal to the bound value, which is the property it held.
+- `frontend/test/spinout_certificate_admin_d382.test.mjs` (new, 11 tests)
+  RENDERS the board with registry-shaped data and asserts what an admin
+  reads: the counts, the delivery columns and KPIs as Not recorded, each
+  row's actions, preview only for a shared credential, the batch preview,
+  the activity log's attribution and its omissions, and an unreadable
+  queue. It also checks the canvas still draws what the tab answers.
+- Eighteen mutations, each anchor unique, bytes proven changed, restored
+  from a sha256-checked snapshot and re-run green. They cover:
+  - worker: issue not attributed; issue or revoke not logged; revoke without
+    a reason; the service or the manual path losing the collision guard; the
+    queue including revoked graduates; a failed queue read returned as
+    empty; the issuer name dropped;
+  - tab: issued counting revoked rows; Emailed drawn as a number; a Reissue
+    button on a revoked row; a preview link to a page the holder closed; the
+    batch preview not filtering; a failed graduate read shown as 0; an
+    automatic issue attributed to a person; Issue sending an admin-typed
+    name; the tab unmounted.
+
+  **One escaped on the first run**, the failed read shown as 0 in the states
+  card, because the assertion looked for the header sentence. The assertion
+  now reads the states row itself, not the code: 18 of 18 caught.
+- **gitleaks on the PR.** Its `generic-api-key` heuristic flagged the
+  frontend test's `credential_id: 'AXL-SOL-C4-…'` fixtures, a key named
+  "credential" beside a string. The value is the public credential reference
+  (`credentialRefFor`), printed on every certificate, not a secret. The
+  flagged commit stays in the PR's scan range, so `.gitleaks.toml` gains one
+  `regexes` entry pinned to that exact shape,
+  `AXL-SOL-(C<n>|X)-<6 digits>-<4 digits>`. The `public_token` that keys the
+  verification page is a different shape and is still scanned. Reproduced
+  with gitleaks 8.21.2 (the version CI pins) over the PR's commits: 2
+  findings before, none after.
+- **CodeQL on the PR.** Two alerts.
+  - *Missing space in string concatenation* (warning): the test's
+    `'Not recorded' + 'Eligible'` assertion could never fail. It now reads the
+    Eligible KPI's own value.
+  - *Clear-text storage of sensitive information* (high): the query reads
+    anything under `certificates` as sensitive. It traced a registry row's id
+    into the revoke URL, which `api.js` writes into its session-expiry and
+    timeout logs, which keep a ring buffer in `localStorage`. The value is an
+    integer row id, not a secret. The tab passes it as `Number(row.id)`.
+    CodeQL 2.27.1, run locally with the alert's query: 3 results before, 0
+    after. The shared logger was not suppressed: a pragma at its sink would
+    hide every future finding there.
 
 ## D390
 
@@ -31448,6 +31701,195 @@ The mutations included:
 - an unfiltered draw or export, a key typo, and an unwired chip row;
 - the dash and the zero fallback restored;
 - `Essays` made live, and Visibility un-excluded.
+
+## D393
+
+**Cohorts alignment: the five archetypes are the canvas's own, with a guard;
+Founders draws the week lanes from the Lab's week record; Calendar gets its
+four chips and a client-side .ics export.** Session 11, item 4. No
+migration, no route, no new `api.js` method. The canvas stays in `backlog/`:
+moving it would pull it into the actions guard, which its markup does not
+yet parse (the gap map's filing trap), and that move is Session 1's.
+
+**Archetypes.** All five Cohorts zones in `shellConfig.js` disagreed with the
+Cohorts canvas. The shell had COLLECTION / WORK BOARD ×3 / ANALYTICS; the
+canvas's artboard headers say WORK BOARD / FEED / COLLECTION / FEED /
+COLLECTION. The archetype is what the zone nav and badge advertise, so the
+nav described the wrong page type on every Cohorts route, and nothing
+checked it: `advisor_shell_canvas` pins only Practice. The shell now carries
+the canvas's five. `advisor_cohorts_alignment_d393.test.mjs` reads them out
+of the canvas's `ab-nm` headers and compares label and archetype, in order,
+so the guard cannot pass on a shell that agrees with a typo.
+
+**Founders (C1).** The page was a name-and-email table. It now also reads
+`GET /me/cohort/:id/weeks`, the route This week already uses, which returns
+the cycle's windows, the batch's `current_week` and each founder's per-week
+status and deliverable counts.
+- *Lanes, one per week window.* "Lanes come from the cohort, not the
+  founder" (the canvas's own note), so every card sits in the current week's
+  lane. With one batch on screen at a time, the other lanes read "Nobody here
+  yet". The canvas's per-cohort chips are the batch picker the page already
+  has.
+- *No windows, or no week open yet, means no lanes.* The page says why
+  instead of putting everyone in Week 1.
+- *A card* has the name and "x of y deliverables · p%" for the current week.
+  A founder with no status row reads "Progress not recorded", and a week with
+  nothing required reads as such; neither is ever 0%.
+- *Behind plan* (under half this week's deliverables, the canvas's
+  threshold) is the one flag drawn.
+- *Chips.* `All` · `Behind plan` narrow the lanes.
+- *Tiles.* Assigned, Behind plan and Complete are counted from the same
+  cards. `Flagged` is Not recorded: the canvas derives it partly from the
+  guidance queue, and nothing records a founder's open question or a missed
+  reply.
+- *The roster table stays* beneath the lanes; it is the only place the
+  contact address is shown.
+
+Kept, and recorded against the canvas: the card carries **no company line**.
+The founders read returns none, and `advisor_cohorts.test.mjs` pins that
+Founders draws no Company or Stage. `Bulk: nudge behind-plan` is drawn
+disabled, with its reason: nothing sends a founder a message from a cohort.
+
+**Calendar (C4).**
+- *Chips.* `Next 14 days` · `Cohort only` · `Client only` · `Demo Day`,
+  over the `kind` every item already carries. The tiles stay counted over the
+  whole stream.
+- *`Export to calendar`.* It builds an .ics in the browser from the rows on
+  screen. A Lab date (a week opening, a deadline, Demo Day) has no end, so it
+  is written as a point in time (DTSTART only), never as an invented
+  one-hour meeting.
+- *Shared builder.* It is `lib/ics.js`, lifted out of
+  `SessionsZone.jsx` so Practice · Sessions and Cohorts · Calendar share one
+  escaping rule. `advisor_practice_pr4` is re-aimed to require that Sessions
+  calls it and that it emits a calendar.
+- *Still not recorded:* Milestone kind, Recording, prep readiness and a
+  clash note, as the zone's stated limit already says.
+
+**Not built, named:** the founder half of Guidance (the ask and acknowledge
+flow, which needs a founder-side route and an owner decision); C3 materials
+and modules; C5 outcome consent; and the Cohorts AI bands. The gap map
+defers all four.
+
+**Verification.** New test: `frontend/test/advisor_cohorts_alignment_d393.test.mjs`
+(8). Re-aimed: `advisor_practice_pr4`. Mutations: 20 of 20 caught, each with
+a non-zero exit and a `not ok` line, restored from a sha256-checked snapshot.
+They included:
+- an archetype reverted;
+- Week 1 used as the default, or week 1 read instead of the current week;
+- nothing-required or no-row shown as 0%, and a changed behind threshold;
+- every lane holding everyone, and the no-window reason removed;
+- the flag dropped, Flagged shown as 0, and the nudge enabled;
+- the chips unwired, a wrong kind filter, and an unnarrowed list or export;
+- an invented one-hour end, no escaping, and a bad start written;
+- Sessions' own builder restored.
+
+## D394
+
+**Partner Home P2, "Where does the firm stand today?": built over the
+existing Delivery and Pipeline reads, with the operating brief as a new draft
+surface, tested, and NOT mounted.** Session 11, item 5. No migration and no
+new `api.js` method. There is one additive field on an existing Worker read,
+and one new `DRAFT_SURFACES` entry.
+
+**Owner-gated, and the gate is named.** `/studio` renders
+`PartnerStudioHome` and stays exactly as it is. The gap map lists it as
+do-not-touch, and the ROUTE_MAP `/studio` row agrees. **The missing decision
+is the owner's sign-off on P2.** If it comes, Session 3 mounts the default
+export of `pages/partner/PartnerHomeP2.jsx` in place of the partner branch
+of `/studio`; nothing in the file changes for it. A test pins that nothing
+imports it today, so the mount is a deliberate, visible change and not a
+drift.
+
+**The five tiles, each from a store that already exists.**
+- *Active engagements (embedded / project).* `GET /partner/delivery/board`:
+  live rows (not delivered, reviewed, invoiced or cancelled, and no revoked
+  seat), split by `mode`.
+- *Due this week.* The same read's new `due_next_7_days`, and per row
+  `milestones_due_7d`: open milestones due today or in the next six days.
+  They are compared as calendar dates in JS over rows the handler already
+  loaded. An undated milestone is not due this week, an overdue one is not
+  "due", and another firm's never counts. The gap map had this tile as
+  inferred; it is now a count.
+- *At risk.* The board's `needs_attention`, with the unrated count beside it
+  so a quiet board does not read as a healthy one.
+- *Recurring.* `GET /partner/pipeline/retainers`: `mrr_cents` (formatted from
+  cents), plus the retainers renewing within sixty days. No stated amount is
+  Not recorded, with the worker's own note.
+- *Over capacity.* `GET /partner/delivery/capacity`'s `over_committed_count`.
+  It is null until the firm states a cap (migration 230), and then reads Not
+  recorded with the worker's `cap_note`, never "0 over".
+
+**The operating brief (`home/brief` in `research.ts`'s `DRAFT_SURFACES`).**
+It is a `ZoneDraft` band run on a click, never on mount.
+- *Scope.* The gather reads the caller's own firm through `users.partner_id`,
+  like every partner surface. A sign-in with no firm gets `nothing_to_draft`
+  and the model is never reached.
+- *Material.* Each live engagement is handed over with what falls due, what
+  is overdue, open blockers, a recorded scope drift, and whether it holds an
+  embedded seat. An engagement with nothing recorded is handed over as
+  "unrated, not healthy".
+- *Voice.* The artboard's sample reads as a verdict ("the engagement to
+  watch", "one of the two has to move"); that voice is not ported. The
+  instruction asks for what the record shows and forbids telling the firm
+  what to do, and neither the page nor the prompt uses the word
+  "recommendation".
+- *Seats.* A seat is described to the model, and on the page, "as recorded
+  by the firm".
+
+**The feed.** At most six lines, built from the same three reads, each with
+its receipt and a link to the zone where it is acted on. The kinds are: at
+risk (with the worker's health reasons), milestones due this week, a person
+over a stated cap, renewals within sixty days, and embedded seats.
+
+**The grant chip is worded as recorded by the firm.** It reads "Scope
+recorded by the firm: Board, KPIs", never "Granted by <founder>".
+`engagement_seats` is created, re-scoped and revoked by the partner
+(`partner_delivery.ts`), so a chip in the founder's voice would state a
+consent nothing recorded. The founder-side grant is one of the deferred
+decisions below.
+
+**Not drawn, and said so on the page and in the rail:**
+- an inbound seam ("From Halverton · 2h ago"), because no message record
+  feeds this page;
+- "proposal opened 3×", because `opened_at` is the client's to set and
+  nothing sets it;
+- a second ask box, because asking Eadwyn lives in the rail.
+
+**States.** Role preview withholds every read and says so; that is not an
+Unreadable state. A sign-in with no firm is `no_partner_profile` on the
+profile read (D390) and draws the no-firm card. A failed read is Unreadable
+on its own tiles, never a zero.
+
+**Deferred decisions, named rather than built (the gap map's list, as it
+touches this cluster):**
+- the advisor relationship book (AN1/AN3);
+- a founder-side seat grant;
+- the Partner | Advisor family switcher (a user holds one role);
+- Visibility impressions;
+- C3 materials;
+- C5 outcome consent;
+- the Expertise and Cohorts AI bands;
+- the founder-side ask and acknowledge flow for Cohorts Guidance.
+
+Each changes a store's shape or needs an owner decision, so none is built
+here.
+
+**Verification.** New tests: `cloudflare-worker/test/partner_home_p2_d394.test.ts`
+(6) and `frontend/test/partner_home_p2_d394.test.mjs` (8). The Worker test
+covers:
+- the seven-day window at both edges, and overdue, done, undated and
+  other-firm milestones excluded;
+- the brief scoped to the caller's firm (another firm's engagement never
+  reaches the prompt);
+- 409 with the model unreached for a sign-in with no firm;
+- the "recorded by the firm" wording.
+
+The frontend test drives `homeTiles` and `homeFeed` and renders every state.
+Mutations: 20 of 20 caught, each with a non-zero exit and a `not ok` line,
+restored from a sha256-checked snapshot. Two anchors were mis-written on the
+first pass (one matched twice, one matched nothing), so those mutations did
+not run; the anchors were corrected and both were then caught. They are
+counted once.
 
 ## D410
 
@@ -32187,6 +32629,109 @@ the enrolment batch dropping the `auth_totp` write.
 
 No migration, no route, no `api.js` method, no `frontend/src` change, so
 `docs/` is untouched.
+
+## D431
+
+**The economics gate: a member's carry is served to that member and to an
+editor, and to nobody else — the field is absent for a refused reader, never
+null.** Session 15's item 2; a disclosure fix (the gap map's trap 1).
+
+**What was true on main (`c38d972f02`).** `detailDto` in `routes/company.ts`
+put `carry_bps` on every member row for every member of the company (and
+every platform admin): an Analyst reading the settings page's own payload —
+`GET /company/:uid`, `/company/me`, `/company/memberships`, and the body
+every member write answers with — could read every partner's carry.
+`CompanySettingsPage` then drew the carry input on every row for every
+viewer, disabled for non-editors but showing the value.
+
+**What changed.**
+- **The read gate is the write gate.** `canEdit` — a platform admin, the
+  primary admin, or an Owner, Admin or Founder by `role_in_company` — already
+  decides who may change a member's carry. `detailDto` computes it once per
+  payload and spreads `carry_bps` into a row only when the viewer is an
+  editor or is that member. Every payload that carries members goes through
+  `detailDto`, so the gate is applied everywhere at once.
+- **Absent, not null.** `null` already means "not recorded" (team_authority's
+  pin, kept unchanged), and a reader must not be able to mistake "withheld
+  from you" for "this person holds no carry". A refused reader's row has no
+  `carry_bps` key at all; the rest of the row — name, email, role, title,
+  authority — is untouched, because withholding one figure hides nobody.
+- **The page branches on whether the field arrived.** An editor gets the
+  input (no longer drawn-then-disabled for anyone else); the member gets
+  their own figure read-only ("Carry 1.5%", or "Carry — not recorded" for
+  null, through the one bps formatter); everyone else gets a locked chip,
+  "Economics · locked", whose note is the canvas's: "Visible to the member
+  and to an Owner, Admin or Founder only. You see that carry exists and not
+  what it is."
+- **Locked, not hidden, by the canvas's own rule.** Team · Authority T4:
+  economics are locked when the viewer is neither the member nor a partner,
+  "visible as a locked section, because a hidden one teaches people the wrong
+  shape of the org". The brief's "hidden for everyone else" is read as the
+  INPUT hidden; the lock is drawn. T4 says "Partner+"; this codebase has no
+  partner rung on `user_company_links` yet (item 6 builds Team · Authority's
+  stores), so the editors are the three edit roles the page already names,
+  and the note says so rather than promising a wider audience than the
+  server serves. When item 6 lands a title ladder, the gate can widen to it
+  in one place.
+- **Reading your own carry is not writing it.** The PATCH stays the editor's
+  (a non-editor's write on their own row is still 403), and its response
+  carries the gated payload it always did.
+
+**Guard.**
+- `cloudflare-worker/test/carry_bps_gate_d431.test.ts`, 6 tests, through the
+  real router on in-memory SQLite: an editor by primary-admin, by role and by
+  platform role reads every carry, null included; a non-editor reads their
+  own and no one else's, with the field absent and the rest of the row
+  intact; a member with no carry recorded sees their own null, never a lock;
+  `/company/me` and `/company/memberships` apply the same gate; a non-editor's
+  write on their own row is refused and an editor's write answers with the
+  gated payload; a source guard holds the gate to `canEdit`, applied once per
+  payload, spread in conditionally and never nulled.
+- `frontend/test/carry_gate_d431.test.mjs`, 4 tests: the row branches on the
+  field's presence with the lock, the input and the read-only figure as its
+  three arms and the input gated on `canChange` with no `!canChange`
+  disabling; the lock quotes T4's sentence (read from the canvas) and says
+  who can see through it; the member's own null reads "not recorded", never
+  a lock; the page's `EDIT_ROLES`, the server's `canEdit` and the lock note
+  name the same three roles.
+- `team_authority.test.mjs`'s "null means NOT RECORDED" pin still matches
+  the spread expression and is not edited.
+
+**Mutations: 10 run, 10 caught** — each a non-zero exit with a `not ok`
+line, anchors unique, bytes proven changed, sources restored from a
+sha256-checked snapshot: the gate removed; a refused reader given null
+instead of no field; the member unable to read their own; an editor by role
+refused; the gate loosened to membership; the page drawing the input for
+absent and null alike; the lock dropped; the input drawn for a non-editor
+and merely disabled; the lock note promising every member; the member's
+own null drawn through `|| 0`.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA
+fallback, `/api/company/*` stubbed as the worker now shapes it. Signed in as
+the Owner, the Analyst's and Associate's rows draw the carry input (25 and
+empty) and the Owner's own primary-admin row draws "Carry 15%" read-only; as
+the Analyst, the Owner's and Associate's rows draw "Economics · locked" with
+the T4 note as its title and the Analyst's own row "Carry 0.25%"; as the
+Associate, whose carry is null, the own row reads "Carry — not recorded" and
+the other two are locked.
+
+`frontend/src` moved, so `docs/` is rebuilt. No migration, no route, no
+`api.js` method.
+
+## D440
+
+**HQ-held Studio and My Licence stop pointing at pages that refuse, and stop printing zero for a seat or a host that was not confirmed.** No branch is provisioned (`infra/branches/` holds only the example), and every `/api/branch/*` handler calls `requireBranchTier`, so a card that opens `/branch/*` on HQ renders Unreadable. S20's rule is that those pages are never linked from the HQ-held shell.
+
+**What changed.**
+
+- `AdminStudioOverview` reads each card's Open target from `SIDEBAR_GROUPS`: `admin` off a branch (the S20 row — Accounts, Approvals, Programs, Community, Contracts, Insights, Settings), `branch_admin` on a branch. A label with no row is not given a path invented on the card. The figures stay unrecorded off a branch; only the doors moved. The Settings card's sentence names the branch Settings page as where the HQ-owned-row count is derived, because off a branch Open is My Licence.
+- My Licence's freeze appeal stays a link to `/branch/approvals` on a branch, where that page answers. Off a branch it does not link there. The page says there is no appeal from here, with the reason: that page refuses on HQ, and nothing on HQ records a licence appeal from the holder.
+- A seat key the licence copy does not carry renders Not recorded. A measured zero stays zero.
+- Domain removal asks for the bound hostname to be typed. The button stays disabled until the typed value equals the bound host, and `myDomainRemove` sends that string in the DELETE body. `DELETE /api/licence/mine/domain` ignores the body today. The route is Session 5's HQ arm and is not edited here. Until it refuses a hostname that does not match the bound one, a client that skips the confirm can still delete.
+
+**No migration. No new route.** `myDomainRemove` already existed; the body is new and the route still mounts it. No live branch exercised this. `docs/` was rebuilt because `frontend/src` moved.
+
+**Mutations: 5 run, 5 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: the card target hard-coded to `/branch/accounts`; a missing seat returned as `0`; any string accepted as the hostname confirm; the HQ-held appeal forced down the branch link; Remove calling `myDomainRemove()` with no argument on the click.
 
 ## D450
 
