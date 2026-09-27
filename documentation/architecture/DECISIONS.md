@@ -20936,7 +20936,8 @@ sidebar stays the canvas's eight (#322 is already a decision about it).
   for programme throughput at all; the cohort timeline returns every week's
   outcomes. It now says the true half: week outcomes are readable, and the
   Analytics page draws them; assessment runs are not, because no route lists
-  them (D140).
+  them (D140). D446 lists those runs for one cycle and rewrites the sentence
+  again: the two counts are not added into one figure.
 - **Branch Home called HQ's cut "your share".** The statement computes what is
   owed to HQ as gross times this rate, so the label told a branch it kept the
   part it pays. It reads *"owed to HQ · you keep N%"* now, and a test holds
@@ -32041,6 +32042,90 @@ touched only to mount the detail panel and the two actions.
   renders the card, where it used to read the retired block's source.
 - **Mutations.** 17 run, 17 caught on the first run.
 
+## D385
+
+**The Spin-Out Lab landing revision, built up to the per-track-gates call.**
+Session 10, item 5 (the C3 gap map's PR 2), against
+`design/canvases/integrated/Spin-Out Lab · Landing.dc.html` (artifact
+`3522163f`, landed by Session 1 in D305). No migration and no new route or
+`api.js` method. `GET /spinout-lab/brief` gains one field, `cohort.end_date`.
+
+**What the Landing canvas adds over the Intro the code was built from.** Its
+markup is the Intro's public surface. What is new is its data script: the
+same nineteen tools, the three tracks with their own four gates each, four
+jurisdictions (two live, two coming), and a cohort record the hero and the
+apply band read by name ("Apply to {cohort.name}", "Read from the cohort
+record"). Most of it was already built (D38).
+
+**1. The cohort is named by the server.**
+- **Before.** The landing's hero, both apply buttons, the apply band and the
+  signed-in `ApplyCtaSection` printed "Cohort N". That number comes from the
+  client calendar (`resolveOpenCohort` / `COHORT_BASE`). The Programme Brief,
+  the apply form (D384) and every cohort row on the server name the same
+  cohort by its month ("November 2026"). This was the gap map's "two naming
+  schemes" trap.
+- **Now.** A new `useCohortRecord` (lib/spinoutLab.js) reads `/brief` once and
+  gives the name, start, end, deadline and places. `cohortRecordFromBrief` is
+  its pure half. `useCohortPlaces` now rides on the same read.
+  - The hero rows are Cohort, Starts, Ends and Applications close, with the
+    canvas's footnote "Read from the cohort record".
+  - The buttons say "Apply to the November 2026 cohort".
+  - The band says "Apply to the November 2026 cohort on the Form track".
+  - The CTA says "Apply to the November 2026 cohort." and gives the deadline
+    it read.
+- **Three absences are told apart:** "Reading…" while the read is in flight;
+  "Could not be read" with a retry when it failed; and "Not recorded" when
+  the record came back without that value. A button never names a cohort
+  nobody has read.
+- **`end_date`** is week 4's deadline from `cycleWeekWindows`, the windows the
+  Lab enforces, so the page computes no end of its own. A worker test holds
+  it at four weeks after the start.
+- `openCohortCopy` stays in the library, and its tests stand, but no landing
+  surface calls it.
+
+**2. The hero draws no seat count.** The Intro left this open ("the landing
+revision's call"). The Landing canvas settles it in its own caption: "No seat
+count, no track record". The count stays on the apply CTA and the apply form,
+where D380 put it.
+
+**3. Default track stays Form on the public page.** The canvas defaults to
+Find fit "because the signed-in member has a company". A logged-out visitor
+has said no such thing. The signed-in page already opens on Find fit when
+the application said the company is incorporated. A test pins both halves.
+
+**THE OPEN PRODUCT CALL: per-track gates** (the gap map's product call 240).
+- **The disagreement.** The Programme Brief prints each track its own four
+  gates (`TRACK_GATES`, lib/spinoutBrief.js), as the Brief and Landing
+  canvases draw them. The intro, the workspace and the worker enforce one
+  gate set for everyone (`PIPELINE_PHASES`, reconciled against `MILESTONES`).
+- **The options.** Build per-track milestones in the worker so the brief
+  becomes true, or have the brief print the one enforced set.
+- **Until the owner decides:**
+  - neither surface changes what it draws;
+  - both print one sentence from `GATES_DECISION` saying the call is open,
+    so a founder reading either is not told a week asks something the Lab
+    will not check;
+  - a test pins that neither side has quietly taken a side. It is the test
+    to change, together with `GATES_DECISION`, when the call is made.
+
+**Not built, because nothing stores it** (unchanged from D38, and still true
+of the Landing canvas):
+- the "Yours" tag;
+- the four sample cohort companies and their feed;
+- founder-to-founder asks;
+- `&track=` on the apply link.
+
+**Verified.**
+- `spinout_landing_d385.test.mjs`: 10 tests. The hero and the apply band are
+  rendered in each read state. The tests run green under UTC,
+  America/Los_Angeles and Asia/Tokyo, because the dates are Delaware time
+  whatever the viewer's zone.
+- Updated tests:
+  - `spinout_lab_intro.test.mjs`: the places hook now reads the record.
+  - `spinout_brief_live_data.test.mjs`: the CTA reads the record.
+  - `spinout_brief_d141.test.ts`: gains the `end_date` test.
+- **Mutations.** 12 run, 12 caught on the first run.
+
 ## D390
 
 **Retiring `/partner/operations/*`, part 1a: the two jobs that existed
@@ -34487,6 +34572,21 @@ record could not be read. Nothing here is drawn from a guess. Retry".
 
 **Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: an unknown seat type accepted; the escalation kind dropped; an admin row offered a button.
 
+## D446
+
+**A branch reads the support sessions on its own database, and lists assessment runs for one cycle.** Wave 8, Session 6, item 7. No migration. No live branch exercised this. `routes/assessment.ts` and `rpc/branchOps.ts` are not edited. `HqSupportSessionBar.jsx` is Session 5's and is not edited.
+
+**The audit line.** `GET /api/branch/support-sessions` (`routes/branch_support_sessions.ts`, mounted at `/api/branch` beside the other branch reads). `requireAdmin` and `requireBranchTier`. It selects `impersonation_sessions` where `admin_user_id = 0` and `context` starts `hq_support:`, which is the row `redeemSupportCode` writes, and it joins the target account on this database. It does not create the table. Creating it on the read would turn "could not be read" into an empty list, and an empty list is what the page says when no session has been opened. A missing or failed read is `available: false` with a sentence of ours; the database's text stays in the log, and `BranchAccounts` draws Unreadable. An empty table is `available: true` and `items: []`, and the page says the record exists and is empty. A read made during a session is not a row in this table, and HQ's Security copy is a different store. Both stay unrecorded, with reasons the route returns. The actor is the name stored in `context`, because that row is not joined to a local user.
+
+**The cycle filter.** `GET /api/admin/assessment/sessions` on the assessment router that was already mounted at `/api/admin/assessment`. `requireAdmin`, so a branch can read it; the writes stay `requireHqAuthoring`. `?cycle=` is a cohort cycle id. `assessment_sessions` has no cycle column, so a run is kept when `datetime(started_at)` is at or after that cycle's `start_at` and before its `end_at`. An id that matches nothing is `cycle_found: false` and lists nothing. A cycle with a blank start or end is `filterable: false` and is not answered with the unfiltered population. A missing `cohort_cycles` table is `available: false`, which is not "no cycle with that id". Omitting `?cycle=` lists the runs on this database, `filtered: false`. The list is capped at 200. There is still no `GET /results`. A result on a run is the archetype label when a result row was written, and "No result" when it was not. The assessment router's existing bootstrap still creates the assessment tables on the way in, so this route does not report a missing `assessment_sessions` table as unreadable; that is the bootstrap that was already there.
+
+**Throughput.** The reason on `GET /api/branch/insights` no longer says there is no route that lists assessment runs. Week outcomes and assessment runs are two counts. They are not added into one figure, because a week gate and an assessment completion count different things.
+
+**Who reads it.** `BranchAccounts` draws the audit line. `BranchPrograms` draws the run list, filtered by the cycle the calendar already loaded.
+
+**Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: a missing support-session table answered as an empty list; a cycle with no end falling through to every run; the cycle window keeping every run.
+
+
 ## D450
 
 **HQ consoles tell the truth about what was read.** Wave 8, Session 16, item 1
@@ -35107,3 +35207,25 @@ Session 2's file, so the page names it instead of mounting a band that would
   `check-api-drift`, `test:guards`, `lint:undef`, `check-dark-mode` exit 0.
   Root `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser
   probe.
+
+## D490
+
+**#871 review follow-ups: private notes, dates, and void touches on the investor
+book.** Wave 9, Session 16, item 2. No migration.
+
+**Private notes.** Each party’s note on a tie lives under
+`metadata.private_notes[userId]`. `GET /partnernet/relationships` returns
+`my_private_note` for the caller only and never the other party’s text.
+`PATCH` accepts `private_note` and merges — it does not replace shared
+metadata wholesale.
+
+**Dates.** The touch form sends optional `interacted_at` (backdating). Calendar
+reminder dates (`YYYY-MM-DD`) normalize to end-of that UTC day so due compares
+honestly.
+
+**Void touches.** `POST …/interactions` refuses an empty note with no explicit
+date; the page matches that refusal before calling the route. The book header
+says **no touches logged yet** when the read succeeded but the log is empty —
+not “coverage unavailable”.
+
+**Tests.** `partnernet_interactions.test.ts` extended; `investor_network_d490.test.mjs`.

@@ -174,6 +174,7 @@ import branchTemplateRoutes from './routes/branch_templates';
 import branchInsightsRoutes from './routes/branch_insights';
 import branchDeploymentRoutes from './routes/branch_deployment';
 import branchInvitationRoutes from './routes/branch_invitations';
+import branchSupportSessionRoutes from './routes/branch_support_sessions';
 import adminSuperAdmins from './routes/admin_super_admins';
 import adminHq from './routes/admin_hq';
 import adminRevenue from './routes/admin_revenue';
@@ -877,6 +878,9 @@ app.route('/api/branch', branchDeploymentRoutes);
 // D441 — accepting a move onto this branch. Same prefix, no session: the
 // token is the credential, and the person has no account here yet.
 app.route('/api/branch', branchInvitationRoutes);
+// D446 — S13's audit line. The branch reads the support sessions its own
+// database recorded. Same prefix as the other branch reads.
+app.route('/api/branch', branchSupportSessionRoutes);
 app.route('/api/admin/licences', adminLicences);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.

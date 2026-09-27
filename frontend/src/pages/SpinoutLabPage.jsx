@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Loader2, ArrowRight, FlaskConical } from "lucide-react";
 import { spinoutLab } from "../lib/api";
@@ -22,7 +22,7 @@ import {
   // ESLint's `no-undef`, which is the whole reason that step exists.
   LAB_APPLY_HREF,
   LAB_APPLY_HREF_SIGNED_IN, LAB_CONTACT_HREF,
-  parseSqliteUtc, fmtRaised, openCohortCopy,
+  parseSqliteUtc, fmtRaised, useCohortRecord,
   useCohortDirectory, useShippedFeed, useCohortPlaces, placesLabel,
 } from "../lib/spinoutLab";
 import { DEFAULT_TRACK } from "../lib/spinoutLabArsenal";
@@ -186,19 +186,20 @@ export function LpCtaSection() {
 }
 
 export function ApplyCtaSection({ applyHref = LAB_APPLY_HREF }) {
-  // Resolve the currently-open cohort client-side (mirrors Worker math).
-  // Deadline = 7 days before the 1st of the cohort month at 23:59:59 ET.
-  // Workspace access is automatically granted at midnight Delaware time on
-  // the 1st by the Worker's cohort-timing cron — no client action needed.
-  const cohort = useMemo(() => openCohortCopy(), []);
+  // D385 — the open cohort as the server names it: one `/brief` read gives the
+  // name and the deadline, the same record the landing above and the Programme
+  // Brief print. Workspace access is granted at midnight Delaware time on the
+  // 1st by the Worker's cohort-timing cron.
+  const read = useCohortRecord();
+  const cohort = read.status === 'ok' ? read.cohort : null;
 
-  const headline = cohort
-    ? `Apply to Cohort ${cohort.cohortNum}.`
+  const headline = cohort?.open && cohort.name
+    ? `Apply to the ${cohort.name} cohort.`
     : 'Apply to the next cohort.';
 
-  const sub = cohort
+  const sub = cohort?.deadlineLabel
     ? `Applications close ${cohort.deadlineLabel}.`
-    : 'Applications are now open.';
+    : 'Applications close seven days before the cohort starts, at 23:59 Delaware time.';
   // The place count is read, never typed: `cohort.places` from /brief.
   const places = useCohortPlaces();
 
@@ -314,7 +315,8 @@ export function Dashboard({ state, investorView = false }) {
 
   const [track, setTrack] = useState(appliedIncorporated ? 'fit' : DEFAULT_TRACK);
   const [jurisdiction, setJurisdiction] = useState('de');
-  const cohort = useMemo(() => openCohortCopy(), []);
+  // D385 — read from /brief, as the landing canvas's cohort record.
+  const cohort = useCohortRecord();
 
   const directory = useCohortDirectory();
   const shipped = useShippedFeed({ enabled: true });

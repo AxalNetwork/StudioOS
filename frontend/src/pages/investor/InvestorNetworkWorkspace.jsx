@@ -141,6 +141,10 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   const [reminderDate, setReminderDate] = useState('');
   const [reminderNote, setReminderNote] = useState('');
   const [touchNote, setTouchNote] = useState('');
+  const [touchDate, setTouchDate] = useState('');
+  const [privateNoteFor, setPrivateNoteFor] = useState(null);
+  const [privateNoteDraft, setPrivateNoteDraft] = useState('');
+  const [privateNoteBusy, setPrivateNoteBusy] = useState(false);
   const [errors, setErrors] = useState({});
   const [refreshing, setRefreshing] = useState(false);
   const [busyUid, setBusyUid] = useState('');
@@ -225,11 +229,29 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
    */
   const logTouch = async (rel) => {
     setActionError('');
+    const note = touchNote.trim();
+    const date = touchDate.trim();
+    if (!note && !date) {
+      setActionError('Say what happened or set when it happened — an empty touch must not move the cold flag.');
+      return;
+    }
+    const body = { note: note || null };
+    if (date) body.interacted_at = `${date}T12:00:00.000Z`;
     try {
-      await api.partnerInteractionAdd(rel.id, { note: touchNote.trim() || null });
-      setTouchFor(null); setTouchNote('');
+      await api.partnerInteractionAdd(rel.id, body);
+      setTouchFor(null); setTouchNote(''); setTouchDate('');
       load();
     } catch (cause) { setActionError(cause?.message || 'The touch could not be recorded.'); }
+  };
+  const savePrivateNote = async (rel) => {
+    setPrivateNoteBusy(true);
+    setActionError('');
+    try {
+      await api.updateRelationship(rel.id, { private_note: privateNoteDraft.trim() || null });
+      setPrivateNoteFor(null);
+      load();
+    } catch (cause) { setActionError(cause?.message || 'The private note could not be saved.'); }
+    finally { setPrivateNoteBusy(false); }
   };
   const setReminder = async (rel) => {
     setActionError('');
@@ -327,7 +349,8 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
               // A book with no last-touch dates and an EMPTY book are different
               // facts. Only the first is a coverage gap.
               const touch = relationships.length === 0 ? 'no ties recorded'
-                : touchCoverage ? `${coldCount} going cold` : 'last-touch coverage unavailable';
+                : errors.relationships ? 'last-touch coverage unavailable'
+                  : touchCoverage ? `${coldCount} going cold` : 'no touches logged yet';
               return `${ties} ties · ${touch}`;
             })} role={role} filters={zoneFilters ? zoneFilters({ value: bookView, onChange: setBookView, counts: { cold: coldCount } }) : []} actions={investorZoneActions('network/relationships', { handlers: { setReminders: setRemindersOp }, view: { header: ['Person', 'Organization', 'Type'], rows: visibleRelationships || [], cells: (r) => [personName(r), orgIdentity(r), r.relationship_type] } })} />
             {/* DUE REMINDERS (migration 338): surface when due, never a
@@ -355,15 +378,30 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                     <span data-label="Context" className="inw-context">{relationshipContext(item)}</span>
                     <time data-label="Last touch" className={age(lastTouchAt(item)).includes('d') && Number.parseInt(age(lastTouchAt(item)), 10) > COLD_AFTER_DAYS ? 'inw-cold' : ''}>{age(lastTouchAt(item))}</time>
                     <span className="inw-row-actions">
-                      <button type="button" onClick={() => { setActionError(''); setTouchFor(touchFor === item.id ? null : item.id); setReminderFor(null); }} data-testid={`button-log-touch-${item.id}`}>Log a touch</button>
-                      <button type="button" onClick={() => { setActionError(''); setReminderFor(reminderFor === item.id ? null : item.id); setTouchFor(null); }} data-testid={`button-remind-${item.id}`}>Remind me</button>
+                      <button type="button" onClick={() => { setActionError(''); setTouchFor(touchFor === item.id ? null : item.id); setReminderFor(null); setPrivateNoteFor(null); }} data-testid={`button-log-touch-${item.id}`}>Log a touch</button>
+                      <button type="button" onClick={() => { setActionError(''); setReminderFor(reminderFor === item.id ? null : item.id); setTouchFor(null); setPrivateNoteFor(null); }} data-testid={`button-remind-${item.id}`}>Remind me</button>
+                      <button type="button" onClick={() => {
+                        setActionError('');
+                        const open = privateNoteFor === item.id ? null : item.id;
+                        setPrivateNoteFor(open);
+                        setPrivateNoteDraft(open ? (item.my_private_note || '') : '');
+                        setTouchFor(null); setReminderFor(null);
+                      }} data-testid={`button-private-note-${item.id}`}>Private note</button>
                     </span>
                   </div>
                   {touchFor === item.id && (
                     <div className="inw-inline-form" data-testid={`form-touch-${item.id}`}>
-                      <input value={touchNote} onChange={(e) => setTouchNote(e.target.value)} placeholder="What the last exchange was (optional)" aria-label="Touch note" />
+                      <input type="date" value={touchDate} onChange={(e) => setTouchDate(e.target.value)} aria-label="When it happened" data-testid={`input-touch-date-${item.id}`} />
+                      <input value={touchNote} onChange={(e) => setTouchNote(e.target.value)} placeholder="What the last exchange was" aria-label="Touch note" />
                       <button type="button" onClick={() => logTouch(item)} data-testid={`button-touch-save-${item.id}`}>Record the touch</button>
                       <button type="button" onClick={() => setTouchFor(null)}>Cancel</button>
+                    </div>
+                  )}
+                  {privateNoteFor === item.id && (
+                    <div className="inw-inline-form" data-testid={`form-private-note-${item.id}`}>
+                      <input value={privateNoteDraft} onChange={(e) => setPrivateNoteDraft(e.target.value)} placeholder="Only you see this note" aria-label="Private note" data-testid={`input-private-note-${item.id}`} />
+                      <button type="button" disabled={privateNoteBusy} onClick={() => savePrivateNote(item)} data-testid={`button-private-note-save-${item.id}`}>Save note</button>
+                      <button type="button" onClick={() => setPrivateNoteFor(null)}>Cancel</button>
                     </div>
                   )}
                   {reminderFor === item.id && (

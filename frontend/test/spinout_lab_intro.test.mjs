@@ -23,6 +23,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { codeOnly } from './_codeOnly.mjs';
+import { cohortRecordFromBrief } from '../src/lib/spinoutLab.js';
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
 
@@ -107,13 +108,17 @@ test('no seat count is typed: every one drawn is the stored cohort.places', () =
       `${label} swallows a failed place-count read instead of saying so`);
   }
   // And the hook reads the /brief field the Programme Brief prints, which the
-  // worker fills from the stored setting rather than a literal.
+  // worker fills from the stored setting rather than a literal. Since D385 the
+  // count rides on the one cohort-record read the landing also uses.
   const hook = codeOnly(LIB).slice(codeOnly(LIB).indexOf('export function useCohortPlaces'));
-  assert.match(hook.slice(0, 700), /spinoutLab\s*\.brief\(\)/);
-  // The number printed is the one read from cohort.places — not merely a
-  // mention of the field (the null check names it too).
-  assert.match(hook.slice(0, 900), /const n = Number\(r\?\.cohort\?\.places\);/);
-  assert.match(hook.slice(0, 900), /setRead\(\{ status: 'ok', places: n \}\)/);
+  assert.match(hook.slice(0, 400), /const record = useCohortRecord\(\);/);
+  assert.match(hook.slice(0, 400), /const n = record\.cohort\.places;/);
+  const reader = codeOnly(LIB).slice(codeOnly(LIB).indexOf('export function useCohortRecord'));
+  assert.match(reader.slice(0, 700), /spinoutLab\s*\.brief\(\)/);
+  // The number printed is the one read from cohort.places, and an absent one
+  // stays absent rather than becoming 0.
+  assert.equal(cohortRecordFromBrief({ cohort: { name: 'November 2026', places: 24 } }).places, 24);
+  assert.equal(cohortRecordFromBrief({ cohort: { name: 'November 2026', places: null } }).places, null);
   assert.match(LAB_ROUTE, /const \{ max \} = await getCohortSizeSettings\(c\.env\);/);
   assert.match(LAB_ROUTE, /places: max,/);
 });
