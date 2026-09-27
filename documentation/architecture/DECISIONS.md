@@ -31856,3 +31856,85 @@ surface); a cached-input cost read on Research (no store).
 - Both typechecks, `check-decision-ids`, `check-folder-docs`,
   `check-api-drift`, `check-unused-imports` and `check-dark-mode` exit 0. Root
   `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser probe.
+
+## D430
+
+**Recovery codes get a single writer: regenerating them and then re-pairing
+the authenticator never resurrects the discarded set.** Session 15's item 1;
+lands after D258 (#811), which touched the same four TOTP routes.
+
+**The defect, reproduced before the fix.** Two stores hold one set of
+recovery-code hashes: `users.totp_recovery_codes`, which login consumes from
+(auth.ts's `tryConsumeRecoveryCode` reads it and accepts a code iff its hash
+is in the array), and `auth_totp.recovery_hashes`, a mirror. On main
+(`4d9add89bb`):
+- `POST /api/settings/totp/recovery-codes/regenerate` ran `UPDATE users SET
+  totp_recovery_codes = …` alone; the mirror kept the old set.
+- `POST /api/settings/totp/repair` called `loadTotp`, which answers the
+  `auth_totp` row's hashes — the stale mirror — and passed them to
+  `persistNewTotpEnrolment`, which wrote them to `auth_totp` and mirrored
+  them to `users`.
+- So after regenerate → repair the codes the person had just saved were
+  refused and the ones they had just discarded worked again, against the
+  settings page's own promise ("This invalidates any existing recovery
+  codes"), and the "N of 10 remaining" count reverted with them.
+- `cloudflare-worker/test/recovery_codes_single_writer_d430.test.ts` drove
+  this on a `node:sqlite` fixture through the real router before the fix:
+  its first three tests failed (`auth_totp.recovery_hashes` still holding the
+  discarded set after regenerate; the saved set replaced by the discarded one
+  after repair; repair siding with the mirror when the two stores had been
+  driven apart), recorded in the PR body.
+
+**What changed — one writer, one batch.**
+- `services/authTotp.ts`: `persistNewTotpEnrolment` writes the `auth_totp`
+  upsert and the `users` mirror in ONE `env.DB.batch`; the mirror's
+  try/catch is gone, so either both land or the route fails and says so.
+  New `replaceRecoveryHashes(env, userId, hashes)` writes both stores in one
+  batch WITHOUT stamping `last_used_at` — that column is the audit of a code
+  or a TOTP being used, and `updateRecoveryHashes` (the consumption path)
+  keeps it; a regenerate is not a consumption. There is no third way to
+  write a recovery set.
+- `routes/settings.ts`: regenerate calls `replaceRecoveryHashes`. Repair
+  carries the set login consumes from — `recoveryCodesOf(users.totp_recovery_codes)`,
+  the row it already read — never the loaded mirror. An empty or unparseable
+  `users` set stays empty: repair never revives codes login was already
+  refusing, and no fallback to the mirror exists (a mutation that added one
+  is caught).
+- `auth_recover.ts`'s own consumption (writes `users`, then
+  `updateRecoveryHashes`) and `auth.ts`'s enrolment are not touched: both
+  already write both stores.
+
+**Guard: 6 tests.** Regenerate writes both stores at once, the old set is
+gone from both and `last_used_at` stays null; regenerate then repair leaves
+the ten saved codes accepted and the discarded one refused, in both stores
+and in `loadTotp`'s count; repair carries the consumed-from set when the
+stores have been driven apart; an empty consumed-from set stays empty; an
+enrolment writes both stores with the same set in a two-statement batch;
+and a source guard holds settings.ts to no direct `UPDATE users SET
+totp_recovery_codes`, repair to `recoveryCodesOf(userRow[0]…)`, and the two
+service writers to one batch each, with no `last_used_at` in the replacer.
+
+**Mutations: 9 run, 9 caught** — each a non-zero exit with a `not ok` line,
+anchors unique, bytes proven changed, sources restored from a sha256-checked
+snapshot: the mirror back in a swallowed try/catch; regenerate writing
+`users` alone (the defect); repair re-persisting the loaded mirror (the
+defect); the replacer stamping `last_used_at`; the replacer writing
+`auth_totp` only; the replacer writing `users` only; repair falling back to
+the mirror on an empty set; the enrolment batch dropping the `users` write;
+the enrolment batch dropping the `auth_totp` write.
+
+**Filed, not fixed.**
+- Remediation is the owner's call (the brief): accounts that regenerated and
+  then repaired before D430 hold the discarded set in both stores today. No
+  per-user row was read and nobody was contacted; the one read-only aggregate
+  the brief allows is in the PR body: the number of accounts with a
+  `totp_recovery_codes_regenerated` row followed by a later `totp_repaired`
+  row and no `user_login_recovery_code` row between the two (a recovery-code
+  sign-in is logged under that action, auth.ts), read from production
+  `activity_logs` as one COUNT and nothing else.
+- Trap 6 of the gap map, unchanged: regenerate and repair are reachable from
+  a relocked post-recovery session, and neither sends a security notice.
+  Neither is this item's, and neither is decided here.
+
+No migration, no route, no `api.js` method, no `frontend/src` change, so
+`docs/` is untouched.
