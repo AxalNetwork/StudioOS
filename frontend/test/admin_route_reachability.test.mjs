@@ -261,27 +261,42 @@ function filesFor(path) {
 const AMBIGUOUS = [];
 const DANGLING = [];
 
-/** BFS. A link only counts once the page holding it is itself reachable. */
-function reachable() {
+/**
+ * BFS. A link only counts once the page holding it is itself reachable.
+ *
+ * `roleSet` limits the sidebar roots, so a door on the branch shell is not
+ * treated as a door for HQ-held accounts. Faults are recorded only on the
+ * full walk: the tier walks ask a different question and must not triple
+ * the dangling-link register.
+ */
+function reachable(roleSet, recordFaults) {
   const seen = new Set();
   const queue = [];
+  // HQ-held shells do not walk /branch routes. Those pages refuse off a
+  // branch, and a link that only renders there (MyLicencePage's appeal) is
+  // not a door an HQ-held admin can open.
+  const skipBranch = roleSet && !roleSet.has('branch_admin');
   const admit = (target, from) => {
+    if (skipBranch && target.startsWith('/branch')) return;
     const hit = toRoute(target);
     // Both registers are scoped to /admin: this file's remit is the admin console,
     // and failing it over an ambiguity in the articles routes would make it red for
     // a reason it has no opinion about.
     if (hit && typeof hit === 'object') {
-      if (target.startsWith('/admin')) AMBIGUOUS.push({ ...hit, from });
+      if (recordFaults && target.startsWith('/admin')) AMBIGUOUS.push({ ...hit, from });
       return;
     }
     if (!hit) {
-      if (target.startsWith('/admin')) DANGLING.push({ target, from });
+      if (recordFaults && target.startsWith('/admin')) DANGLING.push({ target, from });
       return;
     }
     if (!seen.has(hit)) { seen.add(hit); queue.push(hit); }
   };
 
-  for (const row of SIDEBAR_ROWS) admit(row.to, `sidebar:${row.role}`);
+  for (const row of SIDEBAR_ROWS) {
+    if (roleSet && !roleSet.has(row.role)) continue;
+    admit(row.to, `sidebar:${row.role}`);
+  }
   for (const d of doorsIn(CHROME).doors) admit(d, 'App.jsx chrome');
 
   while (queue.length) {
@@ -295,7 +310,9 @@ function reachable() {
   return seen;
 }
 
-const REACHED = reachable();
+const REACHED = reachable(null, true);
+const REACHED_HQ = reachable(new Set(['admin', 'super_admin']), false);
+const REACHED_BRANCH = reachable(new Set(['branch_admin']), false);
 
 /* ------------------------------------------------------------------ *
  * EXEMPT — "no door, and that is correct". Every entry is proved below.
@@ -373,6 +390,22 @@ test('every /admin route is reachable from navigation', () => {
     + 'way in is to type the URL. Give each a sidebar row in frontend/src/sidebarConfig.js,\n'
     + 'or — if having no door is correct — add an EXEMPT entry whose kind has a prover:\n  '
     + orphans.join('\n  '));
+});
+
+test('the HQ-held walk does not reach spinout moderation; that door is Session 5', () => {
+  // The branch Approvals board links to the console. HQ-held Approvals
+  // (HeldApprovals) does not. A walk that starts from every sidebar treats
+  // the branch door as enough. This one does not: the HQ-held shells are
+  // admin and super_admin, and the one route they cannot reach that the
+  // branch shell can is the moderation console. HeldApprovals is Session 5's.
+  assert.equal(REACHED_BRANCH.has('/admin/spinout-moderation'), true);
+  assert.equal(REACHED_HQ.has('/admin/spinout-moderation'), false);
+  const onlyOnTheBranch = ADMIN
+    .filter((r) => !r.redirect)
+    .filter((r) => !EXEMPT_PATHS.has(r.path))
+    .filter((r) => REACHED_BRANCH.has(r.path) && !REACHED_HQ.has(r.path))
+    .map((r) => r.path);
+  assert.deepEqual(onlyOnTheBranch, ['/admin/spinout-moderation']);
 });
 
 test('every in-page /admin link points at a registered route', () => {

@@ -17,7 +17,8 @@ glance that is already in hand is not passed through the legacy props.
 
 Roughly grouped by what they administer: accounts and roles, the Spin-Out Lab
 cohort (applications, timing, journey preview, and `SpinoutModerationPage.jsx`
-at `/admin/spinout-moderation`), content (articles, publications,
+at `/admin/spinout-moderation`, which lists cases awaiting a decision apart
+from sanctions in force, D448), content (articles, publications,
 templates), the network (profiles, partners, referrals), and integrations
 (Telegram, X).
 

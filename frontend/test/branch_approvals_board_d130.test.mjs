@@ -181,8 +181,27 @@ test('one list of sources, read by both the board and the backlog count', () => 
   // The two traps the shared list exists to hold, pinned by name.
   assert.match(SOURCES, /cohort_applicants/, 'the cohort table is the applicant row, not spinout_applications');
   assert.doesNotMatch(SOURCES, /FROM spinout_applications/, 'the wrong cohort table came back');
-  assert.match(SOURCES, /under_review/, "a moderation case awaiting a decision is 'under_review'");
-  assert.match(SOURCES, /m\.resolved_at IS NULL/, 'a closed case whose status stayed under_review is still counted');
+  // D448. The referral lane still says under_review, so a match on SOURCES
+  // alone no longer proves the moderation lane. The lane concatenates one
+  // shared predicate, and that predicate still keeps a closed under_review
+  // row out of the count.
+  const moderationLane = SOURCES.slice(
+    SOURCES.indexOf("key: 'moderation'"),
+    SOURCES.indexOf("key: 'kyc'"),
+  );
+  assert.ok(moderationLane.includes("key: 'moderation'"), 'the moderation lane left the shared list');
+  const awaitingUses = moderationLane.match(/\+ MODERATION_AWAITING_SQL/g) || [];
+  assert.equal(
+    awaitingUses.length,
+    2,
+    'the moderation count and its rows both concatenate the shared open predicate',
+  );
+  const OPEN = raw('cloudflare-worker/src/services/moderationOpen.ts');
+  assert.match(
+    OPEN,
+    /status = 'under_review' AND resolved_at IS NULL/,
+    'a closed case whose status stayed under_review stays out of the lane',
+  );
   assert.match(SOURCES, /!== 'draft'/, 'a draft referral is not reviewer backlog');
 });
 
