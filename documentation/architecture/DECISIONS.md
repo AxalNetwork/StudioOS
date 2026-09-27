@@ -31019,6 +31019,130 @@ timestamps and is unchanged.
   mount must pass the fixture; "Left" is read off the week's own card), not
   the code: 17 of 17 caught.
 
+## D382
+
+**The certificate admin tab, over the registry's existing list, issue and
+revoke — with Emailed, Downloaded and Reissue stated rather than drawn.**
+Session 10, item 3 (the C3 gap map's PR 4). No migration, no new route, no
+new `api.js` method: three routes change behaviour, and their existing
+methods (`spinoutCertificateList`, `spinoutCertificateIssue`,
+`spinoutCertificateRevoke`, `spinoutCertificateBackfill`) get their first
+caller.
+
+**The tab.** `AdminSpinoutLab.jsx` gains a Certificates tab rendering
+`AdminSpinoutCertificates.jsx`, the Graduation Certificate canvas's admin
+artboard. Its parts:
+- **KPIs.** Eligible (graduated), from the `incorporation_completed`
+  milestone. Issued, from the rows.
+- **The issuance table.** Graduates awaiting a certificate first, then the
+  registry. Each row offers only what the worker will do:
+  - Issue, on an awaiting graduate;
+  - Revoke, on an issued credential, with a reason;
+  - Preview, which opens the public `/verify/:token` page, and only when the
+    holder has left sharing on.
+- **Preview batch** narrows the table to the graduates the batch would
+  issue.
+- **Issue all eligible** is the backfill that used to sit under Participants.
+  That row is deleted, not kept beside the tab.
+- **The activity log** is built from the registry's own `issued_at` and
+  `revoked_at`, with who issued each: an admin by name, or "issued
+  automatically on graduation".
+- **The issuance states** are awaiting, issued, revoked and public
+  verification off.
+
+**What the canvas draws that no store holds**, and what the tab does instead:
+- **Emailed.** Nothing sends `spinout_graduated` (D380). The KPI, the column
+  and the state read Not recorded with that reason. **Resend** is not drawn:
+  there is no send to repeat.
+- **Downloaded.** The PDF is built in the graduate's browser. It reads Not
+  recorded with that reason.
+- **"Badge awarded" and "Template updated" in the activity log.** No badge is
+  minted and no template history is kept. The log says it omits them.
+- **Reissue.** Not offered. See below.
+
+**The routes, changed where the tab exposed them:**
+- **Issue** (`POST /certificates` with only `user_id`) now runs
+  `issueOnGraduation`, the path graduation itself uses, so the snapshot comes
+  from the graduate's records and never from what an admin typed. It passes
+  the admin's id as `issued_by_user_id` (the automatic path still writes
+  NULL) and logs `spinout_certificate_issued` through `logAdminAction`. Its
+  refusals are codes with our sentence:
+  - `not_graduated` (409);
+  - `insufficient_data` (422);
+  - `reissue_blocked` (409);
+  - `error` (500).
+
+  The older manual body (with `public_name`) stays, logged the same way.
+- **Revoke** now requires a reason (`reason_required`, 400) and logs
+  `spinout_certificate_revoked`. It used to write the row and record no
+  actor. Revoking an already revoked row logs nothing further.
+- **List** also returns `issued_by_name`, `awaiting` and `eligible_total`.
+  `awaiting` means graduates with no certificate row at all, whether issued
+  or revoked. `eligible_total` is the count of graduates. A failed read of
+  either returns `null` with a reason in `unavailable`, never an empty queue.
+
+**The credential-id collision, measured and refused rather than solved.**
+`credential_id` is UNIQUE and derived from the cohort, the date and the
+account. So after a revoke, issuing again for the same graduate derives the
+same id:
+- the automatic path's `INSERT OR IGNORE` swallowed the conflict and
+  reported `already_issued`, for a graduate who holds no live credential;
+- the manual path's plain INSERT would have thrown the database's own error.
+
+Both now check first and return `reissue_blocked`. The tab states the
+collision on the revoked row instead of drawing a Reissue button. The fix
+itself — a reissue suffix, or keying uniqueness differently — changes what
+the public verifier resolves, so it is filed, not chosen here. The revoked
+graduate is also kept out of the Issue queue for the same reason.
+
+**Filed, not fixed:**
+- **The freeze gate.** The certificate routes still gate on
+  `user.role === 'admin'` rather than `requireAdmin`, so D135's compliance
+  freeze does not reach them. Moving them would also move
+  `lib/branchFreeze.js`'s row, which is outside this item.
+- **Refusal bodies.** The routes' older refusals (`{ detail: 'Forbidden' }`)
+  predate D258 and are unchanged.
+
+### VERIFIED
+
+- `cloudflare-worker/test/spinout_certificates_admin_d382.test.ts` (new, 10
+  tests) drives the real route on real `node:sqlite`, with every table from
+  `schema_baseline.sql` and a minted admin JWT. It covers:
+  - issue built from the records and attributed and logged;
+  - idempotence;
+  - `not_graduated`;
+  - revoke requiring a reason and logging once;
+  - `reissue_blocked` on both paths;
+  - the list's issuer name and queue;
+  - a revoked graduate kept out of the queue;
+  - an unreadable queue reported as unavailable;
+  - founders refused on all three routes.
+
+  `certificateIssuance.test.ts` gains two tests (an admin id bound; the
+  collision blocked with no insert attempted). Its "NULL" test is re-aimed
+  from the SQL literal to the bound value, which is the property it held.
+- `frontend/test/spinout_certificate_admin_d382.test.mjs` (new, 11 tests)
+  RENDERS the board with registry-shaped data and asserts what an admin
+  reads: the counts, the delivery columns and KPIs as Not recorded, each
+  row's actions, preview only for a shared credential, the batch preview,
+  the activity log's attribution and its omissions, and an unreadable
+  queue. It also checks the canvas still draws what the tab answers.
+- Eighteen mutations, each anchor unique, bytes proven changed, restored
+  from a sha256-checked snapshot and re-run green. They cover:
+  - worker: issue not attributed; issue or revoke not logged; revoke without
+    a reason; the service or the manual path losing the collision guard; the
+    queue including revoked graduates; a failed queue read returned as
+    empty; the issuer name dropped;
+  - tab: issued counting revoked rows; Emailed drawn as a number; a Reissue
+    button on a revoked row; a preview link to a page the holder closed; the
+    batch preview not filtering; a failed graduate read shown as 0; an
+    automatic issue attributed to a person; Issue sending an admin-typed
+    name; the tab unmounted.
+
+  **One escaped on the first run**, the failed read shown as 0 in the states
+  card, because the assertion looked for the header sentence. The assertion
+  now reads the states row itself, not the code: 18 of 18 caught.
+
 ## D390
 
 **Retiring `/partner/operations/*`, part 1a: the two jobs that existed
