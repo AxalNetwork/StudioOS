@@ -5,10 +5,24 @@
  */
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { SIDEBAR_GROUPS } from '../../sidebarConfig';
 import { branchLabel } from '../../lib/shellRole';
 import { titleCase, Card, Unrecorded, Unreadable } from '../../ui';
 import { COMMUNITY_CONSOLES } from '../branch/BranchCommunity';
 import { freezeLine, studioGlances } from './adminStudioOverview';
+
+/**
+ * The card's Open link is the shell row of the same name.
+ *
+ * Off a branch that row is S20's: an /admin console or /studio, never
+ * /branch/*, which refuses on HQ. On a branch it is the branch shell.
+ * A label with no row is not given a path invented here.
+ */
+export function studioCardTarget(onBranch, label) {
+  const groups = onBranch ? SIDEBAR_GROUPS.branch_admin : SIDEBAR_GROUPS.admin;
+  const row = (groups || []).flatMap((g) => g.items || []).find((item) => item.label === label);
+  return row?.to || null;
+}
 
 function Glance({ glance }) {
   if (!glance) return <p className="mt-2 text-[12px] text-axal-muted">Reading…</p>;
@@ -36,9 +50,15 @@ function CardHead({ title, to }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
       <h2 className="text-[14px] font-extrabold tracking-tight text-axal-ink">{title}</h2>
-      <Link to={to} className="text-[12px] font-semibold text-axal-ink underline underline-offset-2">
-        Open
-      </Link>
+      {to ? (
+        <Link to={to} className="text-[12px] font-semibold text-axal-ink underline underline-offset-2">
+          Open
+        </Link>
+      ) : (
+        <Unrecorded reason="This card has no row in the shell for this deployment, so it is not linked.">
+          No page
+        </Unrecorded>
+      )}
     </div>
   );
 }
@@ -50,6 +70,7 @@ export function AdminStudioOverview({ user, home, licence, templates, insights }
   const {
     onBranch, lic, seats, approvals, programme, contracts, insights: insightView,
   } = studioGlances({ user, home, licence, templates, insights });
+  const open = (label) => studioCardTarget(onBranch, label);
 
   const territories = Array.isArray(user?.branch?.territories) ? user.branch.territories.filter(Boolean) : [];
   const status = user?.branch?.status;
@@ -81,7 +102,7 @@ export function AdminStudioOverview({ user, home, licence, templates, insights }
 
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
         <Card data-testid="admin-studio-accounts">
-          <CardHead title="Accounts" to="/branch/accounts" />
+          <CardHead title="Accounts" to={open('Accounts')} />
           {seats === null ? <p className="mt-2 text-[12px] text-axal-muted">Reading seats…</p> : null}
           {seats && seats.kind !== 'ready' ? <Glance glance={seats} /> : null}
           {seats?.kind === 'ready' ? (
@@ -113,18 +134,18 @@ export function AdminStudioOverview({ user, home, licence, templates, insights }
         </Card>
 
         <Card data-testid="admin-studio-approvals">
-          <CardHead title="Approvals" to="/branch/approvals" />
+          <CardHead title="Approvals" to={open('Approvals')} />
           <Glance glance={approvals} />
         </Card>
 
         <Card data-testid="admin-studio-programs">
-          <CardHead title="Programs" to="/branch/programs" />
+          <CardHead title="Programs" to={open('Programs')} />
           <Glance glance={programme} />
           <p className="mt-2 text-[11.5px] text-axal-muted">Week dates are set at HQ. This page reads them.</p>
         </Card>
 
         <Card data-testid="admin-studio-community">
-          <CardHead title="Community" to="/branch/community" />
+          <CardHead title="Community" to={open('Community')} />
           <ul className="mt-2 space-y-1.5">
             {COMMUNITY_CONSOLES.map((c) => (
               <li key={c.key} className="text-[13px]">
@@ -136,7 +157,7 @@ export function AdminStudioOverview({ user, home, licence, templates, insights }
         </Card>
 
         <Card data-testid="admin-studio-contracts">
-          <CardHead title="Contracts" to="/branch/contracts" />
+          <CardHead title="Contracts" to={open('Contracts')} />
           {contracts === null ? <p className="mt-2 text-[12px] text-axal-muted">Reading the library and agreements…</p> : (
             <>
               <Glance glance={contracts} />
@@ -154,7 +175,7 @@ export function AdminStudioOverview({ user, home, licence, templates, insights }
         </Card>
 
         <Card data-testid="admin-studio-insights">
-          <CardHead title="Insights" to="/branch/insights" />
+          <CardHead title="Insights" to={open('Insights')} />
           {insightView === null ? <p className="mt-2 text-[12px] text-axal-muted">Reading insights…</p> : (
             <>
               <Glance glance={insightView.median} />
@@ -164,18 +185,20 @@ export function AdminStudioOverview({ user, home, licence, templates, insights }
         </Card>
 
         <Card data-testid="admin-studio-settings" className="lg:col-span-2">
-          <CardHead title="Settings" to="/branch/settings" />
+          <CardHead title="Settings" to={open('Settings')} />
           {/* D197 — THE TYPED COUNT IS GONE, and that is the whole correction
               here. This card said "4 of 5 rows owned by HQ." in a second
               spelling of a number `BranchSettings` states in a third; the
               branch page now DERIVES it from its own rows, and this card
               cannot derive anything — it has no read of them. A number it
               cannot compute is a number that goes stale the next time a row
-              lands, which is exactly what happened. The link is what it has,
-              and the link goes to the page that counts. */}
+              lands, which is exactly what happened.
+              D440 — Open is the shell's Settings row, which off a branch is
+              My Licence, not the page that derives the count. The sentence
+              names the branch Settings page, so it stays true on both tiers. */}
           <p className="mt-2 text-[13px] leading-relaxed text-axal-ink">
-            Every row on Settings names who decides it, and the count of HQ-owned rows is derived
-            there rather than stated here.
+            Every row on the branch Settings page names who decides it, and the count of HQ-owned
+            rows is derived there rather than stated here.
             {' '}
             {!lic ? (
               // THE LICENCE WAS NOT READ, which is a different claim from "no
