@@ -722,6 +722,46 @@ legal.post('/incorporation/order', async (c) => {
   }
 });
 
+// D362 — the incorporation price, as the catalog states it.
+//
+// GET /incorporation/quote?jurisdiction_id=us_de_ccorp returns the SAME price
+// POST /incorporation/order would charge (resolveIncorporationPrice), so the
+// figure a founder reads before paying is the figure on the invoice. It is the
+// only price source the Lab page uses: before D362 the page drew a hard-coded
+// $1,200 + $110 package that no catalog held. With no catalog SKU the quote
+// says so (amount_cents null, a reason) rather than falling back to
+// JURISDICTION_COSTS — those are wizard estimates, not a price.
+legal.get('/incorporation/quote', async (c) => {
+  await requireAuth(c);
+  const jurisdictionId = String(c.req.query('jurisdiction_id') || '');
+  const j = JURISDICTIONS.find((x) => x.id === jurisdictionId);
+  if (!j) {
+    return c.json({ error: 'unknown_jurisdiction', message: 'That jurisdiction cannot be formed here.' }, 400);
+  }
+  const resolved = await resolveIncorporationPrice(c.env, j.id);
+  const registeredAgent = await resolveRegisteredAgentOffer(c.env);
+  if (!resolved) {
+    return c.json({
+      jurisdiction_id: j.id,
+      label: j.label,
+      amount_cents: null,
+      currency: null,
+      source: null,
+      reason: 'catalog_price_missing',
+      message: 'No price for this jurisdiction is configured in the catalog, so it cannot be quoted or charged.',
+      registered_agent: registeredAgent,
+    });
+  }
+  return c.json({
+    jurisdiction_id: j.id,
+    label: j.label,
+    amount_cents: resolved.amountCents,
+    currency: resolved.currency,
+    source: 'catalog',
+    registered_agent: registeredAgent,
+  });
+});
+
 legal.get('/incorporate/status', async (c) => {
   const user = await requireAuth(c);
   await ensureIncorporationsSchema(c.env);

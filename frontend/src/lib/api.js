@@ -949,6 +949,11 @@ export const api = {
     request(`/legal/incorporate/status?id=${encodeURIComponent(id)}`),
   legalIncorporationOrders: () =>
     request('/legal/incorporate/orders'),
+  // D362 — the catalog price POST /incorporation/order would charge for this
+  // jurisdiction: { jurisdiction_id, label, amount_cents | null, currency,
+  // source: 'catalog' | null, reason?, message?, registered_agent }.
+  legalIncorporationQuote: (jurisdictionId) =>
+    request(`/legal/incorporation/quote?jurisdiction_id=${encodeURIComponent(jurisdictionId)}`),
   // Legacy free wizard — still available for admin/back-compat (admin only).
   legalIncorporateWizard: (data) =>
     request('/legal/incorporate/wizard', { method: 'POST', body: JSON.stringify(data) }),
