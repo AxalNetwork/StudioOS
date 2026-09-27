@@ -5004,6 +5004,19 @@ export const api = {
     benchmarks: () => request('/research/benchmarks'),
     benchmarkCreate: (data) => request('/research/benchmarks', { method: 'POST', body: JSON.stringify(data || {}) }),
     benchmarkRemove: (uid) => request(`/research/benchmarks/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+    // One benchmark and its named constituents (D314, migration 303). The edit
+    // is re-validated against 217's CHECK on the merged row, so a peer figure
+    // without its source and sample is refused as `peer_base_required`.
+    benchmarkGet: (uid) => request(`/research/benchmarks/${encodeURIComponent(uid)}`),
+    benchmarkUpdate: (uid, patch) => request(`/research/benchmarks/${encodeURIComponent(uid)}`, {
+      method: 'PATCH', body: JSON.stringify(patch || {}),
+    }),
+    benchmarkConstituentAdd: (uid, data) => request(`/research/benchmarks/${encodeURIComponent(uid)}/constituents`, {
+      method: 'POST', body: JSON.stringify(data || {}),
+    }),
+    benchmarkConstituentRemove: (uid, cuid) => request(
+      `/research/benchmarks/${encodeURIComponent(uid)}/constituents/${encodeURIComponent(cuid)}`, { method: 'DELETE' },
+    ),
 
     // Diligence — no store of its own. Room access assembled from the grants
     // this investor already holds.
