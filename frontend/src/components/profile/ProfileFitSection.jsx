@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, AlertCircle, Lock } from 'lucide-react';
+import { Loader2, AlertCircle, Lock, Sparkles } from 'lucide-react';
 import { api, assessment } from '../../lib/api';
 import SkillRadar from '../play/SkillRadar';
 import { openPaywall } from '../PaywallModal';
 import { archetypeIllustration, archetypeLicenceTitle, archetypeMeta, humanize } from '../../lib/assessmentMeta';
+import { STUDIO_CHAT_ANCHOR } from '../advisor/interviewCompleteRow';
 
 function CardShell({ title, badge, className = '', children, action, to, accent, testId }) {
   const hit = Boolean(to);
@@ -652,6 +653,60 @@ function BookConsultationCard({ className }) {
   );
 }
 
+// ── Assessment not started ───────────────────────────────────────────────────
+// D324 — canvas 69dc42f3 S4 draws the band's empty state as one designed card
+// with one action, "because results genuinely can be absent and a gray
+// placeholder would read as breakage". It replaces the three separate nudges
+// only when every read ANSWERED and every one is empty: a read still loading or
+// one that failed keeps the three cards, so a failure never reads as "not
+// started".
+export function assessmentNotStarted({ radar, values, results, fit }) {
+  const answered = (st) => st && !st.error && st.data != null;
+  if (![radar, values, results, fit].every(answered)) return false;
+  const axes = Array.isArray(radar.data.axes) ? radar.data.axes : [];
+  if (axes.some((a) => Number(a.skill_count) > 0 || Number(a.score) > 0)) return false;
+  const vector = Array.isArray(values.data.vector) ? values.data.vector : [];
+  if (vector.some((v) => Number(v.confidence) > 0)) return false;
+  const list = Array.isArray(results.data.results) ? results.data.results : [];
+  if (list.some((r) => r.archetype_slug)) return false;
+  if (fit.data.archetype && fit.data.archetype.slug) return false;
+  return true;
+}
+
+function toChat(event) {
+  const el = typeof document !== 'undefined' ? document.getElementById(STUDIO_CHAT_ANCHOR) : null;
+  if (!el) return;
+  event.preventDefault();
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+export function AssessmentNotStartedCard({ audience = 'founder' }) {
+  return (
+    <div
+      className="pf-card flex flex-wrap items-center gap-[18px] bg-white dark:bg-gray-900 border border-[#ececf1] dark:border-gray-700 p-[26px]"
+      data-testid={`${audience}-assessment-empty`}
+    >
+      <span className="flex h-11 w-11 flex-none items-center justify-center rounded-[12px] bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-300">
+        <Sparkles size={20} />
+      </span>
+      <div className="min-w-[240px] flex-1">
+        <div className="text-[14.5px] font-extrabold tracking-[-0.015em] text-[#27272a] dark:text-gray-100">Assessment not started</div>
+        <p className="mt-1 text-[12.5px] leading-[1.55] text-[#71717a] dark:text-gray-400">
+          Skills, values and archetype appear here once you begin. The questions arrive through the chat above, a few at a time.
+        </p>
+      </div>
+      <a
+        href={`#${STUDIO_CHAT_ANCHOR}`}
+        onClick={toChat}
+        className="inline-flex items-center rounded-[9px] bg-[#7c3aed] hover:bg-[#6d28d9] px-4 py-2 text-[12.5px] font-bold text-white"
+        data-testid={`button-${audience}-begin-chat`}
+      >
+        Begin with the chat
+      </a>
+    </div>
+  );
+}
+
 // ── Section ───────────────────────────────────────────────────────────────────
 export default function ProfileFitSection({ className = '', compact = false, studio = false, audience = 'founder' }) {
   const condensed = compact || studio;
@@ -687,11 +742,15 @@ export default function ProfileFitSection({ className = '', compact = false, stu
           .pf-card-hit:focus-visible { outline: 2px solid #7c3aed; outline-offset: 2px; }
           @keyframes pfFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
         `}</style>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-[14px] items-start" data-testid={`${audience}-assessment-band`}>
-          <SkillsRadarCard state={radar} audience={audience} />
-          <ValuesLeanCard state={values} audience={audience} />
-          <ArchetypeCard state={results} fitState={fit} audience={audience} compact />
-        </div>
+        {assessmentNotStarted({ radar, values, results, fit }) ? (
+          <div data-testid={`${audience}-assessment-band`}><AssessmentNotStartedCard audience={audience} /></div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-[14px] items-start" data-testid={`${audience}-assessment-band`}>
+            <SkillsRadarCard state={radar} audience={audience} />
+            <ValuesLeanCard state={values} audience={audience} />
+            <ArchetypeCard state={results} fitState={fit} audience={audience} compact />
+          </div>
+        )}
       </section>
     );
   }
