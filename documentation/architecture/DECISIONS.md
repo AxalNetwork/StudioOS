@@ -32846,6 +32846,161 @@ reference.
     six-month `ends_at`, and the review-criteria absence is printed.
   - No page errors in either run.
 
+## D414
+
+**Messages is rebuilt from its canvas. The other person is a card that
+follows their own privacy settings. No email address is served any more.
+A thread's subject becomes a context strip, re-checked against the reader's
+access on every open. A thread can no longer be pinned to an engagement its
+starter cannot open.** Wave 8, Session 13, item 5. Worker first. No migration,
+no new route and no new `api.js` method.
+
+**What was there, measured on 69c0e6218.**
+- **Emails, served to every participant.** `GET /api/messages` returned each
+  counterparty's name and email. `GET /:uid` returned the email of every
+  participant and every sender. Nothing on the page needed an address: it
+  used one only as a label when a name was missing.
+- **An unchecked subject.** `POST /` stored any `subject_type` from the
+  allow-list with any `subject_id`. Nothing resolved the pair, so there was
+  no strip to leak yet. But the gap map's point 8 stood: a resolver that
+  trusted the stored id would show anyone in the thread the title and amount
+  of an engagement they have no part in.
+- **Half the canvas missing.** The page drew rows, bubbles and a one-line
+  composer. It had none of these:
+  - the unread subtitle, search, chips with counts, avatars, context chips
+  - the role line, View profile, the context strip, day and run grouping
+  - mobile back, the growing textarea, and two of the three empty states
+
+**Worker (`routes/messages.ts`).**
+- **The counterparty card.** `personCard` builds `{user_id, handle, role,
+  name, headline, headshot_url, profile_path}` from the public profile's own
+  `effectiveFlags`. That function is exported from `routes/public.ts` for
+  this, a one-word change to that file. So a member who hides their name or
+  photo on `/u/:handle` is not named or pictured here either, and the page
+  prints `absent.name`. The headline and role are what the public card
+  always shows.
+- **No emails, no per-message names.** No read selects an email any more.
+  Messages carry `sender_user_id` only, and the page names senders from the
+  cards. The thread returns `me` and the other participants, not the reader.
+- **The context resolver.** `CONTEXT_RESOLVERS` resolves only what something
+  writes. `engagement` means `advisor_engagements`, because the advisor
+  Delivery zone's nudge is the only code that pins a thread. The reader must
+  be the advisor on it or the founder it is for.
+  - The strip is `{kind, title, amount_cents, status, link}`. The link is
+    `/practice/engagements` for the advisor. A founder has no page for it,
+    and `absent.context_link` says so.
+  - It is resolved on every read, so moving or deleting the engagement takes
+    the strip away.
+  - "Cannot see" and "no longer exists" are one sentence, so the strip
+    cannot prove an object exists.
+  - The other five types (`introduction`, `match`, `service`, `session`,
+    `job`) have no writer. Each could mean several tables. They get the
+    Worker's sentence, not a guess.
+- **Pinned only to what the starter can open.** `POST /` refuses a subject
+  its starter cannot resolve with `404 subject_not_found`, and the same body
+  for a made-up id. A non-integer id gets `400 subject_invalid`.
+- **Served absences:**
+  - `auto_threads`: the canvas says threads appear when an introduction is
+    accepted or a match is made, and nothing does that.
+  - `attachments`: there is no store until item 6.
+  - `search_scope`: search covers the 100 threads the list returns.
+- **`unread_total`** is counted in the Worker, for the header.
+
+**Frontend.** `MessagesPage.jsx` is rebuilt in place, on the same route with
+no redirect.
+- **The page:**
+  - the header subtitle
+  - search over the card, subject and preview
+  - the canvas's seven chips with counts, using the gap map's mapping:
+    `engagement` and `service` are Engagements, `session` is Advisory
+  - rows with an avatar, a context chip and a two-line preview
+  - the thread header with its role line, View profile and Archive (Archive
+    is not on the canvas and is kept)
+  - the context strip, or the Worker's reason
+  - day separators, with the name on the first message of a run and the
+    avatar and time on the last
+  - the paperclip, disabled with the Worker's reason
+  - a growing textarea (Ctrl/Cmd+Enter sends)
+  - the canvas's three empty states
+- **Refresh.** The page re-reads on window focus, since there is no push
+  channel.
+- **`lib/messagesView.js`** is the page's pure half (chips, search and
+  grouping), so a test can run it.
+- **No WorkerRail**, by decision. The canvas draws none. A rail over a
+  private inbox is not something to add without the owner.
+- **Not printed**, because nothing makes them true: "Conversations appear
+  here when an introduction is accepted…", "Attachments are visible to both
+  parties only", and "via Axal VC". The four empty-state hint chips stay as
+  labels, without the canvas's "when" lines.
+
+**Unchanged, and still pinned by `messages_live.test.mjs`:** membership is
+the only key, a thread you are not in is a 404, unread is derived, and no
+admin can read a conversation.
+
+**Filed, not fixed.**
+- **Session 1, account-existence probe (gap-map security point 10).**
+  `POST /` answers "No account with that address" under only the generic
+  60/min limit, so an account can test which emails have accounts. A tighter
+  bucket belongs in `middleware/rateLimit.ts`, which is not this session's,
+  and the owner should decide whether the product keeps saying so at all.
+- **Whoever next pins a thread to an object.** Use a subject type whose table
+  is unambiguous, and add its resolver to `CONTEXT_RESOLVERS`. `engagement`
+  now means an advisor engagement.
+- **Session 5.** Nothing. The stale Messages comments in `sidebarConfig.js`
+  the brief named are already current.
+
+### VERIFIED
+
+- **Drift.** `npm run test:drift` exits 0 on main 69c0e6218 plus this
+  change. Main alone: frontend 3782, worker 4662, retention 112. With the
+  change: frontend 3794 (+12), worker 4671 (+9), retention 112. No count
+  fell.
+- **New tests, by name.**
+  - `messages_context_d414.test.ts`: 9 tests through the route, on
+    migrations 185, 201 and 238 read off disk.
+  - `messages_d414_contract.test.mjs`: 12 tests. The canvas is sliced at
+    both ends of every section it reads. It runs `lib/messagesView.js`
+    rather than reading it.
+  - `messages_live.test.mjs` and the three shell tests the brief named
+    (`admin_placement_h35`, `founder_shell`, `advisor_shell`) pass
+    unchanged. The route, the guard and the top-bar entry did not move, so
+    none needed re-aiming.
+- **Mutations.** 37 were run: 19 on the Worker and 18 on the page and its
+  pure half. 35 were caught first time. Two escaped, and the assertions
+  were fixed, not the code:
+  - **W3**, `u.email` added to the list query: `personCard` never copies
+    it, so no output changed. The source guard is in the contract test.
+    Re-run against it: caught.
+  - **W14**, `unread_total` counted threads: the fixture had one thread with
+    one unread. The test now sends two messages in one thread. Re-run:
+    caught.
+  - 37 of 37. Each failure was a non-zero exit with a `not ok` line,
+    restored from a sha256-checked snapshot, and passed again.
+- **Build and checks.** Both typechecks, `check-decision-ids`,
+  `check-folder-docs`, `check-sql-prepare`, `check-sqlite-columns`,
+  `check-refusal-bodies` and `check-unused-imports` pass.
+  - The card's columns are written out in both queries, not interpolated,
+    so `check-sqlite-columns` reads them.
+  - `docs/` was rebuilt at the root with the asset-retention file moved
+    aside. `check-docs-fresh --strict` passes.
+- **Chromium probe.** This is recorded verification, not a gate. The built
+  SPA was run with stubbed `/api/messages*`, and all 26 checks passed.
+  - **Desktop:**
+    - the header subtitle, the seven chips with counts, "Name not shared",
+      and no email anywhere on the page
+    - the "Select a conversation", "Nothing matches" and clearing-filters
+      states, and search matching a headline
+    - the thread header with its role line and View profile, the context
+      strip ($4,200, Signed), and the founder's link absence
+    - day separators, the name once per run, the paperclip disabled with
+      the Worker's reason, the composer note, send, and the unresolved
+      context sentence
+  - **390px:** the list and thread swap, back returns, and there is no
+    horizontal scroll.
+  - **Empty inbox:** "Your inbox is ready" with the Worker's sentence, the
+    header, and the hint chips with Eadwyn and Tickets.
+  - No page errors.
+
 ## D420
 
 **The founder desks A2–A5 read the stores that already exist.** Wave 8,
