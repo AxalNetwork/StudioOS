@@ -39,14 +39,33 @@
  * honest answer is that the rule is about what the SCHEMA declares.
  */
 
+/** A JavaScript identifier character: a word character or `$`. */
+const isIdentChar = (ch) => ch !== undefined && ch !== '' && /[A-Za-z0-9_$]/.test(ch);
+
 /**
- * A value made safe to interpolate into a `RegExp` — every metacharacter,
- * backslash included. The same rule as `frontend/test/_escapeRe.mjs`; the
- * names interpolated here are identifiers, but a pattern built from source
- * text escapes all of it rather than arguing per site which characters can
- * occur (CodeQL's incomplete-escaping finding on D423's first draft).
+ * Every index in `text` where `name` occurs as a whole identifier — not a
+ * prefix or suffix of a longer one and, unless `allowMember`, not a member
+ * access (`a.name`).
+ *
+ * AN indexOf WALK, NOT A PATTERN BUILT FROM THE NAME. The repo settled this in
+ * `d716900ee` ("rewriting the matches, not silencing them"): a `RegExp` built
+ * from data is what Semgrep's `detect-non-literal-regexp` flags, and escaping
+ * the data first is what CodeQL's incomplete-escaping rule then argues about.
+ * D423's first draft did both; neither is needed to find a name in text.
  */
-export const escapeRe = (v) => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export function identifierAt(text, name, { allowMember = false } = {}) {
+  const out = [];
+  if (!name) return out;
+  let at = text.indexOf(name);
+  while (at >= 0) {
+    const before = text[at - 1];
+    const after = text[at + name.length];
+    const member = before === '.' && text[at - 2] !== '.'; // `...name` is a spread, not a member
+    if (!isIdentChar(before) && !isIdentChar(after) && (allowMember || !member)) out.push(at);
+    at = text.indexOf(name, at + 1);
+  }
+  return out;
+}
 
 /** Name characters, so a scan can require a whole-word match without a regex built from data. */
 const isWordChar = (ch) => ch !== undefined && ch !== '' && /[A-Za-z0-9_]/.test(ch);
@@ -337,10 +356,15 @@ function literalsIn(expr) {
 
 /** `const NAME = <expr>;` in `src`, as text — the first declaration found, or null. */
 function constExpr(src, name) {
-  const re = new RegExp(`\\b(?:const|let)\\s+${escapeRe(name)}\\s*(?::[^=\\n]+)?=\\s*`, 'g');
-  const m = re.exec(src);
-  if (!m) return null;
-  let i = m.index + m[0].length;
+  let i = -1;
+  for (const at of identifierAt(src, name)) {
+    if (!/(?:^|[^\w$])(?:const|let)\s+$/.test(src.slice(Math.max(0, at - 12), at))) continue;
+    const decl = src.slice(at + name.length).match(/^\s*(?::[^=\n]+)?=(?![=>])\s*/);
+    if (!decl) continue;
+    i = at + name.length + decl[0].length;
+    break;
+  }
+  if (i < 0) return null;
   const start = i;
   while (i < src.length) {
     const ch = src[i];
@@ -451,13 +475,14 @@ export function bindWrappers(src) {
     const bindAt = f.body.indexOf('.bind(', pClose);
     if (bindAt < 0 || bindAt - pClose > 40) continue;
     const bClose = matchClose(f.body, bindAt + '.bind'.length);
-    // Spreads read as plain uses: `...bind` passes the rest parameter through.
-    const bindText = f.body.slice(bindAt + '.bind('.length, bClose).replace(/\.\.\./g, ' ');
+    // A spread is a use: `...bind` passes the rest parameter through, and
+    // `identifierAt` reads `...name` as the name rather than a member access.
+    const bindText = f.body.slice(bindAt + '.bind('.length, bClose);
     const bindParams = new Set();
     let restFrom = null;
     f.params.forEach((p, idx) => {
       if (!p.name) return;
-      const used = new RegExp(`(?:^|[^\\w$.])${escapeRe(p.name)}(?![\\w$])`).test(bindText);
+      const used = identifierAt(bindText, p.name).length > 0;
       if (!used) return;
       if (p.rest) restFrom = idx; else bindParams.add(idx);
     });
@@ -527,8 +552,12 @@ export function rawVocabulary(src, helpers) {
     if (rawExpr(src.slice(start, j))) fields.add(m[1]);
   }
   for (const n of names) {
-    const re = new RegExp(`[{,]\\s*${escapeRe(n)}\\s*(?=[,}])`);
-    if (re.test(src)) fields.add(n);
+    const shorthand = identifierAt(src, n).some((at) => {
+      const left = src.slice(0, at).trimEnd();
+      const right = src.slice(at + n.length).trimStart();
+      return (left.endsWith('{') || left.endsWith(',')) && (right.startsWith(',') || right.startsWith('}'));
+    });
+    if (shorthand) fields.add(n);
   }
   const isRawArg = (arg) => {
     const a = arg.trim().replace(/^\.\.\./, '');
@@ -596,17 +625,18 @@ export function sweepBinds({ sources, baseline, resolveImport }) {
     }
 
     for (const [name, w] of wrappers) {
-      const re = new RegExp(`(?<![\\w$.])${escapeRe(name)}\\s*(?:<[^>()]*>)?\\(`, 'g');
-      for (const m of src.matchAll(re)) {
-        const before = src.slice(Math.max(0, m.index - 24), m.index);
+      for (const at of identifierAt(src, name)) {
+        const call = src.slice(at + name.length).match(/^\s*(?:<[^>()]*>)?\s*\(/);
+        if (!call) continue;
+        const before = src.slice(Math.max(0, at - 24), at);
         if (/function\s*\*?\s*$|(?:const|let)\s+$/.test(before)) continue; // the definition itself
-        const open = m.index + m[0].length - 1;
+        const open = at + name.length + call[0].length - 1;
         const close = matchClose(src, open);
         if (close < 0) continue;
         const args = splitTop(src.slice(open + 1, close));
         const raw = args.filter((a, i) => (w.bindParams.has(i) || (w.restFrom !== null && i >= w.restFrom)) && vocab.isRawArg(a));
         const sql = w.sqlParam !== null ? resolveSql(args[w.sqlParam] || '', src) : w.sql;
-        check(`${file}:${lineOf(m.index)}`, sql, raw, `${name}()`);
+        check(`${file}:${lineOf(at)}`, sql, raw, `${name}()`);
       }
     }
   }

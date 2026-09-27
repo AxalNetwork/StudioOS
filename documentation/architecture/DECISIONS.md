@@ -34458,7 +34458,12 @@ and skipped any file with no `.toISOString()` at all. Three shapes escaped:
 SQL is resolved through a local const (both arms of a ternary) and through a
 `${NAME}` template, which is how D301's `telegramAggregator.ts` spells its one
 WINDOW predicate. `sweepBinds` runs the whole analysis over a corpus, so the
-tests run it on fixtures as well as on the worker.
+tests run it on fixtures as well as on the worker. Names are found with
+`identifierAt`, an `indexOf` walk, never a `RegExp` built from the name: the
+first draft built four, escaped for `$` only, and drew CodeQL's
+incomplete-escaping alert and Semgrep's `detect-non-literal-regexp` on each.
+The repo's answer to that rule is `d716900ee`'s — rewrite the match, do not
+silence it — so the patterns went rather than being escaped harder.
 
 **Two defects in the derivation itself, found while widening it.**
 - `sqlFormatColumns` split a table body on commas, so a `-- comment` ending one
@@ -34511,7 +34516,8 @@ word plus the code's own clock writes (D162).
 - 10 mutations, 10 caught (non-zero exit and a `not ok` line, unique anchors,
   sha256-checked restores), re-run on d4ccaf5c before landing: each fix reverted; D301's WINDOW made bare in
   `telegramAggregator.ts` (temporarily — the file is Session 4's and is not
-  changed); comment stripping, the depth-0 rule, the rest-spread reading, the
+  changed); comment stripping, the depth-0 rule, `identifierAt` reading a spread
+  (`...bind`) as a member access, the
   narrowing check in `isRawIsoExpr`, `${NAME}` substitution and import
   resolution each removed; and the field value read to its first comma. That
   last one was first written as a `break` on `(` — which the bracket branch
