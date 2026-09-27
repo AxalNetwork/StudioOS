@@ -370,7 +370,11 @@ test('the two ops the canvas draws are handlers, not exports or promises', () =>
   for (const h of [...block.matchAll(/handler: '(\w+)'/g)].map((m) => m[1])) {
     assert.match(P, new RegExp(`\\b${h}\\b`), `the page declares the op '${h}' and has no handler`);
   }
-  assert.match(P, /BEGIN:VCALENDAR/, 'Export to calendar must emit a calendar');
+  // D393 lifted the builder into lib/ics.js so the Cohorts calendar shares
+  // it: the page must still call it, and the builder must still emit one.
+  assert.match(P, /downloadIcs\(buildIcs\(/, 'Export to calendar must build and download a calendar');
+  assert.match(readFileSync(resolve(process.cwd(), 'frontend/src/lib/ics.js'), 'utf8'), /BEGIN:VCALENDAR/,
+    'the shared builder must emit a calendar');
 });
 
 // ───────────────────────────── the page against the artboard ─────────────────────────────
