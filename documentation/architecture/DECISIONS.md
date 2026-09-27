@@ -34682,6 +34682,31 @@ expands before alpha gradients.
 **Tests.** `hq_licences_d457.test.mjs`; `deployments_last_version_d452.test.ts` extended;
 `hq_licences_polish_d452.test.mjs` re-aimed.
 
+## D458
+
+**#868 review follow-ups: hold blocks statement draw, floors refuse paid-in-full, void is audited.** Wave 9,
+Session 16, item 3. No migration; no new `/api/*` method.
+
+**Draw hold.** `POST /api/admin/statements/draw` refuses when the licence is not
+`active`. Suspension freezes trading; a new claim must not be drawn against a
+held subsidiary. The draw editor lists only active licences that carry a revenue
+share.
+
+**Paid-in-full on a floor.** An incomplete statement (`unreported_streams` or
+`estimated_streams` non-zero) refuses `status: paid` and refuses recording
+`paid_cents` equal to the owed figure. Partial payments below the floor remain
+allowed. The UI hides Mark paid in full and names why.
+
+**Void and audit.** Voiding requires `void_note` (at least ten characters) and
+writes `subsidiary_statement_void` through `logAdminAction`. Marking paid on a
+complete statement and recording a dispute write matching audit rows.
+
+**Tests.** `hq_statements.test.ts` extended; `hq_revenue_statements_d458.test.mjs`.
+
+**Mutations: 4 run, 4 caught** — each a non-zero exit and a `not ok` line: draw
+allowed on a suspended licence; paid-in-full shown on an incomplete row; void
+without a reason; full payment accepted on a floor statement.
+
 ## D460
 
 **The investor deal-flow honesty pass: dead controls wired, false sentences
