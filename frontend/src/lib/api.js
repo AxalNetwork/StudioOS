@@ -4946,6 +4946,13 @@ export const api = {
     // Diligence — no store of its own. Room access assembled from the grants
     // this investor already holds.
     diligence: () => request('/research/diligence'),
+    // One room and one document in it, keyed by the grant the investor holds.
+    // A grant they do not hold is a 404 (`room_not_found`), the same as one
+    // that does not exist; a document behind an NDA they have not signed is a
+    // 403 (`nda_required`) that carries the room and nothing about the file.
+    diligenceRoom: (grantUid) => request(`/research/diligence/${encodeURIComponent(grantUid)}`),
+    diligenceFile: (grantUid, fileUid) =>
+      request(`/research/diligence/${encodeURIComponent(grantUid)}/files/${encodeURIComponent(fileUid)}`),
   },
 };
 

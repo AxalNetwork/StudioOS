@@ -30313,6 +30313,89 @@ claimed is a separate decision, left open. The 10/min/IP `register` bucket
 - `check-decision-ids`, `check-api-drift`, `check-folder-docs` and the worker's
   `tsc --noEmit` exit 0.
 
+## D310
+
+**The investor's room and document are read by the grant they hold, and
+"open to you" counts what that investor may open.** Session 2, wave 8,
+item 1. No migration; two new GETs under `/api/research/diligence`.
+
+**The list said something false.** `GET /research/diligence` counted
+"open to you" as `visibility = 'open'`. An investor holding a live NDA with
+the founder who granted the room can open the `nda` files as well, because
+the download route lets them. That investor was still told "N behind an
+NDA". The list now asks the data room's own `ndaActive` once for each
+granting founder. For a signed investor, "open" counts every file. For an
+unsigned one, it counts only the `open` files. Each row also carries
+`nda_signed`.
+
+**The two reads.**
+- `GET /research/diligence/:grantUid` returns one room for the investor who
+  holds it: the files and folders that investor may open, with each file's
+  last-issued download, and the counts. It also returns "you last opened
+  it" (the visit before this one), the caller's own activity, and the same
+  deal-stage note as the list.
+- `GET /research/diligence/:grantUid/files/:fileUid` returns one document
+  (name, size, type, created) and the caller's own download history for it.
+
+**The gate is the data room's, not a copy.** `data_room.ts` gains the
+`export` keyword on `activeGrant`, `ndaActive` and `logAccess`, and nothing
+else changes in that file. The helpers stay where
+`expiry_gate_datetime_d124` and `data_room_live` read their SQL from.
+- The grant uid is looked up only among rows that name the caller as the
+  investor. `activeGrant` then decides whether that grant is live.
+- A grant the caller does not hold answers with the same 404 body
+  (`room_not_found`) as one that does not exist, because telling the two
+  apart would tell an investor which rooms exist. The same goes for a
+  revoked or expired grant, and for another investor's live grant on the
+  same room.
+
+**What is never served.**
+- The room never names, or gives the uid of, an `nda` file the caller may
+  not open. It gives a count, as the data room already does.
+- A document behind an unsigned NDA returns 403 `nda_required`, carrying
+  the room's grant uid and name and nothing about the file: no name, size
+  or type.
+- Activity is the caller's own rows only. The founder's view of the same
+  log carries every investor's email.
+- A logged download of an `nda` file keeps its time and action, but loses
+  its name once that NDA has lapsed. The gate would withhold that name
+  today, so the log does not re-serve it.
+
+**Audit meaning, decided deliberately.**
+- The room read lists filenames, the same thing
+  `GET /api/data-room/shared/:projectUid` does. It therefore logs
+  `open_room`, which the founder sees. A second URL that listed the same
+  names without logging would be a quiet way into the room.
+- The document read logs nothing. It shows one name the room already
+  showed, and its download goes through the data room's own route, which
+  logs `download`.
+- The log records a link being issued, not used. The responses therefore
+  say "issued", and `download_note` says whether the link was followed is
+  not recorded. The canvas's "link used once, then expired" is not claimed.
+
+**Tests.**
+- `research_diligence_room.test.ts` (new) runs both reads and the list
+  against real SQLite. The data-room tables and `pairwise_ndas` are cut
+  from `schema_baseline.sql`. It has 10 tests.
+- `research_stores_scoping.test.ts` is re-aimed. Its `/diligence` slice
+  used to run from the list handler to the end of the file, which would
+  have swallowed the new handlers and skipped them in the "bound to an
+  owned project" rule. It now ends at the next top-level declaration.
+- A new test in the same file holds the room reads to a single grant
+  lookup that names the caller. That test also requires every room-table
+  read to be narrowed to the grant's project and bound to `pid`, and the
+  access log to be read only for the caller.
+- 11 mutations were run, and all 11 were caught on the first run. Two of
+  them, the grant lookup not bound to the caller and the liveness check
+  bypassed, are the ones the behavioural suite alone would not fully show,
+  because `activeGrant` re-binds the caller. The scoping test holds that
+  line.
+
+**Not in this entry.** The pages come in item 2: the room and document
+pages, the investor `/raise/data-room` redirect and deleting
+`SharedRooms`. The memo the room canvas drafts on Accept needs a draft
+surface and lands with the page.
+
 ## D330
 
 **AdminX.jsx and AdminTelegram.jsx say why no draft was made.** Wave 8,
