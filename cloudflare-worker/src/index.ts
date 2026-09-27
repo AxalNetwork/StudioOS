@@ -181,6 +181,7 @@ import adminContent from './routes/admin_content';
 import adminPlatform from './routes/admin_platform';
 import adminSecurity from './routes/admin_security';
 import adminHqSupport from './routes/admin_hq_support';
+import adminStudioGlance from './routes/admin_studio_glance';
 // The holder-facing read of one licence — see routes/licence.ts for why it is
 // not a role branch inside the admin ledger.
 import licence from './routes/licence';
@@ -897,6 +898,8 @@ app.route('/api/admin/security', adminSecurity);
 // HQ · Support — the three queues as one read (D204, canvas H22). Super-admin-
 // only, and before the catch-all like the rest of the HQ tier.
 app.route('/api/admin/hq-support', adminHqSupport);
+// Studio glance — both tiers, before the /api/admin catch-all (D443).
+app.route('/api/admin/studio', adminStudioGlance);
 app.route('/api/licence', licence);
 app.route('/api/best-fit', bestFitSelf);
 app.route('/api/admin', admin);
