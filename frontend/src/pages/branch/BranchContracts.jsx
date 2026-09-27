@@ -12,20 +12,23 @@ import BranchZone from './BranchZone';
  * *"Active contracts with the template version travelling on the row, HQ's
  * master library read-only with its as-of stamp and archived versions visible
  * but unusable, and pending signatures."* Measured, the library half is now
- * real — `publishTemplate` (D147) gives a branch its copy — and the other two
- * are not drawn here yet.
+ * real — `publishTemplate` (D147) gives a branch its copy — and the ledger
+ * is the same deployment's own rows, read from the list that already existed
+ * (D444). Pending signatures are that list's stats. The template version a
+ * row was sent from, its value, and its renewal date are not on that list,
+ * so those three cells stay Not recorded rather than borrowed from the
+ * library copy or shown as zero.
  *
- * THE REASON THEY ARE NOT DRAWN WAS FIRST STATED WRONG, and D199 corrects it.
- * It said the contracts live in `licence_contracts` (migration 259), HQ's
- * table. That table holds the LICENCE AGREEMENT between HQ and this licensee
- * and nothing else. This branch's own contracts — e-sign envelopes, signed
- * documents, mutual NDAs and partner deals, the four sources
- * `admin_contracts.ts`'s `loadAllContracts` unions — are rows in THIS
- * database (D.2), and that route is `requireAdmin`, not HQ-gated. So the rows
- * are readable here; what is missing is a branch screen that tables them, and
- * two of the columns S5 draws (value, renewal date) that no e-sign envelope
- * records. The Studio overview already counts the dated ones ending inside 60
- * days (D199). This page names the gap rather than drawing an empty ledger.
+ * THE WRONG TABLE WAS NAMED FIRST, and D199 corrects it. It said the
+ * contracts live in `licence_contracts` (migration 259), HQ's table. That
+ * table holds the LICENCE AGREEMENT between HQ and this licensee and nothing
+ * else. This deployment's own contracts — e-sign envelopes, signed documents,
+ * mutual NDAs and partner deals, the four sources `admin_contracts.ts`'s
+ * `loadAllContracts` unions — are rows in THIS database (D.2), and
+ * `GET /api/admin/contracts` is `requireAdmin`, not HQ-gated. The Studio
+ * overview already counts the dated ones ending inside 60 days (D199). The
+ * list still drops those end dates, so the renewal column does not invent
+ * them back.
  *
  * THE LIBRARY IS A COPY AND THE PAGE NEVER LETS YOU FORGET IT. Every field on
  * screen comes from `branch_templates`, which only HQ's push writes; the
@@ -48,6 +51,110 @@ import BranchZone from './BranchZone';
  * changing a template actually is: a Content submission to HQ.
  */
 
+// THE LIST DOES NOT CARRY THESE. They are one sentence each, on the cell,
+// because GET /api/admin/contracts has no field to put in them and a zero
+// would be a value. The library's version is a different fact — HQ's current
+// copy — and copying it onto a contract would claim the agreement was sent
+// on that version.
+export const VALUE_UNRECORDED =
+  'None of the four sources behind GET /api/admin/contracts records a value, so this column is not shown as zero.';
+export const RENEWAL_UNRECORDED =
+  'This list does not carry an end date. Pairwise NDAs store valid_until and partner deals store an expiry, and the list drops both; e-sign envelopes and signed documents record none.';
+export const VERSION_UNRECORDED =
+  'This list carries the template name and not the version the agreement was sent from. The version on the library above is the copy HQ last pushed, which is not this row\'s version.';
+
+function finiteCount(n) {
+  return typeof n === 'number' && Number.isFinite(n) ? n : null;
+}
+
+export function BranchContractsLedger({ ledger, ledgerFailed, onRetry, stats, statsFailed }) {
+  const total = finiteCount(ledger?.total);
+  const rows = Array.isArray(ledger?.items) ? ledger.items : [];
+  const sources = Array.isArray(ledger?.meta?.sources) ? ledger.meta.sources : null;
+  const pending = finiteCount(stats?.pending_signature);
+
+  return (
+    <Card data-testid="branch-contracts-ledger">
+      <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Contracts in this database</h2>
+      <p className="text-[11px] text-gray-500 mt-0.5 dark:text-gray-400">
+        The four sources this deployment already lists. Nothing here sends, voids, or edits one.
+      </p>
+
+      <div className="mt-2" data-testid="branch-contracts-pending">
+        {statsFailed ? (
+          <Unreadable
+            what="The signature counts"
+            claim="A failed read is not zero pending signatures."
+            onRetry={onRetry}
+          />
+        ) : stats === undefined ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400">Loading signature counts…</p>
+        ) : pending === null ? (
+          <Unrecorded reason="GET /api/admin/contracts/stats did not include pending_signature.">
+            Not recorded
+          </Unrecorded>
+        ) : pending === 0 ? (
+          <p>None pending signature. Sent and generated were read, and the count is zero.</p>
+        ) : (
+          <p>{pending} pending signature{pending === 1 ? '' : 's'} (sent or generated).</p>
+        )}
+      </div>
+
+      <div className="mt-3">
+        {ledger === undefined && !ledgerFailed ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400">Loading contracts…</p>
+        ) : ledgerFailed ? (
+          <Unreadable
+            what="The contract list"
+            claim="This is not a claim that this database holds no contracts."
+            onRetry={onRetry}
+          />
+        ) : total === 0 ? (
+          <p className="text-sm text-gray-700 dark:text-gray-300" data-testid="branch-contracts-empty">
+            None in this database. The list was read{sources ? ` across ${sources.join(', ')}` : ''}.
+          </p>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[12px]">
+                <thead>
+                  <tr className="text-[10px] font-extrabold uppercase tracking-[.08em] text-gray-500 dark:text-gray-400">
+                    <th className="py-1.5 pr-3">Agreement</th>
+                    <th className="py-1.5 pr-3">Counterparty</th>
+                    <th className="py-1.5 pr-3">Status</th>
+                    <th className="py-1.5 pr-3">Template</th>
+                    <th className="py-1.5 pr-3">Version</th>
+                    <th className="py-1.5 pr-3">Value</th>
+                    <th className="py-1.5">Renewal</th>
+                  </tr>
+                </thead>
+                <tbody data-testid="branch-contracts-rows">
+                  {rows.map((r) => (
+                    <tr key={`${r.source || 'row'}:${r.uid}`} className="border-t border-gray-100 align-top dark:border-gray-800">
+                      <td className="py-1.5 pr-3">{r.title || <Unrecorded reason="This row has no title on the list.">Not recorded</Unrecorded>}</td>
+                      <td className="py-1.5 pr-3">{r.recipient_email || <Unrecorded reason="This row has no counterparty on the list.">Not recorded</Unrecorded>}</td>
+                      <td className="py-1.5 pr-3">{r.status || <Unrecorded reason="This row has no status on the list.">Not recorded</Unrecorded>}</td>
+                      <td className="py-1.5 pr-3 font-mono">{r.template_name || <Unrecorded reason="This row names no template.">Not recorded</Unrecorded>}</td>
+                      <td className="py-1.5 pr-3"><Unrecorded reason={VERSION_UNRECORDED}>Not recorded</Unrecorded></td>
+                      <td className="py-1.5 pr-3"><Unrecorded reason={VALUE_UNRECORDED}>Not recorded</Unrecorded></td>
+                      <td className="py-1.5"><Unrecorded reason={RENEWAL_UNRECORDED}>Not recorded</Unrecorded></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2 text-[10.5px] text-gray-500 dark:text-gray-400" data-testid="branch-contracts-showing">
+              {total === null
+                ? `Showing ${rows.length}. The list did not include a total, so these rows are not all of them.`
+                : `Showing ${rows.length} of ${total} in this database.`}
+            </p>
+          </>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function ageOf(iso) {
   if (!iso) return null;
   const at = Date.parse(iso);
@@ -60,6 +167,10 @@ function ageOf(iso) {
 export default function BranchContracts({ user }) {
   const [data, setData] = useState(undefined); // undefined = loading
   const [failed, setFailed] = useState(false);
+  const [ledger, setLedger] = useState(undefined);
+  const [ledgerFailed, setLedgerFailed] = useState(false);
+  const [stats, setStats] = useState(undefined);
+  const [statsFailed, setStatsFailed] = useState(false);
 
   const load = useCallback(async () => {
     setFailed(false);
@@ -76,6 +187,27 @@ export default function BranchContracts({ user }) {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const loadLedger = useCallback(async () => {
+    setLedgerFailed(false);
+    setStatsFailed(false);
+    try {
+      setLedger(await api.adminListContracts({ limit: 500 }));
+    } catch (e) {
+      setLedgerFailed(true);
+      setLedger(null);
+      reportError('BranchContracts:ledger', e);
+    }
+    try {
+      setStats(await api.adminContractStats());
+    } catch (e) {
+      setStatsFailed(true);
+      setStats(null);
+      reportError('BranchContracts:stats', e);
+    }
+  }, []);
+
+  useEffect(() => { loadLedger(); }, [loadLedger]);
 
   const items = data?.items || [];
   const pushedAt = data?.pushed_at || null;
@@ -104,13 +236,21 @@ export default function BranchContracts({ user }) {
     // state for a branch to mirror and a column that could only hold 1 is the
     // D129 mistake. `not_carried` says exactly that, and the rail renders it
     // below rather than this line inventing a zero.
+    finiteCount(ledger?.total) !== null
+      ? `${ledger.total} contract${ledger.total === 1 ? '' : 's'} in this database`
+      : null,
+    !statsFailed && finiteCount(stats?.pending_signature) !== null
+      ? (stats.pending_signature === 0
+        ? 'No signature pending (sent or generated, read as zero)'
+        : `${stats.pending_signature} pending signature${stats.pending_signature === 1 ? '' : 's'}`)
+      : null,
   ].filter(Boolean);
 
   return (
     <BranchZone
       workspace="Contracts"
       user={user}
-      stance="Read-only view of HQ's library"
+      stance="Read-only. HQ's library, and this database's contracts"
       coverage={coverage}
       coverageNote={coverage.length ? undefined
         : (failed
@@ -211,14 +351,13 @@ export default function BranchContracts({ user }) {
         </Card>
       )}
 
-      <Card data-testid="branch-contracts-ledger">
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Active contracts</h2>
-        <div className="mt-2">
-          <Unrecorded reason="This branch's contracts — e-sign envelopes, signed documents, mutual NDAs and partner deals — are rows in this branch's own database, not in HQ's licence ledger, which holds only the licence agreement itself. No table of them is built on this page yet, and two of the columns it would carry, value and renewal date, are recorded for no e-sign envelope.">
-            Not tabled here yet
-          </Unrecorded>
-        </div>
-      </Card>
+      <BranchContractsLedger
+        ledger={ledger}
+        ledgerFailed={ledgerFailed}
+        onRetry={loadLedger}
+        stats={stats}
+        statsFailed={statsFailed}
+      />
     </BranchZone>
   );
 }

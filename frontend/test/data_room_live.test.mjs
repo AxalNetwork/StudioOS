@@ -96,12 +96,17 @@ test('the R2 key is derived, never taken from the request', () => {
 });
 
 test('the UI does not claim a watermark', () => {
-  const s = read(PAGE);
-  assert.match(s, /not watermarked/i, 'the absence must be stated, not left to be assumed');
-  assert.ok(!/watermark(ed)?[^.]{0,20}(applied|protect)/i.test(s));
-  // What DOES protect the file is described instead.
-  assert.match(s, /work once|single-use/i);
-  assert.match(s, /expire/i);
+  // D311 — an investor downloads from the room and document pages under
+  // Research · Diligence now; the drawer that used to carry this copy is gone,
+  // and the founder page's docblock would satisfy a read of it by accident.
+  for (const page of ['frontend/src/pages/research/DiligenceRoom.jsx', 'frontend/src/pages/research/DiligenceFile.jsx']) {
+    const s = read(page);
+    assert.match(s, /Not watermarked/, `${page}: the absence must be stated, not left to be assumed`);
+    assert.ok(!/watermark(ed)?[^.]{0,20}(applied|protect)/i.test(s), page);
+    // What DOES protect the file is described instead.
+    assert.match(s, /work once|single-use/i, page);
+    assert.match(s, /expire/i, page);
+  }
 });
 
 test('sharing does not promise an invitation', () => {
