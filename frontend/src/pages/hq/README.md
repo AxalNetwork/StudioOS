@@ -30,9 +30,10 @@ re-checks with `requireSuperAdmin` on every call regardless.
   chooses between a page and the notice; the worker's `requireSuperAdmin` is
   the boundary. A page that assumed the shell implied the power would be wrong
   the moment someone typed the URL.
-- **Per-subsidiary revenue from HQ's database is not recorded** (item 7). Accounts,
+- **Per-subsidiary revenue is reported, not totalled** (item 7, D456). Accounts,
   seats used and backlog on Home and Support may come from each branch's own read
-  when that branch answers; revenue per subsidiary and other item-7 figures render
-  as Not recorded with their reason, never as a sample or a zero. U1 still blocks
-  attributing HQ accounts to a licence on this tier.
+  when that branch answers; revenue per subsidiary reads from `subsidiary_usage_reports`
+  for report status only — every stream today arrives unmeasured (D266), so figures
+  render as Not recorded with that reason, never as a sample or a zero. Token P&L
+  per subsidiary stays blocked by U1 and metering (D261), separate from revenue.
 - Dark mode is not optional; `npm run test:drift` runs `check-dark-mode`.

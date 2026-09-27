@@ -47,6 +47,7 @@ import { bpsPercent } from '../../lib/bps';
 import { reportError } from '../../lib/log';
 import { REFUND_REASON_MIN, refundReasonOk } from '../../lib/refundReason';
 import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import { revenueAbsenceForLicence, usageCoverageLabel } from '../../lib/hqRevenuePerSub';
 
 export const UNAVAILABLE = Symbol('unavailable');
 
@@ -707,6 +708,7 @@ export default function RevenuePage() {
   const fees = ready ? data.licence_fees : null;
   const token = ready ? data.token_cost : null;
   const promos = ready ? data.promos : null;
+  const usageCoverage = ready ? data.usage_coverage : null;
   const openDisputes = disputes && disputes !== UNAVAILABLE
     ? (disputes.disputes || []).filter((d) => d.status !== 'won' && d.status !== 'lost').length
     : null;
@@ -745,7 +747,8 @@ export default function RevenuePage() {
         ['Subscription revenue', 'No local charge ledger; Stripe is read per customer.'],
         ['Token margin', 'The cost of a call is recorded, the price charged for it is not.'],
         ['LTV', NOT_RECORDED_H21.ltv],
-        ['Token P&L per subsidiary', 'No account names its licence yet (U1).'],
+        ['Revenue per subsidiary', 'Branches report quarters to HQ; every stream today arrives unmeasured (D266), so no amount is totalled.'],
+        ['Token P&L per subsidiary', 'Spend is not tied to a licence (U1) and almost no model call carries branch metadata (D261).'],
         // Statements and ceilings came OFF this list in D111, because they
         // acquired a store. What is left absent is the issued figure, and
         // D266 found the old reason promised a report nothing sends.
@@ -857,9 +860,48 @@ export default function RevenuePage() {
             )}
           </Zone>
 
+          <Zone
+            title="Revenue per subsidiary"
+            sub={usageCoverage?.available ? `${usageCoverage.period} · report status, not totals` : 'what HQ recorded from branch reports'}
+          >
+            {!usageCoverage ? (
+              <p className="text-[12px] text-axal-faint">Loading usage coverage…</p>
+            ) : !usageCoverage.available ? (
+              <Unreadable what="Subsidiary usage reports" claim="This is not a claim that no branch reported." onRetry={load} />
+            ) : (
+              <>
+                <p className="mb-3 text-[11.5px] leading-relaxed text-axal-muted">
+                  {usageCoverage.revenue_reason}
+                </p>
+                <div className="overflow-x-auto" data-testid="hq-revenue-usage-coverage">
+                  <table className="w-full text-left text-[12px]">
+                    <thead>
+                      <tr className="border-b border-axal-hairline text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">
+                        <th className="py-1.5 pr-3">Licence</th>
+                        <th className="py-1.5 pr-3">Report</th>
+                        <th className="py-1.5">Figure</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {usageCoverage.by_licence.map((row) => (
+                        <tr key={row.licence_uid} className="border-b border-axal-hairline/60">
+                          <td className="py-2 pr-3 font-medium">{row.brand_name || row.licence_ref}</td>
+                          <td className="py-2 pr-3 text-axal-muted">{usageCoverageLabel(row, usageCoverage.period)}</td>
+                          <td className="py-2 text-axal-muted">
+                            <Unrecorded reason={revenueAbsenceForLicence(usageCoverage, row.licence_uid)} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </Zone>
+
           <div className="grid gap-4 md:grid-cols-2">
             <Zone title="Token P&L by subsidiary" sub="what it cost against what it billed">
-              <Absent reason={ready ? data.derived_metrics_reason : 'The revenue summary could not be read.'} />
+              <Absent reason={ready ? data.token_pl_per_subsidiary_reason : 'The revenue summary could not be read.'} />
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <Stat
                   label="Token cost, platform-wide"

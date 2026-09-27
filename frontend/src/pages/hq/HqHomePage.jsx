@@ -6,6 +6,7 @@ import { reportError } from '../../lib/log';
 import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
 import HqBranchOverlay from './HqBranchOverlay';
+import { revenueAbsenceForLicence } from '../../lib/hqRevenuePerSub';
 
 /**
  * HQ · Home — the whole business on one screen (Admin · Super canvas, H1).
@@ -162,6 +163,7 @@ export default function HqHomePage() {
   // D149 (`revenue_share_bps`, on the row and thrown away).
   const branches = ready ? data.branches || [] : [];
   const branchCoverage = ready ? data.branches_coverage || null : null;
+  const usageCoverage = ready ? data.usage_coverage || null : null;
   // Keyed on `licence_uid`, which is the ONLY join between the two (migration
   // 258). A branch with no deployment row behind it is absent from this map
   // rather than guessed at — attaching one territory's figures to another's
@@ -398,7 +400,11 @@ export default function HqHomePage() {
               </>
             )}
           />
-          <Tile label="MTD revenue" value={null} note="no subsidiary attribution" />
+          <Tile
+            label="MTD revenue"
+            value={null}
+            note={ready ? (data.mtd_revenue_reason || 'Not recorded on HQ') : '…'}
+          />
           <Tile
             label="Queue backlog"
             value={ready && queue?.available ? num(queue.open) : null}
@@ -497,6 +503,14 @@ export default function HqHomePage() {
                         {live && num(live.seats_used) !== null
                           ? num(live.seats_used)
                           : <Unrecorded reason={live?.seats_used_reason || branchReason(b, 'seat count')} />}
+                      </dd>
+                    </div>
+                    <div className="col-span-2">
+                      <dt className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+                        Revenue{usageCoverage?.available ? ` · ${usageCoverage.period}` : ''}
+                      </dt>
+                      <dd className="mt-0.5 text-[11px] leading-relaxed text-axal-muted">
+                        <Unrecorded reason={revenueAbsenceForLicence(usageCoverage, l.uid)} />
                       </dd>
                     </div>
                     <div className="col-span-2">

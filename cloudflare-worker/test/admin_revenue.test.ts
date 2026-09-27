@@ -72,6 +72,9 @@ function freshDb() {
   for (const t of ['users', 'super_admins', 'territory_licences', 'ai_usage_logs', 'promo_codes']) {
     db.exec(ddl(t));
   }
+  db.exec(readFileSync(
+    resolve(process.cwd(), 'cloudflare-worker/sql/migrations/260_subsidiary_statements.sql'), 'utf8',
+  ));
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)');
   u.run(SUPER, 'admin', 'The Holder', 'holder@example.test');
   u.run(PLAIN_ADMIN, 'admin', 'Plain Admin', 'admin@example.test');
@@ -199,10 +202,13 @@ test('the figures with no source are absent, each with its own reason', async ()
   assert.match(String(r.body.promos.budget_reason), /attributes none|names no subsidiary|branch reports/i);
   assert.equal(r.body.promos.budget_left_cents, undefined, 'a promo budget figure appeared');
 
-  // U1 — every per-subsidiary figure, the token P&L split included.
-  assert.equal(r.body.derived_metrics_available, false);
-  assert.match(String(r.body.derived_metrics_reason), /licence it belongs to/);
+  assert.equal(r.body.revenue_per_subsidiary_available, false);
+  assert.match(String(r.body.revenue_per_subsidiary_reason), /unmeasured|D266/);
+  assert.equal(r.body.token_pl_per_subsidiary_available, false);
+  assert.match(String(r.body.token_pl_per_subsidiary_reason), /licence it belongs to|U1/);
   assert.equal(r.body.token_pl_by_subsidiary, undefined, 'a per-subsidiary token split appeared');
+  assert.equal(r.body.usage_coverage?.available, true);
+  assert.ok(Array.isArray(r.body.usage_coverage?.by_licence));
 });
 
 test('statements are pointed at, never inlined — the summary stays a pure read', async () => {

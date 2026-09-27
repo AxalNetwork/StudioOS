@@ -51,7 +51,11 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
-import { DERIVED_UNAVAILABLE } from './licence';
+import {
+  REVENUE_PER_SUBSIDIARY_UNAVAILABLE,
+  TOKEN_PL_PER_SUBSIDIARY_UNAVAILABLE,
+} from './licence';
+import { subsidiaryUsageCoverage } from '../services/subsidiaryUsageCoverage';
 import { promoState } from '../services/promos';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -187,11 +191,14 @@ r.get('/summary', async (c) => {
     promos = { available: false, reason: 'The promotion codes table could not be read.' };
   }
 
+  const usageCoverage = await subsidiaryUsageCoverage(env, new Date());
+
   return c.json({
     quarter,
     licence_fees: licenceFees,
     token_cost: tokenCost,
     promos,
+    usage_coverage: usageCoverage,
 
     // Subscriptions. Not a read that failed — a figure the platform cannot
     // produce, which is a different thing and says so.
@@ -213,8 +220,8 @@ r.get('/summary', async (c) => {
     // Open disputes are real, and deliberately not fetched here.
     disputes_endpoint: '/api/admin/billing/disputes',
 
-    // Token P&L by subsidiary, and every other per-subsidiary figure.
-    ...DERIVED_UNAVAILABLE,
+    ...REVENUE_PER_SUBSIDIARY_UNAVAILABLE,
+    ...TOKEN_PL_PER_SUBSIDIARY_UNAVAILABLE,
   });
 });
 
