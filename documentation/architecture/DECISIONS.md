@@ -33301,6 +33301,27 @@ operator chrome inside HQ's read-only frame.
 **Tests.** `deployments_last_version_d452.test.ts`;
 `hq_licences_polish_d452.test.mjs`.
 
+## D453
+
+**The statement ledger is drawn and entered from HQ · Revenue (H10).** Wave 8,
+Session 16, item 4. No migration; no new `/api/*` method — `POST
+/api/admin/statements/draw` and `PATCH /api/admin/statements/:uid` existed
+since D111 and were filed without a caller in D266.
+
+**Draw.** `StatementDrawEditor` on the Statements zone: licence (only those
+with a revenue share) and period (`YYYY-Qn`), calling `api.statementDraw`.
+Re-draw replaces a draft; issued statements still refuse on the server.
+
+**HQ entry.** `StatementActions` on each row: issue (`draft` → `issued`),
+record payment (`paid_cents` + note), record dispute (amount + required
+reason), mark paid in full, void. Amounts leave as integer minor units with
+client-side refusal of over-payment and dispute-without-reason.
+
+**Copy.** The empty ledger points at Draw draft; the D266 “no caller” comment
+is removed.
+
+**Tests.** `hq_revenue_statements_d453.test.mjs`.
+
 ## D460
 
 **The investor deal-flow honesty pass: dead controls wired, false sentences
