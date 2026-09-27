@@ -43,7 +43,11 @@ test('an admin render returns Admin Studio before the founder fit block', () => 
   // mounts its own, and the admin home mounts none (asserted below).
   assert.ok(!codeOnly(DASH).includes('<ProfileFitSection'), 'Dashboard mounts a fit block of its own again');
   assert.match(DASH, /<AdminStudioHome user=\{authUser\} \/>/);
-  assert.match(HOME, /<PersonalAdvisor \/>/);
+  // D324 — every Studio home mounts Eadwyn through StudioInterview, which
+  // collapses the chat to one row once the interview is complete.
+  assert.match(HOME, /<StudioInterview persona="admin" \/>/);
+  assert.equal((HOME.match(/<StudioInterview\b/g) || []).length, 1, 'Admin Studio mounts Eadwyn once');
+  assert.match(read('frontend/src/components/advisor/StudioInterview.jsx'), /<PersonalAdvisor\b/);
   assert.ok(!HOME.includes('ProfileFitSection'), 'Admin Studio mounts the founder fit block');
   assert.ok(!HOME.includes('WorkerRail') && !OVERVIEW.includes('WorkerRail'),
     'Admin Studio mounts a second assistant beside Eadwyn');

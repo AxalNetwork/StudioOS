@@ -72,6 +72,10 @@ export const SURFACES = [
   ['copy', 'frontend/src/pages/advisor/AdvisorStudioHome.jsx', 'the advisor Studio home, around the Eadwyn chat'],
   ['copy', 'frontend/src/pages/partner/PartnerStudioHome.jsx', 'the partner Studio home, around the Eadwyn chat'],
   ['copy', 'frontend/src/pages/admin/AdminStudioHome.jsx', 'the admin Studio home, which mounts the Eadwyn chat'],
+  // D324 — every Studio home mounts Eadwyn through these two: the wrapper, and
+  // the collapsed "interview complete" row with its proposals and ticket action.
+  ['copy', 'frontend/src/components/advisor/StudioInterview.jsx', 'the Studio chat wrapper'],
+  ['copy', 'frontend/src/components/advisor/interviewCompleteRow.jsx', 'the collapsed interview row: completion, proposals, ticket, Resume'],
   ['prompt', 'cloudflare-worker/src/services/advisor/guardrails.ts', 'ADVISOR_SYSTEM_PROMPT — the model being told who it is'],
   ['prompt', 'cloudflare-worker/src/services/decks/autofill.ts', 'the deck autofill system message'],
   ['prompt', 'cloudflare-worker/src/services/publications.ts', 'buildSystemPrompt for drafted publications'],
