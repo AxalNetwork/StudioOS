@@ -72,7 +72,12 @@ test('the full page shows locked ARCHETYPES copy and a back link', () => {
   assert.match(pageCode, /Who you match with/);
   assert.match(pageCode, /to="\/studio"/);
   assert.match(pageCode, /Back to studio/);
-  assert.match(pageCode, /Answer a few archetype questions in the advisor to reveal your archetype/);
+  // The empty state sends the user to the chat, which is Eadwyn, not an
+  // advisor: human advisors are a separate persona on this platform (D322).
+  const empty = pageCode.match(/Answer a few archetype questions[^<]*/);
+  assert.ok(empty, 'the full card keeps an empty state');
+  assert.match(empty[0], /\bEadwyn\b/);
+  assert.doesNotMatch(empty[0], /\badvis(e|o)r/i);
 });
 
 test('every archetype has a complete profile: summary, description, matching', () => {

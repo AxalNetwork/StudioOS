@@ -90,7 +90,7 @@ export default function AdvisorFilledBanner({ page, onOpenAdvisor }) {
               onClick={() => onOpenAdvisor(page)}
               className="rounded bg-violet-600 px-2.5 py-1 font-medium text-white hover:bg-violet-700"
             >
-              Review with advisor
+              Review with Eadwyn
             </button>
           )}
           <button
