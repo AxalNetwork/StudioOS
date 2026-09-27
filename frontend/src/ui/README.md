@@ -15,6 +15,7 @@ write a bordered white box with a title, it already exists here.
 | `AssistLayout.jsx` | Page shell that hosts the rail. |
 | `WorkerRail.jsx` | The Worker AI rail every licence shares — founder, investor, advisor, partner and both admin tiers, mounted on about seventy pages. It replaced thirty-nine local rail functions re-declared at the bottom of individual page files. `role` picks the accent from `workspaces/shellConfig`'s `ACCENT`. |
 | `railModels.js` | The editorial half of the rail's model menu: each model's display name, sentence and tags. Which models exist, their rates and which one is the default all come from `/api/ai/pricing`. |
+| `railInheritance.js` | Whether a page is a workspace root (the rail offers the model menu) or a zone under one (the rail shows the workspace's model as inherited), worked out from role and URL (D402). |
 | `Honesty.jsx` | `Unrecorded` (the store holds no value) and `Unreadable` (the read failed, with a retry). |
 | `workerRail.css` | Styles for `WorkerRail`, scoped to `.fwr`. |
 | `assistCost.js` | Spend accounting for the rail. |
