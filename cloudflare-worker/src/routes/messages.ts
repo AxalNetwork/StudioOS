@@ -8,6 +8,8 @@
  *   POST   /:uid/messages         post to it
  *   POST   /:uid/read             mark read up to now
  *   POST   /:uid/archive          archive it for everyone in it
+ *   POST   /:uid/attachments      send a file, as a message (D415)
+ *   POST   /:uid/attachments/:att/link  a signed, single-use link to one (D415)
  *
  * MEMBERSHIP IS THE ONLY KEY. Every read and every write joins
  * `message_thread_participants` on the caller. There is no admin override:
@@ -41,6 +43,7 @@ import { requireAuth } from '../auth';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { effectiveFlags } from './public';
 import { refuse } from '../util/refusal';
+import { mintDownloadToken } from '../services/signedDownload';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -51,6 +54,63 @@ const SUBJECT_MAX = 200;
 const SUBJECT_TYPES = new Set(['introduction', 'match', 'engagement', 'service', 'session', 'job']);
 
 type ThreadRow = { id: number; uid: string; status: string };
+
+/* ---------------------------------------------------------------- *
+ * Attachments (D415, migration 323)                                 *
+ * ---------------------------------------------------------------- */
+
+/** The largest file a message may carry. */
+export const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+/** Files one account may send in 24 hours, across every thread. */
+export const ATTACHMENT_DAILY_MAX = 50;
+/** What the page says a message may carry, and the refusal says back. */
+const ATTACHMENT_KINDS = 'PDF, PNG, JPEG, WebP, Word, Excel or PowerPoint';
+
+// Office files are ZIP containers, so their bytes alone cannot say which;
+// the extension decides among the three, and only after the ZIP signature.
+const OOXML: Record<string, string> = {
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+};
+
+/**
+ * What a file is, from its own first bytes — never from the header the
+ * browser sent. Null for anything outside the list above.
+ */
+export function sniffAttachment(bytes: Uint8Array, name: string): { type: string; ext: string } | null {
+  const b = bytes;
+  const at = (i: number, ...v: number[]) => v.every((x, k) => b[i + k] === x);
+  if (b.length >= 5 && at(0, 0x25, 0x50, 0x44, 0x46, 0x2d)) return { type: 'application/pdf', ext: 'pdf' };
+  if (b.length >= 8 && at(0, 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return { type: 'image/png', ext: 'png' };
+  if (b.length >= 3 && at(0, 0xff, 0xd8, 0xff)) return { type: 'image/jpeg', ext: 'jpg' };
+  if (b.length >= 12 && at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50)) return { type: 'image/webp', ext: 'webp' };
+  if (b.length >= 4 && at(0, 0x50, 0x4b, 0x03, 0x04)) {
+    const ext = String(name || '').toLowerCase().split('.').pop() || '';
+    if (OOXML[ext]) return { type: OOXML[ext], ext };
+  }
+  return null;
+}
+
+/**
+ * A filename safe to store in an R2 key and to hand back in a
+ * Content-Disposition: letters, digits, dot, dash and underscore, at most
+ * 100 characters, ending in the extension the bytes were sniffed as.
+ */
+export function safeAttachmentName(name: string, ext: string): string {
+  const base = String(name || '').split(/[\\/]/).pop() || '';
+  let clean = base.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/_+/g, '_').replace(/^[._]+/, '').slice(0, 100);
+  if (!clean) clean = 'file';
+  const dot = `.${ext}`;
+  const lower = clean.toLowerCase();
+  const matches = lower.endsWith(dot) || (ext === 'jpg' && lower.endsWith('.jpeg'));
+  return matches ? clean : `${clean.slice(0, 100 - dot.length)}${dot}`;
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const d = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(d)].map((x) => x.toString(16).padStart(2, '0')).join('');
+}
 
 /**
  * The other person, as their public card would show them (D414). Both reads
@@ -161,8 +221,11 @@ r.get('/', async (c) => {
                 WHERE m.thread_id = t.id
                   AND m.sender_user_id != ?
                   AND (p.last_read_at IS NULL OR m.created_at > p.last_read_at)) AS unread,
-              (SELECT m2.body FROM messages m2
-                WHERE m2.thread_id = t.id ORDER BY m2.created_at DESC LIMIT 1) AS preview
+              (SELECT CASE WHEN m2.body <> '' THEN m2.body
+                           ELSE (SELECT 'Attachment: ' || a.filename FROM message_attachments a
+                                  WHERE a.message_id = m2.id LIMIT 1) END
+                 FROM messages m2
+                WHERE m2.thread_id = t.id ORDER BY m2.created_at DESC, m2.id DESC LIMIT 1) AS preview
          FROM message_threads t
          JOIN message_thread_participants p ON p.thread_id = t.id AND p.user_id = ?
         WHERE t.status = 'open'
@@ -283,10 +346,21 @@ r.get('/:uid', async (c) => {
     // Who sent each message is `sender_user_id`; the page names them from the
     // participant cards, so no name or address rides on each row.
     const msgs = await c.env.DB.prepare(
-      `SELECT m.uid, m.body, m.created_at, m.sender_user_id
+      `SELECT m.id, m.uid, m.body, m.created_at, m.sender_user_id
          FROM messages m
-        WHERE m.thread_id = ? ORDER BY m.created_at ASC LIMIT 500`,
+        WHERE m.thread_id = ? ORDER BY m.created_at ASC, m.id ASC LIMIT 500`,
     ).bind(thread.id).all<any>();
+    // D415 — each message's files, by id and name only. The bytes are reached
+    // through POST /:uid/attachments/:att/link, never from this read.
+    const files = await c.env.DB.prepare(
+      `SELECT uid, message_id, filename, content_type, size_bytes
+         FROM message_attachments WHERE thread_id = ? ORDER BY id ASC`,
+    ).bind(thread.id).all<any>();
+    const byMessage = new Map<number, any[]>();
+    for (const f of files.results || []) {
+      if (!byMessage.has(f.message_id)) byMessage.set(f.message_id, []);
+      byMessage.get(f.message_id)!.push({ uid: f.uid, filename: f.filename, content_type: f.content_type, size_bytes: f.size_bytes });
+    }
     const people = await c.env.DB.prepare(
       `SELECT u.id AS user_id, u.uid AS handle, u.role, u.name, u.display_name,
                   u.headline, u.privacy_prefs, u.headshot_r2_key
@@ -299,15 +373,17 @@ r.get('/:uid', async (c) => {
     return c.json({
       thread: detail,
       me: { user_id: user.id },
-      messages: msgs.results || [],
+      messages: (msgs.results || []).map((m: any) => ({
+        uid: m.uid, body: m.body, created_at: m.created_at, sender_user_id: m.sender_user_id,
+        attachments: byMessage.get(m.id) || [],
+      })),
       participants,
       context,
       absent: {
         ...(context_absent ? { context: context_absent } : {}),
         ...(context?.link_absent ? { context_link: context.link_absent } : {}),
         ...(participants.some((p: any) => p.name === null) ? { name: NAME_WITHHELD } : {}),
-        // The canvas's paperclip. There is no attachment store yet.
-        attachments: 'Files cannot be attached to a conversation yet: there is nowhere to keep them.',
+        ...(c.env.FILES ? {} : { attachments: 'Files cannot be attached on this deployment: there is no file storage connected.' }),
       },
     });
   } catch (e) { return mapError(c, e); }
@@ -347,6 +423,115 @@ r.post('/:uid/read', async (c) => {
       'UPDATE message_thread_participants SET last_read_at = ? WHERE thread_id = ? AND user_id = ?',
     ).bind(nowIso(), thread.id, user.id).run();
     return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * POST /:uid/attachments — multipart `file` (+ optional `body`). Sends ONE
+ * message carrying the file (D415).
+ *
+ * The bytes go to R2 under `messages/<thread uid>/<attachment uid>/` first;
+ * the message and its attachment row are then written in one batch. If that
+ * batch fails, the object is deleted, so R2 never holds a file no message
+ * points to. The type is sniffed from the bytes; the browser's header is not
+ * trusted.
+ */
+r.post('/:uid/attachments', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const thread = await memberThread(c.env, c.req.param('uid'), user.id);
+    if (!thread) return c.json({ detail: 'Conversation not found' }, 404);
+    if (thread.status !== 'open') return c.json({ detail: 'This conversation is archived' }, 409);
+    if (!c.env.FILES) {
+      return refuse(c, 503, { code: 'storage_unavailable', message: 'Files cannot be attached on this deployment: there is no file storage connected.' });
+    }
+    const ctype = (c.req.header('content-type') || '').toLowerCase();
+    const form = ctype.includes('multipart/form-data') ? await c.req.formData().catch(() => null) : null;
+    const file: any = form?.get('file');
+    if (!file || typeof file.arrayBuffer !== 'function') {
+      return refuse(c, 400, { code: 'file_required', message: 'Choose a file to send.' });
+    }
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (bytes.length === 0) return refuse(c, 400, { code: 'file_empty', message: 'That file is empty.' });
+    if (bytes.length > ATTACHMENT_MAX_BYTES) {
+      return refuse(c, 413, { code: 'file_too_large', message: 'Files up to 10 MB can be attached.' });
+    }
+    const kind = sniffAttachment(bytes, String(file.name || ''));
+    if (!kind) {
+      return refuse(c, 415, { code: 'file_type_refused', message: `Only ${ATTACHMENT_KINDS} files can be attached.` });
+    }
+    // A cap per account per day, counted from the store — this route's own
+    // limit, beside the generic per-minute one every route has. Both sides
+    // go through datetime(): rows written here carry an ISO 'T', the column
+    // default does not, and a bare text comparison would mix the two (D160).
+    const since = new Date(Date.now() - 86_400_000).toISOString();
+    const sent = await c.env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM message_attachments WHERE uploader_user_id = ? AND datetime(created_at) > datetime(?)',
+    ).bind(user.id, since).first<{ n: number }>();
+    if (Number(sent?.n) >= ATTACHMENT_DAILY_MAX) {
+      return refuse(c, 429, { code: 'attachment_limit', message: `You can send ${ATTACHMENT_DAILY_MAX} files a day. Try again tomorrow.` });
+    }
+
+    const text = String(form?.get('body') ?? '').trim().slice(0, BODY_MAX);
+    const filename = safeAttachmentName(String(file.name || ''), kind.ext);
+    const attUid = newUid();
+    const key = `messages/${thread.uid}/${attUid}/${filename}`;
+    const digest = await sha256Hex(bytes);
+    await c.env.FILES.put(key, bytes, {
+      httpMetadata: { contentType: kind.type },
+      customMetadata: { thread_uid: thread.uid, uploader_user_id: String(user.id), sha256: digest },
+    });
+
+    const msgUid = newUid();
+    const now = nowIso();
+    try {
+      await c.env.DB.batch([
+        c.env.DB.prepare('INSERT INTO messages (uid, thread_id, sender_user_id, body, created_at) VALUES (?, ?, ?, ?, ?)')
+          .bind(msgUid, thread.id, user.id, text, now),
+        c.env.DB.prepare(
+          `INSERT INTO message_attachments
+             (uid, thread_id, message_id, uploader_user_id, r2_key, filename, content_type, size_bytes, sha256, created_at)
+           SELECT ?, ?, id, ?, ?, ?, ?, ?, ?, ? FROM messages WHERE uid = ?`,
+        ).bind(attUid, thread.id, user.id, key, filename, kind.type, bytes.length, digest, now, msgUid),
+        c.env.DB.prepare('UPDATE message_threads SET last_message_at = ?, updated_at = ? WHERE id = ?')
+          .bind(now, now, thread.id),
+        // Sending is reading, as it is for a text message.
+        c.env.DB.prepare('UPDATE message_thread_participants SET last_read_at = ? WHERE thread_id = ? AND user_id = ?')
+          .bind(now, thread.id, user.id),
+      ]);
+    } catch (e) {
+      await c.env.FILES.delete(key).catch(() => {});
+      throw e;
+    }
+    return c.json({
+      ok: true,
+      message_uid: msgUid,
+      attachment: { uid: attUid, filename, content_type: kind.type, size_bytes: bytes.length },
+    }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * POST /:uid/attachments/:att/link — a link to one file, for a member of the
+ * thread only (D415). The link is the shared signed-download primitive:
+ * HMAC-signed, five minutes, single use, and every download is written to
+ * activity_logs by routes/files.ts. A file in another thread, or one that
+ * does not exist, is the same 404.
+ */
+r.post('/:uid/attachments/:att/link', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const thread = await memberThread(c.env, c.req.param('uid'), user.id);
+    if (!thread) return c.json({ detail: 'Conversation not found' }, 404);
+    const a = await c.env.DB.prepare(
+      'SELECT r2_key, filename FROM message_attachments WHERE uid = ? AND thread_id = ?',
+    ).bind(c.req.param('att'), thread.id).first<{ r2_key: string; filename: string }>();
+    if (!a) return refuse(c, 404, { code: 'attachment_not_found', message: 'That file is not in this conversation.' });
+    if (!c.env.FILES) {
+      return refuse(c, 503, { code: 'storage_unavailable', message: 'Files cannot be fetched on this deployment: there is no file storage connected.' });
+    }
+    const { token, expires_at } = await mintDownloadToken(c.env, { key: a.r2_key, audience: 'message_member', userId: user.id });
+    return c.json({ url: `/api/files/dl/${token}`, expires_at, filename: a.filename });
   } catch (e) { return mapError(c, e); }
 });
 
