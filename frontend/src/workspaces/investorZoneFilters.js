@@ -265,18 +265,26 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Pass reasons', key: 'passes' },
   ],
 
+  // `Blocking` went live with D461: a blocking item is a Commit condition, and
+  // `ic_conditions` (migration 334) is the store the hand-off runs on — the
+  // chip narrows to the deals at closing with an open condition. `Wires` keeps
+  // its reason until item 3 builds the transfer record.
   'deals/closing': [
     { canvas: 'This close', key: 'close', label: 'This close {n}' },
-    { canvas: 'Blocking', unbuilt: 'a blocking item is a Commit condition, and no condition is stored on either side of that hand-off' },
+    { canvas: 'Blocking', key: 'blocking', label: 'Blocking {n}' },
     { canvas: 'Documents', key: 'documents', label: 'Documents {n}' },
     { canvas: 'Wires', unbuilt: 'no transfer out to a company is recorded — capital_calls is an LP paying into the fund', hover: 'No transfer out to a company is recorded; what the fund records is capital coming in from an LP.' },
   ],
 
+  // `Conditions` and `Minutes` went live with D461: conditions are their own
+  // table (migration 334) and minutes live on the meeting record. Both were
+  // `unbuilt` with reasons that were true when written — the memo and terms
+  // were free text, and ic_meetings carried only its agenda.
   'deals/commit': [
     { canvas: 'This deal', key: 'current' },
     { canvas: 'All decisions', key: 'decisions' },
-    { canvas: 'Conditions', unbuilt: 'a condition is not a stored record; ic_decisions carries a memo and a free-text terms blob, and neither is something a later stage could block on', hover: 'A condition is not a stored record, so no later stage can block on one.' },
-    { canvas: 'Minutes', unbuilt: 'no minutes are stored — ic_meetings carries an agenda, which is written before the room rather than after it', hover: 'No minutes are stored — the meeting record is its agenda, written before the room, not after it.' },
+    { canvas: 'Conditions', key: 'conditions', label: 'Conditions {n}' },
+    { canvas: 'Minutes', key: 'minutes' },
   ],
 
   'deals/pipeline': [

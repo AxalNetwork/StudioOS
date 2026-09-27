@@ -4500,6 +4500,12 @@ export const api = {
   // Canvas ID3 — the whole Commit room in one scoped read. Registered ahead of
   // `/ic/:uid` in the worker so the literal is not swallowed by the parameter.
   icCommitRoom: () => request('/ic/commit-room'),
+  // D461 — conditions on a decision (migration 334) and the meeting's minutes.
+  // `/ic/conditions` is registered ahead of `/ic/:uid` for the same reason.
+  icConditions: (status) => request(`/ic/conditions${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  icAddCondition: (uid, body) => request(`/ic/${uid}/conditions`, { method: 'POST', body: JSON.stringify(body) }),
+  icResolveCondition: (uid, status) => request(`/ic/conditions/${uid}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  icRecordMinutes: (uid, minutes) => request(`/ic/meetings/${uid}/minutes`, { method: 'PATCH', body: JSON.stringify({ minutes }) }),
 
   // ---------- LP Reporting (Support) ----------
   lpReportsList: (opts = {}) => {

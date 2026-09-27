@@ -79,8 +79,12 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   'deals/commit': [
-    { label: 'Export minutes', unbuilt: 'no minutes are stored to export; ic_meetings carries an agenda, written before the room rather than after it', hover: 'No minutes are stored — the meeting record is its agenda, written before the room, not after it.' },
-    { label: 'Add condition', unbuilt: 'conditions are not a stored record — the memo and terms are free text, and neither can block a later stage' },
+    // BOTH WENT LIVE WITH D461 (migration 334). Minutes live on the meeting
+    // linked to the deal — the export writes what was recorded and the page
+    // disables it, with the reason, when nothing has been. A condition is its
+    // own row on the decision, and an open one is what Closing blocks on.
+    { label: 'Export minutes', kind: 'handler', handler: 'exportMinutes' },
+    { label: 'Add condition', kind: 'handler', handler: 'addCondition' },
     // THE SCREEN THIS ROW WAS WAITING FOR. It said, correctly, that closing a
     // vote is served by the API — `PUT /api/ic/:uid` with a `decision` forces
     // `decided` and stamps `decided_at` — and that no screen offered the form.
