@@ -8,7 +8,7 @@ import { useAuth } from '../hooks/useAuthSync';
 import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { getPitchCopyLengthStatus } from '../lib/pitchCopyLength';
-import { StatusBadge } from './Dashboard';
+import { StatusBadge } from '../components/StatusBadges';
 import VentureRiskPanel from '../components/VentureRiskPanel';
 import CompetitorAnalysis from '../components/CompetitorAnalysis';
 

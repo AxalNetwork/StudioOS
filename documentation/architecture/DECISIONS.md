@@ -31090,6 +31090,116 @@ passing every file.
   - the founder home taken off the scanned list;
   - each of the five voice lines reverted.
 
+## D323
+
+**The old "Welcome back" Studio page retires into the founder home and a
+redirect, and two pages nothing imported are deleted.** Wave 8, Session 3,
+item 4 (the gap map's PR 3). Frontend only: no migration, no route. One
+`api.js` method is removed.
+
+**What retired.**
+- The final branch of `pages/Dashboard.jsx`: the "Welcome back" page drawn
+  after the four role homes. It carried a greeting and role badge, a
+  PageExplainer, semantic search, a notifications dropdown, "Refresh Scores",
+  the investor trial banner, the Eadwyn chat, `VentureNextStep`,
+  `ProfileFitSection`, a subsidiaries widget, and an investor deal desk that
+  no viewer could reach, because investors are dispatched to their own home
+  first.
+- `pages/SkillsProfilePage.jsx` and `pages/ValuesAssessmentPage.jsx`. Nothing
+  imported either, and their routes, `/skills` and `/values`, already
+  redirected to `/studio`. The redirects stay; the `App.jsx` comment that
+  called the files "kept intact on disk" is corrected.
+
+**Who reached the old page, and where they go now.** `/studio` admits the five
+Studio roles, plus (through `labRoles` in `App.jsx`) an active Spin-Out Lab
+member of any role, and the role an admin is viewing as. Past the four role
+homes and the admin return, that leaves two viewers:
+- **An exploring account admitted to the Lab** (the holding page's "Company
+  record" row links it to `/studio`). The Lab is how an explorer becomes a
+  founder, so it now gets the founder Studio home.
+- **Anyone else**, in practice an admin viewing as "exploring". They get
+  `<Navigate replace>` to `/exploring`, with the query string and hash kept.
+  `/exploring` admits admins and exploring accounts.
+
+No route is retired; `/studio` itself is unchanged for the five Studio roles.
+
+**Every job the old page did, and its successor.**
+| Old page | Now |
+| --- | --- |
+| Google sign-in notice | the same `InfoStrip`, above the founder home |
+| Product tour | mounted above the founder home; see below |
+| Greeting, role badge, PageExplainer | the founder home's "Studio · Founder" context line (D321) |
+| Semantic search | the shell's command palette (Cmd+K) |
+| Notifications dropdown | the shell's notification bell |
+| "Refresh Scores" (`POST /dashboard/refresh-scores`) | nothing: no Studio home offers it |
+| Investor trial banner | unreachable here; investors are served by their own home |
+| Eadwyn chat | the founder home's chat |
+| `VentureNextStep` | the founder home's "Venture next step" card, same lifecycle endpoint |
+| `ProfileFitSection` | the founder home's compact profile band |
+| Subsidiaries widget | the founder home's subsidiaries card |
+| Investor deal desk | unreachable; `InvestorStudioHome` is the investor's home |
+
+"Refresh Scores" has no successor. Its Worker route stays: it is tested
+(`dashboard_company_scope.test.ts`), and removing a Worker route is outside
+this item. `api.refreshDashboardScores` had no other caller and is removed, together
+with its entry in `api.js`'s `SLOW_PATHS`. `api_request_timeout.test.mjs`
+fails on a pattern that matches no call, and it did.
+
+**Deleted with it.** `components/SemanticSearch.jsx`,
+`components/InvestorTrialBanner.jsx` and `components/VentureNextStep.jsx`
+(each imported only by the old page), and, inside `Dashboard.jsx`,
+`InvestorHome`, `DealLifecycle`, `InvestorStats`, `ScoredOpportunities`,
+`ScoredCard`, `IndependentSubsidiariesWidget`, `Card`, `RoleBadge` and
+`NotifDropdown`. Their API methods (`searchSemantic`, `investorBillingStatus`,
+`getLifecycle`) have other callers and stay. `DashboardFallback`, the error
+state for a failed dashboard read, stays.
+
+**Moved, not deleted.** `StatusBadge` and `WeekBadge` move verbatim to
+`components/StatusBadges.jsx`. `StartupList.jsx` and `ProjectDetail.jsx`
+import them from there.
+
+**The tour.** Its `search` and `notifications` steps anchored on markup that
+only the old page had, so every Studio home already showed them as unanchored
+boxes. They are dropped. The sidebar step now names Cmd+K, the command
+palette's key.
+
+**Re-aimed tests, and one property that changed on purpose.**
+- `founder_journey_guards.test.mjs` asserted that the founder home drew
+  `VentureNextStep` above `ProfileFitSection`, but it only ever read the old
+  page. The live home follows canvas 69dc42f3: chat, profile band, then the
+  modules. The guard now asserts what holds: the home's first card is the
+  venture next step.
+- `founder_journey_entry.test.mjs`'s five strip tests now read the founder
+  home's venture card. It must not link a dead Command Center or the
+  Operations console, and it must take its next action from the lifecycle
+  endpoint. Two properties are inverted deliberately. The strip rendered
+  nothing when there was no venture and stayed silent when its read failed.
+  Under D321 the card says "Select or create a startup" when there is no
+  project, and shows `Unreadable` when the read failed.
+- `admin_studio_overview.test.mjs` located the fit block in `Dashboard.jsx` to
+  show that the admin return came first. The dispatcher now mounts no fit
+  block of its own, and the test asserts exactly that.
+
+**Verification.**
+- `npm run test:drift` on main d4ccaf5c3: exit 0.
+  Frontend 3938 to 3942: `studio_fallback_retired_d323.test.mjs` adds 6, and
+  `founder_journey_entry.test.mjs`'s six strip tests become four about the
+  venture card. Worker 4733 (4730 pass, 0 fail), retention 112 and guards 14
+  unchanged. Both typechecks, `lint:undef`,
+  `check-unused-imports`, `check-react-hook-imports`, `check-dark-mode`,
+  `check-api-drift`, `check-folder-docs` and `check-regulated-wording` exit 0.
+  Root `npm run build`, then `check-docs-fresh --strict`, exit 0.
+- Mutations: 10 run, 10 caught (non-zero exit and a `not ok` line, each file
+  restored from a sha256-checked snapshot):
+  - the redirect dropping the query string;
+  - a Lab member sent to `/exploring`;
+  - everyone drawn the founder home;
+  - the admin return mounting the fit block;
+  - each moved badge losing a state;
+  - the founder home no longer leading with the venture card, the venture card
+    hiding its failure, or the venture card linking Command Center;
+  - the tour regaining the search step.
+
 ## D330
 
 **AdminX.jsx and AdminTelegram.jsx say why no draft was made.** Wave 8,
@@ -37041,6 +37151,17 @@ cut that keeps assertions on the markup. The cut is unchanged: the `<` in
 front of `data-dc-script`. The tag name is assembled from two pieces so the
 file read is not written next to one script-tag literal. The string is never
 served. The test throws if that element is gone. No migration.
+
+## D472
+
+**The canvas cut walks back to the same angle bracket.** Semgrep alert on
+`frontend/test/send_for_signature_d411_contract.test.mjs`, the same rule as
+D471. D471 split the tag into two pieces. The scanner joined those pieces
+back into one script-tag string and reported the index sitting in that call.
+The cut is the same byte: the `<` in front of `data-dc-script`. The test
+walks back to that character and checks the six letters on their own, with
+the angle bracket kept out of that string. The text is never served. The
+test throws if that element is gone. No migration.
 
 ## D490
 
