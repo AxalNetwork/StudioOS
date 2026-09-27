@@ -30643,6 +30643,66 @@ shown one company's memo on another company's room.
 - The canvas's "COLLECTION" mark and scope chip are shell chrome, drawn by
   `WorkspaceShell`, not by these pages.
 
+## D320
+
+**The archetype banks go from three probes per trait to five, and every one
+of the 16 archetypes gets a complete profile.** Wave 8, Session 3, item 1.
+It ports one commit, 555332f50 from Cursor's branch (PR 789), as a fresh
+cherry-pick onto main. It supersedes that PR's only unmerged commit. The
+rest of the branch is already on main through the earlier squash 1ff21b463
+(PR 678), so merging the branch would have conflicted in four source files.
+Closing PRs 789, 790 and 791 is the owner's call. No migration, no route, no
+`api.js` method.
+
+**What changes.**
+- `services/advisor/banks/fitShared.ts`: each of the four traits (builder,
+  visionary, connector, operator) gets two more shared probes, and each
+  persona gets a second role-flavoured probe per trait. The archetype
+  section of every persona's profiling bank goes from 17 questions to 29
+  (20 shared, 8 role, the illustration question). The bank lives only in
+  code: nothing in D1 seeds or counts these keys.
+- `lib/assessmentMeta.js`: each of the 16 slugs gets a `summary` (for the
+  compact card), a full `description`, a trait `lean`, and a `matching` set
+  (same-track and cross-licence pairs), each pair with a `why`.
+- `ProfileFitSection.jsx`: the compact `/studio` card prints `summary`; the
+  full card keeps `description`. `ArchetypeCard` becomes a named export so a
+  test can render it.
+- `ArchetypeCardPage.jsx`: draws the lean and a "Who you match with" block.
+
+**Effect on people who already answered.** Classification is nearest-centroid
+over the average of each trait's probes, and its coverage counts traits
+touched, not probes answered (`services/archetypeScoring.ts`). A user who
+answered the old bank keeps their archetype and its coverage. Their profiling
+progress denominator rises by 12 (founder 46 to 58, investor 42 to 54,
+partner 41 to 53, advisor 43 to 55), so a profile that read complete now has
+twelve open archetype questions, and Eadwyn asks them. That is intended: the
+extra probes are what give the classifier headroom.
+
+**Voice.** The new copy uses "advice" and "advisory" only about human
+investors and advisors (the Hands-On Partner, the coach archetypes), never
+about Eadwyn. The card's empty-state line "questions in the advisor" is
+unchanged here; item 3 re-aims it together with the test that pins it.
+
+**Verification.**
+- `npm run test:drift` on main 92c12edf2: exit 0. Frontend 3871 to 3873:
+  "every archetype has a complete profile: summary, description, matching"
+  (`studio_archetype_card.test.mjs`) and "the compact card prints the
+  summary; the full card prints the description"
+  (`studio_archetype_sprite.test.mjs`). Worker 4720 to 4721 (4718 pass, 0
+  fail): "archetype bank is the full trait + role + illustration set for
+  every persona", plus the renamed "archetype module has five probes per
+  trait". Retention 112 and guards 14 unchanged. Both typechecks,
+  `check-decision-ids`, `check-folder-docs`, `check-api-drift` and
+  `check-regulated-wording` exit 0; root `npm run build`, then
+  `check-docs-fresh --strict`, exit 0.
+- Mutations: 9 run, 8 caught (non-zero exit and a `not ok` line, each file
+  restored from a sha256-checked snapshot). One escaped: printing the full
+  description on the compact card. The ported sprite test only matched
+  `meta?.summary` in the source, and the condition that chooses between the
+  two still names it. The assertion was replaced by a render of
+  `ArchetypeCard` in both modes, which catches that mutation and its reverse
+  (the full card printing the summary).
+
 ## D330
 
 **AdminX.jsx and AdminTelegram.jsx say why no draft was made.** Wave 8,
@@ -32724,6 +32784,147 @@ first pass (one matched twice, one matched nothing), so those mutations did
 not run; the anchors were corrected and both were then caught. They are
 counted once.
 
+## D395
+
+**`/partner/operations/*` retires (Session 11, item 1b), with the firm
+profile card mounted on Firm Settings (Session 15's line, taken over while
+Session 15 is paused).** No migration, no new route, no new `api.js` method.
+One additive Worker change: four fields on `GET /partner/delivery/board`
+rows.
+
+**Why this is one PR.** D304 retires an old page only into a canvas-built
+page that does its whole job. D390 built the two missing homes (the firm
+profile card and Founder reviews on Health) and left the card unmounted,
+because `CompanySettingsPage.jsx` was Session 15's. With Session 15 paused,
+the owner handed that part to this session, so the mount and the retirement
+land together and neither exists without the other.
+
+**Measured before retiring: every job on the five tabs, and where it lives
+now.**
+
+| Retired tab | Its jobs | Canvas-built home |
+| --- | --- | --- |
+| Overview (and the bare root) | Edit the firm's name, company, specialisation; the Founder introductions switch; read the partner agreement; the practice snapshot | `/company-settings`: `PartnerFirmProfileCard` (D390), mounted here. The snapshot is the same `quotesAnalytics` read `/pipeline/analytics` already draws. |
+| Capabilities | List, create, edit and delete the firm's own service offerings | `/offers/catalog`, which mounts `ServiceCatalogPage` with the same four calls. |
+| Portfolio | Delivered engagements and the founder reviews on them | `/delivery/health` (Founder reviews, D390); the engagements are on `/delivery/board`. |
+| Engagements | Browse open requests and bid; withdraw a proposal; start, deliver, invoice and cancel an engagement; the invoice ledger | Bidding: `/pipeline/leads`, whose "Accept · bid on it" already hands off to `/needs/:uid` by the zone's own design, unchanged here. **Withdraw: added to `/pipeline/proposals` in this PR.** **The lifecycle and the ledger: added to `/delivery/board` in this PR.** |
+| Performance | The BD scorecard over quotes; founder reviews | `/pipeline/analytics` (the same `quotesAnalytics` read); reviews on `/delivery/health`. |
+
+Two jobs had no canvas-built home, which is what the new controls fix:
+- **Withdraw** existed only on `EngagementsPage` and the legacy
+  `NeedsBoardPage`. Proposals now draws it on a submitted row.
+  `canWithdraw` mirrors `quoteTransition`, which allows it from `submitted`
+  only; the Worker stays the boundary.
+- **Start, Mark delivered, Issue invoice and Cancel**, and the invoiced and
+  awaiting-invoice ledger, existed only on those two pages.
+  `delivery/EngagementLifecycle.jsx` draws them under the board, over every
+  row the board read. `lifecycleStepsFor` offers exactly the transitions
+  `engTransition` in `routes/needs.ts` accepts, so no button is drawn that
+  the Worker would 409. A blank delivery note or cancel reason is sent as
+  absent. The ledger says "issued" with the invoice's own number and date,
+  or "awaiting invoice"; it never says "paid", because nothing records
+  payment. The Delivery canvas draws no lifecycle control. The writes are
+  the product's existing ones, not a design invention, and the disagreement
+  is recorded here rather than resolved by dropping a job.
+- **The Worker half.** `GET /partner/delivery/board` rows gain
+  `delivered_at`, `invoiced_at`, `invoice_id` and `cancelled_at`: the
+  engagement's own columns, null until that step happened, under the same
+  `partner_id` scoping every read in that file uses.
+
+**The mount (Overview → Firm Settings).** `CompanySettingsPage` renders
+`FirmProfileMount`, which draws `PartnerFirmProfileCard` for a sign-in whose
+role is `partner` and nothing for any other role. It sits in **both**
+branches, above the `if (!activeCompany)` on-ramp and above the company
+header, because the card edits the `partners` row (keyed by
+`users.partner_id`), not a company. A partner with no company must still
+reach it: D390 named that trap, and the test pins both branches. The card
+itself is unchanged apart from its header comment.
+
+**Redirects** (`App.jsx`, each a `<Navigate replace>` with no guard of its
+own, since the destination guards itself — the D118 shape):
+- `/partner/operations` → `/company-settings`
+- `/partner/operations/overview` → `/company-settings`
+- `/partner/operations/capabilities` → `/offers/catalog`
+- `/partner/operations/portfolio` → `/delivery/health`
+- `/partner/operations/engagements` → `/pipeline/proposals`
+- `/partner/operations/performance` → `/pipeline/analytics`
+
+None of the retired pages read a query string or a hash, so none is carried.
+Every destination is a mounted route whose guard admits `partner`.
+
+**Deleted.** `pages/partner/operations/` in full: the workspace, the five
+pages and `operations/kit.jsx`. `pages/partner/kit.jsx` re-exported seven
+helpers from that kit. The two the zones use (`formatDay` and `moneyDollars`)
+now live in `kit.jsx` itself with unchanged bodies. The other five (Badge,
+ProgressBar, BulletList, RowCard, formatRelativeDay) had no caller outside
+the retired pages and went with them. No `api.js` method or Worker route is
+removed: every call the pages made still has another caller.
+
+**Links re-pointed, so nothing inside the product rides a redirect.**
+- `PartnerStudioHome`'s three modules (Session 11's three lines):
+  - "Assigned delivery tasks" → `/delivery/board`;
+  - "Relationship health" → `/delivery/health`;
+  - "Delivery book" → `/delivery/board`.
+- `PartnerWorkspaceTabs`:
+  - "Retainers" → `/pipeline/retainers`;
+  - "Proof" → `/offers/proof`.
+- `shellConfig.js`'s partner `legacy:` fields now agree with `App.jsx`, so the
+  uncalled `legacyRedirects('partner')` could not disagree with the real
+  redirects:
+  - Board's `legacy: '/partner/operations/overview'` is dropped, because
+    overview went to `/company-settings`, not a zone;
+  - Retainers' `legacy: '/partner/operations/portfolio'` is dropped;
+  - Health's `legacy` becomes `/partner/operations/portfolio`;
+  - Proposals keeps `/partner/operations/engagements`.
+
+**Left stale on purpose, for Session 5 (`sidebarConfig.js` is theirs).**
+Each still works through the redirects:
+- the partner Pipeline row's `match` entry `/partner/operations/engagements`;
+- the Delivery row's `/partner/operations/overview`, `/portfolio` and
+  `/performance`;
+- the Offers row's `/partner/operations/capabilities`;
+- the comments at the top of the partner block that describe the Delivery row
+  as "the /partner/operations subtree, tabbed by PartnerOperationsWorkspace";
+- the six `/partner/operations*` entries in `PARTNER_FULL_BLEED`, which now
+  name redirects that render nothing.
+
+`partner_shell.test.mjs` pins the `match` entries as deep-link ownership. That
+stays true for as long as Session 5 keeps them, and it goes when Session 5
+removes them.
+
+**Tests.**
+- `frontend/test/partner_operations_retired_d395.test.mjs` (10):
+  - each address is a replace-redirect to its successor, and each successor is
+    a mounted route admitting `partner`;
+  - the folder is gone and nothing imports from an `operations/` path;
+  - no link outside the redirect lines and Session 5's sidebar names a retired
+    address, and `legacyRedirects('partner')` agrees with `App.jsx`;
+  - the mount renders the card for a partner and nothing for any other role,
+    in both branches;
+  - the lifecycle steps match the Worker's four guards, which are read from
+    `needs.ts`;
+  - each step calls its own method, and a blank note is sent as absent;
+  - the ledger lines;
+  - each rendered row carries only its own buttons;
+  - Withdraw is gated on `submitted`.
+- `cloudflare-worker/test/partner_board_lifecycle_d395.test.ts` (4): the four
+  fields are present and null before their step, carry the engagement's own
+  values after it, and never reach another firm; a sign-in with no firm is
+  refused.
+
+**Tests re-aimed, each keeping its property.**
+- `pipeline_proposals_lifecycle` and `delivery_board_modes` pinned "no file
+  but the zone builds its action row" by reading `EngagementsPage` by name.
+  They now walk `frontend/src` through the new `_srcFilesWith.mjs`, which
+  still sees a second builder anywhere in the tree.
+- `partner_operations_live` pinned "no fixture firm, every tab on the real
+  API" on the five pages. It now pins the same properties on the successors,
+  and the fixture-name scan covers the whole partner tree. The engagements
+  half of its stat-strip test read the deleted page; its win-rate rule is the
+  proposals read's, pinned by `pipeline_proposals_lifecycle`.
+- `needs_envelope` drops the deleted page from its list.
+- `partner_shell` drops its read of the deleted workspace.
+
 ## D410
 
 **E-sign `/send` hardening: the signing link reaches only the recipient, a
@@ -34766,6 +34967,8 @@ record could not be read. Nothing here is drawn from a guess. Retry".
 
 **Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: HQ seats counted from `users`; the U1 sentence removed from the seats refusal; the strip's `loadStudioGlance` call removed.
 
+**Corrected by D447.** HQ does not read `branch_benchmarks`. Agreements that end inside the window, and the count of accounts still pending the open week, are read on HQ. The four legacy props are not read when a glance is already present.
+
 ## D444
 
 **The branch Contracts page tables this database's own contracts, from the list it already had.** Wave 8, Session 6, item 5. No migration. No new `/api/*` method. `admin_contracts.ts` is not edited. No live branch exercised this.
@@ -34810,6 +35013,24 @@ record could not be read. Nothing here is drawn from a guess. Retry".
 
 **Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: a missing support-session table answered as an empty list; a cycle with no end falling through to every run; the cycle window keeping every run.
 
+## D447
+
+**The studio glance stops throwing, and HQ stops reading a table it never writes.** Wave 9, Session 6, item 1. No migration. No new `/api` method. No live branch exercised this. `AdminStudioHome.jsx` is the Session 15 slot's and is not edited. `routes/licence.ts` is Session 5's and is not edited.
+
+**The throw.** `StudioNeedsDecision` and `AdminStudioOverview` called `studioGlances` on every render, including when a glance payload was already in hand. `studioGlances` treated only `null` as "still reading", so an undefined `home` fell through to `home.queue_pressure`. A branch user with glance-only props, and a render with no props, both threw. The glance is now the only input when it is present. `studioGlances` treats `undefined` the same as `null`. Until the glance arrives the first paint says Reading, including on HQ, where it used to say the figure was not recorded. `glance={null}` is the legacy path the existing tests still exercise. On `UNAVAILABLE`, `onBranch` and `tier` come from `branchOfUser`, so a suspended branch keeps its freeze banner.
+
+**HQ's benchmark copy.** `branch_benchmarks` is created for a branch and filled by a push. Nothing on HQ writes it. The HQ glance returns `insights: { recorded: false, reason: "HQ pushes the median and keeps no copy." }` and does not query that table. D443 said the published benchmark copy was HQ's store and was read. That sentence is wrong, and D443 points here.
+
+**What HQ does read.** Agreements that end inside the window, and the count of accounts still pending the open week, are this database's own rows (D286). U1 does not apply to them. HQ uses `agreementsExpiring` and `programmeClock`, the same functions the branch digest uses. A missing table is unreadable, not zero. A closed month does not take the pending-account read, and the reason is that no cohort week is open. Striking either read would put a refusal back, and that refusal would cite S22, not U1. Seats, the eleven lanes, the share rate and the licence summary stay unrecorded on HQ, and those reasons still cite U1.
+
+**A failed licence copy.** `branchLicencePayload` words a missing table and a missing row with the same "not pushed" message. The glance probes `branch_licence`. An unreadable table is `available: false` and the page draws Unreadable, carrying `pull.reason`. A readable table with no row stays the not-pushed sentence. The same split is on the branch digest's share rate: the catch is `available: false`, and a missing row is the not-pushed reason. A seat count that comes back `null` is unreadable, not "not recorded". A null `hours_to_close` stays null. `Number(null)` is 0, and 0 would rank the programme tile as due now. The chip draws Unreadable when the share read failed, instead of the not-recorded sentence.
+
+**One read of the rate.** The branch glance takes the share from the licence payload it already asked for, and does not ask `branch_licence` again through `revenueShare`. The template copy and the benchmark copy are the readers the branch routes already had, including the empty-benchmark reason. HQ's library goes through `listTemplates`. The glance route's header no longer says a read changes nothing: the first look at a missing licence copy can store HQ's answer.
+
+**Relay.** Session 15 must not drop the four legacy reads in `AdminStudioHome.jsx` until this is on main. Dropping them before this fix is what throws. After it is on main, dropping them is safe, and it also ends the second pull of the licence copy. This PR does not assert on that file.
+
+**Mutations: 5 run, 5 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: a glance-only render that calls `studioGlances` with an undefined home; HQ querying `branch_benchmarks`; a failed glance clearing `onBranch`; an unreadable licence reported as not pushed; the glance ignoring its clock and using the wall clock for the pending-account read.
+
 ## D448
 
 **Spinout moderation agrees with the approvals lane, and a plain admin cannot decide another admin.** No migration. No live branch exercised this. `HeldApprovals.jsx` is Session 5's and is not edited. The HQ-held door to `/admin/spinout-moderation` is the one route the branch shell reaches and the HQ-held shells do not. That door stays Session 5's.
@@ -34821,7 +35042,6 @@ record could not be read. Nothing here is drawn from a guess. Retry".
 **One open count.** Awaiting a decision is `status = 'under_review' AND resolved_at IS NULL`, exported once and read by the console and by the approvals lane. A suspension or an ejection that has not been closed is a sanction in force, listed and counted apart, and not added into the lane. Close stamps `resolved_at` and does not change Lab access, so a sanction can leave the list without reinstating. The page does not preselect an action. A list that is not an array is unreadable. A missing count is not shown as zero. The list is capped at 200 and says how many of the count it is showing.
 
 **Mutations: 5 run, 5 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: a plain admin reinstating a peer admin; a decision with no audit row; the freeze not reaching the post; the console and the lane disagreeing on a flag; a malformed payload read as an empty list.
-
 
 ## D450
 

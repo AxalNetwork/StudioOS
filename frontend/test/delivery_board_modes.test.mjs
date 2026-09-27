@@ -28,6 +28,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { srcFilesWith } from './_srcFilesWith.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const read = (p) => codeOnly(raw(p));
@@ -40,7 +41,6 @@ const filters = read('frontend/src/workspaces/partnerZoneFilters.js');
 const actions = read('frontend/src/workspaces/partnerZoneActions.js');
 const routes = read('frontend/src/workspaces/partner/PartnerBucketRoutes.jsx');
 const kit = read('frontend/src/workspaces/canvasKit.jsx');
-const engagements = read('frontend/src/pages/partner/operations/EngagementsPage.jsx');
 const api = read('frontend/src/lib/api.js');
 const spec = raw('cloudflare-worker/src/routes/research.ts');
 
@@ -109,20 +109,14 @@ test('the route the Delivery row lands on reads the Delivery stores', () => {
     'the board is rendering something other than its own zone again');
   assert.match(routes, /const PartnerBoard = lazy\(\(\) => import\('\.\.\/\.\.\/pages\/partner\/delivery\/BoardZone'\)\);/,
     'the board zone is not imported');
-  // AND `EngagementsPage` NO LONGER CLAIMS THE ZONE. Two files building one
-  // zone's action row is how a header row comes to describe a page the reader
-  // is not on; `profile_zone_actions` fails on it, and this pins the reason.
-  assert.ok(!engagements.includes("partnerZoneActions('delivery/board'"),
-    'EngagementsPage is building the board’s action row again');
-  // Flattened: the note wraps across comment lines. The wording moved when
-  // `/pipeline/proposals` also got its own zone and this page stopped carrying
-  // BOTH header rows — what has to survive is the record that the rows left
-  // with the zones that own them, not one particular sentence.
-  const engRaw = raw('frontend/src/pages/partner/operations/EngagementsPage.jsx').replace(/\s+/g, ' ');
-  assert.ok(engRaw.includes('the header rows went with the zones that own them'),
-    'the removal is no longer recorded, so the next reader re-adds it');
-  assert.ok(engRaw.includes('delivery/BoardZone` took the route'),
-    'the record no longer names the zone that took this route');
+  // AND NO OTHER FILE CLAIMS THE ZONE. Two files building one zone's action
+  // row is how a header row comes to describe a page the reader is not on;
+  // `profile_zone_actions` fails on it, and this pins the reason. It read
+  // `EngagementsPage` by name until D395 deleted that page, so it walks the
+  // tree: the property is "the zone is the only builder".
+  assert.deepEqual(srcFilesWith("partnerZoneActions('delivery/board'"),
+    ['frontend/src/pages/partner/delivery/BoardZone.jsx'],
+    'a second file is building the board’s action row');
   // The five stores the old page could not see.
   for (const table of ['engagement_seats', 'engagement_milestones', 'engagement_blockers',
     'engagement_deliverables', 'engagement_hours']) {

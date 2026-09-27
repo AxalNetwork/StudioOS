@@ -296,7 +296,7 @@ const STUDIO_CARDS = [
 ];
 
 function markup(props) {
-  return renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AdminStudioOverview, props)));
+  return renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AdminStudioOverview, { glance: null, ...props })));
 }
 
 function firstHref(html, testid) {

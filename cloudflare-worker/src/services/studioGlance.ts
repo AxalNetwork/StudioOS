@@ -1,5 +1,5 @@
 /**
- * Studio's one glance, for both tiers (D443).
+ * Studio's one glance, for both tiers (D443, corrected by D447).
  *
  * THE PAGE USED TO ASK FOUR BRANCH ROUTES. Each refuses on HQ (`Branch only`),
  * so an admin who is not on a branch was told the figures were not recorded
@@ -8,24 +8,46 @@
  * invent.
  *
  * A PER-SUBSIDIARY FIGURE IS NOT READ ON HQ. Seat use, the eleven approval
- * lanes, the agreements that end inside the window, and the share rate are
- * facts about one licence. No row on HQ names the licence it belongs to (U1),
- * so counting HQ's own tables would be a different measurement wearing that
- * name. Those four come back `recorded: false` with the reason, never as zero.
+ * lanes, and the share rate are facts about one licence. No row on HQ names
+ * the licence it belongs to (U1), so counting HQ's own user table or summing
+ * its approval rows would be a different measurement wearing that name. Those
+ * come back `recorded: false` with the reason, never as zero.
  *
- * WHAT HQ'S OWN DATABASE DOES ANSWER. The programme clock is the platform's,
- * not a subsidiary's, and the pending-account count is the part that is not,
- * so the clock is returned and the count is left null. The master template
- * library and the published benchmark copy are HQ's stores; a branch reads
- * the copies HQ pushed, which live in its own database.
+ * AGREEMENTS AND THE PENDING-ACCOUNT COUNT ARE THIS DATABASE'S (D447). They
+ * are not a subsidiary figure. `programmeClock` and `agreementsExpiring` are
+ * the same reads `branchHome` makes. Striking either read would put the
+ * refusal back, and that refusal would cite S22, not U1.
+ *
+ * HQ DOES NOT READ `branch_benchmarks`. That table is the copy a branch keeps
+ * after HQ pushes a median. Nothing on HQ writes it. The glance says so:
+ * `insights.recorded` is false, and the reason is that HQ pushes the median
+ * and keeps no copy.
+ *
+ * WHAT HQ'S OWN DATABASE DOES ANSWER. The programme clock is the platform's.
+ * The master template library is HQ's store, read through `listTemplates`.
+ * A branch reads the copies HQ pushed, through the same readers the branch
+ * routes use.
+ *
+ * A READ OF THE BRANCH LICENCE CAN WRITE. The first read of a missing copy
+ * asks HQ and stores the answer (`applyLicenceCopy`). This is not a pure read
+ * on that path. Suspension still does not gate the route: a frozen branch
+ * can see the copy.
  *
  * No live branch exercised this. The reads run on whichever D1 this Worker
  * has, and the tests run them on node:sqlite.
  */
 import type { Env } from '../types';
 import { branchOf } from '../util/branch';
-import { branchHome, programmeBounds } from './branchHome';
+import {
+  agreementsExpiring,
+  branchHome,
+  programmeClock,
+  SHARE_AMOUNT_REASON,
+} from './branchHome';
 import { branchLicencePayload } from '../routes/licence';
+import { readBranchTemplateCopy } from '../routes/branch_templates';
+import { readBranchBenchmarks } from '../routes/branch_insights';
+import { listTemplates } from './legalTemplateStore';
 
 export const HQ_SEATS_REASON =
   'Seat use is a subsidiary figure. No account on HQ names the licence it sits under (U1), '
@@ -36,59 +58,37 @@ export const HQ_QUEUES_REASON =
   + 'in their own consoles, and summing the rows in HQ\'s tables would be a different board. '
   + 'No row names a licence (U1), so no per-subsidiary pressure is read here.';
 
-export const HQ_AGREEMENTS_REASON =
-  'Agreements that end inside the window are the subsidiary\'s own stores. HQ\'s database is '
-  + 'not that territory\'s ledger, and no agreement row names a licence (U1), so none are '
-  + 'counted here and none are shown as zero.';
-
 export const HQ_SHARE_REASON =
   'The share rate is a term on a subsidiary\'s licence. This studio is HQ, and no row names '
   + 'which licence it would be (U1), so no rate is read from the ledger and none is shown as zero.';
-
-export const HQ_PENDING_REASON =
-  'Accounts still pending this week are a subsidiary\'s. No cohort row on HQ names the licence '
-  + 'it belongs to (U1), so that count is not taken from this database and is not shown as zero.';
 
 export const HQ_LICENCE_REASON =
   'This studio is HQ. No row here names the licence whose host and brand kit would be shown (U1), '
   + 'so neither is read from the ledger and neither is shown as absent.';
 
+export const HQ_INSIGHTS_REASON =
+  'HQ pushes the median and keeps no copy.';
+
 const TEMPLATES_UNREADABLE =
   'The template library could not be read on this database. That is not the same as it being empty.';
 
-const BENCHMARKS_UNREADABLE =
-  'The benchmark copy could not be read on this database. That is not the same as HQ having published nothing.';
-
-const NEVER_PUSHED =
-  'HQ has not pushed its master library to this branch yet. The library lives at HQ and '
-  + 'travels on a push, so until then this branch has nothing to instantiate — which is a '
-  + 'different thing from HQ having no templates.';
+const LICENCE_UNREADABLE =
+  'The table this branch keeps its licence copy in could not be read, so this is not a claim that HQ has not pushed a licence.';
 
 type RecordedFalse = { recorded: false; reason: string };
 
-async function templateCopy(env: Env): Promise<
-  | { recorded: true; available: true; items: { slug: string }[]; pushed_at: string | null; never_pushed_reason?: string }
-  | { recorded: true; available: false; reason: string }
-> {
-  try {
-    const q = await env.DB.prepare(
-      `SELECT slug FROM branch_templates ORDER BY category, title`,
-    ).all<{ slug: string }>();
-    const sync = await env.DB.prepare(
-      'SELECT pushed_at FROM branch_templates_sync WHERE id = 1',
-    ).first<{ pushed_at: string }>();
-    const items = q.results || [];
-    return {
-      recorded: true,
-      available: true,
-      items,
-      pushed_at: sync?.pushed_at ?? null,
-      ...(sync ? {} : { never_pushed_reason: NEVER_PUSHED }),
-    };
-  } catch (e) {
-    console.error('[studio-glance] templates', (e as Error).message);
-    return { recorded: true, available: false, reason: TEMPLATES_UNREADABLE };
+async function templateCopy(env: Env) {
+  const copy = await readBranchTemplateCopy(env);
+  if (!copy.available) {
+    return { recorded: true as const, available: false as const, reason: copy.reason || TEMPLATES_UNREADABLE };
   }
+  return {
+    recorded: true as const,
+    available: true as const,
+    items: copy.items.map((row) => ({ slug: row.slug })),
+    pushed_at: copy.pushed_at,
+    ...(copy.never_pushed_reason ? { never_pushed_reason: copy.never_pushed_reason } : {}),
+  };
 }
 
 async function hqLibrary(env: Env): Promise<
@@ -96,10 +96,8 @@ async function hqLibrary(env: Env): Promise<
   | { recorded: true; available: false; reason: string }
 > {
   try {
-    const q = await env.DB.prepare(
-      `SELECT slug FROM legal_templates WHERE is_active = 1 ORDER BY category, title`,
-    ).all<{ slug: string }>();
-    const items = q.results || [];
+    const rows = await listTemplates(env);
+    const items = rows.map((row) => ({ slug: row.slug }));
     return {
       recorded: true,
       available: true,
@@ -115,79 +113,77 @@ async function hqLibrary(env: Env): Promise<
   }
 }
 
-async function benchmarksOf(env: Env): Promise<
-  | { recorded: true; benchmarks_available: true; benchmarks: unknown[] }
-  | { recorded: true; benchmarks_available: false; benchmarks_reason: string }
-> {
-  try {
-    const q = await env.DB.prepare(
-      `SELECT metric_key, label, median_value, unit, n_branches, period, pushed_at
-         FROM branch_benchmarks ORDER BY metric_key`,
-    ).all();
-    return { recorded: true, benchmarks_available: true, benchmarks: q.results || [] };
-  } catch (e) {
-    console.error('[studio-glance] benchmarks', (e as Error).message);
-    return { recorded: true, benchmarks_available: false, benchmarks_reason: BENCHMARKS_UNREADABLE };
-  }
-}
-
 function hqPerSubsidiary(): {
   seats: RecordedFalse;
   approvals: RecordedFalse;
-  agreements: RecordedFalse;
   revenue: RecordedFalse;
   licence: RecordedFalse;
 } {
   return {
     seats: { recorded: false, reason: HQ_SEATS_REASON },
     approvals: { recorded: false, reason: HQ_QUEUES_REASON },
-    agreements: { recorded: false, reason: HQ_AGREEMENTS_REASON },
     revenue: { recorded: false, reason: HQ_SHARE_REASON },
     licence: { recorded: false, reason: HQ_LICENCE_REASON },
   };
 }
 
 /**
- * HQ. The clock and the two HQ stores are read. The four per-subsidiary
- * figures are not, and `hqPerSubsidiary` is the whole of that refusal — a
- * query added beside it would be counting a table this tier must not treat
- * as a subsidiary's.
+ * Whether `branch_licence` can be read at all. A missing row and a missing
+ * table are different claims, and the licence payload words both as
+ * "not pushed" unless this probe separates them.
+ */
+async function branchLicenceTableReadable(env: Env): Promise<boolean> {
+  try {
+    await env.DB.prepare('SELECT id FROM branch_licence WHERE id = 1').first();
+    return true;
+  } catch (e) {
+    console.error('[studio-glance] branch_licence probe', (e as Error).message);
+    return false;
+  }
+}
+
+/**
+ * HQ. The clock, the pending-account count, the dated agreements and the
+ * master library are read. Seats, the lanes, the share rate and the licence
+ * summary are not. The benchmark copy is not: HQ pushes it and keeps none.
  */
 async function hqGlance(env: Env, now: number) {
-  const clock = programmeBounds(now);
-  const programme = clock.open_week === null
-    ? { recorded: true as const, ...clock }
-    : { recorded: true as const, ...clock, pending_accounts: null, reason: HQ_PENDING_REASON };
-  const [templates, insights] = await Promise.all([hqLibrary(env), benchmarksOf(env)]);
+  const [programme, agreements, templates] = await Promise.all([
+    programmeClock(env, now),
+    agreementsExpiring(env, now),
+    hqLibrary(env),
+  ]);
   return {
     tier: 'hq' as const,
     branch: null,
     ...hqPerSubsidiary(),
-    programme,
+    programme: { recorded: true as const, ...programme },
+    agreements: { recorded: true as const, ...agreements },
     templates,
-    insights,
+    insights: { recorded: false as const, reason: HQ_INSIGHTS_REASON },
   };
 }
 
 async function branchGlance(env: Env, code: string, now: number) {
   const [home, lic, templates, insights] = await Promise.all([
-    branchHome(env, now),
+    branchHome(env, now, { includeRevenue: false }),
     branchLicencePayload(env, code),
     templateCopy(env),
-    benchmarksOf(env),
+    readBranchBenchmarks(env),
   ]);
   const pushed = 'licence' in lic;
-  const seats = pushed
-    ? {
-      recorded: true as const,
+  let seats: Record<string, unknown>;
+  let licence: Record<string, unknown>;
+  let revenue: Record<string, unknown>;
+  if (pushed) {
+    seats = {
+      recorded: true,
       seats: lic.licence.seats,
       seats_used_by_type: lic.licence.seats_used_by_type,
       seats_used_basis: lic.licence.seats_used_basis,
-    }
-    : { recorded: false as const, reason: lic.message };
-  const licence = pushed
-    ? {
-      recorded: true as const,
+    };
+    licence = {
+      recorded: true,
       revenue_share_bps: lic.licence.revenue_share_bps,
       suspended_at: lic.licence.suspended_at,
       status: lic.licence.status,
@@ -196,11 +192,32 @@ async function branchGlance(env: Env, code: string, now: number) {
       domain_available: lic.licence.domain_available,
       domain_reason: lic.licence.domain_reason,
       brand_kit: null,
-      brand_kit_available: false as const,
+      brand_kit_available: false,
       brand_kit_reason:
         'The brand kit is held on the licence ledger at HQ and is not copied onto this branch.',
+    };
+    const bps = lic.licence.revenue_share_bps;
+    revenue = {
+      recorded: true,
+      share_bps: bps === null || bps === undefined ? null : Number(bps),
+      as_of: lic.as_of ?? null,
+      amount_cents: null,
+      reason: SHARE_AMOUNT_REASON,
+    };
+  } else {
+    const tableReadable = await branchLicenceTableReadable(env);
+    const pullReason = lic.pull?.reason;
+    if (!tableReadable) {
+      const reason = pullReason || LICENCE_UNREADABLE;
+      seats = { available: false, reason };
+      licence = { available: false, reason };
+      revenue = { available: false, reason };
+    } else {
+      seats = { recorded: false, reason: lic.message };
+      licence = { recorded: false, reason: lic.message, ...(pullReason ? { pull_reason: pullReason } : {}) };
+      revenue = { recorded: false, reason: lic.message };
     }
-    : { recorded: false as const, reason: lic.message };
+  }
   return {
     tier: 'branch' as const,
     branch: code,
@@ -208,10 +225,10 @@ async function branchGlance(env: Env, code: string, now: number) {
     approvals: { recorded: true as const, lanes: home.queue_pressure },
     programme: { recorded: true as const, ...home.programme },
     agreements: { recorded: true as const, ...home.agreements },
-    revenue: { recorded: true as const, ...home.revenue },
+    revenue,
     licence,
     templates,
-    insights,
+    insights: { recorded: true as const, ...insights },
   };
 }
 

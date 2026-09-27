@@ -163,7 +163,6 @@ const env = (db: any): any => ({ JWT_SECRET, ENVIRONMENT: 'development', DB: mak
 type Who = { user: number; role: string };
 const author = { user: AUTHOR, role: 'investor' };
 const colleague = { user: COLLEAGUE, role: 'investor' };
-const admin = { user: ADMIN, role: 'admin' };
 
 async function call(
   who: Who,

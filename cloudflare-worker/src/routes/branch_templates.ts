@@ -40,46 +40,65 @@ type TemplateRow = {
   slug: string; title: string; category: string | null; version: number; pushed_at: string;
 };
 
+export const BRANCH_LIBRARY_NEVER_PUSHED =
+  'HQ has not pushed its master library to this branch yet. The library lives at HQ and '
+  + 'travels on a push, so until then this branch has nothing to instantiate — which is a '
+  + 'different thing from HQ having no templates.';
+
+const BRANCH_LIBRARY_UNREADABLE =
+  'The template copy could not be read on this database (migration 268). That is not the '
+  + 'same as HQ having pushed nothing.';
+
+/** The copy HQ pushed, or `available: false` when the table could not be read. */
+export async function readBranchTemplateCopy(env: Env): Promise<
+  | {
+    available: true;
+    items: TemplateRow[];
+    pushed_at: string | null;
+    never_pushed_reason?: string;
+  }
+  | { available: false; items: []; pushed_at: null; reason: string }
+> {
+  try {
+    const q = await env.DB.prepare(
+      `SELECT slug, title, category, version, pushed_at
+         FROM branch_templates ORDER BY category, title`,
+    ).all<TemplateRow>();
+    const sync = await env.DB.prepare(
+      'SELECT pushed_at, count FROM branch_templates_sync WHERE id = 1',
+    ).first<{ pushed_at: string; count: number }>();
+    const items = q.results || [];
+    return {
+      available: true,
+      items,
+      pushed_at: sync?.pushed_at ?? null,
+      ...(sync ? {} : { never_pushed_reason: BRANCH_LIBRARY_NEVER_PUSHED }),
+    };
+  } catch (e) {
+    console.error('[branch-templates] library', (e as Error).message);
+    return { available: false, items: [], pushed_at: null, reason: BRANCH_LIBRARY_UNREADABLE };
+  }
+}
+
 // GET /api/branch/templates
 r.get('/templates', async (c) => {
   try {
     await requireAdmin(c);
     const branch = requireBranchTier(c.env);
 
-    let items: TemplateRow[] = [];
-    let sync: { pushed_at: string; count: number } | null = null;
-    let available = true;
-    let reason: string | null = null;
-    try {
-      const q = await c.env.DB.prepare(
-        `SELECT slug, title, category, version, pushed_at
-           FROM branch_templates ORDER BY category, title`,
-      ).all<TemplateRow>();
-      items = q.results || [];
-      sync = await c.env.DB.prepare(
-        'SELECT pushed_at, count FROM branch_templates_sync WHERE id = 1',
-      ).first<{ pushed_at: string; count: number }>();
-    } catch (e) {
-      available = false;
-      reason =
-        'The template copy could not be read on this database (migration 268). That is not the '
-        + `same as HQ having pushed nothing: ${(e as Error)?.message || 'the table is missing'}.`;
-    }
+    const copy = await readBranchTemplateCopy(c.env);
 
     return c.json({
       branch,
-      items,
-      available,
-      ...(reason ? { reason } : {}),
+      items: copy.items,
+      available: copy.available,
+      ...(copy.available ? {} : { reason: copy.reason }),
       // HQ's stamp, never this database's write time, so "as of" never gets
       // younger than the push it reports (migration 256's rule).
-      pushed_at: sync?.pushed_at ?? null,
-      ...(available && !sync ? {
-        never_pushed_reason:
-          'HQ has not pushed its master library to this branch yet. The library lives at HQ and '
-          + 'travels on a push, so until then this branch has nothing to instantiate — which is a '
-          + 'different thing from HQ having no templates.',
-      } : {}),
+      pushed_at: copy.pushed_at,
+      ...(copy.available && copy.never_pushed_reason
+        ? { never_pushed_reason: copy.never_pushed_reason }
+        : {}),
       // WHAT THE COPY DELIBERATELY DOES NOT CARRY, named on the payload rather
       // than written into the page, so the reason travels with the absence.
       not_carried: [

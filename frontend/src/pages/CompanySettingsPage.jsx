@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useActiveCompany } from '../contexts/ActiveCompanyContext';
+import { useAuth } from '../hooks/useAuthSync';
+import PartnerFirmProfileCard from './partner/PartnerFirmProfileCard';
 import { api, setActiveCompanyId } from '../lib/api';
 import { bpsPercent } from '../lib/bps';
 import { safeReadJSON } from '../lib/storage';
@@ -161,15 +163,43 @@ function useFlash() {
 
 // ---------- Page -------------------------------------------------------------
 
+/**
+ * D395 — THE FIRM'S PARTNER PROFILE, for partner sign-ins only, ABOVE the
+ * no-company gate. `/partner/operations/overview` was the only place a service
+ * partner could edit the firm's name, company and specialisation, switch
+ * founder introductions, and read the partner agreement; it retired into this
+ * page (the owner's decision: Firm Settings, with the card widened, D390).
+ * The card edits the `partners` row, keyed by the sign-in's partner id and not
+ * by any company membership, so a partner with no company still reaches it —
+ * which is why it sits outside the `if (!activeCompany)` return rather than
+ * below it. The card names its own store; this page only decides who sees it.
+ */
+export function FirmProfileMount({ role }) {
+  if (role !== 'partner') return null;
+  return (
+    <div className="max-w-3xl px-6 pt-6 mx-auto" data-testid="firm-profile-mount">
+      <PartnerFirmProfileCard />
+    </div>
+  );
+}
+
 export default function CompanySettingsPage() {
   const { company: activeCompany } = useActiveCompany();
+  const { user } = useAuth();
   const [toast, flash] = useFlash();
 
   if (!activeCompany) {
-    return <CompanyOnRamp flash={flash} toast={toast} />;
+    return (
+      <>
+        <FirmProfileMount role={user?.role} />
+        <CompanyOnRamp flash={flash} toast={toast} />
+      </>
+    );
   }
 
   return (
+    <>
+    <FirmProfileMount role={user?.role} />
     <div className="max-w-3xl p-6 mx-auto space-y-6" data-testid="company-settings-page">
       <CompanyHeader company={activeCompany} />
 
@@ -177,6 +207,7 @@ export default function CompanySettingsPage() {
 
       <CompanyProfileCard uid={activeCompany.uid} flash={flash} />
     </div>
+    </>
   );
 }
 
