@@ -355,37 +355,15 @@ r.get('/companies', async (c) => {
 });
 
 // Members
-r.post('/company/:uid/members', async (c) => {
-  try {
-    const user = await requireAuth(c);
-    const company = await getCompanyOr404(c.env, c.req.param('uid'));
-    if (!company) return c.json({ detail: 'Company not found' }, 404);
-    if (!(await canEdit(c.env, company, user))) return c.json({ detail: 'Not authorized to manage members' }, 403);
-    const body = await c.req.json().catch(() => ({} as any));
-    let target: any = null;
-    if (body.user_id) {
-      target = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(Number(body.user_id)).first();
-    } else if (body.email) {
-      target = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(String(body.email)).first();
-    }
-    if (!target) return c.json({ detail: 'User not found (provide user_id or registered email)' }, 404);
-    if (await getLink(c.env, company.id, target.id)) {
-      return c.json({ detail: 'User is already a member of this company' }, 409);
-    }
-    if (body.is_primary_admin && !isAdmin(user)) {
-      const my = await getLink(c.env, company.id, user.id);
-      if (!(my && my.is_primary_admin)) {
-        return c.json({ detail: 'Only the primary admin can grant primary admin status' }, 403);
-      }
-    }
-    await c.env.DB.prepare(
-      `INSERT INTO user_company_links (uid, company_id, user_id, role_in_company, is_primary_admin, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).bind(newUid(), company.id, target.id,
-           String(body.role_in_company || 'Member'), body.is_primary_admin ? 1 : 0, nowIso()).run();
-    return c.json(await detailDto(c.env, company, user));
-  } catch (e) { return mapError(c, e); }
-});
+//
+// POST /company/:uid/members IS GONE (D434). It joined an EXISTING account to
+// the company on an editor's say-so — no invitation, no consent, and a 404
+// for anyone who had never signed up. Task #121 built the invitation the
+// invitee accepts (POST /company/:uid/invitations and the accept below); the
+// one page that still called the direct add (CompanyProfilePanel's "Add team
+// member") now points at Company Settings, so nothing in the tree called this
+// route and it is retired on D304's rule with its client method. Role change
+// and removal below are unchanged.
 
 // Wave 2 — change a member's role, or move primary-admin status.
 //
