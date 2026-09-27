@@ -267,13 +267,14 @@ export const INVESTOR_ZONE_FILTERS = {
 
   // `Blocking` went live with D461: a blocking item is a Commit condition, and
   // `ic_conditions` (migration 334) is the store the hand-off runs on — the
-  // chip narrows to the deals at closing with an open condition. `Wires` keeps
-  // its reason until item 3 builds the transfer record.
+  // chip narrows to the deals at closing with an open condition. `Wires` went
+  // live with D462: `deal_transfers` (migration 335) records a transfer out to
+  // a company — the direction `capital_calls` never covered.
   'deals/closing': [
     { canvas: 'This close', key: 'close', label: 'This close {n}' },
     { canvas: 'Blocking', key: 'blocking', label: 'Blocking {n}' },
     { canvas: 'Documents', key: 'documents', label: 'Documents {n}' },
-    { canvas: 'Wires', unbuilt: 'no transfer out to a company is recorded — capital_calls is an LP paying into the fund', hover: 'No transfer out to a company is recorded; what the fund records is capital coming in from an LP.' },
+    { canvas: 'Wires', key: 'wires', label: 'Wires {n}' },
   ],
 
   // `Conditions` and `Minutes` went live with D461: conditions are their own

@@ -98,16 +98,15 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Close vote', kind: 'handler', handler: 'closeVote' },
   ],
   'deals/closing': [
-    // WAS: 'no closing templates are stored'. False — legal_templates ships the
-    // SAFE, stock-purchase and subscription agreements with merge fields and
-    // versions. The gap is one layer above them: nothing stores a closing
-    // CHECKLIST for a template to be applied to.
-    { label: 'Apply template', unbuilt: 'the SAFE, stock-purchase and subscription templates are stored; what is missing is a closing checklist for one to be applied to', hover: 'The templates are stored; what is missing is a closing checklist to apply one to.' },
-    { label: 'Export packet', unbuilt: 'the documents and signature envelopes are stored, but nothing assembles them into a packet' },
-    // WAS: 'wires are not a stored record'. True, and imprecise enough to cost
-    // the next reader a lookup — capital_calls DOES carry an amount and a paid
-    // date. It is the other direction.
-    { label: 'Record wire', unbuilt: 'no transfer OUT to a company is recorded; capital_calls is an LP paying into the fund, which is the other direction', hover: 'No transfer out to a company is recorded; what the fund records is capital coming in from an LP.' },
+    // ALL THREE WENT LIVE WITH D462 (migration 335). The checklist store is
+    // what the closing templates were always waiting on; the packet is the
+    // index of executed envelopes the page already reads; and deal_transfers
+    // records the wire OUT — the direction capital_calls never covered. An
+    // open Commit condition refuses the transfer (409), which is the
+    // conditions store doing its job.
+    { label: 'Apply template', kind: 'handler', handler: 'applyTemplate' },
+    { label: 'Export packet', kind: 'handler', handler: 'exportPacket' },
+    { label: 'Record wire', kind: 'handler', handler: 'recordWire' },
   ],
 
   // ── Fund ─────────────────────────────────────────────────────────────────
