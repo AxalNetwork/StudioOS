@@ -67,7 +67,7 @@ import { planImport } from '../services/metricsCsv';
 import { weekStartOf, weekWindows, type MoveRow } from '../services/okrWeeks';
 import { summarise as summariseSaasMetrics, sparkline as saasSparkline, type Snapshot as SaasSnapshot } from '../services/saasMetrics';
 import { bindingKey } from '../util/schemaBootstrap';
-import { refusalBody } from '../util/refusal';
+import { refuse, refusalBody } from '../util/refusal';
 
 const progress = new Hono<{ Bindings: Env }>();
 
@@ -1930,14 +1930,25 @@ progress.get('/metrics/:projectId', async (c) => {
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
   await ensureProjectMetricsSchema(c.env);
-  let items: SerializedSnap[] = [];
+  let items: SerializedSnap[];
   try {
     const rows = await c.env.DB.prepare(
       `SELECT * FROM project_metrics WHERE project_id = ? ORDER BY snapshot_date DESC, id DESC LIMIT 200`,
     ).bind(projectId).all<MetricsSnapshot>();
     items = (rows.results || []).map(serializeSnap);
   } catch (e) {
-    console.error('[progress] metrics GET:', (e as Error).message);
+    // D365 — A FAILED READ IS NOT AN EMPTY LOG. This caught the error and
+    // answered 200 with `[]`, so the Lab Revenue page drew "no snapshots
+    // logged", Use of Funds read its burn as never recorded, and the KPI
+    // ledger and Grow desk counted nothing — each a claim about data nobody
+    // read. Every caller already handles a rejected read (Unreadable, an
+    // error banner, or a card that drops out), so the refusal reaches the
+    // person as what it is. SQLite's text is logged, never returned.
+    return refuse(c, 500, {
+      code: 'metrics_read_failed',
+      message: 'Your metric snapshots could not be read. This is not a claim that none are recorded; try again in a moment.',
+      raw: e,
+    });
   }
   // Frontend reads `snapshots` (MetricsPage) AND `items` (other consumers).
   return c.json({ items, snapshots: items });
