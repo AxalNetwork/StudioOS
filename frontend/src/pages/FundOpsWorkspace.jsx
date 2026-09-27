@@ -14,6 +14,7 @@ import { useLocation } from 'react-router-dom';
 import { Banknote, Calculator, FileBarChart, Landmark, PhoneCall, RefreshCw, Rocket, TrendingUp } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
+import { Unreadable } from '../ui';
 import WorkspaceTabs, { WorkspaceHeader } from '../components/WorkspaceTabs';
 import LockedPreview from '../components/LockedPreview';
 import { AdminFundsView } from './FundsPage';
@@ -40,6 +41,9 @@ const callDollars = (cc) => {
   return null;
 };
 
+/** A read that failed — distinct from an empty ledger, which is a fact. */
+const UNREADABLE_ROWS = 'unreadable';
+
 function CapitalCallsPanel({ isAdmin }) {
   const [rows, setRows] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -47,14 +51,19 @@ function CapitalCallsPanel({ isAdmin }) {
   const load = () => {
     setBusy(true);
     // Admins get the studio-wide capital-call ledger; investors are scoped to
-    // their own commitments via the same LP-portal source My LP Portal uses —
-    // never the global /legalcap list, which is not filtered per-LP.
+    // their own commitments via the same LP-portal source My LP Portal uses.
+    //
+    // D370: the admin ledger is `listCapitalCalls` (capital.ts GET /calls,
+    // the live `capital_calls` table). It read `api.capitalCalls`, whose
+    // /legalcap route named columns the table does not have, so it threw on
+    // every call and this panel said "No capital calls on record" for a
+    // ledger it had never read. A failed read now says so.
     const source = isAdmin
-      ? api.capitalCalls().then((r) => (Array.isArray(r) ? r : []))
-      : api.fundsLpPortal().then((d) => (Array.isArray(d) ? d : d?.capital_calls || []));
+      ? api.listCapitalCalls()
+      : api.fundsLpPortal().then((d) => (Array.isArray(d) ? d : d?.capital_calls));
     source
-      .then((r) => setRows(Array.isArray(r) ? r : []))
-      .catch(() => setRows([]))
+      .then((r) => setRows(Array.isArray(r) ? r : UNREADABLE_ROWS))
+      .catch(() => setRows(UNREADABLE_ROWS))
       .finally(() => setBusy(false));
   };
   useEffect(() => { load(); }, []);
@@ -63,7 +72,7 @@ function CapitalCallsPanel({ isAdmin }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-          Capital calls ({rows?.length ?? 0})
+          Capital calls{Array.isArray(rows) ? ` (${rows.length})` : ''}
         </div>
         <button
           onClick={load}
@@ -76,6 +85,14 @@ function CapitalCallsPanel({ isAdmin }) {
 
       {rows == null ? (
         <div className="text-gray-500 dark:text-gray-400 text-center py-16 text-sm">Loading…</div>
+      ) : rows === UNREADABLE_ROWS ? (
+        <div className="py-10">
+          <Unreadable
+            what="The capital-call ledger"
+            claim="This is not a claim that no calls exist."
+            onRetry={load}
+          />
+        </div>
       ) : rows.length === 0 ? (
         <div className="text-gray-500 dark:text-gray-400 text-center py-16 text-sm">
           No capital calls on record. Calls issued against your LP commitments appear here.

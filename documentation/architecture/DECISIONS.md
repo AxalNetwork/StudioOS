@@ -32385,6 +32385,160 @@ Mutation-checked both ways: 8 of 8 caught, each with a non-zero exit and a
 `not ok` line, and the file was restored and checked by sha256. The first
 mutation is the original swallow, so the test fails on the code as it was.
 
+## D370
+
+**LP money moves only when the fund's general partner of record records it,
+and fund figures stop reaching roles with no stake in the fund (Session 9,
+item 1).** No migration, no new route, no new `api.js` method.
+
+**The five defects, measured on `bef2ee7ea`.**
+
+1. **An LP could mark their own capital call paid.** `POST
+   /api/capital/calls/:id/pay` let the LP who owned a call record it paid,
+   which adds the call's amount to `limited_partners.invested_amount` and
+   `vc_funds.deployed_capital`. The handler read the call's status, then ran
+   three separate, unconditional UPDATEs. Two presses in flight both passed
+   the read and both credited: 1000 invested on a 500 call.
+2. **Fund money was visible to every signed-in role.** `GET /funds`,
+   `GET /funds/analytics`, `GET /funds/:id` and `GET /funds/:id/analytics`
+   checked only `requireAuth`. The list returned `SELECT *`, so a founder
+   could read every fund's size, deployed capital and GP email.
+   `GET /funds/syndication` listed queued capital calls, amounts included,
+   for every fund.
+3. **Any investor could overwrite any fund's reserve plan.** `PUT
+   /api/fund-sim/funds/:id/reserves` and `POST …/scenarios` checked only
+   "admin or investor".
+4. **An LPA was drafted for a fund with no GP of record.** `POST /funds`
+   queued `lpa_generation` unconditionally, including for an admin-created
+   fund whose `gp_user_id` is unset. The queue job then drafted the
+   agreement with nobody's name behind it.
+5. **The capital-call ledger read a dead table shape.** `GET
+   /legalcap/capital/calls` named `deal_id`, `syndicate_id` and
+   `lp_responses`, which the production `capital_calls` does not have. It
+   threw on every call, and `api.capitalCalls` swallowed the throw into
+   `[]`. The admin panel in `FundOpsWorkspace` and the fund page in
+   `InvestorFundLanding` therefore showed "no capital calls" for ledgers
+   they had never read.
+
+**The rulings.**
+
+- **Recording a payment is the GP's.** Only the fund's GP of record or an
+  admin may call `pay`.
+  - The LP who owns the call gets `403 gp_records_payment` with our
+    sentence. They already know the call exists, so there is nothing to
+    hide.
+  - Anyone else gets the same `404` as a call that does not exist. That is
+    decided *before* the fund gate: its tier check answers `402` whatever
+    the fund, so reaching it first would answer 402 for a call that exists
+    and 404 for one that does not, which counts the platform's calls. The
+    first run of the new test caught exactly that.
+  - The GP of record then passes the one gate every GP control uses,
+    `requireFundGp` (tier, ownership, company).
+- **Once, even under concurrency.** The two credits and the status flip are
+  one D1 batch, which D1 runs as one transaction. Every statement is
+  conditional on the call still being unpaid: the credits test it in their
+  own `WHERE`, and the flip comes last. The amount is read inside each
+  statement, not carried from the earlier SELECT. A second press, whether
+  concurrent or later, changes nothing and answers `already_paid: true`.
+- **`GET /capital/calls` gains the GP-of-record arm and `fund_id`.** A GP
+  asking "what has my fund called?" got only the calls on their own LP rows.
+  - Each row now also carries `can_record`, which says whether this caller
+    may record it. `CapitalPage` offers "Mark Paid" only on those rows, and
+    shows "Awaiting the GP's receipt" on the rest.
+  - The GP's user id is not returned.
+- **The fund reads are scoped by role.** Both arms are the shared predicates
+  (`fundGpScope`, `lpMembershipScope`), so this adds no third definition of
+  "your fund".
+  - `GET /funds`: an admin sees every fund; anyone else sees the funds they
+    are GP of record for, or hold an LP position in.
+  - `GET /funds/analytics`: the funds the caller runs (all, for an admin).
+  - `GET /funds/:id` and `/:id/analytics`: `requireFundGp`. An LP's view of
+    a fund is `/lp-portal`.
+  - `GET /funds/syndication`: investors, partners and admins; anyone else
+    gets `403 investor_access_required`. Pending calls are limited to the
+    funds the caller runs.
+  - None of these is narrowed by the **active company**.
+    `funds_company_scope`'s regression guard pins that, re-aimed from "stay
+    platform-wide", which was no longer true.
+- **The fund-simulator writes are the GP's.** `PUT reserves` and `POST
+  scenarios` go through `requireFundGp`. The reads and the two pure
+  simulations keep their previous gate: found, not changed here (see below).
+- **No GP of record, no LPA** (the Fabric canvas's F10 rule). `POST /funds`
+  answers `lpa_status: 'blocked_no_gp'` with the reason, instead of
+  queueing. `regenerate-lpa` refuses with `409 no_gp_of_record` before it
+  clears the LPA on file. The queue job re-checks the rule where the
+  document is written, as a no-op rather than a throw, because a retry
+  cannot name a GP.
+- **The dead read is swapped, and fixed with a scope.**
+  - `FundOpsWorkspace` and `InvestorFundLanding` read `listCapitalCalls`,
+    the live ledger.
+  - The `legalcap` route (Session 9's lines) now reads the real columns,
+    scoped exactly like the ledger. Fixed without that scope, it would have
+    handed every investor every LP's calls on the platform. It claims LP
+    rows by email like every other route that grants by email.
+  - `api.capitalCalls` no longer swallows a failure into `[]`.
+    `FundOpsWorkspace`'s panel renders `Unreadable` with a retry, and its
+    count is drawn only from a real list. `LegalCapitalPage` is its
+    remaining caller, and not Session 9's.
+
+**The test database now keeps D1's batch guarantee.** `_d1_sqlite.mjs`'s
+`batch()` awaited each statement in turn, so two batches in flight
+interleaved statement by statement, which is looser than D1. It now runs
+the statements synchronously inside a savepoint and rolls back on failure.
+The 1,792 existing tests that touch it still pass.
+
+**Found, not changed here:**
+- The fund simulator's reads (`GET reserves`, the two `simulate` routes, `GET
+  scenarios`) still answer any investor for any fund id. The allocations
+  are not money movement, but they are another fund's plan.
+- `LegalCapitalPage`'s CapitalTab reads a syndicate-call model
+  (`amount_cents`, `lp_responses`, `deal_id`) whose writer
+  (`legalcap.ts` POST `/capital/call`) also targets columns the table does
+  not have. That whole engine is inert. Neither file's lines are
+  Session 9's.
+
+**Verification.**
+- New file `lp_money_authz_d370.test.ts`, 20 tests on node:sqlite. Every
+  gate is asserted from the refused role's side (the refusal, and nothing
+  moved) and the permitted role's side:
+  - the list for an admin, a GP, another GP, an LP, a founder and a
+    partner;
+  - the family and per-fund analytics;
+  - the detail;
+  - syndication for a founder, an LP, a GP and an admin;
+  - LPA create for an admin and a GP, regenerate, and the queue job;
+  - the two simulator writes for an LP, another GP, the GP and an admin;
+  - the legacy read's shape and scope;
+  - the frontend swap;
+  - the test database's batch atomicity and rollback.
+- `capital.test.ts`:
+  - The fixture gains production's `gp_user_id`, `company_id` and tier
+    columns.
+  - "an investor can pay a call that belongs to their own LP (200)" is
+    re-aimed to "the LP who owns a call cannot record it paid (403, nothing
+    moves)". That permission was the defect.
+  - New tests: the GP records a payment; a GP of another fund gets 404 and
+    nothing moves; **two concurrent presses credit the call once**; a second
+    press moves nothing; the GP sees every call on their fund.
+- Mutations: 25 run, 25 caught, after one escape was fixed in the tests.
+  - Reverting the test database's `batch` to the interleaving version
+    failed nothing at first, because the pay tests' race happens at the
+    status read, not inside a batch. The atomicity test above now pins it.
+  - Restoring the pre-D370 pay logic (a status read, then three
+    unconditional writes) fails "two concurrent presses credit the call
+    once".
+  - The rest: the LP's 403 branch removed; the outsider reaching the fund
+    gate (the oracle); each credit and the flip made unconditional; LP
+    self-recording restored; the calls read's GP arm dropped; the list
+    unscoped, and its LP arm dropped; the analytics unscoped; the detail and
+    per-fund analytics gates removed; a founder admitted to syndication; the
+    pending calls unscoped; the LPA queued without a GP; the regenerate
+    guard removed; the queue job's guard removed (it fails on the
+    assertion that an LPA was written); both simulator gates reverted; the
+    legacy read fixed without its scope; `api.capitalCalls`'s swallow
+    restored; the dead read restored on the page; the test database's
+    rollback removed.
+
 ## D380
 
 **The Spin-Out Lab honesty sweep: the seat count reads `/brief`'s `places`,
