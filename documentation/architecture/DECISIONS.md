@@ -31939,6 +31939,104 @@ the project's self-reported proof fields, and its header said the ledger was
   - It was re-aimed at the real defect, the INSERT writing the proof id, and
     that version is caught.
 
+## D364
+
+**Stores that already existed, now on the Lab's Capital, Cap Table and Pitch
+Deck pages.** Wave 8, Session 8, item 5. No migration and no new API: every
+call below is an `api.js` method with a Worker route that has shipped for
+months.
+
+**The gap.** Each of these was built on the Worker and never read by the Lab:
+- The pro-rata list (migration 169, `GET /contacts/raise-pro-rata`), with the
+  Worker's own entitlement arithmetic.
+- SAFE caps and discounts on the cap-table scenario, while Capital's
+  Instrument, Valuation cap and Discount tiles said "Not set".
+- `GET /captable/equity-plan`, the Carta-synced option pools and vesting
+  grants (migration 057).
+- `POST /captable/scenarios/:uid/share`, audience-scoped cap-table links
+  that redact on the server.
+- Deck share view counts (`GET /decks/:id/engagement`). The Lab share sheet
+  also never said that its links open once and last at most 30 days.
+
+**What changed.**
+- **Capital** (`lib/capitalRoundTerms.js`):
+  - Instrument, Valuation cap and Discount are read from the outstanding
+    SAFEs and notes on the cap-table scenario the page already loads for the
+    data room. Each tile says how many instruments carry the term (for
+    example "$5M–$8M · all 2"). The note under the tiles says these are
+    instruments already outstanding, not the terms of this round, which
+    nothing records.
+  - Discount is stored as a fraction and shown as a percent.
+  - Pro-rata rights reads the round's pro-rata list: a tile (holders, taking,
+    waived) and a read-only card of each holder's prior stake, the Worker's
+    entitlement, what they are taking and their decision.
+  - The card states the Worker's reconciliation rule (raw, fits or scaled).
+  - A round with no target prints no entitlement, because the Worker computes
+    entitlements against `target_amount || 0` and would show every one as $0.
+  - Offers and decisions stay in the founder Capital workspace, which the
+    card links to.
+  - A failed read of either store is a new "Couldn't read" provenance, never
+    "Not set". The pro-rata card on a failed read is `Unreadable`, never "no
+    holders".
+- **Cap Table**:
+  - `EquityPlanCard.jsx` shows the account's Carta pools (authorized, issued,
+    available) and grants, with vested counts as Carta reported them and the
+    date each row was written.
+  - The card says the data is per account, not per startup.
+  - Nothing recorded renders `Unrecorded` ("Only a Carta sync records option
+    pools and vesting grants") and points to the Co-founder Agreement.
+  - A 404 (dev) hides the card; any other failure is `Unreadable`.
+- **Cap Table share** (`CapTableShareModal.jsx`, `lib/capTableShare.js`):
+  - The founder chooses an audience and sees what it shows and hides before
+    anything is minted. Those lines are the Worker's `AUDIENCE_SCOPE` word
+    for word, and a test compares them.
+  - The link lasts 1–90 days and opens 1–500 times. These are the Worker's
+    bounds, sent as the founder typed them.
+  - **Consent:** an investor or full link shows named people's positions to
+    whoever holds it. The Create button stays off until the founder confirms
+    those people agreed, and `shareRequest` refuses anything but a real
+    `true`. A summary link names nobody and needs no confirmation.
+  - The link is shown once (only its hash is stored), and the sheet says so.
+  - Issued links list the Worker's view counts and can be revoked while live.
+  - The Share button follows `canEdit`, because the Worker requires scenario
+    write access to mint.
+- **Pitch Deck** (`lib/deckShareViews.js`):
+  - The share sheet states the link's view limit from the Worker's answer.
+    The Lab asks for none, so a link opens once, and the sheet says a
+    forwarded or scanner-previewed link will not open again.
+  - The sheet says no link lasts past 30 days. The Worker caps
+    `expires_in_hours` at 24 × 30, which is why the design's "Never" is not
+    offered.
+  - A new card lists each link's views, limit, last view and state (live,
+    used up, expired, withdrawn) for the current deck version.
+  - The card reads the version list without `ensureDeck`, which can write.
+  - A total at the Worker's 200-row read cap shows as "200+".
+  - A failed read is `Unreadable`, never "no views".
+
+**Found and filed, not fixed here.**
+- `GET /captable/equity-plan` turns a failed SELECT into an empty list
+  (`.catch(() => ({ results: [] }))`). "No pools or grants recorded" can
+  therefore hide a failed read. The fix is the Worker's: return a 500.
+- `GET /contacts/raise-pro-rata` computes with `Number(target_amount) || 0`
+  and `Number(prior_stake_pct) || 0`. The page works around the first (no
+  target, no entitlement shown); the Worker should return null
+  entitlements.
+- The Lab deck sheet's expiry buttons each mint a new link and leave the
+  previous one live. The views card now shows them, but the sheet should
+  revoke or reuse the previous link.
+- The deck sheet's Copy button reports "Copied" even when the clipboard is
+  blocked. The new Cap Table sheet does not do this.
+- `normalizeInputs` on the Cap Table page still turns a missing SAFE amount
+  or founder share count into 0 (`?? 0`). That predates D360 and feeds the
+  engine, not a displayed figure.
+
+**Guards.** `frontend/test/spinout_existing_stores_d364.test.mjs` (10 tests)
+reads the Worker source for:
+- every rule it copies: the audience lines, the 168-hour, 90-day, 25-open
+  and 500-open bounds, the deck's `view_limit || 1` and 24 × 30 cap, and
+  the engagement query's `LIMIT 200`;
+- the Share button's write gate.
+
 ## D380
 
 **The Spin-Out Lab honesty sweep: the seat count reads `/brief`'s `places`,

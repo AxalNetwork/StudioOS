@@ -10,6 +10,8 @@ they share lives here, so a tool page and its admin preview draw the same thing.
 | `LabPageHeader.jsx` | The one tool-page header. |
 | `LabPageIcon.jsx` | The violet icon tile in that header. |
 | `RevenueLedger.jsx` | The Revenue page's per-customer entry ledger (D363): filters, investor view, manual entry, CSV import with column mapping, proof attachment, mix and confidence, over `/api/revenue`. Sums are integer cents via `../../lib/revenueLedger.js`. |
+| `CapTableShareModal.jsx` | The Cap Table page's share sheet (D364) over `/api/captable/scenarios/:uid/share`: audience, what it sees and hides (before minting), days and opens, the named holders' consent for an investor or full link, the one-time link, and the issued links with their view counts and revoke. Rules in `../../lib/capTableShare.js`. |
+| `EquityPlanCard.jsx` | The Cap Table page's option pools and vesting grants (D364) from `/api/captable/equity-plan` — the account's Carta sync, shown as Carta reported it; nothing recorded is Unrecorded with where the terms live instead. |
 | `LabBackLink.jsx` | "← Back to Workspace", the Lab's return control. |
 | `labStyles.js` | The shared status chip and quick-action button classes. |
 | `LabIntro.jsx` | The programme introduction, on both `/spinout-lab` surfaces. |
