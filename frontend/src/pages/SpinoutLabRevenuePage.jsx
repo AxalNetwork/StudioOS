@@ -1,11 +1,14 @@
 // Spin-Out Lab — Revenue (Week 3 tool page).
 //
 // Design handoff: attached_assets/Revenue.dc_*.html (same file ships in the
-// StudioOS repo under spin-out-lab-pipeline/project). The design's fabricated
-// content — per-customer entry ledger, "verified revenue %", proof vault
-// documents, revenue-mix confidence bars, investor-preview toggle — has NO
-// backend in either runtime and is intentionally NOT reproduced. Everything
-// here is live data:
+// StudioOS repo under spin-out-lab-pipeline/project). Everything here is live
+// data:
+//   - Entry ledger (D363, migration 311): the design's per-customer ledger —
+//     five filters, investor view, manual entry, CSV import with column
+//     mapping, proof attachment, mix and confidence bars — lives in
+//     components/spinout/RevenueLedger.jsx over /api/revenue. Money is integer
+//     cents; verification is the Worker's. "Verified revenue" reads Not
+//     recorded: it means Stripe-synced charges, and no charge sync exists.
 //   - Revenue log: real metric snapshots — the Worker's `project_metrics`
 //     table (migration 249; GET/POST /progress/metrics/:projectId) — with
 //     source badges (stripe/manual), manual logging, and deletion. The
@@ -36,6 +39,7 @@ import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
+import RevenueLedger from '../components/spinout/RevenueLedger';
 import { reportError } from '../lib/log';
 import { Unreadable, Unrecorded } from '../ui';
 
@@ -422,6 +426,9 @@ export default function SpinoutLabRevenuePage() {
           </div>
         ))}
       </div>
+
+      {/* D363 — the per-customer entry ledger. */}
+      <RevenueLedger project={project} canEdit={canEdit} />
 
       {/* Add a revenue source */}
       <div>
