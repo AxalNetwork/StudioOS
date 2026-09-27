@@ -24,7 +24,7 @@ import { Search, Trash2, Database } from 'lucide-react';
 import { api } from '../lib/api';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
-import { StatusBadge, WeekBadge } from '../pages/Dashboard';
+import { StatusBadge, WeekBadge } from './StatusBadges';
 import VirtualList from './VirtualList';
 import { useToast } from './useToast';
 import EmptyState from './EmptyState';
