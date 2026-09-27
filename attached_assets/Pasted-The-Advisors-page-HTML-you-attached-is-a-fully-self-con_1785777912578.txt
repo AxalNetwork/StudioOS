@@ -54,6 +54,6 @@ This means whoever integrated this into the live Studio app **added the `isAdmin
 - Role-gated actions are actually gated by the corrected `isAdmin` value.
 
 Sources
-[1] Advisors.dc.html https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/515796799/9194bb29-625d-44ef-bcc1-34d0cc3546ed/Advisors.dc.html?[expired signed-URL credentials removed; the link expired 2026-08-03]
+[1] Advisors.dc.html https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/515796799/9194bb29-625d-44ef-bcc1-34d0cc3546ed/Advisors.dc.html
 [2] Screenshot-2026-08-03-at-7.21.33-PM.jpeg https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/515796799/e2a88abb-8a2b-43a4-a0e1-9d3d065ff25a/Screenshot-2026-08-03-at-7.21.33-PM.jpeg
 [3] Screenshot-2026-08-03-at-7.21.09-PM.jpeg https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/515796799/8b200cf6-ba65-4316-88de-13e27958a560/Screenshot-2026-08-03-at-7.21.09-PM.jpeg
