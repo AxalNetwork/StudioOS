@@ -1,4 +1,4 @@
-import { count, summary, title, top, usd } from './format.js';
+import { count, summary, title, top, usd, total } from './format.js';
 import { DEAL_STAGE_LABEL, dealStage } from '../../lib/dealFlow.js';
 
 /*
@@ -65,6 +65,8 @@ export default function investorDealsBoard(role, api) {
         // for one), so it is neither counted nor listed here — the zone behind
         // this section reaches it through its own Passed chip.
         summary: (d) => summary(count(Array.isArray(d) ? d.filter((row) => dealStage(row) !== null).length : null, 'live deal')),
+        // deals.ts's list read has no LIMIT, so the filtered length is the count (D403).
+        total: (d) => total((Array.isArray(d) ? d : []).filter((row) => dealStage(row) !== null)),
         rows: (d) => top((Array.isArray(d) ? d : []).filter((row) => dealStage(row) !== null)).map((row) => [
           row.project_name || `Deal #${row.id}`,
           title(row.project_sector),
@@ -128,6 +130,8 @@ export default function investorDealsBoard(role, api) {
         columns: ['Document', 'Deal', 'State', 'Signatures'],
         empty: 'No document has been raised against a deal at closing yet.',
         summary: (d) => summary(count(Array.isArray(d?.items) ? d.items.length : null, 'envelope')),
+        // esign.ts's list read stops at LIMIT 200 (D403).
+        total: (d) => total(d?.items, 200),
         rows: (d) => top(d?.items).map((e) => [
           e.document_title || e.document_type,
           e.deal?.project_name || (e.deal_id ? `Deal #${e.deal_id}` : null),

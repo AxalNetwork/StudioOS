@@ -33639,6 +33639,108 @@ so the desks pass nothing new. A desk that draws a root passes the same
   - the primary model shown instead of the active one
   - `useLocation` used
 
+## D403
+
+**Detail-layer navigation: "View more · N" appears only where a count is
+sourced, the crumb returns to the zone's section on the root, and zone pills
+respond to hover and focus (Session 12, item 4).** No migration, no route,
+and no `api.js` method. Frontend only.
+
+**1. "View more · N", and only where the N is true.** The Detail Layer
+canvases end each compressed zone with "View more · N →". Board sections
+show at most five rows (`top()`) and carried no total, so there was no
+figure to print. The only "View more" in the product was HQ Home's.
+- `boards/format.js` gains `total(rows, cap)`. It returns the list's length
+  only when the read returned the whole list. Several Worker list reads stop
+  at a `LIMIT`, and a list that came back at its cap may be a longer list
+  cut short, so at or past the cap it returns null.
+- A board section may now declare `total(payload)`. `BucketBoard` prints
+  "View more · N" only when the total is an integer larger than the rows
+  shown. Otherwise the footer stays "Open {zone}".
+- Four sections declare a total, each over exactly the list its rows are
+  drawn from:
+
+  | Section | Source | Cap |
+  | --- | --- | --- |
+  | Advisor `/practice` Sessions | `advisors.ts` bookings | `LIMIT 200` |
+  | Investor `/deals` Pipeline | `deals.ts` list, live deals only | none |
+  | Investor `/deals` Closing | `esign.ts` list | `LIMIT 200` |
+  | Partner `/offers` Catalog | `services.ts` offerings | `LIMIT 200` |
+
+- Sections whose list is filtered from a capped read (pending, confirmed and
+  completed bookings), or whose source I did not measure (the IC commit room,
+  the partner pipeline's negotiations), declare none. They keep "Open".
+- The Session 11 registries (`research.js`, and the advisor Introductions
+  and Expertise sections in `network.js` and `advisorExpertise.js`) are not
+  touched.
+- Found, not fixed: the summaries on those capped sections already print
+  `count(items.length)` ("N sessions", "N offerings", "N envelopes") with no
+  cap. At 200 or more rows they state 200 as the whole. The same `total`
+  helper would fix them; their lines belong to the registries, so this is
+  passed on.
+
+**2. The crumb returns to the zone you left.** `WorkspaceShell`'s crumb
+linked to `bucket.prefix`, so it landed at the top of the root. It now links
+to `/prefix#<anchor>`, the section that zone has on a board root, for
+example `/pipeline#pl-proposals`.
+- The anchor comes from `boards/index.js`'s own registry via `boardFor(role,
+  prefix, null)`. Only the section list is read; the sources are functions
+  that nothing calls, so no `api` is passed.
+- `BucketBoard` scrolls to the hash on arrival and when it changes. Every
+  section renders its `id` from the first paint, including the skeleton.
+- A root that is a card grid (every founder bucket, investor Portfolio and
+  Fund, advisor Cohorts), and a board's link cards (the Research zones), have
+  no section id. Their crumb keeps the bare prefix.
+
+**3. Zone pills answer hover and focus.** `ZoneNav` painted each pill with
+inline `color` / `background` / `borderColor`, and an inline style beats
+every `hover:` class, so an idle pill never answered the pointer.
+- The colours are now CSS variables (`--zn-ink`, `--zn-bg`, `--zn-line`,
+  `--zn-hover-ink`, `--zn-hover-line`) painted by the classes.
+- An idle pill takes the role's accent ink and border on hover and on
+  keyboard focus, and focus keeps the role-coloured outline.
+- The current pill is still chosen by the URL (`aria-current`) and does not
+  change on hover.
+- In dark mode, idle pills had rendered white, because no dark skin reads an
+  inline style. They now take neutral greys; the current pill keeps its
+  accent tint.
+
+**Not built: the needs-attention dot.** The canvases put a dot on a zone
+button that needs attention, and no store answers "which zones need
+attention" for any role. It stays unbuilt rather than lit from a guess.
+
+**Verification.**
+- New file `detail_layer_nav_d403.test.mjs`, 12 tests.
+  - `total`: a full list, a list at and past its cap, and no list.
+  - Each declared total counts its own list and stops at the cap. The
+    investor pipeline counts 240 live deals past any cap, and leaves out 60
+    rejected ones.
+  - No registry counts rows it has no source for.
+  - The footer rule, and the hash scroll.
+  - The crumb's anchor lookup. Every board section, across every registry,
+    has an id-safe anchor.
+  - A rendered `ZoneNav` for every shell carries no inline paint property,
+    and has the hover class and focus outline. Its hover colour is the
+    role's accent, exactly one pill is current, and only idle pills carry
+    the dark neutrals.
+- `advisor_bucket_overview`'s crumb test is re-aimed, not loosened. The
+  crumb is still the bucket root, now optionally with a hash, and never a
+  zone path.
+- Mutations: 13 run, 13 caught.
+  - the cap ignored
+  - the cap off by one
+  - the pipeline counting rejected deals
+  - the catalog uncapped
+  - the footer printing when the total is no larger than the rows shown
+  - the footer ignoring the total
+  - no scroll to the hash
+  - the crumb as the bare prefix
+  - the anchor not looked up
+  - an inline colour back on the pill
+  - no hover class
+  - hover not in the role's accent
+  - dark neutrals on the current pill
+
 ## D410
 
 **E-sign `/send` hardening: the signing link reaches only the recipient, a
