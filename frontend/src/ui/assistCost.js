@@ -115,3 +115,25 @@ export function lastRunReceipt(lastRun, name) {
   if (lastRun.fallback_used && !lastRun.cached && !lastRun.refusal) parts.push('a smaller model answered');
   return parts.join(' · ');
 }
+
+/**
+ * "This page this month" as one sentence, from `by_surface` (D404).
+ *
+ * `unattributed` is the month's runs with no recorded page. They are said
+ * rather than left out whenever this page shows none, because some of them
+ * may be this page's own runs from before migration 319 — so "nothing from
+ * this page" alone would be a claim the log cannot make.
+ */
+export function pageSpendLine(bySurface, pagePath) {
+  const rows = Array.isArray(bySurface) ? bySurface : [];
+  const mine = rows.find((r) => r && r.surface === pagePath && pagePath);
+  const unattributed = rows.find((r) => r && r.surface == null);
+  if (mine && mine.calls > 0) {
+    return `This page this month: ${formatCost(mine.spend_usd)} over ${mine.calls} run${mine.calls === 1 ? '' : 's'}.`;
+  }
+  if (unattributed && unattributed.calls > 0) {
+    const n = unattributed.calls;
+    return `No runs recorded from this page this month. ${n} run${n === 1 ? '' : 's'} this month carr${n === 1 ? 'ies' : 'y'} no page, either from before pages were recorded or from features that do not record one.`;
+  }
+  return 'No runs from this page this month.';
+}

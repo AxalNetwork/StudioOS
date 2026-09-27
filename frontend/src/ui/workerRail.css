@@ -254,6 +254,8 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
 /* The lasting "Last run" receipt in the Usage block (D401). The label sits on
    its own line and says whose run it is — the account's, not the page's. */
 .fwr-last-run { font-variant-numeric: tabular-nums; }
+/* This page this month (D404): the page's own share of the account's month. */
+.fwr-page-spend { font-variant-numeric: tabular-nums; }
 .fwr-last-run b {
   display: block; color: var(--fwr-ink);
   font-size: 9.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;

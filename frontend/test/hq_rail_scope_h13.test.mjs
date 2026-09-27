@@ -91,8 +91,13 @@ test('rule 4 — a named branch is logged, and an unscoped run still is not', ()
   // the other is what an audit row is keyed on.
   assert.match(RAIL, /\n  scopeBranch,/, 'the rail lost the branch identifier');
   assert.match(RAIL, /branch: scopeBranch \|\| undefined,/, 'the scope never reaches the request');
-  assert.match(API, /aiWorkspaceExplain: \(\{ workspace, zone, coverage, model, branch \}\)/,
+  // RE-AIMED IN D404: this pinned the parameter list as an exact tuple, so
+  // adding `page` failed it while changing nothing about the branch. The
+  // property is that the method ACCEPTS a branch and FORWARDS it.
+  assert.match(API, /aiWorkspaceExplain: \(\{[^}]*\bbranch\b[^}]*\}\) =>/,
     'the api method stopped carrying the branch');
+  assert.match(API, /aiWorkspaceExplain:[\s\S]{0,300}?JSON\.stringify\(\{[^}]*\bbranch\b[^}]*\}\)/,
+    'the api method accepts a branch and drops it before the request');
   assert.match(OVERLAY, /scopeBranch=\{code\}/, 'the overlay sends no branch, so its read-back is not logged');
   // HQ Home's fan-out rail names a scope and sends NO branch — "All branches"
   // is not a branch, and a row claiming one was read would be the false audit

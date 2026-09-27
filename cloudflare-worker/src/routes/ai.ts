@@ -137,7 +137,7 @@ ai.post('/workspace/explain', async (c) => {
   const user = await requireAuth(c);
 
   const body = await c.req.json<{
-    workspace?: string; zone?: string; coverage?: unknown; model?: string; branch?: string;
+    workspace?: string; zone?: string; coverage?: unknown; model?: string; branch?: string; page?: string;
   }>().catch(() => null);
   const workspace = String(body?.workspace || '').trim().slice(0, 60);
   const zone = String(body?.zone || '').trim().slice(0, 60);
@@ -146,6 +146,11 @@ ai.post('/workspace/explain', async (c) => {
   // clamp is not validation, it is a bound on what gets logged if someone
   // posts a megabyte.
   const model = String(body?.model || '').trim().slice(0, 120) || undefined;
+  // The app path the rail sits on, recorded as the run's `surface` (D404,
+  // migration 319) so the rail can say what THIS page has cost. The router
+  // re-validates it (`normaliseSurface`) and records NULL for anything that
+  // is not a plain app path; this only bounds the length.
+  const page = typeof body?.page === 'string' ? body.page.slice(0, 200) : undefined;
   /**
    * H13 RULE 4 — "anything about a named branch is logged", and D150's refusal
    * of it had a premise D153 removed.
@@ -228,6 +233,7 @@ ai.post('/workspace/explain', async (c) => {
     task: 'workspace_explain',
     userId: user.id,
     model,
+    surface: page,
     systemPrompt: WORKSPACE_EXPLAIN_PROMPT,
     messages: [{ role: 'user', content: `Page: ${subject}\n\nWhat the page is showing:\n${facts}` }],
     maxTokens: 320,
