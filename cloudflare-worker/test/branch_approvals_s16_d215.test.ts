@@ -37,7 +37,7 @@ function db() {
   // use. Trimmed from that route's own DDL.
   d.exec(`CREATE TABLE spinout_moderation_cases (id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL, status TEXT NOT NULL, reason_code TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')))`);
+    created_at TEXT NOT NULL DEFAULT (datetime('now')), resolved_at TEXT)`);
   return d;
 }
 

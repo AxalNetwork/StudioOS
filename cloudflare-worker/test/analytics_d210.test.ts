@@ -543,7 +543,7 @@ test('the benchmark readers read what branchOverview() actually returns', async 
   db.exec(`
     CREATE TABLE lp_applications (id INTEGER PRIMARY KEY, status TEXT, created_at TEXT);
     CREATE TABLE cohort_applicants (id INTEGER PRIMARY KEY, status TEXT, created_at TEXT);
-    CREATE TABLE spinout_moderation_cases (id INTEGER PRIMARY KEY, status TEXT, created_at TEXT);
+    CREATE TABLE spinout_moderation_cases (id INTEGER PRIMARY KEY, status TEXT, created_at TEXT, resolved_at TEXT);
   `);
   addS16Stores(db);
   db.prepare(`INSERT INTO lp_applications (status, created_at) VALUES ('pending', datetime(?, '-2 days'))`).run(NOW_SQL);
