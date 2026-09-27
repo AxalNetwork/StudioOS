@@ -352,3 +352,81 @@ test('the hook keeps "no record" distinguishable from "$0" at the boundary', () 
   assert.doesNotMatch(hookSrc, /setSpend\(\{\s*\}\)|setSpend\(\{ *spend_usd: *0/,
     'a failure must not be turned into a zero reading');
 });
+
+// ---------- D401: the last run carries its token counts ----------
+
+/** One row per case the receipt has to tell apart, all for user 11. */
+const TOKENS_SEED = (rows: string) => `
+INSERT INTO ai_usage_logs (user_id, task, model, prompt_tokens, completion_tokens, est_cost_usd, cached, fallback_used, refusal, created_at) VALUES
+${rows};
+`;
+const lastFor = async (rows: string, schema = SCHEMA) => {
+  const { DB } = makeD1(schema, TOKENS_SEED(rows));
+  return loadMyAiSpend({ DB } as any, { id: 11, role: 'founder' }, AT);
+};
+
+test('D401: a live call reports the token counts the log recorded', async () => {
+  const r = await lastFor(`(11, 'workspace_explain', '@cf/m', 812, 144, 0.0006, 0, 0, NULL, '2026-08-27 11:30:00')`);
+  assert.equal(r.last_run_recorded, true);
+  assert.equal(r.last_run?.prompt_tokens, 812);
+  assert.equal(r.last_run?.completion_tokens, 144);
+});
+
+test('D401: a cached answer or a refusal has no token counts, not zero', async () => {
+  // No model was called. "0 in / 0 out" would read as a very small run.
+  const cached = await lastFor(`(11, 'embed', '@cf/b', 0, 0, 0, 1, 0, NULL, '2026-08-27 11:30:00')`);
+  assert.equal(cached.last_run?.prompt_tokens, null);
+  assert.equal(cached.last_run?.completion_tokens, null);
+  const refused = await lastFor(`(11, 'advisor_turn', '@cf/m', 0, 0, 0, 0, 0, 'budget_user_day', '2026-08-27 11:30:00')`);
+  assert.equal(refused.last_run?.prompt_tokens, null);
+  assert.equal(refused.last_run?.completion_tokens, null);
+  // Not merely "whatever the column held": a cached row with stray counts
+  // still called no model.
+  const stray = await lastFor(`(11, 'embed', '@cf/b', 50, 7, 0, 1, 0, NULL, '2026-08-27 11:30:00')`);
+  assert.equal(stray.last_run?.prompt_tokens, null);
+  // The same for a refusal. The zero-count rows above would pass whether or
+  // not the refusal rule existed, because a zero is nulled on its own — a
+  // mutation dropping the rule escaped them, so this row carries counts.
+  const strayRefusal = await lastFor(`(11, 'advisor_turn', '@cf/m', 50, 7, 0, 0, 0, 'all_models_failed', '2026-08-27 11:30:00')`);
+  assert.equal(strayRefusal.last_run?.prompt_tokens, null);
+  assert.equal(strayRefusal.last_run?.completion_tokens, null);
+});
+
+test('D401: a streamed call has a prompt count and no completion count', async () => {
+  // The router records completion 0 on a stream because it never reads the
+  // body. A zero there is "not measured", not "the model said nothing".
+  const r = await lastFor(`(11, 'advisor_turn', '@cf/m', 300, 0, 0.0001, 0, 0, NULL, '2026-08-27 11:30:00')`);
+  assert.equal(r.last_run?.prompt_tokens, 300);
+  assert.equal(r.last_run?.completion_tokens, null);
+});
+
+test('D401: no calls is a readable "no last run"', async () => {
+  const { env: e } = env();
+  const r = await loadMyAiSpend(e, { id: 4242, role: 'investor' }, AT);
+  assert.equal(r.last_run, null);
+  assert.equal(r.last_run_recorded, true, 'the query ran and found nothing');
+  assert.equal(r.by_task_recorded, true);
+});
+
+test('D401: a last-run read that fails is unrecorded, not "no calls"', async () => {
+  // The totals query reads only est_cost_usd and created_at, so a table
+  // without the token columns still totals — and the last-run query, which
+  // selects them, throws. That is the failure the flag exists to report.
+  const NO_TOKENS = `CREATE TABLE ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER,
+    task TEXT NOT NULL, model TEXT NOT NULL, est_cost_usd REAL NOT NULL DEFAULT 0,
+    cached INTEGER NOT NULL DEFAULT 0, fallback_used INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL);`;
+  const { DB } = makeD1(NO_TOKENS, `INSERT INTO ai_usage_logs (user_id, task, model, est_cost_usd, created_at)
+    VALUES (11, 'workspace_explain', '@cf/m', 0.001, '2026-08-27 11:30:00');`);
+  const r = await loadMyAiSpend({ DB } as any, { id: 11, role: 'founder' }, AT);
+  assert.equal(r.recorded, true, 'the totals still read');
+  assert.equal(r.last_run, null);
+  assert.equal(r.last_run_recorded, false, 'a failed read was reported as "no calls"');
+  assert.equal(r.by_task_recorded, true, 'the breakdown does not read token columns and still stands');
+});
+
+test('D401: an unreadable usage table leaves both reads unrecorded', async () => {
+  const { DB } = makeD1('CREATE TABLE unrelated (id INTEGER);');
+  const r = await loadMyAiSpend({ DB } as any, { id: 7, role: 'investor' }, AT);
+  assert.equal(r.last_run_recorded, false);
+  assert.equal(r.by_task_recorded, false);
+});

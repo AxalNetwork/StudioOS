@@ -76,3 +76,42 @@ export function spendMeter(spent = 0, cap = 0) {
   const ratio = cap > 0 ? spent / cap : 0;
   return { ratio, fraction: Math.max(0, Math.min(1, ratio)), over: ratio > 1 };
 }
+
+/**
+ * The lasting "Last run" receipt, as one line (D401).
+ *
+ * `lastRun` is `/api/ai/me/spend`'s `last_run`: the caller's most recent row
+ * in `ai_usage_logs`, on ANY surface, so the caller labels it account-wide.
+ * `name` is the display name for its model, if the rail has one.
+ *
+ * The token half says exactly what the log can support:
+ *   - both counts            "812 in / 144 out"
+ *   - a prompt count only    "300 in / out not recorded" (a streamed call)
+ *   - neither                "tokens not recorded"
+ *   - a cached answer        "cached, no model called"
+ *   - a refusal              "refused, nothing run"
+ * and never "0 in / 0 out", which would read as a very small run. The Worker
+ * nulls every zero it cannot vouch for; a response from before that change
+ * carries no token fields at all and lands on "tokens not recorded".
+ *
+ * Returns null for no run, so the caller decides what an absence looks like.
+ */
+export function lastRunReceipt(lastRun, name) {
+  if (!lastRun || typeof lastRun !== 'object') return null;
+  const model = name || String(lastRun.model || '').split('/').pop() || 'Unknown model';
+  const isCount = (v) => typeof v === 'number' && Number.isFinite(v) && v > 0;
+  let tokens;
+  if (lastRun.refusal) tokens = 'refused, nothing run';
+  else if (lastRun.cached) tokens = 'cached, no model called';
+  else if (isCount(lastRun.prompt_tokens) && isCount(lastRun.completion_tokens)) {
+    tokens = `${lastRun.prompt_tokens.toLocaleString('en-US')} in / ${lastRun.completion_tokens.toLocaleString('en-US')} out`;
+  } else if (isCount(lastRun.prompt_tokens)) {
+    tokens = `${lastRun.prompt_tokens.toLocaleString('en-US')} in / out not recorded`;
+  } else tokens = 'tokens not recorded';
+  const cost = typeof lastRun.cost_usd === 'number' && Number.isFinite(lastRun.cost_usd)
+    ? formatCost(lastRun.cost_usd)
+    : 'cost not recorded';
+  const parts = [model, tokens, cost];
+  if (lastRun.fallback_used && !lastRun.cached && !lastRun.refusal) parts.push('a smaller model answered');
+  return parts.join(' · ');
+}

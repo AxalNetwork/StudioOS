@@ -91,7 +91,12 @@ export async function computeAuthorTrust(env: Env, userId: number): Promise<Trus
     const since = new Date(Date.now() - 90 * MS_PER_DAY).toISOString();
     const flagged = await safeFirst<{ c: number }>(
       env,
-      "SELECT COUNT(*) AS c FROM notifications WHERE user_id = ? AND kind = 'flagged_score_alert' AND created_at >= ?",
+      // D423: `notifications.created_at` is written by its DEFAULT
+      // (CURRENT_TIMESTAMP, `YYYY-MM-DD HH:MM:SS`) and `since` is raw ISO, so a
+      // bare `>=` compares ' ' against 'T' and misses a flag dated on the
+      // window's first day — the 90-day-clean bonus paid to an author flagged
+      // that day. Both sides normalised.
+      "SELECT COUNT(*) AS c FROM notifications WHERE user_id = ? AND kind = 'flagged_score_alert' AND datetime(created_at) >= datetime(?)",
       userId,
       since,
     );
