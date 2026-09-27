@@ -30304,7 +30304,10 @@ claimed is a separate decision, left open. The 10/min/IP `register` bucket
 - `npm run test:drift` exits 0 on Node 22, read as the exit code of a
   redirected log: frontend 3714 (none skipped), worker 4616 (4613 pass and the
   3 environment-gated skips), retention 112, zero `not ok`. The six D306 tests
-  are in the worker count, confirmed by title in the log.
+  are in the worker count, confirmed by title in the log. Re-run after landing
+  on `main` at `dc951c056` (#867, D442), which added its own tests: frontend
+  3727, worker 4624 (4621 pass and the same 3 skips), retention 112, zero
+  `not ok`, exit 0.
 - Root `npm run build`, then `node scripts/check-docs-fresh.mjs --strict`,
   exits 0.
 - `check-decision-ids`, `check-api-drift`, `check-folder-docs` and the worker's
