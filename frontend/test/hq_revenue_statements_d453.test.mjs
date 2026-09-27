@@ -19,7 +19,6 @@ import {
   statementPaidPayload,
   statementDisputePayload,
   licencesDrawableForStatements,
-  UNAVAILABLE,
 } from '../src/pages/hq/RevenuePage.jsx';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
