@@ -31842,6 +31842,81 @@ exactly this, and the generated copy's wet-ink blocks remain the way to sign.
   25fcdebab, pushed after #835 had squash-merged, so it never reached main.
   It is re-applied here as its own commit.
 
+## D355
+
+**Office Hours: a session keeps its action items and its rating. Both parties
+add and tick action items; only the founder rates, only a completed session;
+the partner sees each rating on their own session; the directory shows each
+partner's average from the first rating, always with its count.** Wave 8,
+Session 7, deferred list. Migrations 360 and 361; seven new `/api` methods.
+
+**The owner's four answers, which fixed the store's shape.** Migration numbers
+360 and 361. The average is ALWAYS shown — from the first rating, with the
+count beside it. The partner sees the rating per session, comment included.
+Action items belong to founder AND partner: both add and tick, and each item
+records who added it.
+
+**Store.** Migration 360, `partner_booking_action_items` (booking, title,
+linked tool, due date, `done_at` + `completed_by_user_id`,
+`created_by_user_id` + `created_by_role` ∈ founder/partner). Migration 361,
+`partner_booking_ratings`, `UNIQUE(booking_id)`, rating `CHECK 1–5`, with
+`partner_id` and `founder_user_id` copied from the booking by the Worker so
+the average is one `GROUP BY` and never trusts a request.
+
+**Who may do what** (`services/partnerBookingFollowups.ts`; the routes only
+pass the session user and relay refusals through `refuse()`):
+- A booking's parties are its founder (`founder_user_id`) and its partner (an
+  account whose `users.partner_id` is the booking's). **Anyone else — another
+  founder, another partner, staff — gets the same 404 as a missing booking.**
+  No request field chooses the actor or their side.
+- Items: either party adds one (not on a cancelled session); either ticks or
+  reopens any item, and the tick records who; only the author rewords,
+  re-dates, re-links or deletes (`not_the_author`). A linked tool is one of
+  seventeen Lab keys, a due date a real calendar date.
+- Rating: only the founder (`founder_only`), only once the partner marked the
+  session completed (`not_completed`), a whole number 1–5; a second write
+  replaces the first.
+- The average read names no founder and no booking; a partner nobody rated is
+  **absent**, never 0.
+
+**Routes** on the existing `/api/partner-office-hours` mount:
+`GET|POST /bookings/:id/action-items`, `PATCH|DELETE /action-items/:itemId`,
+`GET /action-items/me` (both sides, cancelled sessions left out),
+`PUT /bookings/:id/rating`, `GET /ratings/summary`. The two booking lists
+(`/me/bookings`, the partner's; `/bookings/me`, the founder's) LEFT JOIN the
+rating, so each row carries `rating` and `rating_comment`, `null` when unrated.
+No statement interpolates: the summary covers every rated partner rather than
+taking an id list, and the item update is one fixed statement.
+
+**Pages.** One component (`components/officehours/SessionFollowups.jsx`) draws
+a session's action items and rating on both the founder's Office Hours page
+and the partner's `/partner/office-hours`, so the two cannot drift. Founder:
+each non-cancelled history row opens its action items; a completed one takes
+stars and a comment; the rail lists open items from all their sessions above
+the week's milestone checklist; each directory card reads `★ 4.5 · 2 ratings`,
+or "No ratings yet", or "Ratings could not be read". Partner: each completed
+session shows the founder's rating and comment read-only, or "Not rated yet".
+The canvas's invented ratings and action-item fixtures are not reproduced, and
+the page header no longer lists ratings as omitted.
+
+### VERIFIED
+
+- `cloudflare-worker/test/partner_booking_followups_d355.test.ts` (new,
+  11 tests) runs the service's real SQL — and the route's four booking-list
+  statements — on SQLite over the REAL migration 360/361 DDL.
+- `frontend/test/spinout_lab_office_hours_followups.test.mjs` (new, 11 tests).
+- Mutations: 39 run. Worker 23 of 23 caught — after the first pass, where
+  the one that escaped (a filter on the partner's rating join) showed the
+  booking-list SQL was checked only as text; the test now executes those
+  statements. Frontend 16 of 16. Each caught mutation exited non-zero with a
+  `not ok` line and was restored from a sha256-checked snapshot.
+- SQL guards green, including check-sql-prepare (no new interpolation),
+  check-sqlite-columns and check-refusal-bodies; `check-api-drift` reports no
+  new drift; `tsc --noEmit` clean.
+- `npm run test:drift` with main a57b8c0008 merged in: exit 0. Frontend
+  4016 pass / 0 fail (11 of them new), worker 4782 (4779 pass, 0 fail; 11
+  new), retention 112; `check-docs-fresh --strict` after the root build.
+
 ## D360
 
 **The Spin-Out Lab's capital and legal tools say when a read failed, and
