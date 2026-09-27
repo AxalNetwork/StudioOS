@@ -73,7 +73,8 @@ const SCHEMA = `
     status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL);
   CREATE TABLE spinout_moderation_cases (
     id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
-    status TEXT NOT NULL, reason_code TEXT NOT NULL, created_at TEXT NOT NULL);
+    status TEXT NOT NULL, reason_code TEXT NOT NULL, created_at TEXT NOT NULL,
+    resolved_at TEXT);
 `;
 
 /** `datetime('now')`'s own format — the one every one of the four writes. */
@@ -116,6 +117,10 @@ function seedAllFour() {
              -- exactly that. A fixture that cannot tell the two predicates
              -- apart is not testing the predicate.
              (42, 3, 'active',       'other', '${sqlStamp(300, NOW)}');
+    -- Closed by resolved_at while status stays under_review. Counting status
+    -- alone would put 43 on the board.
+    INSERT INTO spinout_moderation_cases (id, user_id, status, reason_code, created_at, resolved_at)
+      VALUES (43, 3, 'under_review', 'abuse', '${sqlStamp(50, NOW)}', '${sqlStamp(1, NOW)}');
   `;
 }
 

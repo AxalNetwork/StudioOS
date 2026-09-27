@@ -2433,6 +2433,7 @@ export const api = {
   // (spinout_lab_active = 0); it never deactivates the platform account the
   // way adminToggleActive does. Reason code is mandatory on every action,
   // reinstatement included.
+  adminSpinoutModerationOpen: () => request('/admin/spinout-moderation'),
   adminSpinoutModeration: (userId) => request(`/admin/spinout-moderation/${userId}`),
   adminSpinoutModerate: (userId, data) =>
     request(`/admin/spinout-moderation/${userId}`, { method: 'POST', body: JSON.stringify(data) }),

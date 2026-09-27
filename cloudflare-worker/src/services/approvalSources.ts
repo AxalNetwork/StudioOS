@@ -141,14 +141,16 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
   {
     key: 'moderation',
     label: 'Spinout moderation',
+    // Closing a case stamps resolved_at and leaves status where it was, so a
+    // decided case can still read 'under_review'. Open work is both.
     countSql:
       'SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM spinout_moderation_cases '
-      + "WHERE status = 'under_review'",
+      + "WHERE status = 'under_review' AND resolved_at IS NULL",
     rowsSql:
       "SELECT m.id AS id, COALESCE(NULLIF(u.name, ''), u.email, 'account ' || m.user_id) AS who, "
       + "'Moderation · ' || m.reason_code AS what, m.created_at AS created_at "
       + 'FROM spinout_moderation_cases m LEFT JOIN users u ON u.id = m.user_id '
-      + "WHERE m.status = 'under_review' ORDER BY m.created_at ASC LIMIT ?",
+      + "WHERE m.status = 'under_review' AND m.resolved_at IS NULL ORDER BY m.created_at ASC LIMIT ?",
   },
   // ── S16 (D215): the queues the live console kept on their own pages. ──
   //

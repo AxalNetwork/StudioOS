@@ -15,13 +15,10 @@
  *      button here would be a fifth writer restating four sets of rules, and
  *      restating a rule is how the copies drift. The payload says
  *      `decides: false`; the page must not contradict it.
- *   3. A LINK TO A CONSOLE THAT DOES NOT EXIST. Measured, not assumed:
- *      `api.adminSpinoutModeration` and `adminSpinoutModerationDecide` have
- *      **zero callers in `frontend/src`**, so spinout moderation has a Worker
- *      route, an api method, a place in the backlog count and now a place on
- *      this board — and no screen on which to decide it. The row says so. A
- *      link would 404, which `sidebarConfig.js` names as worse than no link:
- *      it looks shipped.
+ *   3. THE MODERATION DOOR. The console is `SpinoutModerationPage` at
+ *      `/admin/spinout-moderation` (D442). The lane's `LANE_CONSOLE` entry and
+ *      a literal link on this page both point there. A link to a route App.jsx
+ *      does not register would 404, which is worse than no link.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -113,32 +110,26 @@ test('the board reads; it does not decide', () => {
   );
 });
 
-test('spinout moderation has no console, and the row says so', () => {
-  // The finding, re-measured here rather than trusted: if somebody builds the
-  // moderation console, this test tells them to make the row link to it.
+test('spinout moderation links to its console', () => {
   const callers = [];
   const walk = (dir) => {
     for (const ent of readdirSync(dir, { withFileTypes: true })) {
       const p = join(dir, ent.name);
       if (ent.isDirectory()) { walk(p); continue; }
       if (!/\.(jsx?|tsx?)$/.test(ent.name)) continue;
-      if (p.endsWith(join('lib', 'api.js'))) continue;   // the declaration, not a caller
+      if (p.endsWith(join('lib', 'api.js'))) continue;
       const src = code(readFileSync(p, 'utf8'));
       if (/adminSpinoutModeration/.test(src)) callers.push(p);
     }
   };
   walk(resolve(process.cwd(), 'frontend/src'));
-
-  if (callers.length === 0) {
-    assert.match(PAGE, /moderation: null/, 'the lane must have no console entry while no page calls it');
-    assert.match(PAGE, /no console/, 'the row must say the decision surface does not exist');
-  } else {
-    assert.fail(
-      `A spinout moderation console now exists (${callers.join(', ')}). `
-      + 'Give the moderation lane its `LANE_CONSOLE` entry so its rows link to it, and delete '
-      + 'the "no console" copy — this branch of the test is the reminder.',
-    );
-  }
+  assert.ok(
+    callers.some((p) => p.endsWith(join('admin', 'SpinoutModerationPage.jsx'))),
+    `the console page is not a caller of adminSpinoutModeration (${callers.join(', ')})`,
+  );
+  assert.match(PAGE, /moderation: \{ to: '\/admin\/spinout-moderation'/);
+  assert.match(PAGE, /to="\/admin\/spinout-moderation"/);
+  assert.doesNotMatch(PAGE, /decision surface for moderation has not been built/);
 });
 
 test('every console a lane DOES link to is a registered route', () => {
@@ -191,6 +182,7 @@ test('one list of sources, read by both the board and the backlog count', () => 
   assert.match(SOURCES, /cohort_applicants/, 'the cohort table is the applicant row, not spinout_applications');
   assert.doesNotMatch(SOURCES, /FROM spinout_applications/, 'the wrong cohort table came back');
   assert.match(SOURCES, /under_review/, "a moderation case awaiting a decision is 'under_review'");
+  assert.match(SOURCES, /m\.resolved_at IS NULL/, 'a closed case whose status stayed under_review is still counted');
   assert.match(SOURCES, /!== 'draft'/, 'a draft referral is not reviewer backlog');
 });
 

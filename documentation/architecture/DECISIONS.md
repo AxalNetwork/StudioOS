@@ -33201,6 +33201,18 @@ removed (`companyKybStart` gains an optional second argument).
 
 **Mutations: 6 run, 6 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: the invitation link put back on `/invite/`; the preview effect calling accept; the accept route skipping `requireBranchTier`; an active account taking the invitation's role; a failed create leaving the invitation accepted; the support notice dropped.
 
+## D442
+
+**Spinout moderation has a console, and a case closed by `resolved_at` leaves the approvals lane.** Wave 8, Session 6, item 3. No migration: `spinout_moderation_cases.resolved_at` already exists (migration 287 and the route's own `CREATE TABLE`). No live branch exercised this.
+
+**The list.** `GET /api/admin/spinout-moderation` returns cases whose `resolved_at` is null, oldest first, with `open_count` from the same predicate. Closing a case stamps `resolved_at` and does not change `status`, so a decided case can still say `under_review`. The approvals lane (`approvalSources.ts`, key `moderation`) now requires both `status = 'under_review'` and `resolved_at IS NULL`. The per-member history and the action (`POST /api/admin/spinout-moderation/:userId`) are unchanged: an action still moves `spinout_lab_active` and never `users.is_active`.
+
+**The page.** `pages/admin/SpinoutModerationPage.jsx` at `/admin/spinout-moderation` lists those cases and records an action through the existing method. A failed list is unreadable. An empty list says it was read. `api.adminSpinoutModerationOpen` is the new method; `adminSpinoutModeration` and `adminSpinoutModerate` already existed.
+
+**The door.** `BranchApprovals` links the moderation lane, and the page itself, to `/admin/spinout-moderation`. That link is literal so the admin-route walk can see it. `HeldApprovals.jsx` row 4 (`data-lane="4"`, Spinout moderation) still says "No console" / "No console exists anywhere yet", and `held_admin_shell_d286.test.mjs` pins that row as having no console. Those files are Session 5's. The row the console needs is that one, pointed at `/admin/spinout-moderation`. `AdminPage.jsx` is not edited.
+
+**Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: the lane's `resolved_at` predicate removed; the list's `resolved_at` predicate removed; the board's literal door pointed at the Lab page instead.
+
 ## D450
 
 **HQ consoles tell the truth about what was read.** Wave 8, Session 16, item 1
