@@ -2560,7 +2560,11 @@ function AppInner() {
       <Route path="/spinout-lab/compliance" element={guard(labRoles(['admin']), <SpinoutLabCompliancePage />)} />
       {/* 83(b) moved into the Lab (Week 4 deliverable). Old Incorporate
           path kept as a redirect so existing links and bookmarks survive. */}
-      <Route path="/incorporate/83b" element={<Navigate to="/spinout-lab/83b" replace />} />
+      {/* D361: the tracker lives at /spinout-lab/83b for Lab members and admins
+          (its guard), and inside the Studio-gated Legal Engine card for every
+          other founder. Sending those founders to the Lab route only reached a
+          refusal, so the old path now lands each on the one they can open. */}
+      <Route path="/incorporate/83b" element={<Navigate to={user?.spinout_lab_active === 1 || user?.role === 'admin' ? '/spinout-lab/83b' : '/raise/legal-engine/equity'} replace />} />
       <Route path="/compliance" element={guard(labRoles(['admin', 'founder', 'partner']), <CompliancePage />)} />
       <Route path="/wellbeing" element={guard(['admin', 'founder'], <WellbeingPage />)} />
       <Route path="/wellbeing/expert-dashboard" element={guard(['admin', 'founder', 'partner', 'advisor'], <ExpertEditorPage />)} />
