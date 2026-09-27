@@ -226,7 +226,7 @@ partnernet.get('/relationships', async (c) => {
   await ensureSchema(c.env);
   const sql = getSQL(c.env);
   const rows = await sql`
-    SELECT pr.*, ua.email as a_email, ua.name as a_name, ub.email as b_email, ub.name as b_name
+    SELECT pr.*, ua.email as a_email, ua.name as a_name, ua.role as a_role, ub.email as b_email, ub.name as b_name, ub.role as b_role
     FROM partner_relationships pr
     LEFT JOIN users ua ON ua.id = pr.partner_a_id
     LEFT JOIN users ub ON ub.id = pr.partner_b_id
@@ -235,9 +235,12 @@ partnernet.get('/relationships', async (c) => {
   `;
   await sql.end();
   const enriched = (rows as any[]).map(r => {
+    // The counterpart's role travels with the row: the investor Network desk's
+    // Founders chip narrows on it, and a name and email alone cannot say who
+    // on the other side of the tie is a founder.
     const other = r.partner_a_id === user.id
-      ? { id: r.partner_b_id, email: r.b_email, name: r.b_name }
-      : { id: r.partner_a_id, email: r.a_email, name: r.a_name };
+      ? { id: r.partner_b_id, email: r.b_email, name: r.b_name, role: r.b_role }
+      : { id: r.partner_a_id, email: r.a_email, name: r.a_name, role: r.a_role };
     return { ...r, metadata: safeJson(r.metadata, {}), other };
   });
   return c.json(enriched);

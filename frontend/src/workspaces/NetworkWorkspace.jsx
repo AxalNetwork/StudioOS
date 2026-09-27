@@ -320,7 +320,11 @@ export default function NetworkWorkspace({ role = 'founder' }) {
           ]}
         />
       )}
-      scope={role === 'investor' ? 'One fund' : 'One book'}
+      // NO `scope` PROP. It read `scope={role === 'investor' ? 'One fund' :
+      // 'One book'}` — the same literal the other callers dropped, in a
+      // conditional form the frame contract's attribute-only pattern missed.
+      // The shell fills that slot from `ActiveCompanyContext`, so the badge
+      // names the company instead of restating the rule.
       intro={isRoot ? 'Work your relationships — people, introductions, and the organizations behind them.' : (INTRO[slug] || INTRO.relationships)}
     >
       {body}
