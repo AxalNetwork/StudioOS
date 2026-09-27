@@ -194,9 +194,13 @@ test('the track record has one source, and the brief reads it', () => {
   );
 });
 
-test('the apply CTA resolves its deadline through the shared helper', () => {
-  assert.match(PAGE, /const cohort = useMemo\(\(\) => openCohortCopy\(\), \[\]\)/);
+test('the apply CTA resolves its cohort and deadline from the cohort record', () => {
+  // D385: the name and deadline come from /brief through useCohortRecord, the
+  // record the landing and the brief read, not the client calendar's number.
+  assert.match(PAGE, /const read = useCohortRecord\(\);/);
+  assert.match(PAGE, /Apply to the \$\{cohort\.name\} cohort\./);
   assert.match(PAGE, /Applications close \$\{cohort\.deadlineLabel\}/);
+  assert.doesNotMatch(PAGE, /Apply to Cohort \$\{/, 'the CTA went back to the client calendar number');
 });
 
 test('the cohort deadline is formatted in Delaware time', () => {
