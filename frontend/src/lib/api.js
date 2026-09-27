@@ -3506,6 +3506,12 @@ export const api = {
   // every decision is still made in that queue's own console, and the payload
   // says so on `decides: false` rather than leaving the page to remember.
   branchApprovals: () => request('/branch/approvals'),
+  // D470 — a reviewer on a board item. Not a decision on the queue, and not a
+  // reply. History is the events that write recorded.
+  branchApprovalAssign: (data) =>
+    request('/branch/approvals/assignments', { method: 'POST', body: JSON.stringify(data || {}) }),
+  branchApprovalHistory: (lane, itemId) =>
+    request(`/branch/approvals/history?lane=${encodeURIComponent(lane)}&item_id=${encodeURIComponent(itemId)}`),
   // D131 — S1's digest: queue pressure ordered by the oldest item, the
   // programme clock with the zone it is enforced in, and the revenue-share
   // rate. The three blocks S1 draws that have no source arrive as

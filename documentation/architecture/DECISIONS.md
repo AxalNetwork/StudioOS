@@ -36273,6 +36273,80 @@ Session 2's file, so the page names it instead of mounting a band that would
   Root `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser
   probe.
 
+## D470
+
+**Gap-map leftovers, up to the owner's line.** Wave 9 item 7. Items 4 and 5
+of that wave were already D445 and D446; they were not rebuilt, and migration
+329 was not added. Migration 342 is unused.
+
+**What was built.**
+
+- **Lane board, second view.** The list stays primary (S16 / D215). `hurtingLanes`
+  picks five columns by the oldest finite age, not by count and not by a fixed
+  order. An unreadable lane (`count === null`) is not a column. An unknown age
+  is not zero hours. Empty lanes sort after lanes that have items. A measured
+  age of zero outranks an unknown age.
+- **Assignment, side record.** Migration 341: `approval_assignments` (one row
+  per lane and item) and `approval_events` (`kind` is only `assigned`). The
+  write lives in `routes/branch_approval_assignments.ts`. `branch_approvals.ts`
+  stays a GET. `decides` stays false. A reviewer is an active admin on this
+  database. The item must be among the open rows the board is showing.
+  Assigning the same person again does not append another event. At most 40
+  items per POST. A missing table is unreadable, not "nobody assigned" — items
+  on that read carry no `assignee` field. An empty table means nobody is
+  assigned. History is the latest 100 events this write created, oldest-first
+  inside that window, `capped` when the cap is hit. A console's own actions
+  are not copied into it. A throw after an earlier item in the same call has
+  landed answers 503 and does not claim success. The POST is suspension-gated.
+  The history GET and the board GET are not. `logAdminAction` records
+  `approval_assignment` with `{ target_user_id, lane, item_id }`. The action
+  is not added to `ACTOR_SIDE_ACTIONS`.
+- **Outbound to HQ** stays the card above the board. It is not a filter of
+  this list. Those rows are a different store.
+
+**What was not built, and is named.**
+
+- **A reply thread.** D112 stands: one decision, migration 261. The rail and
+  `answer_note` say the owner has not signed off reversing that. There is no
+  reply box.
+- **An AI-drafted decision note.** Still no per-branch cost (D261). It stays
+  in the rail.
+- **A help desk (U1).** `GET /api/branch/home` names it under `unavailable`.
+  No tickets, chat, canned replies, or a satisfaction score.
+- **Where a security alert sits (U2).** Named on that same home list and on
+  the Accounts rail. Not drawn on Home or on an account row.
+
+**Freeze.** Naming a reviewer is not the appeal. `branch_approval_assignments.ts`
+calls `requireBranchNotSuspended`, and the Approvals row of `branchFreeze.js`
+names that file. Escalations stay ungated.
+
+**Tests.** `approval_assignments_d470.test.ts`, `gap_map_leftovers_d470.test.mjs`.
+Re-aimed, not loosened: the board route still has no write verb, the page
+still has one textarea, and the canvas assertions on five columns, age, and
+S16 stay. The sentence that assignment needed a store that does not exist is
+now false and the tests refuse it.
+
+**Mutations.** 5 of 5 caught, each on a non-zero exit with a `not ok` line
+(unique anchors, byte-change proven, sha256-checked restores): columns ranked
+by count instead of age; a missing assignment table reported as readable and
+empty; a founder accepted as a reviewer; the page stopped calling
+`hurtingLanes`; the owner-sign-off sentence removed.
+
+**Verification.** Frontend suite 3942 pass. Worker suite 4735 tests, 4729
+pass, 3 skipped, 3 fail — the three already failing on main
+(`capital_call_ledger` partial-write retry, and the two `trust_center_d432`
+party-name cases). They were not changed here. `check-api-drift`: 1618 SPA
+calls, 1913 worker routes from 189 mounts, 13 pre-existing baseline items,
+no new drift. Both typechecks, `lint:undef`, `check-dark-mode`,
+`check-decision-ids`, `check-folder-docs`, `check-sql-prepare`,
+`check-refusal-bodies`, `check-sql-migrations`, `check-sqlite-dialect`,
+`check-runtime-schema-declared`, `check-timestamp-comparisons`, and
+`test:guards` exit 0. Root `npm run build`, then `check-docs-fresh --strict`,
+exits 0.
+
+No live branch. Session 1 confirms the deploy and production D1. This session
+cannot read the deploy log.
+
 ## D490
 
 **#871 review follow-ups: private notes, dates, and void touches on the investor
