@@ -30313,6 +30313,119 @@ claimed is a separate decision, left open. The 10/min/IP `register` bucket
 - `check-decision-ids`, `check-api-drift`, `check-folder-docs` and the worker's
   `tsc --noEmit` exit 0.
 
+## D307
+
+**The investor Network page renders again, and a name read in its own scope
+before the line that declares it now fails the lint.** A production hotfix. No
+migration, no route, no `api.js` method. `frontend/src` moves one `useMemo`
+thirty-odd lines down, so `docs/` is rebuilt; `eslint.config.mjs` gains one
+rule.
+
+**The defect.** #871 (`db467a07a3`, D465, merged 11:41Z on 2026-09-27) added
+`setRemindersOp` to `InvestorNetworkWorkspace.jsx` — a `useMemo` whose
+dependency array is `[visibleRelationships]` — thirty lines ABOVE `const
+visibleRelationships`. A dependency array is evaluated when the hook is
+called, during render, so the read landed in the `const`'s temporal dead zone
+and every render threw `Cannot access 'visibleRelationships' before
+initialization`. The component is what an investor gets at `/network`
+(`App.jsx`) and at every `/network/<zone>` (`NetworkWorkspace.jsx` mounts it
+embedded), so every investor Network zone showed the error card from the
+deploy that followed that merge until this one.
+
+**Why nothing caught it.** Nothing rendered the page. The four guards over it
+read its source as text; `lint:undef` enabled `no-undef` and `no-unused-vars`,
+and a TDZ read satisfies both because the name is defined, just later; and
+Vite bundles it without complaint because a TDZ read is a runtime error. The
+same argument this config's own header makes for `no-undef` — a name
+undefined at runtime is not a build error — applies one step over.
+
+**What shipped.**
+- The memo moves below `visibleRelationships` and `coldCount`, with a comment
+  saying why it must stay there. Its `(visibleRelationships || [])[0]` becomes
+  `visibleRelationships[0]`: every branch of that declaration already produces
+  an array.
+- `frontend/test/investor_network_render_d307.test.mjs` renders the page, once
+  as the overview and once per zone, with `renderToStaticMarkup`. Effects do
+  not run, so the book is still loading — and the render still has to get past
+  every hook call to reach the skeleton, which is the whole point.
+- **`no-use-before-define` is armed on `frontend/src`'s `.js`/`.jsx` with
+  `{ functions: false, variables: false }`**, measured across the SPA with a
+  scratch config (a first run with `--no-config-lookup` silently ignored every
+  `.jsx` file, so its "zero" covered `.js` only and was discarded):
+
+  | options | findings |
+  | --- | --- |
+  | defaults | 1576 |
+  | `functions: false` | 74 |
+  | `functions: false, variables: false` | **0** |
+
+  `functions: false` drops 1502 calls to hoisted function declarations —
+  helpers and components kept below their callers, which is correct
+  JavaScript. `variables: false` drops the remaining 74, every one a closure
+  reading a `const` from an enclosing scope that runs after the declaration
+  has executed; sampled, and all safe. The option still reports a read in the
+  SAME scope as its declaration, which is exactly the TDZ shape. The test's
+  last case pins the rule and both options, so it cannot be switched off,
+  downgraded to a warning, or widened into 74 findings of noise without a
+  failure naming the re-measure.
+- A first draft guarded this with a regex over the component's dependency
+  arrays. It was replaced before landing: it watched one file, and scope
+  analysis is the linter's job by this config's own stated reasoning. The
+  `.ts`/`.tsx` half needs nothing — probed, `tsc` refuses the same ordering as
+  TS2448 and leaves the closure read alone, and `test:types:frontend` is in
+  `test:drift`.
+
+**Whose file this is.** `InvestorNetworkWorkspace.jsx` is Session 17's, and
+D465 was its PR. Session 1 made this change anyway, as a stated exception:
+production was down for every investor on a Network page, the owner was
+asleep, Session 17 had no open PR on the file, and the fix moves one block
+without changing what it does. The exception is cheap to reverse — close this
+PR and leave the fix to Session 17 — and Session 17's next prompt says the fix
+has landed and must not be made a second time.
+
+**VERIFIED**
+`npm run test:drift` **exit 0**, read as the exit code from a redirected log:
+frontend **3763** of 3763, worker **4643** (4640 pass plus the same 3 environment-gated skips), retention **112**, and zero `not ok`. The five D307 tests are confirmed by name —
+`the page renders, zone overview`, `… zone relationships`,
+`… zone introductions`, `… zone organizations`, and
+`the SPA lint refuses a same-scope read above its declaration`.
+
+The first run, on the same bytes, exited 1 on a single failure: the
+git-excluded `.agent-progress.md` sitting at the repo root, which
+`repo_layout.test.mjs` refuses. It was moved aside and the suite re-run. The
+file is local-only and never committed; the refusal is correct.
+
+**Five mutations, five caught.** Every anchor was asserted unique before it was
+applied, and every file was restored from a sha256 snapshot:
+
+- **M1** — restore the original ordering. Four render tests fail, and the lint
+  reports `255:7 'visibleRelationships' was used before it was defined`.
+- **M2** — the original ordering with the rule removed. The lint exits 0 and
+  the pin test fails. This is the proof that the rule, not luck, is what
+  catches the defect.
+- **M3** — the rule removed from the fixed tree. The pin test fails.
+- **M4** — `variables: true`. The pin test fails.
+- **M5** — `'warn'` instead of `'error'`. The pin test fails.
+
+These exit 0: `lint:undef` with the rule armed; `test:types:frontend`; the root
+`npm run build` (635 fresh assets, 371 prior hashes retained) followed by
+`check-docs-fresh --strict`; `check-api-drift`; `check-decision-ids` (D1
+through D465, with D307 in position); and `check-folder-docs`.
+
+This was verified again after rebasing onto `791cf947b3` (#874). Main moved
+mid-build, so the uncommitted tree was carried across, and `DECISIONS.md`
+auto-merged.
+
+**The open PRs, checked against the new rule before it lands.** Every changed
+`.js`/`.jsx` file on #876 (Session 5) and #875 (Session 16), read at each PR's
+head, was linted through this config. Both report **zero**
+`no-use-before-define` findings; one #876 file is a deletion. As a control,
+main's pre-fix `InvestorNetworkWorkspace.jsx`, piped through the same harness,
+reports `255:7` — so the check can fail.
+
+No migration. Migration 340 belongs to Session 17's queue, so the next free
+number is 341 or higher; re-measure it before naming one.
+
 ## D330
 
 **AdminX.jsx and AdminTelegram.jsx say why no draft was made.** Wave 8,
@@ -33923,6 +34036,29 @@ artboard’s eight business categories are not stored and stay named as absent i
 the rail.
 
 **Tests.** `support_sla_d455.test.ts`; `hq_support_sla_d455.test.mjs`.
+
+## D456
+
+**HQ names per-subsidiary revenue from usage reports, without totalling it.** Wave 8,
+Session 16, item 7. No migration; no new `/api/*` method — `GET
+/api/admin/hq/overview` and `GET /api/admin/revenue/summary` gain
+`usage_coverage` plus split honesty fields.
+
+**Honesty.** `DERIVED_UNAVAILABLE` no longer blames U1 for revenue: branches report
+quarters (D266) with every stream unmeasured. Token P&L per subsidiary keeps its
+own refusal (U1 + D261 metering). MTD revenue on Home cites quarter reporting,
+not “no subsidiary attribution”.
+
+**Coverage.** `subsidiaryUsageCoverage` lists each licence’s report status for the
+current period — reported vs not, measurable streams if any — never a summed
+`gross_cents`.
+
+**UI.** HQ · Home adds a Revenue row on subsidiary cards and fixes the MTD tile;
+HQ · Revenue draws a **Revenue per subsidiary** table beside Token P&L.
+
+**Tests.** `subsidiary_usage_coverage_d456.test.ts`;
+`hq_revenue_per_sub_d456.test.mjs`; `hq_home.test.mjs` and `hq_revenue_h5.test.mjs`
+re-aimed; `admin_revenue.test.ts` updated.
 
 ## D460
 
