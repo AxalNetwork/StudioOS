@@ -18,7 +18,7 @@
  *
  * THE BOARD READS; THE CONSOLES DECIDE. It shows stores it does not own,
  * so each row offers that queue's own console instead of an Approve button.
- * One lane has no console to offer — see `LANE_CONSOLE` — and says so.
+ * Spinout moderation's console is `/admin/spinout-moderation` (D442).
  *
  * THE ANSWER IS ONE DECISION, NOT A THREAD, and this page must not suggest
  * otherwise. The canvas says "the answer coming back as a thread with HQ's
@@ -452,14 +452,9 @@ const SLA_LABEL = { ok: null, due_soon: 'due within 24h', past: 'past SLA' };
  * THE BOARD READS; THE CONSOLES DECIDE, so each row offers the console rather
  * than an Approve button that would write to a store this page never touches.
  *
- * SPINOUT MODERATION HAS NO CONSOLE, AND THAT IS A FINDING RATHER THAN AN
- * OMISSION HERE. `/api/admin/spinout-moderation/:userId` exists on the Worker
- * and `api.adminSpinoutModeration` / `adminSpinoutModerationDecide` exist in
- * `lib/api.js` — with **zero callers anywhere in `frontend/src`**. So a
- * moderation case is real work that reaches the backlog count, reaches this
- * board, and has nowhere to be decided. The row says that instead of linking
- * to a route that would 404, which is the failure `sidebarConfig.js` names:
- * a destination that looks shipped and is not.
+ * SPINOUT MODERATION IS DECIDED AT /admin/spinout-moderation (D442). The
+ * row links there. HQ-held Approvals (HeldApprovals, S22) still says the
+ * lane has no console; that row and its D286 pin are Session 5's.
  */
 const LANE_CONSOLE = {
   lp: { to: '/admin/lp-applications', label: 'LP applications console' },
@@ -468,7 +463,7 @@ const LANE_CONSOLE = {
   // than routed on its own — checked, not assumed, because a link to
   // `/admin/cohort` would 404.
   cohort: { to: '/admin/spinout-lab', label: 'Spin-Out Lab admin' },
-  moderation: null,
+  moderation: { to: '/admin/spinout-moderation', label: 'Spinout moderation console' },
   // S16 (D215). Each is the page that already decides that store — checked
   // against App.jsx's routes; KYC and partner profiles are tabs of `/admin`,
   // which honours `?tab=`.
@@ -797,6 +792,12 @@ export default function BranchApprovals({ user }) {
         <p className="mb-3 text-[11.5px] leading-relaxed text-axal-muted">
           Every queue this branch decides, in one list ordered by what has waited longest. The board
           reads; each decision is still made in that queue&rsquo;s own console. Pick a lane to narrow it.
+          {' '}
+          <Link to="/admin/spinout-moderation" className="font-semibold text-axal-ink underline">
+            Spinout moderation console
+          </Link>
+          {' '}
+          is where an open moderation case is decided.
         </p>
 
         {board === UNAVAILABLE && (
@@ -909,11 +910,7 @@ export default function BranchApprovals({ user }) {
                         {console_ ? (
                           <Link className="underline" to={console_.to}>{console_.label} →</Link>
                         ) : (
-                          // THE LINK IS ABSENT BECAUSE THE PAGE IS. Stated on
-                          // the row rather than pointed at a route that 404s.
-                          <span className="text-axal-faint" data-testid="branch-board-no-console">
-                            no console — the decision surface for moderation has not been built
-                          </span>
+                          <span className="text-axal-faint">This lane has no registered console.</span>
                         )}
                       </div>
                     </li>

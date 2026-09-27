@@ -324,9 +324,34 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
 
   if (existing.length > 0) {
     const user = existing[0];
-    if (user.email_verified && (await hasTotpConfigured(c.env, user.id))) {
+    // D306 — AN UNAUTHENTICATED REQUEST MAY ONLY OVERWRITE AN ACCOUNT WHOSE
+    // EMAIL HAS NEVER BEEN PROVEN. This route carries Turnstile and no
+    // session, so it cannot tell an account's owner from anyone else who
+    // knows the address. Once `email_verified` is set the address has been
+    // proven — by a verification or magic link, by Google, or by an
+    // invitation sent to it — so the account is refused here whatever factor
+    // it signs in with, and its owner is told to sign in. An unverified row
+    // is one nobody has proven; retrying the signup over it takes the path
+    // below exactly as before.
+    //
+    // TOTP IS NOT THE TEST, though it was: this read `email_verified &&
+    // hasTotpConfigured(...)`, from when an authenticator was mandatory and a
+    // verified row without one was a signup abandoned between its two steps.
+    // Task #11 made TOTP optional, and magic-link and Google members never
+    // enrol one — so the old test let anyone with such a member's address
+    // rename them and reset their role to 'exploring', and let a member who
+    // came back through this page demote themselves the same way.
+    //
+    // RegisterPage's primary path reads this code as "send a sign-in link
+    // instead", so the owner still ends up signed in. The sentence keeps the
+    // words "already registered" for a tab loaded before that page keyed on
+    // the code (D258).
+    if (user.email_verified) {
       await sql.end();
-      return c.json({ error: 'Email already registered' }, 409);
+      return c.json({
+        error: 'email_already_registered',
+        message: 'This email is already registered. Please sign in instead.',
+      }, 409);
     }
     // Task #9 follow-up — an incomplete signup retrying /register lands
     // in 'exploring' just like a brand-new account (see the fresh-INSERT

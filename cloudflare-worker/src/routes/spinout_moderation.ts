@@ -1,6 +1,7 @@
 /**
  * Spin-Out Lab participant moderation — admin only.
  *
+ *   GET  /api/admin/spinout-moderation           open cases (resolved_at IS NULL)
  *   GET  /api/admin/spinout-moderation/:userId   case history for one member
  *   POST /api/admin/spinout-moderation/:userId   apply an action
  *
@@ -26,6 +27,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireBranchNotSuspended } from '../auth';
 import { bindingKey } from '../util/schemaBootstrap';
+import { refuse } from '../util/refusal';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -77,6 +79,48 @@ async function ensureTables(env: Env) {
 const CASE_COLS =
   'id, user_id, status, reason_code, severity, summary, details, ' +
   'lab_access_before, lab_access_after, opened_by, opened_at, resolved_by, resolved_at';
+
+app.get('/', async (c) => {
+  const admin = await requireAuth(c);
+  if (admin.role !== 'admin') {
+    return refuse(c, 403, {
+      code: 'admin_required',
+      message: 'Only an admin can read open moderation cases.',
+    });
+  }
+  await ensureTables(c.env);
+  try {
+    // Open means unresolved. Closing stamps resolved_at and leaves status as it was.
+    const countRow = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM spinout_moderation_cases WHERE resolved_at IS NULL`,
+    ).first<{ n: number | bigint }>();
+    const rawCount = countRow?.n;
+    const openCount = typeof rawCount === 'bigint' ? Number(rawCount) : rawCount;
+    if (typeof openCount !== 'number' || !Number.isFinite(openCount)) {
+      return refuse(c, 500, {
+        code: 'moderation_list_unreadable',
+        message: 'Open moderation cases could not be read. Try again.',
+      });
+    }
+    const rows = await c.env.DB.prepare(
+      `SELECT m.id, m.user_id, m.status, m.reason_code, m.severity, m.summary,
+              m.opened_at, m.created_at,
+              COALESCE(NULLIF(u.name, ''), u.email, 'account ' || m.user_id) AS who
+         FROM spinout_moderation_cases m
+         LEFT JOIN users u ON u.id = m.user_id
+        WHERE m.resolved_at IS NULL
+        ORDER BY m.created_at ASC
+        LIMIT 200`,
+    ).all<any>();
+    return c.json({ cases: rows.results || [], open_count: openCount });
+  } catch (e) {
+    console.error('[spinout-moderation] open list', (e as Error).message);
+    return refuse(c, 500, {
+      code: 'moderation_list_unreadable',
+      message: 'Open moderation cases could not be read. Try again.',
+    });
+  }
+});
 
 app.get('/:userId', async (c) => {
   const admin = await requireAuth(c);

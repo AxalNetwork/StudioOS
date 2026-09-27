@@ -195,7 +195,7 @@ function Field({ label, value, hint }) {
  * Step 2 — the territory picker that refuses                          *
  * ------------------------------------------------------------------ */
 
-function TerritoryEditor({ licence, held, onSaved }) {
+function TerritoryEditor({ licence, held, onSaved, onOpenLicence }) {
   const [codes, setCodes] = useState((licence.territories || []).join(', '));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -251,11 +251,34 @@ function TerritoryEditor({ licence, held, onSaved }) {
           <div className="flex items-start gap-1.5">
             <AlertCircle size={14} className="mt-0.5 shrink-0" />
             <div>
-              {clashes.map((c) => (
-                <div key={c}>
-                  <strong>{c}</strong> is held by {heldByOthers.get(c).licence_ref} ({heldByOthers.get(c).status}).
-                </div>
-              ))}
+              {clashes.map((c) => {
+                const holder = heldByOthers.get(c);
+                return (
+                  <div key={c} className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <span>
+                      <strong>{c}</strong> is held by {holder.licence_ref} ({holder.status}).
+                    </span>
+                    {onOpenLicence && holder.licence_uid && (
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-red-900 underline hover:no-underline dark:text-red-200"
+                        data-testid={`territory-clash-open-${c}`}
+                        onClick={() => onOpenLicence(holder.licence_uid)}
+                      >
+                        Open {holder.licence_ref}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-red-900 underline hover:no-underline dark:text-red-200"
+                      data-testid={`territory-clash-remove-${c}`}
+                      onClick={() => setCodes(entered.filter((x) => x !== c).join(', '))}
+                    >
+                      Remove {c} from list
+                    </button>
+                  </div>
+                );
+              })}
               <p className="mt-1.5">
                 Two licences cannot hold one country, and a suspended holder still holds its
                 territory — releasing it is a termination, not a lapse. This will be refused,
@@ -667,6 +690,13 @@ function DeployStep({ licence }) {
         )}
         {mine.live_state !== 'ok' && mine.live_reason && (
           <p className="text-xs text-gray-600 dark:text-gray-400">{mine.live_reason}</p>
+        )}
+        {(mine.last_version || mine.live?.deploy_version) && (
+          <p className="text-xs text-gray-600 dark:text-gray-400" data-testid="deploy-last-version">
+            Last deployed version:{' '}
+            <code>{mine.last_version || mine.live?.deploy_version}</code>
+            {mine.last_health_at ? ` · health read ${String(mine.last_health_at).slice(0, 10)}` : ''}
+          </p>
         )}
         <p data-testid="deploy-summary" className="text-sm text-gray-700 dark:text-gray-300">
           {summary}
@@ -1491,7 +1521,7 @@ function NoticesEditor({ licence, onSaved }) {
  * Detail                                                              *
  * ------------------------------------------------------------------ */
 
-function Detail({ uid, held, onChanged }) {
+function Detail({ uid, held, onChanged, onOpenLicence }) {
   const [d, setD] = useState(null);
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
@@ -1806,7 +1836,9 @@ function Detail({ uid, held, onChanged }) {
             </p>
           </div>
         )}
-        {step === 2 && <TerritoryEditor licence={d} held={held} onSaved={refresh} />}
+        {step === 2 && (
+          <TerritoryEditor licence={d} held={held} onSaved={refresh} onOpenLicence={onOpenLicence} />
+        )}
         {step === 3 && <SeatEditor licence={d} onSaved={refresh} />}
         {step === 4 && <TermsEditor licence={d} onSaved={refresh} />}
         {step === 5 && <ContractStep licence={d} onSaved={refresh} />}
@@ -1995,11 +2027,18 @@ function Coverage({ items, onOpen }) {
   );
 }
 
+const KIND_FILTERS = [
+  ['all', 'All'],
+  ['subsidiary', 'Axal'],
+  ['white_label', 'White-label'],
+];
+
 export default function AdminLicences() {
   const [data, setData] = useState(null);
   const [held, setHeld] = useState([]);
   const [heldUnreadable, setHeldUnreadable] = useState(false);
   const [sel, setSel] = useState(null);
+  const [kindFilter, setKindFilter] = useState('all');
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ licence_ref: '', legal_entity_name: '', brand_name: '', kind: 'subsidiary' });
   const [err, setErr] = useState('');
@@ -2050,6 +2089,9 @@ export default function AdminLicences() {
     );
   }
   const items = data.items || [];
+  const filteredItems = kindFilter === 'all'
+    ? items
+    : items.filter((l) => l.kind === kindFilter);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
@@ -2066,6 +2108,23 @@ export default function AdminLicences() {
           className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
           {creating ? 'Cancel' : 'New licence'}
         </button>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2" data-testid="licence-kind-filter">
+        {KIND_FILTERS.map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setKindFilter(id)}
+            className={`rounded-full border px-3 py-1 text-xs font-medium ${
+              kindFilter === id
+                ? 'border-indigo-600 bg-indigo-50 text-indigo-800 dark:border-indigo-500 dark:bg-indigo-950/40 dark:text-indigo-200'
+                : 'border-gray-300 text-gray-700 dark:border-gray-700 dark:text-gray-300'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* `setSel` is the same selector the licence rows below use, so a click on
@@ -2141,7 +2200,8 @@ export default function AdminLicences() {
         </form>
       )}
 
-      {items.length === 0 ? (
+      {filteredItems.length === 0 ? (
+        items.length === 0 ? (
         <div className="mt-6 rounded-lg border border-dashed border-gray-300 p-8 text-center dark:border-gray-700">
           <FileText size={22} className="mx-auto text-gray-400" />
           <p className="mt-3 text-sm font-medium text-gray-900 dark:text-gray-100">No licences have been issued.</p>
@@ -2150,10 +2210,17 @@ export default function AdminLicences() {
             contract with a real entity and inventing one would misrepresent the business.
           </p>
         </div>
+        ) : (
+        <div className="mt-6 rounded-lg border border-dashed border-gray-300 p-6 text-center dark:border-gray-700">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            No licences match this kind filter. Switch to All to see every row in the ledger.
+          </p>
+        </div>
+        )
       ) : (
         <div className="mt-6 grid gap-6 lg:grid-cols-[260px_1fr]">
           <div className="space-y-1.5">
-            {items.map((l) => (
+            {filteredItems.map((l) => (
               <button
                 key={l.uid} type="button" onClick={() => setSel(l.uid)}
                 className={`w-full rounded-lg border p-3 text-left ${
@@ -2184,6 +2251,9 @@ export default function AdminLicences() {
                 <div className="mt-1 text-[11px] text-gray-500">
                   {l.licence_ref} · {l.territories.length ? l.territories.join(' ') : 'no territory'}
                 </div>
+                <div className="mt-0.5 text-[10px] font-medium text-gray-500 dark:text-gray-400">
+                  {l.kind === 'white_label' ? 'White-label' : 'Axal subsidiary'}
+                </div>
                 <div className="mt-0.5 flex items-center gap-1 text-[11px] text-gray-500">
                   <Users size={11} /> {n0(l.seats_licensed)} seats
                 </div>
@@ -2191,7 +2261,11 @@ export default function AdminLicences() {
             ))}
           </div>
           <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
-            {sel ? <Detail uid={sel} held={held} onChanged={load} /> : <p className="text-sm text-gray-500">Pick a licence.</p>}
+            {sel ? (
+              <Detail uid={sel} held={held} onChanged={load} onOpenLicence={(u) => setSel(u)} />
+            ) : (
+              <p className="text-sm text-gray-500">Pick a licence.</p>
+            )}
           </div>
         </div>
       )}
