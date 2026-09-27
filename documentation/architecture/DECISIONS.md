@@ -31742,3 +31742,85 @@ surface); a cached-input cost read on Research (no store).
 - Both typechecks, `check-decision-ids`, `check-folder-docs`,
   `check-api-drift`, `check-unused-imports` and `check-dark-mode` exit 0. Root
   `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser probe.
+
+## D460
+
+**The investor deal-flow honesty pass: dead controls wired, false sentences
+corrected.** Wave 8, Session 17, item 1. No migration; no new `/api/*` method
+(the three the pages now call — `api.research.ask`, `api.listIntroductions`,
+`api.partnerRelationships` — already existed and are unchanged in shape except
+where noted); no route added or retired.
+
+**The Research question desk is wired.** IR1's compressed question box on the
+investor research root (`InvestorResearchWorkspace.jsx`) set a local flag on
+submit and showed a panel claiming there is no scoped research-chat service on
+the route — false: `POST /research/ask` (research.ts) is open to every
+signed-in user. The desk now submits to it on the press (never on a visit),
+prints the answer with its citations and the route's own charge, keeps the two
+`no_source` meanings apart (an empty library vs. a library with nothing on
+this), renders `model_unavailable` as its own state, and treats a failed ask
+as `Unreadable` with a retry. The rail's unavailable entry now names the real
+boundary — answers come from the reader's own research library, never from
+general knowledge — instead of denying the service exists.
+`investor_workspaces.test.mjs`'s pin on the old panel's last clause is
+re-aimed at the wiring.
+
+**The `/deals` board's Stage column reads the deal record.** The pipeline
+section read `row.stage`, a column no deal row has, so every Stage cell read
+"Not recorded", and its summary counted passed deals as live. The cell is
+`dealStage(row)`'s label — the same translation the Pipeline zone uses — and a
+passed deal (`dealStage` → null) is neither listed nor counted, matching the
+zone's own rule that a passed deal is not on the board.
+
+**Two Network chips go live.** `/partnernet/relationships` joined `users` for
+the counterpart's name and email but not `role`; it now returns `other.role`,
+and the relationship book's `Founders` chip narrows on it. The introductions
+desk's `Asked` chip reads `investor_introductions` (`GET /api/introductions`),
+which the page now loads beside the propositions; the export follows the view.
+`Offered` keeps a disabled chip with a corrected reason — an introduction you
+gave is value-add support, not a row on this desk — replacing the shared
+"nothing records who asked" reason the asks store disproves.
+
+**The scope-badge guard catches the conditional form.** The frame contract
+banned `scope="One …"` but missed `scope={cond ? 'One fund' : 'One book'}`,
+which two shell callers (`NetworkWorkspace`, `AdvisorBucketRoutes`) passed.
+Both props are removed — the shell fills the slot from the active company —
+and the guard now matches the braced form too.
+
+**Stale sentences corrected, each where it stood.**
+- `InvestorDealsRoutes.jsx`'s rail said "Nothing on this page drafts a memo or
+  produces a score" while every zone mounts its own draft band. The entry now
+  names what no zone does: produce a score (read from a stored run) or start a
+  batch run.
+- `InvestorPortfolioValueAdd.jsx`'s draft band was footed "Feeds the LP
+  reporting pack." — accepting a draft stamps `accepted_at` and nothing else,
+  and no LP report reads that store. The foot says what happens.
+- `investorZoneFilters.js`'s header said sixteen of nineteen zones are
+  declared; all nineteen are.
+- `DealRoomPage.jsx`'s Documents, Commitments and Activity tabs rendered a
+  failed read as an empty list ("No documents yet"); each now renders
+  `Unreadable` with a retry.
+- ROUTE_MAP rows: Deal Flow (the pass reason and funnel shipped; the legacy
+  `/pipeline/*` trio redirects), Pages · Investor Deals (the live-route cell
+  named `DealsPage`/`PipelineWorkspace` for routes investors no longer get),
+  Pages · Investor Research (the investor mount is `InvestorResearchWorkspace`
+  and its question desk is wired), Portfolio (KPI collection and the value-add
+  desk shipped; the marks/distributions writes remain uncalled — item 5).
+
+### VERIFIED
+- `npm run test:drift` exit 1 on Node 22, the one failure pre-existing on
+  main (d68335852) and reproduced there in isolation:
+  `capital_call_ledger.test.ts` "a retry after a partial write fills only the
+  gap, and notices only that" (Session 9's area; reported, not touched).
+  Frontend 3574 → 3583; worker 4473 → 4475. No count fell. New tests:
+  `investor_deals_board` (2), `investor_research_ask` (4),
+  `investor_network_desk` (3), `partnernet_relationships_role` (2). Re-aimed,
+  not loosened: `investor_workspaces` line 71 now pins the ask wiring.
+- 8 mutations, all caught on non-zero exit with a `not ok` line (unique
+  anchors, byte-change proven, sha256-checked restores): `row.stage` back,
+  passed deals listed, the ask box unwired, the false rail sentence restored,
+  the Founders narrowing removed, the asks load dropped, the conditional scope
+  literal restored, the counterpart role reverted.
+- Both typechecks, `check-decision-ids`, `check-folder-docs` and
+  `check-api-drift` exit 0. Root `npm run build`, then `check-docs-fresh
+  --strict`, exits 0. No browser probe.

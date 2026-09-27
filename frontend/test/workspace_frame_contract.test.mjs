@@ -298,6 +298,12 @@ test('the scope badge names the active company, and no caller restates the rule'
     const s = src(caller);
     assert.ok(!/scope="One /.test(s),
       `${caller} passes a literal scope — the shell fills that slot from the active company`);
+    // THE BRACED FORM IS THE SAME OFFENCE. `scope={cond ? 'One fund' : 'One
+    // book'}` is the attribute literal with a conditional wrapped around it,
+    // and the attribute-only pattern above missed it on two callers — the
+    // badge said "One fund" over whichever company was active.
+    assert.ok(!/scope=\{[^}]*['"]One /.test(s),
+      `${caller} passes a conditional literal scope — the shell fills that slot from the active company`);
   }
 });
 

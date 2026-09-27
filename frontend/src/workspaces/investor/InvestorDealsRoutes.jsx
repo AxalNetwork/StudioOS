@@ -124,7 +124,12 @@ export default function InvestorDealsRoutes() {
           coverage={[`${zone?.label || 'Pipeline'} · live deal records only`]}
           coverageNote="Founder-sourced and shared objects retain their provenance. Existing server access controls remain authoritative."
           unavailable={[
-            ['Memos and scoring runs', 'Nothing on this page drafts a memo or produces a score.'],
+            // WAS "Nothing on this page drafts a memo or produces a score" —
+            // false the day ID1–ID4 landed: every zone mounts its own draft
+            // band (memos, stale-deal notes, a cover note), run on your press.
+            // What no zone does is produce a SCORE: a score is read from a
+            // stored run, and nothing here starts a batch one.
+            ['Scoring runs', 'No score is produced on this page — a score is read from a stored run, one project at a time. Each zone’s own band drafts its memo, notes or cover note on your press.'],
           ]}
         />
       )}
