@@ -3,7 +3,8 @@
  *
  * Phase 4 opened with a false premise recorded in the UI layer: `AssistRail`
  * and `ui/index.js` both said there was "no eadwyn AI Gateway yet". There is
- * one. `services/aiRouter.ts` routes sixteen task classes across Workers AI
+ * one. `services/aiRouter.ts` routes twenty-three task classes (its `TaskClass`
+ * union; sixteen when this was written) across Workers AI
  * models with a fallback chain, a llama-guard safety pass, content-hash
  * caching, per-user $/day and $/month KV caps, an org-wide kill switch, and a
  * row in `ai_usage_logs` for every call. What was missing is much narrower:

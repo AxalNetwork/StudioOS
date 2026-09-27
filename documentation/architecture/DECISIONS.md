@@ -30703,6 +30703,115 @@ unchanged here; item 3 re-aims it together with the test that pins it.
   `ArchetypeCard` in both modes, which catches that mutation and its reverse
   (the full card printing the summary).
 
+## D321
+
+**The Founder and Investor Studio homes say when a read failed, count the
+Lab's milestones from what the Worker sends, and stop drawing zeros they
+cannot support.** Wave 8, Session 3, item 2 (the gap map's PR 1). Frontend
+only: no migration, no route, no `api.js` method.
+
+**The defects.**
+- The founder Lab card printed `completed_count || 0` "completed".
+  `/spinout-lab/state` has never sent `completed_count`, so it always read
+  "0 completed". Its "Current focus" row read three fields the Lab does not
+  send, so it was always "Not recorded".
+- A founder card whose read failed printed "Live source unavailable." and then
+  drew its rows anyway, each reading "Not recorded". When the project list
+  failed, every project card also said "Select or create a startup", which
+  invites a founder whose record merely failed to load to make a second one.
+- The "Independent subsidiaries" card appeared only when there were
+  subsidiaries, so a failed read hid it.
+- Investor Quick stats (the gap map's ISH:105) drew "Not recorded" for the
+  deal-flow and lifecycle figures when those reads had failed, and the deal
+  count read 0 while the dashboard was still loading.
+- The investor home's `number` helper returned 0 for `null`, because
+  `Number(null)` is 0. A missing stage count or match average therefore
+  showed as 0, and the lifecycle funnel added `?? 0` on top.
+- Four investor cards reported a failed read as a plain status line with no
+  retry.
+
+**What each home does now.**
+- Every founder card takes its failure, a claim sentence and a retry. A failed
+  read draws `Unreadable` and nothing else: no rows, and no "create a startup"
+  prompt. The subsidiaries card also appears when its read fails.
+- The Lab card counts the `milestones` list: the number completed this week,
+  the total completed, and the days remaining. The week's deliverable total
+  (the canvas's "3 of 5") is held in the Worker's milestone catalog and not
+  sent; the catalog says it must never be copied, so that row reads "Not
+  recorded" with the reason. An account with no active sprint says so. The
+  "Current focus" row is gone: nothing records a focus.
+- Investor Quick stats reads two sources, each in one of four states:
+  withheld (admin preview), loading, unreadable or ready. A failed source
+  draws one `Unreadable` line with a retry in place of its rows. The funnel,
+  the opportunities, the portfolio and the events cards draw `Unreadable` with
+  a retry. An unscored opportunity reads "Unscored" rather than a bare dash.
+- `Dashboard.jsx` passes the investor home an `onRetryLifecycle` that re-reads
+  `/dashboard/investor-lifecycle`. Retrying the dashboard never re-read it,
+  because that effect is keyed on the role. Where the dashboard itself failed
+  and the lifecycle was never requested, the dashboard retry is the retry.
+- Both homes draw the canvas's context line: "Studio", the role badge, the
+  context and today's date, replacing "One company. One clear move." and
+  "Thesis in motion." The advisor home already had it.
+- The founder Deck card reads the newest version's slides (`/decks/:id`) and
+  its engagement (`/decks/:id/engagement`). Both reads existed; the card never
+  called them. It draws the version, the slide count, the save date, "Last
+  shared" and "Viewed N× this week". Before this, "Slides" and "Last updated"
+  asked the version list for fields it never returns, so both were always "Not
+  recorded". Each of the two extra reads can fail alone, and then that part
+  reads `Unreadable` in place of its rows.
+- The founder Raise card draws the committed share of the target as a
+  percentage and a bar, when both amounts are real.
+
+**Differs from the canvas, deliberately.**
+- The canvas's "Last shared: 2 investors" cannot be drawn: a share link
+  records no recipient, so the card counts links, with the newest link's date.
+  "Viewed N× this week" counts views from the engagement read's newest 200, so
+  a deck viewed more than 200 times in one week would undercount.
+- The canvas notes that a founder with no subsidiary never sees the
+  subsidiaries card. That still holds, but a founder whose subsidiaries read
+  failed now sees the card as `Unreadable`. A failed read is not evidence of
+  none.
+- The Lab card reads "Week N", not the canvas's "Week 2 · Solution & Roadmap".
+  The week titles live only inside other sessions' pages, not in a module this
+  page can import.
+
+**Moved, so a test can render it.** The homes mount PersonalAdvisor, whose
+imports reach Worker modules, so a Node test cannot import them. The founder
+cards, `MetricRow`, `LabRows`, `labSummary`, `DeckRows`, `deckSummary`,
+`RaiseProgress` and `raisePercent` now live in
+`pages/founder/founderStudioCards.jsx`. Investor Quick stats' `quickStats`,
+`StatGroup`, `Row`, `Loading` and the fixed `number` live in
+`pages/investor/investorStudioParts.jsx`. Each home imports them back.
+
+**Left to later items.** Session 3's items 3 to 6 build the rest of the gap
+map for these homes: the voice, the shared "interview complete" row and the
+archetype card.
+
+**Verification.**
+- `npm run test:drift` on main ecd185ca9: exit 0. Frontend 3887 to 3912, the
+  25 new tests all in `studio_honesty_d321.test.mjs`. Worker, retention and guards
+  unchanged. Both typechecks, `lint:undef`, `check-dark-mode`,
+  `check-decision-ids`, `check-folder-docs` and `check-api-drift` exit 0.
+  Root `npm run build`, then `check-docs-fresh --strict`, exit 0.
+- Mutations: 26 run, 26 caught (non-zero exit and a `not ok` line, each file
+  restored from a sha256-checked snapshot). The first 18 were run again
+  against the final code, and all were caught again. They were aimed at the
+  defects:
+  - a failed card drawing its rows, and a card losing its retry or its claim;
+  - an absent milestone list or sprint start becoming 0, the per-week count
+    ignoring the week, and the Lab count going back to `completed_count`;
+  - the subsidiaries card hiding its failure again;
+  - a `|| 0`, `?? 0` or `number(null) === 0` returning, including a local copy
+    of `number`;
+  - a failed or loading dashboard shown as ready, and an unreadable group
+    drawing its rows;
+  - the lifecycle failure going back to a status line, and its retry leaving
+    the stale failure on screen;
+  - the investor title going back to its old headline;
+  - every view counted as "this week", the newest link read as the oldest, an
+    unanswered share list becoming 0, either extra deck read's failure being
+    ignored, a zero target dividing, and the bar running past full.
+
 ## D330
 
 **AdminX.jsx and AdminTelegram.jsx say why no draft was made.** Wave 8,
@@ -32924,6 +33033,127 @@ removes them.
   proposals read's, pinned by `pipeline_proposals_lifecycle`.
 - `needs_envelope` drops the deleted page from its list.
 - `partner_shell` drops its read of the deleted workspace.
+
+## D400
+
+**The AI rails say when a read failed, the model badge says "Default", and
+the assistant is no longer labelled as advice (Session 12, item 1).** No
+migration, no route, no `api.js` method. Frontend and comments only, plus one
+comment in `services/aiSpend.ts`.
+
+**What was false on screen, and what it says now.**
+
+| Where | Before | Now |
+| --- | --- | --- |
+| WorkerRail, Usage this month, when `/api/ai/me/spend` failed or answered `recorded: false` | "Not recorded" | `Unreadable` ("Your AI usage" / "The usage log could not be read. That is not a claim that nothing was spent.") with a Retry |
+| WorkerRail, Model · this page, when `/api/ai/pricing` failed | the block vanished, so the page looked like one with no model | the block's label plus `Unreadable` ("The model price list … unknown, not free") with a Retry; no model and no rate is named |
+| AssistRail (Advisory, Brand builder, Deck reviewer and the Lab pages), This month, on `recorded: false` | **"$0.00 / $50.00"** — `eadwynConfig` passed `spend_usd ?? 0`, and a null total fell through to Σ `p.spend ?? 0` over pages that carry no spend | "Unreadable" and "The usage log could not be read…", with a Retry wired through `AssistLayout` |
+| The `advisory` surface's mode card | "Advisory assist" | "Score explainer assist" |
+| The model menu's badge | RECOMMENDED | DEFAULT |
+
+`useAiSpend` now keeps `spendError` and `pricingError` apart and returns a
+`reload` (a counter in the fetch effect's dependency list). It used to keep
+one `error`, set only by the spend read; a failed pricing read was dropped.
+`error` stays, as the spend error, for the callers that read it.
+
+**No zero stands in for a figure on either rail.** WorkerRail's
+`cap_usd ?? 0` became a null cap (no "of $…", no bar); `eadwynConfig`'s
+`planCap`/`totalSpend` pass null rather than 0; AssistRail's page-sum
+fallback is gone (`eadwynConfig` is its only caller and passes the total or
+null); and `eadwynConfig`'s `tin: 0, pin: priced?.pin ?? 0` run profile,
+which spelled "nothing modelled" as zeros, is now empty.
+
+**The badge: measured, then named.** The voice rule forbids
+"recommendation" about what the assistant produces, and the decision given
+for this item was: measure what the badge marks; if it is the router's
+default for the surface, it says "Default". Measured on `d3ee831a5`: the
+badge was drawn from `railModels.js`'s typed `RECOMMENDED_BY_TASK`, whose
+only entry mapped `workspace_explain` to
+`@cf/meta/llama-3.3-70b-instruct-fp8-fast`, and `aiRouter.ts`'s
+`ROUTE.workspace_explain.model` is `MID_LLAMA`, the same id. So the badge
+marked the router's default, and it now says DEFAULT (upper case, like the
+canvas's chip). The decision said to rename the constant with the label;
+this goes one step further and **deletes it**. `modelsForTask` sets
+`isDefault: id === route.model` from the same `/api/ai/pricing` response the
+menu is built from. "Default" is a router fact, and a typed copy of a router
+fact is one nobody re-checks when the primary changes. That is the same
+reason the menu's ids and rates are derived rather than typed.
+`worker_rail_models` pins that `railModels.js` holds no `_BY_TASK` map,
+and it checks the derivation with a primary that is deliberately not first
+in `alternates`.
+
+**'Advisory' → 'Score explainer'.** The label renders as `${label} assist`.
+The regulated-wording scanner treats a one-word literal as an identifier, so
+it could not catch this. The surface runs `advisor_explain`, which explains
+scores and next steps, and the label now says so. The `/advisory` route keeps
+its name because that page also holds the human advisors, who are a real
+persona. The new test checks every `ASSIST_SURFACES` label, not only this
+one.
+
+**Stale claims corrected (the gap map's list, re-measured):**
+- WorkerRail's receipt comment said `/api/ai/me/spend` returns no latest
+  row. It returns `last_run` (without token counts, which is item 2).
+- WorkerRail's header said the mode is "still fixed". Validate passes
+  `fills`. It also said the rail served "six founder desks and twenty-four
+  investor surfaces", when there are 69 mounts across every licence.
+- `ui/index.js` said mode persistence and model choice "do not exist yet".
+  Both exist (D45, D13's condition met).
+- AssistRail said every surface is `kind: 'fixed'`. Two (`workspace`,
+  `market`) declare a choice.
+- AssistRail and `aiSpend.ts` said "sixteen task classes". The `TaskClass`
+  union has twenty-three, and the test derives the word from the union.
+- `ui/README.md` described AssistRail as "the single AI rail" and WorkerRail
+  as founder and investor only. It now also lists `railModels.js` and
+  `Honesty.jsx`.
+- `shellConfig.js` said the archetype badge colours are "identical across all
+  eighteen canvas files". The two Detail Layer canvases disagree with the
+  per-bucket ones, and with each other. The comment now says which palette is
+  followed, and not to repaint.
+
+**Not changed here, and passed to their owners:**
+- `design/incoming/README.md:298` still says "The model card cannot honestly
+  ship yet"; it shipped. That file is Session 1's.
+- `InvestorDealsWorkspace.jsx:202` and `InvestorDealsRoutes.jsx:123` pass the
+  rail a note reading "Scores and recommendations appear only when they exist
+  in the live deal record". Those are deal-record fields, not assistant
+  output, but the notes a page passes are not scanned. The pages are not
+  Session 12's.
+- `FounderRaiseLegal.jsx:176`'s "does not … provide legal advice" is a
+  negation and correct as written.
+
+**Verification.**
+- New test file `worker_rail_honesty_d400.test.mjs`, 12 tests. Two of them
+  render AssistRail against an unreadable and a readable spend response.
+- `worker_rail_models`: three RECOMMENDED tests re-aimed at the derived
+  default, plus one behavioural test.
+- `ui_assist_rail_and_sidebar`'s meter test is re-aimed, not loosened. The
+  gate moved from `spendKnown` onto `meter`, which is now null unless both
+  the figure and the cap are known.
+- `ai_spend_self`'s hook-boundary test is re-aimed the same way. Success
+  still sets the response, and failure leaves `spend` null and records why.
+  The failure branch now also clears an earlier success, because Retry can
+  re-run the fetch. A mutation that drops that clear is caught.
+- Mutations: 19 run, 19 caught. Each was counted on a non-zero exit plus a
+  `not ok` line, and each file was restored from a sha256-checked snapshot.
+  - dropped retry
+  - usage block saying "Not recorded"
+  - pricing block gated off
+  - pricing error dropped in the hook
+  - retry counter removed from the effect's dependencies
+  - default taken as the first alternate
+  - badge back to RECOMMENDED
+  - a typed `DEFAULT_BY_TASK` map
+  - rail `cap ?? 0`
+  - `totalSpend ?? 0`
+  - `planCap ?? 0`
+  - the 'Advisory' label
+  - AssistRail `totalSpend ?? 0`
+  - AssistRail retry removed
+  - AssistRail "Not recorded"
+  - the `ui/index.js` claim
+  - the `aiSpend.ts` count
+  - the receipt comment
+  - the hook's failure branch no longer clearing `spend`
 
 ## D410
 
