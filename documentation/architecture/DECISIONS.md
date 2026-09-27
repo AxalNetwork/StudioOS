@@ -33284,11 +33284,11 @@ partner they were short of credits. The card now reads `UNCLAIMABLE_LABEL`,
 one label per reason the Worker gives, and the drawer prints the Worker's
 `reason_text` for a non-founder. Everything else on the page is item 4's.
 
-**OWNER DECISION, NOT MADE HERE: does an `exploring` account qualify for
-perks?** The conservative default ships: it does not. The rule is one
-constant, `PERK_CLAIMANT_ROLES` in `routes/perks.ts`. Adding `'exploring'` is
-the whole change; the test that pins today's answer would then need its one
-assertion updated.
+**OWNER DECISION, MADE 2026-09-27: only founders claim perks.** An
+`exploring` account does not qualify. This entry first shipped that as the
+conservative default and left the choice to the owner, who confirmed it.
+`PERK_CLAIMANT_ROLES` in `routes/perks.ts` stays `['founder']`. The test that
+pins it now pins a decision, not a default.
 
 **A rule chosen here, and named.** Who may rate is not drawn on the canvas.
 `PERK_RATING_REQUIRES = 'redeemed'` asks for the one fact that says the

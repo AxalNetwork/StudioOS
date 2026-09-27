@@ -117,10 +117,10 @@ const partnerOnly = (c: Parameters<typeof requireRole>[0]) => requireRole(c, 'pa
  * the subscription itself; perks_claim_founders_d412.test.ts fails if a role
  * added here would skip that check.
  *
- * OWNER DECISION, NOT YET MADE: whether an `exploring` account (a signed-up
- * person whose membership is under review) qualifies. The conservative default
- * is that it does not. If the owner decides it does, add 'exploring' here and
- * nothing else changes.
+ * OWNER DECISION, MADE 2026-09-27: only founders claim. An `exploring`
+ * account (a signed-up person whose membership is under review) does not
+ * qualify, and neither does any other role. The test that pins this
+ * (perks_claim_founders_d412.test.ts) now pins a decision, not a default.
  */
 export const PERK_CLAIMANT_ROLES: ReadonlySet<string> = new Set(['founder']);
 const isClaimant = (user: any) => PERK_CLAIMANT_ROLES.has(String(user?.role ?? ''));
