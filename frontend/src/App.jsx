@@ -2544,7 +2544,11 @@ function AppInner() {
       {/* Same explicit list. The partner and admin tabs inside the page are
           gated on the role again there — a role that cannot submit a listing
           simply does not see the tab. */}
-      <Route path="/perks" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], effectiveRole === 'founder' ? founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><PerksPage user={user} /></FounderWorkspaceTabs>) : <PartnerWorkspaceTabs set="offers" user={user}><PerksPage user={user} /></PartnerWorkspaceTabs>)} />
+      {/* D413 — a partner's side of Perks & Products is Submit a perk and
+          Performance, and both live in /offers/perk-deals; claiming is a
+          founder's (D412). So a partner here is sent there. Every other role
+          keeps the marketplace. */}
+      <Route path="/perks" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], effectiveRole === 'founder' ? founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><PerksPage user={user} /></FounderWorkspaceTabs>) : effectiveRole === 'partner' ? <Navigate replace to="/offers/perk-deals" /> : <PartnerWorkspaceTabs set="offers" user={user}><PerksPage user={user} /></PartnerWorkspaceTabs>)} />
       <Route path="/raise/capital/pipeline" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapitalWorkspacePage />))} />
        <Route path="/raise/legal" element={guard(['admin', 'founder'], <FounderRaiseLegal />)} />
       <Route path="/raise/legal-engine" element={guard(['admin', 'founder', 'partner'], founderWorkspace('raise', <FounderWorkspaceTabs set="raise" user={user}><LegalEnginePage /></FounderWorkspaceTabs>))} />
@@ -2560,7 +2564,11 @@ function AppInner() {
       <Route path="/spinout-lab/compliance" element={guard(labRoles(['admin']), <SpinoutLabCompliancePage />)} />
       {/* 83(b) moved into the Lab (Week 4 deliverable). Old Incorporate
           path kept as a redirect so existing links and bookmarks survive. */}
-      <Route path="/incorporate/83b" element={<Navigate to="/spinout-lab/83b" replace />} />
+      {/* D361: the tracker lives at /spinout-lab/83b for Lab members and admins
+          (its guard), and inside the Studio-gated Legal Engine card for every
+          other founder. Sending those founders to the Lab route only reached a
+          refusal, so the old path now lands each on the one they can open. */}
+      <Route path="/incorporate/83b" element={<Navigate to={user?.spinout_lab_active === 1 || user?.role === 'admin' ? '/spinout-lab/83b' : '/raise/legal-engine/equity'} replace />} />
       <Route path="/compliance" element={guard(labRoles(['admin', 'founder', 'partner']), <CompliancePage />)} />
       <Route path="/wellbeing" element={guard(['admin', 'founder'], <WellbeingPage />)} />
       <Route path="/wellbeing/expert-dashboard" element={guard(['admin', 'founder', 'partner', 'advisor'], <ExpertEditorPage />)} />

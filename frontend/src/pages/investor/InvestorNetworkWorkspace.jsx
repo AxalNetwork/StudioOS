@@ -37,6 +37,12 @@ const age = (value) => {
   return days === 0 ? 'Today' : `${days}d ago`;
 };
 const safeKey = (value) => String(value || 'record').replace(/\W+/g, '-').toLowerCase();
+// An ask names its target by id only — `GET /api/introductions` joins no
+// names — so the row says which record it points at rather than inventing one.
+const askTarget = (ask) => (ask?.founder_user_id ? `Founder #${ask.founder_user_id}`
+  : ask?.project_id ? `Project #${ask.project_id}`
+    : ask?.founder_id ? `Founder record #${ask.founder_id}`
+      : 'Target not recorded');
 const lastTouchAt = (relationship) => relationship?.last_touch_at
   || relationship?.last_contact_at
   || relationship?.metadata?.last_touch_at
@@ -104,14 +110,17 @@ function Alert({ children }) {
 // relationship rows, so a split would either duplicate that read or invent a
 // second source for it.
 export default function InvestorNetworkWorkspace({ embedded = false, zone = null, role = 'investor', zoneFilters = null }) {
-  // The relationship book's zone view. One live chip out of five on this
+  // The relationship book's zone view. Two live chips out of five on this
   // licence — `relationship_type` is a CHECKed set and `co_investor` is a
-  // member of it — so `Everyone` and `Co-investors` are the whole of what this
-  // store can tell apart. The other three labels are prose on the row.
+  // member of it, and `Founders` narrows on the counterpart's role, which
+  // `/partnernet/relationships` returns. The other three labels are prose on
+  // the row.
   const [bookView, setBookView] = useState('all');
   // The introductions desk's zone view. `Stalled` is `status = 'expired'`,
-  // which the route writes lazily on every read; `Asked` and `Offered` are
-  // prose on the row, because no response carries a direction.
+  // which the route writes lazily on every read. `Asked` is live: an
+  // investor's own asks are stored in `investor_introductions` and loaded
+  // beside the propositions. `Offered` is prose on the row — an introduction
+  // you gave is logged as value-add support, not on this desk.
   const [deskView, setDeskView] = useState('all');
   const [params] = useSearchParams();
   const highlightedIntro = params.get('intro') || '';
@@ -119,6 +128,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   const [relationships, setRelationships] = useState(null);
   const [summary, setSummary] = useState(null);
   const [introductions, setIntroductions] = useState(null);
+  const [asks, setAsks] = useState(null);
   const [errors, setErrors] = useState({});
   const [refreshing, setRefreshing] = useState(false);
   const [busyUid, setBusyUid] = useState('');
@@ -128,19 +138,21 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
     setRefreshing(refresh);
     setActionError('');
     const calls = await Promise.allSettled([
-      api.partnerRelationships(), api.partnerSummary(), api.introPropositions(refresh ? { refresh: true } : {}),
+      api.partnerRelationships(), api.partnerSummary(), api.introPropositions(refresh ? { refresh: true } : {}), api.listIntroductions(),
     ]);
-    const [relationshipResult, summaryResult, introResult] = calls;
+    const [relationshipResult, summaryResult, introResult, askResult] = calls;
     if (relationshipResult.status === 'fulfilled') {
       const value = relationshipResult.value;
       setRelationships(Array.isArray(value) ? value : Array.isArray(value?.items) ? value.items : []);
     }
     if (summaryResult.status === 'fulfilled') setSummary(summaryResult.value || null);
     if (introResult.status === 'fulfilled') setIntroductions(introResult.value || { propositions: [], credits: null });
+    if (askResult.status === 'fulfilled') setAsks(Array.isArray(askResult.value?.introductions) ? askResult.value.introductions : []);
     setErrors({
       relationships: relationshipResult.status === 'rejected' ? 'Relationship book is unavailable right now.' : '',
       summary: summaryResult.status === 'rejected' ? 'Network aggregate unavailable.' : '',
       introductions: introResult.status === 'rejected' ? 'Introduction propositions are unavailable right now.' : '',
+      asks: askResult.status === 'rejected' ? 'Your recorded asks are unavailable right now.' : '',
       organizations: relationshipResult.status === 'rejected' ? 'Relationship-backed organization context is unavailable right now.' : '',
     });
     setRefreshing(false);
@@ -174,6 +186,9 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
     const highlighted = deskRows.find((prop) => prop.uid === highlightedIntro);
     return highlighted ? [highlighted, ...compact.slice(0, 3)] : compact;
   }, [highlightedIntro, deskRows]);
+  // The `Asked` view's rows: this investor's own asks, newest first as the
+  // route returns them.
+  const askRows = asks || [];
   const organizations = useMemo(() => {
     if (!relationships) return [];
     const grouped = new Map();
@@ -215,7 +230,9 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   // already scoped to the reader.
   const visibleRelationships = bookView === 'coinvestors'
     ? (relationships || []).filter((item) => item.relationship_type === 'co_investor')
-    : (relationships || []);
+    : bookView === 'founders'
+      ? (relationships || []).filter((item) => String(item.other?.role || '') === 'founder')
+      : (relationships || []);
   const touchCoverage = (relationships || []).filter((item) => lastTouchAt(item)).length;
   const coldCount = (relationships || []).filter((item) => {
     const touched = new Date(String(lastTouchAt(item) || '').replace(' ', 'T'));
@@ -253,7 +270,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                 : touchCoverage ? `${coldCount} going cold` : 'last-touch coverage unavailable';
               return `${ties} ties · ${touch}`;
             })} role={role} filters={zoneFilters ? zoneFilters({ value: bookView, onChange: setBookView }) : []} actions={investorZoneActions('network/relationships', { view: { header: ['Person', 'Organization', 'Type'], rows: visibleRelationships || [], cells: (r) => [personName(r), orgIdentity(r), r.relationship_type] } })} />
-            {errors.relationships ? <Alert>{errors.relationships}</Alert> : relationships === null ? <Skeleton rows={5} /> : relationships.length === 0 ? <div className="inw-empty" data-testid="empty-relationship-book">No attributed relationship records are available yet.</div> : visibleRelationships.length === 0 ? <div className="inw-empty" data-testid="empty-relationship-view">{`No co-investor tie is recorded. ${relationships.length} ${relationships.length === 1 ? 'tie' : 'ties'} in the book in total.`}</div> : (
+            {errors.relationships ? <Alert>{errors.relationships}</Alert> : relationships === null ? <Skeleton rows={5} /> : relationships.length === 0 ? <div className="inw-empty" data-testid="empty-relationship-book">No attributed relationship records are available yet.</div> : visibleRelationships.length === 0 ? <div className="inw-empty" data-testid="empty-relationship-view">{bookView === 'founders' ? `No tie with a founder account is recorded. ${relationships.length} ${relationships.length === 1 ? 'tie' : 'ties'} in the book in total.` : `No co-investor tie is recorded. ${relationships.length} ${relationships.length === 1 ? 'tie' : 'ties'} in the book in total.`}</div> : (
               <div className="inw-table" data-testid="table-relationship-book">
                 <div className="inw-table-head"><span>Person</span><span>Type</span><span>Strength</span><span>Context</span><span>Last touch</span></div>
                 {visibleRelationships.map((item) => <div className="inw-table-row" key={item.id} data-testid={`row-relationship-${item.id}`}>
@@ -268,8 +285,18 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
 
           {(shows('introductions') || shows('organizations')) && <div className="inw-lower">
             {shows('introductions') && <section className="inw-card" aria-labelledby="introductions-desk">
-              <SectionHeading id="introductions-desk" title="Introductions desk" detail={detailFor(errors.introductions, introductions, () => `${pending.length} awaiting your decision · ${propositionRows.length} shown`)} role={role} filters={zoneFilters ? zoneFilters({ value: deskView, onChange: setDeskView }) : []} actions={investorZoneActions('network/introductions', { view: { header: ['Introduction', 'Status', 'Score', 'Source'], rows: visiblePropositions, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] } })} />
-              {errors.introductions ? <Alert>{errors.introductions}</Alert> : introductions === null ? <Skeleton rows={4} /> : propositionRows.length === 0 ? <div className="inw-empty" data-testid="empty-introductions">No live introduction propositions. New matches appear here when available.</div> : <>
+              <SectionHeading id="introductions-desk" title="Introductions desk" detail={deskView === 'asked' ? detailFor(errors.asks, asks, () => `${askRows.length} ${askRows.length === 1 ? 'ask' : 'asks'} recorded`) : detailFor(errors.introductions, introductions, () => `${pending.length} awaiting your decision · ${propositionRows.length} shown`)} role={role} filters={zoneFilters ? zoneFilters({ value: deskView, onChange: setDeskView }) : []} actions={investorZoneActions('network/introductions', { view: deskView === 'asked' ? { header: ['Target', 'Status', 'Quarter', 'Asked'], rows: askRows, cells: (a) => [askTarget(a), a.status, a.quarter, a.created_at] } : { header: ['Introduction', 'Status', 'Score', 'Source'], rows: visiblePropositions, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] } })} />
+              {deskView === 'asked' ? (
+                errors.asks ? <Alert>{errors.asks}</Alert> : asks === null ? <Skeleton rows={4} /> : askRows.length === 0 ? <div className="inw-empty" data-testid="empty-asks">No introduction ask is recorded. One appears here when you request an intro.</div> : <>
+                  <div className="inw-proposition-list">{askRows.map((ask) => <article className="inw-proposition" key={ask.uid} data-testid={`card-ask-${ask.uid}`}>
+                    <div className="inw-prop-top"><span className="inw-prop-label">Asked · {ask.quarter || 'quarter not recorded'}</span><span className="inw-state" data-testid={`status-ask-${ask.uid}`}>{typeLabel(ask.status)}</span></div>
+                    <strong>{askTarget(ask)}</strong>
+                    {ask.message ? <p>{ask.message}</p> : null}
+                    <div className="inw-prop-actions"><span className="inw-state">Asked {age(ask.created_at)}</span></div>
+                  </article>)}</div>
+                  <p className="inw-footnote">An ask’s status is written when you make it and nothing moves it yet — a reply is a conversation, not a row here.</p>
+                </>
+              ) : errors.introductions ? <Alert>{errors.introductions}</Alert> : introductions === null ? <Skeleton rows={4} /> : propositionRows.length === 0 ? <div className="inw-empty" data-testid="empty-introductions">No live introduction propositions. New matches appear here when available.</div> : <>
                 {actionError && <Alert>{actionError}</Alert>}
                 <div className="inw-proposition-list">{visiblePropositions.map((prop) => {
                   const target = prop.target || {}; const active = prop.status === 'pending'; const busy = busyUid === prop.uid;

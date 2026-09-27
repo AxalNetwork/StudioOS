@@ -23,9 +23,12 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  * does the translation, exactly as `investorZoneActions.js` describes for the
  * ops half.
  *
- * SIXTEEN OF THE NINETEEN ARE HERE. The three left out are Deals' decision
- * zones, and the guard records why: each renders a single-record panel, so the
- * list surfaces their canvas filters describe would have to be built first.
+ * ALL NINETEEN ARE HERE. The three Deals decision zones were the last to
+ * arrive: each rendered a single-record panel, and filtering one record
+ * narrows nothing — so they waited for the lists their canvases draw, which
+ * ID2–ID4 built. `profile_zone_filters.test.mjs`'s `excluded` list for this
+ * profile is empty, and it stays that way by construction: a zone without a
+ * row fails the exact-set check there.
  *
  * SOME ZONES WERE ALREADY RIGHT AND ARE NOT BEING CHANGED. `funds/lps` and
  * `funds/reporting` each carry four real predicates over rows they load; their
@@ -50,23 +53,27 @@ const NO_EXTRACTION_LAYER =
 // it. What is true is that the question has already been answered upstream.
 const ALREADY_MINE =
   'every deal on this board is already one of yours; it loads only the deals you were invited to, committed to, or are a room member of';
-// `/network/relationships`, and all three failures are the same one column
-// short. `partner_relationships` is `partner_a_id, partner_b_id,
-// relationship_type, strength_score, metadata` and nothing else — no
-// counterpart role, no interaction date, no fund tie.
-const NO_COUNTERPART_ROLE =
-  'no relationship type names an investor-to-founder tie, and the payload carries the counterpart’s name and email without their role';
+// `/network/relationships`. `partner_relationships` is `partner_a_id,
+// partner_b_id, relationship_type, strength_score, metadata` and nothing else
+// — no interaction date and no fund tie, so `Going cold` and `LPs` keep their
+// reasons. The third gap this comment used to name is closed: the counterpart's
+// role was missing from the payload, and `/partnernet/relationships` now
+// returns it, which is what the `Founders` chip narrows on.
 const NO_LP_RELATIONSHIP =
   'an LP register is kept against a fund rather than as a relationship, and this page never reads it';
 const NO_INTERACTION_DATE =
   'no interaction date is stored on a relationship; the only history kept is that the row was created and edited';
-// `/network/introductions`. Word for word what the founder table says, because
-// it is the same store and the same absence: `intro_propositions` has no
-// direction column, and every row is one addressed to the reader. Note the
-// canvas order differs from founder's — `Offered` before `Asked` — which is
-// exactly why these are four tables and not one.
-const NO_DIRECTION_RECORDED =
-  'nothing records who asked: every proposition here is addressed to you, and the response names the counterpart without a direction';
+// `/network/introductions`. NOT word for word what the founder table says, and
+// the difference is a store: the founder desk reads `intro_propositions` alone,
+// where every row is addressed to the reader, but an investor's own asks live
+// in `investor_introductions` (`GET /api/introductions`) — so `Asked` is a live
+// chip here and stays prose there. `Offered` keeps a reason of its own: an
+// introduction you gave is value-add support (the ledger the Portfolio desk
+// keeps), not a row on this desk. Note the canvas order differs from
+// founder's — `Offered` before `Asked` — which is exactly why these are four
+// tables and not one.
+const NO_OFFER_ON_THIS_DESK =
+  'an introduction you offered is logged as value-add support, not on this desk — every row here is one addressed to you, or one you asked for';
 // `/network/organizations`, AND THE FOUR-STEP CHECK ENDS AT STEP FOUR HERE.
 // `metadata` is a real column on `partner_relationships` and it is free-text
 // JSON, so `metadata.organization_name` is a shape the store could physically
@@ -299,7 +306,7 @@ export const INVESTOR_ZONE_FILTERS = {
   // member of it.
   'network/relationships': [
     { canvas: 'Everyone', key: 'all' },
-    { canvas: 'Founders', unbuilt: NO_COUNTERPART_ROLE },
+    { canvas: 'Founders', key: 'founders' },
     { canvas: 'Co-investors', key: 'coinvestors' },
     { canvas: 'LPs', unbuilt: NO_LP_RELATIONSHIP },
     { canvas: 'Going cold', unbuilt: NO_INTERACTION_DATE },
@@ -307,8 +314,8 @@ export const INVESTOR_ZONE_FILTERS = {
 
   'network/introductions': [
     { canvas: 'All', key: 'all' },
-    { canvas: 'Offered', unbuilt: NO_DIRECTION_RECORDED },
-    { canvas: 'Asked', unbuilt: NO_DIRECTION_RECORDED },
+    { canvas: 'Offered', unbuilt: NO_OFFER_ON_THIS_DESK },
+    { canvas: 'Asked', key: 'asked' },
     { canvas: 'Stalled', key: 'stalled' },
   ],
 

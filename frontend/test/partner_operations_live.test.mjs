@@ -134,10 +134,18 @@ test('the partner stat strips read fields the worker actually emits', () => {
   // artboard's strip is `Live · Expiring · Expired · Grants revoked`, and the
   // fourth of those is the one that sums redemptions — of expired perks that
   // named what they granted. Same alias, same defect if it is ever mistyped.
-  assert.match(perks, /revoking\.reduce\(\(a, p\) => a \+ \(Number\(p\.claim_count\) \|\| 0\), 0\)/,
+  // D413 — REDEEMERS ARE `redeemed_count` NOW. The tile summed `claim_count`
+  // under the word "redeemers" while nothing wrote `redeemed`; routes/perks.ts
+  // serves both aliases on GET /partner, and each figure reads its own.
+  assert.match(perks, /revoking\.reduce\(\(a, p\) => a \+ Number\(p\.redeemed_count\), 0\)/,
     'the redeemers-affected total must read the alias the route emits');
-  assert.match(perks, /const used = Number\(p\.claim_count\) \|\| 0;/,
-    'the lifecycle row must read the alias the route emits');
+  assert.match(perks, /const claimed = Number\(p\.claim_count\);/,
+    'the lifecycle row must read the claim alias the route emits');
+  assert.match(perks, /const used = Number\(p\.redeemed_count\);/,
+    'the lifecycle row must read the redeemed alias the route emits');
+  const partnerRoute = read('cloudflare-worker/src/routes/perks.ts');
+  assert.equal((partnerRoute.match(/AND x\.status = 'redeemed'\) AS redeemed_count/g) || []).length, 2,
+    'GET /partner must emit `redeemed_count` on both its queries');
 
   // A win rate divides by decisions, not by submissions, and the sentence under
   // it must count the same set the percentage does.
