@@ -96,12 +96,14 @@ export default function InvestorClosingZone() {
   const navigate = useNavigate();
   const [deals, setDeals] = useState(null);
   const [envelopes, setEnvelopes] = useState(null);
+  const [conditions, setConditions] = useState(null);
   const [view, setView] = useState('close');
   const [query, setQuery] = useState('');
 
   const load = useCallback(() => {
     setDeals(null);
     setEnvelopes(null);
+    setConditions(null);
     api.listDeals(undefined, 'mine').then(
       (r) => setDeals(Array.isArray(r) ? r : (r?.items || [])),
       () => setDeals(UNAVAILABLE),
@@ -110,11 +112,18 @@ export default function InvestorClosingZone() {
       (r) => setEnvelopes(r?.envelopes || []),
       () => setEnvelopes(UNAVAILABLE),
     );
+    // The Blocking chip's store (migration 334): the open conditions on every
+    // decision this account may see, each carrying the deal it could block.
+    api.icConditions('open').then(
+      (r) => setConditions(Array.isArray(r?.items) ? r.items : []),
+      () => setConditions(UNAVAILABLE),
+    );
   }, []);
   useEffect(() => { load(); }, [load]);
 
   const dealsReady = deals !== null && deals !== UNAVAILABLE;
   const envReady = envelopes !== null && envelopes !== UNAVAILABLE;
+  const condReady = conditions !== null && conditions !== UNAVAILABLE;
   /**
    * THE THIRD FLAG, AND THE REASON THE OTHER TWO ARE NOT ENOUGH.
    *
@@ -188,6 +197,29 @@ export default function InvestorClosingZone() {
   }, [view, rows]);
 
   /**
+   * THE BLOCKING VIEW'S ROWS. A blocking item is a Commit condition that is
+   * still open (migration 334), narrowed to the deals at closing — the
+   * hand-off the artboard's note describes ("arrived from the Commit vote").
+   * A condition on a deal at any other stage is the Commit room's to show.
+   */
+  const blockingRows = useMemo(() => {
+    if (!condReady) return [];
+    const ids = new Set(closing.map((d) => d.id));
+    return conditions.filter((cond) => cond.deal_id != null && ids.has(cond.deal_id));
+  }, [condReady, conditions, closing]);
+
+  /** Search narrows what the chip chose — the Blocking view included. */
+  const visibleBlocking = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return blockingRows;
+    return blockingRows.filter((cond) => {
+      const deal = closing.find((d) => d.id === cond.deal_id);
+      return `${cond.body || ''} ${cond.decision_title || ''} ${deal?.project_name || ''}`
+        .toLowerCase().includes(q);
+    });
+  }, [blockingRows, query, closing]);
+
+  /**
    * SEARCH NARROWS WHAT THE CHIP CHOSE, over the two names the row shows: the
    * document's title and the deal it belongs to. A closing row is an envelope,
    * so "which deal is this" is the question the reader arrives with, and the
@@ -227,10 +259,15 @@ export default function InvestorClosingZone() {
         filters={investorZoneFilters('deals/closing', {
           value: view,
           onChange: setView,
-          // The two live chips only. `Blocking` and `Wires` are unbuilt with a
-          // stated reason, and a count beside a refusal would read as a figure
-          // the store does not hold.
-          counts: { close: chipped.length, documents: rows.length },
+          // `Wires` stays unbuilt with a stated reason, and a count beside a
+          // refusal would read as a figure the store does not hold. `Blocking`
+          // counts only when the conditions read succeeded: `undefined` drops
+          // the clause rather than printing a figure a failed read disclaimed.
+          counts: {
+            close: chipped.length,
+            documents: rows.length,
+            blocking: condReady ? blockingRows.length : undefined,
+          },
         })}
         actions={rowActions}
       />
@@ -293,7 +330,44 @@ export default function InvestorClosingZone() {
             />
           </div>
 
+          {/* ══ THE BLOCKING VIEW — open Commit conditions on these deals ══ */}
+          {view === 'blocking' && (
+            !condReady ? (
+              <p className="text-[12.5px] leading-relaxed text-red-700 dark:text-red-300" role="alert" data-testid="status-blocking-unreadable">
+                The conditions record could not be read. That is not a claim that nothing is blocking.
+                <button type="button" onClick={load} className="ml-1 inline-flex items-center gap-1 underline">Retry</button>
+              </p>
+            ) : (
+              <Instrument
+                testid="closing-blocking"
+                title="Blocking"
+                meta="Open conditions carried from the Commit vote"
+                cols="2fr 1.1fr 1.2fr .9fr"
+                head={['Condition', 'Deal', 'Decision', 'Open since']}
+                rows={visibleBlocking.map((cond) => ({
+                  key: cond.uid,
+                  cells: [
+                    { text: cond.body },
+                    {
+                      text: closing.find((d) => d.id === cond.deal_id)?.project_name || `Deal #${cond.deal_id}`,
+                      node: cond.deal_id ? <OpenDeal id={cond.deal_id} onOpen={navigate} /> : undefined,
+                    },
+                    { text: cond.decision_title || cond.decision_uid },
+                    day(cond.created_at) ? { text: day(cond.created_at) } : { nr: true },
+                  ],
+                }))}
+                note={
+                  'A blocking item is a Commit condition that is still open — recorded in the commit room, '
+                  + 'not typed here, which is why it can gate the wire: a condition that lived only in the '
+                  + 'minutes is a condition nobody enforces. The decision’s author or an admin marks one met '
+                  + 'or waived there.'
+                }
+              />
+            )
+          )}
+
           {/* ══ THE COLLECTION THIS STAGE ACTUALLY HAS ══════════════════════ */}
+          {view !== 'blocking' && (
           <Instrument
             testid="closing-paper"
             title="Closing paper"
@@ -327,6 +401,7 @@ export default function InvestorClosingZone() {
               + 'signed under a ratio, so it renders as unrecorded instead.'
             }
           />
+          )}
 
           <ZoneDraft
             surface="deals/closing"
@@ -368,13 +443,15 @@ export default function InvestorClosingZone() {
               at all.
             </p>
             <p className="mt-2">
-              <strong>Nothing here can be blocking,</strong> because a blocking
-              item is a Commit condition and{' '}
+              <strong>Blocking is real, and lives in the commit room.</strong>{' '}
+              A blocking item is a Commit condition that is still open —
+              recorded against the decision in{' '}
               <a className="underline underline-offset-2" href="/deals/commit">the commit room</a>{' '}
-              cannot store one either. The artboard&rsquo;s note says its
-              blocking item &ldquo;arrived from the Commit vote&rdquo;; that
-              hand-off has no store on either side, so no row is drawn as
-              gating a transfer.
+              and read here, never typed locally. The artboard&rsquo;s note says
+              its blocking item &ldquo;arrived from the Commit vote&rdquo;; that
+              hand-off is the store now (migration 334), and the{' '}
+              <em>Blocking</em> chip above lists every open one on a deal at
+              closing.
             </p>
           </StatedLimit>
         </div>

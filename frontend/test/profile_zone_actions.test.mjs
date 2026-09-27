@@ -177,7 +177,12 @@ const PROFILES = {
     // returned 200 over a ledger that stayed empty. Same sentence, three
     // different underlying facts — which is why each was read rather than
     // batch-wired.
-    handlers: 7,
+    //
+    // EIGHTH AND NINTH: `deals/commit`'s `Export minutes` and `Add condition`,
+    // and these are the SECOND kind — gaps closed by building. Both reasons
+    // were true when written (no minutes on `ic_meetings`, no condition store
+    // at all); migration 334 built both, and D461 wired the ops.
+    handlers: 9,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,

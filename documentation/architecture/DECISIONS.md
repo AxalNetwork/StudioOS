@@ -32268,3 +32268,78 @@ the enrolment batch dropping the `auth_totp` write.
 
 No migration, no route, no `api.js` method, no `frontend/src` change, so
 `docs/` is untouched.
+
+## D461
+
+**Commit governance: IC conditions are a store, a recused vote leaves the
+tally, and meetings carry minutes.** Wave 8, Session 17, item 2. Migration
+334 (`ic_conditions`; `ic_meetings` minutes columns). Four new `/api/ic/*`
+routes, all in `routes/ic.ts` so the decision scope stays in one file.
+
+**Conditions.** `ic_conditions` holds one row per condition on a decision —
+the text, `open | met | waived`, who recorded it and who resolved it. Anyone
+who may see the decision may add one (`POST /ic/:uid/conditions`); the
+decision's author or an admin resolves one (`PATCH /ic/conditions/:uid`),
+because resolving is what unblocks the wire. `GET /ic/conditions` lists them
+through `icDecisionScope` joined to the deal each could block — the Commit
+zone's Conditions chip reads it, and the Closing zone's Blocking chip narrows
+it to deals at closing: the hand-off the ID4 artboard means by "arrived from
+the Commit vote". `scopedDecisions` attaches each decision's conditions, so
+the second reader (the `deals/commit` draft gather) inherits them without a
+second copy of the predicate. research.ts's `deals/commit` and
+`deals/closing` draft instructions still forbid naming a condition — that
+file is Session 2's, and the instruction changes there now that the store
+exists.
+
+**Recusal.** `ic_votes.vote` carries no CHECK, so `recused` joins the
+vocabulary at the vote endpoint with no migration — and with the declaration
+required as its rationale (`recusal_requires_declaration`), because a recusal
+with no conflict written down is an unattributed change to the denominator.
+`tally()` counts recusals BESIDE the yes/no/abstain denominator, never in it;
+an abstention is a vote cast and stays in. The decision-journal auto-draft
+excludes a recusal (it is not a decision): no row is written for one, and the
+old vote's shadow draft is removed when it carries only the auto-generated
+fallback thesis, or re-marked `other` when the voter's own words are in it.
+Whether a rationale is required on an ORDINARY vote is unchanged — the column
+stays nullable and the endpoint still accepts one without; the Commit page's
+Rationales tile keeps reporting that. That requirement is the owner's call
+and is named here rather than decided.
+
+**Minutes.** `ic_meetings` gains `minutes`, `minutes_recorded_by` and
+`minutes_recorded_at` — one body per meeting, replaced by PATCH, written by
+the organiser or an admin (`PATCH /ic/meetings/:uid/minutes`). The commit
+room reads them through the meeting linked to the current decision's deal and
+reports the unrecorded state as a state, not as an absent store. Export
+minutes writes what was recorded and is disabled with the reason when nothing
+has been.
+
+**Not built here:** quorum and the eligible roster stay unstored (Session
+15's area); the Commit strip keeps its honest "In the room" invitation count.
+
+### VERIFIED
+- `npm run test:frontend` exit 0: 3608 pass (3558 on the item-1 merge base —
+  main moved). `npm run test:worker` exit 1, the one failure pre-existing on
+  main (`capital_call_ledger.test.ts` "a retry after a partial write fills
+  only the gap", Session 9's area; reported, untouched): 4530 tests, 4526
+  pass, 3 skipped. New worker tests: `ic_conditions_minutes` (9). Extended,
+  not loosened: `ic_company_scope` (outsider matrix 6 → 10 rows for the new
+  endpoints, tally carries `recused`), `investorLifecycle.authz` (fixture
+  gains the migration-334 table). Re-aimed at the built behaviour:
+  `investor_deals_id3` (recusal renders as itself with its declaration;
+  conditions/minutes chips live; quorum still stated), `investor_deals_id4`
+  (Blocking is the live chip over the conditions store; every read scoped),
+  `investor_deals_search_and_counts` (blocking count), and
+  `profile_zone_actions`' investor handler count 7 → 9 with the history kept.
+  New frontend guard: `investor_deals_commit_governance` (4).
+- 10 mutations, all caught on non-zero exit with a `not ok` line (unique
+  anchors, byte-change proven, sha256-checked restores): the declaration
+  requirement removed, the tally dropping recused, the journal including a
+  recusal, the resolve gate removed, the minutes organiser gate removed, the
+  conditions list unscoped (`1=1`), the add-condition call unwired, the page's
+  resolve gate removed, the Blocking narrowing removed, the Conditions chip
+  back to unbuilt.
+- Both typechecks, `check-sql-migrations`, `check-sqlite-dialect`,
+  `check-sql-prepare`, `check-timestamp-comparisons`,
+  `check-runtime-schema-declared`, `check-decision-ids`, `check-folder-docs`
+  and `check-api-drift` exit 0. Root `npm run build`, then `check-docs-fresh
+  --strict`, exits 0. No browser probe.

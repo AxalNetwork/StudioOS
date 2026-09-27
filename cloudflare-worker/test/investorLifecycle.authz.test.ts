@@ -294,6 +294,14 @@ CREATE TABLE ic_votes (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(ic_decision_id, user_id)
 );
+-- Migration 334 — the decision detail read joins its conditions.
+CREATE TABLE ic_conditions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
+  ic_decision_id INTEGER NOT NULL, body TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open', created_by INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  resolved_at TEXT, resolved_by INTEGER
+);
 `;
 
 const IC_FIRM = 5;
