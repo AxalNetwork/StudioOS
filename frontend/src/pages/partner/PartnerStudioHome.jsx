@@ -5,7 +5,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { api } from '../../lib/api';
-import PersonalAdvisor from '../../components/advisor/PersonalAdvisor';
+import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
 import './partnerStudioHome.css';
 import { titleCase as caseLabel } from '../../lib/absence';
@@ -135,7 +135,7 @@ export default function PartnerStudioHome({
 
       <section className="partner-assistant" data-testid="module-eadwyn">
         {previewing ? <div className="partner-assistant-placeholder"><Sparkles size={18} /><div><strong>Eadwyn</strong><span>Partner/Operator assessment is unavailable in role preview.</span></div><Status>Preview only</Status></div>
-          : assistantAvailable ? <PersonalAdvisor disablePersistedFullscreen onAvailabilityChange={setAssistantAvailable} />
+          : assistantAvailable ? <StudioInterview persona="partner" disablePersistedFullscreen onAvailabilityChange={setAssistantAvailable} />
             : <State>Eadwyn is unavailable in this environment. Your studio data remains available below.</State>}
       </section>
 

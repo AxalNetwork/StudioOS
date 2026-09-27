@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BarChart3, CalendarDays, CircleDollarSign, FileStack, Landmark, MessageCircle, Network, RefreshCw, Route, Sparkles } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
-import PersonalAdvisor from '../../components/advisor/PersonalAdvisor';
+import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
 import { api, spinoutLab } from '../../lib/api';
 import { CardStatus, CompactList, DeckRows, LabRows, MetricRow, RaiseProgress, StudioCard, deckSummary, labSummary, raisePercent } from './founderStudioCards';
@@ -129,7 +129,7 @@ export default function FounderStudioHome({ user }) {
       {partial && <div className="fs-partial" data-testid="status-founder-studio-partial">Some live sources are unavailable. Available operating records remain on screen.<button type="button" data-testid="button-retry-founder-studio" onClick={() => setRetry((n) => n + 1)}>Retry</button></div>}
 
       <div className="fs-advisor" data-testid="section-founder-advisor">
-        <PersonalAdvisor disablePersistedFullscreen onAvailabilityChange={setAdvisorAvailable} />
+        <StudioInterview persona="founder" disablePersistedFullscreen onAvailabilityChange={setAdvisorAvailable} />
         {advisorAvailable === false && <AdvisorUnavailable />}
       </div>
       <div className="fs-profile" data-testid="section-founder-profile"><ProfileFitSection compact /></div>

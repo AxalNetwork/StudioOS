@@ -17,6 +17,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, Unrecorded, Unreadable } from '../../ui';
+import { STUDIO_CHAT_ANCHOR } from '../../components/advisor/interviewCompleteRow';
 import { UNAVAILABLE } from './adminStudioOverview';
 
 /** The canvas's four cards. `chip` is the field shown beside the title. */
@@ -31,7 +32,8 @@ export const POSTURE_CARDS = [
   { section: 'PREFS', title: 'Preferences', quiet: true, link: { to: '/account', label: 'Settings' } },
 ];
 
-export const CHAT_ANCHOR = 'studio-chat';
+// D324 — one definition, beside the component that renders the anchor.
+export const CHAT_ANCHOR = STUDIO_CHAT_ANCHOR;
 
 function toChat(e) {
   const el = typeof document !== 'undefined' ? document.getElementById(CHAT_ANCHOR) : null;
