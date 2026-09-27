@@ -8032,6 +8032,11 @@ states until the next route is added.*
 its own work), and the Deployments zone's rollout percentage and rollback, which
 need the Cloudflare versions API rather than the registry.
 
+*Corrected by D451: the licence agreement send leg ships on
+`POST /admin/licences/:uid/contract/:contractUid/send`; status on read follows
+the linked envelope. HQ countersignature and ordered signers remain Session 13
+work.*
+
 **Verification.** `npm run test:drift` exit 0, read as the exit code.
 `cloudflare-worker/test/admin_licences_deploy.test.ts` (16),
 `cloudflare-worker/test/licence_contract_instantiate.test.ts` (14) and
@@ -33076,6 +33081,37 @@ two `api.js` methods removed, none added.
 
 **Tests.** `hq_home.test.mjs` and `territory_licences.test.mjs` re-aimed at
 properties, not stale refusal copy; new `hq_honesty_sweep_d450.test.mjs`.
+
+## D451
+
+**The licence agreement leaves draft through the shared e-sign helper.** Wave 8,
+Session 16, item 2. Migration **331** (`contract_sent` on `licence_events`).
+Reverses the D110 deferred leg that left `envelope_uid` unwired; **`esign.ts` and
+Session 13 originator tables are not edited here.**
+
+**Send.** `POST /api/admin/licences/:uid/contract/:contractUid/send` (super-admin
+write bar) picks the first active `licence_admins` recipient (principal first),
+calls `createAndSendEnvelope` with `documentType: template_slug`, `dealId:
+contract.id`, and licence merge fields (`refuseUnfilled: false`), then writes
+`licence_contracts.status = sent`, `envelope_uid`, `sent_at`, and a
+`contract_sent` event.
+
+**Read.** `GET …/contract` enriches each row from `esign_envelopes` when
+`envelope_uid` is set: `completed` → `signed` (with `signed_at` from the
+envelope), `sent` / `partially_signed` → `sent`, `void` → `void`. HQ
+countersignature stays **Not recorded** with the Session 13 reason (ordered
+signers deferred). The stored `body_md` on the contract row is unchanged — the
+envelope body is rendered at send time from the template slug and merge fields,
+same as other `/legal/esign/send` flows.
+
+**UI.** `AdminLicences.jsx` Contract step: status-aware copy, **Send for
+signature** when draft and no envelope, `api.licenceContractSend`.
+
+**Tests.** `licence_contract_send_d451.test.ts`; `hq_licences_h2h3.test.mjs`
+pins send wiring.
+
+*Corrected by D451: D110's "Deliberately not here" e-sign leg — `envelope_uid`
+is now written on send and status on read follows the envelope.*
 
 ## D460
 
