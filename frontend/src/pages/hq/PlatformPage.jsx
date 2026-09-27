@@ -50,6 +50,7 @@ import { SlidersHorizontal } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import { deployVersionDisplay, DEPLOY_VERSION_ABSENT_REASON } from '../../lib/deployVersion';
 import { SWITCH_TONE, setByLabel, operatorLine } from '../../lib/platformSwitches';
 import { liveChip, residencyLine } from '../../lib/deployTimeline';
 import { ConsoleLinkBody, CONSOLE_LINK, CONSOLE_TILE } from './ConsoleLink';
@@ -1114,13 +1115,15 @@ export default function PlatformPage() {
                           {d.live.detail || 'The branch answered and reported its database failing, without saying why.'}
                         </p>
                       )}
-                      {(d.last_version || d.live?.deploy_version) && (
-                        <p className="mt-0.5 text-[11px] text-axal-faint" data-testid={`hq-deployment-version-${d.code}`}>
-                          Deployed version{' '}
-                          <code className="font-mono">{d.last_version || d.live.deploy_version}</code>
-                          {d.last_health_at ? ` · last health ${day(d.last_health_at)}` : ''}
-                        </p>
-                      )}
+                      <p className="mt-0.5 text-[11px] text-axal-faint" data-testid={`hq-deployment-version-${d.code}`}>
+                        Deployed version{' '}
+                        {deployVersionDisplay(d) ? (
+                          <code className="font-mono">{deployVersionDisplay(d)}</code>
+                        ) : (
+                          <Unrecorded reason={DEPLOY_VERSION_ABSENT_REASON} />
+                        )}
+                        {d.last_health_at ? ` · last health ${day(d.last_health_at)}` : ''}
+                      </p>
                       <div className="mt-0.5 text-[11px] text-axal-faint">
                         {d.d1_name}
                         {residencyLine(d) ? ` · ${residencyLine(d)}` : ''}
