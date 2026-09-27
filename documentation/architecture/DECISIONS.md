@@ -31393,6 +31393,89 @@ admin home. It now asserts the admin home mounts Eadwyn once, through
   - the homes: the advisor home's strip restored, and the founder home
     mounting the chat directly.
 
+## D325
+
+**The archetype card is finished: a retry on every failed read, labels for
+screen readers, a single sprite as one tile, rows on a phone, Values as
+sliders, and a Level / XP bar.** Wave 8, Session 3, item 6. One new route,
+`GET /api/assessment/xp/me`, and its `api.js` method,
+`assessment.myXp()`, in the same commit. No migration: `user_xp` has existed
+since migration 108.
+
+**The XP route.** `user_xp` holds each user's running total. The assessment
+engine and `eventBadges.ts` write it; until now no route read it.
+- The route reads only the caller's own row, with the id bound.
+- The level is derived from the total with the engine's own curve
+  (`levelForXp`: floor(sqrt(xp / 100)) + 1), not taken from the stored
+  `level` column. A concurrent award can leave that column a step behind the
+  total. The route also sends the band around the level: level L starts at
+  100·(L−1)² XP, and L+1 at 100·L².
+- No row is the engine's own default, 0 XP at level 1, so it is a real zero.
+  `recorded: false` says so, and the bar adds "No XP awarded yet".
+- A failed read is a `refuse()` body, `xp_unreadable`, with our own sentence.
+  The SQLite text stays out of it, and the body carries no figure.
+
+**Where the bar goes.** Canvas 69dc42f3 ("Studio · Persona hubs") draws the
+bar inside the compact archetype card on `/studio`. Canvas ec6c3ada ("Studio ·
+Archetype preview"), the card's own design, stops that card at the teaser.
+The card's own design wins, so the bar sits at the top of the full
+`/studio/archetype` page. It reads its own source and retries on its own.
+
+**The card and the band.**
+- **Retry.** The Skills, Values and archetype cards each show `Unreadable`
+  with a retry when their read fails, in place of the raw error text. Each
+  retry re-reads only its own source. The full archetype page does the same
+  for the archetype itself.
+- **Labels.** The compact card is labelled "Title: Name, N% confidence. View
+  full card". Each sprite's alt text names the archetype and which of the pair
+  it is.
+- **One tile.** A sprite whose file is missing drops its slot. When one sprite
+  remains, the pair is one centred tile, 180px wide, not a half-empty pair.
+- **Phone rows.** On a phone, the band is a Skills row, the archetype card,
+  then a Values row. The Skills row names the three strongest measured axes;
+  the Values row names the two strongest leans. Each row opens its card. From
+  `md` up, the band is the three cards as before.
+- **Sliders.** The five bipolar founder dimensions draw as sliders between
+  their poles; the ten unipolar dimensions stay bars, under "Working
+  principles". A score under 0.5 either way reads "Balanced". The first cut
+  read a null score as 0, which drew a Balanced reading nobody gave; the test
+  caught it, and a null score now draws no slider.
+
+**Left out.** The locked state on the card waits on the owner's paywall
+decision.
+
+**Verification.**
+- `npm run test:drift` on main a0e0f83ad: exit 0. Frontend 4045 to 4060,
+  the 15 new tests all in `archetype_card_completion_d325.test.mjs`; worker
+  4807 to 4814 (4811 pass, 0 fail), the 7 new tests all in
+  `assessment_xp_d325.test.ts`, on a schema built from migrations 107 and 108;
+  retention 112 unchanged. `studio_archetype_sprite.test.mjs` had three pins
+  widened to allow the new sprite props. Both typechecks, `lint:undef`,
+  `check-api-drift`, `check-refusal-bodies`, `check-sql-prepare`,
+  `check-row-generics`, `check-unused-imports`, `check-react-hook-imports`,
+  `check-frontend-logging`, `check-dark-mode`, `check-regulated-wording`,
+  `check-folder-docs` and `check-decision-ids` exit 0. Root `npm run build`,
+  then `check-docs-fresh --strict`, exit 0.
+- Mutations: 22 run, 22 caught (non-zero exit and a `not ok` line, each file
+  restored from a sha256-checked snapshot):
+  - the route: the level taken from the stored column, the next level off by
+    one, another user's row read, raw database text in the refusal, and no row
+    reported as recorded;
+  - the band: raw error text on a failed card, the aria label dropped, the
+    sprite alt text dropped, a missing sprite keeping two columns, a missing
+    file never reported, the Balanced threshold removed, the poles swapped, a
+    null score read as 0, the Skills row not strongest-first, the phone rows
+    never hiding the cards, a retry re-reading every source, and the full
+    layout's retry dropped;
+  - the bar: the share measured from 0 rather than the level floor, a
+    malformed standing drawn, and the zero-XP note always shown;
+  - the page: the raw error printed, and the bar not mounted.
+- One escape on the first pass: the retry assertion matched any mount of the
+  card, so a Skills retry that re-read every source still passed. The
+  assertion now mounts each card twice and checks that each mount retries
+  only its own source. Both that mutation and a second one for the full
+  layout are now caught.
+
 ## D330
 
 **AdminX.jsx and AdminTelegram.jsx say why no draft was made.** Wave 8,
