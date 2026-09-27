@@ -278,7 +278,6 @@ export const SLOW_PATHS = [
   /^\/advisor\/transcribe$/,
   /^\/advisory\//,                       // ask, financial-plan, diligence
   /^\/competitors\//,                    // crawl + Workers AI synthesis
-  /^\/dashboard\/refresh-scores$/,
   /^\/dd\/cases\/[^/]+\/(scan|report)$/,
   /^\/deck-reviewer\/[^/]+\/regenerate$/,
   /^\/decks\/generate$/,
@@ -2710,7 +2709,6 @@ export const api = {
   networkFxMarketplaceMatch: (data) => request('/networkfx/marketplace/match', { method: 'POST', body: JSON.stringify(data) }),
 
   getDashboard: (fresh = false) => request('/dashboard' + (fresh ? '?fresh=1' : '')),
-  refreshDashboardScores: () => request('/dashboard/refresh-scores', { method: 'POST', body: JSON.stringify({}) }),
   // Task #81 — read-only investor deal lifecycle (funnel counts by stage).
   investorLifecycle: () => request('/dashboard/investor-lifecycle'),
 
@@ -2785,7 +2783,9 @@ export const api = {
   castVote: (dealId, body) =>
     request(`/pipeline/vote/${dealId}`, { method: 'POST', body: JSON.stringify(body) }),
   voteLeaderboard: (limit = 10) => request(`/pipeline/votes/leaderboard?limit=${limit}`),
-  capitalCalls: () => request('/legalcap/capital/calls').catch(() => []),
+  // D370: no `.catch(() => [])`. That turned a failed read into "no capital
+  // calls", which is a claim; a caller that wants a fallback writes its own.
+  capitalCalls: () => request('/legalcap/capital/calls'),
   diligenceReview: (data) => request('/legalcap/diligence/review', { method: 'POST', body: JSON.stringify(data) }),
   diligenceFor: (dealId) => request(`/legalcap/diligence/${dealId}`),
   complianceFor: (dealId) => request(`/legalcap/compliance/${dealId}`),
@@ -4450,6 +4450,25 @@ export const api = {
     request(`/partner-office-hours/bookings/${id}/complete`, { method: 'POST' }),
   noShowPartnerBooking: (id, reason) =>
     request(`/partner-office-hours/bookings/${id}/no-show`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  // D355 — what a session left behind. Both parties add and tick action items;
+  // only the booking's founder rates a completed session. No user id is sent:
+  // the Worker takes the actor, and their side, from the session.
+  listBookingActionItems: (bookingId) =>
+    request(`/partner-office-hours/bookings/${encodeURIComponent(bookingId)}/action-items`),
+  addBookingActionItem: (bookingId, { title, linked_tool, due_date }) =>
+    request(`/partner-office-hours/bookings/${encodeURIComponent(bookingId)}/action-items`, {
+      method: 'POST', body: JSON.stringify({ title, linked_tool: linked_tool || null, due_date: due_date || null }),
+    }),
+  updateBookingActionItem: (itemId, patch) =>
+    request(`/partner-office-hours/action-items/${encodeURIComponent(itemId)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteBookingActionItem: (itemId) =>
+    request(`/partner-office-hours/action-items/${encodeURIComponent(itemId)}`, { method: 'DELETE' }),
+  listMyBookingActionItems: () => request('/partner-office-hours/action-items/me'),
+  rateBooking: (bookingId, { rating, comment }) =>
+    request(`/partner-office-hours/bookings/${encodeURIComponent(bookingId)}/rating`, {
+      method: 'PUT', body: JSON.stringify({ rating, comment: comment ?? null }),
+    }),
+  partnerRatingSummary: () => request('/partner-office-hours/ratings/summary'),
 
   // ---------- Co-marketing (Task #54) ----------
   submitCoMarketingPitch: (data) =>

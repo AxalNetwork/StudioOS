@@ -32,10 +32,10 @@ test('A7 uses only approved read sources and allSettled retention', () => {
 test('A7 has honest handoffs and excludes fixture claims', () => {
   // D421. The desk hands off to the Research zones it summarises. `/market-intel`
   // sent a founder outside the Lab back to their default page, and Fund
-  // research and the library went to Raise. `/build/competitors` stays: that
-  // line is Session 2's, whose redirect decides where it lands.
-  for (const path of ['/research/funds', '/research/markets', '/research/library', '/research/ask', '/build/competitors']) assert.ok(desk.includes(path), path);
-  for (const gone of ['/market-intel', '/signals?mode=workspace', '/raise/capital/pipeline', '/raise/data-room']) assert.ok(!desk.includes(gone), `${gone} is a handoff out of Research again`);
+  // research and the library went to Raise. D313 retired `/build/competitors`
+  // into `/research/companies`, so the Company profiles card links the zone.
+  for (const path of ['/research/funds', '/research/markets', '/research/library', '/research/ask', '/research/companies']) assert.ok(desk.includes(path), path);
+  for (const gone of ['/market-intel', '/signals?mode=workspace', '/raise/capital/pipeline', '/raise/data-room', '/build/competitors']) assert.ok(!desk.includes(gone), `${gone} is a handoff out of Research again`);
   for (const forbidden of ['async workflow tooling', 'Latitude Seed', 'Kestrel Ventures', 'Thornbury Capital', 'Gartner', 'CB Insights', 'Eurostat', '31×', '$14.20', 'DeepSeek', 'Llama', 'GPT-OSS', 'Moondream', 'Qwen', 'Mistral', 'Gemma', 'bge-m3', 'FLUX', 'QwQ', 'Granite', 'Ask a follow-up', 'Research it', 'Save to Markets', 'Save to fund profile', 'Proposal · Brief']) assert.ok(!desk.includes(forbidden), forbidden);
   assert.doesNotMatch(desk, /Ran 6s ago|3 sources agree|4 saved|11 tracked|9 documents|340 pages|62,400|1,240|\$0\.440|\$0\.014|\$0\.0291|\$0\.0025|\$0\.031|\$4\.08|50 questions/i);
   assert.match(desk, /id="a7-companies"[\s\S]*?title="Company profiles"/);

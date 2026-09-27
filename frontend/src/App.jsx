@@ -60,6 +60,7 @@ const FounderValidateWorkspace = lazy(() => import('./workspaces/founder/Founder
 const ResearchWorkspace = lazy(() => import('./workspaces/ResearchWorkspace'));
 const FundDossier = lazy(() => import('./pages/research/FundDossier'));
 const CompanyCandidate = lazy(() => import('./pages/research/CompanyCandidate'));
+const CompanyAnalysis = lazy(() => import('./pages/research/CompanyAnalysis'));
 const MarketReading = lazy(() => import('./pages/research/MarketReading'));
 const DiligenceRoom = lazy(() => import('./pages/research/DiligenceRoom'));
 const DiligenceFile = lazy(() => import('./pages/research/DiligenceFile'));
@@ -245,9 +246,9 @@ const CofounderPage = lazy(() => import('./pages/CofounderPage'));
 // Co-Founder / Jobs tabs were the discovery surfaces; those open inside the
 // Advisors and Hiring tabs here, so the founder redirects below still land.
 const FounderTeamPage = lazy(() => import('./pages/founder/FounderTeamPage'));
-// Task #20 — /skills and /values are consolidated into the advisor flow.
-// The underlying SkillsProfilePage/ValuesAssessmentPage files are kept intact on
-// disk (data stores), but their routes now redirect to /studio.
+// Task #20 — /skills and /values are consolidated into the advisor flow, and
+// their routes redirect to /studio, where the profile band draws both. The two
+// pages were imported by nothing and were deleted in D323.
 const AdminBestFitPage = lazy(() => import('./pages/admin/AdminBestFitPage'));
 const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage'));
 const RiskMatrixPage = lazy(() => import('./pages/RiskMatrixPage'));
@@ -2272,7 +2273,19 @@ function AppInner() {
           routes now live inside the Pitch workspace; redirect to the right tab. */}
       <Route path="/build/deck" element={<Navigate to="/raise/pitch" replace />} />
       <Route path="/build/deck-reviewer" element={<Navigate to="/raise/pitch/review" replace />} />
-      <Route path="/build/competitors" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('research', <CompetitorAnalysisPage />))} />
+      {/* D313 — a founder's saved analysis is `/research/companies/:id` now, and the list is
+          `/research/companies`, so for everyone that route admits this redirects there, `?id=`
+          included. Partner and investor are not admitted by it and no canvas-built page does
+          this job for them, so for them the page stays. */}
+      <Route path="/build/competitors" element={guard(['admin', 'founder', 'partner', 'investor'],
+        effectiveRole === 'partner' || effectiveRole === 'investor'
+          ? founderWorkspace('research', <CompetitorAnalysisPage />)
+          : <Navigate
+              to={new URLSearchParams(location.search).get('id')
+                ? `/research/companies/${encodeURIComponent(new URLSearchParams(location.search).get('id'))}`
+                : '/research/companies'}
+              replace
+            />)} />
       <Route path="/build/financials" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('raise', <FinancialsPage />))} />
       <Route path="/build/discovery" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), effectiveRole !== 'founder'
         ? <DiscoveryPage />
@@ -2320,6 +2333,7 @@ function AppInner() {
       <Route path="/research/markets" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/markets/:uid" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <MarketReading role={researchRole} />)} />
       <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/companies/:id" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyAnalysis role={researchRole} />)} />
       <Route path="/research/companies/:analysisId/:candidateId" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyCandidate role={researchRole} />)} />
       <Route path="/research/funds" element={guard(labRoles(['admin', 'founder']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/funds/:uid" element={guard(labRoles(['admin', 'founder']), <FundDossier role={researchRole} />)} />

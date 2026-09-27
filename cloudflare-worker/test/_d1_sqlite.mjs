@@ -101,13 +101,42 @@ export function d1Over(db) {
         all: async () => shape(get(), binds).all(),
         first: async (col) => shape(get(), binds).first(col),
         run: async () => shape(get(), binds).run(),
+        // The same answer as `run()`, synchronously — `batch` needs every
+        // statement to execute before control returns to the event loop.
+        runSync: () => {
+          const st = get();
+          try {
+            return { success: true, meta: meta(st.run(...binds)) };
+          } catch (e) {
+            // A RETURNING clause makes node:sqlite treat it as a reader; any
+            // other error is real and aborts the batch.
+            if (!/RETURNING/i.test(sql)) throw e;
+            return { success: true, results: st.all(...binds), meta: { changes: 0, last_row_id: 0 } };
+          }
+        },
       };
       return api;
     },
+    // ONE TRANSACTION, LIKE D1 (D370). D1 runs a batch as a single
+    // transaction: every statement or none, and nothing from another request
+    // lands between them. This used to `await` each statement in turn, so two
+    // batches in flight at once interleaved statement by statement — a
+    // fixture looser than production, which let a test "prove" a race that D1
+    // cannot have, and could not prove the absence of one it can. Each
+    // statement now runs synchronously inside a savepoint, so no other
+    // request's code can run until the batch has committed or rolled back.
     async batch(stmts) {
-      const out = [];
-      for (const s of stmts || []) out.push(await s.run());
-      return out;
+      const list = stmts || [];
+      db.exec('SAVEPOINT d1_batch');
+      try {
+        const out = list.map((s) => s.runSync());
+        db.exec('RELEASE d1_batch');
+        return out;
+      } catch (e) {
+        db.exec('ROLLBACK TO d1_batch');
+        db.exec('RELEASE d1_batch');
+        throw e;
+      }
     },
     async exec(sql) { db.exec(sql); return { count: 0, duration: 0 }; },
   };

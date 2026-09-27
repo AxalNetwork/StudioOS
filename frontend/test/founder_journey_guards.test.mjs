@@ -20,9 +20,10 @@
  *   4. Review is not dead time for founders. The exploring holding screen
  *      must keep offering the founder lane its real next step (the Spin-Out
  *      Lab application).
- *   5. /studio stays venture-first. The founder home renders venture
- *      progress (VentureNextStep) ABOVE the personal skills/values section —
- *      the page used to open on ProfileFitSection.
+ *   5. /studio leads its modules with the venture. The founder home's first
+ *      card is the venture next step. (This guard used to check that the
+ *      retired "Welcome back" page drew VentureNextStep above ProfileFitSection;
+ *      the live home follows canvas 69dc42f3, profile band then modules — D323.)
  *
  * Run with:
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/founder_journey_guards.test.mjs
@@ -77,13 +78,10 @@ test('the exploring holding screen offers the founder lane its real next step', 
   assert.ok(src.includes('exploring-lane-cta'), 'lane CTA testid missing');
 });
 
-test('/studio (founder home) renders venture progress above the personal profile section', () => {
-  const src = fe('src/pages/Dashboard.jsx');
-  const venture = src.indexOf('<VentureNextStep');
-  const profile = src.indexOf('<ProfileFitSection');
-  assert.ok(venture !== -1 && profile !== -1, 'expected both sections on the founder dashboard');
-  assert.ok(
-    venture < profile,
-    'ProfileFitSection renders before VentureNextStep — the founder home has regressed to profile-first',
-  );
+test('/studio (founder home) leads its modules with the venture next step', () => {
+  const src = fe('src/pages/founder/FounderStudioHome.jsx');
+  const firstCard = src.match(/<StudioCard\s+title="([^"]+)"/);
+  assert.ok(firstCard, 'expected the founder home to draw its cards');
+  assert.equal(firstCard[1], 'Venture next step', 'the founder home no longer leads with the venture');
+  assert.ok(!fe('src/pages/Dashboard.jsx').includes('VentureNextStep'), 'the retired strip is mounted again');
 });

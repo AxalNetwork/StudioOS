@@ -30740,6 +30740,118 @@ that sentence as the founder's note. It is replaced, not repaired.
   - The other five sentences it pins are kept word for word on the page,
     three of them in the new band.
 
+## D313
+
+**One saved competitor analysis gets its own page at `/research/companies/:id`,
+and `/build/competitors` retires into it for everyone that page admits.**
+Session 2, wave 8, item 4. It builds canvas 90eb4cf2. No migration, no new
+route and no new `api.js` method: every write the canvas draws already had
+one in `competitors.ts`.
+
+**The page is `CompanyAnalysis`, guarded to admin, founder and advisor**, the
+same licences as the Companies list. It draws every element of the canvas:
+- the editable title (max 200), the mode and status pills, "updated …", and
+  "edited since last run";
+- Save, Re-run, Refresh sources, JSON and Markdown;
+- the inputs row, where anything the person did not give reads Not recorded;
+- the founder scope band ("These analyses are yours, not a client's"), which
+  only the advisor zone drew before;
+- the running card, the failed-read card with Try again, and the pipeline-error
+  card with Re-run and Quick scan (a re-run at quick depth);
+- the four tiles, the market summary, and the seven-column competitors table
+  with a category select, origin, relevance, source-kind chips, summary and
+  Remove, plus the Add competitor row with Crawl site;
+- the feature grid, the signal columns, gaps, the wedge, next steps and notes;
+- the landscape-read ZONEDRAFT and the stated limit.
+
+**Three states, three shapes**, as the canvas's D2 to D4 insist:
+- a failed read draws no tiles at all;
+- a failed run draws Not recorded tiles and withholds the body;
+- a finished run draws its numbers, 0 included, because a run that found
+  nothing is a fact.
+
+"Sources fetched" counts sources whose stored HTTP status is 2xx or 3xx, not
+every URL attempted.
+
+**Nothing blank is written as 0.**
+- `PATCH /competitors/:id` re-inserts the whole candidate set with
+  `Number(relevance_score) || 0`, so a save that sent candidates would turn a
+  blank relevance into 0.
+- The page's Save therefore sends the title and the output only. A category
+  change goes through `PATCH /:id/candidates/:cid`, which touches that one
+  column. Companies are added and removed one row at a time.
+- A blank relevance, domain, summary, source list or feature cell reads Not
+  recorded. A blank feature cell is never "no", because an unfetched site is
+  not evidence that a feature is absent.
+- `competitors.ts` is not Session 2's file, so its bulk write is left as it
+  is. A test holds the page to never sending the set.
+
+**The landscape read is a restatement, not a model**, as the canvas draws it
+("It will not invent a wedge, a price, or a company").
+- It repeats the market summary, the direct and adjacent companies with their
+  summaries, and the kinds of source that came back.
+- Accept appends it to the notes under "Landscape read:", after what is
+  there, and saves the output.
+- Accept is disabled while other edits are unsaved, so one press cannot also
+  save them.
+- The canvas says Accept "writes notes/gaps". It writes notes only, and says
+  so.
+
+**Retired, and where each piece now points.**
+- **`/build/competitors`** now redirects, with `replace`, for founder and
+  admin: with `?id=X` to `/research/companies/X`, and otherwise to
+  `/research/companies`. The page read no other query string.
+- **Partner and investor keep the old page.** `/build/competitors` admits
+  them, and `/research/companies` does not, because neither shell has a
+  Companies zone. A redirect would lock them out of a page they can use today,
+  and no canvas-built page does that job for them. For them the page stays,
+  per the retirement rule. `route_role_zone_contract` still holds.
+- **In `CompetitorAnalysis`**, when mounted in the Research zone
+  (`linkToDossier`), each saved analysis is now a link to its page, and a new
+  run opens on its page. Mounted `embedded` on the startup page, or bare for
+  partner and investor, it keeps its in-place panel, so the component and that
+  panel stay: they are not orphaned. The panel's "Recommended next actions"
+  now reads "Next steps the run listed", under the voice rule.
+- **`CompanyCandidate`'s** "‹ Back to analysis" and its after-remove
+  navigation went to the list. Both now go to the analysis.
+- **`FounderResearchDesk.jsx`'s** Company profiles card (Session 2's one line
+  in that file) links `/research/companies`.
+- **Tests:**
+  - `founder_overview_subpage_links`'s `HELD_ELSEWHERE` exception for that
+    line is emptied, because the link now sits inside its own bucket.
+  - `founder_research_a7_contract` pins `/research/companies`, and now
+    refuses `/build/competitors`.
+
+**Differs from the canvas, deliberately.**
+- "Recommended next actions" reads "Next steps the run listed", because copy
+  never calls model output a recommendation.
+- The run also stores positioning and traction signals, which the canvas does
+  not draw. They stay, as two more signal columns, each omitted when empty.
+- The page's `WorkerRail` passes the literal `role="founder"`, per
+  `branch_rail_mount`'s ceiling on computed rail roles. An advisor reading
+  this page sees the founder rail accent. The page's content does not change
+  for them.
+
+**Tests.** `research_company_analysis.test.mjs` is new, with 10 tests. It
+asserts each element at both ends: the canvas draws it, and the page renders
+it. It also runs the three tile shapes, the inputs row, the feature grid's
+transpose and blank cells, the signal columns and the landscape read. It pins
+that a save never sends candidates, the routes, the list links, the
+candidate back-links, the redirect's `?id=`, and the partner and investor
+branch. It also bans the canvas's fixtures.
+
+**Mutations.** 17 were run. 15 were caught on the first run, and two escaped
+because their assertions were weak, so the assertions were fixed, not the
+code:
+- A grid drawn from rows with no feature heads passed. The only no-features
+  case tried also had empty rows. A case with rows and a blank head now
+  requires `null`.
+- Opening the zone's saved list in place passed. The pin matched the `<Link>`
+  text even when its branch was dead. It now requires that link to be the arm
+  `linkToDossier` takes.
+
+After the fix, 17 of 17 are caught.
+
 ## D320
 
 **The archetype banks go from three probes per trait to five, and every one
@@ -30977,6 +31089,116 @@ passing every file.
   - the class-list rule removed, or broadened until it swallows prose;
   - the founder home taken off the scanned list;
   - each of the five voice lines reverted.
+
+## D323
+
+**The old "Welcome back" Studio page retires into the founder home and a
+redirect, and two pages nothing imported are deleted.** Wave 8, Session 3,
+item 4 (the gap map's PR 3). Frontend only: no migration, no route. One
+`api.js` method is removed.
+
+**What retired.**
+- The final branch of `pages/Dashboard.jsx`: the "Welcome back" page drawn
+  after the four role homes. It carried a greeting and role badge, a
+  PageExplainer, semantic search, a notifications dropdown, "Refresh Scores",
+  the investor trial banner, the Eadwyn chat, `VentureNextStep`,
+  `ProfileFitSection`, a subsidiaries widget, and an investor deal desk that
+  no viewer could reach, because investors are dispatched to their own home
+  first.
+- `pages/SkillsProfilePage.jsx` and `pages/ValuesAssessmentPage.jsx`. Nothing
+  imported either, and their routes, `/skills` and `/values`, already
+  redirected to `/studio`. The redirects stay; the `App.jsx` comment that
+  called the files "kept intact on disk" is corrected.
+
+**Who reached the old page, and where they go now.** `/studio` admits the five
+Studio roles, plus (through `labRoles` in `App.jsx`) an active Spin-Out Lab
+member of any role, and the role an admin is viewing as. Past the four role
+homes and the admin return, that leaves two viewers:
+- **An exploring account admitted to the Lab** (the holding page's "Company
+  record" row links it to `/studio`). The Lab is how an explorer becomes a
+  founder, so it now gets the founder Studio home.
+- **Anyone else**, in practice an admin viewing as "exploring". They get
+  `<Navigate replace>` to `/exploring`, with the query string and hash kept.
+  `/exploring` admits admins and exploring accounts.
+
+No route is retired; `/studio` itself is unchanged for the five Studio roles.
+
+**Every job the old page did, and its successor.**
+| Old page | Now |
+| --- | --- |
+| Google sign-in notice | the same `InfoStrip`, above the founder home |
+| Product tour | mounted above the founder home; see below |
+| Greeting, role badge, PageExplainer | the founder home's "Studio · Founder" context line (D321) |
+| Semantic search | the shell's command palette (Cmd+K) |
+| Notifications dropdown | the shell's notification bell |
+| "Refresh Scores" (`POST /dashboard/refresh-scores`) | nothing: no Studio home offers it |
+| Investor trial banner | unreachable here; investors are served by their own home |
+| Eadwyn chat | the founder home's chat |
+| `VentureNextStep` | the founder home's "Venture next step" card, same lifecycle endpoint |
+| `ProfileFitSection` | the founder home's compact profile band |
+| Subsidiaries widget | the founder home's subsidiaries card |
+| Investor deal desk | unreachable; `InvestorStudioHome` is the investor's home |
+
+"Refresh Scores" has no successor. Its Worker route stays: it is tested
+(`dashboard_company_scope.test.ts`), and removing a Worker route is outside
+this item. `api.refreshDashboardScores` had no other caller and is removed, together
+with its entry in `api.js`'s `SLOW_PATHS`. `api_request_timeout.test.mjs`
+fails on a pattern that matches no call, and it did.
+
+**Deleted with it.** `components/SemanticSearch.jsx`,
+`components/InvestorTrialBanner.jsx` and `components/VentureNextStep.jsx`
+(each imported only by the old page), and, inside `Dashboard.jsx`,
+`InvestorHome`, `DealLifecycle`, `InvestorStats`, `ScoredOpportunities`,
+`ScoredCard`, `IndependentSubsidiariesWidget`, `Card`, `RoleBadge` and
+`NotifDropdown`. Their API methods (`searchSemantic`, `investorBillingStatus`,
+`getLifecycle`) have other callers and stay. `DashboardFallback`, the error
+state for a failed dashboard read, stays.
+
+**Moved, not deleted.** `StatusBadge` and `WeekBadge` move verbatim to
+`components/StatusBadges.jsx`. `StartupList.jsx` and `ProjectDetail.jsx`
+import them from there.
+
+**The tour.** Its `search` and `notifications` steps anchored on markup that
+only the old page had, so every Studio home already showed them as unanchored
+boxes. They are dropped. The sidebar step now names Cmd+K, the command
+palette's key.
+
+**Re-aimed tests, and one property that changed on purpose.**
+- `founder_journey_guards.test.mjs` asserted that the founder home drew
+  `VentureNextStep` above `ProfileFitSection`, but it only ever read the old
+  page. The live home follows canvas 69dc42f3: chat, profile band, then the
+  modules. The guard now asserts what holds: the home's first card is the
+  venture next step.
+- `founder_journey_entry.test.mjs`'s five strip tests now read the founder
+  home's venture card. It must not link a dead Command Center or the
+  Operations console, and it must take its next action from the lifecycle
+  endpoint. Two properties are inverted deliberately. The strip rendered
+  nothing when there was no venture and stayed silent when its read failed.
+  Under D321 the card says "Select or create a startup" when there is no
+  project, and shows `Unreadable` when the read failed.
+- `admin_studio_overview.test.mjs` located the fit block in `Dashboard.jsx` to
+  show that the admin return came first. The dispatcher now mounts no fit
+  block of its own, and the test asserts exactly that.
+
+**Verification.**
+- `npm run test:drift` on main d4ccaf5c3: exit 0.
+  Frontend 3938 to 3942: `studio_fallback_retired_d323.test.mjs` adds 6, and
+  `founder_journey_entry.test.mjs`'s six strip tests become four about the
+  venture card. Worker 4733 (4730 pass, 0 fail), retention 112 and guards 14
+  unchanged. Both typechecks, `lint:undef`,
+  `check-unused-imports`, `check-react-hook-imports`, `check-dark-mode`,
+  `check-api-drift`, `check-folder-docs` and `check-regulated-wording` exit 0.
+  Root `npm run build`, then `check-docs-fresh --strict`, exit 0.
+- Mutations: 10 run, 10 caught (non-zero exit and a `not ok` line, each file
+  restored from a sha256-checked snapshot):
+  - the redirect dropping the query string;
+  - a Lab member sent to `/exploring`;
+  - everyone drawn the founder home;
+  - the admin return mounting the fit block;
+  - each moved badge losing a state;
+  - the founder home no longer leading with the venture card, the venture card
+    hiding its failure, or the venture card linking Command Center;
+  - the tour regaining the search step.
 
 ## D330
 
@@ -31645,6 +31867,81 @@ exactly this, and the generated copy's wet-ink blocks remain the way to sign.
   25fcdebab, pushed after #835 had squash-merged, so it never reached main.
   It is re-applied here as its own commit.
 
+## D355
+
+**Office Hours: a session keeps its action items and its rating. Both parties
+add and tick action items; only the founder rates, only a completed session;
+the partner sees each rating on their own session; the directory shows each
+partner's average from the first rating, always with its count.** Wave 8,
+Session 7, deferred list. Migrations 360 and 361; seven new `/api` methods.
+
+**The owner's four answers, which fixed the store's shape.** Migration numbers
+360 and 361. The average is ALWAYS shown — from the first rating, with the
+count beside it. The partner sees the rating per session, comment included.
+Action items belong to founder AND partner: both add and tick, and each item
+records who added it.
+
+**Store.** Migration 360, `partner_booking_action_items` (booking, title,
+linked tool, due date, `done_at` + `completed_by_user_id`,
+`created_by_user_id` + `created_by_role` ∈ founder/partner). Migration 361,
+`partner_booking_ratings`, `UNIQUE(booking_id)`, rating `CHECK 1–5`, with
+`partner_id` and `founder_user_id` copied from the booking by the Worker so
+the average is one `GROUP BY` and never trusts a request.
+
+**Who may do what** (`services/partnerBookingFollowups.ts`; the routes only
+pass the session user and relay refusals through `refuse()`):
+- A booking's parties are its founder (`founder_user_id`) and its partner (an
+  account whose `users.partner_id` is the booking's). **Anyone else — another
+  founder, another partner, staff — gets the same 404 as a missing booking.**
+  No request field chooses the actor or their side.
+- Items: either party adds one (not on a cancelled session); either ticks or
+  reopens any item, and the tick records who; only the author rewords,
+  re-dates, re-links or deletes (`not_the_author`). A linked tool is one of
+  seventeen Lab keys, a due date a real calendar date.
+- Rating: only the founder (`founder_only`), only once the partner marked the
+  session completed (`not_completed`), a whole number 1–5; a second write
+  replaces the first.
+- The average read names no founder and no booking; a partner nobody rated is
+  **absent**, never 0.
+
+**Routes** on the existing `/api/partner-office-hours` mount:
+`GET|POST /bookings/:id/action-items`, `PATCH|DELETE /action-items/:itemId`,
+`GET /action-items/me` (both sides, cancelled sessions left out),
+`PUT /bookings/:id/rating`, `GET /ratings/summary`. The two booking lists
+(`/me/bookings`, the partner's; `/bookings/me`, the founder's) LEFT JOIN the
+rating, so each row carries `rating` and `rating_comment`, `null` when unrated.
+No statement interpolates: the summary covers every rated partner rather than
+taking an id list, and the item update is one fixed statement.
+
+**Pages.** One component (`components/officehours/SessionFollowups.jsx`) draws
+a session's action items and rating on both the founder's Office Hours page
+and the partner's `/partner/office-hours`, so the two cannot drift. Founder:
+each non-cancelled history row opens its action items; a completed one takes
+stars and a comment; the rail lists open items from all their sessions above
+the week's milestone checklist; each directory card reads `★ 4.5 · 2 ratings`,
+or "No ratings yet", or "Ratings could not be read". Partner: each completed
+session shows the founder's rating and comment read-only, or "Not rated yet".
+The canvas's invented ratings and action-item fixtures are not reproduced, and
+the page header no longer lists ratings as omitted.
+
+### VERIFIED
+
+- `cloudflare-worker/test/partner_booking_followups_d355.test.ts` (new,
+  11 tests) runs the service's real SQL — and the route's four booking-list
+  statements — on SQLite over the REAL migration 360/361 DDL.
+- `frontend/test/spinout_lab_office_hours_followups.test.mjs` (new, 11 tests).
+- Mutations: 39 run. Worker 23 of 23 caught — after the first pass, where
+  the one that escaped (a filter on the partner's rating join) showed the
+  booking-list SQL was checked only as text; the test now executes those
+  statements. Frontend 16 of 16. Each caught mutation exited non-zero with a
+  `not ok` line and was restored from a sha256-checked snapshot.
+- SQL guards green, including check-sql-prepare (no new interpolation),
+  check-sqlite-columns and check-refusal-bodies; `check-api-drift` reports no
+  new drift; `tsc --noEmit` clean.
+- `npm run test:drift` with main a57b8c0008 merged in: exit 0. Frontend
+  4016 pass / 0 fail (11 of them new), worker 4782 (4779 pass, 0 fail; 11
+  new), retention 112; `check-docs-fresh --strict` after the root build.
+
 ## D360
 
 **The Spin-Out Lab's capital and legal tools say when a read failed, and
@@ -32199,6 +32496,160 @@ schema bootstrap all run unmocked. It pins:
 Mutation-checked both ways: 8 of 8 caught, each with a non-zero exit and a
 `not ok` line, and the file was restored and checked by sha256. The first
 mutation is the original swallow, so the test fails on the code as it was.
+
+## D370
+
+**LP money moves only when the fund's general partner of record records it,
+and fund figures stop reaching roles with no stake in the fund (Session 9,
+item 1).** No migration, no new route, no new `api.js` method.
+
+**The five defects, measured on `bef2ee7ea`.**
+
+1. **An LP could mark their own capital call paid.** `POST
+   /api/capital/calls/:id/pay` let the LP who owned a call record it paid,
+   which adds the call's amount to `limited_partners.invested_amount` and
+   `vc_funds.deployed_capital`. The handler read the call's status, then ran
+   three separate, unconditional UPDATEs. Two presses in flight both passed
+   the read and both credited: 1000 invested on a 500 call.
+2. **Fund money was visible to every signed-in role.** `GET /funds`,
+   `GET /funds/analytics`, `GET /funds/:id` and `GET /funds/:id/analytics`
+   checked only `requireAuth`. The list returned `SELECT *`, so a founder
+   could read every fund's size, deployed capital and GP email.
+   `GET /funds/syndication` listed queued capital calls, amounts included,
+   for every fund.
+3. **Any investor could overwrite any fund's reserve plan.** `PUT
+   /api/fund-sim/funds/:id/reserves` and `POST …/scenarios` checked only
+   "admin or investor".
+4. **An LPA was drafted for a fund with no GP of record.** `POST /funds`
+   queued `lpa_generation` unconditionally, including for an admin-created
+   fund whose `gp_user_id` is unset. The queue job then drafted the
+   agreement with nobody's name behind it.
+5. **The capital-call ledger read a dead table shape.** `GET
+   /legalcap/capital/calls` named `deal_id`, `syndicate_id` and
+   `lp_responses`, which the production `capital_calls` does not have. It
+   threw on every call, and `api.capitalCalls` swallowed the throw into
+   `[]`. The admin panel in `FundOpsWorkspace` and the fund page in
+   `InvestorFundLanding` therefore showed "no capital calls" for ledgers
+   they had never read.
+
+**The rulings.**
+
+- **Recording a payment is the GP's.** Only the fund's GP of record or an
+  admin may call `pay`.
+  - The LP who owns the call gets `403 gp_records_payment` with our
+    sentence. They already know the call exists, so there is nothing to
+    hide.
+  - Anyone else gets the same `404` as a call that does not exist. That is
+    decided *before* the fund gate: its tier check answers `402` whatever
+    the fund, so reaching it first would answer 402 for a call that exists
+    and 404 for one that does not, which counts the platform's calls. The
+    first run of the new test caught exactly that.
+  - The GP of record then passes the one gate every GP control uses,
+    `requireFundGp` (tier, ownership, company).
+- **Once, even under concurrency.** The two credits and the status flip are
+  one D1 batch, which D1 runs as one transaction. Every statement is
+  conditional on the call still being unpaid: the credits test it in their
+  own `WHERE`, and the flip comes last. The amount is read inside each
+  statement, not carried from the earlier SELECT. A second press, whether
+  concurrent or later, changes nothing and answers `already_paid: true`.
+- **`GET /capital/calls` gains the GP-of-record arm and `fund_id`.** A GP
+  asking "what has my fund called?" got only the calls on their own LP rows.
+  - Each row now also carries `can_record`, which says whether this caller
+    may record it. `CapitalPage` offers "Mark Paid" only on those rows, and
+    shows "Awaiting the GP's receipt" on the rest.
+  - The GP's user id is not returned.
+- **The fund reads are scoped by role.** Both arms are the shared predicates
+  (`fundGpScope`, `lpMembershipScope`), so this adds no third definition of
+  "your fund".
+  - `GET /funds`: an admin sees every fund; anyone else sees the funds they
+    are GP of record for, or hold an LP position in.
+  - `GET /funds/analytics`: the funds the caller runs (all, for an admin).
+  - `GET /funds/:id` and `/:id/analytics`: `requireFundGp`. An LP's view of
+    a fund is `/lp-portal`.
+  - `GET /funds/syndication`: investors, partners and admins; anyone else
+    gets `403 investor_access_required`. Pending calls are limited to the
+    funds the caller runs.
+  - None of these is narrowed by the **active company**.
+    `funds_company_scope`'s regression guard pins that, re-aimed from "stay
+    platform-wide", which was no longer true.
+- **The fund-simulator writes are the GP's.** `PUT reserves` and `POST
+  scenarios` go through `requireFundGp`. The reads and the two pure
+  simulations keep their previous gate: found, not changed here (see below).
+- **No GP of record, no LPA** (the Fabric canvas's F10 rule). `POST /funds`
+  answers `lpa_status: 'blocked_no_gp'` with the reason, instead of
+  queueing. `regenerate-lpa` refuses with `409 no_gp_of_record` before it
+  clears the LPA on file. The queue job re-checks the rule where the
+  document is written, as a no-op rather than a throw, because a retry
+  cannot name a GP.
+- **The dead read is swapped, and fixed with a scope.**
+  - `FundOpsWorkspace` and `InvestorFundLanding` read `listCapitalCalls`,
+    the live ledger.
+  - The `legalcap` route (Session 9's lines) now reads the real columns,
+    scoped exactly like the ledger. Fixed without that scope, it would have
+    handed every investor every LP's calls on the platform. It claims LP
+    rows by email like every other route that grants by email.
+  - `api.capitalCalls` no longer swallows a failure into `[]`.
+    `FundOpsWorkspace`'s panel renders `Unreadable` with a retry, and its
+    count is drawn only from a real list. `LegalCapitalPage` is its
+    remaining caller, and not Session 9's.
+
+**The test database now keeps D1's batch guarantee.** `_d1_sqlite.mjs`'s
+`batch()` awaited each statement in turn, so two batches in flight
+interleaved statement by statement, which is looser than D1. It now runs
+the statements synchronously inside a savepoint and rolls back on failure.
+The 1,792 existing tests that touch it still pass.
+
+**Found, not changed here:**
+- The fund simulator's reads (`GET reserves`, the two `simulate` routes, `GET
+  scenarios`) still answer any investor for any fund id. The allocations
+  are not money movement, but they are another fund's plan.
+- `LegalCapitalPage`'s CapitalTab reads a syndicate-call model
+  (`amount_cents`, `lp_responses`, `deal_id`) whose writer
+  (`legalcap.ts` POST `/capital/call`) also targets columns the table does
+  not have. That whole engine is inert. Neither file's lines are
+  Session 9's.
+
+**Verification.**
+- New file `lp_money_authz_d370.test.ts`, 20 tests on node:sqlite. Every
+  gate is asserted from the refused role's side (the refusal, and nothing
+  moved) and the permitted role's side:
+  - the list for an admin, a GP, another GP, an LP, a founder and a
+    partner;
+  - the family and per-fund analytics;
+  - the detail;
+  - syndication for a founder, an LP, a GP and an admin;
+  - LPA create for an admin and a GP, regenerate, and the queue job;
+  - the two simulator writes for an LP, another GP, the GP and an admin;
+  - the legacy read's shape and scope;
+  - the frontend swap;
+  - the test database's batch atomicity and rollback.
+- `capital.test.ts`:
+  - The fixture gains production's `gp_user_id`, `company_id` and tier
+    columns.
+  - "an investor can pay a call that belongs to their own LP (200)" is
+    re-aimed to "the LP who owns a call cannot record it paid (403, nothing
+    moves)". That permission was the defect.
+  - New tests: the GP records a payment; a GP of another fund gets 404 and
+    nothing moves; **two concurrent presses credit the call once**; a second
+    press moves nothing; the GP sees every call on their fund.
+- Mutations: 25 run, 25 caught, after one escape was fixed in the tests.
+  - Reverting the test database's `batch` to the interleaving version
+    failed nothing at first, because the pay tests' race happens at the
+    status read, not inside a batch. The atomicity test above now pins it.
+  - Restoring the pre-D370 pay logic (a status read, then three
+    unconditional writes) fails "two concurrent presses credit the call
+    once".
+  - The rest: the LP's 403 branch removed; the outsider reaching the fund
+    gate (the oracle); each credit and the flip made unconditional; LP
+    self-recording restored; the calls read's GP arm dropped; the list
+    unscoped, and its LP arm dropped; the analytics unscoped; the detail and
+    per-fund analytics gates removed; a founder admitted to syndication; the
+    pending calls unscoped; the LPA queued without a GP; the regenerate
+    guard removed; the queue job's guard removed (it fails on the
+    assertion that an LPA was written); both simulator gates reverted; the
+    legacy read fixed without its scope; `api.capitalCalls`'s swallow
+    restored; the dead read restored on the page; the test database's
+    rollback removed.
 
 ## D380
 
