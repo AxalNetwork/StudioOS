@@ -31507,6 +31507,92 @@ when no date was on record. D360 recorded both and left them for this item.
 - The Legal Engine's jurisdiction select is still local-only and
   presentational, as its own TODO says.
 
+## D362
+
+**Incorporate's money integrity: the price is the catalog's, the paid state
+is the server's, and the jurisdiction is the application's.** Wave 8,
+Session 8, item 3. One new Worker route (`GET /legal/incorporation/quote`);
+its `api.js` method is in the same commit. No migration.
+
+**The defect.**
+- The Lab Incorporate page drew a hard-coded package: $1,200 service, $110
+  state filing and a $100 expedite add-on, with "agent included". No catalog
+  held those amounts. `POST /incorporation/order` charges whatever the
+  Stripe catalog says, so the price a founder read before paying was not the
+  price on the invoice.
+- The page decided it was paid from `incorporation_meta.paid`. The browser
+  writes that field through the project update route, so any client could
+  set it.
+- The page always ordered a Delaware formation, including for an applicant
+  who chose Wyoming on the Lab application.
+
+**What changed.**
+- **The quote.** `GET /legal/incorporation/quote?jurisdiction_id=` resolves
+  the price with `resolveIncorporationPrice`, the same function the order
+  route charges with.
+  - With no catalog SKU it returns `amount_cents: null` and the reason
+    `catalog_price_missing`. It never falls back to `JURISDICTION_COSTS`,
+    which are the wizard's estimate ranges, not a price.
+  - An unknown jurisdiction is a 400 with a code and our own sentence.
+  - It also returns the catalog's registered-agent subscription offer, or
+    null.
+- **The page reads the quote and keeps money in integer cents.**
+  `lib/incorporationPricing.js` holds `fmtCents`, the one place cents become
+  a decimal. It returns `null` for a non-integer rather than rounding one
+  into a price.
+  - The package's split into service and state filing, and an expedite
+    add-on, are not in the catalog, so each reads "Not recorded" with its
+    reason.
+  - The registered agent shows the catalog's offer as an optional
+    subscription. It is no longer "included".
+  - Pay is offered only with a catalog price and a formable jurisdiction.
+- **Paid is the server's order and nothing else.** The page counts an order
+  as paid only in `paid`, `packet_processing` or `packet_ready`, read from
+  `GET /legal/incorporate/orders`. It no longer writes `paid` or `paid_at`.
+  - After Stripe reports success, the page asks the server again.
+  - If the order row is not there yet, because the webhook lags, the page
+    says it is waiting and claims nothing.
+  - Existing projects whose meta says paid without a server order now show
+    unpaid. That is the intended correction.
+- **The jurisdiction is the Lab application's.** `formationJurisdiction` reads
+  the label the Apply page stores.
+  - Delaware maps to `us_de_ccorp` or `us_de_llc`, by the selected entity.
+  - Wyoming, or any other answer, returns no `jurisdictionId` and a reason.
+    The Worker has no Wyoming jurisdiction and the catalog has no Wyoming
+    SKU, so the page stops at that line and says so instead of charging for
+    a Delaware formation.
+  - With no jurisdiction on the application, Delaware is used, and the page
+    says that is why.
+  - Every hard-coded "Delaware" on the page (filing step, document preview,
+    investor preview, export) now reads the jurisdiction.
+- **The milestone's timing is named, not decided.** `incorporation_completed`
+  issues the graduation certificate and is still recorded at payment. The
+  only change is that it now fires once the server confirms the order, not
+  on the client's callback. Whether it should wait for state approval is the
+  owner's decision. The page says so under the Pay button, and this entry
+  records it as open.
+
+**Guard.** `frontend/test/spinout_incorporate_money_d362.test.mjs`, six tests.
+- The helpers run for real. The page and the route are checked as source
+  text, because the page imports the Stripe loader and `legal.ts` cannot
+  load under the test runner.
+- Mutation-checked both ways: 16 of 16 caught, each with a non-zero exit and
+  a `not ok` line, and every file was restored and checked by sha256.
+- One mutation escaped at first. An `else` branch that claimed paid while
+  the server was silent passed, because the test looked for
+  `setAwaitingServer(true)` across the whole handler and found it in the
+  `catch`. The assertion was fixed and is now bounded to that branch; the
+  code was not changed.
+
+**Open, each with its owner.**
+- Milestone timing, as above.
+- A Wyoming (or any non-Delaware) formation needs a Worker jurisdiction,
+  its templates and a catalog SKU. That is an owner and catalog decision.
+- The formation packet step is still a stub (`services/incorporations.ts`).
+- The document "Sign" button still only flips a status. Session 13's e-sign
+  hardening has merged, so wiring it is possible, but it is not part of this
+  item.
+
 ## D380
 
 **The Spin-Out Lab honesty sweep: the seat count reads `/brief`'s `places`,
