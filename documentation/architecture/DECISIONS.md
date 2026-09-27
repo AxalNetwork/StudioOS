@@ -33659,6 +33659,18 @@ record could not be read. Nothing here is drawn from a guess. Retry".
 
 **Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: the lane's `resolved_at` predicate removed; the list's `resolved_at` predicate removed; the board's literal door pointed at the Lab page instead.
 
+## D443
+
+**Studio reads one glance, on both tiers, from the database that tier has.** Wave 8, Session 6, item 4. No migration. No live branch exercised this.
+
+**The route.** `GET /api/admin/studio/glance` (`routes/admin_studio_glance.ts`, mounted at `/api/admin/studio` before the `/api/admin` catch-all). `requireAdmin`. It does not call `requireBranchTier`, which is why the four branch reads the page used (`/api/branch/home`, `/api/branch/templates`, `/api/branch/insights`, `/api/licence/mine`) cannot serve HQ: each of those throws `Branch only`.
+
+**What each tier answers.** On a branch the glance is that branch's own seats, approval lanes, programme clock, dated agreements, pushed template copy, pushed benchmarks and share rate — the same reads the branch pages already make. On HQ those four that are a subsidiary's (seats, the lanes, the agreements, the share rate) come back `recorded: false` with a reason that names U1. HQ's user table is not a seat count, and it is not shown as zero. The programme clock is the platform's and is returned on both tiers; the count of accounts still pending the open week is the subsidiary's part, so on HQ that count stays null. HQ's master template library and the benchmark copy are HQ's own stores and are read. A failed read of a store that does exist is `available: false` with a sentence of ours; the database's text stays in the log.
+
+**Who reads it.** `StudioNeedsDecision.jsx` and `AdminStudioOverview.jsx` both call `loadStudioGlance` in `adminStudioOverview.js`, and both render through `glancesFromStudioGlance`, so a tile and its card still cannot disagree. `AdminStudioHome.jsx` is Session 3's and is not edited. It still issues the four branch reads and passes them down, which is what a synchronous render sees until the glance answers. Session 3 should drop those four calls. The children already read `GET /api/admin/studio/glance`.
+
+**Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: HQ seats counted from `users`; the U1 sentence removed from the seats refusal; the strip's `loadStudioGlance` call removed.
+
 ## D450
 
 **HQ consoles tell the truth about what was read.** Wave 8, Session 16, item 1
