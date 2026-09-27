@@ -943,6 +943,14 @@ export const api = {
   // Task #31 — Co-founder agreement + 83(b) tracker
   legalCofounderAgreement: (data) =>
     request('/legal/cofounder-agreement', { method: 'POST', body: JSON.stringify(data) }),
+  // D354 — each party's own position on each clause of a generated draft.
+  // The Worker takes the actor from the session only; nothing here sends a
+  // user id, and a body that named another party's would be refused.
+  legalCofounderPositions: (docId) => request(`/legal/cofounder-agreement/${encodeURIComponent(docId)}/positions`),
+  legalRecordClausePosition: (docId, clauseKey, { position, note }) =>
+    request(`/legal/cofounder-agreement/${encodeURIComponent(docId)}/positions/${encodeURIComponent(clauseKey)}`, {
+      method: 'PUT', body: JSON.stringify({ position, note: note ?? null }),
+    }),
   // Spin-Out Lab graduation-certificate registry. Scopes are enforced in the
   // worker (routes/spinout_certificates.ts), not here: admin issues/revokes,
   // the holder reads only their own row, and the public verifier is separate

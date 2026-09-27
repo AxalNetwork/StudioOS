@@ -30736,6 +30736,113 @@ migration 308 in `schema_migrations` after the deploy.
   unchanged; typechecks, lint and every guard green, `check-docs-fresh
   --strict` after the root build.
 
+## D354
+
+**Co-founder Agreement: each party records their own position on each
+clause, and nobody records one for anyone else. Per-party signing is built up
+to one missing piece in the e-sign service, named below.** Wave 8, Session 7,
+item 5. Migration 309; two new `/api` methods; security-review territory.
+
+**The rule, and where it is enforced.** One party never accepts — or marks
+"needs alignment" — on another's behalf. `services/cofounderAgreementParties.ts`
+holds it and the two routes in `routes/legal.ts` only pass the session user:
+- **The actor is the signed-in account.** Nothing in a request chooses whose
+  position is written. A body that NAMES a `user_id` (or `party_user_id`) other
+  than the caller's is refused with 400 `party_mismatch` — refused, not quietly
+  rewritten, so a client that tries is told so.
+- **A party is an account, resolved from the party's email when the draft is
+  generated** (`LOWER(email)` equality — the D410 rule). `POST
+  /legal/cofounder-agreement` now writes `cofounder_agreement_parties` in one
+  `batch` after the document; a party with no email or no account is stored
+  with a NULL `user_id` and can record nothing. A failure recording parties
+  does not unmake the draft: the response says `parties_recorded: false` and
+  the page says the parties are not on file.
+- **The write is keyed (document, clause, caller)** —
+  `UNIQUE(document_id, clause_key, user_id)` — so there is no column through
+  which one party's write could land on another's row.
+- **KYC is not the gate for founders, and the tests say so.**
+  `requireApprovedKyc` passes every non-investor by design (auth.ts, "KYC is
+  investor-only"); the PUT route keeps it, so an investor without approved KYC
+  is refused, but a KYC-less FOUNDER is stopped by the party check: not a
+  party, no write.
+- **Staff and the project's owner may READ, never write** unless they are a
+  named party themselves. **Anyone else gets the same 404 as a draft that does
+  not exist**, so ids cannot be enumerated. The read carries party names and
+  flags (`has_account`, `is_you`) — never emails, never user ids.
+
+**Routes.** `GET /api/legal/cofounder-agreement/:docId/positions` and
+`PUT /api/legal/cofounder-agreement/:docId/positions/:clauseKey`
+(`{ position: 'accepted' | 'needs_alignment', note }`), mounted through the
+existing `/api/legal` mount; api.js `legalCofounderPositions` and
+`legalRecordClausePosition`, which send no user id. Refusals go through
+`refuse()` with a code and our sentence (D258/D278). Clause keys are the
+page's thirteen (`CLAUSE_SPEC`).
+
+**The page.** Each clause row shows every founder's own position, or Not
+recorded, or "No account on file" with the reason; only the signed-in party
+gets Accept term / Needs alignment and a note. The summary counts clauses
+"agreed by every founder" — every party with an account accepted and no party
+lacks one — "need alignment" and "still open". A failed read is Unreadable
+with a retry; a draft generated before parties were recorded says so.
+
+**Signing — built up to the line, and the line is in Session 13's file.**
+Re-measured on main 4d9add89, after Session 13's #824 (D410) and #834 (D411)
+merged and Session 1 relayed that item 5 is unblocked: the hardening is
+there, and the blocker below is unchanged by it. `createAndSendEnvelope`
+takes its text only from `templateBodyFor(documentType)`, and for
+`cofounder_agreement` that is the `legal_templates` row seeded by migrations
+085 / 105 / 113 — a fixed two-founder document (`{{founder.legal_name}}` /
+`{{cofounder.legal_name}}`, mediation on deadlock) with none of the
+generator's cliff percentage, acceleration, governing law or a third
+founder. D411 also refuses a send while any `{{token}}` is unfilled. An
+envelope would therefore carry a different agreement from the draft the
+parties reviewed and positioned clause by clause.
+The prompt requires per-party signing on Session 13's hardened e-sign routes
+(D410). `createAndSendEnvelope` (routes/esign.ts) renders an envelope's text
+from its template store by `documentType`, and takes no body: the stored
+`cofounder_agreement` row in `legal_templates` has a different two-party
+`{{dotted.path}}` vocabulary (legal.ts documents this at the generator), so an
+envelope sent today would carry the wrong document, not this draft. Nothing
+here edits esign.ts. What it needs, filed with Session 13 through our
+person: an option on `createAndSendEnvelope` to send a caller-supplied,
+already-rendered body (the generated `documents.content`) with its own title,
+under the same sender/recipient scope and duplicate key. With that, per-party
+signing is one envelope per party with an account, and the per-signer rows
+read the envelopes. Until then the execution console's disabled reason names
+exactly this, and the generated copy's wet-ink blocks remain the way to sign.
+
+### VERIFIED
+
+- `cloudflare-worker/test/cofounder_agreement_positions_d354.test.ts` (new,
+  10 tests) runs the service's real SQL on SQLite over the REAL migration 309
+  DDL: parties resolved by email case-insensitively; a party writes only their
+  own row; a party naming another's id is refused and neither row changes;
+  naming your own id is allowed; a KYC-less founder who is not a party gets
+  the 404 and writes nothing; staff read but can neither write nor name a
+  party; the read carries no emails or ids; unknown clauses, bad positions and
+  non-agreement documents are refused; the PUT route takes the session user
+  behind `requireApprovedKyc`.
+- `frontend/test/spinout_lab_clause_positions.test.mjs` (new, 9 tests).
+- Mutations: 23 run. Worker: 14 single mutations, 13 caught; the one that
+  escaped — binding the request's id as the actor — cannot be reached while
+  `party_mismatch` refuses every other id first, so it was re-aimed at the
+  real defect (both removed together) and that was caught. Frontend: 8 of 8.
+  Each caught mutation exited non-zero with a `not ok` line and was restored
+  from a sha256-checked snapshot.
+- SQL guards green, including check-sql-unsafe, check-runtime-schema-declared
+  and check-sqlite-tables; `check-api-drift` reports no new drift.
+- `npm run test:drift` on main 4d9add89 with this PR's two commits: exit 0.
+  Frontend 3583 → 3592 (+9, `spinout_lab_clause_positions.test.mjs`),
+  worker 4477 → 4487 (4484 pass, 0 fail; +10,
+  `cofounder_agreement_positions_d354.test.ts`), retention 112; typechecks,
+  lint and every guard green, `check-docs-fresh --strict` after the root
+  build.
+- **First commit of this PR: the CodeQL fix stranded after #835.** The ICP
+  card's `{project && (` guard (alert 6169, "useless conditional" — the card
+  sits in the branch that only renders with a project) was fixed in
+  25fcdebab, pushed after #835 had squash-merged, so it never reached main.
+  It is re-applied here as its own commit.
+
 ## D360
 
 **The Spin-Out Lab's capital and legal tools say when a read failed, and
