@@ -30643,6 +30643,66 @@ shown one company's memo on another company's room.
 - The canvas's "COLLECTION" mark and scope chip are shell chrome, drawn by
   `WorkspaceShell`, not by these pages.
 
+## D320
+
+**The archetype banks go from three probes per trait to five, and every one
+of the 16 archetypes gets a complete profile.** Wave 8, Session 3, item 1.
+It ports one commit, 555332f50 from Cursor's branch (PR 789), as a fresh
+cherry-pick onto main. It supersedes that PR's only unmerged commit. The
+rest of the branch is already on main through the earlier squash 1ff21b463
+(PR 678), so merging the branch would have conflicted in four source files.
+Closing PRs 789, 790 and 791 is the owner's call. No migration, no route, no
+`api.js` method.
+
+**What changes.**
+- `services/advisor/banks/fitShared.ts`: each of the four traits (builder,
+  visionary, connector, operator) gets two more shared probes, and each
+  persona gets a second role-flavoured probe per trait. The archetype
+  section of every persona's profiling bank goes from 17 questions to 29
+  (20 shared, 8 role, the illustration question). The bank lives only in
+  code: nothing in D1 seeds or counts these keys.
+- `lib/assessmentMeta.js`: each of the 16 slugs gets a `summary` (for the
+  compact card), a full `description`, a trait `lean`, and a `matching` set
+  (same-track and cross-licence pairs), each pair with a `why`.
+- `ProfileFitSection.jsx`: the compact `/studio` card prints `summary`; the
+  full card keeps `description`. `ArchetypeCard` becomes a named export so a
+  test can render it.
+- `ArchetypeCardPage.jsx`: draws the lean and a "Who you match with" block.
+
+**Effect on people who already answered.** Classification is nearest-centroid
+over the average of each trait's probes, and its coverage counts traits
+touched, not probes answered (`services/archetypeScoring.ts`). A user who
+answered the old bank keeps their archetype and its coverage. Their profiling
+progress denominator rises by 12 (founder 46 to 58, investor 42 to 54,
+partner 41 to 53, advisor 43 to 55), so a profile that read complete now has
+twelve open archetype questions, and Eadwyn asks them. That is intended: the
+extra probes are what give the classifier headroom.
+
+**Voice.** The new copy uses "advice" and "advisory" only about human
+investors and advisors (the Hands-On Partner, the coach archetypes), never
+about Eadwyn. The card's empty-state line "questions in the advisor" is
+unchanged here; item 3 re-aims it together with the test that pins it.
+
+**Verification.**
+- `npm run test:drift` on main 92c12edf2: exit 0. Frontend 3871 to 3873:
+  "every archetype has a complete profile: summary, description, matching"
+  (`studio_archetype_card.test.mjs`) and "the compact card prints the
+  summary; the full card prints the description"
+  (`studio_archetype_sprite.test.mjs`). Worker 4720 to 4721 (4718 pass, 0
+  fail): "archetype bank is the full trait + role + illustration set for
+  every persona", plus the renamed "archetype module has five probes per
+  trait". Retention 112 and guards 14 unchanged. Both typechecks,
+  `check-decision-ids`, `check-folder-docs`, `check-api-drift` and
+  `check-regulated-wording` exit 0; root `npm run build`, then
+  `check-docs-fresh --strict`, exit 0.
+- Mutations: 9 run, 8 caught (non-zero exit and a `not ok` line, each file
+  restored from a sha256-checked snapshot). One escaped: printing the full
+  description on the compact card. The ported sprite test only matched
+  `meta?.summary` in the source, and the condition that chooses between the
+  two still names it. The assertion was replaced by a render of
+  `ArchetypeCard` in both modes, which catches that mutation and its reverse
+  (the full card printing the summary).
+
 ## D330
 
 **AdminX.jsx and AdminTelegram.jsx say why no draft was made.** Wave 8,
