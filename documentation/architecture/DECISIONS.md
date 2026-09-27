@@ -35273,6 +35273,18 @@ record could not be read. Nothing here is drawn from a guess. Retry".
 
 **Mutations: 5 run, 5 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: a plain admin reinstating a peer admin; a decision with no audit row; the freeze not reaching the post; the console and the lane disagreeing on a flag; a malformed payload read as an empty list.
 
+## D449
+
+**The domain wizard names the registrar and copies a whole DNS record.** Frontend only. No migration. No new `/api` method. No live branch exercised this. `AdminStudioOverview.jsx` is not edited.
+
+**Registrar chips.** The three-step checklist stays. Above the records, six chips name Cloudflare, Google / Squarespace, Route 53, Namecheap, GoDaddy and Other. None is pressed until the person presses one, because a preselected Cloudflare would claim that is where they bought the name. Pressing one names that registrar and says the name, the value and the TTL do not change with it. Pressing it again clears the choice. The records still come from the licence payload. The choice is not stored.
+
+**Copy all.** Each record card copies Type, Name, Value and, when the TTL is a finite number, TTL, in one action, beside the per-field copies. A TTL that is not a finite number is left off the clipboard rather than written as zero. A refused clipboard uses the same sentence as a refused per-field copy.
+
+**Not on this screen.** Certificate, make primary, email DNS, and apex guidance. The canvas's recommended and not-recommended pair is not drawn.
+
+**Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: Copy all dropping the name and the TTL; a chip pressed before the person presses it; the chip list gone.
+
 ## D450
 
 **HQ consoles tell the truth about what was read.** Wave 8, Session 16, item 1
