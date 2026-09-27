@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
+import { buildIcs, downloadIcs } from '../../../lib/ics';
 import {
   Field, NothingYet, Pill, SaveNote, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
   buttonClass, dollarsToCents, ghostButtonClass, inputClass, money,
@@ -214,29 +215,15 @@ export default function SessionsZone() {
 
   const exportCalendar = useCallback(() => {
     // Built from rows already on screen, so nothing leaves the browser and no
-    // endpoint is needed. One VEVENT per slot the current view shows.
-    const pad = (s) => String(s).replace(/[\\;,]/g, (m) => `\\${m}`).replace(/\n/g, '\\n');
-    const stamp = (iso) => {
-      const d = new Date(iso);
-      return Number.isNaN(d.getTime()) ? null : `${d.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`;
-    };
-    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Axal//Practice Sessions//EN'];
-    for (const s of visible) {
-      const start = stamp(s.starts_at); const end = stamp(s.ends_at);
-      if (!start || !end) continue;
-      lines.push('BEGIN:VEVENT', `UID:${pad(s.uid || s.id)}@axal.vc`,
-        `DTSTART:${start}`, `DTEND:${end}`,
-        `SUMMARY:${pad(KIND_LABEL[slotKind(s)] || 'Session')}`,
-        s.notes ? `DESCRIPTION:${pad(s.notes)}` : 'DESCRIPTION:',
-        'END:VEVENT');
-    }
-    lines.push('END:VCALENDAR');
-    const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'axal-sessions.ics';
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
+    // endpoint is needed. One VEVENT per slot the current view shows. The
+    // builder is shared with the Cohorts calendar (lib/ics.js, D393).
+    downloadIcs(buildIcs({
+      prodId: '-//Axal//Practice Sessions//EN',
+      events: visible.map((s) => ({
+        uid: s.uid || s.id, start: s.starts_at, end: s.ends_at,
+        summary: KIND_LABEL[slotKind(s)] || 'Session', description: s.notes || '',
+      })),
+    }), 'axal-sessions.ics');
   }, [visible]);
 
   // Hoisted out of the JSX: `profile_zone_actions.test.mjs` scans the

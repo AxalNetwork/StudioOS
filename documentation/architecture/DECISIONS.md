@@ -30298,6 +30298,120 @@ D330 in the same session's other PR).
 - `npm run test:drift` exits 0 on Node 22. Both typechecks and
   `check-decision-ids` (D1 through D421, in file order) exit 0.
 
+## D332
+
+**"Unreadable", never zero, across notifications, referrals, events,
+wellbeing, calendar and the help layout.** Wave 8, Session 4, item 4, the
+gap map's point 4: seven places where a failed read rendered the same as a
+genuinely empty or genuinely zero one.
+
+**What was false, and what changed, file by file.**
+- `routes/notifications.ts` — a `notifications_inbox` table-setup failure
+  made GET `/`, GET `/unread-count` and POST `/mark-read` answer 200 with
+  `[]` / `0` / `{ updated: 0 }`: the exact shape a genuinely empty,
+  genuinely caught-up inbox produces. The bell always said "all caught up"
+  whether nothing was there or nothing could be READ. All three now refuse
+  (503, `notifications_unreadable`) through `refuse()`/`refusalBody()`
+  (D278); the frontend's existing `NotificationList`/`NotificationBell`
+  catch handling (D144) already distinguishes a thrown fetch from a 200 —
+  it simply never had one thrown at it before.
+- `ReferralsPage.jsx` — a failed invites read was swallowed as
+  `{ invites: [] }`, indistinguishable from having sent none; a new
+  `invitesUnreadable` flag tracks it instead and the sent-count line shows
+  `Unreadable` when set. Separately, a genuine `loadError` (the overview and
+  submissions reads rejecting) still let the summary tiles render, reading
+  `overview?.counts?.… ?? 0` off an `overview` that stayed `null` — five
+  zeroes under a visible error banner. The tiles no longer render on that
+  branch; the banner and its retry already cover it.
+- `MyEventsPage.jsx` — a failed `eventsApi.list()` showed a toast that
+  disappears, then fell back to `hosting: []` / `attending: []`, rendering
+  "You're not hosting any events yet." — the same screen a genuinely empty
+  account gets. A `loadError` state now renders `Unreadable` with a retry
+  in place of both lists.
+- `PublicEventsPage.jsx` (currency) — every priced event card printed a
+  bare `$`, regardless of the event's own `currency` column. Not a
+  false-zero, but the same family of defect (a value presented as certain
+  that isn't): moved onto a shared `formatEventPrice` (new
+  `lib/money.js`), which also absorbed `PublicEventDetailPage.jsx`'s
+  identical, previously un-exported, local copy — one formatter instead
+  of two.
+- `WellbeingPage.jsx` — two spots. `AdminAggregate`'s catch turned ANY
+  thrown error, not only a genuine 404, into
+  `{ insufficient_data: true, cohort_size: 0, … }` — the exact shape the
+  worker's own `/aggregate` catch block already sends for a real small
+  cohort (it never actually 404s; it degrades to 200 internally). So a
+  request that never reached the worker at all read as "not enough people
+  have checked in yet". Now any thrown error goes to the existing `err`
+  state, untouched. Separately, `quiet404` rewrote a failed `/resources` or
+  `/daily` read into the same shape as a genuinely empty one; both routes
+  are unconditionally mounted for a non-investor sign-in, so a 404 there is
+  a real defect the page should not absorb — removed, and both reads now
+  reach the outer `catch` like everything else on the page.
+- `CalendarPage.jsx` — a failed Google/Microsoft status READ set
+  `available: false`, which `providerState` reads as "this server has no
+  OAuth credentials configured" — a claim about the DEPLOYMENT, not about
+  one request failing. A new `unreadable` flag and provider state (checked
+  before `unconfigured`) carries its own card and a real "Retry" action
+  wired to the same load function; `available`/`configured` now only ever
+  reach `providerState` from the server's own, successfully-read answer.
+- `docs/DocsLayout.jsx` — `StillStuck`'s failed-probe path set
+  `overall: 'unknown'`, but `STATUS_LINE` had no `unknown` entry, so
+  `STATUS_LINE[overall]` was `undefined` and the whole status line vanished
+  — read as "nothing to report" by the same `{line && (…)}` guard the
+  comment above it says exists to keep the line silent until the probe
+  *first* answers. `unknown` now has its own label ("Status could not be
+  read"); the pre-answer silence (`overall === null`) is unchanged.
+
+**Measured and left alone.** `PublicEventDetailPage.jsx`'s `seats_taken`
+`|| 0` was on the gap map's list but does not fabricate a false claim on
+inspection: `services/eventCapacity.ts`'s `seatsTaken` is `COUNT(*)`, which
+SQLite never returns null or undefined for — a query failure throws instead
+of degrading to a fake row, and that throw already reaches this page's
+existing `error` state through its own catch. There is no live path where
+`data.seats_taken` is a successful-but-absent value for the `|| 0` to mask.
+Not fixed, because there is nothing to fix; recorded here rather than
+silently dropped from the sweep.
+
+**Worker + frontend.** No migration, no new route, no new `api.js` method.
+`frontend/src` moved, so `docs/` is rebuilt.
+
+### VERIFIED
+
+- New `cloudflare-worker/test/notifications_unreadable_d332.test.ts` (4
+  tests, real SQLite via `d1Over`, a `DB.prepare` override that fails only
+  the inbox's own `CREATE TABLE`): all three endpoints refuse
+  `notifications_unreadable` on a table-setup failure and a healthy table
+  still answers 200 with real data.
+- New `frontend/test/honesty_sweep_d332.test.mjs` (9 tests): `money.js`'s
+  `formatEventPrice` actually executed against three currencies and a
+  missing one; the rest over `codeOnly` source (neither page takes `api` as
+  an injectable prop, so there is no seam for a live-response test without
+  restructuring each page, out of this task's scope) — Referrals' invites
+  tracking and tile suppression, MyEvents' `Unreadable` render, both event
+  pages' shared formatter, Calendar's `unreadable` flag/ordering/retry
+  wiring, Wellbeing's removed `quiet404` and 404-coercion.
+- `frontend/test/docs_still_stuck_status.test.mjs`'s "renders no status
+  line until the probe answers" test re-aimed: it used to assert `unknown`
+  has NO label (pinning the defect); it now asserts `unknown` DOES, while
+  confirming the true pre-answer silence (`overall === null`) is untouched.
+- `frontend/test/calendar_page_c1.test.mjs`'s provider-states guard
+  re-aimed from five states to six, adding `unreadable` in its actual
+  position (second, before `unconfigured`) — caught by the full drift run
+  before this entry was written, exactly as the guard is built to do.
+- 10 mutations run, 10 caught (non-zero exit plus a `not ok` line), each
+  restored from a sha256-verified `/tmp` snapshot and diff-confirmed
+  byte-identical to the pre-mutation file afterward: notifications.ts's
+  GET / refusal reverted; ReferralsPage's invites tracking and its tile
+  suppression, separately; MyEventsPage's error render; PublicEventsPage's
+  formatter call; PublicEventDetailPage's local duplicate reintroduced;
+  CalendarPage's failure-handling and its retry action, separately;
+  WellbeingPage's 404-coercion and its `quiet404`, separately.
+- `npm run test:drift` exits 0 on Node 22 (3558 frontend tests, 0
+  failures, after the `calendar_page_c1` re-aim above). Both typechecks,
+  `check-decision-ids` (D1 through D421, in file order) and
+  `check-api-drift` exit 0. Root `npm run build`, then
+  `node scripts/check-docs-fresh.mjs --strict`, exits 0.
+
 ## D350
 
 **Lab Profiling reads Eadwyn's question ledger for the four elements it had
@@ -30621,6 +30735,113 @@ migration 308 in `schema_migrations` after the deploy.
   `projects_icp_definition_d353.test.ts` in the log; retention 112
   unchanged; typechecks, lint and every guard green, `check-docs-fresh
   --strict` after the root build.
+
+## D354
+
+**Co-founder Agreement: each party records their own position on each
+clause, and nobody records one for anyone else. Per-party signing is built up
+to one missing piece in the e-sign service, named below.** Wave 8, Session 7,
+item 5. Migration 309; two new `/api` methods; security-review territory.
+
+**The rule, and where it is enforced.** One party never accepts — or marks
+"needs alignment" — on another's behalf. `services/cofounderAgreementParties.ts`
+holds it and the two routes in `routes/legal.ts` only pass the session user:
+- **The actor is the signed-in account.** Nothing in a request chooses whose
+  position is written. A body that NAMES a `user_id` (or `party_user_id`) other
+  than the caller's is refused with 400 `party_mismatch` — refused, not quietly
+  rewritten, so a client that tries is told so.
+- **A party is an account, resolved from the party's email when the draft is
+  generated** (`LOWER(email)` equality — the D410 rule). `POST
+  /legal/cofounder-agreement` now writes `cofounder_agreement_parties` in one
+  `batch` after the document; a party with no email or no account is stored
+  with a NULL `user_id` and can record nothing. A failure recording parties
+  does not unmake the draft: the response says `parties_recorded: false` and
+  the page says the parties are not on file.
+- **The write is keyed (document, clause, caller)** —
+  `UNIQUE(document_id, clause_key, user_id)` — so there is no column through
+  which one party's write could land on another's row.
+- **KYC is not the gate for founders, and the tests say so.**
+  `requireApprovedKyc` passes every non-investor by design (auth.ts, "KYC is
+  investor-only"); the PUT route keeps it, so an investor without approved KYC
+  is refused, but a KYC-less FOUNDER is stopped by the party check: not a
+  party, no write.
+- **Staff and the project's owner may READ, never write** unless they are a
+  named party themselves. **Anyone else gets the same 404 as a draft that does
+  not exist**, so ids cannot be enumerated. The read carries party names and
+  flags (`has_account`, `is_you`) — never emails, never user ids.
+
+**Routes.** `GET /api/legal/cofounder-agreement/:docId/positions` and
+`PUT /api/legal/cofounder-agreement/:docId/positions/:clauseKey`
+(`{ position: 'accepted' | 'needs_alignment', note }`), mounted through the
+existing `/api/legal` mount; api.js `legalCofounderPositions` and
+`legalRecordClausePosition`, which send no user id. Refusals go through
+`refuse()` with a code and our sentence (D258/D278). Clause keys are the
+page's thirteen (`CLAUSE_SPEC`).
+
+**The page.** Each clause row shows every founder's own position, or Not
+recorded, or "No account on file" with the reason; only the signed-in party
+gets Accept term / Needs alignment and a note. The summary counts clauses
+"agreed by every founder" — every party with an account accepted and no party
+lacks one — "need alignment" and "still open". A failed read is Unreadable
+with a retry; a draft generated before parties were recorded says so.
+
+**Signing — built up to the line, and the line is in Session 13's file.**
+Re-measured on main 4d9add89, after Session 13's #824 (D410) and #834 (D411)
+merged and Session 1 relayed that item 5 is unblocked: the hardening is
+there, and the blocker below is unchanged by it. `createAndSendEnvelope`
+takes its text only from `templateBodyFor(documentType)`, and for
+`cofounder_agreement` that is the `legal_templates` row seeded by migrations
+085 / 105 / 113 — a fixed two-founder document (`{{founder.legal_name}}` /
+`{{cofounder.legal_name}}`, mediation on deadlock) with none of the
+generator's cliff percentage, acceleration, governing law or a third
+founder. D411 also refuses a send while any `{{token}}` is unfilled. An
+envelope would therefore carry a different agreement from the draft the
+parties reviewed and positioned clause by clause.
+The prompt requires per-party signing on Session 13's hardened e-sign routes
+(D410). `createAndSendEnvelope` (routes/esign.ts) renders an envelope's text
+from its template store by `documentType`, and takes no body: the stored
+`cofounder_agreement` row in `legal_templates` has a different two-party
+`{{dotted.path}}` vocabulary (legal.ts documents this at the generator), so an
+envelope sent today would carry the wrong document, not this draft. Nothing
+here edits esign.ts. What it needs, filed with Session 13 through our
+person: an option on `createAndSendEnvelope` to send a caller-supplied,
+already-rendered body (the generated `documents.content`) with its own title,
+under the same sender/recipient scope and duplicate key. With that, per-party
+signing is one envelope per party with an account, and the per-signer rows
+read the envelopes. Until then the execution console's disabled reason names
+exactly this, and the generated copy's wet-ink blocks remain the way to sign.
+
+### VERIFIED
+
+- `cloudflare-worker/test/cofounder_agreement_positions_d354.test.ts` (new,
+  10 tests) runs the service's real SQL on SQLite over the REAL migration 309
+  DDL: parties resolved by email case-insensitively; a party writes only their
+  own row; a party naming another's id is refused and neither row changes;
+  naming your own id is allowed; a KYC-less founder who is not a party gets
+  the 404 and writes nothing; staff read but can neither write nor name a
+  party; the read carries no emails or ids; unknown clauses, bad positions and
+  non-agreement documents are refused; the PUT route takes the session user
+  behind `requireApprovedKyc`.
+- `frontend/test/spinout_lab_clause_positions.test.mjs` (new, 9 tests).
+- Mutations: 23 run. Worker: 14 single mutations, 13 caught; the one that
+  escaped — binding the request's id as the actor — cannot be reached while
+  `party_mismatch` refuses every other id first, so it was re-aimed at the
+  real defect (both removed together) and that was caught. Frontend: 8 of 8.
+  Each caught mutation exited non-zero with a `not ok` line and was restored
+  from a sha256-checked snapshot.
+- SQL guards green, including check-sql-unsafe, check-runtime-schema-declared
+  and check-sqlite-tables; `check-api-drift` reports no new drift.
+- `npm run test:drift` on main 4d9add89 with this PR's two commits: exit 0.
+  Frontend 3583 → 3592 (+9, `spinout_lab_clause_positions.test.mjs`),
+  worker 4477 → 4487 (4484 pass, 0 fail; +10,
+  `cofounder_agreement_positions_d354.test.ts`), retention 112; typechecks,
+  lint and every guard green, `check-docs-fresh --strict` after the root
+  build.
+- **First commit of this PR: the CodeQL fix stranded after #835.** The ICP
+  card's `{project && (` guard (alert 6169, "useless conditional" — the card
+  sits in the branch that only renders with a project) was fixed in
+  25fcdebab, pushed after #835 had squash-merged, so it never reached main.
+  It is re-applied here as its own commit.
 
 ## D360
 
@@ -31228,6 +31449,87 @@ The mutations included:
 - the dash and the zero fallback restored;
 - `Essays` made live, and Visibility un-excluded.
 
+## D393
+
+**Cohorts alignment: the five archetypes are the canvas's own, with a guard;
+Founders draws the week lanes from the Lab's week record; Calendar gets its
+four chips and a client-side .ics export.** Session 11, item 4. No
+migration, no route, no new `api.js` method. The canvas stays in `backlog/`:
+moving it would pull it into the actions guard, which its markup does not
+yet parse (the gap map's filing trap), and that move is Session 1's.
+
+**Archetypes.** All five Cohorts zones in `shellConfig.js` disagreed with the
+Cohorts canvas. The shell had COLLECTION / WORK BOARD ×3 / ANALYTICS; the
+canvas's artboard headers say WORK BOARD / FEED / COLLECTION / FEED /
+COLLECTION. The archetype is what the zone nav and badge advertise, so the
+nav described the wrong page type on every Cohorts route, and nothing
+checked it: `advisor_shell_canvas` pins only Practice. The shell now carries
+the canvas's five. `advisor_cohorts_alignment_d393.test.mjs` reads them out
+of the canvas's `ab-nm` headers and compares label and archetype, in order,
+so the guard cannot pass on a shell that agrees with a typo.
+
+**Founders (C1).** The page was a name-and-email table. It now also reads
+`GET /me/cohort/:id/weeks`, the route This week already uses, which returns
+the cycle's windows, the batch's `current_week` and each founder's per-week
+status and deliverable counts.
+- *Lanes, one per week window.* "Lanes come from the cohort, not the
+  founder" (the canvas's own note), so every card sits in the current week's
+  lane. With one batch on screen at a time, the other lanes read "Nobody here
+  yet". The canvas's per-cohort chips are the batch picker the page already
+  has.
+- *No windows, or no week open yet, means no lanes.* The page says why
+  instead of putting everyone in Week 1.
+- *A card* has the name and "x of y deliverables · p%" for the current week.
+  A founder with no status row reads "Progress not recorded", and a week with
+  nothing required reads as such; neither is ever 0%.
+- *Behind plan* (under half this week's deliverables, the canvas's
+  threshold) is the one flag drawn.
+- *Chips.* `All` · `Behind plan` narrow the lanes.
+- *Tiles.* Assigned, Behind plan and Complete are counted from the same
+  cards. `Flagged` is Not recorded: the canvas derives it partly from the
+  guidance queue, and nothing records a founder's open question or a missed
+  reply.
+- *The roster table stays* beneath the lanes; it is the only place the
+  contact address is shown.
+
+Kept, and recorded against the canvas: the card carries **no company line**.
+The founders read returns none, and `advisor_cohorts.test.mjs` pins that
+Founders draws no Company or Stage. `Bulk: nudge behind-plan` is drawn
+disabled, with its reason: nothing sends a founder a message from a cohort.
+
+**Calendar (C4).**
+- *Chips.* `Next 14 days` · `Cohort only` · `Client only` · `Demo Day`,
+  over the `kind` every item already carries. The tiles stay counted over the
+  whole stream.
+- *`Export to calendar`.* It builds an .ics in the browser from the rows on
+  screen. A Lab date (a week opening, a deadline, Demo Day) has no end, so it
+  is written as a point in time (DTSTART only), never as an invented
+  one-hour meeting.
+- *Shared builder.* It is `lib/ics.js`, lifted out of
+  `SessionsZone.jsx` so Practice · Sessions and Cohorts · Calendar share one
+  escaping rule. `advisor_practice_pr4` is re-aimed to require that Sessions
+  calls it and that it emits a calendar.
+- *Still not recorded:* Milestone kind, Recording, prep readiness and a
+  clash note, as the zone's stated limit already says.
+
+**Not built, named:** the founder half of Guidance (the ask and acknowledge
+flow, which needs a founder-side route and an owner decision); C3 materials
+and modules; C5 outcome consent; and the Cohorts AI bands. The gap map
+defers all four.
+
+**Verification.** New test: `frontend/test/advisor_cohorts_alignment_d393.test.mjs`
+(8). Re-aimed: `advisor_practice_pr4`. Mutations: 20 of 20 caught, each with
+a non-zero exit and a `not ok` line, restored from a sha256-checked snapshot.
+They included:
+- an archetype reverted;
+- Week 1 used as the default, or week 1 read instead of the current week;
+- nothing-required or no-row shown as 0%, and a changed behind threshold;
+- every lane holding everyone, and the no-window reason removed;
+- the flag dropped, Flagged shown as 0, and the nudge enabled;
+- the chips unwired, a wrong kind filter, and an unnarrowed list or export;
+- an invented one-hour end, no escaping, and a bad start written;
+- Sessions' own builder restored.
+
 ## D410
 
 **E-sign `/send` hardening: the signing link reaches only the recipient, a
@@ -31552,6 +31854,148 @@ worker tests now share `cloudflare-worker/test/_esign_harness.ts`.
   fill (Continue held with one blank, the preview carries the values) →
   review → send → `?envelope=7` → remind → void.
 
+## D412
+
+**Perks: only founders can claim, and no role gets through the tier gate. A
+claim can no longer overrun its cap or its balance. A claim records when it
+expires. Partners mark claims redeemed, and raising a cap needs no second
+review. Migration 322 stores value, the editorial note, the redeemer and
+ratings.** Wave 8, Session 13, item 3. It is Worker-first, with one frontend
+label fix. Migration 322.
+
+**What was wrong, measured on 4d9add89.**
+- **Claiming was login-only, and the tier gate let four roles through.**
+  `POST /:uid/claim` took `requireAuth` alone. `userMeetsTier` lets admin,
+  partner, investor and advisor through every tier gate
+  (`BYPASS_ROLES`). So any non-founder account could take a plan-included
+  perk for nothing. Claiming being a founder's action was enforced only by
+  the menu.
+- **The cap and the balance were checked before the insert.** The cap was a
+  `COUNT` read before the batch, and the balance a `SUM` read before it. Two
+  concurrent claims could overrun a cap, or spend one balance across two
+  perks. The header's "double-spend impossible" held for one perk only.
+- **`perk_claims.expires_at` had existed since migration 186 and was never
+  written.**
+- **Nothing ever wrote `status = 'redeemed'`**, so every redemption figure
+  was a permanent zero.
+- **Any edit to a live listing sent it back to review, even a raised cap.**
+- **Ended listings stayed claimable.** A listing past its `ends_at` stayed on
+  the shelf and could still be claimed.
+
+**What changed (`routes/perks.ts`, the only place perk gates live).**
+- **Who may claim.** `PERK_CLAIMANT_ROLES = new Set(['founder'])` is checked
+  first in the claim route, before the listing is read, and first in
+  `affordability`. A non-founder therefore gets `403 founders_only` whether
+  or not the listing exists. Such an account is never shown a price or tier
+  line, because its tier line never runs. For a founder, `userMeetsTier`
+  checks the subscription with no bypass. A test fails if a claimant role
+  would skip the tier check.
+- **Atomic cap and balance.** The claim is `INSERT … SELECT … WHERE` over
+  three conditions: the listing is live and not ended; it is under its cap;
+  and, for a credit perk, the balance covers the cost. The debit is
+  `INSERT … SELECT … WHERE EXISTS (the claim row)`, in the same batch, which
+  is one D1 transaction. A claim lands with its debit, inside the cap and
+  the balance, or neither lands. A refused insert is re-read and answered
+  with its reason. A UNIQUE race by the same founder returns the winning
+  claim.
+- **Expiry.** `expires_at` is the listing's `ends_at`, snapshotted at claim
+  time, as the price already is. The listing's end date is the only term
+  anyone sets: the partner form's "duration". An open-ended listing gives
+  an open-ended claim (null). `expired` is derived on read (`claimState`)
+  for an issued claim past its date, and nothing rewrites the column. No
+  reminder job exists, and `/mine` serves that absence as a sentence.
+- **Mark redeemed.** `POST /partner/:uid/redeem` takes `{ code }` or, for a
+  link or intro perk with no code, `{ claim_uid }`. It is bound to the
+  caller's own listing, so another listing's code is not found. An expired
+  claim, or one already redeemed, gets a 409. The actor is stored in
+  `redeemed_by_user_id` and written to `activity_logs`. `GET
+  /partner/:uid/claims` lists the claims' uid, state and dates, and never
+  who made them.
+- **Raising the cap skips review.** An edit that only raises `claim_cap`,
+  to a higher number or to uncapped, keeps a live listing live. A lowered
+  cap, capping an uncapped listing, or any other field in the same request
+  still goes back to review. The response says which with `reviewed_again`.
+- **Ratings.** `POST /:uid/rating` takes 1–5 stars from a founder whose
+  claim of that perk is redeemed (`PERK_RATING_REQUIRES`). One rating per
+  founder per perk; rating again replaces it. The catalogue serves `rating:
+  { count, average }`, and the average is null, never 0, until someone has
+  rated.
+- **Listing facts.** `value_cents` is the partner's stated cash value,
+  settable on submit and edit, never negative, reviewed like any edit.
+  `editorial_note` is written only by the admin review route and served only
+  while the listing is featured. `cap_reached` and `lifecycle` are served;
+  a full listing stays live, and the page says it is full.
+- **Stats.** The stats route adds `redemption_rate`, `founders_reached` (a
+  count; one claim per founder), `value_cents` and `rating`. It serves the
+  absence of the founders list and of card impressions as sentences.
+- **Catalogue.** It drops listings past their end date, and serves
+  `claimant` and `claimant_reason` once for the page.
+- **Refusals** use `refuse()` with a code and our own sentence:
+  `founders_only`, `tier_required`, `insufficient_credits`, `cap_reached`,
+  `perk_ended`, `claim_not_found`, `already_redeemed`,
+  `claim_not_redeemable`, `rating_requires_redemption`, `stars_invalid`.
+
+**Migration 322** (`322_perk_value_editorial_redemption_ratings.sql`) is
+additive only: `perks.value_cents` (integer cents, CHECK ≥ 0),
+`perks.editorial_note`, `perk_claims.redeemed_by_user_id`, and `perk_ratings`
+(UNIQUE per perk and user, stars 1–5). It stands alone, as a wave-8 migration
+must. There is no "instant" fulfilment: 186's CHECK cannot be altered without
+rebuilding `perks`. There is no impression counter and no stored average.
+
+**Frontend (`PerksPage.jsx`, one change).** The card printed `reason ===
+'tier_required' ? 'Needs an upgrade' : 'Not enough credits'`. Once claiming
+became founders-only, that would have told every investor, advisor and
+partner they were short of credits. The card now reads `UNCLAIMABLE_LABEL`,
+one label per reason the Worker gives, and the drawer prints the Worker's
+`reason_text` for a non-founder. Everything else on the page is item 4's.
+
+**OWNER DECISION, NOT MADE HERE: does an `exploring` account qualify for
+perks?** The conservative default ships: it does not. The rule is one
+constant, `PERK_CLAIMANT_ROLES` in `routes/perks.ts`. Adding `'exploring'` is
+the whole change; the test that pins today's answer would then need its one
+assertion updated.
+
+**A rule chosen here, and named.** Who may rate is not drawn on the canvas.
+`PERK_RATING_REQUIRES = 'redeemed'` asks for the one fact that says the
+founder used the offer.
+
+**Filed, not fixed.**
+- **Session 2.** `research.ts:2196` counts every claim as "redeemed"
+  (`COUNT(*) … AS redeemed`), and the draft prints "N redeemed". Redemption
+  is now a real state, so the count should read
+  `SUM(CASE WHEN status = 'redeemed' …)`.
+- **Session 15.** None.
+- **Consent.** "Founders reached" by name, and an intro perk's "sharing your
+  company name", need a store of founder consent. None exists, so both are
+  served as absences.
+
+### VERIFIED
+
+- `npm run test:drift` exit 0 on main 4d9add89 plus this change. Main alone:
+  frontend 3583, worker 4477. With it: frontend 3587 (+4), worker 4496 (+19),
+  retention 112. Nothing fell.
+- New tests, by name:
+  - `perks_claim_founders_d412.test.ts`: 19 tests. The schema is built from
+    migrations 186, 198, 228 and 322 read off disk. The two atomicity tests
+    use a batch hook that lands a competing claim or spend between the
+    route's read and its insert.
+  - `perks_claim_reasons_d412.test.mjs`: 4 tests. The page labels every
+    reason `affordability` gives.
+- `perks_company_scope.test.ts`'s fixture gains migration 322's columns and
+  table.
+- 25 mutations were run. 23 were caught first time. Two escaped (P3, P23),
+  and the assertions were fixed, not the code:
+  - P3, the route's early founder gate removed: `affordability` still
+    refused with the same code. The test now asserts that a non-founder gets
+    the same answer for a nonexistent listing as for a real one, which is
+    what the early gate buys.
+  - P23, the negative-value check removed: the migration's CHECK still
+    refused with a 400. The test now asserts our sentence, not just the
+    status.
+  - Both re-run and caught. 25 of 25. Each failure was a non-zero exit with
+    a `not ok` line, restored from a sha256-checked snapshot, and passed
+    again.
+
 ## D420
 
 **The founder desks A2–A5 read the stores that already exist.** Wave 8,
@@ -31743,6 +32187,87 @@ surface); a cached-input cost read on Research (no store).
   `check-api-drift`, `check-unused-imports` and `check-dark-mode` exit 0. Root
   `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser probe.
 
+## D430
+
+**Recovery codes get a single writer: regenerating them and then re-pairing
+the authenticator never resurrects the discarded set.** Session 15's item 1;
+lands after D258 (#811), which touched the same four TOTP routes.
+
+**The defect, reproduced before the fix.** Two stores hold one set of
+recovery-code hashes: `users.totp_recovery_codes`, which login consumes from
+(auth.ts's `tryConsumeRecoveryCode` reads it and accepts a code iff its hash
+is in the array), and `auth_totp.recovery_hashes`, a mirror. On main
+(`4d9add89bb`):
+- `POST /api/settings/totp/recovery-codes/regenerate` ran `UPDATE users SET
+  totp_recovery_codes = …` alone; the mirror kept the old set.
+- `POST /api/settings/totp/repair` called `loadTotp`, which answers the
+  `auth_totp` row's hashes — the stale mirror — and passed them to
+  `persistNewTotpEnrolment`, which wrote them to `auth_totp` and mirrored
+  them to `users`.
+- So after regenerate → repair the codes the person had just saved were
+  refused and the ones they had just discarded worked again, against the
+  settings page's own promise ("This invalidates any existing recovery
+  codes"), and the "N of 10 remaining" count reverted with them.
+- `cloudflare-worker/test/recovery_codes_single_writer_d430.test.ts` drove
+  this on a `node:sqlite` fixture through the real router before the fix:
+  its first three tests failed (`auth_totp.recovery_hashes` still holding the
+  discarded set after regenerate; the saved set replaced by the discarded one
+  after repair; repair siding with the mirror when the two stores had been
+  driven apart), recorded in the PR body.
+
+**What changed — one writer, one batch.**
+- `services/authTotp.ts`: `persistNewTotpEnrolment` writes the `auth_totp`
+  upsert and the `users` mirror in ONE `env.DB.batch`; the mirror's
+  try/catch is gone, so either both land or the route fails and says so.
+  New `replaceRecoveryHashes(env, userId, hashes)` writes both stores in one
+  batch WITHOUT stamping `last_used_at` — that column is the audit of a code
+  or a TOTP being used, and `updateRecoveryHashes` (the consumption path)
+  keeps it; a regenerate is not a consumption. There is no third way to
+  write a recovery set.
+- `routes/settings.ts`: regenerate calls `replaceRecoveryHashes`. Repair
+  carries the set login consumes from — `recoveryCodesOf(users.totp_recovery_codes)`,
+  the row it already read — never the loaded mirror. An empty or unparseable
+  `users` set stays empty: repair never revives codes login was already
+  refusing, and no fallback to the mirror exists (a mutation that added one
+  is caught).
+- `auth_recover.ts`'s own consumption (writes `users`, then
+  `updateRecoveryHashes`) and `auth.ts`'s enrolment are not touched: both
+  already write both stores.
+
+**Guard: 6 tests.** Regenerate writes both stores at once, the old set is
+gone from both and `last_used_at` stays null; regenerate then repair leaves
+the ten saved codes accepted and the discarded one refused, in both stores
+and in `loadTotp`'s count; repair carries the consumed-from set when the
+stores have been driven apart; an empty consumed-from set stays empty; an
+enrolment writes both stores with the same set in a two-statement batch;
+and a source guard holds settings.ts to no direct `UPDATE users SET
+totp_recovery_codes`, repair to `recoveryCodesOf(userRow[0]…)`, and the two
+service writers to one batch each, with no `last_used_at` in the replacer.
+
+**Mutations: 9 run, 9 caught** — each a non-zero exit with a `not ok` line,
+anchors unique, bytes proven changed, sources restored from a sha256-checked
+snapshot: the mirror back in a swallowed try/catch; regenerate writing
+`users` alone (the defect); repair re-persisting the loaded mirror (the
+defect); the replacer stamping `last_used_at`; the replacer writing
+`auth_totp` only; the replacer writing `users` only; repair falling back to
+the mirror on an empty set; the enrolment batch dropping the `users` write;
+the enrolment batch dropping the `auth_totp` write.
+
+**Filed, not fixed.**
+- Remediation is the owner's call (the brief): accounts that regenerated and
+  then repaired before D430 hold the discarded set in both stores today. No
+  per-user row was read and nobody was contacted; the one read-only aggregate
+  the brief allows is in the PR body: the number of accounts with a
+  `totp_recovery_codes_regenerated` row followed by a later `totp_repaired`
+  row and no `user_login_recovery_code` row between the two (a recovery-code
+  sign-in is logged under that action, auth.ts), read from production
+  `activity_logs` as one COUNT and nothing else.
+- Trap 6 of the gap map, unchanged: regenerate and repair are reachable from
+  a relocked post-recovery session, and neither sends a security notice.
+  Neither is this item's, and neither is decided here.
+
+No migration, no route, no `api.js` method, no `frontend/src` change, so
+`docs/` is untouched.
 ## D460
 
 **The investor deal-flow honesty pass: dead controls wired, false sentences

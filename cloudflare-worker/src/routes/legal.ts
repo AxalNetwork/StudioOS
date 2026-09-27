@@ -29,6 +29,7 @@ import {
   totalEquityPct,
 } from '../services/cofounderAgreement';
 import { refuse } from '../util/refusal';
+import { listPositions, recordParties, recordPosition } from '../services/cofounderAgreementParties';
 
 const legal = new Hono<{ Bindings: Env }>();
 
@@ -1027,10 +1028,23 @@ legal.post('/cofounder-agreement', async (c) => {
     RETURNING id, uid, title, template_name`;
   await sql.end();
 
+  // D354 — record who the draft's parties are, each resolved to an account by
+  // email, so a party can record their OWN position on each clause. A failure
+  // here does not unmake the draft: it is reported (`parties_recorded: false`)
+  // and the page says the parties are not on file, never that nobody accepted.
+  let partiesRecorded = false;
+  try {
+    await recordParties(c.env, Number((doc as any).id), value.founders);
+    partiesRecorded = true;
+  } catch (e) {
+    console.error('[legal] cofounder-agreement parties:', (e as Error)?.message);
+  }
+
   // The /incorporate page dereferences `result.document.title` unguarded, so
   // this envelope (and the 200, not 201) is part of the contract.
   return c.json({
     ok: true,
+    parties_recorded: partiesRecorded,
     document: doc,
     summary: {
       founders: value.founders.length,
@@ -1040,6 +1054,49 @@ legal.post('/cofounder-agreement', async (c) => {
       acceleration: value.acceleration,
     },
   });
+});
+
+/**
+ * D354 — each party's own position on each clause of a co-founder agreement
+ * draft. The rules live in services/cofounderAgreementParties.ts; these two
+ * routes only pass the SESSION user and relay the service's refusals.
+ *
+ *   GET /cofounder-agreement/:docId/positions  — a party, the project's owner
+ *     or staff; anyone else gets the draft-not-found 404.
+ *   PUT /cofounder-agreement/:docId/positions/:clauseKey — { position, note }.
+ *     The caller must be a named party, and records only their own position.
+ *     A body naming a `user_id` other than the caller's is refused
+ *     (`party_mismatch`), never quietly rewritten. `requireApprovedKyc` keeps
+ *     an investor without approved KYC out, as every binding write does.
+ */
+legal.get('/cofounder-agreement/:docId{[0-9]+}/positions', async (c) => {
+  const user = await requireAuth(c);
+  try {
+    const out = await listPositions(c.env, Number(c.req.param('docId')), user);
+    if ('refused' in out) return refuse(c, out.refused.status, { code: out.refused.code, message: out.refused.message });
+    return c.json(out);
+  } catch (e) {
+    return refuse(c, 503, { code: 'positions_unreadable', message: 'The clause positions could not be read. Try again in a moment.', raw: e });
+  }
+});
+
+legal.put('/cofounder-agreement/:docId{[0-9]+}/positions/:clauseKey', async (c) => {
+  const user = await requireApprovedKyc(c);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  try {
+    const out = await recordPosition(c.env, {
+      documentId: Number(c.req.param('docId')),
+      user,
+      clauseKey: String(c.req.param('clauseKey') || ''),
+      position: body?.position,
+      note: body?.note,
+      claimedUserId: body?.user_id ?? body?.party_user_id,
+    });
+    if ('refused' in out) return refuse(c, out.refused.status, { code: out.refused.code, message: out.refused.message });
+    return c.json(out);
+  } catch (e) {
+    return refuse(c, 503, { code: 'position_not_saved', message: 'Your position was not saved. Try again in a moment.', raw: e });
+  }
 });
 
 /**

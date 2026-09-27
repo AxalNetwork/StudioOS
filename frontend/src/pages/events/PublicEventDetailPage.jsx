@@ -10,13 +10,7 @@ import AxalCheckout from '../../components/AxalCheckout';
 import { eventsPublic } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { loadTurnstile } from '../../lib/turnstile';
-
-function formatMoney(cents, currency) {
-  const amt = (Number(cents) || 0) / 100;
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: (currency || 'usd').toUpperCase() }).format(amt);
-  } catch { return `$${amt.toFixed(2)}`; }
-}
+import { formatEventPrice as formatMoney } from '../../lib/money';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 

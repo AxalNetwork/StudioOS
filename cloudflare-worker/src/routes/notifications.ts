@@ -156,7 +156,15 @@ function dto(r: any) {
 notifications.get('/', async (c) => {
   const user = await requireAuth(c);
   if (!user) return c.json({ error: 'Unauthorized' }, 401);
-  if (!(await ensureInbox(c.env))) return c.json({ notifications: [] });
+  // D332 — a table-setup failure is not an empty inbox. `ensureInbox` returning
+  // false meant the bell always said "all caught up" whether nothing was
+  // there or nothing could be READ, and the two are opposite claims.
+  if (!(await ensureInbox(c.env))) {
+    return refuse(c, 503, {
+      code: 'notifications_unreadable',
+      message: 'Your notifications could not be read right now. Try again in a moment.',
+    });
+  }
   const limitRaw = parseInt(c.req.query('limit') || '50', 10);
   const limit = Math.max(1, Math.min(Number.isFinite(limitRaw) ? limitRaw : 50, 200));
   // Task #2 (IB) — spec supports `?unread=true` and `?category=`.
@@ -176,7 +184,13 @@ notifications.get('/', async (c) => {
 notifications.get('/unread-count', async (c) => {
   const user = await requireAuth(c);
   if (!user) return c.json({ error: 'Unauthorized' }, 401);
-  if (!(await ensureInbox(c.env))) return c.json({ count: 0 });
+  // D332 — see the list handler above: a failed read is not zero unread.
+  if (!(await ensureInbox(c.env))) {
+    return refuse(c, 503, {
+      code: 'notifications_unreadable',
+      message: 'Your unread count could not be read right now. Try again in a moment.',
+    });
+  }
   const r: any = await c.env.DB.prepare(
     `SELECT COUNT(*) AS c FROM notifications_inbox WHERE user_id = ? AND read_at IS NULL`,
   ).bind(user.id).first();
@@ -186,7 +200,14 @@ notifications.get('/unread-count', async (c) => {
 notifications.post('/mark-read', async (c) => {
   const user = await requireAuth(c);
   if (!user) return c.json({ error: 'Unauthorized' }, 401);
-  if (!(await ensureInbox(c.env))) return c.json({ updated: 0 });
+  // D332 — a table-setup failure means nothing was marked, not that
+  // everything already was; the two must not read the same on screen.
+  if (!(await ensureInbox(c.env))) {
+    return refuse(c, 503, {
+      code: 'notifications_unreadable',
+      message: 'Your notifications could not be updated right now. Try again in a moment.',
+    });
+  }
   const body: any = await c.req.json().catch(() => ({}));
   const now = new Date().toISOString();
   if (body?.all) {
