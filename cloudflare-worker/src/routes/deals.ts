@@ -434,7 +434,10 @@ deals.post('/', async (c) => {
     await sql.end();
     return c.json({ error: 'Forbidden' }, 403);
   }
-  const [deal] = await sql`INSERT INTO deals (project_id, partner_id, status, notes, amount, stage_changed_at) VALUES (${data.project_id}, ${data.partner_id || null}, ${data.status || 'applied'}, ${data.notes || null}, ${data.amount || null}, datetime('now')) RETURNING *`;
+  // D463 — where the deal came from. Free text: the source taxonomy is the
+  // owner's call, and a CHECK written before it would enshrine a guess.
+  const source = data.source != null ? String(data.source).trim().slice(0, 120) || null : null;
+  const [deal] = await sql`INSERT INTO deals (project_id, partner_id, status, notes, amount, stage_changed_at, source) VALUES (${data.project_id}, ${data.partner_id || null}, ${data.status || 'applied'}, ${data.notes || null}, ${data.amount || null}, datetime('now'), ${source}) RETURNING *`;
   // Task #127 — the deal's arrival is its first stage entry. Without this the
   // funnel can measure conversion OUT of the first stage but never has a
   // cohort that entered it, so the first column reads 0 forever.
@@ -471,18 +474,21 @@ deals.post('/draft', async (c) => {
     }, 400);
   }
   const status = PIPELINE.includes(data.status) ? data.status : 'applied';
+  // D463 — the source is recorded at draft. Free text: the taxonomy is the
+  // owner's call (which sources exist, and which count as the Lab).
+  const source = data.source != null ? String(data.source).trim().slice(0, 120) || null : null;
   const [deal] = await sql`
     INSERT INTO deals (
       project_id, partner_id, lead_partner_id, status, notes, description, website,
       amount, target_raise, minimum_check, valuation_cap, carry_pct, management_fee_pct,
-      instrument, spv_jurisdiction, closing_deadline, capital_committed, stage_changed_at
+      instrument, spv_jurisdiction, closing_deadline, capital_committed, stage_changed_at, source
     ) VALUES (
       ${data.project_id}, ${data.partner_id || null}, ${data.lead_partner_id || null}, ${status},
       ${data.notes || null}, ${data.description || null}, ${data.website || null},
       ${data.amount ?? null}, ${data.target_raise ?? null}, ${data.minimum_check ?? null},
       ${data.valuation_cap ?? null}, ${data.carry_pct ?? null}, ${data.management_fee_pct ?? null},
       ${data.instrument || null}, ${data.spv_jurisdiction || null}, ${data.closing_deadline || null},
-      0, datetime('now')
+      0, datetime('now'), ${source}
     ) RETURNING *`;
   await recordStageEvent(sql, {
     dealId: Number((deal as any)?.id),
@@ -597,6 +603,25 @@ deals.put('/:id', async (c) => {
   if (data.partner_id !== undefined) await sql`UPDATE deals SET partner_id = ${data.partner_id}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
   if (data.notes !== undefined) await sql`UPDATE deals SET notes = ${data.notes}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
   if (data.amount !== undefined) await sql`UPDATE deals SET amount = ${data.amount}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  // D463 — the terms are editable after the draft, by the same operator the
+  // draft admitted. A deal's terms change in negotiation; a store that only
+  // writes them at birth freezes the first answer as the permanent one. Each
+  // field is written only when the key is present, so a partial edit cannot
+  // blank a term it did not send.
+  if (data.lead_partner_id !== undefined) await sql`UPDATE deals SET lead_partner_id = ${data.lead_partner_id || null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.target_raise !== undefined) await sql`UPDATE deals SET target_raise = ${data.target_raise ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.minimum_check !== undefined) await sql`UPDATE deals SET minimum_check = ${data.minimum_check ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.valuation_cap !== undefined) await sql`UPDATE deals SET valuation_cap = ${data.valuation_cap ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.carry_pct !== undefined) await sql`UPDATE deals SET carry_pct = ${data.carry_pct ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.management_fee_pct !== undefined) await sql`UPDATE deals SET management_fee_pct = ${data.management_fee_pct ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.instrument !== undefined) await sql`UPDATE deals SET instrument = ${data.instrument ? String(data.instrument).slice(0, 120) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.spv_jurisdiction !== undefined) await sql`UPDATE deals SET spv_jurisdiction = ${data.spv_jurisdiction ? String(data.spv_jurisdiction).slice(0, 120) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.closing_deadline !== undefined) await sql`UPDATE deals SET closing_deadline = ${data.closing_deadline ? String(data.closing_deadline).slice(0, 40) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.website !== undefined) await sql`UPDATE deals SET website = ${data.website ? String(data.website).slice(0, 300) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.description !== undefined) await sql`UPDATE deals SET description = ${data.description ? String(data.description).slice(0, 20000) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  // The source is free text for the same reason it is at draft: the taxonomy
+  // is the owner's call.
+  if (data.source !== undefined) await sql`UPDATE deals SET source = ${data.source ? String(data.source).trim().slice(0, 120) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
 
   const [updated] = await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, lp.name as lead_partner_name FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users lp ON lp.id = d.lead_partner_id WHERE d.id = ${id}`;
 
