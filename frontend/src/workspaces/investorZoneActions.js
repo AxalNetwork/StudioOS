@@ -213,7 +213,9 @@ export const INVESTOR_ZONE_ACTIONS = {
   // ── Network ──────────────────────────────────────────────────────────────
   'network/relationships': [
     { label: 'Add person', unbuilt: 'the contact form is not reachable from the investor Network desk' },
-    { label: 'Set reminders', unbuilt: 'no reminder store exists' },
+    // LIVE WITH D465 (migration 338): `partner_reminders` is the store, and a
+    // reminder surfaces on the desk when it is due — no notification fan-out.
+    { label: 'Set reminders', kind: 'handler', handler: 'setReminders' },
     { label: 'Export', kind: 'export' },
   ],
   'network/introductions': [

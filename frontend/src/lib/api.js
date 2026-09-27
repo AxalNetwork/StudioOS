@@ -2691,6 +2691,13 @@ export const api = {
 
   partnerSummary: () => request('/partnernet/summary'),
   partnerRelationships: () => request('/partnernet/relationships'),
+  // D465 — the interaction log and the reminders (migration 338). The book's
+  // cold flag reads the log's MAX; a reminder surfaces on the desk when due.
+  partnerInteractionLog: (id) => request(`/partnernet/relationships/${id}/interactions`),
+  partnerInteractionAdd: (id, data) => request(`/partnernet/relationships/${id}/interactions`, { method: 'POST', body: JSON.stringify(data) }),
+  partnerReminders: (all) => request(`/partnernet/reminders${all ? '?all=1' : ''}`),
+  partnerReminderSet: (id, data) => request(`/partnernet/relationships/${id}/reminders`, { method: 'POST', body: JSON.stringify(data) }),
+  partnerReminderDone: (uid, done) => request(`/partnernet/reminders/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify({ done }) }),
 
   // The firm relationship book (migration 224) — people the firm knows at
   // client companies, each owned by someone at the firm or conspicuously not.

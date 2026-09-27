@@ -33283,3 +33283,54 @@ artboard's "Funds moved", real now: the sum over the recorded transfers.
   `check-api-drift`, `test:guards`, `lint:undef`, `check-dark-mode` exit 0.
   Root `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser
   probe.
+
+## D465
+
+**The investor Network book's interaction log and reminders.** Wave 8,
+Session 17, item 6. Migration 338 (`partner_interactions`,
+`partner_reminders`). Five new `/api/partnernet/*` routes.
+
+**The interaction log.** `partner_interactions` is one row per recorded touch
+— the relationship, the kind, a note, when it happened (backdating is
+legitimate: logging last week's call), who recorded it. The relationship's
+last touch is the log's MAX, carried as `last_interaction_at` on
+`GET /partnernet/relationships` — never a field someone edits, so logging a
+touch is the only way the cold flag moves. The `Going cold` chip is live over
+it, narrowing on the shared 60-day window (`lib/networkBook.js`'s
+`COLD_AFTER_DAYS`, the canvas's own COLD_AT), and a tie with no recorded touch
+is unknown, not cold — the empty view says so.
+
+**The reminders.** `partner_reminders` is one row per reminder — the
+relationship, when to re-surface it, a note, done or not. A reminder surfaces
+on the desk when it is due; there is NO notification fan-out. The `Set
+reminders` op is live, and each book row carries "Log a touch" and "Remind
+me" — the log's writer and the store's.
+
+**Named as missing (Session 2's):** the re-engagement band. The canvas drafts
+one line per cold tie; the draft surface lives in research.ts, which is
+Session 2's file, so the page names it instead of mounting a band that would
+400. The advisor side is deliberately untouched: `advisor_network_zones` pins
+`last_interaction_at` absent there, and this store is the investor book's.
+
+### VERIFIED
+- `npm run test:frontend` exit 0: 3698 pass. `npm run test:worker` exit 1,
+  three failures all pre-existing on main and reproduced there in isolation
+  (`capital_call_ledger.test.ts`, Session 9's area; two in
+  `trust_center_d432.test.ts`, Session 15's D432 merge). Reported, untouched.
+  4594 tests, 4588 pass, 3 skipped. New tests: `partnernet_interactions` (4,
+  worker) and `investor_network_cold` (3, frontend). Re-aimed, not loosened:
+  `profile_zone_actions`' investor handler count 12 → 13 with the history
+  kept.
+- 6 mutations, 5 caught on the first run and the 6th caught after an
+  assertion fix (the cold-count helper satisfied the same strings as the
+  cold-view narrowing; the assertion now pins the branch), each on a non-zero
+  exit with a `not ok` line (unique anchors, byte-change proven,
+  sha256-checked restores): the relationships read dropping the log's MAX,
+  the reminder's owner gate removed, the cold narrowing removed, the dateless
+  reminder accepted, a draft band mounted without its surface.
+- Both typechecks, `check-sql-migrations`, `check-sqlite-dialect`,
+  `check-sql-prepare`, `check-timestamp-comparisons`,
+  `check-runtime-schema-declared`, `check-decision-ids`, `check-folder-docs`,
+  `check-api-drift`, `test:guards`, `lint:undef`, `check-dark-mode` exit 0.
+  Root `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser
+  probe.
