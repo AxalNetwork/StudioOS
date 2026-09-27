@@ -635,6 +635,60 @@ adminContracts.get('/stats', async (c) => {
   }
 });
 
+async function loadTemplateUsage(sql: ReturnType<typeof getSQL>) {
+  const contractTypes = Array.from(CONTRACT_DOC_TYPES);
+  const [docs, envs]: [any[], any[]] = await Promise.all([
+    sql.unsafe(
+      `SELECT template_name, doc_type, created_at FROM documents
+        WHERE LOWER(COALESCE(doc_type, '')) IN (${contractTypes.map(() => '?').join(',')})`,
+      contractTypes,
+    ),
+    sql`SELECT document_type, created_at FROM esign_envelopes`,
+  ]);
+  const usage = new Map<string, number>();
+  const lastUsed = new Map<string, string>();
+  const bump = (key: string | null | undefined, when: string | null | undefined) => {
+    if (!key) return;
+    usage.set(key, (usage.get(key) || 0) + 1);
+    const prev = lastUsed.get(key);
+    if (when && (!prev || new Date(when) > new Date(prev))) lastUsed.set(key, when);
+  };
+  for (const d of docs) bump(d.template_name || d.doc_type, d.created_at);
+  for (const e of envs) bump(e.document_type, e.created_at);
+  return { usage, lastUsed };
+}
+
+function buildTemplateCatalog(usage: Map<string, number>, lastUsed: Map<string, string>) {
+  return Object.entries(TEMPLATES).map(([k, v]) => ({
+    key: k,
+    title: v.title,
+    doc_type: k,
+    layer: v.layer,
+    layer_label: TEMPLATE_LAYERS[v.layer]?.label || v.layer,
+    layer_description: TEMPLATE_LAYERS[v.layer]?.description || '',
+    party_roles: [...partyRolesFor(k)],
+    usage_count: usage.get(k) || 0,
+    last_used_at: lastUsed.get(k) || null,
+  }));
+}
+
+// GET /api/admin/contracts/doc-types — the code registry HQ · Contracts draws (D454).
+// What a contract may *be* lives in CONTRACT_DOC_TYPES + TEMPLATES + party roles;
+// usage is counted from documents + esign like the template catalog.
+adminContracts.get('/doc-types', async (c) => {
+  await requireAdmin(c);
+  const sql = getSQL(c.env);
+  try {
+    const { usage, lastUsed } = await loadTemplateUsage(sql);
+    const items = buildTemplateCatalog(usage, lastUsed);
+    items.sort((a, b) => a.layer.localeCompare(b.layer) || a.title.localeCompare(b.title));
+    const layers = Object.entries(TEMPLATE_LAYERS).map(([id, meta]) => ({ id, ...meta }));
+    return c.json({ layers, items, type_count: items.length });
+  } finally {
+    await sql.end();
+  }
+});
+
 // GET /api/admin/contracts/templates — catalog with usage counts.
 // Counts come from BOTH `documents.template_name|doc_type` and
 // `esign_envelopes.document_type` so usage isn't undercounted post-migration.
@@ -642,34 +696,8 @@ adminContracts.get('/templates', async (c) => {
   await requireAdmin(c);
   const sql = getSQL(c.env);
   try {
-    const [docs, envs]: [any[], any[]] = await Promise.all([
-      sql.unsafe(
-        `SELECT template_name, doc_type, created_at FROM documents
-          WHERE LOWER(COALESCE(doc_type, '')) IN (${Array.from(CONTRACT_DOC_TYPES).map(() => '?').join(',')})`,
-        Array.from(CONTRACT_DOC_TYPES),
-      ),
-      sql`SELECT document_type, created_at FROM esign_envelopes`,
-    ]);
-    const usage = new Map<string, number>();
-    const lastUsed = new Map<string, string>();
-    const bump = (key: string | null | undefined, when: string | null | undefined) => {
-      if (!key) return;
-      usage.set(key, (usage.get(key) || 0) + 1);
-      const prev = lastUsed.get(key);
-      if (when && (!prev || new Date(when) > new Date(prev))) lastUsed.set(key, when);
-    };
-    for (const d of docs) bump(d.template_name || d.doc_type, d.created_at);
-    for (const e of envs) bump(e.document_type, e.created_at);
-
-    const out = Object.entries(TEMPLATES).map(([k, v]) => ({
-      key: k,
-      title: v.title,
-      doc_type: k,
-      layer: v.layer,
-      layer_label: TEMPLATE_LAYERS[v.layer]?.label || v.layer,
-      usage_count: usage.get(k) || 0,
-      last_used_at: lastUsed.get(k) || null,
-    }));
+    const { usage, lastUsed } = await loadTemplateUsage(sql);
+    const out = buildTemplateCatalog(usage, lastUsed);
     out.sort((a, b) => (b.usage_count - a.usage_count) || a.title.localeCompare(b.title));
     return c.json(out);
   } finally {
