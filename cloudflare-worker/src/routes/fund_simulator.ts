@@ -2,7 +2,9 @@
  * T3 — Reserve allocation + waterfall simulator (port of FastAPI Task #46).
  *
  * Mounted at `/api/fund-sim`. RBAC: admin or investor (mirrors
- * `canViewLpData` — same gate as `/api/capital` / `/api/funds`).
+ * `canViewLpData` — same gate as `/api/capital` / `/api/funds`) for the reads
+ * and the two pure simulations; the two writes under a fund (PUT reserves,
+ * POST scenarios) are the fund's GP of record or an admin (D370).
  *
  * Routes:
  *   GET    /funds/:fund_id/reserves
@@ -21,6 +23,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, canViewLpData } from '../auth';
 import { isAdmin, mapError, newUid, nowIso, jload } from './_t13t14t15_helpers';
+import { requireFundGp } from '../services/fundGpAccess';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -375,8 +378,11 @@ r.get('/funds/:fund_id/reserves', async (c) => {
 
 r.put('/funds/:fund_id/reserves', async (c) => {
   try {
-    await requireFundOps(c);
-    const fund = await loadFund(c.env, Number(c.req.param('fund_id')));
+    // D370: the fund's GP of record, or an admin. This overwrote a fund's
+    // reserve plan for ANY investor who named its id. `requireFundGp` is the
+    // gate every other GP control uses — tier, then ownership, then company —
+    // and throws a Response that `mapError` passes through (402 / 404).
+    const { fund } = await requireFundGp(c, Number(c.req.param('fund_id')));
     const body = (await c.req.json().catch(() => ({}))) as any;
     const items: any[] = Array.isArray(body?.items) ? body.items : [];
     const projects = await portfolioProjects(c.env);
@@ -555,8 +561,8 @@ r.get('/funds/:fund_id/scenarios', async (c) => {
 
 r.post('/funds/:fund_id/scenarios', async (c) => {
   try {
-    const user = await requireFundOps(c);
-    const fund = await loadFund(c.env, Number(c.req.param('fund_id')));
+    // D370: saving a scenario writes under the fund, so it is the GP's.
+    const { user, fund } = await requireFundGp(c, Number(c.req.param('fund_id')));
     const body = (await c.req.json().catch(() => ({}))) as any;
     const kind = String(body?.kind || '');
     if (kind !== 'reserves' && kind !== 'waterfall') {

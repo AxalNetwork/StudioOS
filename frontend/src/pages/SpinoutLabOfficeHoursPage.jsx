@@ -20,9 +20,15 @@
 //     scoring data, clearly labelled auto-generated; it can be edited in
 //     place (local overrides — "Reset to generated" restores), attached to
 //     a booking (goes into the booking's real `questions` field) or copied.
-//   - Action items · execution handoff: the current week's real milestone
-//     checklist (read-only — items complete by doing the work in the linked
-//     tool, not by ticking a box here).
+//   - Action items · execution handoff: the open action items from the
+//     founder's own sessions (D355, GET /partner-office-hours/action-items/me
+//     — both parties add and tick them on the session), then the current
+//     week's real milestone checklist (read-only — milestones complete by
+//     doing the work in the linked tool, not by ticking a box here).
+//   - Ratings (D355): the founder rates a completed session from its history
+//     row; each directory card shows the partner's average from the first
+//     rating, always with the count (GET /partner-office-hours/ratings/
+//     summary). A partner nobody has rated says so; a failed read says that.
 //   - Partner booking guidance ("When to book X", "Best for stage", "One
 //     session gets you", "Bring to the session"): REAL partner-authored
 //     content only. It lives in the `oh_*` columns on `partners` (D1
@@ -32,8 +38,7 @@
 //     so plainly — this page NEVER synthesises guidance prose, defaults or
 //     role-derived guesses about a real named person, and none of the
 //     design's invented persona copy is reproduced.
-//   - Omitted (no backend): partner ratings, "Resend to partner",
-//     rescheduling. Share / Export / Preview-as-investor render as disabled
+//   - Omitted (no backend): "Resend to partner", rescheduling. Share / Export / Preview-as-investor render as disabled
 //     quick actions with the reason in their tooltip.
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -50,6 +55,9 @@ import { pickLabProject } from './SpinoutLabStartupPage';
 import { initialsOf, buildGaps } from './SpinoutLabAdvisorsPage';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
+import { SessionActionItems, SessionRating } from '../components/officehours/SessionFollowups';
+import { Unrecorded, Unreadable } from '../ui';
+import { ratingBadge, formatRating, toolLink, sortItems, ownerLabel } from '../lib/sessionFollowups';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
 const LBL = 'text-[10.5px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -256,6 +264,41 @@ const MILESTONE_LABELS = {
   incorporation_completed: 'Complete incorporation',
 };
 
+// D355 — the directory badge. Shown from the first rating, always with its
+// count; a partner nobody has rated says so, and a failed read says that.
+function PartnerRating({ read, partnerId }) {
+  if (read == null) return null;
+  const badge = ratingBadge(read, partnerId);
+  if (badge.state === 'failed') return <div className="text-[11px] text-gray-400" data-testid={`partner-rating-${partnerId}`}>Ratings could not be read</div>;
+  if (badge.state === 'none') return <div className="text-[11px]" data-testid={`partner-rating-${partnerId}`}><Unrecorded reason="No founder has rated a session with this partner yet.">No ratings yet</Unrecorded></div>;
+  return <div className="text-[11px] font-semibold text-amber-600 dark:text-amber-400" data-testid={`partner-rating-${partnerId}`}>{formatRating(badge)}</div>;
+}
+
+// D355 — open action items across the founder's own sessions.
+function MySessionItems({ read, onRetry }) {
+  if (read == null) return <div className="text-[11.5px] text-gray-400"><Loader2 className="w-3 h-3 inline animate-spin" /> Loading…</div>;
+  if (read.state === 'failed') return <Unreadable what="Your session action items" claim="Nothing is shown in their place." onRetry={onRetry} />;
+  const open = sortItems(read.data?.items).filter((it) => !it.done);
+  if (!open.length) return <div className="text-[11.5px] text-gray-500 dark:text-gray-400" data-testid="my-session-items-empty">No open items from your sessions.</div>;
+  return (
+    <ul className="space-y-1.5" data-testid="my-session-items">
+      {open.map((it) => {
+        const link = toolLink(it.linked_tool);
+        return (
+          <li key={it.id} className="text-[12.5px] text-gray-800 dark:text-gray-200">
+            {it.title}
+            <div className="text-[10.5px] text-gray-400 flex flex-wrap gap-x-2">
+              <span>{ownerLabel(it)}</span>
+              {it.due_date && <span>Due {it.due_date}</span>}
+              {link && <Link to={link.to} className="font-semibold text-teal-700 dark:text-teal-300">→ {link.label}</Link>}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export default function SpinoutLabOfficeHoursPage() {
   const { toast, showToast } = useToast(3500);
 
@@ -268,6 +311,10 @@ export default function SpinoutLabOfficeHoursPage() {
   const [partners, setPartners] = useState(null); // [] | {failed}
   const [bookings, setBookings] = useState(null); // {items} | {failed}
   const [snapshot, setSnapshot] = useState(null);
+  // D355 reads. `{ state: 'ok', data } | { state: 'failed' }`; null = not yet.
+  const [ratings, setRatings] = useState(null);
+  const [myItems, setMyItems] = useState(null);
+  const [openItemsFor, setOpenItemsFor] = useState(() => new Set());
 
   const [filter, setFilter] = useState('recommended');
   const [historyQ, setHistoryQ] = useState('');
@@ -303,6 +350,10 @@ export default function SpinoutLabOfficeHoursPage() {
         setUser(me || null);
         setPartners(Array.isArray(dir) ? dir : { failed: true });
         setBookings(mine?.failed ? { failed: true } : { items: (Array.isArray(mine?.items) ? mine.items : []).map(normBooking) });
+        api.partnerRatingSummary()
+          .then((data) => { if (!dead) setRatings({ state: 'ok', data }); })
+          .catch(() => { if (!dead) setRatings({ state: 'failed' }); });
+        loadMyItems();
         const proj = pickLabProject(projects, me);
         setProject(proj || null);
         if (proj) {
@@ -317,6 +368,15 @@ export default function SpinoutLabOfficeHoursPage() {
     })();
     return () => { dead = true; };
   }, []);
+
+  const loadMyItems = () => api.listMyBookingActionItems()
+    .then((data) => setMyItems({ state: 'ok', data }))
+    .catch(() => setMyItems({ state: 'failed' }));
+  const toggleItems = (id) => setOpenItemsFor((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   const refreshBookings = async () => {
     const mine = await api.listMyPartnerRequests().catch(() => null);
@@ -804,6 +864,7 @@ export default function SpinoutLabOfficeHoursPage() {
                         <div className="min-w-0">
                           <div className="text-[13px] font-bold text-gray-900 dark:text-gray-100 truncate">{p.name}</div>
                           <div className="text-[11.5px] text-gray-500">{p.headline || p.specialization || p.company || '—'}</div>
+                          <PartnerRating read={ratings} partnerId={p.id} />
                         </div>
                       </div>
                       <RoleTag role={p.role} />
@@ -909,7 +970,9 @@ export default function SpinoutLabOfficeHoursPage() {
 
           <div className={`${CARD} p-5`} data-testid="action-items">
             <div className={`${LBL} mb-1`}>Action items · Execution handoff</div>
-            <div className="text-[11px] text-gray-400 mb-3">This week's milestone checklist — items complete when you do the work in the linked tool.</div>
+            <div className="text-[11px] text-gray-400 mb-2">From your sessions — added by you or your partner, ticked on the session below.</div>
+            <MySessionItems read={myItems} onRetry={loadMyItems} />
+            <div className="text-[11px] text-gray-400 mt-3 mb-2 pt-3 border-t border-gray-100 dark:border-gray-800">This week's milestone checklist — items complete when you do the work in the linked tool.</div>
             {actionItems.map((it) => (
               <div key={it.key} className="flex items-start gap-2 py-1.5" data-testid={`action-${it.key}`}>
                 <span className={`mt-0.5 w-4 h-4 rounded grid place-items-center border ${it.done ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300 dark:border-gray-600'}`}>
@@ -981,6 +1044,13 @@ export default function SpinoutLabOfficeHoursPage() {
               <div className="text-[12.5px] text-gray-700 dark:text-gray-300 mt-0.5 font-semibold">{b.topic}</div>
               {b.questions && <div className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2 whitespace-pre-line">{b.questions}</div>}
               <div className="text-[11px] text-gray-400 mt-1">{historyStatusOf(b)}</div>
+              <SessionRating booking={b} viewerSide="founder" onRated={refreshBookings} />
+              {b.status !== 'cancelled' && (
+                <button type="button" onClick={() => toggleItems(b.id)} className="mt-1.5 text-[11.5px] font-semibold text-teal-700 dark:text-teal-300" data-testid={`button-session-actions-${b.id}`}>
+                  {openItemsFor.has(b.id) ? 'Hide action items' : 'Action items'}
+                </button>
+              )}
+              {openItemsFor.has(b.id) && <SessionActionItems booking={b} onChange={loadMyItems} />}
             </div>
           );
         })}

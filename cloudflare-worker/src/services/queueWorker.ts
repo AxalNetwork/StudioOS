@@ -277,6 +277,15 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       if (!fund) throw new Error(`fund ${fundId} not found`);
       // Skip if an LPA is already on file.
       if (fund.lpa_doc_id) return;
+      // D370: never for a fund with no GP of record. The routes refuse to
+      // enqueue one; this is the same rule where the document is written, so
+      // a job queued before the rule, or by some future caller, cannot draft
+      // an agreement with nobody's name behind it. A no-op rather than a
+      // throw: a retry cannot name a GP.
+      if (!(fund as any).gp_user_id) {
+        console.warn('[queue] lpa_generation skipped: fund has no GP of record', fundId);
+        return;
+      }
       const body = await aiGenerateLPA(env, {
         fund_name: fund.name,
         vintage_year: fund.vintage_year,
