@@ -153,5 +153,7 @@ test('D259: the Team rail says which accounts are told and which are not', () =>
   assert.ok(!ACCOUNTS.includes('Neither an impersonated account nor the successor to the elevation is notified'),
     'the rail still says nobody is told, false since D241 and D248');
   assert.match(ACCOUNTS, /An HQ-held account is told when a support session opens on it \(D248\)/);
-  assert.match(ACCOUNTS, /An account on a branch is not told yet/);
+  assert.match(ACCOUNTS, /An account on a branch is told when HQ authorises a support session/);
+  assert.doesNotMatch(ACCOUNTS, /is not told yet/,
+    'the Team rail still says a branch account is not told');
 });

@@ -8032,6 +8032,11 @@ states until the next route is added.*
 its own work), and the Deployments zone's rollout percentage and rollback, which
 need the Cloudflare versions API rather than the registry.
 
+*Corrected by D451: the licence agreement send leg ships on
+`POST /admin/licences/:uid/contract/:contractUid/send`; status on read follows
+the linked envelope. HQ countersignature and ordered signers remain Session 13
+work.*
+
 **Verification.** `npm run test:drift` exit 0, read as the exit code.
 `cloudflare-worker/test/admin_licences_deploy.test.ts` (16),
 `cloudflare-worker/test/licence_contract_instantiate.test.ts` (14) and
@@ -33016,6 +33021,157 @@ investor (party B, KYC approved): "Mutual NDA · Marisol Vega". As an admin:
 `frontend/src` moved, so `docs/` is rebuilt. No migration. Two routes and
 two `api.js` methods removed, none added.
 
+## D433
+
+**Account: the compliance bridge, a KYB pill and "Save entity" per company,
+sign-in factors as status rows, Roles & access and API keys drawn up to their
+line, and the machine's "recommendation" gone from a notification label —
+with `/profile` retired into `/account`.** Session 15's item 4.
+
+**What was true on main (`1dc654f265`).**
+- The Account canvas puts a trust-score strip above every pane. The page had
+  Task #4's `ProfileTrustBadge`: a 36px ring inside the Profile card that
+  RENDERED NOTHING on a failed `/trust/me`, so a reader whose obligations
+  could not be read saw what "no score" draws. `ProfileCompletionBanner` did
+  the same for a failed identity read.
+- `company_kyb_records` (migration 220) held one KYB record per company and
+  `api.companyKybStart` had no caller; the "Your companies" rows drew no KYB
+  state and no entity fields.
+- `auth_totp.created_at` was stamped on every enrolment and re-pair and
+  served nowhere, so the page could not say when the authenticator was
+  paired.
+- The API-keys card hid behind `api_keys_enabled` (hard-coded false, T20) and
+  would have printed "No keys yet." over a store that does not exist. Roles &
+  access had no card at all, and `account_canvas_coverage.test.mjs` mapped
+  the canvas's "Roles & access" to the companies list.
+- `PARTNER_NOTIFICATION_EVENTS[3]` read "AI match recommendation".
+- `/profile` was a second mount of `SettingsPage`, kept for an investor nav
+  row that no longer exists; the exploring sidebar's "My Profile" pointed at
+  it.
+
+**What changed.**
+- **The bridge, once, above every pane.** `ComplianceBridge` is a
+  module-level component with three states. Ready draws Trust Center's own
+  number and words — `computeTrustScore` over the same rows, `verdictFor`
+  beside the ring, `scoreLine(outstandingCounts(required))` for the sentence
+  — and a link to `/trust`. Failed draws `<Unreadable>` with a Retry that
+  re-runs the effect. The badge is deleted with its mount, and the
+  completeness banner gets the same failed state.
+- **Each company row carries its KYB pill and can save its entity.** The
+  pill reads `GET /trust/companies/kyb`, matched to the memberships list by
+  company id, with three arms: a record ("In review", "Verified", …), no
+  record ("Not started"), and a read that failed ("Unreadable", plus an
+  `<Unreadable>` with a retry above the list) — a failed read is not
+  "Not started". "Entity" opens the five fields the canvas draws (legal
+  entity name, entity type, country of incorporation, registration ID,
+  registered address), prefilled from the record, and "Save entity" posts
+  `POST /trust/companies/kyb` for THAT row's company: `api.companyKybStart`
+  takes a company id and overrides the `X-Company-Id` header for the one
+  call, which `resolveActiveCompany` still verifies against membership. The
+  canvas's "Registry match runs automatically on save" is not promised; the
+  row says no provider runs one.
+- **Sign-in & factors are status rows**, first on the Security pane, read
+  from the payload the page already holds: Authenticator app (Configured ·
+  "Paired <date>" from the new `totp_paired_at`, or "date not recorded for
+  this enrolment" when a configured factor has no stamp), Recovery codes
+  (count, or "None generated"), Email (Verified/Unverified). The Password
+  row is an honest absence with its reason printed: this platform issues no
+  password credential. Passkeys, SMS and Google keep their own panels and
+  their own reads — a second fetch here could only disagree with them.
+- **The worker serves `totp_paired_at`** on the root settings payload and on
+  `GET /settings/security`: `auth_totp.created_at` through
+  `loadTotpPairedAt`, read only when a factor is configured, null otherwise.
+  No new route, no new `api.js` method.
+- **Roles & access** is a card on the account pane: the one role
+  `users.role` records, and "Not recorded" with the reason on screen for
+  additional roles (one role per account, no store for a second) and
+  delegates (no delegate store). Plans point at Billing. Nothing is drawn as
+  an empty list over a missing store.
+- **API keys** is drawn in either state of the flag and reads "Not recorded"
+  with the reason: no key store exists; T20's flag is off. When the flag
+  flips, the card still tells the truth until a store exists.
+- **The label** becomes "New partner match". The guard scans every
+  notification label for "recommend", "advice", "fiduciary" and "AI";
+  "advisor" alone is a role on this platform and is not the violation.
+- **Retired on D304's shape:** `/profile` → `<Navigate replace>` to
+  `/account` through `SettingsRedirect`, which carries the query and hash;
+  the second `SettingsPage` mount is gone; the exploring sidebar's "My
+  Profile" row points at `/account` (sidebarConfig.js is Session 5's own);
+  `PAGE_INVENTORY.md` regenerated. Deep links: `/profile?x=1#y` lands on
+  `/account?x=1#y`. No other row, link or test pointed at it.
+- `account_canvas_coverage.test.mjs`: the header maps "Roles & access" to
+  `<RolesAccessCard>`, the per-company entity is recorded as built on
+  `company_kyb_records` beside `company_profiles`, and the test that said
+  the company-scoped card was unbuildable now pins the split — the company
+  rows write the company route and never the legal-entity route, one record
+  per company, and `company_profiles` still carries no entity columns.
+
+**Not done here, filed.** Identity & tax is still the stub card linking to
+`/kyc` (the brief's retire-once-built). Delegates and additional roles need
+stores and a product decision. A registry-match provider for company KYB
+does not exist.
+
+**Guard.**
+- `cloudflare-worker/test/settings_totp_paired_at_d433.test.ts`, 4 tests
+  through the real router on in-memory SQLite: an unpaired account is served
+  `totp_paired_at: null` on both payloads, with the key present; once paired,
+  both serve the enrolment row's own `created_at`; a re-pair moves the date
+  to the current authenticator's; the service reads `auth_totp.created_at`
+  and nothing else, and both routes gate the read on `totp_configured`.
+- `frontend/test/account_d433.test.mjs`, 14 tests: the bridge is one
+  module-level component mounted once above the pane grid, with the old
+  badge gone; it has a failed state with a retry and no silent catch; it
+  uses Trust Center's formula, verdict and sentence with none of the canvas's
+  refused score model; the completeness banner says when it could not read;
+  each company row reads the company store with three pill arms and its own
+  failure state; "Save entity" names its company through the header override
+  that `request()` merges last; the pill labels match the statuses the
+  worker writes; the factor rows are drawn once, first, from the served date
+  with no clock reads and no second fetch; the password row is an absence
+  with its reason printed; the worker serves the date; Roles & access
+  records the role and prints both reasons with no empty list; the API-keys
+  card is unconditional and reads "Not recorded" with the reason; no label
+  uses the machine's words; `/profile` redirects with query and hash and the
+  sidebar row points at `/account`.
+- `account_canvas_coverage.test.mjs` re-aimed as above (16 tests green);
+  `company_settings_members`, the sidebar, route and settings guards pass
+  unedited.
+
+**Mutations: 20 run, 20 caught** — each a non-zero exit with a `not ok`
+line, anchors unique, bytes proven changed, sources restored from a
+sha256-checked snapshot: the root payload and `/security` each dropping the
+date; the read ungated; the service reading `last_used_at`; an unpaired
+account stamped anyway; the bridge swallowing a failed read; the bridge
+inventing a verdict threshold; the bridge mounted twice; the banner silent
+again; a failed KYB read drawn "Not started"; "Save entity" posting to the
+active company; the header override dropped from `api.js`; the authenticator
+row printing today's date; the password row "Configured"; delegates drawn as
+an empty list; the API-keys card behind the flag; the label reverted;
+`/profile` mounting the page again; the sidebar row pointing at `/profile`;
+the company rows writing the account entity route.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA
+fallback, `/api/*` stubbed as the worker now shapes it. Founder with two
+companies: the strip reads "50 · Trust score · Not compliant · 1 item needs
+action, 1 open in total. Trust Center reports on the data held here. · Open
+Trust Center →"; the rows read "KYB · Not started" and "KYB · In review";
+Entity on the second row prefills "Latitude Seed GmbH", "Save entity" posts
+with `X-Company-Id: 2` and the five fields; Roles & access prints "Founder"
+and both "Not recorded — …" sentences. With `/trust/me` refused first: "Your
+trust score could not be read. Your obligations could not be read just now.
+Retry", and Retry draws the strip. With the company-KYB read refused: both
+pills read "KYB · Unreadable" and the list carries the retry. Security:
+"Password · Not recorded — this platform issues no password credential …",
+"Authenticator app (TOTP) · Paired 2/3/2026 · required for sensitive actions
+· Configured", "Recovery codes · 7 remaining", "Email address · Verified".
+Integrations: "Not recorded — no key store yet; the API tier (T20) has not
+shipped, and its flag is off for this account." `/profile?x=1#y` lands on
+`/account?x=1#y`.
+
+`frontend/src` moved, so `docs/` is rebuilt. No migration; one response
+field added to two existing payloads; no route or `api.js` method added or
+removed (`companyKybStart` gains an optional second argument).
+
 ## D440
 
 **HQ-held Studio and My Licence stop pointing at pages that refuse, and stop printing zero for a seat or a host that was not confirmed.** No branch is provisioned (`infra/branches/` holds only the example), and every `/api/branch/*` handler calls `requireBranchTier`, so a card that opens `/branch/*` on HQ renders Unreadable. S20's rule is that those pages are never linked from the HQ-held shell.
@@ -33030,6 +33186,20 @@ two `api.js` methods removed, none added.
 **No migration. No new route.** `myDomainRemove` already existed; the body is new and the route still mounts it. No live branch exercised this. `docs/` was rebuilt because `frontend/src` moved.
 
 **Mutations: 5 run, 5 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: the card target hard-coded to `/branch/accounts`; a missing seat returned as `0`; any string accepted as the hostname confirm; the HQ-held appeal forced down the branch link; Remove calling `myDomainRemove()` with no argument on the click.
+
+## D441
+
+**A move invitation is accepted on the branch it was sent to, and that branch tells the account when HQ authorises a support session.** No branch is provisioned. No migration: `branch_invitations` (263) and `notifications_inbox` already exist. `users` is at the column cap, so this adds no column there.
+
+**The link.** `inviteAccount` used to build `${base}/invite/${rawToken}`. `/invite/:token` is the events RSVP page, and the Worker's only handler for it is the public events router. The link is now `/join/:token`. The events page and `events_public.ts` are unchanged. The join page is outside the sign-in gate, because the person has no account on this branch yet, and `isPublicPath` allows only a token of the shape the route issues. Accepting happens on a click. The preview on load does not spend the token.
+
+**What accept does.** `GET /api/branch/invitations/preview` and `POST /api/branch/invitations/accept` live in `routes/branch_invitations.ts`, mounted at `/api/branch`, and both call `requireBranchTier`. On HQ that throws `Branch only`. The token is checked against `invt_` plus 64 hex characters before it is hashed or queried, and the table still holds only the digest. The claim is one update of a pending, unexpired row. It then creates the user, or reactivates a deactivated row with the same email. It does not sign them in, and it does not move projects, deals or documents (D121). They sign in at `/login`. `email_verified` is set because the token was addressed to that email. A role the invitation names that this branch does not grant becomes `exploring`, and the response says so. An account that is already active is left as it is, including its role. If the account cannot be written, the claim is put back to pending and the response is a sentence of ours; the database's text stays in the log. The two routes sit in a fail-closed per-IP rate bucket.
+
+**The notice.** `openSupportSession` calls `notify()` after the authorisation is recorded. The category is `security`, so quiet hours do not hold it. The sentence names who authorised it, the reason, and that the session lasts 30 minutes once it is opened — the session itself starts at redeem, not here. The type is `hq_branch_support_session`, distinct from the HQ-held notice (D248). A notice that cannot be stored does not fail the authorisation (D111). `notify.ts` is not edited. Accounts on the Team rail now say a branch account is told. `HqTeamActions.jsx` and `HqTeamTable.jsx` still say the branch account is not told, and `hq_team_h20.test.mjs` pins the first of those sentences. Those files are Session 5's. The sentences are stale once this notice is deployed.
+
+**No live branch exercised this.** Both behaviours were run on node:sqlite.
+
+**Mutations: 6 run, 6 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: the invitation link put back on `/invite/`; the preview effect calling accept; the accept route skipping `requireBranchTier`; an active account taking the invitation's role; a failed create leaving the invitation accepted; the support notice dropped.
 
 ## D450
 
@@ -33062,6 +33232,37 @@ two `api.js` methods removed, none added.
 
 **Tests.** `hq_home.test.mjs` and `territory_licences.test.mjs` re-aimed at
 properties, not stale refusal copy; new `hq_honesty_sweep_d450.test.mjs`.
+
+## D451
+
+**The licence agreement leaves draft through the shared e-sign helper.** Wave 8,
+Session 16, item 2. Migration **331** (`contract_sent` on `licence_events`).
+Reverses the D110 deferred leg that left `envelope_uid` unwired; **`esign.ts` and
+Session 13 originator tables are not edited here.**
+
+**Send.** `POST /api/admin/licences/:uid/contract/:contractUid/send` (super-admin
+write bar) picks the first active `licence_admins` recipient (principal first),
+calls `createAndSendEnvelope` with `documentType: template_slug`, `dealId:
+contract.id`, and licence merge fields (`refuseUnfilled: false`), then writes
+`licence_contracts.status = sent`, `envelope_uid`, `sent_at`, and a
+`contract_sent` event.
+
+**Read.** `GET …/contract` enriches each row from `esign_envelopes` when
+`envelope_uid` is set: `completed` → `signed` (with `signed_at` from the
+envelope), `sent` / `partially_signed` → `sent`, `void` → `void`. HQ
+countersignature stays **Not recorded** with the Session 13 reason (ordered
+signers deferred). The stored `body_md` on the contract row is unchanged — the
+envelope body is rendered at send time from the template slug and merge fields,
+same as other `/legal/esign/send` flows.
+
+**UI.** `AdminLicences.jsx` Contract step: status-aware copy, **Send for
+signature** when draft and no envelope, `api.licenceContractSend`.
+
+**Tests.** `licence_contract_send_d451.test.ts`; `hq_licences_h2h3.test.mjs`
+pins send wiring.
+
+*Corrected by D451: D110's "Deliberately not here" e-sign leg — `envelope_uid`
+is now written on send and status on read follows the envelope.*
 
 ## D460
 
@@ -33277,6 +33478,135 @@ artboard's "Funds moved", real now: the sum over the recorded transfers.
   list, a second checklist applied, a default item seeded, the cents
   conversion dropped, the operator gate dropped, the packet indexing
   unexecuted paper.
+## D463
+
+**The founder's investor update on /build/metrics, and the deal-flow page with
+a deal source.** Wave 8, Session 17, item 4. Migration 336 (`deals.source`).
+No new `/api/*` method (`api.portfolioUpdateCreate`, `api.portfolioUpdatesList`,
+`api.dealStageAnalytics` and `api.updateDeal` already existed).
+
+**The founder investor update.** `POST /portfolio-updates` has always taken the
+owning founder, but the only composer sat on `/portfolio/updates` — a zone
+route of the portfolio shell, guarded `['admin','investor']` — and the
+Portfolio workspace's Updates tab listed the founder (and the partner), leading
+into the refusal. The composer now lives where the canvas puts it: the Investor
+update card on the Metrics page the founder already keeps
+(`MetricsPage.jsx`'s `InvestorUpdateCard`), over the same store — KPIs
+pre-filled from the latest snapshot on the page so the update and the metrics
+start from the same numbers, each field editable. The card lists the project's
+updates back (what the investor inbox reads), and a failed read is unreadable
+with a retry, never an empty list. The tab's roles now match the guard
+(`['admin','investor']`); the founder's shell has no `/portfolio/updates` zone
+and the route_role_zone_contract holds that line. The composer's project is
+picked from the founder's startups, never typed as a raw id
+(`PortfolioUpdatesPage.jsx`). **Named as missing (Session 4's outbound mail):**
+a test copy to myself and a send log — submitting puts the update in the
+investors' inbox and nothing else leaves the firm, and the card says so.
+
+**The deal-flow page with a deal source.** `deals.source` (migration 336) is
+FREE TEXT, deliberately: the source taxonomy — which sources exist, and which
+count as the Lab — is the owner's call, and a CHECK written before it would
+enshrine a guess. It is written at draft (`POST /deals` and `/deals/draft`)
+and editable after: `PUT /deals/:id` now takes the full terms set it used to
+freeze (target, minimum check, valuation cap, instrument, jurisdiction,
+deadline, website, description, lead partner, source), each written only when
+the key is present so a partial edit blanks nothing it did not send. The Deal
+Flow page renders the stage funnel (`GET /deals/stage-analytics` was served
+and unread) with per-stage conversion and time-in-stage, the route's own
+recording-since caveat, and the narrowed source-quality sentence — the column
+exists now; what is missing is the decided taxonomy and the term-sheet
+object, both the owner's call, both named on screen. The Pipeline zone's
+fourth tile becomes "Source recorded" (counting deals carrying one); the
+artboard's "From the Lab" count awaits the taxonomy and the limits block says
+so.
+
+### VERIFIED
+- `npm run test:frontend` exit 0: 3683 pass. `npm run test:worker` exit 1,
+  the one failure pre-existing on main (`capital_call_ledger.test.ts`,
+  Session 9's area; reported, untouched): 4573 tests, 4569 pass, 3 skipped.
+  New tests: `deal_source_and_terms` (4, worker) and
+  `founder_investor_update` (6, frontend). Re-aimed, not loosened:
+  `dealPassTaxonomy`'s source-quality refusal (the column exists; the
+  taxonomy and the term-sheet object are what is missing), and
+  `investor_deals_id1`'s fourth-tile test (Source recorded, the Lab count
+  named as the owner's call).
+- 8 mutations, 7 caught on the first run and the 8th caught after an
+  assertion fix (the draft and the editor carry the same `source:` line, so a
+  file-wide match could not tell which stopped sending it; the assertion now
+  slices both), each on a non-zero exit with a `not ok` line (unique anchors,
+  byte-change proven, sha256-checked restores): the composer not posting, the
+  picker loading no startups, the founder re-added to the Updates tab, the
+  draft not sending the source, the stage-analytics read dropped, PUT
+  blanking the source on a partial edit, the draft not recording it, the
+  Pipeline tile claiming the Lab.
+- Both typechecks, `check-sql-migrations`, `check-sqlite-dialect`,
+  `check-sql-prepare`, `check-timestamp-comparisons`,
+  `check-runtime-schema-declared`, `check-decision-ids`, `check-folder-docs`,
+  `check-api-drift`, `test:guards`, `lint:undef`, `check-dark-mode` exit 0.
+  Root `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser
+  probe.
+
+## D464
+
+**Portfolio: the governed write path's forms, the four alert rules, the
+quarter-end export, and the chase with its log.** Wave 8, Session 17, item 5.
+Migration 337 (`portfolio_update_chases`). Two new `/api/portfolio/*` routes
+(`GET /chases`, `POST /chase`); `positions.ts`'s analytics gains a real
+`as_of`.
+
+**The admin mark and distribution forms.** `POST /positions/:uid/marks` and
+`/distributions` existed admin-only with no caller; the IP1 book told the
+investor marks are recorded "through the governed write path" and no screen
+offered it. The admin positions page's detail drawer now renders the marks
+and distributions the read already returns, with the two forms beside them —
+gated on `isAdmin`, because the routes refuse anyone else and a control
+teaching that by failing is how the gap hid.
+
+**Alerts.** The Portfolio canvas's four rules, evaluated against the book the
+positions page already loads: runway below six months (the self-reported
+figure off the latest update's own KPIs — the health snapshot does not carry
+one), update overdue 30 days, health flipped to red (the dated history behind
+`/portfolio/health/:uid?history_days=90`, loaded lazily for the red positions
+only), and valuation marked down. Every alert names the rule and the
+position; a rule whose source failed says so rather than reporting zero.
+
+**The quarter-end export.** `GET /positions/analytics` accepted `as_of` and
+no page passed it — and the route only moved the IRR terminal date with it.
+It now cuts the flows AND the marks at the date (a quarter-end export must
+not count a wire that landed after it, nor price the book with a mark that
+did not exist yet), and echoes the date the figures speak for. The positions
+page's quarter-end export reads the book as of the chosen date and writes the
+figures. The rendered four-page LP document is `/lp-reports` (Session 9's),
+named on screen.
+
+**The chase, with its log.** `portfolio_update_chases` records who asked
+which company for its update and when. `POST /portfolio/chase` takes the
+page's own overdue set, re-checks the tenancy of each id (the gate is on the
+project, not on the page's list), logs one row per company, and notifies the
+founder through `notify()` with type `portfolio_update_chase` — a repeat
+chase inside the hour answers the existing row rather than re-notifying. The
+per-row Chase on the updates inbox is the same act. **Named as missing
+(Session 4's):** the notification type's settings row
+(`SettingsPage.jsx`'s `NOTIFICATION_EVENTS`) — the notify call delivers
+without it (channels default on, Slack falls through to the generic header),
+and the row is Session 4's to add.
+
+### VERIFIED
+- `npm run test:frontend` exit 0: 3701 pass. `npm run test:worker` exit 1,
+  three failures all pre-existing on main and reproduced there in isolation:
+  `capital_call_ledger.test.ts` (Session 9's area) and two in
+  `trust_center_d432.test.ts` (Session 15's D432 merge). Reported, untouched.
+  4594 tests, 4588 pass, 3 skipped. New tests: `portfolio_chase` (5, worker)
+  and `investor_portfolio_alerts_chase` (4, frontend). Re-aimed, not
+  loosened: `investor_portfolio_ip2`'s chase pin (live over the log now), and
+  `profile_zone_actions`' investor handler count 12 → 13 with the history
+  kept.
+- 8 mutations, all caught on non-zero exit with a `not ok` line (unique
+  anchors, byte-change proven, sha256-checked restores): the chase tenancy
+  check removed, the hourly idempotency removed, the marks not cut at the
+  date, the flows not cut, the mark form unwired, the runway rule reading the
+  health snapshot, the chase op back to unbuilt, the export dropping the
+  date.
 - Both typechecks, `check-sql-migrations`, `check-sqlite-dialect`,
   `check-sql-prepare`, `check-timestamp-comparisons`,
   `check-runtime-schema-declared`, `check-decision-ids`, `check-folder-docs`,

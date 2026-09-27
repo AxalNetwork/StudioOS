@@ -182,7 +182,13 @@ export function isPublicPath(pathname) {
     // they do not have — which is the whole reason the hand-off exists.
     // EXACT, not a `/support/` prefix: bare `/support` is the help-centre
     // redirect and everything else under it is unwritten.
-    || currentPath === '/support/session';
+    || currentPath === '/support/session'
+    // D441 — accepting a move onto this branch. The person has no account
+    // here yet, so a background settings/me 401 is the expected state, and
+    // bouncing them to /login before they can accept would strand the link.
+    // The token shape is the whole allow-list: /join itself and anything
+    // that is not an invitation token stay gated.
+    || /^\/join\/invt_[0-9a-f]{64}$/.test(currentPath);
 }
 
 /**
@@ -727,6 +733,12 @@ export const api = {
   // in a link. Branch Workers only: HQ answers 404 with `hq_only_surface`.
   redeemSupportSession: (code) =>
     request('/auth/support/redeem', { method: 'POST', body: JSON.stringify({ code }) }),
+  // D441 — a move onto this branch. Preview does not spend the token.
+  // Accept creates or reactivates the account and does not return a session.
+  branchInvitationPreview: (token) =>
+    request(`/branch/invitations/preview?token=${encodeURIComponent(token)}`),
+  branchInvitationAccept: (token) =>
+    request('/branch/invitations/accept', { method: 'POST', body: JSON.stringify({ token }) }),
   // T6 — server-side logout: clears the httpOnly auth + CSRF cookies and
   // revokes the current user_sessions row. App.jsx calls this before wiping
   // localStorage so a stolen Bearer copy of the JWT can no longer be used.
@@ -3384,6 +3396,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ template_slug: templateSlug }),
     }),
+  licenceContractSend: (uid, contractUid) =>
+    request(
+      `/admin/licences/${encodeURIComponent(uid)}/contract/${encodeURIComponent(contractUid)}/send`,
+      { method: 'POST' },
+    ),
   // D111 — H5's statements ledger. `draw` computes owed from what the branch
   // reported; `update` is the HQ-entered half (paid, disputed, status), which
   // nothing reconciles against Stripe (D.8).
@@ -3799,7 +3816,15 @@ export const api = {
   // `resolveActiveCompany` verifies against user_company_links — a company id
   // in the body would be an ownership claim the caller makes about themselves.
   companyKybList: () => request('/trust/companies/kyb'),
-  companyKybStart: (payload) => request('/trust/companies/kyb', { method: 'POST', body: JSON.stringify(payload || {}) }),
+  // D433 — the Account page saves one company's entity from a list of several,
+  // so the row names its company by OVERRIDING the header for that one call.
+  // Same channel, same server-side membership check (`resolveActiveCompany`
+  // refuses a company the caller does not belong to); it is not a body field.
+  companyKybStart: (payload, companyId) => request('/trust/companies/kyb', {
+    method: 'POST',
+    body: JSON.stringify(payload || {}),
+    ...(companyId === undefined || companyId === null ? {} : { headers: { 'X-Company-Id': String(companyId) } }),
+  }),
   getRequiredNdas: () => request('/trust/nda/required'),
 
   // ---------- Founder risk (Task #41, admin/partner/investor only) ----------
@@ -4580,6 +4605,12 @@ export const api = {
     request(`/positions/${projectUid}/marks`, { method: 'POST', body: JSON.stringify(data) }),
   positionDistributionCreate: (projectUid, data) =>
     request(`/positions/${projectUid}/distributions`, { method: 'POST', body: JSON.stringify(data) }),
+  // D464 — the chase (IP2's "Chase all overdue" / the Portfolio canvas's
+  // Nudge). Logged per company and the founder is notified; a repeat chase
+  // inside the hour answers the existing row.
+  portfolioChases: () => request('/portfolio/chases'),
+  portfolioChase: (projectIds) =>
+    request('/portfolio/chase', { method: 'POST', body: JSON.stringify({ project_ids: projectIds }) }),
 
   // ---------- Contacts (inbound relationship hub) ----------
   contactsList: (opts = {}) => {

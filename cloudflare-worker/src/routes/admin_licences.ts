@@ -60,6 +60,7 @@ import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { hashEmail } from '../util/hashEmail';
 import { ensureLegalTemplatesSchema, getTemplate, listTemplates } from '../services/legalTemplateStore';
 import { mergeValues, renderContract } from '../services/licenceContract';
+import { createAndSendEnvelope } from './esign';
 // D137 — every transition below now reaches the branch that runs under the
 // licence. `applyLicence` had no caller at all, so HQ's suspend changed four
 // columns here and nothing on the subsidiary.
@@ -1779,6 +1780,66 @@ r.get('/:uid/brand/mark', async (c) => {
  * H3 step 5 — the contract, instantiated from a master template        *
  * ------------------------------------------------------------------ */
 
+const COUNTERSIGN_NOT_RECORDED =
+  'Ordered signers and HQ countersignature are not recorded yet — Session 13 holds '
+  + 'ordered-signer envelopes; this send uses one recipient through createAndSendEnvelope.';
+
+function contractStatusFromEnvelope(envelopeStatus: string): 'draft' | 'sent' | 'signed' | 'void' {
+  if (envelopeStatus === 'completed') return 'signed';
+  if (envelopeStatus === 'void') return 'void';
+  if (envelopeStatus === 'sent' || envelopeStatus === 'partially_signed') return 'sent';
+  return 'draft';
+}
+
+function mergeFieldsForEnvelope(
+  licence: LicenceRow,
+  territories: string[],
+  seats: Array<{ seat_type: string; seats_licensed: number }>,
+): Record<string, string> {
+  const raw = mergeValues(licence, territories, seats);
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (v !== null && v !== undefined) out[k] = String(v);
+  }
+  return out;
+}
+
+/** D451 — status on read follows the envelope row when one exists (D110 deferred leg). */
+async function enrichContractFromEnvelope(env: Env, row: Record<string, unknown>) {
+  const countersignature = { recorded: false as const, reason: COUNTERSIGN_NOT_RECORDED };
+  const envelopeUid = row.envelope_uid ? String(row.envelope_uid) : null;
+  if (!envelopeUid) {
+    return { ...row, countersignature };
+  }
+  try {
+    const e = await env.DB.prepare(
+      `SELECT status, completed_at FROM esign_envelopes WHERE envelope_uuid = ?`,
+    ).bind(envelopeUid).first<{ status: string; completed_at: string | null }>();
+    if (!e) {
+      return {
+        ...row,
+        countersignature,
+        envelope_unreadable: true,
+        envelope_reason: 'The envelope row could not be read for this contract.',
+      };
+    }
+    const status = contractStatusFromEnvelope(String(e.status));
+    return {
+      ...row,
+      status,
+      signed_at: status === 'signed' ? (e.completed_at || row.signed_at || null) : row.signed_at,
+      countersignature,
+    };
+  } catch {
+    return {
+      ...row,
+      countersignature,
+      envelope_unreadable: true,
+      envelope_reason: 'The esign_envelopes table could not be read on this database.',
+    };
+  }
+}
+
 // GET /:uid/contract — what has been instantiated, and what could be.
 //
 // THE TEMPLATE LIST AND THE CONTRACT LIST COME BACK TOGETHER because the
@@ -1800,10 +1861,13 @@ r.get('/:uid/contract', async (c) => {
                 status, envelope_uid, superseded_at, created_at, sent_at, signed_at
            FROM licence_contracts WHERE licence_uid = ? ORDER BY created_at DESC, id DESC`,
       ).bind(licence.uid).all<any>();
-      contracts = (q.results || []).map((row) => ({
-        ...row,
-        unfilled_fields: JSON.parse(String(row.unfilled_fields || '[]')),
-      }));
+      contracts = await Promise.all((q.results || []).map(async (row) => enrichContractFromEnvelope(
+        c.env,
+        {
+          ...row,
+          unfilled_fields: JSON.parse(String(row.unfilled_fields || '[]')),
+        },
+      )));
     } catch { store = false; }
 
     await ensureLegalTemplatesSchema(c.env);
@@ -1908,6 +1972,108 @@ r.post('/:uid/contract', async (c) => {
       note: 'Instantiated unsigned. A pending signature does not block activation; a territory conflict does.',
       pushed,
     }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /:uid/contract/:contractUid/send — leave draft through the shared envelope helper (D451).
+//
+// D110 deliberately left `envelope_uid` unwired; the owner's wave-8 direction
+// reverses that for the licence agreement without touching esign.ts (Session 13).
+r.post('/:uid/contract/:contractUid/send', async (c) => {
+  try {
+    const admin = await requireSuperAdminWriteBar(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+
+    const contractUid = c.req.param('contractUid');
+    const row = await c.env.DB.prepare(
+      `SELECT id, uid, template_slug, status, envelope_uid, superseded_at
+         FROM licence_contracts
+        WHERE uid = ? AND licence_uid = ?`,
+    ).bind(contractUid, licence.uid).first<{
+      id: number; uid: string; template_slug: string; status: string;
+      envelope_uid: string | null; superseded_at: string | null;
+    }>();
+    if (!row || row.superseded_at) {
+      return c.json({ error: 'contract_not_found', message: 'No current contract with that id exists for this licence.' }, 404);
+    }
+    if (row.envelope_uid) {
+      return c.json({
+        error: 'already_sent',
+        message: 'This contract already has an envelope. Its status is derived from that envelope on read.',
+      }, 409);
+    }
+    if (row.status !== 'draft') {
+      return c.json({ error: 'not_draft', message: 'Only a draft contract can be sent for the first time.' }, 409);
+    }
+
+    const recipient = await c.env.DB.prepare(
+      `SELECT u.id, u.email, u.name
+         FROM licence_admins la
+         JOIN users u ON u.id = la.user_id
+        WHERE la.licence_id = ? AND u.is_active = 1
+        ORDER BY CASE la.admin_role WHEN 'principal' THEN 0 ELSE 1 END, la.id
+        LIMIT 1`,
+    ).bind(licence.id).first<{ id: number; email: string; name: string | null }>();
+    if (!recipient?.email) {
+      return c.json({
+        error: 'no_signer',
+        message: 'No active licence administrator has an account to receive the envelope. Grant an admin on this licence first.',
+      }, 409);
+    }
+
+    const [terr, seats] = await Promise.all([
+      c.env.DB.prepare(
+        'SELECT country_code FROM licence_territories WHERE licence_id = ? ORDER BY country_code',
+      ).bind(licence.id).all<{ country_code: string }>(),
+      c.env.DB.prepare(
+        'SELECT seat_type, seats_licensed FROM licence_seats WHERE licence_id = ? ORDER BY seat_type',
+      ).bind(licence.id).all<{ seat_type: string; seats_licensed: number }>(),
+    ]);
+
+    const sent = await createAndSendEnvelope(c.env, {
+      adminUserId: admin.id,
+      adminName: admin.name || admin.email,
+      recipientUserId: recipient.id,
+      recipientEmail: recipient.email,
+      recipientName: recipient.name || licence.signatory_name || recipient.email,
+      documentType: row.template_slug,
+      dealId: row.id,
+      appUrl: c.env.APP_URL || 'https://axal.vc',
+      mergeFields: mergeFieldsForEnvelope(
+        licence,
+        (terr.results || []).map((t) => t.country_code),
+        seats.results || [],
+      ),
+      refuseUnfilled: false,
+    });
+    if (!sent) {
+      return c.json({ error: 'envelope_send_failed', message: 'The envelope could not be created or sent.' }, 502);
+    }
+
+    const now = nowIso();
+    await c.env.DB.prepare(
+      `UPDATE licence_contracts
+          SET status = 'sent', envelope_uid = ?, sent_at = ?, updated_at = ?
+        WHERE id = ?`,
+    ).bind(sent.envelope_uuid, now, now, row.id).run();
+
+    await logEvent(c.env, licence.id, 'contract_sent', admin.id, {
+      contract_uid: row.uid,
+      envelope_uuid: sent.envelope_uuid,
+      recipient_user_id: recipient.id,
+    });
+
+    return c.json({
+      contract_uid: row.uid,
+      envelope_uuid: sent.envelope_uuid,
+      envelope_id: sent.envelope_id,
+      signing_url: sent.signing_url,
+      email_sent: sent.email_sent,
+      already_pending: sent.already_pending ?? false,
+      status: 'sent',
+      countersignature: { recorded: false, reason: COUNTERSIGN_NOT_RECORDED },
+    });
   } catch (e) { return mapError(c, e); }
 });
 

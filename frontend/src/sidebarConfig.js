@@ -522,7 +522,9 @@ export const SIDEBAR_GROUPS = {
       { to: '/messages', icon: Mail, label: 'Messages' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/profile', icon: UserCircle, label: 'My Profile' },
+      // D433 — /profile is a redirect to /account now (the second mount of
+      // SettingsPage retired); the row points where it lands.
+      { to: '/account', icon: UserCircle, label: 'My Profile' },
     ]},
   ],
 };
