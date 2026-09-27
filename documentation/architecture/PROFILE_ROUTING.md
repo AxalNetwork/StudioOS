@@ -96,7 +96,7 @@ it, where in their nav, and how do they get there.*
 | Advisor Studio | `/spinout-lab/advisors` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Advisory Practice | `/expertise/*` · `/practice/*` | Home | Full page | Sidebar → Home → Expertise | DONE | High |
 | Detail Layer Canvas II | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
-| Pages · Advisor Cohorts | `/guidance` · `/calendar` · `/admin/advisor-cohorts` | — (no nav entry) | Full page | Deep link / in-page action | PARTIAL | Medium |
+| Pages · Advisor Cohorts | `/guidance` · `/calendar` · `/weeks` · `/admin/advisor-cohorts` | — (no nav entry) | Full page | Deep link / in-page action | PARTIAL | Medium |
 | Pages · Advisor Expertise | `/expertise` · `/expertise/{profile` | Home | Full page (proposed) | Sidebar → Home → Expertise | UPGRADE | Low |
 | Pages · Advisor Network | `/network/*` | Home | Full page (proposed) | Sidebar → Home → Network | UPGRADE | Low |
 | Pages · Advisor Research | `/research/*` | Home | Full page (proposed) | Sidebar → Home → Research | UPGRADE | Low |
