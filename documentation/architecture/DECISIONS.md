@@ -31716,8 +31716,8 @@ the page header no longer lists ratings as omitted.
 - SQL guards green, including check-sql-prepare (no new interpolation),
   check-sqlite-columns and check-refusal-bodies; `check-api-drift` reports no
   new drift; `tsc --noEmit` clean.
-- `npm run test:drift` on main bef2ee7ea8 with this change: exit 0. Frontend
-  4010 pass / 0 fail (11 of them new), worker 4772 (4769 pass, 0 fail; 11
+- `npm run test:drift` with main a57b8c0008 merged in: exit 0. Frontend
+  4016 pass / 0 fail (11 of them new), worker 4782 (4779 pass, 0 fail; 11
   new), retention 112; `check-docs-fresh --strict` after the root build.
 
 ## D360
