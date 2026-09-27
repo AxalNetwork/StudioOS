@@ -109,6 +109,9 @@ export default function ZoneDraft({
   // A band about ONE record (a room, keyed by `scopeKey`) reads only that
   // record's drafts. Unscoped bands read the surface's newest, as before.
   scoped = false,
+  // Called with the accepted draft, for a page whose record Accept also wrote
+  // (the fund dossier's note) and which must re-read it.
+  onAccepted,
 }) {
   const skin = ACCENTS[accent] || ACCENTS.amber;
   const bodyClass = BODY_TONES[tone] || BODY_PLAIN;
@@ -156,8 +159,12 @@ export default function ZoneDraft({
       const r = await api.research.zoneDraftAccept(item.uid, editing != null ? editing : undefined);
       setItem(r?.item || item);
       setEditing(null);
-    } catch {
-      setNote('That could not be saved right now.');
+      if (onAccepted) onAccepted(r?.item || item);
+    } catch (e) {
+      // D278 — a 409 is the surface refusing to write its record (a note that
+      // would overflow), and its sentence is ours to print; anything else is
+      // a failure with no more to say.
+      setNote(e?.status === 409 && e?.message ? e.message : 'That could not be saved right now.');
     } finally { setBusy(''); }
   };
 
