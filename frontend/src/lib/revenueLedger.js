@@ -116,7 +116,9 @@ export function normalizeCsvDate(raw) {
   const s = String(raw ?? '').trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
   const us = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
-  if (us) return `${us[3]}-${us[1].padStart(2, '0')}-${us[2].padStart(2, '0')}`;
+  // Month first only when it can be a month: "18/07/2026" is day-first, and
+  // that stays as typed for the Worker to refuse rather than be reshaped.
+  if (us && Number(us[1]) >= 1 && Number(us[1]) <= 12) return `${us[3]}-${us[1].padStart(2, '0')}-${us[2].padStart(2, '0')}`;
   return s;
 }
 

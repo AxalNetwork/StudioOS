@@ -272,6 +272,9 @@ export default function RevenueLedger({ project, canEdit }) {
             </table>
           </div>
         )}
+        <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-2" data-testid="ledger-mode-note">
+          The design's Week 3 / Week 4 mode tabs are not built: they would only reword this page, so nothing would stand behind them.
+        </p>
         {canEdit && docs === null && read.status === 'ok' && (
           <p className="text-[10.5px] text-amber-600 dark:text-amber-400 mt-2" data-testid="ledger-docs-unreadable">
             Your documents could not be read, so proof cannot be attached right now.
