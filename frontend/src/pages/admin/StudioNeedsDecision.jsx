@@ -2,18 +2,20 @@
  * D246 — S1c, "Needs a decision": four link tiles, worst first, and the
  * licence line under them.
  *
- * NO READ OF ITS OWN. Every tile renders from `studioGlances`, the same object
- * the overview cards render from, so a tile and its card cannot disagree. The
- * order is computed by `orderNeedsDecision`, never typed. Every tile is a
- * link; nothing here is editable, because a tile that acted in place would be
- * a second home page.
+ * THE GLANCE IS THE READ (D443, D447). When a glance payload is present, the
+ * tiles render from `glancesFromStudioGlance` and `studioGlances` is not
+ * called — an undefined legacy prop must not throw. Until the glance arrives,
+ * the strip says it is reading. The legacy props are the fallback only when
+ * the caller passed `glance={null}`. The order is computed by
+ * `orderNeedsDecision`, never typed. Every tile is a link; nothing here is
+ * editable, because a tile that acted in place would be a second home page.
  */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { bpsPercent } from '../../lib/bps';
 import { reportError } from '../../lib/log';
 import { branchLabel, branchOfUser } from '../../lib/shellRole';
-import { titleCase, Unrecorded } from '../../ui';
+import { titleCase, Unreadable, Unrecorded } from '../../ui';
 import { studioCardTarget } from './AdminStudioOverview';
 import {
   freezeLine,
@@ -91,10 +93,20 @@ export function StudioNeedsDecisionView({ user, home, licence, templates, insigh
     );
     return () => { cancelled = true; };
   }, [glanceProp]);
-  const glance = glanceProp !== undefined ? glanceProp : fetched;
-  const legacy = studioGlances({ user, home, licence, templates, insights });
-  const g = glance ? glancesFromStudioGlance(glance) : legacy;
-  if (!glance && !legacy.onBranch) {
+  const ownsFetch = glanceProp === undefined;
+  const glance = ownsFetch ? fetched : glanceProp;
+  if (ownsFetch && glance == null) {
+    return (
+      <section className="mt-6" data-testid="studio-needs-decision">
+        <h2 className="text-[15px] font-extrabold tracking-tight text-axal-ink">Needs a decision</h2>
+        <p className="mt-2 text-[12.5px] text-axal-muted" data-testid="studio-decide-reading">Reading…</p>
+      </section>
+    );
+  }
+  const g = glance
+    ? glancesFromStudioGlance(glance, user)
+    : studioGlances({ user, home, licence, templates, insights });
+  if (!glance && !g.onBranch) {
     return (
       <section className="mt-6" data-testid="studio-needs-decision">
         <h2 className="text-[15px] font-extrabold tracking-tight text-axal-ink">Needs a decision</h2>
@@ -135,7 +147,9 @@ export function StudioNeedsDecisionView({ user, home, licence, templates, insigh
               ? freezeLine('Suspended', g.lic?.suspended_at || null)
               : status === 'active' ? 'Active' : 'Awaiting HQ'}
         </span>
-        {share && insightsTo ? (
+        {g.insights?.share?.kind === 'unreadable' ? (
+          <Unreadable what="Share rate" claim={g.insights.share.reason} />
+        ) : share && insightsTo ? (
           <Link
             to={insightsTo}
             data-testid="studio-share-chip"

@@ -52,10 +52,42 @@ import { branchLicencePayload } from './licence';
 
 const r = new Hono<{ Bindings: Env }>();
 
-type BenchmarkRow = {
+export type BenchmarkRow = {
   metric_key: string; label: string; median_value: number;
   unit: string; n_branches: number; period: string; pushed_at: string;
 };
+
+export const BENCHMARKS_EMPTY_REASON =
+  'HQ has published no benchmark yet. A median is only anonymous once enough branches '
+  + 'answer — at one branch it IS that branch\'s figure, and at two a branch subtracts its '
+  + 'own and reads the other\'s exactly — so HQ withholds the row rather than naming a '
+  + 'territory. With the platform this size there is nothing to compare against yet.';
+
+const BENCHMARKS_UNREADABLE =
+  'The benchmark copy could not be read on this database (migration 256). That is not the '
+  + 'same as HQ having published nothing.';
+
+/** The pushed median copy. A missing table is unreadable, not an empty publish. */
+export async function readBranchBenchmarks(env: Env): Promise<
+  | { benchmarks_available: true; benchmarks: BenchmarkRow[]; benchmarks_empty_reason?: string }
+  | { benchmarks_available: false; benchmarks: []; benchmarks_reason: string }
+> {
+  try {
+    const q = await env.DB.prepare(
+      `SELECT metric_key, label, median_value, unit, n_branches, period, pushed_at
+         FROM branch_benchmarks ORDER BY metric_key`,
+    ).all<BenchmarkRow>();
+    const benchmarks = q.results || [];
+    return {
+      benchmarks_available: true,
+      benchmarks,
+      ...(benchmarks.length ? {} : { benchmarks_empty_reason: BENCHMARKS_EMPTY_REASON }),
+    };
+  } catch (e) {
+    console.error('[branch-insights] benchmarks', (e as Error).message);
+    return { benchmarks_available: false, benchmarks: [], benchmarks_reason: BENCHMARKS_UNREADABLE };
+  }
+}
 
 /**
  * Why activation is not a figure here. One sentence, read by both `/insights`
@@ -133,21 +165,10 @@ r.get('/insights', async (c) => {
       statsReason = `The account table could not be read on this branch: ${(e as Error)?.message || 'unknown'}.`;
     }
 
-    let benchmarks: BenchmarkRow[] = [];
-    let benchmarksAvailable = true;
-    let benchmarksReason: string | null = null;
-    try {
-      const q = await c.env.DB.prepare(
-        `SELECT metric_key, label, median_value, unit, n_branches, period, pushed_at
-           FROM branch_benchmarks ORDER BY metric_key`,
-      ).all<BenchmarkRow>();
-      benchmarks = q.results || [];
-    } catch (e) {
-      benchmarksAvailable = false;
-      benchmarksReason =
-        'The benchmark copy could not be read on this database (migration 256). That is not the '
-        + `same as HQ having published nothing: ${(e as Error)?.message || 'the table is missing'}.`;
-    }
+    const benchmarkCopy = await readBranchBenchmarks(c.env);
+    const benchmarks = benchmarkCopy.benchmarks;
+    const benchmarksAvailable = benchmarkCopy.benchmarks_available;
+    const benchmarksReason = benchmarkCopy.benchmarks_available ? null : benchmarkCopy.benchmarks_reason;
 
     return c.json({
       branch,
@@ -172,13 +193,9 @@ r.get('/insights', async (c) => {
       benchmarks,
       benchmarks_available: benchmarksAvailable,
       ...(benchmarksReason ? { benchmarks_reason: benchmarksReason } : {}),
-      ...(benchmarksAvailable && !benchmarks.length ? {
-        benchmarks_empty_reason:
-          'HQ has published no benchmark yet. A median is only anonymous once enough branches '
-          + 'answer — at one branch it IS that branch\'s figure, and at two a branch subtracts its '
-          + 'own and reads the other\'s exactly — so HQ withholds the row rather than naming a '
-          + 'territory. With the platform this size there is nothing to compare against yet.',
-      } : {}),
+      ...(benchmarkCopy.benchmarks_available && benchmarkCopy.benchmarks_empty_reason
+        ? { benchmarks_empty_reason: benchmarkCopy.benchmarks_empty_reason }
+        : {}),
       // THE TWO STATS S6 DRAWS AND THIS CANNOT COMPUTE, named on the payload
       // rather than written into the page: a page holding its own copy of a
       // reason is a second place to update, and the one that is not updated is

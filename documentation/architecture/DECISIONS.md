@@ -34766,6 +34766,8 @@ record could not be read. Nothing here is drawn from a guess. Retry".
 
 **Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: HQ seats counted from `users`; the U1 sentence removed from the seats refusal; the strip's `loadStudioGlance` call removed.
 
+**Corrected by D447.** HQ does not read `branch_benchmarks`. Agreements that end inside the window, and the count of accounts still pending the open week, are read on HQ. The four legacy props are not read when a glance is already present.
+
 ## D444
 
 **The branch Contracts page tables this database's own contracts, from the list it already had.** Wave 8, Session 6, item 5. No migration. No new `/api/*` method. `admin_contracts.ts` is not edited. No live branch exercised this.
@@ -34810,6 +34812,23 @@ record could not be read. Nothing here is drawn from a guess. Retry".
 
 **Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: a missing support-session table answered as an empty list; a cycle with no end falling through to every run; the cycle window keeping every run.
 
+## D447
+
+**The studio glance stops throwing, and HQ stops reading a table it never writes.** Wave 9, Session 6, item 1. No migration. No new `/api` method. No live branch exercised this. `AdminStudioHome.jsx` is the Session 15 slot's and is not edited. `routes/licence.ts` is Session 5's and is not edited.
+
+**The throw.** `StudioNeedsDecision` and `AdminStudioOverview` called `studioGlances` on every render, including when a glance payload was already in hand. `studioGlances` treated only `null` as "still reading", so an undefined `home` fell through to `home.queue_pressure`. A branch user with glance-only props, and a render with no props, both threw. The glance is now the only input when it is present. `studioGlances` treats `undefined` the same as `null`. Until the glance arrives the first paint says Reading, including on HQ, where it used to say the figure was not recorded. `glance={null}` is the legacy path the existing tests still exercise. On `UNAVAILABLE`, `onBranch` and `tier` come from `branchOfUser`, so a suspended branch keeps its freeze banner.
+
+**HQ's benchmark copy.** `branch_benchmarks` is created for a branch and filled by a push. Nothing on HQ writes it. The HQ glance returns `insights: { recorded: false, reason: "HQ pushes the median and keeps no copy." }` and does not query that table. D443 said the published benchmark copy was HQ's store and was read. That sentence is wrong, and D443 points here.
+
+**What HQ does read.** Agreements that end inside the window, and the count of accounts still pending the open week, are this database's own rows (D286). U1 does not apply to them. HQ uses `agreementsExpiring` and `programmeClock`, the same functions the branch digest uses. A missing table is unreadable, not zero. A closed month does not take the pending-account read, and the reason is that no cohort week is open. Striking either read would put a refusal back, and that refusal would cite S22, not U1. Seats, the eleven lanes, the share rate and the licence summary stay unrecorded on HQ, and those reasons still cite U1.
+
+**A failed licence copy.** `branchLicencePayload` words a missing table and a missing row with the same "not pushed" message. The glance probes `branch_licence`. An unreadable table is `available: false` and the page draws Unreadable, carrying `pull.reason`. A readable table with no row stays the not-pushed sentence. The same split is on the branch digest's share rate: the catch is `available: false`, and a missing row is the not-pushed reason. A seat count that comes back `null` is unreadable, not "not recorded". A null `hours_to_close` stays null. `Number(null)` is 0, and 0 would rank the programme tile as due now. The chip draws Unreadable when the share read failed, instead of the not-recorded sentence.
+
+**One read of the rate.** The branch glance takes the share from the licence payload it already asked for, and does not ask `branch_licence` again through `revenueShare`. The template copy and the benchmark copy are the readers the branch routes already had, including the empty-benchmark reason. HQ's library goes through `listTemplates`. The glance route's header no longer says a read changes nothing: the first look at a missing licence copy can store HQ's answer.
+
+**Relay.** Session 15 must not drop the four legacy reads in `AdminStudioHome.jsx` until this is on main. Dropping them before this fix is what throws. After it is on main, dropping them is safe, and it also ends the second pull of the licence copy. This PR does not assert on that file.
+
+**Mutations: 5 run, 5 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: a glance-only render that calls `studioGlances` with an undefined home; HQ querying `branch_benchmarks`; a failed glance clearing `onBranch`; an unreadable licence reported as not pushed; the glance ignoring its clock and using the wall clock for the pending-account read.
 
 ## D450
 
