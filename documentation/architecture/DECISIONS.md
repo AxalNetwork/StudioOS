@@ -33304,6 +33304,149 @@ shipped, and its flag is off for this account." `/profile?x=1#y` lands on
 field added to two existing payloads; no route or `api.js` method added or
 removed (`companyKybStart` gains an optional second argument).
 
+## D434
+
+**Company Settings: the header chrome, removal with its consequence, the
+Workspace card, and the direct "Add team member" retired on every side —
+reversing D69's "the direct link stays".** Session 15's item 5.
+
+**What was true on main (`e38aaef264`).**
+- The page opened with an h1 and "Profile and details for X". The canvas's
+  header — initials, the name with its stage chip, a binding line, the
+  reader's role, a scope line with the way to the switcher — was not drawn,
+  though every field it needs is on the memberships row the switcher had
+  already selected.
+- Removing a member was one click on "Remove" (`MembersCard`, the
+  `run(async () => { await api.removeCompanyMember(...)` handler). Revoking
+  an invitation was one click too.
+- No Workspace card: the list and create endpoints existed, the switcher used
+  both, and the settings page said nothing about how many companies the
+  account holds or how to make another.
+- `CompanyProfilePanel` (Network Effects → Companies → My Company) still
+  offered "Add team member": `api.addCompanyMember` → `POST
+  /company/:uid/members`, which joined an EXISTING account to the company on
+  an editor's say-so with no invitation and no consent, and 404'd anyone who
+  had never signed up. D69 kept it "on the one surface that means it".
+- The on-ramp's comment still said the backend "has no join-request or
+  invitation-accept endpoint"; the accept route has existed since task #121
+  (`/company/invitations/accept`). `company_settings_members.test.mjs`
+  forbade the word "invite" in the empty-state cards for the same stale
+  reason.
+- The profile card drew a bare "Logo URL" field under a canvas that draws
+  "Upload image"; nothing said why there is no upload.
+
+**What changed.**
+- **The header** (`CompanyHeader`, module-level, mounted once above the
+  toast) reads the active membership row and nothing else: initials from the
+  name, the name with its stage chip or "Stage not recorded", "You are
+  editing X · created <date>" or "· creation date not recorded", "Your role:
+  Primary admin" / the membership's `my_role` / "not recorded", and the scope
+  line. "Switch company ↑" does not draw a second switcher: it jumps to the
+  sidebar switcher's own trigger (marked `data-company-switcher` on both its
+  collapsed and expanded buttons — `ui/CompanySwitcher.jsx` is Session 5's)
+  and opens it, and says when there is none on screen. The canvas's
+  "Owner view / CTO view" toggle is demo scaffolding and is not drawn.
+- **Removal is two steps.** "Remove" opens an inline confirmation on the row:
+  "Remove <name> from <company>?" with the consequence printed — they lose
+  every workspace scoped to the company, what they contributed stays, adding
+  them back means a new invitation — and "Yes, remove" / "Keep them". The
+  one removal write sits behind it; the reader's own row says to use Leave
+  company instead. Revoke gets the same shape with the invitation's own
+  consequence ("They never had access, so nothing they own is affected").
+  The Members description now counts members and pending invitations from
+  the loaded lists, and a failed invitation read counts as nothing pending,
+  not zero pending.
+- **The Workspace card**: the canvas's sentence, "Create another company"
+  (inline name → `POST /company/create`, then the switcher's own one-writer
+  rules: append to the context list, persist the id, select), "Jump to the
+  switcher", and "You have N companies on this account" from the list the
+  switcher loaded — or "could not be read" when that list is empty on a page
+  that has an active company, since that can only be a failed read.
+- **The direct add is retired on every side, on D304's rule.** The panel's
+  modal and button are deleted; an editor sees "Invite from Company Settings
+  →" instead. `api.addCompanyMember` had no caller left and is removed.
+  `POST /company/:uid/members` was called by nothing in the tree (the
+  rate-limit test only names the path in its does-not-match list) and is
+  removed from `routes/company.ts`; PATCH and DELETE on a member, and the
+  invitation routes, are unchanged. This reverses D69's reasoning: the
+  modal was honest about what it did, but what it did — joining someone
+  without asking — is the thing the invitation exists to replace, and the
+  owner's direction retires an old surface once a built one does its job.
+  No redirect is owed: the panel keeps its page, and the route had no page.
+- **Copy and comments**: the on-ramp says the way in is an invitation to this
+  account's email, accepted by the invitee, and still says there is no
+  self-serve join request; the first unlock card says "Invite co-founders and
+  hires by email — they accept a link, nobody is joined without asking"; the
+  stale "no accept endpoint" comment is corrected; the Logo URL field says
+  upload is not available because there is no image store for company
+  logos, so a link is what is recorded.
+- `company_settings_members.test.mjs` re-aimed: its header no longer says
+  the method lives on; the mutation test also pins the method gone from
+  `api.js`; the empty-state test requires the invitation wording and forbids
+  a join request instead of forbidding "invite".
+
+**Not done here, filed.** Logo upload needs an image store (only `logo_url`
+exists). Delete company has no route; the page already says so and the
+canvas's inert type-to-confirm is still refused. The removal consequence
+lists workspaces by kind, not by count, because no route counts what a
+member holds.
+
+**Guard.**
+- `cloudflare-worker/test/company_direct_add_retired_d434.test.ts`, 4 tests
+  through the real router on in-memory SQLite: an editor's direct add by
+  email answers 404 and writes no link; by user id likewise; role change and
+  removal on a member still answer; the route is gone from the source while
+  the invitation, its accept, PATCH and DELETE remain.
+- `frontend/test/company_settings_d434.test.mjs`, 11 tests: the header is
+  drawn once from the active membership row with no second read and each
+  field has its absence; `initialsOf` and `createdOn` are lifted and run;
+  "Switch company" queries the switcher's anchor, opens it and says when it
+  is absent, and both trigger buttons carry the anchor; removal is two
+  steps with the one write behind the confirmation, the consequence printed
+  and the reader's own row deflected to Leave; revoke likewise; the
+  description counts from the loaded lists with a failed read as nothing
+  pending; the Workspace card creates through the switcher's rules and
+  counts honestly; the direct add is gone from panel, client and worker
+  while the invitation and the two surviving member routes stay; the
+  on-ramp and unlock copy describe the invitation and still no join request,
+  the stale comment is gone and the accept route exists; the logo field
+  says why there is no upload.
+
+**Mutations: 22 run, 22 caught** — each a non-zero exit with a `not ok`
+line, anchors unique, bytes proven changed, sources restored from a
+sha256-checked snapshot: the direct add mounted again; the role-change
+route dropped; the header mounted twice; the header fetching on its own; an
+unrecorded stage drawn as a value; a role invented; initials for an empty
+name; the switch link only scrolling; the anchor dropped from one trigger;
+removal back to one click; the consequence replaced by "Are you sure?"; the
+reader's own row removable; revoke back to one click; a failed invitation
+read counted as zero pending; the Workspace card fetching its own count; an
+empty list counted as one company; create selecting without persisting the
+id; the panel's direct add back; the client method back; the on-ramp
+promising a join request; the stale no-accept-endpoint sentence back; the
+logo field drawing an upload.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA
+fallback, `/api/company/*` stubbed as the worker now shapes it. As the
+primary admin of "Halyard Systems" with two memberships: the header reads
+"HS · Company Settings · Halyard Systems · seed · You are editing Halyard
+Systems · created Mar 12, 2026 · Your role: Primary admin · This sidebar is
+scoped to Halyard Systems … · Switch company ↑"; the Workspace card reads
+"Create another company · Jump to the switcher · You have 2 companies on
+this account."; Remove on the Analyst's row opens "Remove Analyst Person
+from Halyard Systems? They immediately lose access to every workspace scoped
+to Halyard Systems — cap table, raise, data room, metrics. …", "Yes, remove"
+sends the one DELETE and the row is gone; Revoke opens "Cancel the
+invitation to new@example.test? They never had access …". "Switch company ↑"
+opens the sidebar switcher (its "Add a new company" row appears); "Create
+another company" → "Third Co" posts to `/company/create`, the header now
+reads "Third Co" and the count "You have 3 companies on this account.". With
+no memberships the page draws the on-ramp. On Network Effects → Companies → My Company, the panel reads "Team members (2)" with no "Add member" button and the link "Invite from Company Settings →" (the page's default tab needed its own payloads stubbed to render at all; see the filed note).
+
+`frontend/src` moved, so `docs/` is rebuilt. No migration. One route
+(`POST /company/:uid/members`) and one `api.js` method (`addCompanyMember`)
+removed; none added.
+
 ## D440
 
 **HQ-held Studio and My Licence stop pointing at pages that refuse, and stop printing zero for a seat or a host that was not confirmed.** No branch is provisioned (`infra/branches/` holds only the example), and every `/api/branch/*` handler calls `requireBranchTier`, so a card that opens `/branch/*` on HQ renders Unreadable. S20's rule is that those pages are never linked from the HQ-held shell.

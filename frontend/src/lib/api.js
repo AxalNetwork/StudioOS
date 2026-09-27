@@ -3136,9 +3136,11 @@ export const api = {
   },
   createCompany: (data) => request('/company/create', { method: 'POST', body: JSON.stringify(data) }),
   updateCompany: (uid, data) => request(`/company/${uid}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  addCompanyMember: (uid, data) => request(`/company/${uid}/members`, { method: 'POST', body: JSON.stringify(data) }),
+  // The direct add (`addCompanyMember`, POST /company/:uid/members) is retired
+  // (D434): it joined an existing account without asking it. Membership is
+  // granted by the invitation below, accepted by the invitee.
   // Wave 2 — role change / primary-admin transfer. Send only the keys you are
-  // changing; both add and remove already existed, this closes the middle.
+  // changing; remove already existed, this closes the middle.
   updateCompanyMember: (uid, userId, data) =>
     request(`/company/${uid}/members/${userId}`, { method: 'PATCH', body: JSON.stringify(data) }),
   removeCompanyMember: (uid, userId) => request(`/company/${uid}/members/${userId}`, { method: 'DELETE' }),
@@ -3146,11 +3148,10 @@ export const api = {
   // A picker must never hardcode these — see services/teamAuthority.ts.
   teamVocabulary: () => request('/company/team-vocabulary'),
 
-  // Task #121 — a real invitation, as opposed to `addCompanyMember`, which
-  // links an EXISTING account without asking it and 404s on anyone who has
+  // Task #121 — a real invitation, as opposed to the retired direct add, which
+  // linked an EXISTING account without asking it and 404'd on anyone who had
   // not signed up. These five drive `company_invitations`: the first mails a
-  // hashed, expiring token, and the last is the invitee's own accept. `addCompanyMember` stays: it is the direct add for someone
-  // who has already agreed, and the admin console still uses it.
+  // hashed, expiring token, and the last is the invitee's own accept.
   inviteCompanyMember: (uid, data) =>
     request(`/company/${uid}/invitations`, { method: 'POST', body: JSON.stringify(data) }),
   listCompanyInvitations: (uid) => request(`/company/${uid}/invitations`),
