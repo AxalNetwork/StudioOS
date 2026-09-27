@@ -9,8 +9,7 @@
  *
  *   1. `Field` IS EXPORTED TWICE, MEANING DIFFERENT THINGS.
  *      `advisor/expertise/kit.jsx` exports a FORM INPUT wrapper
- *      `({label, hint, children})`. `advisor/network/kit.jsx` — re-exported by
- *      `partner/operations/kit.jsx` — exports a READ-ONLY display pair
+ *      `({label, hint, children})`. `advisor/network/kit.jsx` exports a READ-ONLY display pair
  *      `({label, children})` that renders an italic em-dash when empty. A zone
  *      importing from both gets whichever the bundler resolved last, and the
  *      wrong one still renders. Here they are `Field` and `ReadField`.
@@ -70,15 +69,34 @@ export {
   Field as ReadField,
 } from '../advisor/network/kit';
 
-export {
-  Badge,
-  ProgressBar,
-  BulletList,
-  RowCard,
-  formatDay,
-  formatRelativeDay,
-  moneyUsd as moneyDollars,
-} from './operations/kit';
+/*
+ * D395 — THE TWO HELPERS THE ZONES USE LIVE HERE NOW. They were re-exported
+ * from `operations/kit.jsx`, which retired with `/partner/operations/*`; the
+ * other five it offered (Badge, ProgressBar, BulletList, RowCard and
+ * formatRelativeDay) had no caller outside the retired pages and went with
+ * them. The bodies are unchanged.
+ */
+
+/** A calendar day, formatted against the real clock; an absent or bad date is a dash. */
+export function formatDay(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+}
+
+/**
+ * Whole DOLLARS for quote and engagement prices (the needs pipeline stores
+ * dollars). Not for new money columns — those are integer cents, through
+ * `moneyCents`. See trap 3 above.
+ */
+export function moneyDollars(v) {
+  if (v == null || Number.isNaN(Number(v))) return '—';
+  const n = Number(v);
+  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
+  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(n % 1_000 === 0 ? 0 : 1)}K`;
+  return `$${n.toLocaleString()}`;
+}
 
 /**
  * The partner accent, as Tailwind literals.

@@ -54,6 +54,15 @@ const LOSS_LABEL = {
 };
 const STATE_TONE = { Won: 'ok', Lost: 'danger', Sent: 'neutral', Withdrawn: 'neutral' };
 
+/**
+ * D395 — WITHDRAW MOVED HERE from the retired `/partner/operations/engagements`,
+ * whose "My proposals" view was the only canvas-less place a firm could pull a
+ * proposal back. `quoteTransition` in `routes/needs.ts` allows it from
+ * `submitted` only and answers anything else with a 409; this mirrors that set,
+ * and the Worker stays the boundary.
+ */
+export const canWithdraw = (r) => r?.status === 'submitted';
+
 /** The strip tile, in the anatomy the artboards share. */
 function ProposalTile({ label, value, note, nr = false }) {
   return (
@@ -244,11 +253,24 @@ export default function PartnerProposalsZone() {
                 // says which rather than reading as finished.
                 r.state === 'Lost' && !r.loss_reason
                   ? { text: r.signal, pill: 'No reason recorded', pillTone: 'warn' }
-                  : { text: r.signal, sub: r.loss_reason ? LOSS_LABEL[r.loss_reason] : undefined },
+                  : {
+                    text: r.signal,
+                    sub: r.loss_reason ? LOSS_LABEL[r.loss_reason] : undefined,
+                    node: canWithdraw(r) ? (
+                      <button
+                        type="button" className={ghostButtonClass} disabled={busy}
+                        onClick={() => run(() => api.withdrawQuote(r.quote_id), 'Proposal withdrawn.', 'withdraw')}
+                      >
+                        Withdraw
+                      </button>
+                    ) : undefined,
+                  },
               ],
             }))}
             note={'The `Signal` column is what this side of the exchange knows: when a proposal went out, how long it has been quiet, and whether it has been decided. It is deliberately not a read receipt. The artboard separates a proposal opened four times and not answered from one never opened — a decision in progress from a delivery failure — and that distinction needs an open, which is the client’s act and which nothing in this product records. Naming a silent proposal "never opened" would turn our own silence into a claim about their attention. A lost proposal with no reason recorded is tinted and marked, because it is the one row here that still needs a person: the taxonomy below can only count what somebody entered.'}
           />
+
+          <SaveNote note={note?.scope === 'withdraw' ? note : null} />
 
           {items.length > 0 && visible.length === 0 && (
             <p className="text-[12px] text-axal-muted">

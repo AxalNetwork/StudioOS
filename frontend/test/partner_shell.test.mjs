@@ -123,11 +123,9 @@ test('Partner pages share amber identity and cyan provenance without recoloring 
 
 test('shared Network and Research pages only mount Partner chrome for Partner users', () => {
   const tabs = read('frontend/src/pages/partner/PartnerWorkspaceTabs.jsx');
-  const operations = read('frontend/src/pages/partner/operations/PartnerOperationsWorkspace.jsx');
   const network = read('frontend/src/pages/NetworkPage.jsx');
   const research = read('frontend/src/pages/MarketIntelPage.jsx');
   assert.match(tabs, /user\?\.role !== 'partner'/);
-  assert.match(operations, /user\?\.role !== 'partner'/);
   assert.match(network, /role === 'partner'/);
   assert.match(network, /workspace="network"/);
   assert.match(network, /role === 'advisor'/);

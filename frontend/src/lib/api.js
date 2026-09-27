@@ -1742,8 +1742,8 @@ export const api = {
   listQuotesForNeed: (needId) => request(`/needs/${needId}/quotes`),
   myQuotes: () => request('/quotes/me'),
   // `period` is one of all | quarter | prev_quarter | ytd | shape — the
-  // Analytics chip row. Omitted is `all`, which is what the two older callers
-  // (`/partner/operations/performance` and the Studio home card) send, so their
+  // Analytics chip row. Omitted is `all`, which is what the Studio home card
+  // sends (as the retired `/partner/operations/performance` did, D395), so its
   // response shape is unchanged. It narrows what was DECIDED; the forecast is
   // over the open pipeline either way, because an undecided quote sits in no
   // quarter.

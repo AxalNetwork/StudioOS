@@ -47,8 +47,8 @@ import {
  *
  * WHERE THE FIGURES COME FROM. All of them are `GET /api/quotes/analytics`,
  * computed in `services/bdAnalytics.ts`. The zone does no arithmetic of its
- * own: `/partner/operations/performance` and the Studio home card read the same
- * endpoint, and three surfaces computing one win rate three ways is how they
+ * own: the Studio home card reads the same endpoint (as the retired
+ * `/partner/operations/performance` did, D395), and three surfaces computing one win rate three ways is how they
  * come to disagree.
  */
 
