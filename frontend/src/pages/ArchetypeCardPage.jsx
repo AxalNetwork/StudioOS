@@ -3,7 +3,7 @@
  *
  * Compact /studio stays the pixel-art preview. This route is the cinematic
  * card: a 21:9 banner (sex-aware; `both` is a 50/50 split), overlay well on
- * the left, and the locked ARCHETYPES strengths / blind spots / complements.
+ * the left, and the locked ARCHETYPES strengths / blind spots / matching.
  * Copy is static per-slug metadata, not user data. Missing banner files hide
  * that slot rather than leaving a hole.
  */
@@ -165,6 +165,9 @@ export default function ArchetypeCardPage({ activeRole }) {
           </div>
 
           <div className="p-[22px] flex flex-col gap-5">
+            {meta?.lean && (
+              <div className="acp-lbl text-[#7c3aed] dark:text-violet-300">{meta.lean}</div>
+            )}
             {meta?.description && (
               <p className="text-[13.5px] text-[#3f3f46] dark:text-gray-300 leading-[1.55]">{meta.description}</p>
             )}
@@ -206,6 +209,20 @@ export default function ArchetypeCardPage({ activeRole }) {
                 </div>
               </div>
             </div>
+
+            {(meta?.matching || []).length > 0 && (
+              <div data-testid="archetype-matching">
+                <div className="acp-lbl text-[#7c3aed] dark:text-violet-300 mb-2">Who you match with</div>
+                <div className="flex flex-col gap-3">
+                  {meta.matching.map((m) => (
+                    <div key={m.label} className="border-t border-[#f0f0f3] dark:border-gray-800 pt-3 first:border-0 first:pt-0">
+                      <div className="text-[12.5px] font-bold text-[#27272a] dark:text-gray-100">{m.label}</div>
+                      <div className="text-[12.5px] text-[#3f3f46] dark:text-gray-300 leading-[1.5] mt-0.5">{m.why}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </article>
       )}
