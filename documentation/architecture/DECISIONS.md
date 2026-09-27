@@ -32042,6 +32042,67 @@ reads the Worker source for:
   above, including reading deck views through `ensureDeck` and treating a
   failed scenario read as an empty one.
 
+## D365
+
+**A failed metrics read is a refusal, not an empty log.** Wave 8, Session 8,
+a follow-up to item 4, the revenue ledger (D363). It fixes the Revenue
+defect that D360 filed and D363 left beside the ledger. One Worker handler
+changes; no migration, no new API, no page.
+
+**The defect.** `GET /api/progress/metrics/:projectId` caught a failed
+SELECT, logged it and answered 200 with `{ items: [], snapshots: [] }`. Every
+page that reads snapshots therefore saw a read that never happened as
+"nothing recorded":
+- the Lab Revenue page's snapshot log, beside the ledger;
+- Use of Funds' recorded burn (D360 made it divide by `net_burn`);
+- the Metrics page, the KPI ledger, and the Build and Grow desks.
+
+D360 had already given both Lab pages an `Unreadable` state for a rejected
+read, but the Worker never rejected, so those states could not appear.
+
+**What changed.** The catch returns `refuse(c, 500, { code:
+'metrics_read_failed', … })`:
+- our sentence says it is not a claim that none are recorded;
+- SQLite's text goes to the log through `refusalBody`, never into the body;
+- no list rides on the refusal.
+
+The access checks still run first, so a caller without access never reaches
+the read. A readable empty store is still 200 with an empty list, so the two
+answers are now different.
+
+**Every caller already handles the refusal.** Read at the time of this
+change:
+- the Lab Revenue page and Use of Funds render `Unreadable`;
+- the Metrics page and the Grow focus page show their error line;
+- the KPI ledger and the Build desk go to their error state;
+- the Grow desk counts the read among its failures.
+
+None of them needed an edit, and none crashes.
+
+**Left as it is, with the reason.**
+- The Stripe import's success body sends `mrr: result.mrr ?? 0` and
+  `customers: result.customers ?? 0`. The sync's success path always
+  returns both as numbers, and the Revenue page prints only "Synced" from
+  that body. The `?? 0` never reaches a screen.
+- `POST /progress/metrics/:projectId` still defaults a missing
+  `snapshot_date` to today. The Revenue form always sends a date. Callers
+  that rely on the default are outside this follow-up.
+
+**Guards.** `cloudflare-worker/test/metrics_read_refusal_d365.test.ts` has
+4 tests. It drives the real router against real SQLite with migration 249
+executed, and injects the failure at the adapter for the one snapshot
+SELECT, so auth, the company-scoped project load, the view check and the
+schema bootstrap all run unmocked. It pins:
+- the 500 and its code, with no list in the body;
+- SQLite's text logged but never returned;
+- an empty store still returning 200 with `[]`;
+- recorded rows coming back newest first under both keys;
+- a caller without access never reaching the read.
+
+Mutation-checked both ways: 8 of 8 caught, each with a non-zero exit and a
+`not ok` line, and the file was restored and checked by sha256. The first
+mutation is the original swallow, so the test fails on the code as it was.
+
 ## D380
 
 **The Spin-Out Lab honesty sweep: the seat count reads `/brief`'s `places`,
