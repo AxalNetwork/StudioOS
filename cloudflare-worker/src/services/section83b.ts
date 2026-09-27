@@ -45,6 +45,15 @@ export async function ensureSection83bSchema(env: Env): Promise<void> {
        ON section_83b_trackers(project_id, user_id, grant_date)`,
     `CREATE INDEX IF NOT EXISTS idx_83b_deadline ON section_83b_trackers(deadline_date)`,
     `CREATE INDEX IF NOT EXISTS idx_83b_user ON section_83b_trackers(user_id)`,
+    // Migration 310 (D361) — the filing record. Declared there; these are the
+    // D235 safety net for a cold isolate on a database the runner has not
+    // reached yet. "duplicate column" is swallowed below, so on every
+    // migrated database each is a no-op.
+    'ALTER TABLE section_83b_trackers ADD COLUMN filing_method TEXT',
+    'ALTER TABLE section_83b_trackers ADD COLUMN tracking_number TEXT',
+    'ALTER TABLE section_83b_trackers ADD COLUMN irs_service_center TEXT',
+    'ALTER TABLE section_83b_trackers ADD COLUMN company_ack_at TEXT',
+    'ALTER TABLE section_83b_trackers ADD COLUMN tax_return_copy_at TEXT',
   ];
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); }
@@ -86,6 +95,12 @@ export interface Section83bRow {
   election_doc_id: number | null;
   status: string;
   notes: string | null;
+  // Migration 310 (D361). Null until the founder records them.
+  filing_method?: string | null;
+  tracking_number?: string | null;
+  irs_service_center?: string | null;
+  company_ack_at?: string | null;
+  tax_return_copy_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -114,6 +129,11 @@ export function tracker83bDto(t: Section83bRow) {
     election_doc_id: t.election_doc_id ?? null,
     status: t.status,
     notes: t.notes ?? null,
+    filing_method: t.filing_method ?? null,
+    tracking_number: t.tracking_number ?? null,
+    irs_service_center: t.irs_service_center ?? null,
+    company_ack_at: t.company_ack_at ?? null,
+    tax_return_copy_at: t.tax_return_copy_at ?? null,
     created_at: t.created_at,
     updated_at: t.updated_at,
     checklist: [
