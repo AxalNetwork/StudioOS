@@ -62,8 +62,8 @@ it, where in their nav, and how do they get there.*
 | Pages · Benchmark | `/research/benchmarking` | Home | Full page | Sidebar → Home → Research | NEW | High |
 | Pages · Company | `/research/companies/:analysisId/:candidateId` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Pages · Company analysis | `/research/companies/:id` | Home | Full page (proposed) | Sidebar → Home → Research | NEW | Low |
-| Pages · Diligence file | `/research/diligence` | Home | Full page | Sidebar → Home → Research | NEW | High |
-| Pages · Diligence room | `/research/diligence` | Home | Full page | Sidebar → Home → Research | NEW | High |
+| Pages · Diligence file | `/research/diligence/:grantUid/files/:fileUid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
+| Pages · Diligence room | `/research/diligence/:grantUid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Pages · Founder Build | `/execution` · `/build/metrics` | Home | Full page | Sidebar → Home → Build | UPGRADE | High |
 | Pages · Founder Grow | `/founder/growth/{talent` | — (not routed) | Full page (proposed) | Not reachable yet | RESKIN | Low |
 | Pages · Founder Network | `/network` | Home | Full page | Sidebar → Home → Network | RESKIN | High |
@@ -116,8 +116,8 @@ it, where in their nav, and how do they get there.*
 | InvRail | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |
 | Liquidity & Secondaries | `/liquidity` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | LP Investor Workspace | `/spinout-lab/investor-workspace` · `/lp-portal` · `/funds/lp-workspace` | Home | Full page | Sidebar → Home → Axal VC Fund | DEFERRED | High |
-| Pages · Diligence file | `/research/diligence` | Home | Full page | Sidebar → Home → Research | NEW | High |
-| Pages · Diligence room | `/research/diligence` | Home | Full page | Sidebar → Home → Research | NEW | High |
+| Pages · Diligence file | `/research/diligence/:grantUid/files/:fileUid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
+| Pages · Diligence room | `/research/diligence/:grantUid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Pages · Funds and fund research | `/research/funds` · `/research/funds/:uid` · `/funds` · `/research/companies/:id` · `/research/companies/:analysisId/:candidateId` · `/funds/:id` | Home | Full page | Sidebar → Home → Fund | UPGRADE | High |
 | Pages · Investor Deals | `/deals` · `/pipeline` · `/pipeline/screening\|commit\|transactions` · `/deals/screening\|commit\|closing` | Home | Full page | Sidebar → Home → Deals | UPGRADE | High |
 | Pages · Investor Fund | `/funds` · `/funds/capital-calls` · `/funds/accounting` · `/lp-reports` | Home | Full page (proposed) | Sidebar → Home → Fund | UPGRADE | Low |

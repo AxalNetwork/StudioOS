@@ -78,16 +78,22 @@ test('the route renders the page, and the pending notice is gone from it', () =>
   );
 });
 
-test('the page reads the branch copy, and nothing else', () => {
+test('the library reads the branch copy, and the ledger reads the existing contract list', () => {
   assert.match(PAGE, /api\.branchTemplates\(\)/, 'the page must read the copy route');
   assert.match(API, /branchTemplates:\s*\(\)\s*=>\s*request\('\/branch\/templates'\)/,
     'the api method must point at the branch route, not an HQ one');
-  // A BRANCH MUST NOT REACH HQ'S OWN STORE. `adminTemplateStore*` is
-  // super-admin-gated and answers "HQ only" on a branch, so a page calling it
-  // would render a refusal instead of the copy that is sitting right there.
+  // D444 — the ledger is the list and the stats that already existed. No new
+  // method, and still not HQ's template store: that one is super-admin-gated
+  // and answers "HQ only" on a branch.
+  assert.match(PAGE, /api\.adminListContracts\(\{ limit: 500 \}\)/);
+  assert.match(PAGE, /api\.adminContractStats\(\)/);
   assert.ok(
     !/adminTemplateStore/.test(PAGE),
     'the branch page must never call HQ\'s template-store methods',
+  );
+  assert.ok(
+    !/adminResendContract|adminVoidContract|adminGetContract/.test(PAGE),
+    'the ledger is a read: resend, void and the detail fetch stay off this page',
   );
 });
 
@@ -142,26 +148,23 @@ test('what the copy leaves at HQ is read off the payload, not typed into the pag
   assert.match(WORKER_ROUTE, /field: 'archived versions'/);
 });
 
-test('the active-contracts block states its gap with the TRUE cause (D199)', () => {
-  // RE-AIMED, NOT LOOSENED. This matched `licence_contracts` inside the
-  // block's reason, because the reason named that table as where a branch's
-  // contracts live. That was the wrong table: it holds the licence agreement
-  // and nothing else, and this branch's own contracts are rows in its own
-  // database. A sentence CORRECTING the attribution still contains the table's
-  // name, so the old match would pass on the opposite claim — a lexical scan
-  // cannot tell a rule from its violation. So it asserts the claim itself.
+test('the ledger tables this database and leaves value, renewal and version unrecorded (D444)', () => {
+  // RE-AIMED, NOT LOOSENED. D199 pinned the absence: the rows were readable
+  // and the screen was not built, and a match on `licence_contracts` could
+  // not tell a correction from the wrong cause. D444 builds the table from
+  // the list that already existed. The three cells that list does not carry
+  // stay Not recorded, and the page must not go back to "not tabled".
   assert.match(PAGE, /data-testid="branch-contracts-ledger"/);
-  const at = PAGE.indexOf('data-testid="branch-contracts-ledger"');
-  const block = PAGE.slice(at, PAGE.indexOf('</Card>', at));
-  assert.match(block, /<Unrecorded reason="[^"]*rows in this branch's own database/,
-    'the block no longer says whose database the contracts are in');
-  assert.match(block, /holds only the licence agreement itself/,
-    'the block no longer says what HQ\'s ledger actually holds');
-  assert.doesNotMatch(block, /live in HQ's `licence_contracts`|no branch-side read/i,
-    'the misattributed cause is back');
-  // Still no table: the rows are readable, but the screen that tables them is
-  // not built, and two of its columns are recorded for no e-sign envelope.
-  assert.ok(!/<table/.test(PAGE), 'a table appeared without the columns S5 draws having a source');
+  assert.match(PAGE, /<table/);
+  assert.match(PAGE, /reason=\{VALUE_UNRECORDED\}/);
+  assert.match(PAGE, /reason=\{RENEWAL_UNRECORDED\}/);
+  assert.match(PAGE, /reason=\{VERSION_UNRECORDED\}/);
+  assert.match(PAGE, /None of the four sources behind GET \/api\/admin\/contracts records a value/);
+  assert.match(PAGE, /This list does not carry an end date/);
+  assert.doesNotMatch(PAGE, /Not tabled here yet/);
+  assert.doesNotMatch(PAGE, /live in HQ's `licence_contracts`|no branch-side read/i);
+  assert.doesNotMatch(WORKER_ROUTE, /licence_contracts is HQ/);
+  assert.match(WORKER_ROUTE, /GET \/api\/admin\/contracts carries the template name and not the body/);
 });
 
 test('HQ can push, and the push is the whole library rather than one template', () => {

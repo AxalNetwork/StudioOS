@@ -213,6 +213,11 @@ test('the branch route serves the copy with HQ\'s stamp and what the copy leaves
   const fields = (body.not_carried || []).map((n: any) => n.field);
   assert.deepEqual(fields, ['body_md', 'archived versions']);
   for (const n of body.not_carried) assert.ok(String(n.reason).length > 20, `${n.field} must carry a reason`);
+  // D444 — the body stays at HQ because the list a branch reads does not
+  // carry it. Naming licence_contracts as that ledger was the wrong table.
+  const bodyReason = String((body.not_carried || []).find((n: any) => n.field === 'body_md')?.reason || '');
+  assert.match(bodyReason, /GET \/api\/admin\/contracts carries the template name and not the body/);
+  assert.doesNotMatch(bodyReason, /licence_contracts/);
 });
 
 test('NEVER PUSHED and PUSHED-BUT-EMPTY are different sentences', async () => {

@@ -87,8 +87,8 @@ r.get('/templates', async (c) => {
           field: 'body_md',
           reason:
             'The document text stays at HQ. Nothing on a branch renders or instantiates a template '
-            + 'body — the contract ledger `licence_contracts` is HQ\'s table — so a body column '
-            + 'here would be a store with no reader.',
+            + 'body, and GET /api/admin/contracts carries the template name and not the body, so a '
+            + 'body column here would be a store with no reader.',
         },
         {
           field: 'archived versions',

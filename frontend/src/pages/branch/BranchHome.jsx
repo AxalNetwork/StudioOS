@@ -150,7 +150,7 @@ export default function BranchHome({ user }) {
         </p>
 
         {home === null ? (
-          <p className="mt-3 text-[12px] text-axal-muted">Reading the four queues&hellip;</p>
+          <p className="mt-3 text-[12px] text-axal-muted">Reading the lanes&hellip;</p>
         ) : null}
 
         {ready && lanes.length ? (
@@ -202,7 +202,7 @@ export default function BranchHome({ user }) {
             <Link to="/branch/approvals" className="font-semibold text-axal-ink underline underline-offset-2">
               Open the board
             </Link>
-            <span className="text-axal-muted"> — the same four queues, item by item.</span>
+            <span className="text-axal-muted"> — the same eleven lanes, item by item.</span>
           </p>
         ) : null}
       </Card>

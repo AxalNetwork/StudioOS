@@ -116,4 +116,63 @@ test('a successful health read writes last_version on the deployment row', async
     .get('fr') as any;
   assert.equal(row.last_version, 'abc123def');
   assert.equal(row.last_health_ok, 1);
+  assert.equal(body.deployments[0].version_display, 'abc123def');
+});
+
+test('live deploy_version wins over a stale last_version in the payload', async () => {
+  const db = freshDb();
+  db.prepare('UPDATE licence_deployments SET last_version = ? WHERE code = ?').run('stale-sha', 'fr');
+  const env: any = {
+    DB: makeD1(db),
+    JWT_SECRET,
+    ENVIRONMENT: 'development',
+    GITHUB_REPO_OWNER: 'o',
+    GITHUB_REPO_NAME: 'r',
+    BRANCH_FR: {
+      health: async () => ({
+        ok: true,
+        db_ok: true,
+        licence_status: 'active',
+        licence_pushed_at: null,
+        deploy_version: 'live-sha',
+        branch: 'fr',
+        as_of: '2026-09-27T10:00:00.000Z',
+      }),
+    },
+  };
+  const res = await app.request('/api/admin/deployments', {
+    headers: { Authorization: `Bearer ${await token()}` },
+  }, env);
+  const body = await res.json() as any;
+  assert.equal(body.deployments[0].version_display, 'live-sha');
+  const row = db.prepare('SELECT last_version FROM licence_deployments WHERE code = ?').get('fr') as any;
+  assert.equal(row.last_version, 'live-sha');
+});
+
+test('a null deploy_version from the branch does not erase a stored last_version', async () => {
+  const db = freshDb();
+  db.prepare('UPDATE licence_deployments SET last_version = ? WHERE code = ?').run('kept-sha', 'fr');
+  const env: any = {
+    DB: makeD1(db),
+    JWT_SECRET,
+    ENVIRONMENT: 'development',
+    GITHUB_REPO_OWNER: 'o',
+    GITHUB_REPO_NAME: 'r',
+    BRANCH_FR: {
+      health: async () => ({
+        ok: true,
+        db_ok: true,
+        licence_status: 'active',
+        licence_pushed_at: null,
+        deploy_version: null,
+        branch: 'fr',
+        as_of: '2026-09-27T10:00:00.000Z',
+      }),
+    },
+  };
+  await app.request('/api/admin/deployments', {
+    headers: { Authorization: `Bearer ${await token()}` },
+  }, env);
+  const row = db.prepare('SELECT last_version FROM licence_deployments WHERE code = ?').get('fr') as any;
+  assert.equal(row.last_version, 'kept-sha');
 });

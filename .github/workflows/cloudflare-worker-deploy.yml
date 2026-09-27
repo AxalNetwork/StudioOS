@@ -91,10 +91,11 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GITHUB_SHA: ${{ github.sha }}
         run: |
           set -o pipefail
           for attempt in 1 2 3; do
-            if npx --no-install wrangler deploy --config ../wrangler.toml --env production 2>&1 | tee deploy.log; then
+            if npx --no-install wrangler deploy --config ../wrangler.toml --env production --var "WORKER_DEPLOY_VERSION:${GITHUB_SHA}" 2>&1 | tee deploy.log; then
               exit 0
             fi
             if ! grep -qE '\[code: 10013\]' deploy.log; then
@@ -215,12 +216,13 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CODES: ${{ steps.list.outputs.codes }}
+          GITHUB_SHA: ${{ github.sha }}
         run: |
           set -o pipefail
           deploy_branch() {
             local code="$1" attempt
             for attempt in 1 2 3; do
-              if npx --yes wrangler@4.131.0 deploy --config "wrangler.branch.${code}.toml" 2>&1 | tee "deploy.${code}.log"; then
+              if npx --yes wrangler@4.131.0 deploy --config "wrangler.branch.${code}.toml" --var "WORKER_DEPLOY_VERSION:${GITHUB_SHA}" 2>&1 | tee "deploy.${code}.log"; then
                 return 0
               fi
               if ! grep -qE '\[code: 10013\]' "deploy.${code}.log"; then

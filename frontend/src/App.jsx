@@ -61,6 +61,8 @@ const ResearchWorkspace = lazy(() => import('./workspaces/ResearchWorkspace'));
 const FundDossier = lazy(() => import('./pages/research/FundDossier'));
 const CompanyCandidate = lazy(() => import('./pages/research/CompanyCandidate'));
 const MarketReading = lazy(() => import('./pages/research/MarketReading'));
+const DiligenceRoom = lazy(() => import('./pages/research/DiligenceRoom'));
+const DiligenceFile = lazy(() => import('./pages/research/DiligenceFile'));
 const InvestorDealsRoutes = lazy(() => import('./workspaces/investor/InvestorDealsRoutes'));
 const AdvisorBucketRoutes = lazy(() => import('./workspaces/advisor/AdvisorBucketRoutes'));
 const PartnerBucketRoutes = lazy(() => import('./workspaces/partner/PartnerBucketRoutes'));
@@ -2324,6 +2326,8 @@ function AppInner() {
       <Route path="/research/funds/:uid" element={guard(labRoles(['admin', 'founder']), <FundDossier role={researchRole} />)} />
       <Route path="/research/library" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/diligence" element={guard(labRoles(['admin', 'investor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/diligence/:grantUid" element={guard(labRoles(['admin', 'investor']), <DiligenceRoom role={researchRole} />)} />
+      <Route path="/research/diligence/:grantUid/files/:fileUid" element={guard(labRoles(['admin', 'investor']), <DiligenceFile role={researchRole} />)} />
       <Route path="/research/benchmarking" element={guard(labRoles(['admin', 'investor']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/client-prep" element={guard(labRoles(['admin', 'advisor', 'partner']), <ResearchWorkspace role={researchRole} user={user} />)} />
       {/* Legacy Customer Discovery folds into the unified Discovery workspace. */}
@@ -2411,9 +2415,7 @@ function AppInner() {
           rather than in a notice standing in for the whole screen. */}
       <Route path="/branch/accounts" element={guard(['admin'], <BranchAccounts user={user} />)} />
       {/* D112 — the outbound HALF of S3 is live: the To-HQ lane and HQ's
-          answers. The four local queues keep their stated notice inside the
-          page, so the row is honest about which half is built rather than
-          waiting for all five. */}
+          answers. The local board is the eleven lanes (D215), on the same page. */}
       {/* Approvals wraps ITSELF in BranchZone, unlike the seven above, and the
           asymmetry is the point: it loads live escalations, so only the page
           knows what its rail can report. A zone with nothing loaded takes the
@@ -2551,10 +2553,12 @@ function AppInner() {
           : <FounderRaiseCapital />)} />
       <Route path="/raise/capital/model" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapitalWorkspacePage />))} />
       <Route path="/raise/capital/cap-table" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapitalWorkspacePage />))} />
-      {/* Founders manage their room; investors see what was shared with them. One route, role-branched inside the page, so there is no second root. */}
+      {/* Founders manage their room here. An investor's rooms are read by grant under Research ·
+          Diligence (D311): the investor branch is a redirect there, so a bookmark still lands, and the
+          guard keeps admitting investor so the redirect can run. */}
       <Route path="/raise/data-room" element={guard(['admin', 'founder', 'investor'],
         effectiveRole === 'investor'
-          ? investorWorkspace('deals', <DataRoomPage user={user} />)
+          ? <Navigate to="/research/diligence" replace />
           : new URLSearchParams(location.search).get('mode') === 'workspace'
             ? founderWorkspace('raise', <FounderWorkspaceTabs set="raise" user={user}><DataRoomPage user={user} /></FounderWorkspaceTabs>)
             : <FounderRaiseDataRoom />)} />

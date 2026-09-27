@@ -255,7 +255,8 @@ r.get('/deployments', async (c) => {
         stmts.push(
           env.DB.prepare(
             `UPDATE licence_deployments
-                SET last_health_at = ?, last_health_ok = ?, last_version = ?, updated_at = ?
+                SET last_health_at = ?, last_health_ok = ?,
+                    last_version = COALESCE(?, last_version), updated_at = ?
               WHERE code = ?`,
           ).bind(now, ok, ver, now, d.code),
         );
@@ -282,6 +283,10 @@ r.get('/deployments', async (c) => {
     }),
     deployments: rows.map((d) => {
       const l = byCode.get(d.code);
+      const live = l?.status === 'ok' ? l.data : null;
+      const version_display = live?.deploy_version
+        ? String(live.deploy_version)
+        : (d.last_version ? String(d.last_version) : null);
       return {
         ...d,
         // THE PROVISIONING STATUS AND THE LIVE READ ARE SEPARATE FIELDS ON
@@ -291,7 +296,10 @@ r.get('/deployments', async (c) => {
         live_state: l?.status ?? 'not_deployed',
         live_reason: l?.status === 'ok' ? undefined : l?.reason,
         live_as_of: l?.as_of,
-        live: l?.status === 'ok' ? l.data : null,
+        live,
+        // D457 — when the branch answered ok, its live deploy_version wins over
+        // a stale row in licence_deployments.last_version.
+        version_display,
       };
     }),
     // COVERAGE IS OVER THE BRANCHES HQ ACTUALLY ASKED, not over the registry.
