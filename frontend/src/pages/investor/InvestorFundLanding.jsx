@@ -59,12 +59,13 @@ function FundDetail({ fund }) {
     Promise.all([
       settle(api.fundsLpsList(fund.id).then((r) => r?.items || [])
         .catch(() => api.fundsLpPortal().then((r) => (r?.lps || r?.items || []).filter((lp) => String(lp.fund_id) === String(fund.id))))),
-      settle(api.capitalCalls().then((r) => {
-        // `api.capitalCalls` already swallows its own failure into `[]`
-        // (lib/api.js), so an unreadable ledger cannot be told from an empty
-        // one here. A non-array reply is the one signal left.
-        if (!Array.isArray(r) && !Array.isArray(r?.items)) throw new Error('unreadable');
-        return (Array.isArray(r) ? r : r.items).filter((call) => String(call.fund_id) === String(fund.id));
+      settle(api.listCapitalCalls().then((r) => {
+        // D370: the live ledger (capital.ts GET /calls), which now answers the
+        // GP of record with every call on their fund and names each call's
+        // `fund_id`. This read `api.capitalCalls`, whose /legalcap route threw
+        // on every call, so the fund's calls always read as none.
+        if (!Array.isArray(r)) throw new Error('unreadable');
+        return r.filter((call) => String(call.fund_id) === String(fund.id));
       })),
       settle(api.fundsReportPeriods(fund.id).then((r) => r?.items || r?.periods || [])),
     ]).then(([lps, calls, periods]) => setDetail({ lps, calls, periods }));

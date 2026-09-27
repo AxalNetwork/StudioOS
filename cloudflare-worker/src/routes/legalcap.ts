@@ -1,4 +1,6 @@
 import { Hono } from 'hono';
+import { lpMembershipScope, fundGpScope } from '../services/tenancyScope';
+import { claimLpRowsByEmail } from '../services/lpClaim';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, requireApprovedKyc } from '../auth';
@@ -508,15 +510,35 @@ legalcap.get('/capital/lp-portal', async (c) => {
   }));
 });
 
-// Admin overview of all calls
+// Capital calls, as the table actually is (D370).
+//
+// This read named `deal_id`, `syndicate_id` and `lp_responses` — columns the
+// production `capital_calls` does not have (the winning shape is the LP
+// ledger's: `limited_partner_id`, `amount`, `status`, `due_date`,
+// `paid_date`). So it threw on every call, `api.capitalCalls` swallowed the
+// throw into `[]`, and the pages that read it showed "no capital calls" for
+// funds that had them. It now reads the real columns, scoped the way the LP
+// ledger (`capital.ts` GET /calls) scopes them: an admin sees every call;
+// anyone else the calls on their own LP rows and on funds they are general
+// partner of record for. Fixed without that scope it would have handed every
+// investor every LP's calls on the platform.
 legalcap.get('/capital/calls', async (c) => {
   const user = await requireAuth(c);
   if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
-  await ensureSchema(c.env);
-  const sql = getSQL(c.env);
-  const calls = await sql`SELECT cc.*, p.name as deal_name, s.name as syndicate_name FROM capital_calls cc LEFT JOIN projects p ON p.id = cc.deal_id LEFT JOIN syndicates s ON s.id = cc.syndicate_id ORDER BY cc.created_at DESC LIMIT 100`;
-  await sql.end();
-  return c.json((calls as any[]).map(c => ({ ...c, lp_responses: safeJson(c.lp_responses, {}) })));
+  // Reaching an LP row by email converts it to an account link, as on every
+  // other route that grants by email (lp_membership_consolidated pins it).
+  await claimLpRowsByEmail(c.env, Number(user.id), (user as any).email);
+  const lp = lpMembershipScope(user as any, 'lp');
+  const gp = fundGpScope(user as any, null, 'f');
+  const rows = await c.env.DB.prepare(
+    `SELECT cc.*, lp.fund_id AS fund_id, lp.name AS lp_name, f.name AS fund_name
+       FROM capital_calls cc
+       JOIN limited_partners lp ON lp.id = cc.limited_partner_id
+       LEFT JOIN vc_funds f ON f.id = lp.fund_id
+      WHERE (${lp.sql} OR ${gp.sql})
+      ORDER BY cc.created_at DESC LIMIT 100`,
+  ).bind(...lp.binds, ...gp.binds).all<any>();
+  return c.json(rows.results || []);
 });
 
 // ============================================================

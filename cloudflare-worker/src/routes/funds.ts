@@ -19,7 +19,8 @@ import { Distributions } from '../models/distributions';
 import { logActivity } from './partnernet';
 import { clampLimit } from '../util/pagination';
 import { ensureFundGpColumns } from '../services/fundGpSchema';
-import { lpMembershipScope, lpSelfScope } from '../services/tenancyScope';
+import { lpMembershipScope, lpSelfScope, fundGpScope } from '../services/tenancyScope';
+import { refuse } from '../util/refusal';
 import { claimLpRowsByEmail } from '../services/lpClaim';
 import {
   rollUpFundRow, totalFundRollups, FUND_METRIC_UNAVAILABLE,
@@ -42,12 +43,46 @@ const parseJson = <T,>(raw: unknown, fallback: T): T => {
 };
 
 
+/**
+ * The funds a caller may see in a list or a rollup (D370).
+ *
+ * The list, the family analytics and the syndication queue answered EVERY
+ * signed-in role with every fund on the platform — `SELECT *`, so a founder
+ * could read each fund's size, deployed capital and GP email. Now: an admin
+ * sees all of them; anyone else sees the funds they are general partner of
+ * record for, and (for the list only) the funds they hold an LP position in.
+ * Both arms are the shared predicates every other fund surface already uses,
+ * so this adds no third definition of "your fund". The GP arm carries no
+ * company clause here: a list is a read of funds the caller already runs,
+ * and the operating gate (`requireFundGp`) still scopes every write.
+ */
+function visibleFundsScope(user: any, opts: { includeLp: boolean }): { sql: string; binds: Array<string | number> } {
+  const gp = fundGpScope(user, null, 'f');
+  if (!opts.includeLp) return gp;
+  const lp = lpMembershipScope(user, 'lpv');
+  return {
+    sql: `(${gp.sql} OR EXISTS (SELECT 1 FROM limited_partners lpv WHERE lpv.fund_id = f.id AND ${lp.sql}))`,
+    binds: [...gp.binds, ...lp.binds],
+  };
+}
+
 // ---------- vc_funds CRUD ----------
 funds.get('/', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   const status = c.req.query('status') || undefined;
-  const list = await Funds.list(c.env, status);
-  return c.json({ ok: true, items: list.results || [] });
+  if (user.role === 'admin') {
+    const list = await Funds.list(c.env, status);
+    return c.json({ ok: true, items: list.results || [] });
+  }
+  await claimLpRowsByEmail(c.env, Number(user.id), (user as any).email);
+  const scope = visibleFundsScope(user, { includeLp: true });
+  const where = [scope.sql];
+  const binds = [...scope.binds];
+  if (status) { where.push('f.status = ?'); binds.push(status); }
+  const rows = await c.env.DB.prepare(
+    `SELECT f.* FROM vc_funds f WHERE ${where.join(' AND ')} ORDER BY f.created_at DESC`,
+  ).bind(...binds).all();
+  return c.json({ ok: true, items: rows.results || [] });
 });
 
 funds.get('/lp-portal', async (c) => {
@@ -185,7 +220,13 @@ function fundFacts(rows: any[]) {
 
 funds.get('/syndication', async (c) => {
   // Lightweight co-invest opportunities: open marketplace listings + pending capital calls.
-  await requireAuth(c);
+  const user = await requireAuth(c);
+  // D370: investors, partners and admins — the roles a co-invest listing is
+  // for. The pending CALLS carry fund money in their payloads, so they are
+  // narrowed further below to the funds the caller is GP of record for.
+  if (!['admin', 'investor', 'partner'].includes(String(user.role))) {
+    return refuse(c, 403, { code: 'investor_access_required', message: 'Co-invest listings are for investors, partners and the platform team.' });
+  }
   // T17 — clamp ?limit=N (default 20, max 50) for both lists.
   const limit = clampLimit(c.req.query('limit'), 20, 50);
   const listings = await c.env.DB.prepare(
@@ -196,14 +237,19 @@ funds.get('/syndication', async (c) => {
       WHERE l.status = 'open' AND l.shares > 0
       ORDER BY l.created_at DESC LIMIT ?`
   ).bind(limit).all().catch(() => ({ results: [] }));
+  const gp = fundGpScope(user as any, null, 'f');
   const pendingCalls = await c.env.DB.prepare(
     // `queue_jobs` has no fund_id column — `Jobs.enqueue` puts it in the
     // payload. Naming it directly threw, and the catch below made this list
     // permanently empty, so no pending capital call ever surfaced here.
+    //
+    // D370: only calls on funds the caller runs (every call, for an admin —
+    // `fundGpScope` is unscoped for them). A queued call names its amount.
     `SELECT id, json_extract(payload, '$.fund_id') AS fund_id, payload, created_at FROM queue_jobs
       WHERE job_type IN ('capital_call', 'capital_call_notice') AND status IN ('pending','processing')
+        AND json_extract(payload, '$.fund_id') IN (SELECT f.id FROM vc_funds f WHERE ${gp.sql})
       ORDER BY created_at DESC LIMIT ?`
-  ).bind(limit).all().catch(() => ({ results: [] }));
+  ).bind(...gp.binds, limit).all().catch(() => ({ results: [] }));
   return c.json({
     ok: true,
     co_invest_listings: listings.results || [],
@@ -238,16 +284,22 @@ const FUND_ROLLUP_SQL = (where: string) =>
 
 // The two sums are independent, so they are correlated subqueries rather than
 // joins, which would multiply one fund's rows by the other's row count.
-async function rollUpFunds(env: Env, fundId?: number): Promise<FundRollup[]> {
-  const stmt = env.DB.prepare(FUND_ROLLUP_SQL(fundId ? 'WHERE f.id = ?' : ''));
-  const rows = await (fundId ? stmt.bind(fundId) : stmt).all<FundRollupRow>();
+async function rollUpFunds(env: Env, fundId?: number, scope?: { sql: string; binds: Array<string | number> }): Promise<FundRollup[]> {
+  const where: string[] = [];
+  const binds: Array<string | number> = [];
+  if (fundId) { where.push('f.id = ?'); binds.push(fundId); }
+  if (scope) { where.push(scope.sql); binds.push(...scope.binds); }
+  const stmt = env.DB.prepare(FUND_ROLLUP_SQL(where.length ? `WHERE ${where.join(' AND ')}` : ''));
+  const rows = await (binds.length ? stmt.bind(...binds) : stmt).all<FundRollupRow>();
   return (rows.results || []).map(rollUpFundRow);
 }
 
 // Family rollup. Registered before /:id so `analytics` is not read as an id.
 funds.get('/analytics', async (c) => {
-  await requireAuth(c);
-  const items = await rollUpFunds(c.env);
+  // D370: the family rollup is the funds the caller runs (all of them, for an
+  // admin). An LP's view of a fund is their own position, on /lp-portal.
+  const user = await requireAuth(c);
+  const items = await rollUpFunds(c.env, undefined, visibleFundsScope(user, { includeLp: false }));
   return c.json({
     ok: true,
     items,
@@ -257,9 +309,11 @@ funds.get('/analytics', async (c) => {
 });
 
 funds.get('/:id/analytics', async (c) => {
-  await requireAuth(c);
   const fundId = parseInt(c.req.param('id'), 10);
   if (!fundId) return c.json({ error: 'invalid fund id' }, 400);
+  // D370: the fund's GP of record, or an admin — the same gate as every GP
+  // control. It was any signed-in role.
+  await requireFundGp(c, fundId);
   const [fund] = await rollUpFunds(c.env, fundId);
   if (!fund) return c.json({ error: 'Fund not found' }, 404);
   return c.json({ ok: true, fund, unavailable: FUND_METRIC_UNAVAILABLE });
@@ -267,8 +321,11 @@ funds.get('/:id/analytics', async (c) => {
 
 // /funds/:id MUST come AFTER all /funds/<word> handlers above.
 funds.get('/:id', async (c) => {
-  await requireAuth(c);
+  // D370: the fund's GP of record, or an admin. This returned the whole row —
+  // size, deployed capital, the GP's email — plus the LP totals to any
+  // signed-in role. An LP's own view of the fund is /lp-portal.
   const id = parseInt(c.req.param('id'), 10);
+  await requireFundGp(c, id);
   const f = await Funds.getById(c.env, id);
   if (!f) return c.json({ error: 'not found' }, 404);
   // Compute LP count + invested totals at read time — denormalized lp_count
@@ -458,6 +515,19 @@ funds.post('/', async (c) => {
     (f as any).gp_user_id = creator.id;
     (f as any).company_id = companyId;
   }
+  // NO GP OF RECORD, NO LPA (D370, the Fabric canvas's F10 rule). The LPA is
+  // the document a GP signs as fiduciary; generating one for a fund with no
+  // GP of record puts an agreement with nobody's name behind it into the LP
+  // record. An admin-created fund has none until a GP is named, so its LPA
+  // waits — the response says so, and regenerate-lpa is the door once named.
+  if (!(f as any).gp_user_id) {
+    return c.json({
+      ok: true,
+      fund: f,
+      lpa_status: 'blocked_no_gp',
+      lpa_reason: 'No LPA is drafted until the fund has a general partner of record.',
+    }, 201);
+  }
   // Auto-generate LPA via job queue (non-blocking).
   await enqueueJob(c.env, 'lpa_generation', { fund_id: f.id });
   return c.json({ ok: true, fund: f, lpa_status: 'enqueued' }, 201);
@@ -473,7 +543,13 @@ funds.patch('/:id', async (c) => {
 
 funds.post('/:id/regenerate-lpa', async (c) => {
   const id = parseInt(c.req.param('id'), 10);
-  await requireFundGp(c, id);
+  const { fund } = await requireFundGp(c, id);
+  if (!fund?.gp_user_id) {
+    return refuse(c, 409, {
+      code: 'no_gp_of_record',
+      message: 'Name the fund\'s general partner of record before an LPA is drafted.',
+    });
+  }
   // Clear any prior LPA doc reference so the worker re-generates.
   await c.env.DB.prepare(`UPDATE vc_funds SET lpa_doc_id = NULL WHERE id = ?`).bind(id).run();
   const job = await Jobs.enqueue(c.env, 'lpa_generation', { fund_id: id });

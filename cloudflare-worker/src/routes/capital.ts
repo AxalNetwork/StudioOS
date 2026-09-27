@@ -11,7 +11,9 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { lpMembershipScope } from '../services/tenancyScope';
+import { lpMembershipScope, fundGpScope } from '../services/tenancyScope';
+import { requireFundGp } from '../services/fundGpAccess';
+import { refuse } from '../util/refusal';
 import { claimLpRowsByEmail } from '../services/lpClaim';
 import { requireAuth, canViewLpData } from '../auth';
 import { insertCapitalCall, insertCapitalCalls } from './_capital_call_writes';
@@ -221,90 +223,157 @@ capital.get('/calls', async (c) => {
   // could miss the other.
   await claimLpRowsByEmail(c.env, Number(__u.id), (__u as any).email);
   const scope = lpMembershipScope(__u as any);
-  const where: string[] = [scope.sql];
-  const binds: Array<string | number> = [...scope.binds];
+  // THE GP OF RECORD SEES THEIR FUND'S CALLS (D370). This read was the LP's
+  // alone, so a GP asking "what has my fund called?" got only the calls on
+  // their OWN LP rows — and the pages that wanted the GP view read the dead
+  // /legalcap shape instead, which always came back empty. The GP arm is the
+  // same predicate the fund gate uses (`fundGpScope`, no company arm: this is
+  // a read of calls the GP already issued, across whichever firm they ran
+  // them under). An admin is unscoped on both arms.
+  const gp = fundGpScope(__u as any, null, 'f');
+  const where: string[] = [`(${scope.sql} OR ${gp.sql})`];
+  const binds: Array<string | number> = [...scope.binds, ...gp.binds];
   if (status) { where.push('cc.status = ?'); binds.push(status); }
   const rows = await sql.unsafe(
-    `SELECT cc.* FROM capital_calls cc
+    `SELECT cc.*, lp.fund_id AS fund_id, f.gp_user_id AS fund_gp_user_id FROM capital_calls cc
        JOIN limited_partners lp ON lp.id = cc.limited_partner_id
+       LEFT JOIN vc_funds f ON f.id = lp.fund_id
       WHERE ${where.join(' AND ')}
       ORDER BY cc.created_at DESC`,
     binds,
   );
   await sql.end();
-  return c.json(rows.map(callDto));
+  // `can_record`: may THIS caller record the call paid? The page draws the
+  // button from it rather than guessing from the role, because only the
+  // server knows whose fund each call is on. The GP's user id itself is not
+  // returned. (The pay route re-checks everything; this only decides what to
+  // offer.)
+  const isAdminCaller = __u.role === 'admin';
+  return c.json(rows.map((row: any) => {
+    const { fund_gp_user_id, ...rest } = row;
+    return {
+      ...callDto(rest),
+      can_record: isAdminCaller || (fund_gp_user_id != null && Number(fund_gp_user_id) === Number(__u.id)),
+    };
+  }));
 });
 
+/**
+ * Record a capital call as paid (D370).
+ *
+ * WHO. The fund's general partner of record, or an admin — never the LP.
+ * This used to be the LP's own button, and it moves money on the ledger:
+ * `limited_partners.invested_amount` and `vc_funds.deployed_capital` both
+ * grow by the call's amount. An LP saying "I paid" is a claim; the GP seeing
+ * the wire arrive is the record. The LP who owns the call gets a 403 that
+ * says so (they already know the call exists, so there is nothing to hide);
+ * anyone else gets the fund gate's own answer — 402 below the institutional
+ * tier, 404 otherwise — so the route is no oracle for which calls exist.
+ *
+ * ONCE. The three writes are one D1 batch, which runs as one transaction, and
+ * every one of them is conditional on the call still being unpaid. The two
+ * credits come FIRST and test the call's status in their own WHERE; the
+ * status flip comes last. Two concurrent requests therefore serialize: the
+ * first batch credits and flips, the second finds the call paid in all three
+ * WHEREs and changes nothing. The old handler read the status, then ran three
+ * separate unconditional UPDATEs, so two presses in flight both passed the
+ * read and both credited. The amount is read inside each statement, not
+ * carried from the earlier SELECT, so no stale figure can be written.
+ */
 capital.post('/calls/:id/pay', async (c) => {
   const __u = await requireAuth(c);
-  if (!canViewLpData(__u)) return c.json({ error: "Forbidden: investor access required" }, 403);
-  const id = parseInt(c.req.param('id'));
-  const sql = getSQL(c.env);
-  const calls = await sql`SELECT * FROM capital_calls WHERE id = ${id}`;
-  if (calls.length === 0) { await sql.end(); return c.json({ error: 'Capital call not found' }, 404); }
-  const call = calls[0];
-  // IDOR guard: a non-admin investor may only act on a capital call that belongs
-  // to one of their own LP records. Respond 404 (not 403) so a non-owner cannot
-  // probe which call ids exist.
+  const id = parseInt(c.req.param('id'), 10);
+  if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Capital call not found' }, 404);
+  const call = await c.env.DB.prepare(
+    `SELECT cc.*, lp.fund_id AS fund_id, lp.user_id AS lp_user_id
+       FROM capital_calls cc
+       JOIN limited_partners lp ON lp.id = cc.limited_partner_id
+      WHERE cc.id = ?`,
+  ).bind(id).first<any>();
+  if (!call) return c.json({ error: 'Capital call not found' }, 404);
+
   if (__u.role !== 'admin') {
-    // Same membership predicate as the reads above. Paying a call is the one
-    // LP action with money attached, so a legacy LP being told their own call
-    // does not exist is the sharpest form of the split this consolidates.
+    // The LP who owns this call, and is not also its fund's GP, is told why.
     await claimLpRowsByEmail(c.env, Number(__u.id), (__u as any).email);
     const scope = lpMembershipScope(__u as any);
-    const owned = await sql.unsafe(
-      `SELECT 1 FROM limited_partners lp WHERE lp.id = ? AND ${scope.sql} LIMIT 1`,
-      [call.limited_partner_id, ...scope.binds],
-    );
-    if (owned.length === 0) { await sql.end(); return c.json({ error: 'Capital call not found' }, 404); }
+    const owns = await c.env.DB.prepare(
+      `SELECT 1 AS yes FROM limited_partners lp WHERE lp.id = ? AND ${scope.sql} LIMIT 1`,
+    ).bind(call.limited_partner_id, ...scope.binds).first<{ yes: number }>();
+    const gp = fundGpScope(__u as any, null, 'f');
+    const isGp = await c.env.DB.prepare(
+      `SELECT 1 AS yes FROM vc_funds f WHERE f.id = ? AND ${gp.sql} LIMIT 1`,
+    ).bind(call.fund_id, ...gp.binds).first<{ yes: number }>();
+    if (owns && !isGp) {
+      return refuse(c, 403, {
+        code: 'gp_records_payment',
+        message: "The fund's general partner records a payment when the wire arrives. Your call stays open until they do.",
+      });
+    }
+    // Neither the LP nor the GP: the same 404 as a call that does not exist.
+    // Deciding this BEFORE the fund gate matters — its tier check answers 402
+    // whatever the fund, so reaching it here would answer 402 for a call that
+    // exists and 404 for one that does not, and count the platform's calls.
+    if (!isGp) return c.json({ error: 'Capital call not found' }, 404);
+    // The GP of record: tier and company, the one gate every GP control uses.
+    try {
+      await requireFundGp(c, Number(call.fund_id));
+    } catch (e) {
+      if (e instanceof Response) return e;
+      throw e;
+    }
   }
-  if (call.status === 'paid') { await sql.end(); return c.json({ status: 'paid', call: callDto(call) }); }
 
-  await sql`UPDATE capital_calls SET status = 'paid', paid_date = date('now') WHERE id = ${id}`;
+  const results = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE limited_partners
+          SET invested_amount = invested_amount + (SELECT amount FROM capital_calls WHERE id = ?),
+              updated_at = datetime('now')
+        WHERE id = ?
+          AND EXISTS (SELECT 1 FROM capital_calls WHERE id = ? AND status <> 'paid')`,
+    ).bind(id, call.limited_partner_id, id),
+    c.env.DB.prepare(
+      `UPDATE vc_funds
+          SET deployed_capital = deployed_capital + (SELECT amount FROM capital_calls WHERE id = ?),
+              updated_at = datetime('now')
+        WHERE id = ?
+          AND EXISTS (SELECT 1 FROM capital_calls WHERE id = ? AND status <> 'paid')`,
+    ).bind(id, call.fund_id, id),
+    c.env.DB.prepare(
+      `UPDATE capital_calls SET status = 'paid', paid_date = date('now')
+        WHERE id = ? AND status <> 'paid'`,
+    ).bind(id),
+  ]);
+  const recorded = Number((results[2] as any)?.meta?.changes ?? 0) === 1;
 
-  const lpId = call.limited_partner_id;
-  if (lpId) {
-    await sql`
-      UPDATE limited_partners
-      SET invested_amount = invested_amount + ${call.amount}, updated_at = datetime('now')
-      WHERE id = ${lpId}
-    `;
-    await sql`
-      UPDATE vc_funds
-      SET deployed_capital = deployed_capital + ${call.amount}, updated_at = datetime('now')
-      WHERE id = (SELECT fund_id FROM limited_partners WHERE id = ${lpId})
-    `;
+  const updated = await c.env.DB.prepare('SELECT * FROM capital_calls WHERE id = ?').bind(id).first<any>();
+  if (!recorded) {
+    // Already paid — by an earlier press or a concurrent one. Nothing moved.
+    return c.json({ status: 'paid', already_paid: true, call: callDto(updated) });
   }
-
-  const [updated] = await sql`SELECT * FROM capital_calls WHERE id = ${id}`;
 
   try {
-    if (lpId) {
-      const lpRow = await sql`SELECT user_id FROM limited_partners WHERE id = ${lpId}`;
-      const lpUserId = lpRow[0]?.user_id;
-      if (lpUserId) {
-        const { notify } = await import('../services/notify');
-        await notify(c.env, {
-          userId: lpUserId,
-          type: 'capital_call_paid',
-          title: `Capital call marked paid: $${updated.amount}`,
-          body: 'Thanks — your capital call has been recorded as paid.',
-          link: '/capital',
-          payload: { call_id: updated.id, amount: updated.amount },
-          channels: ['in_app', 'email'],
-        });
-      }
+    if (call.lp_user_id) {
+      const { notify } = await import('../services/notify');
+      await notify(c.env, {
+        userId: call.lp_user_id,
+        type: 'capital_call_paid',
+        title: `Capital call recorded as paid: $${updated.amount}`,
+        body: "Your fund's general partner has recorded this capital call as paid.",
+        link: '/capital',
+        payload: { call_id: updated.id, amount: updated.amount },
+        channels: ['in_app', 'email'],
+      });
     }
   } catch (e) { console.warn('[capital] notify capital_call_paid failed', e); }
 
-  await sql.end();
   return c.json({ status: 'paid', call: callDto(updated) });
 });
 
 capital.post('/capitalCall', async (c) => {
   const __u = await requireAuth(c);
   // Task #9 — issuing a capital call to all active investors at once is a
-  // fund/GP operation. Admin-only; investors keep read + pay-own-call access.
+  // fund/GP operation. Admin-only; investors keep read access (recording a
+  // payment is the GP's, D370).
   if (__u.role !== 'admin') return c.json({ error: "Forbidden: admin access required" }, 403);
   const data = await c.req.json();
   const sql = getSQL(c.env);
