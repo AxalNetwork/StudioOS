@@ -3377,6 +3377,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ template_slug: templateSlug }),
     }),
+  licenceContractSend: (uid, contractUid) =>
+    request(
+      `/admin/licences/${encodeURIComponent(uid)}/contract/${encodeURIComponent(contractUid)}/send`,
+      { method: 'POST' },
+    ),
   // D111 — H5's statements ledger. `draw` computes owed from what the branch
   // reported; `update` is the HQ-entered half (paid, disputed, status), which
   // nothing reconciles against Stripe (D.8).
