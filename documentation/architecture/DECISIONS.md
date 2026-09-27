@@ -30933,6 +30933,113 @@ the Use of Funds burn can still read a failed query as "none recorded";
 `routes/contacts.ts`' pro-rata `post_round_stake_pct` inputs carry `|| 0`
 (PR 5 wires pro-rata and meets the second).
 
+## D361
+
+**The 83(b) filing record is stored, every date in it is the founder's, and
+Section83bPage retires into the Lab tracker.** Wave 8, Session 8, item 2.
+Migration 310. No new route and no new `api.js` method: the existing PATCH
+body gains fields.
+
+**The defect.** The canvas draws a filing record (method, tracking number,
+IRS service center, company acknowledgment, tax-return copy) that
+`section_83b_trackers` did not store. "Mark as filed" sent
+`new Date().toISOString()` as `mailed_at`, so the moment of the click was
+recorded as the postmark of an IRS filing. The receipt upload did the same
+when no date was on record. D360 recorded both and left them for this item.
+
+**What changed.**
+- **Migration 310** adds five nullable `TEXT` columns: `filing_method`,
+  `tracking_number`, `irs_service_center`, `company_ack_at` and
+  `tax_return_copy_at`. They use additive `ALTER`s only and stand alone.
+  `ensureSection83bSchema` carries the same five as its D235 safety net, and
+  the tracker DTO returns them.
+- **`validateFilingPatch`** (`services/section83b.ts`) gates the PATCH:
+  - `mailed_on`, `company_ack_on` and `tax_return_copy_on` must be real
+    calendar dates. Each must fall no earlier than the grant date and no later
+    than today plus one day. The extra day is there because "today" is UTC
+    and a founder east of UTC is already on tomorrow's date.
+  - `filing_method` must be one of `certified_mail`, `private_delivery` or
+    `irs_online`. The value records what the founder did. No option is a
+    default and none is suggested.
+  - The tracking number is limited to 40 letters, digits, spaces or hyphens.
+    The service center is limited to 120 characters on one line.
+  - `confirmed` (IRS delivery, the green card) is refused until a mailing
+    date is on record.
+  - Each refusal is `{ error: code, message }` with our own sentence.
+  - An unrelated PATCH (notes, a receipt id) leaves every recorded field
+    where it was.
+  - The pre-D361 `mailed_at` field is still accepted and is held to the same
+    bounds.
+- **The receipt upload no longer writes a mailing date.** A receipt proves a
+  mailing happened, so a pending tracker becomes `mailed`, but the upload
+  time is not the postmark. `mailed_at` stays null until the founder records
+  it. `legal_83b.test.ts` asserted the old stamp; that assertion now pins
+  its absence.
+- **The Lab page** (`SpinoutLab83bPage.jsx`):
+  - "Mark as filed" (or "Edit filing record") opens a form. It needs a
+    typed date and a chosen method, and offers optional tracking number and
+    service center fields.
+  - The company's acknowledgment and the tax-return copy are dated the same
+    way, from their rows in the submission record.
+  - "Confirm IRS delivery" appears only once a mailing date is on record.
+  - The timeline, proof coverage and checklist read the new columns. The
+    checklist's `copy_company` item ticks on `company_ack_at`, or on the
+    `confirmed` status that ticked it before.
+  - Operator assist and deadline reminders render `Unrecorded` with their
+    reasons. Operator review is an owner decision, and no Worker job sends
+    83(b) reminders.
+- **Section83bPage is deleted.** The Legal Engine's "Equity Elections" card
+  (`/raise/legal-engine/equity`) embeds the Lab page instead.
+  - In `embedded` mode the page drops the Lab header and gutters, because
+    the card has its own.
+  - The card's Studio gate is unchanged.
+  - Route by route, the old page's jobs were: listing trackers, creating one
+    with a project picker, uploading a receipt, marking it mailed, and
+    confirming delivery. The Lab page already did all of them for the
+    founder's startup. The old page's project picker is not carried over:
+    #181 removed every in-body project picker on the decision "one company,
+    one startup", the sidebar's CompanySwitcher is the single writer of
+    scope, and `check-inline-project-pickers` refuses a new one. A switcher
+    added in this item's first draft was caught by that guard and removed.
+  - The old page read no query string.
+  - `PageExplainer`'s `section_83b` entry stays, because the Settings page
+    lists it.
+- **`/incorporate/83b`** stays a `<Navigate replace>`. It now sends Lab
+  members and admins to `/spinout-lab/83b` and every other founder to
+  `/raise/legal-engine/equity`.
+  - Until now it sent everyone to `/spinout-lab/83b`, whose `labRoles(['admin'])`
+    guard refused a founder outside the Lab.
+  - The gap map proposed widening that guard instead. That was not done:
+    widening it to every founder would let a founder without the Studio plan
+    past the Legal Engine card's Studio gate, and that is the owner's
+    decision, not this item's.
+  - No sidebar row points at `/incorporate/83b`.
+- **The Legal Engine's status pill** was hard-coded to "Not set up" on all
+  four cards, even for a founder with a filed election. It now renders
+  `Unrecorded` with its reason, because the hub reads no tool's records.
+- **ROUTE_MAP row "83b Election Tracker"** now names the card, the redirect's
+  two targets and the filing record. `PROFILE_ROUTING.md` was regenerated.
+
+**Guards.**
+- `cloudflare-worker/test/legal_83b.test.ts` goes from 11 tests to 17:
+  - five D361 tests for the PATCH;
+  - one pinning each runtime `ADD COLUMN` to a migration.
+    `check-runtime-schema-declared` compares object names, not columns, so
+    it passed with migration 310 deleted. This test fails in that case.
+- `frontend/test/spinout_83b_filing_record_d361.test.mjs` adds 8 tests.
+  - The page's filing methods are checked against the Worker's
+    `FILING_METHODS`, read from its source, not against a literal list.
+- Mutation-checked both ways: 22 of 22 caught (11 in the Worker, 10 in the
+  page, 1 migration deletion). Each needed a non-zero exit and a `not ok`
+  line, and every file was restored and checked by sha256.
+
+**Not in this item.**
+- The 30-day deadline with no weekend roll is still a question for counsel.
+- The dev FastAPI's `_tracker_dto` does not carry the five fields. It is
+  dev-only and not ported, per CLAUDE.md.
+- The Legal Engine's jurisdiction select is still local-only and
+  presentational, as its own TODO says.
+
 ## D380
 
 **The Spin-Out Lab honesty sweep: the seat count reads `/brief`'s `places`,
@@ -32376,3 +32483,18 @@ the enrolment batch dropping the `auth_totp` write.
 
 No migration, no route, no `api.js` method, no `frontend/src` change, so
 `docs/` is untouched.
+
+## D440
+
+**HQ-held Studio and My Licence stop pointing at pages that refuse, and stop printing zero for a seat or a host that was not confirmed.** No branch is provisioned (`infra/branches/` holds only the example), and every `/api/branch/*` handler calls `requireBranchTier`, so a card that opens `/branch/*` on HQ renders Unreadable. S20's rule is that those pages are never linked from the HQ-held shell.
+
+**What changed.**
+
+- `AdminStudioOverview` reads each card's Open target from `SIDEBAR_GROUPS`: `admin` off a branch (the S20 row — Accounts, Approvals, Programs, Community, Contracts, Insights, Settings), `branch_admin` on a branch. A label with no row is not given a path invented on the card. The figures stay unrecorded off a branch; only the doors moved. The Settings card's sentence names the branch Settings page as where the HQ-owned-row count is derived, because off a branch Open is My Licence.
+- My Licence's freeze appeal stays a link to `/branch/approvals` on a branch, where that page answers. Off a branch it does not link there. The page says there is no appeal from here, with the reason: that page refuses on HQ, and nothing on HQ records a licence appeal from the holder.
+- A seat key the licence copy does not carry renders Not recorded. A measured zero stays zero.
+- Domain removal asks for the bound hostname to be typed. The button stays disabled until the typed value equals the bound host, and `myDomainRemove` sends that string in the DELETE body. `DELETE /api/licence/mine/domain` ignores the body today. The route is Session 5's HQ arm and is not edited here. Until it refuses a hostname that does not match the bound one, a client that skips the confirm can still delete.
+
+**No migration. No new route.** `myDomainRemove` already existed; the body is new and the route still mounts it. No live branch exercised this. `docs/` was rebuilt because `frontend/src` moved.
+
+**Mutations: 5 run, 5 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: the card target hard-coded to `/branch/accounts`; a missing seat returned as `0`; any string accepted as the hostname confirm; the HQ-held appeal forced down the branch link; Remove calling `myDomainRemove()` with no argument on the click.
