@@ -31530,6 +31530,114 @@ They included:
 - an invented one-hour end, no escaping, and a bad start written;
 - Sessions' own builder restored.
 
+## D394
+
+**Partner Home P2, "Where does the firm stand today?": built over the
+existing Delivery and Pipeline reads, with the operating brief as a new draft
+surface, tested, and NOT mounted.** Session 11, item 5. No migration and no
+new `api.js` method. There is one additive field on an existing Worker read,
+and one new `DRAFT_SURFACES` entry.
+
+**Owner-gated, and the gate is named.** `/studio` renders
+`PartnerStudioHome` and stays exactly as it is. The gap map lists it as
+do-not-touch, and the ROUTE_MAP `/studio` row agrees. **The missing decision
+is the owner's sign-off on P2.** If it comes, Session 3 mounts the default
+export of `pages/partner/PartnerHomeP2.jsx` in place of the partner branch
+of `/studio`; nothing in the file changes for it. A test pins that nothing
+imports it today, so the mount is a deliberate, visible change and not a
+drift.
+
+**The five tiles, each from a store that already exists.**
+- *Active engagements (embedded / project).* `GET /partner/delivery/board`:
+  live rows (not delivered, reviewed, invoiced or cancelled, and no revoked
+  seat), split by `mode`.
+- *Due this week.* The same read's new `due_next_7_days`, and per row
+  `milestones_due_7d`: open milestones due today or in the next six days.
+  They are compared as calendar dates in JS over rows the handler already
+  loaded. An undated milestone is not due this week, an overdue one is not
+  "due", and another firm's never counts. The gap map had this tile as
+  inferred; it is now a count.
+- *At risk.* The board's `needs_attention`, with the unrated count beside it
+  so a quiet board does not read as a healthy one.
+- *Recurring.* `GET /partner/pipeline/retainers`: `mrr_cents` (formatted from
+  cents), plus the retainers renewing within sixty days. No stated amount is
+  Not recorded, with the worker's own note.
+- *Over capacity.* `GET /partner/delivery/capacity`'s `over_committed_count`.
+  It is null until the firm states a cap (migration 230), and then reads Not
+  recorded with the worker's `cap_note`, never "0 over".
+
+**The operating brief (`home/brief` in `research.ts`'s `DRAFT_SURFACES`).**
+It is a `ZoneDraft` band run on a click, never on mount.
+- *Scope.* The gather reads the caller's own firm through `users.partner_id`,
+  like every partner surface. A sign-in with no firm gets `nothing_to_draft`
+  and the model is never reached.
+- *Material.* Each live engagement is handed over with what falls due, what
+  is overdue, open blockers, a recorded scope drift, and whether it holds an
+  embedded seat. An engagement with nothing recorded is handed over as
+  "unrated, not healthy".
+- *Voice.* The artboard's sample reads as a verdict ("the engagement to
+  watch", "one of the two has to move"); that voice is not ported. The
+  instruction asks for what the record shows and forbids telling the firm
+  what to do, and neither the page nor the prompt uses the word
+  "recommendation".
+- *Seats.* A seat is described to the model, and on the page, "as recorded
+  by the firm".
+
+**The feed.** At most six lines, built from the same three reads, each with
+its receipt and a link to the zone where it is acted on. The kinds are: at
+risk (with the worker's health reasons), milestones due this week, a person
+over a stated cap, renewals within sixty days, and embedded seats.
+
+**The grant chip is worded as recorded by the firm.** It reads "Scope
+recorded by the firm: Board, KPIs", never "Granted by <founder>".
+`engagement_seats` is created, re-scoped and revoked by the partner
+(`partner_delivery.ts`), so a chip in the founder's voice would state a
+consent nothing recorded. The founder-side grant is one of the deferred
+decisions below.
+
+**Not drawn, and said so on the page and in the rail:**
+- an inbound seam ("From Halverton · 2h ago"), because no message record
+  feeds this page;
+- "proposal opened 3×", because `opened_at` is the client's to set and
+  nothing sets it;
+- a second ask box, because asking Eadwyn lives in the rail.
+
+**States.** Role preview withholds every read and says so; that is not an
+Unreadable state. A sign-in with no firm is `no_partner_profile` on the
+profile read (D390) and draws the no-firm card. A failed read is Unreadable
+on its own tiles, never a zero.
+
+**Deferred decisions, named rather than built (the gap map's list, as it
+touches this cluster):**
+- the advisor relationship book (AN1/AN3);
+- a founder-side seat grant;
+- the Partner | Advisor family switcher (a user holds one role);
+- Visibility impressions;
+- C3 materials;
+- C5 outcome consent;
+- the Expertise and Cohorts AI bands;
+- the founder-side ask and acknowledge flow for Cohorts Guidance.
+
+Each changes a store's shape or needs an owner decision, so none is built
+here.
+
+**Verification.** New tests: `cloudflare-worker/test/partner_home_p2_d394.test.ts`
+(6) and `frontend/test/partner_home_p2_d394.test.mjs` (8). The Worker test
+covers:
+- the seven-day window at both edges, and overdue, done, undated and
+  other-firm milestones excluded;
+- the brief scoped to the caller's firm (another firm's engagement never
+  reaches the prompt);
+- 409 with the model unreached for a sign-in with no firm;
+- the "recorded by the firm" wording.
+
+The frontend test drives `homeTiles` and `homeFeed` and renders every state.
+Mutations: 20 of 20 caught, each with a non-zero exit and a `not ok` line,
+restored from a sha256-checked snapshot. Two anchors were mis-written on the
+first pass (one matched twice, one matched nothing), so those mutations did
+not run; the anchors were corrected and both were then caught. They are
+counted once.
+
 ## D410
 
 **E-sign `/send` hardening: the signing link reaches only the recipient, a

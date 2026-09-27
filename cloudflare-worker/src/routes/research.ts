@@ -2090,6 +2090,73 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  // ── Session 11 · D394 ────────────────────────────────────────────────────
+  // THE PARTNER HOME'S OPERATING BRIEF (P2, "Where does the firm stand
+  // today?"). The artboard's band reads across the whole firm: what is due this
+  // week, what is at risk and why, who is over a stated cap, and what renews
+  // soon. It is one short passage the firm accepts, edits or discards — built
+  // for the P2 component, which is not mounted until the owner signs P2 off.
+  //
+  // VOICE. The artboard's sample reads like a verdict ("the engagement to
+  // watch", "one of the two has to move"). The instruction below asks for what
+  // the record shows and what falls due, and forbids telling the firm what to
+  // do: the brief states, the firm decides.
+  //
+  // SCOPED ON `users.partner_id` like every partner surface above: the caller's
+  // own firm, or nothing — and nothing is a 409, never a brief written from the
+  // model's own knowledge.
+  'home/brief': {
+    instruction: [
+      "Write today's operating brief for this firm in at most five sentences, from the lines below only.",
+      'Lead with what falls due in the next seven days and what is at risk, naming the client and the recorded reason for each.',
+      'Absent is not fine: an engagement with nothing recorded is unrated, an unassessed scope has not been cleared, and a missing capacity cap means nobody is over one. Say which; never fill it in.',
+      'State what the record shows. Do not tell the firm what to do, and add no fact, figure or name that is not in the lines.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT f.name AS client, n.title AS scope, r.renews_at AS renews_at,
+                h.scope_state AS scope_state,
+                (SELECT COUNT(*) FROM engagement_milestones m
+                  WHERE m.engagement_id = e.id AND m.completed_at IS NULL
+                    AND m.due_at IS NOT NULL AND m.due_at < date('now')) AS overdue,
+                (SELECT COUNT(*) FROM engagement_milestones m
+                  WHERE m.engagement_id = e.id AND m.completed_at IS NULL
+                    AND m.due_at IS NOT NULL AND m.due_at >= date('now')
+                    AND m.due_at <= date('now', '+6 days')) AS due_week,
+                (SELECT COUNT(*) FROM engagement_blockers b
+                  WHERE b.engagement_id = e.id AND b.cleared_at IS NULL) AS blockers,
+                (SELECT s.scope FROM engagement_seats s
+                  WHERE s.engagement_id = e.id AND s.revoked_at IS NULL
+                  ORDER BY s.granted_at DESC LIMIT 1) AS seat_scope
+           FROM engagements e
+           LEFT JOIN founder_needs n ON n.id = e.need_id
+           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN partner_retainers r ON r.engagement_id = e.id
+           LEFT JOIN partner_engagement_health h ON h.engagement_id = e.id
+          WHERE e.partner_id = ? AND e.cancelled_at IS NULL
+          ORDER BY e.created_at DESC LIMIT 100`
+      ).bind(me.partner_id).all<{
+        client: string | null; scope: string | null; renews_at: string | null; scope_state: string | null;
+        overdue: number; due_week: number; blockers: number; seat_scope: string | null;
+      }>();
+      return (rows.results || []).map((r) => {
+        const signals = [
+          r.due_week ? `${r.due_week} milestone(s) due in the next seven days` : '',
+          r.overdue ? `${r.overdue} milestone(s) past due` : '',
+          r.blockers ? `${r.blockers} open blocker(s)` : '',
+          r.scope_state === 'drift' ? 'scope recorded as drifting from the SOW' : '',
+        ].filter(Boolean);
+        return `${r.client || 'client not recorded'} — ${r.scope || 'scope not recorded'}; `
+          + `${r.seat_scope ? `embedded seat, scope as recorded by the firm: ${r.seat_scope}; ` : 'project; '}`
+          + `renews: ${r.renews_at ? String(r.renews_at).slice(0, 10) : 'no renewal date recorded'}; `
+          + `${signals.length ? signals.join('; ') : 'NOTHING RECORDED — unrated, not healthy'}`;
+      });
+    },
+  },
+
   'offers/audience-fit': {
     // The artboard: "For each stated exclusion, a short pass note a person can
     // send: the reason, and where relevant a named firm better suited. Points to
