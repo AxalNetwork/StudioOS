@@ -33075,3 +33075,69 @@ has been.
   `check-runtime-schema-declared`, `check-decision-ids`, `check-folder-docs`
   and `check-api-drift` exit 0. Root `npm run build`, then `check-docs-fresh
   --strict`, exits 0. No browser probe.
+
+## D462
+
+**Closing money and paper: recorded transfers, the closing checklist, and the
+packet index.** Wave 8, Session 17, item 3. Migration 335
+(`deal_transfers`; `deal_closing_checklists` + `deal_closing_checklist_items`).
+Six new `/api/deals/*` routes in `routes/deals.ts`.
+
+**Recorded transfers.** `deal_transfers` records a transfer OUT to a company —
+integer cents (never a float; the write refuses anything else), an external
+reference, a phone-verified flag (the artboard's own fraud note: email-only
+verification is how funds get defrauded), who recorded it and when.
+`capital_calls` remains the other direction (an LP paying IN). Recording is an
+operator's act (`requireRole('partner')`, which admits admin); the deal's
+investors read. `GET /deals/transfers` is the zone-wide read, scoped for an
+investor to the deals they were invited to or committed to — the same
+predicate as `scope=mine` — and registered ahead of `/deals/:id`.
+
+**An open condition refuses the wire.** `POST /deals/:id/transfers` counts the
+deal's open `ic_conditions` (migration 334) and answers 409
+`open_conditions_block_transfer` with the count and the sentence naming the
+commit room. There is no override on this route: the way through is marking
+the condition met or waived, which is the author-or-admin act D461 gates.
+This ordering — item 3 after item 2 — is the reason the conditions store
+exists.
+
+**The closing checklist.** One per deal (`UNIQUE(deal_id)`; a second apply is
+409 `closing_checklist_exists`), applied from one of the three closing
+templates (`safe`, `spa`, `subscription`, validated against an active
+`legal_templates` row). Items are `pending | done | blocked | skipped`, with
+who completed and when. THE DEFAULT ITEM SET IS THE OWNER'S CALL: applying a
+template creates the checklist and no items are seeded — the zone says so on
+screen, and this sentence is where the decision is named as missing (standing
+rule (c)). The diligence checklist stores (`dd_checklist_items`,
+`diligence_checklists`) are deliberately not borrowed: they belong to
+diligence, and the page says that too.
+
+**The packet index.** Export packet writes the index of the EXECUTED
+envelopes (`status = 'completed'` — never a signature ratio) from the reads
+the Closing zone already makes: document, deal, when it executed, and how many
+of its recipients signed. Disabled with the reason when the archive is
+unreadable or nothing is executed. The Closing strip's fourth tile is the
+artboard's "Funds moved", real now: the sum over the recorded transfers.
+
+### VERIFIED
+- `npm run test:frontend` exit 0: 3681 pass. `npm run test:worker` exit 1,
+  the one failure pre-existing on main (`capital_call_ledger.test.ts`,
+  Session 9's area; reported, untouched): 4577 tests, 4573 pass, 3 skipped.
+  New tests: `deal_closing_money` (8, worker) and
+  `investor_deals_closing_money` (4, frontend). Re-aimed at the built
+  behaviour: `investor_deals_id4` (the checklist drawn from its own store,
+  the ops live, Funds moved real, every read scoped), and the
+  `investor_deals_search_and_counts` and `profile_zone_actions` count maps
+  (closing counts gain `wires`; investor handlers 9 → 12, history kept).
+- 8 mutations, all caught on non-zero exit with a `not ok` line (unique
+  anchors, byte-change proven, sha256-checked restores): the conditions gate
+  removed, floats accepted, the investor scope dropped from the transfers
+  list, a second checklist applied, a default item seeded, the cents
+  conversion dropped, the operator gate dropped, the packet indexing
+  unexecuted paper.
+- Both typechecks, `check-sql-migrations`, `check-sqlite-dialect`,
+  `check-sql-prepare`, `check-timestamp-comparisons`,
+  `check-runtime-schema-declared`, `check-decision-ids`, `check-folder-docs`,
+  `check-api-drift`, `test:guards`, `lint:undef`, `check-dark-mode` exit 0.
+  Root `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser
+  probe.

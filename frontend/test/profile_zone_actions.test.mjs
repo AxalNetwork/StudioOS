@@ -182,7 +182,11 @@ const PROFILES = {
     // and these are the SECOND kind — gaps closed by building. Both reasons
     // were true when written (no minutes on `ic_meetings`, no condition store
     // at all); migration 334 built both, and D461 wired the ops.
-    handlers: 9,
+    //
+    // TENTH THROUGH TWELFTH: `deals/closing`'s `Apply template`,
+    // `Export packet` and `Record wire`, the same kind again — migration 335
+    // built the checklist store and the transfer record, and D462 wired them.
+    handlers: 12,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
