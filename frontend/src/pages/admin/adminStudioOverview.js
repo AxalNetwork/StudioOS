@@ -11,6 +11,7 @@
  */
 import { seatState } from '../branch/BranchAccounts';
 import { pctFromBps } from '../branch/BranchHome';
+import { api } from '../../lib/api';
 import { inZone } from '../../lib/zoneTime';
 import { branchOfUser } from '../../lib/shellRole';
 
@@ -143,7 +144,7 @@ export function contractsGlance(data) {
   if (n === 0) {
     return {
       kind: 'unrecorded',
-      reason: 'HQ pushed a library and it was empty, so there is nothing to instantiate.',
+      reason: data.empty_reason || 'HQ pushed a library and it was empty, so there is nothing to instantiate.',
     };
   }
   const asOf = data.pushed_at ? String(data.pushed_at).replace('T', ' ').slice(0, 16) : null;
@@ -331,6 +332,123 @@ export function studioGlances({ user, home, licence, templates, insights }) {
   }
 
   return { onBranch, lic, seats, approvals, programme, contracts, insights: insightView };
+}
+
+/**
+ * D443 — one in-flight read of GET /api/admin/studio/glance, shared by the
+ * strip and the cards so they cannot each ask.
+ */
+let glanceInflight = null;
+export function loadStudioGlance() {
+  if (!glanceInflight) {
+    glanceInflight = api.adminStudioGlance().finally(() => { glanceInflight = null; });
+  }
+  return glanceInflight;
+}
+
+function unrecordedBlock(block, fallback) {
+  return { kind: 'unrecorded', reason: block?.reason || fallback };
+}
+
+/**
+ * The same object `studioGlances` returns, read off the glance payload
+ * instead of the four branch responses. `UNAVAILABLE` is a read that failed.
+ * A block with `recorded: false` is a figure this tier does not have, and
+ * its reason is the server's — the page does not invent a softer one.
+ */
+export function glancesFromStudioGlance(payload) {
+  const failed = (what) => ({
+    kind: 'unreadable',
+    reason: `${what} could not be read. This is not a claim that the territory has none.`,
+  });
+  if (!payload || payload === UNAVAILABLE) {
+    return {
+      tier: null,
+      onBranch: false,
+      lic: null,
+      licenceAbsence: null,
+      seats: failed('Seats'),
+      approvals: failed('The queues'),
+      programme: failed('The programme clock'),
+      contracts: { ...failed('The template library'), agreements: failed('Agreements') },
+      insights: { share: failed('The share rate'), median: failed('The benchmark copy') },
+    };
+  }
+
+  const onBranch = payload.tier === 'branch';
+  const seats = payload.seats?.recorded === false
+    ? unrecordedBlock(payload.seats, 'Seat use was not on the glance, so it is not shown as zero.')
+    : (() => {
+      const lines = accountLines(payload.seats?.seats_used_by_type, payload.seats?.seats);
+      if (!lines) {
+        return {
+          kind: 'unrecorded',
+          reason: payload.seats?.seats_used_basis || 'Seat use is not recorded on this copy, so it is not shown as zero.',
+        };
+      }
+      return { kind: 'ready', lines };
+    })();
+
+  const approvals = payload.approvals?.recorded === false
+    ? unrecordedBlock(payload.approvals, 'The queues were not on the glance, so this is not a claim that the board is clear.')
+    : approvalsGlance(payload.approvals?.lanes);
+
+  const programme = payload.programme?.recorded === false
+    ? unrecordedBlock(payload.programme, 'The programme clock was not on the glance.')
+    : {
+      ...programmeGlance(
+        payload.programme,
+        inZone(payload.programme?.week_closes_at, payload.programme?.zone),
+      ),
+      hoursToClose: Number.isFinite(Number(payload.programme?.hours_to_close))
+        ? Number(payload.programme.hours_to_close)
+        : null,
+    };
+
+  const agreements = payload.agreements?.recorded === false
+    ? unrecordedBlock(payload.agreements, 'Agreements were not on the glance, so this is not a claim that none are ending.')
+    : agreementsGlance(payload.agreements);
+
+  let library;
+  if (payload.templates?.recorded === false) {
+    library = unrecordedBlock(payload.templates, 'The template library was not on the glance.');
+  } else if (!payload.templates || payload.templates.available === false) {
+    library = contractsGlance(payload.templates?.available === false ? payload.templates : null);
+  } else {
+    library = contractsGlance({
+      available: true,
+      items: payload.templates.items,
+      pushed_at: payload.templates.pushed_at,
+      never_pushed_reason: payload.templates.never_pushed_reason,
+      empty_reason: payload.templates.empty_reason,
+    });
+  }
+  const contracts = { ...library, agreements };
+
+  const shareAbsent = payload.revenue?.recorded === false;
+  const medianAbsent = payload.insights?.recorded === false;
+  const view = insightsGlance(shareAbsent ? null : payload.revenue, medianAbsent ? null : payload.insights);
+  const insightView = {
+    share: shareAbsent
+      ? unrecordedBlock(payload.revenue, 'The share rate was not on the glance.')
+      : view.share,
+    median: medianAbsent
+      ? unrecordedBlock(payload.insights, 'The benchmark copy was not on the glance.')
+      : view.median,
+  };
+
+  const lic = payload.licence?.recorded ? payload.licence : null;
+  return {
+    tier: payload.tier || null,
+    onBranch,
+    lic,
+    licenceAbsence: payload.licence?.recorded === false ? payload.licence.reason : null,
+    seats,
+    approvals,
+    programme,
+    contracts,
+    insights: insightView,
+  };
 }
 
 /** The sidebar's order, which breaks every tie in the strip. */

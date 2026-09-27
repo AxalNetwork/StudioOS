@@ -130,7 +130,21 @@ export function openWeekAt(nowMs: number): {
   return { cycle, week: null, unlockMs: null, deadlineMs: null };
 }
 
-async function programmeClock(env: Env, nowMs: number): Promise<ProgrammeClock> {
+/** Said once, so the digest and the studio glance cannot word a closed month differently. */
+export const PROGRAMME_NO_WEEK_REASON =
+  'No cohort week is open right now. The four windows run from the 1st of the month in '
+  + `${COHORT_TZ}, so the days after the fourth deadline belong to no week.`;
+
+/**
+ * The platform clock, with no database read.
+ *
+ * The week windows are the same on every deployment. The count of accounts
+ * still pending the open week is not: that is a read of this database, and
+ * `programmeClock` is the one that takes it. A caller that must not take it
+ * (HQ, where a cohort row names no licence) uses this and leaves
+ * `pending_accounts` null.
+ */
+export function programmeBounds(nowMs: number): ProgrammeClock {
   const { cycle, week, unlockMs, deadlineMs } = openWeekAt(nowMs);
   const base: ProgrammeClock = {
     zone: COHORT_TZ,
@@ -141,14 +155,15 @@ async function programmeClock(env: Env, nowMs: number): Promise<ProgrammeClock> 
     hours_to_close: deadlineMs === null ? null : Math.round(((deadlineMs - nowMs) / 3_600_000) * 10) / 10,
     pending_accounts: null,
   };
-  if (week === null) {
-    return {
-      ...base,
-      reason:
-        'No cohort week is open right now. The four windows run from the 1st of the month in '
-        + `${COHORT_TZ}, so the days after the fourth deadline belong to no week.`,
-    };
-  }
+  if (week === null) return { ...base, reason: PROGRAMME_NO_WEEK_REASON };
+  return base;
+}
+
+async function programmeClock(env: Env, nowMs: number): Promise<ProgrammeClock> {
+  const base = programmeBounds(nowMs);
+  if (base.open_week === null) return base;
+  const { cycle } = base;
+  const week = base.open_week;
   try {
     // THE JOIN HERE IS THE PREDICATE, NOT A PROJECTION, which is the
     // distinction D130 was written about. `cohort_cycles` is how a (year,
