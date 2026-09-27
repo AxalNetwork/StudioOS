@@ -158,3 +158,14 @@ test('the route sends ONLY the live half — the programme copy is not served fr
     assert.equal(body[k], undefined, `the route serves \`${k}\`, which is content rather than a measurement`);
   }
 });
+
+test('D385 — the cohort ends four weeks after it starts, on the Lab’s own week-4 deadline', async () => {
+  // The landing's "Ends" row reads this, so the page never computes an end of
+  // its own. It is the same week-4 deadline the Lab's gates enforce.
+  const { body } = await get(emptyDb());
+  const start = Date.parse(body.cohort.start_date);
+  const end = Date.parse(body.cohort.end_date);
+  assert.ok(Number.isFinite(end), 'the cohort has no end date');
+  const days = (end - start) / 86_400_000;
+  assert.ok(days >= 27.9 && days <= 28.1, `the cohort runs ${days} days, not four weeks`);
+});

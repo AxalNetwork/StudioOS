@@ -990,7 +990,7 @@ spinoutLab.get('/brief', async (c) => {
     await import('../services/cohortApplications');
   // From `cohortTiming`, which DECLARES it — `cohortApplications` imports the
   // constant but does not re-export it, so destructuring it there is undefined.
-  const { COHORT_TZ } = await import('../services/cohortTiming');
+  const { COHORT_TZ, cycleWeekWindows } = await import('../services/cohortTiming');
   const t = resolveApplicationTarget(nowMs);
   // `resolveApplicationTarget` reports `ok: false` when no window is open —
   // between a close and the next month's opening. The brief then has no cohort
@@ -1006,8 +1006,11 @@ spinoutLab.get('/brief', async (c) => {
       name: monthLabel(t.year, t.month),
       start_date: new Date(t.window.startMs).toISOString(),
       close_at: new Date(t.window.closeMs).toISOString(),
+      // D385 — the landing's "Ends" row. Week 4's deadline from the same week
+      // windows the Lab enforces, so the page never computes its own end.
+      end_date: new Date(cycleWeekWindows(t.year, t.month)[3].deadlineMs).toISOString(),
       places: max,
-    } : { name: null, start_date: null, close_at: null, places: max },
+    } : { name: null, start_date: null, end_date: null, close_at: null, places: max },
     // The zone every date above is enforced in. Named rather than assumed: a
     // reader outside America/New_York is told which midnight the deadline is.
     zone: COHORT_TZ,

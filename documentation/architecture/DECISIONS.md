@@ -32042,6 +32042,90 @@ touched only to mount the detail panel and the two actions.
   renders the card, where it used to read the retired block's source.
 - **Mutations.** 17 run, 17 caught on the first run.
 
+## D385
+
+**The Spin-Out Lab landing revision, built up to the per-track-gates call.**
+Session 10, item 5 (the C3 gap map's PR 2), against
+`design/canvases/integrated/Spin-Out Lab · Landing.dc.html` (artifact
+`3522163f`, landed by Session 1 in D305). No migration and no new route or
+`api.js` method. `GET /spinout-lab/brief` gains one field, `cohort.end_date`.
+
+**What the Landing canvas adds over the Intro the code was built from.** Its
+markup is the Intro's public surface. What is new is its data script: the
+same nineteen tools, the three tracks with their own four gates each, four
+jurisdictions (two live, two coming), and a cohort record the hero and the
+apply band read by name ("Apply to {cohort.name}", "Read from the cohort
+record"). Most of it was already built (D38).
+
+**1. The cohort is named by the server.**
+- **Before.** The landing's hero, both apply buttons, the apply band and the
+  signed-in `ApplyCtaSection` printed "Cohort N". That number comes from the
+  client calendar (`resolveOpenCohort` / `COHORT_BASE`). The Programme Brief,
+  the apply form (D384) and every cohort row on the server name the same
+  cohort by its month ("November 2026"). This was the gap map's "two naming
+  schemes" trap.
+- **Now.** A new `useCohortRecord` (lib/spinoutLab.js) reads `/brief` once and
+  gives the name, start, end, deadline and places. `cohortRecordFromBrief` is
+  its pure half. `useCohortPlaces` now rides on the same read.
+  - The hero rows are Cohort, Starts, Ends and Applications close, with the
+    canvas's footnote "Read from the cohort record".
+  - The buttons say "Apply to the November 2026 cohort".
+  - The band says "Apply to the November 2026 cohort on the Form track".
+  - The CTA says "Apply to the November 2026 cohort." and gives the deadline
+    it read.
+- **Three absences are told apart:** "Reading…" while the read is in flight;
+  "Could not be read" with a retry when it failed; and "Not recorded" when
+  the record came back without that value. A button never names a cohort
+  nobody has read.
+- **`end_date`** is week 4's deadline from `cycleWeekWindows`, the windows the
+  Lab enforces, so the page computes no end of its own. A worker test holds
+  it at four weeks after the start.
+- `openCohortCopy` stays in the library, and its tests stand, but no landing
+  surface calls it.
+
+**2. The hero draws no seat count.** The Intro left this open ("the landing
+revision's call"). The Landing canvas settles it in its own caption: "No seat
+count, no track record". The count stays on the apply CTA and the apply form,
+where D380 put it.
+
+**3. Default track stays Form on the public page.** The canvas defaults to
+Find fit "because the signed-in member has a company". A logged-out visitor
+has said no such thing. The signed-in page already opens on Find fit when
+the application said the company is incorporated. A test pins both halves.
+
+**THE OPEN PRODUCT CALL: per-track gates** (the gap map's product call 240).
+- **The disagreement.** The Programme Brief prints each track its own four
+  gates (`TRACK_GATES`, lib/spinoutBrief.js), as the Brief and Landing
+  canvases draw them. The intro, the workspace and the worker enforce one
+  gate set for everyone (`PIPELINE_PHASES`, reconciled against `MILESTONES`).
+- **The options.** Build per-track milestones in the worker so the brief
+  becomes true, or have the brief print the one enforced set.
+- **Until the owner decides:**
+  - neither surface changes what it draws;
+  - both print one sentence from `GATES_DECISION` saying the call is open,
+    so a founder reading either is not told a week asks something the Lab
+    will not check;
+  - a test pins that neither side has quietly taken a side. It is the test
+    to change, together with `GATES_DECISION`, when the call is made.
+
+**Not built, because nothing stores it** (unchanged from D38, and still true
+of the Landing canvas):
+- the "Yours" tag;
+- the four sample cohort companies and their feed;
+- founder-to-founder asks;
+- `&track=` on the apply link.
+
+**Verified.**
+- `spinout_landing_d385.test.mjs`: 10 tests. The hero and the apply band are
+  rendered in each read state. The tests run green under UTC,
+  America/Los_Angeles and Asia/Tokyo, because the dates are Delaware time
+  whatever the viewer's zone.
+- Updated tests:
+  - `spinout_lab_intro.test.mjs`: the places hook now reads the record.
+  - `spinout_brief_live_data.test.mjs`: the CTA reads the record.
+  - `spinout_brief_d141.test.ts`: gains the `end_date` test.
+- **Mutations.** 12 run, 12 caught on the first run.
+
 ## D390
 
 **Retiring `/partner/operations/*`, part 1a: the two jobs that existed
@@ -34835,6 +34919,31 @@ expands before alpha gradients.
 
 **Tests.** `hq_licences_d457.test.mjs`; `deployments_last_version_d452.test.ts` extended;
 `hq_licences_polish_d452.test.mjs` re-aimed.
+
+## D458
+
+**#868 review follow-ups: hold blocks statement draw, floors refuse paid-in-full, void is audited.** Wave 9,
+Session 16, item 3. No migration; no new `/api/*` method.
+
+**Draw hold.** `POST /api/admin/statements/draw` refuses when the licence is not
+`active`. Suspension freezes trading; a new claim must not be drawn against a
+held subsidiary. The draw editor lists only active licences that carry a revenue
+share.
+
+**Paid-in-full on a floor.** An incomplete statement (`unreported_streams` or
+`estimated_streams` non-zero) refuses `status: paid` and refuses recording
+`paid_cents` equal to the owed figure. Partial payments below the floor remain
+allowed. The UI hides Mark paid in full and names why.
+
+**Void and audit.** Voiding requires `void_note` (at least ten characters) and
+writes `subsidiary_statement_void` through `logAdminAction`. Marking paid on a
+complete statement and recording a dispute write matching audit rows.
+
+**Tests.** `hq_statements.test.ts` extended; `hq_revenue_statements_d458.test.mjs`.
+
+**Mutations: 4 run, 4 caught** — each a non-zero exit and a `not ok` line: draw
+allowed on a suspended licence; paid-in-full shown on an incomplete row; void
+without a reason; full payment accepted on a floor statement.
 
 ## D460
 

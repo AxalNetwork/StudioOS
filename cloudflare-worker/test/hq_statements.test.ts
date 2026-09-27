@@ -115,6 +115,7 @@ function seededDb() {
      VALUES (?,?,?,?,?,?,?)`,
   );
   l.run('lic_fr', 'AXL-001', 'Axal VC France SAS', 'Axal VC France', 3500, 'EUR', 'active');
+  l.run('lic_susp', 'AXL-002', 'Axal VC Pause SAS', 'Axal VC Pause', 3500, 'EUR', 'suspended');
   // No agreed share: the licence exists and cannot be billed.
   l.run('lic_untermed', 'AXL-009', 'Axal VC Nowhere BV', 'Axal VC Nowhere', null, 'EUR', 'active');
   return db;
@@ -268,6 +269,15 @@ test('every stream appears on the statement, reported or not', async () => {
   }
 });
 
+test('a suspended licence refuses a draw rather than billing a held subsidiary', async () => {
+  const { call, rows } = statementsApp();
+  const r = await call(...draw({ licence_uid: 'lic_susp', period: '2026-Q3' }));
+  assert.equal(r.status, 409);
+  assert.equal(r.body.error, 'licence_not_active');
+  assert.match(String(r.body.message), /suspended/);
+  assert.equal(rows().length, 0);
+});
+
 test('a licence with no agreed share refuses rather than drawing at 0%', async () => {
   const { call, rows } = statementsApp();
   const r = await call(...draw({ licence_uid: 'lic_untermed', period: '2026-Q3' }));
@@ -363,27 +373,70 @@ test('a period filter must be a period', async () => {
 
 test('paid is recorded with who and when, and overpayment refuses', async () => {
   const { call, report, rows } = statementsApp();
-  report('other', 100_000);
+  // Every stream reported so paying the full owed figure is allowed (D458).
+  for (const stream of ['subscriptions', 'licence_fees', 'token_margin', 'other']) {
+    report(stream, 100_000);
+  }
   const { body } = await call(...draw({ licence_uid: 'lic_fr', period: '2026-Q3' }));
-  assert.equal(body.owed_cents, 35_000);
+  assert.equal(body.complete, true);
+  assert.equal(body.owed_cents, 140_000);
 
   const over = await call(`/statements/${body.uid}`, {
-    method: 'PATCH', body: JSON.stringify({ paid_cents: 40_000 }),
+    method: 'PATCH', body: JSON.stringify({ paid_cents: 150_000 }),
   });
   assert.equal(over.status, 409);
   assert.equal(over.body.error, 'over_payment');
   assert.equal(rows()[0].paid_cents, 0, 'an over-payment was recorded anyway');
 
   const ok = await call(`/statements/${body.uid}`, {
-    method: 'PATCH', body: JSON.stringify({ paid_cents: 35_000, paid_note: 'wire ref 88123' }),
+    method: 'PATCH', body: JSON.stringify({ paid_cents: 140_000, paid_note: 'wire ref 88123' }),
   });
   assert.equal(ok.status, 200);
   const [row] = rows();
-  assert.equal(row.paid_cents, 35_000);
+  assert.equal(row.paid_cents, 140_000);
   assert.equal(row.paid_note, 'wire ref 88123');
   assert.equal(row.paid_by_user_id, HOLDER, 'nothing records which operator entered the payment');
   assert.ok(row.paid_at, 'a payment was recorded with no time');
   assert.equal(ok.body.outstanding_cents, 0);
+});
+
+test('an incomplete statement refuses paid in full', async () => {
+  const { call, report, rows } = statementsApp();
+  report('other', 100_000);
+  const { body } = await call(...draw({ licence_uid: 'lic_fr', period: '2026-Q3' }));
+  assert.equal(body.complete, false);
+
+  const full = await call(`/statements/${body.uid}`, {
+    method: 'PATCH', body: JSON.stringify({ status: 'paid', paid_cents: body.owed_cents }),
+  });
+  assert.equal(full.status, 409);
+  assert.equal(full.body.error, 'incomplete_statement');
+  assert.equal(rows()[0].status, 'draft');
+
+  const centsOnly = await call(`/statements/${body.uid}`, {
+    method: 'PATCH', body: JSON.stringify({ paid_cents: body.owed_cents }),
+  });
+  assert.equal(centsOnly.status, 409);
+  assert.equal(centsOnly.body.error, 'incomplete_statement');
+});
+
+test('voiding requires a reason of at least ten characters', async () => {
+  const { call, report, rows } = statementsApp();
+  report('other', 100_000);
+  const { body } = await call(...draw({ licence_uid: 'lic_fr', period: '2026-Q3' }));
+
+  const bare = await call(`/statements/${body.uid}`, {
+    method: 'PATCH', body: JSON.stringify({ status: 'void', void_note: 'oops' }),
+  });
+  assert.equal(bare.status, 400);
+  assert.equal(bare.body.error, 'void_note_required');
+  assert.equal(rows()[0].status, 'draft');
+
+  const ok = await call(`/statements/${body.uid}`, {
+    method: 'PATCH', body: JSON.stringify({ status: 'void', void_note: 'Terms changed before issue' }),
+  });
+  assert.equal(ok.status, 200);
+  assert.equal(rows()[0].status, 'void');
 });
 
 test('a dispute without a reason is refused', async () => {

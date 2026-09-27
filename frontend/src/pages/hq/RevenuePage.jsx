@@ -343,6 +343,22 @@ export function statementPaidPayload({ amountText, note, owedCents }) {
   return { body: { paid_cents, paid_note: String(note ?? '').trim() || null } };
 }
 
+export function statementVoidPayload({ note }) {
+  const void_note = String(note ?? '').trim();
+  if (void_note.length < 10) {
+    return { error: 'Voiding must say why — at least ten characters, read by whoever audits it.' };
+  }
+  return { body: { status: 'void', void_note } };
+}
+
+/** Paid-in-full is refused server-side when the owed figure is still a floor. */
+export function statementAllowsPaidInFull(statement) {
+  if (!statement) return false;
+  if (statement.complete === false) return false;
+  if (statement.unreported_streams > 0 || statement.estimated_streams > 0) return false;
+  return true;
+}
+
 export function statementDisputePayload({ amountText, note }) {
   const text = String(amountText ?? '').trim();
   if (text === '') return { error: 'Enter the disputed amount.' };
@@ -354,10 +370,12 @@ export function statementDisputePayload({ amountText, note }) {
   return { body: { disputed_cents, dispute_note } };
 }
 
-/** Licences that carry a revenue share can be drawn; null share is refused server-side. */
+/** Licences that carry a revenue share and are active can be drawn. */
 export function licencesDrawableForStatements(licences) {
   if (!Array.isArray(licences)) return [];
-  return licences.filter((l) => l.revenue_share_bps !== null && l.revenue_share_bps !== undefined);
+  return licences.filter(
+    (l) => l.revenue_share_bps !== null && l.revenue_share_bps !== undefined && l.status === 'active',
+  );
 }
 
 /**
@@ -400,7 +418,7 @@ export function StatementDrawEditor({ licences, currentPeriod, onDraw }) {
       <div className="text-[11px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Draw a statement</div>
       <p className="mt-1 text-[11.5px] leading-relaxed text-axal-muted">
         Gross comes from what the branch reported for the period; owed is computed from the licence&apos;s revenue share at draw time.
-        Re-drawing replaces a draft only — once issued, void it before drawing again.
+        Re-drawing replaces a draft only — once issued, void it before drawing again. Only active licences can be drawn; a suspended holder is billed only after reactivation.
       </p>
       {licences === UNAVAILABLE && (
         <div className="mt-2">
@@ -449,6 +467,8 @@ export function StatementActions({ statement, onUpdate }) {
   const [msg, setMsg] = useState(null);
   const [paid, setPaid] = useState({ amount: '', note: '' });
   const [dispute, setDispute] = useState({ amount: '', note: '' });
+  const [voidNote, setVoidNote] = useState('');
+  const canPayInFull = statementAllowsPaidInFull(statement);
   if (!statement?.uid) return null;
 
   const patch = async (body) => {
@@ -480,6 +500,13 @@ export function StatementActions({ statement, onUpdate }) {
     patch(p.body);
   };
 
+  const submitVoid = (e) => {
+    e.preventDefault();
+    const p = statementVoidPayload({ note: voidNote });
+    if (p.error) { setMsg({ err: true, text: p.error }); return; }
+    patch(p.body);
+  };
+
   const input = 'w-full rounded-lg border border-axal-hairline bg-axal-ground px-2 py-1 text-[11.5px]';
   const btn = 'rounded-md border border-axal-hairline px-2 py-1 text-[11px] font-bold disabled:opacity-50';
   const isDraft = statement.status === 'draft';
@@ -496,18 +523,28 @@ export function StatementActions({ statement, onUpdate }) {
         )}
         {!isVoid && (
           <>
-            <button type="button" disabled={busy} className={btn} onClick={() => patch({ status: 'void' })}>
-              Void
-            </button>
             {statement.status === 'paid' ? null : (
-              <button type="button" disabled={busy} className={btn}
-                onClick={() => patch({ status: 'paid', paid_cents: statement.owed_cents, paid_note: paid.note || 'Marked paid in full' })}>
-                Mark paid in full
-              </button>
+              canPayInFull ? (
+                <button type="button" disabled={busy} className={btn}
+                  onClick={() => patch({ status: 'paid', paid_cents: statement.owed_cents, paid_note: paid.note || 'Marked paid in full' })}>
+                  Mark paid in full
+                </button>
+              ) : (
+                <span className="text-[10.5px] text-amber-800 dark:text-amber-200" data-testid="hq-statement-no-paid-in-full">
+                  Paid in full is unavailable while the owed figure is a floor.
+                </span>
+              )
             )}
           </>
         )}
       </div>
+      {!isVoid && (
+        <form onSubmit={submitVoid} className="mt-2 space-y-1">
+          <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Void statement</div>
+          <input className={input} required minLength={10} placeholder="Why this claim is withdrawn — required" value={voidNote} onChange={(e) => setVoidNote(e.target.value)} aria-label="Void reason" />
+          <button type="submit" disabled={busy} className={`${btn} border-red-300 text-red-800 dark:border-red-500/40 dark:text-red-300`}>Void</button>
+        </form>
+      )}
       {!isVoid && (
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           <form onSubmit={submitPaid} className="space-y-1">
