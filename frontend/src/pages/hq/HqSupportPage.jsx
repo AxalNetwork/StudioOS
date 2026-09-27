@@ -327,7 +327,12 @@ export function EscalationDecisionView({
     >
       {facts && <p className="text-[10.5px] text-axal-faint">{facts}</p>}
       {item.subject_ref && (
-        <p className="mt-1 text-[10.5px] text-axal-muted">About <span className="font-mono">{item.subject_ref}</span></p>
+        <p className="mt-1 text-[10.5px] text-axal-muted">
+          About <span className="font-mono">{item.subject_ref}</span>
+          {item.relation
+            ? <> · {item.relation === 'localises' ? 'localises' : 'changes'} it</>
+            : <> · <Unrecorded reason="The branch did not record whether this localises or changes the subject." /></>}
+        </p>
       )}
       {item.detail
         ? <p className="mt-1 whitespace-pre-wrap text-[11.5px] leading-relaxed text-axal-ink dark:text-gray-100">{item.detail}</p>

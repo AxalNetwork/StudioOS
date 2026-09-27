@@ -15,7 +15,8 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 
-import { AdminStudioOverview } from '../src/pages/admin/AdminStudioOverview.jsx';
+import { AdminStudioOverview, studioCardTarget } from '../src/pages/admin/AdminStudioOverview.jsx';
+import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import {
   accountLines,
   agreementsGlance,
@@ -284,8 +285,26 @@ test('insights refuse a median HQ did not publish, and refuse an amount', () => 
   assert.match(none.median.reason, /has not published a median/);
 });
 
+const STUDIO_CARDS = [
+  ['admin-studio-accounts', 'Accounts'],
+  ['admin-studio-approvals', 'Approvals'],
+  ['admin-studio-programs', 'Programs'],
+  ['admin-studio-community', 'Community'],
+  ['admin-studio-contracts', 'Contracts'],
+  ['admin-studio-insights', 'Insights'],
+  ['admin-studio-settings', 'Settings'],
+];
+
 function markup(props) {
   return renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AdminStudioOverview, props)));
+}
+
+function firstHref(html, testid) {
+  const at = html.indexOf(`data-testid="${testid}"`);
+  assert.ok(at > 0, `${testid} is missing`);
+  const m = html.slice(at, at + 600).match(/href="([^"]+)"/);
+  assert.ok(m, `${testid} has no Open link`);
+  return m[1].replaceAll('&amp;', '&');
 }
 
 test('off a branch the cards render the absence and no sample figures', () => {
@@ -305,7 +324,16 @@ test('off a branch the cards render the absence and no sample figures', () => {
   assert.match(html, /Brand kit not read/);
   assert.doesNotMatch(html, /Brand kit not recorded/,
     'an unread licence renders the kit as absent, which is a claim nothing measured');
-  assert.match(html, /href="\/branch\/accounts"/);
+  // D440 — RE-AIMED. This used to require href="/branch/accounts" on an
+  // account that is not on a branch. That link is the defect: /branch/*
+  // refuses on HQ. Each Open is the S20 row of the same name.
+  for (const [id, label] of STUDIO_CARDS) {
+    const row = SIDEBAR_GROUPS.admin[0].items.find((item) => item.label === label);
+    assert.equal(firstHref(html, id), studioCardTarget(false, label));
+    assert.equal(studioCardTarget(false, label), row.to);
+    assert.ok(!row.to.startsWith('/branch'), `${label} S20 row points under /branch/`);
+  }
+  assert.doesNotMatch(html, /href="\/branch\//, 'an HQ-held Studio card links a page that refuses on HQ');
   assert.match(html, /href="\/admin\/events"/);
   assert.match(html, /href="\/admin\/jobs"/);
   assert.match(html, /href="\/admin\/circles"/);
@@ -370,7 +398,8 @@ test('a suspension stays a line and the cards stay readable', () => {
   });
   assert.match(html, /Axal VC Iberia · frozen since 18 Jul · writes are blocked/);
   assert.match(html, /Nothing is waiting/);
-  assert.match(html, /href="\/branch\/accounts"/);
+  assert.equal(firstHref(html, 'admin-studio-accounts'), studioCardTarget(true, 'Accounts'));
+  assert.equal(studioCardTarget(true, 'Accounts'), '/branch/accounts');
 });
 
 test('a suspension line names the territory and does not invent the day', () => {

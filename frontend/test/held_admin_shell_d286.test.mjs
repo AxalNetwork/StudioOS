@@ -28,6 +28,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
+
+import { AdminStudioOverview, studioCardTarget } from '../src/pages/admin/AdminStudioOverview.jsx';
 
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { ADMIN_PLACEMENT } from '../src/lib/adminPlacement.js';
@@ -125,6 +130,36 @@ test('every console link on a landing is literal, registered, and never under /b
   }
   // The frame's sentence NAMES /branch/ to say it is never linked; a link is the syntax.
   assert.doesNotMatch(CODE[ZONE], /\b(?:to|href)=["'`{]\/branch/, 'HeldZone links a /branch/ path');
+});
+
+test('off a branch, Studio card Open links are the S20 rows and never /branch/*', () => {
+  const html = renderToStaticMarkup(createElement(
+    MemoryRouter, null,
+    createElement(AdminStudioOverview, {
+      user: { role: 'admin' }, home: null, licence: null, templates: null, insights: null,
+    }),
+  ));
+  const cards = [
+    ['admin-studio-accounts', 'Accounts'],
+    ['admin-studio-approvals', 'Approvals'],
+    ['admin-studio-programs', 'Programs'],
+    ['admin-studio-community', 'Community'],
+    ['admin-studio-contracts', 'Contracts'],
+    ['admin-studio-insights', 'Insights'],
+    ['admin-studio-settings', 'Settings'],
+  ];
+  for (const [id, label] of cards) {
+    const at = html.indexOf(`data-testid="${id}"`);
+    assert.ok(at > 0, `${label} card is missing`);
+    const href = html.slice(at, at + 600).match(/href="([^"]+)"/);
+    assert.ok(href, `${label} has no Open link`);
+    const to = href[1].replaceAll('&amp;', '&');
+    const row = rows.find((r) => r.label === label);
+    assert.equal(to, row.to, `${label} Open is not the S20 row`);
+    assert.equal(to, studioCardTarget(false, label));
+    assert.ok(!to.startsWith('/branch'), `${label} Open points under /branch/`);
+  }
+  assert.doesNotMatch(html, /href="\/branch\//, 'an HQ-held Studio card links a page that refuses on HQ');
 });
 
 /* ------------------------------------------------------------------ *

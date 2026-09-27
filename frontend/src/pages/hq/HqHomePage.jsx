@@ -168,6 +168,40 @@ export default function HqHomePage() {
     return m;
   }, [branches]);
 
+  /** Seats used summed from branch reads — the fan-out HQ Home already receives (D150). */
+  const seatsUtilised = useMemo(() => {
+    if (!ready) return { value: null, reason: null };
+    if (!branches.length) {
+      return {
+        value: null,
+        reason: 'No branch is deployed yet, so seat utilisation cannot be summed from branch reads.',
+      };
+    }
+    let sum = 0;
+    let answered = 0;
+    let silent = 0;
+    for (const b of branches) {
+      if (b.status !== 'ok' || !b.data) { silent += 1; continue; }
+      const used = num(b.data.seats_used);
+      if (used === null) { silent += 1; continue; }
+      sum += used;
+      answered += 1;
+    }
+    if (answered === 0) {
+      return {
+        value: null,
+        reason: 'Every deployed branch withheld its seat count or did not answer in time.',
+      };
+    }
+    if (silent > 0) {
+      return {
+        value: sum,
+        reason: `Summed over ${answered} ${answered === 1 ? 'branch' : 'branches'} that answered; ${silent} did not, so this is not a complete total.`,
+      };
+    }
+    return { value: sum, reason: null };
+  }, [ready, branches]);
+
   // The sentence H13 rule 3 requires, derived rather than typed. Three states,
   // and the middle one is the whole point: a branch that did not answer is
   // NAMED, because a total that quietly drops one is worse than no total.
@@ -212,11 +246,11 @@ export default function HqHomePage() {
       // how many of them answered.
       scope="All branches"
       stance="Read-only overview"
-      note="This rail summarises the licence ledger and platform-wide account totals. It takes no action."
+      note="This rail summarises the licence ledger and active accounts on HQ's database. It takes no action."
       coverage={ready ? [
         `${licences.length} ${plural(licences.length, 'licence', 'licences')} on the ledger`,
         `${countries.length} of 27 EU countries held`,
-        accountsTotal === null ? 'Active accounts: not recorded' : `${accountsTotal} active accounts platform-wide`,
+        accountsTotal === null ? 'Active accounts: not recorded' : `${accountsTotal} active accounts on HQ's database`,
         // H13 RULE 3 — "unreadable is a word in the answer" (D150). The rail
         // summarises the lines below it, so a line that omits an unanswered
         // branch produces an answer that silently totals over the rest. That
@@ -291,8 +325,8 @@ export default function HqHomePage() {
         </div>
         {selected && (
           <p className="mt-2 text-[11.5px] text-axal-faint">
-            Narrowed to {selected.brand_name} on this page only. The rest of the product has no tenant scope yet,
-            so nothing else changes.
+            Narrowed to {selected.brand_name} on this page only. Elsewhere, use View as on a deployed branch
+            to read that tenant's database — the tenant switcher here does not change other routes.
           </p>
         )}
 
@@ -305,7 +339,8 @@ export default function HqHomePage() {
             {ready
               ? `${accountsTotal === null ? 'An unrecorded number of' : accountsTotal} active accounts across ${licences.length} ${plural(licences.length, 'licence', 'licences')} and ${countries.length} ${plural(countries.length, 'country', 'countries')}. `
               : 'The franchisor’s overview: every licence, every account, the licence trail. '}
-            Per-subsidiary figures are not recorded until accounts carry a licence.
+            Per-branch accounts, seats used and backlog on the cards below come from each branch's own read when it answers.
+            Revenue per subsidiary stays not recorded — every stream in the morning report arrives unmeasured.
           </p>
         </header>
 
@@ -318,9 +353,25 @@ export default function HqHomePage() {
           <Tile
             label="Accounts"
             value={ready ? accountsTotal : null}
-            note={<>active, platform-wide · <Link to="/admin/analytics" className="underline">weekly activity, by branch</Link></>}
+            note={<>active on HQ's database · <Link to="/admin/analytics" className="underline">weekly activity, by branch</Link></>}
           />
-          <Tile label="Seats licensed" value={ready ? num(data.seats_licensed) : null} note={<>utilised: <Unrecorded /></>} />
+          <Tile
+            label="Seats licensed"
+            value={ready ? num(data.seats_licensed) : null}
+            note={(
+              <>
+                utilised:{' '}
+                {seatsUtilised.value !== null
+                  ? (
+                    <>
+                      {num(seatsUtilised.value)}
+                      {seatsUtilised.reason ? ` · ${seatsUtilised.reason}` : ' · summed from branch reads'}
+                    </>
+                  )
+                  : <Unrecorded reason={seatsUtilised.reason} />}
+              </>
+            )}
+          />
           <Tile label="MTD revenue" value={null} note="no subsidiary attribution" />
           <Tile
             label="Queue backlog"
@@ -414,7 +465,12 @@ export default function HqHomePage() {
                       <dt className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Backlog</dt>
                       <dd className="mt-0.5 font-bold tabular-nums">
                         {live && live.backlog && num(live.backlog.count) !== null
-                          ? `${num(live.backlog.count)} open`
+                          ? (
+                            <>
+                              {num(live.backlog.count)} open
+                              {live.backlog.oldest_at ? ` · oldest ${day(live.backlog.oldest_at)}` : ''}
+                            </>
+                          )
                           : <Unrecorded reason={live?.backlog_reason || branchReason(b, 'backlog')} />}
                       </dd>
                     </div>

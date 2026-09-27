@@ -37,6 +37,12 @@ export type IssueOutcome =
   | 'already_issued'
   | 'not_graduated'
   | 'insufficient_data'
+  // D382: the graduate holds a REVOKED credential whose id this issuance would
+  // derive again. `credential_id` is UNIQUE and deterministic (cohort, date,
+  // user), so a same-date reissue cannot be written; before D382 the
+  // `INSERT OR IGNORE` below swallowed that conflict and reported
+  // `already_issued` for a graduate who holds no live credential.
+  | 'reissue_blocked'
   | 'error';
 
 type GraduateFacts = {
@@ -132,7 +138,9 @@ function programDays(startedAt: string | null, conferredAt: string | null): numb
  * index on (user_id) WHERE status='issued', and an INSERT that tolerates the
  * conflict. Re-running it is always safe.
  */
-export async function issueOnGraduation(env: Env, userId: number): Promise<IssueOutcome> {
+export async function issueOnGraduation(
+  env: Env, userId: number, issuedBy: number | null = null,
+): Promise<IssueOutcome> {
   try {
     if (!Number.isFinite(userId) || userId <= 0) return 'insufficient_data';
 
@@ -156,20 +164,27 @@ export async function issueOnGraduation(env: Env, userId: number): Promise<Issue
     const credentialId = credentialRefFor(facts.cohort, conferredOn, userId);
     if (!credentialId) return 'insufficient_data';
 
+    const taken = await env.DB.prepare(
+      `SELECT id FROM spinout_certificates WHERE credential_id = ? AND status <> 'issued'`,
+    ).bind(credentialId).first<{ id: number }>();
+    if (taken) return 'reissue_blocked';
+
     const res = await env.DB.prepare(
       `INSERT OR IGNORE INTO spinout_certificates
          (credential_id, user_id, project_id, public_name, public_company, public_cohort,
           public_issued_on, public_jurisdiction, public_program_days, issued_by_user_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       credentialId, userId, facts.project_id, name,
       facts.company, facts.cohort, conferredOn, facts.jurisdiction,
       programDays(facts.started_at, facts.conferred_at),
+      issuedBy,
     ).run();
 
-    // issued_by_user_id stays NULL deliberately: nobody issued this by hand,
-    // and writing a real admin id would misattribute an automatic action to a
-    // person in the audit trail.
+    // issued_by_user_id is NULL on the automatic path deliberately: nobody
+    // issued it by hand, and writing a real admin id would misattribute an
+    // automatic action to a person. The admin tab's Issue (D382) runs this
+    // same path and passes the admin's id, because that one WAS a person.
     return (res.meta?.changes ?? 0) > 0 ? 'issued' : 'already_issued';
   } catch (e) {
     console.error('[certificates] auto-issue failed', userId, (e as Error)?.message);

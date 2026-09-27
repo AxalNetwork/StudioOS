@@ -3,6 +3,7 @@ import { useActiveCompany } from '../contexts/ActiveCompanyContext';
 import { api } from '../lib/api';
 import { bpsPercent } from '../lib/bps';
 import { safeReadJSON } from '../lib/storage';
+import { Lock } from 'lucide-react';
 
 // ---------- Who may edit -----------------------------------------------------
 //
@@ -20,6 +21,16 @@ import { safeReadJSON } from '../lib/storage';
 // asserts this list against the worker's, because two copies of an
 // authorisation rule drift.
 const EDIT_ROLES = ['Owner', 'Admin', 'Founder'];
+
+/**
+ * D431 — what a refused reader of a member's carry sees. Canvas T4's words:
+ * economics are locked when the viewer is neither the member nor a partner,
+ * "visible as a locked section, because a hidden one teaches people the wrong
+ * shape of the org". The server omits the field for such a reader; the page
+ * draws the lock and says who can see through it.
+ */
+const CARRY_LOCKED_LABEL = 'Economics · locked';
+const CARRY_LOCKED_NOTE = 'Visible to the member and to an Owner, Admin or Founder only. You see that carry exists and not what it is.';
 
 /**
  * The caller's own membership row, and what it lets them do.
@@ -907,28 +918,54 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
                   ))}
                 </select>
 
-                <input
-                  type="number"
-                  min="0"
-                  max="10000"
-                  step="1"
-                  defaultValue={m.carry_bps ?? ''}
-                  placeholder="carry bps"
-                  onBlur={(e) => {
-                    const raw = e.target.value.trim();
-                    const next = raw === '' ? null : Number(raw);
-                    if (next === (m.carry_bps ?? null)) return;
-                    run(() => api.updateCompanyMember(uid, m.user_id, { carry_bps: next }),
-                        // D149: one bps formatter. This one did not trim, so
-                        // a carry of 150 read "1.50%" where every other rate on
-                        // the platform reads "1.5%".
-                        next === null ? 'Carry cleared' : `Carry set to ${bpsPercent(next)}`);
-                  }}
-                  disabled={busy || !canChange}
-                  aria-label={`Carry in basis points for ${m.name || m.email}`}
-                  title="Basis points — 150 is 1.5%. Stored as a whole number, never a float."
-                  className="w-24 border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 tabular-nums"
-                />
+                {/* D431 — economics are served only to the member and to an
+                    editor, and the server says so by OMITTING the field, never
+                    by sending null (null is "not recorded"). So the row branches
+                    on whether the key arrived: an editor gets the input, the
+                    member gets their own figure read-only, and everyone else
+                    gets a locked chip — visible as locked, as canvas T4 asks,
+                    because a hidden section teaches the wrong shape of the org. */}
+                {!Object.prototype.hasOwnProperty.call(m, 'carry_bps') ? (
+                  <span
+                    data-testid="carry-locked"
+                    title={CARRY_LOCKED_NOTE}
+                    className="inline-flex items-center gap-1 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 px-2 py-1 text-[11px] text-gray-500 dark:text-gray-400"
+                  >
+                    <Lock size={11} aria-hidden="true" />
+                    {CARRY_LOCKED_LABEL}
+                  </span>
+                ) : canChange ? (
+                  <input
+                    type="number"
+                    min="0"
+                    max="10000"
+                    step="1"
+                    defaultValue={m.carry_bps ?? ''}
+                    placeholder="carry bps"
+                    onBlur={(e) => {
+                      const raw = e.target.value.trim();
+                      const next = raw === '' ? null : Number(raw);
+                      if (next === (m.carry_bps ?? null)) return;
+                      run(() => api.updateCompanyMember(uid, m.user_id, { carry_bps: next }),
+                          // D149: one bps formatter. This one did not trim, so
+                          // a carry of 150 read "1.50%" where every other rate on
+                          // the platform reads "1.5%".
+                          next === null ? 'Carry cleared' : `Carry set to ${bpsPercent(next)}`);
+                    }}
+                    disabled={busy}
+                    aria-label={`Carry in basis points for ${m.name || m.email}`}
+                    title="Basis points — 150 is 1.5%. Stored as a whole number, never a float."
+                    className="w-24 border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 tabular-nums"
+                  />
+                ) : (
+                  <span
+                    data-testid="carry-readonly"
+                    className="text-[11px] text-gray-600 dark:text-gray-300 tabular-nums"
+                    title="Your carry, as recorded. Only an Owner, Admin or Founder can change it."
+                  >
+                    Carry {m.carry_bps === null || m.carry_bps === undefined ? '— not recorded' : bpsPercent(m.carry_bps)}
+                  </span>
+                )}
               </>
             )}
 
