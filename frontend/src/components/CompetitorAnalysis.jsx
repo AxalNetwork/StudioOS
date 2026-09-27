@@ -48,7 +48,7 @@ function emptyInputs() {
   };
 }
 
-function download(filename, text, mime) {
+export function download(filename, text, mime) {
   const blob = new Blob([text], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -60,7 +60,7 @@ function download(filename, text, mime) {
   URL.revokeObjectURL(url);
 }
 
-async function fetchMarkdown(url) {
+export async function fetchMarkdown(url) {
   const token = localStorage.getItem('token');
   const res = await fetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -251,6 +251,12 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
       if (mode === 'startup' && projectId) { payload.project_id = projectId; payload.mode = 'startup'; }
       else payload.mode = 'custom';
       const full = await api.competitors.analyze(payload);
+      // D313 — in the Research zone a finished run opens on its own page, the
+      // same place the saved list links; elsewhere it opens in place.
+      if (linkToDossier && full?.id) {
+        navigate(`/research/companies/${encodeURIComponent(full.id)}`);
+        return;
+      }
       setAnalysis(full);
       setDirty(false);
       // A successful run clears a failed read: the list just answered.
@@ -614,18 +620,33 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
           <div className="font-semibold text-gray-900 dark:text-gray-100 mb-3">Saved analyses</div>
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
             {visibleSaved.map((a) => (
-              <button key={a.id} onClick={() => loadAnalysis(a.id)} className="w-full flex items-center justify-between py-2.5 text-left group">
-                <div className="min-w-0">
-                  <div className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{a.title || 'Untitled'}</div>
-                  <div className="text-xs text-gray-400 dark:text-gray-500">{a.mode} · {new Date(a.updated_at + 'Z').toLocaleDateString()}{a.edited ? ' · edited' : ''}</div>
-                </div>
-                <ChevronRight size={16} className="text-gray-300 dark:text-gray-600 group-hover:text-violet-500" />
-              </button>
+              linkToDossier ? (
+                // D313 — the Research zone links each saved analysis to its page.
+                <Link key={a.id} to={`/research/companies/${encodeURIComponent(a.id)}`} className="w-full flex items-center justify-between py-2.5 text-left group">
+                  <SavedRow a={a} />
+                </Link>
+              ) : (
+                <button key={a.id} onClick={() => loadAnalysis(a.id)} className="w-full flex items-center justify-between py-2.5 text-left group">
+                  <SavedRow a={a} />
+                </button>
+              )
             ))}
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+function SavedRow({ a }) {
+  return (
+    <>
+      <div className="min-w-0">
+        <div className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{a.title || 'Untitled'}</div>
+        <div className="text-xs text-gray-400 dark:text-gray-500">{a.mode} · {new Date(a.updated_at + 'Z').toLocaleDateString()}{a.edited ? ' · edited' : ''}</div>
+      </div>
+      <ChevronRight size={16} className="text-gray-300 dark:text-gray-600 group-hover:text-violet-500" />
+    </>
   );
 }
 
@@ -805,7 +826,7 @@ function AnalysisResults(props) {
       <Section title="Suggested wedge">
         <textarea value={out.wedge || ''} onChange={(e) => updateOutput({ wedge: e.target.value })} rows={2} className={INPUT} />
       </Section>
-      <Section title="Recommended next actions">
+      <Section title="Next steps the run listed">
         <EditableList items={out.next_actions || []} onChange={(next_actions) => updateOutput({ next_actions })} placeholder="Add an action…" />
       </Section>
       <Section title="Notes">

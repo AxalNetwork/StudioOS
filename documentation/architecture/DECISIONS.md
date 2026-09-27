@@ -30740,6 +30740,118 @@ that sentence as the founder's note. It is replaced, not repaired.
   - The other five sentences it pins are kept word for word on the page,
     three of them in the new band.
 
+## D313
+
+**One saved competitor analysis gets its own page at `/research/companies/:id`,
+and `/build/competitors` retires into it for everyone that page admits.**
+Session 2, wave 8, item 4. It builds canvas 90eb4cf2. No migration, no new
+route and no new `api.js` method: every write the canvas draws already had
+one in `competitors.ts`.
+
+**The page is `CompanyAnalysis`, guarded to admin, founder and advisor**, the
+same licences as the Companies list. It draws every element of the canvas:
+- the editable title (max 200), the mode and status pills, "updated …", and
+  "edited since last run";
+- Save, Re-run, Refresh sources, JSON and Markdown;
+- the inputs row, where anything the person did not give reads Not recorded;
+- the founder scope band ("These analyses are yours, not a client's"), which
+  only the advisor zone drew before;
+- the running card, the failed-read card with Try again, and the pipeline-error
+  card with Re-run and Quick scan (a re-run at quick depth);
+- the four tiles, the market summary, and the seven-column competitors table
+  with a category select, origin, relevance, source-kind chips, summary and
+  Remove, plus the Add competitor row with Crawl site;
+- the feature grid, the signal columns, gaps, the wedge, next steps and notes;
+- the landscape-read ZONEDRAFT and the stated limit.
+
+**Three states, three shapes**, as the canvas's D2 to D4 insist:
+- a failed read draws no tiles at all;
+- a failed run draws Not recorded tiles and withholds the body;
+- a finished run draws its numbers, 0 included, because a run that found
+  nothing is a fact.
+
+"Sources fetched" counts sources whose stored HTTP status is 2xx or 3xx, not
+every URL attempted.
+
+**Nothing blank is written as 0.**
+- `PATCH /competitors/:id` re-inserts the whole candidate set with
+  `Number(relevance_score) || 0`, so a save that sent candidates would turn a
+  blank relevance into 0.
+- The page's Save therefore sends the title and the output only. A category
+  change goes through `PATCH /:id/candidates/:cid`, which touches that one
+  column. Companies are added and removed one row at a time.
+- A blank relevance, domain, summary, source list or feature cell reads Not
+  recorded. A blank feature cell is never "no", because an unfetched site is
+  not evidence that a feature is absent.
+- `competitors.ts` is not Session 2's file, so its bulk write is left as it
+  is. A test holds the page to never sending the set.
+
+**The landscape read is a restatement, not a model**, as the canvas draws it
+("It will not invent a wedge, a price, or a company").
+- It repeats the market summary, the direct and adjacent companies with their
+  summaries, and the kinds of source that came back.
+- Accept appends it to the notes under "Landscape read:", after what is
+  there, and saves the output.
+- Accept is disabled while other edits are unsaved, so one press cannot also
+  save them.
+- The canvas says Accept "writes notes/gaps". It writes notes only, and says
+  so.
+
+**Retired, and where each piece now points.**
+- **`/build/competitors`** now redirects, with `replace`, for founder and
+  admin: with `?id=X` to `/research/companies/X`, and otherwise to
+  `/research/companies`. The page read no other query string.
+- **Partner and investor keep the old page.** `/build/competitors` admits
+  them, and `/research/companies` does not, because neither shell has a
+  Companies zone. A redirect would lock them out of a page they can use today,
+  and no canvas-built page does that job for them. For them the page stays,
+  per the retirement rule. `route_role_zone_contract` still holds.
+- **In `CompetitorAnalysis`**, when mounted in the Research zone
+  (`linkToDossier`), each saved analysis is now a link to its page, and a new
+  run opens on its page. Mounted `embedded` on the startup page, or bare for
+  partner and investor, it keeps its in-place panel, so the component and that
+  panel stay: they are not orphaned. The panel's "Recommended next actions"
+  now reads "Next steps the run listed", under the voice rule.
+- **`CompanyCandidate`'s** "‹ Back to analysis" and its after-remove
+  navigation went to the list. Both now go to the analysis.
+- **`FounderResearchDesk.jsx`'s** Company profiles card (Session 2's one line
+  in that file) links `/research/companies`.
+- **Tests:**
+  - `founder_overview_subpage_links`'s `HELD_ELSEWHERE` exception for that
+    line is emptied, because the link now sits inside its own bucket.
+  - `founder_research_a7_contract` pins `/research/companies`, and now
+    refuses `/build/competitors`.
+
+**Differs from the canvas, deliberately.**
+- "Recommended next actions" reads "Next steps the run listed", because copy
+  never calls model output a recommendation.
+- The run also stores positioning and traction signals, which the canvas does
+  not draw. They stay, as two more signal columns, each omitted when empty.
+- The page's `WorkerRail` passes the literal `role="founder"`, per
+  `branch_rail_mount`'s ceiling on computed rail roles. An advisor reading
+  this page sees the founder rail accent. The page's content does not change
+  for them.
+
+**Tests.** `research_company_analysis.test.mjs` is new, with 10 tests. It
+asserts each element at both ends: the canvas draws it, and the page renders
+it. It also runs the three tile shapes, the inputs row, the feature grid's
+transpose and blank cells, the signal columns and the landscape read. It pins
+that a save never sends candidates, the routes, the list links, the
+candidate back-links, the redirect's `?id=`, and the partner and investor
+branch. It also bans the canvas's fixtures.
+
+**Mutations.** 17 were run. 15 were caught on the first run, and two escaped
+because their assertions were weak, so the assertions were fixed, not the
+code:
+- A grid drawn from rows with no feature heads passed. The only no-features
+  case tried also had empty rows. A case with rows and a blank head now
+  requires `null`.
+- Opening the zone's saved list in place passed. The pin matched the `<Link>`
+  text even when its branch was dead. It now requires that link to be the arm
+  `linkToDossier` takes.
+
+After the fix, 17 of 17 are caught.
+
 ## D320
 
 **The archetype banks go from three probes per trait to five, and every one
