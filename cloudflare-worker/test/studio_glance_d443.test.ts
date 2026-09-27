@@ -90,8 +90,11 @@ test('on HQ the per-subsidiary figures stay unrecorded, and the user table is no
   assert.equal(r.body.seats.seats_used_by_type, undefined);
   assert.equal(r.body.approvals.recorded, false);
   assert.match(r.body.approvals.reason, /U1/);
-  assert.equal(r.body.agreements.recorded, false);
-  assert.match(r.body.agreements.reason, /U1/);
+  assert.equal(r.body.agreements.recorded, true, 'agreements are this database\'s, not a U1 refusal');
+  assert.equal(r.body.agreements.expiring, null, 'a missing agreement table is unreadable, not zero');
+  assert.doesNotMatch(String(r.body.agreements.reason || ''), /U1/);
+  assert.equal(r.body.insights.recorded, false);
+  assert.equal(r.body.insights.reason, 'HQ pushes the median and keeps no copy.');
   assert.equal(r.body.revenue.recorded, false);
   assert.match(r.body.revenue.reason, /U1/);
   assert.equal(r.body.licence.recorded, false);
@@ -151,7 +154,7 @@ test('the HQ glance does not count users, and the route is not branch-only', () 
   const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/services/studioGlance.ts'), 'utf8');
   const hq = src.slice(src.indexOf('async function hqGlance'), src.indexOf('async function branchGlance'));
   assert.ok(hq.includes('hqPerSubsidiary'), 'the HQ refusal moved');
-  assert.doesNotMatch(hq, /FROM users|laneCounts|branchHome\(/, 'HQ counts a subsidiary figure from its own tables');
+  assert.doesNotMatch(hq, /FROM users|laneCounts|branchHome\(|branch_benchmarks/, 'HQ counts a subsidiary figure, or reads the benchmark copy it never writes');
   const route = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_studio_glance.ts'), 'utf8');
   assert.match(route, /requireAdmin/);
   assert.doesNotMatch(route, /requireBranchTier/);

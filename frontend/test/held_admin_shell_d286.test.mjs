@@ -136,7 +136,7 @@ test('off a branch, Studio card Open links are the S20 rows and never /branch/*'
   const html = renderToStaticMarkup(createElement(
     MemoryRouter, null,
     createElement(AdminStudioOverview, {
-      user: { role: 'admin' }, home: null, licence: null, templates: null, insights: null,
+      user: { role: 'admin' }, glance: null, home: null, licence: null, templates: null, insights: null,
     }),
   ));
   const cards = [

@@ -272,9 +272,11 @@ export default function BranchHome({ user }) {
 
         {ready && rev ? (
           <div className="mt-2">
-            {pctFromBps(rev.share_bps) === null ? (
-              <Unrecorded reason="The licence copy could not be read, so the rate on it is unknown.">
-                Rate not readable
+            {rev.available === false ? (
+              <Unreadable what="Share rate" claim={rev.reason} />
+            ) : pctFromBps(rev.share_bps) === null ? (
+              <Unrecorded reason={rev.reason || 'The share rate is not on this copy, so none is shown.'}>
+                Rate not recorded
               </Unrecorded>
             ) : (
               <>
