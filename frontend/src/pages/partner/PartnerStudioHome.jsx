@@ -144,7 +144,7 @@ export default function PartnerStudioHome({
         : <ProfileFitSection compact studio audience="partner" className="partner-fit" />}
 
       <div className="partner-grid">
-        <Module title="Assigned delivery tasks" action="Open delivery" to="/partner/operations/engagements" testid="module-assigned-tasks" previewing={previewing} wide>
+        <Module title="Assigned delivery tasks" action="Open delivery" to="/delivery/board" testid="module-assigned-tasks" previewing={previewing} wide>
           {engagements.state === 'loading' ? <Skeleton lines={3} /> : engagements.state === 'unavailable' ? <State>{engagements.message}</State> : taskRows.length ? <div className="partner-list">{taskRows.map((item, index) => <div className="partner-row" key={item.id || item.uid || index}><div><strong>{item.task_title || item.assigned_task_title || item.need_title || item.title || 'Assigned task'}</strong><span>{item.due_at || item.due_date ? `Due ${date(item.due_at || item.due_date)}` : 'Due date not recorded'}</span></div><Status tone={['accepted', 'in_progress', 'active'].includes(item.status) ? 'good' : 'neutral'}>{titleCase(item.status)}</Status></div>)}</div> : <State>Assigned delivery tasks are not available from a connected source.</State>}
         </Module>
 
@@ -158,7 +158,7 @@ export default function PartnerStudioHome({
           </div>}
         </Module>
 
-        <Module title="Relationship health" action="Open relationships" to="/partner/operations/portfolio" testid="module-relationship-health" previewing={previewing}>
+        <Module title="Relationship health" action="Open relationships" to="/delivery/health" testid="module-relationship-health" previewing={previewing}>
           {engagements.state === 'loading' ? <Skeleton /> : engagements.state === 'unavailable' ? <State>{engagements.message}</State> : activeRelationships.length ? <div className="partner-list">{activeRelationships.map((item, index) => <div className="partner-row" key={item.id || item.uid || index}><div><strong>{item.project_name || item.client_name || item.founder_name || item.need_title || 'Engagement'}</strong><span>{item.updated_at ? `Updated ${date(item.updated_at)}` : item.created_at ? `Created ${date(item.created_at)}` : 'Activity date not recorded'}</span></div><Status tone={['accepted', 'in_progress', 'active'].includes(item.status) ? 'good' : 'neutral'}>{titleCase(item.status)}</Status></div>)}</div> : <State>No relationship state is available from connected engagements.</State>}
         </Module>
 
@@ -178,7 +178,7 @@ export default function PartnerStudioHome({
           </div>}
         </Module>
 
-        <Module title="Delivery book" action="Open engagements" to="/partner/operations/engagements" testid="module-delivery-book" previewing={previewing}>
+        <Module title="Delivery book" action="Open engagements" to="/delivery/board" testid="module-delivery-book" previewing={previewing}>
           {analytics.state === 'loading' ? <Skeleton /> : !delivery ? <State>{analytics.message || 'Delivery analytics are not recorded.'}</State> : <div className="partner-kv">
             {delivery.active != null && <div><span>Active engagements</span><b>{delivery.active}</b></div>}
             {delivery.active_value != null && <div><span>Active value</span><b>{money(delivery.active_value)}</b></div>}

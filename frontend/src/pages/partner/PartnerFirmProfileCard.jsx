@@ -21,9 +21,9 @@ import { Unrecorded, Unreadable } from '../../ui';
  * the page mounts this card above its no-company on-ramp. Two stores, one
  * page: the heading and the first sentence name which one this is.
  *
- * BUILT, NOT MOUNTED BY THIS FILE. The mount is Session 15's line in
- * CompanySettingsPage.jsx, which imports this default export and renders it
- * for partner accounts only. Nothing here reads the role; the page decides.
+ * MOUNTED BY THE PAGE, NOT BY THIS FILE (D395). CompanySettingsPage.jsx
+ * imports this default export and renders it for partner accounts only, above
+ * its no-company on-ramp. Nothing here reads the role; the page decides.
  *
  * THREE READS, THREE STATES EACH. The profile, the agreement and the intro
  * toggle each load, fail or answer on their own, so one failure never blanks

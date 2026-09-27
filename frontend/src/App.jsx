@@ -377,7 +377,6 @@ const EmailChangeRevokePage = lazy(() => import('./pages/EmailChangeRevokePage')
 const AdvisorAdvisoryWorkspace = lazy(() => import('./pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
 // Partner Operations shell — tabbed workspace (Overview, Capabilities, Portfolio,
 // Engagements, Performance).
-const PartnerOperationsWorkspace = lazy(() => import('./pages/partner/operations/PartnerOperationsWorkspace'));
 // Authenticated-shell widgets — lazy so they leave the entry chunk. They only
 // ever render inside ProtectedLayout (logged-in users), so a logged-out visitor
 // hitting the landing page never downloads them. Each render site below is
@@ -2918,9 +2917,10 @@ function AppInner() {
           bucketForPath is role-scoped, so each licence resolves to its own
           bucket. Check both lists before adding a sixth slug to either.
 
-          The legacy /partner/operations/*, /needs, /services, /perks and
-          /partner/insights routes all stay mounted — retiring that prefix is an
-          open decision, not this migration's to take. */}
+          The legacy /needs, /services, /perks and /partner/insights routes
+          stay mounted. /partner/operations/* retired in D395: each of its
+          addresses is a redirect below, to the canvas-built page that took
+          its job. */}
       <Route path="/pipeline/leads" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
       <Route path="/pipeline/proposals" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
       <Route path="/pipeline/negotiations" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
@@ -2943,12 +2943,23 @@ function AppInner() {
           Investor and founder keep the page they had; partner gets the shell. */}
       <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], effectiveRole === 'partner' ? <PartnerBucketRoutes /> : investorWorkspace('deals', <PipelineWorkspace />))} />
 
-      <Route path="/partner/operations" element={<Navigate to="/partner/operations/overview" replace />} />
-      <Route path="/partner/operations/overview" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
-      <Route path="/partner/operations/capabilities" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
-      <Route path="/partner/operations/portfolio" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
-      <Route path="/partner/operations/engagements" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
-      <Route path="/partner/operations/performance" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
+      {/* D395 — /partner/operations/* RETIRED. Each tab's job has a
+          canvas-built home, and each address lands on it. No guard here: the
+          destination guards itself, so an unentitled visitor is refused there
+          rather than at a URL that no longer has a page (the D118 shape).
+          None of the retired pages read a query string, so none is carried.
+            root, overview → /company-settings (the firm profile card, D390)
+            capabilities   → /offers/catalog (the service catalogue writes)
+            portfolio      → /delivery/health (founder reviews, D390)
+            engagements    → /pipeline/proposals (withdraw; the lifecycle and
+                              invoice ledger are on /delivery/board)
+            performance    → /pipeline/analytics (the same quotesAnalytics read) */}
+      <Route path="/partner/operations" element={<Navigate to="/company-settings" replace />} />
+      <Route path="/partner/operations/overview" element={<Navigate to="/company-settings" replace />} />
+      <Route path="/partner/operations/capabilities" element={<Navigate to="/offers/catalog" replace />} />
+      <Route path="/partner/operations/portfolio" element={<Navigate to="/delivery/health" replace />} />
+      <Route path="/partner/operations/engagements" element={<Navigate to="/pipeline/proposals" replace />} />
+      <Route path="/partner/operations/performance" element={<Navigate to="/pipeline/analytics" replace />} />
       {/* D118/D119 — the three investor Deals sub-paths retire to `/deals/*`,
           which is now their equal: #586 ported the search and the counted
           chips they had and the zones did not. The destination guards itself,

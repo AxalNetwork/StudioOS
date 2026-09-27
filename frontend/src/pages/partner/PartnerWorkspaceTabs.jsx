@@ -22,7 +22,7 @@ import PartnerWorkspaceShell from './PartnerWorkspaceShell';
  *   /perks                            admin founder partner investor advisor exploring
  *   /comarketing                      admin partner founder investor
  *   /partner/office-hours             admin partner
- *   /partner/operations/*             admin partner
+ *   /pipeline/*, /offers/* zones      admin partner
  *
  * An investor on /services would otherwise see Office Hours and Capabilities
  * tabs that bounce them off the guard. A tab that cannot be opened is worse
@@ -44,7 +44,7 @@ const SETS = {
       roles: ['admin', 'partner', 'investor'] },
     { to: '/partner/insights', label: 'Demand', icon: TrendingUp,
       roles: ['admin', 'partner', 'investor'] },
-    { to: '/partner/operations/engagements', label: 'Retainers', icon: Layers,
+    { to: '/pipeline/retainers', label: 'Retainers', icon: Layers,
       roles: ['admin', 'partner'] },
   ],
   offers: [
@@ -54,7 +54,7 @@ const SETS = {
       roles: ['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'] },
     { to: '/comarketing', label: 'Visibility', icon: Megaphone,
       roles: ['admin', 'partner', 'founder', 'investor'] },
-    { to: '/partner/operations/capabilities', label: 'Proof', icon: Award,
+    { to: '/offers/proof', label: 'Proof', icon: Award,
       roles: ['admin', 'partner'] },
     { to: '/partner/office-hours', label: 'Office hours', icon: Calendar,
       roles: ['admin', 'partner'] },

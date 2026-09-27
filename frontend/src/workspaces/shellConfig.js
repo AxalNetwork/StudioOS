@@ -369,16 +369,19 @@ export const SHELLS = {
           { slug: 'leads', label: 'Leads', archetype: A.MATCH_ENGINE, legacy: '/needs' },
           { slug: 'proposals', label: 'Proposals', archetype: A.COLLECTION, legacy: '/partner/operations/engagements' },
           { slug: 'negotiations', label: 'Negotiations', archetype: A.WORK_BOARD },
-          { slug: 'retainers', label: 'Retainers', archetype: A.LEDGER, legacy: '/partner/operations/portfolio' },
+          { slug: 'retainers', label: 'Retainers', archetype: A.LEDGER },
           { slug: 'analytics', label: 'Analytics', archetype: A.ANALYTICS, legacy: '/partner/insights' },
         ] },
       { kind: 'bucket', label: 'Delivery', prefix: '/delivery', tagline: 'Ship the work',
         zones: [
-          { slug: 'board', label: 'Board', archetype: A.WORK_BOARD, legacy: '/partner/operations/overview' },
+          // D395 — `legacy` here matches App.jsx's redirects for the retired
+          // /partner/operations/*: overview went to /company-settings (the
+          // firm profile card, no zone), portfolio to Health.
+          { slug: 'board', label: 'Board', archetype: A.WORK_BOARD },
           { slug: 'deliverables', label: 'Deliverables', archetype: A.COLLECTION },
           { slug: 'capacity', label: 'Capacity', archetype: A.ANALYTICS },
           { slug: 'status-reports', label: 'Status reports', archetype: A.FEED },
-          { slug: 'health', label: 'Health', archetype: A.WORK_BOARD, legacy: '/partner/operations/performance' },
+          { slug: 'health', label: 'Health', archetype: A.WORK_BOARD, legacy: '/partner/operations/portfolio' },
         ] },
       { kind: 'bucket', label: 'Offers', prefix: '/offers', tagline: 'Package what we sell',
         zones: [
