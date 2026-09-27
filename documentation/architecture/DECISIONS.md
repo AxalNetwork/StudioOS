@@ -12151,7 +12151,9 @@ with its own `pushed_at`* — `branch_licence`, `branch_promo_ceiling`,
 
 1. **`body_md`.** Nothing on a branch renders or instantiates a template body:
    S5's picker shows the library, and `licence_contracts` (migration 259) is
-   HQ's table behind `requireSuperAdmin`. A body column with no reader is the
+   HQ's table behind `requireSuperAdmin`. D444: that table is the licence
+   agreement only (D199), and it is not why the body stays here — the branch
+   list does not carry the body either. A body column with no reader is the
    store-built-so-a-page-looks-complete mistake this programme has deleted four
    times (D129's seat store, D131's six blocks, D140's adjustable dates, D141's
    invented bindings). When instantiation lands it is one additive `ALTER`.
@@ -18552,7 +18554,10 @@ tell a rule from its violation*; it now asserts the claim itself.
 ### NOT BUILT, AND WHY
 
 - **S5's Active contracts table.** Readable, not built, and two of its columns
-  have no store for envelopes.
+  have no store for envelopes. D444 later tables the rows
+  `GET /api/admin/contracts` already returns. Value, renewal and the version
+  the row was sent from stay unrecorded, because that list still does not
+  carry them.
 - **An end date on e-sign envelopes and documents.** That is a model change —
   a field on the send path, with a writer — and without a writer a new column
   would count zero forever, which is the invented figure this card refuses.
@@ -34168,6 +34173,20 @@ record could not be read. Nothing here is drawn from a guess. Retry".
 **Who reads it.** `StudioNeedsDecision.jsx` and `AdminStudioOverview.jsx` both call `loadStudioGlance` in `adminStudioOverview.js`, and both render through `glancesFromStudioGlance`, so a tile and its card still cannot disagree. `AdminStudioHome.jsx` is Session 3's and is not edited. It still issues the four branch reads and passes them down, which is what a synchronous render sees until the glance answers. Session 3 should drop those four calls. The children already read `GET /api/admin/studio/glance`.
 
 **Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: HQ seats counted from `users`; the U1 sentence removed from the seats refusal; the strip's `loadStudioGlance` call removed.
+
+## D444
+
+**The branch Contracts page tables this database's own contracts, from the list it already had.** Wave 8, Session 6, item 5. No migration. No new `/api/*` method. `admin_contracts.ts` is not edited. No live branch exercised this.
+
+**The ledger.** `BranchContracts.jsx` reads `GET /api/admin/contracts` (`api.adminListContracts`, limit 500) and `GET /api/admin/contracts/stats` (`api.adminContractStats`). Both are `requireAdmin` and already union documents, e-sign envelopes, pairwise NDAs and partner deals in the deployment's own database (D199). A failed list is Unreadable. A list that returns a total of zero says the database was read and holds none. The caption says how many rows are on the page and how many the list counted, so a page is not printed as the population. Pending signatures are `pending_signature` on the stats payload, and only when that read succeeded and the field is a finite number. A missing field stays Not recorded. A failed stats read is not zero pending.
+
+**What the list does not carry.** Value, renewal, and the version the agreement was sent from are Not recorded on every row. Pairwise NDAs and partner deals store an end date, and this list drops both; e-sign envelopes and documents record none. The version on the library card is the copy HQ last pushed, not the version of the row. None of the three is shown as zero.
+
+**The stale reason.** `branch_templates.ts` told a branch that a template body has no reader because `licence_contracts` is HQ's table. That table is the licence agreement only. The body still stays at HQ: nothing on a branch instantiates it, and the contract list carries the template name and not the body. The page still prints `not_carried` from the payload.
+
+**Not on this page.** Resend, void, and the contract detail fetch. `esign.ts` and `SendForSignaturePage.jsx` are untouched.
+
+**Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: the body reason put `licence_contracts` back; the page stopped calling `adminListContracts`; a missing `pending_signature` was rendered as zero pending.
 
 ## D450
 
