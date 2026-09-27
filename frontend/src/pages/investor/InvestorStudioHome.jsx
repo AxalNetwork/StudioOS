@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowUpRight, CircleAlert, RefreshCw, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import PersonalAdvisor from '../../components/advisor/PersonalAdvisor';
+import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
 import InvestorQuotaBars from '../../components/InvestorQuotaBars';
 import { api } from '../../lib/api';
@@ -88,7 +88,7 @@ export default function InvestorStudioHome({
       {Object.keys(failures).length > 0 && <div className="is-source-note" data-testid="status-investor-studio-partial"><CircleAlert size={15} />Some private sources are unavailable. No values have been estimated.<button type="button" onClick={() => setRetry((n) => n + 1)} data-testid="button-retry-investor-studio">Retry</button></div>}
 
       <div className="is-advisor" data-testid="section-investor-advisor">
-        {previewing ? <AdvisorUnavailable previewing /> : <PersonalAdvisor disablePersistedFullscreen onAvailabilityChange={setAdvisorAvailable} />}
+        {previewing ? <AdvisorUnavailable previewing /> : <StudioInterview persona="investor" disablePersistedFullscreen onAvailabilityChange={setAdvisorAvailable} />}
         {!previewing && advisorAvailable === false && <AdvisorUnavailable />}
       </div>
       <div className="is-assessment" data-testid="section-investor-assessment">

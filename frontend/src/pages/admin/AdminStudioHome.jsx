@@ -2,7 +2,8 @@
  * Admin Studio — the admin profile's front door.
  *
  * Eadwyn (the chat, the ticket, Proposed / Pending / Completed) is
- * PersonalAdvisor. Under it, in the canvas's order (D246): the operating
+ * PersonalAdvisor, mounted through StudioInterview, which collapses it to one
+ * row once the interview is complete (D324). Under it, in the canvas's order (D246): the operating
  * posture, what needs a decision, then one card per other Admin page in the
  * sidebar's order. The needs-a-decision tiles read the same four props the
  * cards do; the posture makes its own read because the bank is the admin's,
@@ -10,13 +11,13 @@
  * belong here.
  */
 import React, { useEffect, useState } from 'react';
-import PersonalAdvisor from '../../components/advisor/PersonalAdvisor';
+import StudioInterview from '../../components/advisor/StudioInterview';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { branchOfUser } from '../../lib/shellRole';
 import { AdminStudioOverview } from './AdminStudioOverview';
 import { UNAVAILABLE } from './adminStudioOverview';
-import StudioPosture, { CHAT_ANCHOR } from './StudioPosture';
+import StudioPosture from './StudioPosture';
 import { StudioNeedsDecisionView } from './StudioNeedsDecision';
 
 export default function AdminStudioHome({ user }) {
@@ -59,9 +60,7 @@ export default function AdminStudioHome({ user }) {
       <header className="mb-4">
         <h1 className="text-2xl font-extrabold tracking-tight text-axal-ink">Studio</h1>
       </header>
-      <div id={CHAT_ANCHOR}>
-        <PersonalAdvisor />
-      </div>
+      <StudioInterview persona="admin" />
       <StudioPosture />
       <StudioNeedsDecisionView
         user={user}

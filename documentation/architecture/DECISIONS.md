@@ -31306,6 +31306,93 @@ palette's key.
     hiding its failure, or the venture card linking Command Center;
   - the tour regaining the search step.
 
+## D324
+
+**Every Studio home collapses Eadwyn to one row once the interview is
+complete, and the assessment band's empty state is one designed card.**
+Wave 8, Session 3, item 5 (the gap map's PR 4). Frontend only: no migration,
+no route, no `api.js` method (`api.advisor.progress` and `api.advisor.queue`
+already existed).
+
+**The defect.** Canvas 69dc42f3 draws, on S3, "the one improvement": a
+finished interview collapses to a single row (completion, the top three open
+proposals, Open a ticket, Resume), so the page leads with what is
+time-critical. Only the advisor home collapsed, and its row had Resume only.
+Above it, the advisor home drew the canvas's three sample proposals ("Intro
+call filter", "Consent to show client outcomes", "Session-note auto-send") as
+a hard-coded strip. They were the canvas's `doneTop` fixture, frozen as copy,
+and never read from anything.
+
+**What ships.**
+- `components/advisor/StudioInterview.jsx` wraps the chat on all five homes
+  (founder, investor, advisor, partner, admin); none of them mounts
+  `PersonalAdvisor` directly any more. It reads `/advisor/progress`, and it
+  collapses only when the server's `overall.complete` is `true`. A progress
+  read that fails, or that does not say complete, leaves the full chat up,
+  because the row claims a finished interview.
+- `components/advisor/interviewCompleteRow.jsx` is the row:
+  - "Eadwyn" and "persona · answered/total answered (percent) · interview
+    complete", with skipped questions counted when there are any.
+  - The top three open proposals from `/advisor/queue`, in the order the
+    Worker ranked them. Each is a link to its page when the question names one
+    or the router's catalogue knows it. High-importance proposals are marked.
+    An empty queue reads "No open proposals."; a failed or malformed queue
+    read is `Unreadable` with a retry.
+  - "Open a ticket" reopens the chat with its ticket form already open, and
+    "Resume" reopens the chat. `PersonalAdvisor` gains one prop,
+    `initialTicketOpen`, which defaults to `false`, so every other caller is
+    unchanged.
+- The advisor home's own progress read, its ad hoc collapse and the
+  hard-coded strip are removed. The strip's three links are still on the
+  page: "Open storefront" on the Storefront card, "Open clients" on the
+  Engagements and Consented proof cards, and Settings in the shell. Its CSS
+  rules go with it.
+- The page's one `#studio-chat` anchor moves into the wrapper, defined once in
+  `interviewCompleteRow.jsx`. The admin posture's `CHAT_ANCHOR` is that
+  constant, so its "Continue in the chat" links still land.
+
+**The assessment band's empty state.** Canvas S4 draws the band, when nothing
+has been measured, as one card with one action, "because results genuinely
+can be absent and a gray placeholder would read as breakage".
+`ProfileFitSection`'s Studio band now draws "Assessment not started" with
+"Begin with the chat" (a link to `#studio-chat`) in place of its three
+separate nudges. It does so only when all four reads (radar, values,
+assessment results, best fit) answered and every one is empty. A read still
+loading, or one that failed, keeps the three cards, so a failure never reads
+as "not started". The canvas draws the card on the Partner artboard only, but
+the band is one shared component and the card's copy names no persona, so it
+applies to every profile.
+
+**On record.** The regulated-wording lint scans the two new files (23
+surfaces). One ledger entry, the advisor home's "Advisor interview is withheld
+in role preview.", is removed with the string it recorded (12 on record).
+`admin_studio_overview.test.mjs` pinned a bare `<PersonalAdvisor />` on the
+admin home. It now asserts the admin home mounts Eadwyn once, through
+`StudioInterview`, which mounts `PersonalAdvisor`.
+
+**Verification.**
+- `npm run test:drift` on main 4a3484ca9: exit 0. Frontend 4009 to 4024, the
+  15 new tests all in `studio_interview_d324.test.mjs`; worker 4771 (4768
+  pass, 0 fail), retention 112 and guards 14 unchanged. Both
+  typechecks, `lint:undef`, `check-unused-imports`, `check-react-hook-imports`,
+  `check-dark-mode`, `check-frontend-logging`, `check-regulated-wording`,
+  `check-folder-docs`, `check-decision-ids` and `check-api-drift` exit 0.
+  Root `npm run build`, then `check-docs-fresh --strict`, exit 0.
+- Mutations: 17 run, 17 caught (non-zero exit and a `not ok` line, each file
+  restored from a sha256-checked snapshot):
+  - progress: the flat fields read before `overall`, and a truthy value
+    counted as complete;
+  - proposals: the queue re-sorted, a fourth proposal shown, a non-queue
+    payload read as empty, the catalogue fallback for a page dropped, a failed
+    read shown as "none", and the skipped count dropped;
+  - the wrapper: the chat collapsing without the server's word, Open a ticket
+    reopening without the form, `PersonalAdvisor` ignoring the new prop, and
+    the anchor dropped;
+  - the empty card: shown on a failed read, shown when best fit has an
+    archetype, or never shown;
+  - the homes: the advisor home's strip restored, and the founder home
+    mounting the chat directly.
+
 ## D330
 
 **AdminX.jsx and AdminTelegram.jsx say why no draft was made.** Wave 8,

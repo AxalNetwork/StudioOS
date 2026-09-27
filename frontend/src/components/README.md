@@ -12,7 +12,7 @@ building blocks.
 
 | Folder | What lives there |
 | --- | --- |
-| `advisor/` | Advisor-facing panels. |
+| `advisor/` | Eadwyn's chat (`PersonalAdvisor.jsx`) and its panels. Every Studio home mounts it through `StudioInterview.jsx`, which collapses it to the one "interview complete" row in `interviewCompleteRow.jsx` once the server says the interview is complete (D324). Like the chat itself, the wrapper makes its own reads (progress and the proposal queue), so the collapse behaves the same on all five homes. |
 | `auth/` | Shared auth chrome (`AuthShell`) for sign-in and onboarding entry. |
 | `brand/` | Brand builder; `brand/templates/` holds the landing-page previews. |
 | `cofounder/` | Co-founder agreement and matching. |
