@@ -33464,6 +33464,67 @@ artboard's "Funds moved", real now: the sum over the recorded transfers.
   list, a second checklist applied, a default item seeded, the cents
   conversion dropped, the operator gate dropped, the packet indexing
   unexecuted paper.
+## D463
+
+**The founder's investor update on /build/metrics, and the deal-flow page with
+a deal source.** Wave 8, Session 17, item 4. Migration 336 (`deals.source`).
+No new `/api/*` method (`api.portfolioUpdateCreate`, `api.portfolioUpdatesList`,
+`api.dealStageAnalytics` and `api.updateDeal` already existed).
+
+**The founder investor update.** `POST /portfolio-updates` has always taken the
+owning founder, but the only composer sat on `/portfolio/updates` — a zone
+route of the portfolio shell, guarded `['admin','investor']` — and the
+Portfolio workspace's Updates tab listed the founder (and the partner), leading
+into the refusal. The composer now lives where the canvas puts it: the Investor
+update card on the Metrics page the founder already keeps
+(`MetricsPage.jsx`'s `InvestorUpdateCard`), over the same store — KPIs
+pre-filled from the latest snapshot on the page so the update and the metrics
+start from the same numbers, each field editable. The card lists the project's
+updates back (what the investor inbox reads), and a failed read is unreadable
+with a retry, never an empty list. The tab's roles now match the guard
+(`['admin','investor']`); the founder's shell has no `/portfolio/updates` zone
+and the route_role_zone_contract holds that line. The composer's project is
+picked from the founder's startups, never typed as a raw id
+(`PortfolioUpdatesPage.jsx`). **Named as missing (Session 4's outbound mail):**
+a test copy to myself and a send log — submitting puts the update in the
+investors' inbox and nothing else leaves the firm, and the card says so.
+
+**The deal-flow page with a deal source.** `deals.source` (migration 336) is
+FREE TEXT, deliberately: the source taxonomy — which sources exist, and which
+count as the Lab — is the owner's call, and a CHECK written before it would
+enshrine a guess. It is written at draft (`POST /deals` and `/deals/draft`)
+and editable after: `PUT /deals/:id` now takes the full terms set it used to
+freeze (target, minimum check, valuation cap, instrument, jurisdiction,
+deadline, website, description, lead partner, source), each written only when
+the key is present so a partial edit blanks nothing it did not send. The Deal
+Flow page renders the stage funnel (`GET /deals/stage-analytics` was served
+and unread) with per-stage conversion and time-in-stage, the route's own
+recording-since caveat, and the narrowed source-quality sentence — the column
+exists now; what is missing is the decided taxonomy and the term-sheet
+object, both the owner's call, both named on screen. The Pipeline zone's
+fourth tile becomes "Source recorded" (counting deals carrying one); the
+artboard's "From the Lab" count awaits the taxonomy and the limits block says
+so.
+
+### VERIFIED
+- `npm run test:frontend` exit 0: 3683 pass. `npm run test:worker` exit 1,
+  the one failure pre-existing on main (`capital_call_ledger.test.ts`,
+  Session 9's area; reported, untouched): 4573 tests, 4569 pass, 3 skipped.
+  New tests: `deal_source_and_terms` (4, worker) and
+  `founder_investor_update` (6, frontend). Re-aimed, not loosened:
+  `dealPassTaxonomy`'s source-quality refusal (the column exists; the
+  taxonomy and the term-sheet object are what is missing), and
+  `investor_deals_id1`'s fourth-tile test (Source recorded, the Lab count
+  named as the owner's call).
+- 8 mutations, 7 caught on the first run and the 8th caught after an
+  assertion fix (the draft and the editor carry the same `source:` line, so a
+  file-wide match could not tell which stopped sending it; the assertion now
+  slices both), each on a non-zero exit with a `not ok` line (unique anchors,
+  byte-change proven, sha256-checked restores): the composer not posting, the
+  picker loading no startups, the founder re-added to the Updates tab, the
+  draft not sending the source, the stage-analytics read dropped, PUT
+  blanking the source on a partial edit, the draft not recording it, the
+  Pipeline tile claiming the Lab.
 - Both typechecks, `check-sql-migrations`, `check-sqlite-dialect`,
   `check-sql-prepare`, `check-timestamp-comparisons`,
   `check-runtime-schema-declared`, `check-decision-ids`, `check-folder-docs`,

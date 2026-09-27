@@ -18,6 +18,12 @@ export default function PortfolioUpdatesPage({ embedded = false }) {
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({ project_id: '', period: '', title: '', body: '', kpis: {} });
+  // The composer's project is NAMED, never picked and never typed: a founder
+  // has one company and one startup (measured against production), so a picker
+  // would be a second axis beside the company switcher — the shape
+  // check-inline-project-pickers removed. A founder with several startups
+  // writes from each one's Metrics page, where the project is the context.
+  const [projects, setProjects] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -27,15 +33,26 @@ export default function PortfolioUpdatesPage({ embedded = false }) {
       .finally(() => setLoading(false));
   };
   useEffect(load, []);
+  useEffect(() => {
+    if (!isFounder) return;
+    api.listProjects()
+      .then((list) => setProjects(Array.isArray(list) ? list : []))
+      .catch(() => setProjects(null));
+  }, [isFounder]);
 
   const onCreate = async (e, submit) => {
     e.preventDefault();
+    const projectId = Number(form.project_id || (projects || [])[0]?.id);
+    if (!Number.isFinite(projectId)) {
+      setErr('No startup is recorded for you, so there is nothing to update yet.');
+      return;
+    }
     setBusy(true); setErr(null);
     try {
       const kpis = {};
       for (const [k] of KPI_KEYS) if (form.kpis[k] !== undefined && form.kpis[k] !== '') kpis[k] = Number(form.kpis[k]);
       await api.portfolioUpdateCreate({
-        project_id: Number(form.project_id), title: form.title,
+        project_id: projectId, title: form.title,
         period: form.period || undefined, body: form.body || undefined,
         kpis, status: submit ? 'submitted' : 'draft',
       });
@@ -74,8 +91,15 @@ export default function PortfolioUpdatesPage({ embedded = false }) {
       {isFounder && creating && (
         <form className="mb-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
-            <input value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })} placeholder="Startup ID" inputMode="numeric" required
-              className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
+            <div className="px-3 py-2 border border-gray-200 dark:border-gray-800 rounded-lg bg-gray-50 dark:bg-gray-800/40 text-sm" data-testid="update-project-name">
+              {projects === null
+                ? 'Your startup could not be read — retry before writing.'
+                : (projects || []).length === 0
+                  ? 'No startup is recorded for you yet.'
+                  : (projects || []).length === 1
+                    ? <>For <strong>{projects[0].name}</strong></>
+                    : <>You have several startups — this update is for <strong>{projects[0].name}</strong>. To write for another, open it in Metrics.</>}
+            </div>
             <input value={form.period} onChange={(e) => setForm({ ...form, period: e.target.value })} placeholder="Period (e.g. 2026-06)"
               className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
             <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Title" required
