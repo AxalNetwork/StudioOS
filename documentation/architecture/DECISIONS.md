@@ -33627,6 +33627,26 @@ Not recorded (U1).
 **Tests.** `hq_contracts_doc_type_d454.test.mjs`;
 `admin_contracts_doc_types_d454.test.ts`.
 
+## D455
+
+**HQ · Support names the inherited SLA and bands open tickets against it.** Wave 8,
+Session 16, item 6. No migration; no new `/api/*` method — `GET
+/api/admin/hq-support` gains `sla_policy` and `taxonomy`.
+
+**Policy.** P1/P2/P3 at 24/48/96 hours, read-only on the page, with the canvas
+note that subsidiaries inherit the bands whole. Tickets map `urgent` → P1,
+`high` → P2, `medium` and `low` → P3; band is age against that tier with the
+same 24h due-soon window escalations use.
+
+**Queues.** The two ticket queues show band totals and per-row bands; escalations
+unchanged on `due_at`.
+
+**Taxonomy.** Open counts grouped by `tickets.type` (bug, feature, task). The
+artboard’s eight business categories are not stored and stay named as absent in
+the rail.
+
+**Tests.** `support_sla_d455.test.ts`; `hq_support_sla_d455.test.mjs`.
+
 ## D460
 
 **The investor deal-flow honesty pass: dead controls wired, false sentences
