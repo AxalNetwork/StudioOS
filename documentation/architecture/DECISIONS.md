@@ -31629,6 +31629,113 @@ graduate is also kept out of the Issue queue for the same reason.
     after. The shared logger was not suppressed: a pragma at its sink would
     hide every future finding there.
 
+## D383
+
+**The Spin-Out Lab application lifecycle, the store and routes half: answers,
+a draft, withdrawal, an applicant-facing note and a partner interview.**
+Session 10, item 4, split into two PRs. This is the backend. The Apply wizard
+and status screen that read it are D384. Migrations 315 and 316. Five new
+`api.js` methods, each with its worker route.
+
+**Why.** The Apply & Status canvas draws a five-step application, a saved
+draft, a withdraw note, a timeline (Submitted → Screening → Partner interview
+→ Decision), an interview card, and a declined variant with a reason, up to
+three asks and a reapply date. None of it had a store:
+- `spinout_applications` held only step 1 (company, idea, incorporated,
+  stage, jurisdiction), written as `pending` the moment it existed.
+- `cohort_applicants.decision_reason` is the admin's required note, and it
+  carries system text ("Legacy admin decision", capacity roll-forwards). It
+  cannot be shown to an applicant.
+- Nothing stored an interview. The apply page promised "a 30-minute call"
+  that no row could confirm.
+
+**The store.**
+- **Migration 315.** `spinout_applications` gains `answers_json` (steps 2–5,
+  written in the same INSERT as the application), `withdrawn_at`, and
+  `applicant_note`, `applicant_asks_json`, `applicant_note_at`. A new table,
+  `spinout_application_drafts`, holds one draft per account.
+  - *Drafts sit in their own table*, never in `spinout_applications`, so no
+    admin list, pool count or one-pending-application guard has to learn to
+    skip them.
+  - *NULL answers mean "never asked"*, not "left blank". Every application
+    made before 315 has them, and the view says `answers_recorded: false`.
+- **Migration 316.** `spinout_application_interviews`: one row per scheduled
+  interview. The latest row is the live one; earlier rows are its history.
+
+**The answers** (`services/applicationLifecycle.ts`, pure). Every choice is a
+closed enum the canvas names: origin, TTO status, IP flags. Free text is
+clipped, never refused for length. A submission must carry origin, team size
+and why Axal, plus a TTO status for an institutional origin and an
+institution for a university one. Traction is optional, as the canvas says.
+`/apply` without `answers` behaves exactly as before, so the shipped one-page
+form keeps working until D384 replaces it. With `answers`, a missing field is
+`400 answers_incomplete` with the `missing` list.
+
+**What the applicant sees.** `/state` gains `applicant`, built by
+`applicantView`:
+- the application's status, dates and answers;
+- the pool row's status and its cycle (label, app status, start, close);
+- the admin's note and asks, when one was written;
+- the live interview, never a cancelled one;
+- when to reapply, only once declined, from the application window.
+
+It never reads `decision_reason`. The block is read in its own try/catch, so
+a database without 315 answers `applicant: null` and the rest of `/state` is
+unchanged. On such a database an `/apply` carrying answers refuses
+`503 application_not_saved` rather than storing the application without
+them, and withdraw refuses `503 withdraw_unavailable`.
+
+**The runtime CREATE is not widened.** `ensureApplicationsTable` mirrors
+migration 155. Declaring 315's five columns there too would make 315's ALTERs
+fail on any database the route created first, and the schema-pair ledger's
+rule is that a second declaration is never the answer. The pair is recorded in
+`scripts/schema-pair-drift-baseline.json` with that reason.
+
+**The routes.**
+- `GET`, `PUT`, `DELETE /spinout-lab/apply/draft`: founder and explorer
+  accounts only (`role_cannot_apply`). A draft is capped at 20,000
+  characters (`draft_too_large`, 413). Submitting deletes it.
+- `POST /spinout-lab/apply/withdraw`: only a pending application whose pool
+  row is pending or waitlisted (`not_withdrawable`, 409). It is a soft
+  delete:
+  - The row becomes `withdrawn`, and its answers and idea are cleared, which
+    is the canvas's "we delete the file".
+  - The pool row follows to `withdrawn`, decided by `user:<id>`, so the
+    capacity job stops counting it.
+  - Scheduled interviews are cancelled.
+  - The row is not deleted, because `cohort_applicants.application_id` has
+    no foreign key and deleting it would orphan the pool's history.
+- `POST /spinout-lab/apply/interview/reschedule` `{ reason }`: records the
+  request and the reason. It does not move the interview. An admin does
+  that, by scheduling again.
+- `POST /admin/cohort/applications/:id/interview` and `…/interview/cancel`:
+  `requireAdmin` (so the compliance freeze applies) and
+  `requireBranchNotSuspended`. Only a pending or waitlisted applicant can be
+  scheduled, and the time must be in the future. Replacing an interview
+  cancels the old one and inserts the new one in one `DB.batch`, so a failed
+  insert cannot leave no interview. Both write `activity_logs`.
+- **decide** takes `applicant_note` (up to 2,000 characters) and
+  `applicant_asks` (up to three). It writes them to the application and
+  returns `applicant_note_saved`: true, false, or null when none was sent.
+  It refuses a withdrawn applicant (409), and its UPDATE excludes them too.
+- **The admin list** gains each applicant's answers, withdrawal, note and
+  live interview, read per cycle in their own try/catch.
+
+**Not in this PR.**
+- **No email.** Outbound mail is Session 4's. Interview invitations and the
+  declined note reach the applicant on `/state` only.
+- **The UI**, and retiring `ApplicationStatusSection` and the apply page's
+  confirmation, are D384.
+
+**Verified.**
+- `spinout_application_lifecycle_d383.test.ts`: 20 tests on real SQLite
+  built from `schema_baseline.sql` plus 315 and 316, and without them.
+- **Mutations.** 14 run. One escaped on the first run: `reapply` shown to an
+  applicant still in review. The /state test now asserts it is null: 14 of
+  14 caught.
+- **Production D1 was not read** by this session. After merge, the deploy
+  run must show "Apply pending D1 migrations" finishing before "Deploy".
+
 ## D390
 
 **Retiring `/partner/operations/*`, part 1a: the two jobs that existed
