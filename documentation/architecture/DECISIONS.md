@@ -30995,9 +30995,12 @@ when no date was on record. D360 recorded both and left them for this item.
   - The card's Studio gate is unchanged.
   - Route by route, the old page's jobs were: listing trackers, creating one
     with a project picker, uploading a receipt, marking it mailed, and
-    confirming delivery. The Lab page already did all of them for one
-    project. It gains a company switcher for a founder with more than one
-    project, so no tracker becomes unreachable.
+    confirming delivery. The Lab page already did all of them for the
+    founder's startup. The old page's project picker is not carried over:
+    #181 removed every in-body project picker on the decision "one company,
+    one startup", the sidebar's CompanySwitcher is the single writer of
+    scope, and `check-inline-project-pickers` refuses a new one. A switcher
+    added in this item's first draft was caught by that guard and removed.
   - The old page read no query string.
   - `PageExplainer`'s `section_83b` entry stays, because the Settings page
     lists it.

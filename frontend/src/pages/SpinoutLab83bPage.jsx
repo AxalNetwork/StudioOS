@@ -214,13 +214,6 @@ export default function SpinoutLab83bPage({ embedded = false }) {
   // Which reads failed. A failed read is never folded into an empty one.
   const [unread, setUnread] = useState({ projects: false, trackers: false, capTable: false });
 
-  // Every project the viewer can see, and the one whose trackers are shown.
-  // The retired Section83bPage listed trackers across ALL of a founder's
-  // projects; a founder with more than one gets a switcher here instead, so no
-  // tracker becomes unreachable (D361).
-  const [projects, setProjects] = useState([]);
-  const [chosenId, setChosenId] = useState(null);
-
   const load = useCallback(async () => {
     setStatus('loading');
     try {
@@ -230,10 +223,7 @@ export default function SpinoutLab83bPage({ embedded = false }) {
         failed.projects = true;
         return null;
       });
-      const allProjects = Array.isArray(projects) ? projects : [];
-      setProjects(allProjects);
-      const p = failed.projects ? null
-        : allProjects.find((x) => chosenId != null && Number(x.id) === Number(chosenId)) || pickLabProject(allProjects, user);
+      const p = failed.projects ? null : pickLabProject(projects, user);
       setProject(p);
       const [tr, ct] = await Promise.all([
         failed.projects ? null : api.legal83bList(p?.id).catch((e) => {
@@ -257,7 +247,7 @@ export default function SpinoutLab83bPage({ embedded = false }) {
       reportError('SpinoutLab83bPage:load', e);
       setStatus('error');
     }
-  }, [user, chosenId]);
+  }, [user]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -415,20 +405,23 @@ export default function SpinoutLab83bPage({ embedded = false }) {
     setCreating(true);
   };
 
-  const LoadingShell = embedded ? EmbeddedShell : LabPageShell;
+  // Outside the Legal Engine card the page owns the Lab gutters (LabPageShell);
+  // embedded, the card owns them, so the same stack renders without them.
+  const wrap = (props, children) => (embedded
+    ? <div className="space-y-5" data-testid={props.testId}>{children}</div>
+    : <LabPageShell {...props}>{children}</LabPageShell>);
   if (status === 'loading') {
     return (
-      <LoadingShell width="full" spaceY="" testId="page-spinout-83b">
+      wrap({ width: 'full', spaceY: '', testId: 'page-spinout-83b' }, (
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <Loader2 size={15} className="animate-spin" /> Loading your 83(b) tracker…
         </div>
-      </LoadingShell>
+      ))
     );
   }
 
-  const Shell = embedded ? EmbeddedShell : LabPageShell;
-  return (
-    <Shell width="full" testId="page-spinout-83b">
+  return wrap({ width: 'full', testId: 'page-spinout-83b' }, (
+    <>
       {/* Header — Lab shell, back to WORKSPACE (not Incorporate). Embedded in
           the Legal Engine card, the card's own title and back control stand in. */}
       {!embedded && (
@@ -440,18 +433,6 @@ export default function SpinoutLab83bPage({ embedded = false }) {
         />
       )}
 
-      {projects.length > 1 && !readFailed && (
-        <label className="flex items-center gap-2 text-[12px] text-gray-600 dark:text-gray-300">
-          <span className={LBL}>Company</span>
-          <select
-            value={project?.id ?? ''} data-testid="select-83b-project"
-            onChange={(e) => { setActiveId(null); setChosenId(Number(e.target.value)); }}
-            className="h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-[13px] text-gray-800 dark:text-gray-100"
-          >
-            {projects.map((x) => <option key={x.id} value={x.id}>{x.name || `Project ${x.id}`}</option>)}
-          </select>
-        </label>
-      )}
 
       {/* State band. The design ships these as a clickable scenario switcher;
           here the live state is derived and the others are inert, because
@@ -946,11 +927,6 @@ export default function SpinoutLab83bPage({ embedded = false }) {
           </div>
         </div>
       )}
-    </Shell>
-  );
-}
-
-/** The embedded stand-in for LabPageShell: same stack, no Lab gutters. */
-function EmbeddedShell({ testId, children }) {
-  return <div className="space-y-5" data-testid={testId}>{children}</div>;
+    </>
+  ));
 }
