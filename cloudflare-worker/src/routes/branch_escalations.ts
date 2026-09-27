@@ -167,8 +167,8 @@ r.get('/escalations', async (c) => {
       // is one decision, so a surface must not draw a reply box.
       answer_shape: 'single_decision',
       answer_note:
-        'HQ returns one decision with who made it and when. There is no reply thread — a message '
-        + 'store does not exist, and a reply box here would write nowhere.',
+        'HQ returns one decision with who made it and when. There is no reply thread. The owner '
+        + 'has not signed off reversing that single decision, so a reply here would write nowhere.',
     });
   } catch (e) { return mapError(c, e); }
 });

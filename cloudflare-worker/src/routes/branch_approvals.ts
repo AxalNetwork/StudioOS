@@ -43,6 +43,7 @@ import {
   SLA_DUE_SOON_HOURS,
   SLA_PAST_HOURS,
 } from '../services/approvalSources';
+import { readAssignmentState } from '../services/approvalAssignments';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -58,9 +59,24 @@ r.get('/approvals', async (c) => {
     const limit = Number.isFinite(raw) ? Math.min(200, Math.max(1, Math.trunc(raw))) : 100;
 
     const board = await approvalBoard(c.env, limit);
+    // D470 — the current reviewer, when the side record can be read. A missing
+    // table stays off the items: `assignee: null` would say nobody is assigned.
+    const assignments = await readAssignmentState(c.env);
+    const items = assignments.available
+      ? board.items.map((it) => ({
+        ...it,
+        assignee: assignments.assignees.get(`${it.lane}:${it.id}`) ?? null,
+      }))
+      : board.items;
 
     return c.json({
       ...board,
+      items,
+      assignments: assignments.available
+        ? { available: true }
+        : { available: false, reason: assignments.reason },
+      reviewers: assignments.reviewers,
+      ...(assignments.reviewers_reason ? { reviewers_reason: assignments.reviewers_reason } : {}),
       branch,
       per_lane_limit: limit,
       // THE BANDS TRAVEL WITH THE ROWS so the page renders the server's

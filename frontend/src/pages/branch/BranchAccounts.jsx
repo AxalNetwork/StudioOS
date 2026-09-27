@@ -287,6 +287,7 @@ export default function BranchAccounts({ user }) {
         ['A seat ledger', 'Seats used is counted from roles (D127). No seat has an id, so nobody is assigned or released and a vacant seat cannot be shown.'],
         ['Accounts in another territory', 'This deployment holds one territory\'s accounts. There is no cross-branch read behind this page.'],
         ['Forced password reset', 'Not built. The owner has not decided it, so this page has no control that resets a password.'],
+        ['Security alerts on a row', 'The owner has not decided whether a security alert sits on this row, on Home, or on neither. This page does not draw one.'],
       ]}
     >
       <div className="space-y-4" data-testid="branch-accounts-page">
