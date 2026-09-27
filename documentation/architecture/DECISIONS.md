@@ -30852,6 +30852,112 @@ code:
 
 After the fix, 17 of 17 are caught.
 
+## D314
+
+**One benchmark gets its own page at `/research/benchmarking/:uid`, its edit
+is re-validated against migration 217's CHECK, and the members of its peer
+set get a store (migration 303).** Session 2, wave 8, item 3. It builds
+canvas f2eb2046.
+
+**The owner's direction settled the gap map's choice.** The gap map offered
+two options for the constituents: "state them as Not recorded, or add a new
+table". The direction is that every drawn control is wired, so this adds the
+table (migration 303), its reads, and the canvas's Add a constituent and
+Remove writes.
+
+**Migration 303: `research_benchmark_constituents`.**
+- Each row holds a name, a value and an as-of, both kept as text so a unit
+  is never implicit. It is keyed to its benchmark and, denormalised, to its
+  owner, so every read and write is a single owner-scoped predicate.
+- A `CHECK (length(trim(name)) > 0)` means a constituent is a name first. The
+  schema refuses a blank one from any writer.
+- Nothing ties the number of constituents to the stored `peer_sample_size`,
+  on purpose. A list of three against an n of five is stated, not corrected.
+  Rewriting the sample to match the list would be the product deciding which
+  of the reader's two entries was the mistake.
+- The migration has no transaction and no dependence on another session's
+  migration, and it declares everything it creates.
+
+**Worker routes, all in `research.ts` and all owner-scoped.** A uid that is
+not the caller's answers exactly like one that does not exist.
+- `GET /research/benchmarks/:uid` returns the row with `updated_at` and its
+  constituents in order. It also returns `thin` and `sample_note`, which are
+  about this row's own n (under 10), not the list's minimum. Finally it
+  returns `count_mismatch` and `mismatch_note`.
+- `PATCH /research/benchmarks/:uid` merges the edit onto the stored row and
+  validates the result:
+  - a peer figure without its source and sample is refused as
+    `peer_base_required`, before the schema would refuse it with a constraint
+    error;
+  - a blank metric is refused as `metric_required`, and a sample under 1 as
+    `sample_size_invalid`;
+  - clearing the peer figure returns the row to tracked, unless constituents
+    are named against it, which is `constituents_exist` (409). They are
+    members of a peer set the row would no longer have.
+- `POST /research/benchmarks/:uid/constituents` adds a constituent at the
+  next position. Only a comparison takes one: a tracked row is refused as
+  `not_a_comparison` (409). A blank name is refused as
+  `constituent_name_required`.
+- `DELETE /research/benchmarks/:uid/constituents/:cuid` removes a
+  constituent from its own benchmark only.
+- The existing `DELETE /research/benchmarks/:uid` now removes the
+  benchmark's constituents first. D1 does not enforce the foreign key's
+  cascade inside a batch.
+- The new `api.research` methods are `benchmarkGet`, `benchmarkUpdate`,
+  `benchmarkConstituentAdd` and `benchmarkConstituentRemove`.
+
+**The page is `BenchmarkDetail`, guarded to admin and investor** like the
+list, and the list's metric now links to it. It draws every element of the
+canvas:
+- the header, with ours vs peer and the n= pill (amber under 10), or
+  "Tracked, not compared";
+- the thin-base banner, the four tiles (each Not recorded when absent), and
+  the two figures, neither coloured as better;
+- the reading, with Save;
+- the constituents table, its mismatch warning, its empty state ("Do not
+  invent funds.") and Add a constituent, which is offered only on a
+  comparison;
+- the six-field editor, the ZONEDRAFT and the stated limit.
+
+A tracked row shows Not recorded in every peer tile and in the peer half,
+never 0.
+
+**The ZONEDRAFT is a restatement, not a model**, as the canvas draws it: "The
+draft restates only those fields — it has no peer data set to reach for." On
+a thin base it says the gap is not a market rate. Accept writes it as the
+reading through `PATCH`.
+
+**Not built, and why.**
+- The canvas's SAMPLE marker on the reading is fixture labelling, not an
+  element.
+- `api.research.benchmarkRemove` is still called by nothing. No benchmark
+  canvas draws a delete, so none is added. Its route now also clears the
+  constituents, for when a delete is drawn.
+
+**Tests.**
+- `research_benchmark_detail.test.ts` (new, 9 tests, real SQLite over the
+  table definitions in migrations 217 and 303) covers:
+  - owner scoping, with another owner's benchmark answering like a missing
+    one;
+  - the thin note on this row's own n;
+  - merged-row validation, and the refused edits;
+  - constituents: comparisons only, appended in order, named;
+  - the mismatch stated while n is left alone;
+  - no clearing of the peer figure under constituents;
+  - removal from the benchmark's own list only, and the cascade on delete;
+  - the schema's own refusal of a blank name.
+- `research_benchmark_detail.test.mjs` (new, 7 tests) asserts each element
+  at both ends, runs the tiles, the draft and the editor patch (a blank sample
+  is null, never 0), and pins the route, the list link, the four methods and
+  the constituent rules. It also bans the canvas's fixtures.
+
+**Mutations.** 19 were run, and 18 were caught on the first run. One escaped
+because its assertion was weak. PATCH overwriting a field it was not sent
+(`reading`, read from the body even when absent) passed, because no test sent
+an edit without a reading after writing one. The fix was to the assertion, not
+the code: the merged-edit test now sends `our_value` alone and requires the
+stored reading to survive. After the fix, 19 of 19 are caught.
+
 ## D320
 
 **The archetype banks go from three probes per trait to five, and every one
@@ -31286,6 +31392,89 @@ admin home. It now asserts the admin home mounts Eadwyn once, through
     archetype, or never shown;
   - the homes: the advisor home's strip restored, and the founder home
     mounting the chat directly.
+
+## D325
+
+**The archetype card is finished: a retry on every failed read, labels for
+screen readers, a single sprite as one tile, rows on a phone, Values as
+sliders, and a Level / XP bar.** Wave 8, Session 3, item 6. One new route,
+`GET /api/assessment/xp/me`, and its `api.js` method,
+`assessment.myXp()`, in the same commit. No migration: `user_xp` has existed
+since migration 108.
+
+**The XP route.** `user_xp` holds each user's running total. The assessment
+engine and `eventBadges.ts` write it; until now no route read it.
+- The route reads only the caller's own row, with the id bound.
+- The level is derived from the total with the engine's own curve
+  (`levelForXp`: floor(sqrt(xp / 100)) + 1), not taken from the stored
+  `level` column. A concurrent award can leave that column a step behind the
+  total. The route also sends the band around the level: level L starts at
+  100·(L−1)² XP, and L+1 at 100·L².
+- No row is the engine's own default, 0 XP at level 1, so it is a real zero.
+  `recorded: false` says so, and the bar adds "No XP awarded yet".
+- A failed read is a `refuse()` body, `xp_unreadable`, with our own sentence.
+  The SQLite text stays out of it, and the body carries no figure.
+
+**Where the bar goes.** Canvas 69dc42f3 ("Studio · Persona hubs") draws the
+bar inside the compact archetype card on `/studio`. Canvas ec6c3ada ("Studio ·
+Archetype preview"), the card's own design, stops that card at the teaser.
+The card's own design wins, so the bar sits at the top of the full
+`/studio/archetype` page. It reads its own source and retries on its own.
+
+**The card and the band.**
+- **Retry.** The Skills, Values and archetype cards each show `Unreadable`
+  with a retry when their read fails, in place of the raw error text. Each
+  retry re-reads only its own source. The full archetype page does the same
+  for the archetype itself.
+- **Labels.** The compact card is labelled "Title: Name, N% confidence. View
+  full card". Each sprite's alt text names the archetype and which of the pair
+  it is.
+- **One tile.** A sprite whose file is missing drops its slot. When one sprite
+  remains, the pair is one centred tile, 180px wide, not a half-empty pair.
+- **Phone rows.** On a phone, the band is a Skills row, the archetype card,
+  then a Values row. The Skills row names the three strongest measured axes;
+  the Values row names the two strongest leans. Each row opens its card. From
+  `md` up, the band is the three cards as before.
+- **Sliders.** The five bipolar founder dimensions draw as sliders between
+  their poles; the ten unipolar dimensions stay bars, under "Working
+  principles". A score under 0.5 either way reads "Balanced". The first cut
+  read a null score as 0, which drew a Balanced reading nobody gave; the test
+  caught it, and a null score now draws no slider.
+
+**Left out.** The locked state on the card waits on the owner's paywall
+decision.
+
+**Verification.**
+- `npm run test:drift` on main a0e0f83ad: exit 0. Frontend 4045 to 4060,
+  the 15 new tests all in `archetype_card_completion_d325.test.mjs`; worker
+  4807 to 4814 (4811 pass, 0 fail), the 7 new tests all in
+  `assessment_xp_d325.test.ts`, on a schema built from migrations 107 and 108;
+  retention 112 unchanged. `studio_archetype_sprite.test.mjs` had three pins
+  widened to allow the new sprite props. Both typechecks, `lint:undef`,
+  `check-api-drift`, `check-refusal-bodies`, `check-sql-prepare`,
+  `check-row-generics`, `check-unused-imports`, `check-react-hook-imports`,
+  `check-frontend-logging`, `check-dark-mode`, `check-regulated-wording`,
+  `check-folder-docs` and `check-decision-ids` exit 0. Root `npm run build`,
+  then `check-docs-fresh --strict`, exit 0.
+- Mutations: 22 run, 22 caught (non-zero exit and a `not ok` line, each file
+  restored from a sha256-checked snapshot):
+  - the route: the level taken from the stored column, the next level off by
+    one, another user's row read, raw database text in the refusal, and no row
+    reported as recorded;
+  - the band: raw error text on a failed card, the aria label dropped, the
+    sprite alt text dropped, a missing sprite keeping two columns, a missing
+    file never reported, the Balanced threshold removed, the poles swapped, a
+    null score read as 0, the Skills row not strongest-first, the phone rows
+    never hiding the cards, a retry re-reading every source, and the full
+    layout's retry dropped;
+  - the bar: the share measured from 0 rather than the level floor, a
+    malformed standing drawn, and the zero-XP note always shown;
+  - the page: the raw error printed, and the bar not mounted.
+- One escape on the first pass: the retry assertion matched any mount of the
+  card, so a Skills retry that re-read every source still passed. The
+  assertion now mounts each card twice and checks that each mount retries
+  only its own source. Both that mutation and a second one for the full
+  layout are now caught.
 
 ## D330
 

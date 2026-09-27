@@ -8,7 +8,9 @@ zones: one record each, reached from a zone's list.
 | `AskZone.jsx` | Ask, over documents the caller uploaded. |
 | `LibraryZone.jsx` | Those documents. |
 | `MarketZone.jsx` | Markets. |
-| `BenchmarkingZone.jsx` | Investor benchmarking. |
+| `BenchmarkingZone.jsx` | Investor benchmarking. Each metric links to its page. |
+| `BenchmarkDetail.jsx` | `/research/benchmarking/:uid`. One benchmark: two figures neither coloured as better, the base first, named constituents (migration 303) whose count is never forced to match n, and a restatement Accept writes as the reading. |
+| `benchmarkRead.js` | That page's tiles, draft and editor readings. A tracked row is Not recorded, never 0. |
 | `DiligenceZone.jsx` | Investor diligence, assembled from room grants. Each company links to its room. |
 | `DiligenceRoom.jsx` | `/research/diligence/:grantUid`. One room, read by the grant the investor holds. Behind an NDA is a count, never a name. Opening it is logged as opening the room. |
 | `DiligenceFile.jsx` | `/research/diligence/:grantUid/files/:fileUid`. One document's facts and its download. A document behind an unsigned NDA has no name on the page. |

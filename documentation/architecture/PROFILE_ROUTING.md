@@ -59,7 +59,7 @@ it, where in their nav, and how do they get there.*
 | Liquidity & Secondaries | `/liquidity` | Home | Full page | Sidebar → Home → Raise | UPGRADE | High |
 | Metrics | `/build/metrics` | Home | Full page | Sidebar → Home → Build | UPGRADE | High |
 | Office Hours | `/spinout-lab/office-hours` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
-| Pages · Benchmark | `/research/benchmarking` | Home | Full page | Sidebar → Home → Research | NEW | High |
+| Pages · Benchmark | `/research/benchmarking/:uid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Pages · Company | `/research/companies/:analysisId/:candidateId` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Pages · Company analysis | `/research/companies/:id` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Pages · Diligence file | `/research/diligence/:grantUid/files/:fileUid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |

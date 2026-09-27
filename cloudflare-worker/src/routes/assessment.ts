@@ -12,12 +12,14 @@
  * Surface:
  *   GET /results/me         — caller's latest result per track
  *   GET /results/:userId    — another user's result (consent-gated)
+ *   GET /xp/me              — caller's XP and level standing (D325)
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { ensureAssessmentSchema } from '../services/assessmentSchema';
-import { verifyResult, ASSESSMENT_INTEGRITY_VERSION } from '../services/assessmentScoring';
+import { verifyResult, ASSESSMENT_INTEGRITY_VERSION, levelForXp } from '../services/assessmentScoring';
+import { refuse } from '../util/refusal';
 
 const assessment = new Hono<{ Bindings: Env }>();
 
@@ -121,6 +123,49 @@ assessment.get('/results/:userId', async (c) => {
     .all<any>();
   const results = (res.results || []).map((row) => shapeResult(row));
   return c.json({ user_id: targetId, results });
+});
+
+/**
+ * D325 — the archetype card's Level / XP bar. `user_xp` (migration 108) holds
+ * the running total, written by the assessment engine and eventBadges.ts; no
+ * route read it until now. The level is derived from the total with the
+ * engine's own curve (levelForXp: floor(sqrt(xp / 100)) + 1), not taken from
+ * the stored `level` column, which a concurrent award can leave a step behind.
+ * Level L starts at 100·(L−1)² XP and L+1 at 100·L².
+ *
+ * No row means no XP has ever been awarded: the engine's own default is
+ * 0 XP at level 1, so that is a real zero. `recorded` says which it was.
+ */
+export function xpStanding(xp: number, updatedAt: string | null, recorded: boolean) {
+  const total = Number.isFinite(xp) && xp > 0 ? Math.floor(xp) : 0;
+  const level = levelForXp(total);
+  return {
+    recorded,
+    xp: total,
+    level,
+    level_floor: 100 * (level - 1) ** 2,
+    next_level_xp: 100 * level ** 2,
+    updated_at: updatedAt,
+  };
+}
+
+// ── GET /xp/me ─────────────────────────────────────────────────────────────--
+assessment.get('/xp/me', async (c) => {
+  const user = await auth(c);
+  if (user instanceof Response) return user;
+  let row: { xp: number; updated_at: string | null } | null = null;
+  try {
+    row = await c.env.DB.prepare('SELECT xp, updated_at FROM user_xp WHERE user_id = ?')
+      .bind(user.id)
+      .first<{ xp: number; updated_at: string | null }>();
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'xp_unreadable',
+      message: 'Your XP could not be read just now. Try again in a moment.',
+      raw: e,
+    });
+  }
+  return c.json(xpStanding(row ? Number(row.xp) : 0, row?.updated_at ?? null, Boolean(row)));
 });
 
 export default assessment;
