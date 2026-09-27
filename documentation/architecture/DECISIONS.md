@@ -33187,6 +33187,20 @@ removed (`companyKybStart` gains an optional second argument).
 
 **Mutations: 5 run, 5 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: the card target hard-coded to `/branch/accounts`; a missing seat returned as `0`; any string accepted as the hostname confirm; the HQ-held appeal forced down the branch link; Remove calling `myDomainRemove()` with no argument on the click.
 
+## D441
+
+**A move invitation is accepted on the branch it was sent to, and that branch tells the account when HQ authorises a support session.** No branch is provisioned. No migration: `branch_invitations` (263) and `notifications_inbox` already exist. `users` is at the column cap, so this adds no column there.
+
+**The link.** `inviteAccount` used to build `${base}/invite/${rawToken}`. `/invite/:token` is the events RSVP page, and the Worker's only handler for it is the public events router. The link is now `/join/:token`. The events page and `events_public.ts` are unchanged. The join page is outside the sign-in gate, because the person has no account on this branch yet, and `isPublicPath` allows only a token of the shape the route issues. Accepting happens on a click. The preview on load does not spend the token.
+
+**What accept does.** `GET /api/branch/invitations/preview` and `POST /api/branch/invitations/accept` live in `routes/branch_invitations.ts`, mounted at `/api/branch`, and both call `requireBranchTier`. On HQ that throws `Branch only`. The token is checked against `invt_` plus 64 hex characters before it is hashed or queried, and the table still holds only the digest. The claim is one update of a pending, unexpired row. It then creates the user, or reactivates a deactivated row with the same email. It does not sign them in, and it does not move projects, deals or documents (D121). They sign in at `/login`. `email_verified` is set because the token was addressed to that email. A role the invitation names that this branch does not grant becomes `exploring`, and the response says so. An account that is already active is left as it is, including its role. If the account cannot be written, the claim is put back to pending and the response is a sentence of ours; the database's text stays in the log. The two routes sit in a fail-closed per-IP rate bucket.
+
+**The notice.** `openSupportSession` calls `notify()` after the authorisation is recorded. The category is `security`, so quiet hours do not hold it. The sentence names who authorised it, the reason, and that the session lasts 30 minutes once it is opened — the session itself starts at redeem, not here. The type is `hq_branch_support_session`, distinct from the HQ-held notice (D248). A notice that cannot be stored does not fail the authorisation (D111). `notify.ts` is not edited. Accounts on the Team rail now say a branch account is told. `HqTeamActions.jsx` and `HqTeamTable.jsx` still say the branch account is not told, and `hq_team_h20.test.mjs` pins the first of those sentences. Those files are Session 5's. The sentences are stale once this notice is deployed.
+
+**No live branch exercised this.** Both behaviours were run on node:sqlite.
+
+**Mutations: 6 run, 6 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: the invitation link put back on `/invite/`; the preview effect calling accept; the accept route skipping `requireBranchTier`; an active account taking the invitation's role; a failed create leaving the invitation accepted; the support notice dropped.
+
 ## D450
 
 **HQ consoles tell the truth about what was read.** Wave 8, Session 16, item 1

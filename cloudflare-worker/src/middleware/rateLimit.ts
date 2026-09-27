@@ -245,6 +245,21 @@ const BUCKETS: Bucket[] = [
     scope: 'ip',
     failClosed: true,
   },
+  // D441 — accepting a branch move invitation. Unauthenticated, and a
+  // successful POST creates or reactivates a user. The generic 200/min/IP
+  // bucket is not a limit on that. 10/min/IP covers the preview plus the
+  // click, and a retry, and stops a script minting accounts from a list of
+  // stolen links. failClosed: if KV is down the account-creating write
+  // waits, rather than running with no ceiling.
+  {
+    name: 'branch_invitation',
+    limit: 10,
+    windowSec: 60,
+    test: (p, m) => (m === 'GET' || m === 'POST')
+      && /^\/api\/branch\/invitations\/(preview|accept)$/.test(p),
+    scope: 'ip',
+    failClosed: true,
+  },
   // Landing-page creation. Authenticated and already hard-capped at
   // MAX_PAGES_PER_PROJECT (brand.ts), but the cap counts CURRENT pages —
   // create/delete/create in a loop stays under it forever while churning
