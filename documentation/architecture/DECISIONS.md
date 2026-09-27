@@ -33165,6 +33165,112 @@ surface); a cached-input cost read on Research (no store).
   `check-api-drift`,   `check-unused-imports` and `check-dark-mode` exit 0. Root
   `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser probe.
 
+## D422
+
+**The founder legacy mounts: the three that were a second address retire; the
+editors stay, because no zone carries their writes yet.** Wave 8, Session 14,
+item 4. No migration, no route added or removed, no `api.js` change.
+
+**Measured first, and the gap map's table did not survive it.** The table
+retired `/execution`, `/execution/board`, `/execution/roadmap`, the
+`/build/discovery` and `/signals` founder branches and `/network?mode=workspace`
+wholesale, redirecting each to a canvas zone. D304 allows that only where a
+canvas page does every job of the old one. For the editors, none does — each
+is still the only place a founder can make these writes (no file under
+`pages/founder/` or `workspaces/founder/` calls them):
+
+| Editor (route kept) | Writes with no founder zone behind them |
+| --- | --- |
+| ExecutionPage — `/execution?mode=workspace`, `/execution/board`, `/execution/roadmap` | `pipelineCreateTask`, `pipelineUpdateTask`, `pipelineAdvance`, `pipelineDecide`, `castVote`, `pipelineTriggerReview`, `pipelineSnapshot`, `createOkr`, `updateOkr`, `deleteOkr` |
+| DiscoveryPage — `/build/discovery?mode=workspace`, `?tab=leads\|interviews\|insights` | `updateInterview`, `deleteInterview`, `assignPain`, `renamePainGroup`, `deletePainGroup` |
+| SignalsPage — `/signals?mode=workspace` and every Signals deep link | the feed itself (`signals.list`, `signals.refresh`); `/research/markets` is `MarketZone`'s readings, not the feed |
+| NetworkPage — `/network?mode=workspace`, `?tab=`, `?intro=` | `contactCreate`, `contactUpdate`, `contactAddTask`, `contactPromote`, `introAccept`, `introDecline`, `introSetTerms`, `partnerBookAdd`, `partnerBookLogInteraction` |
+| Raise `?mode=workspace` editors (Pitch, Capital, Liquidity) | the zone pages are read-only ledgers; `founderZoneActions` still sends "New version", "Export PDF" and "Revoke a link" to `/raise/pitch?mode=workspace` |
+
+The zones themselves say so: the Roadmap zone's empty state links
+`/execution/roadmap` ("Open roadmap editor"), and the Validate interviews
+zone sends ICP-fit edits to `/build/discovery?tab=interviews`. Retiring these
+would take writes away from founders, so they stay, and
+`founder_legacy_mounts_d422.test.mjs` holds the reason as a property: while a
+write in the table has no caller in a founder zone, its editor must stay
+mounted. It never requires deleting one — the day a zone carries every write,
+retirement is open, not automatic.
+
+**What retired: three second addresses.** Bare `/execution`, `/build/discovery`
+and `/signals` rendered, for a founder, the same element `/build`, `/validate`
+and `/research` mount — each desk had two URLs, and the sidebar matched both.
+Each is now a `<Navigate replace>` to the desk's root with `location.search`
+kept, so every query they accepted still lands:
+
+| Old route (founder) | Now | Queries that still work |
+| --- | --- | --- |
+| `/execution` (no `?mode=workspace`) | `/build` | `?new=1` opens the create-startup form; `?project_id=` selects the startup |
+| `/build/discovery` (no `?mode=workspace`, no Discovery `?tab=`) | `/validate` | `?project_id=` |
+| `/signals` (only `?project_id=`, or `?mode=landing`) | `/research` | `?project_id=`; `?mode=landing` (read by `/research` the same way) |
+
+Every other licence is untouched on all three paths. No component is deleted:
+ExecutionPage, DiscoveryPage and SignalsPage all still render, for founders
+behind the editor queries and for other licences everywhere.
+
+**The desks stop embedding the editors.** FounderBuildDesk swapped itself for
+ExecutionPage on `?mode=workspace`, and FounderValidatePage for DiscoveryPage
+on `?mode=workspace` or a Discovery `?tab=`. The routes mount the editors now
+(`founderWorkspace('build', …ExecutionPage…)`,
+`founderWorkspace('validate', <DiscoveryPage initialTab="interviews" workspaceMode />)`),
+so each desk renders one thing. The one loss is cosmetic: the Discovery editor
+no longer opens pre-seeded from the desk's already-loaded rows, so it reads
+them itself.
+
+**Links moved with them.** The five Build zones' crumbs and empty states
+pointed at `/execution` ("Execution", "Back to execution"); they point at
+`/build` ("Build") now. `/execution/roadmap` links stay — they open the editor.
+Links in files other sessions own (FounderStudioHome, the Spin-Out Lab pages,
+`newFounder.js`) still name `/build/discovery` or `/execution` and land on the
+desk through the redirect; nothing breaks.
+
+**Left alone, as the prompt required:** `/build/team` (Session 15's item 6
+has since rebuilt it) and `/raise/data-room` (Session 2's investor branch,
+Session 9's rebuild).
+
+**For Session 5 (`sidebarConfig.js`, not edited here).** The founder rows'
+`match` lists (Validate: `'/build/discovery'`; Build: `'/execution'`;
+Research: `'/signals'`) stay correct — the editors still live at those paths.
+`FOUNDER_FULL_BLEED`'s comment on `'/build/discovery', '/execution',
+'/signals'` ("still render the same desk at the same width") is now stale:
+for a founder those paths redirect, or mount an editor inside
+`FounderWorkspacePage`.
+
+**Also recorded.** ROUTE_MAP's Founder Workspaces Canvas row said the legacy
+mounts were "unchanged and still live"; it carries a dated update.
+
+### VERIFIED
+
+- `npm run test:drift` exit 0 on Node 22. Frontend tests 3768 on main
+  (23330a2c) → 3773; worker 4649 (4646 pass, 3 skipped); retention 112. The
+  five new tests, all in `founder_legacy_mounts_d422.test.mjs`: "the three
+  second addresses redirect to their desk, query string kept", "an editor
+  stays mounted while a founder zone lacks any of its writes", "the editors
+  keep their deep links: ?mode=workspace, Discovery ?tab=, Signals queries",
+  "no founder desk embeds a legacy editor", "the Build zones crumb back to
+  /build, not the retired address".
+- Re-aimed, none loosened: `founder_build_desk_contract` (A3 is `/build`'s,
+  `/execution` redirects, the editor is at the route), `founder_validate_a2`
+  (the same for `/build/discovery`, and the editor keeps `?tab=`),
+  `founder_research_a7_contract` and `founder_shell`'s A7 test (the same for
+  `/signals`), and `founder_shell`'s OWN_LANDING table (`/build/discovery` is
+  no longer A2's own landing; its editor is owned through
+  `founderWorkspace('validate', …)`, which that test already accepts).
+- 9 mutations, 9 caught (non-zero exit and a `not ok` line, unique anchors,
+  sha256-checked restores): a redirect dropping the query; `/build/discovery`
+  and `/signals` mounting their desk again; the Execution, Discovery and
+  Network editors unmounted; the Discovery `?tab=` deep link dropped; A3
+  re-importing ExecutionPage; a Build crumb pointed back at `/execution`.
+- Both typechecks, `check-decision-ids`, `check-folder-docs`,
+  `check-api-drift`, `check-unused-imports` and `check-dark-mode` exit 0;
+  `node scripts/build-profile-routing.mjs` leaves both generated documents
+  unchanged. Root `npm run build`, then `check-docs-fresh --strict`, exits 0.
+  No browser probe.
+
 ## D430
 
 **Recovery codes get a single writer: regenerating them and then re-pairing

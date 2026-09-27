@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, NavLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, NavLink, useLocation, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowUpRight, ChevronRight, FileText, Layers3, MessageSquare, Quote, Target } from 'lucide-react';
 import { api } from '../../lib/api';
 import { Unreadable, WorkerRail } from '../../ui';
-import DiscoveryPage from '../DiscoveryPage';
 import { zonePillClass } from './deskZoneNav';
 import FillProposals from '../../workspaces/FillProposals';
 import useAssistMode from '../../hooks/useAssistMode';
@@ -76,7 +75,6 @@ const SECTIONS = [
 
 export default function FounderValidatePage() {
   const location = useLocation();
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigationSeed = location.state?.founderValidateSeed;
   const [projects, setProjects] = useState(() => navigationSeed?.projects || []);
@@ -94,17 +92,11 @@ export default function FounderValidatePage() {
   // turned fills on once does not have to turn it on again here — and one who
   // has not is offered nothing that spends their budget.
   const [fillsOn] = useAssistMode('Validate');
-  const workspaceFromUrl = searchParams.get('mode') === 'workspace'
-    || ['leads', 'interviews', 'insights'].includes(searchParams.get('tab'));
-  const [showWorkspace, setShowWorkspace] = useState(workspaceFromUrl);
-  const isWorkspace = showWorkspace;
-
+  // THE DESK NO LONGER EMBEDS THE EDITOR (D422). `?mode=workspace` and
+  // Discovery's `?tab=` used to swap this page for DiscoveryPage; the
+  // `/build/discovery` route mounts DiscoveryPage itself for those now, and
+  // sends every other founder visit here, to `/validate`.
   useEffect(() => {
-    if (workspaceFromUrl) setShowWorkspace(true);
-  }, [workspaceFromUrl]);
-
-  useEffect(() => {
-    if (isWorkspace) return;
     let alive = true;
     api.listProjects().then((list) => {
       if (!alive) return;
@@ -125,10 +117,10 @@ export default function FounderValidatePage() {
       setState('error');
     });
     return () => { alive = false; };
-  }, [isWorkspace, reloadKey]);
+  }, [reloadKey]);
 
   useEffect(() => {
-    if (!projectId || isWorkspace) return;
+    if (!projectId) return;
     let alive = true;
     setState('loading');
     setSearchParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(projectId)); return next; }, { replace: true });
@@ -150,7 +142,7 @@ export default function FounderValidatePage() {
       setState('error');
     });
     return () => { alive = false; };
-  }, [projectId, isWorkspace, reloadKey]);
+  }, [projectId, reloadKey]);
 
   const evidence = useMemo(() => {
     const hypotheses = liveClaims(board);
@@ -164,31 +156,6 @@ export default function FounderValidatePage() {
     return { hypotheses, pains: pains.sort((a, b) => b.count - a.count), maxPain, boardUnreadable: board === null };
   }, [board, painView]);
 
-  if (isWorkspace) {
-    return (
-      <div className="validate-workspace-shell">
-        <button
-          type="button"
-          className="validate-back"
-          onClick={() => {
-            setShowWorkspace(false);
-            navigate(`/build/discovery${projectId ? `?project_id=${projectId}` : ''}`, { replace: true });
-          }}
-        >
-          Back to evidence desk
-        </button>
-        <DiscoveryPage
-          initialProjects={projects}
-          initialProjectId={projectId}
-          initialInterviews={interviews}
-          initialSignals={signals}
-          initialPainView={painView}
-          initialTab="interviews"
-          workspaceMode
-        />
-      </div>
-    );
-  }
   const query = projectId ? `?project_id=${projectId}` : '';
   /**
    * EVERY LINK ON THIS PAGE GOES TO THE STAGE IT SUMMARISES.

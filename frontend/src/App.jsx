@@ -2096,6 +2096,20 @@ function AppInner() {
   const signalsHasNonProjectQuery = [...signalsParams.keys()].some((key) => key !== 'project_id');
   const founderResearchLanding = effectiveRole === 'founder'
     && (signalsMode === 'landing' || (!signalsHasNonProjectQuery && signalsMode !== 'workspace'));
+  // D422. THREE FOUNDER MOUNTS THAT WERE A SECOND URL FOR A DESK. Bare
+  // `/execution`, `/build/discovery` and `/signals` rendered, for a founder, the
+  // very desk `/build`, `/validate` and `/research` render — so each desk had
+  // two addresses and the sidebar had to match both. They redirect now, query
+  // string and all. The EDITORS behind them stay: `?mode=workspace` (and
+  // Discovery's `?tab=`, and every Signals deep link) still opens ExecutionPage,
+  // DiscoveryPage and SignalsPage, because no canvas zone yet carries their
+  // writes — creating a task or an objective, editing or deleting an
+  // interview, curating a pain group, the signals feed itself.
+  const founderDiscoveryEditor = effectiveRole === 'founder'
+    && (new URLSearchParams(location.search).get('mode') === 'workspace'
+      || ['leads', 'interviews', 'insights'].includes(new URLSearchParams(location.search).get('tab')));
+  const founderExecutionEditor = effectiveRole === 'founder'
+    && new URLSearchParams(location.search).get('mode') === 'workspace';
 
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-500 dark:text-gray-400">Loading…</div>}>
@@ -2261,7 +2275,11 @@ function AppInner() {
       <Route path="/build/deck-reviewer" element={<Navigate to="/raise/pitch/review" replace />} />
       <Route path="/build/competitors" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('research', <CompetitorAnalysisPage />))} />
       <Route path="/build/financials" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('raise', <FinancialsPage />))} />
-      <Route path="/build/discovery" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), effectiveRole === 'founder' ? <FounderValidatePage /> : <DiscoveryPage />)} />
+      <Route path="/build/discovery" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), effectiveRole !== 'founder'
+        ? <DiscoveryPage />
+        : founderDiscoveryEditor
+          ? founderWorkspace('validate', <DiscoveryPage initialTab="interviews" workspaceMode />)
+          : <Navigate to={`/validate${location.search}`} replace />)} />
 
       {/* ── Validate · the four evidence stages ──────────────────────────────
           Interviews and Pain map read the SAME records Discovery writes; the
@@ -2321,7 +2339,7 @@ function AppInner() {
       {/* Signals — founder decision engine over public-market evidence. Shared
           by Founder + Advisor modes (mode changes ordering + copy only). */}
       <Route path="/signals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], founderResearchLanding
-        ? <FounderResearchDesk />
+        ? <Navigate to={`/research${location.search}`} replace />
         : founderWorkspace('research', <FounderWorkspaceTabs set="research" user={user}><SignalsPage user={user} /></FounderWorkspaceTabs>))} />
       <Route path="/build/captable" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), founderWorkspace('raise', <CapTablePage />))} />
       {/* documentation/architecture/DECISIONS.md D11 — /marketplace was a partner-provider directory with
@@ -2512,7 +2530,9 @@ function AppInner() {
       <Route path="/build" element={founderBuildLanding
         ? guard(['admin', 'founder'], <FounderBuildDesk />)
         : <Navigate to="/build/this-week" replace />} />
-      <Route path="/execution" element={guard(['admin', 'founder'], effectiveRole === 'founder' ? <FounderBuildDesk /> : founderWorkspace('build', <FounderWorkspaceTabs set="build" user={user}><ExecutionPage /></FounderWorkspaceTabs>))} />
+      <Route path="/execution" element={guard(['admin', 'founder'], effectiveRole === 'founder' && !founderExecutionEditor
+        ? <Navigate to={`/build${location.search}`} replace />
+        : founderWorkspace('build', <FounderWorkspaceTabs set="build" user={user}><ExecutionPage /></FounderWorkspaceTabs>))} />
       <Route path="/build/this-week" element={guard(['admin', 'founder'], <FounderBuildThisWeek />)} />
       <Route path="/build/board" element={guard(['admin', 'founder'], <FounderBuildBoard />)} />
       <Route path="/execution/board" element={guard(['admin', 'founder'], founderWorkspace('build', <ExecutionPage />))} />
