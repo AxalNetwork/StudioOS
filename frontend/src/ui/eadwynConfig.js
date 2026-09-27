@@ -113,16 +113,40 @@ export const ASSIST_SURFACES = {
     mode: {
       kind: 'choice',
       label: 'AI fills the blanks',
-      // All three now. Migration 215 gave `discovery_interviews` its recording
-      // and transcript columns and a `transcribe` task class its own
-      // per-audio-minute price, so the sentence this note carried for one
-      // change — two capabilities, because the third had nowhere to write —
-      // is complete.
-      //
-      // The order is the order a founder meets them: a recording becomes text,
-      // the text's pains become themes, the themes become claims.
-      note: 'Transcribes recordings, tags logged phrases into your themes, and drafts hypothesis cards. Every one is yours to accept, edit or discard.',
-      manualNote: 'Nothing runs and nothing is spent. You log interviews and group pains yourself.',
+      // ONE CARD, FOUR DESKS (D424). This sentence used to be Validate's list —
+      // transcription, pain tags, hypothesis cards — because Validate was the
+      // only host that passed `fills`. Build, Raise and Grow pass it now, and
+      // the card reads this one surface on every one of them, so a Validate
+      // list here would promise transcription on the Raise desk. The card says
+      // what is true everywhere; what the switch does on THIS desk is the
+      // desk's own sentence in `desks` below, which the host passes as the
+      // rail's `note` and the rail prints under the cards.
+      note: 'Drafts proposals for the bands on this workspace, each only when you press its button. Every one is yours to accept, edit or discard.',
+      manualNote: 'Nothing runs and nothing is spent. Every entry here is one you wrote.',
+    },
+    // WHAT THE SWITCH DOES ON EACH FOUNDER DESK (D424), keyed by the rail's
+    // `workspace`, which is also the key `useAssistMode` stores the choice
+    // under — so a desk's sentence and its switch cannot name two workspaces.
+    //
+    // `fills` is a list of promises, and `validate_fills_the_blanks` checks it
+    // clause by clause: each clause must match a band that desk mounts, over a
+    // route or draft surface that exists. The order is the order the bands sit
+    // on the desk. Validate's order is the order a founder meets them: a
+    // recording becomes text, the text's pains become themes, the themes
+    // become claims (migration 215 gave the first one somewhere to write).
+    //
+    // `none` is a desk with no band at all, and it says why there is no
+    // switch rather than drawing one that changes nothing (D17). Network's
+    // draft surfaces are the partner firm's book, not a founder's contacts;
+    // Research's one run is Ask, which is a question pressed on purpose, not
+    // a blank filled.
+    desks: {
+      Validate: { fills: 'Transcribes recordings, tags logged phrases into your themes, and drafts hypothesis cards.' },
+      Build: { fills: 'Drafts a Monday plan from what moved, argues one roadmap ordering, and annotates the metric that moved most.' },
+      Raise: { fills: 'Reads your round back step by step, explains the clauses in stored documents, reads the data room, and explains the order of payment.' },
+      Grow: { fills: 'Ranks applicants with reasons, and drafts an outreach sequence opened on your own recorded pains.' },
+      Network: { none: 'No switch here. This desk summarises stored relationship records and drafts, sends and changes nothing: no draft surface reads the contacts a founder keeps yet.' },
+      Research: { none: 'No switch here. A question runs only when you press Ask, and is answered from your own library; nothing on this desk fills a blank.' },
     },
   },
   // services/competitorAnalysis.ts → aiRun(…)

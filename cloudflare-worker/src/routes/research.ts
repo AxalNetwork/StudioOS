@@ -3969,11 +3969,177 @@ research.post('/benchmarks', async (c) => {
 
 research.delete('/benchmarks/:uid', async (c) => {
   const user = await requireAuth(c);
-  const res = await c.env.DB.prepare(
-    `DELETE FROM research_benchmarks WHERE uid = ? AND owner_user_id = ?`
-  ).bind(c.req.param('uid'), user.id).run();
-  if (!res.meta?.changes) return c.json({ detail: 'Not found' }, 404);
+  // Its named constituents go with it (migration 303). D1 does not enforce the
+  // foreign key's cascade inside a batch, so the rows are removed by hand,
+  // owner-scoped, before the benchmark itself.
+  const row = await c.env.DB.prepare(
+    `SELECT id FROM research_benchmarks WHERE uid = ? AND owner_user_id = ?`
+  ).bind(c.req.param('uid'), user.id).first<{ id: number }>();
+  if (!row) return c.json({ detail: 'Not found' }, 404);
+  await c.env.DB.prepare(
+    `DELETE FROM research_benchmark_constituents WHERE benchmark_id = ? AND owner_user_id = ?`
+  ).bind(row.id, user.id).run();
+  await c.env.DB.prepare(
+    `DELETE FROM research_benchmarks WHERE id = ? AND owner_user_id = ?`
+  ).bind(row.id, user.id).run();
   return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// One benchmark (canvas f2eb2046) and its named constituents (migration 303)
+// ---------------------------------------------------------------------------
+//
+// EVERY READ AND WRITE IS OWNER-SCOPED, like the list. A benchmark uid that is
+// not the caller's answers exactly as one that does not exist.
+//
+// THE CHECK IS RE-VALIDATED ON EVERY EDIT. Migration 217 refuses a peer figure
+// without its source and sample size; PATCH merges the edit onto the stored row
+// and refuses the RESULT with a sentence before the schema would refuse it
+// with a constraint error. Clearing the peer figure is allowed — the row goes
+// back to tracked — unless constituents are named against it.
+//
+// A THIN BASE IS THIS ROW'S OWN n, not the list's minimum: the detail page's
+// banner reads the comparison in front of it.
+
+const BENCH_THIN_AT = 10;
+const BENCHMARK_NOT_FOUND = 'This benchmark is not on your list.';
+const PEER_BASE_REQUIRED = 'A peer figure needs its source and its sample size. A benchmark presented '
+  + 'without its base is arithmetic wearing a metric’s clothes.';
+
+interface ConstituentRow {
+  id: number; uid: string; benchmark_id: number; owner_user_id: number;
+  name: string; value: string | null; as_of: string | null; position: number; created_at: string;
+}
+
+const constituentDto = (r: ConstituentRow) => ({
+  uid: r.uid, name: r.name, value: r.value, as_of: r.as_of, created_at: r.created_at,
+});
+
+/** The caller's benchmark by uid, or null. */
+async function ownedBenchmark(env: Env, userId: number, uid: string): Promise<BenchRow | null> {
+  const row = await env.DB.prepare(
+    `SELECT * FROM research_benchmarks WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, userId).first<BenchRow>();
+  return row || null;
+}
+
+/** The detail read: the row, its constituents, and what the page says about them. */
+async function benchmarkDetail(env: Env, userId: number, row: BenchRow) {
+  const cons = await env.DB.prepare(
+    `SELECT * FROM research_benchmark_constituents
+      WHERE benchmark_id = ? AND owner_user_id = ?
+      ORDER BY position ASC, id ASC`
+  ).bind(row.id, userId).all<ConstituentRow>();
+  const constituents = (cons.results || []).map(constituentDto);
+  const item = { ...benchDto(row), updated_at: row.updated_at };
+  const n = item.is_comparison ? Number(row.peer_sample_size) : null;
+  return {
+    item,
+    constituents,
+    // Only a comparison has a sample to be thin, or a count to disagree with.
+    thin: n !== null && n < BENCH_THIN_AT,
+    sample_note: n !== null && n < BENCH_THIN_AT
+      ? `The smallest peer set behind this comparison is ${n}. A median over a set that size moves with one member and should not be presented as a market rate.`
+      : null,
+    count_mismatch: n !== null && constituents.length > 0 && constituents.length !== n,
+    mismatch_note: n !== null && constituents.length > 0 && constituents.length !== n
+      ? `${constituents.length} ${constituents.length === 1 ? 'constituent is' : 'constituents are'} named against a stored sample of ${n}.`
+      : null,
+  };
+}
+
+research.get('/benchmarks/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const row = await ownedBenchmark(c.env, user.id, c.req.param('uid'));
+  if (!row) return c.json({ error: 'benchmark_not_found', message: BENCHMARK_NOT_FOUND }, 404);
+  return c.json(await benchmarkDetail(c.env, user.id, row));
+});
+
+research.patch('/benchmarks/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const row = await ownedBenchmark(c.env, user.id, c.req.param('uid'));
+  if (!row) return c.json({ error: 'benchmark_not_found', message: BENCHMARK_NOT_FOUND }, 404);
+  const b = await c.req.json<any>().catch(() => ({}));
+  const has = (k: string) => Object.prototype.hasOwnProperty.call(b, k);
+  const next = {
+    metric: has('metric') ? clampText(b.metric, 200) : row.metric,
+    our_value: has('our_value') ? clampText(b.our_value, 100) : row.our_value,
+    peer_value: has('peer_value') ? clampText(b.peer_value, 100) : row.peer_value,
+    peer_source: has('peer_source') ? clampText(b.peer_source, 300) : row.peer_source,
+    peer_sample_size: has('peer_sample_size') ? clampInt(b.peer_sample_size) : row.peer_sample_size,
+    peer_as_of: has('peer_as_of') ? clampText(b.peer_as_of, 40) : row.peer_as_of,
+    reading: has('reading') ? clampText(b.reading, 2000) : row.reading,
+  };
+  if (!next.metric) return c.json({ error: 'metric_required', message: 'A benchmark needs a metric.' }, 400);
+  if (next.peer_sample_size !== null && next.peer_sample_size < 1) {
+    return c.json({ error: 'sample_size_invalid', message: 'A sample size is at least 1.' }, 400);
+  }
+  // The merged row, not the request, is what must satisfy migration 217.
+  if (next.peer_value && (!next.peer_source || next.peer_sample_size === null)) {
+    return c.json({ error: 'peer_base_required', message: PEER_BASE_REQUIRED }, 400);
+  }
+  if (!next.peer_value && row.peer_value) {
+    const named = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM research_benchmark_constituents WHERE benchmark_id = ? AND owner_user_id = ?`
+    ).bind(row.id, user.id).first<{ n: number }>();
+    if (Number(named?.n) > 0) {
+      return c.json({
+        error: 'constituents_exist',
+        message: 'Remove the named constituents before clearing the peer figure. They are members of a peer set this row would no longer have.',
+      }, 409);
+    }
+  }
+  await c.env.DB.prepare(
+    `UPDATE research_benchmarks
+        SET metric = ?, our_value = ?, peer_value = ?, peer_source = ?, peer_sample_size = ?,
+            peer_as_of = ?, reading = ?, updated_at = ?
+      WHERE id = ? AND owner_user_id = ?`
+  ).bind(
+    next.metric, next.our_value, next.peer_value, next.peer_source, next.peer_sample_size,
+    next.peer_as_of, next.reading, nowIso(), row.id, user.id,
+  ).run();
+  const fresh = await ownedBenchmark(c.env, user.id, row.uid);
+  return c.json(await benchmarkDetail(c.env, user.id, fresh as BenchRow));
+});
+
+research.post('/benchmarks/:uid/constituents', async (c) => {
+  const user = await requireAuth(c);
+  const row = await ownedBenchmark(c.env, user.id, c.req.param('uid'));
+  if (!row) return c.json({ error: 'benchmark_not_found', message: BENCHMARK_NOT_FOUND }, 404);
+  // A constituent is a member of a peer set. A tracked row has none to join.
+  if (!row.peer_value) {
+    return c.json({
+      error: 'not_a_comparison',
+      message: 'This benchmark is tracked, not compared. Enter a sourced peer figure before naming who it was measured over.',
+    }, 409);
+  }
+  const b = await c.req.json<any>().catch(() => ({}));
+  const name = clampText(b.name, 200);
+  if (!name) return c.json({ error: 'constituent_name_required', message: 'A constituent needs a name.' }, 400);
+  const last = await c.env.DB.prepare(
+    `SELECT MAX(position) AS p FROM research_benchmark_constituents WHERE benchmark_id = ? AND owner_user_id = ?`
+  ).bind(row.id, user.id).first<{ p: number | null }>();
+  await c.env.DB.prepare(
+    `INSERT INTO research_benchmark_constituents (uid, benchmark_id, owner_user_id, name, value, as_of, position, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    newUid(), row.id, user.id, name, clampText(b.value, 100), clampText(b.as_of, 40),
+    last?.p == null ? 0 : Number(last.p) + 1, nowIso(),
+  ).run();
+  return c.json(await benchmarkDetail(c.env, user.id, row), 201);
+});
+
+research.delete('/benchmarks/:uid/constituents/:cuid', async (c) => {
+  const user = await requireAuth(c);
+  const row = await ownedBenchmark(c.env, user.id, c.req.param('uid'));
+  if (!row) return c.json({ error: 'benchmark_not_found', message: BENCHMARK_NOT_FOUND }, 404);
+  const res = await c.env.DB.prepare(
+    `DELETE FROM research_benchmark_constituents WHERE uid = ? AND benchmark_id = ? AND owner_user_id = ?`
+  ).bind(c.req.param('cuid'), row.id, user.id).run();
+  if (!res.meta?.changes) {
+    return c.json({ error: 'constituent_not_found', message: 'That constituent is not on this benchmark.' }, 404);
+  }
+  return c.json(await benchmarkDetail(c.env, user.id, row));
 });
 
 // ---------------------------------------------------------------------------

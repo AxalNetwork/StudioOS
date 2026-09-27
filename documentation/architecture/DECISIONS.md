@@ -30852,6 +30852,112 @@ code:
 
 After the fix, 17 of 17 are caught.
 
+## D314
+
+**One benchmark gets its own page at `/research/benchmarking/:uid`, its edit
+is re-validated against migration 217's CHECK, and the members of its peer
+set get a store (migration 303).** Session 2, wave 8, item 3. It builds
+canvas f2eb2046.
+
+**The owner's direction settled the gap map's choice.** The gap map offered
+two options for the constituents: "state them as Not recorded, or add a new
+table". The direction is that every drawn control is wired, so this adds the
+table (migration 303), its reads, and the canvas's Add a constituent and
+Remove writes.
+
+**Migration 303: `research_benchmark_constituents`.**
+- Each row holds a name, a value and an as-of, both kept as text so a unit
+  is never implicit. It is keyed to its benchmark and, denormalised, to its
+  owner, so every read and write is a single owner-scoped predicate.
+- A `CHECK (length(trim(name)) > 0)` means a constituent is a name first. The
+  schema refuses a blank one from any writer.
+- Nothing ties the number of constituents to the stored `peer_sample_size`,
+  on purpose. A list of three against an n of five is stated, not corrected.
+  Rewriting the sample to match the list would be the product deciding which
+  of the reader's two entries was the mistake.
+- The migration has no transaction and no dependence on another session's
+  migration, and it declares everything it creates.
+
+**Worker routes, all in `research.ts` and all owner-scoped.** A uid that is
+not the caller's answers exactly like one that does not exist.
+- `GET /research/benchmarks/:uid` returns the row with `updated_at` and its
+  constituents in order. It also returns `thin` and `sample_note`, which are
+  about this row's own n (under 10), not the list's minimum. Finally it
+  returns `count_mismatch` and `mismatch_note`.
+- `PATCH /research/benchmarks/:uid` merges the edit onto the stored row and
+  validates the result:
+  - a peer figure without its source and sample is refused as
+    `peer_base_required`, before the schema would refuse it with a constraint
+    error;
+  - a blank metric is refused as `metric_required`, and a sample under 1 as
+    `sample_size_invalid`;
+  - clearing the peer figure returns the row to tracked, unless constituents
+    are named against it, which is `constituents_exist` (409). They are
+    members of a peer set the row would no longer have.
+- `POST /research/benchmarks/:uid/constituents` adds a constituent at the
+  next position. Only a comparison takes one: a tracked row is refused as
+  `not_a_comparison` (409). A blank name is refused as
+  `constituent_name_required`.
+- `DELETE /research/benchmarks/:uid/constituents/:cuid` removes a
+  constituent from its own benchmark only.
+- The existing `DELETE /research/benchmarks/:uid` now removes the
+  benchmark's constituents first. D1 does not enforce the foreign key's
+  cascade inside a batch.
+- The new `api.research` methods are `benchmarkGet`, `benchmarkUpdate`,
+  `benchmarkConstituentAdd` and `benchmarkConstituentRemove`.
+
+**The page is `BenchmarkDetail`, guarded to admin and investor** like the
+list, and the list's metric now links to it. It draws every element of the
+canvas:
+- the header, with ours vs peer and the n= pill (amber under 10), or
+  "Tracked, not compared";
+- the thin-base banner, the four tiles (each Not recorded when absent), and
+  the two figures, neither coloured as better;
+- the reading, with Save;
+- the constituents table, its mismatch warning, its empty state ("Do not
+  invent funds.") and Add a constituent, which is offered only on a
+  comparison;
+- the six-field editor, the ZONEDRAFT and the stated limit.
+
+A tracked row shows Not recorded in every peer tile and in the peer half,
+never 0.
+
+**The ZONEDRAFT is a restatement, not a model**, as the canvas draws it: "The
+draft restates only those fields — it has no peer data set to reach for." On
+a thin base it says the gap is not a market rate. Accept writes it as the
+reading through `PATCH`.
+
+**Not built, and why.**
+- The canvas's SAMPLE marker on the reading is fixture labelling, not an
+  element.
+- `api.research.benchmarkRemove` is still called by nothing. No benchmark
+  canvas draws a delete, so none is added. Its route now also clears the
+  constituents, for when a delete is drawn.
+
+**Tests.**
+- `research_benchmark_detail.test.ts` (new, 9 tests, real SQLite over the
+  table definitions in migrations 217 and 303) covers:
+  - owner scoping, with another owner's benchmark answering like a missing
+    one;
+  - the thin note on this row's own n;
+  - merged-row validation, and the refused edits;
+  - constituents: comparisons only, appended in order, named;
+  - the mismatch stated while n is left alone;
+  - no clearing of the peer figure under constituents;
+  - removal from the benchmark's own list only, and the cascade on delete;
+  - the schema's own refusal of a blank name.
+- `research_benchmark_detail.test.mjs` (new, 7 tests) asserts each element
+  at both ends, runs the tiles, the draft and the editor patch (a blank sample
+  is null, never 0), and pins the route, the list link, the four methods and
+  the constituent rules. It also bans the canvas's fixtures.
+
+**Mutations.** 19 were run, and 18 were caught on the first run. One escaped
+because its assertion was weak. PATCH overwriting a field it was not sent
+(`reading`, read from the body even when absent) passed, because no test sent
+an edit without a reading after writing one. The fix was to the assertion, not
+the code: the merged-edit test now sends `our_value` alone and requires the
+stored reading to survive. After the fix, 19 of 19 are caught.
+
 ## D320
 
 **The archetype banks go from three probes per trait to five, and every one
@@ -35926,6 +36032,145 @@ word plus the code's own clock writes (D162).
   `check-refusal-bodies`, `check-unused-imports`, the worker typecheck and
   `check-decision-ids` exit 0. Nothing under `frontend/src` moved, so `docs/`
   is not rebuilt.
+
+## D424
+
+**The founder desks draw the rail and proposal anatomy their bands were
+waiting for: the mode switch with each desk's own sentence, the cost before a
+run, and Eadwyn's mark on the Validate board's claims.** Wave 8, Session 14,
+item 3. No migration and no new `/api/*` method; one route gains two fields
+(below). Built on Session 12's rail after its receipt (D401) and inherited
+view (D402) merged. `WorkerRail.jsx`, `workerRail.css`, `railModels.js` and
+`services/aiSpend.ts` are untouched: the desks pass `fills` and a `note`, which
+the rail already takes.
+
+**The switch.** Build, Raise and Grow have mounted proposal bands since A3–A5
+were built (nine in all), each gated on its workspace's mode through
+`useAssistMode`, and no rail on those desks passed `fills`, so no switch was
+ever drawn and no band on them could be reached. The Validate desk's two bands
+could be turned on only from a Validate zone page. All four desks now pass
+`fills`. Network and Research have no band — Network's draft surfaces read the
+partner firm's book, not a founder's contacts, and Research's one run is Ask,
+a question pressed on purpose — so they draw no switch (D17) and their note
+says why.
+
+**Per-desk copy, and the shared card's sentence.** The mode card reads one
+surface, `ASSIST_SURFACES.workspace`, on every host, and its note was
+Validate's list ("Transcribes recordings, tags logged phrases…"). Drawn on
+Raise it would have promised transcription there. The card now says what is
+true on every desk — proposals, only on a press, each yours to accept, edit or
+discard — and `ASSIST_SURFACES.workspace.desks` holds each desk's own
+sentence, which the desk passes as the rail's `note` and the rail prints under
+the cards. The Validate zone (`FounderValidateWorkspace`) prints Validate's
+sentence too, so the zone still says what its switch does. The three notes
+this replaces each said its desk generated nothing, above bands that draft.
+`manualNote` became desk-neutral ("Every entry here is one you wrote").
+
+`validate_fills_the_blanks` used to check the card's one sentence clause by
+clause against Validate's routes. It now checks every desk: each clause names a
+band that desk mounts, over a route or `DRAFT_SURFACES` entry that exists; each
+band the desk mounts is named by a clause; a desk with no band has no switch
+and no band; each rail prints its own desk's sentence; and the shared card
+names no desk's capability.
+
+**The cost before a run.** `ZoneDraft`'s docblock said the cost was shown
+before the run. It was drawn only once a draft existed, from the draft's own
+row. The new `workspaces/RunEstimate.jsx` quotes the reader's own average for
+the band's router task from `/api/ai/me/spend`'s `by_task` — measured, never
+modelled (D16) — above the run button. It keeps four states apart: loading
+(nothing drawn), unreadable (a failed request, `recorded: false` or
+`by_task_recorded: false`: `Unreadable` with a retry, never "no runs"), no
+runs of the task (says there is no average), and runs (the average and the
+count). Hosts pass their `useAiSpend()` result as `ai`, read only while the
+mode is on and a project is selected, so a desk makes one read for its bands,
+not one per band. A mount that passes nothing is unchanged and fetches
+nothing. That is every mount off the founder desks: the research, partner,
+advisor and investor zones.
+
+- A zone draft runs `workspace_explain` whatever its surface
+  (`research.ts`'s `POST /drafts`), the same task as the rail's read-back, so
+  its line says the read-back is in the average. `ZoneDraft.DRAFT_TASK` is
+  held equal to the route's task by a test.
+- A fill band's kinds each bill their own task (`validate_tag_pains`,
+  `validate_draft_hypotheses`). The proposals list now sends
+  `kinds[kind].task` from the registry beside the copy, so the band cannot
+  quote one kind's average for another.
+
+**Eadwyn's mark on the Validate board.** The accept path has written a
+`fill_provenance` row for every hypothesis taken from the band since migration
+246, and only the market page ever read one back. The board route
+(`founder_validate.ts`'s `buildBoard`) now reads them in one query, joined to
+`hypotheses` on the project. The newest row per claim counts only while its
+`written_value` is the claim's text now (`filledColumns`' rule: a founder who
+rewrote the claim owns it). Each hypothesis carries
+`filled: { edited, model, fill_class } | null`, and the board carries
+`fills_recorded`. The desk's hypothesis card draws "Proposed by Eadwyn", or
+"… · you edited it" when the founder corrected it before accepting, with the
+model. A failed read reports `fills_recorded: false`, and the card says which
+claims Eadwyn supplied could not be read; it is never folded into a board with
+no marks, which would claim every claim was typed by hand.
+
+**Semantic tokens.** Minted in `index.css`'s `@theme` at their census values
+(`design/tokens/tokens.json`), only where this anatomy first paints with them:
+`axal-lavender-edge`, `axal-positive`, `axal-destructive`, `-destructive-tint`
+and `-destructive-edge`. The accepted mark, the clause read's warn tone and
+Eadwyn's mark use them; each call site carries its own `dark:` pair, because a
+status colour is not a neutral and the dark skin does not flip it. Amber tint,
+positive tint and edge, info and teal are not minted: nothing paints with
+them yet, and `@theme` tree-shakes an unused token anyway.
+
+**Voice.** The Raise clause read's footnote was the artboard's "Not legal
+advice", which names what Eadwyn produced as a kind of advice. It reads "A
+reading of your documents, not counsel's review. Counsel is on the Team page."
+`founder_raise_overview_a4` pinned the old sentence as "not optional"; it now
+pins the property — the read disclaims counsel's review, points to counsel,
+and never says advice. A comment calling the Validate band "Proposal ·
+Advisor" (the canvas's word) now says proposal band. The `RECOMMENDED` badge is
+Session 12's and was already gone (D400).
+
+**Still not built, each said where it shows.**
+- The Friday retro draft on the Build cadence card needs a `DRAFT_SURFACES`
+  entry in `routes/research.ts`, which is not this session's file. The card
+  already says no retro draft surface exists. Routed to the owner through
+  the relay.
+- The collapsed spine's status dot and vertical spend live in `WorkerRail.jsx`
+  and `workerRail.css` (Session 12).
+- A band's cost per page. D404 (migration 319) records a run's `surface`,
+  and the rail's read-back sends one; `POST /api/research/drafts` sends none,
+  so every zone-draft run lands in the month's unattributed group. The band
+  estimate therefore stays per task. Passing the page to `runAI` from that
+  route is a `research.ts` change, routed to its owner.
+- The amber strike-through with a second confirm: no fill overwrites a value
+  yet (`eadwynConfig`'s market note says why), so there is nothing to confirm.
+
+**Verification.** 22 mutations, 22 caught, each with a non-zero exit and a
+`not ok` line, restored from a sha256-checked snapshot:
+- the per-desk rule (an unbacked clause, a dropped switch, a borrowed
+  sentence, a dead switch on Network, a desk capability in the shared card);
+- the estimate (by-task unreadable read as none, loading drawing a figure, no
+  pre-run cost, a wrong task on either band, the kinds list without its task,
+  a band without `ai`, a spend read with the bands off);
+- the mark (surviving a rewrite, crossing ventures, the oldest row speaking,
+  a failed read folded into no marks, the edited flag dropped, an edited mark
+  reading as unaided, a failed read not shown);
+- the footnote, and a token off its census value.
+
+The cross-venture test was first written handing the reader only project 7's
+claims, which would have passed with the query's project scope removed. It now
+hands over every claim, so only the scope keeps venture 8's mark off venture
+7's board.
+
+CodeQL raised alert 6191 (incomplete multi-character sanitization, high) on
+the first push, against the new test's own `replace(/<[^>]+>/g, '')` helper.
+The test now reads text through `_renderedText.mjs`, the repo's character scan
+that never returns a `<`, and the four mutations that read rendered text were
+re-run: all four caught.
+
+New tests: `founder_desk_rail_anatomy_d424.test.mjs` and
+`cloudflare-worker/test/validate_claim_provenance_d424.test.ts`, which runs
+real SQLite rows through `recordFill`, the accept path's own writer.
+`validate_fills_the_blanks` and `founder_raise_overview_a4` were re-aimed as
+described above.
 
 ## D430
 

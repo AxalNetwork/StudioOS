@@ -5,6 +5,8 @@ import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import useAssistMode from '../../hooks/useAssistMode';
+import useAiSpend from '../../hooks/useAiSpend';
+import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import { zonePillClass } from './deskZoneNav';
 import './founderRaiseDesk.css';
 
@@ -57,6 +59,8 @@ export default function FounderRaiseDesk() {
   const [errors, setErrors] = useState({});
   const [reload, setReload] = useState(0);
   const [fillsOn] = useAssistMode('Raise');
+  // The cost before a run (D424), read only while the four bands are drawn.
+  const ai = useAiSpend({ enabled: fillsOn && Boolean(projectId) });
 
   useEffect(() => {
     let alive = true;
@@ -132,13 +136,18 @@ export default function FounderRaiseDesk() {
           <nav className="raise-anchors" aria-label="Raise desk sections">{SECTIONS.map(([label, slug]) => <NavLink data-testid={`link-raise-anchor-${slug}`} to={`/raise/${slug}${query}`} key={label} className={zonePillClass}>{label}</NavLink>)}</nav>
         </header>
         {(projectError || Object.keys(errors).length > 0) && <div className="raise-error" data-testid="status-raise-partial"><AlertCircle size={16} /><span>{projectError || 'Some selected-project records are unavailable.'}</span><button data-testid="button-retry-raise" type="button" onClick={() => setReload((value) => value + 1)}>Retry</button></div>}
-        <RaiseSections loading={loading} project={project} data={data} errors={errors} query={query} state={state} projectId={projectId} fillsOn={fillsOn} />
+        <RaiseSections loading={loading} project={project} data={data} errors={errors} query={query} state={state} projectId={projectId} fillsOn={fillsOn} ai={ai} />
       </div>
       <WorkerRail
         workspace="Raise"
         className="raise-rail"
         stance="Manual raise view"
-        note="This surface reads selected-project records only. It does not generate, score, or change fundraising materials."
+        // The switch the four bands waited for (D424) — gated on this mode
+        // since they were mounted, with no rail on Raise to turn it on. The
+        // note it replaces said the desk generates nothing, above four bands
+        // that draft. Nothing here scores or changes a document either way.
+        fills
+        note={ASSIST_SURFACES.workspace.desks.Raise.fills}
         coverage={[
           `${data.prospects.length} prospect${data.prospects.length === 1 ? '' : 's'} · ${data.docs.length} legal doc${data.docs.length === 1 ? '' : 's'}`,
           `${data.versions.length} deck version${data.versions.length === 1 ? '' : 's'} · ${asList(data.room, 'files').length} data-room file${asList(data.room, 'files').length === 1 ? '' : 's'}`,
@@ -149,7 +158,7 @@ export default function FounderRaiseDesk() {
   </main>;
 }
 
-function RaiseSections({ loading, project, data, errors, query, state, projectId, fillsOn }) {
+function RaiseSections({ loading, project, data, errors, query, state, projectId, fillsOn, ai }) {
   // `prospects` is deliberately not destructured here. The status card counted
   // every stored prospect before A4; it now reads `inPlay`, which is the same
   // list narrowed to the three stages that are actually in play, and the full
@@ -198,6 +207,7 @@ function RaiseSections({ loading, project, data, errors, query, state, projectId
           empty="Nothing proposed yet. Eadwyn will read your round and cap-table scenario back in plain language, and show every step of the arithmetic."
           nothingToDraft="No round and no cap-table scenario are recorded for this startup yet."
           foot="Shown step by step, because you will be asked to defend this number."
+          ai={ai}
         /> : null}
         <DeskLink testid="link-open-capital" to={`/raise/capital${query}`} state={state}>Open capital planner</DeskLink></>}</section>
       <section className="raise-card" id="raise-legal"><Head icon={Scale} title="Legal engine" meta={loading ? 'Reading documents' : termSheetLabel(docs)} />{loading ? <Skeleton rows={3} /> : errors.legal ? <Unavailable /> : <><div className="legal-list">{docs.slice(0, 4).map((doc, index) => <div key={doc.id || index}><FileText size={14} /><span>{clean(doc.title || doc.name || doc.doc_type) || 'Untitled document'}</span><small>{status(doc.status)}</small></div>)}{!docs.length && <Empty icon={FileText} title="No legal documents are recorded." body="Stored legal documents appear here." />}</div>
@@ -211,7 +221,11 @@ function RaiseSections({ loading, project, data, errors, query, state, projectId
           accept="Keep this reading"
           empty="Nothing proposed yet. Eadwyn will read the documents you have stored and name the clauses worth looking at again, quoting each one."
           nothingToDraft="No stored legal document has any text to read."
-          foot="Not legal advice. Counsel is on the Team page."
+          // A reading of your own documents, and the footnote says what it is
+          // rather than what it is not: "Not legal advice" named Eadwyn's
+          // output as a kind of advice, which the voice rule forbids (D424).
+          foot="A reading of your documents, not counsel's review. Counsel is on the Team page."
+          ai={ai}
         /> : null}
         <DeskLink testid="link-open-legal" to={`/raise/legal${query}`} state={state}>Open legal collection</DeskLink></>}</section>
     </div>
@@ -226,6 +240,7 @@ function RaiseSections({ loading, project, data, errors, query, state, projectId
         empty="Nothing proposed yet. Eadwyn will read what this room holds, what sits behind NDA, and what the investors with access have actually opened."
         nothingToDraft="This room holds no folders and no files yet."
         foot="Read from the room itself, never from a generic diligence checklist."
+        ai={ai}
       /> : null}
       <div className="artifact-grid">{[...folders.map((item) => ({ ...item, kind: 'Folder' })), ...files.map((item) => ({ ...item, kind: 'File' }))].slice(0, 8).map((item, index) => <article key={item.uid || index}><span>{item.kind}</span><strong>{clean(item.name) || 'Unnamed artifact'}</strong><small>{artifactState(item, access)}</small></article>)}{!files.length && !folders.length && <Empty icon={Folder} title="No artifacts are recorded in this room." body="This workspace does not create placeholders." />}</div>
       <p className="source-note">Nothing is screened before it is shared: no content review runs anywhere in this build, so no artifact carries a screened mark.</p>
@@ -244,6 +259,7 @@ function RaiseSections({ loading, project, data, errors, query, state, projectId
         empty="Nothing proposed yet. Eadwyn will explain who is paid what and in what order from your cap table and round — and name every term the answer needs that nothing here records."
         nothingToDraft="No cap-table scenario is recorded, so there is no ownership to pay out."
         foot="No preference term is stored, so none is assumed."
+        ai={ai}
       /> : null}
       <DeskLink testid="link-open-liquidity" to={`/raise/liquidity${query}`} state={state}>Open liquidity</DeskLink></section>
   </div>;
