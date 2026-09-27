@@ -132,7 +132,7 @@ const NOT_COPY = [
   /^https?:\/\//,                               // URLs
   // A className list: every token carries a hyphen, underscore or colon
   // ("advisor-row advisor-row--open"). Prose never hyphenates every word (D322).
-  /^[\w-]*[-_:][\w:-]*(\s+[\w-]*[-_:][\w:-]*)*$/,
+  /^\w*[-_:][\w:-]*(?:\s+\w*[-_:][\w:-]*)*$/,
 ];
 const isCopy = (s) => !NOT_COPY.some((re) => re.test(s));
 
