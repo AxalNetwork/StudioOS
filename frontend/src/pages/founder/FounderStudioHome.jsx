@@ -197,7 +197,7 @@ function AdvisorUnavailable() {
         </div>
       </div>
       <div className="fs-advisor-unavailable-note">
-        <span>Live advisor</span>
+        <span>Live interview</span>
         <strong>Source unavailable</strong>
         <small>No answers or assessment data have been inferred.</small>
       </div>

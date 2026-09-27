@@ -30812,6 +30812,75 @@ archetype card.
     unanswered share list becoming 0, either extra deck read's failure being
     ignored, a zero target dividing, and the bar running past full.
 
+## D322
+
+**Eadwyn is not "the advisor", and the regulated-wording lint can now see
+the lines that said so.** Wave 8, Session 3, item 3 (the gap map's PR 2).
+Frontend copy and one script: no migration, no route, no `api.js` method.
+
+**The lint's blind spot.** `scripts/check-regulated-wording.mjs` read JSX text
+with `/>([^<>{}\n]{4,})</`, which stops at a newline. Text on a line of its own
+between two tags was never read, so the chat's empty state, "Your advisor will
+guide you through a quick setup", passed. The scan now also reads whole lines
+that sit between a tag ending one line and a tag or an expression opening the
+line after, joined into one sentence. Lines that open a tag or an expression
+are excluded, and so is anything not followed by a tag or expression, so code
+after a `>` comparison is not read as text. That rule surfaced one false
+positive, a className list (`"advisor-row advisor-row--open"`). A string in
+which every token carries a hyphen, underscore or colon is now treated as a
+class list, not prose.
+
+**Wider scope.** The scanned surfaces gain `ProfileFitSection.jsx`,
+`ArchetypeCardPage.jsx`, the five Studio homes (founder, investor, advisor,
+partner, admin) and the two modules D321 moved the founder and investor cards
+into: 21 surfaces in all.
+
+**The copy.** Each line below speaks about the chat, which is Eadwyn:
+- `PersonalAdvisor.jsx`: "Eadwyn will guide you through a quick setup."
+- `ProfileFitSection.jsx`, four empty and footer states: "with Eadwyn" in
+  place of "in the advisor", "to the advisor" and "with the advisor".
+- `ArchetypeCardPage.jsx`: the empty state says the same.
+- `FounderStudioHome.jsx`: the unavailable-chat note reads "Live interview",
+  not "Live advisor".
+- `AdvisorFilledBanner.jsx`: its button opens the chat, so it reads "Review
+  with Eadwyn". No session holds this file this wave; it is one string, and
+  the wider scan is what found it.
+
+**On record, not changed.** Ten lines are about human advisors and go into
+`scripts/regulated-wording-baseline.json`, each with its reason:
+- the founder home's Office hours card, which lists bookings with a human
+  advisor;
+- the advisor Studio home, which is the human advisor's own page (its
+  practice, profile, slots, sessions and earnings, and the role preview an
+  admin sees).
+
+The ledger goes from 3 entries to 13. The three already there record
+"Personal Advisor" as a shipped product name, unchanged.
+
+**Re-aimed.** `studio_archetype_card.test.mjs` pinned the old sentence
+verbatim. It now asserts the property: the empty state names Eadwyn and never
+an advisor.
+
+**Testable.** The script exports `SURFACES` and `visibleText` and runs `main()`
+only when invoked, so `regulated_wording_scan_d322.test.mjs` pins the scanner
+itself. A change that makes the scan read less fails that test, instead of
+passing every file.
+
+**Verification.**
+- `npm run test:drift` on main 8d98f34ce: exit 0. Frontend
+  3916 to 3922, the 6 new tests all in `regulated_wording_scan_d322.test.mjs`.
+  Worker 4733 (4730 pass, 0 fail), retention 112 and guards 14 unchanged.
+- Both typechecks, `lint:undef`, `check-regulated-wording` (21 surfaces, 13 on
+  record), `check-decision-ids`, `check-folder-docs` and `check-api-drift`
+  exit 0.
+- Mutations: 10 run, 10 caught (non-zero exit and a `not ok` line, each file
+  restored from a sha256-checked snapshot):
+  - the multi-line scan removed, or no longer requiring a tag or expression
+    after the text;
+  - the class-list rule removed, or broadened until it swallows prose;
+  - the founder home taken off the scanned list;
+  - each of the five voice lines reverted.
+
 ## D330
 
 **AdminX.jsx and AdminTelegram.jsx say why no draft was made.** Wave 8,
@@ -35379,6 +35448,18 @@ record could not be read. Nothing here is drawn from a guess. Retry".
 **One open count.** Awaiting a decision is `status = 'under_review' AND resolved_at IS NULL`, exported once and read by the console and by the approvals lane. A suspension or an ejection that has not been closed is a sanction in force, listed and counted apart, and not added into the lane. Close stamps `resolved_at` and does not change Lab access, so a sanction can leave the list without reinstating. The page does not preselect an action. A list that is not an array is unreadable. A missing count is not shown as zero. The list is capped at 200 and says how many of the count it is showing.
 
 **Mutations: 5 run, 5 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: a plain admin reinstating a peer admin; a decision with no audit row; the freeze not reaching the post; the console and the lane disagreeing on a flag; a malformed payload read as an empty list.
+
+## D449
+
+**The domain wizard names the registrar and copies a whole DNS record.** Frontend only. No migration. No new `/api` method. No live branch exercised this. `AdminStudioOverview.jsx` is not edited.
+
+**Registrar chips.** The three-step checklist stays. Above the records, six chips name Cloudflare, Google / Squarespace, Route 53, Namecheap, GoDaddy and Other. None is pressed until the person presses one, because a preselected Cloudflare would claim that is where they bought the name. Pressing one names that registrar and says the name, the value and the TTL do not change with it. Pressing it again clears the choice. The records still come from the licence payload. The choice is not stored.
+
+**Copy all.** Each record card copies Type, Name, Value and, when the TTL is a finite number, TTL, in one action, beside the per-field copies. A TTL that is not a finite number is left off the clipboard rather than written as zero. A refused clipboard uses the same sentence as a refused per-field copy.
+
+**Not on this screen.** Certificate, make primary, email DNS, and apex guidance. The canvas's recommended and not-recommended pair is not drawn.
+
+**Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: Copy all dropping the name and the TTL; a chip pressed before the person presses it; the chip list gone.
 
 ## D450
 

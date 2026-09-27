@@ -135,7 +135,7 @@ export default function ArchetypeCardPage({ activeRole }) {
 
       {!loading && !failed && !latest && (
         <div className="acp-card border border-dashed border-[#e4e4e7] dark:border-gray-700 bg-[#fafafa] dark:bg-gray-800/40 p-[22px] text-[12.5px] text-[#71717a] dark:text-gray-400 leading-[1.5]">
-          Answer a few archetype questions in the advisor to reveal your archetype.
+          Answer a few archetype questions with Eadwyn to reveal your archetype.
         </div>
       )}
 

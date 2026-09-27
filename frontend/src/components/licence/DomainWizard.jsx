@@ -50,7 +50,35 @@ function RecordVerdict({ verdict }) {
   );
 }
 
-/** One DNS row, with the value on a copy button rather than in a paragraph. */
+/**
+ * The registrars the canvas names. The records do not change between them.
+ * None is selected until the person presses one, because a preselected
+ * Cloudflare would claim that is where they bought the name.
+ */
+export const REGISTRARS = [
+  'Cloudflare',
+  'Google / Squarespace',
+  'Route 53',
+  'Namecheap',
+  'GoDaddy',
+  'Other',
+];
+
+/**
+ * The whole record, in the order a registrar form asks for it.
+ * A TTL that is not a finite number is left off. Writing 0 would publish a TTL.
+ */
+export function dnsRecordClipboard(record) {
+  const lines = [
+    `Type ${record?.type ?? ''}`,
+    `Name ${record?.name ?? ''}`,
+    `Value ${record?.value ?? ''}`,
+  ];
+  if (typeof record?.ttl === 'number' && Number.isFinite(record.ttl)) lines.push(`TTL ${record.ttl}`);
+  return lines.join('\n');
+}
+
+/** One DNS row, with each field on its own copy button and the whole row on Copy all. */
 function RecordCard({ record }) {
   const [copied, setCopied] = useState('');
   const copy = (what, value) => {
@@ -89,6 +117,16 @@ function RecordCard({ record }) {
           </div>
         ))}
       </dl>
+      <div className="mt-2 flex justify-end">
+        <button
+          type="button"
+          onClick={() => copy(`${record.kind}-all`, dnsRecordClipboard(record))}
+          data-testid={`domain-copy-all-${record.kind}`}
+          className="rounded border border-gray-200 px-2 py-0.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+        >
+          {copied === `${record.kind}-all` ? 'Copied' : 'Copy all'}
+        </button>
+      </div>
       {copied === 'fail' && (
         <p className="mt-1.5 text-[11px] text-rose-700 dark:text-rose-300">
           Your browser refused the clipboard — the value is above, and selecting it works.
@@ -114,6 +152,7 @@ export default function DomainWizard({ domain, available, reason, onChanged }) {
   const [busy, setBusy] = useState('');
   const [err, setErr] = useState('');
   const [check, setCheck] = useState(null);
+  const [registrar, setRegistrar] = useState('');
 
   const run = (what, fn) => {
     if (busy) return;
@@ -235,6 +274,34 @@ export default function DomainWizard({ domain, available, reason, onChanged }) {
                 <li>2 · Leave the CNAME unproxied — the orange cloud off, if your registrar is Cloudflare.</li>
                 <li>3 · Press Check now. Most registrars save instantly; some take five minutes.</li>
               </ol>
+
+              <div data-testid="domain-registrars">
+                <p className="text-[11.5px] text-gray-500 dark:text-gray-400">
+                  Your registrar. The records below are the same at each of these.
+                </p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5" role="group" aria-label="Your registrar">
+                  {REGISTRARS.map((name) => (
+                    <button
+                      key={name}
+                      type="button"
+                      aria-pressed={registrar === name}
+                      onClick={() => setRegistrar(registrar === name ? '' : name)}
+                      className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
+                        registrar === name
+                          ? 'border-gray-900 bg-gray-900 text-white dark:border-gray-100 dark:bg-gray-100 dark:text-gray-900'
+                          : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800'
+                      }`}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+                {registrar && (
+                  <p className="mt-1.5 text-[11.5px] text-gray-600 dark:text-gray-400" data-testid="domain-registrar-picked">
+                    {registrar}. The name, the value and the TTL below do not change with the registrar.
+                  </p>
+                )}
+              </div>
 
               <div className="grid gap-2 sm:grid-cols-2">
                 {(domain.records || []).map((rec) => <RecordCard key={rec.kind} record={rec} />)}

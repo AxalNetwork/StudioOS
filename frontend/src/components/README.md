@@ -19,7 +19,7 @@ building blocks.
 | `command-center/` | Founder command-centre widgets. |
 | `discovery/` | Customer-discovery tooling. |
 | `events/` | Event cards and RSVP pieces. |
-| `licence/` | Licence-holder pieces. `DomainWizard.jsx` is S17–S19's custom-host wizard: it states its own absence on a branch, because the host register is HQ's and a branch cannot read another tenant's bindings. |
+| `licence/` | Licence-holder pieces. `DomainWizard.jsx` is S17–S19's custom-host wizard: it states its own absence on a branch, because the host register is HQ's and a branch cannot read another tenant's bindings. Registrar chips name where the person publishes the same two records, and Copy all copies one whole record (D449). |
 | `play/` | Playbook steps. |
 | `products/` | Product and catalogue cards. |
 | `profile/` | Profile blocks shared across personas. |
