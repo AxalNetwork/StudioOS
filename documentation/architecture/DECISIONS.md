@@ -31880,6 +31880,148 @@ worker tests now share `cloudflare-worker/test/_esign_harness.ts`.
   fill (Continue held with one blank, the preview carries the values) →
   review → send → `?envelope=7` → remind → void.
 
+## D412
+
+**Perks: only founders can claim, and no role gets through the tier gate. A
+claim can no longer overrun its cap or its balance. A claim records when it
+expires. Partners mark claims redeemed, and raising a cap needs no second
+review. Migration 322 stores value, the editorial note, the redeemer and
+ratings.** Wave 8, Session 13, item 3. It is Worker-first, with one frontend
+label fix. Migration 322.
+
+**What was wrong, measured on 4d9add89.**
+- **Claiming was login-only, and the tier gate let four roles through.**
+  `POST /:uid/claim` took `requireAuth` alone. `userMeetsTier` lets admin,
+  partner, investor and advisor through every tier gate
+  (`BYPASS_ROLES`). So any non-founder account could take a plan-included
+  perk for nothing. Claiming being a founder's action was enforced only by
+  the menu.
+- **The cap and the balance were checked before the insert.** The cap was a
+  `COUNT` read before the batch, and the balance a `SUM` read before it. Two
+  concurrent claims could overrun a cap, or spend one balance across two
+  perks. The header's "double-spend impossible" held for one perk only.
+- **`perk_claims.expires_at` had existed since migration 186 and was never
+  written.**
+- **Nothing ever wrote `status = 'redeemed'`**, so every redemption figure
+  was a permanent zero.
+- **Any edit to a live listing sent it back to review, even a raised cap.**
+- **Ended listings stayed claimable.** A listing past its `ends_at` stayed on
+  the shelf and could still be claimed.
+
+**What changed (`routes/perks.ts`, the only place perk gates live).**
+- **Who may claim.** `PERK_CLAIMANT_ROLES = new Set(['founder'])` is checked
+  first in the claim route, before the listing is read, and first in
+  `affordability`. A non-founder therefore gets `403 founders_only` whether
+  or not the listing exists. Such an account is never shown a price or tier
+  line, because its tier line never runs. For a founder, `userMeetsTier`
+  checks the subscription with no bypass. A test fails if a claimant role
+  would skip the tier check.
+- **Atomic cap and balance.** The claim is `INSERT … SELECT … WHERE` over
+  three conditions: the listing is live and not ended; it is under its cap;
+  and, for a credit perk, the balance covers the cost. The debit is
+  `INSERT … SELECT … WHERE EXISTS (the claim row)`, in the same batch, which
+  is one D1 transaction. A claim lands with its debit, inside the cap and
+  the balance, or neither lands. A refused insert is re-read and answered
+  with its reason. A UNIQUE race by the same founder returns the winning
+  claim.
+- **Expiry.** `expires_at` is the listing's `ends_at`, snapshotted at claim
+  time, as the price already is. The listing's end date is the only term
+  anyone sets: the partner form's "duration". An open-ended listing gives
+  an open-ended claim (null). `expired` is derived on read (`claimState`)
+  for an issued claim past its date, and nothing rewrites the column. No
+  reminder job exists, and `/mine` serves that absence as a sentence.
+- **Mark redeemed.** `POST /partner/:uid/redeem` takes `{ code }` or, for a
+  link or intro perk with no code, `{ claim_uid }`. It is bound to the
+  caller's own listing, so another listing's code is not found. An expired
+  claim, or one already redeemed, gets a 409. The actor is stored in
+  `redeemed_by_user_id` and written to `activity_logs`. `GET
+  /partner/:uid/claims` lists the claims' uid, state and dates, and never
+  who made them.
+- **Raising the cap skips review.** An edit that only raises `claim_cap`,
+  to a higher number or to uncapped, keeps a live listing live. A lowered
+  cap, capping an uncapped listing, or any other field in the same request
+  still goes back to review. The response says which with `reviewed_again`.
+- **Ratings.** `POST /:uid/rating` takes 1–5 stars from a founder whose
+  claim of that perk is redeemed (`PERK_RATING_REQUIRES`). One rating per
+  founder per perk; rating again replaces it. The catalogue serves `rating:
+  { count, average }`, and the average is null, never 0, until someone has
+  rated.
+- **Listing facts.** `value_cents` is the partner's stated cash value,
+  settable on submit and edit, never negative, reviewed like any edit.
+  `editorial_note` is written only by the admin review route and served only
+  while the listing is featured. `cap_reached` and `lifecycle` are served;
+  a full listing stays live, and the page says it is full.
+- **Stats.** The stats route adds `redemption_rate`, `founders_reached` (a
+  count; one claim per founder), `value_cents` and `rating`. It serves the
+  absence of the founders list and of card impressions as sentences.
+- **Catalogue.** It drops listings past their end date, and serves
+  `claimant` and `claimant_reason` once for the page.
+- **Refusals** use `refuse()` with a code and our own sentence:
+  `founders_only`, `tier_required`, `insufficient_credits`, `cap_reached`,
+  `perk_ended`, `claim_not_found`, `already_redeemed`,
+  `claim_not_redeemable`, `rating_requires_redemption`, `stars_invalid`.
+
+**Migration 322** (`322_perk_value_editorial_redemption_ratings.sql`) is
+additive only: `perks.value_cents` (integer cents, CHECK ≥ 0),
+`perks.editorial_note`, `perk_claims.redeemed_by_user_id`, and `perk_ratings`
+(UNIQUE per perk and user, stars 1–5). It stands alone, as a wave-8 migration
+must. There is no "instant" fulfilment: 186's CHECK cannot be altered without
+rebuilding `perks`. There is no impression counter and no stored average.
+
+**Frontend (`PerksPage.jsx`, one change).** The card printed `reason ===
+'tier_required' ? 'Needs an upgrade' : 'Not enough credits'`. Once claiming
+became founders-only, that would have told every investor, advisor and
+partner they were short of credits. The card now reads `UNCLAIMABLE_LABEL`,
+one label per reason the Worker gives, and the drawer prints the Worker's
+`reason_text` for a non-founder. Everything else on the page is item 4's.
+
+**OWNER DECISION, NOT MADE HERE: does an `exploring` account qualify for
+perks?** The conservative default ships: it does not. The rule is one
+constant, `PERK_CLAIMANT_ROLES` in `routes/perks.ts`. Adding `'exploring'` is
+the whole change; the test that pins today's answer would then need its one
+assertion updated.
+
+**A rule chosen here, and named.** Who may rate is not drawn on the canvas.
+`PERK_RATING_REQUIRES = 'redeemed'` asks for the one fact that says the
+founder used the offer.
+
+**Filed, not fixed.**
+- **Session 2.** `research.ts:2196` counts every claim as "redeemed"
+  (`COUNT(*) … AS redeemed`), and the draft prints "N redeemed". Redemption
+  is now a real state, so the count should read
+  `SUM(CASE WHEN status = 'redeemed' …)`.
+- **Session 15.** None.
+- **Consent.** "Founders reached" by name, and an intro perk's "sharing your
+  company name", need a store of founder consent. None exists, so both are
+  served as absences.
+
+### VERIFIED
+
+- `npm run test:drift` exit 0 on main 4d9add89 plus this change. Main alone:
+  frontend 3583, worker 4477. With it: frontend 3587 (+4), worker 4496 (+19),
+  retention 112. Nothing fell.
+- New tests, by name:
+  - `perks_claim_founders_d412.test.ts`: 19 tests. The schema is built from
+    migrations 186, 198, 228 and 322 read off disk. The two atomicity tests
+    use a batch hook that lands a competing claim or spend between the
+    route's read and its insert.
+  - `perks_claim_reasons_d412.test.mjs`: 4 tests. The page labels every
+    reason `affordability` gives.
+- `perks_company_scope.test.ts`'s fixture gains migration 322's columns and
+  table.
+- 25 mutations were run. 23 were caught first time. Two escaped (P3, P23),
+  and the assertions were fixed, not the code:
+  - P3, the route's early founder gate removed: `affordability` still
+    refused with the same code. The test now asserts that a non-founder gets
+    the same answer for a nonexistent listing as for a real one, which is
+    what the early gate buys.
+  - P23, the negative-value check removed: the migration's CHECK still
+    refused with a 400. The test now asserts our sentence, not just the
+    status.
+  - Both re-run and caught. 25 of 25. Each failure was a non-zero exit with
+    a `not ok` line, restored from a sha256-checked snapshot, and passed
+    again.
+
 ## D420
 
 **The founder desks A2–A5 read the stores that already exist.** Wave 8,
@@ -32070,3 +32212,85 @@ surface); a cached-input cost read on Research (no store).
 - Both typechecks, `check-decision-ids`, `check-folder-docs`,
   `check-api-drift`, `check-unused-imports` and `check-dark-mode` exit 0. Root
   `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser probe.
+
+## D430
+
+**Recovery codes get a single writer: regenerating them and then re-pairing
+the authenticator never resurrects the discarded set.** Session 15's item 1;
+lands after D258 (#811), which touched the same four TOTP routes.
+
+**The defect, reproduced before the fix.** Two stores hold one set of
+recovery-code hashes: `users.totp_recovery_codes`, which login consumes from
+(auth.ts's `tryConsumeRecoveryCode` reads it and accepts a code iff its hash
+is in the array), and `auth_totp.recovery_hashes`, a mirror. On main
+(`4d9add89bb`):
+- `POST /api/settings/totp/recovery-codes/regenerate` ran `UPDATE users SET
+  totp_recovery_codes = …` alone; the mirror kept the old set.
+- `POST /api/settings/totp/repair` called `loadTotp`, which answers the
+  `auth_totp` row's hashes — the stale mirror — and passed them to
+  `persistNewTotpEnrolment`, which wrote them to `auth_totp` and mirrored
+  them to `users`.
+- So after regenerate → repair the codes the person had just saved were
+  refused and the ones they had just discarded worked again, against the
+  settings page's own promise ("This invalidates any existing recovery
+  codes"), and the "N of 10 remaining" count reverted with them.
+- `cloudflare-worker/test/recovery_codes_single_writer_d430.test.ts` drove
+  this on a `node:sqlite` fixture through the real router before the fix:
+  its first three tests failed (`auth_totp.recovery_hashes` still holding the
+  discarded set after regenerate; the saved set replaced by the discarded one
+  after repair; repair siding with the mirror when the two stores had been
+  driven apart), recorded in the PR body.
+
+**What changed — one writer, one batch.**
+- `services/authTotp.ts`: `persistNewTotpEnrolment` writes the `auth_totp`
+  upsert and the `users` mirror in ONE `env.DB.batch`; the mirror's
+  try/catch is gone, so either both land or the route fails and says so.
+  New `replaceRecoveryHashes(env, userId, hashes)` writes both stores in one
+  batch WITHOUT stamping `last_used_at` — that column is the audit of a code
+  or a TOTP being used, and `updateRecoveryHashes` (the consumption path)
+  keeps it; a regenerate is not a consumption. There is no third way to
+  write a recovery set.
+- `routes/settings.ts`: regenerate calls `replaceRecoveryHashes`. Repair
+  carries the set login consumes from — `recoveryCodesOf(users.totp_recovery_codes)`,
+  the row it already read — never the loaded mirror. An empty or unparseable
+  `users` set stays empty: repair never revives codes login was already
+  refusing, and no fallback to the mirror exists (a mutation that added one
+  is caught).
+- `auth_recover.ts`'s own consumption (writes `users`, then
+  `updateRecoveryHashes`) and `auth.ts`'s enrolment are not touched: both
+  already write both stores.
+
+**Guard: 6 tests.** Regenerate writes both stores at once, the old set is
+gone from both and `last_used_at` stays null; regenerate then repair leaves
+the ten saved codes accepted and the discarded one refused, in both stores
+and in `loadTotp`'s count; repair carries the consumed-from set when the
+stores have been driven apart; an empty consumed-from set stays empty; an
+enrolment writes both stores with the same set in a two-statement batch;
+and a source guard holds settings.ts to no direct `UPDATE users SET
+totp_recovery_codes`, repair to `recoveryCodesOf(userRow[0]…)`, and the two
+service writers to one batch each, with no `last_used_at` in the replacer.
+
+**Mutations: 9 run, 9 caught** — each a non-zero exit with a `not ok` line,
+anchors unique, bytes proven changed, sources restored from a sha256-checked
+snapshot: the mirror back in a swallowed try/catch; regenerate writing
+`users` alone (the defect); repair re-persisting the loaded mirror (the
+defect); the replacer stamping `last_used_at`; the replacer writing
+`auth_totp` only; the replacer writing `users` only; repair falling back to
+the mirror on an empty set; the enrolment batch dropping the `users` write;
+the enrolment batch dropping the `auth_totp` write.
+
+**Filed, not fixed.**
+- Remediation is the owner's call (the brief): accounts that regenerated and
+  then repaired before D430 hold the discarded set in both stores today. No
+  per-user row was read and nobody was contacted; the one read-only aggregate
+  the brief allows is in the PR body: the number of accounts with a
+  `totp_recovery_codes_regenerated` row followed by a later `totp_repaired`
+  row and no `user_login_recovery_code` row between the two (a recovery-code
+  sign-in is logged under that action, auth.ts), read from production
+  `activity_logs` as one COUNT and nothing else.
+- Trap 6 of the gap map, unchanged: regenerate and repair are reachable from
+  a relocked post-recovery session, and neither sends a security notice.
+  Neither is this item's, and neither is decided here.
+
+No migration, no route, no `api.js` method, no `frontend/src` change, so
+`docs/` is untouched.

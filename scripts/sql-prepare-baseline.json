@@ -52,6 +52,7 @@
     "isSelf || isAdmin ? '' : ' AND r.published = 1' @ routes/assessment.ts": 1,
     "jWhere @ routes/watchlist.ts": 1,
     "limit @ services/referralSubmissions.ts": 1,
+    "LISTING_SELECT @ routes/perks.ts": 4,
     "m.col @ services/advisor/writeRouter.ts": 2,
     "marks @ routes/funds.ts": 1,
     "mph @ services/introductions.ts": 1,
