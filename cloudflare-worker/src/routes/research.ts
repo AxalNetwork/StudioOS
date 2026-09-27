@@ -3306,15 +3306,39 @@ const DRAFT_SURFACES: Record<string, {
       return lines;
     },
   },
+
+  // The investor's memo on ONE room (canvas b6a5f992, "Room · what is thin").
+  // The scope key is a grant uid, and the material comes from `roomMaterial`,
+  // which passes through the same held-grant gate as the room read: a uid the
+  // caller does not hold drafts nothing, and nothing behind an NDA the caller
+  // has not signed is named to the model — only counted.
+  'research/diligence': {
+    instruction: [
+      'Write a short private memo for the investor who holds access to the data room below.',
+      'Say what the founder has staged, and what is thin or absent for diligence, using only the facts listed.',
+      'Name a document only by the name given. Do not guess what any document says.',
+      'Anything behind an NDA is a count only. Do not name or guess it.',
+      'Do not tell the investor what to decide. Add no fact that is not below.',
+    ].join(' '),
+    gather: (c, userId, scope) => roomMaterial(c.env, userId, scope),
+  },
 };
 
 research.get('/drafts', async (c) => {
   const user = await requireAuth(c);
   const surface = String(c.req.query('surface') || '');
   if (!DRAFT_SURFACES[surface]) return c.json({ detail: 'unknown_surface' }, 400);
-  const rows = await c.env.DB.prepare(
-    `SELECT * FROM research_zone_drafts WHERE owner_user_id = ? AND surface = ? ORDER BY id DESC LIMIT 20`
-  ).bind(user.id, surface).all<ZoneDraftRow>();
+  // A page about ONE record (one room) asks for that record's drafts only, so
+  // a memo on one company's room never shows on another's. Pages that omit
+  // `scope_key` read the surface's newest drafts, as they always have.
+  const scopeKey = c.req.query('scope_key');
+  const rows = scopeKey !== undefined
+    ? await c.env.DB.prepare(
+        `SELECT * FROM research_zone_drafts WHERE owner_user_id = ? AND surface = ? AND scope_key = ? ORDER BY id DESC LIMIT 20`
+      ).bind(user.id, surface, scopeKey).all<ZoneDraftRow>()
+    : await c.env.DB.prepare(
+        `SELECT * FROM research_zone_drafts WHERE owner_user_id = ? AND surface = ? ORDER BY id DESC LIMIT 20`
+      ).bind(user.id, surface).all<ZoneDraftRow>();
   return c.json({ items: (rows.results || []).map(draftDto) });
 });
 
@@ -4011,6 +4035,39 @@ async function heldRoom(env: Env, userId: number, grantUid: string): Promise<Hel
   return { grant, project, nda: await ndaActive(env, grant.granted_by_user_id, userId) };
 }
 
+/**
+ * The facts the room memo is drafted from, for a grant the caller holds.
+ *
+ * Empty when the grant is not the caller's or not live — the draft route turns
+ * that into `nothing_to_draft` and the model is never called. Only what the
+ * room read itself would show is listed: open files by name, withheld ones as
+ * a number.
+ */
+async function roomMaterial(env: Env, userId: number, grantUid: string): Promise<string[]> {
+  if (!grantUid) return [];
+  const room = await heldRoom(env, userId, grantUid);
+  if (!room) return [];
+  const pid = room.grant.project_id;
+  const files = await env.DB.prepare(
+    `SELECT name, content_type, size_bytes, visibility, created_at
+       FROM data_room_files WHERE project_id = ? ORDER BY name`
+  ).bind(pid).all<any>();
+  const all = files.results || [];
+  const open = all.filter((f: any) => f.visibility === 'open' || room.nda);
+  const lines = [
+    `Company: ${room.project.name}`,
+    `Room granted ${String(room.grant.created_at).slice(0, 10)}`
+      + (room.grant.expires_at ? `, access expires ${String(room.grant.expires_at).slice(0, 10)}` : ', no expiry set'),
+    `NDA with this founder: ${room.nda ? 'active' : 'none'}`,
+    `Documents in the room: ${all.length}. Open to this investor: ${open.length}. Behind an NDA, not named: ${all.length - open.length}.`,
+  ];
+  for (const f of open) {
+    lines.push(`Document: ${f.name} (${f.content_type || 'type not recorded'}, `
+      + `${f.size_bytes == null ? 'size not recorded' : `${f.size_bytes} bytes`}, staged ${String(f.created_at).slice(0, 10)})`);
+  }
+  return lines;
+}
+
 research.get('/diligence/:grantUid', async (c) => {
   const user = await requireAuth(c);
   const room = await heldRoom(c.env, user.id, c.req.param('grantUid'));
@@ -4070,7 +4127,9 @@ research.get('/diligence/:grantUid', async (c) => {
       created_at: a.created_at,
       file_uid: named ? f.uid : null,
       file_name: named ? f.name : null,
-      file_withheld: !!(a.file_id != null && !named),
+      file_withheld: !!(f && !named),
+      // The row's file is gone from the room (deleted since).
+      file_removed: a.file_id != null && !f,
     };
   });
 

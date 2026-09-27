@@ -14,7 +14,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -25,6 +25,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 import research from '../src/routes/research.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const MIGRATION_221 = readdirSync(resolve(ROOT, 'cloudflare-worker/sql/migrations')).find((f) => f.startsWith('221_')) as string;
 const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
@@ -48,6 +49,11 @@ function freshDb() {
   for (const t of ['data_room_grants', 'data_room_files', 'data_room_folders', 'data_room_access_log', 'pairwise_ndas']) {
     db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   }
+  // The drafts table as migration 221 declares it, cut from the file itself.
+  const m221 = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations', MIGRATION_221), 'utf8');
+  const start = m221.indexOf('CREATE TABLE IF NOT EXISTS research_zone_drafts');
+  assert.ok(start >= 0, 'migration 221 no longer declares research_zone_drafts');
+  db.exec(stripForeignKeys(m221.slice(start, m221.indexOf(');', start) + 2)));
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?,?,?,?,?)');
   u.run(FOUNDER, 'founder', 100, 'Fran', 'fran@example.com');
   u.run(SIGNED, 'investor', null, 'Sig', 'sig@example.com');
@@ -229,4 +235,65 @@ test('a real file uid from another room is not in this one', async () => {
   assert.equal(r.body.error, 'file_not_found');
   assert.ok(!r.raw.includes('Elsewhere plan'));
   assert.equal((await get(db, STRANGER, '/diligence/g-signed/files/f-open')).status, 404);
+});
+
+/**
+ * POST /drafts for the room memo, with the model stubbed so the test can read
+ * exactly what it would have been sent. `prompt` is null when the model was
+ * never reached, which is the only outcome a refusal may have.
+ */
+async function draftRoom(db: any, userId: number, scopeKey: string): Promise<{ status: number; body: any; prompt: string | null }> {
+  let prompt: string | null = null;
+  const AI = {
+    run: async (_model: string, payload: any) => {
+      const messages = payload?.messages || [];
+      prompt = String(messages[messages.length - 1]?.content ?? '');
+      return { response: 'a drafted memo' };
+    },
+  };
+  const res = await research.fetch(
+    new Request('http://x/drafts', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${await token(userId, 'investor')}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ surface: 'research/diligence', scope_key: scopeKey }),
+    }),
+    { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db), AI } as any,
+  );
+  return { status: res.status, body: await res.json().catch(() => null), prompt };
+}
+
+test('the room memo is drafted only over a room the caller holds', async () => {
+  const db = freshDb();
+  for (const [who, uid] of [[STRANGER, 'g-signed'], [UNSIGNED, 'g-signed'], [SIGNED, 'g-revoked'], [SIGNED, '']] as const) {
+    const r = await draftRoom(db, who, uid);
+    assert.equal(r.status, 409, `a memo was drafted over ${uid || 'no grant'} for user ${who}`);
+    assert.equal(r.prompt, null, 'the model was reached over a room the caller does not hold');
+  }
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM research_zone_drafts').get() as any).n, 0);
+});
+
+test('the room memo is told the NDA count and never the NDA names', async () => {
+  const db = freshDb();
+  const r = await draftRoom(db, UNSIGNED, 'g-unsigned');
+  assert.equal(r.status, 201);
+  assert.ok(r.prompt!.includes(OPEN_NAME), 'the open document is not in the material');
+  assert.ok(!r.prompt!.includes(NDA_NAME), 'a name behind an unsigned NDA was sent to the model');
+  assert.match(r.prompt!, /Behind an NDA, not named: 1\./);
+  assert.ok(!r.prompt!.includes('Elsewhere plan'), 'another room’s document was sent to the model');
+  const row = db.prepare('SELECT owner_user_id, surface, scope_key FROM research_zone_drafts').get() as any;
+  assert.deepEqual({ ...row }, { owner_user_id: UNSIGNED, surface: 'research/diligence', scope_key: 'g-unsigned' });
+});
+
+test('a room page reads only its own room’s memo', async () => {
+  const db = freshDb();
+  const ins = db.prepare(
+    `INSERT INTO research_zone_drafts (uid, owner_user_id, surface, scope_key, body) VALUES (?, ?, 'research/diligence', ?, ?)`,
+  );
+  ins.run('d-a', SIGNED, 'g-signed', 'memo on this room');
+  ins.run('d-b', SIGNED, 'g-other-room', 'memo on another room');
+  const scoped = await get(db, SIGNED, '/drafts?surface=research%2Fdiligence&scope_key=g-signed');
+  assert.deepEqual(scoped.body.items.map((d: any) => d.body), ['memo on this room']);
+  // Unscoped reads keep their old meaning: the surface's newest, whatever the record.
+  const all = await get(db, SIGNED, '/drafts?surface=research%2Fdiligence');
+  assert.equal(all.body.items.length, 2);
 });

@@ -215,7 +215,7 @@ export default function InvestorDealsWorkspace({ embedded = false, zone = null }
           ]}
           action={invitationError
             ? <button type="button" onClick={load} data-testid="button-retry-invitations">Retry invitations</button>
-            : <Link to="/raise/data-room" data-testid="link-rail-data-rooms">Open shared data rooms <ArrowUpRight size={13} /></Link>}
+            : <Link to="/research/diligence" data-testid="link-rail-data-rooms">Open shared data rooms <ArrowUpRight size={13} /></Link>}
         />
       )}
     </div>
