@@ -59,7 +59,7 @@ function SkillsRadarCard({ state, className, audience = 'founder' }) {
     const axes = Array.isArray(data.axes) ? data.axes : [];
     const hasData = axes.some((a) => Number(a.skill_count) > 0 || Number(a.score) > 0);
     if (!hasData) {
-      body = <Nudge>Answer a few skill questions in the advisor to build your 8-axis radar.</Nudge>;
+      body = <Nudge>Answer a few skill questions with Eadwyn to build your 8-axis radar.</Nudge>;
     } else {
       const skillVector = {};
       const sorted = [];
@@ -129,7 +129,7 @@ function ValuesLeanCard({ state, className, audience = 'founder' }) {
   } else {
     const vector = (Array.isArray(data.vector) ? data.vector : []).filter((v) => Number(v.confidence) > 0);
     if (vector.length === 0) {
-      body = <Nudge>Your values profile builds as you talk to the advisor — nothing measured yet.</Nudge>;
+      body = <Nudge>Your values profile builds as you talk with Eadwyn — nothing measured yet.</Nudge>;
     } else {
       const top = (data.summary?.top || []).map((t) => t.label).filter(Boolean);
       body = (
@@ -237,7 +237,7 @@ export function ArchetypeCard({ state, fitState, className, audience = 'founder'
   } else if (!data && !fitData) {
     body = <div className="py-6 flex justify-center text-gray-400"><Loader2 className="animate-spin" size={18} /></div>;
   } else if (!latest) {
-    body = <Nudge>Answer a few archetype questions in the advisor to reveal your archetype.</Nudge>;
+    body = <Nudge>Answer a few archetype questions with Eadwyn to reveal your archetype.</Nudge>;
   } else {
     const pct = latest.confidence != null ? Math.round(Number(latest.confidence) * 100) : null;
     const title = latest.label || meta?.label || latest.slug;
@@ -356,7 +356,7 @@ function CompletionBody({ state }) {
         </div>
         <div className="flex-1 min-w-[150px]">
           <div className="text-[13.5px] text-[#3f3f46] dark:text-gray-300 leading-[1.55]">
-            Keep chatting with the advisor to sharpen every result. Your profile completeness drives matching confidence.
+            Keep chatting with Eadwyn to sharpen every result. Your profile completeness drives matching confidence.
           </div>
         </div>
       </div>

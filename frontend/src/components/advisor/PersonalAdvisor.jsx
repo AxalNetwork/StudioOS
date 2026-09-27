@@ -1107,7 +1107,7 @@ const Transcript = React.forwardRef(function Transcript({ messages, tutor, onClo
       {messages.length === 0 && !loadError && (
         <div className="text-xs text-gray-500 dark:text-gray-400 text-center py-6">
           <MessageSquare size={20} className="mx-auto mb-2 text-gray-400" />
-          Your advisor will guide you through a quick setup. Type your answer below — or ask "explain X" any time.
+          Eadwyn will guide you through a quick setup. Type your answer below — or ask "explain X" any time.
         </div>
       )}
       {messages.map((m, i) => <Bubble key={i} m={m} onCtaClick={onCtaClick} />)}
