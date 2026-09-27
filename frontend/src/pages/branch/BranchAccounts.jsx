@@ -141,6 +141,7 @@ export default function BranchAccounts({ user }) {
   const [asked, setAsked] = useState(false);
   const [togglingId, setTogglingId] = useState(null);
   const [toggleError, setToggleError] = useState('');
+  const [audit, setAudit] = useState(null); // null = loading, UNAVAILABLE = failed
   const debounce = useRef(null);
 
   // D151 — ONE NAME FOR THE BRANCH. This line was the first copy and
@@ -170,7 +171,15 @@ export default function BranchAccounts({ user }) {
     );
   }, []);
 
-  useEffect(() => { loadLicence(); loadDirectory(''); }, [loadLicence, loadDirectory]);
+  const loadAudit = useCallback(() => {
+    setAudit(null);
+    api.branchSupportSessions().then(setAudit, (e) => {
+      reportError('BranchAccounts:supportSessions', e);
+      setAudit(UNAVAILABLE);
+    });
+  }, []);
+
+  useEffect(() => { loadLicence(); loadDirectory(''); loadAudit(); }, [loadLicence, loadDirectory, loadAudit]);
 
   // THE TWO-CHARACTER GATE IS THE SERVER'S RULE, HONOURED HERE SO A ONE-LETTER
   // KEYSTROKE DOES NOT SPEND A ROUND TRIP ON A 400. Clearing the box is not a
@@ -256,6 +265,9 @@ export default function BranchAccounts({ user }) {
     dirReady && exploring !== null ? `${exploring} exploring, holding no seat` : null,
     seatsUsed && licenceReady
       ? `${licence.licence.seats_used} of ${licence.licence.seats_licensed} seats used, counted by role`
+      : null,
+    audit && audit !== UNAVAILABLE && audit.available === true && Array.isArray(audit.items)
+      ? `${audit.items.length} support session${audit.items.length === 1 ? '' : 's'} recorded on this database`
       : null,
   ].filter(Boolean);
 
@@ -543,6 +555,82 @@ export default function BranchAccounts({ user }) {
                 <Link className="underline" to="/admin/exploring">Review them</Link>.
               </span>
             </p>
+          )}
+        </Card>
+
+        {/* ── S13's audit line (D446). The sessions this database recorded. ── */}
+        <Card className="p-4" data-testid="branch-support-audit">
+          <h2 className="text-[14.5px] font-extrabold tracking-tight">Support sessions</h2>
+          <p className="mt-1 text-[11.5px] text-axal-muted">
+            HQ support sessions opened on this territory. The line is written here, so this branch
+            does not have to ask HQ what was done to its database.
+          </p>
+          {audit === null ? (
+            <p className="mt-3 text-[12px] text-axal-faint">Reading support sessions…</p>
+          ) : audit === UNAVAILABLE || audit.available === false ? (
+            <div className="mt-3" data-testid="branch-support-audit-unreadable">
+              <Unreadable
+                what="The support-session record"
+                claim={audit && audit !== UNAVAILABLE && audit.reason
+                  ? audit.reason
+                  : 'This is not a claim that no support session has been opened.'}
+                onRetry={loadAudit}
+              />
+            </div>
+          ) : (
+            <>
+              {audit.items.length === 0 ? (
+                <p className="mt-3 text-[12px] text-axal-muted" data-testid="branch-support-audit-empty">
+                  No support session has been opened on this territory. The record exists and is empty.
+                </p>
+              ) : (
+                <ul className="mt-3 space-y-2" data-testid="branch-support-audit-rows">
+                  {audit.items.map((row) => (
+                    <li key={row.id} className="rounded-xl border border-axal-hairline px-3 py-2 text-[12px]">
+                      <div className="flex flex-wrap gap-x-3 gap-y-1">
+                        <span className="font-semibold tabular-nums">{row.started_at || 'time not recorded'}</span>
+                        <span>support session start</span>
+                        <span>
+                          {row.actor_name
+                            ? `HQ · ${row.actor_name}`
+                            : <Unrecorded reason="The session row does not name who opened it.">Who opened it is not recorded</Unrecorded>}
+                        </span>
+                        <span>
+                          as {row.target_name || row.target_email || 'an account with no name recorded'}
+                          {row.target_role ? ` · ${titleCase(row.target_role)}` : ''}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[11.5px] text-axal-muted">
+                        {row.reason
+                          ? row.reason
+                          : <Unrecorded reason="The session row was stored without a reason.">No reason recorded</Unrecorded>}
+                      </p>
+                      {row.ended_at ? (
+                        <p className="mt-1 text-[11.5px] text-axal-muted">
+                          support session end · {row.ended_at}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-[11.5px] text-axal-faint">
+                          The end has not been stamped yet.
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {audit.truncated ? (
+                <p className="mt-2 text-[10.5px] text-axal-faint">Showing the 100 most recent.</p>
+              ) : null}
+              <p className="mt-2 text-[11px] text-axal-faint">
+                {typeof audit.reads_unrecorded_reason === 'string' ? (
+                  <Unrecorded reason={audit.reads_unrecorded_reason}>Reads during a session are not listed</Unrecorded>
+                ) : null}
+                {typeof audit.reads_unrecorded_reason === 'string' && typeof audit.mirror_unrecorded_reason === 'string' ? ' · ' : null}
+                {typeof audit.mirror_unrecorded_reason === 'string' ? (
+                  <Unrecorded reason={audit.mirror_unrecorded_reason}>HQ&rsquo;s copy is not read here</Unrecorded>
+                ) : null}
+              </p>
+            </>
           )}
         </Card>
       </div>

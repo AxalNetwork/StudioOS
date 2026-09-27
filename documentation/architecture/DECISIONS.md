@@ -20936,7 +20936,8 @@ sidebar stays the canvas's eight (#322 is already a decision about it).
   for programme throughput at all; the cohort timeline returns every week's
   outcomes. It now says the true half: week outcomes are readable, and the
   Analytics page draws them; assessment runs are not, because no route lists
-  them (D140).
+  them (D140). D446 lists those runs for one cycle and rewrites the sentence
+  again: the two counts are not added into one figure.
 - **Branch Home called HQ's cut "your share".** The statement computes what is
   owed to HQ as gross times this rate, so the label told a branch it kept the
   part it pays. It reads *"owed to HQ · you keep N%"* now, and a test holds
@@ -34486,6 +34487,21 @@ record could not be read. Nothing here is drawn from a guess. Retry".
 **Eleven lanes.** The Approvals board, its coverage line and Branch Home's loading line and link say eleven lanes (D215). The sentences that still said four queues were stale.
 
 **Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: an unknown seat type accepted; the escalation kind dropped; an admin row offered a button.
+
+## D446
+
+**A branch reads the support sessions on its own database, and lists assessment runs for one cycle.** Wave 8, Session 6, item 7. No migration. No live branch exercised this. `routes/assessment.ts` and `rpc/branchOps.ts` are not edited. `HqSupportSessionBar.jsx` is Session 5's and is not edited.
+
+**The audit line.** `GET /api/branch/support-sessions` (`routes/branch_support_sessions.ts`, mounted at `/api/branch` beside the other branch reads). `requireAdmin` and `requireBranchTier`. It selects `impersonation_sessions` where `admin_user_id = 0` and `context` starts `hq_support:`, which is the row `redeemSupportCode` writes, and it joins the target account on this database. It does not create the table. Creating it on the read would turn "could not be read" into an empty list, and an empty list is what the page says when no session has been opened. A missing or failed read is `available: false` with a sentence of ours; the database's text stays in the log, and `BranchAccounts` draws Unreadable. An empty table is `available: true` and `items: []`, and the page says the record exists and is empty. A read made during a session is not a row in this table, and HQ's Security copy is a different store. Both stay unrecorded, with reasons the route returns. The actor is the name stored in `context`, because that row is not joined to a local user.
+
+**The cycle filter.** `GET /api/admin/assessment/sessions` on the assessment router that was already mounted at `/api/admin/assessment`. `requireAdmin`, so a branch can read it; the writes stay `requireHqAuthoring`. `?cycle=` is a cohort cycle id. `assessment_sessions` has no cycle column, so a run is kept when `datetime(started_at)` is at or after that cycle's `start_at` and before its `end_at`. An id that matches nothing is `cycle_found: false` and lists nothing. A cycle with a blank start or end is `filterable: false` and is not answered with the unfiltered population. A missing `cohort_cycles` table is `available: false`, which is not "no cycle with that id". Omitting `?cycle=` lists the runs on this database, `filtered: false`. The list is capped at 200. There is still no `GET /results`. A result on a run is the archetype label when a result row was written, and "No result" when it was not. The assessment router's existing bootstrap still creates the assessment tables on the way in, so this route does not report a missing `assessment_sessions` table as unreadable; that is the bootstrap that was already there.
+
+**Throughput.** The reason on `GET /api/branch/insights` no longer says there is no route that lists assessment runs. Week outcomes and assessment runs are two counts. They are not added into one figure, because a week gate and an assessment completion count different things.
+
+**Who reads it.** `BranchAccounts` draws the audit line. `BranchPrograms` draws the run list, filtered by the cycle the calendar already loaded.
+
+**Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: a missing support-session table answered as an empty list; a cycle with no end falling through to every run; the cycle window keeping every run.
+
 
 ## D450
 
