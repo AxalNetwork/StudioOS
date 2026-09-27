@@ -34810,6 +34810,18 @@ record could not be read. Nothing here is drawn from a guess. Retry".
 
 **Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: a missing support-session table answered as an empty list; a cycle with no end falling through to every run; the cycle window keeping every run.
 
+## D448
+
+**Spinout moderation agrees with the approvals lane, and a plain admin cannot decide another admin.** No migration. No live branch exercised this. `HeldApprovals.jsx` is Session 5's and is not edited. The HQ-held door to `/admin/spinout-moderation` is the one route the branch shell reaches and the HQ-held shells do not. That door stays Session 5's.
+
+**Who may decide.** `POST /api/admin/spinout-moderation/:userId` uses `requireAdmin`, so the compliance freeze (D135) reaches it, and it still calls `requireBranchNotSuspended` because that freeze is the branch licence, not the notice. An admin target is refused unless the caller is the Super Admin (D133). The caller's own history still reads. The route still never writes `users.is_active`.
+
+**The record.** Every decision goes through `logAdminAction` as `spinout_moderation`, with `target_user_id`. That action is on `ACTOR_SIDE_ACTIONS`, so the governance feed's activity arm can show it. The target is not stored under `user_id`.
+
+**One open count.** Awaiting a decision is `status = 'under_review' AND resolved_at IS NULL`, exported once and read by the console and by the approvals lane. A suspension or an ejection that has not been closed is a sanction in force, listed and counted apart, and not added into the lane. Close stamps `resolved_at` and does not change Lab access, so a sanction can leave the list without reinstating. The page does not preselect an action. A list that is not an array is unreadable. A missing count is not shown as zero. The list is capped at 200 and says how many of the count it is showing.
+
+**Mutations: 5 run, 5 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: a plain admin reinstating a peer admin; a decision with no audit row; the freeze not reaching the post; the console and the lane disagreeing on a flag; a malformed payload read as an empty list.
+
 
 ## D450
 

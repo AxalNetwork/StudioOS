@@ -39,6 +39,7 @@
  * these four rather than pretending it is one of them.
  */
 import type { Env } from '../types';
+import { MODERATION_AWAITING_SQL } from './moderationOpen';
 import { PRE_VERDICT_STATUSES } from './referralSubmissions';
 
 /** A lane's stable key. The UI orders by this list, so the order is the canvas's. */
@@ -141,16 +142,17 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
   {
     key: 'moderation',
     label: 'Spinout moderation',
-    // Closing a case stamps resolved_at and leaves status where it was, so a
-    // decided case can still read 'under_review'. Open work is both.
+    // Awaiting a decision, the same predicate the moderation console counts
+    // as open_count (D448). A sanction in force is not this lane.
     countSql:
-      'SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM spinout_moderation_cases '
-      + "WHERE status = 'under_review' AND resolved_at IS NULL",
+      'SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM spinout_moderation_cases WHERE '
+      + MODERATION_AWAITING_SQL,
     rowsSql:
       "SELECT m.id AS id, COALESCE(NULLIF(u.name, ''), u.email, 'account ' || m.user_id) AS who, "
       + "'Moderation · ' || m.reason_code AS what, m.created_at AS created_at "
-      + 'FROM spinout_moderation_cases m LEFT JOIN users u ON u.id = m.user_id '
-      + "WHERE m.status = 'under_review' AND m.resolved_at IS NULL ORDER BY m.created_at ASC LIMIT ?",
+      + 'FROM spinout_moderation_cases m LEFT JOIN users u ON u.id = m.user_id WHERE '
+      + MODERATION_AWAITING_SQL
+      + ' ORDER BY m.created_at ASC LIMIT ?',
   },
   // ── S16 (D215): the queues the live console kept on their own pages. ──
   //
