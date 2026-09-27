@@ -31819,6 +31819,95 @@ rule is that a second declaration is never the answer. The pair is recorded in
 - **Production D1 was not read** by this session. After merge, the deploy
   run must show "Apply pending D1 migrations" finishing before "Deploy".
 
+## D384
+
+**The Spin-Out Lab Apply wizard and status screen, read from D383's store.**
+The old apply form and status block are retired. Session 10, item 4, the UI
+half. No migration. No new route and no new `api.js` method: this is the first
+caller of the seven D383 added.
+
+**The applicant's page** (`/spinout-lab/apply`, `SpinoutLabApplyPage.jsx`)
+draws both artboards of the Apply & Status canvas.
+- **P1, the application.** Five steps: venture basics; origin and IP; team;
+  traction; why Axal VC.
+  - A step rail shows the steps, with the canvas's confidentiality note.
+  - **Save draft** writes basics, answers and the current step to
+    `/apply/draft`. The page restores the draft when it opens, and says so
+    when the draft cannot be read.
+  - Each step says what it still needs before Continue. The rules are
+    `lib/applicationLifecycle.js`'s copy of the worker's, and a test reads
+    both files and fails if the closed sets drift.
+  - Submit sends `answers` with the basics.
+- **P2, the status screen.** It replaces the form once an application exists.
+  - **A four-stage timeline.** Submitted → Screening → Partner interview →
+    Cohort decision. One record drives the ring and the lede, so the ring
+    cannot sit on a stage the sentence does not name.
+  - **An interview card.** Time in the viewer's zone, length, place and the
+    team's note. **Add to calendar** is an `.ics` built from the row.
+    **Reschedule** records a request and says the interview stays where it
+    is until the team sends a new time.
+  - **While you wait.** The Programme Brief.
+  - **Withdraw.** A confirm that says it deletes the answers and the
+    description of the venture.
+  - **The declined variant.** The note an admin wrote for the applicant, the
+    asks, the reapply window and **Start a new application**. With no note,
+    it says none was written; it does not invent a reason.
+  - **A pre-315 application** says its answers were never asked for.
+
+**What the canvas draws that no store holds, and is not drawn:**
+- the interviewer's name and bio;
+- screening dates, and a "decision by" date (those stages carry no date);
+- the customer-discovery templates pack;
+- the `MERIDIAN-C7-0142` reference: the application's own number is printed;
+- "Roughly half of accepted ventures apply mid-negotiation" and "a third of
+  each cohort applied twice", which no figure supports.
+
+**THE PRODUCT CALL, named for the owner.** The canvas's "What your answer
+changes" panel says a TTO answer re-sequences the founder's Week 1: the TTO
+checklist moves in, and the Delaware filing waits on a signed licence. The Lab
+has one milestone list for every founder (`MILESTONES`, `lib/spinoutLab.js`),
+and nothing reads this answer. So the panel is titled **What your answer is
+used for**, and it says who reads the answer: the reviewer and the
+interviewing partner. It also says the Lab weeks are the same for every
+founder today. A test fails if the Week 1 promise comes back. Building the
+routing, which would mean per-founder milestones keyed on `tto_status`, is
+the owner's call, not this PR's.
+
+**Retired.**
+- The one-page form (older `Spin-Out Lab.dc.html` APPLY VIEW) and its
+  "Application received" card. That card promised a reply "within 5
+  business days", a confirmation email, and "a 30-minute call". No row backs
+  any of them.
+- **`ApplicationStatusSection` on `/spinout-lab`**, and its generic
+  "turned down for space alone" reason. `ApplicationStatusCard` replaces it:
+  a short form of the same `applicant` block that links to the full screen,
+  so the two cannot disagree. It falls back to the legacy row on a database
+  without 315. Pending still replaces the Apply CTA; refused still sits
+  above it.
+- The admin journey preview keeps both of its modes. `previewMode="form"` is
+  the wizard with no fetch and no draft. `"submitted"` is the status screen.
+
+**The admin side.** Each applicant row in the Cohort Cycles tab
+(`AdminCohortApplications.jsx`) opens `AdminApplicantDetail.jsx`:
+- **The answers as the applicant chose them.** Absent answers say why:
+  withdrawn and deleted, asked before the form existed, or unreadable.
+- **The partner interview**, with the applicant's reschedule request and
+  reason. Schedule, replace or cancel it.
+- **Decline with a note.** The applicant's note and asks, and the internal
+  reason, are each labelled with who reads them. A decision saved without its
+  note (`applicant_note_saved: false`) is said to the admin.
+- **The row** shows a withdrawn badge and an "interview · move asked" chip.
+
+`AdminCohortApplications.jsx` is outside Session 10's file list; it is
+touched only to mount the detail panel and the two actions.
+
+**Verified.**
+- `spinout_apply_status_d384.test.mjs`: 21 tests. The status screen and the
+  admin panel are rendered from worker-shaped records.
+  `spinout_application_status.test.mjs` is rewritten for the card: it
+  renders the card, where it used to read the retired block's source.
+- **Mutations.** 17 run, 17 caught on the first run.
+
 ## D390
 
 **Retiring `/partner/operations/*`, part 1a: the two jobs that existed
