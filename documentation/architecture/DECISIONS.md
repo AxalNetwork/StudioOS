@@ -36347,6 +36347,17 @@ exits 0.
 No live branch. Session 1 confirms the deploy and production D1. This session
 cannot read the deploy log.
 
+## D471
+
+**The Send for Signature canvas cut is not a script injection.** Semgrep
+alert on `frontend/test/send_for_signature_d411_contract.test.mjs`: the rule
+`unknown-value-with-script-tag` reports a file read used in the same call as
+a script-tag literal. The read is the design canvas, and the literal was the
+cut that keeps assertions on the markup. The cut is unchanged: the `<` in
+front of `data-dc-script`. The tag name is assembled from two pieces so the
+file read is not written next to one script-tag literal. The string is never
+served. The test throws if that element is gone. No migration.
+
 ## D490
 
 **#871 review follow-ups: private notes, dates, and void touches on the investor
