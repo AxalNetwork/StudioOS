@@ -47,6 +47,9 @@ import { bpsPercent as pct } from '../../lib/bps';
 import { coverageCells, renewalPipeline, sortCells } from '../../lib/licenceCoverage';
 import { DEPLOY_TIMELINE, deployProgress } from '../../lib/deployTimeline';
 import { reportError } from '../../lib/log';
+import { Unreadable } from '../../ui';
+
+const UNAVAILABLE = Symbol('unavailable');
 import {
   FREEZING_STATUSES, NOTICE_KINDS, noticeKindLabel, noticeRank, daysTo,
 } from '../../lib/notices';
@@ -239,8 +242,9 @@ function TerritoryEditor({ licence, held, onSaved }) {
       />
       <p className="mt-2 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
         This refusal is the Axal-subsidiary rule: one country, one Axal licence.
-        A white-label in the same country is a separate exclusivity flag, and that flag is not stored,
-        so this step cannot yet tell the two apart.
+        The ledger stores each licence&apos;s kind, but white-label exclusivity against other
+        white-labels is not stored (owner decision D196), so this step refuses any country another
+        licence already holds regardless of kind.
       </p>
       {clashes.length > 0 && (
         <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
@@ -1539,8 +1543,7 @@ function Detail({ uid, held, onChanged }) {
 
       <div className="mt-4 grid gap-4 sm:grid-cols-3">
         <Field label="Territory" value={d.territories.length ? d.territories.join(' · ') : null} />
-        <Field label="Seats licensed" value={n0(d.seats_licensed)}
-          hint="Used is unavailable — no account carries a licence yet." />
+        <Field label="Seats licensed" value={n0(d.seats_licensed)} />
         <Field label="Annual fee" value={fee(d.annual_fee_cents, d.currency)} />
         <Field label="Revenue share" value={pct(d.revenue_share_bps)} />
         <Field label="Token split to HQ" value={pct(d.token_split_bps)} />
@@ -1952,6 +1955,7 @@ function Coverage({ items, onOpen }) {
 export default function AdminLicences() {
   const [data, setData] = useState(null);
   const [held, setHeld] = useState([]);
+  const [heldUnreadable, setHeldUnreadable] = useState(false);
   const [sel, setSel] = useState(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ licence_ref: '', legal_entity_name: '', brand_name: '', kind: 'subsidiary' });
@@ -1960,10 +1964,10 @@ export default function AdminLicences() {
   const load = useCallback(() => {
     api.licences()
       .then((d) => { setData(d); if (!sel && d?.items?.[0]) setSel(d.items[0].uid); })
-      .catch((e) => { reportError('licences_failed', e); setData({ items: [] }); });
+      .catch((e) => { reportError('licences_failed', e); setData(UNAVAILABLE); });
     api.licenceTerritories()
-      .then((d) => setHeld(d?.items || []))
-      .catch((e) => reportError('licence_territories_load_failed', e));
+      .then((d) => { setHeld(d?.items || []); setHeldUnreadable(false); })
+      .catch((e) => { reportError('licence_territories_load_failed', e); setHeldUnreadable(true); });
   }, [sel]);
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
@@ -1992,6 +1996,16 @@ export default function AdminLicences() {
   }
 
   if (!data) return <div className="p-6 text-sm text-gray-500">Loading…</div>;
+  if (data === UNAVAILABLE) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-6">
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Territory licences</h1>
+        <div className="mt-4">
+          <Unreadable what="The licence ledger" claim="This is not a claim that no licences exist." onRetry={load} />
+        </div>
+      </div>
+    );
+  }
   const items = data.items || [];
 
   return (
@@ -2014,6 +2028,12 @@ export default function AdminLicences() {
       {/* `setSel` is the same selector the licence rows below use, so a click on
           a held country and a click on its row land in exactly one place. */}
       <Coverage items={items} onOpen={setSel} />
+
+      {heldUnreadable && (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          Territory holdings could not be read, so overlap checks against other licences are unavailable until you retry.
+        </div>
+      )}
 
       {data.seats_used_available === false && (
         <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 dark:border-gray-800 dark:text-gray-300">
