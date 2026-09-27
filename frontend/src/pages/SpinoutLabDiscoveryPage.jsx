@@ -1095,14 +1095,13 @@ export default function SpinoutLabDiscoveryPage() {
                 )}
               </div>
 
-              {/* The stored ICP definition (D353, migration 308). */}
-              {project && (
-                <IcpDefinitionCard
-                  project={project}
-                  canEdit={user?.role !== 'investor'}
-                  onSaved={(updated) => setProject((p) => ({ ...p, ...(updated || {}) }))}
-                />
-              )}
+              {/* The stored ICP definition (D353, migration 308). This branch
+                  only renders with a project, so no guard is needed here. */}
+              <IcpDefinitionCard
+                project={project}
+                canEdit={user?.role !== 'investor'}
+                onSaved={(updated) => setProject((p) => ({ ...p, ...(updated || {}) }))}
+              />
 
               {/* Recurring themes */}
               <div className={CARD} data-testid="discovery-themes">
