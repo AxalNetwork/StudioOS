@@ -278,7 +278,6 @@ export const SLOW_PATHS = [
   /^\/advisor\/transcribe$/,
   /^\/advisory\//,                       // ask, financial-plan, diligence
   /^\/competitors\//,                    // crawl + Workers AI synthesis
-  /^\/dashboard\/refresh-scores$/,
   /^\/dd\/cases\/[^/]+\/(scan|report)$/,
   /^\/deck-reviewer\/[^/]+\/regenerate$/,
   /^\/decks\/generate$/,
@@ -2710,7 +2709,6 @@ export const api = {
   networkFxMarketplaceMatch: (data) => request('/networkfx/marketplace/match', { method: 'POST', body: JSON.stringify(data) }),
 
   getDashboard: (fresh = false) => request('/dashboard' + (fresh ? '?fresh=1' : '')),
-  refreshDashboardScores: () => request('/dashboard/refresh-scores', { method: 'POST', body: JSON.stringify({}) }),
   // Task #81 — read-only investor deal lifecycle (funnel counts by stage).
   investorLifecycle: () => request('/dashboard/investor-lifecycle'),
 
