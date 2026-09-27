@@ -33441,6 +33441,103 @@ it takes no prop.
   - no reload after a run
   - an unreadable breakdown ignored
 
+## D402
+
+**On a zone below a workspace, the rail shows the workspace's model as
+inherited and read-only, with a link back to where it is chosen (Session
+12, item 3).** No migration, no route, no `api.js` method. Frontend only.
+
+**The defect.** The chosen model was already stored per workspace. The key
+is `worker_rail_model:<workspace>`, and it has been since the menu shipped,
+on the Validate canvas's own rule: "Mode and model are chosen on the
+workspace, not re-picked here". So `/validate/interviews` and `/validate`
+read and write the same key. The screen disagreed. Every zone drew the full
+radio menu, so picking a model "for Interviews" silently changed it for all
+of Validate, with nothing on the page saying so. The Validate canvas,
+DetailRail and EmberRail all draw the zone rail as inherited instead.
+
+**What the rail draws now.**
+- **At a bucket root** (`/validate`, `/deals`, `/practice`, …): unchanged. The
+  menu, the DEFAULT badge (D400) and "Remembered for {workspace}. Every zone
+  here uses it."
+- **Anywhere below a root** (`/validate/interviews`, `/raise/data-room/…`):
+  - a dashed card with an INHERITED chip and "Inherited from {workspace}.
+    Mode and model are chosen on the workspace, not re-picked here. Change
+    the model there and this page follows.";
+  - a "Change it on {workspace}" link to the root;
+  - a read-only card for the model that will actually run (name, id and
+    rate), with no radio, no input and no handler.
+  The run still sends that same model, so the card and the run agree.
+- **A role with no shell** (both admin tiers), or a path no bucket claims:
+  unchanged. There is no workspace to inherit from.
+
+**Worked out from role and URL, not passed by the page.** `ui/railInheritance.js`
+asks `shellConfig`'s `bucketForPath(role, path)` for the bucket. It returns
+null at the root, and `{ to: bucket.prefix, bucket: bucket.label }` for any
+path below it. The rail reads the path through `UNSAFE_LocationContext`,
+which is null outside a router instead of throwing like `useLocation()`,
+and falls back to `window.location`. So none of the ~70 mounts was edited.
+No prop was added, so `branch_rail_mount`'s parameter-list parse is
+unaffected.
+
+**Named after the workspace, not the zone.** The card says
+"Inherited from {workspace}" using the `workspace` prop, because that prop is
+the key the choice is stored under. EmberRail's canvas reads "Inherited from
+Analytics", naming a zone, which is the defect the gap map recorded; this
+does not repeat it.
+
+**Measured before claiming "change it there".** Each root the link points to
+mounts the rail under the same `workspace` string its zones pass:
+- founder: Validate, Build, Raise, Grow, Network, Research;
+- investor: Deals (`InvestorDealsRoutes`), Portfolio
+  (`InvestorPortfolioCanvas` through `PortfolioWorkspace`), Fund
+  (`InvestorFundLanding` at `/funds`);
+- advisor and partner: their bucket routes pass the bucket name.
+
+**Mode is not changed here.** The fills switch is drawn only where a page
+passes `fills`, and only Validate's root does. A zone therefore draws no
+switch, which matches the inherited rule without new code.
+
+**For Session 14.** Founder desk zones get the inherited view with no prop,
+so the desks pass nothing new. A desk that draws a root passes the same
+`workspace` its zones pass, as every current root does.
+
+**Verification.**
+- New file `worker_rail_inherited_d402.test.mjs`, 10 tests.
+  - Behavioural, on `railInheritance` over every shell:
+    - every bucket root, with and without a trailing slash, chooses;
+    - every zone of every role inherits from its own root (more than 40
+      walked);
+    - a detail page below a zone inherits;
+    - `/validated`, `/studio`, both admin tiers and an absent role keep the
+      menu;
+    - each role's `/research` zone inherits from `/research`.
+  - On the rail's source:
+    - the view is computed from role and path, with no prop;
+    - the inherited branch holds no input, fieldset, radio, `onChange` or
+      `chooseModel`;
+    - the chip, the workspace-named card and the root link are present;
+    - the read-only card is the active model, not the first one;
+    - no `useLocation`.
+- The rail is not rendered in a Node test, because its model data arrives
+  through `useAiSpend`'s effect, which a server render never runs. No
+  Chromium probe was run.
+- Mutations: 11 run, 10 counted, 10 caught. The eleventh removed the
+  trailing-slash strip, and nothing failed. That was not a weak test: the
+  strip was dead code, because `/validate/` already slices to an empty rest
+  and reads as the root. The strip was removed from the code instead of
+  pinned. The 10:
+  - a root treated as a zone
+  - the link pointing at the zone
+  - the role ignored
+  - the rail never inheriting
+  - radios in the inherited view
+  - the card naming the zone
+  - no chip
+  - no link back
+  - the primary model shown instead of the active one
+  - `useLocation` used
+
 ## D410
 
 **E-sign `/send` hardening: the signing link reaches only the recipient, a
@@ -36285,6 +36382,80 @@ Session 2's file, so the page names it instead of mounting a band that would
   `check-api-drift`, `test:guards`, `lint:undef`, `check-dark-mode` exit 0.
   Root `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser
   probe.
+
+## D470
+
+**Gap-map leftovers, up to the owner's line.** Wave 9 item 7. Items 4 and 5
+of that wave were already D445 and D446; they were not rebuilt, and migration
+329 was not added. Migration 342 is unused.
+
+**What was built.**
+
+- **Lane board, second view.** The list stays primary (S16 / D215). `hurtingLanes`
+  picks five columns by the oldest finite age, not by count and not by a fixed
+  order. An unreadable lane (`count === null`) is not a column. An unknown age
+  is not zero hours. Empty lanes sort after lanes that have items. A measured
+  age of zero outranks an unknown age.
+- **Assignment, side record.** Migration 341: `approval_assignments` (one row
+  per lane and item) and `approval_events` (`kind` is only `assigned`). The
+  write lives in `routes/branch_approval_assignments.ts`. `branch_approvals.ts`
+  stays a GET. `decides` stays false. A reviewer is an active admin on this
+  database. The item must be among the open rows the board is showing.
+  Assigning the same person again does not append another event. At most 40
+  items per POST. A missing table is unreadable, not "nobody assigned" — items
+  on that read carry no `assignee` field. An empty table means nobody is
+  assigned. History is the latest 100 events this write created, oldest-first
+  inside that window, `capped` when the cap is hit. A console's own actions
+  are not copied into it. A throw after an earlier item in the same call has
+  landed answers 503 and does not claim success. The POST is suspension-gated.
+  The history GET and the board GET are not. `logAdminAction` records
+  `approval_assignment` with `{ target_user_id, lane, item_id }`. The action
+  is not added to `ACTOR_SIDE_ACTIONS`.
+- **Outbound to HQ** stays the card above the board. It is not a filter of
+  this list. Those rows are a different store.
+
+**What was not built, and is named.**
+
+- **A reply thread.** D112 stands: one decision, migration 261. The rail and
+  `answer_note` say the owner has not signed off reversing that. There is no
+  reply box.
+- **An AI-drafted decision note.** Still no per-branch cost (D261). It stays
+  in the rail.
+- **A help desk (U1).** `GET /api/branch/home` names it under `unavailable`.
+  No tickets, chat, canned replies, or a satisfaction score.
+- **Where a security alert sits (U2).** Named on that same home list and on
+  the Accounts rail. Not drawn on Home or on an account row.
+
+**Freeze.** Naming a reviewer is not the appeal. `branch_approval_assignments.ts`
+calls `requireBranchNotSuspended`, and the Approvals row of `branchFreeze.js`
+names that file. Escalations stay ungated.
+
+**Tests.** `approval_assignments_d470.test.ts`, `gap_map_leftovers_d470.test.mjs`.
+Re-aimed, not loosened: the board route still has no write verb, the page
+still has one textarea, and the canvas assertions on five columns, age, and
+S16 stay. The sentence that assignment needed a store that does not exist is
+now false and the tests refuse it.
+
+**Mutations.** 5 of 5 caught, each on a non-zero exit with a `not ok` line
+(unique anchors, byte-change proven, sha256-checked restores): columns ranked
+by count instead of age; a missing assignment table reported as readable and
+empty; a founder accepted as a reviewer; the page stopped calling
+`hurtingLanes`; the owner-sign-off sentence removed.
+
+**Verification.** Frontend suite 3942 pass. Worker suite 4735 tests, 4729
+pass, 3 skipped, 3 fail — the three already failing on main
+(`capital_call_ledger` partial-write retry, and the two `trust_center_d432`
+party-name cases). They were not changed here. `check-api-drift`: 1618 SPA
+calls, 1913 worker routes from 189 mounts, 13 pre-existing baseline items,
+no new drift. Both typechecks, `lint:undef`, `check-dark-mode`,
+`check-decision-ids`, `check-folder-docs`, `check-sql-prepare`,
+`check-refusal-bodies`, `check-sql-migrations`, `check-sqlite-dialect`,
+`check-runtime-schema-declared`, `check-timestamp-comparisons`, and
+`test:guards` exit 0. Root `npm run build`, then `check-docs-fresh --strict`,
+exits 0.
+
+No live branch. Session 1 confirms the deploy and production D1. This session
+cannot read the deploy log.
 
 ## D490
 
