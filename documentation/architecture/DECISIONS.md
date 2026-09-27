@@ -12151,7 +12151,9 @@ with its own `pushed_at`* — `branch_licence`, `branch_promo_ceiling`,
 
 1. **`body_md`.** Nothing on a branch renders or instantiates a template body:
    S5's picker shows the library, and `licence_contracts` (migration 259) is
-   HQ's table behind `requireSuperAdmin`. A body column with no reader is the
+   HQ's table behind `requireSuperAdmin`. D444: that table is the licence
+   agreement only (D199), and it is not why the body stays here — the branch
+   list does not carry the body either. A body column with no reader is the
    store-built-so-a-page-looks-complete mistake this programme has deleted four
    times (D129's seat store, D131's six blocks, D140's adjustable dates, D141's
    invented bindings). When instantiation lands it is one additive `ALTER`.
@@ -18552,7 +18554,10 @@ tell a rule from its violation*; it now asserts the claim itself.
 ### NOT BUILT, AND WHY
 
 - **S5's Active contracts table.** Readable, not built, and two of its columns
-  have no store for envelopes.
+  have no store for envelopes. D444 later tables the rows
+  `GET /api/admin/contracts` already returns. Value, renewal and the version
+  the row was sent from stay unrecorded, because that list still does not
+  carry them.
 - **An end date on e-sign envelopes and documents.** That is a model change —
   a field on the send path, with a writer — and without a writer a new column
   would count zero forever, which is the invented figure this card refuses.
@@ -30509,6 +30514,134 @@ pages, the investor `/raise/data-room` redirect and deleting
 `SharedRooms`. The memo the room canvas drafts on Accept needs a draft
 surface and lands with the page.
 
+## D311
+
+**The investor reads a data room and its documents under Research ·
+Diligence. The investor drawer on `/raise/data-room` is retired and that
+route's investor branch redirects.** Session 2, wave 8, item 2. It builds
+canvases b6a5f992 (the room) and 96463a46 (the document) on D310's
+grant-keyed reads. No migration. It adds one query parameter to an existing
+route, and no new route.
+
+**The pages.**
+- `/research/diligence/:grantUid` is `DiligenceRoom`. It draws every element
+  of the room canvas:
+  - the header, the four tiles and the scope table;
+  - the open-file list, with its three states (files listed, every file
+    behind an NDA, nothing staged), each saying something different;
+  - the NDA panel, and Deal stage shown as Not recorded with the Worker's own
+    reason;
+  - the reader's own activity;
+  - the "Room · what is thin" memo band;
+  - the stated limit, and the missing-grant state ("This room is not open to
+    you.").
+- `/research/diligence/:grantUid/files/:fileUid` is `DiligenceFile`. It
+  shows the document's name, its size (formatted from bytes, so the header
+  and the tile cannot disagree), its type, the visibility pill, Download with
+  its single-use note, the three tiles, the reader's own download history,
+  the stated limit, and the NDA state.
+- Both routes are guarded to admin and investor, the same licences as the
+  list.
+- `DiligenceZone` now links each company, and its "Open the room →", to that
+  room. Both used to go to `/raise/data-room`.
+
+**A gated document has no name anywhere.** The Worker's `nda_required`
+refusal carries the room and nothing about the file. The page's gated
+branch, its shell title and its crumb are built without `file.name`. A test
+slices the gated branch and refuses any reference to one.
+
+**The memo is wired to a real store.** The canvas says "Accept writes your
+memo."
+- `research/diligence` is a new `DRAFT_SURFACES` entry in `research.ts`, on
+  its own lines. Its material comes from `roomMaterial`, which goes through
+  D310's `heldRoom`.
+- A grant uid the caller does not hold, or one that has lapsed, drafts
+  nothing. The route answers `nothing_to_draft`, and the model is never
+  reached.
+- Files behind an NDA the caller has not signed are sent to the model as a
+  count and never by name.
+- Accept stamps `accepted_at` on the `research_zone_drafts` row (migration
+  221), exactly as every other band does. It does not email the founder or
+  request files.
+
+**One memo per room.** `GET /research/drafts` returned the surface's newest
+drafts, whichever record they were about. A room page would therefore have
+shown one company's memo on another company's room.
+- The route now takes an optional `scope_key`, and `api.research.zoneDrafts`
+  passes it.
+- `ZoneDraft` gains a `scoped` prop, which the room sets. Every existing band
+  omits it and reads exactly what it read before.
+- `ZoneDraft` also gains an `indigo` accent, because the investor canvas
+  draws the band in `#4f46e5`.
+
+**Retired, with where each now points.**
+- **The `SharedRooms` component in `DataRoomPage.jsx` is deleted.** It was
+  the investor drawer: a list of shared rooms, and a side panel that listed
+  files and downloaded them. Every job it did is now done by the room and
+  document pages: the list is `/research/diligence`, the panel is the room
+  page, and the download is the document page, through the same
+  `dataRoomDownload` route. The page's non-founder arm now renders
+  `<Navigate to="/research/diligence" replace />`, and the icon imports only
+  the drawer used are removed. Nothing else in that file changed.
+- **`/raise/data-room`, investor branch:** `<Navigate to="/research/diligence"
+  replace />`. The route's guard still admits investor, so the redirect can
+  run. The founder branches are unchanged, and the route took no query
+  string that meant anything to an investor.
+- **`api.dataRoomsSharedWithMe` and `api.dataRoomShared` are removed.** Only
+  the drawer called them.
+- **Left in place on purpose:** the Worker routes behind those two methods,
+  `GET /api/data-room/shared` and `GET /api/data-room/shared/:projectUid`.
+  Nothing in the tree calls them any more, but `data_room.ts` is Session 9's
+  file after this PR and its data-room rebuild. Session 9 is told they are
+  now uncalled.
+- **Links re-pointed to `/research/diligence`:**
+  `InvestorDealsWorkspace.jsx`'s "Open shared data rooms" and
+  `PipelineWorkspace.jsx`'s Data Room tab.
+- **Left for Session 5:** `sidebarConfig.js`'s investor Deals row still lists
+  `/raise/data-room` in its `match` array. It keeps working through the
+  redirect, and Session 5 is told.
+
+**Tests re-aimed, none loosened.**
+- `investor_workspaces.test.mjs` pins the investor arm as the redirect,
+  still first and ahead of any founder shell. It refuses the drawer's mount
+  coming back, and pins the room's own guard.
+- The Deals rail link assertion now reads `/research/diligence`.
+- `data_room_live.test.mjs`'s watermark test read `DataRoomPage.jsx`. With
+  the drawer gone, only its docblock would still satisfy it, so it now reads
+  the two pages an investor downloads from.
+- `research_ask_session.test.mjs`'s "the band's read is gone" now admits the
+  scoped read. It still pins that the band loads its surface's drafts and
+  nothing else, and never drafts on mount.
+- `route_role_zone_contract.test.mjs`'s `BRANCHED` row for `/raise/data-room`
+  still holds unchanged, because the redirect is an `effectiveRole ===
+  'investor'` branch.
+- `branch_rail_mount`'s ceiling of five computed rail roles is kept. Both
+  new pages pass the literal `role="investor"` to `WorkerRail`, as that
+  test's note asks of a sixth mount.
+
+**New tests.**
+- `research_diligence_pages.test.mjs` (10 tests) asserts each element twice:
+  the canvas draws it and the page renders it, for both canvases. It also
+  runs the pure readings in `diligenceRead.js`, pins the routes, the scoped
+  band and the retirement, and bans the canvases' fixtures.
+- `research_diligence_room.test.ts` gains 3 tests:
+  - the memo is drafted only over a held grant, and the model is never
+    reached otherwise;
+  - the model is sent the NDA count and never the names;
+  - a room page reads only its own room's memo.
+
+**Differs from the canvas, deliberately.**
+- A history line says a link was "issued". The access log records the link
+  being issued, not followed (D310), so "link used once, then expired" is not
+  claimed.
+- The canvas sends only `open` files to the document page. An investor whose
+  NDA with the founder is live may open `nda` files too, as the download
+  route already allows, so such a file reaches the page with an "NDA ·
+  signed" pill. Nothing draws the NDA-signed state, which the gap map named
+  as a canvas gap.
+- The canvas's "COLLECTION" mark and scope chip are shell chrome, drawn by
+  `WorkspaceShell`, not by these pages.
+
 ## D330
 
 **AdminX.jsx and AdminTelegram.jsx say why no draft was made.** Wave 8,
@@ -31711,6 +31844,202 @@ graduate is also kept out of the Issue queue for the same reason.
     CodeQL 2.27.1, run locally with the alert's query: 3 results before, 0
     after. The shared logger was not suppressed: a pragma at its sink would
     hide every future finding there.
+
+## D383
+
+**The Spin-Out Lab application lifecycle, the store and routes half: answers,
+a draft, withdrawal, an applicant-facing note and a partner interview.**
+Session 10, item 4, split into two PRs. This is the backend. The Apply wizard
+and status screen that read it are D384. Migrations 315 and 316. Five new
+`api.js` methods, each with its worker route.
+
+**Why.** The Apply & Status canvas draws a five-step application, a saved
+draft, a withdraw note, a timeline (Submitted → Screening → Partner interview
+→ Decision), an interview card, and a declined variant with a reason, up to
+three asks and a reapply date. None of it had a store:
+- `spinout_applications` held only step 1 (company, idea, incorporated,
+  stage, jurisdiction), written as `pending` the moment it existed.
+- `cohort_applicants.decision_reason` is the admin's required note, and it
+  carries system text ("Legacy admin decision", capacity roll-forwards). It
+  cannot be shown to an applicant.
+- Nothing stored an interview. The apply page promised "a 30-minute call"
+  that no row could confirm.
+
+**The store.**
+- **Migration 315.** `spinout_applications` gains `answers_json` (steps 2–5,
+  written in the same INSERT as the application), `withdrawn_at`, and
+  `applicant_note`, `applicant_asks_json`, `applicant_note_at`. A new table,
+  `spinout_application_drafts`, holds one draft per account.
+  - *Drafts sit in their own table*, never in `spinout_applications`, so no
+    admin list, pool count or one-pending-application guard has to learn to
+    skip them.
+  - *NULL answers mean "never asked"*, not "left blank". Every application
+    made before 315 has them, and the view says `answers_recorded: false`.
+- **Migration 316.** `spinout_application_interviews`: one row per scheduled
+  interview. The latest row is the live one; earlier rows are its history.
+
+**The answers** (`services/applicationLifecycle.ts`, pure). Every choice is a
+closed enum the canvas names: origin, TTO status, IP flags. Free text is
+clipped, never refused for length. A submission must carry origin, team size
+and why Axal, plus a TTO status for an institutional origin and an
+institution for a university one. Traction is optional, as the canvas says.
+`/apply` without `answers` behaves exactly as before, so the shipped one-page
+form keeps working until D384 replaces it. With `answers`, a missing field is
+`400 answers_incomplete` with the `missing` list.
+
+**What the applicant sees.** `/state` gains `applicant`, built by
+`applicantView`:
+- the application's status, dates and answers;
+- the pool row's status and its cycle (label, app status, start, close);
+- the admin's note and asks, when one was written;
+- the live interview, never a cancelled one;
+- when to reapply, only once declined, from the application window.
+
+It never reads `decision_reason`. The block is read in its own try/catch, so
+a database without 315 answers `applicant: null` and the rest of `/state` is
+unchanged. On such a database an `/apply` carrying answers refuses
+`503 application_not_saved` rather than storing the application without
+them, and withdraw refuses `503 withdraw_unavailable`.
+
+**The runtime CREATE is not widened.** `ensureApplicationsTable` mirrors
+migration 155. Declaring 315's five columns there too would make 315's ALTERs
+fail on any database the route created first, and the schema-pair ledger's
+rule is that a second declaration is never the answer. The pair is recorded in
+`scripts/schema-pair-drift-baseline.json` with that reason.
+
+**The routes.**
+- `GET`, `PUT`, `DELETE /spinout-lab/apply/draft`: founder and explorer
+  accounts only (`role_cannot_apply`). A draft is capped at 20,000
+  characters (`draft_too_large`, 413). Submitting deletes it.
+- `POST /spinout-lab/apply/withdraw`: only a pending application whose pool
+  row is pending or waitlisted (`not_withdrawable`, 409). It is a soft
+  delete:
+  - The row becomes `withdrawn`, and its answers and idea are cleared, which
+    is the canvas's "we delete the file".
+  - The pool row follows to `withdrawn`, decided by `user:<id>`, so the
+    capacity job stops counting it.
+  - Scheduled interviews are cancelled.
+  - The row is not deleted, because `cohort_applicants.application_id` has
+    no foreign key and deleting it would orphan the pool's history.
+- `POST /spinout-lab/apply/interview/reschedule` `{ reason }`: records the
+  request and the reason. It does not move the interview. An admin does
+  that, by scheduling again.
+- `POST /admin/cohort/applications/:id/interview` and `…/interview/cancel`:
+  `requireAdmin` (so the compliance freeze applies) and
+  `requireBranchNotSuspended`. Only a pending or waitlisted applicant can be
+  scheduled, and the time must be in the future. Replacing an interview
+  cancels the old one and inserts the new one in one `DB.batch`, so a failed
+  insert cannot leave no interview. Both write `activity_logs`.
+- **decide** takes `applicant_note` (up to 2,000 characters) and
+  `applicant_asks` (up to three). It writes them to the application and
+  returns `applicant_note_saved`: true, false, or null when none was sent.
+  It refuses a withdrawn applicant (409), and its UPDATE excludes them too.
+- **The admin list** gains each applicant's answers, withdrawal, note and
+  live interview, read per cycle in their own try/catch.
+
+**Not in this PR.**
+- **No email.** Outbound mail is Session 4's. Interview invitations and the
+  declined note reach the applicant on `/state` only.
+- **The UI**, and retiring `ApplicationStatusSection` and the apply page's
+  confirmation, are D384.
+
+**Verified.**
+- `spinout_application_lifecycle_d383.test.ts`: 20 tests on real SQLite
+  built from `schema_baseline.sql` plus 315 and 316, and without them.
+- **Mutations.** 14 run. One escaped on the first run: `reapply` shown to an
+  applicant still in review. The /state test now asserts it is null: 14 of
+  14 caught.
+- **Production D1 was not read** by this session. After merge, the deploy
+  run must show "Apply pending D1 migrations" finishing before "Deploy".
+
+## D384
+
+**The Spin-Out Lab Apply wizard and status screen, read from D383's store.**
+The old apply form and status block are retired. Session 10, item 4, the UI
+half. No migration. No new route and no new `api.js` method: this is the first
+caller of the seven D383 added.
+
+**The applicant's page** (`/spinout-lab/apply`, `SpinoutLabApplyPage.jsx`)
+draws both artboards of the Apply & Status canvas.
+- **P1, the application.** Five steps: venture basics; origin and IP; team;
+  traction; why Axal VC.
+  - A step rail shows the steps, with the canvas's confidentiality note.
+  - **Save draft** writes basics, answers and the current step to
+    `/apply/draft`. The page restores the draft when it opens, and says so
+    when the draft cannot be read.
+  - Each step says what it still needs before Continue. The rules are
+    `lib/applicationLifecycle.js`'s copy of the worker's, and a test reads
+    both files and fails if the closed sets drift.
+  - Submit sends `answers` with the basics.
+- **P2, the status screen.** It replaces the form once an application exists.
+  - **A four-stage timeline.** Submitted → Screening → Partner interview →
+    Cohort decision. One record drives the ring and the lede, so the ring
+    cannot sit on a stage the sentence does not name.
+  - **An interview card.** Time in the viewer's zone, length, place and the
+    team's note. **Add to calendar** is an `.ics` built from the row.
+    **Reschedule** records a request and says the interview stays where it
+    is until the team sends a new time.
+  - **While you wait.** The Programme Brief.
+  - **Withdraw.** A confirm that says it deletes the answers and the
+    description of the venture.
+  - **The declined variant.** The note an admin wrote for the applicant, the
+    asks, the reapply window and **Start a new application**. With no note,
+    it says none was written; it does not invent a reason.
+  - **A pre-315 application** says its answers were never asked for.
+
+**What the canvas draws that no store holds, and is not drawn:**
+- the interviewer's name and bio;
+- screening dates, and a "decision by" date (those stages carry no date);
+- the customer-discovery templates pack;
+- the `MERIDIAN-C7-0142` reference: the application's own number is printed;
+- "Roughly half of accepted ventures apply mid-negotiation" and "a third of
+  each cohort applied twice", which no figure supports.
+
+**THE PRODUCT CALL, named for the owner.** The canvas's "What your answer
+changes" panel says a TTO answer re-sequences the founder's Week 1: the TTO
+checklist moves in, and the Delaware filing waits on a signed licence. The Lab
+has one milestone list for every founder (`MILESTONES`, `lib/spinoutLab.js`),
+and nothing reads this answer. So the panel is titled **What your answer is
+used for**, and it says who reads the answer: the reviewer and the
+interviewing partner. It also says the Lab weeks are the same for every
+founder today. A test fails if the Week 1 promise comes back. Building the
+routing, which would mean per-founder milestones keyed on `tto_status`, is
+the owner's call, not this PR's.
+
+**Retired.**
+- The one-page form (older `Spin-Out Lab.dc.html` APPLY VIEW) and its
+  "Application received" card. That card promised a reply "within 5
+  business days", a confirmation email, and "a 30-minute call". No row backs
+  any of them.
+- **`ApplicationStatusSection` on `/spinout-lab`**, and its generic
+  "turned down for space alone" reason. `ApplicationStatusCard` replaces it:
+  a short form of the same `applicant` block that links to the full screen,
+  so the two cannot disagree. It falls back to the legacy row on a database
+  without 315. Pending still replaces the Apply CTA; refused still sits
+  above it.
+- The admin journey preview keeps both of its modes. `previewMode="form"` is
+  the wizard with no fetch and no draft. `"submitted"` is the status screen.
+
+**The admin side.** Each applicant row in the Cohort Cycles tab
+(`AdminCohortApplications.jsx`) opens `AdminApplicantDetail.jsx`:
+- **The answers as the applicant chose them.** Absent answers say why:
+  withdrawn and deleted, asked before the form existed, or unreadable.
+- **The partner interview**, with the applicant's reschedule request and
+  reason. Schedule, replace or cancel it.
+- **Decline with a note.** The applicant's note and asks, and the internal
+  reason, are each labelled with who reads them. A decision saved without its
+  note (`applicant_note_saved: false`) is said to the admin.
+- **The row** shows a withdrawn badge and an "interview · move asked" chip.
+
+`AdminCohortApplications.jsx` is outside Session 10's file list; it is
+touched only to mount the detail panel and the two actions.
+
+**Verified.**
+- `spinout_apply_status_d384.test.mjs`: 21 tests. The status screen and the
+  admin panel are rendered from worker-shaped records.
+  `spinout_application_status.test.mjs` is rewritten for the card: it
+  renders the card, where it used to read the retired block's source.
+- **Mutations.** 17 run, 17 caught on the first run.
 
 ## D390
 
@@ -34127,6 +34456,20 @@ record could not be read. Nothing here is drawn from a guess. Retry".
 **Who reads it.** `StudioNeedsDecision.jsx` and `AdminStudioOverview.jsx` both call `loadStudioGlance` in `adminStudioOverview.js`, and both render through `glancesFromStudioGlance`, so a tile and its card still cannot disagree. `AdminStudioHome.jsx` is Session 3's and is not edited. It still issues the four branch reads and passes them down, which is what a synchronous render sees until the glance answers. Session 3 should drop those four calls. The children already read `GET /api/admin/studio/glance`.
 
 **Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: HQ seats counted from `users`; the U1 sentence removed from the seats refusal; the strip's `loadStudioGlance` call removed.
+
+## D444
+
+**The branch Contracts page tables this database's own contracts, from the list it already had.** Wave 8, Session 6, item 5. No migration. No new `/api/*` method. `admin_contracts.ts` is not edited. No live branch exercised this.
+
+**The ledger.** `BranchContracts.jsx` reads `GET /api/admin/contracts` (`api.adminListContracts`, limit 500) and `GET /api/admin/contracts/stats` (`api.adminContractStats`). Both are `requireAdmin` and already union documents, e-sign envelopes, pairwise NDAs and partner deals in the deployment's own database (D199). A failed list is Unreadable. A list that returns a total of zero says the database was read and holds none. The caption says how many rows are on the page and how many the list counted, so a page is not printed as the population. Pending signatures are `pending_signature` on the stats payload, and only when that read succeeded and the field is a finite number. A missing field stays Not recorded. A failed stats read is not zero pending.
+
+**What the list does not carry.** Value, renewal, and the version the agreement was sent from are Not recorded on every row. Pairwise NDAs and partner deals store an end date, and this list drops both; e-sign envelopes and documents record none. The version on the library card is the copy HQ last pushed, not the version of the row. None of the three is shown as zero.
+
+**The stale reason.** `branch_templates.ts` told a branch that a template body has no reader because `licence_contracts` is HQ's table. That table is the licence agreement only. The body still stays at HQ: nothing on a branch instantiates it, and the contract list carries the template name and not the body. The page still prints `not_carried` from the payload.
+
+**Not on this page.** Resend, void, and the contract detail fetch. `esign.ts` and `SendForSignaturePage.jsx` are untouched.
+
+**Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: the body reason put `licence_contracts` back; the page stopped calling `adminListContracts`; a missing `pending_signature` was rendered as zero pending.
 
 ## D450
 
