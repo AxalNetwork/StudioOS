@@ -30,6 +30,7 @@ import { SignJWT } from 'jose';
 import funds from '../src/routes/funds.ts';
 import capital from '../src/routes/capital.ts';
 import { handleJob } from '../src/services/queueWorker.ts';
+import { hardDeleteProject } from '../src/services/projectTrash.ts';
 import { splitCall } from '../src/services/fundCallSplit.ts';
 import { daysOverdue } from '../src/services/fundCallLedger.ts';
 import { makeD1 } from './_d1_sqlite.mjs';
@@ -77,10 +78,11 @@ CREATE TABLE limited_partners (
   created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   lpa_signed INTEGER NOT NULL DEFAULT 0, lpa_signed_at TEXT, commitment_date TEXT,
   distribution_history TEXT, name TEXT, email TEXT);
+CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT);
 CREATE TABLE capital_calls (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
-  limited_partner_id INTEGER, lp_investor_id INTEGER, project_id INTEGER,
+  limited_partner_id INTEGER, lp_investor_id INTEGER, project_id INTEGER REFERENCES projects(id),
   amount REAL NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
   due_date TEXT, paid_date TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')));
 CREATE TABLE activity_logs (
@@ -590,6 +592,26 @@ test('the LP register carries each account\'s KYC status, and none for an LP wit
   assert.equal(kyc.get(100), 'approved');
   assert.equal(kyc.get(200), 'pending');
   assert.equal(kyc.get(300), null);
+});
+
+// ── A project purge ─────────────────────────────────────────────────────
+
+test('purging a project keeps a call line that has a receipt, detached, and still purges the project', async () => {
+  const env = makeEnv();
+  // A project-linked line, as POST /capital/calls writes one, marked paid.
+  env.__db.exec(`INSERT INTO projects (id, name) VALUES (7, 'Co');
+    INSERT INTO capital_calls (id, limited_partner_id, project_id, amount, status) VALUES (970, 100, 7, 40, 'pending'),
+      (971, 200, 7, 60, 'pending');`);
+  const paid = await call(capital, env, GP_ID, '/calls/970/pay', { method: 'POST' });
+  assert.equal(paid.status, 200, JSON.stringify(paid.body));
+  await hardDeleteProject(env, 7);
+  assert.equal(one(env, 'SELECT COUNT(*) AS n FROM projects WHERE id = 7').n, 0, 'the project could not be purged');
+  const kept = one(env, 'SELECT project_id FROM capital_calls WHERE id = 970');
+  assert.ok(kept, 'the line whose money arrived was deleted with the project');
+  assert.equal(kept.project_id, null);
+  assert.equal(receipts(env).length, 1);
+  // A line with no receipt goes with the project, as before.
+  assert.equal(one(env, 'SELECT COUNT(*) AS n FROM capital_calls WHERE id = 971').n, 0);
 });
 
 // ── The queue job ───────────────────────────────────────────────────────

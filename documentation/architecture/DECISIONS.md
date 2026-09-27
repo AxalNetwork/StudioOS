@@ -32746,7 +32746,7 @@ the Calls page issues calls and records receipts (Session 9, item 2).**
 Migration 312. Five new routes, four new `api.js` methods, one route
 retired.
 
-**What was there, measured on `62ff5e946c`.**
+**What was there, measured on `62ff5e946c` (D370 merged).**
 
 - A call existed only as a queue payload. `POST /api/funds/:id/capital-call`
   enqueued `capital_call_notice` and answered before anything was written.
@@ -32811,6 +32811,14 @@ retired.
   More than is outstanding is `409 receipt_exceeds_outstanding` with the
   outstanding amount. A paid line is `409 line_already_paid`. Every receipt
   is logged against its recorder in `activity_logs`.
+- **A receipt outlives its project.** `services/projectTrash.ts`'s purge
+  deleted `capital_calls` by `project_id`. A receipt references its line, so
+  for a project-linked line (`POST /capital/calls` writes them) with a
+  receipt, that delete fails on the foreign key. The loop swallows the
+  failure, and the line's own `project_id` then fails the final `DELETE FROM
+  projects`, so the project would sit in the trash for ever. The purge now
+  detaches such a line (`project_id = NULL`) first, as it already does for
+  `activity_logs`. A line with no receipt still goes with its project.
 - **Mark Paid is a receipt.** D370's `POST /api/capital/calls/:id/pay` is now
   a receipt for whatever the line still owes, dated today, through the same
   writer. A line paid there has the receipt the ledger reads. After a part
@@ -32886,7 +32894,7 @@ only it used are deleted. `InvestorFundLanding`'s ledger link opens
   `/funds/ledger`, which do not yet cover their jobs.
 
 **Tests.**
-- `cloudflare-worker/test/fund_call_ledger_d371.test.ts` (30) runs on
+- `cloudflare-worker/test/fund_call_ledger_d371.test.ts` (31) runs on
   node:sqlite with migration 312 applied from its own file. It covers:
   - the split: the residual named, BigInt exactness, zero shares;
   - issuing: numbering; the refused side for an LP, another GP, a lapsed GP
@@ -32896,6 +32904,7 @@ only it used are deleted. `InvestorFundLanding`'s ledger link opens
     after a part payment; two receipts read together under a batch barrier,
     for part and for full amounts;
   - the reads, `can_manage` and `kyc_status`;
+  - a project purge keeping a receipted line, detached;
   - the job: `issued_by`, retry, and the loud failure on a changed
     register.
 - `frontend/test/fund_calls_if2_d371.test.mjs` (18) covers the page's
@@ -32914,7 +32923,7 @@ only it used are deleted. `InvestorFundLanding`'s ledger link opens
 - `scripts/sql-prepare-baseline.json` gains five entries. Four are the
   ledger's module-constant SQL fragments; the fifth is `manage.sql`, a
   `tenancyScope` predicate whose values are bound.
-- Mutations: 40 run, 40 caught — 23 against the Worker, 17 against the
+- Mutations: 41 run, 41 caught — 24 against the Worker, 17 against the
   page.
   - Three escaped at first. Dropping the in-batch outstanding check, or
     crediting without this request's receipt, passed: the concurrency test
@@ -32925,9 +32934,9 @@ only it used are deleted. `InvestorFundLanding`'s ledger link opens
     gap-fill retry, not by this file.
   - A fourth mutation's anchor matched two zones; re-anchored, it was
     caught.
-- `npm run test:drift`: the baseline on `62ff5e946c`, in a clean worktree,
-  was frontend 4020, worker 4804 pass, retention 112. With D371 it is
-  frontend 4038 (+18), worker 4834 pass (+30), retention 112, `EXIT=0`.
+- `npm run test:drift`: the baseline on `a0e0f83ad7`, in a clean worktree,
+  was frontend 4045, worker 4804 pass, retention 112. With D371 it is
+  frontend 4063 (+18), worker 4835 pass (+31), retention 112, `EXIT=0`.
   Nothing fell.
 
 ## D380
