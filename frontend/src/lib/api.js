@@ -1856,6 +1856,8 @@ export const api = {
   },
   adminContractStats: () => request('/admin/contracts/stats'),
   adminContractTemplates: () => request('/admin/contracts/templates'),
+  // D454 — code registry (layer, parties, usage) for HQ · Contracts.
+  adminContractDocTypes: () => request('/admin/contracts/doc-types'),
   adminContractTemplateUsage: (docType, params = {}) => {
     const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== null)).toString();
     return request(`/admin/contracts/templates/${encodeURIComponent(docType)}/usage${q ? `?${q}` : ''}`);

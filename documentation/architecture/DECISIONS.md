@@ -33454,6 +33454,24 @@ is removed.
 
 **Tests.** `hq_revenue_statements_d453.test.mjs`.
 
+## D454
+
+**HQ · Contracts draws the doc-type registry from the code maps.** Wave 8,
+Session 16, item 5. No migration; one new read route and matching `api.js`
+method.
+
+**Registry.** `GET /api/admin/contracts/doc-types` returns the four governance
+layers and every entry in `CONTRACT_DOC_TYPES` with title, layer, party roles,
+and usage from documents + e-sign (shared with `/templates`). HQ · Contracts
+renders it read-only above the template library; cross-tenant oversight stays
+Not recorded (U1).
+
+**`/templates`.** Each catalog row now includes `party_roles` and
+`layer_description` via the same builder — no second definition.
+
+**Tests.** `hq_contracts_doc_type_d454.test.mjs`;
+`admin_contracts_doc_types_d454.test.ts`.
+
 ## D460
 
 **The investor deal-flow honesty pass: dead controls wired, false sentences
