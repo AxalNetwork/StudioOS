@@ -85,7 +85,7 @@ test('Emailed and Downloaded are stated, never counted', () => {
   const out = text(DATA);
   assert.ok(out.includes(NOT_EMAILED_REASON) && out.includes(NOT_DOWNLOADED_REASON));
   // Every row's two delivery cells: 3 rows × 2, plus the states card's 2.
-  assert.equal((html.match(new RegExp(NOT_EMAILED_REASON.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length >= 4, true);
+  assert.ok(html.split(NOT_EMAILED_REASON).length - 1 >= 4, 'a row or the states card lost its Emailed reason');
   assert.ok(!/Resend/.test(out), 'a Resend control is drawn for an email nothing sends');
 });
 
@@ -128,14 +128,16 @@ test('the activity log is the registry’s own events, attributed as recorded', 
 });
 
 test('an unreadable graduate list is said as one, not as an empty queue', () => {
-  const out = text({ ...DATA, awaiting: null, eligible_total: null, unavailable: { awaiting: 'The graduate list could not be read.' } });
+  const failed = { ...DATA, awaiting: null, eligible_total: null, unavailable: { awaiting: 'The graduate list could not be read.' } };
+  const out = text(failed);
   assert.ok(out.includes('The graduate list could not be read'));
   assert.ok(out.includes('The graduate count could not be read'));
   assert.ok(!/0 awaiting/.test(out), 'a failed read printed an empty queue');
   // The states card's own row: the count is replaced by the failure, not by 0.
   assert.match(out, /Awaiting issue\s*The graduate list could not be read/,
     'the states card prints a number for a queue it could not read');
-  assert.ok(!out.includes('Not recorded' + 'Eligible'), 'a failed read was called unrecorded');
+  assert.match(kpiValue(board(failed), 'cert-kpi-eligible'), /^\s*The graduate count could not be read/,
+    'a failed read was called unrecorded, or given a number');
 });
 
 test('certificateRows puts the waiting graduates first and keeps absent names null', () => {
