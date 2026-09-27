@@ -4,7 +4,7 @@ import useAiSpend, { modelsForTask, priceForTask } from '../hooks/useAiSpend';
 import useAssistMode from '../hooks/useAssistMode';
 import { api } from '../lib/api';
 import { safeReadJSON, safeWriteJSON } from '../lib/storage';
-import { formatCost, formatRate, formatSpend, spendMeter } from './assistCost';
+import { formatCost, formatRate, formatSpend, lastRunReceipt, spendMeter } from './assistCost';
 import { ASSIST_SURFACES, EADWYN_GUARDRAIL, observedRunCost } from './eadwynConfig';
 import { MODEL_COPY } from './railModels';
 import { Unreadable } from './Honesty';
@@ -304,6 +304,11 @@ export default function WorkerRail({
         branch: scopeBranch || undefined,
       });
       setRun({ state: 'done', text: r?.text || '', note: '', usage: r?.usage || null });
+      // The run wrote a row, so the month's figures and the lasting "Last
+      // run" receipt below are now stale. Re-read them rather than patching
+      // them locally: the receipt is the LOG's most recent row, and only a
+      // read can say what that is (D401).
+      reload();
     } catch (e) {
       // A refusal is not a crash and must not read as one: the router returns
       // a reason and a message for a spent budget or an unreachable model, and
@@ -328,7 +333,7 @@ export default function WorkerRail({
         usage: null,
       });
     }
-  }, [workspace, stance, coverage, activeModel, scopeBranch]);
+  }, [workspace, stance, coverage, activeModel, scopeBranch, reload]);
 
   // `recorded` false, or no report at all, are the same thing to a reader: the
   // platform cannot say what has been spent. Neither draws a bar.
@@ -552,11 +557,18 @@ export default function WorkerRail({
             {/* Measured, never modelled (DECISIONS D16). Absent until they
                 have run it once, because a number nobody measured is worth
                 less than saying so. */}
-            <p className="fwr-estimate">
-              {observed
-                ? `Your runs of this have averaged ${formatCost(observed.cost)}, over ${observed.calls}.`
-                : 'No runs of this yet, so there is no average to show.'}
-            </p>
+            {/* The average is drawn from `by_task`. When that read failed the
+                Worker says so (`by_task_recorded: false`, D401), and "no runs
+                of this yet" would be a claim the page cannot support. */}
+            {spend?.by_task_recorded === false
+              ? <Unreadable what="Your average for this" claim="That is not a claim that you have never run it." onRetry={reload} />
+              : (
+                <p className="fwr-estimate">
+                  {observed
+                    ? `Your runs of this have averaged ${formatCost(observed.cost)}, over ${observed.calls}.`
+                    : 'No runs of this yet, so there is no average to show.'}
+                </p>
+              )}
             <div className="fwr-action">
               <button
                 type="button"
@@ -578,16 +590,15 @@ export default function WorkerRail({
                 <div className="fwr-draft" data-testid="text-worker-rail-draft">
                   <p>{run.text}</p>
                   {/*
-                    The receipt, and it is a receipt for THIS run rather than a
-                    stored "last run". The canvas draws a persistent one —
-                    model, tokens in and out, and a cost, for the most recent
-                    run. `/api/ai/me/spend` DOES return the latest row, as
-                    `last_run` (services/aiSpend.ts), but without token counts,
-                    so a lasting receipt drawn from it could not show the in/out
-                    the canvas asks for. This says what the click just did and
-                    disappears with the page. (An earlier version of this note
-                    said the endpoint returned no latest row at all; it has for
-                    as long as `last_run` has existed. D400.)
+                    The receipt for THIS click. The lasting "Last run" line in
+                    the Usage block (D401) is the account's most recent row,
+                    which after this click is usually this run — but not
+                    always: another tab, another page, or a later call on the
+                    account can be newer. This one describes exactly the run
+                    whose text is above it, so both stay, each labelled for
+                    what it is. (Before D401 this said `/api/ai/me/spend`
+                    returned no latest row; it returned `last_run` without
+                    token counts, and now carries them.)
 
                     `formatCost` and not `formatSpend`: a read-back costs
                     fractions of a cent, and two decimal places round that to
@@ -645,6 +656,32 @@ export default function WorkerRail({
                       ? `${spend.month.calls} run${spend.month.calls === 1 ? '' : 's'} across the platform this month. Nothing on this page spends.`
                       : 'No runs recorded this month.'}
                   </p>
+                  {/*
+                    THE LASTING RECEIPT (D401) — the canvas's "Last run · in/out
+                    · cost", from `/api/ai/me/spend`'s `last_run`. It is the
+                    caller's most recent row ANYWHERE on the platform, not this
+                    page's, and the label says so: `ai_usage_logs` records no
+                    page, so "this page's last run" is not a fact the log holds
+                    (item 5 adds the column). A failed read of it is
+                    Unreadable, not "no runs"; the Worker reports the two apart
+                    with `last_run_recorded`.
+                  */}
+                  {spend.last_run_recorded === false
+                    ? (
+                      <div data-testid="text-worker-rail-last-run">
+                        <Unreadable
+                          what="Your last run"
+                          claim="That is not a claim that you have none."
+                          onRetry={reload}
+                        />
+                      </div>
+                    )
+                    : spend.last_run && (
+                      <p className="fwr-last-run" data-testid="text-worker-rail-last-run">
+                        <b>Last run · your account, any page</b>
+                        {lastRunReceipt(spend.last_run, MODEL_COPY[spend.last_run.model]?.name)}
+                      </p>
+                    )}
                 </>
               )
               : (

@@ -52,6 +52,7 @@ import { resolve, join } from 'node:path';
 
 import {
   rawIsoNames, sqlFormatColumns, tablesIn, comparesBare, clockWrittenColumns,
+  rawIsoHelpers, bindWrappers, sweepBinds,
 } from './_sqlFormatColumns.mjs';
 
 const ROOT = resolve(process.cwd());
@@ -255,4 +256,153 @@ test("the derived set covers D160's typed six, so its narrower scan is a backsto
     'If either is ever declared, delete this assertion and add it above — but do not '
     + "loosen the subsumption check to make D160's typed list look right, which is how the "
     + 'name survived in it this long');
+});
+
+// ── D423: through helpers, wrappers and object fields ────────────────────────
+//
+// D162's sweep saw a raw ISO value only when it was named from `.toISOString()`
+// in the same file and met `.bind(` beside an inline `.prepare(`. Three shapes
+// walked past it, and D301 filed the guard half as unbuilt ("follow binds
+// through an object field or a rest parameter"). These tests pin each shape on
+// a fixture corpus and then run the widened sweep over the whole worker.
+
+const corpusResolver = (from: string, spec: string): string | null => {
+  if (!spec.startsWith('.')) return null;
+  const base = resolve(from, '..', spec);
+  for (const c of [base, `${base}.ts`, join(base, 'index.ts')]) if (FILES.has(c)) return c;
+  return null;
+};
+const FILES = new Map(SOURCES.map((s) => [s.file, s.src]));
+
+/** A fixture corpus: `{ 'a.ts': src }`, resolved relative to a fake root. */
+function sweepFixture(files: Record<string, string>, ddl: string): string[] {
+  const map = new Map(Object.entries(files).map(([k, v]) => [`/fx/${k}`, v]));
+  return sweepBinds({
+    sources: map,
+    baseline: ddl,
+    resolveImport: (from: string, spec: string) => {
+      const p = resolve(from, '..', spec);
+      return map.has(`${p}.ts`) ? `${p}.ts` : map.has(p) ? p : null;
+    },
+  });
+}
+const DDL = `CREATE TABLE notes (id INTEGER, status TEXT DEFAULT 'open', -- open|closed
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);`;
+
+test('a trailing -- comment on one column does not hide the next', () => {
+  // The derivation splits a table body on commas, so a comment ending one
+  // column's line leads the next part; it used to read the comment as the
+  // column and drop the column. `founder_needs.created_at` was invisible so.
+  assert.deepEqual([...(sqlFormatColumns(DDL).get('notes') || [])], ['created_at']);
+  assert.ok(BY_TABLE.get('founder_needs')?.has('created_at'),
+    'founder_needs.created_at (after a `-- open|…` comment) is SQL-format and must be seen');
+});
+
+test('a helper is judged by what it returns, never by its name', () => {
+  const read = (rel: string) => readFileSync(resolve(ROOT, rel), 'utf8');
+  // `nowIso` returns raw ISO; `iso` and `isoNow` return SQL format. A rule
+  // keyed on the name would flag the correct two and trust the wrong one.
+  assert.ok(rawIsoHelpers(read('cloudflare-worker/src/routes/_t13t14t15_helpers.ts')).has('nowIso'));
+  assert.ok(!rawIsoHelpers(read('cloudflare-worker/src/services/cohortTiming.ts')).has('iso'),
+    "cohortTiming's `iso` returns SQL format and must not be called raw");
+  assert.ok(!rawIsoHelpers(read('cloudflare-worker/src/routes/admin_cohort.ts')).has('isoNow'),
+    "admin_cohort's `isoNow` returns SQL format and must not be called raw");
+  const fx = rawIsoHelpers(`const sqlNow = () => new Date().toISOString();
+    function dayKey(d: Date) { return d.toISOString().slice(0, 10); }`);
+  assert.ok(fx.has('sqlNow'), 'a helper NAMED for SQL that returns raw ISO is raw');
+  assert.ok(!fx.has('dayKey'), 'a date cut before the T is not raw');
+});
+
+test('a raw value is one the expression produces, not one it passes along', () => {
+  const names = rawIsoNames(`const a = new Date(x).toISOString();
+    const axis = weekAxis(new Date(n).toISOString(), 12);
+    const b = new Date().toISOString().replace('T', ' ');`);
+  assert.ok(names.has('a'));
+  assert.ok(!names.has('axis'), 'an ISO string handed INTO a call does not make its result raw');
+  assert.ok(!names.has('b'));
+});
+
+test('a wrapper is followed to every call site, through a rest parameter and a named one', () => {
+  const wrappers = bindWrappers(`async function safeFirst(env: Env, sql: string, ...bind: any[]) {
+      return env.DB.prepare(sql).bind(...bind).first();
+    }
+    async function rows(env: Env, since: string | null) {
+      const sql = since ? 'SELECT * FROM notes WHERE created_at >= ?' : 'SELECT * FROM notes';
+      return env.DB.prepare(sql).bind(since).all();
+    }`);
+  assert.deepEqual({ ...wrappers.get('safeFirst'), bindParams: [...wrappers.get('safeFirst').bindParams] },
+    { sqlParam: 1, sql: '', bindParams: [], restFrom: 2 });
+  assert.equal(wrappers.get('rows').sqlParam, null);
+  assert.deepEqual([...wrappers.get('rows').bindParams], [1]);
+  assert.match(wrappers.get('rows').sql, /created_at >= \?/, "the wrapper's own SQL is read through its const");
+
+  // Rest parameter, SQL at the call site — the newsTrust shape.
+  const rest = sweepFixture({ 'a.ts': `
+    async function safeFirst(env, sql, ...bind) { return env.DB.prepare(sql).bind(...bind).first(); }
+    const since = new Date(Date.now() - 1e9).toISOString();
+    await safeFirst(env, "SELECT COUNT(*) FROM notes WHERE created_at >= ?", since);` }, DDL);
+  assert.equal(rest.length, 1, 'a raw bind through a rest parameter is missed');
+  // Named parameter, SQL inside the wrapper — the insights shape — imported.
+  const named = sweepFixture({
+    'lib.ts': `export async function rows(env, since) {
+      const sql = 'SELECT * FROM notes WHERE created_at >= ?';
+      return env.DB.prepare(sql).bind(since).all(); }`,
+    'b.ts': `import { rows } from './lib';
+      const since = new Date().toISOString();
+      await rows(env, since);`,
+  }, DDL);
+  assert.equal(named.length, 1, 'a raw bind through an imported wrapper is missed');
+  // A raw helper from another file, by call — the nowIso shape.
+  const helper = sweepFixture({
+    'h.ts': 'export function stamp() { return new Date().toISOString(); }',
+    'c.ts': `import { stamp } from './h';
+      await env.DB.prepare('SELECT 1 FROM notes WHERE created_at >= ?').bind(stamp()).first();`,
+  }, DDL);
+  assert.equal(helper.length, 1, 'a raw ISO returned by an imported helper is missed');
+});
+
+test('an object field and a shared template predicate are followed too', () => {
+  // The D301 shape: the window travels as `w.periodStart`, and the SQL is a
+  // template over one shared predicate const.
+  const bare = sweepFixture({ 'd.ts': `
+    const WINDOW = \`created_at >= ? AND created_at <= ?\`;
+    async function safeCount(env, sql, ...binds) { return env.DB.prepare(sql).bind(...binds).first(); }
+    async function build(env, w) {
+      return safeCount(env, \`SELECT COUNT(*) FROM notes WHERE \${WINDOW}\`, w.periodStart, w.periodEnd);
+    }
+    await build(env, { periodStart: new Date(0).toISOString(), periodEnd: new Date().toISOString() });` }, DDL);
+  assert.equal(bare.length, 1, 'a raw window carried in an object field is missed');
+  const wrapped = sweepFixture({ 'e.ts': `
+    const WINDOW = \`datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)\`;
+    async function safeCount(env, sql, ...binds) { return env.DB.prepare(sql).bind(...binds).first(); }
+    await safeCount(env, \`SELECT COUNT(*) FROM notes WHERE \${WINDOW}\`, w.periodStart, w.periodEnd);
+    const w = { periodStart: new Date(0).toISOString(), periodEnd: new Date().toISOString() };` }, DDL);
+  assert.deepEqual(wrapped, [], 'the wrapped predicate — what D301 shipped — must stay clear');
+  // A field holding a DATE cut before the T is not raw, however the value is
+  // written — `admin_revenue.ts`'s \`quarterOf\` returns
+  // \`{ start: d.toISOString().slice(0, 10) }\`, and reading the value only to
+  // the first comma (inside \`slice(0, 10)\`) called it raw.
+  const dated = sweepFixture({ 'f.ts': `
+    function quarterOf(d) { return { start: d.toISOString().slice(0, 10), end: d.toISOString().slice(0, 10) }; }
+    const q = quarterOf(new Date());
+    await env.DB.prepare('SELECT 1 FROM notes WHERE created_at >= ? AND created_at < ?').bind(q.start, q.end).first();` }, DDL);
+  assert.deepEqual(dated, [], 'a date-cut field is read as raw ISO');
+});
+
+test('the widened sweep finds no raw ISO bind against a SQL-format column in the worker', () => {
+  const offenders = sweepBinds({ sources: FILES, baseline: BASELINE, resolveImport: corpusResolver })
+    .map((line) => line.slice(SRC.length + 1));
+  assert.deepEqual(offenders, [],
+    'A raw `.toISOString()` value reaches an unwrapped comparison on a SQL-format column through '
+    + 'a helper, a wrapper or an object field. Wrap both sides: `datetime(col) >= datetime(?)`.');
+});
+
+test('the two sites D423 fixed compare both sides normalised', () => {
+  const read = (rel: string) => readFileSync(resolve(ROOT, rel), 'utf8');
+  assert.match(read('cloudflare-worker/src/services/newsTrust.ts'),
+    /kind = 'flagged_score_alert' AND datetime\(created_at\) >= datetime\(\?\)/,
+    'the 90-day-clean check misses a flag dated on the window\'s first day');
+  assert.match(read('cloudflare-worker/src/routes/insights.ts'),
+    /'SELECT \* FROM founder_needs WHERE datetime\(created_at\) >= datetime\(\?\)'/,
+    'founder_needs.created_at holds two formats; only a normalised comparison reads both');
 });

@@ -33,8 +33,12 @@ type EnrichedRow = {
 };
 
 async function joinRows(env: Env, sinceIso: string | null): Promise<EnrichedRow[]> {
+  // D423: `founder_needs.created_at` holds TWO formats — the DEFAULT writes
+  // `YYYY-MM-DD HH:MM:SS`, and `needs.ts` binds `nowIso()` (ISO) on insert —
+  // and `sinceIso` is raw ISO. A bare `>=` drops default-written rows dated on
+  // the window's first day; normalising both sides reads either format right.
   const sql = sinceIso
-    ? 'SELECT * FROM founder_needs WHERE created_at >= ?'
+    ? 'SELECT * FROM founder_needs WHERE datetime(created_at) >= datetime(?)'
     : 'SELECT * FROM founder_needs';
   const needs = sinceIso
     ? ((await env.DB.prepare(sql).bind(sinceIso).all<any>()).results || [])
