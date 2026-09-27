@@ -19,6 +19,11 @@ export default function PortfolioPositionsPage({ embedded = false }) {
   const [busy, setBusy] = useState(false);
   const [prefillName, setPrefillName] = useState('');
   const [form, setForm] = useState({ project_id: '', round_name: '', invested_amount: '', shares: '', price_per_share: '', ownership_pct: '', position_date: '' });
+  // D464 — the governed write path, offered where the book is read: a mark and
+  // a distribution are admin writes (the routes refuse anyone else), and the
+  // detail drawer already reads both histories back.
+  const [markForm, setMarkForm] = useState(null);
+  const [distForm, setDistForm] = useState(null);
 
   // Task #83 — when we arrive from an IC "invest" decision the startup + round
   // are handed over via router state; prefill the form and open it so the admin
@@ -67,6 +72,42 @@ export default function PortfolioPositionsPage({ embedded = false }) {
       load();
     } catch (e2) { setErr(e2.message || 'Failed to record'); }
     finally { setBusy(false); }
+  };
+
+  const submitMark = async (e) => {
+    e.preventDefault();
+    if (!markForm || !detail?.project?.uid) return;
+    setMarkForm({ ...markForm, busy: true, error: '' });
+    try {
+      await api.positionMarkCreate(detail.project.uid, {
+        fmv: Number(markForm.fmv),
+        as_of_date: markForm.as_of_date,
+        basis: markForm.basis,
+        event: markForm.event || undefined,
+      });
+      setMarkForm(null);
+      await openDetail(detail.project.uid);
+    } catch (cause) {
+      setMarkForm({ ...markForm, busy: false, error: cause?.message || 'The mark could not be recorded.' });
+    }
+  };
+
+  const submitDist = async (e) => {
+    e.preventDefault();
+    if (!distForm || !detail?.project?.uid) return;
+    setDistForm({ ...distForm, busy: true, error: '' });
+    try {
+      await api.positionDistributionCreate(detail.project.uid, {
+        amount: Number(distForm.amount),
+        distribution_date: distForm.distribution_date,
+        kind: distForm.kind,
+        note: distForm.note || undefined,
+      });
+      setDistForm(null);
+      await openDetail(detail.project.uid);
+    } catch (cause) {
+      setDistForm({ ...distForm, busy: false, error: cause?.message || 'The distribution could not be recorded.' });
+    }
   };
 
   const field = (key, placeholder, extra = {}) => (
@@ -204,6 +245,99 @@ export default function PortfolioPositionsPage({ embedded = false }) {
                   ))}
                 </tbody>
               </table>
+            )}
+
+            {/* D464 — the marks and distributions the detail read already
+                returns, with the governed write path offered beside them. */}
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2 mt-6">Marks</h3>
+            {(detail.marks || []).length === 0 ? (
+              <div className="text-sm text-gray-500 mb-2">No mark is recorded — the position carries at cost.</div>
+            ) : (
+              <table className="w-full text-sm mb-2">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b border-gray-100 dark:border-gray-800">
+                    <th className="py-2">As of</th><th className="py-2">FMV</th><th className="py-2">Basis</th><th className="py-2">Event</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.marks.map((m) => (
+                    <tr key={m.uid} className="border-b border-gray-50 dark:border-gray-800/50" data-testid={`row-mark-${m.uid}`}>
+                      <td className="py-2">{m.as_of_date}</td>
+                      <td className="py-2">{fmtMoney(m.fmv)}</td>
+                      <td className="py-2">{m.basis ? m.basis.replace(/_/g, ' ') : '—'}</td>
+                      <td className="py-2">{m.event || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {isAdmin && (
+              markForm ? (
+                <form onSubmit={submitMark} className="mb-4 rounded-lg border border-gray-200 p-3 dark:border-gray-700" data-testid="form-mark">
+                  <div className="grid grid-cols-2 gap-2">
+                    <input value={markForm.fmv} onChange={(e) => setMarkForm({ ...markForm, fmv: e.target.value })} placeholder="FMV ($)" inputMode="decimal" required data-testid="input-mark-fmv" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
+                    <input type="date" value={markForm.as_of_date} onChange={(e) => setMarkForm({ ...markForm, as_of_date: e.target.value })} required data-testid="input-mark-date" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
+                    <select value={markForm.basis} onChange={(e) => setMarkForm({ ...markForm, basis: e.target.value })} data-testid="select-mark-basis" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm">
+                      {[['gp_estimate', 'GP estimate'], ['round_price', 'Round price'], ['secondary', 'Secondary'], ['write_down', 'Write-down'], ['cost', 'Cost']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                    <input value={markForm.event} onChange={(e) => setMarkForm({ ...markForm, event: e.target.value })} placeholder="Event (optional)" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
+                  </div>
+                  {markForm.error && <p className="mt-2 text-xs text-rose-700 dark:text-rose-400" role="alert">{markForm.error}</p>}
+                  <div className="mt-2 flex gap-2">
+                    <button disabled={markForm.busy} data-testid="button-mark-save" className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-xs font-medium">{markForm.busy ? 'Recording…' : 'Record mark'}</button>
+                    <button type="button" onClick={() => setMarkForm(null)} className="px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400">Cancel</button>
+                  </div>
+                </form>
+              ) : (
+                <button type="button" onClick={() => setMarkForm({ fmv: '', as_of_date: new Date().toISOString().slice(0, 10), basis: 'gp_estimate', event: '', busy: false, error: '' })} data-testid="button-mark-open" className="mb-4 px-3 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg text-xs font-medium dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+                  Record a mark
+                </button>
+              )
+            )}
+
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2 mt-6">Distributions</h3>
+            {(detail.distributions || []).length === 0 ? (
+              <div className="text-sm text-gray-500 mb-2">No distribution is recorded.</div>
+            ) : (
+              <table className="w-full text-sm mb-2">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b border-gray-100 dark:border-gray-800">
+                    <th className="py-2">Date</th><th className="py-2">Amount</th><th className="py-2">Kind</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.distributions.map((d) => (
+                    <tr key={d.uid} className="border-b border-gray-50 dark:border-gray-800/50" data-testid={`row-distribution-${d.uid}`}>
+                      <td className="py-2">{d.distribution_date}</td>
+                      <td className="py-2">{fmtMoney(d.amount)}</td>
+                      <td className="py-2">{d.kind ? d.kind.replace(/_/g, ' ') : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {isAdmin && (
+              distForm ? (
+                <form onSubmit={submitDist} className="rounded-lg border border-gray-200 p-3 dark:border-gray-700" data-testid="form-distribution">
+                  <div className="grid grid-cols-2 gap-2">
+                    <input value={distForm.amount} onChange={(e) => setDistForm({ ...distForm, amount: e.target.value })} placeholder="Amount ($)" inputMode="decimal" required data-testid="input-dist-amount" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
+                    <input type="date" value={distForm.distribution_date} onChange={(e) => setDistForm({ ...distForm, distribution_date: e.target.value })} required data-testid="input-dist-date" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
+                    <select value={distForm.kind} onChange={(e) => setDistForm({ ...distForm, kind: e.target.value })} data-testid="select-dist-kind" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm">
+                      {[['exit', 'Exit'], ['secondary', 'Secondary'], ['dividend', 'Dividend'], ['recapitalization', 'Recapitalization']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                    <input value={distForm.note} onChange={(e) => setDistForm({ ...distForm, note: e.target.value })} placeholder="Note (optional)" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
+                  </div>
+                  {distForm.error && <p className="mt-2 text-xs text-rose-700 dark:text-rose-400" role="alert">{distForm.error}</p>}
+                  <div className="mt-2 flex gap-2">
+                    <button disabled={distForm.busy} data-testid="button-dist-save" className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-xs font-medium">{distForm.busy ? 'Recording…' : 'Record distribution'}</button>
+                    <button type="button" onClick={() => setDistForm(null)} className="px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400">Cancel</button>
+                  </div>
+                </form>
+              ) : (
+                <button type="button" onClick={() => setDistForm({ amount: '', distribution_date: new Date().toISOString().slice(0, 10), kind: 'exit', note: '', busy: false, error: '' })} data-testid="button-dist-open" className="px-3 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg text-xs font-medium dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+                  Record a distribution
+                </button>
+              )
             )}
           </div>
         </div>
