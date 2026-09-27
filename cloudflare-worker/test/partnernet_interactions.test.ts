@@ -163,6 +163,39 @@ test('a reminder surfaces when due and leaves the list when done', async () => {
   assert.equal(all.body.items.length, 1, 'and stays on the record');
 });
 
+test('a void touch is refused — empty note with no date must not move the cold flag', async () => {
+  const db = freshDb();
+  const voidTouch = await call(investor, `/relationships/${REL}/interactions`, { method: 'POST', body: {} }, db);
+  assert.equal(voidTouch.status, 400);
+  assert.equal(voidTouch.body?.error, 'touch_requires_substance');
+  const after = await call(investor, '/relationships', {}, db);
+  assert.equal(after.body[0].last_interaction_at, null);
+});
+
+test('private notes are per party — only the writer reads theirs back', async () => {
+  const db = freshDb();
+  const save = await call(investor, `/relationships/${REL}`, {
+    method: 'PATCH', body: { private_note: 'My diligence read' },
+  }, db);
+  assert.equal(save.status, 200);
+
+  const mine = await call(investor, '/relationships', {}, db);
+  assert.equal(mine.body[0].my_private_note, 'My diligence read');
+  assert.equal(mine.body[0].metadata?.private_notes, undefined);
+
+  const founder = await call({ user: FOUNDER, role: 'founder' }, '/relationships', {}, db);
+  assert.equal(founder.body[0].my_private_note, null);
+});
+
+test('a calendar reminder date lands at end of that UTC day', async () => {
+  const db = freshDb();
+  const set = await call(investor, `/relationships/${REL}/reminders`, {
+    method: 'POST', body: { remind_at: '2026-10-15' },
+  }, db);
+  assert.equal(set.status, 201);
+  assert.equal(set.body.item.remind_at, '2026-10-15T23:59:59.000Z');
+});
+
 test('a reminder needs its date, and is the setter’s alone', async () => {
   const db = freshDb();
   const noDate = await call(investor, `/relationships/${REL}/reminders`, { method: 'POST', body: { note: 'x' } }, db);

@@ -3518,6 +3518,8 @@ export const api = {
   // `pushed_at` and its own `n_branches`. `unavailable` names the three stats
   // S6 draws that have no branch-side source.
   branchInsights: () => request('/branch/insights'),
+  // D446 — S13's audit line. The branch's own support-session rows.
+  branchSupportSessions: () => request('/branch/support-sessions'),
   // D210 — S15 · Analytics. This branch over time from its own request log,
   // the seats and decision ages it can measure, and each tile it cannot — with
   // the reason on the payload. Same `range` vocabulary as `hqAnalytics`.
@@ -5600,6 +5602,14 @@ export const adminAssessment = {
     }),
   // Analytics — aggregate funnel/distribution/coverage for a game.
   analytics: (slug) => request(`/admin/assessment/games/${encodeURIComponent(slug)}/analytics`),
+  // D446 — runs on this database. `cycle` is a cohort cycle id; the worker
+  // keeps a run whose start falls inside that cycle. Omit it to list every run.
+  listSessions: (cycleId) => {
+    const q = new URLSearchParams();
+    if (cycleId !== undefined && cycleId !== null && String(cycleId) !== '') q.set('cycle', String(cycleId));
+    const s = q.toString();
+    return request(`/admin/assessment/sessions${s ? `?${s}` : ''}`);
+  },
   // D255 — `rescore` was removed here: no caller in frontend/src called it.
   // The worker route (admin_assessment.ts, POST /sessions/:id/rescore)
   // stays — check-api-drift reads api.js → worker only, so a route with no

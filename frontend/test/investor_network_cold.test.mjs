@@ -52,7 +52,7 @@ test('the reminders and the touch log are wired to their stores', () => {
   assert.match(PAGE, /api\.partnerReminderSet\(rel\.id, \{/, 'the reminder form is unwired');
   assert.match(PAGE, /api\.partnerReminders\(\)/, 'the due reminders are never read');
   assert.match(PAGE, /api\.partnerReminderDone\(uid, true\)/, 'the done write is gone');
-  assert.match(PAGE, /api\.partnerInteractionAdd\(rel\.id, \{/, 'the touch log write is gone');
+  assert.match(PAGE, /api\.partnerInteractionAdd\(rel\.id, body/, 'the touch log write is gone');
   assert.match(API, /partnerReminderSet: \(id, data\) =>/, 'api.js lost the reminder write');
   assert.match(API, /partnerInteractionAdd: \(id, data\) =>/, 'api.js lost the touch write');
   // The op is the page's, and it opens on a tie rather than into thin air.
