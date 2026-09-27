@@ -33264,6 +33264,31 @@ pins send wiring.
 *Corrected by D451: D110's "Deliberately not here" e-sign leg — `envelope_uid`
 is now written on send and status on read follows the envelope.*
 
+## D452
+
+**Deployments record last_version; licences polish (kind filter, clash actions,
+white-label overlay).** Wave 8, Session 16, item 3. No migration.
+
+**`last_version`.** Migration 258's column was never written. Branch
+`health()` now returns `deploy_version` from the optional
+`WORKER_DEPLOY_VERSION` binding; `GET /api/admin/deployments` persists
+`last_health_at`, `last_health_ok`, and `last_version` on each successful
+health read (best-effort batch). Platform → Deployments and the licence Deploy
+step show the stored or live value.
+
+**Licences polish (H28).** `AdminLicences` and HQ Home gain All / Axal /
+White-label filters; list rows and health cards carry a kind pill and a
+white-label swatch when a brand kit exists. Territory step clash rows add
+**Open holder** and **Remove from list** (save stays disabled while a clash
+remains).
+
+**White-label overlay (H29).** Scoped `GET /admin/hq/overview?branch=` returns
+`licence` (kind, public name, brand kit); `HqBranchOverlay` draws the
+operator chrome inside HQ's read-only frame.
+
+**Tests.** `deployments_last_version_d452.test.ts`;
+`hq_licences_polish_d452.test.mjs`.
+
 ## D460
 
 **The investor deal-flow honesty pass: dead controls wired, false sentences

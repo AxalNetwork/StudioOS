@@ -292,6 +292,10 @@ test('health does a real query, so a broken DB binding cannot read as healthy', 
   assert.equal(good.ok, true);
   assert.equal(good.db_ok, true);
   assert.equal(good.branch, 'fr');
+  assert.equal(good.deploy_version, null);
+
+  const tagged = await branchHealth({ ...FR, DB: makeD1(branchDb()), WORKER_DEPLOY_VERSION: 'deadbeef' } as any);
+  assert.equal(tagged.deploy_version, 'deadbeef');
 
   // A DB whose every statement throws. If `health()` answered without
   // touching D1 this would still say ok — which is the failure a health check

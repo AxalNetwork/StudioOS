@@ -64,6 +64,9 @@ export interface Env {
   // provisioned with none; write-once, because an object's jurisdiction is
   // fixed when it is first created.
   BRANCH_DO_JURISDICTION?: string;
+  // D452 — git ref or deploy id stamped at provision/deploy time; branch health
+  // returns it so HQ can persist `licence_deployments.last_version` on read.
+  WORKER_DEPLOY_VERSION?: string;
   // The branch→HQ RPC leg (D111), set only on a branch. `branch-provision.yml`
   // generates it per deployment, puts the plaintext here and writes its SHA-256
   // into HQ's `licence_deployments.rpc_secret_hash`. A branch presents it on
