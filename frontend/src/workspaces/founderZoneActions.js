@@ -327,7 +327,9 @@ export const FOUNDER_ZONE_ACTIONS = {
   // The same stale exclusion `research/client-prep` carried on two licences.
   'research/funds': [
     { label: 'Add fund', unbuilt: 'the add-a-fund form below takes one' },
-    { label: 'Brief me', unbuilt: 'no per-fund brief is generated; the thesis is quoted in their words and the reading is yours to write' },
+    // D312 — a brief is drafted per fund, from that one row, on its dossier.
+    // The list holds many funds and names none, so the op here says where.
+    { label: 'Brief me', unbuilt: 'a brief is drafted on one fund’s dossier, from that row alone — open the fund to draft it' },
     { label: 'Export', kind: 'export' },
   ],
   // `Upload` IS THIS LICENCE'S WORD FOR THE SAME OP advisor and partner call
