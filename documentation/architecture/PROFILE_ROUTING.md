@@ -46,7 +46,7 @@ it, where in their nav, and how do they get there.*
 | Customer Audience Landing Page | `/spinout-lab/brand` · `/build/brand` · `/p/:site/:page` · `/landing/:slug` | Home | Full page | Sidebar → Home → Grow | CURRENT | High |
 | Customer Discovery | `/spinout-lab/discovery` · `/build/discovery` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Validate | OUT OF SCOPE | High |
 | Customer Templates | `/spinout-lab/brand` · `/build/brand` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Grow | OUT OF SCOPE | High |
-| Data Room | `/raise/data-room` | Home | Full page (proposed) | Sidebar → Home → Raise | NEW | Low |
+| Data Room | `/raise/data-room?mode=workspace` · `/research/diligence` · `/research/diligence/:grantUid` · `/files/:fileUid` | Home | Full page | Sidebar → Home → Raise | CURRENT | High |
 | Detail Layer Canvas | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Due Diligence | `/admin/due-diligence*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Founder Studio | `/studio` | Home | Full page | Sidebar → Home → Studio | DEFERRED | High |
@@ -106,7 +106,7 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Data Room | `/raise/data-room` | Home | Full page (proposed) | Sidebar → Home → Deals | NEW | Low |
+| Data Room | `/raise/data-room?mode=workspace` · `/research/diligence` · `/research/diligence/:grantUid` · `/files/:fileUid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Deal Flow | `/pipeline` · `/deals` · `/deals/:dealId` · `/pipeline/screening\|commit\|transactions` · `/deals/screening\|commit\|closing` | Home | Full page | Sidebar → Home → Deals | UPGRADE | High |
 | Detail Layer Canvas | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Due Diligence | `/admin/due-diligence*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
@@ -229,9 +229,9 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 74 | Live route, reachable from that workspace’s sidebar. |
+| High | 76 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 41 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 33 | Not routed. Proposed route only. |
+| Low | 31 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s
