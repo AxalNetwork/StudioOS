@@ -63,6 +63,27 @@ export const TRACK_GATES = {
 };
 
 /**
+ * THE OPEN PRODUCT CALL — per-track gates (D385; the gap map's product call
+ * 240). Two surfaces disagree, and neither is wrong on its own terms:
+ *
+ *   · The Programme Brief prints `TRACK_GATES` above: each track its own four
+ *     gates, as the Brief and Landing canvases draw them.
+ *   · The Lab page's intro, the workspace and the worker enforce ONE gate set
+ *     for everyone — `PIPELINE_PHASES` in lib/spinoutLab.js, reconciled against
+ *     the worker's `MILESTONES`.
+ *
+ * Choosing between them is the owner's call: build per-track milestones in the
+ * worker so the brief is true, or have the brief print the one enforced set.
+ * Until it is made, neither surface changes what it draws, and both SAY the
+ * decision is open, in these words, so a founder reading either is not told a
+ * week asks something the Lab will not check.
+ */
+export const GATES_DECISION = {
+  brief: 'Today the Lab checks one set of gates for every track. Whether it will check these per-track gates is still to be decided.',
+  intro: 'Whether each track gets its own four gates, as the programme brief draws them, is still to be decided.',
+};
+
+/**
  * The terms card.
  *
  * `Places` carries `live: 'places'` rather than a number: it is one of the six

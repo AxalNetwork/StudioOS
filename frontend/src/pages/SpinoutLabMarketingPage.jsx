@@ -1,10 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
 import LabIntro from '../components/spinout/LabIntro';
 import { GraduatesSection } from './SpinoutLabPage';
 import {
-  LAB_APPLY_HREF, openCohortCopy, useCohortDirectory, useShippedFeed,
+  LAB_APPLY_HREF, useCohortRecord, useCohortDirectory, useShippedFeed,
 } from '../lib/spinoutLab';
 import { DEFAULT_TRACK } from '../lib/spinoutLabArsenal';
 
@@ -36,7 +36,8 @@ export default function SpinoutLabMarketingPage() {
   // LabIntro's header for why no `track` param rides the apply link.
   const [track, setTrack] = useState(DEFAULT_TRACK);
   const [jurisdiction, setJurisdiction] = useState('de');
-  const cohort = useMemo(() => openCohortCopy(), []);
+  // D385 — the cohort as the server names it, the same read the brief makes.
+  const cohort = useCohortRecord();
 
   const directory = useCohortDirectory();
   // Logged out: the gate feed needs a session, so it is not requested at all

@@ -35,6 +35,7 @@ import {
 } from '../services/statements';
 import { branchByCode } from '../services/branches';
 import { mirrorBranchAction } from '../services/auditMirror';
+import { logAdminAction } from '../services/adminAudit';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -66,6 +67,11 @@ type StatementRow = {
 };
 
 /** Parse `streams_json` back, never throwing a stored row's shape at the page. */
+/** A floor (partly unreported or estimated) must not be filed as a total. */
+function statementComplete(row: Pick<StatementRow, 'unreported_streams' | 'estimated_streams'>) {
+  return row.unreported_streams === 0 && row.estimated_streams === 0;
+}
+
 function withStreams(row: StatementRow) {
   let streams: unknown = [];
   try { streams = JSON.parse(row.streams_json || '[]'); } catch { streams = []; }
@@ -142,12 +148,23 @@ r.post('/statements/draw', async (c) => {
     if (!PERIOD_RE.test(period)) return c.json({ error: 'bad_period', message: 'period must be YYYY-Qn' }, 400);
 
     const licence = await c.env.DB.prepare(
-      'SELECT uid, licence_ref, brand_name, revenue_share_bps, currency FROM territory_licences WHERE uid = ?',
+      'SELECT uid, licence_ref, brand_name, revenue_share_bps, currency, status FROM territory_licences WHERE uid = ?',
     ).bind(licenceUid).first<{
       uid: string; licence_ref: string; brand_name: string;
-      revenue_share_bps: number | null; currency: string;
+      revenue_share_bps: number | null; currency: string; status: string;
     }>();
     if (!licence) return c.json({ error: 'not_found' }, 404);
+
+    // A HELD OR INACTIVE LICENCE DOES NOT GET A NEW CLAIM. Suspension freezes
+    // the subsidiary's obligations; drawing while it is held would bill against
+    // a party HQ has already told to stop trading.
+    if (licence.status !== 'active') {
+      return c.json({
+        error: 'licence_not_active',
+        message: `${licence.licence_ref} is ${licence.status}, so no new statement can be drawn for it. `
+          + 'Reactivate the licence first, or void an existing draft if the period should not be claimed.',
+      }, 409);
+    }
 
     // A LICENCE WITH NO AGREED SHARE CANNOT BE BILLED. Treating a null share
     // as 0% would draw a statement for nothing and file it as settled.
@@ -278,6 +295,9 @@ r.patch('/statements/:uid', async (c) => {
     // transaction — only once every field the request carries has passed.
     const writes: D1PreparedStatement[] = [];
     const now = nowIso();
+    const complete = statementComplete(row);
+    let voidNoteForAudit: string | null = null;
+    let auditPaidInFull = false;
 
     if (b?.paid_cents !== undefined) {
       const paid = cents(b.paid_cents);
@@ -290,6 +310,16 @@ r.patch('/statements/:uid', async (c) => {
           error: 'over_payment',
           message: `${paid} cents is more than the ${row.owed_cents} this statement claims. `
             + 'If the owed figure is wrong, void the statement and draw it again.',
+        }, 409);
+      }
+      // A FLOOR SETTLED AS A TOTAL. Recording the full owed figure on an
+      // incomplete statement files a partial trade as invoiced in full.
+      if (row.owed_cents > 0 && paid === row.owed_cents && !complete) {
+        return c.json({
+          error: 'incomplete_statement',
+          message: 'This owed figure is a floor — some streams were not fully reported. '
+            + 'Record a partial payment or void and re-draw once reporting is complete; '
+            + 'it cannot be marked paid in full.',
         }, 409);
       }
       writes.push(
@@ -321,6 +351,23 @@ r.patch('/statements/:uid', async (c) => {
       if (!['draft', 'issued', 'paid', 'void'].includes(next)) {
         return c.json({ error: 'bad_status' }, 400);
       }
+      if (next === 'void') {
+        voidNoteForAudit = str(b?.void_note, 500);
+        if (voidNoteForAudit.length < 10) {
+          return c.json({
+            error: 'void_note_required',
+            message: 'Voiding a statement must say why — at least ten characters.',
+          }, 400);
+        }
+      }
+      if (next === 'paid' && !complete) {
+        return c.json({
+          error: 'incomplete_statement',
+          message: 'This owed figure is a floor — some streams were not fully reported. '
+            + 'It cannot be marked paid in full until reporting is complete or the statement is voided.',
+        }, 409);
+      }
+      if (next === 'paid' && complete) auditPaidInFull = true;
       writes.push(
         c.env.DB.prepare(
           `UPDATE subsidiary_statements SET status = ?, updated_at = ? WHERE uid = ?`,
@@ -330,6 +377,32 @@ r.patch('/statements/:uid', async (c) => {
     if (!writes.length) return c.json({ error: 'nothing_to_update' }, 400);
 
     await c.env.DB.batch(writes);
+
+    if (voidNoteForAudit) {
+      await logAdminAction(c.env, admin.id, admin.email, 'subsidiary_statement_void', {
+        statement_uid: uid,
+        licence_uid: row.licence_uid,
+        period: row.period,
+        void_note: voidNoteForAudit,
+        prior_status: row.status,
+      });
+    } else if (auditPaidInFull) {
+      await logAdminAction(c.env, admin.id, admin.email, 'subsidiary_statement_paid', {
+        statement_uid: uid,
+        licence_uid: row.licence_uid,
+        period: row.period,
+        owed_cents: row.owed_cents,
+        currency: row.currency,
+      });
+    } else if (b?.disputed_cents !== undefined && cents(b.disputed_cents) > 0) {
+      await logAdminAction(c.env, admin.id, admin.email, 'subsidiary_statement_dispute', {
+        statement_uid: uid,
+        licence_uid: row.licence_uid,
+        period: row.period,
+        disputed_cents: cents(b.disputed_cents),
+        dispute_note: str(b?.dispute_note, 500),
+      });
+    }
 
     const after = await c.env.DB.prepare('SELECT * FROM subsidiary_statements WHERE uid = ?')
       .bind(uid).first<StatementRow>();

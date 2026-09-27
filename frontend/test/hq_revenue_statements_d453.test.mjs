@@ -28,6 +28,7 @@ const text = (h) => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
 const LICENCES = [
   { uid: 'lic_fr', licence_ref: 'AXL-FR', brand_name: 'France', revenue_share_bps: 3500, status: 'active' },
+  { uid: 'lic_s', licence_ref: 'AXL-S', brand_name: 'Paused', revenue_share_bps: 3500, status: 'suspended' },
   { uid: 'lic_x', licence_ref: 'AXL-X', brand_name: 'Untermed', revenue_share_bps: null, status: 'active' },
 ];
 
