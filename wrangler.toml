@@ -465,6 +465,9 @@ GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME  = "StudioOS"
 ENVIRONMENT       = "production"
 USE_CF_QUEUE      = "true"
+# Set at deploy time by cloudflare-worker-deploy.yml (--var WORKER_DEPLOY_VERSION).
+# branchOps health returns it so HQ can persist licence_deployments.last_version.
+WORKER_DEPLOY_VERSION = ""
 # Task #4 (CG) — see top-level [vars] for the rationale. Mirrored here
 # because Wrangler env tables don't inherit from the top-level [vars].
 CF_AI_GATEWAY_SLUG_ADVISOR     = "advisor-ongoing"

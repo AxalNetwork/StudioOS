@@ -1,0 +1,1 @@
+function e(e){return e?e.version_display?String(e.version_display):e.live_state===`ok`&&e.live?.deploy_version?String(e.live.deploy_version):e.last_version?String(e.last_version):null:null}var t=`No deploy version is stamped on this Worker yet. HQ and branch deploy workflows set WORKER_DEPLOY_VERSION at deploy time.`;export{e as n,t};

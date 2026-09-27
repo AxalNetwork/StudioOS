@@ -2461,6 +2461,9 @@ export const api = {
   adminCohortApplications: () => request('/admin/cohort/applications'),
   adminCohortAppSettings: (payload) => request('/admin/cohort/applications/settings', { method: 'POST', body: JSON.stringify(payload) }),
   adminCohortApplicantDecide: (applicantId, payload) => request(`/admin/cohort/applications/${applicantId}/decide`, { method: 'POST', body: JSON.stringify(payload) }),
+  // D383 — the partner interview on an applicant (schedule replaces the live one).
+  adminCohortScheduleInterview: (applicantId, payload) => request(`/admin/cohort/applications/${applicantId}/interview`, { method: 'POST', body: JSON.stringify(payload) }),
+  adminCohortCancelInterview: (applicantId) => request(`/admin/cohort/applications/${applicantId}/interview/cancel`, { method: 'POST' }),
   adminCohortForceProceed: (cycleId, payload) => request(`/admin/cohort/applications/cycles/${cycleId}/force-proceed`, { method: 'POST', body: JSON.stringify(payload) }),
   adminCohortAppNotifications: (cycleId) => request(`/admin/cohort/applications/notifications${cycleId ? `?cycle_id=${cycleId}` : ''}`),
   adminCohortAppEvents: (cycleId) => request(`/admin/cohort/applications/events${cycleId ? `?cycle_id=${cycleId}` : ''}`),
@@ -3221,7 +3224,6 @@ export const api = {
     request(`/data-room/${encodeURIComponent(projectUid)}/grants`, { method: 'POST', body: JSON.stringify(data || {}) }),
   dataRoomRevoke: (projectUid, uid) =>
     request(`/data-room/${encodeURIComponent(projectUid)}/grants/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
-  dataRoomsSharedWithMe: () => request('/data-room/shared'),
 
   // Task #55 — the advisor grant. A founder opens one project to one named
   // advisor, scope by scope; the advisor reads it back through /shared/*.
@@ -3542,7 +3544,6 @@ export const api = {
     request(`/admin/licences/${encodeURIComponent(uid)}/renew`, { method: 'POST', body: JSON.stringify(data || {}) }),
   licenceTerminate: (uid, note) =>
     request(`/admin/licences/${encodeURIComponent(uid)}/terminate`, { method: 'POST', body: JSON.stringify({ note }) }),
-  dataRoomShared: (projectUid) => request(`/data-room/shared/${encodeURIComponent(projectUid)}`),
   dataRoomDownload: (projectUid, uid) =>
     request(`/data-room/shared/${encodeURIComponent(projectUid)}/files/${encodeURIComponent(uid)}/download`, { method: 'POST' }),
   // getCapTableByProject is NOT redeclared here. It was, and this copy — the
@@ -4878,7 +4879,10 @@ export const api = {
     // The AI band every Research and Network artboard ends with (migration
     // 221). `surface` is the zone key and is allow-listed in the worker, so a
     // page that has not mounted the band cannot spend on it.
-    zoneDrafts: (surface) => request(`/research/drafts?surface=${encodeURIComponent(surface)}`),
+    // `scopeKey` narrows the read to one record's drafts (one data room), so a
+    // page about one record never shows a draft written about another.
+    zoneDrafts: (surface, scopeKey) => request(`/research/drafts?surface=${encodeURIComponent(surface)}${
+      scopeKey !== undefined ? `&scope_key=${encodeURIComponent(scopeKey)}` : ''}`),
     zoneDraftRun: (surface, scopeKey) => request('/research/drafts', {
       method: 'POST', body: JSON.stringify({ surface, ...(scopeKey ? { scope_key: scopeKey } : {}) }),
     }),
@@ -5322,6 +5326,13 @@ export const spinoutLab = {
   // `lib/spinoutLabArsenal.js`; a route serving those too would be a store
   // invented so a page could look dynamic.
   brief: () => request('/spinout-lab/brief'),
+  // D383 — the caller's own application lifecycle. No id in any path: each
+  // acts on the signed-in account's draft or latest application only.
+  applyDraft: () => request('/spinout-lab/apply/draft'),
+  saveApplyDraft: (answers) => request('/spinout-lab/apply/draft', { method: 'PUT', body: JSON.stringify({ answers }) }),
+  discardApplyDraft: () => request('/spinout-lab/apply/draft', { method: 'DELETE' }),
+  withdrawApplication: () => request('/spinout-lab/apply/withdraw', { method: 'POST' }),
+  requestInterviewReschedule: (reason) => request('/spinout-lab/apply/interview/reschedule', { method: 'POST', body: JSON.stringify({ reason }) }),
   // Signed in only — which cohort companies cleared which gate, and when.
   // Deliberately gate-level and not milestone-level: `week` is already public
   // on /cohort, so this adds a timestamp to a transition whose state is

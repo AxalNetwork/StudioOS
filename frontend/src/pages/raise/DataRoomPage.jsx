@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import {
-  FolderPlus, Upload, Trash2, ShieldCheck, ShieldAlert, Users, Download,
-  FileText, Folder, Loader2, X,
+  FolderPlus, Upload, Trash2, ShieldCheck, ShieldAlert, Users,
+  FileText, Folder, Loader2,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
@@ -12,9 +12,9 @@ import AdvisorGrantSection from './AdvisorGrantSection';
  * Data room — /raise/data-room. One route, two audiences.
  *
  * A founder sees their own project's room: folders, files, who it is shared
- * with, and what those people opened. An investor sees the rooms shared with
- * them. The role decides which, so there is no second top-level route and no
- * page that shows two companies at once.
+ * with, and what those people opened. An investor's side moved to Research ·
+ * Diligence (D311): `/research/diligence/:grantUid` is the room read by the
+ * grant they hold, and App.jsx redirects an investor here to that list.
  *
  * Backed by routes/data_room.ts on migration 184.
  *
@@ -274,108 +274,6 @@ function FounderRoom({ projects, initialProjectUid }) {
   );
 }
 
-/* ------------------------------------------------------------------ *
- * Investor                                                            *
- * ------------------------------------------------------------------ */
-
-function SharedRooms() {
-  const [rooms, setRooms] = useState(null);
-  const [open, setOpen] = useState(null);
-  const [detail, setDetail] = useState(null);
-  const [err, setErr] = useState('');
-
-  useEffect(() => {
-    api.dataRoomsSharedWithMe()
-      .then((d) => setRooms(d?.items || []))
-      .catch((e) => { reportError('data_room_shared_failed', e); setErr(e?.message || 'Could not load'); });
-  }, []);
-
-  useEffect(() => {
-    if (!open) { setDetail(null); return; }
-    let cancelled = false;
-    api.dataRoomShared(open)
-      .then((d) => { if (!cancelled) setDetail(d); })
-      .catch((e) => { if (!cancelled) setErr(e?.message || 'Could not open that room'); });
-    return () => { cancelled = true; };
-  }, [open]);
-
-  async function download(fileUid) {
-    setErr('');
-    try {
-      const res = await api.dataRoomDownload(open, fileUid);
-      if (res?.url) window.open(res.url, '_blank', 'noopener,noreferrer');
-    } catch (e) { setErr(e?.message || 'Could not start that download'); }
-  }
-
-  if (err) return <div className="text-sm text-red-600 dark:text-red-400">{err}</div>;
-  if (!rooms) return <p className="text-sm text-gray-500">Loading…</p>;
-  if (rooms.length === 0) {
-    return <Empty title="No data rooms have been shared with you." body="A founder shares a room from their own Raise workspace." />;
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="rounded-xl border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
-        {rooms.map((rm) => (
-          <button key={rm.project_uid} type="button" onClick={() => setOpen(rm.project_uid)}
-            className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50">
-            <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{rm.project_name}</span>
-            <span className="text-xs text-gray-500 whitespace-nowrap">{rm.file_count} files</span>
-          </button>
-        ))}
-      </div>
-
-      {open && detail && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <button aria-label="Close" onClick={() => setOpen(null)} className="flex-1 bg-black/30" />
-          <div className="w-full max-w-lg overflow-y-auto bg-white dark:bg-gray-900 shadow-xl">
-            <div className="sticky top-0 flex items-start justify-between gap-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-4">
-              <div>
-                <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{detail.project?.name}</h2>
-                <p className="mt-0.5 text-xs text-gray-500">
-                  {detail.nda_signed ? 'NDA signed — you can see everything shared with you.' : 'No NDA on file.'}
-                </p>
-              </div>
-              <button onClick={() => setOpen(null)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
-            </div>
-            <div className="space-y-4 p-5">
-              {(detail.files || []).length === 0 ? (
-                <Empty title="Nothing shared here yet." />
-              ) : (
-                <div className="rounded-xl border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
-                  {detail.files.map((f) => (
-                    <div key={f.uid} className="flex items-center gap-3 p-3">
-                      <FileText size={15} className="shrink-0 text-gray-400" />
-                      <span className="flex-1 truncate text-sm text-gray-900 dark:text-gray-100">{f.name}</span>
-                      <span className="text-xs text-gray-500 tabular-nums">{fmtBytes(f.size_bytes)}</span>
-                      <button type="button" onClick={() => download(f.uid)}
-                        className="inline-flex items-center gap-1 text-xs text-violet-700 dark:text-violet-300 hover:underline">
-                        <Download size={13} /> Download
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {detail.withheld_behind_nda > 0 && (
-                <p className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-300">
-                  {detail.withheld_behind_nda} more {detail.withheld_behind_nda === 1 ? 'document is' : 'documents are'} behind
-                  an NDA. Sign one with this company and they appear here.
-                </p>
-              )}
-
-              <p className="text-[11px] text-gray-500">
-                Download links are issued to you alone, work once, and expire after two minutes.
-                The founder can see which documents you opened. Files are not watermarked.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ------------------------------------------------------------------ */
 
 export default function DataRoomPage({ user }) {
@@ -392,7 +290,10 @@ export default function DataRoomPage({ user }) {
   }, [isFounder]);
 
   const body = useMemo(() => {
-    if (!isFounder) return <SharedRooms />;
+    // An investor's rooms live under Research · Diligence (D311); App.jsx
+    // redirects them before this page mounts, and this is the same answer if
+    // anything renders the page for them anyway.
+    if (!isFounder) return <Navigate to="/research/diligence" replace />;
     if (projects === null) return <p className="text-sm text-gray-500">Loading…</p>;
     if (projects.length === 0) {
       return <Empty title="No project yet." body="A data room belongs to a venture — create one first." />;

@@ -13,8 +13,10 @@ test('deployments persist and display last_version', () => {
   const route = read('cloudflare-worker/src/routes/admin_deployments.ts');
   assert.match(route, /last_version/);
   assert.match(route, /deploy_version/);
+  assert.match(route, /version_display/);
   assert.match(read('frontend/src/pages/hq/PlatformPage.jsx'), /hq-deployment-version-/);
   assert.match(read('frontend/src/pages/admin/AdminLicences.jsx'), /deploy-last-version/);
+  assert.match(read('frontend/src/lib/deployVersion.js'), /deployVersionDisplay/);
 });
 
 test('licence ledger and HQ Home carry All / Axal / White-label filters', () => {
