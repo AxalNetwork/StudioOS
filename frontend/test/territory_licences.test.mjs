@@ -329,6 +329,14 @@ test('no subsidiary from the canvas is seeded', () => {
   assert.ok(!/INSERT INTO territory_licences/.test(read(SQL)), 'the migration seeds no rows');
 });
 
+test('a failed ledger read is unreadable, not an empty ledger', () => {
+  const code = codeOnly(read(PAGE));
+  assert.match(code, /const UNAVAILABLE = Symbol\('unavailable'\)/);
+  assert.match(code, /setData\(UNAVAILABLE\)/, 'a failed licences read must not become { items: [] }');
+  assert.match(code, /<Unreadable what="The licence ledger"/);
+  assert.match(code, /items\.length === 0 \?/, 'the empty state is gated on a successful read with zero rows');
+});
+
 test('the empty ledger explains itself', () => {
   assert.match(read(PAGE), /No licences have been issued/i);
   assert.match(read(PAGE), /inventing one would misrepresent/i,

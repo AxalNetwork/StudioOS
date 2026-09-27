@@ -32103,7 +32103,7 @@ surface); a cached-input cost read on Research (no store).
   failed funds read shown as empty, a null overlap printed as a number, the
   batch no longer re-run on retry.
 - Both typechecks, `check-decision-ids`, `check-folder-docs`,
-  `check-api-drift`, `check-unused-imports` and `check-dark-mode` exit 0. Root
+  `check-api-drift`,   `check-unused-imports` and `check-dark-mode` exit 0. Root
   `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser probe.
 
 ## D430
@@ -32187,3 +32187,35 @@ the enrolment batch dropping the `auth_totp` write.
 
 No migration, no route, no `api.js` method, no `frontend/src` change, so
 `docs/` is untouched.
+
+## D450
+
+**HQ consoles tell the truth about what was read.** Wave 8, Session 16, item 1
+(WP1). No migration.
+
+**Defects closed.**
+- `AdminLicences.jsx` treated a failed `api.licences()` as `{ items: [] }` and
+  printed "No licences have been issued." — indistinguishable from an empty
+  ledger. Failed reads now use `UNAVAILABLE` and `<Unreadable>`; the empty
+  state is gated on a successful read with zero rows. Territory holdings that
+  fail to load surface their own banner instead of failing silently.
+- `admin_licences.ts` `seats_used_reason` no longer claims "no account carries
+  a licence yet" as the blocker for utilisation; it names U1 on this tier and
+  points at branch reads on Home. Hydrate is untouched (`routes/licence.ts`
+  still reads it).
+- `HqHomePage.jsx`: header and rail copy no longer imply per-subsidiary figures
+  are blocked only by U1 when branch fan-out answers accounts, seats used and
+  backlog; the tenant switcher note names View-as; the Seats licensed tile sums
+  `seats_used` from branches that answered; backlog cells show `oldest_at` when
+  sent.
+- `SecurityPage.jsx`: failed overview and governance reads render `<Unreadable>`,
+  not `<Unrecorded>`; the sessions zone links per-account revoke to HQ · Team
+  (D165).
+- `HqSupportPage.jsx`: escalation subjects show `relation` from
+  `hq_escalations` or Not recorded with reason; `admin_hq_support.ts` passes
+  `relation` through.
+- `pages/hq/README.md` and `ROUTE_MAP.md` corrected (including the false
+  "no `ticket_sync_events` table" sentence).
+
+**Tests.** `hq_home.test.mjs` and `territory_licences.test.mjs` re-aimed at
+properties, not stale refusal copy; new `hq_honesty_sweep_d450.test.mjs`.
