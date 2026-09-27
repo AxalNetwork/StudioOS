@@ -228,6 +228,26 @@ export function claimState(
   return end && end < today ? 'expired' : 'issued';
 }
 
+/**
+ * Whole days from `today` until an issued claim expires, or null (D413).
+ *
+ * Null for a claim with no expiry (an open-ended offer gives an open-ended
+ * claim) and for one that is no longer `issued` — a redeemed claim has nothing
+ * left to lapse. Served on each claim so My perks never counts days itself: the
+ * "Expiring in 30d" figure and the "N days left" line read the same number,
+ * against the same PERK_EXPIRING_WITHIN_DAYS window the partner zone uses.
+ */
+export function claimDaysLeft(
+  claim: { status?: string | null; expires_at?: string | null },
+  today = todayIso(),
+): number | null {
+  if (claimState(claim, today) !== 'issued') return null;
+  const end = String(claim?.expires_at || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(end)) return null;
+  const ms = Date.parse(`${end}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`);
+  return Math.round(ms / 86_400_000);
+}
+
 /** Balance is derived. There is no balance column, on purpose. */
 async function balanceOf(env: Env, userId: number): Promise<number> {
   const row = await env.DB.prepare(
@@ -311,6 +331,25 @@ function affordability(perk: PerkRow, user: any, balance: number, today = todayI
   };
 }
 
+/**
+ * What a founder might expect around a claim of THIS listing that nothing does
+ * (D413), with the sentence the claim modal prints.
+ *
+ * AN INTRODUCTION IS NOT MADE. The canvas's "Introduction" method reads "you
+ * contact them", and the page used to tell a founder the partner "has your
+ * details and will be in touch". The partner does not: GET /partner/:uid/claims
+ * withholds who claimed, because no founder's consent to share their company
+ * with a partner is recorded. So the founder carries the claim reference to the
+ * partner, and the partner marks it redeemed by that reference. A paid
+ * engagement ('money') has the same gap — see listingAbsences.
+ */
+const PARTNER_NOT_TOLD = 'The partner is not told who claimed: no founder has consented to share their company with a partner, and nothing records that consent yet. Give them your claim reference when you get in touch.';
+function listingAbsences(p: Pick<PerkRow, 'fulfilment' | 'kind'>): Record<string, string> {
+  // A paid engagement has the same gap: the partner invoices offline, and
+  // cannot invoice someone it is not told about.
+  return p.fulfilment === 'intro' || p.kind === 'money' ? { partner_contact: PARTNER_NOT_TOLD } : {};
+}
+
 const publicPerk = (p: PerkRow, today = todayIso()) => ({
   uid: p.uid, partner_name: p.partner_name, category: p.category, offer: p.offer,
   blurb: p.blurb, kind: p.kind, credits: p.credits, required_tier: p.required_tier,
@@ -370,15 +409,32 @@ r.get('/mine', async (c) => {
          FROM perk_credit_ledger WHERE user_id = ?
         ORDER BY created_at DESC, id DESC LIMIT 200`,
     ).bind(user.id).all<any>();
-    return c.json({
-      items: (claims.results || []).map((x: any) => ({
+    const items = (claims.results || []).map((x: any) => {
+      const daysLeft = claimDaysLeft(x, today);
+      return {
         ...x,
         state: claimState(x, today),
         can_rate: isClaimant(user) && x.status === PERK_RATING_REQUIRES,
-      })),
+        // D413 — counted here, once, so the page's "N days left" and its
+        // "Expiring in 30d" tile cannot disagree with each other or with the
+        // partner zone's window.
+        days_left: daysLeft,
+        expiring: daysLeft !== null && daysLeft <= PERK_EXPIRING_WITHIN_DAYS,
+      };
+    });
+    return c.json({
+      items,
       ledger: ledger.results || [],
       balance: await balanceOf(c.env, user.id),
       allowance_configured: await allowanceConfigured(c.env),
+      // The three My perks tiles (D413). Over every claim returned, never a
+      // filtered view; `credits_spent` sums what each claim recorded spending.
+      stats: {
+        claimed: items.length,
+        credits_spent: items.reduce((a: number, x: any) => a + Number(x.credits_spent), 0),
+        expiring: items.filter((x: any) => x.expiring).length,
+        expiring_within_days: PERK_EXPIRING_WITHIN_DAYS,
+      },
       // What the canvas draws around a claim that nothing does yet, with the
       // sentence the page prints (D412).
       absent: {
@@ -396,12 +452,14 @@ r.get('/partner', async (c) => {
     const companyId = await activeCompanyFor(c, user);
     const rows = await (companyId === null
       ? c.env.DB.prepare(
-          `SELECT p.*, (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id) AS claim_count
+          `SELECT p.*, (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id) AS claim_count,
+                  (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id AND x.status = 'redeemed') AS redeemed_count
              FROM perks p WHERE p.partner_user_id = ?
             ORDER BY p.created_at DESC LIMIT 200`,
         ).bind(user.id)
       : c.env.DB.prepare(
-          `SELECT p.*, (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id) AS claim_count
+          `SELECT p.*, (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id) AS claim_count,
+                  (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id AND x.status = 'redeemed') AS redeemed_count
              FROM perks p
             WHERE p.partner_user_id = ? AND (p.company_id = ? OR p.company_id IS NULL)
             ORDER BY p.created_at DESC LIMIT 200`,
@@ -421,7 +479,16 @@ r.get('/partner', async (c) => {
         ? String(p.ends_at).slice(0, 10)
         : null,
     }));
-    return c.json({ items, expiring_within_days: PERK_EXPIRING_WITHIN_DAYS });
+    return c.json({
+      items,
+      expiring_within_days: PERK_EXPIRING_WITHIN_DAYS,
+      // D413 — the canvas's "What review looks at" panel lists four criteria.
+      // None of them is written down anywhere a reviewer reads or this route
+      // enforces, so the zone prints this instead of the canvas's four.
+      absent: {
+        review_criteria: 'What review looks at is not written down yet: an Axal reviewer approves or declines each listing, and a decline says why.',
+      },
+    });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -559,12 +626,23 @@ r.get('/partner/:uid/stats', async (c) => {
       // founders reached — a count, never who they are (below).
       founders_reached: claimed,
       value_cents: perk.value_cents ?? null,
+      // D413 — the canvas's "Cost per founder": the value you gave away,
+      // counted only where it was redeemed, spread over everyone the listing
+      // reached. Integer cents, and only where both inputs exist.
+      cost_per_founder_cents: perk.value_cents !== null && perk.value_cents !== undefined && claimed > 0
+        ? Math.round((perk.value_cents * redeemed) / claimed)
+        : null,
       rating: { count: Number(rating?.n) || 0, average: Number(rating?.n) > 0 ? Math.round(Number(rating?.avg) * 10) / 10 : null },
       claim_cap: perk.claim_cap,
       remaining: perk.claim_cap === null ? null : Math.max(0, perk.claim_cap - claimed),
       absent: {
         founders_list: 'Which founders claimed is not shown to partners: no founder has consented to share their company with a partner, and nothing records that consent yet.',
         card_views: 'Card impressions are not counted; views are detail opens, one per viewer per day.',
+        bd_console: 'Claims do not sync anywhere as leads: there is no BD console, and no founder has consented to be passed to a partner as one.',
+        ...(claimed === 0 ? { redemption_rate: 'No claims yet, so there is no rate to show.' } : {}),
+        ...(perk.value_cents === null || perk.value_cents === undefined
+          ? { cost_per_founder: 'This listing states no cash value, so there is nothing to spread across the founders it reached.' }
+          : claimed === 0 ? { cost_per_founder: 'No claims yet, so there is no one to spread the value across.' } : {}),
       },
     });
   } catch (e) { return mapError(c, e); }
@@ -780,6 +858,7 @@ r.get('/:uid', async (c) => {
       my_rating: myRating?.stars ?? null,
       can_rate: isClaimant(user) && claim?.status === PERK_RATING_REQUIRES,
       ...affordability(perk, user, balance),
+      absent: listingAbsences(perk),
     });
   } catch (e) { return mapError(c, e); }
 });
