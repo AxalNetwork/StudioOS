@@ -376,7 +376,11 @@ export default function AdvisorBucketRoutes({ preview = false }) {
     <WorkspaceShell
       role="advisor"
       title={isRoot ? bucketTitle(bucket) : zoneHead?.h1}
-      scope={prefix === '/cohorts' ? 'One cohort' : 'One practice'}
+      // NO `scope` PROP. It read `scope={prefix === '/cohorts' ? 'One cohort'
+      // : 'One practice'}` — a conditional literal the frame contract's
+      // attribute-only pattern missed. The shell fills that slot from
+      // `ActiveCompanyContext`, so the badge names the company instead of
+      // restating the rule.
       intro={zoneHead?.sub || INTRO[prefix]}
       activeSlug={isRoot ? null : undefined}
       rail={RAIL && (

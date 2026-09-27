@@ -1114,6 +1114,13 @@ export default function PlatformPage() {
                           {d.live.detail || 'The branch answered and reported its database failing, without saying why.'}
                         </p>
                       )}
+                      {(d.last_version || d.live?.deploy_version) && (
+                        <p className="mt-0.5 text-[11px] text-axal-faint" data-testid={`hq-deployment-version-${d.code}`}>
+                          Deployed version{' '}
+                          <code className="font-mono">{d.last_version || d.live.deploy_version}</code>
+                          {d.last_health_at ? ` · last health ${day(d.last_health_at)}` : ''}
+                        </p>
+                      )}
                       <div className="mt-0.5 text-[11px] text-axal-faint">
                         {d.d1_name}
                         {residencyLine(d) ? ` · ${residencyLine(d)}` : ''}

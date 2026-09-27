@@ -79,8 +79,12 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   'deals/commit': [
-    { label: 'Export minutes', unbuilt: 'no minutes are stored to export; ic_meetings carries an agenda, written before the room rather than after it', hover: 'No minutes are stored — the meeting record is its agenda, written before the room, not after it.' },
-    { label: 'Add condition', unbuilt: 'conditions are not a stored record — the memo and terms are free text, and neither can block a later stage' },
+    // BOTH WENT LIVE WITH D461 (migration 334). Minutes live on the meeting
+    // linked to the deal — the export writes what was recorded and the page
+    // disables it, with the reason, when nothing has been. A condition is its
+    // own row on the decision, and an open one is what Closing blocks on.
+    { label: 'Export minutes', kind: 'handler', handler: 'exportMinutes' },
+    { label: 'Add condition', kind: 'handler', handler: 'addCondition' },
     // THE SCREEN THIS ROW WAS WAITING FOR. It said, correctly, that closing a
     // vote is served by the API — `PUT /api/ic/:uid` with a `decision` forces
     // `decided` and stamps `decided_at` — and that no screen offered the form.
@@ -94,16 +98,15 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Close vote', kind: 'handler', handler: 'closeVote' },
   ],
   'deals/closing': [
-    // WAS: 'no closing templates are stored'. False — legal_templates ships the
-    // SAFE, stock-purchase and subscription agreements with merge fields and
-    // versions. The gap is one layer above them: nothing stores a closing
-    // CHECKLIST for a template to be applied to.
-    { label: 'Apply template', unbuilt: 'the SAFE, stock-purchase and subscription templates are stored; what is missing is a closing checklist for one to be applied to', hover: 'The templates are stored; what is missing is a closing checklist to apply one to.' },
-    { label: 'Export packet', unbuilt: 'the documents and signature envelopes are stored, but nothing assembles them into a packet' },
-    // WAS: 'wires are not a stored record'. True, and imprecise enough to cost
-    // the next reader a lookup — capital_calls DOES carry an amount and a paid
-    // date. It is the other direction.
-    { label: 'Record wire', unbuilt: 'no transfer OUT to a company is recorded; capital_calls is an LP paying into the fund, which is the other direction', hover: 'No transfer out to a company is recorded; what the fund records is capital coming in from an LP.' },
+    // ALL THREE WENT LIVE WITH D462 (migration 335). The checklist store is
+    // what the closing templates were always waiting on; the packet is the
+    // index of executed envelopes the page already reads; and deal_transfers
+    // records the wire OUT — the direction capital_calls never covered. An
+    // open Commit condition refuses the transfer (409), which is the
+    // conditions store doing its job.
+    { label: 'Apply template', kind: 'handler', handler: 'applyTemplate' },
+    { label: 'Export packet', kind: 'handler', handler: 'exportPacket' },
+    { label: 'Record wire', kind: 'handler', handler: 'recordWire' },
   ],
 
   // ── Fund ─────────────────────────────────────────────────────────────────
@@ -171,15 +174,13 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Add follow-on', unbuilt: 'a follow-on is a round on the position itself, and recording one is an admin write — this book is the investor’s read of it', hover: 'A follow-on is recorded as an admin write; this book is the investor’s read of it.' },
   ],
   'portfolio/updates': [
-    // CHECKED, AND THE OLD REASON WAS TOO BROAD BY ONE CALL. "Nothing on this
-    // desk sends mail" reads as: this route never reaches a mail path. It does
-    // — `notifyProjectFollowers` runs on create and on submit, and `notify()`
-    // dispatches to email. What it does NOT do is address the company that
-    // stayed silent: the fan-out fires when an update ARRIVES, goes to the
-    // startup's followers, and excludes the author. So the chase is genuinely
-    // unbuilt, for a narrower reason than the one that was written down, and
-    // the narrower reason is the one that stays true if a chase is ever built.
-    { label: 'Chase all overdue', unbuilt: 'nothing here reaches a company that stayed silent — the only outbound on this desk fires when an update arrives, and it notifies the startup’s followers', hover: 'Nothing here reaches a company that stayed silent.' },
+    // LIVE WITH D464 (migration 337). The old reason was right when written —
+    // the only outbound on this desk fired when an update ARRIVED — and the
+    // chase is the other direction: the page hands the route its own overdue
+    // set, the route re-checks the tenancy of each id, logs one row per
+    // company, and notifies the founder. The notification type's settings row
+    // is Session 4's to add.
+    { label: 'Chase all overdue', kind: 'handler', handler: 'chaseOverdue' },
     // WAS 'no reminder rules are stored', which is true and describes a
     // different object. The rules this desk actually has are the KPI
     // definitions companies are held to, and they ARE stored — firm-wide,
@@ -210,7 +211,9 @@ export const INVESTOR_ZONE_ACTIONS = {
   // ── Network ──────────────────────────────────────────────────────────────
   'network/relationships': [
     { label: 'Add person', unbuilt: 'the contact form is not reachable from the investor Network desk' },
-    { label: 'Set reminders', unbuilt: 'no reminder store exists' },
+    // LIVE WITH D465 (migration 338): `partner_reminders` is the store, and a
+    // reminder surfaces on the desk when it is due — no notification fan-out.
+    { label: 'Set reminders', kind: 'handler', handler: 'setReminders' },
     { label: 'Export', kind: 'export' },
   ],
   'network/introductions': [

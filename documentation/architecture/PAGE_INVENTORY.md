@@ -39,7 +39,7 @@ canvas behind it still shows up here.
 | --- | --- | --- | --- |
 | Home | Studio | `/studio` | Investor LP Canvas |
 | Home | Spin-Out Lab | `/spinout-lab` | Explore the Spin-Out Lab, Fund Brief One-Pager |
-| Home | Deals | `/deals` | Deal Flow, Investor LP Canvas |
+| Home | Deals | `/deals` | Deal Flow, Investor LP Canvas, Pages · Investor Deals |
 | Home | Portfolio | `/portfolio` | Investor LP Canvas |
 | Home | Axal VC Fund | `/spinout-lab/investor-workspace` | Fund Brief One-Pager, LP Investor Workspace |
 | Home | Fund | `/funds` | Investor LP Canvas, Pages · Funds and fund research, Pages · Investor Fund |
@@ -79,7 +79,7 @@ canvas behind it still shows up here.
 | Home | Studio | `/exploring` | — (no canvas; shipped ahead of the design corpus) |
 | Home | Spin-Out Lab | `/spinout-lab` | — (no canvas; shipped ahead of the design corpus) |
 | Home | Messages | `/messages` | — (no canvas; shipped ahead of the design corpus) |
-| Account | My Profile | `/profile` | — (no canvas; shipped ahead of the design corpus) |
+| Account | My Profile | `/account` | — (no canvas; shipped ahead of the design corpus) |
 
 ## `super_admin` — 11 destinations in 1 group
 
@@ -138,7 +138,7 @@ rather than merely absent.
 - exploring · Home · Studio (`/exploring`)
 - exploring · Home · Spin-Out Lab (`/spinout-lab`)
 - exploring · Home · Messages (`/messages`)
-- exploring · Account · My Profile (`/profile`)
+- exploring · Account · My Profile (`/account`)
 - super_admin · HQ · Revenue (`/admin/revenue`)
 - super_admin · HQ · Content (`/admin/content`)
 - super_admin · HQ · Platform (`/admin/platform`)

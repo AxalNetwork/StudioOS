@@ -260,7 +260,7 @@ test('no note asserts a security fact while the overview is unreadable', () => {
       `${fn} says "Loading…" under a failed read — the unreadable state must be checked first`);
   }
   // And when the store itself could not be read, the card says the server's reason.
-  assert.match(src, /<Unrecorded \/> — \{block\.reason\}/, 'an unreadable sanctions store is not given its reason');
+  assert.match(src, /<Unrecorded reason=\{block\.reason\} \/>/, 'an unreadable sanctions store is not given its reason');
   // The rail's entries are [title, detail] pairs, the shape WorkerRail destructures.
   const m = /unavailable=\{\[([\s\S]*?)\]\}/.exec(src);
   assert.ok(m, 'the rail lists what is unavailable');

@@ -3,6 +3,7 @@ import type { Env } from '../types';
 import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
+import { newUid } from './_t13t14t15_helpers';
 
 const partnernet = new Hono<{ Bindings: Env }>();
 
@@ -92,6 +93,33 @@ async function ensureSchema(env: Env) {
       FOREIGN KEY (relationship_id) REFERENCES partner_relationships(id)
     )`,
     `CREATE INDEX IF NOT EXISTS idx_re_rel ON relationship_events(relationship_id, created_at)`,
+
+    // D465 — the interaction log and the reminders (migration 338). Runtime
+    // safety nets for the DECLARED tables (D235), in this file's own pattern.
+    `CREATE TABLE IF NOT EXISTS partner_interactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uid TEXT UNIQUE NOT NULL,
+      relationship_id INTEGER NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'note',
+      note TEXT,
+      interacted_at TEXT NOT NULL,
+      recorded_by INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_pint_rel ON partner_interactions(relationship_id, interacted_at)`,
+    `CREATE TABLE IF NOT EXISTS partner_reminders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uid TEXT UNIQUE NOT NULL,
+      relationship_id INTEGER NOT NULL,
+      remind_at TEXT NOT NULL,
+      note TEXT,
+      done INTEGER NOT NULL DEFAULT 0,
+      created_by INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      done_at TEXT
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_prem_rel ON partner_reminders(relationship_id, done, remind_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_prem_due ON partner_reminders(created_by, done, remind_at)`,
 
     // activity_logs may already exist from the legacy schema with columns
     // (action, details, actor, ...). The CREATE IF NOT EXISTS below covers
@@ -226,7 +254,8 @@ partnernet.get('/relationships', async (c) => {
   await ensureSchema(c.env);
   const sql = getSQL(c.env);
   const rows = await sql`
-    SELECT pr.*, ua.email as a_email, ua.name as a_name, ub.email as b_email, ub.name as b_name
+    SELECT pr.*, ua.email as a_email, ua.name as a_name, ua.role as a_role, ub.email as b_email, ub.name as b_name, ub.role as b_role,
+      (SELECT MAX(i.interacted_at) FROM partner_interactions i WHERE i.relationship_id = pr.id) as last_interaction_at
     FROM partner_relationships pr
     LEFT JOIN users ua ON ua.id = pr.partner_a_id
     LEFT JOIN users ub ON ub.id = pr.partner_b_id
@@ -235,9 +264,12 @@ partnernet.get('/relationships', async (c) => {
   `;
   await sql.end();
   const enriched = (rows as any[]).map(r => {
+    // The counterpart's role travels with the row: the investor Network desk's
+    // Founders chip narrows on it, and a name and email alone cannot say who
+    // on the other side of the tie is a founder.
     const other = r.partner_a_id === user.id
-      ? { id: r.partner_b_id, email: r.b_email, name: r.b_name }
-      : { id: r.partner_a_id, email: r.a_email, name: r.a_name };
+      ? { id: r.partner_b_id, email: r.b_email, name: r.b_name, role: r.b_role }
+      : { id: r.partner_a_id, email: r.a_email, name: r.a_name, role: r.a_role };
     return { ...r, metadata: safeJson(r.metadata, {}), other };
   });
   return c.json(enriched);
@@ -326,6 +358,120 @@ partnernet.get('/relationships/:id/events', async (c) => {
   const events = await sql`SELECT * FROM relationship_events WHERE relationship_id = ${id} ORDER BY created_at DESC LIMIT 100`;
   await sql.end();
   return c.json((events as any[]).map(e => ({ ...e, details: safeJson(e.details, {}) })));
+});
+
+// ---------------------------------------------------------------------------
+// D465 — the interaction log and the reminders (migration 338). The book's
+// cold flag reads the log's MAX, never a field someone edits; a reminder
+// surfaces on the desk when it is due (no notification fan-out).
+// ---------------------------------------------------------------------------
+
+/** The relationship the caller is a party to, or the refusal. */
+async function ownRelationship(c: any, id: number): Promise<any> {
+  const user = await requireAuth(c);
+  const rel: any = await c.env.DB.prepare('SELECT * FROM partner_relationships WHERE id = ?').bind(id).first();
+  if (!rel) return { error: c.json({ error: 'Not found' }, 404) };
+  if (user.role !== 'admin' && rel.partner_a_id !== user.id && rel.partner_b_id !== user.id) {
+    return { error: c.json({ error: 'Forbidden' }, 403) };
+  }
+  return { rel, user };
+}
+
+partnernet.post('/relationships/:id/interactions', async (c) => {
+  await ensureSchema(c.env);
+  const id = parseInt(c.req.param('id'));
+  const { rel, user, error } = await ownRelationship(c, id);
+  if (error) return error;
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const note = data?.note != null ? String(data.note).trim().slice(0, 2000) || null : null;
+  const kind = data?.kind != null ? String(data.kind).trim().slice(0, 60) || 'note' : 'note';
+  // The touch's date is supplied or is now — backdating is legitimate (logging
+  // last week's call), and the column is what the cold flag reads.
+  const interactedAt = data?.interacted_at != null && !Number.isNaN(new Date(String(data.interacted_at)).getTime())
+    ? new Date(String(data.interacted_at)).toISOString()
+    : new Date().toISOString();
+  const uid = newUid();
+  await c.env.DB.prepare(
+    'INSERT INTO partner_interactions (uid, relationship_id, kind, note, interacted_at, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).bind(uid, rel.id, kind, note, interactedAt, user.id, new Date().toISOString()).run();
+  const row = await c.env.DB.prepare('SELECT * FROM partner_interactions WHERE uid = ?').bind(uid).first();
+  return c.json({ item: row }, 201);
+});
+
+partnernet.get('/relationships/:id/interactions', async (c) => {
+  await ensureSchema(c.env);
+  const id = parseInt(c.req.param('id'));
+  const { rel, error } = await ownRelationship(c, id);
+  if (error) return error;
+  const rows = await c.env.DB.prepare(
+    `SELECT i.*, u.name AS recorded_by_name FROM partner_interactions i
+      LEFT JOIN users u ON u.id = i.recorded_by
+     WHERE i.relationship_id = ? ORDER BY i.interacted_at DESC LIMIT 200`
+  ).bind(rel.id).all();
+  return c.json({ items: rows.results || [] });
+});
+
+partnernet.post('/relationships/:id/reminders', async (c) => {
+  await ensureSchema(c.env);
+  const id = parseInt(c.req.param('id'));
+  const { rel, user, error } = await ownRelationship(c, id);
+  if (error) return error;
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const remindAt = data?.remind_at != null ? new Date(String(data.remind_at)) : null;
+  if (!remindAt || Number.isNaN(remindAt.getTime())) {
+    return c.json({ error: 'reminder_date_required', message: 'A reminder is a date — say when to re-surface the tie.' }, 400);
+  }
+  const note = data?.note != null ? String(data.note).trim().slice(0, 500) || null : null;
+  const uid = newUid();
+  await c.env.DB.prepare(
+    'INSERT INTO partner_reminders (uid, relationship_id, remind_at, note, done, created_by, created_at) VALUES (?, ?, ?, ?, 0, ?, ?)'
+  ).bind(uid, rel.id, remindAt.toISOString(), note, user.id, new Date().toISOString()).run();
+  const row = await c.env.DB.prepare('SELECT * FROM partner_reminders WHERE uid = ?').bind(uid).first();
+  return c.json({ item: row }, 201);
+});
+
+  // The caller's reminders, due first. `?all=` includes the done ones.
+partnernet.get('/reminders', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const includeDone = c.req.query('all') === '1';
+  // Two full literals, not an interpolated clause (this file's own rule, and
+  // check-sql-prepare's): every value reaching either is bound.
+  const rows = includeDone
+    ? await c.env.DB.prepare(
+      `SELECT r.*, ua.name AS a_name, ub.name AS b_name FROM partner_reminders r
+        LEFT JOIN partner_relationships pr ON pr.id = r.relationship_id
+        LEFT JOIN users ua ON ua.id = pr.partner_a_id
+        LEFT JOIN users ub ON ub.id = pr.partner_b_id
+       WHERE r.created_by = ?
+       ORDER BY r.remind_at ASC LIMIT 200`
+    ).bind(user.id).all()
+    : await c.env.DB.prepare(
+      `SELECT r.*, ua.name AS a_name, ub.name AS b_name FROM partner_reminders r
+        LEFT JOIN partner_relationships pr ON pr.id = r.relationship_id
+        LEFT JOIN users ua ON ua.id = pr.partner_a_id
+        LEFT JOIN users ub ON ub.id = pr.partner_b_id
+       WHERE r.created_by = ? AND r.done = 0
+       ORDER BY r.remind_at ASC LIMIT 200`
+    ).bind(user.id).all();
+  return c.json({ items: rows.results || [] });
+});
+
+partnernet.patch('/reminders/:uid', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const rem: any = await c.env.DB.prepare('SELECT * FROM partner_reminders WHERE uid = ?').bind(c.req.param('uid')).first();
+  if (!rem) return c.json({ error: 'Not found' }, 404);
+  if (rem.created_by !== user.id && user.role !== 'admin') return c.json({ error: 'Forbidden' }, 403);
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const done = data?.done === true ? 1 : 0;
+  await c.env.DB.prepare('UPDATE partner_reminders SET done = ?, done_at = ? WHERE id = ?')
+    .bind(done, done ? new Date().toISOString() : null, rem.id).run();
+  const row = await c.env.DB.prepare('SELECT * FROM partner_reminders WHERE id = ?').bind(rem.id).first();
+  return c.json({ item: row });
 });
 
 partnernet.post('/activity/log', async (c) => {

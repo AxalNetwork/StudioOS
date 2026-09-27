@@ -61,7 +61,8 @@ const SCHEMA = `
     status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL);
   CREATE TABLE spinout_moderation_cases (
     id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
-    status TEXT NOT NULL, reason_code TEXT NOT NULL, created_at TEXT NOT NULL);
+    status TEXT NOT NULL, reason_code TEXT NOT NULL, created_at TEXT NOT NULL,
+    resolved_at TEXT);
   CREATE TABLE cohort_cycles (
     id INTEGER PRIMARY KEY AUTOINCREMENT, year INTEGER NOT NULL, month INTEGER NOT NULL,
     start_at TEXT NOT NULL, end_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'scheduled');

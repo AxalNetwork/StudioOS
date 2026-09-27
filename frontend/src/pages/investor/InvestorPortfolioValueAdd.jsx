@@ -160,13 +160,15 @@ export default function InvestorPortfolioValueAdd() {
       {byCompany
         ? <PerCompany companies={companies} unreadable={unreadable} />
         : <section className="i4-card i4-positions ip3-ledger"><div className="i4-section-head"><div><h2>Support ledger</h2><p>{filter === 'outstanding' ? 'Promised entries, still open' : filter === 'delivered' ? 'Delivered entries' : `${visible.length} of ${entries.length} recorded ${entries.length === 1 ? 'entry' : 'entries'}`}</p></div><span>Promised entries stay visible until delivered or withdrawn</span></div><Ledger rows={visible} filter={filter} unreadable={unreadable} onMove={move} busy={busy} /><p className="i4-seam-note"><span>Evidence boundary</span> Every row here was written by a person recording their own work. Introductions requested through the quota, dealroom membership and calendar activity are access, not support, and none of them is read into this ledger.</p></section>}
-      {/* The artboard's band, footed "Feeds the LP reporting pack." */}
+      {/* The artboard's band. Its foot read "Feeds the LP reporting pack." —
+          false: accepting a draft stamps `accepted_at` and nothing else, and
+          no LP report reads this store, so the foot now says what happens. */}
       <ZoneDraft
         surface="portfolio/value-add"
         label="Proposal · quarterly support summary"
         accept="Accept summary"
         run="Draft the summary"
-        foot="Feeds the LP reporting pack. Drafted from the ledger rows, including the unkept promises."
+        foot="Drafted from the ledger rows, including the unkept promises. Accepting keeps the summary here — nothing carries it into an LP report."
         empty="Per company: what was delivered, what is still owed, and the hours recorded — written so an unmade promise appears rather than being rounded away."
         nothingToDraft="No support entry is recorded against an accessible company, so there is nothing to summarise."
       />

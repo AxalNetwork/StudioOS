@@ -117,9 +117,13 @@ function makeEnv({ withFiles = true }: { withFiles?: boolean } = {}) {
           const row = trackers.find((t) => t.id === id);
           if (!row) return { results: [] };
           if (s.includes('notes = ?')) {
-            const [mailed_at, status, receipt_doc_id, notes] = bound;
-            row.mailed_at = mailed_at; row.status = status;
-            row.receipt_doc_id = receipt_doc_id; row.notes = notes;
+            // D361: the PATCH also writes the five filing-record columns.
+            const [mailed_at, status, receipt_doc_id, notes, filing_method, tracking_number,
+              irs_service_center, company_ack_at, tax_return_copy_at] = bound;
+            Object.assign(row, {
+              mailed_at, status, receipt_doc_id, notes, filing_method, tracking_number,
+              irs_service_center, company_ack_at, tax_return_copy_at,
+            });
           } else {
             const [receipt_doc_id, status, mailed_at] = bound;
             row.receipt_doc_id = receipt_doc_id; row.status = status; row.mailed_at = mailed_at;
@@ -279,7 +283,8 @@ test('patch: only the owner (or admin) can mutate; status is validated', async (
   const bad = await legal.request(`/83b/trackers/${id}`, authJson(tokA, 'PATCH', { status: 'bogus' }), env);
   assert.equal(bad.status, 400);
 
-  const ok = await legal.request(`/83b/trackers/${id}`, authJson(tokA, 'PATCH', { status: 'confirmed' }), env);
+  // D361: 'confirmed' needs a mailing date on record, so it rides with one.
+  const ok = await legal.request(`/83b/trackers/${id}`, authJson(tokA, 'PATCH', { mailed_on: '2026-06-05', status: 'confirmed' }), env);
   assert.equal(ok.status, 200);
   assert.equal(((await ok.json()) as any).tracker.status, 'confirmed');
 
@@ -309,7 +314,9 @@ test('receipt: owner uploads a PDF -> stored, linked, pending flips to mailed', 
   const t = ((await res.json()) as any).tracker;
   assert.ok(t.receipt_doc_id);
   assert.equal(t.status, 'mailed');
-  assert.ok(t.mailed_at);
+  // D361: the upload time is not the postmark. The receipt no longer writes a
+  // mailing date the founder did not give; before D361 this asserted one.
+  assert.equal(t.mailed_at, null);
   assert.equal(state.filesPut.length, 1);
 });
 
@@ -335,4 +342,106 @@ test('receipt: missing R2 binding fails loudly (503), no silent drop', async () 
   fd.append('file', new Blob([PDF_BYTES], { type: 'application/pdf' }), 'receipt.pdf');
   const res = await legal.request(`/83b/trackers/${id}/receipt`, { method: 'POST', headers: { Authorization: `Bearer ${tokA}` }, body: fd }, env);
   assert.equal(res.status, 503);
+});
+
+// --- D361: the filing record ------------------------------------------------
+
+async function createdTracker(env: any, grant = '2026-06-01') {
+  const tokA = await mintToken(FOUNDER_A.id, 'founder');
+  const created = (await (await legal.request('/83b/trackers', authJson(tokA, 'POST', { project_id: 1, taxpayer_name: 'Jane', grant_date: grant }), env)).json()) as any;
+  return { tokA, id: created.tracker.id };
+}
+
+test('D361 patch: mailed_on records the founder\'s date, not the clock, and the filing fields round-trip', async () => {
+  const { env } = makeEnv();
+  const { tokA, id } = await createdTracker(env);
+  const res = await legal.request(`/83b/trackers/${id}`, authJson(tokA, 'PATCH', {
+    mailed_on: '2026-06-04', filing_method: 'certified_mail',
+    tracking_number: '9405 5118 0000 1234', irs_service_center: 'Ogden, UT',
+  }), env);
+  assert.equal(res.status, 200);
+  const t = ((await res.json()) as any).tracker;
+  assert.equal(t.mailed_at, '2026-06-04');
+  assert.equal(t.status, 'mailed');
+  assert.equal(t.filing_method, 'certified_mail');
+  assert.equal(t.tracking_number, '9405 5118 0000 1234');
+  assert.equal(t.irs_service_center, 'Ogden, UT');
+  assert.equal(t.checklist.find((c: any) => c.key === 'mail').done, true);
+});
+
+test('D361 patch: a mailing date before the grant, in the future, or impossible is refused with a code', async () => {
+  const { env } = makeEnv();
+  const { tokA, id } = await createdTracker(env);
+  const future = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
+  for (const [mailed_on, code] of [
+    ['2026-05-31', 'mailed_on_out_of_range'],
+    [future, 'mailed_on_out_of_range'],
+    ['2026-02-31', 'invalid_mailed_on'],
+    ['', 'mailed_on_required'],
+  ]) {
+    const res = await legal.request(`/83b/trackers/${id}`, authJson(tokA, 'PATCH', { mailed_on }), env);
+    assert.equal(res.status, 400, `mailed_on=${mailed_on}`);
+    const b = (await res.json()) as any;
+    assert.equal(b.error, code);
+    assert.equal(typeof b.message, 'string');
+  }
+});
+
+test('D361 patch: filing method, tracking number and service center are validated', async () => {
+  const { env } = makeEnv();
+  const { tokA, id } = await createdTracker(env);
+  for (const [body, code] of [
+    [{ filing_method: 'carrier_pigeon' }, 'invalid_filing_method'],
+    [{ tracking_number: 'DROP TABLE; --' }, 'invalid_tracking_number'],
+    [{ irs_service_center: 'Ogden\nUT' }, 'invalid_irs_service_center'],
+  ] as const) {
+    const res = await legal.request(`/83b/trackers/${id}`, authJson(tokA, 'PATCH', body), env);
+    assert.equal(res.status, 400);
+    assert.equal(((await res.json()) as any).error, code);
+  }
+});
+
+test('D361 patch: confirming delivery needs a mailing date on record', async () => {
+  const { env } = makeEnv();
+  const { tokA, id } = await createdTracker(env);
+  const early = await legal.request(`/83b/trackers/${id}`, authJson(tokA, 'PATCH', { status: 'confirmed' }), env);
+  assert.equal(early.status, 400);
+  assert.equal(((await early.json()) as any).error, 'confirm_before_mailed');
+  await legal.request(`/83b/trackers/${id}`, authJson(tokA, 'PATCH', { mailed_on: '2026-06-03' }), env);
+  const ok = await legal.request(`/83b/trackers/${id}`, authJson(tokA, 'PATCH', { status: 'confirmed' }), env);
+  assert.equal(ok.status, 200);
+});
+
+test('D361 patch: company acknowledgment and tax-return copy dates are stored and tick their items', async () => {
+  const { env } = makeEnv();
+  const { tokA, id } = await createdTracker(env);
+  const res = await legal.request(`/83b/trackers/${id}`, authJson(tokA, 'PATCH', {
+    company_ack_on: '2026-06-06', tax_return_copy_on: '2026-06-07',
+  }), env);
+  assert.equal(res.status, 200);
+  const t = ((await res.json()) as any).tracker;
+  assert.equal(t.company_ack_at, '2026-06-06');
+  assert.equal(t.tax_return_copy_at, '2026-06-07');
+  assert.equal(t.checklist.find((c: any) => c.key === 'copy_company').done, true);
+  // An unrelated PATCH leaves every recorded field where it was.
+  const notes = ((await (await legal.request(`/83b/trackers/${id}`, authJson(tokA, 'PATCH', { notes: 'x' }), env)).json()) as any).tracker;
+  assert.equal(notes.company_ack_at, '2026-06-06');
+  assert.equal(notes.tax_return_copy_at, '2026-06-07');
+  assert.equal(notes.mailed_at, null);
+});
+
+test('D361: every column ensureSection83bSchema can add is declared by a migration (D235)', async () => {
+  // check-runtime-schema-declared compares object NAMES, so a runtime
+  // ADD COLUMN with no migration behind it passes that guard. This one reads
+  // the columns the safety net adds and finds each in a migration file.
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const { resolve } = await import('node:path');
+  const svc = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/services/section83b.ts'), 'utf8');
+  const added = [...svc.matchAll(/ALTER TABLE section_83b_trackers ADD COLUMN (\w+)/g)].map((m) => m[1]);
+  assert.deepEqual(added.sort(), ['company_ack_at', 'filing_method', 'irs_service_center', 'tax_return_copy_at', 'tracking_number']);
+  const dir = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
+  const sql = readdirSync(dir).filter((f) => f.endsWith('.sql')).map((f) => readFileSync(resolve(dir, f), 'utf8')).join('\n');
+  for (const col of added) {
+    assert.match(sql, new RegExp(`^ALTER TABLE section_83b_trackers ADD COLUMN ${col} TEXT;$`, 'm'), `${col} has no migration`);
+  }
 });

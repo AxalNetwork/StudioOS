@@ -1,4 +1,5 @@
 import { count, summary, title, top, usd } from './format.js';
+import { DEAL_STAGE_LABEL, dealStage } from '../../lib/dealFlow.js';
 
 /*
  * `/deals` — Investor canvas ID1–ID4, "Find and close investments".
@@ -60,11 +61,17 @@ export default function investorDealsBoard(role, api) {
         cols: '1.6fr 1fr .9fr 1fr .8fr',
         columns: ['Company', 'Sector', 'Stage', 'Ask', 'In stage'],
         empty: 'No deal is open to this fund yet.',
-        summary: (d) => summary(count(Array.isArray(d) ? d.length : null, 'live deal')),
-        rows: (d) => top(Array.isArray(d) ? d : []).map((row) => [
+        // A passed deal is not live and has no stage (`dealStage` returns null
+        // for one), so it is neither counted nor listed here — the zone behind
+        // this section reaches it through its own Passed chip.
+        summary: (d) => summary(count(Array.isArray(d) ? d.filter((row) => dealStage(row) !== null).length : null, 'live deal')),
+        rows: (d) => top((Array.isArray(d) ? d : []).filter((row) => dealStage(row) !== null)).map((row) => [
           row.project_name || `Deal #${row.id}`,
           title(row.project_sector),
-          title(row.stage),
+          // `deals` has no `stage` column — the stage is the record's stored
+          // `status` translated by `dealStage`, the same vocabulary the zone
+          // uses, so the board and the page cannot disagree about one deal.
+          DEAL_STAGE_LABEL[dealStage(row)] || null,
           usd(row.target_raise || row.amount),
           typeof row.days_in_stage === 'number' ? `${row.days_in_stage} d` : null,
         ]),

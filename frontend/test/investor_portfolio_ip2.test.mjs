@@ -274,17 +274,23 @@ test('the three ops reasons are each true about their own object', () => {
   const writers = [POSITIONS, UPDATES, RESEARCH].filter((src) => /INSERT INTO portfolio_kpi_definitions|UPDATE portfolio_kpi_definitions/.test(src));
   assert.equal(writers.length, 0, 'a write path for the KPI set now exists and Edit rules should be built');
 
-  // CHASE stays unbuilt, with the narrower reason. The old one claimed this
-  // route never reaches mail; it does, on a different trigger to a different
-  // recipient.
-  assert.match(row, /\{ label: 'Chase all overdue', unbuilt: '[^']*only outbound on this desk fires when an update arrives[^']*'/,
-    'the chase reason no longer describes the outbound that does exist');
-  assert.ok(!/'nothing on this desk sends mail'/.test(row), 'the reason that was too broad by one call is back');
+  // CHASE IS LIVE NOW (D464, migration 337). The old reasons were right when
+  // written — the only outbound on this desk fired when an update ARRIVED —
+  // and the chase is the other direction: the page hands the route its own
+  // overdue set, the route re-checks tenancy per id, logs one row per company
+  // and notifies the founder. What is pinned is the wiring, not the reason.
+  assert.match(row, /\{ label: 'Chase all overdue', kind: 'handler', handler: 'chaseOverdue' \}/,
+    'the chase is not the page-performed op D464 made it');
+  const PORTFOLIO = read('cloudflare-worker/src/routes/portfolio.ts');
+  assert.match(PORTFOLIO, /portfolio_update_chases/, 'the chase log store is gone');
+  assert.match(PORTFOLIO, /type: 'portfolio_update_chase'/, 'the founder notification is gone');
+  assert.match(API, /portfolioChase: \(projectIds\) =>/, 'api.js lost the chase write');
+  // The page chases its own overdue set and nothing else.
+  assert.match(P, /api\.portfolioChase\(overdueRows\.map\(\(row\) => row\.project_id\)\)/,
+    'Chase all overdue must hand the route the page’s own overdue set');
+  // The founder-side fan-out is untouched by any of this.
   assert.match(UPDATES, /async function notifyProjectFollowers/, 'the follower fan-out the reason describes is gone');
   assert.match(UPDATES, /if \(f\.uid === update\.author_user_id\) continue;/, 'the fan-out no longer excludes the author');
-  // Two call sites, both on a founder-side write. Not one an investor invokes.
-  assert.equal((UPDATES.match(/notifyProjectFollowers\(c\.env/g) || []).length, 2,
-    'the outbound call sites changed — the chase reason describes a shape that no longer holds');
 
   // No unbuilt reason may carry a path. Precise endpoints belong in route
   // docblocks, where they are maintained; in a button they rot silently.

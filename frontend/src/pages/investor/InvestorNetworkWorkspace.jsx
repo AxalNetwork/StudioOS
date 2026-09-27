@@ -9,6 +9,7 @@ import './investorNetworkWorkspace.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { titleCase } from '../../lib/absence';
+import { daysSince, COLD_AFTER_DAYS } from '../../lib/networkBook';
 
 /**
  * A section heading's right-hand detail, in the order the body already reads
@@ -37,7 +38,17 @@ const age = (value) => {
   return days === 0 ? 'Today' : `${days}d ago`;
 };
 const safeKey = (value) => String(value || 'record').replace(/\W+/g, '-').toLowerCase();
-const lastTouchAt = (relationship) => relationship?.last_touch_at
+// An ask names its target by id only — `GET /api/introductions` joins no
+// names — so the row says which record it points at rather than inventing one.
+const askTarget = (ask) => (ask?.founder_user_id ? `Founder #${ask.founder_user_id}`
+  : ask?.project_id ? `Project #${ask.project_id}`
+    : ask?.founder_id ? `Founder record #${ask.founder_id}`
+      : 'Target not recorded');
+// The last touch is the interaction log's MAX (migration 338), never a field
+// someone edits. The older keys stay as fallbacks for any row written before
+// the log existed.
+const lastTouchAt = (relationship) => relationship?.last_interaction_at
+  || relationship?.last_touch_at
   || relationship?.last_contact_at
   || relationship?.metadata?.last_touch_at
   || relationship?.metadata?.last_contact_at
@@ -104,14 +115,17 @@ function Alert({ children }) {
 // relationship rows, so a split would either duplicate that read or invent a
 // second source for it.
 export default function InvestorNetworkWorkspace({ embedded = false, zone = null, role = 'investor', zoneFilters = null }) {
-  // The relationship book's zone view. One live chip out of five on this
+  // The relationship book's zone view. Two live chips out of five on this
   // licence — `relationship_type` is a CHECKed set and `co_investor` is a
-  // member of it — so `Everyone` and `Co-investors` are the whole of what this
-  // store can tell apart. The other three labels are prose on the row.
+  // member of it, and `Founders` narrows on the counterpart's role, which
+  // `/partnernet/relationships` returns. The other three labels are prose on
+  // the row.
   const [bookView, setBookView] = useState('all');
   // The introductions desk's zone view. `Stalled` is `status = 'expired'`,
-  // which the route writes lazily on every read; `Asked` and `Offered` are
-  // prose on the row, because no response carries a direction.
+  // which the route writes lazily on every read. `Asked` is live: an
+  // investor's own asks are stored in `investor_introductions` and loaded
+  // beside the propositions. `Offered` is prose on the row — an introduction
+  // you gave is logged as value-add support, not on this desk.
   const [deskView, setDeskView] = useState('all');
   const [params] = useSearchParams();
   const highlightedIntro = params.get('intro') || '';
@@ -119,6 +133,14 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   const [relationships, setRelationships] = useState(null);
   const [summary, setSummary] = useState(null);
   const [introductions, setIntroductions] = useState(null);
+  const [asks, setAsks] = useState(null);
+  // The reminders (migration 338) and which row a form is open on.
+  const [reminders, setReminders] = useState(null);
+  const [reminderFor, setReminderFor] = useState(null);
+  const [touchFor, setTouchFor] = useState(null);
+  const [reminderDate, setReminderDate] = useState('');
+  const [reminderNote, setReminderNote] = useState('');
+  const [touchNote, setTouchNote] = useState('');
   const [errors, setErrors] = useState({});
   const [refreshing, setRefreshing] = useState(false);
   const [busyUid, setBusyUid] = useState('');
@@ -128,19 +150,23 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
     setRefreshing(refresh);
     setActionError('');
     const calls = await Promise.allSettled([
-      api.partnerRelationships(), api.partnerSummary(), api.introPropositions(refresh ? { refresh: true } : {}),
+      api.partnerRelationships(), api.partnerSummary(), api.introPropositions(refresh ? { refresh: true } : {}), api.listIntroductions(), api.partnerReminders(),
     ]);
-    const [relationshipResult, summaryResult, introResult] = calls;
+    const [relationshipResult, summaryResult, introResult, askResult, reminderResult] = calls;
     if (relationshipResult.status === 'fulfilled') {
       const value = relationshipResult.value;
       setRelationships(Array.isArray(value) ? value : Array.isArray(value?.items) ? value.items : []);
     }
     if (summaryResult.status === 'fulfilled') setSummary(summaryResult.value || null);
     if (introResult.status === 'fulfilled') setIntroductions(introResult.value || { propositions: [], credits: null });
+    if (askResult.status === 'fulfilled') setAsks(Array.isArray(askResult.value?.introductions) ? askResult.value.introductions : []);
+    if (reminderResult.status === 'fulfilled') setReminders(Array.isArray(reminderResult.value?.items) ? reminderResult.value.items : []);
     setErrors({
       relationships: relationshipResult.status === 'rejected' ? 'Relationship book is unavailable right now.' : '',
       summary: summaryResult.status === 'rejected' ? 'Network aggregate unavailable.' : '',
       introductions: introResult.status === 'rejected' ? 'Introduction propositions are unavailable right now.' : '',
+      asks: askResult.status === 'rejected' ? 'Your recorded asks are unavailable right now.' : '',
+      reminders: reminderResult.status === 'rejected' ? 'Your reminders are unavailable right now.' : '',
       organizations: relationshipResult.status === 'rejected' ? 'Relationship-backed organization context is unavailable right now.' : '',
     });
     setRefreshing(false);
@@ -174,6 +200,9 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
     const highlighted = deskRows.find((prop) => prop.uid === highlightedIntro);
     return highlighted ? [highlighted, ...compact.slice(0, 3)] : compact;
   }, [highlightedIntro, deskRows]);
+  // The `Asked` view's rows: this investor's own asks, newest first as the
+  // route returns them.
+  const askRows = asks || [];
   const organizations = useMemo(() => {
     if (!relationships) return [];
     const grouped = new Map();
@@ -187,6 +216,43 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
     });
     return [...grouped.values()].sort((a, b) => b.people.size - a.people.size || a.name.localeCompare(b.name));
   }, [relationships]);
+
+  /**
+   * The interaction log and the reminders (migration 338). Logging a touch
+   * moves the cold flag — the book reads the log's MAX, so an honest record
+   * of the last exchange is the only way the flag moves. A reminder surfaces
+   * on the desk when it is due; there is no notification fan-out.
+   */
+  const logTouch = async (rel) => {
+    setActionError('');
+    try {
+      await api.partnerInteractionAdd(rel.id, { note: touchNote.trim() || null });
+      setTouchFor(null); setTouchNote('');
+      load();
+    } catch (cause) { setActionError(cause?.message || 'The touch could not be recorded.'); }
+  };
+  const setReminder = async (rel) => {
+    setActionError('');
+    if (!reminderDate) { setActionError('A reminder is a date — say when to re-surface the tie.'); return; }
+    try {
+      await api.partnerReminderSet(rel.id, { remind_at: reminderDate, note: reminderNote.trim() || null });
+      setReminderFor(null); setReminderDate(''); setReminderNote('');
+      load();
+    } catch (cause) { setActionError(cause?.message || 'The reminder could not be set.'); }
+  };
+  const doneReminder = async (uid) => {
+    setActionError('');
+    try { await api.partnerReminderDone(uid, true); load(); }
+    catch (cause) { setActionError(cause?.message || 'The reminder could not be updated.'); }
+  };
+  // The op opens the panel on the first cold tie if one is showing, else the
+  // first row — the reminder is for a tie, and the cold ones are the point.
+  // (Named for the table's handler key, not the state setter above.)
+  const setRemindersOp = useMemo(() => {
+    const target = (visibleRelationships || [])[0];
+    if (!target) return { onClick: () => {}, disabled: true, title: 'No relationship is showing, so there is nothing to remind you about.' };
+    return { onClick: () => { setActionError(''); setReminderFor(target.id); } };
+  }, [visibleRelationships]);
 
   const resolveIntro = async (prop, decision) => {
     setBusyUid(prop.uid); setActionError('');
@@ -215,11 +281,15 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   // already scoped to the reader.
   const visibleRelationships = bookView === 'coinvestors'
     ? (relationships || []).filter((item) => item.relationship_type === 'co_investor')
-    : (relationships || []);
+    : bookView === 'founders'
+      ? (relationships || []).filter((item) => String(item.other?.role || '') === 'founder')
+      : bookView === 'cold'
+        ? (relationships || []).filter((item) => { const d = daysSince(lastTouchAt(item)); return d !== null && d > COLD_AFTER_DAYS; })
+        : (relationships || []);
   const touchCoverage = (relationships || []).filter((item) => lastTouchAt(item)).length;
   const coldCount = (relationships || []).filter((item) => {
-    const touched = new Date(String(lastTouchAt(item) || '').replace(' ', 'T'));
-    return Number.isFinite(touched.getTime()) && Date.now() - touched.getTime() > 60 * 86400000;
+    const d = daysSince(lastTouchAt(item));
+    return d !== null && d > COLD_AFTER_DAYS;
   }).length;
   const pending = propositionRows.filter((item) => item.status === 'pending');
 
@@ -252,24 +322,76 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
               const touch = relationships.length === 0 ? 'no ties recorded'
                 : touchCoverage ? `${coldCount} going cold` : 'last-touch coverage unavailable';
               return `${ties} ties · ${touch}`;
-            })} role={role} filters={zoneFilters ? zoneFilters({ value: bookView, onChange: setBookView }) : []} actions={investorZoneActions('network/relationships', { view: { header: ['Person', 'Organization', 'Type'], rows: visibleRelationships || [], cells: (r) => [personName(r), orgIdentity(r), r.relationship_type] } })} />
-            {errors.relationships ? <Alert>{errors.relationships}</Alert> : relationships === null ? <Skeleton rows={5} /> : relationships.length === 0 ? <div className="inw-empty" data-testid="empty-relationship-book">No attributed relationship records are available yet.</div> : visibleRelationships.length === 0 ? <div className="inw-empty" data-testid="empty-relationship-view">{`No co-investor tie is recorded. ${relationships.length} ${relationships.length === 1 ? 'tie' : 'ties'} in the book in total.`}</div> : (
+            })} role={role} filters={zoneFilters ? zoneFilters({ value: bookView, onChange: setBookView, counts: { cold: coldCount } }) : []} actions={investorZoneActions('network/relationships', { handlers: { setReminders: setRemindersOp }, view: { header: ['Person', 'Organization', 'Type'], rows: visibleRelationships || [], cells: (r) => [personName(r), orgIdentity(r), r.relationship_type] } })} />
+            {/* DUE REMINDERS (migration 338): surface when due, never a
+                notification fan-out. */}
+            {errors.reminders ? <Alert>{errors.reminders}</Alert> : (reminders || []).filter((r) => !r.done && new Date(r.remind_at).getTime() <= Date.now()).length > 0 && (
+              <div className="inw-alert" role="status" data-testid="status-due-reminders">
+                <CircleAlert size={14} />
+                <span>
+                  {(reminders || []).filter((r) => !r.done && new Date(r.remind_at).getTime() <= Date.now()).map((r) => (
+                    <span key={r.uid} className="mr-3">
+                      {r.note || 'Re-surface this tie'} — due {age(r.remind_at)}
+                      <button type="button" onClick={() => doneReminder(r.uid)} data-testid={`button-reminder-done-${r.uid}`} className="ml-1 underline">Done</button>
+                    </span>
+                  ))}
+                </span>
+              </div>
+            )}
+            {errors.relationships ? <Alert>{errors.relationships}</Alert> : relationships === null ? <Skeleton rows={5} /> : relationships.length === 0 ? <div className="inw-empty" data-testid="empty-relationship-book">No attributed relationship records are available yet.</div> : visibleRelationships.length === 0 ? <div className="inw-empty" data-testid="empty-relationship-view">{bookView === 'founders' ? `No tie with a founder account is recorded. ${relationships.length} ${relationships.length === 1 ? 'tie' : 'ties'} in the book in total.` : bookView === 'cold' ? `Nothing is going cold — every tie with a recorded touch is inside ${COLD_AFTER_DAYS} days, and a tie with none is unknown, not cold.` : `No co-investor tie is recorded. ${relationships.length} ${relationships.length === 1 ? 'tie' : 'ties'} in the book in total.`}</div> : (
               <div className="inw-table" data-testid="table-relationship-book">
                 <div className="inw-table-head"><span>Person</span><span>Type</span><span>Strength</span><span>Context</span><span>Last touch</span></div>
-                {visibleRelationships.map((item) => <div className="inw-table-row" key={item.id} data-testid={`row-relationship-${item.id}`}>
-                  <strong data-label="Person">{personName(item)}</strong><span data-label="Type"><i className="inw-type">{typeLabel(item.relationship_type)}</i></span>
-                  <span data-label="Strength"><i className={`inw-strength ${Number(item.strength_score) >= 70 ? 'strong' : ''}`}>{Number.isFinite(Number(item.strength_score)) ? `${Math.round(item.strength_score)}/100` : 'Not scored'}</i></span>
-                   <span data-label="Context" className="inw-context">{relationshipContext(item)}</span><time data-label="Last touch" className={age(lastTouchAt(item)).includes('d') && Number.parseInt(age(lastTouchAt(item)), 10) > 60 ? 'inw-cold' : ''}>{age(lastTouchAt(item))}</time>
+                {visibleRelationships.map((item) => <div key={item.id}>
+                  <div className="inw-table-row" data-testid={`row-relationship-${item.id}`}>
+                    <strong data-label="Person">{personName(item)}</strong><span data-label="Type"><i className="inw-type">{typeLabel(item.relationship_type)}</i></span>
+                    <span data-label="Strength"><i className={`inw-strength ${Number(item.strength_score) >= 70 ? 'strong' : ''}`}>{Number.isFinite(Number(item.strength_score)) ? `${Math.round(item.strength_score)}/100` : 'Not scored'}</i></span>
+                    <span data-label="Context" className="inw-context">{relationshipContext(item)}</span>
+                    <time data-label="Last touch" className={age(lastTouchAt(item)).includes('d') && Number.parseInt(age(lastTouchAt(item)), 10) > COLD_AFTER_DAYS ? 'inw-cold' : ''}>{age(lastTouchAt(item))}</time>
+                    <span className="inw-row-actions">
+                      <button type="button" onClick={() => { setActionError(''); setTouchFor(touchFor === item.id ? null : item.id); setReminderFor(null); }} data-testid={`button-log-touch-${item.id}`}>Log a touch</button>
+                      <button type="button" onClick={() => { setActionError(''); setReminderFor(reminderFor === item.id ? null : item.id); setTouchFor(null); }} data-testid={`button-remind-${item.id}`}>Remind me</button>
+                    </span>
+                  </div>
+                  {touchFor === item.id && (
+                    <div className="inw-inline-form" data-testid={`form-touch-${item.id}`}>
+                      <input value={touchNote} onChange={(e) => setTouchNote(e.target.value)} placeholder="What the last exchange was (optional)" aria-label="Touch note" />
+                      <button type="button" onClick={() => logTouch(item)} data-testid={`button-touch-save-${item.id}`}>Record the touch</button>
+                      <button type="button" onClick={() => setTouchFor(null)}>Cancel</button>
+                    </div>
+                  )}
+                  {reminderFor === item.id && (
+                    <div className="inw-inline-form" data-testid={`form-reminder-${item.id}`}>
+                      <input type="date" value={reminderDate} onChange={(e) => setReminderDate(e.target.value)} aria-label="Remind on" data-testid={`input-reminder-date-${item.id}`} />
+                      <input value={reminderNote} onChange={(e) => setReminderNote(e.target.value)} placeholder="What to re-surface (optional)" aria-label="Reminder note" />
+                      <button type="button" onClick={() => setReminder(item)} data-testid={`button-reminder-save-${item.id}`}>Set the reminder</button>
+                      <button type="button" onClick={() => setReminderFor(null)}>Cancel</button>
+                    </div>
+                  )}
                 </div>)}
               </div>
             )}
             {errors.summary && <p className="inw-footnote" data-testid="text-network-summary-unavailable">{errors.summary}</p>}
+            {bookView === 'cold' && visibleRelationships.length > 0 && (
+              <p className="inw-footnote" data-testid="text-reengagement-note">
+                Re-engagement lines are not drafted here yet — that draft surface is being built separately, and the reminder you set above is the working half.
+              </p>
+            )}
           </section>}
 
           {(shows('introductions') || shows('organizations')) && <div className="inw-lower">
             {shows('introductions') && <section className="inw-card" aria-labelledby="introductions-desk">
-              <SectionHeading id="introductions-desk" title="Introductions desk" detail={detailFor(errors.introductions, introductions, () => `${pending.length} awaiting your decision · ${propositionRows.length} shown`)} role={role} filters={zoneFilters ? zoneFilters({ value: deskView, onChange: setDeskView }) : []} actions={investorZoneActions('network/introductions', { view: { header: ['Introduction', 'Status', 'Score', 'Source'], rows: visiblePropositions, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] } })} />
-              {errors.introductions ? <Alert>{errors.introductions}</Alert> : introductions === null ? <Skeleton rows={4} /> : propositionRows.length === 0 ? <div className="inw-empty" data-testid="empty-introductions">No live introduction propositions. New matches appear here when available.</div> : <>
+              <SectionHeading id="introductions-desk" title="Introductions desk" detail={deskView === 'asked' ? detailFor(errors.asks, asks, () => `${askRows.length} ${askRows.length === 1 ? 'ask' : 'asks'} recorded`) : detailFor(errors.introductions, introductions, () => `${pending.length} awaiting your decision · ${propositionRows.length} shown`)} role={role} filters={zoneFilters ? zoneFilters({ value: deskView, onChange: setDeskView }) : []} actions={investorZoneActions('network/introductions', { view: deskView === 'asked' ? { header: ['Target', 'Status', 'Quarter', 'Asked'], rows: askRows, cells: (a) => [askTarget(a), a.status, a.quarter, a.created_at] } : { header: ['Introduction', 'Status', 'Score', 'Source'], rows: visiblePropositions, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] } })} />
+              {deskView === 'asked' ? (
+                errors.asks ? <Alert>{errors.asks}</Alert> : asks === null ? <Skeleton rows={4} /> : askRows.length === 0 ? <div className="inw-empty" data-testid="empty-asks">No introduction ask is recorded. One appears here when you request an intro.</div> : <>
+                  <div className="inw-proposition-list">{askRows.map((ask) => <article className="inw-proposition" key={ask.uid} data-testid={`card-ask-${ask.uid}`}>
+                    <div className="inw-prop-top"><span className="inw-prop-label">Asked · {ask.quarter || 'quarter not recorded'}</span><span className="inw-state" data-testid={`status-ask-${ask.uid}`}>{typeLabel(ask.status)}</span></div>
+                    <strong>{askTarget(ask)}</strong>
+                    {ask.message ? <p>{ask.message}</p> : null}
+                    <div className="inw-prop-actions"><span className="inw-state">Asked {age(ask.created_at)}</span></div>
+                  </article>)}</div>
+                  <p className="inw-footnote">An ask’s status is written when you make it and nothing moves it yet — a reply is a conversation, not a row here.</p>
+                </>
+              ) : errors.introductions ? <Alert>{errors.introductions}</Alert> : introductions === null ? <Skeleton rows={4} /> : propositionRows.length === 0 ? <div className="inw-empty" data-testid="empty-introductions">No live introduction propositions. New matches appear here when available.</div> : <>
                 {actionError && <Alert>{actionError}</Alert>}
                 <div className="inw-proposition-list">{visiblePropositions.map((prop) => {
                   const target = prop.target || {}; const active = prop.status === 'pending'; const busy = busyUid === prop.uid;

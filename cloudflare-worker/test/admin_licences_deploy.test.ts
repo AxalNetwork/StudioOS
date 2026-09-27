@@ -393,7 +393,10 @@ test('deploying is super-admin only, and anonymous is 401', async () => {
 
 test('the registry and the live read are separate fields, and one branch down says so', async () => {
   const { call, db } = deployApp(GH_VARS, {
-    BRANCH_FR: { health: async () => ({ ok: true, licence_status: 'active', licence_pushed_at: '2026-09-15T08:00:00Z' }) },
+    BRANCH_FR: { health: async () => ({
+      ok: true, db_ok: true, licence_status: 'active', licence_pushed_at: '2026-09-15T08:00:00Z',
+      deploy_version: null, branch: 'fr', as_of: '2026-09-15T08:00:00Z',
+    }) },
     BRANCH_DACH: { health: async () => { throw new Error('boom'); } },
   });
   const ins = db.prepare(

@@ -110,6 +110,7 @@ const AdminLicences = lazy(() => import('./pages/admin/AdminLicences'));
 const AdminNetworkProfiles = lazy(() => import('./pages/admin/AdminNetworkProfiles'));
 // Task #102 — Spin-Out Lab admin dashboard (applications + participants).
 const AdminSpinoutLab = lazy(() => import('./pages/admin/AdminSpinoutLab'));
+const SpinoutModerationPage = lazy(() => import('./pages/admin/SpinoutModerationPage'));
 const AdminSpinoutJourneyPreview = lazy(() => import('./pages/admin/AdminSpinoutJourneyPreview'));
 const AdminTelegram = lazy(() => import('./pages/admin/AdminTelegram'));
 const AdminX = lazy(() => import('./pages/admin/AdminX'));
@@ -237,9 +238,11 @@ const JobEditorPage = lazy(() => import('./pages/jobs/JobEditorPage'));
 const JobManagePage = lazy(() => import('./pages/jobs/JobManagePage'));
 const MyApplicationsPage = lazy(() => import('./pages/jobs/MyApplicationsPage'));
 const CofounderPage = lazy(() => import('./pages/CofounderPage'));
-// Team Building — founder workspace consolidating Advisor, Co-Founder
-// and Jobs into one tabbed page at /build/team.
-const TeamBuildingPage = lazy(() => import('./pages/TeamBuildingPage'));
+// Team (D435) — the founder's roster, advisors, hiring and coverage at
+// /build/team?mode=workspace. It replaced TeamBuildingPage, whose Advisor /
+// Co-Founder / Jobs tabs were the discovery surfaces; those open inside the
+// Advisors and Hiring tabs here, so the founder redirects below still land.
+const FounderTeamPage = lazy(() => import('./pages/founder/FounderTeamPage'));
 // Task #20 — /skills and /values are consolidated into the advisor flow.
 // The underlying SkillsProfilePage/ValuesAssessmentPage files are kept intact on
 // disk (data stores), but their routes now redirect to /studio.
@@ -253,6 +256,7 @@ const NetworkPage = lazy(() => import('./pages/NetworkPage'));
 const LegalCapitalPage = lazy(() => import('./pages/LegalCapitalPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
 const SupportRedeemPage = lazy(() => import('./pages/SupportRedeemPage'));
+const JoinBranchPage = lazy(() => import('./pages/JoinBranchPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 const TeamPage = lazy(() => import('./pages/TeamPage'));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
@@ -2434,6 +2438,8 @@ function AppInner() {
       {/* Task #102 — standalone Spin-Out Lab admin dashboard (same component
           as the AdminPage 'lab-applications' tab). */}
       <Route path="/admin/spinout-lab" element={guard(['admin'], <AdminSpinoutLab standalone onImpersonate={handleImpersonate} />)} />
+      {/* D442 — the console the approvals board links to. Not a tab of AdminPage. */}
+      <Route path="/admin/spinout-moderation" element={guard(['admin'], <SpinoutModerationPage />)} />
       {/* Task #106 — read-only admin preview of the new-founder Spin-Out Lab
           journey (simulated client-side state; no impersonation, no writes). */}
       <Route path="/admin/spinout-lab/preview" element={guard(['admin'], <AdminSpinoutJourneyPreview />)} />
@@ -2544,7 +2550,11 @@ function AppInner() {
       {/* Same explicit list. The partner and admin tabs inside the page are
           gated on the role again there — a role that cannot submit a listing
           simply does not see the tab. */}
-      <Route path="/perks" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], effectiveRole === 'founder' ? founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><PerksPage user={user} /></FounderWorkspaceTabs>) : <PartnerWorkspaceTabs set="offers" user={user}><PerksPage user={user} /></PartnerWorkspaceTabs>)} />
+      {/* D413 — a partner's side of Perks & Products is Submit a perk and
+          Performance, and both live in /offers/perk-deals; claiming is a
+          founder's (D412). So a partner here is sent there. Every other role
+          keeps the marketplace. */}
+      <Route path="/perks" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], effectiveRole === 'founder' ? founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><PerksPage user={user} /></FounderWorkspaceTabs>) : effectiveRole === 'partner' ? <Navigate replace to="/offers/perk-deals" /> : <PartnerWorkspaceTabs set="offers" user={user}><PerksPage user={user} /></PartnerWorkspaceTabs>)} />
       <Route path="/raise/capital/pipeline" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapitalWorkspacePage />))} />
        <Route path="/raise/legal" element={guard(['admin', 'founder'], <FounderRaiseLegal />)} />
       <Route path="/raise/legal-engine" element={guard(['admin', 'founder', 'partner'], founderWorkspace('raise', <FounderWorkspaceTabs set="raise" user={user}><LegalEnginePage /></FounderWorkspaceTabs>))} />
@@ -2560,7 +2570,11 @@ function AppInner() {
       <Route path="/spinout-lab/compliance" element={guard(labRoles(['admin']), <SpinoutLabCompliancePage />)} />
       {/* 83(b) moved into the Lab (Week 4 deliverable). Old Incorporate
           path kept as a redirect so existing links and bookmarks survive. */}
-      <Route path="/incorporate/83b" element={<Navigate to="/spinout-lab/83b" replace />} />
+      {/* D361: the tracker lives at /spinout-lab/83b for Lab members and admins
+          (its guard), and inside the Studio-gated Legal Engine card for every
+          other founder. Sending those founders to the Lab route only reached a
+          refusal, so the old path now lands each on the one they can open. */}
+      <Route path="/incorporate/83b" element={<Navigate to={user?.spinout_lab_active === 1 || user?.role === 'admin' ? '/spinout-lab/83b' : '/raise/legal-engine/equity'} replace />} />
       <Route path="/compliance" element={guard(labRoles(['admin', 'founder', 'partner']), <CompliancePage />)} />
       <Route path="/wellbeing" element={guard(['admin', 'founder'], <WellbeingPage />)} />
       <Route path="/wellbeing/expert-dashboard" element={guard(['admin', 'founder', 'partner', 'advisor'], <ExpertEditorPage />)} />
@@ -2658,12 +2672,14 @@ function AppInner() {
         ? <InvestorResearchWorkspace />
         : investorWorkspace('research', <FounderWorkspaceTabs set="research" user={user}><MarketIntelPage /></FounderWorkspaceTabs>))} />
       <Route path="/advisory" element={guard(['admin', 'founder'], <FounderWorkspaceTabs set="validate" user={user}><AdvisoryPage /></FounderWorkspaceTabs>)} />
-      {/* Team Building consolidation (Build › Team). Founders reach Advisor/
-          Advisor, Co-Founder and Jobs through the unified /build/team
-          workspace; the legacy standalone routes stay live for every other
-          role but redirect a founder into the matching tab so old deep links
-          keep resolving. */}
-      <Route path="/build/team" element={guard(['admin', 'founder'], founderGrowLanding ? <FounderGrowDesk /> : founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><TeamBuildingPage /></FounderWorkspaceTabs>))} />
+      {/* Team (Grow › Talent). Founders reach the advisor directory,
+          Co-founder Match and their roles through the Team workspace at
+          /build/team?mode=workspace; the legacy standalone routes stay live
+          for every other role but redirect a founder into the tab that owns
+          that job. The redirects carry `mode=workspace` because a bare
+          /build/team is the Grow desk for a founder (founderGrowLanding), so
+          `?tab=` alone never reached a tab (D435). */}
+      <Route path="/build/team" element={guard(['admin', 'founder'], founderGrowLanding ? <FounderGrowDesk /> : founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><FounderTeamPage /></FounderWorkspaceTabs>))} />
       <Route path="/grow" element={founderGrowLanding
         ? guard(['admin', 'founder'], <FounderGrowDesk />)
         : <Navigate to="/grow/focus" replace />} />
@@ -2677,7 +2693,7 @@ function AppInner() {
       <Route path="/build/command-center" element={guard(labRoles(['admin', 'founder']), <Navigate to="/studio" replace />)} />
       {/* Task #74 — back-compat redirect from the pre-rename /mentors path. */}
       <Route path="/mentors" element={<Navigate to="/advisors" replace />} />
-      <Route path="/advisors" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), user?.role === 'founder' ? <Navigate to="/build/team?tab=advisor" replace /> : <AdvisorsPage />)} />
+      <Route path="/advisors" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), user?.role === 'founder' ? <Navigate to="/build/team?mode=workspace&tab=advisor" replace /> : <AdvisorsPage />)} />
       {/* /office-hours is RETIRED (task #124's freeze lifted; UNRESOLVED_ITEMS
           U4 resolved). It coupled the storefront to booking and was broken at
           both jobs: it read five keys the DTOs never emitted, so every slot
@@ -2698,12 +2714,12 @@ function AppInner() {
       <Route path="/events/new" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventEditorPage />)} />
       <Route path="/events/:id/edit" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventEditorPage />)} />
       <Route path="/events/:id/manage" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventManagePage />)} />
-      <Route path="/my/jobs" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], user?.role === 'founder' ? <Navigate to="/build/team?tab=jobs" replace /> : <MyJobsPage />)} />
+      <Route path="/my/jobs" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], user?.role === 'founder' ? <Navigate to="/build/team?mode=workspace&tab=jobs" replace /> : <MyJobsPage />)} />
       <Route path="/my/applications" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <MyApplicationsPage />)} />
       <Route path="/jobs/new" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <JobEditorPage />)} />
       <Route path="/jobs/:id/edit" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <JobEditorPage />)} />
       <Route path="/jobs/:id/manage" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <JobManagePage />)} />
-      <Route path="/cofounder" element={guard(labRoles(['admin', 'founder']), user?.role === 'founder' ? <Navigate to="/build/team?tab=cofounder" replace /> : <CofounderPage />)} />
+      <Route path="/cofounder" element={guard(labRoles(['admin', 'founder']), user?.role === 'founder' ? <Navigate to="/build/team?mode=workspace&tab=cofounder" replace /> : <CofounderPage />)} />
       {/* Task #20 — Consolidated profile/advisor flow. The advisor conversation
           now builds the skill + values profile; the legacy /skills and /values
           routes redirect here (underlying data stores kept intact). */}
@@ -2746,6 +2762,9 @@ function AppInner() {
       <Route path="/ic" element={guard(['admin', 'partner', 'investor'], <ICDecisionsPage />)} />
       <Route path="/ic/:uid" element={guard(['admin', 'partner', 'investor'], <ICDecisionPage />)} />
       <Route path="/lp-reports" element={guard(['admin', 'investor'], investorFundWorkspace(<FundOpsWorkspace />))} />
+      {/* D463 — the guard stays ['admin','investor']: this is a zone route of
+          the portfolio shell, and the founder's shell has no such zone. The
+          founder's composer is the Investor update card on /build/metrics. */}
       <Route path="/portfolio/updates" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/portfolio/positions" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       {/* Advisor sections shell — three tabbed workspaces (Network, Advisory,
@@ -3023,10 +3042,12 @@ function AppInner() {
           redirected into the hash-anchored docs surface. */}
       <Route path="/docs/admin/*" element={<AdminDocsPathGuard />} />
       <Route path="/docs" element={<DocsRedirect />} />
-      {/* Task #17 — investor "Profile" nav lands on the self-profile surface
-          (the Settings profile section rendered at its own path so the sidebar
-          item highlights independently of Settings). */}
-      <Route path="/profile" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
+      {/* Task #17 mounted SettingsPage a second time at /profile so an investor
+          "Profile" nav row could highlight independently of Settings. That row
+          is gone; the exploring sidebar's "My Profile" now points at /account
+          itself. D433 retires the duplicate on D304's shape: a redirect, never
+          a 404, with the query and hash carried through. */}
+      <Route path="/profile" element={<SettingsRedirect />} />
       <Route path="/account" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/settings" element={<SettingsRedirect />} />
 
@@ -3082,6 +3103,10 @@ function AppInner() {
           POST /api/auth/support/redeem on the branch. `isPublicPath` lists the
           same path for the same reason. */}
       <Route path="/support/session" element={<SupportRedeemPage />} />
+      {/* D441 — a move onto this branch. The invitee has no account here
+          yet, so the route is not behind the sign-in gate. /invite/:token
+          stays the events RSVP page. */}
+      <Route path="/join/:token" element={<JoinBranchPage />} />
 
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/contact" element={<ContactPage />} />

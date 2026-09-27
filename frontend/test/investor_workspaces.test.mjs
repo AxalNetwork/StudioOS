@@ -68,7 +68,7 @@ test('investor Research implements I8 without fabricated diligence claims', () =
   assert.match(research, /sources\.map\(\(source\)/);
   assert.match(research, /source\.live[\s\S]{0,180}source\.paid/);
   assert.doesNotMatch(research, /Novacraft|74,000|DeepSeek|\$0\.0344|Founder-shared data room/);
-  assert.match(research, /no answer has been generated/i);
+  assert.match(research, /api\.research\.ask\(/, 'the question desk posts to /research/ask — the scoped service exists and the box is wired to it');
 });
 
 test('investor-owned deep links keep the investor workspace shell', () => {

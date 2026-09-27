@@ -6,7 +6,7 @@
  * three workspaces already tabbed across their whole subtrees. Founder has no
  * such thing: `PitchWorkspacePage`, `CapitalWorkspacePage` and
  * `LegalEnginePage` each tab only within themselves and nothing links one to
- * another, while `ExecutionPage`, `TeamBuildingPage`, `DiscoveryPage` and
+ * another, while `ExecutionPage`, `FounderTeamPage`, `DiscoveryPage` and
  * `FounderMarketplacePage` have no tab bar at all.
  *
  * So the audit came first. Searching every `to=`, `to:`, `navigate(` and

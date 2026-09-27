@@ -23,9 +23,12 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  * does the translation, exactly as `investorZoneActions.js` describes for the
  * ops half.
  *
- * SIXTEEN OF THE NINETEEN ARE HERE. The three left out are Deals' decision
- * zones, and the guard records why: each renders a single-record panel, so the
- * list surfaces their canvas filters describe would have to be built first.
+ * ALL NINETEEN ARE HERE. The three Deals decision zones were the last to
+ * arrive: each rendered a single-record panel, and filtering one record
+ * narrows nothing — so they waited for the lists their canvases draw, which
+ * ID2–ID4 built. `profile_zone_filters.test.mjs`'s `excluded` list for this
+ * profile is empty, and it stays that way by construction: a zone without a
+ * row fails the exact-set check there.
  *
  * SOME ZONES WERE ALREADY RIGHT AND ARE NOT BEING CHANGED. `funds/lps` and
  * `funds/reporting` each carry four real predicates over rows they load; their
@@ -50,23 +53,27 @@ const NO_EXTRACTION_LAYER =
 // it. What is true is that the question has already been answered upstream.
 const ALREADY_MINE =
   'every deal on this board is already one of yours; it loads only the deals you were invited to, committed to, or are a room member of';
-// `/network/relationships`, and all three failures are the same one column
-// short. `partner_relationships` is `partner_a_id, partner_b_id,
-// relationship_type, strength_score, metadata` and nothing else — no
-// counterpart role, no interaction date, no fund tie.
-const NO_COUNTERPART_ROLE =
-  'no relationship type names an investor-to-founder tie, and the payload carries the counterpart’s name and email without their role';
+// `/network/relationships`. `partner_relationships` is `partner_a_id,
+// partner_b_id, relationship_type, strength_score, metadata` and nothing else
+// — no interaction date and no fund tie, so `Going cold` and `LPs` keep their
+// reasons. The third gap this comment used to name is closed: the counterpart's
+// role was missing from the payload, and `/partnernet/relationships` now
+// returns it, which is what the `Founders` chip narrows on.
 const NO_LP_RELATIONSHIP =
   'an LP register is kept against a fund rather than as a relationship, and this page never reads it';
-const NO_INTERACTION_DATE =
-  'no interaction date is stored on a relationship; the only history kept is that the row was created and edited';
-// `/network/introductions`. Word for word what the founder table says, because
-// it is the same store and the same absence: `intro_propositions` has no
-// direction column, and every row is one addressed to the reader. Note the
-// canvas order differs from founder's — `Offered` before `Asked` — which is
-// exactly why these are four tables and not one.
-const NO_DIRECTION_RECORDED =
-  'nothing records who asked: every proposition here is addressed to you, and the response names the counterpart without a direction';
+// `Going cold` went live with D465: `partner_interactions` (migration 338) is
+// the interaction log, and the relationship's last touch is its MAX.
+// `/network/introductions`. NOT word for word what the founder table says, and
+// the difference is a store: the founder desk reads `intro_propositions` alone,
+// where every row is addressed to the reader, but an investor's own asks live
+// in `investor_introductions` (`GET /api/introductions`) — so `Asked` is a live
+// chip here and stays prose there. `Offered` keeps a reason of its own: an
+// introduction you gave is value-add support (the ledger the Portfolio desk
+// keeps), not a row on this desk. Note the canvas order differs from
+// founder's — `Offered` before `Asked` — which is exactly why these are four
+// tables and not one.
+const NO_OFFER_ON_THIS_DESK =
+  'an introduction you offered is logged as value-add support, not on this desk — every row here is one addressed to you, or one you asked for';
 // `/network/organizations`, AND THE FOUR-STEP CHECK ENDS AT STEP FOUR HERE.
 // `metadata` is a real column on `partner_relationships` and it is free-text
 // JSON, so `metadata.organization_name` is a shape the store could physically
@@ -258,18 +265,27 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Pass reasons', key: 'passes' },
   ],
 
+  // `Blocking` went live with D461: a blocking item is a Commit condition, and
+  // `ic_conditions` (migration 334) is the store the hand-off runs on — the
+  // chip narrows to the deals at closing with an open condition. `Wires` went
+  // live with D462: `deal_transfers` (migration 335) records a transfer out to
+  // a company — the direction `capital_calls` never covered.
   'deals/closing': [
     { canvas: 'This close', key: 'close', label: 'This close {n}' },
-    { canvas: 'Blocking', unbuilt: 'a blocking item is a Commit condition, and no condition is stored on either side of that hand-off' },
+    { canvas: 'Blocking', key: 'blocking', label: 'Blocking {n}' },
     { canvas: 'Documents', key: 'documents', label: 'Documents {n}' },
-    { canvas: 'Wires', unbuilt: 'no transfer out to a company is recorded — capital_calls is an LP paying into the fund', hover: 'No transfer out to a company is recorded; what the fund records is capital coming in from an LP.' },
+    { canvas: 'Wires', key: 'wires', label: 'Wires {n}' },
   ],
 
+  // `Conditions` and `Minutes` went live with D461: conditions are their own
+  // table (migration 334) and minutes live on the meeting record. Both were
+  // `unbuilt` with reasons that were true when written — the memo and terms
+  // were free text, and ic_meetings carried only its agenda.
   'deals/commit': [
     { canvas: 'This deal', key: 'current' },
     { canvas: 'All decisions', key: 'decisions' },
-    { canvas: 'Conditions', unbuilt: 'a condition is not a stored record; ic_decisions carries a memo and a free-text terms blob, and neither is something a later stage could block on', hover: 'A condition is not a stored record, so no later stage can block on one.' },
-    { canvas: 'Minutes', unbuilt: 'no minutes are stored — ic_meetings carries an agenda, which is written before the room rather than after it', hover: 'No minutes are stored — the meeting record is its agenda, written before the room, not after it.' },
+    { canvas: 'Conditions', key: 'conditions', label: 'Conditions {n}' },
+    { canvas: 'Minutes', key: 'minutes' },
   ],
 
   'deals/pipeline': [
@@ -291,16 +307,16 @@ export const INVESTOR_ZONE_FILTERS = {
   // member of it.
   'network/relationships': [
     { canvas: 'Everyone', key: 'all' },
-    { canvas: 'Founders', unbuilt: NO_COUNTERPART_ROLE },
+    { canvas: 'Founders', key: 'founders' },
     { canvas: 'Co-investors', key: 'coinvestors' },
     { canvas: 'LPs', unbuilt: NO_LP_RELATIONSHIP },
-    { canvas: 'Going cold', unbuilt: NO_INTERACTION_DATE },
+    { canvas: 'Going cold', key: 'cold', label: 'Going cold {n}' },
   ],
 
   'network/introductions': [
     { canvas: 'All', key: 'all' },
-    { canvas: 'Offered', unbuilt: NO_DIRECTION_RECORDED },
-    { canvas: 'Asked', unbuilt: NO_DIRECTION_RECORDED },
+    { canvas: 'Offered', unbuilt: NO_OFFER_ON_THIS_DESK },
+    { canvas: 'Asked', key: 'asked' },
     { canvas: 'Stalled', key: 'stalled' },
   ],
 
