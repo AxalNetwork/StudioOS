@@ -33439,6 +33439,103 @@ it takes no prop.
   - no reload after a run
   - an unreadable breakdown ignored
 
+## D402
+
+**On a zone below a workspace, the rail shows the workspace's model as
+inherited and read-only, with a link back to where it is chosen (Session
+12, item 3).** No migration, no route, no `api.js` method. Frontend only.
+
+**The defect.** The chosen model was already stored per workspace. The key
+is `worker_rail_model:<workspace>`, and it has been since the menu shipped,
+on the Validate canvas's own rule: "Mode and model are chosen on the
+workspace, not re-picked here". So `/validate/interviews` and `/validate`
+read and write the same key. The screen disagreed. Every zone drew the full
+radio menu, so picking a model "for Interviews" silently changed it for all
+of Validate, with nothing on the page saying so. The Validate canvas,
+DetailRail and EmberRail all draw the zone rail as inherited instead.
+
+**What the rail draws now.**
+- **At a bucket root** (`/validate`, `/deals`, `/practice`, …): unchanged. The
+  menu, the DEFAULT badge (D400) and "Remembered for {workspace}. Every zone
+  here uses it."
+- **Anywhere below a root** (`/validate/interviews`, `/raise/data-room/…`):
+  - a dashed card with an INHERITED chip and "Inherited from {workspace}.
+    Mode and model are chosen on the workspace, not re-picked here. Change
+    the model there and this page follows.";
+  - a "Change it on {workspace}" link to the root;
+  - a read-only card for the model that will actually run (name, id and
+    rate), with no radio, no input and no handler.
+  The run still sends that same model, so the card and the run agree.
+- **A role with no shell** (both admin tiers), or a path no bucket claims:
+  unchanged. There is no workspace to inherit from.
+
+**Worked out from role and URL, not passed by the page.** `ui/railInheritance.js`
+asks `shellConfig`'s `bucketForPath(role, path)` for the bucket. It returns
+null at the root, and `{ to: bucket.prefix, bucket: bucket.label }` for any
+path below it. The rail reads the path through `UNSAFE_LocationContext`,
+which is null outside a router instead of throwing like `useLocation()`,
+and falls back to `window.location`. So none of the ~70 mounts was edited.
+No prop was added, so `branch_rail_mount`'s parameter-list parse is
+unaffected.
+
+**Named after the workspace, not the zone.** The card says
+"Inherited from {workspace}" using the `workspace` prop, because that prop is
+the key the choice is stored under. EmberRail's canvas reads "Inherited from
+Analytics", naming a zone, which is the defect the gap map recorded; this
+does not repeat it.
+
+**Measured before claiming "change it there".** Each root the link points to
+mounts the rail under the same `workspace` string its zones pass:
+- founder: Validate, Build, Raise, Grow, Network, Research;
+- investor: Deals (`InvestorDealsRoutes`), Portfolio
+  (`InvestorPortfolioCanvas` through `PortfolioWorkspace`), Fund
+  (`InvestorFundLanding` at `/funds`);
+- advisor and partner: their bucket routes pass the bucket name.
+
+**Mode is not changed here.** The fills switch is drawn only where a page
+passes `fills`, and only Validate's root does. A zone therefore draws no
+switch, which matches the inherited rule without new code.
+
+**For Session 14.** Founder desk zones get the inherited view with no prop,
+so the desks pass nothing new. A desk that draws a root passes the same
+`workspace` its zones pass, as every current root does.
+
+**Verification.**
+- New file `worker_rail_inherited_d402.test.mjs`, 10 tests.
+  - Behavioural, on `railInheritance` over every shell:
+    - every bucket root, with and without a trailing slash, chooses;
+    - every zone of every role inherits from its own root (more than 40
+      walked);
+    - a detail page below a zone inherits;
+    - `/validated`, `/studio`, both admin tiers and an absent role keep the
+      menu;
+    - each role's `/research` zone inherits from `/research`.
+  - On the rail's source:
+    - the view is computed from role and path, with no prop;
+    - the inherited branch holds no input, fieldset, radio, `onChange` or
+      `chooseModel`;
+    - the chip, the workspace-named card and the root link are present;
+    - the read-only card is the active model, not the first one;
+    - no `useLocation`.
+- The rail is not rendered in a Node test, because its model data arrives
+  through `useAiSpend`'s effect, which a server render never runs. No
+  Chromium probe was run.
+- Mutations: 11 run, 10 counted, 10 caught. The eleventh removed the
+  trailing-slash strip, and nothing failed. That was not a weak test: the
+  strip was dead code, because `/validate/` already slices to an empty rest
+  and reads as the root. The strip was removed from the code instead of
+  pinned. The 10:
+  - a root treated as a zone
+  - the link pointing at the zone
+  - the role ignored
+  - the rail never inheriting
+  - radios in the inherited view
+  - the card naming the zone
+  - no chip
+  - no link back
+  - the primary model shown instead of the active one
+  - `useLocation` used
+
 ## D410
 
 **E-sign `/send` hardening: the signing link reaches only the recipient, a
