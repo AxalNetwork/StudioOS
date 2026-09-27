@@ -35,8 +35,8 @@ function between(src, a, b) {
   assert.ok(to > from, `the closing marker is gone: ${b}`);
   return src.slice(from, to);
 }
-/** `l:'…'` or `label:'…'` values inside one canvas array literal. */
-const labelsIn = (src, key = 'l') => [...src.matchAll(new RegExp(`\\b${key}:'([^']+)'`, 'g'))].map((m) => m[1]);
+/** The `l:'…'` values inside one canvas array literal. A literal regex, never a built one. */
+const labelsIn = (src) => [...src.matchAll(/\bl:'([^']+)'/g)].map((m) => m[1]);
 
 const MARKET = between(CANVAS, '<!-- ============ 1 · MARKETPLACE', '<!-- ============ 2 · MY PERKS');
 const MINE = between(CANVAS, '<!-- ============ 2 · MY PERKS', '<!-- ============ 3 · PARTNER SUBMIT');
