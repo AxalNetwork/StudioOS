@@ -35,6 +35,9 @@
  */
 import type { Env } from '../types';
 import { ageHours } from './approvalSources';
+import {
+  ticketSlaBandForPriority, tallySlaBands, type SlaBand,
+} from './supportSlaPolicy';
 
 /**
  * What "open" means for a ticket, on every surface that counts one.
@@ -189,6 +192,8 @@ export type SupportTicketItem = {
   status: string;
   priority: string;
   age_hours: number | null;
+  /** Derived from priority and age against HQ's inherited P1/P2/P3 hours (D455). */
+  sla_band: SlaBand | null;
   requester: string | null;
   licence: { uid: string; licence_ref: string | null; brand_name: string | null } | null;
 };
@@ -197,6 +202,8 @@ export type PersonaBucket = {
   /** Null when the read hit its ceiling: a cut count is not a total. */
   count: number | null;
   oldest_age_hours: number | null;
+  /** Null when the read was cut — band totals would under-count. */
+  bands: { ok: number; due_soon: number; past: number } | null;
   /** The oldest `SUPPORT_LIST_LIMIT`, oldest first. Exact even past the ceiling, because the read is ordered. */
   items: SupportTicketItem[];
 };
@@ -213,11 +220,17 @@ export function summariseTickets(
   read: { complete: boolean; rows: OpenTicketRow[] }, nowMs: number,
 ): TicketQueues {
   const buckets = {} as Record<TicketPersona, PersonaBucket>;
-  for (const p of TICKET_PERSONAS) buckets[p] = { count: 0, oldest_age_hours: null, items: [] };
+  const bandScratch = {} as Record<TicketPersona, Array<SlaBand | null>>;
+  for (const p of TICKET_PERSONAS) {
+    buckets[p] = { count: 0, oldest_age_hours: null, bands: { ok: 0, due_soon: 0, past: 0 }, items: [] };
+    bandScratch[p] = [];
+  }
   for (const row of read.rows) {
     const bucket = buckets[personaOf(row)];
     const age = ageHours(row.created_at, nowMs);
+    const slaBand = ticketSlaBandForPriority(age, String(row.priority ?? ''));
     bucket.count = (bucket.count || 0) + 1;
+    bandScratch[personaOf(row)].push(slaBand);
     // Rows arrive oldest first, so the first dated row a bucket sees is its oldest.
     if (bucket.oldest_age_hours === null && age !== null) bucket.oldest_age_hours = age;
     if (bucket.items.length < SUPPORT_LIST_LIMIT) {
@@ -227,6 +240,7 @@ export function summariseTickets(
         status: String(row.status ?? ''),
         priority: String(row.priority ?? ''),
         age_hours: age,
+        sla_band: slaBand,
         requester: row.requester_name || row.requester_email || null,
         licence: row.licence_uid
           ? { uid: row.licence_uid, licence_ref: row.licence_ref, brand_name: row.licence_brand }
@@ -234,7 +248,16 @@ export function summariseTickets(
       });
     }
   }
-  if (!read.complete) for (const p of TICKET_PERSONAS) buckets[p].count = null;
+  if (!read.complete) {
+    for (const p of TICKET_PERSONAS) {
+      buckets[p].count = null;
+      buckets[p].bands = null;
+    }
+  } else {
+    for (const p of QUEUE_PERSONAS) {
+      buckets[p].bands = tallySlaBands(bandScratch[p]);
+    }
+  }
   return { complete: read.complete, open: read.complete ? read.rows.length : null, buckets };
 }
 

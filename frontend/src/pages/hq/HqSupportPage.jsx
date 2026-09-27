@@ -20,9 +20,9 @@
  * line says so under the cards — two figures that each defined "open" for
  * themselves is how a tile and a desk come to disagree.
  *
- * NO TICKET HAS AN SLA. Escalations carry a due date and render in three bands;
- * tickets carry none, so their ages render without a band rather than borrowing
- * one nobody set.
+ * TICKET SLA (D455). Escalations carry `due_at`; tickets inherit P1/P2/P3 from
+ * filing priority and age against HQ's fixed hours. The policy panel names the
+ * bands; queue cards show the derived band on each ticket row.
  *
  * D205 — HQ ANSWERS HERE. `PATCH /api/admin/escalations/:uid` (D112) had no
  * caller, so an escalation sat on HQ's board until its SLA passed and D143's
@@ -155,7 +155,7 @@ export function QueueCard({
                   </span>
                   <span
                     className={`shrink-0 rounded-full px-2 py-0.5 text-[9.5px] font-extrabold tabular-nums ${PILL[it.band || 'none']}`}
-                    title={it.band ? SLA_WORD[it.band] : 'Tickets carry no due date, so their age has no band.'}
+                    title={it.band ? SLA_WORD[it.band] : 'Age could not be banded.'}
                   >
                     {age || <Unrecorded>undated</Unrecorded>}
                   </span>
@@ -527,12 +527,14 @@ export function ticketCardProps(data, failed, persona) {
     ...base,
     state: 'ready',
     count: b ? b.count : null,
+    bands: b?.bands ?? null,
     items: (b?.items || []).map((x) => ({
       key: x.id,
       title: x.title || `Ticket #${x.id}`,
       meta: [x.requester, x.licence ? (x.licence.licence_ref || x.licence.brand_name) : null, x.status?.replace('_', ' ')]
         .filter(Boolean).join(' · '),
       age_hours: x.age_hours,
+      band: x.sla_band,
       to: `/help/tickets/${x.id}`,
     })),
   };
@@ -761,10 +763,84 @@ export function supportCoverage(data) {
 export const SUPPORT_UNAVAILABLE = [
   ['Tickets filed on a branch host', 'Once a licence has a branch, its administrators file on that branch’s host, into its own database, and no branch call returns tickets. The matrix marks those cells “On the branch”.'],
   ['A ticket’s queue as filed', 'A ticket is sorted by its requester’s standing now. Nothing stamps it when it is filed, so an administrator demoted since has moved queue.'],
-  ['A ticket SLA', 'Tickets carry no due date, so their ages show without a band. Only escalations have one.'],
+  ['Eight canvas support categories', 'Open tickets are counted by type (bug, feature, task) only. The artboard’s eight business categories are not stored on tickets yet.'],
   ['A push that has not been tried', 'A decision recorded before the push was stored has no outcome on its row. Send again is offered where this page still shows that decision.'],
   ['Support under the overlay', 'Out of scope. Viewing as a branch scopes Home and Team; this page reads HQ’s escalation board and HQ’s own tickets, not one branch’s database.'],
 ];
+
+/** Canvas Y1 — inherited response bands and ticket-type counts (D455). */
+export function SlaPolicyPanel({ slaPolicy, taxonomy, failed, onRetry }) {
+  if (failed) {
+    return (
+      <Card>
+        <Unreadable what="SLA policy and taxonomy" claim="The Support read failed." onRetry={onRetry} />
+      </Card>
+    );
+  }
+  const tiers = slaPolicy?.tiers || [];
+  const tax = taxonomy?.available ? taxonomy.items : null;
+  return (
+    <Card>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-[13.5px] font-extrabold tracking-tight">SLA policy and taxonomy</h2>
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-axal-faint">Set here · inherited by every subsidiary</span>
+      </div>
+      <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_1.15fr]">
+        <div>
+          <p className="text-[9px] font-extrabold uppercase tracking-wide text-axal-faint">Response bands</p>
+          <ul className="mt-2 grid gap-2">
+            {tiers.map((b) => (
+              <li
+                key={b.id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 dark:border-gray-700 dark:bg-gray-900/40"
+                data-testid={`hq-support-sla-${b.id}`}
+              >
+                <div className="min-w-0">
+                  <span className="text-[10px] font-extrabold tracking-wide text-[#881337] dark:text-rose-300">{b.id}</span>
+                  <span className="ml-2 text-[11px] text-axal-muted">{b.description}</span>
+                </div>
+                <span className="shrink-0 text-[12px] font-extrabold tabular-nums text-axal-ink dark:text-white">{b.hours}h</span>
+              </li>
+            ))}
+          </ul>
+          {slaPolicy?.note && (
+            <p className="mt-2 text-[11px] leading-relaxed text-axal-muted">{slaPolicy.note}</p>
+          )}
+          {slaPolicy?.ticket_mapping && (
+            <p className="mt-1 text-[10.5px] text-axal-faint">Tickets: {slaPolicy.ticket_mapping}</p>
+          )}
+        </div>
+        <div>
+          <p className="text-[9px] font-extrabold uppercase tracking-wide text-axal-faint">Open tickets by type</p>
+          {!taxonomy?.available && (
+            <p className="mt-2 text-[11px] text-axal-muted">
+              <Unrecorded reason={taxonomy?.reason}>Unreadable</Unrecorded>
+            </p>
+          )}
+          {tax && tax.length === 0 && (
+            <p className="mt-2 text-[12px] text-axal-faint">No open ticket carries a type count.</p>
+          )}
+          {tax && tax.length > 0 && (
+            <ul className="mt-2 grid grid-cols-2 gap-2" data-testid="hq-support-taxonomy">
+              {tax.map((t) => (
+                <li
+                  key={t.type}
+                  className="flex items-center justify-between gap-2 rounded-lg border border-axal-hairline bg-axal-ground px-2.5 py-2 text-[11px] dark:border-gray-700 dark:bg-gray-900/40"
+                >
+                  <span className="font-semibold capitalize">{t.type}</span>
+                  <span className="font-mono text-[10.5px] tabular-nums text-axal-muted">{t.open}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-2 text-[11px] leading-relaxed text-axal-muted">
+            Types are fixed at filing (bug, feature, task). Free-text categories would not stay comparable across tenants.
+          </p>
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 export default function HqSupportPage() {
   const [data, setData] = useState(null); // null = loading, UNAVAILABLE = failed
@@ -862,6 +938,15 @@ export default function HqSupportPage() {
         <div className="mt-4 grid gap-3 lg:grid-cols-[1.3fr_1fr]">
           <TenantMatrix matrix={ready?.matrix} failed={failed} onRetry={load} />
           <SyncStrip sync={ready?.sync} failed={failed} onRetry={load} />
+        </div>
+
+        <div className="mt-4">
+          <SlaPolicyPanel
+            slaPolicy={ready?.sla_policy}
+            taxonomy={ready?.taxonomy}
+            failed={failed}
+            onRetry={load}
+          />
         </div>
       </div>
       <WorkerRail
