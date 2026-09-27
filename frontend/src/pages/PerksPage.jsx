@@ -33,6 +33,17 @@ import { Eyebrow, Instrument } from '../workspaces/canvasKit';
  * two unlabelled "credits" in one product is a trap.
  */
 
+// D412 — the reasons routes/perks.ts gives for a listing this caller cannot
+// claim. The card used to print "Not enough credits" for every reason that was
+// not a tier, which became false the moment claiming became founders-only.
+const UNCLAIMABLE_LABEL = {
+  tier_required: 'Needs an upgrade',
+  insufficient_credits: 'Not enough credits',
+  founders_only: 'Founders only',
+  cap_reached: 'Claim limit reached',
+  perk_ended: 'Offer ended',
+};
+
 const KIND_LABEL = { credits: 'Credits', tier: 'Included in plan', money: 'Paid' };
 
 const STATUS_TONE = {
@@ -198,6 +209,12 @@ function ClaimDrawer({ perk, onClose, onClaimed }) {
                 This one comes with the {d.required_tier} plan.
               </p>
             )}
+            {!d.claimable && d.reason === 'founders_only' && d.reason_text && (
+              <p className="mt-3 text-sm text-amber-700">{d.reason_text}</p>
+            )}
+            {!d.claimable && (d.reason === 'cap_reached' || d.reason === 'perk_ended') && (
+              <p className="mt-3 text-sm text-amber-700">{UNCLAIMABLE_LABEL[d.reason]}.</p>
+            )}
 
             <button
               type="button"
@@ -297,7 +314,7 @@ function Catalogue() {
                     disabled={!p.claimable}
                     className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-500"
                   >
-                    {p.claimable ? 'Claim' : p.reason === 'tier_required' ? 'Needs an upgrade' : 'Not enough credits'}
+                    {p.claimable ? 'Claim' : (UNCLAIMABLE_LABEL[p.reason] || 'Not claimable')}
                   </button>
                 )}
               </div>
