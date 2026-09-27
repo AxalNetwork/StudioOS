@@ -35,8 +35,8 @@ export const FROZEN = [
     // D260 — "Every queue frozen" was never true: Approvals has eleven lanes
     // since D215, and four of them have no gate. The row now names both sides.
     row: 'Approvals',
-    note: 'LP applications, referrals, Spin-Out moderation and KYC verdicts are frozen, approve and reject alike. Items keep their SLA age, so nothing looks fresh when it unfreezes. Partner profiles, Exploring, Best-Fit consultations and due diligence are not frozen.',
-    gatedIn: ['admin_lp_applications.ts', 'refer_earn.ts', 'spinout_moderation.ts', 'kyc.ts'],
+    note: 'LP applications, referrals, Spin-Out moderation and KYC verdicts are frozen, approve and reject alike. Naming a reviewer on the board is frozen too. Items keep their SLA age, so nothing looks fresh when it unfreezes. Partner profiles, Exploring, Best-Fit consultations and due diligence are not frozen.',
+    gatedIn: ['admin_lp_applications.ts', 'refer_earn.ts', 'spinout_moderation.ts', 'kyc.ts', 'branch_approval_assignments.ts'],
   },
   {
     // D260 — the older application decide in admin.ts writes the same cohort

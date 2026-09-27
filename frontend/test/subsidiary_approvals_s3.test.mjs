@@ -88,10 +88,14 @@ test('the page ships the board AND the lane, and still names what is missing', (
   // which is what a reader would act on.
   assert.doesNotMatch(SRC, /PR 13/,
     'the page renders PR 13 as future work; PR 13 IS this page');
-  // The three things that genuinely still have no store, each with its reason.
+  // Assignment is a side record now (D470). The heading names it. The AI note
+  // and the reply thread are still not drawn, and the old "missing store"
+  // sentence must not come back in place of the owner's sign-off.
   assert.match(PAGE, /Assignment and history/, 'the assignment gap lost its statement');
   assert.match(PAGE, /AI-drafted decision note/, 'the AI-note gap lost its statement');
   assert.match(PAGE, /no thread/, 'the single-decision shape lost its statement');
+  assert.match(PAGE, /has not signed off/, 'the thread is named as a missing owner sign-off');
+  assert.doesNotMatch(PAGE, /need a store that does not exist/);
 });
 
 test('there is no reply box — the answer is one decision and the page says so', () => {
