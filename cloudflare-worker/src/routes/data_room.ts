@@ -85,7 +85,7 @@ function activeCompany(c: any, user: any): Promise<number | null> {
 }
 
 /** An active, unexpired grant for this investor on this project, or null. */
-async function activeGrant(env: Env, projectId: number, userId: number): Promise<GrantRow | null> {
+export async function activeGrant(env: Env, projectId: number, userId: number): Promise<GrantRow | null> {
   const row = await env.DB.prepare(
     `SELECT * FROM data_room_grants
       WHERE project_id = ? AND investor_user_id = ? AND status = 'active'
@@ -102,7 +102,7 @@ async function activeGrant(env: Env, projectId: number, userId: number): Promise
  * two-column lookup rather than an OR over both orderings. Checking both ways
  * round would quietly accept a row the rest of the system considers malformed.
  */
-async function ndaActive(env: Env, founderUserId: number, investorUserId: number): Promise<boolean> {
+export async function ndaActive(env: Env, founderUserId: number, investorUserId: number): Promise<boolean> {
   const row = await env.DB.prepare(
     `SELECT 1 FROM pairwise_ndas
       WHERE party_a_user_id = ? AND party_b_user_id = ? AND status = 'active'
@@ -111,7 +111,7 @@ async function ndaActive(env: Env, founderUserId: number, investorUserId: number
   return !!row;
 }
 
-async function logAccess(env: Env, projectId: number, userId: number, action: string, fileId: number | null) {
+export async function logAccess(env: Env, projectId: number, userId: number, action: string, fileId: number | null) {
   try {
     await env.DB.prepare(
       `INSERT INTO data_room_access_log (project_id, file_id, user_id, action, created_at)
