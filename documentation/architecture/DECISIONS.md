@@ -33560,6 +33560,177 @@ no memberships the page draws the on-ramp. On Network Effects → Companies → 
 (`POST /company/:uid/members`) and one `api.js` method (`addCompanyMember`)
 removed; none added.
 
+## D435
+
+**Team (integrated, founder): the roster, coverage and headcount plan get a
+store (migration 326) and `/build/team?mode=workspace` draws the canvas's
+four tabs up to the owner's decision line; `TeamBuildingPage` is retired.**
+Session 15's item 6, first half (Team · Authority is D436).
+
+**What was true on main (`6510453615`).**
+- `/build/team?mode=workspace` rendered `TeamBuildingPage`: three tabs,
+  Advisor / Co-Founder / Jobs, each embedding a discovery surface (the
+  advisor directory, Co-founder Match, the jobs list). The integrated Team
+  canvas draws Roster / Advisors / Hiring / Coverage: a stat strip, a roster
+  with equity, vesting and paperwork flags, an option-pool bar, a person
+  drawer and an invite drawer, advisor grants and cadence, roles and the
+  co-founder decision, function coverage, a headcount plan and people cost.
+- No store held a person's type, start date, access, salary, grant,
+  vesting schedule or paperwork state; none held coverage or a plan.
+  `user_company_links` (migration 191) records only accounts that joined
+  the workspace; `cap_table_holders` (020) is a Carta-shaped import keyed by
+  project; option pools and vesting (057) are keyed by the importing user.
+- The founder redirects `/advisors`, `/my/jobs` and `/cofounder` sent a
+  founder to `/build/team?tab=…`, and a bare `/build/team` is the Grow desk
+  for a founder (`founderGrowLanding` tests `mode !== 'workspace'`), so
+  `?tab=` never reached a tab: a founder opening `/advisors` landed on the
+  Grow desk. `FounderStudioHome`'s Office hours card had the same link.
+
+**What changed.**
+- **Migration 326** — `company_people` (one row per person on a company's
+  team, account or not: `person_type` founder / employee / contractor /
+  advisor, role, start date, access level, status active / offer_out /
+  offboarded, `salary_cents` as an annual integer, the recorded grant as
+  shares and a kind, the vesting schedule as start, cliff and length in
+  months, the agreement, IP-assignment and 83(b) states, advisor focus and
+  cadence, `created_by` / `updated_by`), `company_function_coverage`
+  (function, covered / thin / gap, who holds it, what would fix it) and
+  `company_headcount_plan` (period, target). Additive, idempotent, no
+  transaction statements, every row signed by its actor.
+- **Worker** (`routes/company.ts`, `services/companyTeam.ts`): `GET
+  /company/:uid/team` for any member, `POST …/team/people`, `PATCH
+  …/team/people/:pid`, `PUT …/team/coverage` and `PUT …/team/plan` for an
+  editor (`canEdit`, the rule that already decides who changes the
+  membership list). A non-member is refused `not_a_member`, a plain member
+  writing is refused `not_an_editor`, and a body outside the closed
+  vocabulary — an unknown type, a non-date, a fractional month, a negative
+  salary — is refused `invalid_person` / `invalid_coverage` /
+  `invalid_plan` with nothing written. Economics follow D431:
+  `salary_cents` and `compensation_note` are present for an editor and for
+  the person the row is linked to, and ABSENT for another member. A person
+  is linked to an account only when a member of this company holds the
+  email, never to an arbitrary account. Offboarding is a status with a
+  date, never a delete; a PUT replaces the coverage or plan list as one
+  signed record. The read composes three other stores and reports each per
+  source: the cap-table holders of the company's projects (joined through
+  `projects.company_id`, deleted projects excluded), a member's Carta
+  option-pool import (joined through `user_company_links`), and the newest
+  project's `cofounder_decision_meta` (162); a source that cannot be read
+  answers `{ available: false, reason }`, never an empty list.
+- **Page** (`pages/founder/FounderTeamPage.jsx`, mounted where
+  `TeamBuildingPage` was): the stat strip (team, roles from `jobs.mine()`,
+  pool unallocated from the import with granted and offer-out from the
+  roster and "reserved not recorded", coverage gaps); the paperwork strip
+  naming each person and document, linking to Trust Center; the roster with
+  type chips, flags, equity (the cap table's own `ownership_pct` when the
+  person is on it, the recorded grant over the fully-diluted total when not,
+  and the row says which), vesting computed from the recorded schedule with
+  a ghost track before the cliff and labelled computed, and a status pill;
+  the option-pool card naming the import it reads; the person drawer with
+  employment, equity, paperwork, edit and a two-step offboard that prints
+  the consequence; the invite drawer that records the person and, only when
+  asked and only with an email, sends the existing workspace invitation,
+  reporting the two outcomes apart; Advisors (grants, cadence, office hours
+  from the calendar's `advisor_booking` and `partner_office_hour` kinds, the
+  advisor directory opening inside the tab behind the Growth gate); Hiring
+  (roles with applicant counts and a link to `/grow/talent`, the jobs list
+  opening inside the tab, inbound co-founder leads, the project's recorded
+  decision with Co-founder Match opening behind the Studio gate); Coverage
+  (functions and plan editable by an editor and saved as a list, people
+  cost from recorded salaries with an unrecorded salary counted as unknown
+  and payroll load Not recorded). Economics locked, not hidden: an absent
+  salary draws Locked, and the cost card locks as a whole. Every read has
+  its own failed state.
+- **Retired on D304's rule**: `frontend/src/pages/TeamBuildingPage.jsx` is
+  deleted; the mount, the three founder redirects and Studio Home's link now
+  carry `mode=workspace`, and the legacy ids land in the tab that owns the
+  job (`advisor` → Advisors, `cofounder` and `jobs` → Hiring). No `api.js`
+  method or worker route is removed; five methods and five routes are added
+  together (`check-api-drift` 0 new).
+- ROUTE_MAP's Team row is CURRENT with the D435 update; PROFILE_ROUTING
+  regenerated; the founder README names the page.
+
+**Built up to the owner's decision line — named on the page's Decisions
+panel, never invented.** (1) The cap table of record: a company can own
+several projects, each with its own imported cap table; the page reads every
+holder across them. (2) A company-level option pool and a top-up model: the
+pool shown is a member's Carta import; no divisor is invented. (3) Paperwork
+issuance from this page — offer letter, contractor agreement, advisory
+agreement: the store records states; "Send document" is not drawn as live.
+(4) A payroll-load rate: none is stored, so people cost is salaries and
+contractors and says so. (5) Talent leads from a careers page: landing-page
+leads route by audience and only the co-founder audience exists. (6)
+Advisory grants and the cap table: recorded here, not written to
+`cap_table_holders`. Also not built: the canvas's "Model a top-up" and
+"Reserved for open roles" (no reservation is recorded on a posting).
+
+**Guard.**
+- `cloudflare-worker/test/company_team_d435.test.ts`, 6 tests through the
+  real router on real SQLite with migration 326 applied as written: an editor
+  records a person linked to the member holding the email (and never to a
+  non-member account) with the actor stamped; economics served to the editor
+  and the linked person and absent for another member; a member reads and
+  cannot write, a non-member gets neither; the closed vocabulary refuses six
+  bad bodies and the service's own rules; offboarding stamps a date and
+  keeps the row, coverage and plan PUTs replace and sign; the composed reads
+  answer per source and an unreadable cap table says so.
+- `frontend/test/team_d435.test.mjs`, 10 tests: the mount and the deleted
+  page, the redirects carrying `mode=workspace`, the legacy tab ids and the
+  preserved mode; vesting from the schedule with a ghost track; equity's
+  source labels; people cost's unknowns and the unestimated payroll load;
+  Locked vs Not recorded; every read's failed state and no `|| 0`; the
+  worker's per-source shapes, D431 predicate and gates, the migration's
+  cents and signatures; the six decisions on screen, "Send document" not
+  live, the invite note, the two-step offboard with one write, the opt-in
+  invitation, and no "advice"/"recommendation" in the page's voice.
+- `founder_grow_a5_contract`, `founder_shell`,
+  `founder_overview_subpage_links`, `apex_route_coverage`, `repo_layout`,
+  `team_authority`: green unchanged.
+
+**Mutations: 27 run, 27 caught** — each a non-zero exit with a `not ok`
+line, anchors unique, bytes proven changed, sources restored from a
+sha256-checked snapshot: economics served to every member; a plain member
+writing; a non-member reading; an unknown type accepted; a fractional month
+accepted; offboarding deleting the row; a failed cap-table read masked as
+empty; holders read across every project; every account's pool; a person
+linked to a non-member account holding the email; the actor unstamped on
+coverage; salary as a REAL dollar column; the old page mounted again; a
+redirect sending a bare `?tab=`; the cofounder alias dropped; a tab change
+dropping the mode; pre-cliff time drawn as vested; an unrecorded grant drawn
+as none; an unrecorded salary counted as zero; a withheld salary drawn as
+Not recorded; payroll load estimated at 11%; a failed roles read shown as
+zero; the Decisions panel unmounted; "Send document" drawn live; offboarding
+in one click; the invitation sent without asking; a client method dropped.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA
+fallback, `/company/:uid/team` stubbed as the worker shapes it. As an editor
+of "Novacraft Labs, Inc.": the meta line reads "Stage: seed · created Mar
+12, 2026 · 5 active · 10,000,000 shares fully diluted"; the strip "ON THE
+TEAM 5 · 0 offers out · 1 contractor · OPEN ROLES 1 · POOL UNALLOCATED
+760,000 · 240,000 granted · 0 offer out · reserved not recorded · COVERAGE
+GAPS 1 · 1 thin"; the paperwork strip "2 team members have missing paperwork
+— Amara (83(b) election), Rin (IP assignment). Both are diligence
+blockers."; Dmitri's row "EQUITY 2.4% · 240,000 options · recorded grant,
+not on the cap table · VESTED Cliff in 218 days"; the drawer's compensation
+"$145,000/yr"; Offboard opens "Offboard Dmitri Volkov from Novacraft Labs,
+Inc.? The record stays with today's date …", "Yes, offboard" sends the one
+PATCH. As a plain member the same page reads, with the drawer's compensation
+"Locked". Invite teammate with "Yusuf Demir", an email and "135,000" and the
+invitation box checked posts the person (`salary_cents` 13500000) and then
+the invitation, and the flash says both. Coverage reads "1 function has no
+owner and 1 is thin", the plan "5 of 6 · 1 to hire", the cost card
+"Salaries (1 employee) $12,083 · Contractors (1) $8,000 · Founders (2) $0 ·
+Payroll load & benefits Not recorded · Total monthly people cost $20,083 · 2
+founders defer salary". `/my/jobs` lands on Hiring with "Senior backend
+engineer · published · 14 applied · Review applicants" and the decision
+"Document a solo path · Documented Aug 1, 2026"; `/advisors` lands on Advisors with "GRANT 0.35% ·
+35,000 shares · 24-month vest, no cliff · CADENCE Monthly, 60 min · Signed"
+and one office hour from the calendar. A failed team read draws "The team
+record could not be read. Nothing here is drawn from a guess. Retry".
+
+`frontend/src` moved, so `docs/` is rebuilt. Migration 326 added. Five
+`api.js` methods and five worker routes added together; one page retired.
+
 ## D440
 
 **HQ-held Studio and My Licence stop pointing at pages that refuse, and stop printing zero for a seat or a host that was not confirmed.** No branch is provisioned (`infra/branches/` holds only the example), and every `/api/branch/*` handler calls `requireBranchTier`, so a card that opens `/branch/*` on HQ renders Unreadable. S20's rule is that those pages are never linked from the HQ-held shell.
@@ -33759,6 +33930,29 @@ artboard’s eight business categories are not stored and stay named as absent i
 the rail.
 
 **Tests.** `support_sla_d455.test.ts`; `hq_support_sla_d455.test.mjs`.
+
+## D456
+
+**HQ names per-subsidiary revenue from usage reports, without totalling it.** Wave 8,
+Session 16, item 7. No migration; no new `/api/*` method — `GET
+/api/admin/hq/overview` and `GET /api/admin/revenue/summary` gain
+`usage_coverage` plus split honesty fields.
+
+**Honesty.** `DERIVED_UNAVAILABLE` no longer blames U1 for revenue: branches report
+quarters (D266) with every stream unmeasured. Token P&L per subsidiary keeps its
+own refusal (U1 + D261 metering). MTD revenue on Home cites quarter reporting,
+not “no subsidiary attribution”.
+
+**Coverage.** `subsidiaryUsageCoverage` lists each licence’s report status for the
+current period — reported vs not, measurable streams if any — never a summed
+`gross_cents`.
+
+**UI.** HQ · Home adds a Revenue row on subsidiary cards and fixes the MTD tile;
+HQ · Revenue draws a **Revenue per subsidiary** table beside Token P&L.
+
+**Tests.** `subsidiary_usage_coverage_d456.test.ts`;
+`hq_revenue_per_sub_d456.test.mjs`; `hq_home.test.mjs` and `hq_revenue_h5.test.mjs`
+re-aimed; `admin_revenue.test.ts` updated.
 
 ## D460
 

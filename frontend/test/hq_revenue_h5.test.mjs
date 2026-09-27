@@ -67,7 +67,8 @@ test('the figures with no source render absent, each with its own reason', () =>
   // server's reason for THAT figure, so the page can be read without
   // knowing the schema.
   assert.match(SRC, /data\.subscriptions_reason/, 'the subscriptions row does not say why it is blank');
-  assert.match(SRC, /data\.derived_metrics_reason/, 'the per-subsidiary zone does not cite U1');
+  assert.match(SRC, /data\.token_pl_per_subsidiary_reason/, 'the token P&L zone names why spend is not split');
+  assert.match(SRC, /Revenue per subsidiary/, 'the revenue-per-subsidiary zone is drawn');
   // Still shown, and still true, but narrower than it was: what cannot be
   // derived is a branch's SPEND, because a code names no subsidiary.
   assert.match(SRC, /promos\.budget_reason/, 'the promo zone no longer says what it cannot derive');

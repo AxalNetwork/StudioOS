@@ -533,12 +533,39 @@ export async function branchLicencePayload(env: Env, code: string) {
  * D111 pattern, where `budget_reason` survived in a smaller and still-true
  * form rather than being dropped.
  */
+export const REVENUE_PER_SUBSIDIARY_UNAVAILABLE = {
+  revenue_per_subsidiary_available: false,
+  revenue_per_subsidiary_reason:
+    'Each branch reports its quarter to HQ every morning (D266), and every stream in that report '
+    + 'arrives unmeasured: branch databases record no revenue amounts, so there is no figure to '
+    + 'total per subsidiary.',
+} as const;
+
+export const MTD_REVENUE_UNAVAILABLE = {
+  mtd_revenue_available: false,
+  mtd_revenue_reason:
+    'Month-to-date revenue per subsidiary is not recorded on HQ: branches report quarters, not MTD, '
+    + 'and every reported stream arrives unmeasured (D266).',
+} as const;
+
+/** Token spend split — still blocked by tenancy scope and metering (D261), not by D266. */
+export const TOKEN_PL_PER_SUBSIDIARY_UNAVAILABLE = {
+  token_pl_per_subsidiary_available: false,
+  token_pl_per_subsidiary_reason:
+    'Token P&L per subsidiary needs inference spend tied to a licence. No account names its licence '
+    + 'yet (U1), and only Eadwyn’s two gatewayed task classes carry branch metadata (D261); every '
+    + 'other model call carries none, so spend is not attributed per tenant.',
+} as const;
+
 export const DERIVED_UNAVAILABLE = {
   derived_metrics_available: false,
   derived_metrics_reason:
-    'Accounts in territory and revenue per subsidiary need every account to name the licence it '
-    + 'belongs to. No account carries one yet — migration 187 built the licence ledger, not the '
-    + 'tenancy scope — so these are not shown rather than shown as zero.',
+    'Accounts in territory need every account to name the licence it belongs to. No account carries '
+    + 'one yet — migration 187 built the licence ledger, not the tenancy scope — so that count is '
+    + 'not shown rather than shown as zero. Revenue per subsidiary is a separate absence: branches '
+    + 'report quarters (D266) with every stream unmeasured, so no revenue figure is totalled here either.',
+  ...REVENUE_PER_SUBSIDIARY_UNAVAILABLE,
+  ...MTD_REVENUE_UNAVAILABLE,
 } as const;
 
 /**
