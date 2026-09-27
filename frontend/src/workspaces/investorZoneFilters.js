@@ -61,8 +61,8 @@ const ALREADY_MINE =
 // returns it, which is what the `Founders` chip narrows on.
 const NO_LP_RELATIONSHIP =
   'an LP register is kept against a fund rather than as a relationship, and this page never reads it';
-const NO_INTERACTION_DATE =
-  'no interaction date is stored on a relationship; the only history kept is that the row was created and edited';
+// `Going cold` went live with D465: `partner_interactions` (migration 338) is
+// the interaction log, and the relationship's last touch is its MAX.
 // `/network/introductions`. NOT word for word what the founder table says, and
 // the difference is a store: the founder desk reads `intro_propositions` alone,
 // where every row is addressed to the reader, but an investor's own asks live
@@ -310,7 +310,7 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Founders', key: 'founders' },
     { canvas: 'Co-investors', key: 'coinvestors' },
     { canvas: 'LPs', unbuilt: NO_LP_RELATIONSHIP },
-    { canvas: 'Going cold', unbuilt: NO_INTERACTION_DATE },
+    { canvas: 'Going cold', key: 'cold', label: 'Going cold {n}' },
   ],
 
   'network/introductions': [

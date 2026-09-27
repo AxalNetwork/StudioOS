@@ -189,7 +189,10 @@ const PROFILES = {
     //
     // THIRTEENTH: `portfolio/updates`'s `Chase all overdue` — migration 337
     // built the chase log, and D464 wired the op.
-    handlers: 13,
+    //
+    // FOURTEENTH: `network/relationships`'s `Set reminders` — migration 338
+    // built the reminder store, and D465 wired the op.
+    handlers: 14,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
