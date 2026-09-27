@@ -3147,6 +3147,18 @@ export const api = {
   // The ladder, the named functions, and what each authority level MEANS.
   // A picker must never hardcode these — see services/teamAuthority.ts.
   teamVocabulary: () => request('/company/team-vocabulary'),
+  // D435 — the founder's Team page (migration 326): the roster, coverage and
+  // headcount plan of one company, plus the cap-table, option-pool and
+  // co-founder-decision reads it composes, each reported per source.
+  getCompanyTeam: (uid) => request(`/company/${uid}/team`),
+  addCompanyPerson: (uid, data) =>
+    request(`/company/${uid}/team/people`, { method: 'POST', body: JSON.stringify(data) }),
+  updateCompanyPerson: (uid, personUid, data) =>
+    request(`/company/${uid}/team/people/${personUid}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  saveCompanyCoverage: (uid, rows) =>
+    request(`/company/${uid}/team/coverage`, { method: 'PUT', body: JSON.stringify({ rows }) }),
+  saveCompanyHeadcountPlan: (uid, rows) =>
+    request(`/company/${uid}/team/plan`, { method: 'PUT', body: JSON.stringify({ rows }) }),
 
   // Task #121 — a real invitation, as opposed to the retired direct add, which
   // linked an EXISTING account without asking it and 404'd on anyone who had
@@ -3484,6 +3496,10 @@ export const api = {
   branchHome: () => request('/branch/home'),
   // D246 — Studio's operating-posture strip: the caller's own admin-bank answers.
   adminPosture: () => request('/advisor/admin-posture'),
+  // D443 — one glance for Studio, on both tiers. Per-subsidiary figures on HQ
+  // come back recorded:false. The branch routes below stay for the pages that
+  // still call them.
+  adminStudioGlance: () => request('/admin/studio/glance'),
   // D147 — HQ's master contract library as this branch holds it. A COPY: the
   // payload carries HQ's `pushed_at`, and `not_carried` names what deliberately
   // does not travel (the document bodies, and an archived-version state HQ's own

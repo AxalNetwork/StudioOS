@@ -84,7 +84,7 @@ it, where in their nav, and how do they get there.*
 | Spin-Out Lab · Landing | `/spinout-lab` | Home | Full page | Sidebar → Home → Spin-Out Lab | UPGRADE | High |
 | Spin-Out Lab Workspace | `/spinout-lab` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Studio Ops | — | — (not routed) | Full page (Spin-Out Lab — frozen) | Not reachable yet | OUT OF SCOPE | High |
-| Team | `/build/team` | Home | Full page | Sidebar → Home → Grow | UPGRADE | High |
+| Team | `/build/team?mode=workspace` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Use of Funds | `/spinout-lab/use-of-funds` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 
 ## Advisor — 10 canvases
@@ -229,8 +229,8 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 74 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 40 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| High | 73 | Live route, reachable from that workspace’s sidebar. |
+| Medium | 41 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 34 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts

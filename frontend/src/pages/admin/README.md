@@ -9,7 +9,9 @@ route, not in the component.
 `StudioPosture.jsx` (the admin bank on record), `StudioNeedsDecision.jsx` (four
 link tiles, worst first), then `AdminStudioOverview.jsx`: one card per other
 Admin page. All three read their figures and the one `UNAVAILABLE` sentinel
-from `adminStudioOverview.js` (D246). It is not an `/admin/*` route.
+from `adminStudioOverview.js` (D246). The strip and the cards also read
+`GET /api/admin/studio/glance` (D443), which answers on both tiers.
+`AdminStudioHome.jsx` does not call that route yet. It is not an `/admin/*` route.
 
 Roughly grouped by what they administer: accounts and roles, the Spin-Out Lab
 cohort (applications, timing, journey preview, and `SpinoutModerationPage.jsx`

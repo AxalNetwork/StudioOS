@@ -3,13 +3,16 @@
  * Figures come from reads the branch pages already make. This file does not
  * mount a second assistant.
  */
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SIDEBAR_GROUPS } from '../../sidebarConfig';
-import { branchLabel } from '../../lib/shellRole';
+import { reportError } from '../../lib/log';
+import { branchLabel, branchOfUser } from '../../lib/shellRole';
 import { titleCase, Card, Unrecorded, Unreadable } from '../../ui';
 import { COMMUNITY_CONSOLES } from '../branch/BranchCommunity';
-import { freezeLine, studioGlances } from './adminStudioOverview';
+import {
+  freezeLine, glancesFromStudioGlance, loadStudioGlance, studioGlances, UNAVAILABLE,
+} from './adminStudioOverview';
 
 /**
  * The card's Open link is the shell row of the same name.
@@ -63,14 +66,35 @@ function CardHead({ title, to }) {
   );
 }
 
-export function AdminStudioOverview({ user, home, licence, templates, insights }) {
+export function AdminStudioOverview({ user, home, licence, templates, insights, glance: glanceProp }) {
   // D246 — every figure comes from studioGlances, which the needs-a-decision
   // strip reads too, and a prop equal to the shared UNAVAILABLE sentinel
   // renders as Unreadable.
+  // D443 — once the glance has answered, both this and the strip render from
+  // that payload instead. Until it does, the props the home page still passes
+  // are what a synchronous render sees.
+  const [fetched, setFetched] = useState(null);
+  useEffect(() => {
+    if (glanceProp !== undefined) return undefined;
+    let cancelled = false;
+    loadStudioGlance().then(
+      (value) => { if (!cancelled) setFetched(value); },
+      (e) => {
+        reportError('admin-studio:glance', e);
+        if (!cancelled) setFetched(UNAVAILABLE);
+      },
+    );
+    return () => { cancelled = true; };
+  }, [glanceProp]);
+  const glance = glanceProp !== undefined ? glanceProp : fetched;
+  const legacy = studioGlances({ user, home, licence, templates, insights });
+  const g = glance ? glancesFromStudioGlance(glance) : legacy;
   const {
     onBranch, lic, seats, approvals, programme, contracts, insights: insightView,
-  } = studioGlances({ user, home, licence, templates, insights });
-  const open = (label) => studioCardTarget(onBranch, label);
+  } = g;
+  const licenceAbsence = g.licenceAbsence || null;
+  const linkOnBranch = g.tier === 'branch' || (g.tier == null && Boolean(branchOfUser(user)));
+  const open = (label) => studioCardTarget(linkOnBranch, label);
 
   const territories = Array.isArray(user?.branch?.territories) ? user.branch.territories.filter(Boolean) : [];
   const status = user?.branch?.status;
@@ -88,7 +112,11 @@ export function AdminStudioOverview({ user, home, licence, templates, insights }
         </p>
       ) : null}
 
-      {onBranch ? (
+      {g.tier === 'hq' ? (
+        <p className="mt-4 text-[12.5px] text-axal-muted" data-testid="admin-studio-hq">
+          These figures are read from HQ&apos;s own database. A figure that belongs to one subsidiary is not recorded here.
+        </p>
+      ) : onBranch ? (
         <p className="mt-4 text-[12.5px] text-axal-muted" data-testid="admin-studio-territory">
           <span className="font-semibold text-axal-ink">{branchLabel(user) || 'This territory'}</span>
           {territories.length ? ` · ${territories.join(' · ')}` : ''}
@@ -205,7 +233,7 @@ export function AdminStudioOverview({ user, home, licence, templates, insights }
               // host is bound" — the register was never consulted. The card
               // already draws that distinction for seats a dozen lines up, and
               // a host is no less worth it.
-              <Unrecorded reason="The licence was not read, so whether a custom host is bound is unknown rather than none.">
+              <Unrecorded reason={licenceAbsence || 'The licence was not read, so whether a custom host is bound is unknown rather than none.'}>
                 Hostname not read
               </Unrecorded>
             ) : lic.domain_available === false ? (
@@ -233,7 +261,7 @@ export function AdminStudioOverview({ user, home, licence, templates, insights }
                 three different claims. The fourth — "a kit does not apply" — is
                 new here, because only a white-label licence has one. */}
             {!lic ? (
-              <Unrecorded reason="The licence was not read, so whether a brand kit is recorded is unknown rather than none.">
+              <Unrecorded reason={licenceAbsence || 'The licence was not read, so whether a brand kit is recorded is unknown rather than none.'}>
                 Brand kit not read
               </Unrecorded>
             ) : lic.kind !== 'white_label' ? (
