@@ -39,6 +39,15 @@
  * honest answer is that the rule is about what the SCHEMA declares.
  */
 
+/**
+ * A value made safe to interpolate into a `RegExp` — every metacharacter,
+ * backslash included. The same rule as `frontend/test/_escapeRe.mjs`; the
+ * names interpolated here are identifiers, but a pattern built from source
+ * text escapes all of it rather than arguing per site which characters can
+ * occur (CodeQL's incomplete-escaping finding on D423's first draft).
+ */
+export const escapeRe = (v) => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /** Name characters, so a scan can require a whole-word match without a regex built from data. */
 const isWordChar = (ch) => ch !== undefined && ch !== '' && /[A-Za-z0-9_]/.test(ch);
 
@@ -328,7 +337,7 @@ function literalsIn(expr) {
 
 /** `const NAME = <expr>;` in `src`, as text — the first declaration found, or null. */
 function constExpr(src, name) {
-  const re = new RegExp(`\\b(?:const|let)\\s+${name.replace(/\$/g, '\\$')}\\s*(?::[^=\\n]+)?=\\s*`, 'g');
+  const re = new RegExp(`\\b(?:const|let)\\s+${escapeRe(name)}\\s*(?::[^=\\n]+)?=\\s*`, 'g');
   const m = re.exec(src);
   if (!m) return null;
   let i = m.index + m[0].length;
@@ -448,7 +457,7 @@ export function bindWrappers(src) {
     let restFrom = null;
     f.params.forEach((p, idx) => {
       if (!p.name) return;
-      const used = new RegExp(`(?:^|[^\\w$.])${p.name.replace(/\$/g, '\\$')}(?![\\w$])`).test(bindText);
+      const used = new RegExp(`(?:^|[^\\w$.])${escapeRe(p.name)}(?![\\w$])`).test(bindText);
       if (!used) return;
       if (p.rest) restFrom = idx; else bindParams.add(idx);
     });
@@ -518,7 +527,7 @@ export function rawVocabulary(src, helpers) {
     if (rawExpr(src.slice(start, j))) fields.add(m[1]);
   }
   for (const n of names) {
-    const re = new RegExp(`[{,]\\s*${n.replace(/\$/g, '\\$')}\\s*(?=[,}])`);
+    const re = new RegExp(`[{,]\\s*${escapeRe(n)}\\s*(?=[,}])`);
     if (re.test(src)) fields.add(n);
   }
   const isRawArg = (arg) => {
@@ -587,7 +596,7 @@ export function sweepBinds({ sources, baseline, resolveImport }) {
     }
 
     for (const [name, w] of wrappers) {
-      const re = new RegExp(`(?<![\\w$.])${name.replace(/\$/g, '\\$')}\\s*(?:<[^>()]*>)?\\(`, 'g');
+      const re = new RegExp(`(?<![\\w$.])${escapeRe(name)}\\s*(?:<[^>()]*>)?\\(`, 'g');
       for (const m of src.matchAll(re)) {
         const before = src.slice(Math.max(0, m.index - 24), m.index);
         if (/function\s*\*?\s*$|(?:const|let)\s+$/.test(before)) continue; // the definition itself
