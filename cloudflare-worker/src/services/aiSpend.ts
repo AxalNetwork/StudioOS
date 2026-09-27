@@ -59,12 +59,36 @@ export interface AiSpendReport {
     task: string;
     model: string;
     cost_usd: number;
+    /**
+     * The row's token counts, as `ai_usage_logs` recorded them (D401). NULL
+     * where the row's zero is not a count:
+     *   - a cached answer or a refusal called no model, so nothing was
+     *     billed in either direction and "0 in / 0 out" would read as a tiny
+     *     run rather than no run;
+     *   - a ZERO on a live call: a STREAMED call records completion 0 because
+     *     the router forwards the body without reading it (aiRouter.ts, "we
+     *     don't see the completion side"), and a transcription is billed by
+     *     audio minute and records prompt 0.
+     * They are the same figures `est_cost_usd` was computed from, so where the
+     * provider omitted its usage they are the router's text-length estimate —
+     * the rail labels them as the log's figures, not as a meter reading.
+     */
+    prompt_tokens: number | null;
+    completion_tokens: number | null;
     cached: boolean;
     fallback_used: boolean;
     refusal: string | null;
     at: string;
   } | null;
+  /**
+   * FALSE WHEN THE LAST-RUN READ FAILED (D401). `last_run: null` used to mean
+   * both "no calls yet" and "the query threw", and the rail could only say
+   * the first. Now `null` + `true` is no calls, and `false` is unreadable.
+   */
+  last_run_recorded: boolean;
   by_task: Array<{ task: string; calls: number; spend_usd: number }>;
+  /** The same split for the task breakdown the rail's average is drawn from. */
+  by_task_recorded: boolean;
 }
 
 /** UTC, sortable, no locale drift — the same keys aiRouter writes. */
@@ -187,6 +211,10 @@ export async function loadMyAiSpend(env: Env, actor: Actor, now: Date): Promise<
 
   let last_run: AiSpendReport['last_run'] = null;
   let by_task: AiSpendReport['by_task'] = [];
+  // Only a read that RAN can report its result. When the totals themselves
+  // were unreadable neither query runs, and both stay false.
+  let last_run_recorded = false;
+  let by_task_recorded = false;
   if (recorded) {
     try {
       // Bounded by `now`, like every other figure in this report. Without the
@@ -196,23 +224,39 @@ export async function loadMyAiSpend(env: Env, actor: Actor, now: Date): Promise<
       // concerned. Harmless with a wall clock, incoherent the moment the
       // clock is anything else, and the report is explicitly as-at `now`.
       const r = await env.DB.prepare(
-        `SELECT u.task, u.model, u.est_cost_usd, u.cached, u.fallback_used, u.refusal, u.created_at
+        `SELECT u.task, u.model, u.est_cost_usd, u.prompt_tokens, u.completion_tokens,
+                u.cached, u.fallback_used, u.refusal, u.created_at
            FROM ai_usage_logs u
           WHERE ${scope.sql} AND u.created_at <= ?
           ORDER BY u.created_at DESC, u.id DESC LIMIT 1`,
       ).bind(...scope.binds, asAt).first<any>();
       if (r) {
+        // No model was called for a cached answer or a refusal, so neither
+        // direction has a count. On a live call a ZERO is not a count either:
+        // a streamed call records no completion side, and a transcription
+        // is billed by audio minute and records no prompt tokens. Only a
+        // positive figure is one the router actually wrote down.
+        const called = !r.cached && !r.refusal;
+        const tok = (v: unknown) => {
+          const n = Number(v);
+          return Number.isFinite(n) && n > 0 ? n : null;
+        };
+        const tokensIn = called ? tok(r.prompt_tokens) : null;
+        const tokensOut = called ? tok(r.completion_tokens) : null;
         last_run = {
           task: String(r.task ?? ''),
           model: String(r.model ?? ''),
           cost_usd: Number(r.est_cost_usd) || 0,
+          prompt_tokens: tokensIn,
+          completion_tokens: tokensOut,
           cached: !!r.cached,
           fallback_used: !!r.fallback_used,
           refusal: r.refusal ?? null,
           at: String(r.created_at ?? ''),
         };
       }
-    } catch { /* leave null — an unreadable last run is not a free one */ }
+      last_run_recorded = true;
+    } catch { /* leave null and unrecorded — an unreadable last run is not "no run" */ }
 
     try {
       const rows = await env.DB.prepare(
@@ -227,8 +271,9 @@ export async function loadMyAiSpend(env: Env, actor: Actor, now: Date): Promise<
         calls: Number(t.calls) || 0,
         spend_usd: Number(t.spend) || 0,
       }));
-    } catch { /* the totals above still stand */ }
+      by_task_recorded = true;
+    } catch { /* the totals above still stand; the breakdown is unrecorded, not empty */ }
   }
 
-  return { recorded, month, today, last_run, by_task };
+  return { recorded, month, today, last_run, last_run_recorded, by_task, by_task_recorded };
 }

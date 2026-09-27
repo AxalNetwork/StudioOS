@@ -33155,6 +33155,113 @@ one.
   - the receipt comment
   - the hook's failure branch no longer clearing `spend`
 
+## D401
+
+**The rail keeps a lasting "Last run" receipt: model, tokens in and out, and
+cost, labelled as the account's (Session 12, item 2).** No migration, no new
+route, no `api.js` method. There is one additive change to the Worker's
+response: `GET /api/ai/me/spend` gains four fields.
+
+**What the canvas asks for, and what the log holds.** The AIRail canvas draws
+"Last run · in/out · cost" in the Usage block. `services/aiSpend.ts` already
+returned `last_run`, the caller's newest `ai_usage_logs` row, but without
+token counts. The columns exist (`prompt_tokens`, `completion_tokens`,
+`NOT NULL DEFAULT 0`), so no store was missing. The work was saying
+honestly what a stored zero means.
+
+**A zero in those columns is often not a count.** Measured in
+`services/aiRouter.ts`:
+- A cached answer and a refused call record 0 because no model was called.
+- A streamed call records `completion_tokens` 0 because the router forwards
+  the body unread ("we don't see the completion side").
+- A transcription is billed by the audio minute and records `prompt_tokens`
+  0.
+- Where the provider omits its usage, both counts are the router's
+  text-length estimate. `est_cost_usd` is computed from the same figures.
+
+So `last_run` now carries `prompt_tokens` and `completion_tokens`. Each is
+the logged value when it is positive and the row called a model, and null
+otherwise: never 0. The rail labels them as the log's figures, and makes no
+claim that they are a meter reading.
+
+**A failed read is no longer "no runs".** `last_run: null` meant both "no
+calls yet" and "the query threw", because the catch left it null. The same
+was true of `by_task: []`, which the rail's average is drawn from. The
+response now carries `last_run_recorded` and `by_task_recorded`. Each is true
+only when its query ran, and both are false when the totals themselves were
+unreadable.
+
+**On the rail** (`WorkerRail.jsx`, `assistCost.js`'s new `lastRunReceipt`):
+- The Usage block draws **"Last run · your account, any page"** over a line
+  like "Llama 3.3 70B Fast · 812 in / 1,440 out · $0.0006". The label is
+  account-wide on purpose. `ai_usage_logs` records no page, so "this page's
+  last run" is not a fact the log holds; item 5 adds the column.
+- The token half of the line takes one of five forms:
+  - "812 in / 1,440 out"
+  - "300 in / out not recorded" (a streamed call)
+  - "tokens not recorded"
+  - "cached, no model called"
+  - "refused, nothing run"
+
+  It never reads "0 in / 0 out". A response from a Worker older than this
+  change carries no token fields and lands on "tokens not recorded".
+- A fallback is named ("a smaller model answered"), and an absent cost reads
+  "cost not recorded", never $0.0000.
+- `last_run_recorded: false` renders Unreadable with a Retry, and
+  `by_task_recorded: false` does the same in place of "No runs of this yet".
+- A successful read-back calls the hook's `reload()` (D400), so the month's
+  figures and the lasting receipt are re-read after the run.
+
+**Why the per-click receipt stays.** The gap map expected the lasting receipt
+to replace it. It does not, because the two answer different questions. The
+per-click line describes exactly the run whose text sits above it. The
+lasting line is the account's newest row, which after a click is usually
+that run, but not always: another tab or page, or a later call on the
+account, can be newer. Replacing the first with the second would sometimes
+put another run's figures under this run's text. Both stay, each labelled
+for what it is.
+
+**Not changed:** AssistRail's own "Last run" row (cost only) on the Lab and
+the three legacy founder tools. The canvas's lasting receipt is WorkerRail's
+block, and AssistRail's retirement outside the Lab is still an open
+decision.
+
+**For Session 14.** The rail's receipt is now part of the anatomy the founder
+desks inherit. It is drawn by the rail from the account's own report, and
+it takes no prop.
+
+**Verification.**
+- The Worker block of `ai_spend_self` gains six tests on real SQLite.
+  1. A live call carries the counts the log recorded.
+  2. A cached answer and a refusal carry none, including rows whose counts
+     are non-zero.
+  3. A stream carries a prompt count and no completion count.
+  4. No calls means `last_run_recorded: true` with `last_run` null.
+  5. A table without the token columns still totals, and reports
+     `last_run_recorded: false` with `by_task_recorded: true`.
+  6. An unreadable table leaves both flags false.
+- New file `worker_rail_last_run_d401.test.mjs`, 12 tests: eight on the line
+  and four on the rail.
+- Mutations: 16 run, 16 caught, after one escape was fixed in the test.
+  "A refusal keeps its counts" at first passed, because every refusal row in
+  the test held zero tokens and the zero rule nulled them on its own. A
+  refusal row with non-zero counts now pins the rule. The 16:
+  - tokens not selected
+  - a cached row keeping its counts
+  - a refusal keeping its counts
+  - a zero passed through as a count
+  - `last_run_recorded` always true
+  - either flag never set (two mutations)
+  - the line printing a zero
+  - a cached run printed as a count
+  - a refusal printed as a count
+  - a fallback left unnamed
+  - a null cost printed as $0
+  - the label saying "this page"
+  - an unreadable last run hidden
+  - no reload after a run
+  - an unreadable breakdown ignored
+
 ## D410
 
 **E-sign `/send` hardening: the signing link reaches only the recipient, a
