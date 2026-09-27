@@ -133,7 +133,8 @@ test('the composer is the canvas’s: paperclip, growing textarea, send, and a n
   assert.ok(THREAD.includes('title="Attach a file"') && THREAD.includes('<textarea'));
   const composer = between(page, 'function Composer(', 'function ContextStrip(');
   assert.match(composer, /aria-label="Attach a file"/);
-  assert.match(composer, /title=\{attachReason \|\| undefined\}/);
+  // D415: the paperclip works; it is disabled only with the Worker's reason.
+  assert.match(composer, /title=\{attachReason \|\| 'Attach a file'\}/);
   assert.match(composer, /el\.style\.height = `\$\{Math\.min\(el\.scrollHeight, 150\)\}px`;/);
   assert.match(page, /`This thread stays attached to \$\{detail\.context\.kind\.toLowerCase\(\)\}: \$\{detail\.context\.title\}\.`/);
 });
@@ -173,16 +174,15 @@ test('the context is re-checked for the reader on every open, and pinned only to
  * 3 · What is not printed                                           *
  * ---------------------------------------------------------------- */
 
-test('the canvas’s two untrue sentences are not printed; the Worker’s are', () => {
-  for (const [phrase, key] of [
-    ['Conversations appear here when an introduction is accepted', 'auto_threads'],
-    ['Attachments are visible to both parties only', 'attachments'],
-  ]) {
-    assert.ok(CANVAS.includes(phrase), `the canvas no longer says "${phrase}", so this guard is stale`);
-    assert.ok(!pageRaw.includes(phrase), `the page repeats "${phrase}"`);
-    assert.ok(worker.includes(`${key}: '`), `the Worker no longer serves absent.${key}`);
-  }
+test('the canvas’s untrue sentence is not printed; the Worker’s is', () => {
+  const phrase = 'Conversations appear here when an introduction is accepted';
+  assert.ok(CANVAS.includes(phrase), `the canvas no longer says "${phrase}", so this guard is stale`);
+  assert.ok(!pageRaw.includes(phrase), `the page repeats "${phrase}"`);
+  assert.ok(worker.includes("auto_threads: '"), 'the Worker no longer serves absent.auto_threads');
   assert.match(page, /\{list\.absent\?\.auto_threads\}/);
+  // D415 made the attachments sentence true, so it is printed now — and the
+  // Worker's reason takes its place only where no storage is connected.
+  assert.match(page, /\(detail\.absent\?\.attachments \|\| 'Attachments are visible to both parties only\.'\)/);
   assert.match(page, /attachReason=\{detail\.absent\?\.attachments\}/);
   // "via Axal VC" names a party to an introduction nothing records.
   assert.ok(!pageRaw.includes('via Axal VC'));

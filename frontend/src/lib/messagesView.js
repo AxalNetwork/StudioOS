@@ -99,3 +99,20 @@ export function threadMatches(t, filter, query) {
   return hay.includes(q);
 }
 
+
+/**
+ * D415 — what the composer's file picker offers, and the size the Worker
+ * accepts. The Worker is the rule (routes/messages.ts sniffs the bytes and
+ * counts the size); these only stop the page offering what it would refuse.
+ */
+export const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+export const ATTACHMENT_ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx,.pptx';
+
+/** A byte count as a person reads it. */
+export function fileSize(n) {
+  const b = Number(n);
+  if (!Number.isFinite(b) || b < 0) return '';
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${Math.round(b / 1024)} KB`;
+  return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+}

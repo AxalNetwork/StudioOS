@@ -3260,6 +3260,16 @@ export const api = {
     request(`/messages/${encodeURIComponent(uid)}/messages`, { method: 'POST', body: JSON.stringify({ body }) }),
   messageMarkRead: (uid) => request(`/messages/${encodeURIComponent(uid)}/read`, { method: 'POST' }),
   messageArchive: (uid) => request(`/messages/${encodeURIComponent(uid)}/archive`, { method: 'POST' }),
+  // D415 — a file sent as a message (multipart), and a signed, single-use,
+  // five-minute link to one, minted only for a member of the thread.
+  messageAttach: (uid, file, body) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (body) fd.append('body', body);
+    return request(`/messages/${encodeURIComponent(uid)}/attachments`, { method: 'POST', body: fd });
+  },
+  messageAttachmentLink: (uid, attUid) =>
+    request(`/messages/${encodeURIComponent(uid)}/attachments/${encodeURIComponent(attUid)}/link`, { method: 'POST' }),
 
   // Perks & Products (migration 186 + routes/perks.ts). `allowance_configured`
   // on the catalogue response is load-bearing: it lets the page say "no credit

@@ -9,6 +9,7 @@ import { reportError } from '../lib/log';
 import { Pill, Unrecorded, Unreadable } from '../ui';
 import {
   FILTERS, SUBJECT_LABEL, nameOf, initialsOf, roleLine, money, timeOf, fmtWhen, groupMessages, threadMatches,
+  ATTACHMENT_MAX_BYTES, ATTACHMENT_ACCEPT, fileSize,
 } from '../lib/messagesView';
 
 /**
@@ -28,10 +29,12 @@ import {
  * and re-checked for the person reading on every open; when it is absent, the
  * page prints the Worker's sentence for why.
  *
- * TWO CANVAS SENTENCES ARE NOT PRINTED because nothing makes them true:
- * threads do not "appear when an introduction is accepted or a match is made"
- * (only a person starts one), and "Attachments are visible to both parties
- * only" describes a store that does not exist yet. The Worker says both.
+ * ONE CANVAS SENTENCE IS NOT PRINTED because nothing makes it true: threads
+ * do not "appear when an introduction is accepted or a match is made" (only a
+ * person starts one), and the Worker says so. The other one D414 withheld —
+ * "Attachments are visible to both parties only" — is printed since D415,
+ * because it became true: files live in a private bucket and the only way to
+ * one is a single-use link the Worker mints for a member of the thread.
  */
 
 /** Each subject type's chip: the shared label, an icon and a tone. */
@@ -121,11 +124,22 @@ function NewThread({ onClose, onCreated }) {
   );
 }
 
-function Composer({ onSend, disabled, hint, note, attachReason }) {
+/**
+ * The canvas's composer: paperclip, growing textarea, send, and a note.
+ *
+ * A FILE IS SENT AS A MESSAGE (D415). Choosing one shows it above the
+ * textarea; Send posts it with whatever was typed, as one message. The
+ * Worker decides what may be attached — type from the bytes, size, a daily
+ * count — and the page prints its sentence when it says no. The size check
+ * here only saves an upload the Worker would refuse anyway.
+ */
+function Composer({ onSend, onAttach, disabled, hint, note, attachReason }) {
   const [text, setText] = useState('');
+  const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const ref = useRef(null);
+  const picker = useRef(null);
   // The canvas's growing textarea: one line, up to about six.
   useEffect(() => {
     const el = ref.current;
@@ -133,21 +147,42 @@ function Composer({ onSend, disabled, hint, note, attachReason }) {
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 150)}px`;
   }, [text]);
+  function choose(e) {
+    const f = e.target.files?.[0] || null;
+    e.target.value = '';
+    setErr('');
+    if (f && f.size > ATTACHMENT_MAX_BYTES) { setErr('Files up to 10 MB can be attached.'); return; }
+    setFile(f);
+  }
   async function submit(e) {
     e?.preventDefault();
     const body = text.trim();
-    if (!body || busy) return;
+    if ((!body && !file) || busy) return;
     setBusy(true); setErr('');
-    try { await onSend(body); setText(''); }
-    catch (ex) { setErr(ex?.message || 'That message did not send.'); }
+    try {
+      if (file) await onAttach(file, body);
+      else await onSend(body);
+      setText(''); setFile(null);
+    } catch (ex) { setErr(ex?.message || 'That message did not send.'); }
     finally { setBusy(false); }
   }
+  const canAttach = !attachReason && !disabled;
   return (
     <form onSubmit={submit} className="border-t border-gray-200 p-3 dark:border-gray-800" data-testid="messages-composer">
+      {file && (
+        <div className="mb-2 inline-flex max-w-full items-center gap-2 rounded-lg border border-gray-200 px-2 py-1 text-[12px] dark:border-gray-700" data-testid="messages-chosen-file">
+          <Paperclip size={12} className="flex-none text-gray-500" />
+          <span className="truncate">{file.name}</span>
+          <span className="flex-none text-gray-500">{fileSize(file.size)}</span>
+          <button type="button" onClick={() => setFile(null)} aria-label="Remove the file" className="flex-none text-gray-400 hover:text-gray-700"><X size={12} /></button>
+        </div>
+      )}
       <div className="flex items-end gap-2">
-        {/* The canvas's paperclip, disabled with the Worker's reason. */}
-        <button type="button" disabled title={attachReason || undefined} aria-label="Attach a file"
-          className="flex h-9 w-9 flex-none items-center justify-center rounded-lg text-gray-400 disabled:cursor-not-allowed">
+        <input ref={picker} type="file" accept={ATTACHMENT_ACCEPT} onChange={choose} className="hidden" aria-hidden="true" tabIndex={-1} data-testid="messages-file-input" />
+        {/* The canvas's paperclip. Disabled only with the Worker's reason. */}
+        <button type="button" disabled={!canAttach || busy} title={attachReason || 'Attach a file'} aria-label="Attach a file"
+          onClick={() => picker.current?.click()}
+          className="flex h-9 w-9 flex-none items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-300 dark:hover:bg-gray-800">
           <Paperclip size={16} />
         </button>
         <textarea
@@ -157,7 +192,7 @@ function Composer({ onSend, disabled, hint, note, attachReason }) {
           aria-label="Message"
           className="min-h-9 flex-1 resize-none rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 disabled:opacity-60"
         />
-        <button type="submit" disabled={disabled || busy || !text.trim()} aria-label="Send"
+        <button type="submit" disabled={disabled || busy || (!text.trim() && !file)} aria-label="Send"
           className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-800">
           {busy ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
         </button>
@@ -165,6 +200,34 @@ function Composer({ onSend, disabled, hint, note, attachReason }) {
       {err && <p className="mt-1.5 text-[12px] text-red-600" role="alert">{err}</p>}
       <p className="mt-1.5 text-[11px] text-gray-500">{note}</p>
     </form>
+  );
+}
+
+/**
+ * One file on a bubble. Opening it asks the Worker for a signed, single-use
+ * link — only a member of the thread gets one — and follows it.
+ */
+function AttachmentChip({ threadUid, a, mine }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  async function open() {
+    setBusy(true); setErr('');
+    try {
+      const r = await api.messageAttachmentLink(threadUid, a.uid);
+      window.location.assign(r.url);
+    } catch (e) { setErr(e?.message || 'That file could not be opened.'); }
+    finally { setBusy(false); }
+  }
+  return (
+    <div className="mt-1">
+      <button type="button" onClick={open} disabled={busy} data-testid="messages-attachment"
+        className={`inline-flex max-w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-[12px] ${mine ? 'border-violet-300 bg-violet-500/30 text-white' : 'border-gray-200 bg-white text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'}`}>
+        {busy ? <Loader2 size={13} className="flex-none animate-spin" /> : <Paperclip size={13} className="flex-none" />}
+        <span className="truncate font-semibold">{a.filename}</span>
+        <span className="flex-none opacity-70">{fileSize(a.size_bytes)}</span>
+      </button>
+      {err && <p className="mt-0.5 text-[11px] text-red-600" role="alert">{err}</p>}
+    </div>
   );
 }
 
@@ -245,6 +308,10 @@ export default function MessagesPage({ user }) {
 
   async function send(body) {
     await api.messageSend(openUid, body);
+    await loadThread(openUid);
+  }
+  async function attach(file, body) {
+    await api.messageAttach(openUid, file, body);
     await loadThread(openUid);
   }
 
@@ -405,7 +472,10 @@ export default function MessagesPage({ user }) {
                         {!m.mine && (m.showAvatar ? <Avatar person={other} size={26} /> : <div className="w-[26px] flex-none" />)}
                         <div className="max-w-[75%]">
                           {m.showName && <div className="mb-0.5 text-[11px] font-semibold text-gray-500"><PersonName person={other} reason={detail.absent?.name} /></div>}
-                          <div className={`whitespace-pre-wrap rounded-[14px] px-3 py-2 text-sm ${m.mine ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100'}`}>{m.body}</div>
+                          <div className={`whitespace-pre-wrap rounded-[14px] px-3 py-2 text-sm ${m.mine ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100'}`}>
+                            {m.body}
+                            {(m.attachments || []).map((a) => <AttachmentChip key={a.uid} threadUid={openUid} a={a} mine={m.mine} />)}
+                          </div>
                           {m.showTime && <div className={`mt-0.5 text-[10px] text-gray-400 ${m.mine ? 'text-right' : ''}`}>{timeOf(m.created_at)}</div>}
                         </div>
                       </div>
@@ -416,12 +486,13 @@ export default function MessagesPage({ user }) {
 
                 <Composer
                   onSend={send}
+                  onAttach={attach}
                   disabled={detail.thread?.status !== 'open'}
                   hint={firstName ? `Message ${firstName}…` : 'Write a message…'}
                   attachReason={detail.absent?.attachments}
                   note={detail.context
                     ? `This thread stays attached to ${detail.context.kind.toLowerCase()}: ${detail.context.title}.`
-                    : detail.absent?.attachments}
+                    : (detail.absent?.attachments || 'Attachments are visible to both parties only.')}
                 />
               </>
             )}
