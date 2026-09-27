@@ -3224,7 +3224,6 @@ export const api = {
     request(`/data-room/${encodeURIComponent(projectUid)}/grants`, { method: 'POST', body: JSON.stringify(data || {}) }),
   dataRoomRevoke: (projectUid, uid) =>
     request(`/data-room/${encodeURIComponent(projectUid)}/grants/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
-  dataRoomsSharedWithMe: () => request('/data-room/shared'),
 
   // Task #55 — the advisor grant. A founder opens one project to one named
   // advisor, scope by scope; the advisor reads it back through /shared/*.
@@ -3545,7 +3544,6 @@ export const api = {
     request(`/admin/licences/${encodeURIComponent(uid)}/renew`, { method: 'POST', body: JSON.stringify(data || {}) }),
   licenceTerminate: (uid, note) =>
     request(`/admin/licences/${encodeURIComponent(uid)}/terminate`, { method: 'POST', body: JSON.stringify({ note }) }),
-  dataRoomShared: (projectUid) => request(`/data-room/shared/${encodeURIComponent(projectUid)}`),
   dataRoomDownload: (projectUid, uid) =>
     request(`/data-room/shared/${encodeURIComponent(projectUid)}/files/${encodeURIComponent(uid)}/download`, { method: 'POST' }),
   // getCapTableByProject is NOT redeclared here. It was, and this copy — the
@@ -4881,7 +4879,10 @@ export const api = {
     // The AI band every Research and Network artboard ends with (migration
     // 221). `surface` is the zone key and is allow-listed in the worker, so a
     // page that has not mounted the band cannot spend on it.
-    zoneDrafts: (surface) => request(`/research/drafts?surface=${encodeURIComponent(surface)}`),
+    // `scopeKey` narrows the read to one record's drafts (one data room), so a
+    // page about one record never shows a draft written about another.
+    zoneDrafts: (surface, scopeKey) => request(`/research/drafts?surface=${encodeURIComponent(surface)}${
+      scopeKey !== undefined ? `&scope_key=${encodeURIComponent(scopeKey)}` : ''}`),
     zoneDraftRun: (surface, scopeKey) => request('/research/drafts', {
       method: 'POST', body: JSON.stringify({ surface, ...(scopeKey ? { scope_key: scopeKey } : {}) }),
     }),

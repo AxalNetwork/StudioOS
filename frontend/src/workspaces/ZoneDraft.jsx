@@ -61,6 +61,17 @@ const ACCENTS = {
       + 'transition-colors hover:bg-amber-700 focus-visible:outline focus-visible:outline-2 '
       + 'focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60',
   },
+  // The investor canvases (b6a5f992, the diligence room) draw the band in the
+  // investor shell's indigo, `#4f46e5`.
+  indigo: {
+    band: 'rounded-[10px] border border-indigo-200 bg-indigo-50/60 p-3.5 dark:border-indigo-900 dark:bg-indigo-950/25',
+    ink: 'text-indigo-700 dark:text-indigo-300',
+    edit: 'mt-2 w-full rounded-[8px] border border-indigo-200 bg-white p-2.5 text-[12px] leading-relaxed text-axal-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 dark:border-indigo-900 dark:bg-gray-900 dark:text-gray-100',
+    button: 'inline-flex items-center gap-1.5 whitespace-nowrap rounded-[7px] border '
+      + 'border-indigo-600 bg-indigo-600 px-[11px] py-1.5 text-[11px] font-bold text-white '
+      + 'transition-colors hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 '
+      + 'focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60',
+  },
   violet: {
     band: 'rounded-[10px] border border-violet-200 bg-violet-50/60 p-3.5 dark:border-violet-900 dark:bg-violet-950/25',
     ink: 'text-violet-700 dark:text-violet-300',
@@ -95,6 +106,9 @@ export default function ZoneDraft({
   nothingToDraft,
   accent = 'amber',
   tone,
+  // A band about ONE record (a room, keyed by `scopeKey`) reads only that
+  // record's drafts. Unscoped bands read the surface's newest, as before.
+  scoped = false,
 }) {
   const skin = ACCENTS[accent] || ACCENTS.amber;
   const bodyClass = BODY_TONES[tone] || BODY_PLAIN;
@@ -105,7 +119,7 @@ export default function ZoneDraft({
 
   const load = useCallback(async () => {
     try {
-      const r = await api.research.zoneDrafts(surface);
+      const r = await api.research.zoneDrafts(surface, scoped ? scopeKey : undefined);
       // The newest, whether or not it has been accepted: the artboard shows one
       // block, and a reader who accepted a draft should still see what they
       // accepted rather than an empty slot inviting them to pay for it again.
@@ -115,7 +129,7 @@ export default function ZoneDraft({
       // reporting an error over a page that is otherwise fine.
       setItem(null);
     }
-  }, [surface]);
+  }, [surface, scoped, scopeKey]);
   useEffect(() => { load(); }, [load]);
 
   const doRun = async () => {
