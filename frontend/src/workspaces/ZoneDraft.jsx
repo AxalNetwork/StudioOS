@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatCost } from '../ui/assistCost';
+import RunEstimate from './RunEstimate';
 
 /**
  * The band every artboard with an AI proposal closes with.
@@ -17,7 +18,12 @@ import { formatCost } from '../ui/assistCost';
  * `FillProposals` states the reason for the founder's copy of this rule and
  * it is the same one: a component that drafted on render would spend a reader's
  * budget for visiting a page. Which is also why the cost is shown BEFORE the
- * run and not only after it.
+ * run and not only after it — where the host passes `ai`, its `useAiSpend()`
+ * result (D424). This used to claim the cost came first on every mount while
+ * the band drew one only once a draft existed, from the draft's own row. The
+ * founder desks pass `ai` now and show the reader's own average for
+ * `DRAFT_TASK` above the run button; a mount that passes nothing still shows
+ * the cost after the run and nothing before it, and does not fetch.
  *
  * `Edit first` AND `Accept` ARE ONE WRITE. Editing then accepting is the same
  * act with a different body, so the textarea opens in place and the accept
@@ -89,11 +95,24 @@ const ACCENTS = {
 // uses plain body text. It is the same draft through the same surface — only
 // the reading changes — so it is a tone on the body rather than a second
 // component. `null` is the default and leaves the body exactly as it was.
+//
+// The semantic tokens (D424) rather than Tailwind's reds: `destructive-edge`
+// and `-tint` are the canvas's own `#fecaca` / `#fef2f2`, and the text is the
+// System Sheet's destructive rather than a darker red it never names.
 const BODY_TONES = {
-  warn: 'mt-2 whitespace-pre-wrap rounded-[8px] border border-red-200 bg-red-50 p-2.5 text-[11.5px] '
-    + 'leading-relaxed text-red-900 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200',
+  warn: 'mt-2 whitespace-pre-wrap rounded-[8px] border border-axal-destructive-edge bg-axal-destructive-tint p-2.5 text-[11.5px] '
+    + 'leading-relaxed text-axal-destructive dark:border-red-900 dark:bg-red-950/30 dark:text-red-200',
 };
 const BODY_PLAIN = 'mt-2 whitespace-pre-wrap text-[12px] leading-relaxed text-gray-700 dark:text-gray-300';
+
+/**
+ * The router task every zone draft runs: `POST /api/research/drafts` calls
+ * `runAI({ task: 'workspace_explain' })` whatever the surface
+ * (routes/research.ts), and `zone_draft_run_estimate_d424` holds the two
+ * equal. The rail's "Read this page back" runs the same task, which is why
+ * the estimate names it.
+ */
+export const DRAFT_TASK = 'workspace_explain';
 
 export default function ZoneDraft({
   surface,
@@ -112,6 +131,8 @@ export default function ZoneDraft({
   // Called with the accepted draft, for a page whose record Accept also wrote
   // (the fund dossier's note) and which must re-read it.
   onAccepted,
+  // The host's `useAiSpend()` result, for the cost before a run (D424).
+  ai,
 }) {
   const skin = ACCENTS[accent] || ACCENTS.amber;
   const bodyClass = BODY_TONES[tone] || BODY_PLAIN;
@@ -226,7 +247,7 @@ export default function ZoneDraft({
               {busy === 'discard' ? 'Discarding…' : 'Discard'}
             </button>
             {item.accepted ? (
-              <span className="text-[10.5px] font-bold text-emerald-700 dark:text-emerald-400">Accepted</span>
+              <span className="text-[10.5px] font-bold text-axal-positive dark:text-emerald-400">Accepted</span>
             ) : null}
             {foot ? <span className="ml-auto text-[10px] text-gray-600 dark:text-gray-400">{foot}</span> : null}
           </div>
@@ -234,6 +255,7 @@ export default function ZoneDraft({
       ) : (
         <>
           <p className="mt-2 text-[12px] leading-relaxed text-gray-700 dark:text-gray-300">{empty}</p>
+          <RunEstimate ai={ai} task={DRAFT_TASK} shared="the rail's read-back" testId={`text-zone-draft-estimate-${surface.replace(/[^a-z0-9]+/gi, '-')}`} />
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button type="button" className={skin.button} onClick={doRun} disabled={busy !== ''}>
               {busy === 'run' ? 'Drafting…' : run}

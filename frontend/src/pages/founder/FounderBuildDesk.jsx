@@ -6,6 +6,8 @@ import { Unreadable, WorkerRail } from '../../ui';
 import { kindLabel, scheduleLabel } from '../../lib/cadence';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import useAssistMode from '../../hooks/useAssistMode';
+import useAiSpend from '../../hooks/useAiSpend';
+import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import { zonePillClass } from './deskZoneNav';
 import CreateStartupForm from '../../components/CreateStartupForm';
 import './founderBuildDesk.css';
@@ -126,6 +128,9 @@ export default function FounderBuildDesk() {
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [fillsOn] = useAssistMode('Build');
+  // The cost before a run (D424): the founder's own average for the task the
+  // three bands run, read only while they are drawn.
+  const ai = useAiSpend({ enabled: fillsOn && Boolean(projectId) });
   // `/projects` is retired (task #101) and this desk inherited the one thing it
   // could do that nothing else can: create a startup. `?new=1` opens the form,
   // because that is how the Command Palette's "Create startup" entry addressed
@@ -273,13 +278,19 @@ export default function FounderBuildDesk() {
           </nav>
         </header>
         {state === 'error' && <div className="build-error" data-testid="status-build-error"><AlertCircle size={16} /> {error} <button data-testid="button-retry-build" onClick={() => setReloadKey((value) => value + 1)}>Retry</button></div>}
-        <BuildSections loading={state === 'loading'} hasProjects={projects.length > 0} data={data} snapshots={snapshots} summary={summary} cadence={cadence} onRetry={() => setReloadKey((value) => value + 1)} links={links} metricsLink={metricsLink} executionLink={executionLink} navigationState={navigationState} projectId={projectId} fillsOn={fillsOn} onSaved={() => setReloadKey((value) => value + 1)} />
+        <BuildSections loading={state === 'loading'} hasProjects={projects.length > 0} data={data} snapshots={snapshots} summary={summary} cadence={cadence} onRetry={() => setReloadKey((value) => value + 1)} links={links} metricsLink={metricsLink} executionLink={executionLink} navigationState={navigationState} projectId={projectId} fillsOn={fillsOn} ai={ai} onSaved={() => setReloadKey((value) => value + 1)} />
       </div>
       <WorkerRail
         workspace="Build"
         className="build-rail"
         stance="Manual operating view"
-        note="This desk reads stored records. It does not move cards, generate plans, or change commitments."
+        // THE SWITCH THE THREE BANDS WAITED FOR (D424). They have been gated
+        // on this workspace's mode since they were mounted, and no rail on
+        // Build drew a switch for it, so none of them could ever be reached.
+        // The note it replaces said the desk generates no plans, above a band
+        // that drafts one.
+        fills
+        note={ASSIST_SURFACES.workspace.desks.Build.fills}
         coverage={[
           `${data.commitments.length} current key result${data.commitments.length === 1 ? '' : 's'}`,
           `${data.boardTotal} stored execution card${data.boardTotal === 1 ? '' : 's'} for this startup`,
@@ -290,7 +301,7 @@ export default function FounderBuildDesk() {
   </main>;
 }
 
-function BuildSections({ loading, hasProjects, data, snapshots, summary, cadence, onRetry, links, metricsLink, executionLink, navigationState, projectId, fillsOn, onSaved }) {
+function BuildSections({ loading, hasProjects, data, snapshots, summary, cadence, onRetry, links, metricsLink, executionLink, navigationState, projectId, fillsOn, ai, onSaved }) {
   const latest = snapshots[0];
   const previous = snapshots[1];
   const objectives = data.roadmap.reduce((count, column) => count + column.items.length, 0);
@@ -299,6 +310,7 @@ function BuildSections({ loading, hasProjects, data, snapshots, summary, cadence
       {fillsOn && projectId ? <ZoneDraft
         surface="build/this-week"
         scopeKey={String(projectId)}
+        ai={ai}
         accent="violet"
         label="Proposal · Monday plan"
         run="Draft a Monday plan"
@@ -327,6 +339,7 @@ function BuildSections({ loading, hasProjects, data, snapshots, summary, cadence
       {fillsOn && projectId ? <ZoneDraft
         surface="build/roadmap"
         scopeKey={String(projectId)}
+        ai={ai}
         accent="violet"
         label="Proposal · tradeoff, reasoned"
         run="Argue the ordering"
@@ -342,6 +355,7 @@ function BuildSections({ loading, hasProjects, data, snapshots, summary, cadence
       {fillsOn && projectId ? <ZoneDraft
         surface="build/kpi"
         scopeKey={String(projectId)}
+        ai={ai}
         accent="violet"
         label="Out of range · explain this?"
         run="Draft an annotation"
