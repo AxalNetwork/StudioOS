@@ -182,7 +182,13 @@ export function isPublicPath(pathname) {
     // they do not have — which is the whole reason the hand-off exists.
     // EXACT, not a `/support/` prefix: bare `/support` is the help-centre
     // redirect and everything else under it is unwritten.
-    || currentPath === '/support/session';
+    || currentPath === '/support/session'
+    // D441 — accepting a move onto this branch. The person has no account
+    // here yet, so a background settings/me 401 is the expected state, and
+    // bouncing them to /login before they can accept would strand the link.
+    // The token shape is the whole allow-list: /join itself and anything
+    // that is not an invitation token stay gated.
+    || /^\/join\/invt_[0-9a-f]{64}$/.test(currentPath);
 }
 
 /**
@@ -727,6 +733,12 @@ export const api = {
   // in a link. Branch Workers only: HQ answers 404 with `hq_only_surface`.
   redeemSupportSession: (code) =>
     request('/auth/support/redeem', { method: 'POST', body: JSON.stringify({ code }) }),
+  // D441 — a move onto this branch. Preview does not spend the token.
+  // Accept creates or reactivates the account and does not return a session.
+  branchInvitationPreview: (token) =>
+    request(`/branch/invitations/preview?token=${encodeURIComponent(token)}`),
+  branchInvitationAccept: (token) =>
+    request('/branch/invitations/accept', { method: 'POST', body: JSON.stringify({ token }) }),
   // T6 — server-side logout: clears the httpOnly auth + CSRF cookies and
   // revokes the current user_sessions row. App.jsx calls this before wiping
   // localStorage so a stolen Bearer copy of the JWT can no longer be used.
@@ -943,6 +955,14 @@ export const api = {
   // Task #31 — Co-founder agreement + 83(b) tracker
   legalCofounderAgreement: (data) =>
     request('/legal/cofounder-agreement', { method: 'POST', body: JSON.stringify(data) }),
+  // D354 — each party's own position on each clause of a generated draft.
+  // The Worker takes the actor from the session only; nothing here sends a
+  // user id, and a body that named another party's would be refused.
+  legalCofounderPositions: (docId) => request(`/legal/cofounder-agreement/${encodeURIComponent(docId)}/positions`),
+  legalRecordClausePosition: (docId, clauseKey, { position, note }) =>
+    request(`/legal/cofounder-agreement/${encodeURIComponent(docId)}/positions/${encodeURIComponent(clauseKey)}`, {
+      method: 'PUT', body: JSON.stringify({ position, note: note ?? null }),
+    }),
   // Spin-Out Lab graduation-certificate registry. Scopes are enforced in the
   // worker (routes/spinout_certificates.ts), not here: admin issues/revokes,
   // the holder reads only their own row, and the public verifier is separate
@@ -1316,6 +1336,17 @@ export const api = {
   createDealInvitations: (id, data) => request(`/deals/${id}/invitations`, { method: 'POST', body: JSON.stringify(data) }),
   myDealInvitations: () => request('/deals/invitations/mine'),
   respondDealInvitation: (id, response) => request(`/deals/${id}/invitations/respond`, { method: 'POST', body: JSON.stringify({ response }) }),
+  // D462 — the Closing stage's money and paper (migration 335). A transfer is
+  // refused with 409 `open_conditions_block_transfer` while an IC condition on
+  // the deal is open; the page branches on `e.code`.
+  dealTransfers: (id) => request(`/deals/${id}/transfers`),
+  dealTransferRecord: (id, data) => request(`/deals/${id}/transfers`, { method: 'POST', body: JSON.stringify(data) }),
+  // The zone-wide read for the Wires view — registered ahead of /deals/:id.
+  dealsTransfers: () => request('/deals/transfers'),
+  dealClosingChecklist: (id) => request(`/deals/${id}/closing-checklist`),
+  dealClosingChecklistApply: (id, templateSlug) => request(`/deals/${id}/closing-checklist/apply`, { method: 'POST', body: JSON.stringify({ template_slug: templateSlug }) }),
+  dealClosingChecklistAddItem: (id, label) => request(`/deals/${id}/closing-checklist/items`, { method: 'POST', body: JSON.stringify({ label }) }),
+  dealClosingChecklistSetItem: (id, itemUid, data) => request(`/deals/${id}/closing-checklist/items/${itemUid}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   listUsers: (role) => request(`/users${role ? `?role=${role}` : ''}`),
   createUser: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
@@ -1825,6 +1856,8 @@ export const api = {
   },
   adminContractStats: () => request('/admin/contracts/stats'),
   adminContractTemplates: () => request('/admin/contracts/templates'),
+  // D454 — code registry (layer, parties, usage) for HQ · Contracts.
+  adminContractDocTypes: () => request('/admin/contracts/doc-types'),
   adminContractTemplateUsage: (docType, params = {}) => {
     const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== null)).toString();
     return request(`/admin/contracts/templates/${encodeURIComponent(docType)}/usage${q ? `?${q}` : ''}`);
@@ -2062,7 +2095,8 @@ export const api = {
   myDomainBind: (hostname) =>
     request('/licence/mine/domain', { method: 'POST', body: JSON.stringify({ hostname }) }),
   myDomainCheck: () => request('/licence/mine/domain/check', { method: 'POST' }),
-  myDomainRemove: () => request('/licence/mine/domain', { method: 'DELETE' }),
+  myDomainRemove: (hostname) =>
+    request('/licence/mine/domain', { method: 'DELETE', body: JSON.stringify({ hostname }) }),
   licenceDomainDetach: (uid, reason) =>
     request(`/admin/licences/${encodeURIComponent(uid)}/domain/detach`, {
       method: 'POST', body: JSON.stringify({ reason }),
@@ -2401,6 +2435,7 @@ export const api = {
   // (spinout_lab_active = 0); it never deactivates the platform account the
   // way adminToggleActive does. Reason code is mandatory on every action,
   // reinstatement included.
+  adminSpinoutModerationOpen: () => request('/admin/spinout-moderation'),
   adminSpinoutModeration: (userId) => request(`/admin/spinout-moderation/${userId}`),
   adminSpinoutModerate: (userId, data) =>
     request(`/admin/spinout-moderation/${userId}`, { method: 'POST', body: JSON.stringify(data) }),
@@ -2426,6 +2461,9 @@ export const api = {
   adminCohortApplications: () => request('/admin/cohort/applications'),
   adminCohortAppSettings: (payload) => request('/admin/cohort/applications/settings', { method: 'POST', body: JSON.stringify(payload) }),
   adminCohortApplicantDecide: (applicantId, payload) => request(`/admin/cohort/applications/${applicantId}/decide`, { method: 'POST', body: JSON.stringify(payload) }),
+  // D383 — the partner interview on an applicant (schedule replaces the live one).
+  adminCohortScheduleInterview: (applicantId, payload) => request(`/admin/cohort/applications/${applicantId}/interview`, { method: 'POST', body: JSON.stringify(payload) }),
+  adminCohortCancelInterview: (applicantId) => request(`/admin/cohort/applications/${applicantId}/interview/cancel`, { method: 'POST' }),
   adminCohortForceProceed: (cycleId, payload) => request(`/admin/cohort/applications/cycles/${cycleId}/force-proceed`, { method: 'POST', body: JSON.stringify(payload) }),
   adminCohortAppNotifications: (cycleId) => request(`/admin/cohort/applications/notifications${cycleId ? `?cycle_id=${cycleId}` : ''}`),
   adminCohortAppEvents: (cycleId) => request(`/admin/cohort/applications/events${cycleId ? `?cycle_id=${cycleId}` : ''}`),
@@ -2671,6 +2709,13 @@ export const api = {
 
   partnerSummary: () => request('/partnernet/summary'),
   partnerRelationships: () => request('/partnernet/relationships'),
+  // D465 — the interaction log and the reminders (migration 338). The book's
+  // cold flag reads the log's MAX; a reminder surfaces on the desk when due.
+  partnerInteractionLog: (id) => request(`/partnernet/relationships/${id}/interactions`),
+  partnerInteractionAdd: (id, data) => request(`/partnernet/relationships/${id}/interactions`, { method: 'POST', body: JSON.stringify(data) }),
+  partnerReminders: (all) => request(`/partnernet/reminders${all ? '?all=1' : ''}`),
+  partnerReminderSet: (id, data) => request(`/partnernet/relationships/${id}/reminders`, { method: 'POST', body: JSON.stringify(data) }),
+  partnerReminderDone: (uid, done) => request(`/partnernet/reminders/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify({ done }) }),
 
   // The firm relationship book (migration 224) — people the firm knows at
   // client companies, each owned by someone at the firm or conspicuously not.
@@ -3094,21 +3139,34 @@ export const api = {
   },
   createCompany: (data) => request('/company/create', { method: 'POST', body: JSON.stringify(data) }),
   updateCompany: (uid, data) => request(`/company/${uid}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  addCompanyMember: (uid, data) => request(`/company/${uid}/members`, { method: 'POST', body: JSON.stringify(data) }),
+  // The direct add (`addCompanyMember`, POST /company/:uid/members) is retired
+  // (D434): it joined an existing account without asking it. Membership is
+  // granted by the invitation below, accepted by the invitee.
   // Wave 2 — role change / primary-admin transfer. Send only the keys you are
-  // changing; both add and remove already existed, this closes the middle.
+  // changing; remove already existed, this closes the middle.
   updateCompanyMember: (uid, userId, data) =>
     request(`/company/${uid}/members/${userId}`, { method: 'PATCH', body: JSON.stringify(data) }),
   removeCompanyMember: (uid, userId) => request(`/company/${uid}/members/${userId}`, { method: 'DELETE' }),
   // The ladder, the named functions, and what each authority level MEANS.
   // A picker must never hardcode these — see services/teamAuthority.ts.
   teamVocabulary: () => request('/company/team-vocabulary'),
+  // D435 — the founder's Team page (migration 326): the roster, coverage and
+  // headcount plan of one company, plus the cap-table, option-pool and
+  // co-founder-decision reads it composes, each reported per source.
+  getCompanyTeam: (uid) => request(`/company/${uid}/team`),
+  addCompanyPerson: (uid, data) =>
+    request(`/company/${uid}/team/people`, { method: 'POST', body: JSON.stringify(data) }),
+  updateCompanyPerson: (uid, personUid, data) =>
+    request(`/company/${uid}/team/people/${personUid}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  saveCompanyCoverage: (uid, rows) =>
+    request(`/company/${uid}/team/coverage`, { method: 'PUT', body: JSON.stringify({ rows }) }),
+  saveCompanyHeadcountPlan: (uid, rows) =>
+    request(`/company/${uid}/team/plan`, { method: 'PUT', body: JSON.stringify({ rows }) }),
 
-  // Task #121 — a real invitation, as opposed to `addCompanyMember`, which
-  // links an EXISTING account without asking it and 404s on anyone who has
+  // Task #121 — a real invitation, as opposed to the retired direct add, which
+  // linked an EXISTING account without asking it and 404'd on anyone who had
   // not signed up. These five drive `company_invitations`: the first mails a
-  // hashed, expiring token, and the last is the invitee's own accept. `addCompanyMember` stays: it is the direct add for someone
-  // who has already agreed, and the admin console still uses it.
+  // hashed, expiring token, and the last is the invitee's own accept.
   inviteCompanyMember: (uid, data) =>
     request(`/company/${uid}/invitations`, { method: 'POST', body: JSON.stringify(data) }),
   listCompanyInvitations: (uid) => request(`/company/${uid}/invitations`),
@@ -3166,7 +3224,6 @@ export const api = {
     request(`/data-room/${encodeURIComponent(projectUid)}/grants`, { method: 'POST', body: JSON.stringify(data || {}) }),
   dataRoomRevoke: (projectUid, uid) =>
     request(`/data-room/${encodeURIComponent(projectUid)}/grants/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
-  dataRoomsSharedWithMe: () => request('/data-room/shared'),
 
   // Task #55 — the advisor grant. A founder opens one project to one named
   // advisor, scope by scope; the advisor reads it back through /shared/*.
@@ -3212,6 +3269,12 @@ export const api = {
   perkUpdate: (uid, data) =>
     request(`/perks/partner/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
   perkStats: (uid) => request(`/perks/partner/${encodeURIComponent(uid)}/stats`),
+  // D412 — the partner's claims list and mark-redeemed, and the founder's rating.
+  perkClaimsForListing: (uid) => request(`/perks/partner/${encodeURIComponent(uid)}/claims`),
+  perkRedeem: (uid, data) =>
+    request(`/perks/partner/${encodeURIComponent(uid)}/redeem`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  perkRate: (uid, stars) =>
+    request(`/perks/${encodeURIComponent(uid)}/rating`, { method: 'POST', body: JSON.stringify({ stars }) }),
   perkReviewQueue: () => request('/perks/admin/queue'),
   perkReview: (uid, data) =>
     request(`/perks/admin/${encodeURIComponent(uid)}/review`, { method: 'POST', body: JSON.stringify(data || {}) }),
@@ -3351,6 +3414,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ template_slug: templateSlug }),
     }),
+  licenceContractSend: (uid, contractUid) =>
+    request(
+      `/admin/licences/${encodeURIComponent(uid)}/contract/${encodeURIComponent(contractUid)}/send`,
+      { method: 'POST' },
+    ),
   // D111 — H5's statements ledger. `draw` computes owed from what the branch
   // reported; `update` is the HQ-entered half (paid, disputed, status), which
   // nothing reconciles against Stripe (D.8).
@@ -3430,6 +3498,10 @@ export const api = {
   branchHome: () => request('/branch/home'),
   // D246 — Studio's operating-posture strip: the caller's own admin-bank answers.
   adminPosture: () => request('/advisor/admin-posture'),
+  // D443 — one glance for Studio, on both tiers. Per-subsidiary figures on HQ
+  // come back recorded:false. The branch routes below stay for the pages that
+  // still call them.
+  adminStudioGlance: () => request('/admin/studio/glance'),
   // D147 — HQ's master contract library as this branch holds it. A COPY: the
   // payload carries HQ's `pushed_at`, and `not_carried` names what deliberately
   // does not travel (the document bodies, and an archived-version state HQ's own
@@ -3441,6 +3513,8 @@ export const api = {
   // `pushed_at` and its own `n_branches`. `unavailable` names the three stats
   // S6 draws that have no branch-side source.
   branchInsights: () => request('/branch/insights'),
+  // D446 — S13's audit line. The branch's own support-session rows.
+  branchSupportSessions: () => request('/branch/support-sessions'),
   // D210 — S15 · Analytics. This branch over time from its own request log,
   // the seats and decision ages it can measure, and each tile it cannot — with
   // the reason on the payload. Same `range` vocabulary as `hqAnalytics`.
@@ -3472,7 +3546,6 @@ export const api = {
     request(`/admin/licences/${encodeURIComponent(uid)}/renew`, { method: 'POST', body: JSON.stringify(data || {}) }),
   licenceTerminate: (uid, note) =>
     request(`/admin/licences/${encodeURIComponent(uid)}/terminate`, { method: 'POST', body: JSON.stringify({ note }) }),
-  dataRoomShared: (projectUid) => request(`/data-room/shared/${encodeURIComponent(projectUid)}`),
   dataRoomDownload: (projectUid, uid) =>
     request(`/data-room/shared/${encodeURIComponent(projectUid)}/files/${encodeURIComponent(uid)}/download`, { method: 'POST' }),
   // getCapTableByProject is NOT redeclared here. It was, and this copy — the
@@ -3706,11 +3779,11 @@ export const api = {
   // this note: the prefix is NOT mounted, so nothing new belongs against it.
 
   // ---------- Trust layer (Task #58) ----------
-  // Task #4 (Y-2) — Trust Center v2 endpoints. The legacy
-  // /trust/summary, /trust/kyb/*, /trust/accreditation/*, /trust/nda/*
-  // helpers below remain wired for backward compatibility — the new
-  // page consumes both the obligation matrix (/trust/me) and the
-  // legacy KYB/Accred/NDA helpers per role.
+  // Task #4 (Y-2) — Trust Center v2 endpoints. The page reads the obligation
+  // matrix (/trust/me), the required NDAs (/trust/nda/required), the
+  // pairwise list and the company KYB list. The first Trust Center's
+  // single-call /trust/summary and its /trust/kyb/start facade are retired
+  // (D432): neither had a caller, and their routes are gone with them.
   trustMe: () => request('/trust/me'),
   trustAgreements: () => request('/trust/agreements'),
   trustIntroRequest: (founder_user_id) =>
@@ -3759,16 +3832,22 @@ export const api = {
       method: 'POST', body: JSON.stringify(payload),
     }),
 
-  getTrustSummary: () => request('/trust/summary'),
-  startKyb: (payload) => request('/trust/kyb/start', { method: 'POST', body: JSON.stringify(payload) }),
-  // Task #108 — the COMPANY's entity record, beside the account's above, never
+  // Task #108 — the COMPANY's entity record, beside the account's, never
   // instead of it (D40/D42: "the account's entity is who signs your contracts;
   // the company's is who the workspace belongs to"). The write takes its
   // company from the X-Company-Id header every request already carries, which
   // `resolveActiveCompany` verifies against user_company_links — a company id
   // in the body would be an ownership claim the caller makes about themselves.
   companyKybList: () => request('/trust/companies/kyb'),
-  companyKybStart: (payload) => request('/trust/companies/kyb', { method: 'POST', body: JSON.stringify(payload || {}) }),
+  // D433 — the Account page saves one company's entity from a list of several,
+  // so the row names its company by OVERRIDING the header for that one call.
+  // Same channel, same server-side membership check (`resolveActiveCompany`
+  // refuses a company the caller does not belong to); it is not a body field.
+  companyKybStart: (payload, companyId) => request('/trust/companies/kyb', {
+    method: 'POST',
+    body: JSON.stringify(payload || {}),
+    ...(companyId === undefined || companyId === null ? {} : { headers: { 'X-Company-Id': String(companyId) } }),
+  }),
   getRequiredNdas: () => request('/trust/nda/required'),
 
   // ---------- Founder risk (Task #41, admin/partner/investor only) ----------
@@ -4487,6 +4566,12 @@ export const api = {
   // Canvas ID3 — the whole Commit room in one scoped read. Registered ahead of
   // `/ic/:uid` in the worker so the literal is not swallowed by the parameter.
   icCommitRoom: () => request('/ic/commit-room'),
+  // D461 — conditions on a decision (migration 334) and the meeting's minutes.
+  // `/ic/conditions` is registered ahead of `/ic/:uid` for the same reason.
+  icConditions: (status) => request(`/ic/conditions${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  icAddCondition: (uid, body) => request(`/ic/${uid}/conditions`, { method: 'POST', body: JSON.stringify(body) }),
+  icResolveCondition: (uid, status) => request(`/ic/conditions/${uid}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  icRecordMinutes: (uid, minutes) => request(`/ic/meetings/${uid}/minutes`, { method: 'PATCH', body: JSON.stringify({ minutes }) }),
 
   // ---------- LP Reporting (Support) ----------
   lpReportsList: (opts = {}) => {
@@ -4543,6 +4628,12 @@ export const api = {
     request(`/positions/${projectUid}/marks`, { method: 'POST', body: JSON.stringify(data) }),
   positionDistributionCreate: (projectUid, data) =>
     request(`/positions/${projectUid}/distributions`, { method: 'POST', body: JSON.stringify(data) }),
+  // D464 — the chase (IP2's "Chase all overdue" / the Portfolio canvas's
+  // Nudge). Logged per company and the founder is notified; a repeat chase
+  // inside the hour answers the existing row.
+  portfolioChases: () => request('/portfolio/chases'),
+  portfolioChase: (projectIds) =>
+    request('/portfolio/chase', { method: 'POST', body: JSON.stringify({ project_ids: projectIds }) }),
 
   // ---------- Contacts (inbound relationship hub) ----------
   contactsList: (opts = {}) => {
@@ -4790,7 +4881,10 @@ export const api = {
     // The AI band every Research and Network artboard ends with (migration
     // 221). `surface` is the zone key and is allow-listed in the worker, so a
     // page that has not mounted the band cannot spend on it.
-    zoneDrafts: (surface) => request(`/research/drafts?surface=${encodeURIComponent(surface)}`),
+    // `scopeKey` narrows the read to one record's drafts (one data room), so a
+    // page about one record never shows a draft written about another.
+    zoneDrafts: (surface, scopeKey) => request(`/research/drafts?surface=${encodeURIComponent(surface)}${
+      scopeKey !== undefined ? `&scope_key=${encodeURIComponent(scopeKey)}` : ''}`),
     zoneDraftRun: (surface, scopeKey) => request('/research/drafts', {
       method: 'POST', body: JSON.stringify({ surface, ...(scopeKey ? { scope_key: scopeKey } : {}) }),
     }),
@@ -4858,6 +4952,13 @@ export const api = {
     // Diligence — no store of its own. Room access assembled from the grants
     // this investor already holds.
     diligence: () => request('/research/diligence'),
+    // One room and one document in it, keyed by the grant the investor holds.
+    // A grant they do not hold is a 404 (`room_not_found`), the same as one
+    // that does not exist; a document behind an NDA they have not signed is a
+    // 403 (`nda_required`) that carries the room and nothing about the file.
+    diligenceRoom: (grantUid) => request(`/research/diligence/${encodeURIComponent(grantUid)}`),
+    diligenceFile: (grantUid, fileUid) =>
+      request(`/research/diligence/${encodeURIComponent(grantUid)}/files/${encodeURIComponent(fileUid)}`),
   },
 };
 
@@ -5227,6 +5328,13 @@ export const spinoutLab = {
   // `lib/spinoutLabArsenal.js`; a route serving those too would be a store
   // invented so a page could look dynamic.
   brief: () => request('/spinout-lab/brief'),
+  // D383 — the caller's own application lifecycle. No id in any path: each
+  // acts on the signed-in account's draft or latest application only.
+  applyDraft: () => request('/spinout-lab/apply/draft'),
+  saveApplyDraft: (answers) => request('/spinout-lab/apply/draft', { method: 'PUT', body: JSON.stringify({ answers }) }),
+  discardApplyDraft: () => request('/spinout-lab/apply/draft', { method: 'DELETE' }),
+  withdrawApplication: () => request('/spinout-lab/apply/withdraw', { method: 'POST' }),
+  requestInterviewReschedule: (reason) => request('/spinout-lab/apply/interview/reschedule', { method: 'POST', body: JSON.stringify({ reason }) }),
   // Signed in only — which cohort companies cleared which gate, and when.
   // Deliberately gate-level and not milestone-level: `week` is already public
   // on /cohort, so this adds a timestamp to a transition whose state is
@@ -5489,6 +5597,14 @@ export const adminAssessment = {
     }),
   // Analytics — aggregate funnel/distribution/coverage for a game.
   analytics: (slug) => request(`/admin/assessment/games/${encodeURIComponent(slug)}/analytics`),
+  // D446 — runs on this database. `cycle` is a cohort cycle id; the worker
+  // keeps a run whose start falls inside that cycle. Omit it to list every run.
+  listSessions: (cycleId) => {
+    const q = new URLSearchParams();
+    if (cycleId !== undefined && cycleId !== null && String(cycleId) !== '') q.set('cycle', String(cycleId));
+    const s = q.toString();
+    return request(`/admin/assessment/sessions${s ? `?${s}` : ''}`);
+  },
   // D255 — `rescore` was removed here: no caller in frontend/src called it.
   // The worker route (admin_assessment.ts, POST /sessions/:id/rescore)
   // stays — check-api-drift reads api.js → worker only, so a route with no

@@ -5,8 +5,9 @@
  * (same mount-before-catch-all precedence as admin_events / admin_articles).
  * Two gates, and nothing in front of them: the 17 handlers that write a game,
  * chapter, item, archetype or badge are `hqAuthor` (requireAdmin plus "not on
- * a branch", D106), and the other 6 — the reads, preview and rescore — are
- * plain `admin`. This header said every handler was requireAdmin and that was
+ * a branch", D106), and the other 7 — the reads, including the session list
+ * (D446), preview and rescore — are plain `admin`. This header said every
+ * handler was requireAdmin and that was
  * the whole gate from D106, which made it false, until D214 corrected it. It
  * used to claim a `/api/admin/*` Cf-Access perimeter "applied in index.ts"
  * too, which is the one file that records its removal — Task #33 took it out
@@ -647,6 +648,128 @@ adminAssessment.post('/games/:slug/preview', async (c) => {
     skillVector: scored.skillVector,
   });
   return c.json({ preview: true, ...scored, archetype });
+});
+
+const SESSION_CAP = 200;
+
+function finiteOrNull(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function shapeSession(row: any) {
+  return {
+    public_id: row.public_id ?? null,
+    game_slug: row.game_slug ?? null,
+    game_version: finiteOrNull(row.game_version),
+    status: row.status ?? null,
+    started_at: row.started_at ?? null,
+    completed_at: row.completed_at ?? null,
+    user_name: row.user_name ?? null,
+    user_email: row.user_email ?? null,
+    archetype_label: row.archetype_label ?? null,
+  };
+}
+
+const SESSIONS_IN_CYCLE = `SELECT s.public_id, s.game_slug, s.game_version, s.status, s.started_at, s.completed_at,
+            u.name AS user_name, u.email AS user_email, r.archetype_label
+       FROM assessment_sessions s
+       LEFT JOIN users u ON u.id = s.user_id
+       LEFT JOIN assessment_results r ON r.session_id = s.id
+      WHERE datetime(s.started_at) >= datetime(?)
+        AND datetime(s.started_at) < datetime(?)
+      ORDER BY s.started_at DESC
+      LIMIT 201`;
+
+const SESSIONS_ALL = `SELECT s.public_id, s.game_slug, s.game_version, s.status, s.started_at, s.completed_at,
+            u.name AS user_name, u.email AS user_email, r.archetype_label
+       FROM assessment_sessions s
+       LEFT JOIN users u ON u.id = s.user_id
+       LEFT JOIN assessment_results r ON r.session_id = s.id
+      ORDER BY s.started_at DESC
+      LIMIT 201`;
+
+/**
+ * D446 — the list BranchPrograms was missing. `?cycle=` is a cohort cycle id.
+ * A session has no cycle column, so the filter keeps a run whose start falls
+ * inside that cycle's start and end. There is no twin of this filter on
+ * `routes/assessment.ts`.
+ */
+adminAssessment.get('/sessions', async (c) => {
+  const u = await admin(c);
+  if (u instanceof Response) return u;
+  const rawCycle = c.req.query('cycle');
+  const wantsCycle = typeof rawCycle === 'string' && rawCycle.trim() !== '';
+  let cycleId: number | null = null;
+  let windowStart: string | null = null;
+  let windowEnd: string | null = null;
+  if (wantsCycle) {
+    if (!/^[1-9][0-9]{0,8}$/.test(rawCycle.trim())) {
+      return c.json({ error: 'cycle_invalid', message: 'Name a cycle by its id. Nothing was listed.' }, 400);
+    }
+    cycleId = Number(rawCycle.trim());
+    let cycle: { id: number; start_at: string | null; end_at: string | null } | null = null;
+    try {
+      cycle = await c.env.DB.prepare(
+        'SELECT id, start_at, end_at FROM cohort_cycles WHERE id = ?',
+      ).bind(cycleId).first<{ id: number; start_at: string | null; end_at: string | null }>();
+    } catch (e) {
+      console.error('[admin-assessment] could not read cohort_cycles', (e as Error).message);
+      return c.json({
+        available: false,
+        reason: 'The cohort calendar could not be read, so runs cannot be limited to a cycle. This is not a claim that nobody has taken an assessment.',
+      });
+    }
+    if (!cycle) {
+      return c.json({
+        available: true,
+        filtered: false,
+        cycle_id: cycleId,
+        cycle_found: false,
+        items: [],
+        truncated: false,
+        reason: 'No cycle with that id is on this database, so no runs are listed against it.',
+      });
+    }
+    const start = typeof cycle.start_at === 'string' ? cycle.start_at.trim() : '';
+    const end = typeof cycle.end_at === 'string' ? cycle.end_at.trim() : '';
+    if (!start || !end) {
+      return c.json({
+        available: true,
+        filtered: false,
+        cycle_id: cycleId,
+        cycle_found: true,
+        filterable: false,
+        items: [],
+        truncated: false,
+        reason: 'This cycle has no start or no end, so a run cannot be kept inside it. The list is not the unfiltered population.',
+      });
+    }
+    windowStart = start;
+    windowEnd = end;
+  }
+  try {
+    const res = windowStart && windowEnd
+      ? await c.env.DB.prepare(SESSIONS_IN_CYCLE).bind(windowStart, windowEnd).all<any>()
+      : await c.env.DB.prepare(SESSIONS_ALL).all<any>();
+    const rows = res.results || [];
+    const truncated = rows.length > SESSION_CAP;
+    return c.json({
+      available: true,
+      filtered: Boolean(windowStart && windowEnd),
+      cycle_id: cycleId,
+      ...(wantsCycle ? { cycle_found: true, filterable: true } : {}),
+      items: rows.slice(0, SESSION_CAP).map(shapeSession),
+      truncated,
+    });
+  } catch (e) {
+    console.error('[admin-assessment] could not list sessions', (e as Error).message);
+    return c.json({
+      available: false,
+      reason: 'Assessment runs could not be read on this database. This is not a claim that nobody has taken one.',
+    });
+  }
 });
 
 // ── ANALYTICS ──────────────────────────────────────────────────────────────

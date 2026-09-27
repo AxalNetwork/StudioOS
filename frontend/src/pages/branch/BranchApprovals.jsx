@@ -18,7 +18,7 @@
  *
  * THE BOARD READS; THE CONSOLES DECIDE. It shows stores it does not own,
  * so each row offers that queue's own console instead of an Approve button.
- * One lane has no console to offer — see `LANE_CONSOLE` — and says so.
+ * Spinout moderation's console is `/admin/spinout-moderation` (D442).
  *
  * THE ANSWER IS ONE DECISION, NOT A THREAD, and this page must not suggest
  * otherwise. The canvas says "the answer coming back as a thread with HQ's
@@ -52,9 +52,10 @@
  * is the name, not a link, and each row here shows the name it was raised with.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Send } from 'lucide-react';
 import { api } from '../../lib/api';
+import { prefillFromSearch } from '../../lib/escalationPrefill';
 import { reportError } from '../../lib/log';
 import {
   RELATION_CHOICES, relationLead, RELATION_NOT_RECORDED, RELATION_NOT_RECORDED_REASON,
@@ -452,14 +453,9 @@ const SLA_LABEL = { ok: null, due_soon: 'due within 24h', past: 'past SLA' };
  * THE BOARD READS; THE CONSOLES DECIDE, so each row offers the console rather
  * than an Approve button that would write to a store this page never touches.
  *
- * SPINOUT MODERATION HAS NO CONSOLE, AND THAT IS A FINDING RATHER THAN AN
- * OMISSION HERE. `/api/admin/spinout-moderation/:userId` exists on the Worker
- * and `api.adminSpinoutModeration` / `adminSpinoutModerationDecide` exist in
- * `lib/api.js` — with **zero callers anywhere in `frontend/src`**. So a
- * moderation case is real work that reaches the backlog count, reaches this
- * board, and has nowhere to be decided. The row says that instead of linking
- * to a route that would 404, which is the failure `sidebarConfig.js` names:
- * a destination that looks shipped and is not.
+ * SPINOUT MODERATION IS DECIDED AT /admin/spinout-moderation (D442). The
+ * row links there. HQ-held Approvals (HeldApprovals, S22) still says the
+ * lane has no console; that row and its D286 pin are Session 5's.
  */
 const LANE_CONSOLE = {
   lp: { to: '/admin/lp-applications', label: 'LP applications console' },
@@ -468,7 +464,7 @@ const LANE_CONSOLE = {
   // than routed on its own — checked, not assumed, because a link to
   // `/admin/cohort` would 404.
   cohort: { to: '/admin/spinout-lab', label: 'Spin-Out Lab admin' },
-  moderation: null,
+  moderation: { to: '/admin/spinout-moderation', label: 'Spinout moderation console' },
   // S16 (D215). Each is the page that already decides that store — checked
   // against App.jsx's routes; KYC and partner profiles are tabs of `/admin`,
   // which honours `?tab=`.
@@ -488,15 +484,19 @@ const VIEWS = [
 ];
 
 export default function BranchApprovals({ user }) {
+  const [params] = useSearchParams();
+  // D445 — a door may arrive with the kind and the subject already chosen.
+  // An unknown kind is ignored; chosenKind still drops a kind the licence hides.
+  const prefill = prefillFromSearch(params);
   const [lane, setLane] = useState(null);           // null = loading, UNAVAILABLE = failed
-  const [board, setBoard] = useState(null);         // D130 — the four local queues
+  const [board, setBoard] = useState(null);         // the local lanes (eleven since D215)
   const [view, setView] = useState('all');
   // S16's chip row: null = every lane, else one lane's key.
   const [laneFilter, setLaneFilter] = useState(null);
-  const [kind, setKind] = useState('other');
+  const [kind, setKind] = useState(prefill.kind || 'other');
   const [concern, setConcern] = useState('');       // D208 — the picked item's key, or none
   const [relation, setRelation] = useState('');     // D275 — what the raise is to that item, or none yet
-  const [subject, setSubject] = useState('');
+  const [subject, setSubject] = useState(prefill.subject);
   const [detail, setDetail] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
@@ -511,8 +511,8 @@ export default function BranchApprovals({ user }) {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  // SEPARATE FROM THE LANE, AND ITS OWN FAILURE. The outbound lane and the four
-  // local queues are different reads against different tables; folding them
+  // SEPARATE FROM THE LANE, AND ITS OWN FAILURE. The outbound lane and the
+  // local lanes are different reads against different tables; folding them
   // into one loader would make either failure blank the other half of a page
   // whose whole argument is that the two halves are different things.
   const loadBoard = useCallback(() => {
@@ -571,7 +571,7 @@ export default function BranchApprovals({ user }) {
 
   // WHAT THE RAIL CAN HONESTLY REPORT (D126): what this page loaded. The count
   // of raised escalations and how many still await an answer are both real
-  // reads; the four local queues now contribute their own lines rather than
+  // reads; the local lanes now contribute their own lines rather than
   // nothing, and a failed read still contributes none — `coverageNote` says
   // which. The rail must never read as "nothing raised" or "nothing waiting".
   const coverage = [
@@ -583,7 +583,7 @@ export default function BranchApprovals({ user }) {
       : []),
     ...(boardReady
       ? [
-        `${boardItems.length} open across the four local queues`,
+        `${boardItems.length} open across the eleven lanes`,
         `${pastCount} past the 72-hour SLA`,
       ]
       : []),
@@ -619,7 +619,7 @@ export default function BranchApprovals({ user }) {
         </h1>
         <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
           What this territory cannot decide for itself goes to HQ, and HQ&rsquo;s decision comes back
-          here. Below it, the four local queues this territory does decide, as one board.
+          here. Below it, the eleven lanes this territory does decide, as one board.
         </p>
       </header>
 
@@ -709,10 +709,23 @@ export default function BranchApprovals({ user }) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-[12px] font-bold">{it.subject}</div>
-                    <div className="mt-0.5 text-[10.5px] text-axal-faint">
-                      {it.kind.replace('_', ' ')} · raised {it.created_at}
-                      {it.sla && SLA_LABEL[it.sla] ? ` · ${SLA_LABEL[it.sla]}` : ''}
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10.5px] text-axal-faint">
+                      <span className={`${PILL} border border-axal-hairline`} data-testid="branch-escalation-kind">
+                        {KIND_LABEL[it.kind] || it.kind}
+                      </span>
+                      <span>
+                        raised {it.created_at}
+                        {it.raised_by_name ? ` · ${it.raised_by_name}` : ''}
+                        {it.sla && SLA_LABEL[it.sla] ? ` · ${SLA_LABEL[it.sla]}` : ''}
+                      </span>
                     </div>
+                    {it.detail
+                      ? <p className="mt-1 text-[12px] leading-relaxed text-axal-muted" data-testid="branch-escalation-detail">{it.detail}</p>
+                      : (
+                        <p className="mt-1 text-[12px]" data-testid="branch-escalation-detail">
+                          <Unrecorded reason="This raise was sent with a subject and no detail.">No detail</Unrecorded>
+                        </p>
+                      )}
                     {/* D208 — the item it was raised about, in the words HQ
                         received. D275 — led by what the raise is to it:
                         "Localises" or "Changes", or "About" with the relation
@@ -784,7 +797,7 @@ export default function BranchApprovals({ user }) {
         )}
       </Card>
 
-      {/* ── The four local queues, as one board (S3, D130) ── */}
+      {/* ── The eleven lanes, as one board (S3, D130; widened in D215) ── */}
       <Card className="p-4">
         <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-[14.5px] font-extrabold tracking-tight">The work board</h2>
@@ -797,6 +810,12 @@ export default function BranchApprovals({ user }) {
         <p className="mb-3 text-[11.5px] leading-relaxed text-axal-muted">
           Every queue this branch decides, in one list ordered by what has waited longest. The board
           reads; each decision is still made in that queue&rsquo;s own console. Pick a lane to narrow it.
+          {' '}
+          <Link to="/admin/spinout-moderation" className="font-semibold text-axal-ink underline">
+            Spinout moderation console
+          </Link>
+          {' '}
+          is where an open moderation case is decided.
         </p>
 
         {board === UNAVAILABLE && (
@@ -909,11 +928,7 @@ export default function BranchApprovals({ user }) {
                         {console_ ? (
                           <Link className="underline" to={console_.to}>{console_.label} →</Link>
                         ) : (
-                          // THE LINK IS ABSENT BECAUSE THE PAGE IS. Stated on
-                          // the row rather than pointed at a route that 404s.
-                          <span className="text-axal-faint" data-testid="branch-board-no-console">
-                            no console — the decision surface for moderation has not been built
-                          </span>
+                          <span className="text-axal-faint">This lane has no registered console.</span>
                         )}
                       </div>
                     </li>

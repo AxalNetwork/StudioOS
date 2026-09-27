@@ -74,7 +74,7 @@ export default function HqAccountsPage({ onImpersonate }) {
         ['A tenant per ordinary account', 'No account but an administrator names a licence (U1), so the directory has no Branch column to read.'],
         ['Deciding KYC, access or the Lab for a branch account', 'A branch hit shows its KYC, access and Lab state (D260), read-only. Deciding them is the branch admin’s, on its own Admin Console. A suspended branch gives no KYC verdict, grants no limited access and admits no one to the Lab; it can still revoke limited access.'],
         ['Trust on a branch account', 'Trust is computed over HQ’s own accounts and is not a per-branch figure.'],
-        ['Telling a branch account HQ supports', 'An HQ-held account is told when a support session opens on it (D248), and both parties to a transfer of the elevation are told (D241). An account on a branch is not told yet: the branch records the session and sends no notice.'],
+        ['Telling a branch account HQ supports', 'An HQ-held account is told when a support session opens on it (D248), and both parties to a transfer of the elevation are told (D241). An account on a branch is told when HQ authorises a support session on it (D441): the branch records the authorisation and sends a security notice naming who, the reason, and that the session lasts 30 minutes once it is opened.'],
       ]}
       data-testid="hq-team-rail"
     />

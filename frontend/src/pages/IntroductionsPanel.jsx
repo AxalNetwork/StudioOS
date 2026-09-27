@@ -737,7 +737,7 @@ function StepRow() {
  * only thing missing was returning the counterpart's. Gathering what is already
  * recorded into one chronological view invents nothing.
  */
-function ConsentLog({ rows, onClose }) {
+export function ConsentLog({ rows, onClose }) {
   const events = rows.flatMap((p) => {
     const name = p.target?.name || 'Member';
     const out = [];

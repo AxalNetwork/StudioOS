@@ -4,13 +4,14 @@
  * Accreditation / Agreements / Sanctions). Drives a Trust score 0-100 from
  * /api/trust/me and shows per-pair NDA flow on the Agreements tab.
  *
- * THIS PAGE NO LONGER READS /trust/summary. It once did, for backwards compat
- * with legacy KYB / Accreditation / NDA cards built on that endpoint's shape.
- * All three are gone: the first two were unreachable (see the note above
- * `KybCard`) and the NDA card was repointed at /nda/required, whose rows are
- * the shape it actually reads. The endpoint still ships with the worker and is
- * still pinned by a canary in trust_center_contract.test.mjs; nothing in the
- * SPA calls it.
+ * THIS PAGE NO LONGER READS /trust/summary, AND THE ROUTE IS GONE (D432). It
+ * once did, for backwards compat with legacy KYB / Accreditation / NDA cards
+ * built on that endpoint's shape. The first two were unreachable and were
+ * deleted; the NDA card was repointed at /nda/required and then folded into
+ * the Role agreements rows (D432), whose "Open to sign" is the one signing
+ * path for a role NDA. Nothing in the SPA called the endpoint, so it was
+ * retired with its client method, getTrustSummary; trust_center_contract.test.mjs holds it
+ * gone.
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react';
 import { api, getActiveCompanyId } from '../lib/api';
 import { safeReadJSON } from '../lib/storage';
+import { Unreadable } from '../ui';
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
 import {
   SCORE_BANDS, bandOf, verdictFor, scoreLine, obligationSummary,
@@ -95,7 +97,7 @@ const STATUS_TONE = {
   active:        'ok',
   revoked:       'bad',
   cancelled:     'bad',
-  // /trust/summary's older vocabulary, still reachable through legacy reads
+  // The first Trust Center's vocabulary — rows written before v2 still carry it
   verified:      'ok',
   self_attested: 'prog',
   rejected:      'bad',
@@ -272,124 +274,75 @@ function Section({ icon: Icon, title, subtitle, children }) {
 }
 
 // ---------------------------------------------------------------------------
-// KYB / Accreditation / NDA cards — copied verbatim from the previous Trust
-// Center implementation; they consume /trust/summary which still ships with
-// the worker. Trust v2 (this task) layers obligations + agreements on top.
-// ---------------------------------------------------------------------------
-// KybCard and AccreditationCard USED TO LIVE HERE, and both were unreachable.
+// KybCard, AccreditationCard and NdaCard USED TO LIVE HERE.
 //
-// Each was rendered only on the true branch of `legacy?.kyb ? <KybCard …>` /
-// `legacy?.accreditation ? <AccreditationCard …>`. `legacy` has exactly one
-// source — GET /api/trust/summary — and that handler returns `kyb: null` and
-// `accreditation: null` as literals, with a comment saying so: "Task AH leaves
-// the KYB+Accred cards out of scope, so they are surfaced via /api/kyc/* and
-// the obligation matrix." Both ternaries therefore always took the false
-// branch, and both tabs have been rendering <ObligationList> the whole time.
+// The first two were unreachable: each rendered only on the true branch of
+// `legacy?.kyb ? …` / `legacy?.accreditation ? …`, and `legacy` came from
+// GET /trust/summary, which answered both as literal nulls. Their dead
+// endpoints (POST /trust/kyb/submit, GET /trust/kyb/status, the four
+// /trust/accreditation/* paths) were never routed; the components, their
+// client methods and six drift-baseline entries went together.
 //
-// That made their dead endpoints unreachable rather than user-facing, which is
-// the only reason nobody hit a 404: POST /trust/kyb/submit,
-// GET /trust/kyb/status and all four /trust/accreditation/* paths are absent
-// from routes/trust.ts and suppressed in scripts/api-drift-baseline.json. The
-// components are gone and so are the client methods; the baseline shrinks by
-// six entries, which is the measurable half of this change.
+// NdaCard was reachable and was the one signing path for a role NDA. It drew
+// a second list of the same obligations the Role agreements section drew
+// above it (the template-NDA card), and only that copy offered "Open to sign".
+// D432 folds it: the Role agreements rows now carry the button, through
+// `OpenToSignButton` below, fed by the same GET /trust/nda/required the card
+// read. One list, one action.
 //
-// POST /trust/kyb/start IS real — but nothing calls it, and this comment used to
-// claim it was what the KYB obligation's "Start" action runs. It is not.
-// ObligationList → startObligation calls api.trustObligationStart, i.e.
-// POST /trust/obligation/:key/start, which only flips pending → in_review and
-// collects no entity evidence at all. /trust/kyb/start, which does collect it, is
-// orphaned on both sides: api.startKyb (lib/api.js) has no caller in frontend/src,
-// and the route has no other client.
+// POST /trust/kyb/start and GET /trust/summary are retired with D432 (nothing
+// called either; their client methods startKyb and getTrustSummary had no caller). The
+// gap they did not fill stays recorded on the worker: a partner seeded a
+// required kyb_v1 presses Start, lands on in_review, and ObligationList
+// renders no action for in_review while lib/trustCenter.js classes it as
+// waiting on us; kyb_v1 has no working satisfier either
+// (cloudflare-worker/test/obligation_satisfiable.test.ts).
 //
-// So a partner handed a required kyb_v1 at deal signature presses Start, lands on
-// in_review, and ObligationList renders no action for in_review — the button is
-// gone for good, while lib/trustCenter.js classes in_review as waiting on us.
-// Nothing is in review and nobody is looking. kyb_v1 is also one of the two
-// obligations nothing can satisfy at all
-// (cloudflare-worker/test/obligation_satisfiable.test.ts), so wiring this button
-// to /trust/kyb/start would collect evidence nothing can act on; both are recorded
-// as follow-ups rather than guessed at.
-//
-// Accreditation evidence has no upload route on either side, so the tab says that
-// rather than drawing a file input that cannot POST.
+// Accreditation evidence has no upload route on either side, so the tab says
+// that rather than drawing a file input that cannot POST.
 
-function NdaCard({ items, onChanged }) {
-  const [busy, setBusy] = useState(null);
+/**
+ * The one signing path for a role NDA, drawn on its Role agreements row.
+ *
+ * The worker signs by ENVELOPE, not by role, and returns a link into the
+ * e-sign flow rather than accepting a typed name — so an in-page signature
+ * ceremony was never the shape. `api.trustMySigningUrl` already reaches that
+ * route and is what the pairwise rows use too. A recipient row can exist
+ * without a live token, so each refusal says which, rather than failing
+ * silently on a button that looked like it would work.
+ */
+function OpenToSignButton({ item, onChanged }) {
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
-  /**
-   * THIS CARD WAS BROKEN TWICE OVER, and it is the one a reader could reach.
-   *
-   * Wrong data in: it was fed `legacy.ndas`, which is `pairwise_ndas` rows —
-   * {id, party_a_user_id, party_b_user_id, intermediary, nda_envelope_uuid,
-   * status, valid_until}. It read `it.role`, `it.title` and `it.signed_at`,
-   * none of which exist on that row, so every entry rendered a blank title,
-   * "role: undefined", and keyed React on `undefined`. Meanwhile the page
-   * fetched GET /trust/nda/required — which returns exactly the right thing —
-   * and threw the result away.
-   *
-   * Wrong write out: it opened a modal from GET /trust/nda/:role/preview and
-   * signed with POST /trust/nda/sign, and neither route exists. The worker
-   * signs by ENVELOPE, not by role, and returns a link into the e-sign flow
-   * rather than accepting a typed name — so an in-page signature ceremony was
-   * never the shape. `api.trustMySigningUrl` already reaches that route and is
-   * what the Agreements tab uses, so this needs no new client method.
-   */
-  async function openSigning(item) {
-    setErr(null); setBusy(item.obligation_key);
+  async function openSigning() {
+    setErr(null); setBusy(true);
     try {
       const res = await api.trustMySigningUrl(item.evidence_envelope_uuid);
       if (res?.signing_url) { window.location.href = res.signing_url; return; }
-      // A recipient row can exist without a live token — say which, rather
-      // than failing silently on a button that looked like it would work.
       setErr(res?.status === 'expired'
         ? 'That signing link has expired. Ask the sender to re-issue it.'
         : res?.status === 'signed'
           ? 'This one is already signed — reload to refresh the list.'
           : 'No signing link is available for this agreement yet.');
       onChanged?.();
-    } catch (e) { setErr(e.message); } finally { setBusy(null); }
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
   }
 
-  if (!items?.length) return <p className="text-sm text-gray-600 dark:text-gray-400">No template NDAs are required for your role.</p>;
-
   return (
-    <div className="space-y-2">
-      {items.map((it) => {
-        const label = OBLIGATION_META[it.obligation_key]?.label || it.obligation_key;
-        const signable = it.open && it.evidence_envelope_uuid;
-        return (
-          <div key={it.obligation_key} className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 px-3 py-2">
-            <div className="flex items-center gap-3 min-w-0">
-              <FileText className="w-4 h-4 flex-none text-gray-500 dark:text-gray-400" />
-              <div className="min-w-0">
-                <div className="text-sm text-gray-900 dark:text-gray-100 truncate">{label}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">
-                  {it.expires_at ? `renews ${new Date(it.expires_at).toLocaleDateString()}` : 'no renewal date recorded'}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 flex-none">
-              <StatusPill status={it.status} />
-              {signable && (
-                <button
-                  onClick={() => openSigning(it)}
-                  disabled={busy === it.obligation_key}
-                  className="text-xs bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white px-2 py-1 rounded inline-flex items-center gap-1.5"
-                >
-                  {busy === it.obligation_key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                  Open to sign
-                </button>
-              )}
-              {it.open && !it.evidence_envelope_uuid && (
-                <span className="text-xs text-gray-500 dark:text-gray-400">Not issued yet</span>
-              )}
-            </div>
-          </div>
-        );
-      })}
-      {err && <p className="text-red-600 dark:text-red-400 text-xs">{err}</p>}
-    </div>
+    <span className="inline-flex items-center gap-2">
+      <button
+        type="button"
+        onClick={openSigning}
+        disabled={busy}
+        data-testid={`open-to-sign-${item.obligation_key}`}
+        className="text-xs bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white px-2 py-1 rounded inline-flex items-center gap-1.5"
+      >
+        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+        Open to sign
+      </button>
+      {err && <span className="text-red-600 dark:text-red-400 text-xs">{err}</span>}
+    </span>
   );
 }
 
@@ -617,7 +570,12 @@ function EnvelopeHistory({ envelopeUuid }) {
   );
 }
 
-function ObligationList({ obligations, emptyText, onStart }) {
+/**
+ * `rowAction(o)` lets a tab put its own control on a row — the Role
+ * agreements section uses it for "Open to sign" (D432) — beside the generic
+ * Start. Null means the row gets nothing extra.
+ */
+function ObligationList({ obligations, emptyText, onStart, rowAction = null }) {
   if (!obligations.length) {
     return <p className="text-sm text-slate-600">{emptyText || 'Nothing required for this section.'}</p>;
   }
@@ -662,6 +620,7 @@ function ObligationList({ obligations, emptyText, onStart }) {
             </div>
             <div className="flex items-center gap-3">
               <StatusPill status={o.status} />
+              {rowAction ? rowAction(o) : null}
               {open && o.status === 'pending' && onStart && (
                 <button
                   onClick={() => onStart(o.obligation_key)}
@@ -717,7 +676,29 @@ function PairwiseSignButton({ envelopeUuid }) {
   );
 }
 
-function AgreementsTab({ obligations, onStart, role }) {
+/**
+ * Who the other party is, by name. The worker joins `users` for both sides
+ * (D432: `party_a_name` / `party_b_name` beside the emails it already sent),
+ * so a row reads "Mutual NDA · Marisol Vega" to a party and
+ * "Novacraft Labs ↔ Marisol Vega" to an admin, as the canvas draws it, rather
+ * than "parties #12 ↔ #40". A party whose account is gone is said to be gone
+ * rather than given a made-up name.
+ */
+function partyLabel(row, side) {
+  const name = row[`party_${side}_name`];
+  const email = row[`party_${side}_email`];
+  if (name) return name;
+  if (email) return email;
+  return `account #${row[`party_${side}_user_id`]} · removed`;
+}
+
+function pairwiseTitle(row, meId, isAdmin) {
+  if (isAdmin) return `${partyLabel(row, 'a')} ↔ ${partyLabel(row, 'b')}`;
+  const other = Number(row.party_a_user_id) === Number(meId) ? 'b' : 'a';
+  return `Mutual NDA · ${partyLabel(row, other)}`;
+}
+
+function AgreementsTab({ obligations, onStart, role, requiredNdas = [], onChanged }) {
   const [items, setItems] = useState([]);
   const [pending, setPending] = useState([]);
   const [documents, setDocuments] = useState([]);
@@ -783,11 +764,23 @@ function AgreementsTab({ obligations, onStart, role }) {
   }
 
   const ndaObligations = obligations.filter(o => OBLIGATION_META[o.obligation_key]?.tab === 'agreements');
+  // D432 — the template-NDA card is folded into these rows. GET /nda/required
+  // says, per role NDA, whether it is still open and which envelope to sign;
+  // the row draws "Open to sign" when there is an envelope and says "Not
+  // issued yet" when the obligation is open but no envelope exists.
+  const ndaByKey = new Map((requiredNdas || []).map((it) => [it.obligation_key, it]));
+  const roleNdaAction = (o) => {
+    const it = ndaByKey.get(o.obligation_key);
+    if (!it || !it.open) return null;
+    if (it.evidence_envelope_uuid) return <OpenToSignButton item={it} onChanged={onChanged} />;
+    return <span className="text-xs text-slate-500 dark:text-slate-400">Not issued yet</span>;
+  };
+  const meId = safeReadJSON('user', {})?.id;
 
   return (
     <>
       <Section icon={FileSignature} title="Role agreements" subtitle="Standing NDAs and disclosures required for your role.">
-        <ObligationList obligations={ndaObligations} emptyText="No role-level agreements required." onStart={onStart} />
+        <ObligationList obligations={ndaObligations} emptyText="No role-level agreements required." onStart={onStart} rowAction={roleNdaAction} />
       </Section>
       <Section icon={Lock} title="Pairwise NDAs" subtitle={isAdmin
         ? "Every founder ↔ investor mutual NDA. Resend re-emails any unsigned recipients; Void cancels the envelope and revokes access."
@@ -827,8 +820,8 @@ function AgreementsTab({ obligations, onStart, role }) {
                   <div className="flex items-center gap-3 min-w-0">
                     <Lock size={16} className="text-slate-500 dark:text-slate-400 shrink-0" />
                     <div className="min-w-0">
-                      <div className="text-sm text-slate-900 dark:text-slate-100 truncate">
-                        Mutual NDA · parties #{a.party_a_user_id} ↔ #{a.party_b_user_id}
+                      <div className="text-sm text-slate-900 dark:text-slate-100 truncate" data-testid="pairwise-title">
+                        {pairwiseTitle(a, meId, isAdmin)}
                       </div>
                       <div className="text-xs text-slate-500">
                         envelope {a.nda_envelope_uuid?.slice(0, 8)}…
@@ -928,6 +921,102 @@ function AgreementsTab({ obligations, onStart, role }) {
         </Section>
       )}
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The company's own KYB, one row per company — task #108, migration 220.
+//
+// D432 — HOISTED OUT OF THE PAGE'S RENDER. It was declared inside
+// `TrustCenterPage`'s body, so every render of the page minted a new component
+// type, React unmounted the card and mounted a fresh one, and its effect
+// re-fetched GET /trust/companies/kyb on every keystroke elsewhere on the
+// page. A module-level component keeps its identity and fetches once.
+//
+// A FAILED READ IS SAID, NOT HIDDEN. The card used to catch the error and set
+// `loaded`, which drew exactly what "no companies" draws: nothing. The worker
+// now refuses with a sentence (D278), and the card draws "Unreadable" with a
+// retry — a member with three companies whose read failed must not be told
+// they have none.
+// ---------------------------------------------------------------------------
+function CompanyKybCard() {
+  // 'loading' → 'ready' | 'failed'. Three states because an empty list and a
+  // failed read are different facts and draw differently.
+  const [state, setState] = useState({ phase: 'loading', items: [], message: null });
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    setState((s) => (s.phase === 'failed' ? { ...s, phase: 'loading' } : s));
+    api.companyKybList()
+      .then((r) => { if (alive) setState({ phase: 'ready', items: r?.items || [], message: null }); })
+      .catch((e) => { if (alive) setState({ phase: 'failed', items: [], message: e?.message || null }); });
+    return () => { alive = false; };
+  }, [attempt]);
+
+  if (state.phase === 'loading') return null;
+  if (state.phase === 'failed') {
+    return (
+      <div className="mt-4" data-testid="company-kyb-unreadable">
+        <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">Your companies</h4>
+        <Unreadable what="Your companies’ entity records" claim={state.message || ''} onRetry={() => setAttempt((n) => n + 1)} />
+      </div>
+    );
+  }
+  // NOT an empty card. Someone who belongs to no company has no company
+  // entity to verify, and a row of zeroes would imply they are missing a step
+  // they cannot take.
+  if (!state.items.length) return null;
+
+  // Read at render rather than held in state: the company switcher writes it
+  // synchronously and this list is re-rendered by the switch, so state would
+  // only add a way for the badge to lag the workspace it names.
+  const activeCompanyId = getActiveCompanyId();
+
+  return (
+    <div className="mt-4" data-testid="company-kyb-card">
+      <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">Your companies</h4>
+      <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+        Each company has its own entity record. This is separate from your account&rsquo;s own
+        entity above — that one is who signs your contracts, these are who the workspaces
+        belong to.
+      </p>
+      {state.items.map((row) => (
+        <div key={row.company_id} className="mt-2 flex items-start gap-3 border-t border-slate-100 py-2 dark:border-slate-800">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm text-slate-900 dark:text-slate-100">{row.company_name}</div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400">
+              {row.kyb
+                ? `${row.kyb.status.replace(/_/g, ' ')}${row.kyb.entity_name ? ` · ${row.kyb.entity_name}` : ''}`
+                : 'Not started'}
+            </div>
+          </div>
+          <div className="flex flex-none items-center gap-2">
+            {/* v2 marks which of these rows is the workspace you are
+                currently in. Without it a reader with three companies
+                cannot tell which record the rest of the app is acting on.
+                Compared as strings: the id arrives from localStorage as
+                text and from the API as a number. */}
+            {String(row.company_id) === String(activeCompanyId) && (
+              <span className="rounded border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-widest text-violet-700 dark:border-violet-900 dark:bg-violet-950 dark:text-violet-300">
+                Active workspace
+              </span>
+            )}
+            {row.is_primary_admin
+              ? <span className="text-[11px] text-slate-500 dark:text-slate-400">You administer this company</span>
+              : <span className="text-[11px] text-slate-400">{row.role_in_company}</span>}
+          </div>
+        </div>
+      ))}
+      {/* This page reports; Account Settings is where an entity record is
+          changed. The canvas puts the way out at the foot of the list. */}
+      <a
+        href="/account"
+        className="mt-3 inline-block text-xs font-semibold text-violet-700 hover:underline dark:text-violet-400"
+      >
+        Edit in Account Settings &rarr;
+      </a>
+    </div>
   );
 }
 
@@ -1285,9 +1374,9 @@ export default function TrustCenterPage({ chromeless = false }) {
     </Section>
   );
 
-  // `legacy?.kyb` is a literal null from GET /trust/summary, so the KybCard
-  // branch this used to carry could never run. The obligation matrix is the
-  // real source and always was.
+  // The obligation matrix is the real source of the account's KYB state and
+  // always was: the first Trust Center's /trust/summary (retired, D432) never
+  // carried a KYB object, so the KybCard branch this used to carry never ran.
   const entity = obligations.some(o => o.obligation_key === 'kyb_v1') && (
     <Section icon={Building2} title="Entity verification (KYB)" subtitle="Required for service-provider partners and entity investors.">
       <ManagedElsewhere cta="Open entity details →" href="/account">
@@ -1320,76 +1409,6 @@ export default function TrustCenterPage({ chromeless = false }) {
     </Section>
   );
 
-  function CompanyKybCard() {
-    const [items, setItems] = useState([]);
-    const [loaded, setLoaded] = useState(false);
-
-    useEffect(() => {
-      let alive = true;
-      api.companyKybList()
-        .then((r) => { if (alive) { setItems(r?.items || []); setLoaded(true); } })
-        .catch(() => { if (alive) setLoaded(true); });
-      return () => { alive = false; };
-    }, []);
-
-    if (!loaded) return null;
-    // NOT an empty card. Someone who belongs to no company has no company
-    // entity to verify, and a row of zeroes would imply they are missing a step
-    // they cannot take.
-    if (!items.length) return null;
-
-    // Read at render rather than held in state: the company switcher writes it
-    // synchronously and this list is re-rendered by the switch, so state would
-    // only add a way for the badge to lag the workspace it names.
-    const activeCompanyId = getActiveCompanyId();
-
-    return (
-      <div className="mt-4">
-        <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">Your companies</h4>
-        <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-          Each company has its own entity record. This is separate from your account&rsquo;s own
-          entity above — that one is who signs your contracts, these are who the workspaces
-          belong to.
-        </p>
-        {items.map((row) => (
-          <div key={row.company_id} className="mt-2 flex items-start gap-3 border-t border-slate-100 py-2 dark:border-slate-800">
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm text-slate-900 dark:text-slate-100">{row.company_name}</div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                {row.kyb
-                  ? `${row.kyb.status.replace(/_/g, ' ')}${row.kyb.entity_name ? ` \u00b7 ${row.kyb.entity_name}` : ''}`
-                  : 'Not started'}
-              </div>
-            </div>
-            <div className="flex flex-none items-center gap-2">
-              {/* v2 marks which of these rows is the workspace you are
-                  currently in. Without it a reader with three companies
-                  cannot tell which record the rest of the app is acting on.
-                  Compared as strings: the id arrives from localStorage as
-                  text and from the API as a number. */}
-              {String(row.company_id) === String(activeCompanyId) && (
-                <span className="rounded border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-widest text-violet-700 dark:border-violet-900 dark:bg-violet-950 dark:text-violet-300">
-                  Active workspace
-                </span>
-              )}
-              {row.is_primary_admin
-                ? <span className="text-[11px] text-slate-500 dark:text-slate-400">You administer this company</span>
-                : <span className="text-[11px] text-slate-400">{row.role_in_company}</span>}
-            </div>
-          </div>
-        ))}
-        {/* This page reports; Account Settings is where an entity record is
-            changed. The canvas puts the way out at the foot of the list. */}
-        <a
-          href="/account"
-          className="mt-3 inline-block text-xs font-semibold text-violet-700 hover:underline dark:text-violet-400"
-        >
-          Edit in Account Settings &rarr;
-        </a>
-      </div>
-    );
-  }
-
   const accreditation = role === 'investor' && (
     <Section icon={BadgeCheck} title="Accredited investor verification" subtitle="Your accreditation obligation and its current status.">
       {/* Wording is the canvas's: v2 says "Manage in Account Settings" here
@@ -1420,12 +1439,6 @@ export default function TrustCenterPage({ chromeless = false }) {
       </p>
     </Section>
   );
-
-  const agreementsLegacy = requiredNdas.length ? (
-    <Section icon={FileSignature} title="Template NDAs" subtitle="Standing NDAs based on your role.">
-      <NdaCard items={requiredNdas} onChanged={load} />
-    </Section>
-  ) : null;
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -1496,8 +1509,7 @@ export default function TrustCenterPage({ chromeless = false }) {
       {tab === 'accreditation' && (accreditation || <Section icon={BadgeCheck} title="Accreditation"><p className="text-sm text-slate-600">No accreditation required.</p></Section>)}
       {tab === 'agreements'    && (
         <div data-testid="trust-agreements-panel">
-          <AgreementsTab obligations={obligations} onStart={startObligation} role={role} />
-          {agreementsLegacy}
+          <AgreementsTab obligations={obligations} onStart={startObligation} role={role} requiredNdas={requiredNdas} onChanged={load} />
         </div>
       )}
       {tab === 'sanctions'     && <div data-testid="trust-sanctions-panel"><SanctionsTab /></div>}

@@ -278,6 +278,7 @@ function CompanySwitcher({ collapsed, role }) {
     return (
       <div ref={ref} className="relative flex justify-center py-2 px-1 border-b border-gray-200 dark:border-gray-700 flex-none">
         <button
+          data-company-switcher=""
           type="button"
           onClick={() => setOpen(v => !v)}
           title={displayName}
@@ -293,6 +294,7 @@ function CompanySwitcher({ collapsed, role }) {
   return (
     <div ref={ref} className="relative px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex-none">
       <button
+        data-company-switcher=""
         type="button"
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 transition-colors text-left"

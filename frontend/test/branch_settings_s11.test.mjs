@@ -163,7 +163,10 @@ test('no row draws a control the server would refuse', () => {
   const acts = [...PAGE.matchAll(/actTo: '([^']+)'/g)].map((m) => m[1]);
   assert.equal(acts.length, rowBlocks().length, 'a row lost its destination');
   for (const to of acts) {
-    assert.ok(APP.includes(`path="${to}"`), `${to} is a request path with no route behind it`);
+    // D445 — a row may carry ?kind= and ?subject= so Approvals opens prefilled.
+    // The path before the query is still a route that exists.
+    const path = to.split('?')[0];
+    assert.ok(APP.includes(`path="${path}"`), `${path} is a request path with no route behind it`);
   }
 });
 

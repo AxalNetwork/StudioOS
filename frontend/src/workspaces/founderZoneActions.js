@@ -26,7 +26,7 @@ import { makeZoneActions } from './zoneActionBuilder';
  * tab a founder's Network desk does not read; `/build/discovery` renders
  * `FounderValidatePage` for a founder, so the waitlist invite panel behind it
  * is not theirs to reach; and `/build/team` renders the Grow desk, not
- * `TeamBuildingPage`. All four are notes below. A link that 404s, or that lands
+ * `FounderTeamPage`. All four are notes below. A link that 404s, or that lands
  * on a page the reader is not allowed to open, is the same broken promise as a
  * button that does nothing — it is just slower to discover.
  *

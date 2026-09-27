@@ -233,7 +233,10 @@ test('neither strip is a form, a currency, a second assistant or a second read',
     assert.ok(!/[€$]\s?\d|\$\{?[0-9]/.test(src.replace(/\$\{[a-zA-Z]/g, '')), `${name} typed a currency`);
     assert.ok(!src.includes('WorkerRail'), `${name} mounts a second assistant`);
   }
-  assert.doesNotMatch(DECIDE, /\bapi\./, 'the needs-a-decision strip makes a read of its own');
+  assert.match(DECIDE, /loadStudioGlance\(/, 'the strip does not read the studio glance');
+  assert.doesNotMatch(DECIDE, /\bapi\./, 'the strip calls the client directly instead of the overview\'s loader');
+  assert.doesNotMatch(DECIDE, /branchHome|myLicence|branchTemplates|branchInsights/,
+    'the strip grew a second read of the branch endpoints');
   assert.match(DECIDE, /studioGlances\(/, 'the strip stopped reading the overview\'s own figures');
   assert.doesNotMatch(DECIDE, /approvalsGlance|contractsGlance|programmeGlance|accountLines\(/,
     'the strip computes a figure with a helper of its own instead of the overview\'s');

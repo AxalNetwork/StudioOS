@@ -74,6 +74,13 @@ regexes = [
   # param. The "token" is the EU's published export-version marker
   # (base64 of "token-2017"), not a credential — we pin both the literal
   # value and the URL so the rule doesn't re-trigger on URL edits.
+  # Spin-Out Lab graduation credential references (`AXL-SOL-C4-260731-0117`):
+  # derived from cohort, date and account by `credentialRefFor`
+  # (routes/spinout_certificates.ts), printed on every certificate and on its
+  # public verification page. A reference, not a secret — the public page is
+  # keyed on the separate 128-bit `public_token`, which this does not match.
+  # Pinned to the exact shape so nothing looser rides on it (D382).
+  '''\bAXL-SOL-(C\d+|X)-\d{6}-\d{4}\b''',
   '''dG9rZW4tMjAxNw''',
   '''webgate\.ec\.europa\.eu/fsd/fsf/public/files/jsonFullSanctionsList[^'"\s]+''',
 ]

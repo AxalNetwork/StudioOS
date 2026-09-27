@@ -729,14 +729,29 @@ function AggregatorTab({ accounts, onReload, toast }) {
             <div className="flex items-center gap-2 text-sm mb-2">
               <span className="px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-200 text-xs">{d.audience}</span>
               <span className="text-gray-500">{d.kind}</span>
+              {d.drafted === false && (
+                <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                  no draft made
+                </span>
+              )}
               {d.thread.length > 1 && <span className="text-xs text-amber-600">thread × {d.thread.length}</span>}
               {d.needs_media && <span className="text-xs text-purple-600">+media suggested</span>}
             </div>
-            <div className="space-y-2">
-              {d.thread.map((t, j) => (
-                <pre key={j} className="whitespace-pre-wrap text-sm font-mono p-2 bg-gray-50 dark:bg-gray-800 rounded text-gray-800 dark:text-gray-200">{t}</pre>
-              ))}
-            </div>
+            {/* D330 — a preview whose only figure had no replacement (D301) sets
+                `drafted: false` and a reason, and persists nothing on Run. The
+                thread is empty in that case, so this says why rather than
+                rendering a blank card. */}
+            {d.drafted === false ? (
+              <div className="text-sm text-gray-500 dark:text-gray-400" data-testid="x-aggregator-not-drafted-reason">
+                No draft was made: {d.reason || 'no reason was given'}.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {d.thread.map((t, j) => (
+                  <pre key={j} className="whitespace-pre-wrap text-sm font-mono p-2 bg-gray-50 dark:bg-gray-800 rounded text-gray-800 dark:text-gray-200">{t}</pre>
+                ))}
+              </div>
+            )}
           </div>
         ))}
         {drafts.length === 0 && <div className="text-sm text-gray-500 dark:text-gray-400">Click Preview to see audience-by-audience drafts.</div>}

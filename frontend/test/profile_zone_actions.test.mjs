@@ -177,7 +177,22 @@ const PROFILES = {
     // returned 200 over a ledger that stayed empty. Same sentence, three
     // different underlying facts — which is why each was read rather than
     // batch-wired.
-    handlers: 7,
+    //
+    // EIGHTH AND NINTH: `deals/commit`'s `Export minutes` and `Add condition`,
+    // and these are the SECOND kind — gaps closed by building. Both reasons
+    // were true when written (no minutes on `ic_meetings`, no condition store
+    // at all); migration 334 built both, and D461 wired the ops.
+    //
+    // TENTH THROUGH TWELFTH: `deals/closing`'s `Apply template`,
+    // `Export packet` and `Record wire`, the same kind again — migration 335
+    // built the checklist store and the transfer record, and D462 wired them.
+    //
+    // THIRTEENTH: `portfolio/updates`'s `Chase all overdue` — migration 337
+    // built the chase log, and D464 wired the op.
+    //
+    // FOURTEENTH: `network/relationships`'s `Set reminders` — migration 338
+    // built the reminder store, and D465 wired the op.
+    handlers: 14,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -366,7 +381,12 @@ const PROFILES = {
     // in the browser from the table already on screen, and `Download 1099
     // summary`, which fetches its own year rather than deriving one from the
     // reader's chosen window. Was 0, then 4, then 5, then 7.
-    handlers: 9,
+    // TEN NOW, because D392's Introductions brings `Consent log` — prose
+    // reading "consent is recorded per introduction, not as a log" on the
+    // premise that only this side's consent was returned. Both are, and the
+    // zone opens the partner panel's own log over its rows. Was 0, then 4,
+    // then 5, then 7, then 9.
+    handlers: 10,
     embeddedGuards: 0,
     // Both remaining exclusions are cards whose whole page IS the gap
     // statement, so there is nothing for a row to sit over. `expertise/

@@ -32,6 +32,9 @@ import {
   readSupportDeployments, buildTenantMatrix, SUPPORT_LIST_LIMIT,
   type TicketQueues,
 } from '../services/supportQueues';
+import {
+  HQ_SUPPORT_SLA_POLICY, readOpenTicketTaxonomy,
+} from '../services/supportSlaPolicy';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -67,6 +70,7 @@ function escalationQueue(read: EscalationsRead, nowMs: number) {
       due_at: e.due_at,
       sla: e.sla,
       age_hours: ageHours(e.created_at, nowMs),
+      relation: e.relation,
     })),
   };
 }
@@ -113,11 +117,12 @@ r.get('/', async (c) => {
 
   // Each of these catches its own failure and answers `available: false`, so
   // the parallel read cannot reject as a whole.
-  const [ticketsRead, licences, deployments, sync] = await Promise.all([
+  const [ticketsRead, licences, deployments, sync, taxonomy] = await Promise.all([
     readOpenTickets(env),
     readSupportLicences(env),
     readSupportDeployments(env),
     readTicketSync(env),
+    readOpenTicketTaxonomy(env),
   ]);
 
   let escalationsRead: EscalationsRead;
@@ -153,6 +158,12 @@ r.get('/', async (c) => {
     tickets,
     matrix,
     sync,
+    sla_policy: {
+      tiers: HQ_SUPPORT_SLA_POLICY,
+      note: 'Bands are set here and inherited whole — a subsidiary can escalate a ticket’s priority but cannot redefine what P1 means.',
+      ticket_mapping: 'urgent → P1 · high → P2 · medium and low → P3',
+    },
+    taxonomy,
   });
 });
 

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Card, Pill } from '../../../ui';
 import { api } from '../../../lib/api';
+import { buildIcs, downloadIcs } from '../../../lib/ics';
 import { NothingYet, Unrecorded, ZoneBody, ZoneHeading } from '../expertise/kit';
 import { BatchPicker, FromTheLab, NoBatch, StatedLimit, cohortLabel } from './kit';
 
@@ -29,10 +30,40 @@ import { BatchPicker, FromTheLab, NoBatch, StatedLimit, cohortLabel } from './ki
 const KIND_TONE = { cohort: 'info', client: 'ok', demo_day: 'warn' };
 const KIND_LABEL = { cohort: 'Cohort', client: 'Client', demo_day: 'Demo Day' };
 
+/**
+ * D393 — THE CANVAS'S FOUR CHIPS, over the `kind` every item already carries.
+ * `Next 14 days` is the whole stream (the route's own window); the other three
+ * narrow it. The tiles above stay counted over the whole stream: a tile that
+ * changed because you looked at it would not be reporting what it claims.
+ */
+export const CAL_VIEWS = {
+  all: () => true,
+  cohort: (it) => it.kind === 'cohort',
+  client: (it) => it.kind === 'client',
+  demo_day: (it) => it.kind === 'demo_day',
+};
+const CAL_CHIPS = [['all', 'Next 14 days'], ['cohort', 'Cohort only'], ['client', 'Client only'], ['demo_day', 'Demo Day']];
+
+/**
+ * `Export to calendar`, built in the browser from the rows on screen (the
+ * shared builder in lib/ics.js). A Lab date has no end — a week opens, a
+ * deadline falls — so it is written as a point in time, not a meeting.
+ */
+export function calendarIcs(items) {
+  return buildIcs({
+    prodId: '-//Axal//Cohort Calendar//EN',
+    events: (items || []).map((it) => ({
+      uid: it.ref, start: it.starts_at, end: it.ends_at || null,
+      summary: it.title, description: KIND_LABEL[it.kind] || it.kind,
+    })),
+  });
+}
+
 export default function CalendarZone() {
   const [assignments, setAssignments] = useState({ loading: true, error: '', items: [] });
   const [cycleId, setCycleId] = useState(null);
   const [data, setData] = useState({ loading: false, error: '', payload: null });
+  const [view, setView] = useState('all');
 
   const loadAssignments = useCallback(async () => {
     setAssignments((c) => ({ ...c, loading: true, error: '' }));
@@ -72,6 +103,7 @@ export default function CalendarZone() {
   const payload = data.payload;
   const counts = payload?.counts || null;
   const items = payload?.items || [];
+  const shown = items.filter(CAL_VIEWS[view] || CAL_VIEWS.all);
   const clashing = new Set((payload?.collisions || []).flatMap((c) => [c.a, c.b]));
   const batch = assignments.items.find((a) => a.cohort_cycle_id === cycleId)?.cohort;
 
@@ -132,13 +164,30 @@ export default function CalendarZone() {
           the batch's dates are the Lab's record, read-only here — your own sessions are yours
         </FromTheLab>
 
+        <div className="flex flex-wrap items-center gap-2" data-testid="calendar-chips">
+          {CAL_CHIPS.map(([key, label]) => (
+            <button key={key} type="button" onClick={() => setView(key)}
+              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${view === key ? 'border-emerald-600 bg-emerald-50 text-emerald-800' : 'border-axal-hairline text-axal-muted'}`}>
+              {label}
+            </button>
+          ))}
+          <button type="button" disabled={shown.length === 0}
+            onClick={() => downloadIcs(calendarIcs(shown), 'axal-cohort-calendar.ics')}
+            className="rounded-full border border-axal-hairline px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50">
+            {shown.length === 0 ? 'Export to calendar · nothing in this view' : 'Export to calendar · this view'}
+          </button>
+        </div>
+
         <Card className="p-4">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <span className="text-sm font-extrabold tracking-tight">Next fourteen days</span>
             <span className="text-[11px] text-axal-faint">Soonest first</span>
           </div>
           <ul className="divide-y divide-axal-hairline">
-            {items.map((it) => (
+            {shown.length === 0 && (
+              <li className="py-2.5 text-[12px] text-axal-muted">{`Nothing of this kind in the next fourteen days. ${items.length} in the stream.`}</li>
+            )}
+            {shown.map((it) => (
               <li key={it.ref} className="flex items-start justify-between gap-4 py-2.5">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">

@@ -13,8 +13,15 @@ test('founder execution uses the A3 operating desk rather than the generic found
   const desk = fe('src/pages/founder/FounderBuildDesk.jsx');
   const route = app.match(/<Route path="\/execution"[\s\S]*?\/>/)?.[0] || '';
 
-  assert.match(route, /effectiveRole === 'founder' \? <FounderBuildDesk \/>/, 'founder /execution no longer selects A3');
-  assert.doesNotMatch(route, /FounderWorkspaceTabs/, 'A3 must not render duplicate Founder workspace tabs');
+  // D422. `/execution` was a second address for A3 — a founder there got
+  // FounderBuildDesk, the element `/build` mounts. It redirects to `/build`
+  // with the query kept (`?new=1` and `?project_id=` survive), so A3 has one
+  // address; the editor keeps `?mode=workspace`.
+  assert.match(route, /effectiveRole === 'founder' && !founderExecutionEditor\s*\? <Navigate to=\{`\/build\$\{location\.search\}`\} replace \/>/,
+    'founder /execution no longer lands on A3 at /build');
+  assert.ok(!route.includes('<FounderBuildDesk />'), '/execution is a second address for A3 again');
+  assert.match(app, /const founderExecutionEditor = effectiveRole === 'founder'\s*&& new URLSearchParams\(location\.search\)\.get\('mode'\) === 'workspace';/);
+  assert.match(app, /<Route path="\/build" element=\{founderBuildLanding\s*\? guard\(\[[^\]]*\], <FounderBuildDesk \/>\)/);
   assert.match(desk, /Operate the company this week/);
   assert.match(desk, /api\.listProjects\(\)/);
   assert.match(desk, /api\.pipelineActive\(\)/);
@@ -49,10 +56,12 @@ test('founder execution uses the A3 operating desk rather than the generic found
   // ON the desk spells the parameter.
   assert.doesNotMatch(codeOnly(desk), /mode=workspace["'`]/,
     'a Build card is routing through the shared workspace instead of to its own page');
-  assert.match(desk, /const workspace = searchParams\.get\('mode'\) === 'workspace';/,
-    'A3 no longer reads ?mode=workspace at all');
-  assert.match(desk, /if \(workspace\) return <ExecutionPage \/>;/,
-    'A3 no longer hands ?mode=workspace to the detailed execution editor');
+  // THE EDITOR LEFT THE DESK (D422): `/execution?mode=workspace` mounts
+  // ExecutionPage at the route, so the desk renders one thing.
+  assert.ok(!/ExecutionPage/.test(codeOnly(desk)), 'A3 embeds the execution editor again');
+  const fullRoute = app.slice(app.indexOf('<Route path="/execution"'), app.indexOf('<Route path="/build/this-week"'));
+  assert.match(fullRoute, /: founderWorkspace\('build', <FounderWorkspaceTabs set="build" user=\{user\}><ExecutionPage \/><\/FounderWorkspaceTabs>\)/,
+    'the execution editor is no longer reachable at /execution?mode=workspace');
 
   assert.doesNotMatch(desk, /Async digest|pending trials|pricing page|Amara|Guillaume|Slack integration|permissions model|\$4,200|14 paid trials|\$21,412|18 mo|Llama|QwQ|Granite/i);
 });

@@ -49,6 +49,7 @@ import {
   weekAxis, weeklyKpi,
 } from '../services/activeAccounts';
 import { loadActiveAccountsByBranchWeek } from '../services/analyticsReports';
+import { subsidiaryUsageCoverage } from '../services/subsidiaryUsageCoverage';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -125,6 +126,49 @@ async function stampLicence<T>(env: Env, one: BranchResult<T>): Promise<BranchRe
   return one;
 }
 
+/** D452 / H29 — operator chrome for the view-as overlay when the branch is white-label. */
+export type LicenceShellField =
+  | {
+    readable: true;
+    uid: string;
+    kind: string;
+    brand_name: string;
+    brand_kit: { primary_hex?: string | null; accent_hex?: string | null } | null;
+    brand_kit_available: boolean;
+    brand_kit_reason: string | null;
+  }
+  | { readable: false; reason: string };
+
+async function licenceShellFor(env: Env, licenceUid: string | null | undefined): Promise<LicenceShellField> {
+  const uid = String(licenceUid || '').trim();
+  if (!uid) {
+    return { readable: false, reason: 'This branch is not bound to a territory licence, so there is no brand shell to read.' };
+  }
+  try {
+    const row = await env.DB.prepare('SELECT * FROM territory_licences WHERE uid = ?').bind(uid).first<LicenceRow>();
+    if (!row) {
+      return { readable: false, reason: 'The licence this branch binds to is not on HQ\'s ledger.' };
+    }
+    const [full] = await hydrate(env, [row]);
+    const kit = full.brand_kit ?? null;
+    const hex = kit?.primary_hex ? String(kit.primary_hex).trim() : '';
+    const brandKitAvailable = hex.length > 0;
+    return {
+      readable: true,
+      uid: full.uid,
+      kind: full.kind,
+      brand_name: full.brand_name,
+      brand_kit: kit,
+      brand_kit_available: brandKitAvailable,
+      brand_kit_reason: brandKitAvailable
+        ? null
+        : 'This licence records no primary brand colour, so only its name is shown — not Axal\'s chrome.',
+    };
+  } catch {
+    return { readable: false, reason: 'The territory licence ledger could not be read, so this overlay cannot show the tenant\'s brand.' };
+  }
+}
+
 r.get('/overview', async (c) => {
   await requireSuperAdmin(c);
   const env = c.env;
@@ -136,6 +180,7 @@ r.get('/overview', async (c) => {
   const scoped = scopeOf(c);
   if (scoped) {
     const one = await stampLicence(env, await branchRead<BranchOverview>(env, scoped, 'overview'));
+    const licenceShell = await licenceShellFor(env, one.licence_uid ?? null);
     return c.json({
       scope: {
         branch: one.code,
@@ -146,6 +191,8 @@ r.get('/overview', async (c) => {
         read_at: new Date().toISOString(),
         ...(one.reason ? { reason: one.reason } : {}),
       },
+      licence_shell: licenceShell,
+      licence: licenceShell.readable ? licenceShell : null,
       branches: [one],
       branches_coverage: coverage([one]),
     });
@@ -236,6 +283,8 @@ r.get('/overview', async (c) => {
     };
   }
 
+  const usageCoverage = await subsidiaryUsageCoverage(env);
+
   return c.json({
     accounts: { total: accountsTotal, by_role: byRole, active_only: true },
     seats_licensed: seatsLicensed,
@@ -256,6 +305,7 @@ r.get('/overview', async (c) => {
     // which is correct and different from "could not read them".
     branches,
     branches_coverage: branchCoverage,
+    usage_coverage: usageCoverage,
     ...DERIVED_UNAVAILABLE,
   });
 });

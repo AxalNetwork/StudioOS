@@ -246,9 +246,12 @@ const LIVE = {
     'perk-deals': (user) => <PerksPage user={user} embedded role="partner"
       zoneFilters={(opts) => partnerZoneFilters('offers/perk-deals', opts)}
       zoneActions={(rows, handlers) => partnerZoneActions('offers/perk-deals', { handlers, view: {
-        header: ['Offer', 'State', 'Redeemed', 'Cap', 'Ends', 'What it granted', 'Revoked on', 'Review state'],
+        // `Claimed` and `Redeemed` are two columns since D413: the export
+        // wrote the claim count under "Redeemed" until a claim could be
+        // marked redeemed.
+        header: ['Offer', 'State', 'Claimed', 'Redeemed', 'Cap', 'Ends', 'What it granted', 'Revoked on', 'Review state'],
         rows,
-        cells: (p) => [p.offer, p.lifecycle, p.claim_count, p.claim_cap,
+        cells: (p) => [p.offer, p.lifecycle, p.claim_count, p.redeemed_count, p.claim_cap,
           p.ends_at, p.grant_scope, p.grant_revoked_on, p.status],
       } })} />,
     visibility: () => <PartnerVisibility />,
@@ -286,9 +289,11 @@ const LIVE = {
  * TWO OF THOSE SENTENCES WERE NOT FULLY ANSWERED, and the zones say so on
  * themselves rather than a card saying it for them:
  *
- *   · "an embedded seat burning its cap" — nothing records the firm's CAP.
- *     Capacity shows real hours and real seats and refuses to mark anyone over,
- *     because a threshold nobody set is not a finding.
+ *   · "an embedded seat burning its cap" — the CAP is the firm's to state
+ *     (migration 230, firm-wide or per person). Capacity marks someone over
+ *     only against a cap that was stated, and until one is it refuses to,
+ *     because a threshold nobody set is not a finding (D391 corrected this
+ *     line, which still said nothing records a cap).
  *   · "whether the client opened it" — `opened_at` is the CLIENT'S to set and
  *     no surface in this product lets them. Deliverables shows every sent item
  *     as unopened and says the absence is ours, not theirs.
@@ -353,7 +358,7 @@ const ZONE_LINES = {
     // work: both of its partner-facing tabs read a response shape the worker
     // does not send, so the catalogue was permanently empty either way.
     catalog: 'What the firm sells, at what price — the record lead scoring reads a match against.',
-    'perk-deals': 'Deals that expire in public, with grants revoked when they do.',
+    'perk-deals': 'Deals that expire in public, with grants revoked when they do — and where a perk is submitted and its claims are marked redeemed.',
     // Written to what the store can support. "Views" is deliberately absent
     // from this line as it is from the zone: nothing records an impression, so
     // naming it here would promise a column that renders as an absence.

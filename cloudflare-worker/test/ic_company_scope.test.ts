@@ -127,6 +127,25 @@ function freshDb() {
       decision TEXT, conviction TEXT, thesis TEXT, outcome_status TEXT,
       decided_at TEXT, created_at TEXT, updated_at TEXT
     );
+    -- Migration 334: conditions on a decision, and minutes on the meeting.
+    CREATE TABLE ic_conditions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
+      ic_decision_id INTEGER NOT NULL, body TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open', created_by INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      resolved_at TEXT, resolved_by INTEGER
+    );
+    CREATE TABLE ic_meetings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
+      title TEXT NOT NULL, agenda TEXT, start_at TEXT NOT NULL,
+      duration_min INTEGER NOT NULL DEFAULT 60, deal_id INTEGER,
+      organizer_user_id INTEGER NOT NULL, location_kind TEXT NOT NULL DEFAULT 'video',
+      location_uri TEXT, status TEXT NOT NULL DEFAULT 'scheduled',
+      cancelled_at TEXT, cancel_reason TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      minutes TEXT, minutes_recorded_by INTEGER, minutes_recorded_at TEXT
+    );
     CREATE TABLE mi_pro_subscriptions (
       user_id INTEGER PRIMARY KEY, status TEXT, subscription_id TEXT, plan TEXT,
       period_end TEXT, stripe_customer_id TEXT
@@ -157,6 +176,12 @@ function freshDb() {
 
   db.prepare('INSERT INTO ic_votes (ic_decision_id, user_id, vote, rationale) VALUES ((SELECT id FROM ic_decisions WHERE uid = ?), ?, ?, ?)')
     .run(DEC_A, AUTHOR, 'yes', 'conviction on the team');
+  // A real condition on firm A's decision, so the outsider's resolve attempt
+  // travels the scope path (decision not visible → 404) rather than the
+  // unknown-uid one.
+  db.prepare(`INSERT INTO ic_conditions (uid, ic_decision_id, body, created_by)
+              VALUES ('cond-a1', (SELECT id FROM ic_decisions WHERE uid = ?), 'IP chain of title', ?)`)
+    .run(DEC_A, AUTHOR);
   return db;
 }
 
@@ -241,6 +266,26 @@ const OUTSIDER_MATRIX: Array<{
     why: 'the widest read in the file — every decision WITH its votes and every '
       + 'rationale, in one response, so an unscoped version leaks more than /:uid does',
   },
+  {
+    route: '/conditions', method: 'GET', path: '/conditions', expect: 200,
+    why: 'the conditions list answers 200 with an EMPTY page for an outsider — the '
+      + 'decision scope rides the join, so another firm’s condition never lists',
+  },
+  {
+    route: '/:uid/conditions', method: 'POST', path: `/${DEC_A}/conditions`, expect: 404,
+    body: { body: 'IP chain of title' },
+    why: 'a condition added to another firm’s decision is the vote-into-the-tally hole one layer up',
+  },
+  {
+    route: '/conditions/:uid', method: 'PATCH', path: '/conditions/cond-a1', expect: 404,
+    body: { status: 'met' },
+    why: 'resolving another firm’s condition travels the decision scope: the uid is real and the answer is still 404',
+  },
+  {
+    route: '/meetings/:uid/minutes', method: 'PATCH', path: '/meetings/mtg-not-theirs/minutes', expect: 404,
+    body: { minutes: 'the room concluded…' },
+    why: 'minutes are written on a meeting the caller organised; an unknown uid is a 404',
+  },
 ];
 
 for (const row of OUTSIDER_MATRIX) {
@@ -249,6 +294,12 @@ for (const row of OUTSIDER_MATRIX) {
     assert.equal(r.status, row.expect);
     if (row.method === 'GET' && row.path === '/') {
       assert.deepEqual(uids(r.body), [], 'the list must be empty for a firm with no decisions');
+    }
+    if (row.method === 'GET' && row.path === '/conditions') {
+      const blob = JSON.stringify(r.body);
+      assert.deepEqual((r.body?.items || []).length, 0, 'another firm\'s condition reached the list');
+      assert.ok(!blob.includes('cond-a1'), 'firm A\'s condition uid is in the response');
+      assert.ok(!blob.includes('IP chain of title'), 'firm A\'s condition text is in the response');
     }
     // 200 IS NOT THE ASSERTION FOR THIS ONE. `/commit-room` answers every
     // caller who holds the licence — there is no uid to 404 on — so the refusal
@@ -289,7 +340,7 @@ test('every endpoint under /api/ic is in the outsider matrix', () => {
     [...declared].filter((k) => !covered.has(k as string)).sort(), [],
     'an /api/ic endpoint has no outsider assertion',
   );
-  assert.equal(covered.size, 6, 'the matrix itself must not shrink silently');
+  assert.equal(covered.size, 10, 'the matrix itself must not shrink silently');
 });
 
 // ---------------------------------------------------------------------------
@@ -316,7 +367,7 @@ test('a colleague at the same firm sees it and can vote — a committee needs mo
   const db = freshDb();
   const voted = await call(colleague, `/${DEC_A}/vote`, { method: 'POST', body: { vote: 'no' } }, db);
   assert.equal(voted.status, 200);
-  assert.deepEqual(voted.body.tally, { yes: 1, no: 1, abstain: 0 });
+  assert.deepEqual(voted.body.tally, { yes: 1, no: 1, abstain: 0, recused: 0 });
 });
 
 test('a colleague may read and vote but not rewrite — 403 inside the firm, 404 outside it', async () => {

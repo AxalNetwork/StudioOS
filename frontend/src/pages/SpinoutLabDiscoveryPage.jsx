@@ -1095,7 +1095,8 @@ export default function SpinoutLabDiscoveryPage() {
                 )}
               </div>
 
-              {/* The stored ICP definition (D353, migration 308). */}
+              {/* The stored ICP definition (D353, migration 308). This branch
+                  only renders with a project, so no guard is needed here. */}
               <IcpDefinitionCard
                 project={project}
                 canEdit={user?.role !== 'investor'}

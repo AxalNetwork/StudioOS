@@ -1,7 +1,7 @@
 # frontend/src/pages/research — zone bodies
 
-The bodies `ResearchWorkspace` mounts for a slug, plus the one page that is not
-a zone: a single researched fund.
+The bodies `ResearchWorkspace` mounts for a slug, plus the pages that are not
+zones: one record each, reached from a zone's list.
 
 | File | What it is |
 | --- | --- |
@@ -9,7 +9,10 @@ a zone: a single researched fund.
 | `LibraryZone.jsx` | Those documents. |
 | `MarketZone.jsx` | Markets. |
 | `BenchmarkingZone.jsx` | Investor benchmarking. |
-| `DiligenceZone.jsx` | Investor diligence, assembled from room grants. |
+| `DiligenceZone.jsx` | Investor diligence, assembled from room grants. Each company links to its room. |
+| `DiligenceRoom.jsx` | `/research/diligence/:grantUid`. One room, read by the grant the investor holds. Behind an NDA is a count, never a name. Opening it is logged as opening the room. |
+| `DiligenceFile.jsx` | `/research/diligence/:grantUid/files/:fileUid`. One document's facts and its download. A document behind an unsigned NDA has no name on the page. |
+| `diligenceRead.js` | The size, date and file-state readings those two pages and their tests share. |
 | `ClientPrepZone.jsx` | Advisor and partner client prep. |
 | `FundsZone.jsx` | The founder shortlist at `/research/funds`. Stage, path and status stay three columns. |
 | `FundDossier.jsx` | `/research/funds/:uid`. One row. A blank cheque stays blank. The draft restates the page and does not email the fund. |

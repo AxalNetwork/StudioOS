@@ -145,7 +145,7 @@ export default function FounderStudioHome({ user }) {
           <MetricRow name="Modelled burn / month" result={money(financialComputed.avg_monthly_burn)} />
           <MetricRow name="Modelled runway" result={financialComputed.runway_months != null ? `${financialComputed.runway_months} months` : null} />
         </StudioCard>
-        <StudioCard title="Office hours" icon={CalendarDays} to="/build/team?tab=advisor" action="Open Bookings" loading={loading} error={failures.bookings}>
+        <StudioCard title="Office hours" icon={CalendarDays} to="/build/team?mode=workspace&tab=advisor" action="Open Bookings" loading={loading} error={failures.bookings}>
           <CompactList items={context.bookings} empty="No advisory bookings recorded." render={(booking) => <><strong>{booking?.advisor_name || booking?.advisor?.name || booking?.topic || 'Advisory booking'}</strong><small>{booking.scheduled_start ? date(booking.scheduled_start) : label(booking.status)}</small></>} />
         </StudioCard>
         <StudioCard title="Introductions in motion" icon={Network} to="/network?mode=workspace&tab=introductions" action="Open Network" loading={loading} error={failures.intros}>

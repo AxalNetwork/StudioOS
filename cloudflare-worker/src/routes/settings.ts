@@ -24,7 +24,7 @@ import { decodeJwt } from 'jose';
 import { getSQL } from '../db';
 import { requireAuth, hashToken, generateToken, selectJwt, bumpJwtMinIat, jwtMinIatFloor } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
-import { hasTotpConfigured, loadTotp, persistNewTotpEnrolment } from '../services/authTotp';
+import { hasTotpConfigured, loadTotp, loadTotpPairedAt, persistNewTotpEnrolment, replaceRecoveryHashes } from '../services/authTotp';
 import { loadSms, getUserFactors, setUserFactor } from '../services/authSms';
 import { ensureAuthBlockersSchema } from '../services/authBlockersSchema';
 import { putHeadshotFromDataUri, getHeadshot } from '../services/r2';
@@ -250,6 +250,11 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
   if (rows.length) {
     rows[0].totp_configured = (await hasTotpConfigured(c.env, user.id)) ? 1 : 0;
   }
+  // D433 — the Account page's "Authenticator app" row reads the pairing date.
+  // Read only when a factor is configured: an unpaired account has no date,
+  // and a legacy row's absence must read as null rather than as a stamp.
+  const totpPairedAt = rows.length && rows[0].totp_configured
+    ? await loadTotpPairedAt(c.env, user.id) : null;
   const pendingChange = await sql`
     SELECT id, new_email, requested_at, confirm_expires_at, confirmed_at, revoked_at
     FROM email_change_requests
@@ -299,6 +304,7 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
     role: u.role,
     email_verified: !!u.email_verified,
     totp_configured: !!u.totp_configured,
+    totp_paired_at: totpPairedAt,
     kyc_status: u.kyc_status || 'not_started',
     access_level: u.access_level || null,
     last_active_at: u.last_active_at || null,
@@ -828,7 +834,13 @@ settings.post('/totp/repair', async (c) => {
   const secret = new Secret();
   const newTotp = new TOTP({ issuer: 'Axal VC StudioOS', label: user.email, secret });
   const newSecret = secret.base32;
-  await persistNewTotpEnrolment(c.env, user.id, newSecret, totpRow.recoveryHashes);
+  // D430 — a repair mints a new SECRET and keeps the recovery set the person
+  // holds. That set is the one login consumes from, `users.totp_recovery_codes`
+  // (read above), never the `auth_totp` mirror `loadTotp` returned: before
+  // D430 regenerate wrote the `users` column alone, so the mirror could still
+  // hold the set the person had just discarded, and re-persisting it here
+  // brought those codes back to life and killed the ones they had saved.
+  await persistNewTotpEnrolment(c.env, user.id, newSecret, recoveryCodesOf(userRow[0].totp_recovery_codes));
   try { await setUserFactor(c.env, user.id, 'totp'); } catch {}
   // Invalidate existing sessions — the user is about to scan a new QR.
   //
@@ -1011,6 +1023,16 @@ settings.post('/sessions/:id/revoke', async (c) => {
 // and rotation, which is the architect's explicit ask for "recovery codes
 // management".
 
+/**
+ * D430 — the recovery set as login reads it: `users.totp_recovery_codes`,
+ * a JSON array of hashes, or the empty set when the column holds nothing
+ * parseable (which is also the set login would accept from it).
+ */
+function recoveryCodesOf(json: string | null | undefined): string[] {
+  const arr = safeJson<unknown>(json, []);
+  return Array.isArray(arr) ? arr.filter((h): h is string => typeof h === 'string') : [];
+}
+
 function generateRecoveryCode(): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // skip ambiguous I,O,0,1
   const bytes = new Uint8Array(12);
@@ -1051,7 +1073,10 @@ settings.post('/totp/recovery-codes/regenerate', async (c) => {
     plain.push(c1);
     hashes.push(await hashToken(c1));
   }
-  await sql`UPDATE users SET totp_recovery_codes = ${JSON.stringify(hashes)} WHERE id = ${user.id}`;
+  // D430 — both stores in one batch. Writing `users.totp_recovery_codes`
+  // alone left `auth_totp.recovery_hashes` holding the discarded set, which
+  // the next /totp/repair read back and re-persisted to both columns.
+  await replaceRecoveryHashes(c.env, user.id, hashes);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('totp_recovery_codes_regenerated', 'User regenerated TOTP recovery codes', ${user.email}, ${user.id})`;
   await sql.end();
@@ -1849,9 +1874,11 @@ settings.get('/security', async (c) => {
   // intentionally NEVER return the full phone number — only the trailing 4.
   const smsRow = await loadSms(c.env, user.id);
   const factors = await getUserFactors(c.env, user.id);
+  const totpPairedAt = rows[0].totp_configured ? await loadTotpPairedAt(c.env, user.id) : null;
   return c.json({
     email_verified: !!rows[0].email_verified,
     totp_configured: !!rows[0].totp_configured,
+    totp_paired_at: totpPairedAt,
     totp_recovery_codes_remaining: remaining,
     active_sessions: Number(sessions[0]?.active || 0),
     sms_configured: !!smsRow,

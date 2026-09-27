@@ -6,6 +6,7 @@ import { reportError } from '../../lib/log';
 import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
 import HqBranchOverlay from './HqBranchOverlay';
+import { revenueAbsenceForLicence } from '../../lib/hqRevenuePerSub';
 
 /**
  * HQ · Home — the whole business on one screen (Admin · Super canvas, H1).
@@ -106,6 +107,7 @@ function Tile({ label, value, note, tone = 'text-axal-ink' }) {
 export default function HqHomePage() {
   const [data, setData] = useState(null);       // null = loading, UNAVAILABLE = failed
   const [tenant, setTenant] = useState('');     // '' = all subsidiaries; else a licence uid
+  const [kindFilter, setKindFilter] = useState('all'); // all | subsidiary | white_label (H28)
   // D153 / H12 — the view-as scope, from the shell. `setViewAs` is what a
   // health card's own button calls; the way OUT is the shell bar's "Return to
   // HQ view", which is chrome rather than a control on this page, because the
@@ -126,7 +128,10 @@ export default function HqHomePage() {
   const ready = data && data !== UNAVAILABLE;
   const licences = ready ? data.licences || [] : [];
   const selected = tenant ? licences.find((l) => l.uid === tenant) || null : null;
-  const shown = selected ? [selected] : licences;
+  const kindScoped = kindFilter === 'all'
+    ? licences
+    : licences.filter((l) => l.kind === kindFilter);
+  const shown = selected ? [selected] : kindScoped;
   const events = useMemo(() => {
     if (!ready) return [];
     const all = data.events || [];
@@ -158,6 +163,7 @@ export default function HqHomePage() {
   // D149 (`revenue_share_bps`, on the row and thrown away).
   const branches = ready ? data.branches || [] : [];
   const branchCoverage = ready ? data.branches_coverage || null : null;
+  const usageCoverage = ready ? data.usage_coverage || null : null;
   // Keyed on `licence_uid`, which is the ONLY join between the two (migration
   // 258). A branch with no deployment row behind it is absent from this map
   // rather than guessed at — attaching one territory's figures to another's
@@ -167,6 +173,40 @@ export default function HqHomePage() {
     for (const b of branches) if (b?.licence_uid) m.set(b.licence_uid, b);
     return m;
   }, [branches]);
+
+  /** Seats used summed from branch reads — the fan-out HQ Home already receives (D150). */
+  const seatsUtilised = useMemo(() => {
+    if (!ready) return { value: null, reason: null };
+    if (!branches.length) {
+      return {
+        value: null,
+        reason: 'No branch is deployed yet, so seat utilisation cannot be summed from branch reads.',
+      };
+    }
+    let sum = 0;
+    let answered = 0;
+    let silent = 0;
+    for (const b of branches) {
+      if (b.status !== 'ok' || !b.data) { silent += 1; continue; }
+      const used = num(b.data.seats_used);
+      if (used === null) { silent += 1; continue; }
+      sum += used;
+      answered += 1;
+    }
+    if (answered === 0) {
+      return {
+        value: null,
+        reason: 'Every deployed branch withheld its seat count or did not answer in time.',
+      };
+    }
+    if (silent > 0) {
+      return {
+        value: sum,
+        reason: `Summed over ${answered} ${answered === 1 ? 'branch' : 'branches'} that answered; ${silent} did not, so this is not a complete total.`,
+      };
+    }
+    return { value: sum, reason: null };
+  }, [ready, branches]);
 
   // The sentence H13 rule 3 requires, derived rather than typed. Three states,
   // and the middle one is the whole point: a branch that did not answer is
@@ -212,11 +252,11 @@ export default function HqHomePage() {
       // how many of them answered.
       scope="All branches"
       stance="Read-only overview"
-      note="This rail summarises the licence ledger and platform-wide account totals. It takes no action."
+      note="This rail summarises the licence ledger and active accounts on HQ's database. It takes no action."
       coverage={ready ? [
         `${licences.length} ${plural(licences.length, 'licence', 'licences')} on the ledger`,
         `${countries.length} of 27 EU countries held`,
-        accountsTotal === null ? 'Active accounts: not recorded' : `${accountsTotal} active accounts platform-wide`,
+        accountsTotal === null ? 'Active accounts: not recorded' : `${accountsTotal} active accounts on HQ's database`,
         // H13 RULE 3 — "unreadable is a word in the answer" (D150). The rail
         // summarises the lines below it, so a line that omits an unanswered
         // branch produces an answer that silently totals over the rest. That
@@ -288,11 +328,33 @@ export default function HqHomePage() {
             )}
           </label>
           <span className="rounded bg-white/15 px-2 py-0.5 text-[10px] font-bold tracking-[.05em]">AXAL VC HQ</span>
+          <div className="flex w-full flex-wrap gap-2 pt-1 sm:w-auto sm:pt-0" data-testid="hq-kind-filter">
+            {[
+              ['all', 'All'],
+              ['subsidiary', 'Axal'],
+              ['white_label', 'White-label'],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                disabled={!ready}
+                aria-pressed={kindFilter === id}
+                onClick={() => setKindFilter(id)}
+                className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${
+                  kindFilter === id
+                    ? 'border-white bg-white/25 text-white'
+                    : 'border-white/50 text-white/95 hover:bg-white/15'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         {selected && (
           <p className="mt-2 text-[11.5px] text-axal-faint">
-            Narrowed to {selected.brand_name} on this page only. The rest of the product has no tenant scope yet,
-            so nothing else changes.
+            Narrowed to {selected.brand_name} on this page only. Elsewhere, use View as on a deployed branch
+            to read that tenant's database — the tenant switcher here does not change other routes.
           </p>
         )}
 
@@ -305,7 +367,8 @@ export default function HqHomePage() {
             {ready
               ? `${accountsTotal === null ? 'An unrecorded number of' : accountsTotal} active accounts across ${licences.length} ${plural(licences.length, 'licence', 'licences')} and ${countries.length} ${plural(countries.length, 'country', 'countries')}. `
               : 'The franchisor’s overview: every licence, every account, the licence trail. '}
-            Per-subsidiary figures are not recorded until accounts carry a licence.
+            Per-branch accounts, seats used and backlog on the cards below come from each branch's own read when it answers.
+            Revenue per subsidiary stays not recorded — every stream in the morning report arrives unmeasured.
           </p>
         </header>
 
@@ -318,10 +381,30 @@ export default function HqHomePage() {
           <Tile
             label="Accounts"
             value={ready ? accountsTotal : null}
-            note={<>active, platform-wide · <Link to="/admin/analytics" className="underline">weekly activity, by branch</Link></>}
+            note={<>active on HQ's database · <Link to="/admin/analytics" className="underline">weekly activity, by branch</Link></>}
           />
-          <Tile label="Seats licensed" value={ready ? num(data.seats_licensed) : null} note={<>utilised: <Unrecorded /></>} />
-          <Tile label="MTD revenue" value={null} note="no subsidiary attribution" />
+          <Tile
+            label="Seats licensed"
+            value={ready ? num(data.seats_licensed) : null}
+            note={(
+              <>
+                utilised:{' '}
+                {seatsUtilised.value !== null
+                  ? (
+                    <>
+                      {num(seatsUtilised.value)}
+                      {seatsUtilised.reason ? ` · ${seatsUtilised.reason}` : ' · summed from branch reads'}
+                    </>
+                  )
+                  : <Unrecorded reason={seatsUtilised.reason} />}
+              </>
+            )}
+          />
+          <Tile
+            label="MTD revenue"
+            value={null}
+            note={ready ? (data.mtd_revenue_reason || 'Not recorded on HQ') : '…'}
+          />
           <Tile
             label="Queue backlog"
             value={ready && queue?.available ? num(queue.open) : null}
@@ -353,6 +436,11 @@ export default function HqHomePage() {
               subsidiary being healthy. <Link to="/admin/licences" className="underline">Issue the first licence →</Link>
             </p>
           )}
+          {ready && licences.length > 0 && shown.length === 0 && (
+            <p className="text-[12.5px] text-axal-muted" data-testid="hq-kind-filter-empty">
+              No licences match this filter. Choose All, Axal subsidiary, or White-label above.
+            </p>
+          )}
           {ready && shown.length > 0 && (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" data-testid="hq-subsidiary-cards">
               {shown.map((l) => {
@@ -366,8 +454,20 @@ export default function HqHomePage() {
                 return (
                 <div key={l.uid} data-branch-state={b ? b.status : 'none'} className={`rounded-xl border p-3 ${l.status === 'suspended' ? 'border-amber-200 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20' : 'border-axal-hairline bg-axal-ground'}`}>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[12.5px] font-extrabold tracking-tight">{l.brand_name}</span>
+                    <span className="flex min-w-0 items-center gap-1.5 truncate">
+                      {l.kind === 'white_label' && l.brand_kit?.primary_hex && (
+                        <span
+                          aria-hidden="true"
+                          className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm border border-black/10"
+                          style={{ backgroundColor: l.brand_kit.primary_hex }}
+                        />
+                      )}
+                      <span className="truncate text-[12.5px] font-extrabold tracking-tight">{l.brand_name}</span>
+                    </span>
                     <Pill status={l.status} />
+                  </div>
+                  <div className="mt-0.5 text-[10px] font-semibold text-axal-faint" data-testid="hq-card-kind-pill">
+                    {l.kind === 'white_label' ? 'White-label' : 'Axal subsidiary'}
                   </div>
                   {/* D153 / H12 — the way IN, and it is drawn only where there
                       is something behind it. A licence whose branch is not
@@ -411,10 +511,23 @@ export default function HqHomePage() {
                       </dd>
                     </div>
                     <div className="col-span-2">
+                      <dt className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+                        Revenue{usageCoverage?.available ? ` · ${usageCoverage.period}` : ''}
+                      </dt>
+                      <dd className="mt-0.5 text-[11px] leading-relaxed text-axal-muted">
+                        <Unrecorded reason={revenueAbsenceForLicence(usageCoverage, l.uid)} />
+                      </dd>
+                    </div>
+                    <div className="col-span-2">
                       <dt className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Backlog</dt>
                       <dd className="mt-0.5 font-bold tabular-nums">
                         {live && live.backlog && num(live.backlog.count) !== null
-                          ? `${num(live.backlog.count)} open`
+                          ? (
+                            <>
+                              {num(live.backlog.count)} open
+                              {live.backlog.oldest_at ? ` · oldest ${day(live.backlog.oldest_at)}` : ''}
+                            </>
+                          )
                           : <Unrecorded reason={live?.backlog_reason || branchReason(b, 'backlog')} />}
                       </dd>
                     </div>

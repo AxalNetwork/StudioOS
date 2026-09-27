@@ -326,12 +326,17 @@ export const SHELLS = {
       // writes nothing back.
       { kind: 'bucket', label: 'Cohorts', prefix: '/cohorts', tagline: 'Guide the batch',
         readsLab: true,
+        // D393 — the five archetypes are the Cohorts canvas's own artboard
+        // headers (C1–C5), and `advisor_cohorts_alignment_d393.test.mjs` reads
+        // them from the canvas so the nav cannot drift from it again. They had
+        // drifted on all five: COLLECTION / WORK BOARD ×3 / ANALYTICS against
+        // the canvas's WORK BOARD / FEED / COLLECTION / FEED / COLLECTION.
         zones: [
-          { slug: 'founders', label: 'Founders', archetype: A.COLLECTION },
-          { slug: 'guidance', label: 'Guidance', archetype: A.WORK_BOARD },
-          { slug: 'this-week', label: 'This week', archetype: A.WORK_BOARD },
-          { slug: 'calendar', label: 'Calendar', archetype: A.WORK_BOARD },
-          { slug: 'outcomes', label: 'Outcomes', archetype: A.ANALYTICS },
+          { slug: 'founders', label: 'Founders', archetype: A.WORK_BOARD },
+          { slug: 'guidance', label: 'Guidance', archetype: A.FEED },
+          { slug: 'this-week', label: 'This week', archetype: A.COLLECTION },
+          { slug: 'calendar', label: 'Calendar', archetype: A.FEED },
+          { slug: 'outcomes', label: 'Outcomes', archetype: A.COLLECTION },
         ] },
       { kind: 'bucket', label: 'Expertise', prefix: '/expertise', tagline: 'Package what I know',
         zones: [

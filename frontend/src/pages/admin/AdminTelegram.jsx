@@ -341,6 +341,8 @@ function DraftsTab({ channels, refresh, toast, onEdit }) {
   const [loading, setLoading] = useState(true);
   const [periodDays, setPeriodDays] = useState(7);
   const [running, setRunning] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [previewing, setPreviewing] = useState(false);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -361,11 +363,28 @@ function DraftsTab({ channels, refresh, toast, onEdit }) {
     try {
       const res = await api.runAggregator({ period_days: periodDays });
       toast.success(`Aggregator ran — drafted ${res.drafted.length} posts`);
+      setPreview(null);
       reload();
     } catch (e) {
       toast.error(e?.message || 'Aggregator failed');
     } finally {
       setRunning(false);
+    }
+  };
+
+  // D330 — a preview of what the NEXT run would produce, including the
+  // audiences it drafts nothing for. `runAggregator` never persists a draft
+  // with `drafted: false` (D301), so that audience never shows up in the
+  // list above; without this, "no draft made" is silent rather than stated.
+  const runPreview = async () => {
+    setPreviewing(true);
+    try {
+      const res = await api.previewAggregator({ period_days: periodDays });
+      setPreview(res.drafts || []);
+    } catch (e) {
+      toast.error(e?.message || 'Preview failed');
+    } finally {
+      setPreviewing(false);
     }
   };
 
@@ -396,6 +415,14 @@ function DraftsTab({ channels, refresh, toast, onEdit }) {
           />
         </label>
         <button
+          onClick={runPreview}
+          disabled={previewing}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
+        >
+          {previewing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+          Preview
+        </button>
+        <button
           onClick={runAgg}
           disabled={running}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 text-white text-sm hover:bg-violet-700 disabled:opacity-50"
@@ -404,6 +431,36 @@ function DraftsTab({ channels, refresh, toast, onEdit }) {
           Run aggregator
         </button>
       </div>
+
+      {/* D330 — the preview shows every audience the NEXT run would touch,
+          including one `runAggregator` drafts nothing for (D301: a draft
+          whose every figure line was dropped is not persisted). Without this,
+          that audience's absence from the list below is silent. */}
+      {preview && (
+        <div className="space-y-2">
+          {preview.map((d) => (
+            <div key={d.audience} className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">{d.audience}</span>
+                {d.drafted === false && (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                    no draft made
+                  </span>
+                )}
+              </div>
+              {d.drafted === false ? (
+                <div className="text-xs text-slate-500 dark:text-slate-400" data-testid="telegram-aggregator-not-drafted-reason">
+                  No draft was made: {d.reason || 'no reason was given'}.
+                </div>
+              ) : (
+                <div className="text-xs text-slate-600 dark:text-slate-400 line-clamp-3 whitespace-pre-wrap font-mono">
+                  {d.body_md}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {loading ? (
         <div className="text-center py-8 text-slate-500"><Loader2 className="w-5 h-5 animate-spin inline" /></div>

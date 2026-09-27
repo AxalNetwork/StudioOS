@@ -31,7 +31,7 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| 83b Election Tracker | `/spinout-lab/83b` · `/incorporate/83b` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| 83b Election Tracker | `/spinout-lab/83b` · `/raise/legal-engine/equity` · `/incorporate/83b` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Raise | OUT OF SCOPE | High |
 | Advisors | `/spinout-lab/advisors` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Apply and Status | `/spinout-lab/apply` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Brand & Landing Page | `/spinout-lab/brand` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Grow | OUT OF SCOPE | High |
@@ -62,8 +62,8 @@ it, where in their nav, and how do they get there.*
 | Pages · Benchmark | `/research/benchmarking` | Home | Full page | Sidebar → Home → Research | NEW | High |
 | Pages · Company | `/research/companies/:analysisId/:candidateId` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Pages · Company analysis | `/research/companies/:id` | Home | Full page (proposed) | Sidebar → Home → Research | NEW | Low |
-| Pages · Diligence file | `/research/diligence` | Home | Full page | Sidebar → Home → Research | NEW | High |
-| Pages · Diligence room | `/research/diligence` | Home | Full page | Sidebar → Home → Research | NEW | High |
+| Pages · Diligence file | `/research/diligence/:grantUid/files/:fileUid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
+| Pages · Diligence room | `/research/diligence/:grantUid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Pages · Founder Build | `/execution` · `/build/metrics` | Home | Full page | Sidebar → Home → Build | UPGRADE | High |
 | Pages · Founder Grow | `/founder/growth/{talent` | — (not routed) | Full page (proposed) | Not reachable yet | RESKIN | Low |
 | Pages · Founder Network | `/network` | Home | Full page | Sidebar → Home → Network | RESKIN | High |
@@ -84,7 +84,7 @@ it, where in their nav, and how do they get there.*
 | Spin-Out Lab · Landing | `/spinout-lab` | Home | Full page | Sidebar → Home → Spin-Out Lab | UPGRADE | High |
 | Spin-Out Lab Workspace | `/spinout-lab` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Studio Ops | — | — (not routed) | Full page (Spin-Out Lab — frozen) | Not reachable yet | OUT OF SCOPE | High |
-| Team | `/build/team` | Home | Full page | Sidebar → Home → Grow | UPGRADE | High |
+| Team | `/build/team?mode=workspace` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Use of Funds | `/spinout-lab/use-of-funds` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 
 ## Advisor — 10 canvases
@@ -96,7 +96,7 @@ it, where in their nav, and how do they get there.*
 | Advisor Studio | `/spinout-lab/advisors` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Advisory Practice | `/expertise/*` · `/practice/*` | Home | Full page | Sidebar → Home → Expertise | DONE | High |
 | Detail Layer Canvas II | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
-| Pages · Advisor Cohorts | `/cohorts/founders` · `/this-week` · `/outcomes` · `/guidance` · `/calendar` · `/admin/advisor-cohorts` | Home | Full page | Sidebar → Home → Cohorts | PARTIAL | High |
+| Pages · Advisor Cohorts | `/guidance` · `/calendar` · `/weeks` · `/admin/advisor-cohorts` | — (no nav entry) | Full page | Deep link / in-page action | PARTIAL | Medium |
 | Pages · Advisor Expertise | `/expertise` · `/expertise/{profile` | Home | Full page (proposed) | Sidebar → Home → Expertise | UPGRADE | Low |
 | Pages · Advisor Network | `/network/*` | Home | Full page (proposed) | Sidebar → Home → Network | UPGRADE | Low |
 | Pages · Advisor Research | `/research/*` | Home | Full page (proposed) | Sidebar → Home → Research | UPGRADE | Low |
@@ -107,7 +107,7 @@ it, where in their nav, and how do they get there.*
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | Data Room | `/raise/data-room` | Home | Full page (proposed) | Sidebar → Home → Deals | NEW | Low |
-| Deal Flow | `/pipeline` · `/pipeline/screening\|commit\|transactions` · `/deals` · `/deals/:dealId` | Home | Full page | Sidebar → Home → Deals | UPGRADE | High |
+| Deal Flow | `/pipeline` · `/deals` · `/deals/:dealId` · `/pipeline/screening\|commit\|transactions` · `/deals/screening\|commit\|closing` | Home | Full page | Sidebar → Home → Deals | UPGRADE | High |
 | Detail Layer Canvas | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Due Diligence | `/admin/due-diligence*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Explore the Spin-Out Lab | `/spinout-lab` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
@@ -116,15 +116,15 @@ it, where in their nav, and how do they get there.*
 | InvRail | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |
 | Liquidity & Secondaries | `/liquidity` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | LP Investor Workspace | `/spinout-lab/investor-workspace` · `/lp-portal` · `/funds/lp-workspace` | Home | Full page | Sidebar → Home → Axal VC Fund | DEFERRED | High |
-| Pages · Diligence file | `/research/diligence` | Home | Full page | Sidebar → Home → Research | NEW | High |
-| Pages · Diligence room | `/research/diligence` | Home | Full page | Sidebar → Home → Research | NEW | High |
+| Pages · Diligence file | `/research/diligence/:grantUid/files/:fileUid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
+| Pages · Diligence room | `/research/diligence/:grantUid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Pages · Funds and fund research | `/research/funds` · `/research/funds/:uid` · `/funds` · `/research/companies/:id` · `/research/companies/:analysisId/:candidateId` · `/funds/:id` | Home | Full page | Sidebar → Home → Fund | UPGRADE | High |
-| Pages · Investor Deals | `/pipeline/active` | Home | Full page | Sidebar → Home → Deals | UPGRADE | High |
+| Pages · Investor Deals | `/deals` · `/pipeline` · `/pipeline/screening\|commit\|transactions` · `/deals/screening\|commit\|closing` | Home | Full page | Sidebar → Home → Deals | UPGRADE | High |
 | Pages · Investor Fund | `/funds` · `/funds/capital-calls` · `/funds/accounting` · `/lp-reports` | Home | Full page (proposed) | Sidebar → Home → Fund | UPGRADE | Low |
 | Pages · Investor Network | `/network` | Home | Full page | Sidebar → Home → Network | RESKIN | High |
 | Pages · Investor Portfolio | `/portfolio/positions` · `/portfolio/updates` | Home | Full page (proposed) | Sidebar → Home → Portfolio | UPGRADE | Low |
-| Pages · Investor Research | `/advisor/research*` | — (no nav entry) | Full page | Deep link / in-page action | RESKIN | Medium |
-| Portfolio | `/portfolio/health\|updates\|positions\|performance\|growth` | Home | Full page (proposed) | Sidebar → Home → Portfolio | UPGRADE | Low |
+| Pages · Investor Research | `/advisor/research*` · `/market-intel` · `/research/ask` | Home | Full page | Sidebar → Home → Research | RESKIN | High |
+| Portfolio | `/portfolio/value-add` | Home | Full page | Sidebar → Home → Portfolio | UPGRADE | High |
 | Quarterly Report | `/lp-reports` · `/lp-portal` | Home | Full page + print stylesheet | Sidebar → Home → Fund | UPGRADE | High |
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 
@@ -230,8 +230,8 @@ it, where in their nav, and how do they get there.*
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
 | High | 73 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 40 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 35 | Not routed. Proposed route only. |
+| Medium | 41 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| Low | 34 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s

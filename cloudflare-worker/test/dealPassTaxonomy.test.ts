@@ -205,11 +205,13 @@ test('a stage nobody has moved through reports null, not zero', () => {
 // ---------- the refusals ----------
 
 test('the source-quality table is refused in words, not silently omitted', () => {
-  // The canvas asks for source · seen · IC · sheets · yield. Deals record no
-  // source, no IC decision and no term sheet — three invented columns.
+  // The canvas asks for source · seen · IC · sheets · yield. The source field
+  // EXISTS now (migration 336, D463) — what is not decided is the taxonomy,
+  // and no term-sheet object exists, so the refusal names those and must not
+  // deny the column.
   const why = DEAL_METRIC_UNAVAILABLE.source_quality;
-  assert.match(why, /no source field/i);
-  assert.match(why, /IC decision record/i);
+  assert.match(why, /taxonomy is not decided/i);
   assert.match(why, /term-sheet/i);
+  assert.ok(!/no source field/i.test(why), 'the source field exists now — the refusal must not deny it');
   assert.match(DEAL_METRIC_UNAVAILABLE.stage_history, /first recorded move/i);
 });

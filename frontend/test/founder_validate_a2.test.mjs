@@ -10,14 +10,16 @@ const page = read('frontend/src/pages/founder/FounderValidatePage.jsx');
 const styles = read('frontend/src/pages/founder/founderValidate.css');
 
 test('founder active role owns the A2 Validate landing page', () => {
-  assert.match(
-    app,
-    /path="\/build\/discovery"[^\n]+effectiveRole === 'founder' \? <FounderValidatePage \/> : <DiscoveryPage \/>/,
-  );
-  assert.doesNotMatch(
-    app,
-    /path="\/build\/discovery"[^\n]+founderWorkspace\('validate'/,
-  );
+  // D422. `/build/discovery` was a second address for this desk: a founder
+  // there got FounderValidatePage, the same element `/validate` mounts. It
+  // redirects to `/validate` now, query and all, and the desk is `/validate`'s
+  // alone. Every other licence keeps DiscoveryPage at the old path.
+  const route = app.slice(app.indexOf('<Route path="/build/discovery"'), app.indexOf('/>)} />', app.indexOf('<Route path="/build/discovery"')) + 7);
+  assert.match(route, /effectiveRole !== 'founder'\s*\? <DiscoveryPage \/>/, 'another licence lost DiscoveryPage');
+  assert.match(route, /: <Navigate to=\{`\/validate\$\{location\.search\}`\} replace \/>/,
+    'a founder on the bare path is not redirected to /validate with the query kept');
+  assert.ok(!route.includes('<FounderValidatePage />'), '/build/discovery is a second address for the desk again');
+  assert.match(app, /<Route path="\/validate" element=\{founderValidateLanding\s*\? guard\([^)]*\), <FounderValidatePage \/>\)/);
 });
 
 test('A2 renders every requested evidence surface', () => {
@@ -41,11 +43,14 @@ test('A2 uses live discovery sources and retains the detailed editor', () => {
   for (const source of ['listProjects', 'listInterviews', 'getProgressSignals', 'painGroups']) {
     assert.match(page, new RegExp(source));
   }
-  assert.match(page, /if \(isWorkspace\) \{/);
-  assert.match(page, /initialProjects=\{projects\}/);
-  assert.match(page, /initialInterviews=\{interviews\}/);
-  assert.match(page, /initialTab="interviews"/);
-  assert.match(page, /workspaceMode/);
+  // THE EDITOR LEFT THE DESK (D422) and is mounted at the route: a founder's
+  // `?mode=workspace` or Discovery `?tab=` still opens DiscoveryPage on its
+  // interviews tab, in workspace mode — nothing a founder could reach is lost.
+  assert.ok(!/DiscoveryPage/.test(page.replace(/\/\/.*$/gm, '')), 'the desk embeds the Discovery editor again');
+  assert.match(app, /founderDiscoveryEditor\s*\? founderWorkspace\('validate', <DiscoveryPage initialTab="interviews" workspaceMode \/>\)/,
+    'the founder Discovery editor is no longer reachable');
+  assert.match(app, /\['leads', 'interviews', 'insights'\]\.includes\(new URLSearchParams\(location\.search\)\.get\('tab'\)\)/,
+    'a Discovery ?tab= deep link no longer opens the editor');
   // WAS `to={detailLink} state={workspaceNavigationState}`, AND `detailLink`
   // WAS THE PROBLEM. It was one constant — `/build/discovery?mode=workspace` —
   // behind EVERY link on this page: the hero button, the rail action, the
@@ -79,7 +84,6 @@ test('A2 uses live discovery sources and retains the detailed editor', () => {
   assert.match(page, /state=\{workspaceNavigationState\}/,
     'the seeded handoff must survive the retarget');
   assert.match(page, /founderValidateSeed/);
-  assert.match(page, /\['leads', 'interviews', 'insights'\]\.includes\(searchParams\.get\('tab'\)\)/);
   assert.match(page, /setReloadKey\(\(value\) => value \+ 1\)/);
 });
 

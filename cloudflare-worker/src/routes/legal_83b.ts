@@ -8,6 +8,8 @@ import {
   ensureSection83bSchema,
   tracker83bDto,
   addDaysISO,
+  validateFilingPatch,
+  type FilingPatchBody,
   type Section83bRow,
 } from '../services/section83b';
 
@@ -172,10 +174,8 @@ app.patch('/83b/trackers/:id', async (c) => {
   const user = await requireAuth(c);
   await ensureSection83bSchema(c.env);
   const id = Number(c.req.param('id'));
-  const body = (await c.req.json().catch(() => ({}))) as {
-    mailed_at?: string;
+  const body = (await c.req.json().catch(() => ({}))) as FilingPatchBody & {
     receipt_doc_id?: number;
-    status?: string;
     notes?: string;
   };
 
@@ -188,17 +188,17 @@ app.patch('/83b/trackers/:id', async (c) => {
     return c.json({ error: 'Forbidden: not your tracker' }, 403);
   }
 
-  let mailedAt = t.mailed_at;
-  let status = t.status;
+  // D361: every date here is one the founder supplied, bounded by the grant
+  // date and today; the clock never supplies one.
+  const checked = validateFilingPatch(body, t, new Date().toISOString().slice(0, 10));
+  if (!checked.ok) {
+    await sql.end();
+    return c.json({ error: checked.code, message: checked.message }, 400);
+  }
+  const set = checked.set;
+
   let receiptDocId = t.receipt_doc_id;
   let notes = t.notes;
-
-  if (body.mailed_at != null) {
-    const parsed = Date.parse(body.mailed_at);
-    if (Number.isNaN(parsed)) { await sql.end(); return c.json({ error: 'mailed_at must be ISO datetime' }, 400); }
-    mailedAt = new Date(parsed).toISOString();
-    if (status === 'pending') status = 'mailed';
-  }
   if (body.receipt_doc_id != null) {
     const docId = Number(body.receipt_doc_id);
     const d = await sql`SELECT id, project_id FROM documents WHERE id = ${docId}`;
@@ -208,21 +208,22 @@ app.patch('/83b/trackers/:id', async (c) => {
     }
     receiptDocId = docId;
   }
-  if (body.status != null) {
-    if (!['pending', 'mailed', 'confirmed', 'missed'].includes(body.status)) {
-      await sql.end();
-      return c.json({ error: 'Invalid status' }, 400);
-    }
-    status = body.status;
-  }
   if (body.notes != null) notes = body.notes;
+
+  const pick = <K extends keyof typeof set>(k: K, stored: string | null | undefined) =>
+    (k in set ? set[k] : stored) ?? null;
 
   const updated = await sql`
     UPDATE section_83b_trackers
-       SET mailed_at = ${mailedAt ?? null},
-           status = ${status},
+       SET mailed_at = ${pick('mailed_at', t.mailed_at)},
+           status = ${set.status ?? t.status},
            receipt_doc_id = ${receiptDocId ?? null},
            notes = ${notes ?? null},
+           filing_method = ${pick('filing_method', t.filing_method)},
+           tracking_number = ${pick('tracking_number', t.tracking_number)},
+           irs_service_center = ${pick('irs_service_center', t.irs_service_center)},
+           company_ack_at = ${pick('company_ack_at', t.company_ack_at)},
+           tax_return_copy_at = ${pick('tax_return_copy_at', t.tax_return_copy_at)},
            updated_at = datetime('now')
      WHERE id = ${id}
      RETURNING *`;
@@ -320,8 +321,12 @@ app.post('/83b/trackers/:id/receipt', async (c) => {
     RETURNING id`;
   const receiptDocId = (docRows[0] as any).id as number;
 
+  // The receipt proves a mailing happened, so a pending tracker becomes
+  // 'mailed'. It does NOT say when: the upload time is not the postmark, so
+  // mailed_at stays whatever the founder recorded, or null until they do
+  // (D361 — before it, this stamped "now" as the mailing date).
   const newStatus = t.status === 'pending' ? 'mailed' : t.status;
-  const newMailedAt = t.mailed_at ?? new Date().toISOString();
+  const newMailedAt = t.mailed_at ?? null;
   const updated = await sql`
     UPDATE section_83b_trackers
        SET receipt_doc_id = ${receiptDocId},

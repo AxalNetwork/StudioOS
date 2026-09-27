@@ -68,7 +68,7 @@ const BRANCH_SCHEMA = `
   CREATE TABLE lp_applications (id INTEGER PRIMARY KEY, status TEXT, created_at TEXT);
   CREATE TABLE referral_submissions (id INTEGER PRIMARY KEY, status TEXT, created_at TEXT);
   CREATE TABLE cohort_applicants (id INTEGER PRIMARY KEY, status TEXT, created_at TEXT);
-  CREATE TABLE spinout_moderation_cases (id INTEGER PRIMARY KEY, status TEXT, created_at TEXT);
+  CREATE TABLE spinout_moderation_cases (id INTEGER PRIMARY KEY, status TEXT, created_at TEXT, resolved_at TEXT);
 `;
 
 const HQ_SCHEMA = `
@@ -292,6 +292,10 @@ test('health does a real query, so a broken DB binding cannot read as healthy', 
   assert.equal(good.ok, true);
   assert.equal(good.db_ok, true);
   assert.equal(good.branch, 'fr');
+  assert.equal(good.deploy_version, null);
+
+  const tagged = await branchHealth({ ...FR, DB: makeD1(branchDb()), WORKER_DEPLOY_VERSION: 'deadbeef' } as any);
+  assert.equal(tagged.deploy_version, 'deadbeef');
 
   // A DB whose every statement throws. If `health()` answered without
   // touching D1 this would still say ok — which is the failure a health check
@@ -321,8 +325,10 @@ test('the backlog sums every queue, and one unreadable queue voids the total', a
     INSERT INTO referral_submissions (id,status,created_at) VALUES
       (1,'submitted','2026-09-02T00:00:00Z'),(2,'draft','2026-08-01T00:00:00Z');
     INSERT INTO cohort_applicants (id,status,created_at) VALUES (1,'pending','2026-09-03T00:00:00Z');
-    INSERT INTO spinout_moderation_cases (id,status,created_at) VALUES
-      (1,'under_review','2026-09-04T00:00:00Z'),(2,'active','2026-08-01T00:00:00Z');
+    INSERT INTO spinout_moderation_cases (id,status,created_at,resolved_at) VALUES
+      (1,'under_review','2026-09-04T00:00:00Z', NULL),
+      (2,'active','2026-08-01T00:00:00Z', NULL),
+      (3,'under_review','2026-08-15T00:00:00Z', '2026-09-01T00:00:00Z');
   `);
   const o = await branchOverview({ ...FR, DB: makeD1(seeded) } as any);
   assert.equal(o.accounts.total, 3);
