@@ -4,7 +4,6 @@ import { AlertCircle, ArrowUpRight, ChevronRight, ClipboardCheck, KanbanSquare, 
 import { api } from '../../lib/api';
 import { Unreadable, WorkerRail } from '../../ui';
 import { kindLabel, scheduleLabel } from '../../lib/cadence';
-import ExecutionPage from '../ExecutionPage';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import useAssistMode from '../../hooks/useAssistMode';
 import { zonePillClass } from './deskZoneNav';
@@ -112,7 +111,6 @@ export default function FounderBuildDesk() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const seed = location.state?.founderBuildSeed;
-  const workspace = searchParams.get('mode') === 'workspace';
   const [projects, setProjects] = useState(() => seed?.projects || []);
   const [projectId, setProjectId] = useState(() => seed?.projectId || null);
   const [okrs, setOkrs] = useState(() => seed?.okrs || []);
@@ -146,7 +144,6 @@ export default function FounderBuildDesk() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (workspace) return;
     let alive = true;
     setState(seed ? 'ready' : 'loading');
     Promise.all([api.listProjects(), api.pipelineActive().catch(() => [])]).then(([list, active]) => {
@@ -161,10 +158,10 @@ export default function FounderBuildDesk() {
       setError(err?.message || 'The operating records could not be loaded.'); setState('error');
     });
     return () => { alive = false; };
-  }, [workspace, reloadKey]);
+  }, [reloadKey]);
 
   useEffect(() => {
-    if (!projectId || workspace) return;
+    if (!projectId) return;
     let alive = true;
     setState('loading');
     setSearchParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(projectId)); return next; }, { replace: true });
@@ -187,7 +184,7 @@ export default function FounderBuildDesk() {
       setError(err?.message || 'Records for this startup could not be loaded.'); setState('error');
     });
     return () => { alive = false; };
-  }, [projectId, workspace, reloadKey]);
+  }, [projectId, reloadKey]);
 
   const data = useMemo(() => {
     const now = okrs.filter((item) => item.kanban_status === 'now');
@@ -221,7 +218,10 @@ export default function FounderBuildDesk() {
   }, [okrs, deals, cards, projectId]);
 
   const navigationState = { founderBuildSeed: { projects, projectId, okrs, deals, cards, snapshots, summary, cadence } };
-  if (workspace) return <ExecutionPage />;
+  // THE DESK NO LONGER EMBEDS THE EDITOR (D422). `?mode=workspace` used to
+  // swap this whole page for ExecutionPage; `/build?mode=workspace` never
+  // reached it (the route redirects to This week) and `/execution?mode=workspace`
+  // now mounts ExecutionPage at the route, so the desk renders one thing.
   const query = projectId ? `?project_id=${projectId}` : '';
   const links = Object.fromEntries(SECTIONS.map(([, slug]) => [slug, `/build/${slug}${query}`]));
   const metricsLink = `/build/metrics${query}`;

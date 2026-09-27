@@ -118,7 +118,7 @@ export default function FounderBuildRoadmap() {
       <div className="fb-roadmap-shell">
         <section className="fb-roadmap-main">
           <header className="fb-roadmap-header">
-            <div className="fb-roadmap-crumb"><Link to="/execution" data-testid="link-roadmap-back"><ArrowLeft size={13} /> Execution</Link><span>/</span><strong>Roadmap</strong></div>
+            <div className="fb-roadmap-crumb"><Link to="/build" data-testid="link-roadmap-back"><ArrowLeft size={13} /> Build</Link><span>/</span><strong>Roadmap</strong></div>
             <div className="fb-roadmap-title-row">
               <div><h1>Roadmap</h1><p className="fb-roadmap-subtitle">Timeline, dependency chain and saved scenarios for the selected startup.</p></div>
             </div>
@@ -357,5 +357,5 @@ function PageRail({ project, stats }) {
   />;
 }
 
-function EmptyRoadmap() { return <div className="fb-roadmap-empty" data-testid="empty-roadmap"><GitBranch size={24} /><h2>No startup is available</h2><p>This founder roadmap is scoped to authenticated startup records. There is no project to inspect yet.</p><Link to="/execution">Back to execution</Link></div>; }
+function EmptyRoadmap() { return <div className="fb-roadmap-empty" data-testid="empty-roadmap"><GitBranch size={24} /><h2>No startup is available</h2><p>This founder roadmap is scoped to authenticated startup records. There is no project to inspect yet.</p><Link to="/build">Back to Build</Link></div>; }
 function RoadmapSkeleton() { return <div className="fb-roadmap-loading" data-testid="status-roadmap-loading"><i /><i /><div><i /><i /><i /><i /></div></div>; }

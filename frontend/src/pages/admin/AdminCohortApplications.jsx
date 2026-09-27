@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import ApplicantDetail from './AdminApplicantDetail';
 
 function parseUtc(ts) {
   if (!ts) return null;
@@ -49,6 +50,7 @@ const APPLICANT_BADGE = {
   waitlisted: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300',
   activated: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300',
   rolled_forward: 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
+  withdrawn: 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
 };
 
 export default function AdminCohortApplications() {
@@ -60,6 +62,7 @@ export default function AdminCohortApplications() {
   const [loading, setLoading] = useState(true);
   const [unsupported, setUnsupported] = useState(false);
   const [busyKey, setBusyKey] = useState(null);
+  const [openApplicant, setOpenApplicant] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -95,6 +98,18 @@ export default function AdminCohortApplications() {
     if (!reason) { window.alert('A reason is required.'); return; }
     act(`decide:${applicant.id}`, () => api.adminCohortApplicantDecide(applicant.id, { status, reason }));
   };
+
+  // D384 — a decline that carries the note the applicant reads. The worker
+  // reports whether that note was stored; a decision saved without it is said,
+  // not left for the applicant to discover as a blank reason.
+  const declineWithNote = (applicant, payload) => act(`decide:${applicant.id}`, async () => {
+    const r = await api.adminCohortApplicantDecide(applicant.id, { status: 'rejected', ...payload });
+    if (payload.applicant_note && r?.applicant_note_saved === false) {
+      window.alert('The decision was saved, but the note to the applicant was not. Open the applicant and send the note again.');
+    }
+  });
+  const scheduleInterview = (applicant, payload) => act(`interview:${applicant.id}`, () => api.adminCohortScheduleInterview(applicant.id, payload));
+  const cancelInterview = (applicant) => act(`interview:${applicant.id}`, () => api.adminCohortCancelInterview(applicant.id));
 
   const forceProceed = (cycle) => {
     const reason = (window.prompt(`Run the ${cycle.label} cohort even below the minimum size? Reason (required, audited):`) || '').trim();
@@ -193,14 +208,19 @@ export default function AdminCohortApplications() {
                 {(cy.applicants || []).length > 0 && (
                   <div className="mt-3 divide-y divide-gray-100 dark:divide-gray-800">
                     {cy.applicants.map((a) => (
-                      <div key={a.id} className="py-2 flex flex-wrap items-center gap-2 text-sm" data-testid={`applicant-row-${a.id}`}>
+                      <div key={a.id} className="py-2" data-testid={`applicant-row-${a.id}`}>
+                      <div className="flex flex-wrap items-center gap-2 text-sm">
                         <div className="min-w-0 flex-1">
                           <span className="font-semibold text-gray-900 dark:text-gray-100">{a.company_name || '—'}</span>
                           <span className="text-gray-500 dark:text-gray-400"> · {a.name || a.email}</span>
                           {a.rolled_from_cycle_id && <span className="ml-1 text-[11px] text-gray-400 dark:text-gray-500">(rolled forward)</span>}
                           {a.decision_reason && <div className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{a.decided_by}: {a.decision_reason}</div>}
                         </div>
+                        {a.interview?.status === 'scheduled' && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">interview{a.interview.reschedule_requested_at ? ' · move asked' : ''}</span>}
                         <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${APPLICANT_BADGE[a.status] || APPLICANT_BADGE.pending}`}>{a.status}</span>
+                        <button onClick={() => setOpenApplicant(openApplicant === a.id ? null : a.id)} aria-expanded={openApplicant === a.id} data-testid={`button-applicant-detail-${a.id}`} className="px-2 py-0.5 rounded text-[11px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800">
+                          {openApplicant === a.id ? 'Close' : 'Application'}
+                        </button>
                         {['pending', 'approved', 'waitlisted', 'rejected'].includes(a.status) && ['open', 'reviewing'].includes(cy.app_status) && (
                           <div className="flex items-center gap-1">
                             {a.status !== 'approved' && (
@@ -214,6 +234,17 @@ export default function AdminCohortApplications() {
                             )}
                           </div>
                         )}
+                      </div>
+                      {openApplicant === a.id && (
+                        <ApplicantDetail
+                          applicant={a}
+                          canDecide={['open', 'reviewing'].includes(cy.app_status)}
+                          busy={busyKey === `decide:${a.id}` || busyKey === `interview:${a.id}`}
+                          onSchedule={(payload) => scheduleInterview(a, payload)}
+                          onCancelInterview={() => cancelInterview(a)}
+                          onDeclineWithNote={(payload) => declineWithNote(a, payload)}
+                        />
+                      )}
                       </div>
                     ))}
                   </div>

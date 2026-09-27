@@ -185,7 +185,7 @@ export default function FounderBuildBoard() {
       <div className="fb-board-shell">
         <section className="fb-board-main">
           <header className="fb-board-header">
-            <div className="fb-board-crumb"><Link to="/execution" data-testid="link-board-back"><ArrowLeft size={13} /> Execution</Link><span>/</span><strong>Board</strong></div>
+            <div className="fb-board-crumb"><Link to="/build" data-testid="link-board-back"><ArrowLeft size={13} /> Build</Link><span>/</span><strong>Board</strong></div>
             <div className="fb-title-row">
               <div><h1>Execution board</h1><p className="fb-subtitle">The stored work record for this startup. Read-only for founder accounts.</p></div>
             </div>
@@ -362,5 +362,5 @@ function PageRail({ taskCount, project }) {
   />;
 }
 function Unavailable({ text: message }) { return <div className="fb-unavailable-state"><CircleDot size={16} /><span>{message}</span></div>; }
-function EmptyBoard() { return <div className="fb-empty" data-testid="empty-board"><Layers3 size={24} /><h2>No startup is available</h2><p>This founder board can only display authenticated pipeline records. There is no project to inspect yet.</p><Link to="/execution" data-testid="link-empty-board-execution">Back to execution</Link></div>; }
+function EmptyBoard() { return <div className="fb-empty" data-testid="empty-board"><Layers3 size={24} /><h2>No startup is available</h2><p>This founder board can only display authenticated pipeline records. There is no project to inspect yet.</p><Link to="/build" data-testid="link-empty-board-execution">Back to Build</Link></div>; }
 function BoardSkeleton() { return <div className="fb-loading" data-testid="status-board-loading"><i /><i /><i /><div className="fb-loading-table"><i /><i /><i /><i /></div></div>; }
