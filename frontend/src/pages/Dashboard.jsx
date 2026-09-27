@@ -257,6 +257,12 @@ export default function Dashboard({ activeRole, authUser }) {
           lifecycle={previewingInvestor ? null : investorLC}
           previewing={previewingInvestor}
           onRetryDashboard={() => { setLoading(true); load(); }}
+          onRetryLifecycle={() => {
+            setInvestorLC(undefined);
+            api.investorLifecycle()
+              .then((d) => setInvestorLC(d))
+              .catch((e) => { setInvestorLC(null); reportError('Dashboard:investorLifecycle', e); });
+          }}
         />
       </div>
     );
