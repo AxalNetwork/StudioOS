@@ -3377,6 +3377,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ template_slug: templateSlug }),
     }),
+  licenceContractSend: (uid, contractUid) =>
+    request(
+      `/admin/licences/${encodeURIComponent(uid)}/contract/${encodeURIComponent(contractUid)}/send`,
+      { method: 'POST' },
+    ),
   // D111 — H5's statements ledger. `draw` computes owed from what the branch
   // reported; `update` is the HQ-entered half (paid, disputed, status), which
   // nothing reconciles against Stripe (D.8).
@@ -3792,7 +3797,15 @@ export const api = {
   // `resolveActiveCompany` verifies against user_company_links — a company id
   // in the body would be an ownership claim the caller makes about themselves.
   companyKybList: () => request('/trust/companies/kyb'),
-  companyKybStart: (payload) => request('/trust/companies/kyb', { method: 'POST', body: JSON.stringify(payload || {}) }),
+  // D433 — the Account page saves one company's entity from a list of several,
+  // so the row names its company by OVERRIDING the header for that one call.
+  // Same channel, same server-side membership check (`resolveActiveCompany`
+  // refuses a company the caller does not belong to); it is not a body field.
+  companyKybStart: (payload, companyId) => request('/trust/companies/kyb', {
+    method: 'POST',
+    body: JSON.stringify(payload || {}),
+    ...(companyId === undefined || companyId === null ? {} : { headers: { 'X-Company-Id': String(companyId) } }),
+  }),
   getRequiredNdas: () => request('/trust/nda/required'),
 
   // ---------- Founder risk (Task #41, admin/partner/investor only) ----------
