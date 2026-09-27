@@ -32,6 +32,7 @@ import { Eye } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import { cssHex, hexWithAlpha } from '../../lib/brandHex';
 
 const UNAVAILABLE = Symbol('unavailable');
 const num = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Number(v).toLocaleString());
@@ -72,9 +73,12 @@ export default function HqBranchOverlay({ branch }) {
 
   const ready = data && data !== UNAVAILABLE;
   const scope = ready ? data.scope || null : null;
-  const licence = ready ? data.licence || null : null;
+  const licenceShell = ready ? (data.licence_shell || data.licence || null) : null;
+  const licenceReadable = licenceShell && licenceShell.readable !== false ? licenceShell : null;
+  const licenceUnreadable = licenceShell && licenceShell.readable === false ? licenceShell : null;
   const one = ready ? (data.branches || [])[0] || null : null;
-  const whiteLabel = licence?.kind === 'white_label';
+  const whiteLabel = licenceReadable?.kind === 'white_label';
+  const primaryHex = licenceReadable?.brand_kit?.primary_hex ? cssHex(licenceReadable.brand_kit.primary_hex) : null;
   const live = one && one.status === 'ok' ? one.data || null : null;
   const readAt = stamp(scope?.read_at);
   const code = scope?.branch || branch;
@@ -147,34 +151,44 @@ export default function HqBranchOverlay({ branch }) {
       data-testid="hq-branch-overlay"
       data-branch={code}
       data-branch-state={one ? one.status : 'loading'}
-      data-licence-kind={licence?.kind || 'unknown'}
+      data-licence-kind={licenceReadable?.kind || (licenceUnreadable ? 'unreadable' : 'unknown')}
     >
-      {whiteLabel && (
+      {licenceUnreadable && (
+        <div className="mb-4" data-testid="hq-licence-shell-unreadable">
+          <Unreadable
+            what="This tenant's licence record"
+            claim="This is not Axal branding — the brand shell was not read."
+          />
+          <p className="mt-1 text-[11.5px] text-axal-muted">{licenceUnreadable.reason}</p>
+        </div>
+      )}
+      {whiteLabel && licenceReadable && (
         <div
           className="mb-4 rounded-xl border border-axal-hairline p-4"
           data-testid="hq-white-label-overlay"
           style={{
-            borderColor: licence.brand_kit?.primary_hex || undefined,
-            background: licence.brand_kit?.primary_hex
-              ? `linear-gradient(135deg, ${licence.brand_kit.primary_hex}14, transparent)`
+            borderColor: primaryHex || undefined,
+            background: primaryHex && hexWithAlpha(primaryHex)
+              ? `linear-gradient(135deg, ${hexWithAlpha(primaryHex)}, transparent)`
               : undefined,
           }}
         >
           <div className="flex flex-wrap items-center gap-2">
-            {licence.brand_kit?.primary_hex && (
+            {primaryHex && (
               <span
                 aria-hidden="true"
                 className="inline-block h-4 w-4 rounded-sm border border-black/10"
-                style={{ backgroundColor: licence.brand_kit.primary_hex }}
+                style={{ backgroundColor: primaryHex }}
               />
             )}
-            <span className="text-[13px] font-extrabold text-axal-ink">{licence.brand_name || code}</span>
+            <span className="text-[13px] font-extrabold text-axal-ink">{licenceReadable.brand_name || code}</span>
             <span className="rounded-full border border-axal-hairline px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-axal-muted">
               White-label · read-only
             </span>
           </div>
           <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">
-            Their chrome inside HQ&apos;s frame: the operator&apos;s public name and mark, not the Axal wordmark.
+            Their public name{primaryHex ? ' and mark' : ''} inside HQ&apos;s frame — not the Axal wordmark.
+            {licenceReadable.brand_kit_reason ? ` ${licenceReadable.brand_kit_reason}` : ''}
             HQ&apos;s oxblood bar stays outside this panel.
           </p>
         </div>
@@ -184,7 +198,7 @@ export default function HqBranchOverlay({ branch }) {
           <Eye size={13} /> HQ · Viewing as {code}
         </div>
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink">
-          {whiteLabel && licence.brand_name ? licence.brand_name : code}
+          {whiteLabel && licenceReadable?.brand_name ? licenceReadable.brand_name : code}
         </h1>
         <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
           One read of one branch, over its private link. Nothing on this screen is a platform total, and

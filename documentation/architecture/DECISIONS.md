@@ -34143,6 +34143,31 @@ HQ · Revenue draws a **Revenue per subsidiary** table beside Token P&L.
 `hq_revenue_per_sub_d456.test.mjs`; `hq_home.test.mjs` and `hq_revenue_h5.test.mjs`
 re-aimed; `admin_revenue.test.ts` updated.
 
+## D457
+
+**#865 review fixes: territory drafts, deploy version, Home filter, overlay shell.** Wave 9,
+Session 16, item 1. No migration.
+
+**Territory draft.** `AdminLicences` keys `<Detail>` on the selected licence uid so a
+territory draft typed for one licence cannot be saved onto another when the operator
+uses Open holder.
+
+**Deploy version.** `cloudflare-worker-deploy.yml` passes
+`WORKER_DEPLOY_VERSION:${{ github.sha }}` on HQ and branch redeploys. The Platform and
+Licences consoles render `<Unrecorded>` when no version is known; live health’s
+`deploy_version` wins over a stale `last_version`, and null live versions no longer
+wipe a stored SHA (`COALESCE` on persist).
+
+**HQ Home.** Kind filter chips sit on the oxblood bar (visible contrast), carry
+`aria-pressed`, and empty filter states are named.
+
+**View-as overlay.** Scoped overview returns `licence_shell` with readable/unreadable
+states; failed licence reads no longer draw white-label chrome; 3-digit brand hex
+expands before alpha gradients.
+
+**Tests.** `hq_licences_d457.test.mjs`; `deployments_last_version_d452.test.ts` extended;
+`hq_licences_polish_d452.test.mjs` re-aimed.
+
 ## D460
 
 **The investor deal-flow honesty pass: dead controls wired, false sentences

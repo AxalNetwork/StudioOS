@@ -47,6 +47,7 @@ import { bpsPercent as pct } from '../../lib/bps';
 import { coverageCells, renewalPipeline, sortCells } from '../../lib/licenceCoverage';
 import { DEPLOY_TIMELINE, deployProgress } from '../../lib/deployTimeline';
 import { reportError } from '../../lib/log';
+import { deployVersionDisplay, DEPLOY_VERSION_ABSENT_REASON } from '../../lib/deployVersion';
 import { Unreadable, Unrecorded } from '../../ui';
 
 const UNAVAILABLE = Symbol('unavailable');
@@ -247,7 +248,7 @@ function TerritoryEditor({ licence, held, onSaved, onOpenLicence }) {
         licence already holds regardless of kind.
       </p>
       {clashes.length > 0 && (
-        <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+        <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
           <div className="flex items-start gap-1.5">
             <AlertCircle size={14} className="mt-0.5 shrink-0" />
             <div>
@@ -691,13 +692,15 @@ function DeployStep({ licence }) {
         {mine.live_state !== 'ok' && mine.live_reason && (
           <p className="text-xs text-gray-600 dark:text-gray-400">{mine.live_reason}</p>
         )}
-        {(mine.last_version || mine.live?.deploy_version) && (
-          <p className="text-xs text-gray-600 dark:text-gray-400" data-testid="deploy-last-version">
-            Last deployed version:{' '}
-            <code>{mine.last_version || mine.live?.deploy_version}</code>
-            {mine.last_health_at ? ` · health read ${String(mine.last_health_at).slice(0, 10)}` : ''}
-          </p>
-        )}
+        <p className="text-xs text-gray-600 dark:text-gray-400" data-testid="deploy-last-version">
+          Last deployed version:{' '}
+          {deployVersionDisplay(mine) ? (
+            <code>{deployVersionDisplay(mine)}</code>
+          ) : (
+            <Unrecorded reason={DEPLOY_VERSION_ABSENT_REASON} />
+          )}
+          {mine.last_health_at ? ` · health read ${String(mine.last_health_at).slice(0, 10)}` : ''}
+        </p>
         <p data-testid="deploy-summary" className="text-sm text-gray-700 dark:text-gray-300">
           {summary}
         </p>
@@ -2262,7 +2265,7 @@ export default function AdminLicences() {
           </div>
           <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
             {sel ? (
-              <Detail uid={sel} held={held} onChanged={load} onOpenLicence={(u) => setSel(u)} />
+              <Detail key={sel} uid={sel} held={held} onChanged={load} onOpenLicence={(u) => setSel(u)} />
             ) : (
               <p className="text-sm text-gray-500">Pick a licence.</p>
             )}
