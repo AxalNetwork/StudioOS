@@ -401,7 +401,9 @@ async function detect(env: Env, userId: number, key: string, primaryPersonaId?: 
         userId)) > 0;
     case 'op.kyb':
       // kyc_records exists nowhere. The item is "Configure KYB documents", and
-      // corporate_profiles IS that configuration — /trust/kyb/start upserts it.
+      // corporate_profiles IS that configuration — the profile-expansion
+      // service writes it (POST /trust/kyb/start used to as well; retired
+      // uncalled, D432).
       // Gated on entity_name so an empty row does not read as configured.
       return (await num(env,
         `SELECT COUNT(*) FROM corporate_profiles

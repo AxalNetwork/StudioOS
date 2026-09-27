@@ -32874,6 +32874,148 @@ the other two are locked.
 `frontend/src` moved, so `docs/` is rebuilt. No migration, no route, no
 `api.js` method.
 
+## D432
+
+**Trust Center: a pairwise row names the other party, a company-KYB read
+that fails says "Unreadable", the role NDAs are one list, and the company
+card is a component — with `GET /trust/summary` and `POST /trust/kyb/start`
+retired.** Session 15's item 3.
+
+**What was true on main (`b0aacbe569`).**
+- A pairwise NDA row was titled by its envelope's document type with an
+  email in brackets. `GET /trust/pairwise-ndas` joined `users` twice for the
+  emails and never selected `name`, so the canvas's "Novacraft Labs, Inc. ↔
+  Marisol Vega" (admin) and "Dev Raman · Latitude Seed" (member) had nothing
+  to draw from.
+- `GET /trust/companies/kyb` caught every error into `{ results: [] }`, and
+  the card set `loaded` in its catch: a database that could not be read
+  answered exactly like an account with no companies, and the card drew
+  nothing.
+- The Agreements tab drew the role NDAs twice — `ObligationList` under "Role
+  agreements" and `NdaCard` under "Template NDAs" — and only the second copy
+  offered "Open to sign".
+- `CompanyKybCard` was declared inside `TrustCenterPage`'s body: a new
+  component type on every render, so React remounted it and its effect
+  re-fetched the company list on every keystroke elsewhere on the page.
+- `GET /trust/summary` and `POST /trust/kyb/start` were mounted with client
+  methods (`getTrustSummary`, `startKyb`) that nothing under `frontend/src`
+  called. The summary route cost `requireAuth`, `ensureTrustSchema`,
+  `seedObligations` and two D1 reads for a payload that answered `kyb: null`
+  and `accreditation: null` by construction.
+
+**What changed.**
+- **Names, from the joins that already existed.** Both SELECTs — the admin
+  branch and the self branch — add `ua.name AS party_a_name, ub.name AS
+  party_b_name`. A party whose account is gone is served as `null` by the
+  LEFT JOIN and the row is kept. The page's `partyLabel` reads name, then the
+  email it always had, then "account #N · removed" — never a printed `null`.
+  `pairwiseTitle` draws `A ↔ B` for an admin and `Mutual NDA · <other>` for a
+  member, oriented around the OTHER party whichever side the reader is on,
+  with the ids compared as numbers because localStorage hands the user id
+  back as a string.
+- **A failed read is a refusal, not an empty list.** The worker answers 503
+  with a D278 body — `error: 'company_kyb_unreadable'`, `message` and
+  `detail` our sentence, the raw SQLite text in the log and not in the body
+  (a member is not an owner, so no `upstream`). The card has a third state:
+  `loading → ready | failed`, and `failed` draws `<Unreadable>` with a Retry
+  that re-runs the effect. An empty list still draws nothing: no companies
+  is not a failure, and a row of zeroes would imply a step the reader cannot
+  take.
+- **One list of role NDAs.** `ObligationList` takes a `rowAction`; the
+  Agreements tab feeds it the `GET /trust/nda/required` items by
+  `obligation_key`: "Open to sign" through `OpenToSignButton` when the
+  obligation is open and an envelope exists, "Not issued yet" when it is
+  open and none does, nothing when it is satisfied. `NdaCard` and the
+  "Template NDAs" section are deleted; `requiredNdas` reaches the tab as a
+  prop instead of a second list below it.
+- **The card is hoisted** to module level, declared once, and keeps its
+  identity across the page's renders.
+- **Retired on D304's rule** (nothing in the tree called either):
+  `GET /trust/summary` and `POST /trust/kyb/start` are removed from
+  `routes/trust.ts`, `getTrustSummary` and `startKyb` from `api.js`. Neither
+  had a redirect to give: they were API routes with no page. The one thing
+  `/kyb/start` did that nothing else does — upsert a `corporate_profiles`
+  row from the body — is the account-entity write that Account Settings
+  makes through `profileExpansion` (`INSERT OR IGNORE` then `UPDATE`), so no
+  writer is lost; `POST /trust/obligation/:key/start` still flips `kyb_v1`
+  to `in_review`. The gap `/kyb/start` did not fill stays recorded on the
+  worker comment and in `obligation_satisfiable.test.ts`: `in_review` has no
+  action in `ObligationList` and `kyb_v1` has no working satisfier.
+- **ROUTE_MAP's Trust Center v2 row** stops saying per-row provenance, the
+  envelope-history timeline and the per-company card have "no store"; all
+  three have had stores since migrations 220 and 243 and are drawn. The row
+  now says so and names the two retired routes.
+- `trust_center_contract.test.mjs` is re-aimed where its premises moved: the
+  dead-method list gains the two client methods; the "unreachable cards"
+  test pins the routes gone rather than answering nulls; the NDA tests slice
+  `OpenToSignButton` instead of `NdaCard`; and the "account entity keyed on
+  `user_id`" pin reads the key where it is declared, `schema_baseline.sql`'s
+  `corporate_profiles (user_id INTEGER PRIMARY KEY …)`, because the one
+  `ON CONFLICT(user_id)` it used to grep in `routes/trust.ts` was
+  `/kyb/start`'s.
+
+**Not done here, filed.** The Sanctions tab's stat cards still count the
+page's own 200-row window; a server-side count is a route, not a page fix.
+`in_review` still renders no action and `kyb_v1` has no satisfier (above);
+item 4 draws the per-company KYB pill and "Save entity" on Account.
+
+**Guard.**
+- `cloudflare-worker/test/trust_center_d432.test.ts`, 8 tests through the
+  real router on in-memory SQLite: a member reads both names on their own
+  row beside the emails; an admin reads them on every row through the other
+  SELECT; a party whose account is gone is `null` and the row is kept; both
+  SELECTs carry the name columns from the existing joins; a read that fails
+  (the table dropped after the schema is built) answers 503 with the code,
+  the sentence in `message` and `detail`, no `items` key, no `no such table`
+  in the body and no `upstream`; a read that succeeds is unchanged with
+  not-started companies kept; the empty case is still an honest empty list;
+  the two retired routes answer 404 and are not in the source.
+- `frontend/test/trust_center_d432.test.mjs`, 10 tests: `partyLabel` and
+  `pairwiseTitle` are lifted out of the module and RUN — name, then email,
+  then "removed"; an empty name is no name; admin `A ↔ B`; party A sees B
+  and party B sees A; a string id from localStorage still orients to the
+  other party (asked with A's id, because B's reads right by accident under
+  a strict comparison); the row draws that title from the signed-in id and
+  nothing else titles it; the worker serves the names on both branches; the
+  card has a `failed` state set in its catch, draws `<Unreadable>` with a
+  retry that bumps the effect's dependency, keeps the empty list silent and
+  has no `setLoaded`; the worker refuses with the code and the swallow is
+  gone; the Role agreements rows carry the button fed by `/nda/required`,
+  a satisfied NDA gets none, open-without-envelope says "Not issued yet",
+  no second list and one place draws the button; exactly one
+  `CompanyKybCard` declaration, at column 0, outside the page, which still
+  draws it; the routes, the methods and the paths are gone from worker and
+  `api.js`; the ROUTE_MAP row no longer says "No store" and names the two
+  retired routes.
+
+**Mutations: 21 run, 21 caught** — each a non-zero exit with a `not ok`
+line, anchors unique, bytes proven changed, sources restored from a
+sha256-checked snapshot: the self branch and the admin branch each dropping
+the names; the KYB read swallowing into an empty list; the refusal leaking
+the raw text to a member; the refusal answering 200; `GET /summary` and
+`POST /kyb/start` mounted again; the email winning over the name; a removed
+account printing null; a member reading their own side; the id compared
+without coercion; an admin reading a member title; a failed read reporting
+ready with no items; Retry no longer re-running the effect; a satisfied NDA
+still offered a button; the required NDAs fetched and not fed to the rows;
+the card declared again inside the page render; `getTrustSummary` and
+`startKyb` back in `api.js`; the "no store" claim back in the map; and
+`corporate_profiles` losing its account key in the schema.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA
+fallback, `/api/trust/*` stubbed as the worker now shapes it. As the founder
+(party A): "Mutual NDA · Dev Raman" and "Mutual NDA · account #77 · removed";
+one "Open to sign" on the Founder NDA row and no "Template NDAs"; with the
+company-KYB read refused first, the Entity tab draws "Your companies' entity
+records could not be read. … Try again in a moment. Retry", the Retry
+re-fetches once, and the card then draws Novacraft Labs "Not started" and
+Latitude Seed "in review · Latitude Seed GmbH · Active workspace". As the
+investor (party B, KYC approved): "Mutual NDA · Marisol Vega". As an admin:
+"Marisol Vega ↔ Dev Raman" and "Marisol Vega ↔ account #77 · removed".
+
+`frontend/src` moved, so `docs/` is rebuilt. No migration. Two routes and
+two `api.js` methods removed, none added.
+
 ## D440
 
 **HQ-held Studio and My Licence stop pointing at pages that refuse, and stop printing zero for a seat or a host that was not confirmed.** No branch is provisioned (`infra/branches/` holds only the example), and every `/api/branch/*` handler calls `requireBranchTier`, so a card that opens `/branch/*` on HQ renders Unreadable. S20's rule is that those pages are never linked from the HQ-held shell.
