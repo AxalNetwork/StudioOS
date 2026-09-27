@@ -2411,9 +2411,7 @@ function AppInner() {
           rather than in a notice standing in for the whole screen. */}
       <Route path="/branch/accounts" element={guard(['admin'], <BranchAccounts user={user} />)} />
       {/* D112 — the outbound HALF of S3 is live: the To-HQ lane and HQ's
-          answers. The four local queues keep their stated notice inside the
-          page, so the row is honest about which half is built rather than
-          waiting for all five. */}
+          answers. The local board is the eleven lanes (D215), on the same page. */}
       {/* Approvals wraps ITSELF in BranchZone, unlike the seven above, and the
           asymmetry is the point: it loads live escalations, so only the page
           knows what its rail can report. A zone with nothing loaded takes the

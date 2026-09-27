@@ -277,7 +277,7 @@ export default function BranchSettings({ user }) {
       value: lic?.brand_name ? `${lic.brand_name} · ${copyNote}` : null,
       reason: 'The licence copy could not be read, so the name it carries is unknown rather than unset.',
       act: 'Request a change · escalation (other)',
-      actTo: '/branch/approvals',
+      actTo: '/branch/approvals?kind=other&subject=Change+the+subsidiary+name',
     },
     {
       field: 'Territory',
@@ -285,7 +285,7 @@ export default function BranchSettings({ user }) {
       value: lic?.territories?.length ? `${lic.territories.join(' · ')} · ${copyNote}` : null,
       reason: 'The licence copy could not be read, so which countries this branch holds is unknown rather than none.',
       act: 'Request a change · escalation (other)',
-      actTo: '/branch/approvals',
+      actTo: '/branch/approvals?kind=other&subject=Change+the+territory',
     },
     {
       field: 'Staff & roles',
@@ -320,7 +320,7 @@ export default function BranchSettings({ user }) {
         + 'brand, which is fixed and is not stored per branch. HQ records one where a licence has '
         + 'one, and nothing pushes it to a branch yet \u2014 so there is still no file to fetch here.',
       act: 'Ask HQ · Content',
-      actTo: '/branch/approvals',
+      actTo: '/branch/approvals?kind=content&subject=Brand+kit',
     },
     {
       field: 'Licence summary',
@@ -330,7 +330,7 @@ export default function BranchSettings({ user }) {
         : null,
       reason: 'The licence copy could not be read, so its terms are unknown rather than absent.',
       act: 'Request seats · escalation (seat increase)',
-      actTo: '/branch/approvals',
+      actTo: '/branch/accounts',
     },
     {
       // THE CANVAS TYPES A VALUE HERE AND THE PAGE REFUSES TO. S11 draws
@@ -342,7 +342,7 @@ export default function BranchSettings({ user }) {
       value: null,
       reason: 'Nothing pushes this branch its own residency, so where its data sits is unknown here rather than unset. It is chosen at provisioning and HQ holds the record.',
       act: 'Ask HQ · escalation (other)',
-      actTo: '/branch/approvals',
+      actTo: '/branch/approvals?kind=other&subject=Data+residency',
     },
     {
       // D197. The canvas puts Domain in a Settings sub-nav this page does not
@@ -355,7 +355,7 @@ export default function BranchSettings({ user }) {
       value: null,
       reason: 'The host register is HQ\'s, so this branch cannot read which host its licence holds. Binding one is done on the licence at HQ.',
       act: 'Ask HQ · escalation (other)',
-      actTo: '/branch/approvals',
+      actTo: '/branch/approvals?kind=other&subject=Domain',
     },
   ];
   const hqOwned = rows.filter((r) => r.who === 'HQ').length;

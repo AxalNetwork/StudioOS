@@ -52,9 +52,10 @@
  * is the name, not a link, and each row here shows the name it was raised with.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Send } from 'lucide-react';
 import { api } from '../../lib/api';
+import { prefillFromSearch } from '../../lib/escalationPrefill';
 import { reportError } from '../../lib/log';
 import {
   RELATION_CHOICES, relationLead, RELATION_NOT_RECORDED, RELATION_NOT_RECORDED_REASON,
@@ -483,15 +484,19 @@ const VIEWS = [
 ];
 
 export default function BranchApprovals({ user }) {
+  const [params] = useSearchParams();
+  // D445 — a door may arrive with the kind and the subject already chosen.
+  // An unknown kind is ignored; chosenKind still drops a kind the licence hides.
+  const prefill = prefillFromSearch(params);
   const [lane, setLane] = useState(null);           // null = loading, UNAVAILABLE = failed
-  const [board, setBoard] = useState(null);         // D130 — the four local queues
+  const [board, setBoard] = useState(null);         // the local lanes (eleven since D215)
   const [view, setView] = useState('all');
   // S16's chip row: null = every lane, else one lane's key.
   const [laneFilter, setLaneFilter] = useState(null);
-  const [kind, setKind] = useState('other');
+  const [kind, setKind] = useState(prefill.kind || 'other');
   const [concern, setConcern] = useState('');       // D208 — the picked item's key, or none
   const [relation, setRelation] = useState('');     // D275 — what the raise is to that item, or none yet
-  const [subject, setSubject] = useState('');
+  const [subject, setSubject] = useState(prefill.subject);
   const [detail, setDetail] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
@@ -506,8 +511,8 @@ export default function BranchApprovals({ user }) {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  // SEPARATE FROM THE LANE, AND ITS OWN FAILURE. The outbound lane and the four
-  // local queues are different reads against different tables; folding them
+  // SEPARATE FROM THE LANE, AND ITS OWN FAILURE. The outbound lane and the
+  // local lanes are different reads against different tables; folding them
   // into one loader would make either failure blank the other half of a page
   // whose whole argument is that the two halves are different things.
   const loadBoard = useCallback(() => {
@@ -566,7 +571,7 @@ export default function BranchApprovals({ user }) {
 
   // WHAT THE RAIL CAN HONESTLY REPORT (D126): what this page loaded. The count
   // of raised escalations and how many still await an answer are both real
-  // reads; the four local queues now contribute their own lines rather than
+  // reads; the local lanes now contribute their own lines rather than
   // nothing, and a failed read still contributes none — `coverageNote` says
   // which. The rail must never read as "nothing raised" or "nothing waiting".
   const coverage = [
@@ -578,7 +583,7 @@ export default function BranchApprovals({ user }) {
       : []),
     ...(boardReady
       ? [
-        `${boardItems.length} open across the four local queues`,
+        `${boardItems.length} open across the eleven lanes`,
         `${pastCount} past the 72-hour SLA`,
       ]
       : []),
@@ -614,7 +619,7 @@ export default function BranchApprovals({ user }) {
         </h1>
         <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
           What this territory cannot decide for itself goes to HQ, and HQ&rsquo;s decision comes back
-          here. Below it, the four local queues this territory does decide, as one board.
+          here. Below it, the eleven lanes this territory does decide, as one board.
         </p>
       </header>
 
@@ -704,10 +709,23 @@ export default function BranchApprovals({ user }) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-[12px] font-bold">{it.subject}</div>
-                    <div className="mt-0.5 text-[10.5px] text-axal-faint">
-                      {it.kind.replace('_', ' ')} · raised {it.created_at}
-                      {it.sla && SLA_LABEL[it.sla] ? ` · ${SLA_LABEL[it.sla]}` : ''}
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10.5px] text-axal-faint">
+                      <span className={`${PILL} border border-axal-hairline`} data-testid="branch-escalation-kind">
+                        {KIND_LABEL[it.kind] || it.kind}
+                      </span>
+                      <span>
+                        raised {it.created_at}
+                        {it.raised_by_name ? ` · ${it.raised_by_name}` : ''}
+                        {it.sla && SLA_LABEL[it.sla] ? ` · ${SLA_LABEL[it.sla]}` : ''}
+                      </span>
                     </div>
+                    {it.detail
+                      ? <p className="mt-1 text-[12px] leading-relaxed text-axal-muted" data-testid="branch-escalation-detail">{it.detail}</p>
+                      : (
+                        <p className="mt-1 text-[12px]" data-testid="branch-escalation-detail">
+                          <Unrecorded reason="This raise was sent with a subject and no detail.">No detail</Unrecorded>
+                        </p>
+                      )}
                     {/* D208 — the item it was raised about, in the words HQ
                         received. D275 — led by what the raise is to it:
                         "Localises" or "Changes", or "About" with the relation
@@ -779,7 +797,7 @@ export default function BranchApprovals({ user }) {
         )}
       </Card>
 
-      {/* ── The four local queues, as one board (S3, D130) ── */}
+      {/* ── The eleven lanes, as one board (S3, D130; widened in D215) ── */}
       <Card className="p-4">
         <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-[14.5px] font-extrabold tracking-tight">The work board</h2>
