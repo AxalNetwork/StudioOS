@@ -39,14 +39,13 @@ test('every mount of each card retries its own source, and only that', () => {
   // Pinned per mount, not anywhere in the file: the band and the full layout
   // each mount all three cards, and a match in one must not cover the other.
   const src = codeOnly(read('components/profile/ProfileFitSection.jsx'));
-  const mounts = (tag) => [...src.matchAll(new RegExp(`<${tag} state=[^\\n]*`, 'g'))].map((m) => m[0]);
   const expect = {
-    SkillsRadarCard: /onRetry=\{\(\) => read\('radar'\)\} \/>$/,
-    ValuesLeanCard: /onRetry=\{\(\) => read\('values'\)\} \/>$/,
-    ArchetypeCard: /onRetry=\{\(\) => \{ read\('results'\); read\('fit'\); \}\} \/>$/,
+    SkillsRadarCard: [/<SkillsRadarCard state=[^\n]*/g, /onRetry=\{\(\) => read\('radar'\)\} \/>$/],
+    ValuesLeanCard: [/<ValuesLeanCard state=[^\n]*/g, /onRetry=\{\(\) => read\('values'\)\} \/>$/],
+    ArchetypeCard: [/<ArchetypeCard state=[^\n]*/g, /onRetry=\{\(\) => \{ read\('results'\); read\('fit'\); \}\} \/>$/],
   };
-  for (const [tag, re] of Object.entries(expect)) {
-    const found = mounts(tag);
+  for (const [tag, [mount, re]] of Object.entries(expect)) {
+    const found = [...src.matchAll(mount)].map((m) => m[0]);
     assert.equal(found.length, 2, `${tag} is mounted by the band and by the full layout`);
     for (const m of found) assert.match(m, re, m);
   }
