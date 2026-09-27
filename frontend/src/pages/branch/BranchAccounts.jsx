@@ -35,6 +35,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom';
 import { Users, Search, ArrowUpRight } from 'lucide-react';
 import { api } from '../../lib/api';
+import { drawsAccountControls } from '../../lib/accountControls';
 import { reportError } from '../../lib/log';
 import { Card, Unrecorded, Unreadable, titleCase } from '../../ui';
 import BranchZone from './BranchZone';
@@ -58,6 +59,51 @@ const SEAT_TYPES = ['founder', 'investor', 'advisor', 'partner'];
  * changes the tile to 0.9, which is the drift it was written to catch.
  */
 export const AMBER_AT = 0.88;
+
+/** Whole seats a request may ask for. Above this the raise is refused here, before it is sent. */
+const MORE_MIN = 1;
+const MORE_MAX = 500;
+
+const SEAT_REQUEST_LEAD = 'Raised from Accounts. Seats are a licence term, so this is a request to HQ rather '
+  + 'than a number this branch can change.';
+
+/**
+ * The seat request Accounts sends (D445). The kind stays `seat_increase`.
+ * The type and the count travel in the subject and the detail of that one
+ * raise — there is no second store. A used/licensed pair that is not two
+ * finite numbers is left out of the detail rather than written as zero.
+ * Anything that is not a known type and a whole number from 1 to 500 returns
+ * null, and the form does not call the route.
+ */
+export function seatIncreaseRequest({ type, more, used, licensed } = {}) {
+  if (!SEAT_TYPES.includes(type)) return null;
+  const text = typeof more === 'number' ? String(more) : (typeof more === 'string' ? more.trim() : '');
+  if (!/^[0-9]+$/.test(text)) return null;
+  const n = Number(text);
+  if (!Number.isInteger(n) || n < MORE_MIN || n > MORE_MAX) return null;
+  let detail = SEAT_REQUEST_LEAD;
+  if (Number.isFinite(used) && Number.isFinite(licensed)) {
+    detail += ` This territory is using ${used} of ${licensed} ${type} seats.`;
+  }
+  return {
+    kind: 'seat_increase',
+    subject: `${n} more ${type} ${n === 1 ? 'seat' : 'seats'}`,
+    detail,
+  };
+}
+
+/**
+ * Whether Accounts draws Deactivate or Reactivate on a row (D445).
+ * `drawsAccountControls` already hides the viewer's own row. An admin-role
+ * target is hidden here as well: closing one needs a written reason, a step-up
+ * and the super admin, and this page collects none of those. A branch has no
+ * super admin (D106), so the row says who closes it instead of offering a
+ * button the server would refuse.
+ */
+export function canDeactivateMember(row, viewer) {
+  if (String(row?.role || '').toLowerCase() === 'admin') return false;
+  return drawsAccountControls(row, viewer);
+}
 
 /**
  * A tile's state, derived once so the class and the wording cannot disagree.
@@ -88,9 +134,13 @@ export default function BranchAccounts({ user }) {
   const [dir, setDir] = useState(null);           // the account directory envelope
   const [query, setQuery] = useState('');
   const [searched, setSearched] = useState('');   // what the loaded page actually answers
+  const [seatType, setSeatType] = useState('');
+  const [seatMore, setSeatMore] = useState('');
   const [asking, setAsking] = useState(false);
   const [askError, setAskError] = useState('');
   const [asked, setAsked] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
+  const [toggleError, setToggleError] = useState('');
   const debounce = useRef(null);
 
   // D151 — ONE NAME FOR THE BRANCH. This line was the first copy and
@@ -134,27 +184,6 @@ export default function BranchAccounts({ user }) {
     return () => { if (debounce.current) clearTimeout(debounce.current); };
   }, [query, loadDirectory]);
 
-  const requestSeats = async (e) => {
-    e.preventDefault();
-    if (asking) return;
-    setAsking(true);
-    setAskError('');
-    try {
-      await api.branchEscalate({
-        kind: 'seat_increase',
-        subject: 'More seats for this territory',
-        detail: 'Raised from Accounts. Seats are a licence term, so this is a request to HQ rather '
-          + 'than a number this branch can change.',
-      });
-      setAsked(true);
-    } catch (err) {
-      reportError('BranchAccounts:requestSeats', err);
-      setAskError(err?.message || 'The request could not be raised, so HQ has not been asked.');
-    } finally {
-      setAsking(false);
-    }
-  };
-
   const licenceReady = licence && licence !== UNAVAILABLE && licence.licence;
   const dirReady = dir && dir !== UNAVAILABLE;
 
@@ -170,6 +199,48 @@ export default function BranchAccounts({ user }) {
       return { type, used, licensed, free: licensed - used, state: seatState(used, licensed) };
     });
   }, [seatsUsed, seatsLicensed]);
+
+  const requestSeats = async (e) => {
+    e.preventDefault();
+    if (asking) return;
+    const usage = tiles.find((t) => t.type === seatType);
+    const built = seatIncreaseRequest({
+      type: seatType,
+      more: seatMore,
+      used: usage && Number.isFinite(usage.used) ? usage.used : undefined,
+      licensed: usage && Number.isFinite(usage.licensed) ? usage.licensed : undefined,
+    });
+    if (!built) {
+      setAskError('Name a seat type and a whole number of seats from 1 to 500. Nothing was sent.');
+      return;
+    }
+    setAsking(true);
+    setAskError('');
+    try {
+      await api.branchEscalate(built);
+      setAsked(true);
+    } catch (err) {
+      reportError('BranchAccounts:requestSeats', err);
+      setAskError(err?.message || 'The request could not be raised, so HQ has not been asked.');
+    } finally {
+      setAsking(false);
+    }
+  };
+
+  const toggleMember = async (member) => {
+    if (togglingId != null) return;
+    setTogglingId(member.id);
+    setToggleError('');
+    try {
+      await api.adminToggleActive(member.id);
+      loadDirectory(searched);
+    } catch (err) {
+      reportError('BranchAccounts:toggle', err);
+      setToggleError(err?.message || 'The account could not be changed.');
+    } finally {
+      setTogglingId(null);
+    }
+  };
 
   const rows = dirReady ? (dir.results || []) : [];
   const total = dirReady ? dir.total : null;
@@ -203,6 +274,7 @@ export default function BranchAccounts({ user }) {
       unavailable={[
         ['A seat ledger', 'Seats used is counted from roles (D127). No seat has an id, so nobody is assigned or released and a vacant seat cannot be shown.'],
         ['Accounts in another territory', 'This deployment holds one territory\'s accounts. There is no cross-branch read behind this page.'],
+        ['Forced password reset', 'Not built. The owner has not decided it, so this page has no control that resets a password.'],
       ]}
     >
       <div className="space-y-4" data-testid="branch-accounts-page">
@@ -297,15 +369,40 @@ export default function BranchAccounts({ user }) {
             ) : (
               <form onSubmit={requestSeats} data-testid="branch-seats-request">
                 <p className="text-[11.5px] text-axal-muted">
-                  Need more? Seats are a licence term, so this asks HQ rather than changing a number here.
+                  Need more? Name the seat type and how many. This asks HQ. It does not change the licence.
                 </p>
-                <button
-                  type="submit"
-                  disabled={asking}
-                  className="mt-2 inline-flex items-center gap-1.5 rounded-xl bg-slate-800 px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900"
-                >
-                  <ArrowUpRight size={13} /> {asking ? 'Raising…' : 'Request more seats from HQ'}
-                </button>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <select
+                    value={seatType}
+                    onChange={(e) => setSeatType(e.target.value)}
+                    aria-label="Seat type"
+                    data-testid="branch-seats-type"
+                    className="rounded-xl border border-axal-hairline bg-axal-ground px-2.5 py-1.5 text-[12px]"
+                  >
+                    <option value="">Seat type</option>
+                    {SEAT_TYPES.map((type) => (
+                      <option key={type} value={type}>{titleCase(type)}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={seatMore}
+                    onChange={(e) => setSeatMore(e.target.value)}
+                    aria-label="How many more seats"
+                    placeholder="How many"
+                    maxLength={3}
+                    data-testid="branch-seats-more"
+                    className="w-28 rounded-xl border border-axal-hairline bg-axal-ground px-2.5 py-1.5 text-[12px]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={asking}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900"
+                  >
+                    <ArrowUpRight size={13} /> {asking ? 'Raising…' : 'Request more seats from HQ'}
+                  </button>
+                </div>
                 {askError && (
                   <p className="mt-2 text-[11.5px] text-red-700 dark:text-red-300" data-testid="branch-seats-request-error">
                     {askError}
@@ -342,6 +439,9 @@ export default function BranchAccounts({ user }) {
           <p className="mt-1.5 text-[11px] text-axal-faint" data-testid="branch-account-scope">
             {brand ? `Searching ${brand} accounts` : 'Searching this territory\'s accounts'}
           </p>
+          <p className="mt-1 text-[11px] text-axal-faint" data-testid="branch-password-reset-absent">
+            A forced password reset is not offered on this page. The owner has not decided it.
+          </p>
 
           {dir === UNAVAILABLE ? (
             <div className="mt-3" data-testid="branch-members-unreadable">
@@ -368,7 +468,8 @@ export default function BranchAccounts({ user }) {
                       <th className="py-1.5 pr-3">Member</th>
                       {/* HEADED ROLE, NOT SEAT (D127) — there is no seat id to show. */}
                       <th className="py-1.5 pr-3">Role</th>
-                      <th className="py-1.5">State</th>
+                      <th className="py-1.5 pr-3">State</th>
+                      <th className="py-1.5">Account</th>
                     </tr>
                   </thead>
                   <tbody data-testid="branch-members-rows">
@@ -379,7 +480,24 @@ export default function BranchAccounts({ user }) {
                           {m.name && <span className="block text-[10.5px] text-axal-faint">{m.email}</span>}
                         </td>
                         <td className="py-1.5 pr-3">{titleCase(m.role)}</td>
-                        <td className="py-1.5">{m.is_active ? 'Active' : 'Deactivated'}</td>
+                        <td className="py-1.5 pr-3">{m.is_active ? 'Active' : 'Deactivated'}</td>
+                        <td className="py-1.5">
+                          {canDeactivateMember(m, user) ? (
+                            <button
+                              type="button"
+                              data-testid={`branch-member-toggle-${m.id}`}
+                              disabled={togglingId === m.id}
+                              onClick={() => toggleMember(m)}
+                              className="rounded-lg border border-axal-hairline px-2 py-1 text-[11px] font-bold disabled:opacity-50"
+                            >
+                              {togglingId === m.id ? 'Saving…' : (m.is_active ? 'Deactivate' : 'Reactivate')}
+                            </button>
+                          ) : String(m.role || '').toLowerCase() === 'admin' && Number(user?.id) !== Number(m.id) ? (
+                            <span className="text-[11px] text-axal-faint" data-testid={`branch-member-admin-${m.id}`}>
+                              Closed by a super admin. This branch has none.
+                            </span>
+                          ) : null}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -388,6 +506,11 @@ export default function BranchAccounts({ user }) {
               {/* THE TABLE IS A PAGE AND SAYS SO. D128 fixed the HQ panel that
                   rendered a page as a total; this caption is the same rule kept
                   rather than re-broken on a new surface. */}
+              {toggleError && (
+                <p className="mt-2 text-[11.5px] text-red-700 dark:text-red-300" data-testid="branch-member-toggle-error">
+                  {toggleError}
+                </p>
+              )}
               <p className="mt-2 text-[10.5px] text-axal-faint" data-testid="branch-members-showing">
                 Showing {rows.length} of {total === null ? 'an unknown number of' : total}
                 {searched ? ` matching “${searched}”` : ' accounts in this territory'}.

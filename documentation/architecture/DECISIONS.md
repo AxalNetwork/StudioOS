@@ -34471,6 +34471,22 @@ record could not be read. Nothing here is drawn from a guess. Retry".
 
 **Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: the body reason put `licence_contracts` back; the page stopped calling `adminListContracts`; a missing `pending_signature` was rendered as zero pending.
 
+## D445
+
+**Approvals, Accounts and Settings share one raise, and the form is not blank when a row sent the person there.** Wave 8, Session 6, item 6. No migration. No new `/api` method. No live branch exercised this.
+
+**Prefill.** `/branch/approvals` reads `?kind=` and `?subject=` once, through `prefillFromSearch` in `frontend/src/lib/escalationPrefill.js`. The kinds are `moderation`, `content`, `seat_increase` and `other`. An unknown kind is ignored and the form keeps its own default. The subject is trimmed and cut at 300 characters, the route's own limit. Settings' HQ-owned rows link with both already set: the subsidiary name, the territory, data residency and the domain as `other`, and the brand kit as `content`. Staff & roles, and the licence summary's request for seats, go to `/branch/accounts`. `HqSupportSessionBar.jsx` is Session 5's and is not edited. Its "Raise a concern" link is `/branch/approvals` with no query. The prefill a concern from that bar would use is `?kind=other&subject=`.
+
+**Seats.** Accounts asks for a type and a whole number from 1 to 500 and sends them as the subject and the detail of one `seat_increase` escalation. There is no second store. The detail names how many of that type this territory is using only when both figures are finite numbers; a missing figure is left out rather than written as zero. The quantity is a text field. Nothing on the page writes the licence.
+
+**Deactivation.** A non-admin row that `drawsAccountControls` would draw gets Deactivate or Reactivate, which calls the existing `PATCH /api/admin/users/:id/toggle-active` with no reason. The viewer's own row draws nothing. An admin-role row is not offered a button: closing one needs a written reason, a step-up and the super admin, and this page collects none of those. The row says a super admin closes it and this branch has none.
+
+**Password reset.** Named, not built. The rail and a sentence on the members card say the owner has not decided it. There is no control.
+
+**Eleven lanes.** The Approvals board, its coverage line and Branch Home's loading line and link say eleven lanes (D215). The sentences that still said four queues were stale.
+
+**Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: an unknown seat type accepted; the escalation kind dropped; an admin row offered a button.
+
 ## D450
 
 **HQ consoles tell the truth about what was read.** Wave 8, Session 16, item 1
