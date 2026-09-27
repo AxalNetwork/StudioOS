@@ -124,6 +124,11 @@ test('an edit is merged onto the row and the merged row must carry its base', as
   await call(db, OWNER, 'PATCH', '/benchmarks/b-thin', { reading: 'One re-mark carries it.' });
   assert.equal(row(db, 'b-thin').reading, 'One re-mark carries it.');
   assert.equal(row(db, 'b-thin').peer_value, '1.2x');
+  // And an edit that does not send the reading leaves it where it was — the
+  // editor saves the six fields without it.
+  await call(db, OWNER, 'PATCH', '/benchmarks/b-thin', { our_value: '1.5x' });
+  assert.equal(row(db, 'b-thin').reading, 'One re-mark carries it.', 'an edit that did not send the reading erased it');
+  assert.equal(row(db, 'b-thin').our_value, '1.5x');
 });
 
 test('an edit refuses a blank metric, a sample under 1, and a row that is not the caller’s', async () => {

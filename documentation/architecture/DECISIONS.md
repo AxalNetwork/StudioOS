@@ -30852,6 +30852,112 @@ code:
 
 After the fix, 17 of 17 are caught.
 
+## D314
+
+**One benchmark gets its own page at `/research/benchmarking/:uid`, its edit
+is re-validated against migration 217's CHECK, and the members of its peer
+set get a store (migration 303).** Session 2, wave 8, item 3. It builds
+canvas f2eb2046.
+
+**The owner's direction settled the gap map's choice.** The gap map offered
+two options for the constituents: "state them as Not recorded, or add a new
+table". The direction is that every drawn control is wired, so this adds the
+table (migration 303), its reads, and the canvas's Add a constituent and
+Remove writes.
+
+**Migration 303: `research_benchmark_constituents`.**
+- Each row holds a name, a value and an as-of, both kept as text so a unit
+  is never implicit. It is keyed to its benchmark and, denormalised, to its
+  owner, so every read and write is a single owner-scoped predicate.
+- A `CHECK (length(trim(name)) > 0)` means a constituent is a name first. The
+  schema refuses a blank one from any writer.
+- Nothing ties the number of constituents to the stored `peer_sample_size`,
+  on purpose. A list of three against an n of five is stated, not corrected.
+  Rewriting the sample to match the list would be the product deciding which
+  of the reader's two entries was the mistake.
+- The migration has no transaction and no dependence on another session's
+  migration, and it declares everything it creates.
+
+**Worker routes, all in `research.ts` and all owner-scoped.** A uid that is
+not the caller's answers exactly like one that does not exist.
+- `GET /research/benchmarks/:uid` returns the row with `updated_at` and its
+  constituents in order. It also returns `thin` and `sample_note`, which are
+  about this row's own n (under 10), not the list's minimum. Finally it
+  returns `count_mismatch` and `mismatch_note`.
+- `PATCH /research/benchmarks/:uid` merges the edit onto the stored row and
+  validates the result:
+  - a peer figure without its source and sample is refused as
+    `peer_base_required`, before the schema would refuse it with a constraint
+    error;
+  - a blank metric is refused as `metric_required`, and a sample under 1 as
+    `sample_size_invalid`;
+  - clearing the peer figure returns the row to tracked, unless constituents
+    are named against it, which is `constituents_exist` (409). They are
+    members of a peer set the row would no longer have.
+- `POST /research/benchmarks/:uid/constituents` adds a constituent at the
+  next position. Only a comparison takes one: a tracked row is refused as
+  `not_a_comparison` (409). A blank name is refused as
+  `constituent_name_required`.
+- `DELETE /research/benchmarks/:uid/constituents/:cuid` removes a
+  constituent from its own benchmark only.
+- The existing `DELETE /research/benchmarks/:uid` now removes the
+  benchmark's constituents first. D1 does not enforce the foreign key's
+  cascade inside a batch.
+- The new `api.research` methods are `benchmarkGet`, `benchmarkUpdate`,
+  `benchmarkConstituentAdd` and `benchmarkConstituentRemove`.
+
+**The page is `BenchmarkDetail`, guarded to admin and investor** like the
+list, and the list's metric now links to it. It draws every element of the
+canvas:
+- the header, with ours vs peer and the n= pill (amber under 10), or
+  "Tracked, not compared";
+- the thin-base banner, the four tiles (each Not recorded when absent), and
+  the two figures, neither coloured as better;
+- the reading, with Save;
+- the constituents table, its mismatch warning, its empty state ("Do not
+  invent funds.") and Add a constituent, which is offered only on a
+  comparison;
+- the six-field editor, the ZONEDRAFT and the stated limit.
+
+A tracked row shows Not recorded in every peer tile and in the peer half,
+never 0.
+
+**The ZONEDRAFT is a restatement, not a model**, as the canvas draws it: "The
+draft restates only those fields — it has no peer data set to reach for." On
+a thin base it says the gap is not a market rate. Accept writes it as the
+reading through `PATCH`.
+
+**Not built, and why.**
+- The canvas's SAMPLE marker on the reading is fixture labelling, not an
+  element.
+- `api.research.benchmarkRemove` is still called by nothing. No benchmark
+  canvas draws a delete, so none is added. Its route now also clears the
+  constituents, for when a delete is drawn.
+
+**Tests.**
+- `research_benchmark_detail.test.ts` (new, 9 tests, real SQLite over the
+  table definitions in migrations 217 and 303) covers:
+  - owner scoping, with another owner's benchmark answering like a missing
+    one;
+  - the thin note on this row's own n;
+  - merged-row validation, and the refused edits;
+  - constituents: comparisons only, appended in order, named;
+  - the mismatch stated while n is left alone;
+  - no clearing of the peer figure under constituents;
+  - removal from the benchmark's own list only, and the cascade on delete;
+  - the schema's own refusal of a blank name.
+- `research_benchmark_detail.test.mjs` (new, 7 tests) asserts each element
+  at both ends, runs the tiles, the draft and the editor patch (a blank sample
+  is null, never 0), and pins the route, the list link, the four methods and
+  the constituent rules. It also bans the canvas's fixtures.
+
+**Mutations.** 19 were run, and 18 were caught on the first run. One escaped
+because its assertion was weak. PATCH overwriting a field it was not sent
+(`reading`, read from the body even when absent) passed, because no test sent
+an edit without a reading after writing one. The fix was to the assertion, not
+the code: the merged-edit test now sends `our_value` alone and requires the
+stored reading to survive. After the fix, 19 of 19 are caught.
+
 ## D320
 
 **The archetype banks go from three probes per trait to five, and every one
