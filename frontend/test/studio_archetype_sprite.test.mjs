@@ -122,3 +122,31 @@ test('compact scored card is one hit target to the full archetype page', () => {
   assert.doesNotMatch(fitCode, /md:grid-cols-\[300px/,
     'compact must not reintroduce the overflowing two-column grid');
 });
+
+// The compact /studio card reads the short summary and the full card the
+// paragraph. Rendered, not grepped: the condition that picks between them
+// names `meta?.summary` even when the body prints the description, so a
+// source match could not tell the two apart.
+test('the compact card prints the summary; the full card prints the description', async () => {
+  const { createElement } = await import('react');
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { MemoryRouter } = await import('react-router-dom');
+  const { ArchetypeCard } = await import('../src/components/profile/ProfileFitSection.jsx');
+  const { ARCHETYPES } = await import('../src/lib/assessmentMeta.js');
+  const { renderedText } = await import('./_renderedText.mjs');
+  const slug = Object.keys(ARCHETYPES).find((k) => ARCHETYPES[k].summary && ARCHETYPES[k].description
+    && !ARCHETYPES[k].description.includes(ARCHETYPES[k].summary));
+  assert.ok(slug, 'an archetype whose summary is not part of its description');
+  const { summary, description } = ARCHETYPES[slug];
+  const draw = (compact) => renderedText(renderToStaticMarkup(createElement(MemoryRouter, null,
+    createElement(ArchetypeCard, {
+      state: { data: { results: [] }, error: null },
+      fitState: { data: { archetype: { slug, label: ARCHETYPES[slug].label, confidence: 0.8 } } },
+      compact,
+    }))));
+  const compactText = draw(true);
+  const fullText = draw(false);
+  assert.ok(compactText.includes(summary), 'compact card shows the summary');
+  assert.ok(!compactText.includes(description), 'compact card does not print the full paragraph');
+  assert.ok(fullText.includes(description), 'full card shows the description');
+});

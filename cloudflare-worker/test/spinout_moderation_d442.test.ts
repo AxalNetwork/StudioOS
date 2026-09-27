@@ -1,8 +1,9 @@
 /**
  * D442 — the open-case list, and a closed case that kept its status.
  *
- * Closing stamps resolved_at and does not change status, so a row can still
- * say under_review after it has been decided. The list is the unresolved rows.
+ * Awaiting a decision is under_review and unresolved. A suspension that is
+ * still unresolved is a sanction in force, not part of that count. A closed
+ * under_review row stays off both lists.
  * Run on node:sqlite. No live branch.
  */
 import test from 'node:test';
@@ -87,14 +88,16 @@ async function call(db: InstanceType<typeof DatabaseSync>, userId: number) {
   return { status: res.status, body: text ? JSON.parse(text) : null };
 }
 
-test('the list is unresolved cases, oldest first, and a closed under_review row stays off it', async () => {
+test('awaiting a decision is the open count, and a sanction is listed apart from it', async () => {
   const db = freshDb();
   const r = await call(db, ADMIN_ID);
   assert.equal(r.status, 200);
-  assert.equal(r.body.open_count, 2);
-  assert.deepEqual(r.body.cases.map((row: any) => row.id), [1, 3]);
+  assert.equal(r.body.open_count, 1);
+  assert.deepEqual(r.body.cases.map((row: any) => row.id), [1]);
   assert.equal(r.body.cases[0].who, 'member@example.test', 'an empty name must fall back to the email');
-  assert.equal(r.body.cases[1].status, 'suspended');
+  assert.equal(r.body.sanctions_count, 1);
+  assert.deepEqual(r.body.sanctions.map((row: any) => row.id), [3]);
+  assert.equal(r.body.sanctions[0].status, 'suspended');
   const body = JSON.stringify(r.body);
   assert.doesNotMatch(body, /no such column|SQLITE/i);
 });

@@ -216,7 +216,7 @@ function ArchetypeArt({ slug, sex, compact = false }) {
 }
 
 // ── Archetype ─────────────────────────────────────────────────────────────────
-function ArchetypeCard({ state, fitState, className, audience = 'founder', compact = false }) {
+export function ArchetypeCard({ state, fitState, className, audience = 'founder', compact = false }) {
   const { data, error } = state;
   const fitData = fitState?.data;
   const conv = fitData?.archetype && fitData.archetype.slug
@@ -252,10 +252,12 @@ function ArchetypeCard({ state, fitState, className, audience = 'founder', compa
             <div className="text-[12.5px] text-[#3f3f46] dark:text-gray-300 leading-[1.5]">{meta.tagline}</div>
           </div>
         )}
-        {meta?.description && (
+        {(compact ? (meta?.summary || meta?.description) : meta?.description) && (
           <div>
             <div className="pf-lbl text-[#b45309] dark:text-amber-500 mb-[9px]">Description</div>
-            <div className="text-[12.5px] text-[#3f3f46] dark:text-gray-300 leading-[1.5]">{meta.description}</div>
+            <div className="text-[12.5px] text-[#3f3f46] dark:text-gray-300 leading-[1.5]">
+              {compact ? (meta.summary || meta.description) : meta.description}
+            </div>
           </div>
         )}
       </>
