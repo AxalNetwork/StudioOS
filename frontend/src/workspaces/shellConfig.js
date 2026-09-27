@@ -271,7 +271,10 @@ export const SHELLS = {
       // `/funds/accounting` were both live and rendered different components.
       //
       // The zones are the fund OVERVIEW; `/funds/*` already holds the
-      // operations tool (FundOpsWorkspace and its six tabs) and keeps it. The
+      // operations tool (FundOpsWorkspace and its tabs) and keeps it — less
+      // its Capital Calls tab, which D371 retired: `/funds/capital-calls` now
+      // redirects to the `calls` zone, so that zone's `legacy` is a route
+      // App.jsx really does send here, as `legacyRedirects` reports. The
       // two are not rivals — InvestorFundAccounting says so itself: "IF3 does
       // not reconcile, close periods, export a journal… Open the existing Fund
       // Ops accounting workspace for authorized operations." So `accounting`

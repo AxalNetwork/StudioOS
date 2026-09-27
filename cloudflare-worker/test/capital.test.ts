@@ -24,8 +24,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import capital from '../src/routes/capital.ts';
 import { makeD1 } from './_d1_sqlite.mjs';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+/** D371: the call header, the line columns and the sealed receipts, from the migration itself. */
+const MIGRATION_312 = readFileSync(resolve(HERE, '../sql/migrations/312_fund_call_ledger.sql'), 'utf8');
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef'; // >= 32 bytes
 
@@ -71,7 +78,7 @@ const LEGACY_EMAIL = 'legacy@lp.example';
 const SCHEMA = `
 CREATE TABLE users (
   id INTEGER PRIMARY KEY, email TEXT, name TEXT, role TEXT, is_active INTEGER DEFAULT 1,
-  investor_tier TEXT, investor_subscription_status TEXT);
+  investor_tier TEXT, investor_subscription_status TEXT, last_active TEXT);
 CREATE TABLE vc_funds (
   id INTEGER PRIMARY KEY, name TEXT, status TEXT DEFAULT 'active',
   total_commitment REAL DEFAULT 0, deployed_capital REAL DEFAULT 0, lp_count INTEGER DEFAULT 0,
@@ -90,6 +97,14 @@ CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, sector TEXT);
 CREATE TABLE notifications (
   id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, type TEXT, title TEXT,
   body TEXT, link TEXT, created_at TEXT);
+CREATE TABLE activity_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, action TEXT, details TEXT, actor TEXT,
+  action_type TEXT, entity_type TEXT, entity_id TEXT, ip_address TEXT, user_agent TEXT,
+  metadata TEXT, created_at TEXT DEFAULT (datetime('now')));
+CREATE TABLE activity_stats (
+  user_id INTEGER, stat_date TEXT, action_count INTEGER DEFAULT 0, updated_at TEXT,
+  UNIQUE (user_id, stat_date));
+${MIGRATION_312}
 `;
 
 function seedFor(user: any): string {

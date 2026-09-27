@@ -456,6 +456,17 @@ function PartnerPortalRedirect() {
   return <Navigate to={{ pathname: '/studio', search: loc.search, hash: loc.hash }} replace />;
 }
 
+// D371 — /funds/capital-calls was Fund Ops' Capital Calls tab: a read-only
+// list (the studio-wide ledger for an admin, the caller's own LP calls for an
+// investor). The Calls zone at /funds/calls is the fund's call ledger with
+// writes: numbered calls, each LP's line, receipts and the wire trail, for
+// any fund the caller operates. The tab accepted no query string of its own;
+// whatever a bookmark carries travels anyway.
+function FundCapitalCallsRedirect() {
+  const loc = useLocation();
+  return <Navigate to={{ pathname: '/funds/calls', search: loc.search, hash: loc.hash }} replace />;
+}
+
 // Legacy /refer redirects to the standalone /referrals page, preserving ?tab=.
 function ReferRedirect() {
   const loc = useLocation();
@@ -2790,7 +2801,7 @@ function AppInner() {
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
       <Route path="/liquidity" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('raise', <FounderWorkspaceTabs set="raise" user={user}><LiquidityPage currentUser={user} /></FounderWorkspaceTabs>))} />
       <Route path="/funds" element={guard(['admin', 'investor'], effectiveRole === 'investor' ? <InvestorFundLanding fundUnlocked={hasInvestorTier(user, 'institutional')} /> : <FundOpsWorkspace />)} />
-      <Route path="/funds/capital-calls" element={guard(['admin', 'investor'], investorFundWorkspace(<FundOpsWorkspace />))} />
+      <Route path="/funds/capital-calls" element={<FundCapitalCallsRedirect />} />
       <Route path="/lp-portal" element={guard(['admin', 'investor'], investorWorkspace('axal-vc-fund', <LPPortalPage />))} />
       {/* Spin-Out Fund I LP participation workspace — a Fund Ops tab, so it
           renders inside the same investor shell as the other fund surfaces. */}

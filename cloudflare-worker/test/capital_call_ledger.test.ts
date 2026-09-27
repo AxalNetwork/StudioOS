@@ -87,6 +87,9 @@ const SCHEMA = [
      id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, details TEXT,
      actor TEXT, user_id INTEGER, created_at TEXT DEFAULT (datetime('now')));`,
   `CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT, name TEXT);`,
+  // D371: the call header, the two line columns and the sealed receipts, from
+  // the migration file itself rather than a copy of it.
+  readFileSync(resolve(HERE, '../sql/migrations/312_fund_call_ledger.sql'), 'utf8'),
 ].join('\n');
 
 const FUND = 1;

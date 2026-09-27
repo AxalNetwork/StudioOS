@@ -145,11 +145,16 @@ export const LPs = {
     // user_id came back with name/email NULL — exactly the unlinked LPs whose
     // only identity IS the operator-entered pair. The account's values still
     // take precedence when the row is linked.
+    //
+    // `kyc_status` (D371) is the linked account's; an LP with no account has
+    // none, and reads NULL rather than a status nobody recorded. The LP page's
+    // KYC column and "KYC pending" filter read it, and got nothing before.
     return env.DB.prepare(
       `SELECT lp.*,
               COALESCE(u.email, lp.email) AS email,
               COALESCE(u.name,  lp.name)  AS name,
-              u.id AS account_user_id
+              u.id AS account_user_id,
+              u.kyc_status AS kyc_status
          FROM limited_partners lp
          LEFT JOIN users u ON u.id = lp.user_id
         WHERE lp.fund_id = ? ORDER BY lp.commitment_amount DESC`
