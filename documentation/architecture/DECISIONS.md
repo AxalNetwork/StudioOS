@@ -32036,6 +32036,11 @@ reads the Worker source for:
   and 500-open bounds, the deck's `view_limit || 1` and 24 × 30 cap, and
   the engagement query's `LIMIT 200`;
 - the Share button's write gate.
+- Mutation-checked both ways: 27 of 27 caught, each with a non-zero exit and
+  a `not ok` line, and every file was restored and checked by sha256. The
+  mutations cover every tile, consent, bound, state, gate and copy rule
+  above, including reading deck views through `ensureDeck` and treating a
+  failed scenario read as an empty one.
 
 ## D380
 
