@@ -9,6 +9,10 @@ the generic route wrapper once a canvas has graduated.
   `InvestorDealsWorkspace` inline rather than handing off to a separate page.
 - `InvestorDealsWorkspace.jsx` is the deal-flow canvas rendered inside
   `InvestorWorkspacePage`, not routed directly.
+- `InvestorStudioHome.jsx` is the investor's `/studio` home (canvas 69dc42f3,
+  S2). Its stat rows and their states live in `investorStudioParts.jsx`,
+  apart from the home so a Node test can render them. A source whose read
+  failed draws one `Unreadable` line with a retry in place of its rows (D321).
 - `InvestorFundLanding.jsx` owns `/funds` for the investor role (GP/admin
   keep the detailed `FundOpsWorkspace`); gated on the institutional tier via
   `fundUnlocked`.

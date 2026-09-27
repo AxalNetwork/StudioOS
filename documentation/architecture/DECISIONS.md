@@ -30703,6 +30703,115 @@ unchanged here; item 3 re-aims it together with the test that pins it.
   `ArchetypeCard` in both modes, which catches that mutation and its reverse
   (the full card printing the summary).
 
+## D321
+
+**The Founder and Investor Studio homes say when a read failed, count the
+Lab's milestones from what the Worker sends, and stop drawing zeros they
+cannot support.** Wave 8, Session 3, item 2 (the gap map's PR 1). Frontend
+only: no migration, no route, no `api.js` method.
+
+**The defects.**
+- The founder Lab card printed `completed_count || 0` "completed".
+  `/spinout-lab/state` has never sent `completed_count`, so it always read
+  "0 completed". Its "Current focus" row read three fields the Lab does not
+  send, so it was always "Not recorded".
+- A founder card whose read failed printed "Live source unavailable." and then
+  drew its rows anyway, each reading "Not recorded". When the project list
+  failed, every project card also said "Select or create a startup", which
+  invites a founder whose record merely failed to load to make a second one.
+- The "Independent subsidiaries" card appeared only when there were
+  subsidiaries, so a failed read hid it.
+- Investor Quick stats (the gap map's ISH:105) drew "Not recorded" for the
+  deal-flow and lifecycle figures when those reads had failed, and the deal
+  count read 0 while the dashboard was still loading.
+- The investor home's `number` helper returned 0 for `null`, because
+  `Number(null)` is 0. A missing stage count or match average therefore
+  showed as 0, and the lifecycle funnel added `?? 0` on top.
+- Four investor cards reported a failed read as a plain status line with no
+  retry.
+
+**What each home does now.**
+- Every founder card takes its failure, a claim sentence and a retry. A failed
+  read draws `Unreadable` and nothing else: no rows, and no "create a startup"
+  prompt. The subsidiaries card also appears when its read fails.
+- The Lab card counts the `milestones` list: the number completed this week,
+  the total completed, and the days remaining. The week's deliverable total
+  (the canvas's "3 of 5") is held in the Worker's milestone catalog and not
+  sent; the catalog says it must never be copied, so that row reads "Not
+  recorded" with the reason. An account with no active sprint says so. The
+  "Current focus" row is gone: nothing records a focus.
+- Investor Quick stats reads two sources, each in one of four states:
+  withheld (admin preview), loading, unreadable or ready. A failed source
+  draws one `Unreadable` line with a retry in place of its rows. The funnel,
+  the opportunities, the portfolio and the events cards draw `Unreadable` with
+  a retry. An unscored opportunity reads "Unscored" rather than a bare dash.
+- `Dashboard.jsx` passes the investor home an `onRetryLifecycle` that re-reads
+  `/dashboard/investor-lifecycle`. Retrying the dashboard never re-read it,
+  because that effect is keyed on the role. Where the dashboard itself failed
+  and the lifecycle was never requested, the dashboard retry is the retry.
+- Both homes draw the canvas's context line: "Studio", the role badge, the
+  context and today's date, replacing "One company. One clear move." and
+  "Thesis in motion." The advisor home already had it.
+- The founder Deck card reads the newest version's slides (`/decks/:id`) and
+  its engagement (`/decks/:id/engagement`). Both reads existed; the card never
+  called them. It draws the version, the slide count, the save date, "Last
+  shared" and "Viewed N× this week". Before this, "Slides" and "Last updated"
+  asked the version list for fields it never returns, so both were always "Not
+  recorded". Each of the two extra reads can fail alone, and then that part
+  reads `Unreadable` in place of its rows.
+- The founder Raise card draws the committed share of the target as a
+  percentage and a bar, when both amounts are real.
+
+**Differs from the canvas, deliberately.**
+- The canvas's "Last shared: 2 investors" cannot be drawn: a share link
+  records no recipient, so the card counts links, with the newest link's date.
+  "Viewed N× this week" counts views from the engagement read's newest 200, so
+  a deck viewed more than 200 times in one week would undercount.
+- The canvas notes that a founder with no subsidiary never sees the
+  subsidiaries card. That still holds, but a founder whose subsidiaries read
+  failed now sees the card as `Unreadable`. A failed read is not evidence of
+  none.
+- The Lab card reads "Week N", not the canvas's "Week 2 · Solution & Roadmap".
+  The week titles live only inside other sessions' pages, not in a module this
+  page can import.
+
+**Moved, so a test can render it.** The homes mount PersonalAdvisor, whose
+imports reach Worker modules, so a Node test cannot import them. The founder
+cards, `MetricRow`, `LabRows`, `labSummary`, `DeckRows`, `deckSummary`,
+`RaiseProgress` and `raisePercent` now live in
+`pages/founder/founderStudioCards.jsx`. Investor Quick stats' `quickStats`,
+`StatGroup`, `Row`, `Loading` and the fixed `number` live in
+`pages/investor/investorStudioParts.jsx`. Each home imports them back.
+
+**Left to later items.** Session 3's items 3 to 6 build the rest of the gap
+map for these homes: the voice, the shared "interview complete" row and the
+archetype card.
+
+**Verification.**
+- `npm run test:drift` on main ecd185ca9: exit 0. Frontend 3887 to 3912, the
+  25 new tests all in `studio_honesty_d321.test.mjs`. Worker, retention and guards
+  unchanged. Both typechecks, `lint:undef`, `check-dark-mode`,
+  `check-decision-ids`, `check-folder-docs` and `check-api-drift` exit 0.
+  Root `npm run build`, then `check-docs-fresh --strict`, exit 0.
+- Mutations: 26 run, 26 caught (non-zero exit and a `not ok` line, each file
+  restored from a sha256-checked snapshot). The first 18 were run again
+  against the final code, and all were caught again. They were aimed at the
+  defects:
+  - a failed card drawing its rows, and a card losing its retry or its claim;
+  - an absent milestone list or sprint start becoming 0, the per-week count
+    ignoring the week, and the Lab count going back to `completed_count`;
+  - the subsidiaries card hiding its failure again;
+  - a `|| 0`, `?? 0` or `number(null) === 0` returning, including a local copy
+    of `number`;
+  - a failed or loading dashboard shown as ready, and an unreadable group
+    drawing its rows;
+  - the lifecycle failure going back to a status line, and its retry leaving
+    the stale failure on screen;
+  - the investor title going back to its old headline;
+  - every view counted as "this week", the newest link read as the oldest, an
+    unanswered share list becoming 0, either extra deck read's failure being
+    ignored, a zero target dividing, and the bar running past full.
+
 ## D330
 
 **AdminX.jsx and AdminTelegram.jsx say why no draft was made.** Wave 8,
