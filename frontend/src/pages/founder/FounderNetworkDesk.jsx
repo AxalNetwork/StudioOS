@@ -3,6 +3,7 @@ import { AlertCircle, ArrowUpRight, Network } from 'lucide-react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
+import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import { COLD_AFTER_DAYS, daysSince, isCold, organizationOf } from '../../lib/networkBook';
 import { zonePillClass } from './deskZoneNav';
 import './founderNetworkDesk.css';
@@ -74,7 +75,9 @@ export default function FounderNetworkDesk() {
     workspace="Network"
     className="a6-rail"
     stance="Read-only coverage"
-    note="This view summarizes stored relationship records. It does not draft outreach, send messages, or change records."
+    // No `fills`, and the note says why (D424): no band on this desk drafts,
+    // so a switch here would change nothing — D17's dead control.
+    note={ASSIST_SURFACES.workspace.desks.Network.none}
     coverage={[
       `${data.relationships.length} explicit partner relationship${data.relationships.length === 1 ? '' : 's'}`,
       `${data.contacts.length} authorized contact${data.contacts.length === 1 ? '' : 's'}`,
