@@ -640,7 +640,7 @@ async function loadTemplateUsage(sql: ReturnType<typeof getSQL>) {
   const [docs, envs]: [any[], any[]] = await Promise.all([
     sql.unsafe(
       `SELECT template_name, doc_type, created_at FROM documents
-        WHERE LOWER(COALESCE(doc_type, '')) IN (${contractTypes.map(() => '?').join(',')})`,
+        WHERE LOWER(COALESCE(doc_type, '')) IN (${Array.from(CONTRACT_DOC_TYPES).map(() => '?').join(',')})`,
       contractTypes,
     ),
     sql`SELECT document_type, created_at FROM esign_envelopes`,
