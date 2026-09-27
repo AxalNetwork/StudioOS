@@ -34886,3 +34886,25 @@ Session 2's file, so the page names it instead of mounting a band that would
   `check-api-drift`, `test:guards`, `lint:undef`, `check-dark-mode` exit 0.
   Root `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser
   probe.
+
+## D490
+
+**#871 review follow-ups: private notes, dates, and void touches on the investor
+book.** Wave 9, Session 16, item 2. No migration.
+
+**Private notes.** Each party’s note on a tie lives under
+`metadata.private_notes[userId]`. `GET /partnernet/relationships` returns
+`my_private_note` for the caller only and never the other party’s text.
+`PATCH` accepts `private_note` and merges — it does not replace shared
+metadata wholesale.
+
+**Dates.** The touch form sends optional `interacted_at` (backdating). Calendar
+reminder dates (`YYYY-MM-DD`) normalize to end-of that UTC day so due compares
+honestly.
+
+**Void touches.** `POST …/interactions` refuses an empty note with no explicit
+date; the page matches that refusal before calling the route. The book header
+says **no touches logged yet** when the read succeeded but the log is empty —
+not “coverage unavailable”.
+
+**Tests.** `partnernet_interactions.test.ts` extended; `investor_network_d490.test.mjs`.
