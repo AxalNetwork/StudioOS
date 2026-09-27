@@ -70,6 +70,18 @@ r.get('/home', async (c) => {
             + 'display names, not codes, so nothing maps FR to a time zone. The clock that does '
             + 'govern — the programme\'s — is shown with the deadline it governs.',
         },
+        {
+          block: 'A help desk',
+          reason:
+            'The owner has not decided whether this territory has a help desk. Tickets, chat, '
+            + 'canned replies and a satisfaction score are not drawn here.',
+        },
+        {
+          block: 'Security alerts',
+          reason:
+            'The owner has not decided whether a security alert sits on Home, on an Accounts row, '
+            + 'or on neither. This digest does not draw one.',
+        },
       ],
     });
   } catch (e) { return mapError(c, e); }
