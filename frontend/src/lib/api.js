@@ -3035,8 +3035,19 @@ export const api = {
     a.remove();
     URL.revokeObjectURL(url);
   },
-  fundsCapitalCallV2: (id, amount_cents, note) =>
-    request(`/funds/${id}/capital-call`, { method: 'POST', body: JSON.stringify({ amount_cents, note }) }),
+  // D371: `due_date` rides along (the worker always accepted it; this dropped
+  // it), and the call is written before the response — see funds.ts.
+  fundsCapitalCallV2: (id, amount_cents, note, due_date) =>
+    request(`/funds/${id}/capital-call`, { method: 'POST', body: JSON.stringify({ amount_cents, note, due_date: due_date || undefined }) }),
+  // D371: the fund call ledger — each call with its LP lines, the ledger of
+  // calls and receipts (one LP's history with `lpId`), the split a call would
+  // make before it is issued, and the GP's receipt against one LP's line.
+  fundsCallLedger: (id) => request(`/funds/${id}/capital-calls`),
+  fundsLedger: (id, lpId) => request(`/funds/${id}/ledger${lpId ? `?lp=${encodeURIComponent(lpId)}` : ''}`),
+  fundsCallPreview: (id, amount_cents) =>
+    request(`/funds/${id}/capital-calls/preview`, { method: 'POST', body: JSON.stringify({ amount_cents }) }),
+  fundsRecordReceipt: (id, lineId, data) =>
+    request(`/funds/${id}/capital-calls/lines/${lineId}/receipts`, { method: 'POST', body: JSON.stringify(data) }),
   fundsLpsList: (id) => request(`/funds/${id}/lps`),
   fundsAddLpV2: (id, data) =>
     request(`/funds/${id}/lps`, { method: 'POST', body: JSON.stringify(data) }),

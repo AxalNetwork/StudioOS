@@ -17,6 +17,8 @@ import { refuse } from '../util/refusal';
 import { claimLpRowsByEmail } from '../services/lpClaim';
 import { requireAuth, canViewLpData } from '../auth';
 import { insertCapitalCall, insertCapitalCalls } from './_capital_call_writes';
+import { recordReceipt } from '../services/fundCallLedger';
+import { logActivity } from './partnernet';
 
 const capital = new Hono<{ Bindings: Env }>();
 
@@ -270,15 +272,19 @@ capital.get('/calls', async (c) => {
  * anyone else gets the fund gate's own answer — 402 below the institutional
  * tier, 404 otherwise — so the route is no oracle for which calls exist.
  *
- * ONCE. The three writes are one D1 batch, which runs as one transaction, and
- * every one of them is conditional on the call still being unpaid. The two
- * credits come FIRST and test the call's status in their own WHERE; the
- * status flip comes last. Two concurrent requests therefore serialize: the
- * first batch credits and flips, the second finds the call paid in all three
- * WHEREs and changes nothing. The old handler read the status, then ran three
- * separate unconditional UPDATEs, so two presses in flight both passed the
- * read and both credited. The amount is read inside each statement, not
- * carried from the earlier SELECT, so no stale figure can be written.
+ * ONCE. The writes are one D1 batch, which runs as one transaction, and
+ * every one of them is conditional. The old handler read the status, then ran
+ * three separate unconditional UPDATEs, so two presses in flight both passed
+ * the read and both credited.
+ *
+ * AS A RECEIPT (D371). "Mark Paid" is now a receipt for whatever the line
+ * still owes, dated today, written by `recordReceipt` — the same writer as the
+ * GP's "Record receipt" on the fund's Calls page. So a line marked paid here
+ * has the receipt the fund ledger reads, rather than a status with no money
+ * behind it. The receipt lands only while the line is unpaid and the amount
+ * fits what is outstanding, re-checked inside the batch; each credit lands
+ * only if this request's receipt did. A second press, concurrent or not,
+ * finds nothing outstanding and moves nothing.
  */
 capital.post('/calls/:id/pay', async (c) => {
   const __u = await requireAuth(c);
@@ -323,33 +329,31 @@ capital.post('/calls/:id/pay', async (c) => {
     }
   }
 
-  const results = await c.env.DB.batch([
-    c.env.DB.prepare(
-      `UPDATE limited_partners
-          SET invested_amount = invested_amount + (SELECT amount FROM capital_calls WHERE id = ?),
-              updated_at = datetime('now')
-        WHERE id = ?
-          AND EXISTS (SELECT 1 FROM capital_calls WHERE id = ? AND status <> 'paid')`,
-    ).bind(id, call.limited_partner_id, id),
-    c.env.DB.prepare(
-      `UPDATE vc_funds
-          SET deployed_capital = deployed_capital + (SELECT amount FROM capital_calls WHERE id = ?),
-              updated_at = datetime('now')
-        WHERE id = ?
-          AND EXISTS (SELECT 1 FROM capital_calls WHERE id = ? AND status <> 'paid')`,
-    ).bind(id, call.fund_id, id),
-    c.env.DB.prepare(
-      `UPDATE capital_calls SET status = 'paid', paid_date = date('now')
-        WHERE id = ? AND status <> 'paid'`,
-    ).bind(id),
-  ]);
-  const recorded = Number((results[2] as any)?.meta?.changes ?? 0) === 1;
-
+  const outcome = await recordReceipt(c.env, {
+    lineId: id,
+    amount: 'outstanding',
+    receivedOn: new Date().toISOString().slice(0, 10),
+    reference: null,
+    source: 'mark_paid',
+    recordedBy: Number(__u.id),
+  });
+  if (outcome.kind === 'not_found') return c.json({ error: 'Capital call not found' }, 404);
   const updated = await c.env.DB.prepare('SELECT * FROM capital_calls WHERE id = ?').bind(id).first<any>();
-  if (!recorded) {
+  if (outcome.kind === 'exceeds_outstanding') {
+    // A receipt for part of the line landed between the read and the batch.
+    return refuse(c, 409, {
+      code: 'line_changed',
+      message: 'A receipt was recorded against this call while you were marking it paid, so nothing was recorded. Reload and try again.',
+    });
+  }
+  if (outcome.kind !== 'recorded') {
     // Already paid — by an earlier press or a concurrent one. Nothing moved.
     return c.json({ status: 'paid', already_paid: true, call: callDto(updated) });
   }
+  await logActivity(c.env, Number(__u.id), 'capital_call_receipt_recorded', {
+    entityType: 'capital_call', entityId: id,
+    metadata: { fund_id: call.fund_id, amount_cents: outcome.receipt?.amount_cents ?? null, source: 'mark_paid' },
+  }).catch(() => {});
 
   try {
     if (call.lp_user_id) {

@@ -79,6 +79,22 @@ export interface CapitalCallInput {
    * routes get and what they had before this file existed.
    */
   uid?: string | null;
+  /**
+   * The header this line belongs to, by its `fund_capital_calls.uid` (D371).
+   *
+   * Set only by the fund call ledger, which writes the header and its lines in
+   * one batch and so cannot know the header's id yet: the statement resolves it
+   * by uid inside the same transaction. A line with this set must also carry an
+   * explicit `uid` and `amountCents`. The two capital.ts writers pass neither
+   * and keep the statements they had.
+   */
+  fundCallUid?: string | null;
+  /**
+   * The line's exact share in integer cents (D371). Required with
+   * `fundCallUid`; `amount` is then derived from it, never passed separately,
+   * so the two columns cannot disagree.
+   */
+  amountCents?: number | null;
 }
 
 export interface CapitalCallWrite {
@@ -123,9 +139,24 @@ function toAmount(raw: unknown): number {
  * agree about which rows are new.
  */
 export function capitalCallStatement(env: Env, input: CapitalCallInput) {
-  const amount = toAmount(input.amount);
   const projectId = input.projectId ?? null;
   const dueDate = input.dueDate ?? null;
+  if (input.fundCallUid) {
+    // A fund call line (D371): exact cents, the header resolved by uid in the
+    // same batch, and idempotent on the line's own uid like every job write.
+    const cents = input.amountCents;
+    if (!input.uid) throw new Error('a fund call line needs its own uid');
+    if (!Number.isSafeInteger(cents) || (cents as number) <= 0) {
+      throw new Error('a fund call line is a positive whole number of cents');
+    }
+    return env.DB.prepare(
+      `INSERT OR IGNORE INTO capital_calls
+         (uid, limited_partner_id, project_id, amount, amount_cents, due_date, fund_call_id)
+       VALUES (?, ?, ?, ?, ?, ?, (SELECT id FROM fund_capital_calls WHERE uid = ?))
+       RETURNING *`,
+    ).bind(input.uid, input.limitedPartnerId, projectId, (cents as number) / 100, cents, dueDate, input.fundCallUid);
+  }
+  const amount = toAmount(input.amount);
   if (input.uid) {
     return env.DB.prepare(
       `INSERT OR IGNORE INTO capital_calls (uid, limited_partner_id, project_id, amount, due_date)

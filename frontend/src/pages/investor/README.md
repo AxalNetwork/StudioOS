@@ -16,6 +16,16 @@ the generic route wrapper once a canvas has graduated.
 - `InvestorFundLanding.jsx` owns `/funds` for the investor role (GP/admin
   keep the detailed `FundOpsWorkspace`); gated on the institutional tier via
   `fundUnlocked`.
+- `InvestorFundCalls.jsx` is the Calls zone (`/funds/calls`, IF2): the fund's
+  call ledger — numbered calls, each LP's line in whole cents with the rounding
+  residual on one named line, receipts and the wire trail — with New call and
+  Record receipt (D371, migration 312). Its arithmetic and labels live in
+  `fundCallsModel.js` so a Node test can hold them. `/funds/capital-calls`
+  redirects here.
+- `managedFund.jsx` decides which fund a Fund-zone page operates: one the
+  caller can run (`can_manage` on the fund list), chosen by `?fund=`, never
+  the first row of a list that also carries funds they only invest in. The
+  Calls, LPs and Reporting zones all use it.
 - `InvestorPortfolioCanvas.jsx` is the investor branch rendered inside
   `PortfolioWorkspace.jsx`, the shared portfolio route both founder and
   investor land on.

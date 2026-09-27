@@ -5,16 +5,15 @@
 //     non-admins this tab shows a blurred LockedPreview pointing them at
 //     My LP Portal for their own positions.
 //   • LP Reporting — quarterly fund statements with live-computed TVPI/DPI.
-//   • Capital Calls — read-only list from the canonical capital_calls store.
-//     Admins get the studio-wide ledger (api.capitalCalls); investors are
-//     scoped to their own commitments via the LP-portal source (never the
-//     global /legalcap list, which is not filtered per-LP).
-import React, { useEffect, useState } from 'react';
+//   • Capital Calls — RETIRED (D371). `/funds/capital-calls` redirects to the
+//     Calls zone at `/funds/calls`, the fund's call ledger with writes. An
+//     admin's studio-wide list of every call is `/capital`; an investor's own
+//     calls are in `/lp-portal`. The panel that lived here read those same two
+//     sources, read-only.
+import React from 'react';
 import { useLocation } from 'react-router-dom';
-import { Banknote, Calculator, FileBarChart, Landmark, PhoneCall, RefreshCw, Rocket, TrendingUp } from 'lucide-react';
+import { Banknote, Calculator, FileBarChart, Landmark, Rocket, TrendingUp } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
-import { api } from '../lib/api';
-import { Unreadable } from '../ui';
 import WorkspaceTabs, { WorkspaceHeader } from '../components/WorkspaceTabs';
 import LockedPreview from '../components/LockedPreview';
 import { AdminFundsView } from './FundsPage';
@@ -22,112 +21,6 @@ import LPReportingPage from './LPReportingPage';
 import FundPerformancePage from './FundPerformancePage';
 import FundAccountingPage from './FundAccountingPage';
 import SpinoutLabLpWorkspacePage from './SpinoutLabLpWorkspacePage';
-
-const fmtMoney = (v) => (v == null || v === '' ? '—' : `$${Number(v).toLocaleString()}`);
-const fmtDate = (v) => (v ? String(v).slice(0, 10) : '—');
-
-const CALL_STATUS = {
-  paid: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
-  pending: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
-  overdue: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300',
-};
-
-// Normalize a capital-call row to dollars regardless of backend shape: the
-// legalcap/worker store exposes `amount_cents`, while the fund LP-portal store
-// (and the dev backend) exposes `amount` in dollars.
-const callDollars = (cc) => {
-  if (cc?.amount_cents != null) return Number(cc.amount_cents) / 100;
-  if (cc?.amount != null && cc.amount !== '') return Number(cc.amount);
-  return null;
-};
-
-/** A read that failed — distinct from an empty ledger, which is a fact. */
-const UNREADABLE_ROWS = 'unreadable';
-
-function CapitalCallsPanel({ isAdmin }) {
-  const [rows, setRows] = useState(null);
-  const [busy, setBusy] = useState(false);
-
-  const load = () => {
-    setBusy(true);
-    // Admins get the studio-wide capital-call ledger; investors are scoped to
-    // their own commitments via the same LP-portal source My LP Portal uses.
-    //
-    // D370: the admin ledger is `listCapitalCalls` (capital.ts GET /calls,
-    // the live `capital_calls` table). It read `api.capitalCalls`, whose
-    // /legalcap route named columns the table does not have, so it threw on
-    // every call and this panel said "No capital calls on record" for a
-    // ledger it had never read. A failed read now says so.
-    const source = isAdmin
-      ? api.listCapitalCalls()
-      : api.fundsLpPortal().then((d) => (Array.isArray(d) ? d : d?.capital_calls));
-    source
-      .then((r) => setRows(Array.isArray(r) ? r : UNREADABLE_ROWS))
-      .catch(() => setRows(UNREADABLE_ROWS))
-      .finally(() => setBusy(false));
-  };
-  useEffect(() => { load(); }, []);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-          Capital calls{Array.isArray(rows) ? ` (${rows.length})` : ''}
-        </div>
-        <button
-          onClick={load}
-          disabled={busy}
-          className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 rounded-lg flex items-center gap-1.5 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
-        >
-          <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> Refresh
-        </button>
-      </div>
-
-      {rows == null ? (
-        <div className="text-gray-500 dark:text-gray-400 text-center py-16 text-sm">Loading…</div>
-      ) : rows === UNREADABLE_ROWS ? (
-        <div className="py-10">
-          <Unreadable
-            what="The capital-call ledger"
-            claim="This is not a claim that no calls exist."
-            onRetry={load}
-          />
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="text-gray-500 dark:text-gray-400 text-center py-16 text-sm">
-          No capital calls on record. Calls issued against your LP commitments appear here.
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 dark:bg-gray-900/60 text-gray-500 dark:text-gray-400">
-              <tr>
-                <th className="text-left font-medium px-4 py-2.5">Amount</th>
-                <th className="text-left font-medium px-4 py-2.5">Status</th>
-                <th className="text-left font-medium px-4 py-2.5">Due</th>
-                <th className="text-left font-medium px-4 py-2.5">Issued</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {rows.map((cc) => (
-                <tr key={cc.id} className="bg-white dark:bg-gray-900">
-                  <td className="px-4 py-2.5 font-medium text-gray-900 dark:text-gray-100">{fmtMoney(callDollars(cc))}</td>
-                  <td className="px-4 py-2.5">
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${CALL_STATUS[cc.status] || 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'}`}>
-                      {cc.status || 'pending'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400">{fmtDate(cc.due_date)}</td>
-                  <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400">{fmtDate(cc.created_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // Inert teaser rendered under the blur for the non-admin "Funds admin" tab.
 function FundsAdminTeaser() {
@@ -163,8 +56,6 @@ export default function FundOpsWorkspace() {
     ? 'accounting'
     : pathname.includes('/lp-reports')
     ? 'reports'
-    : pathname.includes('/capital-calls')
-    ? 'calls'
     : 'funds';
 
   const tabs = [
@@ -172,7 +63,6 @@ export default function FundOpsWorkspace() {
     { to: '/funds/performance', label: 'Performance', icon: TrendingUp },
     { to: '/funds/accounting', label: 'Accounting', icon: Calculator },
     { to: '/lp-reports', label: 'LP Reporting', icon: FileBarChart },
-    { to: '/funds/capital-calls', label: 'Capital Calls', icon: PhoneCall },
     // Spin-Out Fund I LP participation — the one tab here whose primary
     // audience is the investor rather than the studio admin.
     { to: '/funds/lp-workspace', label: 'LP Workspace', icon: Rocket },
@@ -202,7 +92,6 @@ export default function FundOpsWorkspace() {
       {active === 'performance' && <FundPerformancePage embedded />}
       {active === 'accounting' && <FundAccountingPage embedded />}
       {active === 'reports' && <LPReportingPage embedded />}
-      {active === 'calls' && <CapitalCallsPanel isAdmin={isAdmin} />}
       {active === 'lpworkspace' && <SpinoutLabLpWorkspacePage embedded />}
     </div>
   );
