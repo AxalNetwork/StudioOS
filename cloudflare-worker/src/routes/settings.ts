@@ -24,7 +24,7 @@ import { decodeJwt } from 'jose';
 import { getSQL } from '../db';
 import { requireAuth, hashToken, generateToken, selectJwt, bumpJwtMinIat, jwtMinIatFloor } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
-import { hasTotpConfigured, loadTotp, persistNewTotpEnrolment, replaceRecoveryHashes } from '../services/authTotp';
+import { hasTotpConfigured, loadTotp, loadTotpPairedAt, persistNewTotpEnrolment, replaceRecoveryHashes } from '../services/authTotp';
 import { loadSms, getUserFactors, setUserFactor } from '../services/authSms';
 import { ensureAuthBlockersSchema } from '../services/authBlockersSchema';
 import { putHeadshotFromDataUri, getHeadshot } from '../services/r2';
@@ -250,6 +250,11 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
   if (rows.length) {
     rows[0].totp_configured = (await hasTotpConfigured(c.env, user.id)) ? 1 : 0;
   }
+  // D433 — the Account page's "Authenticator app" row reads the pairing date.
+  // Read only when a factor is configured: an unpaired account has no date,
+  // and a legacy row's absence must read as null rather than as a stamp.
+  const totpPairedAt = rows.length && rows[0].totp_configured
+    ? await loadTotpPairedAt(c.env, user.id) : null;
   const pendingChange = await sql`
     SELECT id, new_email, requested_at, confirm_expires_at, confirmed_at, revoked_at
     FROM email_change_requests
@@ -299,6 +304,7 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
     role: u.role,
     email_verified: !!u.email_verified,
     totp_configured: !!u.totp_configured,
+    totp_paired_at: totpPairedAt,
     kyc_status: u.kyc_status || 'not_started',
     access_level: u.access_level || null,
     last_active_at: u.last_active_at || null,
@@ -1868,9 +1874,11 @@ settings.get('/security', async (c) => {
   // intentionally NEVER return the full phone number — only the trailing 4.
   const smsRow = await loadSms(c.env, user.id);
   const factors = await getUserFactors(c.env, user.id);
+  const totpPairedAt = rows[0].totp_configured ? await loadTotpPairedAt(c.env, user.id) : null;
   return c.json({
     email_verified: !!rows[0].email_verified,
     totp_configured: !!rows[0].totp_configured,
+    totp_paired_at: totpPairedAt,
     totp_recovery_codes_remaining: remaining,
     active_sessions: Number(sessions[0]?.active || 0),
     sms_configured: !!smsRow,

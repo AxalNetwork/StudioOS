@@ -33016,6 +33016,157 @@ investor (party B, KYC approved): "Mutual NDA · Marisol Vega". As an admin:
 `frontend/src` moved, so `docs/` is rebuilt. No migration. Two routes and
 two `api.js` methods removed, none added.
 
+## D433
+
+**Account: the compliance bridge, a KYB pill and "Save entity" per company,
+sign-in factors as status rows, Roles & access and API keys drawn up to their
+line, and the machine's "recommendation" gone from a notification label —
+with `/profile` retired into `/account`.** Session 15's item 4.
+
+**What was true on main (`1dc654f265`).**
+- The Account canvas puts a trust-score strip above every pane. The page had
+  Task #4's `ProfileTrustBadge`: a 36px ring inside the Profile card that
+  RENDERED NOTHING on a failed `/trust/me`, so a reader whose obligations
+  could not be read saw what "no score" draws. `ProfileCompletionBanner` did
+  the same for a failed identity read.
+- `company_kyb_records` (migration 220) held one KYB record per company and
+  `api.companyKybStart` had no caller; the "Your companies" rows drew no KYB
+  state and no entity fields.
+- `auth_totp.created_at` was stamped on every enrolment and re-pair and
+  served nowhere, so the page could not say when the authenticator was
+  paired.
+- The API-keys card hid behind `api_keys_enabled` (hard-coded false, T20) and
+  would have printed "No keys yet." over a store that does not exist. Roles &
+  access had no card at all, and `account_canvas_coverage.test.mjs` mapped
+  the canvas's "Roles & access" to the companies list.
+- `PARTNER_NOTIFICATION_EVENTS[3]` read "AI match recommendation".
+- `/profile` was a second mount of `SettingsPage`, kept for an investor nav
+  row that no longer exists; the exploring sidebar's "My Profile" pointed at
+  it.
+
+**What changed.**
+- **The bridge, once, above every pane.** `ComplianceBridge` is a
+  module-level component with three states. Ready draws Trust Center's own
+  number and words — `computeTrustScore` over the same rows, `verdictFor`
+  beside the ring, `scoreLine(outstandingCounts(required))` for the sentence
+  — and a link to `/trust`. Failed draws `<Unreadable>` with a Retry that
+  re-runs the effect. The badge is deleted with its mount, and the
+  completeness banner gets the same failed state.
+- **Each company row carries its KYB pill and can save its entity.** The
+  pill reads `GET /trust/companies/kyb`, matched to the memberships list by
+  company id, with three arms: a record ("In review", "Verified", …), no
+  record ("Not started"), and a read that failed ("Unreadable", plus an
+  `<Unreadable>` with a retry above the list) — a failed read is not
+  "Not started". "Entity" opens the five fields the canvas draws (legal
+  entity name, entity type, country of incorporation, registration ID,
+  registered address), prefilled from the record, and "Save entity" posts
+  `POST /trust/companies/kyb` for THAT row's company: `api.companyKybStart`
+  takes a company id and overrides the `X-Company-Id` header for the one
+  call, which `resolveActiveCompany` still verifies against membership. The
+  canvas's "Registry match runs automatically on save" is not promised; the
+  row says no provider runs one.
+- **Sign-in & factors are status rows**, first on the Security pane, read
+  from the payload the page already holds: Authenticator app (Configured ·
+  "Paired <date>" from the new `totp_paired_at`, or "date not recorded for
+  this enrolment" when a configured factor has no stamp), Recovery codes
+  (count, or "None generated"), Email (Verified/Unverified). The Password
+  row is an honest absence with its reason printed: this platform issues no
+  password credential. Passkeys, SMS and Google keep their own panels and
+  their own reads — a second fetch here could only disagree with them.
+- **The worker serves `totp_paired_at`** on the root settings payload and on
+  `GET /settings/security`: `auth_totp.created_at` through
+  `loadTotpPairedAt`, read only when a factor is configured, null otherwise.
+  No new route, no new `api.js` method.
+- **Roles & access** is a card on the account pane: the one role
+  `users.role` records, and "Not recorded" with the reason on screen for
+  additional roles (one role per account, no store for a second) and
+  delegates (no delegate store). Plans point at Billing. Nothing is drawn as
+  an empty list over a missing store.
+- **API keys** is drawn in either state of the flag and reads "Not recorded"
+  with the reason: no key store exists; T20's flag is off. When the flag
+  flips, the card still tells the truth until a store exists.
+- **The label** becomes "New partner match". The guard scans every
+  notification label for "recommend", "advice", "fiduciary" and "AI";
+  "advisor" alone is a role on this platform and is not the violation.
+- **Retired on D304's shape:** `/profile` → `<Navigate replace>` to
+  `/account` through `SettingsRedirect`, which carries the query and hash;
+  the second `SettingsPage` mount is gone; the exploring sidebar's "My
+  Profile" row points at `/account` (sidebarConfig.js is Session 5's own);
+  `PAGE_INVENTORY.md` regenerated. Deep links: `/profile?x=1#y` lands on
+  `/account?x=1#y`. No other row, link or test pointed at it.
+- `account_canvas_coverage.test.mjs`: the header maps "Roles & access" to
+  `<RolesAccessCard>`, the per-company entity is recorded as built on
+  `company_kyb_records` beside `company_profiles`, and the test that said
+  the company-scoped card was unbuildable now pins the split — the company
+  rows write the company route and never the legal-entity route, one record
+  per company, and `company_profiles` still carries no entity columns.
+
+**Not done here, filed.** Identity & tax is still the stub card linking to
+`/kyc` (the brief's retire-once-built). Delegates and additional roles need
+stores and a product decision. A registry-match provider for company KYB
+does not exist.
+
+**Guard.**
+- `cloudflare-worker/test/settings_totp_paired_at_d433.test.ts`, 4 tests
+  through the real router on in-memory SQLite: an unpaired account is served
+  `totp_paired_at: null` on both payloads, with the key present; once paired,
+  both serve the enrolment row's own `created_at`; a re-pair moves the date
+  to the current authenticator's; the service reads `auth_totp.created_at`
+  and nothing else, and both routes gate the read on `totp_configured`.
+- `frontend/test/account_d433.test.mjs`, 14 tests: the bridge is one
+  module-level component mounted once above the pane grid, with the old
+  badge gone; it has a failed state with a retry and no silent catch; it
+  uses Trust Center's formula, verdict and sentence with none of the canvas's
+  refused score model; the completeness banner says when it could not read;
+  each company row reads the company store with three pill arms and its own
+  failure state; "Save entity" names its company through the header override
+  that `request()` merges last; the pill labels match the statuses the
+  worker writes; the factor rows are drawn once, first, from the served date
+  with no clock reads and no second fetch; the password row is an absence
+  with its reason printed; the worker serves the date; Roles & access
+  records the role and prints both reasons with no empty list; the API-keys
+  card is unconditional and reads "Not recorded" with the reason; no label
+  uses the machine's words; `/profile` redirects with query and hash and the
+  sidebar row points at `/account`.
+- `account_canvas_coverage.test.mjs` re-aimed as above (16 tests green);
+  `company_settings_members`, the sidebar, route and settings guards pass
+  unedited.
+
+**Mutations: 20 run, 20 caught** — each a non-zero exit with a `not ok`
+line, anchors unique, bytes proven changed, sources restored from a
+sha256-checked snapshot: the root payload and `/security` each dropping the
+date; the read ungated; the service reading `last_used_at`; an unpaired
+account stamped anyway; the bridge swallowing a failed read; the bridge
+inventing a verdict threshold; the bridge mounted twice; the banner silent
+again; a failed KYB read drawn "Not started"; "Save entity" posting to the
+active company; the header override dropped from `api.js`; the authenticator
+row printing today's date; the password row "Configured"; delegates drawn as
+an empty list; the API-keys card behind the flag; the label reverted;
+`/profile` mounting the page again; the sidebar row pointing at `/profile`;
+the company rows writing the account entity route.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA
+fallback, `/api/*` stubbed as the worker now shapes it. Founder with two
+companies: the strip reads "50 · Trust score · Not compliant · 1 item needs
+action, 1 open in total. Trust Center reports on the data held here. · Open
+Trust Center →"; the rows read "KYB · Not started" and "KYB · In review";
+Entity on the second row prefills "Latitude Seed GmbH", "Save entity" posts
+with `X-Company-Id: 2` and the five fields; Roles & access prints "Founder"
+and both "Not recorded — …" sentences. With `/trust/me` refused first: "Your
+trust score could not be read. Your obligations could not be read just now.
+Retry", and Retry draws the strip. With the company-KYB read refused: both
+pills read "KYB · Unreadable" and the list carries the retry. Security:
+"Password · Not recorded — this platform issues no password credential …",
+"Authenticator app (TOTP) · Paired 2/3/2026 · required for sensitive actions
+· Configured", "Recovery codes · 7 remaining", "Email address · Verified".
+Integrations: "Not recorded — no key store yet; the API tier (T20) has not
+shipped, and its flag is off for this account." `/profile?x=1#y` lands on
+`/account?x=1#y`.
+
+`frontend/src` moved, so `docs/` is rebuilt. No migration; one response
+field added to two existing payloads; no route or `api.js` method added or
+removed (`companyKybStart` gains an optional second argument).
+
 ## D440
 
 **HQ-held Studio and My Licence stop pointing at pages that refuse, and stop printing zero for a seat or a host that was not confirmed.** No branch is provisioned (`infra/branches/` holds only the example), and every `/api/branch/*` handler calls `requireBranchTier`, so a card that opens `/branch/*` on HQ renders Unreadable. S20's rule is that those pages are never linked from the HQ-held shell.
