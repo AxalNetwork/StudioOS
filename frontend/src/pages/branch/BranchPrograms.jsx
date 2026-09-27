@@ -39,22 +39,19 @@ import BranchZone from './BranchZone';
  * `/admin/spinout-lab` rather than a route of its own — and two audited writes
  * drawn twice is how two surfaces come to disagree about what was decided.
  *
- * ASSESSMENT SHIPS AS ANALYTICS, NOT AS RUNS, AND THE DIFFERENCE IS STATED.
- * `admin_assessment.ts` has 23 routes and **17 of them are behind
- * `requireHqAuthoring`** (D106) — authoring is HQ's, and asking a branch admin
- * to press a button that 403s is the same lie as the date picker. Of the six
- * that are not, this page uses ONE: the game list. It does not call per-game
- * analytics, and an earlier version of this sentence said it did (D214).
+ * ASSESSMENT AUTHORING STAYS AT HQ. `admin_assessment.ts` keeps the writes
+ * behind `requireHqAuthoring` (D106). Asking a branch admin to press a button
+ * that 403s is the same lie as the date picker. This page reads the game list
+ * and, since D446, the run list. It does not call per-game analytics.
  *
- * AND ON A BRANCH THAT LIST IS EMPTY BY CONSTRUCTION, which is not the same as
- * "HQ has authored nothing". HQ authors the games in HQ's database; a branch's
- * database is built from a baseline with no seed rows, authoring is refused
- * here, and no call sends a game to a branch (D214 measured every RPC method).
- * So the empty state names the branch's own database as what was read. What
- * it cannot draw is the artboard's "assessment **runs**": there is **no
- * `GET /sessions` and no `GET /results`** anywhere in that file, and the one
- * session-shaped route, `POST /sessions/:id/rescore`, needs a `public_id` no
- * console surfaces — so a table of runs would have nothing to read.
+ * AND ON A BRANCH THE GAME LIST IS EMPTY BY CONSTRUCTION, which is not the
+ * same as "HQ has authored nothing". HQ authors the games in HQ's database; a
+ * branch's database is built from a baseline with no seed rows, authoring is
+ * refused here, and no call sends a game to a branch (D214 measured every RPC
+ * method). So the empty state names the branch's own database as what was
+ * read. Runs are listed for one cycle: a session has no cycle column, so a
+ * run is kept when its start falls inside that cycle. There is still no
+ * `GET /results`. A result is the archetype on the run, when one was written.
  *
  * EVERY DEADLINE CARRIES ITS ZONE. The programme runs on `COHORT_TZ` —
  * America/New_York — for every territory, and a branch admin reads this page
@@ -75,6 +72,8 @@ export const NO_GAME_HERE = 'The list read is this branch\u2019s own database, a
 export default function BranchPrograms({ user }) {
   const [timeline, setTimeline] = useState(null);
   const [games, setGames] = useState(null);
+  const [cyclePick, setCyclePick] = useState('');
+  const [runs, setRuns] = useState(null);
 
   const loadTimeline = useCallback(() => {
     setTimeline(null);
@@ -101,6 +100,21 @@ export default function BranchPrograms({ user }) {
   const gamesReady = games && games !== UNAVAILABLE;
 
   const cycles = timelineReady ? (timeline.cycles || []) : [];
+  const activeCycle = cyclePick || (cycles[0]?.id != null ? String(cycles[0].id) : '');
+
+  const loadRuns = useCallback((cycle) => {
+    setRuns(null);
+    adminAssessment.listSessions(cycle || undefined).then(setRuns, (e) => {
+      reportError('BranchPrograms:runs', e);
+      setRuns(UNAVAILABLE);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (timeline === null) return undefined;
+    loadRuns(timelineReady ? (activeCycle || undefined) : undefined);
+    return undefined;
+  }, [timeline, timelineReady, activeCycle, loadRuns]);
   // `{ games: [...] }` is the shape the route returns. No second key is read:
   // a fallback to a shape the server does not send is a guess that looks
   // like defensiveness and hides the day the payload actually changes.
@@ -111,11 +125,13 @@ export default function BranchPrograms({ user }) {
   const coverage = [];
   if (timelineReady) coverage.push(`Cohort cycles: ${cycles.length} most recent`);
   if (gamesReady) coverage.push(`Assessment games: ${gameRows.length}`);
+  if (runs && runs !== UNAVAILABLE && runs.available === true && Array.isArray(runs.items)) {
+    coverage.push(`${runs.items.length} assessment run${runs.items.length === 1 ? '' : 's'} listed`);
+  }
 
   const unavailable = [
-    ['Assessment runs', 'No admin route lists assessment sessions or results — there is no '
-      + 'GET /sessions and no GET /results on the worker, so a table of runs would have nothing '
-      + 'to read. The player routes that recorded a run are retired, so none is recorded now.'],
+    ['Assessment results as their own list', 'There is no GET /results. A result is the archetype '
+      + 'on a run, when one was written. A run with none says so.'],
     ['Cycle and week dates', 'The four week windows are derived from the month and no route '
       + 'changes them, so there is nothing here to adjust. What this branch decides is a '
       + "company's week outcome."],
@@ -365,13 +381,79 @@ export default function BranchPrograms({ user }) {
           </ul>
         ) : null}
 
-        {/* THE GAP, NAMED WHERE A READER MEETS IT rather than in the rail
-            alone — the artboard draws a table of runs and there is no route
-            that lists one. */}
-        <p className="mt-3 text-[11.5px] text-axal-muted" data-testid="branch-programs-runs-gap">
-          Individual assessment runs are not listed: no admin route returns sessions or results, so
-          a table of them here would have nothing behind it.
-        </p>
+        <div className="mt-3" data-testid="branch-programs-runs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-[12px] font-extrabold text-axal-ink">Runs</h3>
+            {cycles.length ? (
+              <select
+                value={activeCycle}
+                onChange={(e) => setCyclePick(e.target.value)}
+                aria-label="Cycle"
+                data-testid="branch-programs-cycle-filter"
+                className="rounded-lg border border-axal-hairline bg-axal-ground px-2 py-1 text-[12px]"
+              >
+                {cycles.map((cy) => (
+                  <option key={cy.id} value={String(cy.id)}>
+                    {cycleLabel(cy.year, cy.month) || `Cycle ${cy.id}`}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+          </div>
+          <p className="mt-1 text-[11.5px] text-axal-muted" data-testid="branch-programs-runs-gap">
+            A run is kept in a cycle when its start falls inside that cycle. There is no separate
+            list of results.
+          </p>
+          {timeline === null || runs === null ? (
+            <p className="mt-2 text-[12px] text-axal-faint">Reading runs…</p>
+          ) : runs === UNAVAILABLE || runs.available === false ? (
+            <div className="mt-2" data-testid="branch-programs-runs-unreadable">
+              <Unreadable
+                what="assessment runs"
+                claim={runs && runs !== UNAVAILABLE && runs.reason
+                  ? runs.reason
+                  : 'This is not a claim that nobody has taken an assessment.'}
+                onRetry={() => loadRuns(activeCycle || undefined)}
+              />
+            </div>
+          ) : runs.cycle_found === false || runs.filterable === false ? (
+            <p className="mt-2 text-[12px]" data-testid="branch-programs-runs-unfiltered">
+              <Unrecorded reason={runs.reason || 'This cycle cannot limit the list.'}>
+                Not listed for this cycle
+              </Unrecorded>
+            </p>
+          ) : !runs.items.length ? (
+            <p className="mt-2 text-[12px] text-axal-muted" data-testid="branch-programs-runs-empty">
+              {runs.filtered
+                ? 'No assessment run started inside this cycle. The list was read and it is empty.'
+                : 'No assessment run is recorded on this database. The list was read and it is empty.'}
+            </p>
+          ) : (
+            <ul className="mt-2 space-y-2" data-testid="branch-programs-run-rows">
+              {runs.items.map((row) => (
+                <li
+                  key={row.public_id || `${row.game_slug}-${row.started_at}`}
+                  className="rounded border border-axal-hairline px-3 py-2 text-[12px]"
+                >
+                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    <span className="font-semibold">{row.user_name || row.user_email || 'Name not recorded'}</span>
+                    <span>{row.game_slug || 'game not recorded'}</span>
+                    <span className="uppercase tracking-[.06em] text-axal-muted">{row.status || 'status not recorded'}</span>
+                    <span className="text-axal-muted">{row.started_at || 'start not recorded'}</span>
+                  </div>
+                  <p className="mt-1 text-[11.5px] text-axal-muted">
+                    {row.archetype_label
+                      ? row.archetype_label
+                      : <Unrecorded reason="No result row was written for this run.">No result</Unrecorded>}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+          {runs && runs !== UNAVAILABLE && runs.truncated ? (
+            <p className="mt-2 text-[10.5px] text-axal-faint">Showing the 200 most recent.</p>
+          ) : null}
+        </div>
       </Card>
     </BranchZone>
   );

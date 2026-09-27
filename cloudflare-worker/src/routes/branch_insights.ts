@@ -13,11 +13,12 @@
  * S6 DRAWS FOUR STATS AND THIS SHIPS TWO, which is the measurement rather than
  * a choice. Accounts and seats used are counted here the way `branchOverview`
  * counts them (D127's definition, stated with the figure). Activation has no
- * branch-side read anywhere in the worker, and programme throughput has half of
- * one — the cohort timeline's week outcomes, with no list route for assessment
- * runs (D210; this sentence said "no read" until D211) — so both arrive as
- * `unavailable` with their reasons instead of a derived-looking zero, the shape
- * `branch_home.ts` already uses for S1's three sourceless blocks.
+ * branch-side read anywhere in the worker. Programme throughput can be read as
+ * two counts that are not one figure: the cohort timeline's week outcomes, and
+ * assessment runs listed for one cycle (D446). Adding them would invent a
+ * definition, so the stat still arrives `unavailable` with that reason rather
+ * than a derived-looking zero, the shape `branch_home.ts` already uses for
+ * S1's three sourceless blocks.
  *
  * REVENUE SHARE IS THE FOURTH AND IT IS THE INTERESTING ABSENCE.
  * `branchOverview` returns `revenue_mtd_cents: null` BY CONSTRUCTION and
@@ -67,18 +68,16 @@ const ACTIVATION_REASON =
   + 'it here would be inventing the definition on the screen.';
 
 /**
- * Programme throughput, corrected in D210. It used to say the worker had no read
- * for it at all; the cohort timeline (`GET /api/admin/cohort/timeline`) returns
- * every week's outcomes per cycle and a branch admin can read it. What is still
- * missing is the other half — assessment runs have no list route — so this page
- * does not print one figure for it, and the Analytics page draws the half that
- * exists, by week, from the timeline.
+ * Programme throughput. D210 corrected the claim that the worker had no read
+ * at all. D446 lists assessment runs for one cycle. The two counts are still
+ * not one figure: a week gate and an assessment completion count different
+ * things, and this page does not add them.
  */
 const THROUGHPUT_REASON =
-  'Throughput needs two things and this branch can read one of them. Cohort week outcomes are '
-  + 'readable — the Analytics page draws them from the cohort timeline, week by week — but '
-  + 'assessment runs are not: the worker has no route that lists sessions or results, the gap '
-  + 'D140 named on Programs. One figure counting half a programme would not say which half.';
+  'Throughput is two counts, and they are not added here. Cohort week outcomes are on the '
+  + 'Analytics page, drawn from the cohort timeline week by week. Assessment runs are listed '
+  + 'on Programs for one cycle: a run is kept when its start falls inside that cycle. A week '
+  + 'gate and an assessment completion count different things, so one figure would not say which.';
 
 /** The window a decision age is measured over, in days. */
 const DECISION_WINDOW_DAYS = 30;

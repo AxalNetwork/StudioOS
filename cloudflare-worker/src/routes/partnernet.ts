@@ -191,6 +191,40 @@ async function ensureSchema(env: Env) {
 }
 
 function safeJson<T>(s: any, def: T): T { try { return s ? JSON.parse(s) : def; } catch { return def; } }
+
+/** Per-party notes live under metadata.private_notes[userId] — never returned whole. */
+function mergePrivateNote(existing: any, userId: number, note: unknown): Record<string, unknown> {
+  const meta = safeJson(existing, {} as Record<string, unknown>);
+  const raw = meta.private_notes;
+  const map: Record<string, string> = raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? { ...(raw as Record<string, string>) }
+    : {};
+  const text = note != null ? String(note).trim().slice(0, 2000) : '';
+  if (text) map[String(userId)] = text;
+  else delete map[String(userId)];
+  if (Object.keys(map).length) meta.private_notes = map;
+  else delete meta.private_notes;
+  return meta;
+}
+
+function relationshipForParty(row: any, userId: number) {
+  const meta = safeJson(row.metadata, {} as Record<string, unknown>);
+  const priv = meta.private_notes;
+  const myPrivateNote = priv && typeof priv === 'object' && !Array.isArray(priv)
+    ? (priv as Record<string, string>)[String(userId)] ?? null
+    : null;
+  const { private_notes: _drop, ...sharedMeta } = meta;
+  return { ...row, metadata: sharedMeta, my_private_note: myPrivateNote };
+}
+
+/** Calendar dates from `<input type="date">` become end-of that UTC day. */
+function parseRemindAt(raw: unknown): Date | null {
+  if (raw == null || raw === '') return null;
+  const s = String(raw).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(`${s}T23:59:59.000Z`);
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
 function pair(a: number, b: number): [number, number] { return a < b ? [a, b] : [b, a]; }
 
 export async function logActivity(env: Env, userId: number, actionType: string, opts: {
@@ -270,7 +304,7 @@ partnernet.get('/relationships', async (c) => {
     const other = r.partner_a_id === user.id
       ? { id: r.partner_b_id, email: r.b_email, name: r.b_name, role: r.b_role }
       : { id: r.partner_a_id, email: r.a_email, name: r.a_name, role: r.a_role };
-    return { ...r, metadata: safeJson(r.metadata, {}), other };
+    return { ...relationshipForParty(r, user.id), other };
   });
   return c.json(enriched);
 });
@@ -335,8 +369,17 @@ partnernet.patch('/relationships/:id', async (c) => {
   if (data?.relationship_type && REL_TYPES.has(data.relationship_type)) {
     updates.push('relationship_type = ?'); values.push(data.relationship_type);
   }
+  let metaPatch: Record<string, unknown> | null = null;
+  if (data?.private_note !== undefined) {
+    metaPatch = mergePrivateNote(rel.metadata, user.id, data.private_note);
+  }
   if (data?.metadata && typeof data.metadata === 'object') {
-    updates.push('metadata = ?'); values.push(JSON.stringify(data.metadata).slice(0, 4000));
+    const incoming = { ...data.metadata };
+    delete incoming.private_notes;
+    metaPatch = { ...(metaPatch || safeJson(rel.metadata, {} as Record<string, unknown>)), ...incoming };
+  }
+  if (metaPatch) {
+    updates.push('metadata = ?'); values.push(JSON.stringify(metaPatch).slice(0, 4000));
   }
   if (!updates.length) return c.json({ error: 'No valid fields' }, 400);
   updates.push('updated_at = CURRENT_TIMESTAMP');
@@ -386,10 +429,19 @@ partnernet.post('/relationships/:id/interactions', async (c) => {
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
   const note = data?.note != null ? String(data.note).trim().slice(0, 2000) || null : null;
   const kind = data?.kind != null ? String(data.kind).trim().slice(0, 60) || 'note' : 'note';
+  const hasExplicitDate = data?.interacted_at != null && String(data.interacted_at).trim() !== '';
+  const parsedTouch = hasExplicitDate ? new Date(String(data.interacted_at)) : null;
+  const touchDateOk = parsedTouch && !Number.isNaN(parsedTouch.getTime());
+  if (!note && !touchDateOk) {
+    return c.json({
+      error: 'touch_requires_substance',
+      message: 'Say what happened or set when it happened — an empty touch must not move the cold flag.',
+    }, 400);
+  }
   // The touch's date is supplied or is now — backdating is legitimate (logging
   // last week's call), and the column is what the cold flag reads.
-  const interactedAt = data?.interacted_at != null && !Number.isNaN(new Date(String(data.interacted_at)).getTime())
-    ? new Date(String(data.interacted_at)).toISOString()
+  const interactedAt = touchDateOk
+    ? parsedTouch!.toISOString()
     : new Date().toISOString();
   const uid = newUid();
   await c.env.DB.prepare(
@@ -419,8 +471,8 @@ partnernet.post('/relationships/:id/reminders', async (c) => {
   if (error) return error;
   let data: any;
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
-  const remindAt = data?.remind_at != null ? new Date(String(data.remind_at)) : null;
-  if (!remindAt || Number.isNaN(remindAt.getTime())) {
+  const remindAt = parseRemindAt(data?.remind_at);
+  if (!remindAt) {
     return c.json({ error: 'reminder_date_required', message: 'A reminder is a date — say when to re-surface the tie.' }, 400);
   }
   const note = data?.note != null ? String(data.note).trim().slice(0, 500) || null : null;
