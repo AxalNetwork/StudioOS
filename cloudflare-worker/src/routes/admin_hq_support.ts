@@ -67,6 +67,7 @@ function escalationQueue(read: EscalationsRead, nowMs: number) {
       due_at: e.due_at,
       sla: e.sla,
       age_hours: ageHours(e.created_at, nowMs),
+      relation: e.relation,
     })),
   };
 }

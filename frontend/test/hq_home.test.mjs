@@ -135,7 +135,11 @@ test('every per-subsidiary figure renders Not recorded, and nothing renders an i
   // has no source at all — is passed as null rather than as a number.
   assert.match(PAGE, /label="MTD revenue" value=\{null\}/);
   assert.match(PAGE, /\{value \?\? <Unrecorded \/>\}/, 'a null tile value must render Not recorded');
-  assert.match(PAGE, /utilised: <Unrecorded \/>/);
+  assert.match(PAGE, /utilised:/);
+  assert.match(PAGE, /const seatsUtilised = useMemo/,
+    'seat utilisation is derived from the branch fan-out rather than a bare Not recorded');
+  assert.match(PAGE, /live\.backlog\.oldest_at/,
+    'backlog on a subsidiary card names the oldest open item when the branch sent it');
   // The formatter refuses to default: a missing figure is null, never "0".
   assert.match(PAGE, /const num = \(v\) => \(v === null \|\| v === undefined \|\| !Number\.isFinite\(Number\(v\)\) \? null/);
   // `|| 0` is how a missing field becomes a confident zero. The page has no

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ShieldCheck, AlertTriangle, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
@@ -280,13 +281,18 @@ export function Sanctions({ block, unreadable }) {
   // claims: under a failed read "Loading…" would say an answer is coming.
   if (!block) {
     return unreadable
-      ? <p className="text-[12.5px] text-axal-muted"><Unrecorded /> — the security overview could not be read.</p>
+      ? (
+        <Unreadable
+          what="The security overview"
+          claim="This is not a claim that nothing happened."
+        />
+      )
       : <p className="text-[12px] text-axal-faint">Loading…</p>;
   }
   if (!block.available) {
     return (
       <p className="text-[12.5px] leading-relaxed text-axal-muted" data-testid="hq-sanctions-unreadable">
-        <Unrecorded /> — {block.reason}
+        <Unrecorded reason={block.reason} />
       </p>
     );
   }
@@ -347,7 +353,12 @@ export function BackupDr({ block, unreadable }) {
   // Same rule as Sanctions: a failed overview read is not a load in progress.
   if (!block) {
     return unreadable
-      ? <p className="text-[12.5px] text-axal-muted"><Unrecorded /> — the security overview could not be read.</p>
+      ? (
+        <Unreadable
+          what="The security overview"
+          claim="This is not a claim that nothing happened."
+        />
+      )
       : <p className="text-[12px] text-axal-faint">Loading…</p>;
   }
   const b = block.backup;
@@ -547,15 +558,16 @@ export default function HqSecurityPage() {
   // and read as "that is all there is".
   const [feed, setFeed] = useState(null);
   const [filter, setFilter] = useState('all');
-  useEffect(() => {
-    let live = true;
+  const loadFeed = useCallback(() => {
     setFeed(null);
     api.hqGovernance(filter).then(
-      (r) => { if (live) setFeed(r); },
-      (e) => { reportError('hq-governance', e); if (live) setFeed(UNAVAILABLE); },
+      (r) => setFeed(r),
+      (e) => { reportError('hq-governance', e); setFeed(UNAVAILABLE); },
     );
-    return () => { live = false; };
   }, [filter]);
+  useEffect(() => {
+    loadFeed();
+  }, [loadFeed]);
   const feedReady = feed && feed !== UNAVAILABLE;
   const access = feedReady ? feed.data_access : null;
 
@@ -851,7 +863,9 @@ export default function HqSecurityPage() {
               <ForceReauth onDone={load} />
               <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
                 An impersonation is a session like any other, which is why it sits here. Per-device revocation stays
-                with each account under Settings; the platform-wide action above bumps every account&apos;s token floor.
+                with each account under Settings; per-account sign-out for HQ-held admins is on{' '}
+                <Link to="/admin/accounts" className="underline">HQ · Team</Link>. The platform-wide action above bumps
+                every account&apos;s token floor.
               </p>
             </Zone>
           </div>
@@ -935,9 +949,11 @@ export default function HqSecurityPage() {
               cannot make the other half look like the whole answer. */}
           <Zone title="Data access" sub="impersonations and exports">
             {feed === UNAVAILABLE && (
-              <p className="text-[12.5px] text-axal-muted">
-                <Unrecorded /> — the security ledger could not be read, so neither half of this zone can be shown.
-              </p>
+              <Unreadable
+                what="The security ledger"
+                claim="This is not a claim that nothing happened."
+                onRetry={loadFeed}
+              />
             )}
             {feed === null && <p className="text-[12px] text-axal-faint">Loading…</p>}
             {access && (

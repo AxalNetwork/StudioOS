@@ -383,9 +383,9 @@ r.get('/', async (c) => {
       // Said once, at the top, rather than implied by a column of dashes.
       seats_used_available: false,
       seats_used_reason:
-        'Seats used needs every account to name the licence it belongs to. No account carries one '
-        + 'yet — this is the licence ledger, not the tenancy scope — so utilisation is not shown '
-        + 'rather than shown as zero.',
+        'This ledger does not attribute HQ accounts to a licence (U1), so a per-licence '
+        + 'utilisation figure here would invent scoping. Seats used on a deployed branch is read '
+        + 'on HQ Home from each branch\'s own database and on the branch console itself.',
     });
   } catch (e) { return mapError(c, e); }
 });
