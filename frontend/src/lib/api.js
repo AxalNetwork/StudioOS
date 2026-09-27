@@ -1324,6 +1324,17 @@ export const api = {
   createDealInvitations: (id, data) => request(`/deals/${id}/invitations`, { method: 'POST', body: JSON.stringify(data) }),
   myDealInvitations: () => request('/deals/invitations/mine'),
   respondDealInvitation: (id, response) => request(`/deals/${id}/invitations/respond`, { method: 'POST', body: JSON.stringify({ response }) }),
+  // D462 — the Closing stage's money and paper (migration 335). A transfer is
+  // refused with 409 `open_conditions_block_transfer` while an IC condition on
+  // the deal is open; the page branches on `e.code`.
+  dealTransfers: (id) => request(`/deals/${id}/transfers`),
+  dealTransferRecord: (id, data) => request(`/deals/${id}/transfers`, { method: 'POST', body: JSON.stringify(data) }),
+  // The zone-wide read for the Wires view — registered ahead of /deals/:id.
+  dealsTransfers: () => request('/deals/transfers'),
+  dealClosingChecklist: (id) => request(`/deals/${id}/closing-checklist`),
+  dealClosingChecklistApply: (id, templateSlug) => request(`/deals/${id}/closing-checklist/apply`, { method: 'POST', body: JSON.stringify({ template_slug: templateSlug }) }),
+  dealClosingChecklistAddItem: (id, label) => request(`/deals/${id}/closing-checklist/items`, { method: 'POST', body: JSON.stringify({ label }) }),
+  dealClosingChecklistSetItem: (id, itemUid, data) => request(`/deals/${id}/closing-checklist/items/${itemUid}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   listUsers: (role) => request(`/users${role ? `?role=${role}` : ''}`),
   createUser: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
@@ -3721,11 +3732,11 @@ export const api = {
   // this note: the prefix is NOT mounted, so nothing new belongs against it.
 
   // ---------- Trust layer (Task #58) ----------
-  // Task #4 (Y-2) — Trust Center v2 endpoints. The legacy
-  // /trust/summary, /trust/kyb/*, /trust/accreditation/*, /trust/nda/*
-  // helpers below remain wired for backward compatibility — the new
-  // page consumes both the obligation matrix (/trust/me) and the
-  // legacy KYB/Accred/NDA helpers per role.
+  // Task #4 (Y-2) — Trust Center v2 endpoints. The page reads the obligation
+  // matrix (/trust/me), the required NDAs (/trust/nda/required), the
+  // pairwise list and the company KYB list. The first Trust Center's
+  // single-call /trust/summary and its /trust/kyb/start facade are retired
+  // (D432): neither had a caller, and their routes are gone with them.
   trustMe: () => request('/trust/me'),
   trustAgreements: () => request('/trust/agreements'),
   trustIntroRequest: (founder_user_id) =>
@@ -3774,9 +3785,7 @@ export const api = {
       method: 'POST', body: JSON.stringify(payload),
     }),
 
-  getTrustSummary: () => request('/trust/summary'),
-  startKyb: (payload) => request('/trust/kyb/start', { method: 'POST', body: JSON.stringify(payload) }),
-  // Task #108 — the COMPANY's entity record, beside the account's above, never
+  // Task #108 — the COMPANY's entity record, beside the account's, never
   // instead of it (D40/D42: "the account's entity is who signs your contracts;
   // the company's is who the workspace belongs to"). The write takes its
   // company from the X-Company-Id header every request already carries, which

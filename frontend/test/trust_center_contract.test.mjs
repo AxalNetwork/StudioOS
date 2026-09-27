@@ -70,9 +70,11 @@ test('no /trust path the SPA calls is banked as missing', () => {
 });
 
 test('the six dead client methods are gone, not merely unused', () => {
+  // D432 added the two whose ROUTES existed but had no caller: /trust/summary
+  // and /trust/kyb/start went with them.
   for (const m of ['getKybStatus', 'submitKyb', 'getAccreditationStatus', 'uploadAccreditation',
                    'reviewAccreditation', 'getAccreditationBadge', 'getNdaPreview', 'signNda',
-                   'getNdaStatus']) {
+                   'getNdaStatus', 'getTrustSummary', 'startKyb']) {
     assert.ok(!API.includes(`${m}:`), `${m} still exists in api.js`);
     assert.ok(!PAGE.includes(`api.${m}`), `${m} is still called`);
   }
@@ -90,32 +92,37 @@ test('the retired paths left the drift baseline', () => {
 test('the two unreachable cards are gone, and the reason is recorded', () => {
   assert.doesNotMatch(PAGE, /function KybCard/);
   assert.doesNotMatch(PAGE, /function AccreditationCard/);
-  // The premise, in the worker. If /trust/summary ever returns a real kyb
-  // object, this fails and the deletion should be reconsidered.
-  assert.match(WORKER, /kyb: null,\s*\n\s*accreditation: null,/,
-    'GET /trust/summary no longer hardcodes these nulls — the cards were deleted on that premise');
+  // The premise was that GET /trust/summary answered `kyb: null` and
+  // `accreditation: null`. D432 retired the route itself — nothing called it —
+  // so the premise is now that it does not exist, on either side.
+  assert.doesNotMatch(WORKER, /trust\.get\('\/summary'/, 'GET /trust/summary is back — the cards were deleted on the premise that it carried nothing');
+  assert.doesNotMatch(WORKER, /trust\.post\('\/kyb\/start'/, 'POST /trust/kyb/start is back without a caller');
   // And the page must not read them any more.
   assert.doesNotMatch(CODE, /legacy\?\.kyb\s*\?/);
   assert.doesNotMatch(CODE, /legacy\?\.accreditation\s*\?/);
 });
 
-test('the NDA card is fed the endpoint the page fetches, not the one it discarded', () => {
+test('the role NDAs are fed the endpoint the page fetches, not the one it discarded', () => {
   // The bug in one line: the result was awaited and dropped on the floor.
   assert.doesNotMatch(CODE, /try \{ await api\.getRequiredNdas\(\); \} catch \{\}/,
     'getRequiredNdas is being fetched and thrown away again');
   assert.match(PAGE, /setRequiredNdas\(/);
-  assert.match(PAGE, /<NdaCard items=\{requiredNdas\}/);
-  // And it reads fields that exist on that payload, not on a pairwise_nda row.
-  const card = CODE.slice(CODE.indexOf('function NdaCard'), CODE.indexOf('function ObligationList'));
-  for (const gone of ['it.role', 'it.title', 'it.signed_at']) {
+  // D432 — no second list: the required NDAs reach the Role agreements rows
+  // through AgreementsTab, and the Template NDAs card is gone.
+  assert.match(PAGE, /<AgreementsTab[^>]*requiredNdas=\{requiredNdas\}/);
+  assert.doesNotMatch(PAGE, /function NdaCard|Template NDAs/);
+  // And the button reads fields that exist on that payload, not on a pairwise_nda row.
+  const card = CODE.slice(CODE.indexOf('function OpenToSignButton'), CODE.indexOf('function ObligationList'));
+  assert.ok(card.length > 200, 'OpenToSignButton could not be sliced');
+  for (const gone of ['it.role', 'it.title', 'it.signed_at', 'item.role', 'item.title', 'item.signed_at']) {
     assert.ok(!card.includes(gone), `${gone} is not a field of GET /trust/nda/required`);
   }
-  assert.match(card, /it\.obligation_key/);
-  assert.match(card, /it\.evidence_envelope_uuid/);
+  assert.match(card, /item\.obligation_key/);
+  assert.match(card, /item\.evidence_envelope_uuid/);
 });
 
 test('signing goes through the envelope route that exists, via the method already in use', () => {
-  const card = CODE.slice(CODE.indexOf('function NdaCard'), CODE.indexOf('function ObligationList'));
+  const card = CODE.slice(CODE.indexOf('function OpenToSignButton'), CODE.indexOf('function ObligationList'));
   assert.match(card, /api\.trustMySigningUrl\(item\.evidence_envelope_uuid\)/);
   // That method's route is real, and the Agreements tab already relies on it.
   assert.match(WORKER, /trust\.get\('\/agreements\/:envelope_uuid\/my_signing_url'/);
@@ -369,7 +376,12 @@ test('the Entity tab draws the per-company card, and keeps the two entities apar
     'the card must say the account entity is a different record');
 
   const worker = read('cloudflare-worker/src/routes/trust.ts');
-  assert.match(worker, /ON CONFLICT\(user_id\)/,
+  // D432 retired POST /trust/kyb/start, the one upsert this file made into
+  // corporate_profiles, so the key is now read where it is declared: the
+  // table's primary key is the account, and no migration can change a
+  // SQLite primary key in place.
+  assert.match(read('cloudflare-worker/sql/schema_baseline.sql'),
+    /CREATE TABLE corporate_profiles \(\s*user_id INTEGER PRIMARY KEY/,
     'corporate_profiles must stay keyed on user_id — the account entity is not the company entity');
   assert.match(worker, /ON CONFLICT \(company_id\)/,
     'and the company record is keyed on the company');
