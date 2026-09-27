@@ -3,6 +3,7 @@ import { AlertCircle, ArrowUpRight, Landmark, Radar, RefreshCw, Search } from 'l
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Unreadable, WorkerRail } from '../../ui';
+import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import { zonePillClass } from './deskZoneNav';
 import './founderResearchDesk.css';
 
@@ -182,7 +183,9 @@ export default function FounderResearchDesk() {
         workspace="Research"
         className="a7-rail"
         stance="Read-only source coverage"
-        note="This rail reports coverage for stored records. A question runs only when you press Ask, and is answered from your own library."
+        // No `fills`, and the note says why (D424): Ask is a question pressed
+        // on purpose, not a blank filled, so a switch here would change nothing.
+        note={ASSIST_SURFACES.workspace.desks.Research.none}
         coverage={[
           data.sources.length ? `${data.sources.length} source records` : 'Source list not recorded',
           sourceMeta('pulse', `${data.headlines.length} stored headlines`),

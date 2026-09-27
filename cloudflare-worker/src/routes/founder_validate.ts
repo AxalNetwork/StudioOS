@@ -50,7 +50,7 @@ import {
 // point; only the caller moved.
 import { insertHypothesis } from './_founder_validate_writes';
 import { FILL_KINDS, fillKind } from '../services/fills/registry';
-import { recordFill } from '../services/fills/provenance';
+import { ensureFillProvenanceSchema, recordFill } from '../services/fills/provenance';
 // `PROPOSAL_KINDS`, `TASK_FOR_KIND`, `TAG_PROMPT`, `DRAFT_PROMPT` and the two
 // parsers are gone from this file: the registry owns them per kind now, and it is
 // the parsers themselves the registry calls. They stay exported from that module
@@ -151,6 +151,60 @@ async function loadEvidenceBase(env: Env, projectId: number) {
 // ---------------------------------------------------------------------------
 
 /**
+ * WHICH CLAIMS EADWYN SUPPLIED, and only while they still say what it wrote
+ * (D424).
+ *
+ * The accept path has written a `fill_provenance` row for every hypothesis a
+ * founder took from the band since migration 246, and nothing ever read them
+ * back for this board: the only reader was the market page's
+ * (`projects.ts`'s `/market-assumptions`). So a claim Eadwyn drafted and one a
+ * founder typed looked identical on the desk, the canvas's provenance mark
+ * notwithstanding.
+ *
+ * THE MARK FOLLOWS THE TEXT, NOT THE ROW. A provenance row says what was
+ * written then; a founder who has since rewritten the claim by hand owns it,
+ * and a card still reading "Eadwyn" over their sentence would be the same lie
+ * pointed the other way. So the newest row per claim counts only when its
+ * `written_value` is the claim's text now — `filledColumns`' comparison, done
+ * over one query for the whole board rather than one `fillsForRow` per card.
+ *
+ * `edited` is the founder's correction before accepting, which the accept
+ * route derives by comparing the two values; the mark says so.
+ *
+ * Throws on a failed read: the caller reports `fills_recorded: false` rather
+ * than an unmarked board, which would claim every claim was typed by hand.
+ */
+export async function claimFills(env: Env, projectId: number, items: any[]): Promise<Map<number, {
+  edited: boolean; model: string | null; fill_class: string;
+}>> {
+  await ensureFillProvenanceSchema(env);
+  const rows = await env.DB.prepare(
+    `SELECT fp.target_row_id, fp.written_value, fp.edited, fp.model, fp.fill_class
+       FROM fill_provenance fp
+       JOIN hypotheses h ON h.id = fp.target_row_id
+      WHERE fp.target_table = 'hypotheses' AND fp.target_column = 'claim'
+        AND h.project_id = ?
+      ORDER BY fp.id DESC`,
+  ).bind(projectId).all<{
+    target_row_id: number; written_value: string | null; edited: number;
+    model: string | null; fill_class: string;
+  }>();
+  const claimNow = new Map<number, string>(items.map((h) => [Number(h.id), String(h.claim ?? '').trim()]));
+  const seen = new Set<number>();
+  const out = new Map<number, { edited: boolean; model: string | null; fill_class: string }>();
+  for (const r of rows.results || []) {
+    const id = Number(r.target_row_id);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const now = claimNow.get(id);
+    if (now && String(r.written_value ?? '').trim() === now) {
+      out.set(id, { edited: r.edited === 1, model: r.model ?? null, fill_class: r.fill_class });
+    }
+  }
+  return out;
+}
+
+/**
  * The board, built once.
  *
  * Extracted when the CSV export arrived: a second copy of this orchestration
@@ -221,6 +275,15 @@ async function buildBoard(env: Env, projectId: number) {
     }));
   }
 
+  // Eadwyn's mark on the claims it supplied (D424). Never allowed to cost the
+  // board, and never folded into "no claim was supplied" when it failed.
+  let fillsRecorded = true;
+  const fills = await claimFills(env, projectId, items).catch(() => {
+    fillsRecorded = false;
+    return new Map();
+  });
+  for (const h of items as any[]) h.filled = fills.get(Number(h.id)) ?? null;
+
   // Project-level honesty: how much of the evidence base is unusable, and why.
   const fitMissing = interviews.filter((i) => i.row.icp_fit == null).length;
   const consentMissing = interviews.filter((i) => i.row.quote_consent == null).length;
@@ -236,6 +299,9 @@ async function buildBoard(env: Env, projectId: number) {
     // than as "nothing changed". `/build/this-week` returns `history_since` for
     // exactly this reason and this is the same seam.
     verdict_history_since: history.since,
+    // False when `fill_provenance` could not be read: every `filled` is then
+    // unknown, not "typed by hand", and the page says which.
+    fills_recorded: fillsRecorded,
     evidence_base: {
       interviews: interviews.length,
       icp: interviews.filter((i) => isIcp(i.row.icp_fit)).length,
@@ -744,10 +810,16 @@ founderValidate.get('/proposals/:projectId', async (c) => {
     // editable field must not offer one — a `pain_tag`'s phrase is the project's
     // own logged string, and the accept route refuses an edit to it with that as
     // the reason, so drawing the control would be a button that always fails.
+    //
+    // `task` is the router task a run of this kind bills (D424). The band
+    // quotes the founder's own average for it BEFORE they press run, and
+    // `/api/ai/me/spend` groups by task, so the band has to know which one —
+    // from here rather than from a second copy of the registry in the SPA.
     kinds: Object.fromEntries(Object.values(FILL_KINDS).map((k) => [k.kind, {
       copy: k.copy,
       fill_class: k.fillClass,
       editable: k.editableField != null,
+      task: k.task,
     }])),
   });
 });

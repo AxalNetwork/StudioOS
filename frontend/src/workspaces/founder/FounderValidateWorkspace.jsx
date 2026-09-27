@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useSearchParams, Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Card, EmptyState, ErrorState, WorkerRail, Skeleton } from '../../ui';
+import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import WorkspaceShell, { NotRecorded } from '../WorkspaceShell';
 import ZoneToolbar from '../ZoneToolbar';
 import { founderZoneFilters } from '../founderZoneFilters';
@@ -1325,7 +1326,11 @@ export default function FounderValidateWorkspace() {
         <WorkerRail
           workspace="Validate"
           stance="Evidence-led view"
-          note="Nothing is written without your click. Proposals are accept, edit or discard."
+          // What the switch does on Validate (D424). The mode card above this
+          // note is shared by every founder desk now, so it no longer lists
+          // Validate's three capabilities; this workspace's own sentence does,
+          // the same one the Validate desk's rail prints.
+          note={ASSIST_SURFACES.workspace.desks.Validate.fills}
           coverage={[projectId ? `Venture #${projectId} selected` : 'No venture selected']}
           // The Transcription gap named here is closed by migration 215 — a
           // recording has a home and a transcript has a column — so the entry

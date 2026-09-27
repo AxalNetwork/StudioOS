@@ -6,6 +6,8 @@ import { Unreadable, WorkerRail } from '../../ui';
 import { COUNT_KEYS, PCT_KEYS, metricLabel, readTarget } from '../../lib/metricTargets';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import useAssistMode from '../../hooks/useAssistMode';
+import useAiSpend from '../../hooks/useAiSpend';
+import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import { zonePillClass } from './deskZoneNav';
 import './founderGrowDesk.css';
 
@@ -106,6 +108,8 @@ export default function FounderGrowDesk() {
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
   const [fillsOn] = useAssistMode('Grow');
+  // The cost before a run (D424), read only while the two bands are drawn.
+  const ai = useAiSpend({ enabled: fillsOn && Boolean(projectId) });
 
   useEffect(() => {
     let alive = true; setLoading(true); setError('');
@@ -210,12 +214,17 @@ export default function FounderGrowDesk() {
      <nav aria-label="Grow desk sections">{SECTIONS.map(([label, slug]) => <NavLink data-testid={`link-grow-anchor-${slug}`} to={`/grow/${slug}${query}`} key={label} className={zonePillClass}>{label}</NavLink>)}</nav>
     </header>
     {error && <div className="a5-grow-error" data-testid="status-grow-partial"><AlertCircle size={15} />{error}<button data-testid="button-retry-grow" type="button" onClick={() => setReload((count) => count + 1)}>Retry</button></div>}
-    <GrowSections data={data} project={project} loading={loading} query={query} state={state} projectId={projectId} fillsOn={fillsOn} />
+    <GrowSections data={data} project={project} loading={loading} query={query} state={state} projectId={projectId} fillsOn={fillsOn} ai={ai} />
   </div><WorkerRail
     workspace="Grow"
     className="a5-rail"
     stance="Read-only source coverage"
-    note="This rail summarizes records already stored for the selected startup. It takes no action."
+    // The switch the two bands waited for (D424): gated on this mode since
+    // they were mounted, with no rail on Grow to turn it on. Nothing here
+    // acts either way — a ranking moves no application, a sequence sends
+    // nothing.
+    fills
+    note={ASSIST_SURFACES.workspace.desks.Grow.fills}
     coverage={[
       `${data.snapshots.length} metric snapshot${data.snapshots.length === 1 ? '' : 's'}`,
       `${data.customers.length} customer record${data.customers.length === 1 ? '' : 's'}`,
@@ -226,7 +235,7 @@ export default function FounderGrowDesk() {
   /></div></main>;
 }
 
-function GrowSections({ data, project, loading, query, state, projectId, fillsOn }) {
+function GrowSections({ data, project, loading, query, state, projectId, fillsOn, ai }) {
   const focus = data.latest;
   const targets = data.targets === null ? null : data.targets.map((target) => readTarget(target, focus));
   const unavailable = Array.isArray(data.summary?.unavailable) ? data.summary.unavailable : [];
@@ -251,6 +260,7 @@ function GrowSections({ data, project, loading, query, state, projectId, fillsOn
         {bandOn ? <ZoneDraft
           surface="grow/talent"
           scopeKey={scope}
+          ai={ai}
           accent="violet"
           label="Match · why this one"
           run="Rank the applicants"
@@ -265,6 +275,7 @@ function GrowSections({ data, project, loading, query, state, projectId, fillsOn
         {bandOn ? <ZoneDraft
           surface="grow/customers"
           scopeKey={scope}
+          ai={ai}
           accent="violet"
           label="Proposal · outreach sequence"
           run="Draft a sequence"

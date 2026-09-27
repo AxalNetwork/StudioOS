@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatCost } from '../ui/assistCost';
+import RunEstimate from './RunEstimate';
 
 /**
  * What Eadwyn suggested, and the THREE decisions a founder makes about each one.
@@ -36,6 +37,13 @@ import { formatCost } from '../ui/assistCost';
  * then it only READS existing proposals until the founder presses the run
  * button. A component that proposed on mount would spend a founder's budget
  * for visiting a page.
+ *
+ * AND ITS COST COMES BEFORE THE PRESS (D424), where the host passes `ai` — its
+ * `useAiSpend()` result. The figure is the founder's own average for the
+ * kind's router task, which the list response now carries beside the copy
+ * (`kinds[kind].task`, from the registry), so a pain-tag band quotes
+ * `validate_tag_pains` and a hypothesis band `validate_draft_hypotheses`, never
+ * one for the other. The receipt below still says what the run just done cost.
  *
  * NO MODEL IS SENT, and that is deliberate rather than an omission. The rail's
  * menu is scoped to `workspace_explain` — the read-back — and these are two
@@ -107,7 +115,7 @@ function Citation({ citation }) {
   );
 }
 
-export default function FillProposals({ projectId, kind, enabled, onApplied }) {
+export default function FillProposals({ projectId, kind, enabled, onApplied, ai }) {
   const [items, setItems] = useState([]);
   const [kinds, setKinds] = useState(null);
   const [busy, setBusy] = useState('');
@@ -215,6 +223,7 @@ export default function FillProposals({ projectId, kind, enabled, onApplied }) {
           {copy.empty}
         </p>
       )}
+      <RunEstimate ai={ai} task={spec.task} testId={`text-proposals-estimate-${kind}`} />
 
       <ul className="mt-2 grid gap-2">
         {items.map((p) => {

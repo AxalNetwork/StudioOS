@@ -169,8 +169,16 @@ test('the four proposal bands are mounted, off by default, and allow-listed', ()
   // plain body text.
   assert.match(page, /surface="raise\/legal"\n\s*scopeKey=\{scope\}\n\s*accent="violet"\n\s*tone="warn"/);
   assert.equal((page.match(/tone="warn"/g) || []).length, 1, 'the warn tone spread beyond the clause read');
-  // "Not legal advice" is the artboard's own footnote and is not optional.
-  assert.match(page, /foot="Not legal advice\. Counsel is on the Team page\."/);
+  // The artboard's footnote says the clause read is not a lawyer's, and where
+  // one is — and that half is not optional. Its wording was "Not legal
+  // advice", which names what Eadwyn produced as a kind of advice; the voice
+  // rule forbids that about the assistant's output (D424), so the property is
+  // pinned rather than the artboard's sentence: the read disclaims counsel's
+  // review, sends the reader to counsel, and never calls itself advice.
+  const legalFoot = /surface="raise\/legal"[\s\S]*?foot="([^"]+)"/.exec(page)?.[1] || '';
+  assert.match(legalFoot, /not counsel's review/, 'the clause read no longer says it is not a lawyer\'s');
+  assert.match(legalFoot, /Counsel is on the Team page\./, 'the clause read no longer says where counsel is');
+  assert.doesNotMatch(legalFoot, /\badvice\b/i, 'the clause read calls what Eadwyn wrote advice');
 });
 
 test('every Raise draft surface scopes to a project the caller owns', () => {
