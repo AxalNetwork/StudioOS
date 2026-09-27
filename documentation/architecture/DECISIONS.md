@@ -34640,6 +34640,100 @@ mounts were "unchanged and still live"; it carries a dated update.
   unchanged. Root `npm run build`, then `check-docs-fresh --strict`, exits 0.
   No browser probe.
 
+## D423
+
+**D162's ISO-bind guard follows the value through helpers, wrappers and object
+fields — and two live defects it could not see are fixed.** Wave 8, Session
+14, item 5. No migration, no route, no `api.js` change. This is the guard half
+D301 filed as unbuilt ("extending D162's sweep to follow binds through an
+object field or a rest parameter").
+
+**What D162's sweep saw, and what walked past it.** It named a raw ISO value
+only from `x = ….toISOString()` in the same file, required that name inside a
+`.bind(` within 40 characters of a `.prepare(` whose SQL was written inline,
+and skipped any file with no `.toISOString()` at all. Three shapes escaped:
+
+| Shape | Example | Now followed by |
+| --- | --- | --- |
+| a helper returning ISO | `nowIso()` from `_t13t14t15_helpers.ts` | `rawIsoHelpers` — judged by the helper's RETURN expression, never its name: `cohortTiming.ts`'s `iso` and `admin_cohort.ts`'s `isoNow` return SQL format and are not called raw |
+| a bind wrapper | `safeFirst(env, sql, ...bind)`, `joinRows(env, sinceIso)` | `bindWrappers` — which parameters reach `.bind`, whether the SQL is a parameter or a local const — and every call site, local or imported |
+| an object field | `{ periodStart: new Date().toISOString() }` → `w.periodStart` | `rawVocabulary` — fields (and arrays, and spreads) holding a raw value |
+
+SQL is resolved through a local const (both arms of a ternary) and through a
+`${NAME}` template, which is how D301's `telegramAggregator.ts` spells its one
+WINDOW predicate. `sweepBinds` runs the whole analysis over a corpus, so the
+tests run it on fixtures as well as on the worker. Names are found with
+`identifierAt`, an `indexOf` walk, never a `RegExp` built from the name: the
+first draft built four, escaped for `$` only, and drew CodeQL's
+incomplete-escaping alert and Semgrep's `detect-non-literal-regexp` on each.
+The repo's answer to that rule is `d716900ee`'s — rewrite the match, do not
+silence it — so the patterns went rather than being escaped harder.
+
+**Two defects in the derivation itself, found while widening it.**
+- `sqlFormatColumns` split a table body on commas, so a `-- comment` ending one
+  column's line led the next part and the column was dropped.
+  `founder_needs.created_at` (after `status … DEFAULT 'open', -- open|…`) was
+  invisible that way; with comments stripped the derivation finds 557
+  SQL-format columns.
+- `rawIsoNames` called a name raw when `.toISOString()` appeared anywhere on the
+  right-hand side — including as an ARGUMENT to another call
+  (`axis = weekAxis(new Date(n).toISOString(), …)`, whose `from`/`to` are SQL
+  format). The raw call must now produce the value, at bracket depth 0.
+
+**What the widened sweep found, and what was fixed.** Exactly the gap map's
+two live sites, both in this session's files:
+- `services/newsTrust.ts` — the 90-day-clean check compared
+  `notifications.created_at` (DEFAULT CURRENT_TIMESTAMP) against raw ISO
+  through `safeFirst`, so a flag dated on the window's first day was missed and
+  the +10 paid. Now `datetime(created_at) >= datetime(?)`.
+- `routes/insights.ts` — `joinRows` compared `founder_needs.created_at` against
+  raw ISO at three call sites. The column holds TWO formats (the DEFAULT, and
+  `needs.ts`'s `nowIso()` on insert), so only default-written rows on the first
+  day were dropped; normalising both sides reads either format. Decided: wrap,
+  not rewrite the writer — the read is correct for both formats, and changing
+  what `needs.ts` stores is a data migration nobody asked for.
+
+Two candidates the first draft flagged were false positives in the guard, not
+the code, and the guard was fixed: `admin_revenue.ts`'s `quarterOf` (a field
+holding `.slice(0, 10)`, misread by a regex that stopped at the comma inside
+`slice(0, 10)`) and `branch_insights.ts`'s `axis` (the depth rule above).
+Nothing in `services/telegramAggregator.ts` (Session 4's) is flagged: D301's
+WINDOW is wrapped on both sides, and a mutation making it bare is caught.
+
+**What it still does not do.** It follows values within a function's own
+parameters and one hop of import; a value laundered through two wrappers, or
+through a class method, is not followed. The column side stays the schema's
+word plus the code's own clock writes (D162).
+
+### VERIFIED
+
+- `npm run test:drift` exit 0 on Node 22. Worker tests 4733 on main
+  (d4ccaf5c) → 4740; frontend 3938 and retention 112, unchanged. The seven new
+  tests, in `iso_bind_sql_columns_d162.test.ts`: "a trailing -- comment on one
+  column does not hide the next", "a helper is judged by what it returns, never
+  by its name", "a raw value is one the expression produces, not one it passes
+  along", "a wrapper is followed to every call site, through a rest parameter
+  and a named one", "an object field and a shared template predicate are
+  followed too", "the widened sweep finds no raw ISO bind against a SQL-format
+  column in the worker", "the two sites D423 fixed compare both sides
+  normalised". D162's six existing tests pass unchanged.
+- 10 mutations, 10 caught (non-zero exit and a `not ok` line, unique anchors,
+  sha256-checked restores), re-run on d4ccaf5c before landing: each fix reverted; D301's WINDOW made bare in
+  `telegramAggregator.ts` (temporarily — the file is Session 4's and is not
+  changed); comment stripping, the depth-0 rule, `identifierAt` reading a spread
+  (`...bind`) as a member access, the
+  narrowing check in `isRawIsoExpr`, `${NAME}` substitution and import
+  resolution each removed; and the field value read to its first comma. That
+  last one was first written as a `break` on `(` — which the bracket branch
+  consumes before it is reached, so the bytes changed and the behaviour did
+  not; it was re-aimed at the defect itself and a fixture pinning a date-cut
+  field was added, so the property does not rest on `admin_revenue.ts`.
+- `check-sql-migrations`, `check-sqlite-dialect`, `check-sql-prepare`,
+  `check-timestamp-comparisons`, `check-runtime-schema-declared`,
+  `check-refusal-bodies`, `check-unused-imports`, the worker typecheck and
+  `check-decision-ids` exit 0. Nothing under `frontend/src` moved, so `docs/`
+  is not rebuilt.
+
 ## D430
 
 **Recovery codes get a single writer: regenerating them and then re-pairing
