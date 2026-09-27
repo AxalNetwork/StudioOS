@@ -36930,6 +36930,17 @@ front of `data-dc-script`. The tag name is assembled from two pieces so the
 file read is not written next to one script-tag literal. The string is never
 served. The test throws if that element is gone. No migration.
 
+## D472
+
+**The canvas cut walks back to the same angle bracket.** Semgrep alert on
+`frontend/test/send_for_signature_d411_contract.test.mjs`, the same rule as
+D471. D471 split the tag into two pieces. The scanner joined those pieces
+back into one script-tag string and reported the index sitting in that call.
+The cut is the same byte: the `<` in front of `data-dc-script`. The test
+walks back to that character and checks the six letters on their own, with
+the angle bracket kept out of that string. The text is never served. The
+test throws if that element is gone. No migration.
+
 ## D490
 
 **#871 review follow-ups: private notes, dates, and void touches on the investor
