@@ -307,3 +307,47 @@ test('rule 4 — the row is written BEFORE the run, so a refused read still leav
   assert.ok(auditAt > 0, 'the branch read-back is no longer audited');
   assert.ok(auditAt < runAt, 'the audit row is written after the run, so a refused read leaves no trace');
 });
+
+/* ------------------------------------------------------------------ *
+ * D404 — the run records the page it was asked from
+ * ------------------------------------------------------------------ */
+
+import { normaliseSurface } from '../src/services/aiRouter.ts';
+
+// The read-back's own usage row. The route's guardrail screen runs a
+// `safety` task first, which writes a row of its own with no page — correctly:
+// it is not the run the page asked for — so the row is picked by task.
+const usageInserts = (sql: string[], binds: unknown[][]) => sql
+  .map((q, i) => ({ q, b: binds[i] }))
+  .filter(({ q, b }) => /INSERT INTO ai_usage_logs/i.test(q) && Array.isArray(b) && b[1] === 'workspace_explain');
+
+test('D404: the rail\'s page reaches the usage row as its surface', async () => {
+  const { env, sql, binds } = envThatRecordsWrites();
+  const res = await post(
+    { workspace: 'Validate', coverage: ['4 interviews'], page: '/validate/interviews' },
+    env, await bearer(env),
+  );
+  assert.ok(res.status < 500, `the run failed outright (${res.status})`);
+  const rows = usageInserts(sql, binds);
+  assert.ok(rows.length >= 1, 'the run wrote no usage row at all — the fixture is not reaching recordUsage');
+  assert.match(rows[0].q, /\bsurface\b/, 'the INSERT does not name the surface column');
+  assert.equal(rows[0].b.at(-1), '/validate/interviews', 'the page was not bound as the surface');
+});
+
+test('D404: a run with no page records NULL, never a guess', async () => {
+  const { env, sql, binds } = envThatRecordsWrites();
+  await post({ workspace: 'Validate', coverage: ['4 interviews'] }, env, await bearer(env));
+  const rows = usageInserts(sql, binds);
+  assert.ok(rows.length >= 1);
+  assert.equal(rows[0].b.at(-1), null);
+});
+
+test('D404: only a plain app path is recorded', () => {
+  assert.equal(normaliseSurface('/validate/interviews'), '/validate/interviews');
+  assert.equal(normaliseSurface('/validate/interviews/'), '/validate/interviews', 'a trailing slash splits one page into two');
+  assert.equal(normaliseSurface('/raise/data-room/ab12.x_y'), '/raise/data-room/ab12.x_y');
+  assert.equal(normaliseSurface('/'), '/');
+  for (const bad of ['validate', 'https://evil.example/x', '/a b', "/x'; DROP TABLE", '/x?y=1', '/x#y', '', null, 42, `/${'a'.repeat(200)}`]) {
+    assert.equal(normaliseSurface(bad as any), null, `${JSON.stringify(bad)} was recorded as a page`);
+  }
+});

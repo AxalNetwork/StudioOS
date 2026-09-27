@@ -33638,6 +33638,107 @@ attention" for any role. It stays unbuilt rather than lit from a guess.
   - hover not in the role's accent
   - dark neutrals on the current pill
 
+## D404
+
+**The rail shows what this page has cost this month. `ai_usage_logs` gains a
+nullable `surface` column (migration 319), the router records it, and older
+rows read "no page" (Session 12, item 5).** No new route and no new `api.js`
+method. `aiWorkspaceExplain` sends one more field, and
+`GET /api/ai/me/spend` returns two more.
+
+**What was missing.** The AIRail canvas draws "This page this month" under
+the usage meter. `ai_usage_logs` recorded no page, so every figure the rail
+could draw was the account's or the task's. D401 labelled the "Last run"
+receipt account-wide for the same reason.
+
+**The store.**
+- Migration `319_ai_usage_surface.sql`:
+  `ALTER TABLE ai_usage_logs ADD COLUMN surface TEXT`. It is nullable on
+  purpose. Every earlier row, and every run from a caller that sends no
+  page, holds NULL, which means "not recorded". A default such as `''` or
+  `'unknown'` would be a value pretending to be an answer.
+- The router's runtime `CREATE TABLE IF NOT EXISTS ai_usage_logs` carries
+  the column too. The migration is the declaration and the bootstrap is the
+  safety net (D235).
+- `check-runtime-schema-declared`, `check-sql-migrations`,
+  `migrations_fresh_build` and `baseline_drift_guard` pass.
+
+**The write.**
+- `RunOptions.surface` is new. All nine `recordUsage` calls in `run()` pass
+  it, including the refusals, so a refused run still counts against the
+  page it was asked from.
+- `recordUsage` writes `normaliseSurface(surface)`. It accepts only an
+  absolute app path of letters, digits, `/`, `_`, `.` and `-`, at most 160
+  characters, with a trailing slash stripped so one page is not recorded as
+  two. Anything else is recorded as NULL, never trimmed into a
+  plausible-looking value.
+- `POST /api/ai/workspace/explain` takes `page` and passes it as `surface`.
+- The route's guardrail pre-screen runs a `safety` task that records no
+  page. That is correct: it is not the run the page asked for.
+- Every other caller of the router sends no page today, so its rows are
+  NULL.
+
+**The read.** `loadMyAiSpend` adds `by_surface`: this month's rows grouped on
+the column, so NULL forms one entry, the month's unattributed runs. That
+entry is reported rather than dropped, and the breakdown adds up to the
+month. A failed read, including the read before migration 319 is applied,
+sets `by_surface_recorded: false` rather than returning an empty list.
+
+**On the rail.** The Usage block draws one of three lines, via
+`assistCost.js`'s `pageSpendLine`:
+- "This page this month: $0.0040 over 2 runs."
+- "No runs recorded from this page this month. N runs this month carry no
+  page, either from before pages were recorded or from features that do not
+  record one." This is shown whenever the month has unattributed runs,
+  because some of them may be this page's own runs from before the
+  migration, so "nothing from this page" alone would be a claim the log
+  cannot make.
+- "No runs from this page this month."
+
+A failed read renders Unreadable with a Retry. The rail sends its path
+normalised the way the router stores it, so the lookup matches.
+
+**Stays not recorded:** token margin (the owner's brief, item 7). Nothing
+here computes or draws a margin.
+
+**Verification.**
+- `ai_spend_self` gains three tests on real SQLite:
+  - the breakdown is per page, this user's rows and this month's only, with
+    one null entry, and it sums to the month;
+  - a table without the column still totals and reports the breakdown
+    unrecorded;
+  - an unreadable table leaves it unrecorded.
+- `ai_workspace_explain` gains three:
+  - the page reaches the `workspace_explain` usage row's INSERT, through the
+    real route with an authenticated fixture;
+  - no page records NULL;
+  - `normaliseSurface` accepts a plain path, strips a trailing slash, and
+    refuses a bare word, a URL, a space, a quote, a query, a hash, an empty
+    value, a non-string and an overlong path.
+- New file `worker_rail_page_spend_d404.test.mjs`, 6 tests: the line's
+  three states and plurals, and the rail sending its normalised page and
+  drawing the breakdown, with Unreadable on a failed read.
+- Two existing tests pinned exact source text that this change extended, and
+  are re-aimed, not loosened. Each re-aim is mutation-checked (three caught):
+  - `hq_rail_scope_h13` pinned `aiWorkspaceExplain`'s parameter list as an
+    exact tuple. It now pins that the method accepts `branch` and forwards
+    it.
+  - D401's receipt test pinned `readBack`'s whole dependency list. It now
+    pins that `reload` is in it.
+- Mutations: 12 run, 12 caught.
+  - the router dropping the surface
+  - the route not passing the page
+  - no charset check
+  - the trailing slash kept
+  - the null group dropped
+  - the breakdown always recorded
+  - the query not scoped to the month
+  - the line ignoring unattributed runs
+  - a wrong singular
+  - the rail sending no page
+  - the api method dropping the page
+  - the Unreadable hidden
+
 ## D410
 
 **E-sign `/send` hardening: the signing link reaches only the recipient, a

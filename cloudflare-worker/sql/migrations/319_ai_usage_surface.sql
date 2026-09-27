@@ -1,0 +1,28 @@
+-- 319_ai_usage_surface.sql — which page an AI run came from (D404, wave 8,
+-- Session 12, item 5).
+--
+-- The AIRail canvas draws "This page this month" under the usage meter, and
+-- `ai_usage_logs` recorded no page: every figure the rail could draw was the
+-- account's, or the task's, never the page's. This adds the column:
+--
+--   ai_usage_logs.surface TEXT   -- the app path the run was asked from
+--                                   (`/validate/interviews`), or NULL
+--
+-- NULLABLE ON PURPOSE. Every row written before this migration has no page,
+-- and so does every run from a caller that does not send one (the router's
+-- internal callers, and every surface but the workspace rail today). NULL is
+-- "not recorded", and the rail says so; a default such as '' or 'unknown'
+-- would be a value pretending to be an answer.
+--
+-- Written by `recordUsage` in `services/aiRouter.ts`, which re-validates the
+-- path against a charset before it reaches SQL; read by `services/aiSpend.ts`
+-- as `by_surface`. The router's runtime `CREATE TABLE IF NOT EXISTS
+-- ai_usage_logs` carries the column too (D235: the migration is the
+-- declaration, the bootstrap is the safety net).
+--
+-- STANDS ALONE and additive. NON-IDEMPOTENT (D1's ALTER TABLE has no IF NOT
+-- EXISTS) — apply through the ledger-driven runner, which runs it once:
+--
+--   npm run d1:migrate:remote
+
+ALTER TABLE ai_usage_logs ADD COLUMN surface TEXT;
