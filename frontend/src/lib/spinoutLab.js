@@ -156,7 +156,43 @@ export function openCohortCopy(nowMs = Date.now()) {
  * failed and offers `retry`.
  */
 export function useCohortPlaces() {
-  const [read, setRead] = useState({ status: 'loading', places: null });
+  const record = useCohortRecord();
+  if (record.status !== 'ok') return { status: record.status, places: null, retry: record.retry };
+  const n = record.cohort.places;
+  return n == null ? { status: 'error', places: null, retry: record.retry } : { status: 'ok', places: n, retry: record.retry };
+}
+
+/**
+ * D385 — the open cohort AS THE SERVER NAMES IT, from the public
+ * `GET /spinout-lab/brief`: its name ("November 2026"), start, end,
+ * application deadline and places.
+ *
+ * WHY NOT `openCohortCopy()`. That computes the same dates on the client and
+ * numbers the cohort from `COHORT_BASE` ("Cohort 2"), while the Programme
+ * Brief, the apply form and every cohort row on the server call it by its
+ * month. The landing canvas reads "Apply to {cohort.name}" from the cohort
+ * record, so the landing, the brief and the apply form now print one name.
+ *
+ * Pure half first, so the tests read it without React.
+ */
+export function cohortRecordFromBrief(r) {
+  const c = r?.cohort;
+  if (!c || typeof c !== 'object') return null;
+  const ms = (iso) => { const t = Date.parse(iso || ''); return Number.isFinite(t) ? t : null; };
+  const places = Number(c.places);
+  return {
+    open: r.applications_open !== false && Boolean(c.name),
+    name: c.name || null,
+    startLabel: cohortDateLabel(ms(c.start_date)),
+    endLabel: cohortDateLabel(ms(c.end_date)),
+    deadlineLabel: cohortDateLabel(ms(c.close_at)),
+    places: c.places != null && Number.isFinite(places) ? places : null,
+  };
+}
+
+/** `status` is 'loading', 'ok' or 'error'; `cohort` is the record only on 'ok'. */
+export function useCohortRecord() {
+  const [read, setRead] = useState({ status: 'loading', cohort: null });
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -164,14 +200,13 @@ export function useCohortPlaces() {
     spinoutLab
       .brief()
       .then((r) => {
-        const n = Number(r?.cohort?.places);
         if (!alive) return;
-        if (r?.cohort?.places == null || !Number.isFinite(n)) setRead({ status: 'error', places: null });
-        else setRead({ status: 'ok', places: n });
+        const cohort = cohortRecordFromBrief(r);
+        setRead(cohort ? { status: 'ok', cohort } : { status: 'error', cohort: null });
       })
       .catch((e) => {
-        reportError('spinout-lab:places', e);
-        if (alive) setRead({ status: 'error', places: null });
+        reportError('spinout-lab:cohort-record', e);
+        if (alive) setRead({ status: 'error', cohort: null });
       });
     return () => {
       alive = false;
@@ -179,7 +214,7 @@ export function useCohortPlaces() {
   }, [attempt]);
 
   const retry = () => {
-    setRead({ status: 'loading', places: null });
+    setRead({ status: 'loading', cohort: null });
     setAttempt((a) => a + 1);
   };
   return { ...read, retry };
