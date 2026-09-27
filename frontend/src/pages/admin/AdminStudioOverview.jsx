@@ -1,7 +1,8 @@
 /**
  * The cards under Eadwyn on Admin Studio. One per other Admin page.
- * Figures come from reads the branch pages already make. This file does not
- * mount a second assistant.
+ * Figures come from the studio glance (D443, D447). Until it arrives the
+ * cards say they are reading. `glance={null}` falls back to the legacy props.
+ * This file does not mount a second assistant.
  */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -86,13 +87,23 @@ export function AdminStudioOverview({ user, home, licence, templates, insights, 
     );
     return () => { cancelled = true; };
   }, [glanceProp]);
-  const glance = glanceProp !== undefined ? glanceProp : fetched;
-  const legacy = studioGlances({ user, home, licence, templates, insights });
-  const g = glance ? glancesFromStudioGlance(glance) : legacy;
+  const ownsFetch = glanceProp === undefined;
+  const glance = ownsFetch ? fetched : glanceProp;
+  if (ownsFetch && glance == null) {
+    return (
+      <div data-testid="admin-studio-overview">
+        <p className="mt-4 text-[12.5px] text-axal-muted" data-testid="admin-studio-reading">Reading…</p>
+      </div>
+    );
+  }
+  const g = glance
+    ? glancesFromStudioGlance(glance, user)
+    : studioGlances({ user, home, licence, templates, insights });
   const {
     onBranch, lic, seats, approvals, programme, contracts, insights: insightView,
   } = g;
   const licenceAbsence = g.licenceAbsence || null;
+  const licenceUnreadable = g.licenceUnreadable || null;
   const linkOnBranch = g.tier === 'branch' || (g.tier == null && Boolean(branchOfUser(user)));
   const open = (label) => studioCardTarget(linkOnBranch, label);
 
@@ -228,7 +239,9 @@ export function AdminStudioOverview({ user, home, licence, templates, insights, 
             Every row on the branch Settings page names who decides it, and the count of HQ-owned
             rows is derived there rather than stated here.
             {' '}
-            {!lic ? (
+            {licenceUnreadable ? (
+              <Unreadable what="Hostname" claim={licenceUnreadable} />
+            ) : !lic ? (
               // THE LICENCE WAS NOT READ, which is a different claim from "no
               // host is bound" — the register was never consulted. The card
               // already draws that distinction for seats a dozen lines up, and
@@ -260,7 +273,9 @@ export function AdminStudioOverview({ user, home, licence, templates, insights, 
                 same reason they exist there: unread, unreadable and absent are
                 three different claims. The fourth — "a kit does not apply" — is
                 new here, because only a white-label licence has one. */}
-            {!lic ? (
+            {licenceUnreadable ? (
+              <Unreadable what="Brand kit" claim={licenceUnreadable} />
+            ) : !lic ? (
               <Unrecorded reason={licenceAbsence || 'The licence was not read, so whether a brand kit is recorded is unknown rather than none.'}>
                 Brand kit not read
               </Unrecorded>

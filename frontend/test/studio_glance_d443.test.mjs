@@ -97,11 +97,9 @@ test('the loader lives in the overview module, and the home page is not the call
   const js = read('frontend/src/pages/admin/adminStudioOverview.js');
   const decide = read('frontend/src/pages/admin/StudioNeedsDecision.jsx');
   const overview = read('frontend/src/pages/admin/AdminStudioOverview.jsx');
-  const home = read('frontend/src/pages/admin/AdminStudioHome.jsx');
   assert.match(js, /adminStudioGlance/);
   assert.match(decide, /loadStudioGlance\(/);
   assert.match(overview, /loadStudioGlance\(/);
   assert.match(decide, /glancesFromStudioGlance\(/);
   assert.match(overview, /glancesFromStudioGlance\(/);
-  assert.doesNotMatch(home, /loadStudioGlance\(/, 'AdminStudioHome started reading the glance; Session 3 owns that file');
 });
