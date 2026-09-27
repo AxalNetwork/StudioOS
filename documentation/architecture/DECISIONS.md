@@ -31249,6 +31249,16 @@ graduate is also kept out of the Issue queue for the same reason.
   **One escaped on the first run**, the failed read shown as 0 in the states
   card, because the assertion looked for the header sentence. The assertion
   now reads the states row itself, not the code: 18 of 18 caught.
+- **gitleaks on the PR.** Its `generic-api-key` heuristic flagged the
+  frontend test's `credential_id: 'AXL-SOL-C4-…'` fixtures, a key named
+  "credential" beside a string. The value is the public credential reference
+  (`credentialRefFor`), printed on every certificate, not a secret. The
+  flagged commit stays in the PR's scan range, so `.gitleaks.toml` gains one
+  `regexes` entry pinned to that exact shape,
+  `AXL-SOL-(C<n>|X)-<6 digits>-<4 digits>`. The `public_token` that keys the
+  verification page is a different shape and is still scanned. Reproduced
+  with gitleaks 8.21.2 (the version CI pins) over the PR's commits: 2
+  findings before, none after.
 
 ## D390
 
