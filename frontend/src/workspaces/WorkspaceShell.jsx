@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import ZoneNav from './ZoneNav';
 import { useActiveCompany } from '../contexts/ActiveCompanyContext';
 import { bucketForPath, zoneForPath } from './shellConfig';
+import { boardFor } from './boards/index.js';
 
 /**
  * The chrome every workspace subpage sits in — one component, four shells.
@@ -103,6 +104,17 @@ export default function WorkspaceShell({
     : null;
   const zone = resolved || namedZone;
   const crumbTitle = typeof title === 'string' && zone && title !== zone.label ? title : null;
+  // BACK TO THE ZONE, NOT THE TOP OF THE BUCKET (D403). Where the root is a
+  // board (`boards/index.js`), each zone has a section there with its own
+  // anchor, and the crumb returns the reader to it: `/pipeline#pl-proposals`.
+  // BucketBoard scrolls to the hash. A root that is a card grid has no such
+  // section, and the crumb keeps the bare prefix. `boardFor` is only read for
+  // its section list — its sources are functions that nothing calls here, so
+  // no `api` is needed.
+  const crumbAnchor = zone && bucket
+    ? (boardFor(role, bucket.prefix, null)?.sections || []).find((s) => s.slug === zone.slug)?.anchor || null
+    : null;
+  const crumbTo = bucket ? (crumbAnchor ? `${bucket.prefix}#${crumbAnchor}` : bucket.prefix) : null;
   // No accent is read here on purpose. In the canvases the shell chrome —
   // crumb, title, divider — is neutral in all four roles; the accent lives on
   // the zone pills (ZoneNav) and the AI rail, which is where a reader looks to
@@ -174,7 +186,7 @@ export default function WorkspaceShell({
       <div className="min-w-0 flex-1 p-5">
         {bucket && (
           <div className="mb-2 flex items-center gap-2 text-[11.5px] text-axal-faint">
-            <Link to={bucket.prefix} className="hover:underline">
+            <Link to={crumbTo} className="hover:underline" data-testid="link-workspace-crumb">
               {bucket.label}
             </Link>
             {zone && (
