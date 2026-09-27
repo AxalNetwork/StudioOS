@@ -33128,6 +33128,133 @@ only it used are deleted. `InvestorFundLanding`'s ledger link opens
   frontend 4063 (+18), worker 4835 pass (+31), retention 112, `EXIT=0`.
   Nothing fell.
 
+## D374
+
+**The founder's data room is rebuilt on the "Data Room" canvas, and the room's
+log gains the refusal, the week and the per-file count (Session 9, item 4).**
+Same route, no redirect. No migration, no new route, no new `api.js` method.
+
+**Where it lives.** `/raise/data-room?mode=workspace` renders
+`pages/raise/DataRoomPage.jsx`. The bare route stays the Raise desk's read-only
+`FounderRaiseDataRoom`, and an investor is still redirected to Research ·
+Diligence (D311). The canvas's investor half is that page and its file page,
+built on D310's grant-keyed reads; nothing here touches them.
+
+**Worker (`routes/data_room.ts`).**
+
+- **A refused download is logged.** When the NDA gate refuses
+  `POST /shared/:projectUid/files/:uid/download`, `logAccess` writes
+  `blocked` before the 403, so the founder's log can filter Blocked.
+  `data_room_access_log.action` has no CHECK (migration 184), so no
+  migration is needed.
+- **The week is counted, not the fifty.** `GET /:projectUid` returns
+  `week: { opened, downloaded, blocked }`, a `GROUP BY action` over the
+  last seven days of the whole log. `created_at` is written by `nowIso()`,
+  so the column goes through `datetime()` before the comparison (D124). An
+  action with no row is 0 events: the table is this route's, and it exists.
+- **Each file carries its downloads**, counted from the log. It is a download
+  count, never a view count: nothing previews a file, so no per-file view is
+  logged.
+- **The recent list names the file's gate and the person**
+  (`file_visibility`, `user_name`), which the NDA filter and the log rows
+  read.
+- **A folder's gate can be carried to its contents.** A folder's visibility
+  hides only its name: every file keeps its own, and the download checks the
+  file's. So `PATCH /:projectUid/folders/:uid` with `apply_to_contents: true`
+  sets the folder, every folder under it (a recursive CTE, bounded by
+  `project_id` at every step) and every file in any of them, in one batch.
+  Without the flag, the old single-row update is unchanged.
+- **None of the new figures reaches an investor.** `/shared/:projectUid`
+  returns neither `week` nor `downloads`.
+
+**The page.**
+
+- Stat strip: Files, NDA-gated, Investors with access, and "Room opens this
+  week" (the canvas's "Views this week", restated as what the log counts).
+  A missing `week` is Not recorded, never 0.
+- A multi-file upload queue with drag and drop, a target folder and an NDA
+  toggle. Files are sent one at a time, each row with its state, and an
+  oversize file is refused before it is sent. The cap is 20 MB (canvas: 250),
+  and the bar shows that a file is sending, not a percentage: one request
+  carries the whole file and reports no progress.
+- The folder tree, with each item's gate, size and downloads.
+- A settings panel for the selection:
+  - who can see it, as three tiers;
+  - Require signed NDA, with "Also set every folder and file inside" for a
+    folder (on by default, and it says why);
+  - With access now, the worker's gate restated, with its empty-state reason;
+  - NDA terms, Not recorded;
+  - the watermark note, stated as its absence.
+- Sharing, revoking, and the advisor grant, as before.
+- The activity log with All / View / Download / NDA / Blocked. View is opening
+  the room, NDA is any event on an NDA-marked file, and Blocked is a refused
+  download. The log records no NDA signing, and the page says so.
+- A failed room read and a failed project list are each Unreadable with a
+  retry. The project list failing used to read "No project yet."
+- `WorkerRail` is mounted once with `role="founder"`, listing what the page
+  cannot do.
+
+**Not built, and why.**
+
+- **"Committed only" and "Private to you".** Every reader of this room was
+  measured first:
+  - `/shared/:projectUid` (`visible = v === 'open' || nda`);
+  - `research.ts` `heldRoom` and the room read (`f.visibility === 'open' ||
+    room.nda`);
+  - the diligence list's `file_open`.
+
+  Each shows a file to an investor holding a grant and a live NDA *whatever
+  else it is marked*. A third value would therefore be listed to every NDA
+  holder. The two `research.ts` readers are not this item's, so the tiers are
+  drawn as not built with that reason, and `badVisibility` still refuses
+  anything but `open|nda`. "Committed" would also need a key from a grant to
+  `raise_prospects`, which does not exist.
+- **Watermark and preview.** There is no PDF pipeline. The page says a
+  download is single-use, expires after two minutes, is logged, and that
+  changing a gate does not reach a copy already saved. The canvas says access
+  "revokes instantly … including for anyone with the file already open",
+  which is not true.
+- **The founder id in the shared payload.** The only e-sign consumer would
+  be an NDA-signing panel on Session 2's `DiligenceRoom`, and that page signs
+  nothing today. It states the NDA's state and links nowhere to sign.
+  `/shared` and `/shared/:projectUid` have had no caller since D311. So the
+  field is not added; when the investor page gains a signing panel, the
+  field belongs on the grant-keyed read it already uses.
+
+**Tests.**
+
+- `cloudflare-worker/test/data_room_founder_reads_d374.test.ts` (7 tests on
+  real SQLite over the baseline tables): the refusal is logged and a
+  permitted download is not; the week counts this room's seven days and not
+  the fifty, nothing older and nothing elsewhere; per-file downloads count
+  downloads only; the recent list names the file's gate; the founder counts
+  never reach `/shared` and a rival founder reads 404; the carried gate
+  reaches its own subtree when asked and only then; it is refused outside
+  the caller's room, for a folder uid from another project, and for a value
+  that is not a gate.
+- `frontend/test/data_room_canvas_d374.test.mjs` (11 tests): the canvas's
+  founder-view elements, each asserted at both ends; what cannot be built is
+  said and never drawn as working; the stat strip; the tree, with an orphan
+  or a loop landing at the root; With access now; the five filters; the
+  downloads label; the queue; the carried gate; Unreadable on both reads; no
+  fixture.
+- `data_room_live`, `data_room_docs` and `inline_project_pickers_retired`
+  pass unchanged: the page kept every property they pin.
+
+**Mutations.** 24 were run, and 23 were caught on the first run. One escaped
+because its assertion was weak: a failed project list set back to an empty
+list passed, since the test checked only that a `projectsFailed` branch came
+before "No project yet.", not that the catch sets it. The fix was to the
+assertion, not the code: it now requires the catch to mark the read failed
+and never to set an empty list. 24/24.
+
+One mutation needs a note. The subtree walk is bounded by `project_id` in
+three places: the recursive step, and each of the two UPDATEs. Breaking any
+one alone leaves the other two holding, so it is not observable (defence in
+depth). The mutation broke all three at once, against a fixture folder in
+another project whose `parent_id` points into this room's tree, and was
+caught.
+
 ## D380
 
 **The Spin-Out Lab honesty sweep: the seat count reads `/brief`'s `places`,
