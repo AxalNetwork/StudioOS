@@ -4,8 +4,8 @@ This folder contains the founder-specific workspace shell and the dedicated canv
 
 - `FounderWorkspacePage.jsx` provides the shared founder workspace frame used by routes that have not graduated to a dedicated canvas landing.
 - `FounderWorkspaceTabs.jsx` preserves access to the detailed tools grouped under each founder workspace.
-- `FounderValidatePage.jsx` owns the Validate evidence desk and hands off to the detailed Discovery editor.
-- `FounderBuildDesk.jsx` owns the Build weekly operating desk and hands off to the detailed Execution, Roadmap, and Metrics editors.
+- `FounderValidatePage.jsx` owns the Validate evidence desk at `/validate` and hands off to the four `/validate/*` stages. It no longer embeds the Discovery editor: a founder's bare `/build/discovery` redirects to `/validate`, and `?mode=workspace` or a Discovery `?tab=` mounts DiscoveryPage at the route (D422).
+- `FounderBuildDesk.jsx` owns the Build weekly operating desk at `/build` and hands off to the `/build/*` zones. It no longer embeds ExecutionPage: a founder's bare `/execution` redirects to `/build`, and `/execution?mode=workspace`, `/execution/board` and `/execution/roadmap` mount the editor at the route (D422).
 - `FounderRaiseDesk.jsx` owns the A4 Raise landing: a selected-project, read-only capital and legal overview that hands off to the detailed Pitch, Capital, Legal, Data Room, and Liquidity tools.
 - `FounderGrowDesk.jsx` owns the A5 Grow landing at `/build/team` for founders; `?mode=workspace` renders the Team workspace.
 - `FounderTeamPage.jsx` owns the Team workspace at `/build/team?mode=workspace` (D435): the company's roster, advisors, hiring and coverage from migration 326's stores, with the advisor directory, Co-founder Match and the jobs list opening inside the tab that owns each. It replaced the retired Team Building page (D435); the founder redirects `?tab=advisor|cofounder|jobs` land here.

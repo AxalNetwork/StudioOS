@@ -11,7 +11,12 @@ const app = read('frontend/src/App.jsx');
 
 test('A7 owns only bare founder signals and preserves detailed routes', () => {
   assert.match(app, /founderResearchLanding = effectiveRole === 'founder'/);
-  assert.match(app, /founderResearchLanding\s*\?\s*<FounderResearchDesk \/>[\s\S]*?founderWorkspace\('research'/);
+  // D422. Bare `/signals` was a second address for A7; it redirects to
+  // `/research` with the query kept (`?mode=landing`, `?project_id=`), and the
+  // desk is mounted at `/research` alone. Signals deep links and
+  // `?mode=workspace` keep the feed.
+  assert.match(app, /path="\/signals" element=\{guard\(\[[^\]]*\], founderResearchLanding\s*\? <Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>\s*: founderWorkspace\('research'/);
+  assert.match(app, /<Route path="\/research" element=\{founderResearchLanding\s*\? guard\([^)]*\), <FounderResearchDesk \/>\)/);
   assert.match(app, /signalsMode.*workspace/);
   assert.match(app, /signalsHasNonProjectQuery/);
 });

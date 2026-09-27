@@ -151,8 +151,10 @@ test('each row that owns sections is actually wrapped at its routes', () => {
   // which cannot fit the dashboard — the "Build doesn't fit full width and
   // height" report. Raise's and Grow's section pages never had it; Build's no
   // longer do either.
+  // `/build/discovery` left this table in D422: it stopped being A2's second
+  // address (a founder is redirected to `/validate`) and its editor mounts in
+  // `founderWorkspace('validate', …)`, which the shell branch below accepts.
   const OWN_LANDING = {
-    '/build/discovery': '<FounderValidatePage />',
     '/build/roadmap': '<FounderBuildRoadmap />',
   };
 
@@ -219,7 +221,10 @@ test('A7 owns the founder Research landing while workspace mode retains Signals'
   const line = app.split('\n').find((item) => item.includes('path="/signals"'));
   assert.ok(line?.includes('founderResearchLanding'), '/signals must defer ownership to A7');
   assert.match(app, /founderResearchLanding = effectiveRole === 'founder'/);
-  assert.match(app, /founderResearchLanding\s*\?\s*<FounderResearchDesk \/>/);
+  // D422: the landing is `/research`'s; bare `/signals` redirects there.
+  assert.match(line, /founderResearchLanding/);
+  assert.match(app, /founderResearchLanding\s*\?\s*<Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>/);
+  assert.match(app, /founderResearchLanding\s*\?\s*guard\([^)]*\), <FounderResearchDesk \/>\)/);
   assert.match(app, /FounderWorkspaceTabs set="research" user=\{user\}><SignalsPage user=\{user\} \/>/);
 });
 
