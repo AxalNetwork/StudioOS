@@ -10,7 +10,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -123,11 +123,13 @@ test('D394: the brief is the home/brief surface, run on a click and never on mou
 
 test('D394: P2 is built and not mounted — /studio stays PartnerStudioHome until the owner signs it off', () => {
   const importers = [];
+  // Directory entries carry their own type, so nothing is stat-ed and then
+  // read (CodeQL's file-system race, raised on the first draft's statSync).
   const walk = (dir) => {
-    for (const name of readdirSync(dir)) {
-      const p = join(dir, name);
-      if (statSync(p).isDirectory()) walk(p);
-      else if (/\.(jsx?|mjs)$/.test(name) && !p.endsWith('PartnerHomeP2.jsx')
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, entry.name);
+      if (entry.isDirectory()) walk(p);
+      else if (/\.(jsx?|mjs)$/.test(entry.name) && !p.endsWith('PartnerHomeP2.jsx')
         && /from ['"][^'"]*PartnerHomeP2['"]/.test(readFileSync(p, 'utf8'))) importers.push(p);
     }
   };
