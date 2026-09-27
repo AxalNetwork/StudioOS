@@ -38,9 +38,10 @@ const DASH = read('frontend/src/pages/Dashboard.jsx');
 
 test('an admin render returns Admin Studio before the founder fit block', () => {
   const adminAt = DASH.indexOf("if (activeRole === 'admin' && authUser)");
-  const fitAt = DASH.indexOf('<ProfileFitSection');
   assert.ok(adminAt > 0, 'Dashboard no longer has an admin return');
-  assert.ok(fitAt > adminAt, 'the fit block renders for an admin');
+  // Since D323 the dispatcher mounts no fit block of its own: each role's home
+  // mounts its own, and the admin home mounts none (asserted below).
+  assert.ok(!codeOnly(DASH).includes('<ProfileFitSection'), 'Dashboard mounts a fit block of its own again');
   assert.match(DASH, /<AdminStudioHome user=\{authUser\} \/>/);
   assert.match(HOME, /<PersonalAdvisor \/>/);
   assert.ok(!HOME.includes('ProfileFitSection'), 'Admin Studio mounts the founder fit block');
