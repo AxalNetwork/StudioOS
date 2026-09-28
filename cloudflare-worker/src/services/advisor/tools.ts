@@ -114,7 +114,6 @@ const PAGE_ALLOWLIST: Record<string, string> = {
   '/build/deck': 'Pitch Deck',
   '/network': 'Network',
   '/onboarding/persona': 'Persona',
-  '/matches': 'AI Matches',
   '/portfolio': 'Portfolio',
   '/advisors': 'Advisors',
   '/partners': 'Partners',

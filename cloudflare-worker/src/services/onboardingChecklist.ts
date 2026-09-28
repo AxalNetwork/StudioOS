@@ -105,8 +105,11 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     { key: 'inv.nda',       label: 'Sign Investor NDA with Axal',        route: '/trust',                      autoDetect: true },
     { key: 'inv.thesis',    label: 'Save your thesis + watchlist',       route: '/watchlist',                  autoDetect: true },
     { key: 'inv.crm',       label: 'Connect Affinity / HubSpot (optional)', route: '/integrations',            autoDetect: true },
-    { key: 'inv.review',    label: 'Review 3 matched founders',          route: '/matches',                    autoDetect: true },
-    { key: 'inv.intro',     label: 'Request your first intro',           route: '/matches',                    autoDetect: true },
+    // 'inv.review' (Review 3 matched founders) and 'inv.intro' (Request your
+    // first intro) both sent the investor to /matches, which was removed with
+    // the AI Matching Engine. Nothing writes the deal-flow scores the first
+    // counted, and no screen requests an intro, so both steps came out rather
+    // than stay as steps nobody can finish.
     // RELABELLED with the repoint: 'deployment target' and 'reserve %' are fields
     // no table has. investor_profiles stores the ticket band and the LP target,
     // which is what the investor is actually asked for.
@@ -155,7 +158,6 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
   ],
 };
 
-export const TOTAL_ITEMS = 10;
 export const CELEBRATION_THRESHOLD = 8;
 
 /**
@@ -362,12 +364,6 @@ async function detect(env: Env, userId: number, key: string, primaryPersonaId?: 
             AND status = 'active'
             AND provider_key IN ('affinity','hubspot','salesforce')`,
         userId)) > 0;
-    case 'inv.review':
-      return (await num(env,
-        `SELECT COUNT(*) FROM match_scores WHERE user_id = ? AND score_type = 'deal_flow'`,
-        userId)) >= 3;
-    case 'inv.intro':
-      return (await num(env, `SELECT COUNT(*) FROM investor_introductions WHERE investor_user_id = ?`, userId)) > 0;
     case 'inv.target':
       return (await num(env,
         `SELECT COUNT(*) FROM investor_profiles
@@ -584,7 +580,11 @@ export async function loadChecklist(
 
   return {
     role,
-    total: TOTAL_ITEMS,
+    // The role's own count. Was a fixed TOTAL_ITEMS = 10, which every
+    // catalogue held until the investor's lost inv.review and inv.intro with
+    // the AI Matching Engine; a fixed 10 would have shown an investor "8 / 10"
+    // with nothing left to do, and never "You're all set!".
+    total: rows.length,
     completed: completedCount,
     pending: pendingCount,
     skipped: skippedCount,

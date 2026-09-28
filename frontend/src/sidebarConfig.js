@@ -426,7 +426,7 @@ export const SIDEBAR_GROUPS = {
       // (PartnerBucketRoutes); the legacy destinations stay in `match` so a
       // deep link still lights the right row.
       { to: '/pipeline', icon: Target, label: 'Pipeline',
-        match: ['/pipeline', '/needs', '/matches', '/partner/insights', '/partner/operations/engagements'] },
+        match: ['/pipeline', '/needs', '/partner/insights', '/partner/operations/engagements'] },
       { to: '/delivery', icon: Briefcase, label: 'Delivery',
         match: ['/delivery', '/partner/operations/overview', '/partner/operations/portfolio',
                 '/partner/operations/performance'] },

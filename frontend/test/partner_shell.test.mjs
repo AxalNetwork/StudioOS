@@ -69,7 +69,8 @@ test('Home remains /studio and no Partner persona root was invented', () => {
 
 test('canonical Partner deep links are owned by the correct workspace', () => {
   const expectedMatches = {
-    Pipeline: ['/pipeline', '/needs', '/matches', '/partner/insights', '/partner/operations/engagements'],
+    // '/matches' left with the AI Matching Engine, which was deleted.
+    Pipeline: ['/pipeline', '/needs', '/partner/insights', '/partner/operations/engagements'],
     Delivery: ['/delivery', '/partner/operations/overview', '/partner/operations/portfolio', '/partner/operations/performance'],
     Offers: ['/offers', '/services', '/perks', '/comarketing', '/partner/office-hours', '/partner/operations/capabilities'],
     Network: ['/network', '/relationships', '/contacts'],
@@ -93,7 +94,6 @@ test('collapsed Pipeline and Offers sections remain reachable from Partner tabs'
   );
   for (const path of [
     '/needs',
-    '/matches',
     '/partner/insights',
     '/services',
     '/perks',

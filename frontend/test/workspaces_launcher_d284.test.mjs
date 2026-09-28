@@ -58,7 +58,8 @@ const CANVAS = [
   ['Studio', 'Pipeline Board', '/pipeline'], ['Studio', 'Scoring Engine', '/scoring'],
   ['Studio', 'Risk Matrix', '/portfolio/risk-matrix'], ['Studio', 'Market Intelligence', '/market-intel'],
   ['Studio', 'Signals', '/signals'], ['Studio', 'AI Advisory Suite', '/advisory'],
-  ['Studio', 'AI Matches', '/matches'], ['Studio', 'Deal Flow', '/deals'],
+  // ['Studio', 'AI Matches', '/matches'] stood here; that page was deleted.
+  ['Studio', 'Deal Flow', '/deals'],
   ['Capital & Legal', 'Capital & Investment', '/capital'], ['Capital & Legal', 'Liquidity & Exits', '/liquidity'],
   ['Capital & Legal', 'Portfolio Health', '/portfolio/health'], ['Capital & Legal', 'Portfolio Coverage', '/portfolio/coverage'],
   ['Capital & Legal', 'Reserve Allocation', '/portfolio/reserves'], ['Capital & Legal', 'Exit Waterfall', '/portfolio/waterfall'],
@@ -72,11 +73,11 @@ const CANVAS = [
   ['More', 'Perks', '/perks'],
 ];
 
-test('the launcher list is the canvas list: 29 pages in four groups, every one a registered route', () => {
+test('the launcher list is the canvas list less AI Matches: 28 pages in four groups, every one a registered route', () => {
   assert.deepEqual(WORKSPACES.map((w) => [w.group, w.label, w.route]), CANVAS);
   assert.deepEqual(WORKSPACE_GROUP_ORDER, ['Studio', 'Capital & Legal', 'Network & Growth', 'More']);
   assert.deepEqual(WORKSPACE_GROUPS.map((g) => [g.group, g.count]),
-    [['Studio', 8], ['Capital & Legal', 10], ['Network & Growth', 8], ['More', 3]]);
+    [['Studio', 7], ['Capital & Legal', 10], ['Network & Growth', 8], ['More', 3]]);
   for (const g of WORKSPACE_GROUPS) assert.equal(g.count, g.items.length, `${g.group}'s count is not its length`);
   for (const w of WORKSPACES) {
     assert.ok(w.description && w.description.endsWith('.'), `${w.route} has no description`);

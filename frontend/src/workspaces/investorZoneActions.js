@@ -41,10 +41,11 @@ import { makeZoneActions } from './zoneActionBuilder';
  *
  * THE SAME LABEL IS NOT THE SAME ANSWER ACROSS PROFILES. `/network/*` serves
  * every licence and the investor artboard's ops are word-for-word the founder's
- * — but `/matches`, where `introductionsRequest` lives, is guarded
- * `['admin', 'partner', 'investor']`. So "Request an intro" is a working link
- * here and a stated gap on the founder's identical zone. That is exactly why
- * the tables are per profile and only the builder is shared.
+ * — but a route one licence may open can be closed to another. "Request an
+ * intro" was the example: a working link to `/matches` here and a stated gap
+ * on the founder's identical zone. `/matches` has since been removed, so it
+ * is a gap on both. That is exactly why the tables are per profile and only
+ * the builder is shared.
  *
  * THE CANVAS'S FUND ROUTES ARE NOT THE LIVE ONES. `Pages · Investor Fund` names
  * `/fund/lps`, `/fund/calls`, `/fund/accounting`, `/fund/reporting`. The router
@@ -211,7 +212,10 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   'network/introductions': [
-    { label: 'Request an intro', to: '/matches' },
+    // WAS a link to /matches, whose deal cards carried the only button that
+    // called `introductionsRequest`. The AI Matching Engine was removed, the
+    // button with it, and nothing else asks for an intro.
+    { label: 'Request an intro', unbuilt: 'no screen requests an introduction since the AI Matches page was removed' },
     { label: 'Offer one', unbuilt: 'offering an introduction is not built' },
     { label: 'Export', kind: 'export' },
   ],

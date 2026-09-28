@@ -337,7 +337,6 @@ def _project_founder_onboarding(session: Session, user: User) -> Optional[str]:
 # Task #6 (IF) — Settings → Onboarding checklist (dev mirror of the worker).
 # ---------------------------------------------------------------------------
 
-_TOTAL_ITEMS = 10
 _CELEBRATION_THRESHOLD = 8
 
 # Mirrors CATALOG in cloudflare-worker/src/services/onboardingChecklist.ts.
@@ -373,8 +372,6 @@ _CHECKLIST_CATALOG: Dict[str, list] = {
         {"key": "inv.nda", "label": "Sign Investor NDA with Axal", "route": "/trust"},
         {"key": "inv.thesis", "label": "Save your thesis + watchlist", "route": "/watchlist"},
         {"key": "inv.crm", "label": "Connect Affinity / HubSpot (optional)", "route": "/integrations"},
-        {"key": "inv.review", "label": "Review 3 matched founders", "route": "/matches"},
-        {"key": "inv.intro", "label": "Request your first intro", "route": "/matches"},
         {"key": "inv.target", "label": "Set deployment target + reserve %", "route": "/settings/profile"},
         {"key": "inv.dealroom", "label": "Open your first deal-room", "route": "/deals"},
         {"key": "inv.notifs", "label": "Configure notifications", "route": "/settings/notifications"},
@@ -550,7 +547,7 @@ def _load_checklist(session: Session, user: User) -> Dict[str, Any]:
 
     return {
         "role": role,
-        "total": _TOTAL_ITEMS,
+        "total": len(rows_out),  # per role, as the worker reports it
         "completed": completed,
         "pending": pending,
         "skipped": skipped,

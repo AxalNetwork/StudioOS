@@ -126,7 +126,6 @@ export const ADMIN_PLACEMENT = [
   page('Studio', 'Market Intelligence', '/market-intel', 'Market readings with their sources.'),
   page('Studio', 'Signals', '/signals', 'External signals, grouped by theme.'),
   page('Studio', 'AI Advisory Suite', '/advisory', 'AI-assisted analysis tools.'),
-  page('Studio', 'AI Matches', '/matches', 'Suggested matches between members.'),
   page('Studio', 'Deal Flow', '/deals', 'Incoming deals and their status.'),
   page('Capital & Legal', 'Capital & Investment', '/capital', 'Rounds, commitments and instruments.'),
   page('Capital & Legal', 'Liquidity & Exits', '/liquidity', 'Secondaries and recorded exits.'),

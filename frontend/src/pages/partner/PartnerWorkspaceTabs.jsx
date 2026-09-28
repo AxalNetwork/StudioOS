@@ -1,5 +1,5 @@
 import React from 'react';
-import { Target, Handshake, TrendingUp, Layers, Package, Gift, Megaphone, Calendar, Award } from 'lucide-react';
+import { Target, TrendingUp, Layers, Package, Gift, Megaphone, Calendar, Award } from 'lucide-react';
 import WorkspaceTabs from '../../components/WorkspaceTabs';
 import PartnerWorkspaceShell from './PartnerWorkspaceShell';
 
@@ -10,7 +10,7 @@ import PartnerWorkspaceShell from './PartnerWorkspaceShell';
  * WHY A WRAPPER AND NOT AN EDIT. `PartnerOperationsWorkspace` puts its tab bar
  * inside one page that renders all five of its children with an `embedded`
  * prop. The pages these rows point at — NeedsBoardPage, ServiceCatalogPage,
- * MatchesPage and the rest — are 500–1000 line files that take no such prop and
+ * and the rest — are 500–1000 line files that take no such prop and
  * share no shell. Wrapping them at the route is additive: no page changes, no
  * new props, and reverting is deleting one element from App.jsx.
  *
@@ -18,7 +18,7 @@ import PartnerWorkspaceShell from './PartnerWorkspaceShell';
  * The tab targets do not share a guard:
  *
  *   /needs, /services                 admin founder partner investor
- *   /matches, /partner/insights       admin partner investor
+ *   /partner/insights                 admin partner investor
  *   /perks                            admin founder partner investor advisor exploring
  *   /comarketing                      admin partner founder investor
  *   /partner/office-hours             admin partner
@@ -40,8 +40,6 @@ const SETS = {
   pipeline: [
     { to: '/needs', label: 'Leads', icon: Target,
       roles: ['admin', 'founder', 'partner', 'investor'] },
-    { to: '/matches', label: 'Matches', icon: Handshake,
-      roles: ['admin', 'partner', 'investor'] },
     { to: '/partner/insights', label: 'Demand', icon: TrendingUp,
       roles: ['admin', 'partner', 'investor'] },
     { to: '/pipeline/retainers', label: 'Retainers', icon: Layers,
