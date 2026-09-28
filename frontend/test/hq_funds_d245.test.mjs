@@ -38,11 +38,11 @@ const fund = (over) => ({
   committed_minor: 1_000_000_000, committed_source: 'fund_size_cents',
   last_issued: { period: '2026-Q2', period_end: '2026-06-30', issued_at: '2026-07-14T10:00:00Z' },
   // D375's fields, as a branch on the current build answers them.
-  vintage_year: 2025, called_minor: 300_000_000, called_ratio: 0.3, distributed_minor: 60_000_000, dpi: 0.2,
+  vintage_year: 2025, jurisdiction: null, gp_entity_jurisdiction: null, called_minor: 300_000_000, called_ratio: 0.3, distributed_minor: 60_000_000, dpi: 0.2,
   flags: { no_gp_of_record: false, custodian_recorded: true, gp_fields_unset: [], lpa_on_file: true, draft_not_issued: null },
   ...over,
 });
-const READS = { complete: true, periods_available: true, calls_available: true, distributions_available: true };
+const READS = { complete: true, periods_available: true, calls_available: true, distributions_available: true, entities_available: true };
 const PAYLOAD = {
   read_at: '2026-09-26T10:00:00Z',
   hq: { code: 'hq', status: 'ok', as_of: '2026-09-26T10:00:00Z', data: { ...READS, funds: [fund()] } },

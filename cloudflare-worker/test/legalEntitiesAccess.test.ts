@@ -109,11 +109,18 @@ test('the GET route never runs an unscoped SELECT outside the staff branch', () 
 test('the POST route on the same path is staff-only', () => {
   // The write half of the same hole: unguarded, it let any principal graft a
   // row into the corporate tree, including under another founder's parent_id.
-  const body = handler('post');
-  assert.match(body, /user\.role !== 'admin' && user\.role !== 'partner'/);
-  assert.match(body, /403/);
+  // D376 moved the handler into routes/legal_entities.ts (a sub-app legal.ts
+  // mounts); the gate moved with it, and legal.ts must not keep a second one.
+  assert.equal(SRC.indexOf("legal.post('/entities'"), -1, 'legal.ts still defines POST /entities beside the sub-app');
+  assert.match(SRC, /legal\.route\('\/', legalEntities\);/);
+  const sub = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../src/routes/legal_entities.ts'), 'utf8');
+  assert.match(sub, /const isStaff = \(role: unknown\) => role === 'admin' \|\| role === 'partner';/);
+  const start = sub.indexOf("app.post('/entities', async (c) => {");
+  assert.notEqual(start, -1, "app.post('/entities') not found — route renamed?");
+  const body = sub.slice(start, sub.indexOf('\n});', start));
+  assert.match(body, /if \(!isStaff\(user\.role\)\) return c\.json\(\{ error: 'Forbidden' \}, 403\);/);
   assert.ok(
-    body.indexOf("role !== 'admin'") < body.indexOf('INSERT INTO entities'),
+    body.indexOf('isStaff(user.role)') < body.indexOf('INSERT INTO entities'),
     'the role check must precede the INSERT',
   );
 });
