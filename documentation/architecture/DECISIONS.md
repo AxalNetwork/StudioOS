@@ -31067,6 +31067,37 @@ Four mutations were run and all four were caught:
 - attempts no longer tagged with their build;
 - `main.jsx` bypassing the recorder.
 
+## D317
+
+**The Spin-Out Lab carries no Eadwyn rail.**
+
+**The report.** The owner, on `/spinout-lab/market` and then
+`/spinout-lab/advisors`: "This Eadwyn right sidebar has nothing to do in the
+Spin-Out Lab, remove it."
+
+**What was there.** The rule "the AI rail applies to the pages, except in the
+Spin-Out Lab" was already enforced, but only for `WorkerRail`. Three Lab pages
+(Market, Advisors, Brand) still mounted the other rail, `AssistRail` through
+`AssistLayout`, and `workspace_frame_contract.test.mjs` had pinned that as
+intended.
+
+**The change.**
+
+- `SpinoutLabMarketPage`, `SpinoutLabAdvisorsPage` and `SpinoutLabBrandPage`
+  return their page without `AssistLayout`. Brand is included because the
+  owner's reason covers the whole Lab, not just the two URLs they sent.
+- **The market switch moved onto the page.** The rail's "AI fills the blanks"
+  card was the only control that turned on the page's two fill bands (sizing
+  inputs, competitors). Taking the rail away without moving the switch would
+  have left the bands permanently off. The page now draws the switch above the
+  bands, still backed by `useAssistMode('market')` and still off by default,
+  with the same copy for what it proposes, what it refuses, and what off means.
+- The `market` entry in `ASSIST_SURFACES` is removed: the Lab page was its
+  only mount. `advisory` and `brand` stay, because `AdvisoryPage` and
+  `BrandBuilderPage` outside the Lab still mount them.
+- The Lab test now bans `WorkerRail`, `AssistLayout` and `AssistRail` in every
+  Spin-Out Lab page. The market test checks the page's own switch and copy.
+
 ## D320
 
 **The archetype banks go from three probes per trait to five, and every one

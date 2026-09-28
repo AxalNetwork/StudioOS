@@ -237,13 +237,15 @@ test('a page mounted inside the shell draws no second frame', () => {
   }
 });
 
-test('the Spin-Out Lab keeps its own chrome, and the exclusion is scoped to the Worker rail', () => {
+test('the Spin-Out Lab carries no Eadwyn rail of either kind (D317)', () => {
   // The owner's rule is "the AI rail applies to the pages, EXCEPT in the
-  // Spin-Out Lab". Already true, and the scope matters: not one Lab route
-  // renders `WorkerRail`, but three Lab pages render the OTHER component,
-  // `AssistRail` through `AssistLayout` — and those three surfaces ARE
-  // registered in `ASSIST_SURFACES`, so they legitimately name a model and a
-  // price. A blunt "no rail in the Lab" would strip three correct rails.
+  // Spin-Out Lab". It used to be scoped to `WorkerRail` alone, and three Lab
+  // pages — Market, Advisors, Brand — kept the OTHER rail, `AssistRail`
+  // through `AssistLayout`. The owner then asked for it off /spinout-lab/market
+  // and /spinout-lab/advisors: "This Eadwyn right sidebar has nothing to do in
+  // the Spin-Out Lab". So the rule now covers both components. The market
+  // page's fill switch moved onto the page with its bands, so removing the
+  // rail removed no capability.
   const lab = [];
   const walk = (dir) => {
     for (const entry of readdirSync(resolve(process.cwd(), dir), { withFileTypes: true })) {
@@ -255,10 +257,9 @@ test('the Spin-Out Lab keeps its own chrome, and the exclusion is scoped to the 
   walk('frontend/src/pages');
   assert.ok(lab.length >= 5, `only ${lab.length} Spin-Out Lab pages found`);
   for (const file of lab) {
-    assert.doesNotMatch(src(file), /<WorkerRail/, `${file} mounts the workspace rail inside the Lab`);
+    assert.doesNotMatch(src(file), /<WorkerRail|<AssistLayout|<AssistRail/,
+      `${file} mounts an Eadwyn rail inside the Lab`);
   }
-  assert.ok(lab.some((f) => /AssistLayout|AssistRail/.test(src(f))),
-    'the three legitimate AssistRail mounts in the Lab have been stripped');
 });
 
 test('the scope badge names the active company, and no caller restates the rule', () => {
