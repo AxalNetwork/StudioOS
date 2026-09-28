@@ -4,8 +4,14 @@
 // file uploaded to attached_assets). The design's fabricated content
 // (invented partner personas, ratings, "Partner prep sent", fake session
 // summaries) is intentionally NOT reproduced. Mapping to REAL surfaces only:
-//   - Partner directory: GET /partners (real partner network — role tags
-//     derived from each partner's marketplace categories/specialization).
+//   - Host directory (D377): GET /spinout-lab/hosts/directory — ONLY the
+//     investors, advisors and partners who applied to host Spin-Out Lab
+//     office hours and whom an admin approved. It used to be GET /partners,
+//     every partner profile on the platform. An approved partner profile is
+//     booked through partner slots; an approved advisor through advisor
+//     slots (the advisor booking route keeps its own tier gate). Role tags:
+//     the capacity they were approved as, and for a Partner the role derived
+//     from their own specialization.
 //   - Booking: real partner office-hour slots
 //     (GET /partner-office-hours/partners/:uid/slots +
 //      POST /partner-office-hours/slots/:id/book) via the design's booking
@@ -80,6 +86,7 @@ const ROLE_STYLE = {
   Lawyer: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
   Operator: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
   Investor: 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
+  Advisor: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
   Finance: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
   Partner: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
 };
@@ -98,11 +105,29 @@ function RoleTag({ role }) {
 export const FILTERS = [
   ['recommended', 'Recommended'],
   ['Investor', 'Investors'],
+  ['Advisor', 'Advisors'],
   ['Lawyer', 'Lawyers'],
   ['Operator', 'Operators'],
   ['all', 'All'],
 ];
-const filterRoleOf = (role) => (role === 'Lawyer' || role === 'Investor' ? role : 'Operator');
+const filterRoleOf = (role) => (role === 'Lawyer' || role === 'Investor' || role === 'Advisor' ? role : 'Operator');
+
+/**
+ * D377 — one directory entry from the approved-hosts read. A partner keeps its
+ * `partners.id` as `id`, because partner bookings, ratings and action items key
+ * on it; an advisor gets an id of its own so the two id spaces never collide.
+ */
+export function hostEntry(h) {
+  const kind = h?.kind === 'advisor' ? 'advisor' : 'partner';
+  return { ...h, kind, id: kind === 'partner' ? h.host_id : `advisor-${h.host_id}` };
+}
+
+/** The tag a host carries: the capacity an admin approved them as. */
+export function hostRole(h) {
+  if (h?.capacity === 'investor') return 'Investor';
+  if (h?.capacity === 'advisor') return 'Advisor';
+  return roleOfPartner(h);
+}
 // Per-filter directory note (design L286). The recommended note is dynamic
 // (needs the current week) and built at render.
 //
@@ -113,10 +138,11 @@ const filterRoleOf = (role) => (role === 'Lawyer' || role === 'Investor' ? role 
 // carries neither — so a growth-stage fund or an IP attorney would be
 // described inaccurately. Nothing here claims anything about a real person.
 const DIR_NOTE = {
-  Investor: 'Investors in the Axal network.',
-  Lawyer: 'Legal partners in the Axal network.',
-  Operator: 'Service partners in the Axal network — GTM, hiring, ops, product, and finance.',
-  all: 'Every partner in the Axal network.',
+  Investor: 'Investors approved to host Spin-Out Lab office hours.',
+  Advisor: 'Advisors approved to host Spin-Out Lab office hours.',
+  Lawyer: 'Legal partners approved to host Spin-Out Lab office hours.',
+  Operator: 'Service partners approved to host Spin-Out Lab office hours — GTM, hiring, ops, product, and finance.',
+  all: 'Everyone approved to host Spin-Out Lab office hours.',
 };
 
 // Rec-card tint per partner type (design recBg / recBorder L266-267).
@@ -342,7 +368,8 @@ export default function SpinoutLabOfficeHoursPage() {
           spinoutLab.state().catch(() => null),
           api.getMe(),
           api.listProjects().catch(() => []),
-          api.listPartners().catch(() => ({ failed: true })),
+          api.labHostDirectory().then((r) => (Array.isArray(r?.items) ? r.items.map(hostEntry) : { failed: true }))
+            .catch(() => ({ failed: true })),
           api.listMyPartnerRequests().catch(() => ({ failed: true })),
         ]);
         if (dead) return;
@@ -445,7 +472,7 @@ export default function SpinoutLabOfficeHoursPage() {
   // ---- Partner directory + filters ----
   const dirItems = useMemo(() => (Array.isArray(partners) ? partners : [])
     .filter((p) => p.status !== 'inactive')
-    .map((p) => ({ ...p, role: roleOfPartner(p) })), [partners]);
+    .map((p) => ({ ...p, role: hostRole(p) })), [partners]);
   const recommendedRoles = useMemo(() => new Set(helpCards.map((c) => c.role)), [helpCards]);
   // Exact role first, then the directory's folded bucket (Finance/Partner sit
   // under Operator) — so "Book now" resolves to a real partner or to null,
@@ -534,7 +561,10 @@ export default function SpinoutLabOfficeHoursPage() {
     setDrawerFor(partner); setSlots('loading'); setSlotId(null);
     setObjective(''); setOutcome(''); setAttachBrief(true); setBookError('');
     try {
-      const res = await api.listPartnerSlots(partner.uid, true);
+      // An approved advisor is booked on their own advisor calendar.
+      const res = partner.kind === 'advisor'
+        ? await api.listAdvisorSlots(partner.uid, true)
+        : await api.listPartnerSlots(partner.uid, true);
       if (seq !== drawerSeq.current) return;
       const items = (Array.isArray(res?.items) ? res.items : []).map(normSlot).filter((s) => s.open && s.remaining > 0);
       setSlots({ items });
@@ -555,18 +585,26 @@ export default function SpinoutLabOfficeHoursPage() {
         attachBrief && briefText ? `— Pre-session brief —\n${briefText}` : null,
       ].filter(Boolean).join('\n\n');
       const questions = composed ? composed.slice(0, 2000) : null;
-      await api.bookPartnerSlot(slotId, {
-        topic: objective,
-        questions,           // dev FastAPI field
-        notes: questions,    // production Worker reads `notes` (extra field is ignored by FastAPI)
-        project_id: project?.id ?? null,
-      });
+      const advisor = drawerFor?.kind === 'advisor';
+      if (advisor) {
+        // The advisor booking route: its Growth-tier gate still applies, and
+        // its refusal is what the drawer prints.
+        await api.bookAdvisorSlot(slotId, { topic: objective, notes: questions });
+      } else {
+        await api.bookPartnerSlot(slotId, {
+          topic: objective,
+          questions,           // dev FastAPI field
+          notes: questions,    // production Worker reads `notes` (extra field is ignored by FastAPI)
+          project_id: project?.id ?? null,
+        });
+      }
       setDrawerFor(null);
       // Only claim the brief travelled when it actually did (the checkbox is
       // opt-out and the brief can be empty).
-      showToast(attachBrief && briefText
-        ? 'Session requested — the partner will confirm and your brief travels with the booking.'
-        : 'Session requested — the partner will confirm.');
+      const who = advisor ? 'advisor' : 'partner';
+      showToast(`${attachBrief && briefText
+        ? `Session requested — the ${who} will confirm and your brief travels with the booking.`
+        : `Session requested — the ${who} will confirm.`}${advisor ? ' It is listed with your advisor sessions on Advisors.' : ''}`);
       // W3 deliverable — a real partner session was requested.
       markMilestone(user, 'office_hours_booked');
       await refreshBookings();
@@ -579,7 +617,7 @@ export default function SpinoutLabOfficeHoursPage() {
   const bookTopMatch = (role) => {
     const target = matchForRole(role);
     if (target) openDrawer(target);
-    else showToast('No partner in the network matches this yet.', 'error');
+    else showToast('No approved host matches this yet.', 'error');
   };
 
   // Partner-authored guidance for the partner whose drawer is open (if any).
@@ -674,10 +712,10 @@ export default function SpinoutLabOfficeHoursPage() {
       />
 
       {/* Disambiguation against Advisors — the reciprocal of the note on
-          /spinout-lab/advisors. This page books PARTNER ORGANISATIONS and
-          fires an OPTIONAL milestone; the advisor surface books an individual
-          matched to your skill gaps and is what satisfies Week 3's REQUIRED
-          one. A founder booking here to "do Week 3" would come up short. */}
+          /spinout-lab/advisors. This page books the APPROVED HOSTS (D377):
+          partner organisations, and advisors an admin approved to host here.
+          The advisor surface ranks individuals against your skill gaps and is
+          the one this page points at for Week 3's REQUIRED milestone. */}
       <p className="mb-4 text-[12.5px] text-gray-500 dark:text-gray-400" data-testid="xlink-advisors">
         Need a 1:1 with an advisor matched to your skill gaps — the booking that completes Week 3?{' '}
         <Link to="/spinout-lab/advisors" className="font-semibold text-teal-700 dark:text-teal-400 hover:underline">
@@ -689,7 +727,7 @@ export default function SpinoutLabOfficeHoursPage() {
         <div className={`${CARD} p-4 mb-5 flex items-center gap-3`} data-testid="banner-locked">
           <Lock className="w-4 h-4 text-gray-400" />
           <div className="text-[12.5px] text-gray-600 dark:text-gray-300">
-            Office Hours is a Week 3 tool. You can browse the partner network now; booking unlocks with Week 3.
+            Office Hours is a Week 3 tool. You can browse the approved hosts now; booking unlocks with Week 3.
           </div>
         </div>
       )}
@@ -749,7 +787,7 @@ export default function SpinoutLabOfficeHoursPage() {
                       type="button"
                       className={`${BTN} bg-teal-600 hover:bg-teal-700 text-white disabled:opacity-50 shrink-0`}
                       disabled={!unlocked || !match}
-                      title={!unlocked ? 'Office Hours unlocks in Week 3' : !match ? 'No partner in the network matches this yet' : undefined}
+                      title={!unlocked ? 'Office Hours unlocks in Week 3' : !match ? 'No approved host matches this yet' : undefined}
                       onClick={() => bookTopMatch(c.role)}
                       data-testid={`button-book-help-${c.id}`}
                     >
@@ -817,7 +855,7 @@ export default function SpinoutLabOfficeHoursPage() {
       <div className="grid lg:grid-cols-[1fr_340px] gap-6 items-start mb-6">
         <div className={`${CARD} p-5`} data-testid="partner-directory">
           <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
-            <div className={LBL}>Partner directory · Book a session</div>
+            <div className={LBL}>Approved hosts · Book a session</div>
             <div className="flex gap-1.5 flex-wrap" data-testid="directory-filters">
               {FILTERS.map(([key, label]) => (
                 <button
@@ -832,9 +870,12 @@ export default function SpinoutLabOfficeHoursPage() {
           </div>
           <div className="text-[11.5px] text-gray-400 mb-3">{dirNote}</div>
           {partners?.failed ? (
-            <div className="text-[12.5px] text-gray-500">Couldn't load the partner network.</div>
+            <div className="text-[12.5px] text-gray-500">Couldn't load the approved hosts.</div>
           ) : dirItems.length === 0 ? (
-            <div className="text-[12.5px] text-gray-500 dark:text-gray-400">No partners in the network yet.</div>
+            <div className="text-[12.5px] text-gray-500 dark:text-gray-400" data-testid="directory-empty">
+              No one is approved to host Spin-Out Lab office hours yet. Investors, advisors and partners apply from their
+              own office-hours page, and an admin approves them.
+            </div>
           ) : (
             <div className="grid sm:grid-cols-2 gap-3" data-testid="partner-grid">
               {visiblePartners.map((p) => {
@@ -864,7 +905,7 @@ export default function SpinoutLabOfficeHoursPage() {
                         <div className="min-w-0">
                           <div className="text-[13px] font-bold text-gray-900 dark:text-gray-100 truncate">{p.name}</div>
                           <div className="text-[11.5px] text-gray-500">{p.headline || p.specialization || p.company || '—'}</div>
-                          <PartnerRating read={ratings} partnerId={p.id} />
+                          {p.kind === 'partner' && <PartnerRating read={ratings} partnerId={p.id} />}
                         </div>
                       </div>
                       <RoleTag role={p.role} />
@@ -889,7 +930,7 @@ export default function SpinoutLabOfficeHoursPage() {
                           Matches your open item: {recTitleByRole.get(p.role) || 'a gap or blocker this week'}
                         </div>
                         <div className="text-[10.5px] text-teal-700/70 dark:text-teal-300/60 mt-0.5">
-                          Matched on their {p.role} tag — every {p.role.toLowerCase()} in the network is shown here.
+                          Matched on their {p.role} tag — every approved {p.role.toLowerCase()} is shown here.
                         </div>
                       </div>
                     )}

@@ -13,6 +13,7 @@ import {
 } from './sessionGrid';
 import { bookingView, formatDateTime, slotMinutes } from '../advisory/kit';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
+import LabHostApplyCard from '../../../components/officehours/LabHostApplyCard';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 
@@ -256,6 +257,9 @@ export default function SessionsZone() {
       />
 
       <SaveNote note={blockNote} />
+
+      {/* D377 — Spin-Out Lab founders see only approved hosts. */}
+      <LabHostApplyCard kind="advisor" />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Booked" value={counts.booked} note={bookedNote(counts)} />

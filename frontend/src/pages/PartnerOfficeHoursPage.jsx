@@ -19,6 +19,7 @@ import { api } from '../lib/api';
 // in both environments instead of printing "Invalid Date" against the Worker.
 import { normSlot, normBooking } from './SpinoutLabOfficeHoursPage';
 import { SessionActionItems, SessionRating } from '../components/officehours/SessionFollowups';
+import LabHostApplyCard from '../components/officehours/LabHostApplyCard';
 
 // `new Date(undefined)` is Invalid Date and renders as the literal string
 // "Invalid Date" — guard every timestamp before formatting.
@@ -339,6 +340,9 @@ export default function PartnerOfficeHoursPage() {
           {err} {err.includes('partner profile') && '— complete partner onboarding first.'}
         </div>
       )}
+
+      {/* D377 — Spin-Out Lab founders see only approved hosts. */}
+      <LabHostApplyCard kind="partner" />
 
       <GuidanceCard
         draft={gDraft} setDraft={setGDraft} base={gBase} loadState={gLoadState}
