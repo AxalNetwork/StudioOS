@@ -8,7 +8,7 @@
     "value is 0-5 for scale questions; fit.<role>.arch_illustration takes one of the select options.",
     "expected.primary / expected.secondary for kind \"archetype\" and \"blend\" is the ground truth the persona was written to be, not what any engine returned. The baseline report prints what the engine of the day returns.",
     "checkpoints[] (kind \"evolution\") are computed with the reference model and the parameters below; displayed is what the card shows under hysteresis, computed is the nearest centroid on that day.",
-    "evidence[] axis values are RADAR_AXES keys; source names are provisional until S9 publishes the tool map (PROFILING_V2.md §5.3).",
+    "evidence[] axis values are RADAR_AXES keys; source names are provisional until Session 8 publishes the tool map (PROFILING_V2.md §5.3).",
     "Coach has no personas: the coach bank asks no archetype-trait questions today (PROFILING_V2.md §2.4)."
   ],
   "params": {

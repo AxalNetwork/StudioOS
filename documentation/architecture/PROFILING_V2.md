@@ -1,10 +1,15 @@
 # Profiling v2 — spec
 
-**Status:** source of truth for the Profiling v2 programme (Sessions 8–16).
-Written by Session 7 on 2026-09-28 against main `8e2120b4e3`; decision
+**Status:** source of truth for the Profiling v2 programme (Sessions 7–15).
+Written by Session 6 on 2026-09-28 against main `8e2120b4e3`; decision
 **D356** in `DECISIONS.md`. When a later session's handoff disagrees with this
 file, this file wins, and the PR says so. Changing a rule here is a new D
 entry, not a silent edit.
+
+**Numbering.** The owner renumbered the programme to Sessions 6–15 on
+2026-09-28; this file uses those numbers throughout. An earlier draft called
+the same sessions S7–S16. A document or branch that says "S8" for the scoring
+engine means Session 7: subtract one.
 
 The owner's two requirements, verbatim:
 
@@ -20,7 +25,7 @@ The owner's two requirements, verbatim:
    the user uses the platform."
 
 Nothing in this file changed the engine, a bank, a route, a migration or a
-page. Session 7 shipped this document, the persona fixture
+page. Session 6 shipped this document, the persona fixture
 (`cloudflare-worker/test/fixtures/profiling-v2-personas.json`), a test that
 holds the fixture to this file, and a baseline report script.
 
@@ -30,9 +35,9 @@ holds the fixture to this file, and a baseline report script.
 
 | # | Question | Decision |
 | --- | --- | --- |
-| a | Which archetype system is canonical? | **Eadwyn's conversational profiling** (`services/archetypeScoring.ts`, what `/studio` reads) is canonical. The gamified assessment (`assessment_archetypes`, `assessment_results`) stays **read-only as a fallback** for a user with no conversational signal, and is retired in S16 when the card page stops reading it. |
-| b | Can platform evidence raise a skill score? | **Corroborate first, blend later.** Evidence never moves the displayed skill level in v2; it changes the axis's *state* (§5.2) and its confidence. A blend that can move the level is S14's to propose and the owner's to switch on. |
-| c | Who appears as a "match" on the card page? | **Archetype types always, plus real members only if they published their archetype.** Today the only publish flag is `assessment_results.published`; the conversational archetype has none, so S8 adds one (§8.3) and S16 reads it. |
+| a | Which archetype system is canonical? | **Eadwyn's conversational profiling** (`services/archetypeScoring.ts`, what `/studio` reads) is canonical. The gamified assessment (`assessment_archetypes`, `assessment_results`) stays **read-only as a fallback** for a user with no conversational signal, and is retired in Session 15 when the card page stops reading it. |
+| b | Can platform evidence raise a skill score? | **Corroborate first, blend later.** Evidence never moves the displayed skill level in v2; it changes the axis's *state* (§5.2) and its confidence. A blend that can move the level is Session 13's to propose and the owner's to switch on. |
+| c | Who appears as a "match" on the card page? | **Archetype types always, plus real members only if they published their archetype.** Today the only publish flag is `assessment_results.published`; the conversational archetype has none, so Session 7 adds one (§8.3) and Session 15 reads it. |
 | d | Evolution speed | **As proposed:** answer half-life 12 months, re-ask after 6 months, evidence at full weight for 12 months then fading, hysteresis 14 days with a lead margin. Exact values in §7.0. |
 | e | Tell the user when their displayed archetype changes? | **Yes, in-app only** (`notifications_inbox`), once per change, after hysteresis. No email. |
 
@@ -72,7 +77,7 @@ connector, operator):
 | Partner | Strategic Connector (`pt_strategic_connector`) | 2, 4, 5, 3 |
 | Partner | Embedded Operator (`pt_embedded_operator`) | 5, 2, 3, 4 |
 | Partner | Growth Catalyst (`pt_growth_catalyst`) | 4, 4, 4, 2 |
-| Partner | Systems Builder (`pt_systems_builder`) | 4, 2, 2, 5 → **3, 2, 2, 5** in S8 |
+| Partner | Systems Builder (`pt_systems_builder`) | 4, 2, 2, 5 → **3, 2, 2, 5** in Session 7 |
 | Advisor | Sage Guide (`mt_sage_guide`) | 2, 5, 4, 3 |
 | Advisor | Hands-On Coach (`mt_hands_on_coach`) | 4, 2, 5, 3 |
 | Advisor | Accountability Anchor (`mt_accountability_anchor`) | 3, 2, 4, 5 |
@@ -109,7 +114,7 @@ expectations are over those four.
 Coach shares the advisor archetype set (`ARCHETYPES.coach =
 ADVISOR_ARCHETYPES`). **Today a coach can never be classified:** the coach
 bank (`fit_coach.ts`, 18 questions) asks no `archetype_trait` question, so
-`computeArchetype(…, 'coach')` returns null. S13 adds
+`computeArchetype(…, 'coach')` returns null. Session 12 adds
 `archetypeModuleRows('coach')`, with coach-flavoured role probes, to that
 bank. Until then the fixture carries no coach personas.
 
@@ -138,7 +143,7 @@ gets a new key, and the old one is retired (see `retired` below).
 ### 3.1 Data shape
 
 `FitRowSpec` (in `banks/fitShared.ts`) and `FitMeasures` (in
-`questionBank.ts`) gain the following fields. S8 adds the types and S10–S13
+`questionBank.ts`) gain the following fields. Session 7 adds the types and Sessions 8–11
 use them:
 
 ```ts
@@ -179,7 +184,7 @@ interface FitMeasures {
 | Reverse-keyed scale | `scale` + `reverse: true` | `'0'`–`'5'` as the user chose it | `5 − value` on `measures.archetype_trait`. The ledger keeps what the user chose. The reversal happens only in scoring. |
 | Situational pick-one | `choice` | the option's `key` | Each trait in the chosen option's `loadings` gets that value, as if that trait's question had been answered with it. A trait the option does not load is not touched. |
 
-Rules for authors (S10–S13):
+Rules for authors (Sessions 8–11):
 
 - **Every bank carries at least 2 reverse-keyed probes per trait.** A bank
   of all-positive "how much do you…" items rewards whoever rates everything
@@ -219,7 +224,7 @@ work_values 4, archetype 6, axal_fit 8, which makes about 23 answers to
   uncovered axes, so this changes the "confident" flag, not the order
   questions are asked in.
 
-Banks grow in S10–S13 (reverse-keyed and situational items), but the floors
+Banks grow in Sessions 8–11 (reverse-keyed and situational items), but the floors
 do not. A larger bank is headroom for re-asking and adaptivity, not a longer
 survey.
 
@@ -249,7 +254,7 @@ Axes each bank does not ask about today:
 | Advisor | engineering, design, legal_compliance |
 | Coach | all eight (no `skill_axis` question) |
 
-S10–S13 decide whether to add a question for each gap. Evidence may fill a
+Sessions 8–11 decide whether to add a question for each gap. Evidence may fill a
 gap anyway, and the axis then reads "Evidence only".
 
 ### 5.2 Axis state (decision b: corroborate)
@@ -263,11 +268,11 @@ gap anyway, and the axis then reads "Evidence only".
 | `evidence_only` | no self-rating, evidence weight > 0 | none. The axis shows the evidence count, not a level. |
 
 Evidence never changes the level in v2. It changes the state, and confidence
-rises with it. S14 may propose a blend, for example
+rises with it. Session 13 may propose a blend, for example
 `self + clamp(evidence_level − self, −1, +1) × w`, behind a switch that is
 off by default. The owner turns it on.
 
-### 5.3 Evidence rules (S9 details the tool map)
+### 5.3 Evidence rules (Session 8 details the tool map)
 
 - An evidence event is a **completed, attributable action by the user**, not
   a page view: a session they hosted and the partner marked completed, a
@@ -276,12 +281,12 @@ off by default. The owner turns it on.
   `office_hours.session_completed`) and when it happened.
 - Evidence is about the user's own activity and never reads another user's
   content. A two-party event (an office-hours session) counts for the party
-  whose skill it evidences, as S9 decides per source.
+  whose skill it evidences, as Session 8 decides per source.
 - A source counts once per underlying record. Re-saving the same model is
   one event, not ten.
 - Lifetime totals are kept for display ("42 sessions hosted"), but only the
   window (§7.4) feeds the state.
-- The fixture's evidence `source` names are provisional until S9 publishes
+- The fixture's evidence `source` names are provisional until Session 8 publishes
   the map. The axis keys are final.
 
 ---
@@ -289,7 +294,7 @@ off by default. The owner turns it on.
 ## 6. Values within the Axal ecosystem
 
 Three families, all 0–5 self-ratings today, each stored in one current row
-per user and dimension (no history before S8):
+per user and dimension (no history before Session 7):
 
 | Family | Dimensions | Asked of |
 | --- | --- | --- |
@@ -297,7 +302,7 @@ per user and dimension (no history before S8):
 | Founder spectrums (`user_values`) | mission_vs_profit, speed_vs_quality, risk_appetite, growth_vs_sustain, autonomy_vs_structure | founder (all five); investor asks risk_appetite and growth_vs_sustain; partner asks autonomy_vs_structure |
 | Schwartz (`user_values`) | achievement, benevolence, universalism, self_direction | investor: achievement, benevolence, universalism · partner: benevolence, self_direction, universalism · advisor: all four · **founder: none** |
 
-**Compared across roles for matching (S15 implements):**
+**Compared across roles for matching (Session 14 implements):**
 
 | Founder side | Other side | Why |
 | --- | --- | --- |
@@ -305,7 +310,7 @@ per user and dimension (no history before S8):
 | `founder_risk_appetite` | investor `lean_risk` (the same dimension) | a mismatch here is the commonest failed round |
 | `founder_growth_vs_sustain` | investor `values_patience` (the same dimension) | holding period against growth plan |
 | `founder_autonomy_vs_structure` | partner `collab_founder_led` (the same dimension) | how much a partner should steer |
-| Schwartz: none today | investor, partner and advisor Schwartz dims | **S10 adds achievement, benevolence, universalism and self_direction to the founder bank**, so the comparison has two sides. Until then S15 compares Schwartz only among investor, partner and advisor. |
+| Schwartz: none today | investor, partner and advisor Schwartz dims | **Session 9 adds achievement, benevolence, universalism and self_direction to the founder bank**, so the comparison has two sides. Until then Session 14 compares Schwartz only among investor, partner and advisor. |
 
 Values age like any answer (§7.2) and re-ask like any answer (§7.3).
 Evidence does not move a value.
@@ -333,7 +338,7 @@ two disagree.
 | `corroborated_at` | 3.0 | Evidence weight at which a self-rated axis reads "corroborated". |
 
 `lead_margin`, `secondary_margin` and `corroborated_at` are this spec's
-choices; the owner fixed the four time parameters. S8 may recalibrate the
+choices; the owner fixed the four time parameters. Session 7 may recalibrate the
 three choices against the baseline (§9) and must record a change as a new D
 entry.
 
@@ -342,7 +347,7 @@ entry.
 A profile is a deterministic function of:
 
 1. the user's timestamped answers (the `advisor_answers` ledger);
-2. their timestamped evidence events (S9);
+2. their timestamped evidence events (Session 8);
 3. the engine version;
 4. the evaluation date.
 
@@ -367,7 +372,7 @@ never read as "no answer".
 
 A question is **re-askable** when its latest answer is at least
 `reask_after_days` old and the question is not retired. Adaptive selection
-(S14) offers re-askable questions after uncovered ones, using
+(Session 13) offers re-askable questions after uncovered ones, using
 `reask_prompt`. A re-answer is a new ledger row. Skipping a re-ask leaves the
 old answer counting at its aged weight. Re-askability is a queue signal and
 never changes a score by itself.
@@ -395,7 +400,7 @@ daily evaluation is at the nightly cron (§7.8):
 
 Hysteresis makes the displayed archetype depend on the path. It is still
 deterministic: it is defined as the result of replaying the daily
-evaluations from the first answer. S8 may store it in snapshots so as not to
+evaluations from the first answer. Session 7 may store it in snapshots so as not to
 replay, but replay is the definition, and the persona checkpoints were
 computed that way.
 
@@ -444,7 +449,7 @@ change, or the first classification.
 
 ---
 
-## 8. Data model sketch (migrations are S8's and S9's)
+## 8. Data model sketch (migrations are Session 7's and Session 8's)
 
 ### 8.1 Profile snapshots
 
@@ -492,7 +497,7 @@ skill_evidence
 
 Decision c needs a publish flag on the canonical archetype. Proposed:
 `user_settings.archetype_published INTEGER NOT NULL DEFAULT 0`, set by the
-user on the card page. S8 must first check that `user_settings` has
+user on the card page. Session 7 must first check that `user_settings` has
 headroom under D1's 100-column cap. If it does not, the flag goes in a side
 table. The legacy `assessment_results.published` stays readable for the
 fallback (decision a) and is not copied across: publishing is a new consent.
@@ -531,7 +536,7 @@ synthetic people (every name invented, every address `@example.test`):
     past 12 and then 24 months.
 
 **Baseline** (`cloudflare-worker/scripts/profiling-v2-baseline.mjs`, today's
-engine, run by S7 on main `8e2120b4e3`):
+engine, run by Session 6 on main `8e2120b4e3`):
 
 - Today's `computeArchetype` classifies **all 16 archetype personas and both
   blends correctly**, and the v1 runner-up matches the expected secondary on
@@ -546,13 +551,13 @@ engine, run by S7 on main `8e2120b4e3`):
 
 What the baseline does **not** show: the personas were written from the
 centroids, so agreement confirms the engine reads them correctly, not that
-real users' answers look like this. S8 should add harder personas (a heavier
+real users' answers look like this. Session 7 should add harder personas (a heavier
 pull towards 3.5, missing traits) once reverse-keyed items exist to test
 against.
 
 ---
 
-## 10. Routes (sketch; S8, S9 and S14 build them)
+## 10. Routes (sketch; Session 7, Session 8 and Session 13 build them)
 
 | Route | Who | Returns |
 | --- | --- | --- |
@@ -571,19 +576,19 @@ commit as its mounted Worker route.
 
 | Session | Builds | After |
 | --- | --- | --- |
-| S7 | This spec, owner decisions, evolution model, test personas | first |
-| S8 | Archetype scoring engine v2 (ledger reads, ageing, secondary, hysteresis, Systems Builder move, `engine_version`) + `profile_snapshots` + publish flag + `/profile/history` | S7 |
-| S9 | Skill evidence from platform tools: `skill_evidence`, the source→axis tool map, the nightly evidence pass, `/skills/me/evidence` | S7 |
-| S10 | Founder question bank v2 (reverse-keyed, situational, `reask_prompt`, Schwartz dims) | S8 |
-| S11 | Investor question bank v2 | S8 |
-| S12 | Partner question bank v2 | S8 |
-| S13 | Advisor / coach question bank v2, including the coach's first archetype probes | S8 |
-| S14 | Evolution loop: recompute triggers, ageing, re-ask queue, change events and notification, admin trends | S8, S9 |
-| S15 | Values compatibility across roles (§6) + archetype copy for all 16 + banner audit | copy after S7; values after S10–S13 |
-| S16 | Archetype card page v2: two-layer skills radar, evolution timeline, published-member matches; retires the assessment fallback | last |
+| Session 6 | This spec, owner decisions, evolution model, test personas | first |
+| Session 7 | Archetype scoring engine v2 (ledger reads, ageing, secondary, hysteresis, Systems Builder move, `engine_version`) + `profile_snapshots` + publish flag + `/profile/history` | Session 6 |
+| Session 8 | Skill evidence from platform tools: `skill_evidence`, the source→axis tool map, the nightly evidence pass, `/skills/me/evidence` | Session 6 |
+| Session 9 | Founder question bank v2 (reverse-keyed, situational, `reask_prompt`, Schwartz dims) | Session 7 |
+| Session 10 | Investor question bank v2 | Session 7 |
+| Session 11 | Partner question bank v2 | Session 7 |
+| Session 12 | Advisor / coach question bank v2, including the coach's first archetype probes | Session 7 |
+| Session 13 | Evolution loop: recompute triggers, ageing, re-ask queue, change events and notification, admin trends | Session 7, Session 8 |
+| Session 14 | Values compatibility across roles (§6) + archetype copy for all 16 + banner audit | copy after Session 6; values after Sessions 8–11 |
+| Session 15 | Archetype card page v2: two-layer skills radar, evolution timeline, published-member matches; retires the assessment fallback | last |
 
-Order: S7 → (S8 ∥ S9) → (S10 ∥ S11 ∥ S12 ∥ S13) → S14 → S15 → S16. S15's
-copy half can start any time after S7.
+Order: Session 6 → (Session 7 ∥ Session 8) → (Session 9 ∥ Session 10 ∥ Session 11 ∥ Session 12) → Session 13 → Session 14 → Session 15. Session 14's
+copy half can start any time after Session 6.
 
 ---
 
@@ -591,7 +596,7 @@ copy half can start any time after S7.
 
 - **Two reads of "latest".** `field_sources` is the latest per question
   without ageing. v2 reads the `advisor_answers` ledger with `created_at`.
-  S8 must not keep scoring from `field_sources`.
+  Session 7 must not keep scoring from `field_sources`.
 - **No history exists for skills or values today.** `user_skills`,
   `user_values` and `axal_values` keep one current row. The first snapshot
   per user is its baseline; nothing earlier can be reconstructed except from

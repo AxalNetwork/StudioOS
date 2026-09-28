@@ -32364,22 +32364,22 @@ the page header no longer lists ratings as omitted.
 archetype is canonical, evidence corroborates skills before it may move them,
 and a profile is recomputed from dated answers and evidence, never edited.
 The displayed archetype changes only after 14 days of lead.** Wave 8,
-Session 7 of the Profiling v2 programme (S7–S16). Documentation and fixtures
+Session 6 of the Profiling v2 programme (Sessions 6–15). Documentation and fixtures
 only: no engine, bank, route, migration or page changed.
 
 **The spec is `documentation/architecture/PROFILING_V2.md`**, and it outranks
-any later handoff for S8–S16. What it fixes:
+any later handoff for Sessions 6–14. What it fixes:
 
 - **Owner decisions, 2026-09-28.**
   - (a) The conversational archetype (`services/archetypeScoring.ts`) is
     canonical. The gamified assessment stays read-only as a fallback and is
-    retired in S16.
+    retired in Session 15.
   - (b) Platform evidence corroborates a self-rated skill, changing its state
-    and confidence but never its level, until S14 proposes a blend and the
+    and confidence but never its level, until Session 13 proposes a blend and the
     owner switches it on.
   - (c) Card-page matches show archetype types always, and real members only
     if they published their archetype. The conversational archetype has no
-    publish flag today (only `assessment_results.published` exists), so S8
+    publish flag today (only `assessment_results.published` exists), so Session 7
     adds one.
   - (d) Answer half-life 12 months, re-ask after 6 months, evidence at full
     weight for 12 months then fading over 12, hysteresis 14 days.
@@ -32387,16 +32387,16 @@ any later handoff for S8–S16. What it fixes:
     email.
 - **Four traits stay; one centroid moves.** Adding a fifth trait would reset
   every stored trait vector and add twenty probes per bank. Instead, Systems
-  Builder's builder coordinate goes 4 → 3 in S8, separating it from Embedded
+  Builder's builder coordinate goes 4 → 3 in Session 7, separating it from Embedded
   Operator: 1.73 → 2.45, the only pair that was under 2.
-- **Things the handoff did not know, recorded so S8–S13 do not trip on them:**
+- **Things the handoff did not know, recorded so Sessions 6–11 do not trip on them:**
   - the coach bank asks no archetype-trait question, so a coach can never be
-    classified today (S13 adds the probes);
+    classified today (Session 12 adds the probes);
   - a six-archetype v2 set (Scout, Steward) exists for the fit decision only
     and is never displayed;
   - the founder bank has no Schwartz values, so a cross-role comparison has
-    one side (S10 adds them).
-- **Question formats for S10–S13:**
+    one side (Session 9 adds them).
+- **Question formats for Sessions 8–11:**
   - reverse-keyed scales (`reverse: true`, scored 5 − value), with at least
     two per trait;
   - situational pick-one items (`input_kind: 'choice'`, each option with
@@ -32415,7 +32415,7 @@ any later handoff for S8–S16. What it fixes:
   - a snapshot is written on every material change and on nothing else.
 
   The last three thresholds (lead margin, secondary margin, the corroboration
-  threshold of 3 events) are the spec's choices, and S8 may recalibrate them
+  threshold of 3 events) are the spec's choices, and Session 7 may recalibrate them
   under a new D entry.
 
 **Personas.** `cloudflare-worker/test/fixtures/profiling-v2-personas.json` has
@@ -32432,7 +32432,7 @@ any later handoff for S8–S16. What it fixes:
     fade.
 
 `cloudflare-worker/scripts/profiling-v2-baseline.mjs` runs today's real
-`computeArchetype` over them and prints the baseline for S8.
+`computeArchetype` over them and prints the baseline for Session 7.
 
 ### VERIFIED
 

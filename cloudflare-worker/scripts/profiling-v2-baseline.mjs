@@ -3,7 +3,7 @@
  * synthetic personas in test/fixtures/profiling-v2-personas.json (D356,
  * documentation/architecture/PROFILING_V2.md §9).
  *
- * A report, not a test: it asserts nothing and exits 0. Session 8 runs it
+ * A report, not a test: it asserts nothing and exits 0. Session 7 runs it
  * before and after its engine change and puts both tables in its PR.
  *
  *   node --experimental-strip-types --no-warnings \

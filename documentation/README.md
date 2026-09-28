@@ -31,7 +31,7 @@ nothing here is served.
 | Why was this routed that way with nobody asked? | [architecture/ASSUMPTIONS_LOG.md](architecture/ASSUMPTIONS_LOG.md) |
 | Who serves the frontend, and how did it get that way? | [architecture/PRODUCTION.md](architecture/PRODUCTION.md) for today — the Worker, on both `axal.vc` and `app.axal.vc`. [architecture/CLOUDFLARE-CUTOVER.md](architecture/CLOUDFLARE-CUTOVER.md) and [architecture/CLOUDFLARE-PAGES-MIGRATION.md](architecture/CLOUDFLARE-PAGES-MIGRATION.md) are the superseded 2026-08 records of how the apex left GitHub Pages, sat on Cloudflare Pages for one day, and came to the Worker. |
 | Why is it built this way and not the obvious way? | [architecture/DECISIONS.md](architecture/DECISIONS.md) |
-| How do archetype, skills and values profiling work, and how do they change over time? | [architecture/PROFILING_V2.md](architecture/PROFILING_V2.md) — the Profiling v2 spec (D356) that Sessions 8–16 build against. |
+| How do archetype, skills and values profiling work, and how do they change over time? | [architecture/PROFILING_V2.md](architecture/PROFILING_V2.md) — the Profiling v2 spec (D356) that Sessions 7–15 build against. |
 | What will bite me? | [architecture/GOTCHAS.md](architecture/GOTCHAS.md) |
 | How do I deploy to production? | [operations/DEPLOY.md](operations/DEPLOY.md) |
 
