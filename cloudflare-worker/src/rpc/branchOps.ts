@@ -35,7 +35,7 @@ import { sha256Hex, verifySecret } from './secret';
 import { createJWT, loadSuperAdminFlag } from '../auth';
 import { likeNeedle } from '../util/likeSearch';
 import { activeAccountsInWeek, weekAxis } from '../services/activeAccounts';
-import { rollUpFundRow } from '../services/fundRollup';
+import { rollUpFundRow, ratioOrNull } from '../services/fundRollup';
 
 /** Every branch answer carries the code, because a binding does not (D.7). */
 export type BranchAnswer<T> = T & { branch: string; as_of: string };
@@ -825,10 +825,39 @@ export async function branchEscalations(
 /** How many funds one registry read lists before it says it stopped. */
 export const FUNDS_REGISTRY_CAP = 200;
 
+/** The GP-of-record fields F10 names, in the canvas's order (`emptyGP`). */
+export const GP_RECORD_FIELDS = ['gp_name', 'gp_title', 'gp_entity', 'fund_admin', 'auditor'] as const;
+export type GpRecordField = typeof GP_RECORD_FIELDS[number];
+
+/**
+ * F10's honesty states for one fund, computed on the database that holds it.
+ * Booleans, field names and a period label — FUND-LEVEL FACTS ONLY, never a
+ * person's name, email or anything about an LP (the RPC takes no secret).
+ */
+export type RegistryFlags = {
+  /** `gp_user_id` is null: the fund exists, and cannot issue an LPA (D370). */
+  no_gp_of_record: boolean;
+  /** `custodian` holds a non-blank value. */
+  custodian_recorded: boolean;
+  /** Which of GP_RECORD_FIELDS are unset or blank, in that order. */
+  gp_fields_unset: GpRecordField[];
+  /** `lpa_doc_id` is set. The document's own status is not read. */
+  lpa_on_file: boolean;
+  /**
+   * The newest DRAFT period when it is newer than the newest issued one (or
+   * none has issued); null when there is no such draft. Absent when the
+   * periods could not be read — see `periods_available`.
+   */
+  draft_not_issued?: { period: string; period_end: string } | null;
+};
+
 export type RegistryFund = {
   id: number;
   name: string;
+  /** The fund's stage, as `vc_funds.status` stores it. */
   status: string;
+  /** `vc_funds.vintage_year`, or null when none is recorded. */
+  vintage_year: number | null;
   /** The GP's legal entity (migration 163), or null when none is recorded. */
   gp_entity: string | null;
   /**
@@ -843,6 +872,25 @@ export type RegistryFund = {
    * null) when the periods could not be read — see `periods_available`.
    */
   last_issued?: { period: string; period_end: string; issued_at: string | null } | null;
+  /**
+   * Σ every call line on the fund, in the same unrecorded minor units. Absent
+   * when the call lines could not be read — see `calls_available`.
+   */
+  called_minor?: number;
+  /**
+   * called ÷ committed, both this fund's own figures in its own currency.
+   * Null when no committed figure is recorded; absent when the calls could
+   * not be read.
+   */
+  called_ratio?: number | null;
+  /** Σ PAID distributions. Absent when they could not be read. */
+  distributed_minor?: number;
+  /**
+   * distributed ÷ called. Null when nothing has been called; absent when
+   * either sum could not be read.
+   */
+  dpi?: number | null;
+  flags: RegistryFlags;
 };
 
 export type FundsRegistry = {
@@ -851,16 +899,29 @@ export type FundsRegistry = {
   complete: boolean;
   periods_available: boolean;
   periods_reason?: string;
+  calls_available: boolean;
+  calls_reason?: string;
+  distributions_available: boolean;
+  distributions_reason?: string;
 };
+
+const blank = (v: unknown) => typeof v !== 'string' || v.trim() === '';
+const readError = (e: unknown) => String((e as Error)?.message || e).slice(0, 200);
 
 /**
  * D245 — the funds THIS database holds, for HQ's registry (canvas H24).
+ * D375 — and what HQ's oversight view needs of each (Fabric F6 and F10).
  *
  * TIER-NEUTRAL ON PURPOSE. A branch answers it over `fundsRegistry`, and HQ
  * reads its own row through the same function, so the "HQ" row and a branch's
  * rows are one definition of what a registry row is. Which branch a fund
  * belongs to is not a column — no fund table carries a branch, a licence or a
  * territory — it is WHICH DATABASE answered.
+ *
+ * FUND-LEVEL FACTS ONLY. The RPC takes no secret, so what it returns is what
+ * any Worker in the account may read: each fund's own figures, stage, vintage
+ * and flags. Never an LP's name, email or per-LP figure, and never the GP's
+ * name or email — F10 needs to know THAT `gp_name` is unset, not what it says.
  *
  * COMMITTED IS THE FUNDS PRODUCT'S OWN FIGURE. `rollUpFundRow` already decides
  * it — `fund_size_cents` once set, else the legacy `total_commitment` dollars —
@@ -870,19 +931,30 @@ export type FundsRegistry = {
  * units of a currency that is NOT recorded: there is no currency column, so
  * the figure travels with its unit stated as unknown and nothing sums it.
  *
- * THE PERIODS ARE THEIR OWN READ. The newest issued period per fund is a
- * second table (`fund_report_periods`); if it cannot be read, the funds still
- * answer and each says its last issue is unreadable, rather than "none".
+ * CALLED IS THE CALL LEDGER'S FIGURE (D371). Each line's owed cents, exact on
+ * a line written since migration 312 and rounded from its dollars before it —
+ * the same expression as `OWED_CENTS_SQL` in services/fundCallLedger.ts — summed
+ * per fund as `readFundCalls` sums `called_cents`. Called ÷ committed divides
+ * one fund's two figures in that fund's own currency, so it is a real ratio
+ * even though neither figure's currency is recorded.
+ *
+ * EACH SECOND TABLE IS ITS OWN READ. Report periods, call lines and
+ * distributions each answer or fail alone; a failure leaves the funds
+ * answering, with that field absent and a reason on the registry — unknown,
+ * never "none" and never 0.
  */
 export async function readFundsRegistry(env: Env): Promise<FundsRegistry> {
   const rows = await env.DB.prepare(
-    `SELECT id, name, status, gp_entity, fund_size_cents, total_commitment
+    `SELECT id, name, status, vintage_year, fund_size_cents, total_commitment,
+            gp_user_id, gp_name, gp_title, gp_entity, fund_admin, auditor, custodian, lpa_doc_id
        FROM vc_funds
       ORDER BY name COLLATE NOCASE, id
       LIMIT ?`,
   ).bind(FUNDS_REGISTRY_CAP + 1).all<{
-    id: number; name: string; status: string | null; gp_entity: string | null;
+    id: number; name: string; status: string | null; vintage_year: number | null;
     fund_size_cents: number | null; total_commitment: number | null;
+    gp_user_id: number | null; gp_name: string | null; gp_title: string | null; gp_entity: string | null;
+    fund_admin: string | null; auditor: string | null; custodian: string | null; lpa_doc_id: number | null;
   }>();
   const all = rows.results || [];
   const complete = all.length <= FUNDS_REGISTRY_CAP;
@@ -899,39 +971,97 @@ export async function readFundsRegistry(env: Env): Promise<FundsRegistry> {
       ? 'fund_size_cents' as const
       : Number(r.total_commitment) > 0 ? 'total_commitment' as const : null;
     const gp = typeof r.gp_entity === 'string' ? r.gp_entity.trim() : '';
+    const vintage = Number(r.vintage_year);
     return {
       id: Number(r.id),
       name: String(r.name),
       status: String(r.status || ''),
+      vintage_year: r.vintage_year != null && Number.isInteger(vintage) && vintage > 0 ? vintage : null,
       gp_entity: gp || null,
       committed_minor: source ? committed : null,
       committed_source: source,
+      flags: {
+        no_gp_of_record: r.gp_user_id == null,
+        custodian_recorded: !blank(r.custodian),
+        gp_fields_unset: GP_RECORD_FIELDS.filter((k) => blank(r[k])),
+        lpa_on_file: r.lpa_doc_id != null,
+      },
     };
   });
 
   let periodsAvailable = true;
   let periodsReason: string | undefined;
+  let callsAvailable = true;
+  let callsReason: string | undefined;
+  let distributionsAvailable = true;
+  let distributionsReason: string | undefined;
   if (funds.length) {
     try {
+      // The newest period of each STATUS per fund: the issued one is the last
+      // issue, and a draft newer than it is F10's "drafted, not issued".
       const latest = await env.DB.prepare(
-        `SELECT fund_id, period, period_end, issued_at FROM (
-           SELECT fund_id, period, period_end, issued_at,
-                  ROW_NUMBER() OVER (PARTITION BY fund_id ORDER BY period_end DESC, id DESC) AS rn
+        `SELECT fund_id, status, period, period_end, issued_at FROM (
+           SELECT fund_id, status, period, period_end, issued_at,
+                  ROW_NUMBER() OVER (PARTITION BY fund_id, status ORDER BY period_end DESC, id DESC) AS rn
              FROM fund_report_periods
-            WHERE status = 'issued'
+            WHERE status IN ('issued', 'draft')
          ) WHERE rn = 1`,
-      ).all<{ fund_id: number; period: string; period_end: string; issued_at: string | null }>();
-      const byFund = new Map((latest.results || []).map((p) => [Number(p.fund_id), p]));
+      ).all<{ fund_id: number; status: string; period: string; period_end: string; issued_at: string | null }>();
+      const issued = new Map<number, any>();
+      const draft = new Map<number, any>();
+      for (const p of latest.results || []) (p.status === 'issued' ? issued : draft).set(Number(p.fund_id), p);
       for (const f of funds) {
-        const p = byFund.get(f.id);
+        const p = issued.get(f.id);
         f.last_issued = p
           ? { period: String(p.period), period_end: String(p.period_end), issued_at: p.issued_at ?? null }
+          : null;
+        const d = draft.get(f.id);
+        f.flags.draft_not_issued = d && (!p || String(d.period_end) > String(p.period_end))
+          ? { period: String(d.period), period_end: String(d.period_end) }
           : null;
       }
     } catch (e) {
       periodsAvailable = false;
       periodsReason = 'The fund report periods could not be read on this database, so when each fund '
-        + `last issued is unknown rather than never: ${String((e as Error)?.message || e).slice(0, 200)}`;
+        + `last issued is unknown rather than never: ${readError(e)}`;
+    }
+
+    try {
+      const called = await env.DB.prepare(
+        `SELECT lp.fund_id AS fund_id,
+                SUM(COALESCE(cc.amount_cents, CAST(ROUND(cc.amount * 100) AS INTEGER))) AS called_minor
+           FROM capital_calls cc
+           JOIN limited_partners lp ON lp.id = cc.limited_partner_id
+          GROUP BY lp.fund_id`,
+      ).all<{ fund_id: number; called_minor: number | null }>();
+      const byFund = new Map((called.results || []).map((x) => [Number(x.fund_id), Number(x.called_minor)]));
+      for (const f of funds) {
+        // No line on the fund is a real zero: the ledger answered, and nothing is called.
+        f.called_minor = byFund.get(f.id) ?? 0;
+        f.called_ratio = f.committed_minor == null ? null : ratioOrNull(f.called_minor, f.committed_minor);
+      }
+    } catch (e) {
+      callsAvailable = false;
+      callsReason = 'The capital call lines could not be read on this database, so how much of each fund '
+        + `is called is unknown rather than nothing: ${readError(e)}`;
+    }
+
+    try {
+      const paid = await env.DB.prepare(
+        `SELECT fund_id, SUM(amount_cents) AS distributed_minor
+           FROM fund_distributions
+          WHERE status = 'paid'
+          GROUP BY fund_id`,
+      ).all<{ fund_id: number; distributed_minor: number | null }>();
+      const byFund = new Map((paid.results || []).map((x) => [Number(x.fund_id), Number(x.distributed_minor)]));
+      for (const f of funds) {
+        f.distributed_minor = byFund.get(f.id) ?? 0;
+        if (f.called_minor !== undefined) f.dpi = ratioOrNull(f.distributed_minor, f.called_minor);
+      }
+    } catch (e) {
+      distributionsAvailable = false;
+      distributionsReason = 'The fund distributions could not be read on this database, so what each fund '
+        + `has paid out is unknown rather than nothing: ${readError(e)}`;
     }
   }
 
@@ -940,6 +1070,10 @@ export async function readFundsRegistry(env: Env): Promise<FundsRegistry> {
     complete,
     periods_available: periodsAvailable,
     ...(periodsReason ? { periods_reason: periodsReason } : {}),
+    calls_available: callsAvailable,
+    ...(callsReason ? { calls_reason: callsReason } : {}),
+    distributions_available: distributionsAvailable,
+    ...(distributionsReason ? { distributions_reason: distributionsReason } : {}),
   };
 }
 
