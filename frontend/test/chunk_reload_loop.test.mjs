@@ -556,3 +556,51 @@ test('a default-prevented preload error resolves the import with undefined', asy
     'and leaving the default alone is what lets the real error reach the boundary',
   );
 });
+
+/**
+ * THE BUDGET BELONGS TO A BUILD (reloadGuard.recordAttempt). A tab kept open
+ * across a day of deploys spent its one recovery on the first stale chunk and
+ * then showed the `e._result.default` error card on every later deploy —
+ * reported on /company-settings. The loop bound must still hold on one build.
+ */
+test('an attempt spent on an older build does not spend this build\'s budget', async () => {
+  const { readAttempts: read, recordAttempt, currentBuild } = await import('../src/lib/reloadGuard.js');
+  const priorDoc = globalThis.document;
+  const onBuild = (src) => {
+    globalThis.document = { querySelector: () => (src ? { getAttribute: () => src } : null) };
+  };
+  try {
+    const storage = workingStorage();
+    withBrowser({ storage }, () => {
+      onBuild('/assets/index-AAA.js');
+      assert.equal(currentBuild(), '/assets/index-AAA.js');
+      recordAttempt('axal:chunk-reload-boundary', 1);
+      assert.equal(storage._map.get('axal:chunk-reload-boundary'), '1@/assets/index-AAA.js');
+      // The same build reads its own spent attempt: the loop stays bounded.
+      assert.equal(read('axal:chunk-reload-boundary', '__chunkBoundary'), 1);
+      // A newer build starts with its budget intact.
+      onBuild('/assets/index-BBB.js');
+      assert.equal(read('axal:chunk-reload-boundary', '__chunkBoundary'), 0,
+        'a budget spent on a build that is gone still blocked recovery');
+      // A count stored before this change (no build tag) still counts.
+      storage.setItem('axal:chunk-reload-attempts', '2');
+      assert.equal(read('axal:chunk-reload-attempts', '__chunk'), 2);
+      // No entry script to read (Node, the dev server): scoping stays off.
+      onBuild(null);
+      recordAttempt('axal:chunk-reload-boundary', 1);
+      assert.equal(storage._map.get('axal:chunk-reload-boundary'), '1');
+      assert.equal(read('axal:chunk-reload-boundary', '__chunkBoundary'), 1);
+    });
+  } finally {
+    globalThis.document = priorDoc;
+  }
+});
+
+test('both chunk recoveries write through the build-scoped recorder', () => {
+  const main = readFileSync(new URL('../src/main.jsx', import.meta.url), 'utf8');
+  const guard = readFileSync(new URL('../src/lib/reloadGuard.js', import.meta.url), 'utf8');
+  assert.match(main, /recordAttempt\(CHUNK_KEY, next\)/);
+  assert.doesNotMatch(main, /sessionStorage\.setItem\(CHUNK_KEY/);
+  const within = guard.slice(guard.indexOf('export function reloadWithinBudget'));
+  assert.match(within, /recordAttempt\(storageKey, next\)/);
+});

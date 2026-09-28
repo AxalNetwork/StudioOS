@@ -7,7 +7,7 @@ import TopLevelErrorBoundary from './components/TopLevelErrorBoundary';
 import './index.css';
 import { registerServiceWorker } from './lib/pwa';
 import { isChunkLoadError } from './lib/chunkLoadError';
-import { readAttempts, reloadCarryingCount } from './lib/reloadGuard';
+import { readAttempts, recordAttempt, reloadCarryingCount } from './lib/reloadGuard';
 import { reportError } from './lib/log';
 
 // Task #37 — tell the un-bundled boot watchdog (index.html) that the entry
@@ -94,7 +94,7 @@ function reloadOnceForStaleChunk() {
   const attempts = readAttempts(CHUNK_KEY, CHUNK_PARAM);
   if (attempts >= MAX_CHUNK_RELOADS) return false;
   const next = attempts + 1;
-  try { sessionStorage.setItem(CHUNK_KEY, String(next)); } catch { /* URL marker below carries it */ }
+  try { recordAttempt(CHUNK_KEY, next); } catch { /* URL marker below carries it */ }
   // Drop SW caches first so the next load isn't fed another stale chunk.
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistrations()
