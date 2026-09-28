@@ -80,6 +80,11 @@
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  /* The signed-in product's one type face — the investor Fund page's
+     (Space Grotesk for text, Roboto Mono for eyebrow labels). Applied to
+     every signed-in surface through `html.app-type` (ProtectedLayout sets
+     it); the public site keeps --font-sans. */
+  --font-app: 'Space Grotesk', 'Inter', system-ui, -apple-system, sans-serif;
 
   /* Radii — the spec scale, confirmed dominant across the corpus.
      99px and 999px tie in practice (50 vs 57); both render as a pill. */
@@ -158,6 +163,13 @@ body {
      only, so no full-height container grows by an inset. */
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Signed-in surfaces share one face (--font-app). Set on <html> rather than
+   on the shell element so portals — menus, modals, toasts mounted on <body>
+   — get it too. The public site never sets the class. */
+html.app-type body {
+  font-family: var(--font-app);
 }
 
 /* Force legible input text. We previously hardcoded white/black, which
