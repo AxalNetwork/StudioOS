@@ -53,7 +53,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/networkfx     → networkfx.ts
 /api/profiling     → profiling.ts
 /api/dashboard     → dashboard.ts
-/api/matches       → matches.ts
+/api/matches       → matches.ts         (Best-Fit's /summary only; the AI Matching Engine was removed)
 /api/research      → research.ts        (the Research bucket's own stores)
 /api/advisor-grants → advisor_grants.ts (a founder's per-scope grant to a named advisor)
 /api               → realtime.ts (WebSocket fan-out, Durable Objects)

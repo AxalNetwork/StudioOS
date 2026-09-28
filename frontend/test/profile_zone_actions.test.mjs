@@ -19,8 +19,8 @@
  * prose.
  *
  * ONE FILE, EVERY PROFILE. The rules are identical and the answers are not —
- * `/matches` is a working destination for an investor's "Request an intro" and
- * a closed door for a founder's identical one — so the checks are parameterised
+ * a route one licence may open is a closed door for another (`/matches` was
+ * the example until it was removed) — so the checks are parameterised
  * over `PROFILES` and each profile brings its own table, canvases and pages.
  *
  * Run with:
@@ -137,7 +137,9 @@ const PROFILES = {
     canvas: /^Pages · Investor /,
     buckets: /^(deals|funds|portfolio|network|research)\//,
     zones: 19,
-    links: 1,
+    // Was 1: `network/introductions`'s `Request an intro` → `/matches`. The AI
+    // Matching Engine and its page were removed, and the op is a gap now.
+    links: 0,
     // Fourteenth export: `portfolio/value-add`'s. Was a gap reading "there is
     // no support history to export", which was TRUE — see the handler note.
     // Fifteenth: `funds/calls`'s `Export wires`, whose reason "no wire schedule

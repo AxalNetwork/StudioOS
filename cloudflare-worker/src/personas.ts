@@ -196,7 +196,7 @@ export const PERSONAS: Persona[] = [
     ],
     // D254 — was `/projects`, which only redirects to `/build`. Taken from
     // the frontend mirror, which pointed at `/build` directly.
-    nav_extras: [{ to: '/matches', label: 'AI Matches' }, { to: '/build', label: 'Startups' }],
+    nav_extras: [{ to: '/build', label: 'Startups' }],
   },
   {
     id: 'service_provider',
