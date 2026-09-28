@@ -36,3 +36,8 @@ paths-ignore:
   # WITHOUT a copy of the bundle, so the parity guard's bundle-header test
   # could not see it until it learned to read the .dc.html extension too.
   - "design/incoming"
+  # Legacy GitHub Pages output at the repo root and its Jekyll search
+  # template; the same entries as .semgrepignore (see its comment). Never
+  # built, bundled or served — the Worker's assets are docs/.
+  - assets
+  - search.json

@@ -119,3 +119,20 @@ docs/.build-source merge=union
 # exception is pinned here so a repo-wide re-tracking sweep cannot silently
 # undo it again. (.agents/memory/font-lfs-attribute-quirk.md has the history.)
 scripts/og-assets/SpaceGrotesk-Variable.woff2 -filter -diff -merge -text
+
+# ---- Generated and pasted trees: linguist-generated ---------------------------
+# Not hand-written source. The same five trees are already excluded from the
+# repo's own CodeQL (.github/codeql/codeql-config.yml paths-ignore) and from
+# Semgrep (.semgrepignore); this marks them for everything that reads git
+# attributes instead: GitHub collapses their diffs and leaves them out of the
+# language bar. CodeQL has an exclusion keyed on this attribute
+# (codeql-action "ignore generated files"), but on 2026-09-27 it is still an
+# experimental flag, so this does NOT yet clear Code Quality findings.
+# GitHub Code Quality does not honour `paths-ignore`, which is why its
+# js/useless-expression findings were almost all in these trees: the bundler's
+# `t.node;` in docs/assets and the `{{ }}` bindings in the .dc.html canvases.
+docs/**                   linguist-generated=true
+attached_assets/**        linguist-generated=true
+spin-out-lab-pipeline/**  linguist-generated=true
+design/canvases/**        linguist-generated=true
+design/incoming/**        linguist-generated=true
