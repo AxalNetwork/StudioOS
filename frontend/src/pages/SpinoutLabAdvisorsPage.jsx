@@ -45,7 +45,6 @@ import { api, spinoutLab, assessment } from '../lib/api';
 import { archetypeMeta, SKILL_AXES } from '../lib/assessmentMeta';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import { buildDimensions } from '../lib/scoringViewModel';
-import { AssistLayout } from '../ui';
 import { reportError, reportWarn } from '../lib/log';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
@@ -1032,5 +1031,5 @@ export default function SpinoutLabAdvisorsPage() {
     </LabPageShell>
   );
 
-  return <AssistLayout surface="advisory">{page}</AssistLayout>;
+  return page;
 }

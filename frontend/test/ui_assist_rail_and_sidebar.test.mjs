@@ -605,8 +605,9 @@ test('each mount wraps its own page, once, inside the exported component', () =>
   // The mounts were applied by script across six files. A wrap that landed in
   // a later helper function would still build — Vite transpiles rather than
   // type-checks — and would render nothing while looking correct in a diff.
-  const PAGES = ['AdvisoryPage', 'SpinoutLabAdvisorsPage', 'BrandBuilderPage',
-    'SpinoutLabBrandPage', 'SpinoutLabMarketPage', 'DeckReviewerPage'];
+  // The three Spin-Out Lab pages left this list with D317: the Lab carries no
+  // Eadwyn rail (workspace_frame_contract asserts that).
+  const PAGES = ['AdvisoryPage', 'BrandBuilderPage', 'DeckReviewerPage'];
   for (const name of PAGES) {
     const lines = read(`frontend/src/pages/${name}.jsx`).split('\n');
     const start = lines.findIndex((l) => l.startsWith('export default function'));
