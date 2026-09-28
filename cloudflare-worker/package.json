@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@simplewebauthn/server": "^14.0.2",
-    "hono": "^4.13.7",
+    "hono": "^4.13.8",
     "jose": "^6.2.12",
     "mimetext": "^3.0.28",
     "otpauth": "^9.5.2",
@@ -21,9 +21,9 @@
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260914.1",
+    "@cloudflare/workers-types": "^5.20260921.1",
     "@types/qrcode": "^1.5.5",
     "typescript": "^7.0.2",
-    "wrangler": "^4.131.1"
+    "wrangler": "^4.135.0"
   }
 }
