@@ -79,10 +79,13 @@ const run = (db: InstanceType<typeof DatabaseSync>, sql: string) => {
 /** The fund tables as the baseline declares them (plus migration 312), with three funds and their periods. */
 function fundsDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  for (const t of ['vc_funds', 'fund_report_periods', 'limited_partners', 'capital_calls', 'fund_distributions']) {
+  for (const t of ['vc_funds', 'fund_report_periods', 'limited_partners', 'capital_calls', 'fund_distributions', 'entities']) {
     db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   }
   db.exec(migration('312_fund_call_ledger'));
+  // D376: the fund's GP and vehicle entities. No fund here is linked, so each
+  // jurisdiction is null (not recorded); fabric_entities_d376.test.ts links them.
+  db.exec(migration('314_fabric_entities'));
   const f = db.prepare(
     `INSERT INTO vc_funds (id, name, status, gp_entity, fund_size_cents, total_commitment, vintage_year,
                            gp_user_id, gp_name, gp_title, fund_admin, auditor, custodian, lpa_doc_id)
@@ -424,13 +427,15 @@ test('D375: the distributions unreadable leave DPI absent, and called answering'
 test('D375: a row is fund-level facts only — no LP and no GP name or email crosses the RPC', async () => {
   const r: any = await branchFundsRegistry({ DB: makeD1(fundsDb()), BRANCH_CODE: 'fr' } as any);
   assert.deepEqual(Object.keys(r).sort(), [
-    'as_of', 'branch', 'calls_available', 'complete', 'distributions_available', 'funds', 'periods_available',
+    'as_of', 'branch', 'calls_available', 'complete', 'distributions_available', 'entities_available', 'funds',
+    'periods_available',
   ]);
   for (const x of r.funds) {
     assert.deepEqual(Object.keys(x).sort(), [
       'called_minor', 'called_ratio', 'committed_minor', 'committed_source', 'distributed_minor', 'dpi',
-      'flags', 'gp_entity', 'id', 'last_issued', 'name', 'status', 'vintage_year',
+      'flags', 'gp_entity', 'gp_entity_jurisdiction', 'id', 'jurisdiction', 'last_issued', 'name', 'status', 'vintage_year',
     ], `${x.name} carries a key that is not a fund-level fact`);
+    assert.equal(x.jurisdiction, null, `${x.name} has a jurisdiction with no vehicle linked`);
     assert.deepEqual(Object.keys(x.flags).sort(),
       ['custodian_recorded', 'draft_not_issued', 'gp_fields_unset', 'lpa_on_file', 'no_gp_of_record']);
   }

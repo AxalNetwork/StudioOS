@@ -70,11 +70,12 @@ const flags = (over) => ({
 });
 const fund = (over) => ({
   id: 1, name: 'Harbor Fund I', status: 'investing', gp_entity: 'Harbor GP LLC', vintage_year: 2024,
+  jurisdiction: null, gp_entity_jurisdiction: null,
   committed_minor: 1_000_000_000, committed_source: 'fund_size_cents',
   last_issued: { period: '2026-Q2', period_end: '2026-06-30', issued_at: '2026-07-14T10:00:00Z' },
   called_minor: 300_000_000, called_ratio: 0.3, distributed_minor: 60_000_000, dpi: 0.2, flags: flags(), ...over,
 });
-const READS = { complete: true, periods_available: true, calls_available: true, distributions_available: true };
+const READS = { complete: true, periods_available: true, calls_available: true, distributions_available: true, entities_available: true };
 const PAYLOAD = {
   read_at: '2026-09-28T10:00:00Z',
   hq: { code: 'hq', status: 'ok', data: { ...READS, funds: [
@@ -173,7 +174,7 @@ test('D375: a branch on an earlier build is "Not reported", never "clear" and ne
   const de = PAYLOAD.branches[1].data.funds[0];
   assert.equal(fundFlags(de), null);
   const row = text(renderToStaticMarkup(createElement(FundsTable, { payload: { ...PAYLOAD, hq: { code: 'hq', status: 'ok', data: { ...READS, funds: [] } }, branches: [PAYLOAD.branches[1]] } })));
-  assert.match(row, /Branch DE Linde Fund I .* Not recorded Not reported 5,000,000\.00 Not reported Not reported \/ Not recorded Not reported$/);
+  assert.match(row, /Branch DE Linde Fund I .* Not reported Not reported 5,000,000\.00 Not reported Not reported \/ Not recorded Not reported$/);
   assert.doesNotMatch(row, /\bclear\b/);
   assert.equal(oversightStats(PAYLOAD).unreported, 1);
   assert.match(text(render(OversightStats)), /Open flags 6 1 not reported/);
