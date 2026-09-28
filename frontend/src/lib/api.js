@@ -4495,6 +4495,10 @@ export const api = {
     request('/comarketing/track', { method: 'POST', body: JSON.stringify(data) }),
   listMyCoMarketingAttributions: (pitchUid) =>
     request(`/comarketing/me/attributions${pitchUid ? `?pitch_uid=${pitchUid}` : ''}`),
+  // Founder side: the pitches and attributions that touch one of the caller's
+  // own startups. `/me/*` above is the PARTNER side and refuses a founder.
+  founderCoMarketing: (projectId) =>
+    request(`/comarketing/founder/by-project/${encodeURIComponent(projectId)}`),
 
   // Google Calendar sync
   googleCalStatus: () => request('/calendar/google/status'),
