@@ -53,12 +53,13 @@ export default function FounderGrowLaunch() {
       const to = new Date(now); to.setFullYear(to.getFullYear() + 1);
       const results = await Promise.allSettled([
         api.listCalendarEvents({ from: from.toISOString(), to: to.toISOString() }),
-        api.listMyCoMarketingAttributions(),
+        // Founder side; `/me/attributions` is the partner's and refuses a founder.
+        api.founderCoMarketing(selected.id),
       ]);
       const eventResult = results[0];
       const attributionResult = results[1];
       setEvents(eventResult.status === 'fulfilled' ? list(eventResult.value, 'items', 'events').filter((row) => linked(row, selected)) : []);
-      setAttributions(attributionResult.status === 'fulfilled' ? list(attributionResult.value, 'items', 'attributions').filter((row) => linked(row, selected)) : []);
+      setAttributions(attributionResult.status === 'fulfilled' ? list(attributionResult.value, 'attributions').filter((row) => linked(row, selected)) : []);
       const failed = [];
       if (eventResult.status === 'rejected') failed.push('calendar');
       if (attributionResult.status === 'rejected') failed.push('co-marketing attribution');

@@ -17,7 +17,14 @@ test('A5 Grow is founder-owned and workspace mode preserves Talent', () => {
 });
 
 test('A5 reads only documented sources and does not post investor matches', () => {
-  for (const call of ['listMetricsSnapshots', 'metricsSummary', 'listWaitlistCustomers', 'brandGetLanding', 'brandListPages', 'brandListWaitlist', 'raiseProspects', 'listMyCoMarketingPitches', 'listCalendarEvents']) assert.ok(page.includes(`api.${call}`), `the desk no longer reads api.${call}`);
+  for (const call of ['listMetricsSnapshots', 'metricsSummary', 'listWaitlistCustomers', 'brandGetLanding', 'brandListPages', 'brandListWaitlist', 'raiseProspects', 'founderCoMarketing', 'listCalendarEvents']) assert.ok(page.includes(`api.${call}`), `the desk no longer reads api.${call}`);
+  // The partner-side co-marketing reads refuse every founder (requirePartnerProfile),
+  // so a founder page that calls them shows "sources unavailable" on every load.
+  for (const grow of ['FounderGrowDesk', 'FounderGrowLaunch', 'FounderGrowPartnerships']) {
+    const src = read(`frontend/src/pages/founder/${grow}.jsx`);
+    assert.doesNotMatch(src, /api\.listMyCoMarketing(Pitches|Attributions)\(/, `${grow} calls a partner-only co-marketing read`);
+    assert.match(src, /api\.founderCoMarketing\(/, `${grow} does not read the founder-side co-marketing route`);
+  }
   assert.match(page, /jobsApi\.applications\(role\.id\)/, 'the desk no longer reads applicant counts');
   assert.ok(!page.includes('matchInvestors'));
   assert.match(page, /import \{ api, jobs as jobsApi \} from '\.\.\/\.\.\/lib\/api'/);
