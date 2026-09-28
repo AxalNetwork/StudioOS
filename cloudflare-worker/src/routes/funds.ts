@@ -130,12 +130,30 @@ funds.get('/lp-portal', async (c) => {
   // Self-view, so lpSelfScope and not lpMembershipScope: an admin's own
   // portal must show their own positions, not the sum of everyone's.
   const callScope = lpSelfScope(user as any);
-  const calls = await c.env.DB.prepare(
-    `SELECT cc.* FROM capital_calls cc
-       JOIN limited_partners lp ON lp.id = cc.limited_partner_id
-      WHERE ${callScope.sql}
-      ORDER BY cc.created_at DESC LIMIT 50`
-  ).bind(...callScope.binds).all().catch(() => ({ results: [] }));
+  // D372: each line carries what the ledger (D371) knows about it — the cents
+  // it owes, the cents received against it, the call's number and its fund —
+  // so the My-commitment card can say called, due and uncalled without
+  // guessing. A failed read is `capital_calls_recorded: false`, never an empty
+  // list: "no calls" is a claim about the LP's money.
+  let calls: any[] = [];
+  let callsRecorded = true;
+  try {
+    calls = (await c.env.DB.prepare(
+      `SELECT cc.*, lp.fund_id AS fund_id, f.name AS fund_name, fc.call_number AS call_number,
+              COALESCE(cc.amount_cents, CAST(ROUND(cc.amount * 100) AS INTEGER)) AS owed_cents,
+              COALESCE((SELECT SUM(r.amount_cents) FROM capital_call_receipts r WHERE r.capital_call_id = cc.id), 0)
+                AS received_cents
+         FROM capital_calls cc
+         JOIN limited_partners lp ON lp.id = cc.limited_partner_id
+         JOIN vc_funds f ON f.id = lp.fund_id
+         LEFT JOIN fund_capital_calls fc ON fc.id = cc.fund_call_id
+        WHERE ${callScope.sql}
+        ORDER BY cc.created_at DESC LIMIT 200`
+    ).bind(...callScope.binds).all()).results || [];
+  } catch (e) {
+    console.error('[funds] lp-portal calls unreadable', e);
+    callsRecorded = false;
+  }
 
   // Performance per-LP-row: TVPI = (returns + distributions) / invested ; DPI = distributions / invested
   const perfByLp = lpRows.map((lp: any) => {
@@ -143,8 +161,10 @@ funds.get('/lp-portal', async (c) => {
     const distSumDollars = lpDists.reduce((s: number, d: any) => s + Number(d.amount_cents || 0) / 100, 0);
     const invested = Number(lp.invested_amount || 0);
     const returns = Number(lp.returns || 0);
-    const tvpi = invested > 0 ? (invested + returns + distSumDollars) / invested : 0;
-    const dpi = invested > 0 ? (returns + distSumDollars) / invested : 0;
+    // Nothing paid in, no multiple: null, not 0 (D372). A TVPI of 0.00× says
+    // the money was lost; with no paid-in capital there is no ratio at all.
+    const tvpi = invested > 0 ? Number(((invested + returns + distSumDollars) / invested).toFixed(3)) : null;
+    const dpi = invested > 0 ? Number(((returns + distSumDollars) / invested).toFixed(3)) : null;
     return {
       lp_id: lp.id,
       fund_id: lp.fund_id,
@@ -154,9 +174,10 @@ funds.get('/lp-portal', async (c) => {
       invested_amount: invested,
       returns: returns,
       distributions_dollars: distSumDollars,
-      tvpi: Number(tvpi.toFixed(3)),
-      dpi: Number(dpi.toFixed(3)),
+      tvpi,
+      dpi,
       lpa_signed: !!lp.lpa_signed,
+      lpa_signed_at: lp.lpa_signed_at ?? null,
       commitment_date: lp.commitment_date ?? null,
     };
   });
@@ -164,7 +185,8 @@ funds.get('/lp-portal', async (c) => {
   return c.json({
     ok: true,
     lp_holdings: lpRows,
-    capital_calls: calls.results || [],
+    capital_calls: calls,
+    capital_calls_recorded: callsRecorded,
     distributions: distRows,
     performance: perfByLp,
     // The signer and the firms an LP-facing document names, per fund the caller
@@ -226,6 +248,11 @@ function fundFacts(rows: any[]) {
         title: r.gp_title ?? null,
         email: r.gp_email ?? null,
         entity: r.gp_entity ?? null,
+        // D372: the GP of record's platform account, which "Message the GP"
+        // starts a thread with (`POST /api/messages` takes an account email).
+        // `email` above is the fiduciary address as printed on the LPA, which
+        // may not be an account at all. Only the LP's own funds reach here.
+        contact_email: r.gp_account_email ?? null,
       },
       providers: {
         fund_admin: r.fund_admin ?? null,
@@ -740,8 +767,9 @@ funds.get('/:id/lp-report/:lpId', async (c) => {
   const distSumDollars = dists.reduce((s: number, d: any) => s + Number(d.amount_cents || 0) / 100, 0);
   const invested = Number(lp.invested_amount || 0);
   const returns = Number(lp.returns || 0);
-  const tvpi = invested > 0 ? (invested + returns + distSumDollars) / invested : 0;
-  const dpi = invested > 0 ? (returns + distSumDollars) / invested : 0;
+  // Null with nothing paid in, as the LP's own portal says (D372).
+  const tvpi = invested > 0 ? Number(((invested + returns + distSumDollars) / invested).toFixed(3)) : null;
+  const dpi = invested > 0 ? Number(((returns + distSumDollars) / invested).toFixed(3)) : null;
 
   return c.json({
     ok: true,
@@ -757,8 +785,8 @@ funds.get('/:id/lp-report/:lpId', async (c) => {
       invested_amount: invested,
       returns,
       distributions_dollars: distSumDollars,
-      tvpi: Number(tvpi.toFixed(3)),
-      dpi: Number(dpi.toFixed(3)),
+      tvpi,
+      dpi,
       lpa_signed: !!lp.lpa_signed,
       commitment_date: lp.commitment_date ?? null,
     }],

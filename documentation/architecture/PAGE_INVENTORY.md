@@ -41,7 +41,7 @@ canvas behind it still shows up here.
 | Home | Spin-Out Lab | `/spinout-lab` | Explore the Spin-Out Lab, Fund Brief One-Pager |
 | Home | Deals | `/deals` | Deal Flow, Investor LP Canvas, Pages · Investor Deals |
 | Home | Portfolio | `/portfolio` | Investor LP Canvas |
-| Home | Axal VC Fund | `/spinout-lab/investor-workspace` | Fund Brief One-Pager, LP Investor Workspace |
+| Home | Axal VC Fund | `/spinout-lab/investor-workspace` | Fund Brief One-Pager, LP Investor Workspace, Quarterly Report |
 | Home | Fund | `/funds` | Investor LP Canvas, Pages · Funds and fund research, Pages · Investor Fund |
 | Home | Network | `/network` | Investor LP Canvas, Pages · Investor Network |
 | Home | Research | `/research` | Investor LP Canvas |
