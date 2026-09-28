@@ -82,9 +82,14 @@ test('investor-owned deep links keep the investor workspace shell', () => {
     routeBlock(app, '/deals/:dealId'),
     /investorWorkspace\('deals', <DealRoomPage \/>/,
   );
+  // Re-aimed by D372: /lp-portal retired into the LP workspace's My-commitment
+  // section. The old path is a redirect to that anchor, and the destination
+  // keeps the same investor shell the portal page had.
+  assert.match(routeBlock(app, '/lp-portal'), /<LpPortalRedirect \/>/);
+  assert.match(app, /function LpPortalRedirect\(\)[\s\S]{0,240}?pathname: '\/spinout-lab\/investor-workspace'[\s\S]{0,80}?'#my-commitment'/);
   assert.match(
-    routeBlock(app, '/lp-portal'),
-    /investorWorkspace\('axal-vc-fund', <LPPortalPage \/>/,
+    routeBlock(app, '/spinout-lab/investor-workspace'),
+    /investorWorkspace\('axal-vc-fund', null\)/,
   );
   // D311 — the investor's rooms are read by grant under Research · Diligence,
   // so the investor arm of /raise/data-room is a redirect there, still FIRST,
