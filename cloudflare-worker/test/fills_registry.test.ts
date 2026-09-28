@@ -196,9 +196,24 @@ test('every kind names a rail that exists and declares a mode — D17', () => {
   // CAPABILITY WITH NO SWITCH — it would run with no way to turn it off, and
   // `manualNote`'s promise that nothing runs and nothing is spent would be false
   // on that page.
+  //
+  // THE SWITCH IS ON THE RAIL OR ON THE PAGE (D317). `market` left the rail
+  // when the Spin-Out Lab dropped it, and its switch is now drawn by the market
+  // page beside its bands. Such a page must write the same mode key, and say
+  // what off means, in its own source.
   const config = readFileSync(resolve(HERE, '../../frontend/src/ui/eadwynConfig.js'), 'utf8');
+  const PAGE_SWITCHES: Record<string, string> = { market: 'frontend/src/pages/SpinoutLabMarketPage.jsx' };
   for (const k of Object.values(FILL_KINDS)) {
     const at = config.indexOf(`\n  ${k.assistSurface}: {`);
+    const own = PAGE_SWITCHES[k.assistSurface];
+    if (at < 0 && own) {
+      const page = readFileSync(resolve(HERE, '../..', own), 'utf8');
+      assert.match(page, new RegExp(`const \\[(\\w+), (set\\w+)\\] = useAssistMode\\('${k.assistSurface}'\\);`),
+        `${own} offers ${k.kind} with no switch that writes the mode`);
+      assert.match(page, /onChange=\{\(e\) => set\w+\(e\.target\.checked\)\}/, `${own}'s switch changes nothing`);
+      assert.match(page, /Nothing runs and nothing is spent\./, `${own} says what ON does and not what OFF means`);
+      continue;
+    }
     assert.ok(at > 0, `eadwynConfig has no ASSIST_SURFACES entry called ${k.assistSurface}`);
     const entry = config.slice(at, config.indexOf('\n  },', at));
     assert.match(entry, /mode: \{/,

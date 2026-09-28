@@ -166,16 +166,17 @@ test('a figure Eadwyn supplied is marked, and one the founder replaced is not', 
   assert.match(body, /citation: fill\.citation,/, 'the source is not sent');
 });
 
-test('the market rail can be turned off, and says what off means — D17', () => {
+test('the market switch can be turned off, and says what off means — D17, D317', () => {
   // D17 refused a mode switch until a page branched on it. The market page
-  // branches now, so the switch is real — and `manualNote` is what OFF means in
-  // the founder's own terms rather than as the absence of something.
-  const at = CONFIG.indexOf('\n  market: {');
-  assert.ok(at > 0, 'the market surface is gone from eadwynConfig');
-  const entry = CONFIG.slice(at, CONFIG.indexOf('\n  },', at));
-  assert.match(entry, /mode: \{/);
-  assert.match(entry, /kind: 'choice'/);
-  assert.match(entry, /manualNote: 'Nothing runs and nothing is spent\./);
+  // branches, so the switch is real. It sat on the Eadwyn rail until D317 took
+  // the rail out of the Spin-Out Lab; it is now the page's own, beside the two
+  // bands it turns on, and it still says what OFF means in the founder's terms.
+  assert.doesNotMatch(CONFIG, /\n  market: \{/, 'the market surface is back on the Eadwyn rail');
+  assert.match(PAGE, /const \[fillsOn, setFillsOn\] = useAssistMode\('market'\);/);
+  assert.match(PAGE, /onChange=\{\(e\) => setFillsOn\(e\.target\.checked\)\}/,
+    'the switch no longer changes the mode the bands read');
+  assert.match(PAGE, /const FILLS_OFF_NOTE = 'Nothing runs and nothing is spent\./);
+  const entry = PAGE.slice(PAGE.indexOf('const FILLS_NOTE'), PAGE.indexOf('const FILLS_OFF_NOTE'));
 
   // AND IT PROMISES WHAT THE REGISTRY ACTUALLY DOES, for BOTH kinds this surface
   // now offers. A note that over-promised here would be the page's fourth
