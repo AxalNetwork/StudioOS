@@ -4452,6 +4452,15 @@ export const api = {
   createCheckin: (data) => request('/calendar/founder-checkins', { method: 'POST', body: JSON.stringify(data) }),
   cancelCheckin: (id) => request(`/calendar/founder-checkins/${id}`, { method: 'DELETE' }),
 
+  // ---------- Profiling v2 (D357) ----------
+  // The caller's own profile snapshots and archetype publish consent. No user
+  // id is sent: the Worker reads the session.
+  profileHistory: (persona) =>
+    request(`/profile/history${persona ? `?persona=${encodeURIComponent(persona)}` : ''}`),
+  archetypePublished: () => request('/profile/archetype-published'),
+  setArchetypePublished: (published) =>
+    request('/profile/archetype-published', { method: 'PUT', body: JSON.stringify({ published: published === true }) }),
+
   // ---------- Partner office hours (Task #54) ----------
   createPartnerSlot: (data) =>
     request('/partner-office-hours/me/slots', { method: 'POST', body: JSON.stringify(data) }),

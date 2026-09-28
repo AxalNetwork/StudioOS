@@ -75,6 +75,8 @@ import { explorerBankForTrack } from '../services/advisor/banks/explorer';
 // answer lands (the raw score is persisted to field_sources below).
 import { recomputeUserFit } from '../services/axalFit';
 import { recomputeUserArchetype } from '../services/archetypeScoring';
+import { recomputeProfile } from '../services/profileHistory';
+import { normalizeFitAnswer } from '../services/advisor/banks/fitShared';
 import { computeProfilingCompletion, applyAdaptiveProfiling } from '../services/advisor/profilingModules';
 import { routeAnswer, recordFieldSource, type WriteResult } from '../services/advisor/writeRouter';
 import { hashEmail } from '../util/hashEmail';
@@ -176,9 +178,16 @@ async function ensureSchema(env: Env): Promise<void> {
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_advisor_msg_conv ON advisor_messages(conversation_id, id)");
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS advisor_answers (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id INTEGER NOT NULL REFERENCES advisor_conversations(id) ON DELETE CASCADE, user_id INTEGER NOT NULL, question_id TEXT NOT NULL, raw_value TEXT, saved_to_table TEXT, saved_to_column TEXT, saved_to_id TEXT, saved_status TEXT NOT NULL, saved_error TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(conversation_id, question_id))"
+      "CREATE TABLE IF NOT EXISTS advisor_answers (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id INTEGER NOT NULL REFERENCES advisor_conversations(id) ON DELETE CASCADE, user_id INTEGER NOT NULL, question_id TEXT NOT NULL, raw_value TEXT, saved_to_table TEXT, saved_to_column TEXT, saved_to_id TEXT, saved_status TEXT NOT NULL, saved_error TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), answered_at TEXT, UNIQUE(conversation_id, question_id))"
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_advisor_answers_user_q ON advisor_answers(user_id, question_id)");
+    // D357 — migration 362's answered_at, for a table that predates it. The
+    // column is declared by the migration; this is the safety net only.
+    const answerCols = await env.DB.prepare(`PRAGMA table_info(advisor_answers)`).all<{ name: string }>();
+    if (!(answerCols.results || []).some((r) => r.name === 'answered_at')) {
+      try { await env.DB.exec(`ALTER TABLE advisor_answers ADD COLUMN answered_at TEXT`); }
+      catch (e) { /* duplicate-column race; ignore */ void e; }
+    }
     // Task #3 (AS) — field_sources audit table for the per-page
     // <AdvisorFilledBanner> + sparkle attribution icons. Mirrors
     // sql/migrations/042_advisor_field_sources.sql so a dev D1
@@ -1009,7 +1018,11 @@ advisor.post('/answer', async (c) => {
   // red-flag scores from field_sources.evidence_text, so for fit.* questions we
   // persist the RAW 0..5 score there (not the free-text citation). Non-fit
   // questions keep the verbatim evidence-gate citation.
-  const fieldEvidence = FIT_ID_RE.test(q.id) ? valueStr : evidenceStr;
+  // D357 — a pick-one stores its option KEY, whether the chat sent the key or
+  // the label it showed; routeAnswer has already refused anything else. Every
+  // other fit answer (reverse-keyed scales included) is stored as given.
+  const ledgerValue = FIT_ID_RE.test(q.id) ? (normalizeFitAnswer(q, valueStr) ?? valueStr) : valueStr;
+  const fieldEvidence = FIT_ID_RE.test(q.id) ? ledgerValue : evidenceStr;
 
   // Surface evidence-gate / schema-invalid as 4xx so the frontend
   // can run optimistic-rollback + inline retry instead of treating
@@ -1044,17 +1057,18 @@ advisor.post('/answer', async (c) => {
     const stmts: D1PreparedStatement[] = [];
     stmts.push(c.env.DB.prepare(
       `INSERT INTO advisor_answers
-         (conversation_id, user_id, question_id, raw_value, saved_to_table, saved_to_column, saved_to_id, saved_status, saved_error)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (conversation_id, user_id, question_id, raw_value, saved_to_table, saved_to_column, saved_to_id, saved_status, saved_error, answered_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
        ON CONFLICT(conversation_id, question_id) DO UPDATE SET
          raw_value = excluded.raw_value,
          saved_to_table = excluded.saved_to_table,
          saved_to_column = excluded.saved_to_column,
          saved_to_id = excluded.saved_to_id,
          saved_status = excluded.saved_status,
-         saved_error = excluded.saved_error`,
+         saved_error = excluded.saved_error,
+         answered_at = excluded.answered_at`,
     ).bind(
-      conv.id, user.id, q.id, valueStr,
+      conv.id, user.id, q.id, ledgerValue,
       result.saved_to?.table || null,
       result.saved_to?.column || null,
       result.saved_to?.id != null ? String(result.saved_to.id) : null,
@@ -1103,7 +1117,7 @@ advisor.post('/answer', async (c) => {
     // bare advisor_answers write so the conversation history is
     // still persisted.
     console.warn('[advisor] post-answer batch failed', (e as Error).message);
-    await recordAnswer(c.env, conv, user, q.id, valueStr, result);
+    await recordAnswer(c.env, conv, user, q.id, ledgerValue, result);
     if (result.status === 'saved') {
       await recordFieldSource(
         c.env, user.id, q.id, q.page_target || null,
@@ -1129,6 +1143,14 @@ advisor.post('/answer', async (c) => {
       await recomputeUserArchetype(c.env, user.id);
     } catch (e) {
       console.warn('[advisor] recomputeUserArchetype failed', (e as Error).message);
+    }
+    // D357 — Profiling v2: recompute the person's profile from the answer
+    // ledger and append a snapshot if it changed materially. v1 above keeps
+    // feeding the card until Session 15 moves it.
+    try {
+      await recomputeProfile(c.env, user.id, { trigger: 'answer' });
+    } catch (e) {
+      console.warn('[advisor] recomputeProfile failed', (e as Error).message);
     }
   }
 

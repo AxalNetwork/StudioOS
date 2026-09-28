@@ -57,7 +57,7 @@ coordinate for all sixteen, twenty more probes in every bank, and a new
 radar. It would also invalidate every stored `traits_json` in
 `profile_archetypes`, so history would start again from zero. The one pair
 that a fifth axis would really separate, Embedded Operator and Systems
-Builder, is separated by moving one coordinate instead (§2.2).
+Builder, is left close and separated by situational items instead (§2.2, D357).
 
 ### 2.2 Centroids
 
@@ -77,25 +77,27 @@ connector, operator):
 | Partner | Strategic Connector (`pt_strategic_connector`) | 2, 4, 5, 3 |
 | Partner | Embedded Operator (`pt_embedded_operator`) | 5, 2, 3, 4 |
 | Partner | Growth Catalyst (`pt_growth_catalyst`) | 4, 4, 4, 2 |
-| Partner | Systems Builder (`pt_systems_builder`) | 4, 2, 2, 5 → **3, 2, 2, 5** in Session 7 |
+| Partner | Systems Builder (`pt_systems_builder`) | 4, 2, 2, 5 (the proposed move to 3, 2, 2, 5 was withdrawn by D357) |
 | Advisor | Sage Guide (`mt_sage_guide`) | 2, 5, 4, 3 |
 | Advisor | Hands-On Coach (`mt_hands_on_coach`) | 4, 2, 5, 3 |
 | Advisor | Accountability Anchor (`mt_accountability_anchor`) | 3, 2, 4, 5 |
 | Advisor | Craft Master (`mt_craft_master`) | 5, 3, 2, 4 |
 
-**One centroid moves: Systems Builder's builder coordinate goes from 4 to 3.**
-Embedded Operator and Systems Builder are 1.73 apart (raw Euclidean), the
-only pair under 2. Every other close pair is at 2.45 or more. In the
-baseline (§9) their two personas win by 0.34 and 0.27 (normalised distance),
-the two thinnest margins among the sixteen. The distinction the owner's
-names draw is hands-on delivery against installing the machinery, so the
-builder axis is the right one to widen. At (3, 2, 2, 5) the pair is 2.45
-apart, the same as every other close pair. Systems Builder is still 4.24
-from Strategic Connector and from Growth Catalyst. The move is an
-`engine_version` bump (§7.8), so existing partners are recomputed under
-hysteresis, never flipped on the spot.
+**No centroid moves (D357).** This spec first proposed moving Systems
+Builder's builder coordinate from 4 to 3. Embedded Operator and Systems
+Builder are 1.73 apart (raw Euclidean), the only pair under 2, and in the
+baseline (§9) their personas win by the two thinnest margins (0.34 and
+0.27). Session 7 measured the move against the Session 6 personas before
+shipping it: it widens Embedded Operator's margin (0.30 → 0.67) but
+classifies the Systems Builder persona — builder 4.3, operator 4.6,
+connector 2.3, a hands-on person who installs the machinery — as an
+Embedded Operator. Nothing in the owner's description makes a Systems
+Builder less hands-on, so the move was withdrawn. The pair stays close. The
+engine reports a close result as a blend (secondary within
+`secondary_margin`), and the partner bank (Session 11) separates it with
+situational items, as §3.2 requires for every close pair.
 
-No other centroid moves. The 2.45 pairs (Thesis-Driven/Allocator, Strategic
+The 2.45 pairs (Thesis-Driven/Allocator, Strategic
 Connector/Growth Catalyst, Hands-On Coach/Accountability Anchor) and the
 founder pairs (2.65, 3.16) are separated by the new question formats (§3)
 rather than by moving the targets.
@@ -205,10 +207,30 @@ Rules for authors (Sessions 8–11):
 
 ### 3.3 Where the answer lives
 
-Unchanged: `advisor_answers` is the ledger (one row per answer), and
+`advisor_answers` is the ledger (one row per conversation and question), and
 `field_sources` keeps the latest per `(user_id, question_id)`. v2 scoring
-reads the **ledger** (it needs `created_at` for ageing), not
-`field_sources`.
+reads the **ledger**, not `field_sources`.
+
+**When an answer was given (D357).** A re-answer within one conversation
+upserts the same `advisor_answers` row, and `created_at` kept the time of the
+first answer. Migration 362 adds `advisor_answers.answered_at`, which the
+route sets on every insert and re-answer. The ledger dates an answer by
+`COALESCE(answered_at, created_at)`.
+
+**How the item types are delivered and stored (D357).**
+- A pick-one is declared with `input_kind: 'choice'` and reaches the chat as
+  a plain `select` over its labels, so the chat needs no new control. The
+  route stores the option **key** (`normalizeFitAnswer` accepts the key or
+  the exact label, case-insensitively, and refuses anything else).
+- A reverse-keyed scale is stored as the person answered it and inverted
+  only when the trait is scored.
+- Reverse keys are allowed only on `archetype_trait` rows, and pick-ones
+  feed archetype traits only. `assertFitRow` fails the build otherwise, so
+  the write router's skill, value and Axal-value writes never receive a
+  reversed or keyed answer. A bank that needs a reverse-keyed skill or value
+  item needs a spec change first.
+- `retired` removes a question from `bankFor` (delivery) but keeps it in
+  `BANKS`, so its past answers are still found and scored.
 
 ---
 
@@ -272,7 +294,24 @@ rises with it. Session 13 may propose a blend, for example
 `self + clamp(evidence_level − self, −1, +1) × w`, behind a switch that is
 off by default. The owner turns it on.
 
-### 5.3 Evidence rules (Session 8 details the tool map)
+### 5.3 The evidence interface (D357)
+
+Session 7's engine takes Session 8's numbers without knowing how they were
+made:
+
+```ts
+recomputeProfile(env, userId, {
+  trigger,                                   // 'answer' | 'evidence' | 'scheduled' | 'engine_bump'
+  evidence?: (persona) => EvidenceWeights,   // { [radar axis]: weight } — the §7.4 window ALREADY applied
+})
+```
+
+An axis's weight is the number §5.2 compares with `corroborated_at`. No
+evidence supplied, or an axis missing from the map, means the axis reads
+from the self-rating alone (`self_rated_only`), or `not_recorded` when it
+has none. It is never 0 evidence-as-a-level.
+
+### 5.4 Evidence rules (Session 8 details the tool map)
 
 - An evidence event is a **completed, attributable action by the user**, not
   a page view: a session they hosted and the partner marked completed, a
@@ -434,7 +473,7 @@ change, or the first classification.
 | `answer` | after each saved `fit.*` answer, for that user |
 | `evidence` | the nightly cron (`0 3 * * *`, already in both envs), for users with new evidence or crossing a window edge |
 | `scheduled` | the same cron, for users whose hysteresis clock or re-ask state moved |
-| `engine_bump` | once per user, batched, when `engine_version` changes (e.g. §2.2's centroid move); hysteresis applies, so nobody's displayed archetype flips overnight |
+| `engine_bump` | once per user, batched, when `engine_version` changes (e.g. a changed centroid or scoring rule); hysteresis applies, so nobody's displayed archetype flips overnight |
 
 ### 7.9 Visibility
 
@@ -464,7 +503,7 @@ profile_snapshots
   user_id             INTEGER NOT NULL REFERENCES users(id)
   persona             TEXT NOT NULL            -- FitPersona
   engine_version      TEXT NOT NULL            -- e.g. 'profiling-v2.1'
-  trigger             TEXT NOT NULL            -- answer | evidence | scheduled | engine_bump
+  trigger_kind        TEXT NOT NULL            -- answer | evidence | scheduled | engine_bump (D357: `trigger` is an SQL keyword)
   displayed_slug      TEXT                     -- NULL until first classification
   computed_slug       TEXT
   secondary_slug      TEXT
@@ -495,11 +534,11 @@ skill_evidence
 
 ### 8.3 Publishing the conversational archetype
 
-Decision c needs a publish flag on the canonical archetype. Proposed:
-`user_settings.archetype_published INTEGER NOT NULL DEFAULT 0`, set by the
-user on the card page. Session 7 must first check that `user_settings` has
-headroom under D1's 100-column cap. If it does not, the flag goes in a side
-table. The legacy `assessment_results.published` stays readable for the
+Decision c needs a publish flag on the canonical archetype. Built by D357 as
+a side table, `profile_archetype_publish (user_id PRIMARY KEY, published
+0|1, updated_at)` (migration 362), rather than a column on `users` or
+`user_settings`. No row means not published. The caller sets it through
+`PUT /api/profile/archetype-published`. The legacy `assessment_results.published` stays readable for the
 fallback (decision a) and is not copied across: publishing is a new consent.
 
 ---
@@ -547,7 +586,7 @@ engine, run by Session 6 on main `8e2120b4e3`):
   day it wins (Eli on 2 and 13 July; Oscar on 6 and 11 March and on 2 and
   13 May).
 - The thinnest static margins are Embedded Operator 0.34 and Systems
-  Builder 0.27, the pair §2.2 separates.
+  Builder 0.27, the close pair §2.2 discusses.
 
 What the baseline does **not** show: the personas were written from the
 centroids, so agreement confirms the engine reads them correctly, not that
@@ -577,7 +616,7 @@ commit as its mounted Worker route.
 | Session | Builds | After |
 | --- | --- | --- |
 | Session 6 | This spec, owner decisions, evolution model, test personas | first |
-| Session 7 | Archetype scoring engine v2 (ledger reads, ageing, secondary, hysteresis, Systems Builder move, `engine_version`) + `profile_snapshots` + publish flag + `/profile/history` | Session 6 |
+| Session 7 | Archetype scoring engine v2 (ledger reads, ageing, secondary, hysteresis, `engine_version`) + `profile_snapshots` + publish flag + `/profile/history` (D357) | Session 6 |
 | Session 8 | Skill evidence from platform tools: `skill_evidence`, the source→axis tool map, the nightly evidence pass, `/skills/me/evidence` | Session 6 |
 | Session 9 | Founder question bank v2 (reverse-keyed, situational, `reask_prompt`, Schwartz dims) | Session 7 |
 | Session 10 | Investor question bank v2 | Session 7 |

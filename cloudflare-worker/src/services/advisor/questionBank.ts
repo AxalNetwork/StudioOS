@@ -83,6 +83,26 @@ export interface FitMeasures {
   // answer, not a 0–5 scale; write-router stores it on user_settings.
   archetype_presentation?: boolean;
   red_flag?: { key: string; at_or_below: number };
+  // D357 (Profiling v2, PROFILING_V2.md §3) — a situational pick-one. The
+  // answer is an option key; the chosen option's `loadings` feed the traits.
+  archetype_choice?: true;
+}
+
+/** One option of a situational pick-one (PROFILING_V2.md §3.1). */
+export interface FitChoice {
+  /** Stable within the question; lower-case letters, digits, underscore. */
+  key: string;
+  /** What the person reads. */
+  label: string;
+  /** 0..5 per trait this option speaks to; at most two traits. */
+  loadings: Partial<Record<'builder' | 'visionary' | 'connector' | 'operator', number>>;
+}
+
+/** A question taken out of rotation. Its id is never reused; old answers keep counting as they age. */
+export interface FitRetirement {
+  at: string;
+  reason: string;
+  replaced_by?: string;
 }
 
 export interface Question {
@@ -122,6 +142,16 @@ export interface Question {
   // Task #19 — Best-Fit. Present only on `fit.*` questions; tags what the 0..5
   // answer measures so axalFit + the write-router can route + score it.
   measures?: FitMeasures;
+  // D357 — Profiling v2 item metadata (fit.* only). `reverse` scores a scale
+  // answer as 5 − value AT SCORING TIME; the ledger keeps what the person said.
+  // `choices` carries a pick-one's option keys and trait loadings (the chat
+  // sees them as a plain `select` over the labels). `reask_prompt` is the
+  // wording used when an aged answer is re-asked; `retired` takes the question
+  // out of delivery while its past answers keep counting.
+  reverse?: boolean;
+  choices?: FitChoice[];
+  reask_prompt?: string;
+  retired?: FitRetirement;
 }
 
 // Task #5 (CH) — per-persona size targets enforced by the drift CI
@@ -253,6 +283,12 @@ export function bankByName(name: BankName): Question[] {
  * existing-founder bank.
  */
 export function bankFor(persona: Persona, ctx?: { spinoutLabActive?: boolean }): Question[] {
+  // D357 — a retired fit question is never delivered again. It stays in BANKS
+  // so questionById / fitMeasuresIndex still score the answers it already has.
+  return deliveredBankFor(persona, ctx).filter((q) => !q.retired);
+}
+
+function deliveredBankFor(persona: Persona, ctx?: { spinoutLabActive?: boolean }): Question[] {
   switch (persona) {
     // Task #19 — append the persona's Best-Fit bank so the conversational
     // profiling questions are delivered inline (importance:'low' → trailing).
@@ -280,6 +316,11 @@ export interface FitMeasureEntry {
   question_id: string;
   persona: FitPersona;
   measures: FitMeasures;
+  // D357 — carried so scoring needs no second lookup. Absent on a plain scale.
+  reverse?: boolean;
+  choices?: FitChoice[];
+  /** A retired question's replacement: once it is answered, this one stops counting. */
+  replaced_by?: string;
 }
 
 export function fitMeasuresIndex(): FitMeasureEntry[] {
@@ -289,7 +330,11 @@ export function fitMeasuresIndex(): FitMeasureEntry[] {
       if (!q.measures) continue;
       const m = FIT_ID_RE.exec(q.id);
       if (!m) continue;
-      out.push({ question_id: q.id, persona: m[1] as FitPersona, measures: q.measures });
+      const entry: FitMeasureEntry = { question_id: q.id, persona: m[1] as FitPersona, measures: q.measures };
+      if (q.reverse) entry.reverse = true;
+      if (q.choices) entry.choices = q.choices;
+      if (q.retired?.replaced_by) entry.replaced_by = q.retired.replaced_by;
+      out.push(entry);
     }
   }
   return out;
@@ -368,7 +413,7 @@ export function profilingBankFor(persona: Persona): Question[] {
  */
 export function profilingSectionForQuestion(q: Question): ProfilingSectionKey {
   const m = q.measures;
-  if (m?.archetype_trait || m?.archetype_presentation) return 'archetype';
+  if (m?.archetype_trait || m?.archetype_choice || m?.archetype_presentation) return 'archetype';
   if (m?.skill_axis) return 'skills';
   if (m?.value_dim) return 'work_values';
   return 'axal_fit';
