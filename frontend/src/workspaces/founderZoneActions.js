@@ -21,8 +21,8 @@ import { makeZoneActions } from './zoneActionBuilder';
  * EVERY `to` WAS CHECKED AGAINST THE ROUTER, NOT ASSUMED. Each one is a path
  * `App.jsx` mounts with a guard that admits `founder`, and lands on a component
  * that calls the write method the label promises. Four labels lost their link
- * that way: `/matches` (where `introductionsRequest` lives) is admin, partner
- * and investor only; `/contacts` redirects to `/network?tab=contacts`, whose
+ * that way: `/matches` (where `introductionsRequest` lived, since removed) was
+ * admin, partner and investor only; `/contacts` redirects to `/network?tab=contacts`, whose
  * tab a founder's Network desk does not read; `/build/discovery` renders
  * `FounderValidatePage` for a founder, so the waitlist invite panel behind it
  * is not theirs to reach; and `/build/team` renders the Grow desk, not
@@ -223,7 +223,9 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   'network/introductions': [
-    { label: 'Request an intro', unbuilt: 'the request flow lives on a surface a founder cannot open' },
+    // Was 'the request flow lives on a surface a founder cannot open', which
+    // stopped being true when that surface, the AI Matches page, was removed.
+    { label: 'Request an intro', unbuilt: 'no screen requests an introduction since the AI Matches page was removed' },
     { label: 'Offer one', unbuilt: 'offering an introduction is not built' },
     { label: 'Export', kind: 'export' },
   ],

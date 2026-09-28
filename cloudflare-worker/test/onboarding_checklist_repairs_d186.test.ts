@@ -168,19 +168,8 @@ const CASES: Case[] = [
     key: 'inv.thesis', role: 'investor',
     seed: (u) => run(`INSERT INTO investor_profiles (user_id, thesis_text) VALUES (?, 'Seed B2B infra')`, u),
   },
-  {
-    // was match_scores.investor_user_id; the writer binds the investor to user_id
-    key: 'inv.review', role: 'investor',
-    seed: (u) => {
-      // Three distinct targets: idx_match_scores_unique is
-      // (user_id, score_type, deal_id, target_user_id), so three identical
-      // rows would collide and the item needs >= 3.
-      for (let i = 0; i < 3; i++) {
-        run(`INSERT INTO match_scores (user_id, target_user_id, score_type, score)
-             VALUES (?, ?, 'deal_flow', 0.5)`, u, mkUser('founder'));
-      }
-    },
-  },
+  // inv.review stood here. It left the catalogue with the AI Matching Engine,
+  // together with its detector, so there is no gate left for a case to hold.
   {
     // was deployment_target_cents / reserve_percent, fields no table has
     key: 'inv.target', role: 'investor',
@@ -271,26 +260,8 @@ const NEAR_MISSES: Case[] = [
     seed: (u) => run(
       `INSERT INTO legal_obligations (user_id, obligation_key, status) VALUES (?, 'kyc_v1', 'satisfied')`, u),
   },
-  {
-    // Two matched founders is not three.
-    key: 'inv.review', role: 'investor',
-    seed: (u) => {
-      for (let i = 0; i < 2; i++) {
-        run(`INSERT INTO match_scores (user_id, target_user_id, score_type, score)
-             VALUES (?, ?, 'deal_flow', 0.5)`, u, mkUser('founder'));
-      }
-    },
-  },
-  {
-    // A score of another kind is not deal flow.
-    key: 'inv.review', role: 'investor',
-    seed: (u) => {
-      for (let i = 0; i < 3; i++) {
-        run(`INSERT INTO match_scores (user_id, target_user_id, score_type, score)
-             VALUES (?, ?, 'cofounder', 0.5)`, u, mkUser('founder'));
-      }
-    },
-  },
+  // inv.review's two near misses (two matched founders; three scores of
+  // another kind) left with the item itself — see the case list above.
   {
     // A corporate_profiles row with no entity name is not a configured KYB.
     key: 'op.kyb', role: 'partner',
@@ -354,8 +325,9 @@ test('every repointed detector is satisfied by a real row, and by nothing else',
   // NON-VACUITY. The count is the arithmetic D186 states: twenty-four broken
   // detectors, of which four became autoDetect:false (no store anywhere) and
   // one was a dead second arm on an item that already worked. Nineteen
-  // repointed detectors are left, and each one is a case below.
-  assert.equal(CASES.length, 19,
+  // repointed detectors were left, and each one was a case below. inv.review
+  // then left the catalogue with the AI Matching Engine, so eighteen remain.
+  assert.equal(CASES.length, 18,
     `${CASES.length} cases — a repoint lost its satisfying-row case, or one was added without one`);
 
   for (const c of CASES) {
@@ -377,8 +349,10 @@ test('every repointed detector is satisfied by a real row, and by nothing else',
 test('a row that almost satisfies an item does not satisfy it', async () => {
   // Non-vacuity, same shape as above: every gate D186 wrote deliberately has a
   // near miss here, so loosening one is caught by a row rather than by a
-  // reader noticing.
-  assert.ok(NEAR_MISSES.length >= 10,
+  // reader noticing. Was >= 10; two of the ten belonged to inv.review, whose
+  // gate was deleted rather than loosened, and every gate still in the
+  // catalogue keeps its near miss.
+  assert.ok(NEAR_MISSES.length >= 8,
     `${NEAR_MISSES.length} near misses — a deliberate gate lost the row that refuses it`);
 
   for (const c of NEAR_MISSES) {
@@ -447,4 +421,18 @@ test('the advisor catalogue can now reach the celebration threshold', async () =
   assert.ok(res.completed >= 8,
     `the advisor reached ${res.completed} of 10 against a threshold of 8 — the celebration is still unreachable`);
   assert.equal(res.meta.should_celebrate, true);
+});
+
+test('the total is the role\'s own catalogue, so an investor can finish', async () => {
+  // D378. The total was a fixed 10 while every catalogue held ten steps. The
+  // investor's now holds eight (inv.review and inv.intro left with the AI
+  // Matching Engine), and a fixed 10 would read "8 / 10" with nothing left to
+  // do and never reach "You're all set!".
+  const inv = await loadChecklist(env, { id: mkUser('investor'), role: 'investor' });
+  assert.equal(inv.role, 'investor');
+  assert.equal(inv.total, CATALOG.investor.length);
+  assert.equal(inv.total, 8);
+  const adv = await loadChecklist(env, { id: mkUser('advisor'), role: 'advisor' });
+  assert.equal(adv.total, CATALOG.advisor.length);
+  assert.equal(adv.total, 10);
 });

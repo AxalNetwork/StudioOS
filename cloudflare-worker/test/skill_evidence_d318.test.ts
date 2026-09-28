@@ -76,16 +76,34 @@ const TABLES = [
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
 }
+function sqliteCall(sql: string, binds: any[]) {
+  // D1 treats `?1` as one parameter no matter how often it appears. node:sqlite
+  // rejects a repeated `?1` ("column index out of range"), so each occurrence
+  // becomes its own `?` carrying that same value.
+  const values: any[] = [];
+  const rewritten = sql.replace(/\?(\d+)/g, (_m, n) => {
+    values.push(binds[Number(n) - 1]);
+    return '?';
+  });
+  return { sql: values.length ? rewritten : sql, values: values.length ? values : binds };
+}
 function makeD1(db: InstanceType<typeof DatabaseSync>) {
   return {
     prepare(sql: string) {
       let b: any[] = [];
       const api: any = {
         bind: (...x: any[]) => { b = coerce(x); return api; },
-        async first() { return db.prepare(sql).get(...b) ?? null; },
-        async all() { return { results: db.prepare(sql).all(...b) }; },
+        async first() {
+          const q = sqliteCall(sql, b);
+          return db.prepare(q.sql).get(...q.values) ?? null;
+        },
+        async all() {
+          const q = sqliteCall(sql, b);
+          return { results: db.prepare(q.sql).all(...q.values) };
+        },
         async run() {
-          const r = db.prepare(sql).run(...b);
+          const q = sqliteCall(sql, b);
+          const r = db.prepare(q.sql).run(...q.values);
           return { meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } };
         },
       };
