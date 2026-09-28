@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { safeReadJSON } from './lib/storage';
 import { reportError } from './lib/log';
 import { preserveReloadGuards } from './lib/reloadGuard';
@@ -824,6 +824,15 @@ const FULL_BLEED_BY_ROLE = {
 
 function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, primaryPersonaId, hqView = true, supportLeftMs = null, onExtendImpersonation, supportReason = null }) {
   const location = useLocation();
+  // ONE TYPE FACE FOR THE SIGNED-IN PRODUCT: the investor Fund page's
+  // (--font-app, index.css). The class sits on <html> so portals mounted on
+  // <body> get it too, and comes off on the way back to the public site,
+  // which keeps its own face. A layout effect, so the first paint is already
+  // in the right face.
+  useLayoutEffect(() => {
+    document.documentElement.classList.add('app-type');
+    return () => document.documentElement.classList.remove('app-type');
+  }, []);
   // Active-company context state — owned here so descendants (CompanySwitcher,
   // CompanySettingsPage, etc.) share the same reference without prop drilling.
   const [activeCompany, setActiveCompany] = useState(null);

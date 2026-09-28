@@ -30958,6 +30958,66 @@ an edit without a reading after writing one. The fix was to the assertion, not
 the code: the merged-edit test now sends `our_value` alone and requires the
 stored reading to survive. After the fix, 19 of 19 are caught.
 
+## D315
+
+**One type face for the signed-in product: the investor Fund page's.**
+The owner asked for the typography of `/funds` (investor) across the whole
+dashboard and every profile, and not the front page yet.
+
+**What was there.** The signed-in pages did not agree:
+
+- `/funds` and the other investor workspaces set Space Grotesk on their own
+  root.
+- The founder desks (Build, Raise, Validate, KPI, Board, Roadmap) and
+  Refer & Earn hard-coded Inter.
+- The Studio homes used `--font-sans` for body text and `--font-display` for
+  headings.
+- Every page that set nothing fell through to the body's Inter.
+- A few monospace labels used system stacks instead of Roboto Mono.
+
+So the same product changed face from page to page.
+
+**What it is now.**
+
+- **`--font-app`** (Space Grotesk, falling back to Inter) is the single face
+  for signed-in text.
+- **`--font-mono`** (Roboto Mono) is the face for the uppercase eyebrow
+  labels, as on `/funds`.
+- **`ProtectedLayout` sets `app-type` on `<html>`** in a layout effect, so the
+  first paint is already right, and removes it on the way out.
+  `html.app-type body` takes `--font-app`. The class goes on `<html>` rather
+  than on the shell element so that portals mounted on `<body>` (menus,
+  modals, toasts) get the face too.
+- **The 35 per-page overrides now name the tokens.** They were spread across
+  22 stylesheets, including the calendar and the worker rail. The two
+  `font-sans` roots on the Spin-Out Lab page are gone.
+
+**What is untouched, and why.**
+
+- **The public site**, front page included, keeps `--font-sans` (Inter), as
+  asked. It never mounts `ProtectedLayout`, so it never gets the class.
+- **The brand-template previews** keep their own serif and mono stacks: they
+  render a founder's own landing page, not ours.
+- **The paper, e-sign and co-founder agreement bodies** keep `font-sans`:
+  they are documents, whose typography is part of the document.
+- **The top-level error screen** keeps its inline stack: it renders when the
+  app itself has failed.
+
+**Tests.** `frontend/test/app_typography.test.mjs` (3 tests) checks four
+things:
+
+- the token is Space Grotesk, and the public token stays Inter;
+- the shell sets the class and removes it;
+- the front page never opts in;
+- no stylesheet other than `index.css` names a face other than the two
+  tokens.
+
+Three mutations were run and all three were caught:
+
+- a page bringing back Inter;
+- the shell no longer setting the class;
+- the rule no longer matching.
+
 ## D320
 
 **The archetype banks go from three probes per trait to five, and every one
