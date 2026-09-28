@@ -14,6 +14,7 @@ import { reportError } from '../../lib/log';
 import AdminCohortTiming from './AdminCohortTiming';
 import AdminCohortApplications from './AdminCohortApplications';
 import AdminSpinoutCertificates from './AdminSpinoutCertificates';
+import AdminLabHosts from './AdminLabHosts';
 
 // ---------------------------------------------------------------------------
 // Deliverables shown in the admin milestones panel (all 4 weeks).
@@ -697,7 +698,7 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
         </div>
       </div>
 
-      <div className="flex gap-1.5 mb-5" role="tablist">
+      <div className="flex flex-wrap gap-1.5 mb-5" role="tablist">
         <button
           role="tab"
           aria-selected={section === 'applications'}
@@ -749,6 +750,15 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
         >
           <Award size={14} /> Certificates
         </button>
+        <button
+          role="tab"
+          aria-selected={section === 'hosts'}
+          onClick={() => setSection('hosts')}
+          data-testid="tab-hosts"
+          className={`px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5 ${section === 'hosts' ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+        >
+          <Building2 size={14} /> Office-hours hosts
+        </button>
       </div>
 
       {section === 'applications' ? (
@@ -761,6 +771,9 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
         // D382 — the canvas's admin artboard. Its "Issue all eligible" is the
         // backfill that used to sit under Participants.
         <AdminSpinoutCertificates />
+      ) : section === 'hosts' ? (
+        // D377 — who Lab founders see on /spinout-lab/office-hours.
+        <AdminLabHosts />
       ) : (
         <>
           <ParticipantsSection
