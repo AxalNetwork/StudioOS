@@ -200,7 +200,7 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Export shortlist', kind: 'export' },
   ],
   'grow/brand': [
-    { label: 'New page', to: '/spinout-lab/brand' },
+    { label: 'New page', to: '/build/brand' },
     { label: 'Export leads', kind: 'export' },
     // THE REASON WAS FALSE ABOUT THE BUILDER IT NAMED. It said templates are
     // "chosen in the brand builder, not edited"; `/build/brand` mounts

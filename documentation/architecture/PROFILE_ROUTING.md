@@ -34,7 +34,7 @@ it, where in their nav, and how do they get there.*
 | 83b Election Tracker | `/spinout-lab/83b` · `/raise/legal-engine/equity` · `/incorporate/83b` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Raise | OUT OF SCOPE | High |
 | Advisors | `/spinout-lab/advisors` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Apply and Status | `/spinout-lab/apply` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
-| Brand & Landing Page | `/spinout-lab/brand` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Grow | OUT OF SCOPE | High |
+| Brand & Landing Page | `/spinout-lab/brand` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Cap Table | `/spinout-lab/captable` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Cap Table Pro | `/raise/capital/cap-table` · `/build/captable` · `/share/captable/:token` | Home | Full page | Sidebar → Home → Raise | UPGRADE | High |
 | Capital | `/spinout-lab/capital` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
@@ -42,7 +42,7 @@ it, where in their nav, and how do they get there.*
 | Co-founder Match | `/spinout-lab/cofounder-match` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Company Settings | `/company-settings` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Compliance | `/spinout-lab/compliance` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
-| Customer Acquisition Landing Page | `/spinout-lab/brand` | Home | Full page | Sidebar → Home → Grow | CURRENT | High |
+| Customer Acquisition Landing Page | `/spinout-lab/brand` | Home | Full page | Sidebar → Home → Spin-Out Lab | CURRENT | High |
 | Customer Audience Landing Page | `/spinout-lab/brand` · `/build/brand` · `/p/:site/:page` · `/landing/:slug` | Home | Full page | Sidebar → Home → Grow | CURRENT | High |
 | Customer Discovery | `/spinout-lab/discovery` · `/build/discovery` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Validate | OUT OF SCOPE | High |
 | Customer Templates | `/spinout-lab/brand` · `/build/brand` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Grow | OUT OF SCOPE | High |

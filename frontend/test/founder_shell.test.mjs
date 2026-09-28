@@ -77,8 +77,18 @@ test('every destination the old nav reached still has a door', () => {
     '/comarketing',
     '/network-effects', '/liquidity', '/perks',
   ];
-  const doorless = BEFORE.filter((p) => !targets.includes(p) && !tabsTo(p));
-  assert.deepEqual(doorless, [], 'no nav row and no workspace tab — reachable only by typed URL');
+  // A Spin-Out Lab tool's door is the Lab: the `Spin-Out Lab` row opens the
+  // Lab workspace, whose tool card links the tool. `/spinout-lab/brand` is
+  // one — it stopped being a Grow tab when the Lab tool and Grow's own Brand
+  // page (`/grow/brand`) were separated, so it no longer dresses as Grow.
+  const labTools = codeOnly(read('frontend/src/pages/SpinoutLabWorkspace.jsx'));
+  const labDoor = (p) => p.startsWith('/spinout-lab/') && targets.includes('/spinout-lab')
+    && labTools.includes(`to: '${p}'`);
+  const doorless = BEFORE.filter((p) => !targets.includes(p) && !tabsTo(p) && !labDoor(p));
+  assert.deepEqual(doorless, [], 'no nav row, no workspace tab and no Lab tool card — reachable only by typed URL');
+  assert.ok(labDoor('/spinout-lab/brand') && !tabsTo('/spinout-lab/brand'),
+    'the Lab brand tool is reached from the Lab, and not from a Grow tab');
+  assert.ok(tabsTo('/grow/brand'), "Grow's Brand tab opens Grow's own Brand page");
 });
 
 test('the seven doorless destinations are exactly the ones the bar rescues', () => {
@@ -154,8 +164,11 @@ test('each row that owns sections is actually wrapped at its routes', () => {
   // `/build/discovery` left this table in D422: it stopped being A2's second
   // address (a founder is redirected to `/validate`) and its editor mounts in
   // `founderWorkspace('validate', …)`, which the shell branch below accepts.
+  // `/grow/brand` is Grow's own Brand page: it draws the Grow section row
+  // itself, so it renders directly, like the other `/grow/*` section pages.
   const OWN_LANDING = {
     '/build/roadmap': '<FounderBuildRoadmap />',
+    '/grow/brand': '<FounderGrowBrand />',
   };
 
   const rendersBar = new Set();

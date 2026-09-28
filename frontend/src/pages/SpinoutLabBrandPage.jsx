@@ -1853,5 +1853,9 @@ export default function SpinoutLabBrandPage() {
     </LabPageShell>
   );
 
+  // No Eadwyn rail here. The "Brand builder" assist card belongs to the
+  // brand builder (/build/brand, which still mounts it); on the Lab tool it
+  // was Grow-side chrome on a Spin-Out Lab page. D317 extends that to the
+  // whole Lab: no page under /spinout-lab mounts either rail.
   return page;
 }

@@ -216,7 +216,7 @@ export const SHELLS = {
           { slug: 'customers', label: 'Customers', archetype: A.WORK_BOARD },
           { slug: 'partnerships', label: 'Partnerships', archetype: A.WORK_BOARD },
           { slug: 'capital-match', label: 'Capital match', archetype: A.MATCH_ENGINE },
-          { slug: 'brand', label: 'Brand', archetype: A.COLLECTION, legacy: '/spinout-lab/brand' },
+          { slug: 'brand', label: 'Brand', archetype: A.COLLECTION },
           { slug: 'launch', label: 'Launch', archetype: A.FEED },
         ] },
       { kind: 'bucket', label: 'Network', prefix: '/network', tagline: 'Work my relationships',
