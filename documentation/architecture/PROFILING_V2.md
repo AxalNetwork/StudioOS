@@ -1,347 +1,608 @@
-# Profiling v2
+# Profiling v2 — spec
 
-The source of truth for Sessions 7–15. If a later handoff disagrees with this file, this file wins.
+**Status:** source of truth for the Profiling v2 programme (Sessions 7–15).
+Written by Session 6 on 2026-09-28 against main `8e2120b4e3`; decision
+**D356** in `DECISIONS.md`. When a later session's handoff disagrees with this
+file, this file wins, and the PR says so. Changing a rule here is a new D
+entry, not a silent edit.
 
-Measured on main `8e2120b4e3` (2026-09-28). This session writes the spec, the persona fixture, and the decisions. It does not change scoring, banks, or schema.
+**Numbering.** The owner renumbered the programme to Sessions 6–15 on
+2026-09-28; this file uses those numbers throughout. An earlier draft called
+the same sessions S7–S16. A document or branch that says "S8" for the scoring
+engine means Session 7: subtract one.
 
-## What this programme is
+The owner's two requirements, verbatim:
 
-Eadwyn, on `/studio`, already asks a conversational fit bank and draws skills, work values, an archetype, and Axal Fit. The owner asked for three things this programme has to make true:
+1. "Develop further the question bank for archetype, skills (based on
+   questions but also on tools used on the platform), values within the Axal
+   VC ecosystem, and their resulting profiles archetype card page for:
+   Founder: Missionary, Rocketeer, Architect, Maverick. Investor: Thesis-Driven
+   Backer, Network Amplifier, Hands-On Partner, Disciplined Allocator.
+   Partner: Strategic Connector, Embedded Operator, Growth Catalyst, Systems
+   Builder. Advisor: Sage Guide, Hands-On Coach, Accountability Anchor, Craft
+   Master."
+2. "The results for skills, values, and archetype should evolve over time as
+   the user uses the platform."
 
-1. The question banks for archetype, skills, and values grow, skills also from tools the person actually uses, and the archetype card shows the sixteen profiles below.
-2. Skills, values, and archetype move as the person keeps using the platform.
-3. A profile is recomputed from timestamped inputs. It is never edited by hand.
+Nothing in this file changed the engine, a bank, a route, a migration or a
+page. Session 6 shipped this document, the persona fixture
+(`cloudflare-worker/test/fixtures/profiling-v2-personas.json`), a test that
+holds the fixture to this file, and a baseline report script.
 
-The sixteen profiles, four per role:
+---
 
-| Role | Archetypes |
-| --- | --- |
-| Founder | Missionary, Rocketeer, Architect, Maverick |
-| Investor | Thesis-Driven Backer, Network Amplifier, Hands-On Partner, Disciplined Allocator |
-| Partner | Strategic Connector, Embedded Operator, Growth Catalyst, Systems Builder |
-| Advisor | Sage Guide, Hands-On Coach, Accountability Anchor, Craft Master |
+## 1. Owner decisions (2026-09-28)
 
-Slugs, centroids, and card copy already exist. This programme does not rename them.
-
-## What already exists, and what the handoff had wrong
-
-Two archetype systems are live:
-
-- Conversational: `classifyArchetype` in `archetypeScoring.ts`. Nearest centroid over builder, visionary, connector, operator, each 0–5. Missing traits are skipped. Absence is not zero. Distance is the Euclidean distance divided by the square root of how many traits were answered, so three answers are not punished against four. Ties break by the order of the archetype list.
-- The older gamified assessment (`assessment_archetypes`). `ArchetypeCardPage.jsx` at `/studio/archetype` reads `api.bestFit.me()` first and falls back to `assessment.myResults()`.
-
-`classifyArchetypeV2` also already exists. It classifies the same four traits over six centroids: the role's four, plus Scout and Steward. `fitV2Decision.ts` is what reads it. That function is the Fit overlay. It is not this programme's engine. Session 7 must not replace it and must not reuse its name. Session 7 builds a new function beside `classifyArchetype`.
-
-`profile_archetypes` (migration 130) already appends archetype rows: persona, slug, label, traits, confidence, distance, narrative, `computed_at`. Nothing in the product reads that history. Skills, work values, and Axal values do not append. Each keeps one row per user and key (`user_skills`, `user_values`, `axal_values`).
-
-`advisor_answers` is the ledger: one row per answer, with a conversation and a status. `field_sources` keeps only the latest answer per user and question. `classifyArchetype`'s loader reads `field_sources`, so an older answer is invisible to today's score even though the ledger still has it.
-
-A skill answer of 0 writes no `user_skills` row (`writeRouter.ts`: a positive rating only). A missing row is not a recorded zero. A recorded zero lives in the ledger. Session 7 and Session 13 score from the ledger.
-
-Work-value answers are stored as `n * 0.8 - 2` (0 becomes −2, 5 becomes +2) and blended with any survey row at confidence 0.25. Session 14 does not read that blended row. It compares the decay-weighted mean of ledger answers on the 0–5 scale, which is the scale the questions use.
-
-Axal answers are stored as `n / 5` on a 0–1 score. The fixture keeps Axal targets on the 0–5 answer scale.
-
-### Banks, measured
-
-`fit.<persona>.<key>`, section `FIT`, importance low, skippable, 0–5 scale except the illustration question. Module floors in `profilingModules.ts`: skills 5, work values 4, archetype 6, Axal Fit 8. About 23 answers make every module confident. Adaptive selection then stops asking that module.
-
-| Bank | Total | Skills | Work values | Archetype | Axal Fit |
-| --- | --- | --- | --- | --- | --- |
-| founder | 58 | 7 | 5 | 29 | 17 |
-| investor | 54 | 5 | 5 | 29 | 15 |
-| partner | 53 | 5 | 4 | 29 | 15 |
-| advisor | 55 | 5 | 4 | 29 | 17 |
-| coach | 18 | 0 | 0 | 0 | 18 |
-
-Coach is 12 rubric questions plus the 6 Axal values, including ambition. `BANK_SIZE_TARGETS.fitCoach` still says 17 and its comment still says five Axal values. That comment is stale. This session does not edit it. Sessions 9–12 must not treat 17 as the coach bank's size.
-
-Radar axes with no question in that bank today:
-
-| Bank | Axes the bank does not ask |
-| --- | --- |
-| founder | legal_compliance |
-| investor | engineering, design, marketing_brand |
-| partner | engineering, design, marketing_brand |
-| advisor | engineering, design, legal_compliance |
-| coach | all eight |
-
-An unasked axis stays "Not recorded" until Session 8 has evidence for it, or a later bank adds a question. It is not drawn as 0.
-
-## Sessions
-
-| Session | Builds | Starts after |
+| # | Question | Decision |
 | --- | --- | --- |
-| 7 | The profiling engine (pick-one, reverse keys, engine version) and the profile snapshot store | this spec |
-| 8 | Skill evidence from platform tools | this spec |
-| 9 | Founder question bank | 7 |
-| 10 | Investor question bank | 7 |
-| 11 | Partner question bank | 7 |
-| 12 | Advisor question bank. Coach stays on the advisor set | 7 |
-| 13 | Recompute, ageing, re-ask, change events, admin aggregates | 7 and 8 |
-| 14 | Archetype card copy for all 16, then values compatibility | copy any time after this spec; values after 9–12 |
-| 15 | Archetype card page, two-layer skills radar, evolution timeline | last |
+| a | Which archetype system is canonical? | **Eadwyn's conversational profiling** (`services/archetypeScoring.ts`, what `/studio` reads) is canonical. The gamified assessment (`assessment_archetypes`, `assessment_results`) stays **read-only as a fallback** for a user with no conversational signal, and is retired in Session 15 when the card page stops reading it. |
+| b | Can platform evidence raise a skill score? | **Corroborate first, blend later.** Evidence never moves the displayed skill level in v2; it changes the axis's *state* (§5.2) and its confidence. A blend that can move the level is Session 13's to propose and the owner's to switch on. |
+| c | Who appears as a "match" on the card page? | **Archetype types always, plus real members only if they published their archetype.** Today the only publish flag is `assessment_results.published`; the conversational archetype has none, so Session 7 adds one (§8.3) and Session 15 reads it. |
+| d | Evolution speed | **As proposed:** answer half-life 12 months, re-ask after 6 months, evidence at full weight for 12 months then fading, hysteresis 14 days with a lead margin. Exact values in §7.0. |
+| e | Tell the user when their displayed archetype changes? | **Yes, in-app only** (`notifications_inbox`), once per change, after hysteresis. No email. |
 
-An earlier draft numbered these S7–S16. Use only the numbers in the table. An "S8 scoring engine" in an old note is Session 7.
+---
 
-## Item formats
+## 2. Trait model
 
-Session 7 builds these. Sessions 9–12 author items in this shape. Ids stay `fit.<persona>.<key>`. An id is permanent: an answer is stored against it.
+### 2.1 Four traits stay
 
-### Pick-one situational item
+The four behavioural traits stay: **builder, visionary, connector, operator**,
+each 0–5 (`ARCHETYPE_TRAITS`). No fifth trait.
 
-```
-input_kind: 'pick_one'
-prompt: string
-options: 2 to 5 of {
-  key: string          // stable, unique inside the item
-  label: string        // what Eadwyn shows
-  traits: { builder, visionary, connector, operator }   // each 0..5
-  skill_axis?: { slug, loading }     // loading 0..5, one axis
-  value_dim?: { slug, loading }      // loading 0..5, one dimension
-  axal_value?: { slug, loading }     // loading 0..5, one Axal value
+Why not add one. The sixteen archetypes the owner named are all describable
+in these four. A fifth axis (the candidates were "rigour/analytical" for the
+Allocator and "teaching" for the advisor set) would need a fifth centroid
+coordinate for all sixteen, twenty more probes in every bank, and a new
+radar. It would also invalidate every stored `traits_json` in
+`profile_archetypes`, so history would start again from zero. The one pair
+that a fifth axis would really separate, Embedded Operator and Systems
+Builder, is separated by moving one coordinate instead (§2.2).
+
+### 2.2 Centroids
+
+The four archetypes per role, and their coordinates (builder, visionary,
+connector, operator):
+
+| Role | Archetype (slug) | Centroid |
+| --- | --- | --- |
+| Founder | Missionary (`fo_missionary`) | 2, 5, 5, 3 |
+| Founder | Rocketeer (`fo_rocketeer`) | 4, 4, 4, 2 |
+| Founder | Architect (`fo_architect`) | 5, 2, 2, 5 |
+| Founder | Maverick (`fo_maverick`) | 5, 4, 1, 2 |
+| Investor | Thesis-Driven Backer (`inv_thesis_backer`) | 2, 5, 2, 4 |
+| Investor | Network Amplifier (`inv_network_amplifier`) | 2, 3, 5, 2 |
+| Investor | Hands-On Partner (`inv_hands_on_partner`) | 4, 3, 4, 4 |
+| Investor | Disciplined Allocator (`inv_disciplined_allocator`) | 1, 3, 2, 5 |
+| Partner | Strategic Connector (`pt_strategic_connector`) | 2, 4, 5, 3 |
+| Partner | Embedded Operator (`pt_embedded_operator`) | 5, 2, 3, 4 |
+| Partner | Growth Catalyst (`pt_growth_catalyst`) | 4, 4, 4, 2 |
+| Partner | Systems Builder (`pt_systems_builder`) | 4, 2, 2, 5 → **3, 2, 2, 5** in Session 7 |
+| Advisor | Sage Guide (`mt_sage_guide`) | 2, 5, 4, 3 |
+| Advisor | Hands-On Coach (`mt_hands_on_coach`) | 4, 2, 5, 3 |
+| Advisor | Accountability Anchor (`mt_accountability_anchor`) | 3, 2, 4, 5 |
+| Advisor | Craft Master (`mt_craft_master`) | 5, 3, 2, 4 |
+
+**One centroid moves: Systems Builder's builder coordinate goes from 4 to 3.**
+Embedded Operator and Systems Builder are 1.73 apart (raw Euclidean), the
+only pair under 2. Every other close pair is at 2.45 or more. In the
+baseline (§9) their two personas win by 0.34 and 0.27 (normalised distance),
+the two thinnest margins among the sixteen. The distinction the owner's
+names draw is hands-on delivery against installing the machinery, so the
+builder axis is the right one to widen. At (3, 2, 2, 5) the pair is 2.45
+apart, the same as every other close pair. Systems Builder is still 4.24
+from Strategic Connector and from Growth Catalyst. The move is an
+`engine_version` bump (§7.8), so existing partners are recomputed under
+hysteresis, never flipped on the spot.
+
+No other centroid moves. The 2.45 pairs (Thesis-Driven/Allocator, Strategic
+Connector/Growth Catalyst, Hands-On Coach/Accountability Anchor) and the
+founder pairs (2.65, 3.16) are separated by the new question formats (§3)
+rather than by moving the targets.
+
+### 2.3 Scout and Steward are not displayed archetypes
+
+`ARCHETYPES_V2` adds two cross-role archetypes, Scout (1, 5, 4, 1) and
+Steward (4, 1, 3, 5), which the handoff did not mention.
+`services/fitV2Decision.ts` reads them for its "archetype clarity"
+component. They stay an internal signal of the fit decision. The card page
+shows only the four per role that the owner named, and the persona fixture's
+expectations are over those four.
+
+### 2.4 Coach
+
+Coach shares the advisor archetype set (`ARCHETYPES.coach =
+ADVISOR_ARCHETYPES`). **Today a coach can never be classified:** the coach
+bank (`fit_coach.ts`, 18 questions) asks no `archetype_trait` question, so
+`computeArchetype(…, 'coach')` returns null. Session 12 adds
+`archetypeModuleRows('coach')`, with coach-flavoured role probes, to that
+bank. Until then the fixture carries no coach personas.
+
+### 2.5 Classification rule (unchanged method)
+
+Nearest centroid over the traits actually answered, with the distance
+normalised by the number of traits compared
+(`sqrt(Σ(score−centroid)² / n)`). A missing trait is skipped, never read as
+0. Ties break by the archetype's order in the set. v2 adds:
+
+- **Secondary archetype:** the runner-up, shown only when
+  `runner_up_distance − winner_distance < secondary_margin` (§7.0).
+- **Trait score** is the age-weighted mean of the latest answer to each of
+  that trait's questions (§7.2), not the flat mean `field_sources` gives
+  today.
+
+---
+
+## 3. Question formats
+
+Every fit question keeps its id shape `fit.<persona>.<key>`, its 0–5 range
+after scoring, `skip_allowed: true` and `importance: 'low'`. **An id is never
+reused.** A question whose wording changes enough to change what it measures
+gets a new key, and the old one is retired (see `retired` below).
+
+### 3.1 Data shape
+
+`FitRowSpec` (in `banks/fitShared.ts`) and `FitMeasures` (in
+`questionBank.ts`) gain the following fields. Session 7 adds the types and Sessions 8–11
+use them:
+
+```ts
+interface FitRowSpec {
+  key: string;
+  prompt: string;
+  hint?: string;
+  measures: FitMeasures;
+  input_kind?: Question['input_kind'];   // 'scale' (default) | 'select' | 'choice' (new)
+  options?: string[];                    // select only
+  validate?: ValidateKind;
+  importance?: Importance;
+  // ---- v2 ----
+  reverse?: boolean;                     // reverse-keyed scale: scored as 5 − value
+  choices?: FitChoice[];                 // situational pick-one; required when input_kind = 'choice'
+  reask_prompt?: string;                 // wording when re-asked after ageing (§7.3)
+  retired?: { at: string; reason: string; replaced_by?: string };
+}
+
+interface FitChoice {
+  key: string;                           // stable within the question: 'a' | 'b' | …
+  label: string;                         // what the user reads
+  loadings: Partial<Record<ArchetypeTrait, number>>; // 0..5 per trait this option speaks to
+}
+
+interface FitMeasures {
+  // existing: skill_axis, value_dim, axal_value, archetype_trait,
+  //           rubric_category, red_flag, archetype_presentation
+  archetype_choice?: true;               // v2: the answer's option carries the trait loadings
 }
 ```
 
-A loading is a number on the same 0–5 scale as a scale answer, in steps of 0.25 (0, 0.25, …, 5). The step is a quarter point because the scale is five points wide and a finer step would be a second scale. An omitted loading is absence. It is not zero. A pick about the mission must not pull engineering to zero.
+### 3.2 The three archetype formats
 
-Two to five options because one option is not a choice and six is a form. Reverse is not allowed on a pick-one. Direction lives in the option loadings. Session 7 rejects a pick-one that also sets `reverse`.
+| Format | `input_kind` | Stored answer | Contribution to traits |
+| --- | --- | --- | --- |
+| Scale | `scale` | `'0'`–`'5'` | One value on `measures.archetype_trait`. |
+| Reverse-keyed scale | `scale` + `reverse: true` | `'0'`–`'5'` as the user chose it | `5 − value` on `measures.archetype_trait`. The ledger keeps what the user chose. The reversal happens only in scoring. |
+| Situational pick-one | `choice` | the option's `key` | Each trait in the chosen option's `loadings` gets that value, as if that trait's question had been answered with it. A trait the option does not load is not touched. |
 
-### Reverse-keyed scale item
+Rules for authors (Sessions 8–11):
 
-A scale item may set `reverse: true`. The ledger stores the raw answer, an integer 0–5. The score uses `5 - answer`. The midpoint 2.5 would stay 2.5; integer answers have no midpoint, and 0 swaps with 5. Only scale items can be reverse.
+- **Every bank carries at least 2 reverse-keyed probes per trait.** A bank
+  of all-positive "how much do you…" items rewards whoever rates everything
+  4. The baseline personas were written with a 20% pull towards 3.5 on
+  every answer, and that pull is what shrinks the close pairs' margins.
+- **Situational items target a close pair.** Each role gets at least one
+  pick-one whose options separate its tightest pair (for example
+  Thesis-Driven against Allocator: "A deal outside your thesis with a great
+  founder…").
+- A pick-one option loads at most two traits, each with a value in 0–5.
+- `reask_prompt` is required on every archetype question. It reads as a
+  check-in, not a retest ("Last spring you said you'd rather build it
+  yourself — still true?").
+- A retired question is never asked again, including on re-ask. Its old
+  answers stay in the ledger. **They keep counting towards the trait until
+  they age out** unless `retired.replaced_by` names a question the user has
+  since answered.
 
-### Retired
+### 3.3 Where the answer lives
 
-`retired: true` means Eadwyn never asks the question again, including the re-ask. Old ledger rows still score. Stopping the score of a retired question is an engine bump that names the id in that version's ignore list. Session 7 ships that list empty. A silent drop would change a profile with no new fact and no version change.
+Unchanged: `advisor_answers` is the ledger (one row per answer), and
+`field_sources` keeps the latest per `(user_id, question_id)`. v2 scoring
+reads the **ledger** (it needs `created_at` for ageing), not
+`field_sources`.
 
-### Re-ask
+---
 
-Optional `reask_prompt` on any item. When the answer is old enough (below), Eadwyn asks that string if it is set. Otherwise Eadwyn asks the template, then the original prompt on the next line:
+## 4. Modules and floors
 
-> It's been a while — is this still true?
+Keep the four modules and their floors (`profilingModules.ts`): skills 5,
+work_values 4, archetype 6, axal_fit 8, which makes about 23 answers to
+"confident". One addition:
 
-The template is one sentence so the voice stays the same. The per-item string replaces the whole message, for a prompt that would not make sense after that sentence. A new answer replaces the latest for scoring. The old row stays in the ledger.
+- **The archetype module is confident only when every trait has at least one
+  answer** (in addition to the floor of 6). Six answers on one trait tell
+  nothing about the other three. Adaptive selection already prefers
+  uncovered axes, so this changes the "confident" flag, not the order
+  questions are asked in.
 
-### How several observations combine
+Banks grow in Sessions 8–11 (reverse-keyed and situational items), but the floors
+do not. A larger bank is headroom for re-asking and adaptivity, not a longer
+survey.
 
-For one trait, skill axis, value dimension, or Axal value, the score is the decay-weighted mean of every observation that loads it:
+---
 
-`sum(value × weight) / sum(weight)`
+## 5. Skills
 
-A scale answer contributes `answer`, or `5 - answer` when reversed, with that answer's decay weight. A chosen option contributes each loading it actually carries, with the same decay weight. An omitted loading contributes nothing. If the weight sum is 0, the score is absent.
+### 5.1 Two layers per radar axis
 
-### engine_version
+The radar keeps its 8 axes (`RADAR_AXES`, in its order): product, engineering, design,
+gtm_sales, marketing_brand, finance_ops, legal_compliance, capital_network.
+Each axis has two layers:
 
-A positive integer stored on every snapshot.
+- **Self:** the self-rating 0–5 from the `skill_axis` questions (today
+  `user_skills.self_level`). With several questions on one axis, the latest
+  answer to each counts, weighted by age (§7.2).
+- **Evidence:** platform activity tagged to the axis (§5.3), weighted over
+  the evidence window (§7.4).
 
-| Version | Meaning |
+Axes each bank does not ask about today:
+
+| Role | Axes with no self-rating question |
 | --- | --- |
-| 1 | Today's `classifyArchetype`. Rows written before Session 7 have no version; readers treat a missing version as 1. |
-| 2 | The first version Session 7 ships, once pick-one and reverse scoring are live. |
+| Founder | legal_compliance |
+| Investor | engineering, design, marketing_brand |
+| Partner | engineering, design, marketing_brand |
+| Advisor | engineering, design, legal_compliance |
+| Coach | all eight (no `skill_axis` question) |
 
-Bump the version when the scoring function, the centroids, the loading scale, the decay, the blend weights, or the hysteresis constants change. Adding, retiring, or rewording a question does not bump it: the function of a given set of inputs did not change. A bump is the `engine_bump` trigger below.
+Sessions 8–11 decide whether to add a question for each gap. Evidence may fill a
+gap anyway, and the axis then reads "Evidence only".
 
-## Evolution
+### 5.2 Axis state (decision b: corroborate)
 
-A profile is a deterministic function of the ledger, the platform-evidence rows Session 8 writes, and `engine_version`. Same inputs, same profile.
-
-### Decay
-
-Weight of an answer aged `age_days` is `0.5 ** (age_days / 365)`.
-
-The half-life is 365 days so a year-old self-rating still counts half, and a rating from two years ago counts a quarter. A person who answered once and kept the same practice is not erased. A person who changed is not stuck with a two-year-old rating at full strength.
-
-### Re-ask
-
-An answer whose age is at least 183 days may be asked again. 183 is half of 365, rounded to an integer a cron can compare. Six calendar months are 181–184 days depending on the months; 183 does not change in February.
-
-Until the person answers, the old answer keeps its decayed weight. The re-ask does not zero it. A retired item is not re-asked.
-
-### Evidence window
-
-Session 8's events carry `occurred_at`. An event younger than 365 days has weight 1. An older event has weight `0.5 ** ((age_days - 365) / 365)`, the same half-life measured from the edge of the year. The lifetime count is stored for the card to show and is not an input to the blend. Skills should describe current practice. A total from 2019 would freeze the radar.
-
-### Skill blend
-
-Per radar axis:
-
-- `self` is the decay-weighted mean of ledger answers on that axis, on the 0–5 scale. Absent when the ledger has none.
-- `evidence` is the decay-weighted mean of Session 8's events on that axis, mapped by Session 8 onto 0–5. Absent when there are no events.
-- `w_self` is the decay weight of the latest self answer. A fresh answer has weight 1.
-- `w_evidence` is `min(1, n / 5)`, where `n` is how many events fall inside the 365-day full-weight window.
-
-Five events earn a full vote because five is the skills confidence floor: the same count that makes a self-rating module confident. One event cannot outvote a fresh self-rating.
-
-`blended = (w_self × self + w_evidence × evidence) / (w_self + w_evidence)` when both weights are above 0. A side with no observations has weight 0 and is left out of the fraction. Both weights 0 means the axis is absent.
-
-What the card shows:
-
-| Self | Evidence | Draw |
+| State | When | Level shown |
 | --- | --- | --- |
-| present | present | both numbers and the blend |
-| present | absent | the self number, labelled "Self-rated only" |
-| absent | present | the evidence number, labelled "From platform activity" |
-| absent | absent | "Not recorded", and the axis is omitted from the radar |
+| `not_recorded` | no self-rating, no evidence | none, drawn as "Not recorded", never as 0 |
+| `self_rated_only` | self-rating, evidence weight 0 | self |
+| `some_evidence` | self-rating, 0 < evidence weight < `corroborated_at` | self |
+| `corroborated` | self-rating, evidence weight ≥ `corroborated_at` | self |
+| `evidence_only` | no self-rating, evidence weight > 0 | none. The axis shows the evidence count, not a level. |
 
-A missing side is not drawn as 0.
+Evidence never changes the level in v2. It changes the state, and confidence
+rises with it. Session 13 may propose a blend, for example
+`self + clamp(evidence_level − self, −1, +1) × w`, behind a switch that is
+off by default. The owner turns it on.
 
-### Material change
+### 5.3 Evidence rules (Session 8 details the tool map)
 
-A recompute writes a snapshot when any of these is true. Otherwise it writes nothing.
+- An evidence event is a **completed, attributable action by the user**, not
+  a page view: a session they hosted and the partner marked completed, a
+  deliverable they submitted, an action item they ticked, a model they
+  built. Each event names one axis, one source (a stable dotted name such as
+  `office_hours.session_completed`) and when it happened.
+- Evidence is about the user's own activity and never reads another user's
+  content. A two-party event (an office-hours session) counts for the party
+  whose skill it evidences, as Session 8 decides per source.
+- A source counts once per underlying record. Re-saving the same model is
+  one event, not ten.
+- Lifetime totals are kept for display ("42 sessions hosted"), but only the
+  window (§7.4) feeds the state.
+- The fixture's evidence `source` names are provisional until Session 8 publishes
+  the map. The axis keys are final.
 
-- The displayed archetype slug changes.
-- The pending candidate slug changes (see hysteresis).
-- Any blended skill changes by 0.5 or more on the 0–5 scale.
-- Any work-value mean changes by 0.5 or more on the 0–5 answer scale.
-- Any Axal stored score changes by 0.1 or more on the 0–1 scale.
-- `engine_version` changes.
+---
 
-0.5 is one step of the answer scale, so noise under a step does not write history. 0.1 is that same step after the existing `/5` store (`0.5 / 5`).
+## 6. Values within the Axal ecosystem
 
-The snapshot is append-only and holds: primary slug, secondary slug, confidence, trait vector, each skill axis (self, evidence, blended — each nullable), work values, Axal values, `engine_version`, and the trigger. Session 7 builds the table. It is a side table keyed by `user_id`. `users` is at the 100-column cap. Session 7 asks for the migration number. This session does not pick one.
+Three families, all 0–5 self-ratings today, each stored in one current row
+per user and dimension (no history before Session 7):
 
-### Hysteresis
-
-The displayed archetype changes only when a new leader's `margin` is at least 0.35 and that leader is still the leader at every recompute for 14 days.
-
-`margin` is the field `classifyArchetype` already returns: runner-up distance minus winner distance, in the normalized units (sum of squares divided by the number of traits, then square root). The closest pair, sitting on its own centroid, has margin 0.87 (Embedded Operator against Systems Builder). 0.35 is below that, so a person on a centroid is not flickering, and it is above the exact midpoint of every closest pair, which classifies with margin 0. A tie does not flip the card.
-
-14 days is long enough that one evening of answers cannot flip the card, and short enough that a real change shows up inside a month. During the hold, the snapshot records the candidate as pending and the displayed slug stays.
-
-### Triggers
-
-| Trigger | When |
-| --- | --- |
-| `answer` | After each saved fit answer. Session 13 hooks the existing answer route. |
-| `scheduled` | The nightly cron `0 3 * * *` already in `wrangler.toml`. Session 13 adds the job to that cron. It does not add a cron. |
-| `engine_bump` | A batched backfill when `engine_version` changes. |
-
-### Visibility
-
-The person sees their own history. Another person sees only the current published archetype, under the consent rule the card already uses. An admin sees aggregates only, behind the admin gate. No route in this programme returns another person's answers, evidence, or history.
-
-## Values matching
-
-Session 14 builds the comparison. One slug per meaning. Do not invent a second slug for a spectrum that already has one.
-
-The six Axal values are the cross-role match. Every role bank asks all six under the same keys: integrity, stewardship, curiosity, resilience, collaboration, ambition.
-
-Founder spectrums are compared only where the other role already asks that slug:
-
-| Other role | Founder spectrums shared with the founder bank |
-| --- | --- |
-| Investor | `founder_risk_appetite`, `founder_growth_vs_sustain` |
-| Partner | `founder_autonomy_vs_structure` |
-| Advisor | none |
-
-Schwartz dimensions are not compared to founders. Founders are not asked them, and Session 9 does not add them. The founder spectrums already name the founder values. A new Schwartz item on the founder bank would be a second name for a meaning those spectrums already cover.
-
-Schwartz comparison is among the roles that ask the slug:
-
-| Slug | Roles |
-| --- | --- |
-| `schwartz_achievement` | investor, advisor |
-| `schwartz_benevolence` | investor, partner, advisor |
-| `schwartz_universalism` | investor, partner, advisor |
-| `schwartz_self_direction` | partner, advisor |
-
-## Close pairs
-
-Raw Euclidean distance over the four centroids, measured against `archetypeScoring.ts`. The centroids do not move. Each one classifies to itself under `classifyArchetype`, with margin 0.87 to 1.87, and the card copy is bound to these slugs. Moving one would reclassify stored answers without an engine bump.
-
-| Pair | Distance | Separating items |
+| Family | Dimensions | Asked of |
 | --- | --- | --- |
-| Partner Embedded Operator – Systems Builder | 1.73 | 5 |
-| Investor Thesis-Driven Backer – Disciplined Allocator | 2.45 | 3 |
-| Partner Strategic Connector – Growth Catalyst | 2.45 | 3 |
-| Advisor Hands-On Coach – Accountability Anchor | 2.45 | 3 |
-| Founder Missionary – Rocketeer | 2.65 | 3 |
-| Investor Network Amplifier – Hands-On Partner | 3.00 | 3 |
-| Founder Rocketeer – Maverick | 3.16 | 3 |
+| Axal values (`axal_values`, 0..1) | integrity, stewardship, curiosity, resilience, collaboration, ambition. v1 `axalFit.ts` scores the first five; v2 `fitV2Decision.ts` scores all six. | every role (`axalValueRows`) |
+| Founder spectrums (`user_values`) | mission_vs_profit, speed_vs_quality, risk_appetite, growth_vs_sustain, autonomy_vs_structure | founder (all five); investor asks risk_appetite and growth_vs_sustain; partner asks autonomy_vs_structure |
+| Schwartz (`user_values`) | achievement, benevolence, universalism, self_direction | investor: achievement, benevolence, universalism · partner: benevolence, self_direction, universalism · advisor: all four · **founder: none** |
 
-Five items for the pair under distance 2. That gap is under 2 on every single trait, so three items cannot move the mean across the 0.35 hysteresis margin when the other answers sit near both centroids. Three items for every farther pair: three answers that differ by 2 points on the separating trait move the mean by more than 0.35.
+**Compared across roles for matching (Session 14 implements):**
 
-Sessions 9–12 must include at least that many items whose loadings differ between the two centroids of each pair for that role. The machine-readable copy is `CLOSE_PAIRS` in the persona fixture.
-
-## Personas
-
-`cloudflare-worker/test/fixtures/profiling_v2_personas.ts` exports `PROFILING_V2_PERSONAS`: 16 archetypes and 4 blends.
-
-Each row has `id`, `role`, `kind` (`archetype` or `blend`), a synthetic `name` and `@example.test` email, `expected_slug`, `secondary_slug` (blends only), `traits`, `skills` (all 8 axes, 0–5), `values` (that role's keys only, 0–5, 5 = pole_high), and `axal` (the six values, 0–5).
-
-An archetype's trait vector is that archetype's centroid. A blend is 0.75 of the primary centroid and 0.25 of the secondary, rounded to two decimals. The blend's expected slug is the primary. Its runner-up under `classifyArchetype` is the secondary. The exact midpoint is a tie (margin 0) and is not used.
-
-| Blend | Primary | Secondary |
+| Founder side | Other side | Why |
 | --- | --- | --- |
-| `founder.blend` | Missionary | Rocketeer |
-| `investor.blend` | Thesis-Driven Backer | Disciplined Allocator |
-| `partner.blend` | Embedded Operator | Systems Builder |
-| `advisor.blend` | Hands-On Coach | Accountability Anchor |
+| all six Axal values | all six Axal values, every role | the ecosystem's shared bar; a red flag on either side is surfaced, never averaged away |
+| `founder_risk_appetite` | investor `lean_risk` (the same dimension) | a mismatch here is the commonest failed round |
+| `founder_growth_vs_sustain` | investor `values_patience` (the same dimension) | holding period against growth plan |
+| `founder_autonomy_vs_structure` | partner `collab_founder_led` (the same dimension) | how much a partner should steer |
+| Schwartz: none today | investor, partner and advisor Schwartz dims | **Session 9 adds achievement, benevolence, universalism and self_direction to the founder bank**, so the comparison has two sides. Until then Session 14 compares Schwartz only among investor, partner and advisor. |
 
-### From a target to answers
+Values age like any answer (§7.2) and re-ask like any answer (§7.3).
+Evidence does not move a value.
 
-Session 7 tests the engine on the trait vectors directly. Sessions 9–12 test that answering their bank by this rule reproduces `expected_slug`.
+---
 
-For each item in that session's bank:
+## 7. Evolution model
 
-- Scale item tagged `archetype_trait` T: answer `round(traits[T])`. If `reverse`, answer `5 - round(traits[T])`.
-- Pick-one: choose the option whose trait vector is closest to `traits` by Euclidean distance. A tie takes the first option.
-- Skill item: answer `skills[skill_axis]`, rounded to an integer 0–5. A 0 is a real ledger answer. Today's write router still stores no `user_skills` row for 0.
-- Value item: answer `values[value_dim]` when that key is on the persona. If the bank asks a slug the persona does not carry, the test fails: the bank grew a dimension the fixture does not know.
-- Axal item: answer `axal[axal_value]`.
-- Several items on the same trait or axis: each is answered with that same target. The target is the mean the engine should recover.
-- An item with no tag the persona carries is skipped.
+### 7.0 Parameters
 
-## Skill evidence, skeleton only
+These values are the owner's decision d. The persona fixture carries the
+same values in `params`, and
+`cloudflare-worker/test/profiling_v2_personas_fixture.test.ts` fails if the
+two disagree.
 
-Session 8 names the tables and events. This list only names the tool that can count, because that route exists today.
+| Parameter | Value | Meaning |
+| --- | --- | --- |
+| `half_life_days` | 365 | An answer's weight halves every 12 months. |
+| `reask_after_days` | 182 | An answer this old makes its question re-askable. |
+| `evidence_full_days` | 365 | Evidence counts in full for 12 months. |
+| `evidence_fade_days` | 365 | After that, evidence fades linearly to 0 over the next 12 months. |
+| `hysteresis_days` | 14 | A new archetype must be the computed winner on 14 consecutive days before it is displayed. |
+| `lead_margin` | 0.25 | …and must lead the displayed archetype by at least this (normalised distance) on the day it takes over. |
+| `secondary_margin` | 0.5 | The runner-up is shown as secondary when it is within this of the winner. |
+| `corroborated_at` | 3.0 | Evidence weight at which a self-rated axis reads "corroborated". |
 
-| Axis | Tool |
+`lead_margin`, `secondary_margin` and `corroborated_at` are this spec's
+choices; the owner fixed the four time parameters. Session 7 may recalibrate the
+three choices against the baseline (§9) and must record a change as a new D
+entry.
+
+### 7.1 A profile is recomputed, never edited
+
+A profile is a deterministic function of:
+
+1. the user's timestamped answers (the `advisor_answers` ledger);
+2. their timestamped evidence events (Session 8);
+3. the engine version;
+4. the evaluation date.
+
+Same inputs give the same profile. Nothing writes a trait, a level or an
+archetype directly. **The latest answer to a question at or before the
+evaluation date wins.** Older answers stay in the ledger and stop counting
+for that question.
+
+### 7.2 Ageing
+
+Each counted answer carries the weight `w = 0.5 ^ (age_days / half_life_days)`.
+A trait (or skill axis, or value) is the weighted mean of its questions'
+latest answers: `Σ w·v / Σ w`.
+
+Consequence, by design: when every answer on a trait is the same age, ageing
+changes nothing, because the weights cancel in the mean. Ageing only matters
+when a trait mixes fresh and stale answers. The fresh ones then dominate,
+which is the point. It never pulls a score towards 0, and an old answer is
+never read as "no answer".
+
+### 7.3 Re-asking
+
+A question is **re-askable** when its latest answer is at least
+`reask_after_days` old and the question is not retired. Adaptive selection
+(Session 13) offers re-askable questions after uncovered ones, using
+`reask_prompt`. A re-answer is a new ledger row. Skipping a re-ask leaves the
+old answer counting at its aged weight. Re-askability is a queue signal and
+never changes a score by itself.
+
+### 7.4 Evidence window
+
+An event's weight by age: 1 while `age ≤ evidence_full_days`; then
+`1 − (age − evidence_full_days) / evidence_fade_days`; 0 from
+`evidence_full_days + evidence_fade_days` on. An axis's evidence weight is
+the sum over its events and drives the state in §5.2.
+
+### 7.5 Computed and displayed archetype
+
+The **computed** archetype on a day is the nearest centroid (§2.5) over that
+day's traits. The **displayed** archetype is what the card, the network and
+everything else show, and it follows the computed one under hysteresis. The
+daily evaluation is at the nightly cron (§7.8):
+
+1. The first classification ever is displayed immediately.
+2. A computed archetype C that differs from the displayed D replaces it on
+   the first day d on which (i) C has been the computed winner on each of the
+   `hysteresis_days` consecutive days d−13 … d, and (ii)
+   `distance(D) − distance(C) ≥ lead_margin` on day d.
+3. Otherwise D stays, however many single answers point elsewhere.
+
+Hysteresis makes the displayed archetype depend on the path. It is still
+deterministic: it is defined as the result of replaying the daily
+evaluations from the first answer. Session 7 may store it in snapshots so as not to
+replay, but replay is the definition, and the persona checkpoints were
+computed that way.
+
+### 7.6 Snapshots: every material change, nothing else
+
+Every **material** change appends one snapshot (§8.1). A change is
+material when any of these differ from the previous snapshot:
+
+- displayed archetype, computed archetype or secondary;
+- any trait score by ≥ 0.25;
+- any skill axis: self level, or state (§5.2);
+- any value or Axal value by ≥ 0.25 (0–5 scale), or ≥ 0.05 on the 0..1
+  scale;
+- engine version.
+
+A recompute that changes none of these writes nothing. Snapshots are
+append-only and never updated or deleted, except under the user's own
+account-deletion path.
+
+### 7.7 Notification (decision e)
+
+When the **displayed** archetype changes, one `notifications_inbox` row goes
+to that user, in-app only: "Your archetype is now {label}", linking to
+`/studio/archetype`. It is not sent for a computed-only change, a secondary
+change, or the first classification.
+
+### 7.8 Triggers
+
+| Trigger (`snapshot.trigger`) | When |
 | --- | --- |
-| product | `/build` and `/build/discovery` |
-| engineering | no tool records this today. The axis stays self-rated only. Do not borrow design or product events. |
-| design | `/build/brand` (the brand builder). Not `/spinout-lab/brand`, which is the Lab tool. |
-| gtm_sales | `/grow/customers` |
-| marketing_brand | `/grow/brand` |
-| capital_network | `/raise/capital` and `/network` |
-| finance_ops | `/build/metrics` and `/build/financials` |
-| legal_compliance | `/raise/legal-engine` |
+| `answer` | after each saved `fit.*` answer, for that user |
+| `evidence` | the nightly cron (`0 3 * * *`, already in both envs), for users with new evidence or crossing a window edge |
+| `scheduled` | the same cron, for users whose hysteresis clock or re-ask state moved |
+| `engine_bump` | once per user, batched, when `engine_version` changes (e.g. §2.2's centroid move); hysteresis applies, so nobody's displayed archetype flips overnight |
 
-## Coach
+### 7.9 Visibility
 
-Coach keeps sharing the advisor archetype set, as `ARCHETYPES.coach` already does. Coach has no archetype questions (measured: 0), no studio role, and is asked inside the advisor conversation. A second centroid set would classify the same person twice. Session 12 does not build a coach archetype bank.
+- **A user sees their own history**: snapshots, evidence and re-ask state,
+  through `me` routes scoped by the caller's id.
+- **Everyone else sees only the current published archetype** (decision c):
+  the displayed slug and label, never the trait vector, the history, the
+  skills or the values. Unpublished means invisible.
+- **Admins see aggregates only** (behind `requireAdmin`): archetype
+  distribution per role, change rate, and re-ask response rate. No
+  individual timeline.
 
-## Owner decisions
+---
 
-Adopted 2026-09-28. The owner sent this session as the work to carry out, and the brief's recommendations are the decisions below, so Sessions 7–15 are not waiting on an open question. A later note from the owner replaces a row. Until then, these are the values.
+## 8. Data model sketch (migrations are Session 7's and Session 8's)
 
-| # | Question | Options | Decision | Why |
-| --- | --- | --- | --- | --- |
-| 1 | Loading scale for a pick-one | 0–5 in 0.25 steps, or a separate −1..+1 scale | 0–5 in steps of 0.25 | Same space as a scale answer, so they average. An omitted loading is absence. |
-| 2 | How picks and scales combine | sum, max, or decay-weighted mean | decay-weighted mean | One fresh answer and one old answer must not count the same. |
-| 3 | Reverse formula | `5 - x`, or a sign flip around 2.5 stored differently | `5 - x` on the stored 0–5 answer | Swaps the poles. The raw answer stays in the ledger. |
-| 4 | Retired answers | drop them, or keep scoring them | keep scoring them | Dropping them changes a profile with no new fact. An ignore list requires an engine bump. |
-| 5 | Re-ask copy | one template, or per-item only | template, with optional `reask_prompt` | One sentence of voice, and an escape when the original prompt would not fit. |
-| 6 | engine_version form | integer, or a date string | positive integer; missing means 1; Session 7 ships 2 | Dates collide when two changes land the same day. |
-| 7 | When the version bumps | any bank edit, or only a change to the function | only a change to the function, centroids, scales, decay, blend weights, or hysteresis | A new question does not change the score of the answers already given. |
-| 8 | Decay half-life | 6 months, 12 months, 24 months | 365 days | A year-old rating still counts half. |
-| 9 | Re-ask threshold | 90 days, 183 days, 365 days | 183 days | Half the half-life, as an integer. |
-| 10 | Evidence window | lifetime, or 365 days full and then the same half-life | 365 days at weight 1, then the half-life | Skills should describe current practice. Lifetime is display only. |
-| 11 | Evidence vote | equal to self, or capped by event count | `min(1, n / 5)` inside the year | Five is the skills confidence floor. One event cannot outvote a fresh self-rating. |
-| 12 | Material skill or value change | any float change, or 0.5 on the 0–5 scale | 0.5 on 0–5; 0.1 on stored Axal 0–1 | One step of the answer scale. |
-| 13 | Hysteresis | none, or margin 0.35 for 14 days | margin at least 0.35, held 14 days | The closest on-centroid margin is 0.87. A midpoint tie is margin 0 and must not flip the card. |
-| 14 | Cron | a new cron, or the existing `0 3 * * *` | the existing cron | It already runs nightly. Session 13 adds a job. |
-| 15 | Who sees history | everyone, or the person plus admin aggregates | the person sees their own; others see the published archetype only; admins see aggregates | Matches the consent rule and the admin gate. |
-| 16 | Centroids | keep, or move the 1.73 pair apart | keep | They already separate, and the card copy is bound to the slugs. |
-| 17 | Separating items | 3 for every pair, or 5 for the pair under distance 2 | 5 under distance 2, otherwise 3 | The 1.73 pair is under 2 on every trait. |
-| 18 | Cross-role values | all dimensions, or shared slugs only | six Axal values for every role; founder spectrums only where the other bank already asks that slug; Schwartz not against founders | One slug per meaning. Session 9 does not add Schwartz to founders. |
-| 19 | Coach archetypes | a coach set, or the advisor set | the advisor set | Coach has no archetype items and is asked inside the advisor conversation. |
-| 20 | Blend shape | the midpoint, or 0.75 toward the primary | 0.75 toward the primary | The midpoint classifies with margin 0. |
+### 8.1 Profile snapshots
 
-## What Session 7 must not break
+Extending `profile_archetypes` was considered. It is keyed per persona and
+holds only the archetype, so a snapshot holding skills and values would need
+a second table anyway. A new table, with `profile_archetypes` kept as the
+v1 history:
 
-- `classifyArchetype` stays. The persona test runs it on these targets.
-- `classifyArchetypeV2` stays the Fit overlay (Scout, Steward). The new engine gets a new name.
-- A 0 skill answer still must not create a phantom `user_skills` row. The ledger is where the zero lives.
-- No `|| 0` and no `?? 0` on a skill, a value, or a trait. Absence is "Not recorded", "Self-rated only", or "From platform activity".
+```
+profile_snapshots
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT
+  user_id             INTEGER NOT NULL REFERENCES users(id)
+  persona             TEXT NOT NULL            -- FitPersona
+  engine_version      TEXT NOT NULL            -- e.g. 'profiling-v2.1'
+  trigger             TEXT NOT NULL            -- answer | evidence | scheduled | engine_bump
+  displayed_slug      TEXT                     -- NULL until first classification
+  computed_slug       TEXT
+  secondary_slug      TEXT
+  confidence          REAL
+  margin              REAL
+  traits_json         TEXT                     -- {builder, visionary, connector, operator}, absent keys absent
+  skills_json         TEXT                     -- {axis: {self, evidence_weight, state}}
+  values_json         TEXT                     -- {dimension: score}
+  axal_values_json    TEXT                     -- {value: score}
+  hysteresis_json     TEXT                     -- {candidate_slug, since} when a change is pending
+  computed_at         TEXT NOT NULL DEFAULT (datetime('now'))
+  INDEX (user_id, persona, computed_at)
+```
+
+### 8.2 Evidence
+
+```
+skill_evidence
+  id            INTEGER PRIMARY KEY AUTOINCREMENT
+  user_id       INTEGER NOT NULL REFERENCES users(id)
+  axis          TEXT NOT NULL            -- RADAR_AXES key
+  source        TEXT NOT NULL            -- e.g. 'office_hours.session_completed'
+  source_ref    TEXT NOT NULL            -- the underlying record, e.g. 'partner_bookings:123'
+  occurred_at   TEXT NOT NULL
+  recorded_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  UNIQUE (user_id, source, source_ref, axis)   -- one event per record (§5.3)
+```
+
+### 8.3 Publishing the conversational archetype
+
+Decision c needs a publish flag on the canonical archetype. Proposed:
+`user_settings.archetype_published INTEGER NOT NULL DEFAULT 0`, set by the
+user on the card page. Session 7 must first check that `user_settings` has
+headroom under D1's 100-column cap. If it does not, the flag goes in a side
+table. The legacy `assessment_results.published` stays readable for the
+fallback (decision a) and is not copied across: publishing is a new consent.
+
+---
+
+## 9. Test personas and baseline
+
+`cloudflare-worker/test/fixtures/profiling-v2-personas.json` holds 22
+synthetic people (every name invented, every address `@example.test`):
+
+- **16 archetype personas**, one per archetype. Each answers every scale and
+  select question of its role's current bank (880 answers across the sixteen), with a
+  20% pull towards 3.5 and item-level jitter, so the answers are not
+  centroid copies. `expected.primary` is the archetype the persona was
+  written to be.
+- **2 blend personas**: Bo Blend (Rocketeer, secondary Maverick) and Bea
+  Balance (Thesis-Driven Backer, secondary Disciplined Allocator).
+- **4 evolution personas**, each with dated `checkpoints` computed with the
+  reference model and §7.0's parameters:
+  - `missionary_to_architect` (Eli Evolve): Missionary in January, a partial
+    re-answer in April, and a full Architect re-answer on 1 July. The card
+    still shows Missionary on 13 July and switches on 14 July.
+  - `partner_radar_grows` (Pia Partner): self-ratings never change.
+    Office-hour evidence takes finance_ops from `self_rated_only` through
+    `some_evidence` to `corroborated` by 1 June 2026. Marketing & brand, an
+    axis the partner bank never asks about, reads `evidence_only`. Finance
+    fades back to `some_evidence` by December 2027.
+  - `investor_flip_flop` (Oscar Oscillate): flips to Hands-On Partner for 7
+    days in March and nothing is displayed. Flips again on 1 May and holds,
+    and the displayed archetype changes on 14 May.
+  - `advisor_ageing` (Aria Ageing): answers everything on 1 September 2025
+    and never again. The archetype stays Sage Guide (uniform ageing cancels),
+    all 55 questions become re-askable on 2 March 2026, and the gtm evidence
+    goes `corroborated` → `some_evidence` → `self_rated_only` as it ages
+    past 12 and then 24 months.
+
+**Baseline** (`cloudflare-worker/scripts/profiling-v2-baseline.mjs`, today's
+engine, run by Session 6 on main `8e2120b4e3`):
+
+- Today's `computeArchetype` classifies **all 16 archetype personas and both
+  blends correctly**, and the v1 runner-up matches the expected secondary on
+  both blends.
+- On the 29 evolution checkpoints it agrees with the spec's displayed
+  archetype on **23**. **All 6 disagreements fall inside a hysteresis
+  window**: today's engine has no hysteresis and shows the new archetype the
+  day it wins (Eli on 2 and 13 July; Oscar on 6 and 11 March and on 2 and
+  13 May).
+- The thinnest static margins are Embedded Operator 0.34 and Systems
+  Builder 0.27, the pair §2.2 separates.
+
+What the baseline does **not** show: the personas were written from the
+centroids, so agreement confirms the engine reads them correctly, not that
+real users' answers look like this. Session 7 should add harder personas (a heavier
+pull towards 3.5, missing traits) once reverse-keyed items exist to test
+against.
+
+---
+
+## 10. Routes (sketch; Session 7, Session 8 and Session 13 build them)
+
+| Route | Who | Returns |
+| --- | --- | --- |
+| `GET /api/profile/history?persona=` | the caller (own only) | snapshots, newest first: displayed, computed, secondary, traits, skills states, values, trigger, engine_version, computed_at |
+| `GET /api/skills/me/evidence` | the caller (own only) | per axis: state, evidence weight, lifetime count, the last few events (source, occurred_at) |
+| `GET /api/profile/reask` | the caller (own only) | re-askable question ids with `reask_prompt` (read-only peek, like `/advisor/queue`) |
+| `PUT /api/profile/archetype-published` | the caller (own only) | `{ published: boolean }` (decision c) |
+| `GET /api/admin/profiling/trends` | `requireAdmin` | aggregates only: distribution per role and month, change counts, re-ask response rate; small cells suppressed |
+
+Every `/api/*` method added to `frontend/src/lib/api.js` ships in the same
+commit as its mounted Worker route.
+
+---
+
+## 11. The programme
+
+| Session | Builds | After |
+| --- | --- | --- |
+| Session 6 | This spec, owner decisions, evolution model, test personas | first |
+| Session 7 | Archetype scoring engine v2 (ledger reads, ageing, secondary, hysteresis, Systems Builder move, `engine_version`) + `profile_snapshots` + publish flag + `/profile/history` | Session 6 |
+| Session 8 | Skill evidence from platform tools: `skill_evidence`, the source→axis tool map, the nightly evidence pass, `/skills/me/evidence` | Session 6 |
+| Session 9 | Founder question bank v2 (reverse-keyed, situational, `reask_prompt`, Schwartz dims) | Session 7 |
+| Session 10 | Investor question bank v2 | Session 7 |
+| Session 11 | Partner question bank v2 | Session 7 |
+| Session 12 | Advisor / coach question bank v2, including the coach's first archetype probes | Session 7 |
+| Session 13 | Evolution loop: recompute triggers, ageing, re-ask queue, change events and notification, admin trends | Session 7, Session 8 |
+| Session 14 | Values compatibility across roles (§6) + archetype copy for all 16 + banner audit | copy after Session 6; values after Sessions 8–11 |
+| Session 15 | Archetype card page v2: two-layer skills radar, evolution timeline, published-member matches; retires the assessment fallback | last |
+
+Order: Session 6 → (Session 7 ∥ Session 8) → (Session 9 ∥ Session 10 ∥ Session 11 ∥ Session 12) → Session 13 → Session 14 → Session 15. Session 14's
+copy half can start any time after Session 6.
+
+---
+
+## 12. What the next sessions must know
+
+- **Two reads of "latest".** `field_sources` is the latest per question
+  without ageing. v2 reads the `advisor_answers` ledger with `created_at`.
+  Session 7 must not keep scoring from `field_sources`.
+- **No history exists for skills or values today.** `user_skills`,
+  `user_values` and `axal_values` keep one current row. The first snapshot
+  per user is its baseline; nothing earlier can be reconstructed except from
+  the ledger.
+- **The fixture is the contract.** A session that changes a rule here
+  updates the fixture's `params` or checkpoints in the same PR, and says why.
+- **Absent is absent.** A missing trait, axis or value is drawn as "Not
+  recorded" or "Self-rated only", never as 0, on every page this programme
+  touches.
