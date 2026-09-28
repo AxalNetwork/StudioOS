@@ -227,9 +227,20 @@ export default function AdminDueDiligenceCasePage() {
             <div key={s.id} ref={(el) => { if (el) sectionRefs.current[String(s.id)] = el; }}
               className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 transition-shadow">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                <div>
+                  <div>
                   <div className="font-semibold text-gray-900 dark:text-gray-100">{s.title}</div>
                   <div className="text-xs text-gray-500">weight {Number(s.weight).toFixed(2)} · {s.status}{hasNda ? ' · NDA on file' : ''}</div>
+                  {/* D466 — the Sign-off column the canvas's report draws:
+                      who returned the verdict, recorded at write (migration
+                      339). A section completed before the column existed
+                      renders unrecorded rather than a guessed signer. */}
+                  {s.status === 'completed' && (
+                    <div className="text-xs text-gray-500 mt-0.5" data-testid={`signoff-${s.id}`}>
+                      {s.signed_off_by_name
+                        ? `Signed off by ${s.signed_off_by_name}${s.completed_at ? ` · ${String(s.completed_at).slice(0, 10)}` : ''}`
+                        : 'Sign-off not recorded'}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   {s.verdict && (
