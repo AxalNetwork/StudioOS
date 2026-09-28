@@ -293,7 +293,6 @@ const FundOpsWorkspace = lazy(() => import('./pages/FundOpsWorkspace'));
 const PortfolioWorkspace = lazy(() => import('./pages/PortfolioWorkspace'));
 const PipelineWorkspace = lazy(() => import('./pages/PipelineWorkspace'));
 const FundModelingWorkspace = lazy(() => import('./pages/FundModelingWorkspace'));
-const LPPortalPage = lazy(() => import('./pages/LPPortalPage'));
 const InvestorPricingPage = lazy(() => import('./pages/InvestorPricingPage'));
 const ICDecisionsPage = lazy(() => import('./pages/ICDecisionsPage'));
 const ICDecisionPage = lazy(() => import('./pages/ICDecisionPage'));
@@ -465,6 +464,23 @@ function PartnerPortalRedirect() {
 function FundCapitalCallsRedirect() {
   const loc = useLocation();
   return <Navigate to={{ pathname: '/funds/calls', search: loc.search, hash: loc.hash }} replace />;
+}
+
+// D372 — /lp-portal was "My LP Portal": the LP's own commitments, capital
+// calls, distributions, TVPI/DPI and LPA signing. The My-commitment section of
+// the LP workspace does every one of those jobs, so the old page redirects to
+// that section. A bookmark's own query string travels; its hash, if it had
+// one, wins over the section anchor.
+function LpPortalRedirect() {
+  const loc = useLocation();
+  return <Navigate to={{ pathname: '/spinout-lab/investor-workspace', search: loc.search, hash: loc.hash || '#my-commitment' }} replace />;
+}
+
+// D372 — /funds/lp-workspace rendered the same LP workspace as a Fund Ops tab,
+// embedded. It is one route now.
+function FundLpWorkspaceRedirect() {
+  const loc = useLocation();
+  return <Navigate to={{ pathname: '/spinout-lab/investor-workspace', search: loc.search, hash: loc.hash }} replace />;
 }
 
 // Legacy /refer redirects to the standalone /referrals page, preserving ?tab=.
@@ -2166,11 +2182,11 @@ function AppInner() {
           investor journey (fund overview, terms, tiers, underwriting data,
           reporting archive, allocation, and the apply / request-access flow).
           First-class route under /spinout-lab so the journey stays in one
-          namespace: /spinout-lab → /spinout-lab/investor-workspace. The same
-          component is also a Fund Ops tab at /funds/lp-workspace (embedded
-          there, standalone here) — one component behind both routes, so the
-          two surfaces cannot drift. Role-gated like the Fund Ops route: this
-          content is for investors and admins only. */}
+          namespace: /spinout-lab → /spinout-lab/investor-workspace. It was
+          also a Fund Ops tab at /funds/lp-workspace, and /lp-portal was a
+          second page for the same LP's own position; D372 retired both into
+          this one route (redirects below). Role-gated like the Fund Ops
+          route: this content is for investors and admins only. */}
       <Route path="/spinout-lab/investor-workspace" element={guard(['admin', 'investor'], investorWorkspace('axal-vc-fund', null))} />
       {/* Lab tool page — the founder's company record (design: workspace tool
           pages). labRoles admits the active lab member's own role; admins can
@@ -2802,10 +2818,8 @@ function AppInner() {
       <Route path="/liquidity" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('raise', <FounderWorkspaceTabs set="raise" user={user}><LiquidityPage currentUser={user} /></FounderWorkspaceTabs>))} />
       <Route path="/funds" element={guard(['admin', 'investor'], effectiveRole === 'investor' ? <InvestorFundLanding fundUnlocked={hasInvestorTier(user, 'institutional')} /> : <FundOpsWorkspace />)} />
       <Route path="/funds/capital-calls" element={<FundCapitalCallsRedirect />} />
-      <Route path="/lp-portal" element={guard(['admin', 'investor'], investorWorkspace('axal-vc-fund', <LPPortalPage />))} />
-      {/* Spin-Out Fund I LP participation workspace — a Fund Ops tab, so it
-          renders inside the same investor shell as the other fund surfaces. */}
-      <Route path="/funds/lp-workspace" element={guard(['admin', 'investor'], investorFundWorkspace(<FundOpsWorkspace />))} />
+      <Route path="/lp-portal" element={<LpPortalRedirect />} />
+      <Route path="/funds/lp-workspace" element={<FundLpWorkspaceRedirect />} />
       <Route path="/portfolio/reserves" element={guard(['admin', 'investor'], <FundModelingWorkspace />)} />
       <Route path="/portfolio/waterfall" element={guard(['admin', 'investor'], <FundModelingWorkspace />)} />
       {/* Task #18 — investor-lifecycle features ported from PR #119. */}

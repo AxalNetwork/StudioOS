@@ -164,7 +164,7 @@ export default function InvestorFundCalls() {
       <div className="if2-unavailable" data-testid="status-fund-list-unreadable"><Unreadable what="The list of funds you operate" claim="This is not a claim that you run no fund." onRetry={managed.reload} /></div>
     ) : !fund ? (
       <section className="i6-card if2-none" data-testid="status-no-managed-fund"><h2>No fund to operate</h2>
-        <p>You are not the general partner of record for any fund you can operate here, so there is no call ledger to open. Calls issued against your own LP commitments are in <Link to="/lp-portal">your LP portal</Link>.</p></section>
+        <p>You are not the general partner of record for any fund you can operate here, so there is no call ledger to open. Calls issued against your own LP commitments are in <Link to="/spinout-lab/investor-workspace#my-commitment">My commitment</Link>, on the LP workspace.</p></section>
     ) : <>
       {composer && <CallComposer composer={composer} setComposer={setComposer} onPreview={previewCall} onIssue={issueCall} />}
       {ledger.status === 'unreadable' && <div className="if2-unavailable" data-testid="status-call-ledger-unreadable"><Unreadable what="This fund's call ledger" claim="This is not a claim that the fund has no calls." onRetry={load} /></div>}

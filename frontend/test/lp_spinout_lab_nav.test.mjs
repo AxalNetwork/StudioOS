@@ -192,22 +192,19 @@ test('the investor Home nav keeps its Spin-Out Lab entry', () => {
   assert.match(sidebar, /investor: \[[\s\S]{0,1600}to: '\/spinout-lab', icon: Rocket, label: 'Spin-Out Lab'/);
 });
 
-test('the duplicate LP Workspace nav item is gone, but its route is not', () => {
+test('the duplicate LP Workspace nav item is gone, and its route is a redirect', () => {
   assert.doesNotMatch(
     sidebar,
     /to: '\/funds\/lp-workspace'/,
     'two nav items opening identical content is the confusion, not the fix',
   );
-  assert.match(
-    app,
-    /path="\/funds\/lp-workspace" element=\{guard\(\['admin', 'investor'\], investorFundWorkspace\(<FundOpsWorkspace \/>\)\)\}/,
-    'the route must stay registered — deep links and the Fund Ops tab strip use it',
-  );
-  assert.match(
-    fundOps,
-    /to: '\/funds\/lp-workspace', label: 'LP Workspace'/,
-    'and it must stay a tab inside Fund Ops',
-  );
+  // Re-aimed by D372: the Fund Ops tab was the second copy of the same
+  // workspace. The path still answers, as a redirect that keeps the query and
+  // hash, so deep links land on the one standalone route.
+  assert.match(app, /path="\/funds\/lp-workspace" element=\{<FundLpWorkspaceRedirect \/>\}/,
+    'the route must stay registered so old deep links land');
+  assert.match(app, /function FundLpWorkspaceRedirect\(\)[\s\S]{0,200}?pathname: '\/spinout-lab\/investor-workspace', search: loc\.search, hash: loc\.hash/);
+  assert.doesNotMatch(fundOps, /to: '\/funds\/lp-workspace'/, 'the Fund Ops copy of the workspace is back');
 });
 
 test('the LP workspace renders standalone, not only embedded', () => {
