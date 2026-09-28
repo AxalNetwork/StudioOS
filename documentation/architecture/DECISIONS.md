@@ -38301,13 +38301,6 @@ and the row is Session 4's to add.
   date, the flows not cut, the mark form unwired, the runway rule reading the
   health snapshot, the chase op back to unbuilt, the export dropping the
   date.
-- Both typechecks, `check-sql-migrations`, `check-sqlite-dialect`,
-  `check-sql-prepare`, `check-timestamp-comparisons`,
-  `check-runtime-schema-declared`, `check-decision-ids`, `check-folder-docs`,
-  `check-api-drift`, `test:guards`, `lint:undef`, `check-dark-mode` exit 0.
-  Root `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser
-  probe.
-
 ## D465
 
 **The investor Network book's interaction log and reminders.** Wave 8,
@@ -38352,6 +38345,48 @@ Session 2's file, so the page names it instead of mounting a band that would
   sha256-checked restores): the relationships read dropping the log's MAX,
   the reminder's owner gate removed, the cold narrowing removed, the dateless
   reminder accepted, a draft band mounted without its surface.
+- Both typechecks, `check-sql-migrations`, `check-sqlite-dialect`,
+  `check-sql-prepare`, `check-timestamp-comparisons`,
+  `check-runtime-schema-declared`, `check-decision-ids`, `check-folder-docs`,
+  `check-api-drift`, `test:guards`, `lint:undef`, `check-dark-mode` exit 0.
+  Root `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser
+  probe.
+
+## D466
+
+**DD sign-off: who returned the verdict, recorded at write.** Wave 8,
+Session 17, item 7 (the sign-off half). Migration 339
+(`dd_sections.signed_off_by`).
+
+The Due Diligence canvas's report draws a Sign-off column per section — who
+returned the verdict and when. The signer was derivable from
+`dd_reviewers.responded_at` when an ASSIGNED reviewer returned it, and absent
+entirely when an admin overrode: no reviewer row, no signer. The column is
+stamped on every verdict write (`POST /cases/:uid/sections/:sectionId/verdict`),
+so both paths record alike; the case read joins the signer's name; and the
+generated report renders it — the canvas's own sentence is that every figure
+traces to a checklist item, a flag, or a sign-off. A section completed before
+the column existed renders unrecorded, never a guessed signer.
+
+**Held, and why:** the Blocking column. The canvas's blocking-section rule (a
+blocking section cannot carry an open flag at IC) overlaps Session 15's T6
+(the IC panel/console), so the split is being agreed with Session 15 before
+either side builds it — recorded here so the gap is named rather than silent.
+The section-weighting editor is the owner's call (a per-fund template
+versioning decision) and stays unbuilt past its line.
+
+### VERIFIED
+- `npm run test:frontend` exit 0. `npm run test:worker` exit 1, three
+  failures all pre-existing on main and reproduced there in isolation
+  (`capital_call_ledger.test.ts`, Session 9's area; two in
+  `trust_center_d432.test.ts`, Session 15's D432 merge). Reported, untouched.
+  New tests: `dd_signoff` (3, worker — the reviewer path, the admin override,
+  the pre-column section) and `dd_signoff_column` (3, frontend).
+- 4 mutations, all caught on non-zero exit with a `not ok` line (unique
+  anchors, byte-change proven, sha256-checked restores): the verdict write
+  not stamping the signer, the case read dropping the signer's name, the page
+  inventing a signer for a pre-column section, the report omitting the
+  sign-off.
 - Both typechecks, `check-sql-migrations`, `check-sqlite-dialect`,
   `check-sql-prepare`, `check-timestamp-comparisons`,
   `check-runtime-schema-declared`, `check-decision-ids`, `check-folder-docs`,
