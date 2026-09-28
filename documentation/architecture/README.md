@@ -12,6 +12,7 @@ disagrees with the code, the document is the thing to fix.
 | `PAGE_INVENTORY.md` | **Generated.** The same projection from the nav side: every destination each role sidebar can reach, and which canvas is behind it. |
 | `UNRESOLVED_ITEMS.md` | The routing decisions that cannot be made from the code, what each blocks, and what a wrong guess would cost. |
 | `ASSUMPTIONS_LOG.md` | Routing calls taken without an explicit instruction, what each was decided from, and what would make it wrong. |
+| `PROFILING_V2.md` | Profiling v2 (archetype, skills, values that evolve with use). Holds S9's skill-evidence tool map; S7 owns the rest of the spec. |
 | `DECISIONS.md` | Why is it built this way and not the obvious way? Numbered, D1…, each recording what was decided and what it cost. |
 | `GOTCHAS.md` | What will bite me? |
 | `PRODUCTION.md` | What production actually is, and how a deploy works. |
