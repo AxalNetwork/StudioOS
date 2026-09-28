@@ -33255,6 +33255,99 @@ depth). The mutation broke all three at once, against a fixture folder in
 another project whose `parent_id` points into this room's tree, and was
 caught.
 
+## D375
+
+**HQ · Funds becomes the Fabric canvas's oversight view: F6's stats, table
+and flags feed and F10's honesty states, on D245's registry (Session 9,
+item 5).** Same route, `/admin/funds`. No migration, no new route, no new
+`api.js` method.
+
+**Worker.** `readFundsRegistry` (`rpc/branchOps.ts`) stays the one
+tier-neutral function HQ and every branch answer with, and each row now also
+carries:
+
+- `vintage_year`, null when none is recorded;
+- `called_minor`, the sum of every call line on the fund, using the D371
+  ledger's own owed expression. A test holds that expression to
+  `OWED_CENTS_SQL`;
+- `called_ratio`, called over committed. It is null when no committed figure
+  is recorded;
+- `distributed_minor` (paid distributions only) and `dpi`, which is null when
+  nothing is called;
+- `flags`: `no_gp_of_record` (`gp_user_id` null, the D370 rule that blocks an
+  LPA), `custodian_recorded`, `gp_fields_unset` (F10's five facts, blank
+  counting as unset), `lpa_on_file`, and `draft_not_issued`. That last one is
+  the newest draft when it is newer than the newest issue, or when nothing
+  has issued.
+
+Call lines, distributions and report periods are each read separately, with
+their own `*_available` and `*_reason`. When one fails, its fields are
+absent: they are neither 0 nor "none", and the other reads still answer.
+
+**Fund-level facts only.** The RPC takes no secret. A test asserts the exact
+key set of a row and of its flags, and that no LP name or email, and no GP
+name, title, custodian or administrator, appears in the payload. The flags
+say that a fact is unset, never what a set one says.
+
+`GET /api/admin/hq/funds` adds `not_recorded`, one reason per F6 element
+that has no store behind it:
+
+- `platform_aum` and the FX date: no currency is recorded, so nothing is
+  converted or summed;
+- `jurisdiction`;
+- `hq_economics`: revenue per subsidiary stays not recorded by the owner's
+  brief, and no store was built for it;
+- `tvpi`: there is no fund-level valuation;
+- `obligations`: there is no store for filing deadlines, so the canvas's
+  "Franchise tax due" is not raised;
+- `report_cadence`: there is no stored cadence, so no "days past cadence"
+  figure is given.
+
+**Page.** `HqFundsPage` shows:
+
+- F6's five stats (Platform AUM and HQ accrued read Not recorded with the
+  Worker's reason);
+- the eight-column table, where the canvas's Tenant is the branch that
+  answered, Jur is Not recorded, and Size is the committed figure with no
+  currency symbol;
+- the flags feed, worst first;
+- an HQ economics card that reads Not recorded;
+- F10's cards: the five GP-of-record facts, the "LPA issue is blocked" note
+  for a fund with no GP of record, and a draft period beside the last issued
+  one.
+
+A failed call read reads Unreadable, never 0%. A branch still on a build
+from before this change answers without these fields, and its cells read
+"Not reported" rather than "clear". WorkerRail is mounted once, and its
+coverage names each second table a source could not read.
+
+**No `/admin/fabric` alias.** Measured on `b990540f47`:
+`frontend/test/admin_route_reachability.test.mjs` derives `REDIRECTS` from
+the /admin routes whose element is a redirect (line 361) and pins it to
+`['/admin/news']` (line 421). An alias from `/admin/fabric` to
+`/admin/funds` would have to become a second entry. Per the brief, that list
+changes only when retiring an /admin route is the point of the PR, so the
+alias is dropped. The contract test asserts that App.jsx has no
+`/admin/fabric` and that the pin still stands.
+
+**Not built.** Opening a fund's console from a row behind the canvas's
+oversight banner, for the reason D245 gives. The canvas's F1, F2, F4, F7, F9
+and FX stay Not recorded until their stores exist; the first of them is D376.
+
+**Tests.**
+
+- `cloudflare-worker/test/hq_funds_registry_d245.test.ts`: 8 → 21 tests, on
+  node:sqlite, with migration 312 applied.
+- `frontend/test/hq_funds_d245.test.mjs`: re-aimed from H24's six columns to
+  F6's eight, 6 tests.
+- New: `frontend/test/hq_funds_fabric_d375_contract.test.mjs` (10). It slices
+  F6 and F10, and each of their data models, at both ends.
+
+Mutations: 40 (19 Worker, 21 page), all caught. One escaped first: removing
+the feed's worst-first sort (P5), because the fixture already listed the bad
+flag first. The fixture now gives the first fund a warn flag, so the order is
+the sort's, not the fixture's.
+
 ## D380
 
 **The Spin-Out Lab honesty sweep: the seat count reads `/brief`'s `places`,
