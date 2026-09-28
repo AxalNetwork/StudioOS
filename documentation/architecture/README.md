@@ -13,6 +13,7 @@ disagrees with the code, the document is the thing to fix.
 | `UNRESOLVED_ITEMS.md` | The routing decisions that cannot be made from the code, what each blocks, and what a wrong guess would cost. |
 | `ASSUMPTIONS_LOG.md` | Routing calls taken without an explicit instruction, what each was decided from, and what would make it wrong. |
 | `DECISIONS.md` | Why is it built this way and not the obvious way? Numbered, D1…, each recording what was decided and what it cost. |
+| `PROFILING_V2.md` | The profiling programme (Sessions 7–15): item formats, evolution, and the persona targets. |
 | `GOTCHAS.md` | What will bite me? |
 | `PRODUCTION.md` | What production actually is, and how a deploy works. |
 | `CLOUDFLARE-CUTOVER.md` | **Superseded record (2026-08).** The plan that retired GitHub Pages at the apex — executed, then overtaken: since 2026-09-01 the Worker serves both hosts (`PRODUCTION.md` has the current topology). Kept for the 5xx baseline table and the OAuth re-registration table, which is still live work. |

@@ -38837,3 +38837,11 @@ says **no touches logged yet** when the read succeeded but the log is empty —
 not “coverage unavailable”.
 
 **Tests.** `partnernet_interactions.test.ts` extended; `investor_network_d490.test.mjs`.
+
+## D491
+
+**Profiling v2 is a spec, a persona fixture, and twenty decisions.** No migration. D491 is the next id after D490 on main `8e2120b4e3`.
+
+`documentation/architecture/PROFILING_V2.md` is the source of truth for Sessions 7–15. The fixture is `cloudflare-worker/test/fixtures/profiling_v2_personas.ts`: 16 archetype targets and 4 blends. `profiling_v2_personas.test.ts` checks the shape and that today's `classifyArchetype` lands each target on its expected slug.
+
+The Fit overlay `classifyArchetypeV2` (Scout and Steward) already exists and is not this programme's engine. Coach's fit bank measures 18 questions, all Axal Fit, not the stale target of 17. Centroids stay. The exact midpoint of each closest pair is a tie, so a blend is 0.75 of the way toward its primary.
