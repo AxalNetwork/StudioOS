@@ -23,6 +23,7 @@ import {
   getIncorporationForUser,
 } from '../services/incorporations';
 import legal83b from './legal_83b';
+import legalEntities from './legal_entities';
 import {
   validateCofounderAgreement,
   renderCofounderAgreement,
@@ -1179,29 +1180,12 @@ legal.get('/entities', async (c) => {
   return c.json(entities);
 });
 
-/**
- * Staff-only, and the write half of the same hole: this had no ownership check
- * at all, so any authenticated principal could graft a row into the corporate
- * tree — including one whose `parent_id` points at another founder's holding
- * company.
- *
- * Restricting to staff costs nothing: no caller exists (`api.js` exposes only
- * `listEntities`), and the legitimate way a founder's entity comes into being
- * is POST /incorporate, which creates it under that project's own ownership
- * check and links it via `projects.entity_id`. An entity minted here is
- * unreachable from the scoped GET above anyway, since nothing points at it.
- */
-legal.post('/entities', async (c) => {
-  const user = await requireAuth(c);
-  if (user.role !== 'admin' && user.role !== 'partner') {
-    return c.json({ error: 'Forbidden' }, 403);
-  }
-  const data = await c.req.json();
-  const sql = getSQL(c.env);
-  const [entity] = await sql`INSERT INTO entities (name, entity_type, parent_id, jurisdiction) VALUES (${data.name}, ${data.entity_type}, ${data.parent_id || null}, ${data.jurisdiction || null}) RETURNING *`;
-  await sql.end();
-  return c.json(entity, 201);
-});
+// POST /entities — and the D376 entity writes (fabric role, registration,
+// registered agent, officers, a fund's GP and vehicle) — live in
+// ./legal_entities, mounted below, so node:test can load them without this
+// file's import graph. The create keeps the staff-only gate it had here: it is
+// the write half of the cross-tenant hole the GET above closed.
+legal.route('/', legalEntities);
 
 // Task #13 — Section 83(b) tracker routes (GET/POST /83b/trackers,
 // PATCH /83b/trackers/:id, POST /83b/trackers/:id/receipt). Defined in a

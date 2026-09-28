@@ -33348,6 +33348,111 @@ the feed's worst-first sort (P5), because the fixture already listed the bad
 flag first. The fixture now gives the first fund a warn flag, so the order is
 the sort's, not the fixture's.
 
+## D376
+
+**The Funds · Fabric canvas's F1 store: what an entity is in the fund
+fabric, and which entities a fund runs through (migration 314, Session 9).**
+This is the first of the stores F6 left Not recorded (F1, F2, F4, F7, F9,
+FX). It is built up to the line that reads it: HQ · Funds' Jurisdiction
+column and its GP-entity jurisdiction count. The F1 entity-graph page itself
+is not built.
+
+**Migration 314** (additive, stands alone):
+
+- `entities` gains:
+  - `fabric_role`: `gp_entity`, `management_company`, `fund_vehicle`,
+    `holding` or `operating`, enforced by a CHECK;
+  - `registration_number`;
+  - `registered_agent`.
+- `vc_funds` gains `gp_entity_id` and `vehicle_entity_id`.
+- A new table, `entity_officers`, records appointments. An appointment is
+  ceased with its date, never deleted.
+
+**Why these shapes.** The role is a new column rather than a wider
+`entity_type`, for two reasons. The baseline's CHECK on `entity_type` cannot
+be altered in SQLite without rebuilding the table. And its four values say
+what kind of company an entity is, not what it does in a fund.
+
+**No tenant column.** Which branch an entity belongs to is the database that
+holds it, as D245 settled for funds. A tenant column would restate that, and
+could only ever disagree with it.
+
+**Worker (`routes/legal_entities.ts`).** A new Hono sub-app, mounted by
+`legal.ts` so node:test can load it, as `legal_83b.ts` is.
+
+- `POST /api/legal/entities` moves out of `legal.ts`. It keeps its staff-only
+  gate (admin or partner) and now validates what it writes:
+  - `name_required`;
+  - `entity_type_invalid`;
+  - `fabric_role_invalid`;
+  - `parent_not_found`;
+  - `field_invalid` for text over 200 characters.
+- `GET /entities` stays in `legal.ts` and is unchanged. It is still scoped by
+  `entityListScope`.
+
+Every new write is admin-only; a partner is refused with `admin_only`:
+
+- `PATCH /entities/:id` changes only the fields it is sent. A field sent as
+  null or blank is cleared, and the statement's column list is fixed, never
+  taken from the request.
+- `POST /entities/:id/officers` records an appointment.
+- `POST /entities/:id/officers/:uid/cease` ends one. Ceasing twice is refused
+  with `already_ceased`.
+- `POST /entities/:id/funds {fund_id, as: 'gp' | 'vehicle'}` makes the entity
+  a fund's GP or its vehicle.
+  - It requires the matching role (`fabric_role_mismatch`), so a link never
+    says a company is something its own record does not.
+  - With `unlink: true` it clears the link, but only a link that points at
+    this entity (`not_linked`).
+
+Staff can list officers with `GET /entities/:id/officers`. Every write is
+recorded through `logAdminAction` with the actor, the entity, and the names
+of the fields changed (never their values). No `api.js` method is added,
+because no page calls these routes yet; they are API-only until the F1 page
+exists.
+
+**The line it feeds.** `readFundsRegistry` gains a fourth separate read,
+`entities_available` / `entities_reason`. Each fund now carries:
+
+- `jurisdiction`: its vehicle entity's jurisdiction;
+- `gp_entity_jurisdiction`: its GP entity's jurisdiction.
+
+Each is null when the fund is unlinked or the entity records none, and absent
+when the read fails. Only the jurisdiction string crosses the unauthenticated
+`fundsRegistry` RPC: a test scans the payload for the entity's name,
+registration number, agent and officer, and finds none of them.
+
+On `HqFundsPage`, the Jurisdiction column prints a linked vehicle's
+jurisdiction. An unlinked fund reads Not recorded with the Worker's reason,
+which now says how to fill it. The GP entities stat reads "across N
+jurisdictions, from linked GP entities" when any GP entity is linked. That
+count is a floor, and with none linked it reads Not recorded rather than 0.
+
+**Correction to D375.** The `obligations` reason said no obligation store
+exists. `compliance_events` does record filing deadlines, franchise tax
+included, but only for founder companies, each row against a project. The
+reason now says that, and says that no fund or GP entity has an obligation
+store: that is F2's, and it is next.
+
+**Tests.**
+
+- New `cloudflare-worker/test/fabric_entities_d376.test.ts` (11), on
+  node:sqlite with migrations 312 and 314 applied.
+- New `frontend/test/hq_funds_jurisdiction_d376.test.mjs` (4).
+- The D375 tests are re-aimed: the registry fixture applies 314, the row's key
+  set gains the two jurisdictions, and a branch on an earlier build reads Not
+  reported in the Jurisdiction column.
+- `legalEntitiesAccess.test.ts` read the POST handler from `legal.ts`, and it
+  now reads it from `legal_entities.ts`, with the same assertions: staff-only,
+  and the role check before the INSERT. It also asserts that `legal.ts` keeps
+  no second POST. Three mutations were run against it (gate removed, gate
+  widened to founders, a second POST in `legal.ts`), and all three were
+  caught.
+
+Mutations: 31 on the new code, all caught. One escaped at first: logging every editable field
+name instead of the ones sent (E12), because the create test sent all five.
+A second create that sends only a name now asserts `fields: ['name']`.
+
 ## D380
 
 **The Spin-Out Lab honesty sweep: the seat count reads `/brief`'s `places`,
