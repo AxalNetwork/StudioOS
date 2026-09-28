@@ -50,7 +50,9 @@ const LEGACY_ROWS = [
   '/admin/my-licence', '/admin/trash',
   // studio
   '/pipeline', '/scoring', '/portfolio/risk-matrix', '/market-intel', '/signals', '/advisory',
-  '/matches', '/deals',
+  // '/matches' (AI Matches) stood here. The page was deleted, not moved, so
+  // there is no console left to place and no route an exception could name.
+  '/deals',
   // capital
   '/capital', '/liquidity', '/portfolio/health', '/portfolio/coverage', '/portfolio/reserves',
   '/portfolio/waterfall', '/watchlist', '/legal-capital', '/incorporate', '/compliance',
@@ -95,9 +97,11 @@ const entryFor = (legacyRoute) => byKey(legacyRoute) || UNPLACED.find((u) => u.k
 
 test('the question is the size it was measured at', () => {
   // Fifty live rows on the day the map was drawn, fourteen tabs, one parked
-  // row. A shorter list here means the guard is asking less than it did.
-  assert.equal(LEGACY_ROWS.length, 50);
-  assert.equal(new Set(LEGACY_ROWS).size, 50, 'a legacy route is listed twice');
+  // row. A shorter list here means the guard is asking less than it did —
+  // with one recorded exception: /matches, the AI Matching Engine, was deleted
+  // outright, which is the one way a legacy console leaves the question.
+  assert.equal(LEGACY_ROWS.length, 49);
+  assert.equal(new Set(LEGACY_ROWS).size, 49, 'a legacy route is listed twice');
   assert.ok(TABS.length >= 14, `ADMIN_SECTIONS read ${TABS.length} tabs; the map was drawn for 14`);
   assert.ok(X_ROW_PARKED, 'the commented-out /admin/x row is gone from sidebarConfig.js');
   assert.ok(ROUTES.size >= 300, `App.jsx parsed to ${ROUTES.size} routes — the route reader is broken`);
@@ -193,7 +197,8 @@ test('every placement names a real tier, a real row of that tier, and a real for
     }
     if (e.tier === 'launcher') assert.ok(e.group, `${e.key}: a launcher entry names its group`);
   }
-  assert.equal(ADMIN_PLACEMENT.filter((e) => e.tier === 'launcher').length, 29, 'S23 and H37 launch 29 pages');
+  // S23 and H37 launched 29 pages; AI Matches (/matches) was deleted since.
+  assert.equal(ADMIN_PLACEMENT.filter((e) => e.tier === 'launcher').length, 28, 'S23 and H37 launch 28 pages once AI Matches is gone');
 });
 
 test('the three decided placements hold: Wellbeing, X, Trash', () => {

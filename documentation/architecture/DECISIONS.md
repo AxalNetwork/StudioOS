@@ -33802,6 +33802,102 @@ the advisor half of the directory reading pending rows (W2), because the
 empty-until-approved test applied only from a partner profile. It now applies
 from an advisor profile too.
 
+## D378
+
+**The AI Matching Engine is deleted: the `/matches` page, its six worker
+endpoints and every link to it (Session 9).** No migration. Asked for by the
+owner, with a screenshot of the page: "Delete AI Matching Engine page and
+feature".
+
+Drafted as D377. #947 (Spin-Out Lab office hosts) merged first under that
+number, so this entry is D378, and its tests are named `_d378`.
+
+**What went.**
+
+| What | Where it was |
+| --- | --- |
+| The page (Deal Flow, Co-Investment, Referral Quality; a founder's Investor Match tab) | `frontend/src/pages/MatchesPage.jsx`, route `/matches` in `App.jsx` |
+| Its deal card, the only UI caller of `api.introductionsRequest` | `frontend/src/components/ScoredDealCard.jsx` |
+| `GET /deal-flow`, `GET /co-invest`, `GET /referral-scores`, `POST /score`, `POST /investor-match`, `GET /admin/all` | `cloudflare-worker/src/routes/matches.ts` |
+| The institutional-tier gate on `/api/matches/co-invest` | `cloudflare-worker/src/index.ts` |
+| `api.matchDealFlow`, `matchCoInvest`, `matchReferralScores`, `matchScore`, `matchAdminAll`, `matchInvestors` | `frontend/src/lib/api.js` |
+| The Matches tab in the Partner Pipeline bar, the `/matches` entry in the Pipeline row's `match`, the AI Matches launcher entry, the Operator/Advisor persona's nav extra (both mirrors), the advisor router's page label (both mirrors) | `PartnerWorkspaceTabs.jsx`, `sidebarConfig.js`, `adminPlacement.js`, `personas.js` and `personas.ts`, `lib/advisor/router.js` and `services/advisor/tools.ts` |
+| The dev FastAPI port | `backend/app/api/routes/matches.py` and its `include_router` |
+
+**What stayed, and why.**
+- `GET /api/matches/summary` is Best-Fit's, not the engine's. The profile's
+  Fit section (`ProfileFitSection.jsx`) reads it, and it was only ever mounted
+  under this prefix. `routes/matches.ts` now holds that one handler and says
+  why.
+- `match_scores` and `user_preferences` stay in D1, and no table is dropped.
+  The dashboard, syndicate recommendations (`networkfx.ts`) and the
+  onboarding checklist's history read `match_scores`. They keep reading the
+  rows written before this change, and nothing writes new ones. Dropping the
+  tables would destroy data for no reader's benefit.
+- The matching services (`matchingVectors`, `matchingConsent`, `matchAudit`)
+  are Best-Fit's, the introductions service's and the partner, event and
+  co-founder routes' as well.
+- `POST /api/introductions/request` and `api.introductionsRequest` stay: the
+  route belongs to the introductions quota, not to the engine.
+
+**Consequences, stated rather than discovered.**
+- **No screen requests an intro any more.** The engine's deal card held the
+  only button that called `introductionsRequest`, and `LockedFounderCard`,
+  the other component that asks for an intro (through `trustIntroRequest`),
+  is imported by nothing. "Request an intro" on the investor's
+  Network · Introductions zone was a link to `/matches`. It is a stated gap
+  now, as it already was on the founder's zone, whose reason ("lives on a
+  surface a founder cannot open") had also stopped being true.
+- **Two investor checklist steps left.** `inv.review` ("Review 3 matched
+  founders") counted deal-flow scores that nothing writes now, and
+  `inv.intro` ("Request your first intro") asks for an action no screen
+  offers. Both routed to `/matches`. They left the catalogue in the worker
+  and in the dev mirror.
+- **The checklist total is the role's own count.** It was a fixed
+  `TOTAL_ITEMS = 10`, true while every catalogue held ten steps. The
+  investor's now holds eight, and a fixed 10 would have read "8 / 10" with
+  nothing left to do and never reached "You're all set!". The worker reports
+  `rows.length`, and so does the dev mirror. `CELEBRATION_THRESHOLD` stays an
+  absolute 8, which an investor reaches by completing all eight.
+- **`/matches` is not redirected.** The page was deleted, not moved, so no
+  successor exists to send a bookmark to. It lands on the not-found page.
+- **Two pinned counts moved, each with its reason in the test.**
+  - The H35 placement map's legacy question goes from fifty rows to 49, and
+    the launcher from 29 pages to 28 (Studio 8 to 7). A deleted console has no
+    route that an exception entry could name.
+  - `onboarding_checklist_repairs_d186` goes from 19 repointed detectors to
+    18, and its near-miss floor from 10 to 8: `inv.review` and its two near
+    misses left with the gate itself. The test still covers every gate left in
+    the catalogue.
+
+**Found, not changed.** The docs section `#network/matches`
+(`pages/docs/sections/network.js`) describes a "Matches" page with
+co-founder, advisor and partner tabs. No such page exists, and it was never
+this engine. It is left for whoever owns the in-app docs.
+
+**Tests.**
+- `cloudflare-worker/test/matches_engine_removed_d378.test.ts` (3 tests) holds
+  three things:
+  - the router serves exactly `GET /summary`;
+  - the mount stays and the co-invest gate does not;
+  - no checklist step routes to `/matches`.
+- `frontend/test/matches_engine_removed_d378.test.mjs` (4 tests) holds four:
+  - the files and the route are gone;
+  - `api.js` calls only `/matches/summary`;
+  - no nav, launcher, persona, tab or checklist file points at `/matches`;
+  - "Request an intro" is a stated gap on both desks.
+- `onboarding_checklist_repairs_d186` gains a behavioural test: the
+  investor's total is 8 and the advisor's 10.
+- The re-aimed tests are `profile_zone_actions` (investor links 1 to 0),
+  `partner_shell`, `admin_placement_h35` and `workspaces_launcher_d284`.
+- 13 mutations, each restoring one piece of the engine, were all caught.
+  Each file was restored from a sha256-checked snapshot.
+- Drift on main at `85f7fe914d`: 4149 frontend, 4901 worker (3 skipped),
+  112 guard. On this branch, merged with main at `509fdd6e74`: 4156, 4905
+  (3 skipped), 112. The frontend's seven are this change's four plus the
+  three `509fdd6e74` brought (`app_typography`). The worker's four are this
+  change's.
+
 ## D380
 
 **The Spin-Out Lab honesty sweep: the seat count reads `/brief`'s `places`,

@@ -13,7 +13,7 @@ imports. The bucket roots and the zone routing live in
 | `PartnerStudioHome.jsx` | What `/studio` renders for a partner today. |
 | `PartnerHomeP2.jsx` | The canvas's P2 Home, built and tested but not mounted until the owner signs it off (D394). |
 | `PartnerFirmProfileCard.jsx` | The firm's partner profile, introductions switch and agreement summary (D390), mounted on Firm Settings (`/company-settings`) for partner sign-ins (D395). |
-| `PartnerWorkspaceShell.jsx`, `PartnerWorkspaceTabs.jsx` | The legacy tabbed shell a few older pages (`/needs`, `/services`, `/matches` and others) still wrap themselves in. |
+| `PartnerWorkspaceShell.jsx`, `PartnerWorkspaceTabs.jsx` | The legacy tabbed shell a few older pages (`/needs`, `/services`, `/partner/insights` and others) still wrap themselves in. |
 | `OrganizationsZone.jsx` | Network · Organizations for this licence. |
 
 **Adding a page.** A zone body goes in the subfolder of its bucket and

@@ -120,7 +120,6 @@ export function pageLabel(path) {
     '/build/brand': 'Brand',
     '/build/deck': 'Pitch Deck',
     '/onboarding/persona': 'Persona',
-    '/matches': 'AI Matches',
     '/portfolio': 'Portfolio',
     '/advisorship': 'Advisorship',
   };

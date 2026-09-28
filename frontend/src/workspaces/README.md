@@ -81,10 +81,11 @@ a button, because a button is a promise.
 re-checks every link against `App.jsx`'s guards, for every profile.
 
 **The builder is shared and the tables are not, deliberately.** The rules are
-identical across licences and the answers are not: `/matches` is where
-`introductionsRequest` lives and is guarded `['admin', 'partner', 'investor']`,
-so the identical canvas label "Request an intro" is a link on the investor's
-`/network/introductions` and a stated gap on the founder's. Four tables each
+identical across licences and the answers are not: a route one licence may
+open can be closed to another, so an identical canvas label can be a link on
+one profile's zone and a stated gap on another's. ("Request an intro" was the
+example, a link to `/matches` for an investor only; that page was removed and
+the label is now a gap on both.) Four tables each
 carrying their own copy of "what an empty export says" is how this repo ended up
 with three CSV escapers that disagree.
 
