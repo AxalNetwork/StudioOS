@@ -10,7 +10,7 @@
   margin: auto;
   padding-bottom: 12px;
   color: var(--fs-ink);
-  font-family: var(--font-display);
+  font-family:var(--font-app);
 }
 
 .fs-context {
