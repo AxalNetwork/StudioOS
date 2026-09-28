@@ -32358,6 +32358,106 @@ the page header no longer lists ratings as omitted.
   4016 pass / 0 fail (11 of them new), worker 4782 (4779 pass, 0 fail; 11
   new), retention 112; `check-docs-fresh --strict` after the root build.
 
+## D356
+
+**Profiling v2 is specified before it is built: Eadwyn's conversational
+archetype is canonical, evidence corroborates skills before it may move them,
+and a profile is recomputed from dated answers and evidence, never edited.
+The displayed archetype changes only after 14 days of lead.** Wave 8,
+Session 7 of the Profiling v2 programme (S7–S16). Documentation and fixtures
+only: no engine, bank, route, migration or page changed.
+
+**The spec is `documentation/architecture/PROFILING_V2.md`**, and it outranks
+any later handoff for S8–S16. What it fixes:
+
+- **Owner decisions, 2026-09-28.**
+  - (a) The conversational archetype (`services/archetypeScoring.ts`) is
+    canonical. The gamified assessment stays read-only as a fallback and is
+    retired in S16.
+  - (b) Platform evidence corroborates a self-rated skill, changing its state
+    and confidence but never its level, until S14 proposes a blend and the
+    owner switches it on.
+  - (c) Card-page matches show archetype types always, and real members only
+    if they published their archetype. The conversational archetype has no
+    publish flag today (only `assessment_results.published` exists), so S8
+    adds one.
+  - (d) Answer half-life 12 months, re-ask after 6 months, evidence at full
+    weight for 12 months then fading over 12, hysteresis 14 days.
+  - (e) An in-app notification when the displayed archetype changes. No
+    email.
+- **Four traits stay; one centroid moves.** Adding a fifth trait would reset
+  every stored trait vector and add twenty probes per bank. Instead, Systems
+  Builder's builder coordinate goes 4 → 3 in S8, separating it from Embedded
+  Operator: 1.73 → 2.45, the only pair that was under 2.
+- **Things the handoff did not know, recorded so S8–S13 do not trip on them:**
+  - the coach bank asks no archetype-trait question, so a coach can never be
+    classified today (S13 adds the probes);
+  - a six-archetype v2 set (Scout, Steward) exists for the fit decision only
+    and is never displayed;
+  - the founder bank has no Schwartz values, so a cross-role comparison has
+    one side (S10 adds them).
+- **Question formats for S10–S13:**
+  - reverse-keyed scales (`reverse: true`, scored 5 − value), with at least
+    two per trait;
+  - situational pick-one items (`input_kind: 'choice'`, each option with
+    per-trait loadings);
+  - a `reask_prompt` on every archetype question;
+  - a `retired` flag. An id is never reused.
+- **Evolution, precisely enough to test:**
+  - the latest answer per question wins, and each answer carries the weight
+    0.5^(age/365 days);
+  - a question is re-askable at 182 days;
+  - evidence counts in full for 365 days and fades linearly over the next
+    365;
+  - a new archetype is displayed only after winning 14 consecutive daily
+    evaluations and leading by ≥ 0.25;
+  - the runner-up within 0.5 is shown as secondary;
+  - a snapshot is written on every material change and on nothing else.
+
+  The last three thresholds (lead margin, secondary margin, the corroboration
+  threshold of 3 events) are the spec's choices, and S8 may recalibrate them
+  under a new D entry.
+
+**Personas.** `cloudflare-worker/test/fixtures/profiling-v2-personas.json` has
+22 synthetic people:
+- 16 archetype personas, one per archetype, answering every question of the
+  role's bank;
+- 2 blends with a primary and a secondary;
+- 4 evolution personas whose dated checkpoints were computed with the
+  reference model:
+  - a founder moving from Missionary to Architect;
+  - a partner whose radar grows from office-hour evidence;
+  - an investor whose seven-day flip is absorbed by hysteresis;
+  - an advisor whose answers age, turn re-askable and see their evidence
+    fade.
+
+`cloudflare-worker/scripts/profiling-v2-baseline.mjs` runs today's real
+`computeArchetype` over them and prints the baseline for S8.
+
+### VERIFIED
+
+- **Baseline:** today's engine classifies all 16 archetype personas and both
+  blends as expected, and its runner-up matches both blend secondaries. On
+  the 29 evolution checkpoints it agrees with the spec's displayed archetype
+  23 times. All 6 disagreements are inside a hysteresis window, because
+  today's engine switches the day a new archetype wins. The thinnest static
+  margins are Embedded Operator 0.34 and Systems Builder 0.27, the pair the
+  spec separates.
+- **Test:** `cloudflare-worker/test/profiling_v2_personas_fixture.test.ts`
+  (new, 9 tests) holds the fixture to the real banks (every id, role and
+  value), to the sixteen archetypes (each exactly once), to hysteresis, and to
+  the spec's parameter table (both directions), and holds every person to
+  `@example.test`.
+- **Mutations:** 11 of 11 caught. Each exited non-zero with a `not ok` line
+  and was restored from a sha256-checked snapshot. One anchor had to be
+  re-aimed; nothing escaped.
+- **Guards:** `check-folder-docs` passes with the spec indexed in
+  `documentation/README.md` and `documentation/architecture/README.md`.
+- **Drift run:** `npm run test:drift` on main 8e2120b4e3 with this change
+  exits 0: frontend 4172 pass, worker 4927 (4924 pass, 0 fail, 9 new), and
+  retention 112. `check-docs-fresh --strict` passes. `docs/` is unchanged,
+  since no frontend source moved.
+
 ## D360
 
 **The Spin-Out Lab's capital and legal tools say when a read failed, and
