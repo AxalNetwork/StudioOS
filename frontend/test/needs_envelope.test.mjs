@@ -62,7 +62,6 @@ test('no page reads a needs-board list under any key but `items`', () => {
   // these calls is always undefined.
   const PAGES = [
     'frontend/src/pages/NeedsBoardPage.jsx',
-    'frontend/src/pages/partner/operations/EngagementsPage.jsx',
   ];
   const WRONG = ['needs', 'quotes', 'engagements', 'rows', 'results', 'data'];
   for (const page of PAGES) {

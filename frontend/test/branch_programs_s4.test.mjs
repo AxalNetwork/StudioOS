@@ -10,8 +10,10 @@
  *      `UPDATE cohort_cycles` touches `status`, `app_status`, `force_proceed`
  *      or the one-shot application window — never `start_at`/`end_at`. A date
  *      picker would be a control with nothing behind it.
- *   2. THERE IS NO ROUTE THAT LISTS ASSESSMENT RUNS — no `GET /sessions`, no
- *      `GET /results`. A table of runs would have nothing to read.
+ *   2. THERE IS STILL NO `GET /results`. D446 added `GET /sessions` on the
+ *      admin assessment router, filtered by a cycle's start and end, and the
+ *      page lists those runs. The founder routes in `assessment.ts` do not
+ *      grow that filter.
  *
  * So the risk on these two pages is not a wrong number, it is a *plausible*
  * affordance: a control the reader believes in and the server always refuses.
@@ -197,23 +199,27 @@ test('a cycle label refuses a month it cannot name', () => {
 
 test('the assessment gap is named on the page, not only in the rail', () => {
   assert.ok(PROG_RAW.includes('data-testid="branch-programs-runs-gap"'),
-    'nothing on screen says why individual runs are not listed');
+    'nothing on screen says how a run is kept in a cycle');
   assert.ok(PROG_RAW.includes('data-testid="branch-programs-authoring"'),
     'the page does not say that authoring belongs to HQ');
-  // And it draws no authoring control, because 17 of that file's 23 routes
-  // refuse one on a branch.
+  // And it draws no authoring control. The writes stay hqAuthor.
   assert.ok(!/adminAssessment\.(createGame|updateGame|publishGame|archiveGame|createChapter|createItem|createBadge)/.test(PROG),
     'the page calls an assessment authoring route that is refused on a branch');
 });
 
-test('the assessment runs gap is true: the worker lists no sessions or results', () => {
-  // Read out of the worker rather than restated. The day somebody ships a list
-  // route, this fails and the page gets its table.
+test('assessment runs are listed by cycle, and results still have no list route', () => {
   const file = raw('cloudflare-worker/src/routes/admin_assessment.ts');
-  assert.ok(!/adminAssessment\.get\('\/sessions'/.test(file),
-    'a sessions list route exists now — BranchPrograms can show runs');
+  assert.match(file, /adminAssessment\.get\('\/sessions'/,
+    'the sessions list route is gone — BranchPrograms has nothing to read');
   assert.ok(!/adminAssessment\.get\('\/results'/.test(file),
-    'a results list route exists now — BranchPrograms can show runs');
+    'a results list route exists — the page still says there is none');
+  const founder = raw('cloudflare-worker/src/routes/assessment.ts');
+  assert.ok(!/get\('\/sessions'/.test(founder),
+    'the cycle filter was copied onto the founder assessment routes');
+  assert.ok(!/SESSIONS_IN_CYCLE/.test(founder),
+    'the cycle window query was copied onto the founder assessment routes');
+  assert.match(PROG, /listSessions\(/,
+    'BranchPrograms does not ask for the run list');
 });
 
 test('every community card points at a route App.jsx registers', () => {

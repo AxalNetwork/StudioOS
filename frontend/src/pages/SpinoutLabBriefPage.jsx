@@ -12,7 +12,7 @@ import {
   LAB_TRACKS, TOOL_COUNT, arsenalFor, leadsWithFor,
 } from '../lib/spinoutLabArsenal';
 import {
-  WEEKS, TRACK_GATES, TERMS, JURISDICTIONS, DELIVERABLES, COMMUNITY, SUPPORT,
+  WEEKS, TRACK_GATES, GATES_DECISION, TERMS, JURISDICTIONS, DELIVERABLES, COMMUNITY, SUPPORT,
   FIT, NOT_FIT, TOOL_EXAMPLE_READS, EXAMPLE_LABEL, numberWord, numberWordCap,
 } from '../lib/spinoutBrief';
 
@@ -410,6 +410,11 @@ export function BriefDocument({ brief, err, stats = [] }) {
               </div>
             ))}
           </div>
+          {/* D385 — the open product call, stated where the per-track gates are
+              printed. See GATES_DECISION in lib/spinoutBrief.js. */}
+          <p className="text-[10.5px] leading-[1.5] -mt-2 mb-4" style={{ color: MUT }} data-testid="brief-gates-decision">
+            {GATES_DECISION.brief}
+          </p>
         </div>
         <PageFoot n={2} year={year} />
       </section>

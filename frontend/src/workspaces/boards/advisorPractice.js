@@ -1,4 +1,4 @@
-import { count, day, summary, title, top, usdCents } from './format.js';
+import { count, day, summary, title, top, usdCents, total } from './format.js';
 
 /*
  * `/practice` — Advisor Canvas V3, "Run my advisory business".
@@ -108,6 +108,8 @@ export default function advisorPracticeBoard(role, api) {
         columns: ['Client', 'Topic', 'When', 'State'],
         empty: 'No session is booked.',
         summary: (d) => summary(count(Array.isArray(d?.items) ? d.items.length : null, 'session')),
+        // advisors.ts reads bookings with LIMIT 200 (D403).
+        total: (d) => total(d?.items, 200),
         rows: (d) => top(d?.items).map((b) => [
           b.client_name, b.topic, day(b.slot_starts_at), title(b.status),
         ]),

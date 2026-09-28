@@ -155,6 +155,7 @@ import calendarRoutes from './routes/calendar';
 import financialsRoutes from './routes/financials';
 import progressRoutes from './routes/progress';
 import metricsRoutes from './routes/metrics';
+import revenueRoutes from './routes/revenue';
 import wellbeingRoutes from './routes/wellbeing';
 import complianceRoutes from './routes/compliance';
 import captableRoutes from './routes/captable';
@@ -169,11 +170,13 @@ import adminEscalations from './routes/admin_escalations';
 import adminSupportSessions from './routes/admin_support_sessions';
 import branchEscalationRoutes from './routes/branch_escalations';
 import branchApprovalRoutes from './routes/branch_approvals';
+import branchApprovalAssignmentRoutes from './routes/branch_approval_assignments';
 import branchHomeRoutes from './routes/branch_home';
 import branchTemplateRoutes from './routes/branch_templates';
 import branchInsightsRoutes from './routes/branch_insights';
 import branchDeploymentRoutes from './routes/branch_deployment';
 import branchInvitationRoutes from './routes/branch_invitations';
+import branchSupportSessionRoutes from './routes/branch_support_sessions';
 import adminSuperAdmins from './routes/admin_super_admins';
 import adminHq from './routes/admin_hq';
 import adminRevenue from './routes/admin_revenue';
@@ -181,6 +184,7 @@ import adminContent from './routes/admin_content';
 import adminPlatform from './routes/admin_platform';
 import adminSecurity from './routes/admin_security';
 import adminHqSupport from './routes/admin_hq_support';
+import adminStudioGlance from './routes/admin_studio_glance';
 // The holder-facing read of one licence — see routes/licence.ts for why it is
 // not a role branch inside the admin ledger.
 import licence from './routes/licence';
@@ -859,6 +863,9 @@ app.route('/api/branch', branchEscalationRoutes);
 // from the escalations lane because they are different concerns: one reads the
 // four queues this branch decides, the other is what it asked HQ.
 app.route('/api/branch', branchApprovalRoutes);
+// D470 — assignment is a side record, not a decision and not a thread. Its
+// own file so the board route stays a read.
+app.route('/api/branch', branchApprovalAssignmentRoutes);
 // D131 — S1's digest. A third file on the same prefix because it composes what
 // the other two read rather than owning a store of its own.
 app.route('/api/branch', branchHomeRoutes);
@@ -876,6 +883,9 @@ app.route('/api/branch', branchDeploymentRoutes);
 // D441 — accepting a move onto this branch. Same prefix, no session: the
 // token is the credential, and the person has no account here yet.
 app.route('/api/branch', branchInvitationRoutes);
+// D446 — S13's audit line. The branch reads the support sessions its own
+// database recorded. Same prefix as the other branch reads.
+app.route('/api/branch', branchSupportSessionRoutes);
 app.route('/api/admin/licences', adminLicences);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.
@@ -897,6 +907,8 @@ app.route('/api/admin/security', adminSecurity);
 // HQ · Support — the three queues as one read (D204, canvas H22). Super-admin-
 // only, and before the catch-all like the rest of the HQ tier.
 app.route('/api/admin/hq-support', adminHqSupport);
+// Studio glance — both tiers, before the /api/admin catch-all (D443).
+app.route('/api/admin/studio', adminStudioGlance);
 app.route('/api/licence', licence);
 app.route('/api/best-fit', bestFitSelf);
 app.route('/api/admin', admin);
@@ -1030,6 +1042,8 @@ app.route('/api/venture-risk', ventureRiskRoutes);
 app.route('/api/progress', progressRoutes);
 // Task #3 (DF) — `/api/metrics/*` alias of /api/progress/metrics/* + /series.
 app.route('/api/metrics', metricsRoutes);
+// D363 — the Spin-Out Lab revenue ledger (migration 311).
+app.route('/api/revenue', revenueRoutes);
 app.route('/api/wellbeing', wellbeingRoutes);
 // T12 — Compliance calendar + Cap-table simulator + Co-founder matching.
 app.route('/api/compliance', complianceRoutes);

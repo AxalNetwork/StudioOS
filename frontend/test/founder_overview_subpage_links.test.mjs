@@ -55,13 +55,13 @@ const DESKS = [
 ];
 
 /**
- * THE ONE LINK THIS RULE DOES NOT OWN. `FounderResearchDesk.jsx`'s Company
- * profiles card links `/build/competitors`, and that line belongs to Session 2
- * this wave, whose `/build/competitors` redirect decides where it lands. It is
- * named here, one exact target in one file, rather than the rule being
- * loosened for the desk — a second out-of-bucket link on the same desk fails.
+ * LINKS THIS RULE DOES NOT OWN, one exact target in one file each. Empty since
+ * D313: the one entry was `FounderResearchDesk.jsx`'s `/build/competitors`,
+ * held for the redirect that retired it, and the card now links
+ * `/research/companies`, inside its own bucket. An empty set still refuses
+ * every out-of-bucket link rather than loosening the rule for a desk.
  */
-const HELD_ELSEWHERE = new Set(['frontend/src/pages/founder/FounderResearchDesk.jsx /build/competitors']);
+const HELD_ELSEWHERE = new Set([]);
 
 /** Every `/bucket/slug` route App.jsx actually mounts. */
 const BUCKET_PATH = {

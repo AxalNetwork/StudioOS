@@ -68,6 +68,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/components/brand/templates', 'the landing-page template previews'],
   ['frontend/src/components/cofounder',       'the co-founder agreement builder'],
   ['frontend/src/components/scoring',         'the scoring engine UI'],
+  ['frontend/src/components/spinout',         'the Spin-Out Lab shared pieces'],
   ['frontend/src/decks/templates',            'the pitch-deck slide templates'],
   ['frontend/src/pages/admin',                'the admin console'],
   ['frontend/src/pages/admin/assessment',     'the assessment game editor'],

@@ -37,11 +37,9 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  * working code.
  */
 
-// `/funds/calls` and `/funds/ledger` each fail for one reason across several
-// filters, so the reason is written once and shared by every entry it covers
-// rather than restated per label.
-const NO_FUND_SCOPED_CALLS =
-  'capital calls are recorded, but nothing links one to a fund register, so none can be listed against this fund';
+// `/funds/ledger` fails for one reason across several filters, so the reason
+// is written once and shared by every entry it covers rather than restated per
+// label. (`/funds/calls` shared one too, until D371 built its ledger.)
 const NO_LEDGER_LINES =
   'the fund analytics contract returns totals, not the journal, fee movements or audit rows behind them';
 const NO_EXTRACTION_LAYER =
@@ -61,8 +59,8 @@ const ALREADY_MINE =
 // returns it, which is what the `Founders` chip narrows on.
 const NO_LP_RELATIONSHIP =
   'an LP register is kept against a fund rather than as a relationship, and this page never reads it';
-const NO_INTERACTION_DATE =
-  'no interaction date is stored on a relationship; the only history kept is that the row was created and edited';
+// `Going cold` went live with D465: `partner_interactions` (migration 338) is
+// the interaction log, and the relationship's last touch is its MAX.
 // `/network/introductions`. NOT word for word what the founder table says, and
 // the difference is a store: the founder desk reads `intro_propositions` alone,
 // where every row is addressed to the reader, but an investor's own asks live
@@ -147,11 +145,17 @@ export const INVESTOR_ZONE_FILTERS = {
   // `Call 3` is that artboard's sample datum — one specific call, not a count
   // welded onto a filter, so `{n}` is not the repair. It renders as the
   // positional filter it actually is.
+  // D371: the call ledger exists, so three of the four run. `Current call` is
+  // the newest numbered call's lines, `All calls` every numbered call's, and
+  // `Outstanding` every line — numbered or from before numbering — that still
+  // owes something. `Notices` keeps a reason, corrected: a notice IS logged per
+  // LP account when a call is issued, but no letter is kept and no delivery is
+  // tracked, so there is no notice state to filter lines by.
   'funds/calls': [
-    { canvas: 'Call 3', label: 'Current call', unbuilt: NO_FUND_SCOPED_CALLS },
-    { canvas: 'All calls', unbuilt: NO_FUND_SCOPED_CALLS },
-    { canvas: 'Outstanding', unbuilt: NO_FUND_SCOPED_CALLS },
-    { canvas: 'Notices', unbuilt: 'no call notice is stored, sent or tracked anywhere in this product' },
+    { canvas: 'Call 3', label: 'Current call', key: 'latest' },
+    { canvas: 'All calls', key: 'all' },
+    { canvas: 'Outstanding', key: 'outstanding' },
+    { canvas: 'Notices', unbuilt: 'an in-app notice is logged for each LP account when a call is issued, but no letter is kept and no delivery is tracked, so there is no notice state to filter by', hover: 'Call notices are logged, but their delivery is not tracked, so there is nothing to filter.' },
   ],
 
   // `Summary` is real — it reads the fund analytics totals. The other three
@@ -310,7 +314,7 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Founders', key: 'founders' },
     { canvas: 'Co-investors', key: 'coinvestors' },
     { canvas: 'LPs', unbuilt: NO_LP_RELATIONSHIP },
-    { canvas: 'Going cold', unbuilt: NO_INTERACTION_DATE },
+    { canvas: 'Going cold', key: 'cold', label: 'Going cold {n}' },
   ],
 
   'network/introductions': [

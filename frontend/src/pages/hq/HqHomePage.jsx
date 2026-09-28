@@ -6,6 +6,7 @@ import { reportError } from '../../lib/log';
 import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
 import HqBranchOverlay from './HqBranchOverlay';
+import { revenueAbsenceForLicence } from '../../lib/hqRevenuePerSub';
 
 /**
  * HQ · Home — the whole business on one screen (Admin · Super canvas, H1).
@@ -162,6 +163,7 @@ export default function HqHomePage() {
   // D149 (`revenue_share_bps`, on the row and thrown away).
   const branches = ready ? data.branches || [] : [];
   const branchCoverage = ready ? data.branches_coverage || null : null;
+  const usageCoverage = ready ? data.usage_coverage || null : null;
   // Keyed on `licence_uid`, which is the ONLY join between the two (migration
   // 258). A branch with no deployment row behind it is absent from this map
   // rather than guessed at — attaching one territory's figures to another's
@@ -326,6 +328,28 @@ export default function HqHomePage() {
             )}
           </label>
           <span className="rounded bg-white/15 px-2 py-0.5 text-[10px] font-bold tracking-[.05em]">AXAL VC HQ</span>
+          <div className="flex w-full flex-wrap gap-2 pt-1 sm:w-auto sm:pt-0" data-testid="hq-kind-filter">
+            {[
+              ['all', 'All'],
+              ['subsidiary', 'Axal'],
+              ['white_label', 'White-label'],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                disabled={!ready}
+                aria-pressed={kindFilter === id}
+                onClick={() => setKindFilter(id)}
+                className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${
+                  kindFilter === id
+                    ? 'border-white bg-white/25 text-white'
+                    : 'border-white/50 text-white/95 hover:bg-white/15'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         {selected && (
           <p className="mt-2 text-[11.5px] text-axal-faint">
@@ -333,28 +357,6 @@ export default function HqHomePage() {
             to read that tenant's database — the tenant switcher here does not change other routes.
           </p>
         )}
-
-        <div className="mt-2 flex flex-wrap gap-2" data-testid="hq-kind-filter">
-          {[
-            ['all', 'All'],
-            ['subsidiary', 'Axal'],
-            ['white_label', 'White-label'],
-          ].map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              disabled={!ready}
-              onClick={() => setKindFilter(id)}
-              className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${
-                kindFilter === id
-                  ? 'border-white bg-white/20 text-white'
-                  : 'border-white/40 text-white/90 hover:bg-white/10'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
 
         <header className="mt-4">
           <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
@@ -398,7 +400,11 @@ export default function HqHomePage() {
               </>
             )}
           />
-          <Tile label="MTD revenue" value={null} note="no subsidiary attribution" />
+          <Tile
+            label="MTD revenue"
+            value={null}
+            note={ready ? (data.mtd_revenue_reason || 'Not recorded on HQ') : '…'}
+          />
           <Tile
             label="Queue backlog"
             value={ready && queue?.available ? num(queue.open) : null}
@@ -428,6 +434,11 @@ export default function HqHomePage() {
             <p className="text-[12.5px] text-axal-muted">
               No licences have been issued yet. The ledger is empty, which is a different fact from every
               subsidiary being healthy. <Link to="/admin/licences" className="underline">Issue the first licence →</Link>
+            </p>
+          )}
+          {ready && licences.length > 0 && shown.length === 0 && (
+            <p className="text-[12.5px] text-axal-muted" data-testid="hq-kind-filter-empty">
+              No licences match this filter. Choose All, Axal subsidiary, or White-label above.
             </p>
           )}
           {ready && shown.length > 0 && (
@@ -497,6 +508,14 @@ export default function HqHomePage() {
                         {live && num(live.seats_used) !== null
                           ? num(live.seats_used)
                           : <Unrecorded reason={live?.seats_used_reason || branchReason(b, 'seat count')} />}
+                      </dd>
+                    </div>
+                    <div className="col-span-2">
+                      <dt className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+                        Revenue{usageCoverage?.available ? ` · ${usageCoverage.period}` : ''}
+                      </dt>
+                      <dd className="mt-0.5 text-[11px] leading-relaxed text-axal-muted">
+                        <Unrecorded reason={revenueAbsenceForLicence(usageCoverage, l.uid)} />
                       </dd>
                     </div>
                     <div className="col-span-2">

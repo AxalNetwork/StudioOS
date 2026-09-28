@@ -11,6 +11,7 @@
  */
 import { seatState } from '../branch/BranchAccounts';
 import { pctFromBps } from '../branch/BranchHome';
+import { api } from '../../lib/api';
 import { inZone } from '../../lib/zoneTime';
 import { branchOfUser } from '../../lib/shellRole';
 
@@ -143,7 +144,7 @@ export function contractsGlance(data) {
   if (n === 0) {
     return {
       kind: 'unrecorded',
-      reason: 'HQ pushed a library and it was empty, so there is nothing to instantiate.',
+      reason: data.empty_reason || 'HQ pushed a library and it was empty, so there is nothing to instantiate.',
     };
   }
   const asOf = data.pushed_at ? String(data.pushed_at).replace('T', ' ').slice(0, 16) : null;
@@ -192,10 +193,17 @@ export function agreementsGlance(a) {
 
 /** Share rate from the licence term, plus whether HQ published a median. No amount. */
 export function insightsGlance(revenue, insights) {
-  const sharePct = revenue ? pctFromBps(revenue.share_bps) : null;
-  const share = sharePct === null
-    ? { kind: 'unrecorded', reason: revenue?.reason || 'The share rate is not recorded on the licence copy.' }
-    : { kind: 'ready', text: `${sharePct}% share on this licence` };
+  const share = revenue?.available === false
+    ? {
+      kind: 'unreadable',
+      reason: revenue.reason || 'The share rate could not be read. This is not a claim that no rate was pushed.',
+    }
+    : (() => {
+      const sharePct = revenue ? pctFromBps(revenue.share_bps) : null;
+      return sharePct === null
+        ? { kind: 'unrecorded', reason: revenue?.reason || 'The share rate is not recorded on the licence copy.' }
+        : { kind: 'ready', text: `${sharePct}% share on this licence` };
+    })();
   if (!insights) {
     return {
       share,
@@ -264,12 +272,13 @@ export function studioGlances({ user, home, licence, templates, insights }) {
   const lic = licence && licence !== UNAVAILABLE ? licence.licence || null : null;
   const seats = !onBranch
     ? absent
-    : licence === null
+    : licence == null
       ? null
       : licence === UNAVAILABLE
         ? failed('Seats')
         : (() => {
-          const lines = accountLines(lic?.seats_used_by_type, lic?.seats);
+          if (lic?.seats_used_by_type == null) return failed('Seats');
+          const lines = accountLines(lic.seats_used_by_type, lic?.seats);
           if (!lines) {
             return {
               kind: 'unrecorded',
@@ -281,7 +290,7 @@ export function studioGlances({ user, home, licence, templates, insights }) {
 
   const approvals = !onBranch
     ? absent
-    : home === null
+    : home == null
       ? null
       : home === UNAVAILABLE
         ? failed('The queues')
@@ -289,20 +298,20 @@ export function studioGlances({ user, home, licence, templates, insights }) {
 
   const programme = !onBranch
     ? absent
-    : home === null
+    : home == null
       ? null
       : home === UNAVAILABLE
         ? failed('The programme clock')
         : {
           ...programmeGlance(home.programme, inZone(home.programme?.week_closes_at, home.programme?.zone)),
-          hoursToClose: Number.isFinite(home.programme?.hours_to_close) ? home.programme.hours_to_close : null,
+          hoursToClose: finiteHours(home.programme?.hours_to_close),
         };
 
   // #308 / D199 — the agreements come from the DIGEST, not the template
   // library: two stores, so two independent states.
   const agreements = !onBranch
     ? absent
-    : home === null
+    : home == null
       ? null
       : home === UNAVAILABLE
         ? failed('Agreements')
@@ -310,7 +319,7 @@ export function studioGlances({ user, home, licence, templates, insights }) {
 
   const contracts = !onBranch
     ? { ...absent, agreements }
-    : (templates === null || home === null)
+    : (templates == null || home == null)
       ? null
       : templates === UNAVAILABLE
         ? { ...failed('The template library'), agreements }
@@ -318,7 +327,7 @@ export function studioGlances({ user, home, licence, templates, insights }) {
 
   let insightView;
   if (!onBranch) insightView = { share: absent, median: absent };
-  else if (home === null || insights === null) insightView = null;
+  else if (home == null || insights == null) insightView = null;
   else {
     const view = insightsGlance(
       home === UNAVAILABLE ? null : home.revenue,
@@ -331,6 +340,142 @@ export function studioGlances({ user, home, licence, templates, insights }) {
   }
 
   return { onBranch, lic, seats, approvals, programme, contracts, insights: insightView };
+}
+
+/**
+ * D443 — one in-flight read of GET /api/admin/studio/glance, shared by the
+ * strip and the cards so they cannot each ask.
+ */
+let glanceInflight = null;
+export function loadStudioGlance() {
+  if (!glanceInflight) {
+    glanceInflight = api.adminStudioGlance().finally(() => { glanceInflight = null; });
+  }
+  return glanceInflight;
+}
+
+function unrecordedBlock(block, fallback) {
+  return { kind: 'unrecorded', reason: block?.reason || fallback };
+}
+
+/** A missing hour is null. `Number(null)` is 0, and 0 would rank the tile as due now. */
+function finiteHours(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * The same object `studioGlances` returns, read off the glance payload
+ * instead of the four branch responses. `UNAVAILABLE` is a read that failed.
+ * A block with `recorded: false` is a figure this tier does not have, and
+ * its reason is the server's — the page does not invent a softer one.
+ */
+export function glancesFromStudioGlance(payload, user) {
+  const failed = (what) => ({
+    kind: 'unreadable',
+    reason: `${what} could not be read. This is not a claim that the territory has none.`,
+  });
+  if (!payload || payload === UNAVAILABLE) {
+    const onBranch = Boolean(branchOfUser(user));
+    return {
+      tier: onBranch ? 'branch' : null,
+      onBranch,
+      lic: null,
+      licenceAbsence: null,
+      licenceUnreadable: null,
+      seats: failed('Seats'),
+      approvals: failed('The queues'),
+      programme: failed('The programme clock'),
+      contracts: { ...failed('The template library'), agreements: failed('Agreements') },
+      insights: { share: failed('The share rate'), median: failed('The benchmark copy') },
+    };
+  }
+
+  const onBranch = payload.tier === 'branch';
+  const seats = payload.seats?.available === false
+    ? { kind: 'unreadable', reason: payload.seats.reason || failed('Seats').reason }
+    : payload.seats?.recorded === false
+      ? unrecordedBlock(payload.seats, 'Seat use was not on the glance, so it is not shown as zero.')
+      : payload.seats?.seats_used_by_type == null
+        ? failed('Seats')
+        : (() => {
+          const lines = accountLines(payload.seats.seats_used_by_type, payload.seats?.seats);
+          if (!lines) {
+            return {
+              kind: 'unrecorded',
+              reason: payload.seats?.seats_used_basis || 'Seat use is not recorded on this copy, so it is not shown as zero.',
+            };
+          }
+          return { kind: 'ready', lines };
+        })();
+
+  const approvals = payload.approvals?.recorded === false
+    ? unrecordedBlock(payload.approvals, 'The queues were not on the glance, so this is not a claim that the board is clear.')
+    : approvalsGlance(payload.approvals?.lanes);
+
+  const programme = payload.programme?.recorded === false
+    ? unrecordedBlock(payload.programme, 'The programme clock was not on the glance.')
+    : {
+      ...programmeGlance(
+        payload.programme,
+        inZone(payload.programme?.week_closes_at, payload.programme?.zone),
+      ),
+      hoursToClose: finiteHours(payload.programme?.hours_to_close),
+    };
+
+  const agreements = payload.agreements?.recorded === false
+    ? unrecordedBlock(payload.agreements, 'Agreements were not on the glance, so this is not a claim that none are ending.')
+    : agreementsGlance(payload.agreements);
+
+  let library;
+  if (payload.templates?.recorded === false) {
+    library = unrecordedBlock(payload.templates, 'The template library was not on the glance.');
+  } else if (!payload.templates || payload.templates.available === false) {
+    library = contractsGlance(payload.templates?.available === false ? payload.templates : null);
+  } else {
+    library = contractsGlance({
+      available: true,
+      items: payload.templates.items,
+      pushed_at: payload.templates.pushed_at,
+      never_pushed_reason: payload.templates.never_pushed_reason,
+      empty_reason: payload.templates.empty_reason,
+    });
+  }
+  const contracts = { ...library, agreements };
+
+  const shareUnreadable = payload.revenue?.available === false;
+  const shareAbsent = !shareUnreadable && payload.revenue?.recorded === false;
+  const medianAbsent = payload.insights?.recorded === false;
+  const view = insightsGlance(
+    shareUnreadable || shareAbsent ? null : payload.revenue,
+    medianAbsent ? null : payload.insights,
+  );
+  const insightView = {
+    share: shareUnreadable
+      ? { kind: 'unreadable', reason: payload.revenue.reason || failed('The share rate').reason }
+      : shareAbsent
+        ? unrecordedBlock(payload.revenue, 'The share rate was not on the glance.')
+        : view.share,
+    median: medianAbsent
+      ? unrecordedBlock(payload.insights, 'The benchmark copy was not on the glance.')
+      : view.median,
+  };
+
+  const licenceUnreadable = payload.licence?.available === false ? (payload.licence.reason || null) : null;
+  const lic = payload.licence?.recorded && !licenceUnreadable ? payload.licence : null;
+  return {
+    tier: payload.tier || null,
+    onBranch,
+    lic,
+    licenceUnreadable,
+    licenceAbsence: payload.licence?.recorded === false ? payload.licence.reason : null,
+    seats,
+    approvals,
+    programme,
+    contracts,
+    insights: insightView,
+  };
 }
 
 /** The sidebar's order, which breaks every tie in the strip. */

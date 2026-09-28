@@ -47,6 +47,7 @@ import { bpsPercent } from '../../lib/bps';
 import { reportError } from '../../lib/log';
 import { REFUND_REASON_MIN, refundReasonOk } from '../../lib/refundReason';
 import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import { revenueAbsenceForLicence, usageCoverageLabel } from '../../lib/hqRevenuePerSub';
 
 export const UNAVAILABLE = Symbol('unavailable');
 
@@ -314,9 +315,262 @@ function RefundForm({ onDone }) {
  * unreadable amount is refused rather than sent as 0, because the worker
  * would (since D228) refuse it too and a 0 ceiling is a real instruction.
  */
+/** Quarter period the statement routes accept (YYYY-Qn). */
+export const STATEMENT_PERIOD_RE = /^\d{4}-Q[1-4]$/;
+
+export function statementDrawPayload({ licenceUid, period }) {
+  if (!licenceUid) return { error: 'Choose the licence to draw a statement for.' };
+  const p = String(period || '').trim();
+  if (!STATEMENT_PERIOD_RE.test(p)) return { error: 'The period is a quarter, written YYYY-Qn.' };
+  return { licenceUid, period: p };
+}
+
+/**
+ * Paid and disputed amounts leave as integer minor units. A blank payment is
+ * refused; zero is allowed when nothing was received.
+ */
+export function statementPaidPayload({ amountText, note, owedCents }) {
+  const text = String(amountText ?? '').trim();
+  if (text === '') return { error: 'Enter what was received, in the licence currency. 0 is valid when nothing arrived.' };
+  const n = Number(text);
+  if (!Number.isFinite(n) || n < 0) return { error: 'The paid amount must be a figure of 0 or more.' };
+  const paid_cents = Math.round(n * 100);
+  if (!Number.isInteger(paid_cents)) return { error: 'The paid amount must resolve to whole minor units.' };
+  const owed = Number(owedCents);
+  if (Number.isFinite(owed) && paid_cents > owed) {
+    return { error: `That is more than the ${owed} minor units this statement claims.` };
+  }
+  return { body: { paid_cents, paid_note: String(note ?? '').trim() || null } };
+}
+
+export function statementVoidPayload({ note }) {
+  const void_note = String(note ?? '').trim();
+  if (void_note.length < 10) {
+    return { error: 'Voiding must say why — at least ten characters, read by whoever audits it.' };
+  }
+  return { body: { status: 'void', void_note } };
+}
+
+/** Paid-in-full is refused server-side when the owed figure is still a floor. */
+export function statementAllowsPaidInFull(statement) {
+  if (!statement) return false;
+  if (statement.complete === false) return false;
+  if (statement.unreported_streams > 0 || statement.estimated_streams > 0) return false;
+  return true;
+}
+
+export function statementDisputePayload({ amountText, note }) {
+  const text = String(amountText ?? '').trim();
+  if (text === '') return { error: 'Enter the disputed amount.' };
+  const n = Number(text);
+  if (!Number.isFinite(n) || n <= 0) return { error: 'The disputed amount must be greater than zero.' };
+  const disputed_cents = Math.round(n * 100);
+  const dispute_note = String(note ?? '').trim();
+  if (!dispute_note) return { error: 'A dispute must say why — a subsidiary will ask HQ to justify it.' };
+  return { body: { disputed_cents, dispute_note } };
+}
+
+/** Licences that carry a revenue share and are active can be drawn. */
+export function licencesDrawableForStatements(licences) {
+  if (!Array.isArray(licences)) return [];
+  return licences.filter(
+    (l) => l.revenue_share_bps !== null && l.revenue_share_bps !== undefined && l.status === 'active',
+  );
+}
+
+/**
+ * D453 — draw a statement from what the branch reported (H10). Re-draw replaces
+ * a draft only; issued statements refuse on the server.
+ */
+export function StatementDrawEditor({ licences, currentPeriod, onDraw }) {
+  const [f, setF] = useState({ licenceUid: '', period: currentPeriod || '' });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const list = licences && licences !== UNAVAILABLE ? licencesDrawableForStatements(licences) : null;
+  const period = f.period || currentPeriod || '';
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (busy) return;
+    const p = statementDrawPayload({ licenceUid: f.licenceUid, period });
+    if (p.error) { setMsg({ err: true, text: p.error }); return; }
+    setBusy(true); setMsg(null);
+    try {
+      const r = await onDraw(p.licenceUid, p.period);
+      const label = r?.brand_name || r?.licence_ref || p.licenceUid;
+      setMsg({
+        err: false,
+        text: r?.complete
+          ? `Statement drawn for ${label} · ${p.period}.`
+          : `Draft drawn for ${label} · ${p.period} — ${r?.note || 'some streams could not be reported, so the owed figure is a floor.'}`,
+      });
+    } catch (err) {
+      setMsg({ err: true, text: err?.data?.message || err?.message || 'The statement was not drawn.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const input = 'w-full rounded-lg border border-axal-hairline bg-axal-ground px-2.5 py-1.5 text-[12.5px]';
+  return (
+    <div className="mb-3 border-b border-axal-hairline pb-3" data-testid="hq-revenue-statement-draw">
+      <div className="text-[11px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Draw a statement</div>
+      <p className="mt-1 text-[11.5px] leading-relaxed text-axal-muted">
+        Gross comes from what the branch reported for the period; owed is computed from the licence&apos;s revenue share at draw time.
+        Re-drawing replaces a draft only — once issued, void it before drawing again. Only active licences can be drawn; a suspended holder is billed only after reactivation.
+      </p>
+      {licences === UNAVAILABLE && (
+        <div className="mt-2">
+          <Unreadable what="The licence list" claim="No statement can be drawn until licences are read." />
+        </div>
+      )}
+      {licences === null && <p className="mt-2 text-[11.5px] text-axal-faint">Loading licences…</p>}
+      {list && list.length === 0 && (
+        <p className="mt-2 text-[12px] text-axal-muted" data-testid="hq-revenue-statement-no-drawable">
+          No licence records a revenue share yet — set step 4 of the issue flow before drawing.
+        </p>
+      )}
+      {list && list.length > 0 && (
+        <form onSubmit={submit} className="mt-2 grid gap-2 sm:grid-cols-3">
+          <select className={`${input} sm:col-span-2`} value={f.licenceUid} onChange={(e) => set('licenceUid', e.target.value)} aria-label="Licence">
+            <option value="">Licence…</option>
+            {list.map((l) => (
+              <option key={l.uid} value={l.uid}>
+                {l.brand_name || l.licence_ref || l.uid}
+                {l.status && l.status !== 'active' ? ` · ${l.status}` : ''}
+              </option>
+            ))}
+          </select>
+          <input className={input} value={period} onChange={(e) => set('period', e.target.value)} placeholder="YYYY-Qn" aria-label="Period" />
+          <div className="sm:col-span-3 flex flex-wrap items-center gap-3">
+            <button type="submit" disabled={busy} className="rounded-lg bg-axal-violet px-3 py-1.5 text-[12px] font-bold text-white hover:bg-violet-800 disabled:opacity-50 dark:hover:bg-violet-700">
+              {busy ? 'Drawing…' : 'Draw draft'}
+            </button>
+          </div>
+          {msg && (
+            <p role="status" className={`sm:col-span-3 text-[11.5px] ${msg.err ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300'}`}>
+              {msg.text}
+            </p>
+          )}
+        </form>
+      )}
+    </div>
+  );
+}
+
+/**
+ * HQ-entered half of a statement: issue, record paid or disputed, void.
+ */
+export function StatementActions({ statement, onUpdate }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [paid, setPaid] = useState({ amount: '', note: '' });
+  const [dispute, setDispute] = useState({ amount: '', note: '' });
+  const [voidNote, setVoidNote] = useState('');
+  const canPayInFull = statementAllowsPaidInFull(statement);
+  if (!statement?.uid) return null;
+
+  const patch = async (body) => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try {
+      await onUpdate(statement.uid, body);
+      setMsg({ err: false, text: 'Saved.' });
+      setPaid({ amount: '', note: '' });
+      setDispute({ amount: '', note: '' });
+    } catch (err) {
+      setMsg({ err: true, text: err?.data?.message || err?.message || 'The update was not saved.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitPaid = (e) => {
+    e.preventDefault();
+    const p = statementPaidPayload({ amountText: paid.amount, note: paid.note, owedCents: statement.owed_cents });
+    if (p.error) { setMsg({ err: true, text: p.error }); return; }
+    patch(p.body);
+  };
+
+  const submitDispute = (e) => {
+    e.preventDefault();
+    const p = statementDisputePayload({ amountText: dispute.amount, note: dispute.note });
+    if (p.error) { setMsg({ err: true, text: p.error }); return; }
+    patch(p.body);
+  };
+
+  const submitVoid = (e) => {
+    e.preventDefault();
+    const p = statementVoidPayload({ note: voidNote });
+    if (p.error) { setMsg({ err: true, text: p.error }); return; }
+    patch(p.body);
+  };
+
+  const input = 'w-full rounded-lg border border-axal-hairline bg-axal-ground px-2 py-1 text-[11.5px]';
+  const btn = 'rounded-md border border-axal-hairline px-2 py-1 text-[11px] font-bold disabled:opacity-50';
+  const isDraft = statement.status === 'draft';
+  const isVoid = statement.status === 'void';
+
+  return (
+    <div className="mt-2 border-t border-axal-hairline/60 pt-2" data-testid={`hq-statement-actions-${statement.uid}`}>
+      <div className="flex flex-wrap gap-2">
+        {isDraft && (
+          <button type="button" disabled={busy} className={`${btn} bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200`}
+            onClick={() => patch({ status: 'issued' })}>
+            Issue to subsidiary
+          </button>
+        )}
+        {!isVoid && (
+          <>
+            {statement.status === 'paid' ? null : (
+              canPayInFull ? (
+                <button type="button" disabled={busy} className={btn}
+                  onClick={() => patch({ status: 'paid', paid_cents: statement.owed_cents, paid_note: paid.note || 'Marked paid in full' })}>
+                  Mark paid in full
+                </button>
+              ) : (
+                <span className="text-[10.5px] text-amber-800 dark:text-amber-200" data-testid="hq-statement-no-paid-in-full">
+                  Paid in full is unavailable while the owed figure is a floor.
+                </span>
+              )
+            )}
+          </>
+        )}
+      </div>
+      {!isVoid && (
+        <form onSubmit={submitVoid} className="mt-2 space-y-1">
+          <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Void statement</div>
+          <input className={input} required minLength={10} placeholder="Why this claim is withdrawn — required" value={voidNote} onChange={(e) => setVoidNote(e.target.value)} aria-label="Void reason" />
+          <button type="submit" disabled={busy} className={`${btn} border-red-300 text-red-800 dark:border-red-500/40 dark:text-red-300`}>Void</button>
+        </form>
+      )}
+      {!isVoid && (
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          <form onSubmit={submitPaid} className="space-y-1">
+            <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Record payment</div>
+            <input className={input} type="number" step="0.01" min="0" placeholder="Amount received" value={paid.amount} onChange={(e) => setPaid((x) => ({ ...x, amount: e.target.value }))} aria-label="Paid amount" />
+            <input className={input} placeholder="Reference or note" value={paid.note} onChange={(e) => setPaid((x) => ({ ...x, note: e.target.value }))} aria-label="Paid note" />
+            <button type="submit" disabled={busy} className={`${btn} bg-emerald-700 text-white hover:bg-emerald-800 dark:hover:bg-emerald-600`}>Save payment</button>
+          </form>
+          <form onSubmit={submitDispute} className="space-y-1">
+            <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Record dispute</div>
+            <input className={input} type="number" step="0.01" min="0" placeholder="Disputed amount" value={dispute.amount} onChange={(e) => setDispute((x) => ({ ...x, amount: e.target.value }))} aria-label="Disputed amount" />
+            <input className={input} required placeholder="Why — required" value={dispute.note} onChange={(e) => setDispute((x) => ({ ...x, note: e.target.value }))} aria-label="Dispute reason" />
+            <button type="submit" disabled={busy} className={`${btn} border-red-300 text-red-800 dark:border-red-500/40 dark:text-red-300`}>Save dispute</button>
+          </form>
+        </div>
+      )}
+      {msg && (
+        <p role="status" className={`mt-1 text-[11px] ${msg.err ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300'}`}>{msg.text}</p>
+      )}
+    </div>
+  );
+}
+
 export function ceilingPayload({ licenceUid, period, amount, currency }) {
   if (!licenceUid) return { error: 'Choose the licence this ceiling is for.' };
-  if (!/^\d{4}-Q[1-4]$/.test(String(period || ''))) return { error: 'The period is a quarter, written YYYY-Qn.' };
+  if (!STATEMENT_PERIOD_RE.test(String(period || ''))) return { error: 'The period is a quarter, written YYYY-Qn.' };
   const text = String(amount ?? '').trim();
   if (text === '') return { error: 'Enter the ceiling. 0 is a ceiling: no promotions this period.' };
   const n = Number(text);
@@ -473,6 +727,16 @@ export default function RevenuePage() {
     loadCeilings();
     return r;
   }, [loadCeilings]);
+  const drawStatement = useCallback(async (licenceUid, period) => {
+    const r = await api.statementDraw(licenceUid, period);
+    loadStatements();
+    return r;
+  }, [loadStatements]);
+  const updateStatement = useCallback(async (uid, body) => {
+    const r = await api.statementUpdate(uid, body);
+    loadStatements();
+    return r;
+  }, [loadStatements]);
   useEffect(() => {
     load(); loadDisputes(); loadStatements(); loadCeilings(); loadRefunds(); loadLicences();
   }, [load, loadDisputes, loadStatements, loadCeilings, loadRefunds, loadLicences]);
@@ -481,6 +745,7 @@ export default function RevenuePage() {
   const fees = ready ? data.licence_fees : null;
   const token = ready ? data.token_cost : null;
   const promos = ready ? data.promos : null;
+  const usageCoverage = ready ? data.usage_coverage : null;
   const openDisputes = disputes && disputes !== UNAVAILABLE
     ? (disputes.disputes || []).filter((d) => d.status !== 'won' && d.status !== 'lost').length
     : null;
@@ -519,7 +784,8 @@ export default function RevenuePage() {
         ['Subscription revenue', 'No local charge ledger; Stripe is read per customer.'],
         ['Token margin', 'The cost of a call is recorded, the price charged for it is not.'],
         ['LTV', NOT_RECORDED_H21.ltv],
-        ['Token P&L per subsidiary', 'No account names its licence yet (U1).'],
+        ['Revenue per subsidiary', 'Branches report quarters to HQ; every stream today arrives unmeasured (D266), so no amount is totalled.'],
+        ['Token P&L per subsidiary', 'Spend is not tied to a licence (U1) and almost no model call carries branch metadata (D261).'],
         // Statements and ceilings came OFF this list in D111, because they
         // acquired a store. What is left absent is the issued figure, and
         // D266 found the old reason promised a report nothing sends.
@@ -631,9 +897,48 @@ export default function RevenuePage() {
             )}
           </Zone>
 
+          <Zone
+            title="Revenue per subsidiary"
+            sub={usageCoverage?.available ? `${usageCoverage.period} · report status, not totals` : 'what HQ recorded from branch reports'}
+          >
+            {!usageCoverage ? (
+              <p className="text-[12px] text-axal-faint">Loading usage coverage…</p>
+            ) : !usageCoverage.available ? (
+              <Unreadable what="Subsidiary usage reports" claim="This is not a claim that no branch reported." onRetry={load} />
+            ) : (
+              <>
+                <p className="mb-3 text-[11.5px] leading-relaxed text-axal-muted">
+                  {usageCoverage.revenue_reason}
+                </p>
+                <div className="overflow-x-auto" data-testid="hq-revenue-usage-coverage">
+                  <table className="w-full text-left text-[12px]">
+                    <thead>
+                      <tr className="border-b border-axal-hairline text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">
+                        <th className="py-1.5 pr-3">Licence</th>
+                        <th className="py-1.5 pr-3">Report</th>
+                        <th className="py-1.5">Figure</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {usageCoverage.by_licence.map((row) => (
+                        <tr key={row.licence_uid} className="border-b border-axal-hairline/60">
+                          <td className="py-2 pr-3 font-medium">{row.brand_name || row.licence_ref}</td>
+                          <td className="py-2 pr-3 text-axal-muted">{usageCoverageLabel(row, usageCoverage.period)}</td>
+                          <td className="py-2 text-axal-muted">
+                            <Unrecorded reason={revenueAbsenceForLicence(usageCoverage, row.licence_uid)} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </Zone>
+
           <div className="grid gap-4 md:grid-cols-2">
             <Zone title="Token P&L by subsidiary" sub="what it cost against what it billed">
-              <Absent reason={ready ? data.derived_metrics_reason : 'The revenue summary could not be read.'} />
+              <Absent reason={ready ? data.token_pl_per_subsidiary_reason : 'The revenue summary could not be read.'} />
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <Stat
                   label="Token cost, platform-wide"
@@ -645,13 +950,19 @@ export default function RevenuePage() {
             </Zone>
 
             <Zone title="Statements and Stripe" sub="what is owed, and what is stuck">
+              <StatementDrawEditor
+                licences={licences}
+                currentPeriod={ledger?.current_period || (statements && statements !== UNAVAILABLE ? statements.current_period : '')}
+                onDraw={drawStatement}
+              />
               {ledger && ledger.items.length > 0 && (
                 <div className="space-y-2" data-testid="hq-revenue-statements">
                   {ledger.items.map((s) => (
                     <div
                       key={s.uid}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-axal-hairline bg-axal-ground p-2.5"
+                      className="rounded-xl border border-axal-hairline bg-axal-ground p-2.5"
                     >
+                      <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <div className="truncate text-[12px] font-bold">
                           {s.brand_name || s.licence_ref || s.licence_uid}
@@ -689,18 +1000,18 @@ export default function RevenuePage() {
                         )}
                       </div>
                       <span className={STATEMENT_PILL[s.status] || STATEMENT_PILL.draft}>{s.status}</span>
+                      </div>
+                      <StatementActions statement={s} onUpdate={updateStatement} />
                     </div>
                   ))}
                 </div>
               )}
               {ledger && ledger.items.length === 0 && (
                 <p className="text-[12.5px] leading-relaxed text-axal-muted" data-testid="hq-revenue-statements-empty">
-                  {/* D266 — THIS USED TO SAY "draw one", and no control on this
-                      page draws a statement: `api.statementDraw` has no caller.
-                      The route exists; the control is filed, not built here. */}
                   No statement has been drawn for {ledger.current_period}. The store exists and is empty,
-                  which is not the same as a figure nobody can produce — but this page offers no control to
-                  draw one yet, and every stream a branch reports today arrives unmeasured.
+                  which is not the same as a figure nobody can produce — use Draw draft above once a licence
+                  carries a revenue share. Every stream a branch reports today still arrives unmeasured until
+                  gross exists locally.
                 </p>
               )}
               {ledger && Object.keys(ledger.totals_by_currency).length > 0 && (

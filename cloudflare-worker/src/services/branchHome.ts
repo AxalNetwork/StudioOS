@@ -77,6 +77,8 @@ export type BranchHome = {
     /** Always null, and the reason says why rather than the page guessing. */
     amount_cents: null;
     reason: string;
+    /** Set only when the licence copy could not be read. A missing row is not this. */
+    available?: false;
   };
   sla_bands: { due_soon_hours: number; past_hours: number };
   /** The Studio card's expiring agreements (#308, D199). */
@@ -130,7 +132,21 @@ export function openWeekAt(nowMs: number): {
   return { cycle, week: null, unlockMs: null, deadlineMs: null };
 }
 
-async function programmeClock(env: Env, nowMs: number): Promise<ProgrammeClock> {
+/** Said once, so the digest and the studio glance cannot word a closed month differently. */
+export const PROGRAMME_NO_WEEK_REASON =
+  'No cohort week is open right now. The four windows run from the 1st of the month in '
+  + `${COHORT_TZ}, so the days after the fourth deadline belong to no week.`;
+
+/**
+ * The platform clock, with no database read.
+ *
+ * The week windows are the same on every deployment. The count of accounts
+ * still pending the open week is a read of this database, and `programmeClock`
+ * is the one that takes it. HQ takes that read too (D447): the cohort rows are
+ * this database's, and U1 does not apply to them. A closed month never takes
+ * the read, and `pending_accounts` stays null with `PROGRAMME_NO_WEEK_REASON`.
+ */
+export function programmeBounds(nowMs: number): ProgrammeClock {
   const { cycle, week, unlockMs, deadlineMs } = openWeekAt(nowMs);
   const base: ProgrammeClock = {
     zone: COHORT_TZ,
@@ -141,14 +157,15 @@ async function programmeClock(env: Env, nowMs: number): Promise<ProgrammeClock> 
     hours_to_close: deadlineMs === null ? null : Math.round(((deadlineMs - nowMs) / 3_600_000) * 10) / 10,
     pending_accounts: null,
   };
-  if (week === null) {
-    return {
-      ...base,
-      reason:
-        'No cohort week is open right now. The four windows run from the 1st of the month in '
-        + `${COHORT_TZ}, so the days after the fourth deadline belong to no week.`,
-    };
-  }
+  if (week === null) return { ...base, reason: PROGRAMME_NO_WEEK_REASON };
+  return base;
+}
+
+export async function programmeClock(env: Env, nowMs: number): Promise<ProgrammeClock> {
+  const base = programmeBounds(nowMs);
+  if (base.open_week === null) return base;
+  const { cycle } = base;
+  const week = base.open_week;
   try {
     // THE JOIN HERE IS THE PREDICATE, NOT A PROJECTION, which is the
     // distinction D130 was written about. `cohort_cycles` is how a (year,
@@ -161,7 +178,18 @@ async function programmeClock(env: Env, nowMs: number): Promise<ProgrammeClock> 
          JOIN cohort_cycles c ON c.id = s.cohort_cycle_id
         WHERE c.year = ? AND c.month = ? AND s.week_number = ? AND s.status = 'pending'`,
     ).bind(cycle.year, cycle.month, week).first<{ n: number }>();
-    return { ...base, pending_accounts: Number(row?.n) || 0 };
+    const n = row?.n;
+    const count = n === null || n === undefined ? null : Number(n);
+    if (count === null || !Number.isFinite(count)) {
+      return {
+        ...base,
+        pending_accounts: null,
+        reason:
+          'The cohort week status could not be read on this database, so the number of accounts still '
+          + 'pending this week is unknown rather than zero.',
+      };
+    }
+    return { ...base, pending_accounts: count };
   } catch {
     return {
       ...base,
@@ -180,26 +208,48 @@ async function programmeClock(env: Env, nowMs: number): Promise<ProgrammeClock> 
  * is a COST rather than revenue. Multiplying a real rate by a missing base is
  * how a page invents a number that looks audited.
  */
+export const SHARE_AMOUNT_REASON =
+  'The share is a licence term and it is shown: the part of this territory\'s revenue owed to '
+  + 'HQ, with the rest kept here. The amount it applies to is not totalled on a '
+  + 'branch: subscription charges live in Stripe with no amount in this database, a subsidiary '
+  + 'charges no onward licence fee, and the AI figure is a cost rather than revenue. HQ enters '
+  + 'the gross on the statement, so the statement is where a euro figure exists.';
+
+export const SHARE_NOT_PUSHED_REASON =
+  'HQ has not pushed this branch its licence yet, so the share rate is not on this copy and is not shown as zero.';
+
+export const SHARE_UNREADABLE_REASON =
+  'The licence copy could not be read, so the share rate on it is unknown. That is not a claim that no rate was pushed.';
+
 async function revenueShare(env: Env): Promise<BranchHome['revenue']> {
-  const reason =
-    'The share is a licence term and it is shown: the part of this territory\'s revenue owed to '
-    + 'HQ, with the rest kept here. The amount it applies to is not totalled on a '
-    + 'branch: subscription charges live in Stripe with no amount in this database, a subsidiary '
-    + 'charges no onward licence fee, and the AI figure is a cost rather than revenue. HQ enters '
-    + 'the gross on the statement, so the statement is where a euro figure exists.';
   try {
     const row = await env.DB.prepare(
       'SELECT revenue_share_bps, pushed_at FROM branch_licence WHERE id = 1',
     ).first<{ revenue_share_bps: number | null; pushed_at: string | null }>();
-    const bps = row?.revenue_share_bps;
+    if (!row) {
+      return {
+        share_bps: null,
+        as_of: null,
+        amount_cents: null,
+        reason: SHARE_NOT_PUSHED_REASON,
+      };
+    }
+    const bps = row.revenue_share_bps;
     return {
       share_bps: bps === null || bps === undefined ? null : Number(bps),
-      as_of: row?.pushed_at ?? null,
+      as_of: row.pushed_at ?? null,
       amount_cents: null,
-      reason,
+      reason: SHARE_AMOUNT_REASON,
     };
-  } catch {
-    return { share_bps: null, as_of: null, amount_cents: null, reason };
+  } catch (e) {
+    console.error('[branch-home] revenue share', (e as Error).message);
+    return {
+      share_bps: null,
+      as_of: null,
+      amount_cents: null,
+      available: false,
+      reason: SHARE_UNREADABLE_REASON,
+    };
   }
 }
 
@@ -260,7 +310,7 @@ async function countEnding(env: Env, sql: string, nowIso: string): Promise<numbe
   }
 }
 
-async function agreementsExpiring(env: Env, now: number): Promise<AgreementsExpiring> {
+export async function agreementsExpiring(env: Env, now: number): Promise<AgreementsExpiring> {
   const nowIso = new Date(now).toISOString();
   const [ndas, deals] = await Promise.all([
     countEnding(env,
@@ -301,7 +351,11 @@ async function agreementsExpiring(env: Env, now: number): Promise<AgreementsExpi
   };
 }
 
-export async function branchHome(env: Env, now = Date.now()): Promise<BranchHome> {
+export async function branchHome(
+  env: Env,
+  now = Date.now(),
+  opts?: { includeRevenue?: boolean },
+): Promise<BranchHome> {
   const lanes = await laneCounts(env);
   const queue_pressure: QueuePressureLane[] = lanes.map((l) => {
     const age = l.count === null ? null : ageHours(l.oldest_at, now);
@@ -317,8 +371,18 @@ export async function branchHome(env: Env, now = Date.now()): Promise<BranchHome
   });
   queue_pressure.sort(byPressure);
 
+  const includeRevenue = opts?.includeRevenue !== false;
   const [programme, revenue, agreements] = await Promise.all([
-    programmeClock(env, now), revenueShare(env), agreementsExpiring(env, now),
+    programmeClock(env, now),
+    includeRevenue
+      ? revenueShare(env)
+      : Promise.resolve({
+        share_bps: null,
+        as_of: null,
+        amount_cents: null as null,
+        reason: 'The share rate is read from the licence copy on this call, not a second time here.',
+      }),
+    agreementsExpiring(env, now),
   ]);
 
   return {

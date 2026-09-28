@@ -21,6 +21,51 @@
       "file": "frontend/src/components/advisor/AdvisorProgressWidget.jsx",
       "text": "Book an advisor meeting",
       "why": "A HUMAN advisor. This is the milestone for booking office hours with a person on the advisor track, not the model describing itself."
+    },
+    {
+      "file": "frontend/src/pages/founder/FounderStudioHome.jsx",
+      "text": "No advisory bookings recorded.",
+      "why": "A booking with a human advisor: the Office hours card lists the founder's sessions from /mentee-bookings. Not the model (D322)."
+    },
+    {
+      "file": "frontend/src/pages/founder/FounderStudioHome.jsx",
+      "text": "Advisory booking",
+      "why": "A booking with a human advisor: the Office hours card lists the founder's sessions from /mentee-bookings. Not the model (D322)."
+    },
+    {
+      "file": "frontend/src/pages/advisor/AdvisorStudioHome.jsx",
+      "text": "Advisor data is withheld in role preview.",
+      "why": "The advisor Studio home is a human advisor's own page; this names that persona's practice data, not the model (D322)."
+    },
+    {
+      "file": "frontend/src/pages/advisor/AdvisorStudioHome.jsx",
+      "text": "Your advisor profile is not available yet.",
+      "why": "The advisor Studio home is a human advisor's own page; this names that persona's public profile, not the model (D322)."
+    },
+    {
+      "file": "frontend/src/pages/advisor/AdvisorStudioHome.jsx",
+      "text": "Publish an advisor profile to manage slots.",
+      "why": "The advisor Studio home is a human advisor's own page; this names that persona's public profile and booking slots, not the model (D322)."
+    },
+    {
+      "file": "frontend/src/pages/advisor/AdvisorStudioHome.jsx",
+      "text": "Advisor session",
+      "why": "The advisor Studio home is a human advisor's own page; this names that persona's sessions with founders, not the model (D322)."
+    },
+    {
+      "file": "frontend/src/pages/advisor/AdvisorStudioHome.jsx",
+      "text": "Advisor earnings are not recorded in the local development service.",
+      "why": "The advisor Studio home is a human advisor's own page; this names that persona's earnings, not the model (D322)."
+    },
+    {
+      "file": "frontend/src/pages/advisor/AdvisorStudioHome.jsx",
+      "text": "Advisor role preview. Practice data and actions are withheld.",
+      "why": "The advisor Studio home is a human advisor's own page; this names that persona's role, as an admin previews it, not the model (D322)."
+    },
+    {
+      "file": "frontend/src/pages/advisor/AdvisorStudioHome.jsx",
+      "text": "Advisor interview is unavailable in role preview.",
+      "why": "Names whose interview it is: the human advisor persona's own Eadwyn interview, shown to an admin previewing that role (D322)."
     }
   ]
 }

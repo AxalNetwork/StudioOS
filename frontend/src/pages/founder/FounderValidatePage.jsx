@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, NavLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, NavLink, useLocation, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowUpRight, ChevronRight, FileText, Layers3, MessageSquare, Quote, Target } from 'lucide-react';
 import { api } from '../../lib/api';
 import { Unreadable, WorkerRail } from '../../ui';
-import DiscoveryPage from '../DiscoveryPage';
+import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
+import useAiSpend from '../../hooks/useAiSpend';
 import { zonePillClass } from './deskZoneNav';
 import FillProposals from '../../workspaces/FillProposals';
 import useAssistMode from '../../hooks/useAssistMode';
@@ -76,7 +77,6 @@ const SECTIONS = [
 
 export default function FounderValidatePage() {
   const location = useLocation();
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigationSeed = location.state?.founderValidateSeed;
   const [projects, setProjects] = useState(() => navigationSeed?.projects || []);
@@ -94,17 +94,15 @@ export default function FounderValidatePage() {
   // turned fills on once does not have to turn it on again here — and one who
   // has not is offered nothing that spends their budget.
   const [fillsOn] = useAssistMode('Validate');
-  const workspaceFromUrl = searchParams.get('mode') === 'workspace'
-    || ['leads', 'interviews', 'insights'].includes(searchParams.get('tab'));
-  const [showWorkspace, setShowWorkspace] = useState(workspaceFromUrl);
-  const isWorkspace = showWorkspace;
-
+  // The founder's own average for each band's task, quoted before they press
+  // run (D424). Read only while the mode is on: with it off no band is drawn,
+  // and a read nobody will see is a read nobody should pay for.
+  const ai = useAiSpend({ enabled: fillsOn && Boolean(projectId) });
+  // THE DESK NO LONGER EMBEDS THE EDITOR (D422). `?mode=workspace` and
+  // Discovery's `?tab=` used to swap this page for DiscoveryPage; the
+  // `/build/discovery` route mounts DiscoveryPage itself for those now, and
+  // sends every other founder visit here, to `/validate`.
   useEffect(() => {
-    if (workspaceFromUrl) setShowWorkspace(true);
-  }, [workspaceFromUrl]);
-
-  useEffect(() => {
-    if (isWorkspace) return;
     let alive = true;
     api.listProjects().then((list) => {
       if (!alive) return;
@@ -125,10 +123,10 @@ export default function FounderValidatePage() {
       setState('error');
     });
     return () => { alive = false; };
-  }, [isWorkspace, reloadKey]);
+  }, [reloadKey]);
 
   useEffect(() => {
-    if (!projectId || isWorkspace) return;
+    if (!projectId) return;
     let alive = true;
     setState('loading');
     setSearchParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(projectId)); return next; }, { replace: true });
@@ -150,7 +148,7 @@ export default function FounderValidatePage() {
       setState('error');
     });
     return () => { alive = false; };
-  }, [projectId, isWorkspace, reloadKey]);
+  }, [projectId, reloadKey]);
 
   const evidence = useMemo(() => {
     const hypotheses = liveClaims(board);
@@ -164,31 +162,6 @@ export default function FounderValidatePage() {
     return { hypotheses, pains: pains.sort((a, b) => b.count - a.count), maxPain, boardUnreadable: board === null };
   }, [board, painView]);
 
-  if (isWorkspace) {
-    return (
-      <div className="validate-workspace-shell">
-        <button
-          type="button"
-          className="validate-back"
-          onClick={() => {
-            setShowWorkspace(false);
-            navigate(`/build/discovery${projectId ? `?project_id=${projectId}` : ''}`, { replace: true });
-          }}
-        >
-          Back to evidence desk
-        </button>
-        <DiscoveryPage
-          initialProjects={projects}
-          initialProjectId={projectId}
-          initialInterviews={interviews}
-          initialSignals={signals}
-          initialPainView={painView}
-          initialTab="interviews"
-          workspaceMode
-        />
-      </div>
-    );
-  }
   const query = projectId ? `?project_id=${projectId}` : '';
   /**
    * EVERY LINK ON THIS PAGE GOES TO THE STAGE IT SUMMARISES.
@@ -242,13 +215,20 @@ export default function FounderValidatePage() {
             </nav>
           </header>
           {state === 'error' && <div className="validate-error" data-testid="status-validate-error"><AlertCircle size={16} /> {error} <button data-testid="button-retry-validate" onClick={() => setReloadKey((value) => value + 1)}>Retry</button></div>}
-          <EvidenceCards loading={state === 'loading'} projects={projects} projectId={projectId} fillsOn={fillsOn} onApplied={() => setReloadKey((value) => value + 1)} featured={featured} interviews={interviews} evidence={evidence} signals={signals} dateFormat={dateFormat} stageLinks={stageLinks} workspaceNavigationState={workspaceNavigationState} bar={board?.bar} />
+          <EvidenceCards loading={state === 'loading'} projects={projects} projectId={projectId} fillsOn={fillsOn} ai={ai} fillsRecorded={board?.fills_recorded !== false} onApplied={() => setReloadKey((value) => value + 1)} featured={featured} interviews={interviews} evidence={evidence} signals={signals} dateFormat={dateFormat} stageLinks={stageLinks} workspaceNavigationState={workspaceNavigationState} bar={board?.bar} />
         </div>
         <WorkerRail
           workspace="Validate"
           className="validate-rail"
           stance="Evidence-led view"
-          note="This desk does not generate, transcribe, or change records. It keeps the evidence surface readable."
+          // THE SWITCH, ON THE DESK (D424). The two bands below have been
+          // gated on this workspace's mode since they were mounted, and the
+          // only switch for it was on the zone pages. `fills` draws it here
+          // too, and the sentence under it is this desk's: what turning it on
+          // does on Validate. The one this replaced said the desk generated
+          // nothing, beside two bands that draft.
+          fills
+          note={ASSIST_SURFACES.workspace.desks.Validate.fills}
           coverage={[
             `${interviews.length} interview${interviews.length === 1 ? '' : 's'}`,
             evidence.boardUnreadable ? 'Hypothesis board unreadable' : `${evidence.hypotheses.length} claim${evidence.hypotheses.length === 1 ? '' : 's'} on the hypothesis board`,
@@ -262,7 +242,7 @@ export default function FounderValidatePage() {
   );
 }
 
-function EvidenceCards({ loading, projects, projectId, fillsOn, onApplied, featured, interviews, evidence, signals, dateFormat, stageLinks, workspaceNavigationState, bar }) {
+function EvidenceCards({ loading, projects, projectId, fillsOn, ai, fillsRecorded, onApplied, featured, interviews, evidence, signals, dateFormat, stageLinks, workspaceNavigationState, bar }) {
   const cards = evidence.hypotheses.slice(0, 6);
   const retry = onApplied;
   return <div className="validate-sections">
@@ -274,7 +254,7 @@ function EvidenceCards({ loading, projects, projectId, fillsOn, onApplied, featu
           mounts (`FounderValidateWorkspace`), so a tag accepted here is the
           same alias write as one accepted there. Off until the founder turns
           the Validate mode on — every run spends their own budget. */}
-      <FillProposals key="overview-pain-tags" projectId={projectId} kind="pain_tag" enabled={fillsOn} onApplied={onApplied} />
+      <FillProposals key="overview-pain-tags" projectId={projectId} kind="pain_tag" enabled={fillsOn} onApplied={onApplied} ai={ai} />
       {!loading && interviews.length > 0 && <div className="interview-table"><div className="table-head"><span>Person</span><span>Role</span><span>Date</span><span>Quotes</span></div>{interviews.slice(0, 6).map((item) => <div className="table-row" key={item.id}><strong>{clean(item.interviewee_name) || 'Unnamed'}</strong><span>{clean(item.interviewee_role) || 'Not recorded'}</span><span>{dateFormat(item.interview_date)}</span><span>{quoteCount(item)}{quoteCount(item) > 0 && !quotable(item) ? <em className="not-quotable" title={item.quote_consent === false ? 'Consent was declined, so nothing here can be quoted.' : 'Nobody has asked for consent yet, so nothing here can be quoted.'}> · not quotable</em> : null}</span></div>)}</div>}
       <div className="evidence-ops" data-testid="ops-interviews">
         <Link data-testid="op-record-now" to={`${stageLinks.interviews}${stageLinks.interviews.includes('?') ? '&' : '?'}new=record`} state={workspaceNavigationState}>+ Record now</Link>
@@ -284,8 +264,9 @@ function EvidenceCards({ loading, projects, projectId, fillsOn, onApplied, featu
       <Link data-testid="link-manage-interviews" className="manage-link" to={stageLinks.interviews} state={workspaceNavigationState}>Manage interviews and source notes <ChevronRight size={14} /></Link>
     </section>
     <section className="evidence-card" id="validate-1"><SectionHead icon={Layers3} title="Pain map" meta={painLabel(evidence.pains.length)} sub="Edit any grouping on the pain map" />{loading ? <Skeleton rows={3} /> : evidence.pains.length ? <div className="pain-map">{evidence.pains.slice(0, 8).map((pain) => <div className="pain-row" key={pain.name}><strong>{pain.name}</strong><div><i style={{ width: `${Math.max(7, pain.count / evidence.maxPain * 100)}%` }} /></div><span>{pain.count} recorded</span></div>)}</div> : <Empty icon={Layers3} text="No pains have been logged or curated yet." action="Pain counts appear only after a recorded pain is grouped." link={stageLinks.pains} linkState={workspaceNavigationState} label="Open the pain map" />}<Link data-testid="link-open-pain-map" className="manage-link" to={stageLinks.pains}>Open the pain map <ChevronRight size={14} /></Link></section>
-    <section className="evidence-card" id="validate-2"><SectionHead icon={Target} title="Hypotheses" meta={evidence.boardUnreadable ? 'Board unreadable' : `${evidence.hypotheses.length} claim${evidence.hypotheses.length === 1 ? '' : 's'} on the board`} sub="Each carries its evidence" />{loading ? <Skeleton rows={2} /> : evidence.boardUnreadable ? <Unreadable what="The hypothesis board" claim="This is not a sign that no claim is recorded." onRetry={retry} /> : cards.length ? <div className="hypothesis-grid">{cards.map((item) => <article className={`hypothesis hypothesis-${item.verdict || 'withheld'}`} key={item.id} data-testid={`card-desk-hypothesis-${item.id}`}><span>{verdictLabel(item)}</span><strong>{item.claim}</strong><small>{claimEvidence(item, bar)}</small></article>)}</div> : <Empty icon={Target} text="No hypotheses have been stored yet." action="Create and assess them on the hypotheses page." link={stageLinks.hypotheses} linkState={workspaceNavigationState} label="Open hypotheses" />}
-      {/* THE ARTBOARD'S `Proposal · Advisor` BAND — "Three interviews mention
+    <section className="evidence-card" id="validate-2"><SectionHead icon={Target} title="Hypotheses" meta={evidence.boardUnreadable ? 'Board unreadable' : `${evidence.hypotheses.length} claim${evidence.hypotheses.length === 1 ? '' : 's'} on the board`} sub="Each carries its evidence" />{loading ? <Skeleton rows={2} /> : evidence.boardUnreadable ? <Unreadable what="The hypothesis board" claim="This is not a sign that no claim is recorded." onRetry={retry} /> : cards.length ? <div className="hypothesis-grid">{cards.map((item) => <article className={`hypothesis hypothesis-${item.verdict || 'withheld'}`} key={item.id} data-testid={`card-desk-hypothesis-${item.id}`}><span>{verdictLabel(item)}</span><strong>{item.claim}</strong><small>{claimEvidence(item, bar)}</small><FilledMark filled={item.filled} id={item.id} /></article>)}</div> : <Empty icon={Target} text="No hypotheses have been stored yet." action="Create and assess them on the hypotheses page." link={stageLinks.hypotheses} linkState={workspaceNavigationState} label="Open hypotheses" />}
+      {!loading && !evidence.boardUnreadable && !fillsRecorded ? <div data-testid="status-desk-fills-unreadable"><Unreadable what="Which claims Eadwyn supplied" claim="No mark here is not a claim that you wrote every one." onRetry={retry} /></div> : null}
+      {/* THE ARTBOARD'S PROPOSAL BAND — "Three interviews mention
           procurement blocking a trial, which no hypothesis covers yet", and a
           drafted card under it. This is the SAME component the hypotheses page
           mounts, with the same `hypothesis` kind: one drafter, so a claim
@@ -293,10 +274,25 @@ function EvidenceCards({ loading, projects, projectId, fillsOn, onApplied, featu
           copy about what accepting means cannot drift between two surfaces.
           Gated on the same per-workspace mode, which is OFF until a founder
           turns it on — every run spends their own budget. */}
-      <FillProposals key="overview-hypotheses" projectId={projectId} kind="hypothesis" enabled={fillsOn} onApplied={onApplied} />
+      <FillProposals key="overview-hypotheses" projectId={projectId} kind="hypothesis" enabled={fillsOn} onApplied={onApplied} ai={ai} />
       <Link data-testid="link-open-hypotheses" className="manage-link" to={stageLinks.hypotheses}>Open hypotheses <ChevronRight size={14} /></Link></section>
     <section className="evidence-card" id="validate-3"><SectionHead icon={FileText} title="Validation summary" meta="Living verdict · rewrites as evidence lands" /><Verdict evidence={evidence} interviews={interviews} signals={signals} link={stageLinks.hypotheses} onRetry={retry} /><Link data-testid="link-open-verdict" className="manage-link" to={stageLinks.verdict}>Open the verdict <ChevronRight size={14} /></Link></section>
   </div>;
+}
+/**
+ * EADWYN'S MARK ON A CLAIM IT SUPPLIED (D424) — the canvas's provenance mark on
+ * accepted records, on the one board where accepted proposals land.
+ *
+ * `filled` comes from the board route, which reads `fill_provenance` and keeps
+ * a mark only while the claim still holds the text Eadwyn wrote: a founder who
+ * rewrote it owns it. `edited` means they corrected the proposal before
+ * accepting it, which is a different fact from either an unaided draft or an
+ * unaided claim, so it is said. Which model wrote it is what the proposal band
+ * showed at the time, and it travels here with the row.
+ */
+function FilledMark({ filled, id }) {
+  if (!filled) return null;
+  return <em className="mt-1 inline-flex w-fit items-center gap-1 rounded-axal-pill border border-axal-lavender-edge bg-axal-lavender px-2 py-0.5 text-[10px] font-bold not-italic text-axal-violet-deep dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300" data-testid={`mark-desk-hypothesis-filled-${id}`}>{filled.edited ? 'Proposed by Eadwyn · you edited it' : 'Proposed by Eadwyn'}{filled.model ? ` · ${filled.model.split('/').pop()}` : ''}</em>;
 }
 /**
  * The artboard's `zh` row: a title, a count, and the line that says what the

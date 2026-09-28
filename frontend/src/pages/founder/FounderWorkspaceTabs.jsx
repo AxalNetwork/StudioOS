@@ -13,7 +13,7 @@ import { hasTier } from '../../sidebarConfig';
  * WHY A WRAPPER AND NOT AN EDIT — the same reason it was one for Partner.
  * `PitchWorkspacePage`, `CapitalWorkspacePage` and `LegalEnginePage` each
  * render a tab bar, but only across their OWN sub-routes; nothing links Pitch
- * to Capital to Legal. `ExecutionPage`, `TeamBuildingPage`, `DiscoveryPage`,
+ * to Capital to Legal. `ExecutionPage`, `FounderTeamPage`, `DiscoveryPage`,
  * `FounderMarketplacePage` and the rest have no bar at all and take no
  * `embedded` prop. Wrapping at the route is additive: no page changes, and
  * reverting is deleting one element from App.jsx.

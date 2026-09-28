@@ -60,7 +60,7 @@ test('exactly one Symbol("unavailable") across the Studio files, and every file 
 
 test('the overview renders Unreadable, not the not-recorded sentences, for every failed read', () => {
   const html = render(createElement(AdminStudioOverview, {
-    user: USER, home: UNAVAILABLE, licence: UNAVAILABLE, templates: UNAVAILABLE, insights: UNAVAILABLE,
+    user: USER, glance: null, home: UNAVAILABLE, licence: UNAVAILABLE, templates: UNAVAILABLE, insights: UNAVAILABLE,
   }));
   for (const what of ['Seats', 'The queues', 'The programme clock', 'The template library', 'Agreements',
     'The share rate', 'The benchmark copy']) {
@@ -189,7 +189,7 @@ test('the order is computed: unreadable, past the window, due soon or AMBER_AT, 
 });
 
 test('the rendered strip is in computed order, and each tile shows its card\'s own figure', () => {
-  const props = { user: USER, home: HOME, licence: LICENCE, templates: TEMPLATES, insights: { benchmarks: [] } };
+  const props = { user: USER, glance: null, home: HOME, licence: LICENCE, templates: TEMPLATES, insights: { benchmarks: [] } };
   const html = render(createElement(StudioNeedsDecisionView, props));
   const at = (k) => html.indexOf(`data-testid="studio-decide-${k}"`);
   assert.ok(at('approvals') < at('seats') && at('seats') < at('programme') && at('programme') < at('contracts'),
@@ -211,18 +211,18 @@ test('the rendered strip is in computed order, and each tile shows its card\'s o
 test('a suspended licence keeps every tile readable and says on each that writes are blocked', () => {
   const user = { ...USER, branch: { ...USER.branch, status: 'suspended' } };
   const licence = { licence: { ...LICENCE.licence, status: 'suspended', suspended_at: '2026-09-03T10:00:00Z' } };
-  const html = render(createElement(StudioNeedsDecisionView, { user, home: HOME, licence, templates: TEMPLATES, insights: {} }));
+  const html = render(createElement(StudioNeedsDecisionView, { user, glance: null, home: HOME, licence, templates: TEMPLATES, insights: {} }));
   assert.equal((html.match(/Suspended — writes are blocked/g) || []).length, 4);
   assert.match(html, /Founder 45 of 50/, 'a frozen tile hid its figure');
   assert.match(html, /frozen since 3 Sep/, 'the date is not the licence\'s suspended_at');
   const undated = render(createElement(StudioNeedsDecisionView, {
-    user, home: HOME, licence: { licence: { ...licence.licence, suspended_at: null } }, templates: TEMPLATES, insights: {},
+    user, glance: null, home: HOME, licence: { licence: { ...licence.licence, suspended_at: null } }, templates: TEMPLATES, insights: {},
   }));
   assert.doesNotMatch(undated, /frozen since/, 'a date was invented for a suspension that has none');
 });
 
 test('off a branch the strip says so once, not four empty tiles', () => {
-  const html = render(createElement(StudioNeedsDecisionView, { user: { role: 'admin' }, home: null, licence: null, templates: null, insights: null }));
+  const html = render(createElement(StudioNeedsDecisionView, { user: { role: 'admin' }, glance: null, home: null, licence: null, templates: null, insights: null }));
   assert.match(html, /studio-decide-off-branch/);
   assert.doesNotMatch(html, /studio-decide-(seats|approvals|programme|contracts)/);
 });
@@ -233,7 +233,10 @@ test('neither strip is a form, a currency, a second assistant or a second read',
     assert.ok(!/[€$]\s?\d|\$\{?[0-9]/.test(src.replace(/\$\{[a-zA-Z]/g, '')), `${name} typed a currency`);
     assert.ok(!src.includes('WorkerRail'), `${name} mounts a second assistant`);
   }
-  assert.doesNotMatch(DECIDE, /\bapi\./, 'the needs-a-decision strip makes a read of its own');
+  assert.match(DECIDE, /loadStudioGlance\(/, 'the strip does not read the studio glance');
+  assert.doesNotMatch(DECIDE, /\bapi\./, 'the strip calls the client directly instead of the overview\'s loader');
+  assert.doesNotMatch(DECIDE, /branchHome|myLicence|branchTemplates|branchInsights/,
+    'the strip grew a second read of the branch endpoints');
   assert.match(DECIDE, /studioGlances\(/, 'the strip stopped reading the overview\'s own figures');
   assert.doesNotMatch(DECIDE, /approvalsGlance|contractsGlance|programmeGlance|accountLines\(/,
     'the strip computes a figure with a helper of its own instead of the overview\'s');

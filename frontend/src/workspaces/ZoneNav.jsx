@@ -52,12 +52,24 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
             key={zone.slug}
             to={zonePath(bucket, zone)}
             aria-current={on ? 'page' : undefined}
-            className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            data-testid={`link-zone-${zone.slug}`}
+            // HOVER AND FOCUS (D403). The colours used to be inline `color` /
+            // `background` / `borderColor`, and an inline style beats every
+            // `hover:` class, so an idle pill never answered the pointer. They
+            // are CSS variables now, painted by the classes: an idle pill takes
+            // the role's border and ink on hover, and keyboard focus draws the
+            // role's outline. The current pill is already accented and does not
+            // change on hover. In dark mode an idle pill takes neutral greys (it was
+            // painted white there, since no dark skin reads an inline style); the
+            // current pill keeps its accent tint.
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] transition-colors text-[color:var(--zn-ink)] bg-[var(--zn-bg)] border-[color:var(--zn-line)] hover:text-[color:var(--zn-hover-ink)] hover:border-[color:var(--zn-hover-line)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:text-[color:var(--zn-hover-ink)] focus-visible:border-[color:var(--zn-hover-line)]${on ? '' : ' dark:bg-transparent dark:text-gray-300 dark:border-gray-700 dark:hover:text-gray-100 dark:hover:border-gray-500'}`}
             style={{
               fontWeight: on ? 700 : 600,
-              color: on ? accent.deep : '#615c6e',
-              background: on ? accent.tint : '#fff',
-              borderColor: on ? accent.border : '#ececf1',
+              '--zn-ink': on ? accent.deep : '#615c6e',
+              '--zn-bg': on ? accent.tint : '#fff',
+              '--zn-line': on ? accent.border : '#ececf1',
+              '--zn-hover-ink': accent.deep,
+              '--zn-hover-line': on ? accent.border : accent.ink,
               outlineColor: accent.ink,
             }}
           >

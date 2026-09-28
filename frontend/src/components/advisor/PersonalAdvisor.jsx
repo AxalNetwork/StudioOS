@@ -129,7 +129,7 @@ function useVisualViewportStyle() {
 //   onAvailabilityChange(available: bool) — fired when we learn whether
 //     /api/advisor exists in this environment, so a host page can swap in
 //     a fallback surface instead of the card silently rendering null.
-export default function PersonalAdvisor({ disablePersistedFullscreen = false, onAvailabilityChange } = {}) {
+export default function PersonalAdvisor({ disablePersistedFullscreen = false, onAvailabilityChange, initialTicketOpen = false } = {}) {
   const { user } = useAuth();
   const persisted = useMemo(() => safeReadJSON(STORAGE_KEY, {}) || {}, []);
   // viewMode: 'normal' (embedded card) | 'fullscreen' (viewport takeover).
@@ -158,7 +158,9 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
   // Task #9 — inline "Open a ticket" affordance. When open, a small
   // ticket form renders under the advisor header; filing posts via the
   // existing api.createTicket and the advisor confirms inline.
-  const [ticketOpen, setTicketOpen] = useState(false);
+  // D324 — a Studio home's collapsed interview row reopens the chat with
+  // the ticket form already open when its "Open a ticket" is pressed.
+  const [ticketOpen, setTicketOpen] = useState(initialTicketOpen);
 
   // Task #2 (AR) — server-driven per-page / per-section progress
   // and Spin-Out week banner state. Refreshed after every answer
@@ -1107,7 +1109,7 @@ const Transcript = React.forwardRef(function Transcript({ messages, tutor, onClo
       {messages.length === 0 && !loadError && (
         <div className="text-xs text-gray-500 dark:text-gray-400 text-center py-6">
           <MessageSquare size={20} className="mx-auto mb-2 text-gray-400" />
-          Your advisor will guide you through a quick setup. Type your answer below — or ask "explain X" any time.
+          Eadwyn will guide you through a quick setup. Type your answer below — or ask "explain X" any time.
         </div>
       )}
       {messages.map((m, i) => <Bubble key={i} m={m} onCtaClick={onCtaClick} />)}

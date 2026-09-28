@@ -59,12 +59,12 @@ function payload(over = {}) {
     tickets: {
       available: true, complete: true, open: 10,
       buckets: {
-        hq_held: { count: 2, oldest_age_hours: 18, items: [
-          { id: 1, title: 'Data export request', status: 'open', age_hours: 18, requester: 'D. Raghunathan', licence: null },
-          { id: 2, title: 'Cannot reach billing', status: 'in_progress', age_hours: 3, requester: 'Investor B', licence: null },
+        hq_held: { count: 2, oldest_age_hours: 18, bands: { ok: 2, due_soon: 0, past: 0 }, items: [
+          { id: 1, title: 'Data export request', status: 'open', priority: 'medium', age_hours: 18, sla_band: 'ok', requester: 'D. Raghunathan', licence: null },
+          { id: 2, title: 'Cannot reach billing', status: 'in_progress', priority: 'low', age_hours: 3, sla_band: 'ok', requester: 'Investor B', licence: null },
         ] },
-        admin_product: { count: 4, oldest_age_hours: 44, items: [
-          { id: 4, title: 'Approvals filter loses state', status: 'open', age_hours: 44, requester: 'K. Weber', licence: { uid: 'lic_fr', licence_ref: 'AXL-001', brand_name: 'Axal VC France' } },
+        admin_product: { count: 4, oldest_age_hours: 44, bands: { ok: 0, due_soon: 1, past: 0 }, items: [
+          { id: 4, title: 'Approvals filter loses state', status: 'open', priority: 'medium', age_hours: 44, sla_band: 'due_soon', requester: 'K. Weber', licence: { uid: 'lic_fr', licence_ref: 'AXL-001', brand_name: 'Axal VC France' } },
         ] },
         hq_staff: { count: 1, oldest_age_hours: 1, items: [{ id: 7, title: 'Staff test ticket', status: 'open', age_hours: 1, requester: 'HQ Staff', licence: null }] },
         account_closed: { count: 1, oldest_age_hours: 70, items: [{ id: 8, title: 'Closed admin asking', status: 'open', age_hours: 70, requester: 'Closed Admin', licence: null }] },
@@ -152,12 +152,12 @@ test('an escalation keeps its band: due within 24h is not folded into open', () 
   assert.match(html, /bg-amber-100[^"]*"[^>]*title="due within 24h"/);
 });
 
-test('a ticket has no SLA, so its age renders without a band, and it opens the ticket', () => {
+test('a ticket inherits a band from priority and age, and opens the ticket', () => {
   const props = ticketCardProps(payload(), false, 'admin_product');
   const html = render(QueueCard, props);
   assert.match(html, /href="\/help\/tickets\/4"/);
-  assert.match(html, /title="Tickets carry no due date, so their age has no band\."/);
-  assert.doesNotMatch(html, /bg-(?:red|amber|emerald)-/, 'a ticket age borrowed a band nobody set');
+  assert.match(html, /title="due within 24h"/);
+  assert.match(html, /bg-amber-100[^"]*"[^>]*>44h</);
   assert.match(text(html), /K\. Weber · AXL-001 · open/);
 });
 
@@ -175,7 +175,7 @@ test('a queue has four states, and none of them is a zero it did not count', () 
   assert.doesNotMatch(t, /Nothing is waiting/, 'an unreadable queue said nothing is waiting');
 
   const empty = payload();
-  empty.tickets.buckets.hq_held = { count: 0, oldest_age_hours: null, items: [] };
+  empty.tickets.buckets.hq_held = { count: 0, oldest_age_hours: null, bands: { ok: 0, due_soon: 0, past: 0 }, items: [] };
   assert.match(text(render(QueueCard, ticketCardProps(empty, false, 'hq_held'))), /Nothing is waiting\./);
 });
 

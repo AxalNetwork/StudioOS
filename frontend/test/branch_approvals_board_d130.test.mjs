@@ -8,9 +8,10 @@
  *   1. THE NOTICE OUTLIVING ITS FACT, which is the class D129 was written
  *      about. `BranchZonePending` promised *"the read model that makes them
  *      one board"* as PR 13's work. PR 13 is this, so the promise must be gone
- *      — and what replaces it in the rail's `unavailable` list must be the
- *      NARROWER true thing (assignment, history, the AI note) rather than
- *      nothing at all. Narrowing rather than deleting is the D111 pattern.
+ *      — and what stays in the rail's `unavailable` list must be the narrower
+ *      true thing. D470 records a reviewer beside the board; the AI note and
+ *      the unsigned-off reply thread stay named. The sentence that said
+ *      assignment needed a store that does not exist must not come back.
  *   2. THE BOARD DECIDING. It reads four stores it does not own. An Approve
  *      button here would be a fifth writer restating four sets of rules, and
  *      restating a rule is how the copies drift. The payload says
@@ -97,6 +98,9 @@ test('the board exists, and the promise it fulfilled is gone', () => {
   // things that genuinely still have no store.
   assert.match(PAGE, /Assignment and history/, 'the rail stopped naming what is still missing');
   assert.match(PAGE, /AI-drafted decision note/, 'the AI note refusal is gone');
+  // D470 — the side record exists. The old sentence said the gap was a missing
+  // store. That sentence is now false, and it must not come back.
+  assert.doesNotMatch(PAGE, /need a store that does not exist/);
 });
 
 test('the board reads; it does not decide', () => {
@@ -181,8 +185,27 @@ test('one list of sources, read by both the board and the backlog count', () => 
   // The two traps the shared list exists to hold, pinned by name.
   assert.match(SOURCES, /cohort_applicants/, 'the cohort table is the applicant row, not spinout_applications');
   assert.doesNotMatch(SOURCES, /FROM spinout_applications/, 'the wrong cohort table came back');
-  assert.match(SOURCES, /under_review/, "a moderation case awaiting a decision is 'under_review'");
-  assert.match(SOURCES, /m\.resolved_at IS NULL/, 'a closed case whose status stayed under_review is still counted');
+  // D448. The referral lane still says under_review, so a match on SOURCES
+  // alone no longer proves the moderation lane. The lane concatenates one
+  // shared predicate, and that predicate still keeps a closed under_review
+  // row out of the count.
+  const moderationLane = SOURCES.slice(
+    SOURCES.indexOf("key: 'moderation'"),
+    SOURCES.indexOf("key: 'kyc'"),
+  );
+  assert.ok(moderationLane.includes("key: 'moderation'"), 'the moderation lane left the shared list');
+  const awaitingUses = moderationLane.match(/\+ MODERATION_AWAITING_SQL/g) || [];
+  assert.equal(
+    awaitingUses.length,
+    2,
+    'the moderation count and its rows both concatenate the shared open predicate',
+  );
+  const OPEN = raw('cloudflare-worker/src/services/moderationOpen.ts');
+  assert.match(
+    OPEN,
+    /status = 'under_review' AND resolved_at IS NULL/,
+    'a closed case whose status stayed under_review stays out of the lane',
+  );
   assert.match(SOURCES, /!== 'draft'/, 'a draft referral is not reviewer backlog');
 });
 
@@ -213,23 +236,15 @@ test('the artboard still draws what this page claims to be', () => {
   const s3 = CANVAS.slice(at, end).replaceAll('&amp;', '&');
   assert.match(s3, /five columns/i, 'S3 no longer describes a five-column board');
   assert.match(s3, /oldest/i, 'S3 no longer orders by age, which is the board\'s whole claim');
-  // The canvas draws assignment and the AI note; the page refuses both with a
-  // reason. If the canvas ever stops drawing them, the refusals are stale.
+  // The canvas draws assignment and the AI note. D470 records a reviewer; it
+  // does not decide the item, and the AI note stays refused. If the canvas
+  // stops drawing either, that record is stale.
   assert.match(s3, /assign to reviewer/i, 'the assignment refusal may be stale');
   assert.match(s3, /decision note/i, 'the AI-note refusal may be stale');
 
-  // TWO THINGS D195's EXPORT ADDED, AND THE PAGE IS NEITHER OF THEM YET.
-  // Asserted here so the divergence is on the record and fails if the canvas
-  // quietly reverts — which is the only way this file can tell the difference
-  // between "the design moved on" and "somebody edited the export".
-  //
-  //   1 · Which five columns is now decided by AGE rather than being a fixed
-  //       order, so the board always shows the lanes that are hurting. The
-  //       shipped board's columns are fixed.
-  //   2 · The board is the SECOND view. The primary view — every lane
-  //       reachable, one age-sorted list — is S16, which does not exist as a
-  //       page. That is why this test is named for what the page CLAIMS to be
-  //       rather than for what the artboard is.
+  // TWO THINGS D195's EXPORT ADDED. D470 built the second view: five columns
+  // chosen by age, and the age-sorted list stays the primary view (S16).
+  // These stay on the canvas so a quiet revert of the export still fails.
   assert.match(s3, /decided by age/i,
     'S3 stopped saying its five columns are chosen by age — the board is a fixed order again');
   assert.match(s3, /primary view/i,

@@ -16,9 +16,10 @@
  * investor workspaces all solving the same problem four ways.
  *
  * THE ARCHETYPES are the canvases' own taxonomy and they are load-bearing, not
- * decoration: a zone's archetype says what kind of surface it is, and the six
- * badge colours are identical across all eighteen canvas files. They are
- * carried here so a page cannot drift from the canvas that specifies it.
+ * decoration: a zone's archetype says what kind of surface it is. The badge
+ * colours follow the per-bucket canvases; the two Detail Layer canvases draw
+ * a different palette (Canvas I and II disagree with each other too), and the
+ * tests pin this one, so do not repaint from the Detail Layer files (D400).
  *
  * WHAT IS DELIBERATELY ABSENT. Spin-Out Lab keeps its own route tree and is
  * referenced only as a sidebar row target — no Lab route is defined, renamed
@@ -31,7 +32,7 @@
  * to exactly one shell.
  */
 
-// The six archetypes, with the badge palette every canvas file uses verbatim:
+// The six archetypes, with the per-bucket canvases' badge palette:
 // [background, ink, border]. Do not re-derive these per surface.
 export const ARCHETYPE = {
   WORK_BOARD:   { label: 'WORK BOARD',   colors: ['#eff6ff', '#1d4ed8', '#dbeafe'] },
@@ -270,7 +271,10 @@ export const SHELLS = {
       // `/funds/accounting` were both live and rendered different components.
       //
       // The zones are the fund OVERVIEW; `/funds/*` already holds the
-      // operations tool (FundOpsWorkspace and its six tabs) and keeps it. The
+      // operations tool (FundOpsWorkspace and its tabs) and keeps it — less
+      // its Capital Calls tab, which D371 retired: `/funds/capital-calls` now
+      // redirects to the `calls` zone, so that zone's `legacy` is a route
+      // App.jsx really does send here, as `legacyRedirects` reports. The
       // two are not rivals — InvestorFundAccounting says so itself: "IF3 does
       // not reconcile, close periods, export a journal… Open the existing Fund
       // Ops accounting workspace for authorized operations." So `accounting`
@@ -369,16 +373,19 @@ export const SHELLS = {
           { slug: 'leads', label: 'Leads', archetype: A.MATCH_ENGINE, legacy: '/needs' },
           { slug: 'proposals', label: 'Proposals', archetype: A.COLLECTION, legacy: '/partner/operations/engagements' },
           { slug: 'negotiations', label: 'Negotiations', archetype: A.WORK_BOARD },
-          { slug: 'retainers', label: 'Retainers', archetype: A.LEDGER, legacy: '/partner/operations/portfolio' },
+          { slug: 'retainers', label: 'Retainers', archetype: A.LEDGER },
           { slug: 'analytics', label: 'Analytics', archetype: A.ANALYTICS, legacy: '/partner/insights' },
         ] },
       { kind: 'bucket', label: 'Delivery', prefix: '/delivery', tagline: 'Ship the work',
         zones: [
-          { slug: 'board', label: 'Board', archetype: A.WORK_BOARD, legacy: '/partner/operations/overview' },
+          // D395 — `legacy` here matches App.jsx's redirects for the retired
+          // /partner/operations/*: overview went to /company-settings (the
+          // firm profile card, no zone), portfolio to Health.
+          { slug: 'board', label: 'Board', archetype: A.WORK_BOARD },
           { slug: 'deliverables', label: 'Deliverables', archetype: A.COLLECTION },
           { slug: 'capacity', label: 'Capacity', archetype: A.ANALYTICS },
           { slug: 'status-reports', label: 'Status reports', archetype: A.FEED },
-          { slug: 'health', label: 'Health', archetype: A.WORK_BOARD, legacy: '/partner/operations/performance' },
+          { slug: 'health', label: 'Health', archetype: A.WORK_BOARD, legacy: '/partner/operations/portfolio' },
         ] },
       { kind: 'bucket', label: 'Offers', prefix: '/offers', tagline: 'Package what we sell',
         zones: [

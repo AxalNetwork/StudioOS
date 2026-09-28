@@ -50,9 +50,10 @@ test('archetypeIllustration maps known slugs to male and female paths', () => {
 
 test('studio compact archetype does not use the 300px two-column grid', () => {
   assert.doesNotMatch(fitCode, /md:grid-cols-\[300px/);
-  assert.match(fitCode, /<ArchetypeCard state=\{results\} fitState=\{fit\} audience=\{audience\} compact \/>/);
+  // D325 — the card also takes onRetry; the pin is that /studio mounts the compact card.
+  assert.match(fitCode, /<ArchetypeCard state=\{results\} fitState=\{fit\} audience=\{audience\} compact\b/);
   assert.match(fitCode, /max-w-\[180px\]/);
-  assert.match(fitCode, /<ArchetypeArt slug=\{latest\.slug\} sex=\{sex\} compact \/>/);
+  assert.match(fitCode, /<ArchetypeArt slug=\{latest\.slug\} sex=\{sex\} compact\b/);
 });
 
 test('full archetype holds the pair in a 280px column, not 300px', () => {
@@ -61,7 +62,8 @@ test('full archetype holds the pair in a 280px column, not 300px', () => {
 });
 
 test('the studio card renders the matching sex sprite, or the pair when unknown', () => {
-  assert.match(fitCode, /function ArchetypeArt\(\{ slug, sex, compact = false \}\)/);
+  // D325 — ArchetypeArt also takes the archetype's name, for the sprites' alt text.
+  assert.match(fitCode, /function ArchetypeArt\(\{ slug, sex, compact = false\b/);
   assert.match(fitCode, /if \(sex === 'm' \|\| sex === 'f'\)/);
   assert.match(fitCode, /variant="f"/);
   assert.match(fitCode, /variant="m"/);
@@ -121,4 +123,32 @@ test('compact scored card is one hit target to the full archetype page', () => {
     'compact /studio stays on pixel sprites — cinematic banners belong on the full page');
   assert.doesNotMatch(fitCode, /md:grid-cols-\[300px/,
     'compact must not reintroduce the overflowing two-column grid');
+});
+
+// The compact /studio card reads the short summary and the full card the
+// paragraph. Rendered, not grepped: the condition that picks between them
+// names `meta?.summary` even when the body prints the description, so a
+// source match could not tell the two apart.
+test('the compact card prints the summary; the full card prints the description', async () => {
+  const { createElement } = await import('react');
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { MemoryRouter } = await import('react-router-dom');
+  const { ArchetypeCard } = await import('../src/components/profile/ProfileFitSection.jsx');
+  const { ARCHETYPES } = await import('../src/lib/assessmentMeta.js');
+  const { renderedText } = await import('./_renderedText.mjs');
+  const slug = Object.keys(ARCHETYPES).find((k) => ARCHETYPES[k].summary && ARCHETYPES[k].description
+    && !ARCHETYPES[k].description.includes(ARCHETYPES[k].summary));
+  assert.ok(slug, 'an archetype whose summary is not part of its description');
+  const { summary, description } = ARCHETYPES[slug];
+  const draw = (compact) => renderedText(renderToStaticMarkup(createElement(MemoryRouter, null,
+    createElement(ArchetypeCard, {
+      state: { data: { results: [] }, error: null },
+      fitState: { data: { archetype: { slug, label: ARCHETYPES[slug].label, confidence: 0.8 } } },
+      compact,
+    }))));
+  const compactText = draw(true);
+  const fullText = draw(false);
+  assert.ok(compactText.includes(summary), 'compact card shows the summary');
+  assert.ok(!compactText.includes(description), 'compact card does not print the full paragraph');
+  assert.ok(fullText.includes(description), 'full card shows the description');
 });

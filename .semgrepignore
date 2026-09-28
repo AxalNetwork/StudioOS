@@ -31,3 +31,16 @@
 # never bundled or served. It holds the .dc.html pages without a copy of the
 # bundle, which is why the parity guard had to learn the extension.
 /design/incoming/
+
+# Legacy GitHub Pages output at the repo root (documentation/audits/
+# MIGRATION_LFS_AUDIT.md: "Legacy GH Pages output; rotates each build").
+# Nothing builds, bundles or serves it — the Worker's assets are docs/, and
+# wrangler's "/assets/*" is a URL path, not this directory. Its four minified
+# bundles cost twelve rule TIMEOUTS per run, the bulk of what the tool status
+# page reported as errors.
+/assets/
+
+# A Jekyll template left from the GitHub Pages site (`{% for post in
+# site.posts %}` under a front-matter block). It is not JSON, so every JSON
+# rule reported a syntax error on it.
+/search.json

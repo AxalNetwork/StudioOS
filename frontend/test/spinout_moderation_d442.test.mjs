@@ -19,13 +19,15 @@ test('the list method, the route, and the page agree', () => {
   assert.match(APP, /path="\/admin\/spinout-moderation"/);
   assert.match(APP, /<SpinoutModerationPage \/>/);
   assert.match(ROUTE, /app\.get\('\/'/);
-  assert.match(ROUTE, /resolved_at IS NULL/);
+  assert.match(ROUTE, /MODERATION_AWAITING_SQL/);
+  assert.match(raw('cloudflare-worker/src/services/moderationOpen.ts'), /status = 'under_review' AND resolved_at IS NULL/);
+  assert.match(raw('cloudflare-worker/src/services/approvalSources.ts'), /MODERATION_AWAITING_SQL/);
   const effect = PAGE.slice(PAGE.indexOf('useEffect(() => { load(); }'), PAGE.indexOf('const openMember'));
   assert.match(effect, /load\(\)/);
   assert.doesNotMatch(effect, /adminSpinoutModerate/);
   assert.match(PAGE, /api\.adminSpinoutModerationOpen\(\)/);
   assert.match(PAGE, /api\.adminSpinoutModerate\(picked/);
-  assert.match(PAGE, /if \(busy \|\| !picked\) return/);
+  assert.match(PAGE, /if \(busy \|\| !picked \|\| !action\) return/);
 });
 
 test('a failed read is unreadable and an empty read says the list was read', () => {

@@ -60,7 +60,11 @@ const FounderValidateWorkspace = lazy(() => import('./workspaces/founder/Founder
 const ResearchWorkspace = lazy(() => import('./workspaces/ResearchWorkspace'));
 const FundDossier = lazy(() => import('./pages/research/FundDossier'));
 const CompanyCandidate = lazy(() => import('./pages/research/CompanyCandidate'));
+const CompanyAnalysis = lazy(() => import('./pages/research/CompanyAnalysis'));
+const BenchmarkDetail = lazy(() => import('./pages/research/BenchmarkDetail'));
 const MarketReading = lazy(() => import('./pages/research/MarketReading'));
+const DiligenceRoom = lazy(() => import('./pages/research/DiligenceRoom'));
+const DiligenceFile = lazy(() => import('./pages/research/DiligenceFile'));
 const InvestorDealsRoutes = lazy(() => import('./workspaces/investor/InvestorDealsRoutes'));
 const AdvisorBucketRoutes = lazy(() => import('./workspaces/advisor/AdvisorBucketRoutes'));
 const PartnerBucketRoutes = lazy(() => import('./workspaces/partner/PartnerBucketRoutes'));
@@ -238,12 +242,14 @@ const JobEditorPage = lazy(() => import('./pages/jobs/JobEditorPage'));
 const JobManagePage = lazy(() => import('./pages/jobs/JobManagePage'));
 const MyApplicationsPage = lazy(() => import('./pages/jobs/MyApplicationsPage'));
 const CofounderPage = lazy(() => import('./pages/CofounderPage'));
-// Team Building — founder workspace consolidating Advisor, Co-Founder
-// and Jobs into one tabbed page at /build/team.
-const TeamBuildingPage = lazy(() => import('./pages/TeamBuildingPage'));
-// Task #20 — /skills and /values are consolidated into the advisor flow.
-// The underlying SkillsProfilePage/ValuesAssessmentPage files are kept intact on
-// disk (data stores), but their routes now redirect to /studio.
+// Team (D435) — the founder's roster, advisors, hiring and coverage at
+// /build/team?mode=workspace. It replaced TeamBuildingPage, whose Advisor /
+// Co-Founder / Jobs tabs were the discovery surfaces; those open inside the
+// Advisors and Hiring tabs here, so the founder redirects below still land.
+const FounderTeamPage = lazy(() => import('./pages/founder/FounderTeamPage'));
+// Task #20 — /skills and /values are consolidated into the advisor flow, and
+// their routes redirect to /studio, where the profile band draws both. The two
+// pages were imported by nothing and were deleted in D323.
 const AdminBestFitPage = lazy(() => import('./pages/admin/AdminBestFitPage'));
 const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage'));
 const RiskMatrixPage = lazy(() => import('./pages/RiskMatrixPage'));
@@ -373,7 +379,6 @@ const EmailChangeRevokePage = lazy(() => import('./pages/EmailChangeRevokePage')
 const AdvisorAdvisoryWorkspace = lazy(() => import('./pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
 // Partner Operations shell — tabbed workspace (Overview, Capabilities, Portfolio,
 // Engagements, Performance).
-const PartnerOperationsWorkspace = lazy(() => import('./pages/partner/operations/PartnerOperationsWorkspace'));
 // Authenticated-shell widgets — lazy so they leave the entry chunk. They only
 // ever render inside ProtectedLayout (logged-in users), so a logged-out visitor
 // hitting the landing page never downloads them. Each render site below is
@@ -449,6 +454,17 @@ function DashboardRedirect() {
 function PartnerPortalRedirect() {
   const loc = useLocation();
   return <Navigate to={{ pathname: '/studio', search: loc.search, hash: loc.hash }} replace />;
+}
+
+// D371 — /funds/capital-calls was Fund Ops' Capital Calls tab: a read-only
+// list (the studio-wide ledger for an admin, the caller's own LP calls for an
+// investor). The Calls zone at /funds/calls is the fund's call ledger with
+// writes: numbered calls, each LP's line, receipts and the wire trail, for
+// any fund the caller operates. The tab accepted no query string of its own;
+// whatever a bookmark carries travels anyway.
+function FundCapitalCallsRedirect() {
+  const loc = useLocation();
+  return <Navigate to={{ pathname: '/funds/calls', search: loc.search, hash: loc.hash }} replace />;
 }
 
 // Legacy /refer redirects to the standalone /referrals page, preserving ?tab=.
@@ -2092,6 +2108,20 @@ function AppInner() {
   const signalsHasNonProjectQuery = [...signalsParams.keys()].some((key) => key !== 'project_id');
   const founderResearchLanding = effectiveRole === 'founder'
     && (signalsMode === 'landing' || (!signalsHasNonProjectQuery && signalsMode !== 'workspace'));
+  // D422. THREE FOUNDER MOUNTS THAT WERE A SECOND URL FOR A DESK. Bare
+  // `/execution`, `/build/discovery` and `/signals` rendered, for a founder, the
+  // very desk `/build`, `/validate` and `/research` render — so each desk had
+  // two addresses and the sidebar had to match both. They redirect now, query
+  // string and all. The EDITORS behind them stay: `?mode=workspace` (and
+  // Discovery's `?tab=`, and every Signals deep link) still opens ExecutionPage,
+  // DiscoveryPage and SignalsPage, because no canvas zone yet carries their
+  // writes — creating a task or an objective, editing or deleting an
+  // interview, curating a pain group, the signals feed itself.
+  const founderDiscoveryEditor = effectiveRole === 'founder'
+    && (new URLSearchParams(location.search).get('mode') === 'workspace'
+      || ['leads', 'interviews', 'insights'].includes(new URLSearchParams(location.search).get('tab')));
+  const founderExecutionEditor = effectiveRole === 'founder'
+    && new URLSearchParams(location.search).get('mode') === 'workspace';
 
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-500 dark:text-gray-400">Loading…</div>}>
@@ -2255,9 +2285,25 @@ function AppInner() {
           routes now live inside the Pitch workspace; redirect to the right tab. */}
       <Route path="/build/deck" element={<Navigate to="/raise/pitch" replace />} />
       <Route path="/build/deck-reviewer" element={<Navigate to="/raise/pitch/review" replace />} />
-      <Route path="/build/competitors" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('research', <CompetitorAnalysisPage />))} />
+      {/* D313 — a founder's saved analysis is `/research/companies/:id` now, and the list is
+          `/research/companies`, so for everyone that route admits this redirects there, `?id=`
+          included. Partner and investor are not admitted by it and no canvas-built page does
+          this job for them, so for them the page stays. */}
+      <Route path="/build/competitors" element={guard(['admin', 'founder', 'partner', 'investor'],
+        effectiveRole === 'partner' || effectiveRole === 'investor'
+          ? founderWorkspace('research', <CompetitorAnalysisPage />)
+          : <Navigate
+              to={new URLSearchParams(location.search).get('id')
+                ? `/research/companies/${encodeURIComponent(new URLSearchParams(location.search).get('id'))}`
+                : '/research/companies'}
+              replace
+            />)} />
       <Route path="/build/financials" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('raise', <FinancialsPage />))} />
-      <Route path="/build/discovery" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), effectiveRole === 'founder' ? <FounderValidatePage /> : <DiscoveryPage />)} />
+      <Route path="/build/discovery" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), effectiveRole !== 'founder'
+        ? <DiscoveryPage />
+        : founderDiscoveryEditor
+          ? founderWorkspace('validate', <DiscoveryPage initialTab="interviews" workspaceMode />)
+          : <Navigate to={`/validate${location.search}`} replace />)} />
 
       {/* ── Validate · the four evidence stages ──────────────────────────────
           Interviews and Pain map read the SAME records Discovery writes; the
@@ -2299,12 +2345,16 @@ function AppInner() {
       <Route path="/research/markets" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/markets/:uid" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <MarketReading role={researchRole} />)} />
       <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/companies/:id" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyAnalysis role={researchRole} />)} />
       <Route path="/research/companies/:analysisId/:candidateId" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyCandidate role={researchRole} />)} />
       <Route path="/research/funds" element={guard(labRoles(['admin', 'founder']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/funds/:uid" element={guard(labRoles(['admin', 'founder']), <FundDossier role={researchRole} />)} />
       <Route path="/research/library" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/diligence" element={guard(labRoles(['admin', 'investor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/diligence/:grantUid" element={guard(labRoles(['admin', 'investor']), <DiligenceRoom role={researchRole} />)} />
+      <Route path="/research/diligence/:grantUid/files/:fileUid" element={guard(labRoles(['admin', 'investor']), <DiligenceFile role={researchRole} />)} />
       <Route path="/research/benchmarking" element={guard(labRoles(['admin', 'investor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/benchmarking/:uid" element={guard(labRoles(['admin', 'investor']), <BenchmarkDetail role={researchRole} />)} />
       <Route path="/research/client-prep" element={guard(labRoles(['admin', 'advisor', 'partner']), <ResearchWorkspace role={researchRole} user={user} />)} />
       {/* Legacy Customer Discovery folds into the unified Discovery workspace. */}
       <Route path="/customer-discovery" element={<Navigate to="/build/discovery" replace />} />
@@ -2315,7 +2365,7 @@ function AppInner() {
       {/* Signals — founder decision engine over public-market evidence. Shared
           by Founder + Advisor modes (mode changes ordering + copy only). */}
       <Route path="/signals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], founderResearchLanding
-        ? <FounderResearchDesk />
+        ? <Navigate to={`/research${location.search}`} replace />
         : founderWorkspace('research', <FounderWorkspaceTabs set="research" user={user}><SignalsPage user={user} /></FounderWorkspaceTabs>))} />
       <Route path="/build/captable" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), founderWorkspace('raise', <CapTablePage />))} />
       {/* documentation/architecture/DECISIONS.md D11 — /marketplace was a partner-provider directory with
@@ -2391,9 +2441,7 @@ function AppInner() {
           rather than in a notice standing in for the whole screen. */}
       <Route path="/branch/accounts" element={guard(['admin'], <BranchAccounts user={user} />)} />
       {/* D112 — the outbound HALF of S3 is live: the To-HQ lane and HQ's
-          answers. The four local queues keep their stated notice inside the
-          page, so the row is honest about which half is built rather than
-          waiting for all five. */}
+          answers. The local board is the eleven lanes (D215), on the same page. */}
       {/* Approvals wraps ITSELF in BranchZone, unlike the seven above, and the
           asymmetry is the point: it loads live escalations, so only the page
           knows what its rail can report. A zone with nothing loaded takes the
@@ -2506,7 +2554,9 @@ function AppInner() {
       <Route path="/build" element={founderBuildLanding
         ? guard(['admin', 'founder'], <FounderBuildDesk />)
         : <Navigate to="/build/this-week" replace />} />
-      <Route path="/execution" element={guard(['admin', 'founder'], effectiveRole === 'founder' ? <FounderBuildDesk /> : founderWorkspace('build', <FounderWorkspaceTabs set="build" user={user}><ExecutionPage /></FounderWorkspaceTabs>))} />
+      <Route path="/execution" element={guard(['admin', 'founder'], effectiveRole === 'founder' && !founderExecutionEditor
+        ? <Navigate to={`/build${location.search}`} replace />
+        : founderWorkspace('build', <FounderWorkspaceTabs set="build" user={user}><ExecutionPage /></FounderWorkspaceTabs>))} />
       <Route path="/build/this-week" element={guard(['admin', 'founder'], <FounderBuildThisWeek />)} />
       <Route path="/build/board" element={guard(['admin', 'founder'], <FounderBuildBoard />)} />
       <Route path="/execution/board" element={guard(['admin', 'founder'], founderWorkspace('build', <ExecutionPage />))} />
@@ -2529,10 +2579,12 @@ function AppInner() {
           : <FounderRaiseCapital />)} />
       <Route path="/raise/capital/model" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapitalWorkspacePage />))} />
       <Route path="/raise/capital/cap-table" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapitalWorkspacePage />))} />
-      {/* Founders manage their room; investors see what was shared with them. One route, role-branched inside the page, so there is no second root. */}
+      {/* Founders manage their room here. An investor's rooms are read by grant under Research ·
+          Diligence (D311): the investor branch is a redirect there, so a bookmark still lands, and the
+          guard keeps admitting investor so the redirect can run. */}
       <Route path="/raise/data-room" element={guard(['admin', 'founder', 'investor'],
         effectiveRole === 'investor'
-          ? investorWorkspace('deals', <DataRoomPage user={user} />)
+          ? <Navigate to="/research/diligence" replace />
           : new URLSearchParams(location.search).get('mode') === 'workspace'
             ? founderWorkspace('raise', <FounderWorkspaceTabs set="raise" user={user}><DataRoomPage user={user} /></FounderWorkspaceTabs>)
             : <FounderRaiseDataRoom />)} />
@@ -2670,12 +2722,14 @@ function AppInner() {
         ? <InvestorResearchWorkspace />
         : investorWorkspace('research', <FounderWorkspaceTabs set="research" user={user}><MarketIntelPage /></FounderWorkspaceTabs>))} />
       <Route path="/advisory" element={guard(['admin', 'founder'], <FounderWorkspaceTabs set="validate" user={user}><AdvisoryPage /></FounderWorkspaceTabs>)} />
-      {/* Team Building consolidation (Build › Team). Founders reach Advisor/
-          Advisor, Co-Founder and Jobs through the unified /build/team
-          workspace; the legacy standalone routes stay live for every other
-          role but redirect a founder into the matching tab so old deep links
-          keep resolving. */}
-      <Route path="/build/team" element={guard(['admin', 'founder'], founderGrowLanding ? <FounderGrowDesk /> : founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><TeamBuildingPage /></FounderWorkspaceTabs>))} />
+      {/* Team (Grow › Talent). Founders reach the advisor directory,
+          Co-founder Match and their roles through the Team workspace at
+          /build/team?mode=workspace; the legacy standalone routes stay live
+          for every other role but redirect a founder into the tab that owns
+          that job. The redirects carry `mode=workspace` because a bare
+          /build/team is the Grow desk for a founder (founderGrowLanding), so
+          `?tab=` alone never reached a tab (D435). */}
+      <Route path="/build/team" element={guard(['admin', 'founder'], founderGrowLanding ? <FounderGrowDesk /> : founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><FounderTeamPage /></FounderWorkspaceTabs>))} />
       <Route path="/grow" element={founderGrowLanding
         ? guard(['admin', 'founder'], <FounderGrowDesk />)
         : <Navigate to="/grow/focus" replace />} />
@@ -2689,7 +2743,7 @@ function AppInner() {
       <Route path="/build/command-center" element={guard(labRoles(['admin', 'founder']), <Navigate to="/studio" replace />)} />
       {/* Task #74 — back-compat redirect from the pre-rename /mentors path. */}
       <Route path="/mentors" element={<Navigate to="/advisors" replace />} />
-      <Route path="/advisors" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), user?.role === 'founder' ? <Navigate to="/build/team?tab=advisor" replace /> : <AdvisorsPage />)} />
+      <Route path="/advisors" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), user?.role === 'founder' ? <Navigate to="/build/team?mode=workspace&tab=advisor" replace /> : <AdvisorsPage />)} />
       {/* /office-hours is RETIRED (task #124's freeze lifted; UNRESOLVED_ITEMS
           U4 resolved). It coupled the storefront to booking and was broken at
           both jobs: it read five keys the DTOs never emitted, so every slot
@@ -2710,12 +2764,12 @@ function AppInner() {
       <Route path="/events/new" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventEditorPage />)} />
       <Route path="/events/:id/edit" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventEditorPage />)} />
       <Route path="/events/:id/manage" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventManagePage />)} />
-      <Route path="/my/jobs" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], user?.role === 'founder' ? <Navigate to="/build/team?tab=jobs" replace /> : <MyJobsPage />)} />
+      <Route path="/my/jobs" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], user?.role === 'founder' ? <Navigate to="/build/team?mode=workspace&tab=jobs" replace /> : <MyJobsPage />)} />
       <Route path="/my/applications" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <MyApplicationsPage />)} />
       <Route path="/jobs/new" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <JobEditorPage />)} />
       <Route path="/jobs/:id/edit" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <JobEditorPage />)} />
       <Route path="/jobs/:id/manage" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <JobManagePage />)} />
-      <Route path="/cofounder" element={guard(labRoles(['admin', 'founder']), user?.role === 'founder' ? <Navigate to="/build/team?tab=cofounder" replace /> : <CofounderPage />)} />
+      <Route path="/cofounder" element={guard(labRoles(['admin', 'founder']), user?.role === 'founder' ? <Navigate to="/build/team?mode=workspace&tab=cofounder" replace /> : <CofounderPage />)} />
       {/* Task #20 — Consolidated profile/advisor flow. The advisor conversation
           now builds the skill + values profile; the legacy /skills and /values
           routes redirect here (underlying data stores kept intact). */}
@@ -2747,7 +2801,7 @@ function AppInner() {
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
       <Route path="/liquidity" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('raise', <FounderWorkspaceTabs set="raise" user={user}><LiquidityPage currentUser={user} /></FounderWorkspaceTabs>))} />
       <Route path="/funds" element={guard(['admin', 'investor'], effectiveRole === 'investor' ? <InvestorFundLanding fundUnlocked={hasInvestorTier(user, 'institutional')} /> : <FundOpsWorkspace />)} />
-      <Route path="/funds/capital-calls" element={guard(['admin', 'investor'], investorFundWorkspace(<FundOpsWorkspace />))} />
+      <Route path="/funds/capital-calls" element={<FundCapitalCallsRedirect />} />
       <Route path="/lp-portal" element={guard(['admin', 'investor'], investorWorkspace('axal-vc-fund', <LPPortalPage />))} />
       {/* Spin-Out Fund I LP participation workspace — a Fund Ops tab, so it
           renders inside the same investor shell as the other fund surfaces. */}
@@ -2890,9 +2944,10 @@ function AppInner() {
           bucketForPath is role-scoped, so each licence resolves to its own
           bucket. Check both lists before adding a sixth slug to either.
 
-          The legacy /partner/operations/*, /needs, /services, /perks and
-          /partner/insights routes all stay mounted — retiring that prefix is an
-          open decision, not this migration's to take. */}
+          The legacy /needs, /services, /perks and /partner/insights routes
+          stay mounted. /partner/operations/* retired in D395: each of its
+          addresses is a redirect below, to the canvas-built page that took
+          its job. */}
       <Route path="/pipeline/leads" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
       <Route path="/pipeline/proposals" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
       <Route path="/pipeline/negotiations" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
@@ -2915,12 +2970,23 @@ function AppInner() {
           Investor and founder keep the page they had; partner gets the shell. */}
       <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], effectiveRole === 'partner' ? <PartnerBucketRoutes /> : investorWorkspace('deals', <PipelineWorkspace />))} />
 
-      <Route path="/partner/operations" element={<Navigate to="/partner/operations/overview" replace />} />
-      <Route path="/partner/operations/overview" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
-      <Route path="/partner/operations/capabilities" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
-      <Route path="/partner/operations/portfolio" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
-      <Route path="/partner/operations/engagements" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
-      <Route path="/partner/operations/performance" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
+      {/* D395 — /partner/operations/* RETIRED. Each tab's job has a
+          canvas-built home, and each address lands on it. No guard here: the
+          destination guards itself, so an unentitled visitor is refused there
+          rather than at a URL that no longer has a page (the D118 shape).
+          None of the retired pages read a query string, so none is carried.
+            root, overview → /company-settings (the firm profile card, D390)
+            capabilities   → /offers/catalog (the service catalogue writes)
+            portfolio      → /delivery/health (founder reviews, D390)
+            engagements    → /pipeline/proposals (withdraw; the lifecycle and
+                              invoice ledger are on /delivery/board)
+            performance    → /pipeline/analytics (the same quotesAnalytics read) */}
+      <Route path="/partner/operations" element={<Navigate to="/company-settings" replace />} />
+      <Route path="/partner/operations/overview" element={<Navigate to="/company-settings" replace />} />
+      <Route path="/partner/operations/capabilities" element={<Navigate to="/offers/catalog" replace />} />
+      <Route path="/partner/operations/portfolio" element={<Navigate to="/delivery/health" replace />} />
+      <Route path="/partner/operations/engagements" element={<Navigate to="/pipeline/proposals" replace />} />
+      <Route path="/partner/operations/performance" element={<Navigate to="/pipeline/analytics" replace />} />
       {/* D118/D119 — the three investor Deals sub-paths retire to `/deals/*`,
           which is now their equal: #586 ported the search and the counted
           chips they had and the zones did not. The destination guards itself,

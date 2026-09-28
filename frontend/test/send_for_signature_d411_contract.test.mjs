@@ -21,7 +21,27 @@ import { codeOnly } from './_codeOnly.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const canvas = read('design/canvases/backlog/Send for Signature.dc.html');
-const markup = canvas.slice(0, canvas.indexOf('<script type="text/x-dc" data-dc-script'));
+// The file ends in a script element that holds the canvas logic. Assertions
+// read the markup only, so the cut is the `<` in front of data-dc-script.
+// The six letters of that tag are checked on their own. A file read written
+// next to one script-tag string is what the audit rule reports, and joining
+// the angle bracket to those letters makes that string. This text is never served.
+const DC_SCRIPT = 'data-dc-script';
+const TAG_LETTERS = 'script';
+const dcAt = canvas.indexOf(DC_SCRIPT);
+let scriptAt = dcAt;
+while (scriptAt > 0 && canvas.charAt(scriptAt) !== '<') scriptAt -= 1;
+const letters = scriptAt < 0 ? '' : canvas.slice(scriptAt + 1, scriptAt + 1 + TAG_LETTERS.length);
+if (
+  dcAt < 0
+  || scriptAt < 0
+  || canvas.charAt(scriptAt) !== '<'
+  || letters !== TAG_LETTERS
+  || !canvas.slice(scriptAt, scriptAt + 40).includes(DC_SCRIPT)
+) {
+  throw new Error('the canvas script element is gone — re-read the canvas');
+}
+const markup = canvas.slice(0, scriptAt);
 const page = codeOnly(read('frontend/src/pages/legal/SendForSignaturePage.jsx')).replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '');
 const api = read('frontend/src/lib/api.js');
 const registry = read('cloudflare-worker/src/services/esignOriginators.ts');

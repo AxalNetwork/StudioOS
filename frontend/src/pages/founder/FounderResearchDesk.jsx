@@ -3,6 +3,7 @@ import { AlertCircle, ArrowUpRight, Landmark, Radar, RefreshCw, Search } from 'l
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Unreadable, WorkerRail } from '../../ui';
+import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import { zonePillClass } from './deskZoneNav';
 import './founderResearchDesk.css';
 
@@ -174,7 +175,7 @@ export default function FounderResearchDesk() {
           <section className="a7-card"><SectionHead title="Market deep-dives" meta={pulseLoaded || roundsLoaded
             ? `${data.markets.length + data.rounds.length} stored market records`
             : sourceMeta('pulse', '')} /><p>Market signals and private-round records available for deeper inspection.</p><Link className="a7-link" data-testid="link-open-research-markets" to={`/research/markets${query}`} state={state}>Open markets <ArrowUpRight size={13} /></Link></section>
-          <section className="a7-card" id="a7-companies"><SectionHead title="Company profiles" meta={sourceMeta('companies', `${data.companies.length} returned`)} /><p>{data.companies.length ? 'Company records are available from the company directory.' : companiesLoaded ? 'No company records are available from the approved source.' : 'The company source is temporarily unavailable.'}</p><Link className="a7-link" to="/build/competitors" state={state}>Open competitor analysis <ArrowUpRight size={13} /></Link></section>
+          <section className="a7-card" id="a7-companies"><SectionHead title="Company profiles" meta={sourceMeta('companies', `${data.companies.length} returned`)} /><p>{data.companies.length ? 'Company records are available from the company directory.' : companiesLoaded ? 'No company records are available from the approved source.' : 'The company source is temporarily unavailable.'}</p><Link className="a7-link" to="/research/companies" state={state}>Open competitor analysis <ArrowUpRight size={13} /></Link></section>
           <section className="a7-card" id="a7-library"><SectionHead title="Document library" meta={sourceMeta('library', `${data.library.length} document${data.library.length === 1 ? '' : 's'}`)} /><p data-testid="text-research-library">{libraryLine(records.library, failedKeys.has('library'))}</p><Link className="a7-link" data-testid="link-open-research-library" to={`/research/library${query}`} state={state}>Open library <ArrowUpRight size={13} /></Link></section>
         </div>
       </div>
@@ -182,7 +183,9 @@ export default function FounderResearchDesk() {
         workspace="Research"
         className="a7-rail"
         stance="Read-only source coverage"
-        note="This rail reports coverage for stored records. A question runs only when you press Ask, and is answered from your own library."
+        // No `fills`, and the note says why (D424): Ask is a question pressed
+        // on purpose, not a blank filled, so a switch here would change nothing.
+        note={ASSIST_SURFACES.workspace.desks.Research.none}
         coverage={[
           data.sources.length ? `${data.sources.length} source records` : 'Source list not recorded',
           sourceMeta('pulse', `${data.headlines.length} stored headlines`),

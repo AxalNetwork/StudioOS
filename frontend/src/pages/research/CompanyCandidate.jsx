@@ -484,7 +484,7 @@ export default function CompanyCandidate({ role = 'founder' }) {
                     <span className="ml-2">· {othersNote((analysis?.candidates || []).length)}</span>
                   </p>
                 </div>
-                <Link to="/research/companies" className="text-[12px] font-bold text-violet-700 dark:text-violet-300">
+                <Link to={`/research/companies/${encodeURIComponent(analysisId)}`} className="text-[12px] font-bold text-violet-700 dark:text-violet-300">
                   ‹ Back to analysis
                 </Link>
               </div>
@@ -562,7 +562,7 @@ export default function CompanyCandidate({ role = 'founder' }) {
                     setBusy(true);
                     try {
                       await api.competitors.removeCandidate(analysisId, candidateId);
-                      navigate('/research/companies');
+                      navigate(`/research/companies/${encodeURIComponent(analysisId)}`);
                     } catch (e) {
                       setBusy(false);
                       setRemoving(false);

@@ -39,11 +39,21 @@ test('the two tables were write-only before this change', () => {
     }
   };
   walk(dir);
+  // D435 added one reader on purpose: the founder's Team page reads the
+  // company's option pool through `user_company_links` (a member's import,
+  // and the page says so) rather than duplicating this per-caller endpoint.
+  // It is a SELECT joined through the membership, names only the pools table,
+  // and writes nothing — pinned below so the list can grow only that way.
   assert.deepEqual(
     readers.sort(),
-    ['integrations/providers/carta.ts', 'routes/captable.ts'],
-    'only the Carta importer and this new endpoint should touch these tables',
+    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts'],
+    'only the Carta importer, this endpoint and the D435 company-scoped read should touch these tables',
   );
+  const company = read('cloudflare-worker/src/routes/company.ts');
+  assert.doesNotMatch(company, /cap_table_vesting/, 'the Team page reads pools, not vesting rows');
+  assert.doesNotMatch(company, /(INSERT INTO|UPDATE|DELETE FROM)\s+cap_table_option_pools/, 'a read, never a write');
+  assert.match(company, /FROM cap_table_option_pools o\s*JOIN user_company_links ucl ON ucl\.user_id = o\.user_id\s*WHERE ucl\.company_id = \?/,
+    'the company-scoped read is joined through the membership, so it can only return a member’s import');
 });
 
 test('the endpoint is scoped to the caller', () => {

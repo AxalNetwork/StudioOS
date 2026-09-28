@@ -11,8 +11,9 @@
  * THIS PAGE SHIPPED AS HALF OF ITSELF FIRST, and the notice it carried said
  * so. That notice promised the read model as PR 13's work; D130 IS PR 13, so
  * the promise is gone and what remains in the rail's `unavailable` list is the
- * narrower true thing — assignment, history and the AI decision note, each
- * with the reason it does not exist. Narrowing rather than deleting is the
+ * AI decision note, which still has no per-branch cost. Assignment is a side
+ * record (D470), not a decision on the queue. A reply thread needs the owner's
+ * sign-off and is not drawn. Narrowing rather than deleting is the
  * D111 pattern, and `frontend/test/branch_approvals_board_d130.test.mjs`
  * refuses the retired sentence.
  *
@@ -51,10 +52,12 @@
  * not be read, or holds nothing draws a sentence and no control. What HQ gets
  * is the name, not a link, and each row here shows the name it was raised with.
  */
-import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Send } from 'lucide-react';
 import { api } from '../../lib/api';
+import { hurtingLanes } from '../../lib/approvalBoard';
+import { prefillFromSearch } from '../../lib/escalationPrefill';
 import { reportError } from '../../lib/log';
 import {
   RELATION_CHOICES, relationLead, RELATION_NOT_RECORDED, RELATION_NOT_RECORDED_REASON,
@@ -476,26 +479,131 @@ const LANE_CONSOLE = {
   due_diligence: { to: '/admin/due-diligence', label: 'Due diligence' },
 };
 
-/** The two views that are pure predicates over what the server already sent. */
+/** Predicates over what the server already sent. "Assigned to me" needs the side record. */
 const VIEWS = [
   ['all', 'All queues'],
   ['past', 'Past SLA'],
+  ['mine', 'Assigned to me'],
 ];
 
+const LAYOUTS = [
+  ['list', 'List'],
+  ['lanes', 'Lane board'],
+];
+
+function slaCardClass(sla) {
+  if (sla === 'past') return 'border-red-300 bg-red-50/60 dark:border-red-500/40 dark:bg-red-500/5';
+  if (sla === 'due_soon') return 'border-amber-300 bg-amber-50/60 dark:border-amber-500/40 dark:bg-amber-500/5';
+  return 'border-axal-hairline';
+}
+
+function HistoryPanel({ history, onRetry }) {
+  if (history === null) {
+    return <p className="mt-2 text-[11.5px] text-axal-faint">Reading the assignment history…</p>;
+  }
+  if (history === UNAVAILABLE || history?.available === false) {
+    return (
+      <div className="mt-2">
+        <Unreadable
+          what="Assignment history"
+          claim={history && history !== UNAVAILABLE && history.reason
+            ? history.reason
+            : 'This is not a claim that nothing was recorded.'}
+          onRetry={onRetry}
+        />
+      </div>
+    );
+  }
+  const items = Array.isArray(history.items) ? history.items : [];
+  return (
+    <div className="mt-2 rounded-lg border border-axal-hairline bg-white p-2.5 dark:bg-slate-900" data-testid="branch-board-history">
+      <p className="text-[11px] leading-relaxed text-axal-muted">
+        The console&rsquo;s own actions are not copied here.
+      </p>
+      {items.length === 0 ? (
+        <p className="mt-1 text-[11.5px] text-axal-muted">Nothing has been recorded against this item.</p>
+      ) : (
+        <ul className="mt-1 space-y-1">
+          {items.map((ev, i) => (
+            <li key={`${ev.created_at}:${i}`} className="text-[11.5px] leading-relaxed text-axal-ink dark:text-white">
+              Assigned to {ev.assignee_name} by {ev.actor_name}
+              {ev.created_at ? ` · ${ev.created_at}` : ''}
+            </li>
+          ))}
+        </ul>
+      )}
+      {history.capped && (
+        <p className="mt-1 text-[11px] text-axal-faint">Older events are not in this list.</p>
+      )}
+    </div>
+  );
+}
+
+/** The five lanes that have waited longest. `columns` already chose which. */
+export function LaneColumns({ columns }) {
+  return (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-5" data-testid="branch-lane-board">
+      {columns.map((col) => (
+        <section key={col.key} data-testid={`branch-lane-column-${col.key}`} className="min-w-0">
+          <div className="mb-1.5 flex items-baseline justify-between gap-1">
+            <span className="text-[11px] font-extrabold">{col.label}</span>
+            <span className="text-[10.5px] tabular-nums text-axal-muted">{col.items.length}</span>
+          </div>
+          {col.items.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-axal-hairline px-2 py-3 text-center text-[10.5px] text-axal-faint">
+              Clear
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              {col.items.map((it) => (
+                <article
+                  key={`${it.lane}:${it.id}`}
+                  className={`rounded-lg border p-2 ${slaCardClass(it.sla)}`}
+                  data-sla={it.sla}
+                >
+                  <div className="text-[12px] font-bold">{it.who}</div>
+                  <div className="mt-0.5 text-[10.5px] text-axal-muted">{it.what}</div>
+                  <div className="mt-1 text-[10px] tabular-nums text-axal-faint">
+                    {it.age_hours === null
+                      ? 'age unknown'
+                      : `${Math.round(it.age_hours)}h`}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      ))}
+    </div>
+  );
+}
+
 export default function BranchApprovals({ user }) {
+  const [params] = useSearchParams();
+  // D445 — a door may arrive with the kind and the subject already chosen.
+  // An unknown kind is ignored; chosenKind still drops a kind the licence hides.
+  const prefill = prefillFromSearch(params);
   const [lane, setLane] = useState(null);           // null = loading, UNAVAILABLE = failed
-  const [board, setBoard] = useState(null);         // D130 — the four local queues
+  const [board, setBoard] = useState(null);         // the local lanes (eleven since D215)
   const [view, setView] = useState('all');
   // S16's chip row: null = every lane, else one lane's key.
   const [laneFilter, setLaneFilter] = useState(null);
-  const [kind, setKind] = useState('other');
+  const [kind, setKind] = useState(prefill.kind || 'other');
   const [concern, setConcern] = useState('');       // D208 — the picked item's key, or none
   const [relation, setRelation] = useState('');     // D275 — what the raise is to that item, or none yet
-  const [subject, setSubject] = useState('');
+  const [subject, setSubject] = useState(prefill.subject);
   const [detail, setDetail] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
   const [retryingId, setRetryingId] = useState(null);
+  const [layout, setLayout] = useState('list');
+  const [picked, setPicked] = useState(() => new Set());
+  const [reviewerId, setReviewerId] = useState('');
+  const [assigning, setAssigning] = useState(false);
+  const [assignError, setAssignError] = useState('');
+  const [historyFor, setHistoryFor] = useState(null);
+  const [history, setHistory] = useState(null);
+  const historySeq = useRef(0);
 
   const load = useCallback(() => {
     setLane(null);
@@ -506,12 +614,15 @@ export default function BranchApprovals({ user }) {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  // SEPARATE FROM THE LANE, AND ITS OWN FAILURE. The outbound lane and the four
-  // local queues are different reads against different tables; folding them
+  // SEPARATE FROM THE LANE, AND ITS OWN FAILURE. The outbound lane and the
+  // local lanes are different reads against different tables; folding them
   // into one loader would make either failure blank the other half of a page
   // whose whole argument is that the two halves are different things.
   const loadBoard = useCallback(() => {
     setBoard(null);
+    setPicked(new Set());
+    setHistoryFor(null);
+    setHistory(null);
     api.branchApprovals().then(setBoard, (e) => {
       reportError('BranchApprovals:board', e);
       setBoard(UNAVAILABLE);
@@ -560,13 +671,95 @@ export default function BranchApprovals({ user }) {
 
   const boardReady = board && board !== UNAVAILABLE;
   const boardItems = boardReady ? (board.items || []) : [];
+  const assignmentsReady = boardReady && board.assignments?.available === true;
+  const assignmentClaim = boardReady
+    ? (board.assignments?.reason
+      || 'The assignment record was not on this read. That is not a claim that nobody is assigned.')
+    : '';
   const inLane = laneFilter ? boardItems.filter((it) => it.lane === laneFilter) : boardItems;
-  const shown = view === 'past' ? inLane.filter((it) => it.sla === 'past') : inLane;
+  const viewerId = Number(user?.id);
+  const viewerKnown = Number.isInteger(viewerId) && viewerId > 0;
+  const mineBlocked = view === 'mine' && (!assignmentsReady || !viewerKnown);
+  const shown = mineBlocked
+    ? []
+    : view === 'past'
+      ? inLane.filter((it) => it.sla === 'past')
+      : view === 'mine'
+        ? inLane.filter((it) => it.assignee && it.assignee.user_id === viewerId)
+        : inLane;
+  const laneColumns = boardReady ? hurtingLanes(shown, board.lanes) : [];
   const pastCount = boardItems.filter((it) => it.sla === 'past').length;
+  const mineCount = assignmentsReady
+    ? boardItems.filter((it) => it.assignee && it.assignee.user_id === viewerId).length
+    : null;
+  const reviewers = assignmentsReady ? board.reviewers : null;
+
+  const togglePicked = (it) => {
+    const key = `${it.lane}:${it.id}`;
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const selectPast = () => {
+    const pool = view === 'all' ? inLane : shown;
+    const next = new Set();
+    for (const it of pool) {
+      if (it.sla === 'past') next.add(`${it.lane}:${it.id}`);
+    }
+    setPicked(next);
+  };
+
+  const assignRows = async (rows) => {
+    const id = Number(reviewerId);
+    if (!Number.isInteger(id) || id <= 0 || rows.length === 0 || assigning) return;
+    setAssigning(true);
+    setAssignError('');
+    try {
+      await api.branchApprovalAssign({
+        assignee_user_id: id,
+        items: rows.map((it) => ({ lane: it.lane, item_id: it.id })),
+      });
+      setPicked(new Set());
+      loadBoard();
+    } catch (err) {
+      reportError('branch-approval-assign', err);
+      setAssignError(err?.message || 'The assignment could not be recorded.');
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const openHistory = async (it, force) => {
+    const key = `${it.lane}:${it.id}`;
+    if (!force && historyFor === key) {
+      setHistoryFor(null);
+      setHistory(null);
+      return;
+    }
+    const seq = historySeq.current + 1;
+    historySeq.current = seq;
+    setHistoryFor(key);
+    setHistory(null);
+    try {
+      const body = await api.branchApprovalHistory(it.lane, it.id);
+      if (historySeq.current !== seq) return;
+      setHistory(body);
+    } catch (err) {
+      if (historySeq.current !== seq) return;
+      reportError('branch-approval-history', err);
+      setHistory(UNAVAILABLE);
+    }
+  };
+
+  const pickedRows = boardItems.filter((it) => picked.has(`${it.lane}:${it.id}`));
 
   // WHAT THE RAIL CAN HONESTLY REPORT (D126): what this page loaded. The count
   // of raised escalations and how many still await an answer are both real
-  // reads; the four local queues now contribute their own lines rather than
+  // reads; the local lanes now contribute their own lines rather than
   // nothing, and a failed read still contributes none — `coverageNote` says
   // which. The rail must never read as "nothing raised" or "nothing waiting".
   const coverage = [
@@ -578,7 +771,7 @@ export default function BranchApprovals({ user }) {
       : []),
     ...(boardReady
       ? [
-        `${boardItems.length} open across the four local queues`,
+        `${boardItems.length} open across the eleven lanes`,
         `${pastCount} past the 72-hour SLA`,
       ]
       : []),
@@ -588,7 +781,7 @@ export default function BranchApprovals({ user }) {
     <BranchZone
       workspace="Approvals"
       user={user}
-      stance="Read-only summary of the board and the outbound lane"
+      stance="The board reads. Naming a reviewer does not decide a queue."
       coverage={coverage}
       coverageNote={coverage.length ? undefined
         : (lane === UNAVAILABLE && board === UNAVAILABLE
@@ -599,9 +792,8 @@ export default function BranchApprovals({ user }) {
         // the old line, which promised the read model as future work,
         // became false the moment this shipped. What is still genuinely
         // missing is smaller, and saying the smaller true thing is the point.
-        ['Assignment and history', 'Who a queue item is assigned to, and its history timeline, need a store that does not exist. Nothing records either today, so the board shows neither rather than showing them empty.'],
         ['An AI-drafted decision note', 'The canvas draws one with its cost. There is no per-branch AI cost figure: only Eadwyn’s two gatewayed task classes name the branch to the gateway (D261), and nothing reads the gateway’s logs back as a cost, so a cost line here would be invented.'],
-        ['A reply to HQ', 'An escalation carries one answer with an author and a time. There is no thread, so there is nothing for a reply to be added to.'],
+        ['A reply to HQ', 'The owner has not signed off a thread. There is no thread to reply on: an escalation stays one decision, with an author and a time, and a reply box would write nowhere.'],
       ]}
     >
     <div className="space-y-4" data-testid="branch-approvals-page">
@@ -614,7 +806,7 @@ export default function BranchApprovals({ user }) {
         </h1>
         <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
           What this territory cannot decide for itself goes to HQ, and HQ&rsquo;s decision comes back
-          here. Below it, the four local queues this territory does decide, as one board.
+          here. Below it, the eleven lanes this territory does decide, as one board.
         </p>
       </header>
 
@@ -704,10 +896,23 @@ export default function BranchApprovals({ user }) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-[12px] font-bold">{it.subject}</div>
-                    <div className="mt-0.5 text-[10.5px] text-axal-faint">
-                      {it.kind.replace('_', ' ')} · raised {it.created_at}
-                      {it.sla && SLA_LABEL[it.sla] ? ` · ${SLA_LABEL[it.sla]}` : ''}
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10.5px] text-axal-faint">
+                      <span className={`${PILL} border border-axal-hairline`} data-testid="branch-escalation-kind">
+                        {KIND_LABEL[it.kind] || it.kind}
+                      </span>
+                      <span>
+                        raised {it.created_at}
+                        {it.raised_by_name ? ` · ${it.raised_by_name}` : ''}
+                        {it.sla && SLA_LABEL[it.sla] ? ` · ${SLA_LABEL[it.sla]}` : ''}
+                      </span>
                     </div>
+                    {it.detail
+                      ? <p className="mt-1 text-[12px] leading-relaxed text-axal-muted" data-testid="branch-escalation-detail">{it.detail}</p>
+                      : (
+                        <p className="mt-1 text-[12px]" data-testid="branch-escalation-detail">
+                          <Unrecorded reason="This raise was sent with a subject and no detail.">No detail</Unrecorded>
+                        </p>
+                      )}
                     {/* D208 — the item it was raised about, in the words HQ
                         received. D275 — led by what the raise is to it:
                         "Localises" or "Changes", or "About" with the relation
@@ -779,7 +984,7 @@ export default function BranchApprovals({ user }) {
         )}
       </Card>
 
-      {/* ── The four local queues, as one board (S3, D130) ── */}
+      {/* ── The eleven lanes, as one board (S3, D130; widened in D215) ── */}
       <Card className="p-4">
         <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-[14.5px] font-extrabold tracking-tight">The work board</h2>
@@ -790,8 +995,10 @@ export default function BranchApprovals({ user }) {
           )}
         </div>
         <p className="mb-3 text-[11.5px] leading-relaxed text-axal-muted">
-          Every queue this branch decides, in one list ordered by what has waited longest. The board
-          reads; each decision is still made in that queue&rsquo;s own console. Pick a lane to narrow it.
+          Every queue this branch decides, in one list ordered by what has waited longest. The list
+          is the primary view. The lane board is the second: five lanes, the ones that have waited
+          longest. The board reads; each decision is still made in that queue&rsquo;s own console.
+          Pick a lane to narrow it.
           {' '}
           <Link to="/admin/spinout-moderation" className="font-semibold text-axal-ink underline">
             Spinout moderation console
@@ -868,25 +1075,136 @@ export default function BranchApprovals({ user }) {
                 >
                   {label}
                   {key === 'past' ? ` (${pastCount})` : ''}
+                  {key === 'mine' && mineCount !== null ? ` (${mineCount})` : ''}
                 </button>
               ))}
             </div>
 
-            {shown.length === 0 ? (
+            <div className="mb-2 flex gap-1.5" data-testid="branch-board-layouts">
+              {LAYOUTS.map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setLayout(key)}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                    layout === key
+                      ? 'bg-slate-700 text-white dark:bg-slate-300 dark:text-slate-900'
+                      : 'border border-axal-hairline text-axal-muted'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <p className="mb-2 text-[11.5px] leading-relaxed text-axal-muted" data-testid="branch-board-outbound-note">
+              Outbound to HQ is the card above. It is not a filter of this board, because those rows are a different store.
+            </p>
+
+            <h3 className="text-[13px] font-extrabold tracking-tight" data-testid="branch-assignment-heading">
+              Assignment and history
+            </h3>
+            <p className="mb-2 text-[11.5px] leading-relaxed text-axal-muted">
+              Naming a reviewer records who is looking at an item. It does not decide the item.
+              History is only those changes.
+            </p>
+
+            {assignmentsReady && reviewers === null && (
+              <div className="mb-2">
+                <Unreadable
+                  what="Reviewers"
+                  claim={board.reviewers_reason || 'The admin accounts on this territory could not be read.'}
+                  onRetry={loadBoard}
+                />
+              </div>
+            )}
+            {assignmentsReady && Array.isArray(reviewers) && reviewers.length === 0 && (
+              <p className="mb-2 text-[12px] leading-relaxed text-axal-muted" data-testid="branch-board-no-reviewers">
+                No active admin is recorded on this territory, so there is nobody to assign.
+              </p>
+            )}
+            {assignmentsReady && Array.isArray(reviewers) && reviewers.length > 0 && (
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <select
+                  className="rounded-lg border border-axal-hairline bg-axal-ground px-2 py-1 text-[12px]"
+                  value={reviewerId}
+                  onChange={(e) => setReviewerId(e.target.value)}
+                  data-testid="branch-board-reviewer"
+                >
+                  <option value="">Choose a reviewer</option>
+                  {reviewers.map((rev) => (
+                    <option key={rev.id} value={rev.id}>{rev.name}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="rounded-lg border border-axal-hairline px-2.5 py-1 text-[11px] font-bold"
+                  onClick={selectPast}
+                  data-testid="branch-board-select-past"
+                >
+                  Select past SLA
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-slate-700 px-2.5 py-1 text-[11px] font-bold text-white disabled:opacity-50 dark:bg-slate-300 dark:text-slate-900"
+                  disabled={assigning || !reviewerId || pickedRows.length === 0}
+                  onClick={() => assignRows(pickedRows)}
+                  data-testid="branch-approval-assign"
+                >
+                  {assigning ? 'Assigning…' : 'Assign selected'}
+                </button>
+              </div>
+            )}
+            {assignError && (
+              <p className="mb-2 text-[12px] text-red-700 dark:text-red-300" data-testid="branch-approval-assign-error">
+                {assignError}
+              </p>
+            )}
+
+            {boardReady && !assignmentsReady && view !== 'mine' && (
+              <div className="mb-2">
+                <Unreadable what="Assignment" claim={assignmentClaim} onRetry={loadBoard} />
+              </div>
+            )}
+
+            {mineBlocked && (
+              !assignmentsReady ? (
+                <Unreadable what="Assignment" claim={assignmentClaim} onRetry={loadBoard} />
+              ) : (
+                <p className="text-[12.5px] leading-relaxed text-axal-muted">
+                  This account has no id on the signed-in session, so assigned-to-me cannot be read.
+                </p>
+              )
+            )}
+
+            {!mineBlocked && layout === 'lanes' && (
+              laneColumns.length === 0 ? (
+                <p className="text-[12.5px] leading-relaxed text-axal-muted" data-testid="branch-lane-board-empty">
+                  No readable lane can be a column. An unreadable queue is not drawn as an empty one.
+                </p>
+              ) : (
+                <LaneColumns columns={laneColumns} />
+              )
+            )}
+
+            {!mineBlocked && layout === 'list' && (shown.length === 0 ? (
               <p className="text-[12.5px] leading-relaxed text-axal-muted" data-testid="branch-board-empty">
                 {view === 'past'
                   ? 'Nothing is past the 72-hour SLA.'
-                  : laneFilter
-                    ? 'This lane is empty. It was read and holds nothing, which is not the same as a lane that could not be read.'
-                    : 'Every queue is empty. They were read and hold nothing, which is not the same as a queue that could not be read.'}
+                  : view === 'mine'
+                    ? 'Nothing on this board is assigned to this account. The record was read.'
+                    : laneFilter
+                      ? 'This lane is empty. It was read and holds nothing, which is not the same as a lane that could not be read.'
+                      : 'Every queue is empty. They were read and hold nothing, which is not the same as a queue that could not be read.'}
               </p>
             ) : (
               <ul className="space-y-1.5" data-testid="branch-board-rows">
                 {shown.map((it) => {
                   const console_ = LANE_CONSOLE[it.lane];
+                  const rowKey = `${it.lane}:${it.id}`;
                   return (
                     <li
-                      key={`${it.lane}:${it.id}`}
+                      key={rowKey}
                       className={`rounded-xl border p-2.5 ${
                         it.sla === 'past'
                           ? 'border-red-300 bg-red-50/60 dark:border-red-500/40 dark:bg-red-500/5'
@@ -896,28 +1214,73 @@ export default function BranchApprovals({ user }) {
                       }`}
                       data-sla={it.sla}
                     >
-                      <div className="flex flex-wrap items-baseline justify-between gap-2">
-                        <span className="text-[12px] font-bold">{it.who}</span>
-                        <span className="text-[10.5px] tabular-nums text-axal-faint">
-                          {it.age_hours === null
-                            ? <Unrecorded reason="This row's timestamp would not parse, so its age is unknown. It sorts last rather than first — an unknown age must not read as the most urgent thing here.">age unknown</Unrecorded>
-                            : `${Math.round(it.age_hours)}h old`}
-                          {SLA_LABEL[it.sla] ? ` · ${SLA_LABEL[it.sla]}` : ''}
-                        </span>
-                      </div>
-                      <div className="mt-0.5 flex flex-wrap items-baseline gap-2 text-[11px] text-axal-muted">
-                        <span>{it.what}</span>
-                        {console_ ? (
-                          <Link className="underline" to={console_.to}>{console_.label} →</Link>
-                        ) : (
-                          <span className="text-axal-faint">This lane has no registered console.</span>
+                      <div className="flex gap-2">
+                        {assignmentsReady && (
+                          <input
+                            type="checkbox"
+                            className="mt-1"
+                            checked={picked.has(rowKey)}
+                            onChange={() => togglePicked(it)}
+                            aria-label={`Select ${it.who}`}
+                            data-testid={`branch-board-pick-${it.lane}-${it.id}`}
+                          />
                         )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-baseline justify-between gap-2">
+                            <span className="text-[12px] font-bold">{it.who}</span>
+                            <span className="text-[10.5px] tabular-nums text-axal-faint">
+                              {it.age_hours === null
+                                ? <Unrecorded reason="This row's timestamp would not parse, so its age is unknown. It sorts last rather than first — an unknown age must not read as the most urgent thing here.">age unknown</Unrecorded>
+                                : `${Math.round(it.age_hours)}h old`}
+                              {SLA_LABEL[it.sla] ? ` · ${SLA_LABEL[it.sla]}` : ''}
+                            </span>
+                          </div>
+                          <div className="mt-0.5 flex flex-wrap items-baseline gap-2 text-[11px] text-axal-muted">
+                            <span>{it.what}</span>
+                            {console_ ? (
+                              <Link className="underline" to={console_.to}>{console_.label} →</Link>
+                            ) : (
+                              <span className="text-axal-faint">This lane has no registered console.</span>
+                            )}
+                          </div>
+                          {assignmentsReady && (
+                            <p className="mt-1 text-[11px] text-axal-muted">
+                              {it.assignee
+                                ? `Assigned to ${it.assignee.name}`
+                                : 'No reviewer is assigned. The record was read.'}
+                            </p>
+                          )}
+                          {assignmentsReady && Array.isArray(reviewers) && reviewers.length > 0 && (
+                            <div className="mt-1 flex gap-2">
+                              <button
+                                type="button"
+                                className="rounded-lg border border-axal-hairline px-2 py-0.5 text-[11px] font-bold disabled:opacity-50"
+                                disabled={assigning || !reviewerId}
+                                onClick={() => assignRows([it])}
+                                data-testid={`branch-board-assign-${it.lane}-${it.id}`}
+                              >
+                                Assign
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-lg border border-axal-hairline px-2 py-0.5 text-[11px] font-bold"
+                                onClick={() => openHistory(it)}
+                                data-testid={`branch-board-history-${it.lane}-${it.id}`}
+                              >
+                                {historyFor === rowKey ? 'Hide history' : 'History'}
+                              </button>
+                            </div>
+                          )}
+                          {historyFor === rowKey && (
+                            <HistoryPanel history={history} onRetry={() => openHistory(it, true)} />
+                          )}
+                        </div>
                       </div>
                     </li>
                   );
                 })}
               </ul>
-            )}
+            ))}
           </>
         )}
       </Card>

@@ -151,7 +151,12 @@ const _PROFILE_DEFAULTS: Record<string, Record<string, boolean>> = {
   admin: { name: true, bio: true, headshot: true, socials: false, background: true },
 };
 
-function effectiveFlags(privacyPrefs: any, role: string): Record<string, boolean> {
+/**
+ * Which profile fields a member shows, after their own privacy_prefs.
+ * Exported (D414) so the Messages counterparty card applies the SAME rules as
+ * this public card rather than a copy of them.
+ */
+export function effectiveFlags(privacyPrefs: any, role: string): Record<string, boolean> {
   const base = { ...(_PROFILE_DEFAULTS[role] || _PROFILE_DEFAULTS.admin) };
   const pp = (safeJsonParse<any>(privacyPrefs, {}) || {}).public_profile || {};
   if (pp && typeof pp === 'object') {

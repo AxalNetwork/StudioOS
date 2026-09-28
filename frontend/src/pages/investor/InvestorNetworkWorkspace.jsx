@@ -9,6 +9,7 @@ import './investorNetworkWorkspace.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { titleCase } from '../../lib/absence';
+import { daysSince, COLD_AFTER_DAYS } from '../../lib/networkBook';
 
 /**
  * A section heading's right-hand detail, in the order the body already reads
@@ -43,7 +44,11 @@ const askTarget = (ask) => (ask?.founder_user_id ? `Founder #${ask.founder_user_
   : ask?.project_id ? `Project #${ask.project_id}`
     : ask?.founder_id ? `Founder record #${ask.founder_id}`
       : 'Target not recorded');
-const lastTouchAt = (relationship) => relationship?.last_touch_at
+// The last touch is the interaction log's MAX (migration 338), never a field
+// someone edits. The older keys stay as fallbacks for any row written before
+// the log existed.
+const lastTouchAt = (relationship) => relationship?.last_interaction_at
+  || relationship?.last_touch_at
   || relationship?.last_contact_at
   || relationship?.metadata?.last_touch_at
   || relationship?.metadata?.last_contact_at
@@ -129,6 +134,17 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   const [summary, setSummary] = useState(null);
   const [introductions, setIntroductions] = useState(null);
   const [asks, setAsks] = useState(null);
+  // The reminders (migration 338) and which row a form is open on.
+  const [reminders, setReminders] = useState(null);
+  const [reminderFor, setReminderFor] = useState(null);
+  const [touchFor, setTouchFor] = useState(null);
+  const [reminderDate, setReminderDate] = useState('');
+  const [reminderNote, setReminderNote] = useState('');
+  const [touchNote, setTouchNote] = useState('');
+  const [touchDate, setTouchDate] = useState('');
+  const [privateNoteFor, setPrivateNoteFor] = useState(null);
+  const [privateNoteDraft, setPrivateNoteDraft] = useState('');
+  const [privateNoteBusy, setPrivateNoteBusy] = useState(false);
   const [errors, setErrors] = useState({});
   const [refreshing, setRefreshing] = useState(false);
   const [busyUid, setBusyUid] = useState('');
@@ -138,9 +154,9 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
     setRefreshing(refresh);
     setActionError('');
     const calls = await Promise.allSettled([
-      api.partnerRelationships(), api.partnerSummary(), api.introPropositions(refresh ? { refresh: true } : {}), api.listIntroductions(),
+      api.partnerRelationships(), api.partnerSummary(), api.introPropositions(refresh ? { refresh: true } : {}), api.listIntroductions(), api.partnerReminders(),
     ]);
-    const [relationshipResult, summaryResult, introResult, askResult] = calls;
+    const [relationshipResult, summaryResult, introResult, askResult, reminderResult] = calls;
     if (relationshipResult.status === 'fulfilled') {
       const value = relationshipResult.value;
       setRelationships(Array.isArray(value) ? value : Array.isArray(value?.items) ? value.items : []);
@@ -148,11 +164,13 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
     if (summaryResult.status === 'fulfilled') setSummary(summaryResult.value || null);
     if (introResult.status === 'fulfilled') setIntroductions(introResult.value || { propositions: [], credits: null });
     if (askResult.status === 'fulfilled') setAsks(Array.isArray(askResult.value?.introductions) ? askResult.value.introductions : []);
+    if (reminderResult.status === 'fulfilled') setReminders(Array.isArray(reminderResult.value?.items) ? reminderResult.value.items : []);
     setErrors({
       relationships: relationshipResult.status === 'rejected' ? 'Relationship book is unavailable right now.' : '',
       summary: summaryResult.status === 'rejected' ? 'Network aggregate unavailable.' : '',
       introductions: introResult.status === 'rejected' ? 'Introduction propositions are unavailable right now.' : '',
       asks: askResult.status === 'rejected' ? 'Your recorded asks are unavailable right now.' : '',
+      reminders: reminderResult.status === 'rejected' ? 'Your reminders are unavailable right now.' : '',
       organizations: relationshipResult.status === 'rejected' ? 'Relationship-backed organization context is unavailable right now.' : '',
     });
     setRefreshing(false);
@@ -203,6 +221,52 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
     return [...grouped.values()].sort((a, b) => b.people.size - a.people.size || a.name.localeCompare(b.name));
   }, [relationships]);
 
+  /**
+   * The interaction log and the reminders (migration 338). Logging a touch
+   * moves the cold flag — the book reads the log's MAX, so an honest record
+   * of the last exchange is the only way the flag moves. A reminder surfaces
+   * on the desk when it is due; there is no notification fan-out.
+   */
+  const logTouch = async (rel) => {
+    setActionError('');
+    const note = touchNote.trim();
+    const date = touchDate.trim();
+    if (!note && !date) {
+      setActionError('Say what happened or set when it happened — an empty touch must not move the cold flag.');
+      return;
+    }
+    const body = { note: note || null };
+    if (date) body.interacted_at = `${date}T12:00:00.000Z`;
+    try {
+      await api.partnerInteractionAdd(rel.id, body);
+      setTouchFor(null); setTouchNote(''); setTouchDate('');
+      load();
+    } catch (cause) { setActionError(cause?.message || 'The touch could not be recorded.'); }
+  };
+  const savePrivateNote = async (rel) => {
+    setPrivateNoteBusy(true);
+    setActionError('');
+    try {
+      await api.updateRelationship(rel.id, { private_note: privateNoteDraft.trim() || null });
+      setPrivateNoteFor(null);
+      load();
+    } catch (cause) { setActionError(cause?.message || 'The private note could not be saved.'); }
+    finally { setPrivateNoteBusy(false); }
+  };
+  const setReminder = async (rel) => {
+    setActionError('');
+    if (!reminderDate) { setActionError('A reminder is a date — say when to re-surface the tie.'); return; }
+    try {
+      await api.partnerReminderSet(rel.id, { remind_at: reminderDate, note: reminderNote.trim() || null });
+      setReminderFor(null); setReminderDate(''); setReminderNote('');
+      load();
+    } catch (cause) { setActionError(cause?.message || 'The reminder could not be set.'); }
+  };
+  const doneReminder = async (uid) => {
+    setActionError('');
+    try { await api.partnerReminderDone(uid, true); load(); }
+    catch (cause) { setActionError(cause?.message || 'The reminder could not be updated.'); }
+  };
   const resolveIntro = async (prop, decision) => {
     setBusyUid(prop.uid); setActionError('');
     try {
@@ -232,12 +296,30 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
     ? (relationships || []).filter((item) => item.relationship_type === 'co_investor')
     : bookView === 'founders'
       ? (relationships || []).filter((item) => String(item.other?.role || '') === 'founder')
-      : (relationships || []);
+      : bookView === 'cold'
+        ? (relationships || []).filter((item) => { const d = daysSince(lastTouchAt(item)); return d !== null && d > COLD_AFTER_DAYS; })
+        : (relationships || []);
   const touchCoverage = (relationships || []).filter((item) => lastTouchAt(item)).length;
   const coldCount = (relationships || []).filter((item) => {
-    const touched = new Date(String(lastTouchAt(item) || '').replace(' ', 'T'));
-    return Number.isFinite(touched.getTime()) && Date.now() - touched.getTime() > 60 * 86400000;
+    const d = daysSince(lastTouchAt(item));
+    return d !== null && d > COLD_AFTER_DAYS;
   }).length;
+  // The op opens the reminder panel on the first row the current view shows —
+  // under `Going cold` that is the first cold tie, under any other view the
+  // first row. (Named for the table's handler key, not the state setter.)
+  //
+  // IT SITS BELOW `visibleRelationships` ON PURPOSE (D307). A hook's
+  // dependency array is evaluated when the hook is called, during render, so
+  // a memo placed above the `const` it depends on reads it in its temporal
+  // dead zone and EVERY render throws. That shipped once and took every
+  // investor /network zone down; investor_network_render_d307.test.mjs now
+  // renders the page, and `no-use-before-define` in eslint.config.mjs refuses
+  // the ordering in any component.
+  const setRemindersOp = useMemo(() => {
+    const target = visibleRelationships[0];
+    if (!target) return { onClick: () => {}, disabled: true, title: 'No relationship is showing, so there is nothing to remind you about.' };
+    return { onClick: () => { setActionError(''); setReminderFor(target.id); } };
+  }, [visibleRelationships]);
   const pending = propositionRows.filter((item) => item.status === 'pending');
 
   // No zone means the overview, where every section shows. An unknown slug
@@ -267,20 +349,78 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
               // A book with no last-touch dates and an EMPTY book are different
               // facts. Only the first is a coverage gap.
               const touch = relationships.length === 0 ? 'no ties recorded'
-                : touchCoverage ? `${coldCount} going cold` : 'last-touch coverage unavailable';
+                : errors.relationships ? 'last-touch coverage unavailable'
+                  : touchCoverage ? `${coldCount} going cold` : 'no touches logged yet';
               return `${ties} ties · ${touch}`;
-            })} role={role} filters={zoneFilters ? zoneFilters({ value: bookView, onChange: setBookView }) : []} actions={investorZoneActions('network/relationships', { view: { header: ['Person', 'Organization', 'Type'], rows: visibleRelationships || [], cells: (r) => [personName(r), orgIdentity(r), r.relationship_type] } })} />
-            {errors.relationships ? <Alert>{errors.relationships}</Alert> : relationships === null ? <Skeleton rows={5} /> : relationships.length === 0 ? <div className="inw-empty" data-testid="empty-relationship-book">No attributed relationship records are available yet.</div> : visibleRelationships.length === 0 ? <div className="inw-empty" data-testid="empty-relationship-view">{bookView === 'founders' ? `No tie with a founder account is recorded. ${relationships.length} ${relationships.length === 1 ? 'tie' : 'ties'} in the book in total.` : `No co-investor tie is recorded. ${relationships.length} ${relationships.length === 1 ? 'tie' : 'ties'} in the book in total.`}</div> : (
+            })} role={role} filters={zoneFilters ? zoneFilters({ value: bookView, onChange: setBookView, counts: { cold: coldCount } }) : []} actions={investorZoneActions('network/relationships', { handlers: { setReminders: setRemindersOp }, view: { header: ['Person', 'Organization', 'Type'], rows: visibleRelationships || [], cells: (r) => [personName(r), orgIdentity(r), r.relationship_type] } })} />
+            {/* DUE REMINDERS (migration 338): surface when due, never a
+                notification fan-out. */}
+            {errors.reminders ? <Alert>{errors.reminders}</Alert> : (reminders || []).filter((r) => !r.done && new Date(r.remind_at).getTime() <= Date.now()).length > 0 && (
+              <div className="inw-alert" role="status" data-testid="status-due-reminders">
+                <CircleAlert size={14} />
+                <span>
+                  {(reminders || []).filter((r) => !r.done && new Date(r.remind_at).getTime() <= Date.now()).map((r) => (
+                    <span key={r.uid} className="mr-3">
+                      {r.note || 'Re-surface this tie'} — due {age(r.remind_at)}
+                      <button type="button" onClick={() => doneReminder(r.uid)} data-testid={`button-reminder-done-${r.uid}`} className="ml-1 underline">Done</button>
+                    </span>
+                  ))}
+                </span>
+              </div>
+            )}
+            {errors.relationships ? <Alert>{errors.relationships}</Alert> : relationships === null ? <Skeleton rows={5} /> : relationships.length === 0 ? <div className="inw-empty" data-testid="empty-relationship-book">No attributed relationship records are available yet.</div> : visibleRelationships.length === 0 ? <div className="inw-empty" data-testid="empty-relationship-view">{bookView === 'founders' ? `No tie with a founder account is recorded. ${relationships.length} ${relationships.length === 1 ? 'tie' : 'ties'} in the book in total.` : bookView === 'cold' ? `Nothing is going cold — every tie with a recorded touch is inside ${COLD_AFTER_DAYS} days, and a tie with none is unknown, not cold.` : `No co-investor tie is recorded. ${relationships.length} ${relationships.length === 1 ? 'tie' : 'ties'} in the book in total.`}</div> : (
               <div className="inw-table" data-testid="table-relationship-book">
                 <div className="inw-table-head"><span>Person</span><span>Type</span><span>Strength</span><span>Context</span><span>Last touch</span></div>
-                {visibleRelationships.map((item) => <div className="inw-table-row" key={item.id} data-testid={`row-relationship-${item.id}`}>
-                  <strong data-label="Person">{personName(item)}</strong><span data-label="Type"><i className="inw-type">{typeLabel(item.relationship_type)}</i></span>
-                  <span data-label="Strength"><i className={`inw-strength ${Number(item.strength_score) >= 70 ? 'strong' : ''}`}>{Number.isFinite(Number(item.strength_score)) ? `${Math.round(item.strength_score)}/100` : 'Not scored'}</i></span>
-                   <span data-label="Context" className="inw-context">{relationshipContext(item)}</span><time data-label="Last touch" className={age(lastTouchAt(item)).includes('d') && Number.parseInt(age(lastTouchAt(item)), 10) > 60 ? 'inw-cold' : ''}>{age(lastTouchAt(item))}</time>
+                {visibleRelationships.map((item) => <div key={item.id}>
+                  <div className="inw-table-row" data-testid={`row-relationship-${item.id}`}>
+                    <strong data-label="Person">{personName(item)}</strong><span data-label="Type"><i className="inw-type">{typeLabel(item.relationship_type)}</i></span>
+                    <span data-label="Strength"><i className={`inw-strength ${Number(item.strength_score) >= 70 ? 'strong' : ''}`}>{Number.isFinite(Number(item.strength_score)) ? `${Math.round(item.strength_score)}/100` : 'Not scored'}</i></span>
+                    <span data-label="Context" className="inw-context">{relationshipContext(item)}</span>
+                    <time data-label="Last touch" className={age(lastTouchAt(item)).includes('d') && Number.parseInt(age(lastTouchAt(item)), 10) > COLD_AFTER_DAYS ? 'inw-cold' : ''}>{age(lastTouchAt(item))}</time>
+                    <span className="inw-row-actions">
+                      <button type="button" onClick={() => { setActionError(''); setTouchFor(touchFor === item.id ? null : item.id); setReminderFor(null); setPrivateNoteFor(null); }} data-testid={`button-log-touch-${item.id}`}>Log a touch</button>
+                      <button type="button" onClick={() => { setActionError(''); setReminderFor(reminderFor === item.id ? null : item.id); setTouchFor(null); setPrivateNoteFor(null); }} data-testid={`button-remind-${item.id}`}>Remind me</button>
+                      <button type="button" onClick={() => {
+                        setActionError('');
+                        const open = privateNoteFor === item.id ? null : item.id;
+                        setPrivateNoteFor(open);
+                        setPrivateNoteDraft(open ? (item.my_private_note || '') : '');
+                        setTouchFor(null); setReminderFor(null);
+                      }} data-testid={`button-private-note-${item.id}`}>Private note</button>
+                    </span>
+                  </div>
+                  {touchFor === item.id && (
+                    <div className="inw-inline-form" data-testid={`form-touch-${item.id}`}>
+                      <input type="date" value={touchDate} onChange={(e) => setTouchDate(e.target.value)} aria-label="When it happened" data-testid={`input-touch-date-${item.id}`} />
+                      <input value={touchNote} onChange={(e) => setTouchNote(e.target.value)} placeholder="What the last exchange was" aria-label="Touch note" />
+                      <button type="button" onClick={() => logTouch(item)} data-testid={`button-touch-save-${item.id}`}>Record the touch</button>
+                      <button type="button" onClick={() => setTouchFor(null)}>Cancel</button>
+                    </div>
+                  )}
+                  {privateNoteFor === item.id && (
+                    <div className="inw-inline-form" data-testid={`form-private-note-${item.id}`}>
+                      <input value={privateNoteDraft} onChange={(e) => setPrivateNoteDraft(e.target.value)} placeholder="Only you see this note" aria-label="Private note" data-testid={`input-private-note-${item.id}`} />
+                      <button type="button" disabled={privateNoteBusy} onClick={() => savePrivateNote(item)} data-testid={`button-private-note-save-${item.id}`}>Save note</button>
+                      <button type="button" onClick={() => setPrivateNoteFor(null)}>Cancel</button>
+                    </div>
+                  )}
+                  {reminderFor === item.id && (
+                    <div className="inw-inline-form" data-testid={`form-reminder-${item.id}`}>
+                      <input type="date" value={reminderDate} onChange={(e) => setReminderDate(e.target.value)} aria-label="Remind on" data-testid={`input-reminder-date-${item.id}`} />
+                      <input value={reminderNote} onChange={(e) => setReminderNote(e.target.value)} placeholder="What to re-surface (optional)" aria-label="Reminder note" />
+                      <button type="button" onClick={() => setReminder(item)} data-testid={`button-reminder-save-${item.id}`}>Set the reminder</button>
+                      <button type="button" onClick={() => setReminderFor(null)}>Cancel</button>
+                    </div>
+                  )}
                 </div>)}
               </div>
             )}
             {errors.summary && <p className="inw-footnote" data-testid="text-network-summary-unavailable">{errors.summary}</p>}
+            {bookView === 'cold' && visibleRelationships.length > 0 && (
+              <p className="inw-footnote" data-testid="text-reengagement-note">
+                Re-engagement lines are not drafted here yet — that draft surface is being built separately, and the reminder you set above is the working half.
+              </p>
+            )}
           </section>}
 
           {(shows('introductions') || shows('organizations')) && <div className="inw-lower">

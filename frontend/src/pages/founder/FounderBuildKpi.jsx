@@ -236,7 +236,7 @@ export default function FounderBuildKpi() {
       <div className="fb-kpi-shell">
         <section className="fb-kpi-main">
           <header className="fb-kpi-header">
-            <div className="fb-kpi-crumb"><Link to="/execution" data-testid="link-kpi-back"><ArrowLeft size={13} /> Execution</Link><span>/</span><strong>KPI entry</strong></div>
+            <div className="fb-kpi-crumb"><Link to="/build" data-testid="link-kpi-back"><ArrowLeft size={13} /> Build</Link><span>/</span><strong>KPI entry</strong></div>
             <div className="fb-kpi-title-row">
               <div><h1>KPI entry</h1><p className="fb-kpi-subtitle">Bulk entry, imports, metric definitions, targets and history from the selected startup's stored ledger.</p></div>
             </div>
@@ -422,5 +422,5 @@ function PageRail({ project, snapshotCount }) {
     footer="Reads stored records · writes through the ops above"
   />;
 }
-function EmptyKpi() { return <div className="fb-kpi-empty" data-testid="empty-kpi"><Database size={24} /><h2>No startup is available</h2><p>This founder KPI ledger is scoped to authenticated startup records. There is no project to inspect yet.</p><Link to="/execution">Back to execution</Link></div>; }
+function EmptyKpi() { return <div className="fb-kpi-empty" data-testid="empty-kpi"><Database size={24} /><h2>No startup is available</h2><p>This founder KPI ledger is scoped to authenticated startup records. There is no project to inspect yet.</p><Link to="/build">Back to Build</Link></div>; }
 function KpiSkeleton() { return <div className="fb-kpi-loading" data-testid="status-kpi-loading"><i /><i /><div><i /><i /><i /><i /></div></div>; }

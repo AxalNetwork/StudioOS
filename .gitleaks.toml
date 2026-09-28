@@ -87,8 +87,11 @@ regexes = [
 # Historical leak commits already exposed in public git history. Listed here
 # so CI doesn't fail forever on findings nobody can change without rewriting
 # history. ACTIONS REQUIRED OUTSIDE THIS FILE:
-#   - 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 (commit c45afb1) → REVOKE on
-#     github.com → Settings → Developer settings → Personal access tokens.
+#   - the GitHub OAuth token (`gho_…`, commit c45afb1; secret-scanning alert 1)
+#     → REVOKE it. A `gho_` token is issued to an OAuth app, so it is revoked
+#     under github.com → Settings → Applications → Authorized OAuth Apps, not
+#     Personal access tokens. Its value is deliberately NOT written here: this
+#     comment used to carry it in full, which kept it in the current tree.
 #   - JWT_SECRET values in commits 64fed2c / 885de6e / af864bf → ROTATE the
 #     current secret and move it from `.replit` into Replit Secrets so it
 #     stops being committed going forward.

@@ -52,6 +52,18 @@
   --color-axal-lavender: #f4f0fe;      /* violet tint — brand, stays on spec */
   --color-axal-amber: #fcd34d;         /* 32 */
   --color-axal-amber-deep: #92400e;    /* 67 */
+  --color-axal-lavender-edge: #ddd0fb; /* violet tint borders — spec */
+
+  /* Semantic — what a state MEANS, not which hue paints it (D424). The
+     System Sheet names these and the census confirms each; they are minted
+     where the proposal anatomy first needed them (the accepted mark, the
+     warning read, Eadwyn's mark on a claim), not all at once. Light values:
+     every call site pairs each one with its own `dark:` utility, because a
+     status colour is not a neutral and the dark skin does not flip it. */
+  --color-axal-positive: #047857;      /* cleared, accepted — spec */
+  --color-axal-destructive: #b91c1c;   /* failure, warning text — spec */
+  --color-axal-destructive-tint: #fef2f2; /* failure grounds — spec */
+  --color-axal-destructive-edge: #fecaca; /* error tint borders — 44 canvases */
 
   /* Neutrals — corpus majority (D2). Margin = majority vs spec. */
   --color-axal-ink: #18181b;           /* 80 vs 14 — spec was #241f38 */
@@ -140,6 +152,12 @@ body {
   margin: 0;
   background: var(--app-bg);
   color: var(--app-text);
+  /* D425 — the page tag asks for `viewport-fit=cover`, which lets content
+     reach under a phone's notch in landscape. These keep every page clear of
+     it on both sides; they are 0 on every screen without a notch. Horizontal
+     only, so no full-height container grows by an inset. */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 /* Force legible input text. We previously hardcoded white/black, which

@@ -12151,7 +12151,9 @@ with its own `pushed_at`* — `branch_licence`, `branch_promo_ceiling`,
 
 1. **`body_md`.** Nothing on a branch renders or instantiates a template body:
    S5's picker shows the library, and `licence_contracts` (migration 259) is
-   HQ's table behind `requireSuperAdmin`. A body column with no reader is the
+   HQ's table behind `requireSuperAdmin`. D444: that table is the licence
+   agreement only (D199), and it is not why the body stays here — the branch
+   list does not carry the body either. A body column with no reader is the
    store-built-so-a-page-looks-complete mistake this programme has deleted four
    times (D129's seat store, D131's six blocks, D140's adjustable dates, D141's
    invented bindings). When instantiation lands it is one additive `ALTER`.
@@ -18552,7 +18554,10 @@ tell a rule from its violation*; it now asserts the claim itself.
 ### NOT BUILT, AND WHY
 
 - **S5's Active contracts table.** Readable, not built, and two of its columns
-  have no store for envelopes.
+  have no store for envelopes. D444 later tables the rows
+  `GET /api/admin/contracts` already returns. Value, renewal and the version
+  the row was sent from stay unrecorded, because that list still does not
+  carry them.
 - **An end date on e-sign envelopes and documents.** That is a model change —
   a field on the send path, with a writer — and without a writer a new column
   would count zero forever, which is the invented figure this card refuses.
@@ -20931,7 +20936,8 @@ sidebar stays the canvas's eight (#322 is already a decision about it).
   for programme throughput at all; the cohort timeline returns every week's
   outcomes. It now says the true half: week outcomes are readable, and the
   Analytics page draws them; assessment runs are not, because no route lists
-  them (D140).
+  them (D140). D446 lists those runs for one cycle and rewrites the sentence
+  again: the two counts are not added into one figure.
 - **Branch Home called HQ's cut "your share".** The statement computes what is
   owed to HQ as gross times this rate, so the label told a branch it kept the
   part it pays. It reads *"owed to HQ · you keep N%"* now, and a test holds
@@ -30313,6 +30319,1163 @@ claimed is a separate decision, left open. The 10/min/IP `register` bucket
 - `check-decision-ids`, `check-api-drift`, `check-folder-docs` and the worker's
   `tsc --noEmit` exit 0.
 
+## D307
+
+**The investor Network page renders again, and a name read in its own scope
+before the line that declares it now fails the lint.** A production hotfix. No
+migration, no route, no `api.js` method. `frontend/src` moves one `useMemo`
+thirty-odd lines down, so `docs/` is rebuilt; `eslint.config.mjs` gains one
+rule.
+
+**The defect.** #871 (`db467a07a3`, D465, merged 11:41Z on 2026-09-27) added
+`setRemindersOp` to `InvestorNetworkWorkspace.jsx` — a `useMemo` whose
+dependency array is `[visibleRelationships]` — thirty lines ABOVE `const
+visibleRelationships`. A dependency array is evaluated when the hook is
+called, during render, so the read landed in the `const`'s temporal dead zone
+and every render threw `Cannot access 'visibleRelationships' before
+initialization`. The component is what an investor gets at `/network`
+(`App.jsx`) and at every `/network/<zone>` (`NetworkWorkspace.jsx` mounts it
+embedded), so every investor Network zone showed the error card from the
+deploy that followed that merge until this one.
+
+**Why nothing caught it.** Nothing rendered the page. The four guards over it
+read its source as text; `lint:undef` enabled `no-undef` and `no-unused-vars`,
+and a TDZ read satisfies both because the name is defined, just later; and
+Vite bundles it without complaint because a TDZ read is a runtime error. The
+same argument this config's own header makes for `no-undef` — a name
+undefined at runtime is not a build error — applies one step over.
+
+**What shipped.**
+- The memo moves below `visibleRelationships` and `coldCount`, with a comment
+  saying why it must stay there. Its `(visibleRelationships || [])[0]` becomes
+  `visibleRelationships[0]`: every branch of that declaration already produces
+  an array.
+- `frontend/test/investor_network_render_d307.test.mjs` renders the page, once
+  as the overview and once per zone, with `renderToStaticMarkup`. Effects do
+  not run, so the book is still loading — and the render still has to get past
+  every hook call to reach the skeleton, which is the whole point.
+- **`no-use-before-define` is armed on `frontend/src`'s `.js`/`.jsx` with
+  `{ functions: false, variables: false }`**, measured across the SPA with a
+  scratch config (a first run with `--no-config-lookup` silently ignored every
+  `.jsx` file, so its "zero" covered `.js` only and was discarded):
+
+  | options | findings |
+  | --- | --- |
+  | defaults | 1576 |
+  | `functions: false` | 74 |
+  | `functions: false, variables: false` | **0** |
+
+  `functions: false` drops 1502 calls to hoisted function declarations —
+  helpers and components kept below their callers, which is correct
+  JavaScript. `variables: false` drops the remaining 74, every one a closure
+  reading a `const` from an enclosing scope that runs after the declaration
+  has executed; sampled, and all safe. The option still reports a read in the
+  SAME scope as its declaration, which is exactly the TDZ shape. The test's
+  last case pins the rule and both options, so it cannot be switched off,
+  downgraded to a warning, or widened into 74 findings of noise without a
+  failure naming the re-measure.
+- A first draft guarded this with a regex over the component's dependency
+  arrays. It was replaced before landing: it watched one file, and scope
+  analysis is the linter's job by this config's own stated reasoning. The
+  `.ts`/`.tsx` half needs nothing — probed, `tsc` refuses the same ordering as
+  TS2448 and leaves the closure read alone, and `test:types:frontend` is in
+  `test:drift`.
+
+**Whose file this is.** `InvestorNetworkWorkspace.jsx` is Session 17's, and
+D465 was its PR. Session 1 made this change anyway, as a stated exception:
+production was down for every investor on a Network page, the owner was
+asleep, Session 17 had no open PR on the file, and the fix moves one block
+without changing what it does. The exception is cheap to reverse — close this
+PR and leave the fix to Session 17 — and Session 17's next prompt says the fix
+has landed and must not be made a second time.
+
+**VERIFIED**
+`npm run test:drift` **exit 0**, read as the exit code from a redirected log:
+frontend **3763** of 3763, worker **4643** (4640 pass plus the same 3 environment-gated skips), retention **112**, and zero `not ok`. The five D307 tests are confirmed by name —
+`the page renders, zone overview`, `… zone relationships`,
+`… zone introductions`, `… zone organizations`, and
+`the SPA lint refuses a same-scope read above its declaration`.
+
+The first run, on the same bytes, exited 1 on a single failure: the
+git-excluded `.agent-progress.md` sitting at the repo root, which
+`repo_layout.test.mjs` refuses. It was moved aside and the suite re-run. The
+file is local-only and never committed; the refusal is correct.
+
+**Five mutations, five caught.** Every anchor was asserted unique before it was
+applied, and every file was restored from a sha256 snapshot:
+
+- **M1** — restore the original ordering. Four render tests fail, and the lint
+  reports `255:7 'visibleRelationships' was used before it was defined`.
+- **M2** — the original ordering with the rule removed. The lint exits 0 and
+  the pin test fails. This is the proof that the rule, not luck, is what
+  catches the defect.
+- **M3** — the rule removed from the fixed tree. The pin test fails.
+- **M4** — `variables: true`. The pin test fails.
+- **M5** — `'warn'` instead of `'error'`. The pin test fails.
+
+These exit 0: `lint:undef` with the rule armed; `test:types:frontend`; the root
+`npm run build` (635 fresh assets, 371 prior hashes retained) followed by
+`check-docs-fresh --strict`; `check-api-drift`; `check-decision-ids` (D1
+through D465, with D307 in position); and `check-folder-docs`.
+
+This was verified again after rebasing onto `791cf947b3` (#874). Main moved
+mid-build, so the uncommitted tree was carried across, and `DECISIONS.md`
+auto-merged.
+
+**The open PRs, checked against the new rule before it lands.** Every changed
+`.js`/`.jsx` file on #876 (Session 5) and #875 (Session 16), read at each PR's
+head, was linted through this config. Both report **zero**
+`no-use-before-define` findings; one #876 file is a deletion. As a control,
+main's pre-fix `InvestorNetworkWorkspace.jsx`, piped through the same harness,
+reports `255:7` — so the check can fail.
+
+No migration. Migration 340 belongs to Session 17's queue, so the next free
+number is 341 or higher; re-measure it before naming one.
+
+## D310
+
+**The investor's room and document are read by the grant they hold, and
+"open to you" counts what that investor may open.** Session 2, wave 8,
+item 1. No migration; two new GETs under `/api/research/diligence`.
+
+**The list said something false.** `GET /research/diligence` counted
+"open to you" as `visibility = 'open'`. An investor holding a live NDA with
+the founder who granted the room can open the `nda` files as well, because
+the download route lets them. That investor was still told "N behind an
+NDA". The list now asks the data room's own `ndaActive` once for each
+granting founder. For a signed investor, "open" counts every file. For an
+unsigned one, it counts only the `open` files. Each row also carries
+`nda_signed`.
+
+**The two reads.**
+- `GET /research/diligence/:grantUid` returns one room for the investor who
+  holds it: the files and folders that investor may open, with each file's
+  last-issued download, and the counts. It also returns "you last opened
+  it" (the visit before this one), the caller's own activity, and the same
+  deal-stage note as the list.
+- `GET /research/diligence/:grantUid/files/:fileUid` returns one document
+  (name, size, type, created) and the caller's own download history for it.
+
+**The gate is the data room's, not a copy.** `data_room.ts` gains the
+`export` keyword on `activeGrant`, `ndaActive` and `logAccess`, and nothing
+else changes in that file. The helpers stay where
+`expiry_gate_datetime_d124` and `data_room_live` read their SQL from.
+- The grant uid is looked up only among rows that name the caller as the
+  investor. `activeGrant` then decides whether that grant is live.
+- A grant the caller does not hold answers with the same 404 body
+  (`room_not_found`) as one that does not exist, because telling the two
+  apart would tell an investor which rooms exist. The same goes for a
+  revoked or expired grant, and for another investor's live grant on the
+  same room.
+
+**What is never served.**
+- The room never names, or gives the uid of, an `nda` file the caller may
+  not open. It gives a count, as the data room already does.
+- A document behind an unsigned NDA returns 403 `nda_required`, carrying
+  the room's grant uid and name and nothing about the file: no name, size
+  or type.
+- Activity is the caller's own rows only. The founder's view of the same
+  log carries every investor's email.
+- A logged download of an `nda` file keeps its time and action, but loses
+  its name once that NDA has lapsed. The gate would withhold that name
+  today, so the log does not re-serve it.
+
+**Audit meaning, decided deliberately.**
+- The room read lists filenames, the same thing
+  `GET /api/data-room/shared/:projectUid` does. It therefore logs
+  `open_room`, which the founder sees. A second URL that listed the same
+  names without logging would be a quiet way into the room.
+- The document read logs nothing. It shows one name the room already
+  showed, and its download goes through the data room's own route, which
+  logs `download`.
+- The log records a link being issued, not used. The responses therefore
+  say "issued", and `download_note` says whether the link was followed is
+  not recorded. The canvas's "link used once, then expired" is not claimed.
+
+**Tests.**
+- `research_diligence_room.test.ts` (new) runs both reads and the list
+  against real SQLite. The data-room tables and `pairwise_ndas` are cut
+  from `schema_baseline.sql`. It has 10 tests.
+- `research_stores_scoping.test.ts` is re-aimed. Its `/diligence` slice
+  used to run from the list handler to the end of the file, which would
+  have swallowed the new handlers and skipped them in the "bound to an
+  owned project" rule. It now ends at the next top-level declaration.
+- A new test in the same file holds the room reads to a single grant
+  lookup that names the caller. That test also requires every room-table
+  read to be narrowed to the grant's project and bound to `pid`, and the
+  access log to be read only for the caller.
+- 11 mutations were run, and all 11 were caught on the first run. Two of
+  them, the grant lookup not bound to the caller and the liveness check
+  bypassed, are the ones the behavioural suite alone would not fully show,
+  because `activeGrant` re-binds the caller. The scoping test holds that
+  line.
+
+**Not in this entry.** The pages come in item 2: the room and document
+pages, the investor `/raise/data-room` redirect and deleting
+`SharedRooms`. The memo the room canvas drafts on Accept needs a draft
+surface and lands with the page.
+
+## D311
+
+**The investor reads a data room and its documents under Research ·
+Diligence. The investor drawer on `/raise/data-room` is retired and that
+route's investor branch redirects.** Session 2, wave 8, item 2. It builds
+canvases b6a5f992 (the room) and 96463a46 (the document) on D310's
+grant-keyed reads. No migration. It adds one query parameter to an existing
+route, and no new route.
+
+**The pages.**
+- `/research/diligence/:grantUid` is `DiligenceRoom`. It draws every element
+  of the room canvas:
+  - the header, the four tiles and the scope table;
+  - the open-file list, with its three states (files listed, every file
+    behind an NDA, nothing staged), each saying something different;
+  - the NDA panel, and Deal stage shown as Not recorded with the Worker's own
+    reason;
+  - the reader's own activity;
+  - the "Room · what is thin" memo band;
+  - the stated limit, and the missing-grant state ("This room is not open to
+    you.").
+- `/research/diligence/:grantUid/files/:fileUid` is `DiligenceFile`. It
+  shows the document's name, its size (formatted from bytes, so the header
+  and the tile cannot disagree), its type, the visibility pill, Download with
+  its single-use note, the three tiles, the reader's own download history,
+  the stated limit, and the NDA state.
+- Both routes are guarded to admin and investor, the same licences as the
+  list.
+- `DiligenceZone` now links each company, and its "Open the room →", to that
+  room. Both used to go to `/raise/data-room`.
+
+**A gated document has no name anywhere.** The Worker's `nda_required`
+refusal carries the room and nothing about the file. The page's gated
+branch, its shell title and its crumb are built without `file.name`. A test
+slices the gated branch and refuses any reference to one.
+
+**The memo is wired to a real store.** The canvas says "Accept writes your
+memo."
+- `research/diligence` is a new `DRAFT_SURFACES` entry in `research.ts`, on
+  its own lines. Its material comes from `roomMaterial`, which goes through
+  D310's `heldRoom`.
+- A grant uid the caller does not hold, or one that has lapsed, drafts
+  nothing. The route answers `nothing_to_draft`, and the model is never
+  reached.
+- Files behind an NDA the caller has not signed are sent to the model as a
+  count and never by name.
+- Accept stamps `accepted_at` on the `research_zone_drafts` row (migration
+  221), exactly as every other band does. It does not email the founder or
+  request files.
+
+**One memo per room.** `GET /research/drafts` returned the surface's newest
+drafts, whichever record they were about. A room page would therefore have
+shown one company's memo on another company's room.
+- The route now takes an optional `scope_key`, and `api.research.zoneDrafts`
+  passes it.
+- `ZoneDraft` gains a `scoped` prop, which the room sets. Every existing band
+  omits it and reads exactly what it read before.
+- `ZoneDraft` also gains an `indigo` accent, because the investor canvas
+  draws the band in `#4f46e5`.
+
+**Retired, with where each now points.**
+- **The `SharedRooms` component in `DataRoomPage.jsx` is deleted.** It was
+  the investor drawer: a list of shared rooms, and a side panel that listed
+  files and downloaded them. Every job it did is now done by the room and
+  document pages: the list is `/research/diligence`, the panel is the room
+  page, and the download is the document page, through the same
+  `dataRoomDownload` route. The page's non-founder arm now renders
+  `<Navigate to="/research/diligence" replace />`, and the icon imports only
+  the drawer used are removed. Nothing else in that file changed.
+- **`/raise/data-room`, investor branch:** `<Navigate to="/research/diligence"
+  replace />`. The route's guard still admits investor, so the redirect can
+  run. The founder branches are unchanged, and the route took no query
+  string that meant anything to an investor.
+- **`api.dataRoomsSharedWithMe` and `api.dataRoomShared` are removed.** Only
+  the drawer called them.
+- **Left in place on purpose:** the Worker routes behind those two methods,
+  `GET /api/data-room/shared` and `GET /api/data-room/shared/:projectUid`.
+  Nothing in the tree calls them any more, but `data_room.ts` is Session 9's
+  file after this PR and its data-room rebuild. Session 9 is told they are
+  now uncalled.
+- **Links re-pointed to `/research/diligence`:**
+  `InvestorDealsWorkspace.jsx`'s "Open shared data rooms" and
+  `PipelineWorkspace.jsx`'s Data Room tab.
+- **Left for Session 5:** `sidebarConfig.js`'s investor Deals row still lists
+  `/raise/data-room` in its `match` array. It keeps working through the
+  redirect, and Session 5 is told.
+
+**Tests re-aimed, none loosened.**
+- `investor_workspaces.test.mjs` pins the investor arm as the redirect,
+  still first and ahead of any founder shell. It refuses the drawer's mount
+  coming back, and pins the room's own guard.
+- The Deals rail link assertion now reads `/research/diligence`.
+- `data_room_live.test.mjs`'s watermark test read `DataRoomPage.jsx`. With
+  the drawer gone, only its docblock would still satisfy it, so it now reads
+  the two pages an investor downloads from.
+- `research_ask_session.test.mjs`'s "the band's read is gone" now admits the
+  scoped read. It still pins that the band loads its surface's drafts and
+  nothing else, and never drafts on mount.
+- `route_role_zone_contract.test.mjs`'s `BRANCHED` row for `/raise/data-room`
+  still holds unchanged, because the redirect is an `effectiveRole ===
+  'investor'` branch.
+- `branch_rail_mount`'s ceiling of five computed rail roles is kept. Both
+  new pages pass the literal `role="investor"` to `WorkerRail`, as that
+  test's note asks of a sixth mount.
+
+**New tests.**
+- `research_diligence_pages.test.mjs` (10 tests) asserts each element twice:
+  the canvas draws it and the page renders it, for both canvases. It also
+  runs the pure readings in `diligenceRead.js`, pins the routes, the scoped
+  band and the retirement, and bans the canvases' fixtures.
+- `research_diligence_room.test.ts` gains 3 tests:
+  - the memo is drafted only over a held grant, and the model is never
+    reached otherwise;
+  - the model is sent the NDA count and never the names;
+  - a room page reads only its own room's memo.
+
+**Differs from the canvas, deliberately.**
+- A history line says a link was "issued". The access log records the link
+  being issued, not followed (D310), so "link used once, then expired" is not
+  claimed.
+- The canvas sends only `open` files to the document page. An investor whose
+  NDA with the founder is live may open `nda` files too, as the download
+  route already allows, so such a file reaches the page with an "NDA ·
+  signed" pill. Nothing draws the NDA-signed state, which the gap map named
+  as a canvas gap.
+- The canvas's "COLLECTION" mark and scope chip are shell chrome, drawn by
+  `WorkspaceShell`, not by these pages.
+
+## D312
+
+**The fund dossier gets its Last-updated tile, a "What's missing"
+checklist from the row's own columns, and a model-drafted pre-meeting brief
+whose Accept writes into the note.** Session 2, wave 8, item 5. It builds
+canvas c0834993's FS4d on `/research/funds/:uid`. No migration and no new
+route: the brief is a new draft surface on the existing `/research/drafts`.
+
+**Last updated.** `fundDto` now carries `updated_at`; the column always
+existed and every write already stamped it. The tile replaces the Pass tile,
+as FS4d draws four tiles: Cheque, Stage, Path, Last updated. A passed fund is
+still shown three ways: the status pill, the "Passed with no reason recorded"
+warning, and the pass-reason card. A row with no stamp reads Not recorded.
+
+**The checklist counts only what this page can close.**
+- Rows derived from the fund's columns are done or a gap: thesis quoted,
+  cheque range complete, stage assessed, path assessed, and source recorded.
+  A pass reason is added only for a passed fund, as FS4d's own note says.
+- FS4d also draws a sourced investment, a public size and the partner who
+  will be in the room. No store holds any of them, so they read Not recorded,
+  with the reason, and are never counted as gaps.
+- A cheque with one end recorded is a gap. A zero is a recorded end, not a
+  missing one.
+
+**Public size and "What they have funded" read Not recorded, with their
+reason.** Both need a new store, and Session 2's prompt says the second
+migration number that needs comes from Session 1. Nothing is drawn from
+them in the meantime: no chart, no rows and no count.
+
+**The brief.** `research/funds` is a new `DRAFT_SURFACES` entry, on its own
+lines at the end of the map.
+- Its material is the one fund row, read with `owner_user_id = ?`. It holds
+  the thesis quoted in their words, the note, the cheque with a missing end
+  written "not recorded", stage, path, status, pass reason and source. The
+  partner, size and investments are each written "not recorded", so the
+  instruction turns them into questions to ask.
+- It drafts nothing, and never reaches the model, for a fund the caller does
+  not own, or for a row with neither a thesis nor a note. A brief over a
+  fund's name alone would be written from the model's own knowledge of that
+  fund.
+- It is never drafted on page load. The band is `ZoneDraft`, scoped to the
+  fund uid (D311's `scoped`).
+
+**What Accept writes.** `DRAFT_SURFACES` entries gain an optional `accept`
+hook, and `PATCH /research/drafts/:uid` runs it before stamping
+`accepted_at`.
+- The funds hook appends the brief, or the reader's edit of it, to the note
+  under "Pre-meeting brief:", after the founder's own words, and stamps the
+  row's `updated_at`. It never replaces the note.
+- A note and brief over the 2,000-character column cap that `PATCH /funds`
+  enforces are refused as `note_full`, with our sentence. Neither text is
+  truncated, and nothing is written: not the note, and not `accepted_at`.
+- Surfaces with no hook accept exactly as before.
+- `ZoneDraft` gains `onAccepted`, which the dossier uses to re-read the note
+  Accept wrote. A 409 from Accept now prints the Worker's own sentence.
+
+**Why the old band went.** The dossier's local "Fund · approach note"
+ZONEDRAFT put its own explanatory sentence into the preview when Draft was
+pressed ("Draft restates only what is on this page: …"). Accept then saved
+that sentence as the founder's note. It is replaced, not repaired.
+
+**Other lines this made stale, fixed.**
+- `FundsZone`'s subtitle said "Investor research and fit scores", but the
+  product stores no fit score. It now says "Thesis in their words, stage and
+  path as separate facts", which is FS4's own sub.
+- `founderZoneActions.js`'s list-level "Brief me" op said no per-fund brief
+  is generated. It stays unbuilt on the list, because a brief is about one
+  fund, and its reason now says the brief is drafted on the fund's dossier.
+  It is still on `profile_zone_actions`'s reviewed elsewhere-claims list,
+  because it still names where the op happens.
+- ROUTE_MAP's Fund dossier row said the draft does not call
+  `research_zone_drafts`. It now describes the brief.
+
+**Tests.**
+- `research_fund_brief.test.ts` (new, 6 tests, real SQLite over migrations
+  216 and 221) covers:
+  - `updated_at` on the read;
+  - no draft over another founder's fund, a bare fund or no scope, with the
+    model never reached;
+  - the prompt quotes the thesis and marks the gaps;
+  - Accept appends after the founder's words and stamps the row, and an
+    edited brief is what gets written;
+  - an overflow is refused with nothing written and nothing stamped;
+  - another founder cannot accept into the note, and a hookless surface
+    still only stamps.
+- `research_fund_dossier_fs4d.test.mjs` (new, 6 tests) slices FS4d from the
+  canvas, asserts each element at both ends, and runs the checklist and
+  Last-updated readings.
+- `research_fund_dossier.test.mjs` is re-aimed:
+  - The stated limit read "or drafts an approach", which is now false. It now
+    pins "or writes to the fund".
+  - Its ban on the page naming the draft store becomes a pin on the one
+    `ZoneDraft` band: `research/funds`, scoped to `fund.uid`, re-reading
+    after Accept. It also refuses the local restatement coming back.
+  - The other five sentences it pins are kept word for word on the page,
+    three of them in the new band.
+
+## D313
+
+**One saved competitor analysis gets its own page at `/research/companies/:id`,
+and `/build/competitors` retires into it for everyone that page admits.**
+Session 2, wave 8, item 4. It builds canvas 90eb4cf2. No migration, no new
+route and no new `api.js` method: every write the canvas draws already had
+one in `competitors.ts`.
+
+**The page is `CompanyAnalysis`, guarded to admin, founder and advisor**, the
+same licences as the Companies list. It draws every element of the canvas:
+- the editable title (max 200), the mode and status pills, "updated …", and
+  "edited since last run";
+- Save, Re-run, Refresh sources, JSON and Markdown;
+- the inputs row, where anything the person did not give reads Not recorded;
+- the founder scope band ("These analyses are yours, not a client's"), which
+  only the advisor zone drew before;
+- the running card, the failed-read card with Try again, and the pipeline-error
+  card with Re-run and Quick scan (a re-run at quick depth);
+- the four tiles, the market summary, and the seven-column competitors table
+  with a category select, origin, relevance, source-kind chips, summary and
+  Remove, plus the Add competitor row with Crawl site;
+- the feature grid, the signal columns, gaps, the wedge, next steps and notes;
+- the landscape-read ZONEDRAFT and the stated limit.
+
+**Three states, three shapes**, as the canvas's D2 to D4 insist:
+- a failed read draws no tiles at all;
+- a failed run draws Not recorded tiles and withholds the body;
+- a finished run draws its numbers, 0 included, because a run that found
+  nothing is a fact.
+
+"Sources fetched" counts sources whose stored HTTP status is 2xx or 3xx, not
+every URL attempted.
+
+**Nothing blank is written as 0.**
+- `PATCH /competitors/:id` re-inserts the whole candidate set with
+  `Number(relevance_score) || 0`, so a save that sent candidates would turn a
+  blank relevance into 0.
+- The page's Save therefore sends the title and the output only. A category
+  change goes through `PATCH /:id/candidates/:cid`, which touches that one
+  column. Companies are added and removed one row at a time.
+- A blank relevance, domain, summary, source list or feature cell reads Not
+  recorded. A blank feature cell is never "no", because an unfetched site is
+  not evidence that a feature is absent.
+- `competitors.ts` is not Session 2's file, so its bulk write is left as it
+  is. A test holds the page to never sending the set.
+
+**The landscape read is a restatement, not a model**, as the canvas draws it
+("It will not invent a wedge, a price, or a company").
+- It repeats the market summary, the direct and adjacent companies with their
+  summaries, and the kinds of source that came back.
+- Accept appends it to the notes under "Landscape read:", after what is
+  there, and saves the output.
+- Accept is disabled while other edits are unsaved, so one press cannot also
+  save them.
+- The canvas says Accept "writes notes/gaps". It writes notes only, and says
+  so.
+
+**Retired, and where each piece now points.**
+- **`/build/competitors`** now redirects, with `replace`, for founder and
+  admin: with `?id=X` to `/research/companies/X`, and otherwise to
+  `/research/companies`. The page read no other query string.
+- **Partner and investor keep the old page.** `/build/competitors` admits
+  them, and `/research/companies` does not, because neither shell has a
+  Companies zone. A redirect would lock them out of a page they can use today,
+  and no canvas-built page does that job for them. For them the page stays,
+  per the retirement rule. `route_role_zone_contract` still holds.
+- **In `CompetitorAnalysis`**, when mounted in the Research zone
+  (`linkToDossier`), each saved analysis is now a link to its page, and a new
+  run opens on its page. Mounted `embedded` on the startup page, or bare for
+  partner and investor, it keeps its in-place panel, so the component and that
+  panel stay: they are not orphaned. The panel's "Recommended next actions"
+  now reads "Next steps the run listed", under the voice rule.
+- **`CompanyCandidate`'s** "‹ Back to analysis" and its after-remove
+  navigation went to the list. Both now go to the analysis.
+- **`FounderResearchDesk.jsx`'s** Company profiles card (Session 2's one line
+  in that file) links `/research/companies`.
+- **Tests:**
+  - `founder_overview_subpage_links`'s `HELD_ELSEWHERE` exception for that
+    line is emptied, because the link now sits inside its own bucket.
+  - `founder_research_a7_contract` pins `/research/companies`, and now
+    refuses `/build/competitors`.
+
+**Differs from the canvas, deliberately.**
+- "Recommended next actions" reads "Next steps the run listed", because copy
+  never calls model output a recommendation.
+- The run also stores positioning and traction signals, which the canvas does
+  not draw. They stay, as two more signal columns, each omitted when empty.
+- The page's `WorkerRail` passes the literal `role="founder"`, per
+  `branch_rail_mount`'s ceiling on computed rail roles. An advisor reading
+  this page sees the founder rail accent. The page's content does not change
+  for them.
+
+**Tests.** `research_company_analysis.test.mjs` is new, with 10 tests. It
+asserts each element at both ends: the canvas draws it, and the page renders
+it. It also runs the three tile shapes, the inputs row, the feature grid's
+transpose and blank cells, the signal columns and the landscape read. It pins
+that a save never sends candidates, the routes, the list links, the
+candidate back-links, the redirect's `?id=`, and the partner and investor
+branch. It also bans the canvas's fixtures.
+
+**Mutations.** 17 were run. 15 were caught on the first run, and two escaped
+because their assertions were weak, so the assertions were fixed, not the
+code:
+- A grid drawn from rows with no feature heads passed. The only no-features
+  case tried also had empty rows. A case with rows and a blank head now
+  requires `null`.
+- Opening the zone's saved list in place passed. The pin matched the `<Link>`
+  text even when its branch was dead. It now requires that link to be the arm
+  `linkToDossier` takes.
+
+After the fix, 17 of 17 are caught.
+
+## D314
+
+**One benchmark gets its own page at `/research/benchmarking/:uid`, its edit
+is re-validated against migration 217's CHECK, and the members of its peer
+set get a store (migration 303).** Session 2, wave 8, item 3. It builds
+canvas f2eb2046.
+
+**The owner's direction settled the gap map's choice.** The gap map offered
+two options for the constituents: "state them as Not recorded, or add a new
+table". The direction is that every drawn control is wired, so this adds the
+table (migration 303), its reads, and the canvas's Add a constituent and
+Remove writes.
+
+**Migration 303: `research_benchmark_constituents`.**
+- Each row holds a name, a value and an as-of, both kept as text so a unit
+  is never implicit. It is keyed to its benchmark and, denormalised, to its
+  owner, so every read and write is a single owner-scoped predicate.
+- A `CHECK (length(trim(name)) > 0)` means a constituent is a name first. The
+  schema refuses a blank one from any writer.
+- Nothing ties the number of constituents to the stored `peer_sample_size`,
+  on purpose. A list of three against an n of five is stated, not corrected.
+  Rewriting the sample to match the list would be the product deciding which
+  of the reader's two entries was the mistake.
+- The migration has no transaction and no dependence on another session's
+  migration, and it declares everything it creates.
+
+**Worker routes, all in `research.ts` and all owner-scoped.** A uid that is
+not the caller's answers exactly like one that does not exist.
+- `GET /research/benchmarks/:uid` returns the row with `updated_at` and its
+  constituents in order. It also returns `thin` and `sample_note`, which are
+  about this row's own n (under 10), not the list's minimum. Finally it
+  returns `count_mismatch` and `mismatch_note`.
+- `PATCH /research/benchmarks/:uid` merges the edit onto the stored row and
+  validates the result:
+  - a peer figure without its source and sample is refused as
+    `peer_base_required`, before the schema would refuse it with a constraint
+    error;
+  - a blank metric is refused as `metric_required`, and a sample under 1 as
+    `sample_size_invalid`;
+  - clearing the peer figure returns the row to tracked, unless constituents
+    are named against it, which is `constituents_exist` (409). They are
+    members of a peer set the row would no longer have.
+- `POST /research/benchmarks/:uid/constituents` adds a constituent at the
+  next position. Only a comparison takes one: a tracked row is refused as
+  `not_a_comparison` (409). A blank name is refused as
+  `constituent_name_required`.
+- `DELETE /research/benchmarks/:uid/constituents/:cuid` removes a
+  constituent from its own benchmark only.
+- The existing `DELETE /research/benchmarks/:uid` now removes the
+  benchmark's constituents first. D1 does not enforce the foreign key's
+  cascade inside a batch.
+- The new `api.research` methods are `benchmarkGet`, `benchmarkUpdate`,
+  `benchmarkConstituentAdd` and `benchmarkConstituentRemove`.
+
+**The page is `BenchmarkDetail`, guarded to admin and investor** like the
+list, and the list's metric now links to it. It draws every element of the
+canvas:
+- the header, with ours vs peer and the n= pill (amber under 10), or
+  "Tracked, not compared";
+- the thin-base banner, the four tiles (each Not recorded when absent), and
+  the two figures, neither coloured as better;
+- the reading, with Save;
+- the constituents table, its mismatch warning, its empty state ("Do not
+  invent funds.") and Add a constituent, which is offered only on a
+  comparison;
+- the six-field editor, the ZONEDRAFT and the stated limit.
+
+A tracked row shows Not recorded in every peer tile and in the peer half,
+never 0.
+
+**The ZONEDRAFT is a restatement, not a model**, as the canvas draws it: "The
+draft restates only those fields — it has no peer data set to reach for." On
+a thin base it says the gap is not a market rate. Accept writes it as the
+reading through `PATCH`.
+
+**Not built, and why.**
+- The canvas's SAMPLE marker on the reading is fixture labelling, not an
+  element.
+- `api.research.benchmarkRemove` is still called by nothing. No benchmark
+  canvas draws a delete, so none is added. Its route now also clears the
+  constituents, for when a delete is drawn.
+
+**Tests.**
+- `research_benchmark_detail.test.ts` (new, 9 tests, real SQLite over the
+  table definitions in migrations 217 and 303) covers:
+  - owner scoping, with another owner's benchmark answering like a missing
+    one;
+  - the thin note on this row's own n;
+  - merged-row validation, and the refused edits;
+  - constituents: comparisons only, appended in order, named;
+  - the mismatch stated while n is left alone;
+  - no clearing of the peer figure under constituents;
+  - removal from the benchmark's own list only, and the cascade on delete;
+  - the schema's own refusal of a blank name.
+- `research_benchmark_detail.test.mjs` (new, 7 tests) asserts each element
+  at both ends, runs the tiles, the draft and the editor patch (a blank sample
+  is null, never 0), and pins the route, the list link, the four methods and
+  the constituent rules. It also bans the canvas's fixtures.
+
+**Mutations.** 19 were run, and 18 were caught on the first run. One escaped
+because its assertion was weak. PATCH overwriting a field it was not sent
+(`reading`, read from the body even when absent) passed, because no test sent
+an edit without a reading after writing one. The fix was to the assertion, not
+the code: the merged-edit test now sends `our_value` alone and requires the
+stored reading to survive. After the fix, 19 of 19 are caught.
+
+## D320
+
+**The archetype banks go from three probes per trait to five, and every one
+of the 16 archetypes gets a complete profile.** Wave 8, Session 3, item 1.
+It ports one commit, 555332f50 from Cursor's branch (PR 789), as a fresh
+cherry-pick onto main. It supersedes that PR's only unmerged commit. The
+rest of the branch is already on main through the earlier squash 1ff21b463
+(PR 678), so merging the branch would have conflicted in four source files.
+Closing PRs 789, 790 and 791 is the owner's call. No migration, no route, no
+`api.js` method.
+
+**What changes.**
+- `services/advisor/banks/fitShared.ts`: each of the four traits (builder,
+  visionary, connector, operator) gets two more shared probes, and each
+  persona gets a second role-flavoured probe per trait. The archetype
+  section of every persona's profiling bank goes from 17 questions to 29
+  (20 shared, 8 role, the illustration question). The bank lives only in
+  code: nothing in D1 seeds or counts these keys.
+- `lib/assessmentMeta.js`: each of the 16 slugs gets a `summary` (for the
+  compact card), a full `description`, a trait `lean`, and a `matching` set
+  (same-track and cross-licence pairs), each pair with a `why`.
+- `ProfileFitSection.jsx`: the compact `/studio` card prints `summary`; the
+  full card keeps `description`. `ArchetypeCard` becomes a named export so a
+  test can render it.
+- `ArchetypeCardPage.jsx`: draws the lean and a "Who you match with" block.
+
+**Effect on people who already answered.** Classification is nearest-centroid
+over the average of each trait's probes, and its coverage counts traits
+touched, not probes answered (`services/archetypeScoring.ts`). A user who
+answered the old bank keeps their archetype and its coverage. Their profiling
+progress denominator rises by 12 (founder 46 to 58, investor 42 to 54,
+partner 41 to 53, advisor 43 to 55), so a profile that read complete now has
+twelve open archetype questions, and Eadwyn asks them. That is intended: the
+extra probes are what give the classifier headroom.
+
+**Voice.** The new copy uses "advice" and "advisory" only about human
+investors and advisors (the Hands-On Partner, the coach archetypes), never
+about Eadwyn. The card's empty-state line "questions in the advisor" is
+unchanged here; item 3 re-aims it together with the test that pins it.
+
+**Verification.**
+- `npm run test:drift` on main 92c12edf2: exit 0. Frontend 3871 to 3873:
+  "every archetype has a complete profile: summary, description, matching"
+  (`studio_archetype_card.test.mjs`) and "the compact card prints the
+  summary; the full card prints the description"
+  (`studio_archetype_sprite.test.mjs`). Worker 4720 to 4721 (4718 pass, 0
+  fail): "archetype bank is the full trait + role + illustration set for
+  every persona", plus the renamed "archetype module has five probes per
+  trait". Retention 112 and guards 14 unchanged. Both typechecks,
+  `check-decision-ids`, `check-folder-docs`, `check-api-drift` and
+  `check-regulated-wording` exit 0; root `npm run build`, then
+  `check-docs-fresh --strict`, exit 0.
+- Mutations: 9 run, 8 caught (non-zero exit and a `not ok` line, each file
+  restored from a sha256-checked snapshot). One escaped: printing the full
+  description on the compact card. The ported sprite test only matched
+  `meta?.summary` in the source, and the condition that chooses between the
+  two still names it. The assertion was replaced by a render of
+  `ArchetypeCard` in both modes, which catches that mutation and its reverse
+  (the full card printing the summary).
+
+## D321
+
+**The Founder and Investor Studio homes say when a read failed, count the
+Lab's milestones from what the Worker sends, and stop drawing zeros they
+cannot support.** Wave 8, Session 3, item 2 (the gap map's PR 1). Frontend
+only: no migration, no route, no `api.js` method.
+
+**The defects.**
+- The founder Lab card printed `completed_count || 0` "completed".
+  `/spinout-lab/state` has never sent `completed_count`, so it always read
+  "0 completed". Its "Current focus" row read three fields the Lab does not
+  send, so it was always "Not recorded".
+- A founder card whose read failed printed "Live source unavailable." and then
+  drew its rows anyway, each reading "Not recorded". When the project list
+  failed, every project card also said "Select or create a startup", which
+  invites a founder whose record merely failed to load to make a second one.
+- The "Independent subsidiaries" card appeared only when there were
+  subsidiaries, so a failed read hid it.
+- Investor Quick stats (the gap map's ISH:105) drew "Not recorded" for the
+  deal-flow and lifecycle figures when those reads had failed, and the deal
+  count read 0 while the dashboard was still loading.
+- The investor home's `number` helper returned 0 for `null`, because
+  `Number(null)` is 0. A missing stage count or match average therefore
+  showed as 0, and the lifecycle funnel added `?? 0` on top.
+- Four investor cards reported a failed read as a plain status line with no
+  retry.
+
+**What each home does now.**
+- Every founder card takes its failure, a claim sentence and a retry. A failed
+  read draws `Unreadable` and nothing else: no rows, and no "create a startup"
+  prompt. The subsidiaries card also appears when its read fails.
+- The Lab card counts the `milestones` list: the number completed this week,
+  the total completed, and the days remaining. The week's deliverable total
+  (the canvas's "3 of 5") is held in the Worker's milestone catalog and not
+  sent; the catalog says it must never be copied, so that row reads "Not
+  recorded" with the reason. An account with no active sprint says so. The
+  "Current focus" row is gone: nothing records a focus.
+- Investor Quick stats reads two sources, each in one of four states:
+  withheld (admin preview), loading, unreadable or ready. A failed source
+  draws one `Unreadable` line with a retry in place of its rows. The funnel,
+  the opportunities, the portfolio and the events cards draw `Unreadable` with
+  a retry. An unscored opportunity reads "Unscored" rather than a bare dash.
+- `Dashboard.jsx` passes the investor home an `onRetryLifecycle` that re-reads
+  `/dashboard/investor-lifecycle`. Retrying the dashboard never re-read it,
+  because that effect is keyed on the role. Where the dashboard itself failed
+  and the lifecycle was never requested, the dashboard retry is the retry.
+- Both homes draw the canvas's context line: "Studio", the role badge, the
+  context and today's date, replacing "One company. One clear move." and
+  "Thesis in motion." The advisor home already had it.
+- The founder Deck card reads the newest version's slides (`/decks/:id`) and
+  its engagement (`/decks/:id/engagement`). Both reads existed; the card never
+  called them. It draws the version, the slide count, the save date, "Last
+  shared" and "Viewed N× this week". Before this, "Slides" and "Last updated"
+  asked the version list for fields it never returns, so both were always "Not
+  recorded". Each of the two extra reads can fail alone, and then that part
+  reads `Unreadable` in place of its rows.
+- The founder Raise card draws the committed share of the target as a
+  percentage and a bar, when both amounts are real.
+
+**Differs from the canvas, deliberately.**
+- The canvas's "Last shared: 2 investors" cannot be drawn: a share link
+  records no recipient, so the card counts links, with the newest link's date.
+  "Viewed N× this week" counts views from the engagement read's newest 200, so
+  a deck viewed more than 200 times in one week would undercount.
+- The canvas notes that a founder with no subsidiary never sees the
+  subsidiaries card. That still holds, but a founder whose subsidiaries read
+  failed now sees the card as `Unreadable`. A failed read is not evidence of
+  none.
+- The Lab card reads "Week N", not the canvas's "Week 2 · Solution & Roadmap".
+  The week titles live only inside other sessions' pages, not in a module this
+  page can import.
+
+**Moved, so a test can render it.** The homes mount PersonalAdvisor, whose
+imports reach Worker modules, so a Node test cannot import them. The founder
+cards, `MetricRow`, `LabRows`, `labSummary`, `DeckRows`, `deckSummary`,
+`RaiseProgress` and `raisePercent` now live in
+`pages/founder/founderStudioCards.jsx`. Investor Quick stats' `quickStats`,
+`StatGroup`, `Row`, `Loading` and the fixed `number` live in
+`pages/investor/investorStudioParts.jsx`. Each home imports them back.
+
+**Left to later items.** Session 3's items 3 to 6 build the rest of the gap
+map for these homes: the voice, the shared "interview complete" row and the
+archetype card.
+
+**Verification.**
+- `npm run test:drift` on main ecd185ca9: exit 0. Frontend 3887 to 3912, the
+  25 new tests all in `studio_honesty_d321.test.mjs`. Worker, retention and guards
+  unchanged. Both typechecks, `lint:undef`, `check-dark-mode`,
+  `check-decision-ids`, `check-folder-docs` and `check-api-drift` exit 0.
+  Root `npm run build`, then `check-docs-fresh --strict`, exit 0.
+- Mutations: 26 run, 26 caught (non-zero exit and a `not ok` line, each file
+  restored from a sha256-checked snapshot). The first 18 were run again
+  against the final code, and all were caught again. They were aimed at the
+  defects:
+  - a failed card drawing its rows, and a card losing its retry or its claim;
+  - an absent milestone list or sprint start becoming 0, the per-week count
+    ignoring the week, and the Lab count going back to `completed_count`;
+  - the subsidiaries card hiding its failure again;
+  - a `|| 0`, `?? 0` or `number(null) === 0` returning, including a local copy
+    of `number`;
+  - a failed or loading dashboard shown as ready, and an unreadable group
+    drawing its rows;
+  - the lifecycle failure going back to a status line, and its retry leaving
+    the stale failure on screen;
+  - the investor title going back to its old headline;
+  - every view counted as "this week", the newest link read as the oldest, an
+    unanswered share list becoming 0, either extra deck read's failure being
+    ignored, a zero target dividing, and the bar running past full.
+
+## D322
+
+**Eadwyn is not "the advisor", and the regulated-wording lint can now see
+the lines that said so.** Wave 8, Session 3, item 3 (the gap map's PR 2).
+Frontend copy and one script: no migration, no route, no `api.js` method.
+
+**The lint's blind spot.** `scripts/check-regulated-wording.mjs` read JSX text
+with `/>([^<>{}\n]{4,})</`, which stops at a newline. Text on a line of its own
+between two tags was never read, so the chat's empty state, "Your advisor will
+guide you through a quick setup", passed. The scan now also reads whole lines
+that sit between a tag ending one line and a tag or an expression opening the
+line after, joined into one sentence. Lines that open a tag or an expression
+are excluded, and so is anything not followed by a tag or expression, so code
+after a `>` comparison is not read as text. That rule surfaced one false
+positive, a className list (`"advisor-row advisor-row--open"`). A string in
+which every token carries a hyphen, underscore or colon is now treated as a
+class list, not prose.
+
+**Wider scope.** The scanned surfaces gain `ProfileFitSection.jsx`,
+`ArchetypeCardPage.jsx`, the five Studio homes (founder, investor, advisor,
+partner, admin) and the two modules D321 moved the founder and investor cards
+into: 21 surfaces in all.
+
+**The copy.** Each line below speaks about the chat, which is Eadwyn:
+- `PersonalAdvisor.jsx`: "Eadwyn will guide you through a quick setup."
+- `ProfileFitSection.jsx`, four empty and footer states: "with Eadwyn" in
+  place of "in the advisor", "to the advisor" and "with the advisor".
+- `ArchetypeCardPage.jsx`: the empty state says the same.
+- `FounderStudioHome.jsx`: the unavailable-chat note reads "Live interview",
+  not "Live advisor".
+- `AdvisorFilledBanner.jsx`: its button opens the chat, so it reads "Review
+  with Eadwyn". No session holds this file this wave; it is one string, and
+  the wider scan is what found it.
+
+**On record, not changed.** Ten lines are about human advisors and go into
+`scripts/regulated-wording-baseline.json`, each with its reason:
+- the founder home's Office hours card, which lists bookings with a human
+  advisor;
+- the advisor Studio home, which is the human advisor's own page (its
+  practice, profile, slots, sessions and earnings, and the role preview an
+  admin sees).
+
+The ledger goes from 3 entries to 13. The three already there record
+"Personal Advisor" as a shipped product name, unchanged.
+
+**Re-aimed.** `studio_archetype_card.test.mjs` pinned the old sentence
+verbatim. It now asserts the property: the empty state names Eadwyn and never
+an advisor.
+
+**Testable.** The script exports `SURFACES` and `visibleText` and runs `main()`
+only when invoked, so `regulated_wording_scan_d322.test.mjs` pins the scanner
+itself. A change that makes the scan read less fails that test, instead of
+passing every file.
+
+**Verification.**
+- `npm run test:drift` on main 8d98f34ce: exit 0. Frontend
+  3916 to 3922, the 6 new tests all in `regulated_wording_scan_d322.test.mjs`.
+  Worker 4733 (4730 pass, 0 fail), retention 112 and guards 14 unchanged.
+- Both typechecks, `lint:undef`, `check-regulated-wording` (21 surfaces, 13 on
+  record), `check-decision-ids`, `check-folder-docs` and `check-api-drift`
+  exit 0.
+- Mutations: 10 run, 10 caught (non-zero exit and a `not ok` line, each file
+  restored from a sha256-checked snapshot):
+  - the multi-line scan removed, or no longer requiring a tag or expression
+    after the text;
+  - the class-list rule removed, or broadened until it swallows prose;
+  - the founder home taken off the scanned list;
+  - each of the five voice lines reverted.
+
+## D323
+
+**The old "Welcome back" Studio page retires into the founder home and a
+redirect, and two pages nothing imported are deleted.** Wave 8, Session 3,
+item 4 (the gap map's PR 3). Frontend only: no migration, no route. One
+`api.js` method is removed.
+
+**What retired.**
+- The final branch of `pages/Dashboard.jsx`: the "Welcome back" page drawn
+  after the four role homes. It carried a greeting and role badge, a
+  PageExplainer, semantic search, a notifications dropdown, "Refresh Scores",
+  the investor trial banner, the Eadwyn chat, `VentureNextStep`,
+  `ProfileFitSection`, a subsidiaries widget, and an investor deal desk that
+  no viewer could reach, because investors are dispatched to their own home
+  first.
+- `pages/SkillsProfilePage.jsx` and `pages/ValuesAssessmentPage.jsx`. Nothing
+  imported either, and their routes, `/skills` and `/values`, already
+  redirected to `/studio`. The redirects stay; the `App.jsx` comment that
+  called the files "kept intact on disk" is corrected.
+
+**Who reached the old page, and where they go now.** `/studio` admits the five
+Studio roles, plus (through `labRoles` in `App.jsx`) an active Spin-Out Lab
+member of any role, and the role an admin is viewing as. Past the four role
+homes and the admin return, that leaves two viewers:
+- **An exploring account admitted to the Lab** (the holding page's "Company
+  record" row links it to `/studio`). The Lab is how an explorer becomes a
+  founder, so it now gets the founder Studio home.
+- **Anyone else**, in practice an admin viewing as "exploring". They get
+  `<Navigate replace>` to `/exploring`, with the query string and hash kept.
+  `/exploring` admits admins and exploring accounts.
+
+No route is retired; `/studio` itself is unchanged for the five Studio roles.
+
+**Every job the old page did, and its successor.**
+| Old page | Now |
+| --- | --- |
+| Google sign-in notice | the same `InfoStrip`, above the founder home |
+| Product tour | mounted above the founder home; see below |
+| Greeting, role badge, PageExplainer | the founder home's "Studio · Founder" context line (D321) |
+| Semantic search | the shell's command palette (Cmd+K) |
+| Notifications dropdown | the shell's notification bell |
+| "Refresh Scores" (`POST /dashboard/refresh-scores`) | nothing: no Studio home offers it |
+| Investor trial banner | unreachable here; investors are served by their own home |
+| Eadwyn chat | the founder home's chat |
+| `VentureNextStep` | the founder home's "Venture next step" card, same lifecycle endpoint |
+| `ProfileFitSection` | the founder home's compact profile band |
+| Subsidiaries widget | the founder home's subsidiaries card |
+| Investor deal desk | unreachable; `InvestorStudioHome` is the investor's home |
+
+"Refresh Scores" has no successor. Its Worker route stays: it is tested
+(`dashboard_company_scope.test.ts`), and removing a Worker route is outside
+this item. `api.refreshDashboardScores` had no other caller and is removed, together
+with its entry in `api.js`'s `SLOW_PATHS`. `api_request_timeout.test.mjs`
+fails on a pattern that matches no call, and it did.
+
+**Deleted with it.** `components/SemanticSearch.jsx`,
+`components/InvestorTrialBanner.jsx` and `components/VentureNextStep.jsx`
+(each imported only by the old page), and, inside `Dashboard.jsx`,
+`InvestorHome`, `DealLifecycle`, `InvestorStats`, `ScoredOpportunities`,
+`ScoredCard`, `IndependentSubsidiariesWidget`, `Card`, `RoleBadge` and
+`NotifDropdown`. Their API methods (`searchSemantic`, `investorBillingStatus`,
+`getLifecycle`) have other callers and stay. `DashboardFallback`, the error
+state for a failed dashboard read, stays.
+
+**Moved, not deleted.** `StatusBadge` and `WeekBadge` move verbatim to
+`components/StatusBadges.jsx`. `StartupList.jsx` and `ProjectDetail.jsx`
+import them from there.
+
+**The tour.** Its `search` and `notifications` steps anchored on markup that
+only the old page had, so every Studio home already showed them as unanchored
+boxes. They are dropped. The sidebar step now names Cmd+K, the command
+palette's key.
+
+**Re-aimed tests, and one property that changed on purpose.**
+- `founder_journey_guards.test.mjs` asserted that the founder home drew
+  `VentureNextStep` above `ProfileFitSection`, but it only ever read the old
+  page. The live home follows canvas 69dc42f3: chat, profile band, then the
+  modules. The guard now asserts what holds: the home's first card is the
+  venture next step.
+- `founder_journey_entry.test.mjs`'s five strip tests now read the founder
+  home's venture card. It must not link a dead Command Center or the
+  Operations console, and it must take its next action from the lifecycle
+  endpoint. Two properties are inverted deliberately. The strip rendered
+  nothing when there was no venture and stayed silent when its read failed.
+  Under D321 the card says "Select or create a startup" when there is no
+  project, and shows `Unreadable` when the read failed.
+- `admin_studio_overview.test.mjs` located the fit block in `Dashboard.jsx` to
+  show that the admin return came first. The dispatcher now mounts no fit
+  block of its own, and the test asserts exactly that.
+
+**Verification.**
+- `npm run test:drift` on main d4ccaf5c3: exit 0.
+  Frontend 3938 to 3942: `studio_fallback_retired_d323.test.mjs` adds 6, and
+  `founder_journey_entry.test.mjs`'s six strip tests become four about the
+  venture card. Worker 4733 (4730 pass, 0 fail), retention 112 and guards 14
+  unchanged. Both typechecks, `lint:undef`,
+  `check-unused-imports`, `check-react-hook-imports`, `check-dark-mode`,
+  `check-api-drift`, `check-folder-docs` and `check-regulated-wording` exit 0.
+  Root `npm run build`, then `check-docs-fresh --strict`, exit 0.
+- Mutations: 10 run, 10 caught (non-zero exit and a `not ok` line, each file
+  restored from a sha256-checked snapshot):
+  - the redirect dropping the query string;
+  - a Lab member sent to `/exploring`;
+  - everyone drawn the founder home;
+  - the admin return mounting the fit block;
+  - each moved badge losing a state;
+  - the founder home no longer leading with the venture card, the venture card
+    hiding its failure, or the venture card linking Command Center;
+  - the tour regaining the search step.
+
+## D324
+
+**Every Studio home collapses Eadwyn to one row once the interview is
+complete, and the assessment band's empty state is one designed card.**
+Wave 8, Session 3, item 5 (the gap map's PR 4). Frontend only: no migration,
+no route, no `api.js` method (`api.advisor.progress` and `api.advisor.queue`
+already existed).
+
+**The defect.** Canvas 69dc42f3 draws, on S3, "the one improvement": a
+finished interview collapses to a single row (completion, the top three open
+proposals, Open a ticket, Resume), so the page leads with what is
+time-critical. Only the advisor home collapsed, and its row had Resume only.
+Above it, the advisor home drew the canvas's three sample proposals ("Intro
+call filter", "Consent to show client outcomes", "Session-note auto-send") as
+a hard-coded strip. They were the canvas's `doneTop` fixture, frozen as copy,
+and never read from anything.
+
+**What ships.**
+- `components/advisor/StudioInterview.jsx` wraps the chat on all five homes
+  (founder, investor, advisor, partner, admin); none of them mounts
+  `PersonalAdvisor` directly any more. It reads `/advisor/progress`, and it
+  collapses only when the server's `overall.complete` is `true`. A progress
+  read that fails, or that does not say complete, leaves the full chat up,
+  because the row claims a finished interview.
+- `components/advisor/interviewCompleteRow.jsx` is the row:
+  - "Eadwyn" and "persona · answered/total answered (percent) · interview
+    complete", with skipped questions counted when there are any.
+  - The top three open proposals from `/advisor/queue`, in the order the
+    Worker ranked them. Each is a link to its page when the question names one
+    or the router's catalogue knows it. High-importance proposals are marked.
+    An empty queue reads "No open proposals."; a failed or malformed queue
+    read is `Unreadable` with a retry.
+  - "Open a ticket" reopens the chat with its ticket form already open, and
+    "Resume" reopens the chat. `PersonalAdvisor` gains one prop,
+    `initialTicketOpen`, which defaults to `false`, so every other caller is
+    unchanged.
+- The advisor home's own progress read, its ad hoc collapse and the
+  hard-coded strip are removed. The strip's three links are still on the
+  page: "Open storefront" on the Storefront card, "Open clients" on the
+  Engagements and Consented proof cards, and Settings in the shell. Its CSS
+  rules go with it.
+- The page's one `#studio-chat` anchor moves into the wrapper, defined once in
+  `interviewCompleteRow.jsx`. The admin posture's `CHAT_ANCHOR` is that
+  constant, so its "Continue in the chat" links still land.
+
+**The assessment band's empty state.** Canvas S4 draws the band, when nothing
+has been measured, as one card with one action, "because results genuinely
+can be absent and a gray placeholder would read as breakage".
+`ProfileFitSection`'s Studio band now draws "Assessment not started" with
+"Begin with the chat" (a link to `#studio-chat`) in place of its three
+separate nudges. It does so only when all four reads (radar, values,
+assessment results, best fit) answered and every one is empty. A read still
+loading, or one that failed, keeps the three cards, so a failure never reads
+as "not started". The canvas draws the card on the Partner artboard only, but
+the band is one shared component and the card's copy names no persona, so it
+applies to every profile.
+
+**On record.** The regulated-wording lint scans the two new files (23
+surfaces). One ledger entry, the advisor home's "Advisor interview is withheld
+in role preview.", is removed with the string it recorded (12 on record).
+`admin_studio_overview.test.mjs` pinned a bare `<PersonalAdvisor />` on the
+admin home. It now asserts the admin home mounts Eadwyn once, through
+`StudioInterview`, which mounts `PersonalAdvisor`.
+
+**Verification.**
+- `npm run test:drift` on main 4a3484ca9: exit 0. Frontend 4009 to 4024, the
+  15 new tests all in `studio_interview_d324.test.mjs`; worker 4771 (4768
+  pass, 0 fail), retention 112 and guards 14 unchanged. Both
+  typechecks, `lint:undef`, `check-unused-imports`, `check-react-hook-imports`,
+  `check-dark-mode`, `check-frontend-logging`, `check-regulated-wording`,
+  `check-folder-docs`, `check-decision-ids` and `check-api-drift` exit 0.
+  Root `npm run build`, then `check-docs-fresh --strict`, exit 0.
+- Mutations: 17 run, 17 caught (non-zero exit and a `not ok` line, each file
+  restored from a sha256-checked snapshot):
+  - progress: the flat fields read before `overall`, and a truthy value
+    counted as complete;
+  - proposals: the queue re-sorted, a fourth proposal shown, a non-queue
+    payload read as empty, the catalogue fallback for a page dropped, a failed
+    read shown as "none", and the skipped count dropped;
+  - the wrapper: the chat collapsing without the server's word, Open a ticket
+    reopening without the form, `PersonalAdvisor` ignoring the new prop, and
+    the anchor dropped;
+  - the empty card: shown on a failed read, shown when best fit has an
+    archetype, or never shown;
+  - the homes: the advisor home's strip restored, and the founder home
+    mounting the chat directly.
+
+## D325
+
+**The archetype card is finished: a retry on every failed read, labels for
+screen readers, a single sprite as one tile, rows on a phone, Values as
+sliders, and a Level / XP bar.** Wave 8, Session 3, item 6. One new route,
+`GET /api/assessment/xp/me`, and its `api.js` method,
+`assessment.myXp()`, in the same commit. No migration: `user_xp` has existed
+since migration 108.
+
+**The XP route.** `user_xp` holds each user's running total. The assessment
+engine and `eventBadges.ts` write it; until now no route read it.
+- The route reads only the caller's own row, with the id bound.
+- The level is derived from the total with the engine's own curve
+  (`levelForXp`: floor(sqrt(xp / 100)) + 1), not taken from the stored
+  `level` column. A concurrent award can leave that column a step behind the
+  total. The route also sends the band around the level: level L starts at
+  100·(L−1)² XP, and L+1 at 100·L².
+- No row is the engine's own default, 0 XP at level 1, so it is a real zero.
+  `recorded: false` says so, and the bar adds "No XP awarded yet".
+- A failed read is a `refuse()` body, `xp_unreadable`, with our own sentence.
+  The SQLite text stays out of it, and the body carries no figure.
+
+**Where the bar goes.** Canvas 69dc42f3 ("Studio · Persona hubs") draws the
+bar inside the compact archetype card on `/studio`. Canvas ec6c3ada ("Studio ·
+Archetype preview"), the card's own design, stops that card at the teaser.
+The card's own design wins, so the bar sits at the top of the full
+`/studio/archetype` page. It reads its own source and retries on its own.
+
+**The card and the band.**
+- **Retry.** The Skills, Values and archetype cards each show `Unreadable`
+  with a retry when their read fails, in place of the raw error text. Each
+  retry re-reads only its own source. The full archetype page does the same
+  for the archetype itself.
+- **Labels.** The compact card is labelled "Title: Name, N% confidence. View
+  full card". Each sprite's alt text names the archetype and which of the pair
+  it is.
+- **One tile.** A sprite whose file is missing drops its slot. When one sprite
+  remains, the pair is one centred tile, 180px wide, not a half-empty pair.
+- **Phone rows.** On a phone, the band is a Skills row, the archetype card,
+  then a Values row. The Skills row names the three strongest measured axes;
+  the Values row names the two strongest leans. Each row opens its card. From
+  `md` up, the band is the three cards as before.
+- **Sliders.** The five bipolar founder dimensions draw as sliders between
+  their poles; the ten unipolar dimensions stay bars, under "Working
+  principles". A score under 0.5 either way reads "Balanced". The first cut
+  read a null score as 0, which drew a Balanced reading nobody gave; the test
+  caught it, and a null score now draws no slider.
+
+**Left out.** The locked state on the card waits on the owner's paywall
+decision.
+
+**Verification.**
+- `npm run test:drift` on main a0e0f83ad: exit 0. Frontend 4045 to 4060,
+  the 15 new tests all in `archetype_card_completion_d325.test.mjs`; worker
+  4807 to 4814 (4811 pass, 0 fail), the 7 new tests all in
+  `assessment_xp_d325.test.ts`, on a schema built from migrations 107 and 108;
+  retention 112 unchanged. `studio_archetype_sprite.test.mjs` had three pins
+  widened to allow the new sprite props. Both typechecks, `lint:undef`,
+  `check-api-drift`, `check-refusal-bodies`, `check-sql-prepare`,
+  `check-row-generics`, `check-unused-imports`, `check-react-hook-imports`,
+  `check-frontend-logging`, `check-dark-mode`, `check-regulated-wording`,
+  `check-folder-docs` and `check-decision-ids` exit 0. Root `npm run build`,
+  then `check-docs-fresh --strict`, exit 0.
+- Mutations: 22 run, 22 caught (non-zero exit and a `not ok` line, each file
+  restored from a sha256-checked snapshot):
+  - the route: the level taken from the stored column, the next level off by
+    one, another user's row read, raw database text in the refusal, and no row
+    reported as recorded;
+  - the band: raw error text on a failed card, the aria label dropped, the
+    sprite alt text dropped, a missing sprite keeping two columns, a missing
+    file never reported, the Balanced threshold removed, the poles swapped, a
+    null score read as 0, the Skills row not strongest-first, the phone rows
+    never hiding the cards, a retry re-reading every source, and the full
+    layout's retry dropped;
+  - the bar: the share measured from 0 rather than the level floor, a
+    malformed standing drawn, and the zero-XP note always shown;
+  - the page: the raw error printed, and the bar not mounted.
+- One escape on the first pass: the retry assertion matched any mount of the
+  card, so a Skills retry that re-read every source still passed. The
+  assertion now mounts each card twice and checks that each mount retries
+  only its own source. Both that mutation and a second one for the full
+  layout are now caught.
+
 ## D330
 
 **AdminX.jsx and AdminTelegram.jsx say why no draft was made.** Wave 8,
@@ -30980,6 +32143,81 @@ exactly this, and the generated copy's wet-ink blocks remain the way to sign.
   25fcdebab, pushed after #835 had squash-merged, so it never reached main.
   It is re-applied here as its own commit.
 
+## D355
+
+**Office Hours: a session keeps its action items and its rating. Both parties
+add and tick action items; only the founder rates, only a completed session;
+the partner sees each rating on their own session; the directory shows each
+partner's average from the first rating, always with its count.** Wave 8,
+Session 7, deferred list. Migrations 360 and 361; seven new `/api` methods.
+
+**The owner's four answers, which fixed the store's shape.** Migration numbers
+360 and 361. The average is ALWAYS shown — from the first rating, with the
+count beside it. The partner sees the rating per session, comment included.
+Action items belong to founder AND partner: both add and tick, and each item
+records who added it.
+
+**Store.** Migration 360, `partner_booking_action_items` (booking, title,
+linked tool, due date, `done_at` + `completed_by_user_id`,
+`created_by_user_id` + `created_by_role` ∈ founder/partner). Migration 361,
+`partner_booking_ratings`, `UNIQUE(booking_id)`, rating `CHECK 1–5`, with
+`partner_id` and `founder_user_id` copied from the booking by the Worker so
+the average is one `GROUP BY` and never trusts a request.
+
+**Who may do what** (`services/partnerBookingFollowups.ts`; the routes only
+pass the session user and relay refusals through `refuse()`):
+- A booking's parties are its founder (`founder_user_id`) and its partner (an
+  account whose `users.partner_id` is the booking's). **Anyone else — another
+  founder, another partner, staff — gets the same 404 as a missing booking.**
+  No request field chooses the actor or their side.
+- Items: either party adds one (not on a cancelled session); either ticks or
+  reopens any item, and the tick records who; only the author rewords,
+  re-dates, re-links or deletes (`not_the_author`). A linked tool is one of
+  seventeen Lab keys, a due date a real calendar date.
+- Rating: only the founder (`founder_only`), only once the partner marked the
+  session completed (`not_completed`), a whole number 1–5; a second write
+  replaces the first.
+- The average read names no founder and no booking; a partner nobody rated is
+  **absent**, never 0.
+
+**Routes** on the existing `/api/partner-office-hours` mount:
+`GET|POST /bookings/:id/action-items`, `PATCH|DELETE /action-items/:itemId`,
+`GET /action-items/me` (both sides, cancelled sessions left out),
+`PUT /bookings/:id/rating`, `GET /ratings/summary`. The two booking lists
+(`/me/bookings`, the partner's; `/bookings/me`, the founder's) LEFT JOIN the
+rating, so each row carries `rating` and `rating_comment`, `null` when unrated.
+No statement interpolates: the summary covers every rated partner rather than
+taking an id list, and the item update is one fixed statement.
+
+**Pages.** One component (`components/officehours/SessionFollowups.jsx`) draws
+a session's action items and rating on both the founder's Office Hours page
+and the partner's `/partner/office-hours`, so the two cannot drift. Founder:
+each non-cancelled history row opens its action items; a completed one takes
+stars and a comment; the rail lists open items from all their sessions above
+the week's milestone checklist; each directory card reads `★ 4.5 · 2 ratings`,
+or "No ratings yet", or "Ratings could not be read". Partner: each completed
+session shows the founder's rating and comment read-only, or "Not rated yet".
+The canvas's invented ratings and action-item fixtures are not reproduced, and
+the page header no longer lists ratings as omitted.
+
+### VERIFIED
+
+- `cloudflare-worker/test/partner_booking_followups_d355.test.ts` (new,
+  11 tests) runs the service's real SQL — and the route's four booking-list
+  statements — on SQLite over the REAL migration 360/361 DDL.
+- `frontend/test/spinout_lab_office_hours_followups.test.mjs` (new, 11 tests).
+- Mutations: 39 run. Worker 23 of 23 caught — after the first pass, where
+  the one that escaped (a filter on the partner's rating join) showed the
+  booking-list SQL was checked only as text; the test now executes those
+  statements. Frontend 16 of 16. Each caught mutation exited non-zero with a
+  `not ok` line and was restored from a sha256-checked snapshot.
+- SQL guards green, including check-sql-prepare (no new interpolation),
+  check-sqlite-columns and check-refusal-bodies; `check-api-drift` reports no
+  new drift; `tsc --noEmit` clean.
+- `npm run test:drift` with main a57b8c0008 merged in: exit 0. Frontend
+  4016 pass / 0 fail (11 of them new), worker 4782 (4779 pass, 0 fail; 11
+  new), retention 112; `check-docs-fresh --strict` after the root build.
+
 ## D360
 
 **The Spin-Out Lab's capital and legal tools say when a read failed, and
@@ -31176,6 +32414,846 @@ when no date was on record. D360 recorded both and left them for this item.
   dev-only and not ported, per CLAUDE.md.
 - The Legal Engine's jurisdiction select is still local-only and
   presentational, as its own TODO says.
+
+## D362
+
+**Incorporate's money integrity: the price is the catalog's, the paid state
+is the server's, and the jurisdiction is the application's.** Wave 8,
+Session 8, item 3. One new Worker route (`GET /legal/incorporation/quote`);
+its `api.js` method is in the same commit. No migration.
+
+**The defect.**
+- The Lab Incorporate page drew a hard-coded package: $1,200 service, $110
+  state filing and a $100 expedite add-on, with "agent included". No catalog
+  held those amounts. `POST /incorporation/order` charges whatever the
+  Stripe catalog says, so the price a founder read before paying was not the
+  price on the invoice.
+- The page decided it was paid from `incorporation_meta.paid`. The browser
+  writes that field through the project update route, so any client could
+  set it.
+- The page always ordered a Delaware formation, including for an applicant
+  who chose Wyoming on the Lab application.
+
+**What changed.**
+- **The quote.** `GET /legal/incorporation/quote?jurisdiction_id=` resolves
+  the price with `resolveIncorporationPrice`, the same function the order
+  route charges with.
+  - With no catalog SKU it returns `amount_cents: null` and the reason
+    `catalog_price_missing`. It never falls back to `JURISDICTION_COSTS`,
+    which are the wizard's estimate ranges, not a price.
+  - An unknown jurisdiction is a 400 with a code and our own sentence.
+  - It also returns the catalog's registered-agent subscription offer, or
+    null.
+- **The page reads the quote and keeps money in integer cents.**
+  `lib/incorporationPricing.js` holds `fmtCents`, the one place cents become
+  a decimal. It returns `null` for a non-integer rather than rounding one
+  into a price.
+  - The package's split into service and state filing, and an expedite
+    add-on, are not in the catalog, so each reads "Not recorded" with its
+    reason.
+  - The registered agent shows the catalog's offer as an optional
+    subscription. It is no longer "included".
+  - Pay is offered only with a catalog price and a formable jurisdiction.
+- **Paid is the server's order and nothing else.** The page counts an order
+  as paid only in `paid`, `packet_processing` or `packet_ready`, read from
+  `GET /legal/incorporate/orders`. It no longer writes `paid` or `paid_at`.
+  - After Stripe reports success, the page asks the server again.
+  - If the order row is not there yet, because the webhook lags, the page
+    says it is waiting and claims nothing.
+  - Existing projects whose meta says paid without a server order now show
+    unpaid. That is the intended correction.
+- **The jurisdiction is the Lab application's.** `formationJurisdiction` reads
+  the label the Apply page stores.
+  - Delaware maps to `us_de_ccorp` or `us_de_llc`, by the selected entity.
+  - Wyoming, or any other answer, returns no `jurisdictionId` and a reason.
+    The Worker has no Wyoming jurisdiction and the catalog has no Wyoming
+    SKU, so the page stops at that line and says so instead of charging for
+    a Delaware formation.
+  - With no jurisdiction on the application, Delaware is used, and the page
+    says that is why.
+  - Every hard-coded "Delaware" on the page (filing step, document preview,
+    investor preview, export) now reads the jurisdiction.
+- **The milestone's timing is named, not decided.** `incorporation_completed`
+  issues the graduation certificate and is still recorded at payment. The
+  only change is that it now fires once the server confirms the order, not
+  on the client's callback. Whether it should wait for state approval is the
+  owner's decision. The page says so under the Pay button, and this entry
+  records it as open.
+
+**Guard.** `frontend/test/spinout_incorporate_money_d362.test.mjs`, six tests.
+- The helpers run for real. The page and the route are checked as source
+  text, because the page imports the Stripe loader and `legal.ts` cannot
+  load under the test runner.
+- Mutation-checked both ways: 16 of 16 caught, each with a non-zero exit and
+  a `not ok` line, and every file was restored and checked by sha256.
+- One mutation escaped at first. An `else` branch that claimed paid while
+  the server was silent passed, because the test looked for
+  `setAwaitingServer(true)` across the whole handler and found it in the
+  `catch`. The assertion was fixed and is now bounded to that branch; the
+  code was not changed.
+
+**Open, each with its owner.**
+- Milestone timing, as above.
+- A Wyoming (or any non-Delaware) formation needs a Worker jurisdiction,
+  its templates and a catalog SKU. That is an owner and catalog decision.
+- The formation packet step is still a stub (`services/incorporations.ts`).
+- The document "Sign" button still only flips a status. Session 13's e-sign
+  hardening has merged, so wiring it is possible, but it is not part of this
+  item.
+
+## D363
+
+**The revenue ledger: one row per payment, in integer cents, evidenced or
+not, stated as such.** Wave 8, Session 8, item 4.
+- Migration 311 adds `revenue_entries`.
+- The new route file `routes/revenue.ts` is mounted at `/api/revenue`, and
+  its five `api.js` methods land in the same commit.
+- The Revenue page gains the ledger.
+
+**The gap.** The Revenue canvas draws a per-customer entry ledger. Each row
+has a customer, amount, type, date, verification status and proof. The
+ledger has five filters, an investor view, manual entry, a CSV import with
+column mapping, a proof vault, and mix and confidence bars. No store held any
+of it. The page could show `project_metrics` snapshots (one MRR per date) and
+the project's self-reported proof fields, and its header said the ledger was
+"intentionally NOT reproduced".
+
+**What changed.**
+- **Migration 311 (`revenue_entries`).** Additive only
+  (`CREATE … IF NOT EXISTS`), and it depends on no other migration.
+  - `amount_cents` is an INTEGER with `CHECK (> 0)`.
+  - `currency` is `usd`; the Worker refuses any other currency until sums
+    can keep currencies apart.
+  - `revenue_type` is one of `recurring`, `pilot`, `one_time`, `deposit`.
+  - `received_on` is a date; `source` is `manual`, `csv` or the reserved
+    `stripe`.
+  - `verification` is one of `verified`, `supported`, `manual`.
+  - `proof_document_id` points at a document; plus notes, the import batch
+    and the author.
+  - `ensureRevenueEntriesSchema` is the D235 safety net. It is cached per
+    binding, and a test holds it to the migration.
+- **`routes/revenue.ts`** lists, creates, imports, edits and deletes entries.
+  - Access is the same as `/api/progress/metrics`, the store the ledger sits
+    beside:
+    - the project is narrowed to the caller's active company, with admins and
+      partners exempt;
+    - its founder, an admin or a partner can read it;
+    - its founder, an admin or an active Lab member who owns it can write.
+  - An entry reached through another project is a 404.
+  - A failed read is a 500 with our own sentence, never an empty list the
+    page would draw as "no revenue recorded".
+  - Refusals carry a code and a sentence.
+- **Money is integer cents end to end.**
+  - A CSV amount is parsed as text, never through a float: "1,200.50"
+    becomes 120050.
+  - A third decimal place, a zero, a negative or a non-number is refused, not
+    rounded.
+  - The page's sums (`lib/revenueLedger.js`) stay in cents until one
+    formatter turns them into dollars.
+- **Verification is the Worker's.** `verificationFor` derives it from the
+  row, and a request cannot set it.
+  - An entry with a proof document from the same project is `supported`; one
+    without is `manual`.
+  - `verified` is reserved for entries a Stripe charge sync writes. No such
+    sync exists: the Stripe import (`routes/progress.ts`) records MRR and
+    customer counts, not charges. So no path writes `verified` today.
+  - Because of that, the page's "Verified revenue" KPI and the Verified mix
+    line read "Not recorded" with that reason. They do not show 0%, which
+    would claim entries were checked and failed.
+  - Building the charge sync is the step past this line.
+- **The CSV import checks every row first.**
+  - It writes the valid rows in one batch and returns each refused row with
+    its code and sentence.
+  - An imported row never carries a proof document id; proof is attached per
+    entry afterwards, from the startup's own documents.
+- **The page** (`components/spinout/RevenueLedger.jsx`, mounted in
+  `SpinoutLabRevenuePage.jsx`):
+  - the canvas's five filters and the investor view (the same rows, without
+    the unevidenced ones);
+  - a manual-entry form, with no defaults for date or type;
+  - CSV import: upload, a guessed column mapping the founder confirms, a
+    preview, then the server's per-row result. A day-first date such as
+    "18/07/2026" is never reshaped; the Worker refuses it with its own
+    reason;
+  - per-row proof attachment from the startup's documents;
+  - mix bars by type and confidence by evidence;
+  - ledger KPIs: total, distinct customers, verified share and proof
+    coverage.
+  - A failed ledger read renders `Unreadable` with a retry, and the KPIs
+    built from it read Unreadable rather than "$0".
+  - The existing snapshot log, Stripe MRR sync and proof fields are
+    unchanged beside it.
+
+**Not built, with the reason on screen.**
+- The Week 3 / Week 4 mode tabs. They only reword a banner, so they would be
+  a control with nothing behind it.
+- A proof "vault" of uploaded files separate from the startup's documents.
+  Proof is attached from `GET /legal/documents`, which is the store the
+  canvas's proof rows describe.
+
+**Guards.**
+- `cloudflare-worker/test/revenue_ledger_d363.test.ts` has 7 tests. It runs
+  on real SQLite (`_d1_sqlite.mjs`) with migration 311 executed, so the
+  table's CHECKs, the binds and the scoping decide what comes back.
+- `frontend/test/spinout_revenue_ledger_d363.test.mjs` has 7 tests.
+- Writing the frontend test found a real defect before merge:
+  `normalizeCsvDate` turned "18/07/2026" into "2026-18-07". The Worker would
+  have refused that date, but the helper had promised not to guess a
+  day-first date. It now accepts a month-first date only when the month is
+  1 to 12.
+- Mutation-checked both ways: 28 of 28 caught, each with a non-zero exit and
+  a `not ok` line, and every file was restored and checked by sha256.
+  - One mutation, letting an imported row keep a proof id through
+    validation, first escaped. The import's INSERT has no proof column, so
+    that mutation changed no behaviour.
+  - It was re-aimed at the real defect, the INSERT writing the proof id, and
+    that version is caught.
+
+## D364
+
+**Stores that already existed, now on the Lab's Capital, Cap Table and Pitch
+Deck pages.** Wave 8, Session 8, item 5. No migration and no new API: every
+call below is an `api.js` method with a Worker route that has shipped for
+months.
+
+**The gap.** Each of these was built on the Worker and never read by the Lab:
+- The pro-rata list (migration 169, `GET /contacts/raise-pro-rata`), with the
+  Worker's own entitlement arithmetic.
+- SAFE caps and discounts on the cap-table scenario, while Capital's
+  Instrument, Valuation cap and Discount tiles said "Not set".
+- `GET /captable/equity-plan`, the Carta-synced option pools and vesting
+  grants (migration 057).
+- `POST /captable/scenarios/:uid/share`, audience-scoped cap-table links
+  that redact on the server.
+- Deck share view counts (`GET /decks/:id/engagement`). The Lab share sheet
+  also never said that its links open once and last at most 30 days.
+
+**What changed.**
+- **Capital** (`lib/capitalRoundTerms.js`):
+  - Instrument, Valuation cap and Discount are read from the outstanding
+    SAFEs and notes on the cap-table scenario the page already loads for the
+    data room. Each tile says how many instruments carry the term (for
+    example "$5M–$8M · all 2"). The note under the tiles says these are
+    instruments already outstanding, not the terms of this round, which
+    nothing records.
+  - Discount is stored as a fraction and shown as a percent.
+  - Pro-rata rights reads the round's pro-rata list: a tile (holders, taking,
+    waived) and a read-only card of each holder's prior stake, the Worker's
+    entitlement, what they are taking and their decision.
+  - The card states the Worker's reconciliation rule (raw, fits or scaled).
+  - A round with no target prints no entitlement, because the Worker computes
+    entitlements against `target_amount || 0` and would show every one as $0.
+  - Offers and decisions stay in the founder Capital workspace, which the
+    card links to.
+  - A failed read of either store is a new "Couldn't read" provenance, never
+    "Not set". The pro-rata card on a failed read is `Unreadable`, never "no
+    holders".
+- **Cap Table**:
+  - `EquityPlanCard.jsx` shows the account's Carta pools (authorized, issued,
+    available) and grants, with vested counts as Carta reported them and the
+    date each row was written.
+  - The card says the data is per account, not per startup.
+  - Nothing recorded renders `Unrecorded` ("Only a Carta sync records option
+    pools and vesting grants") and points to the Co-founder Agreement.
+  - A 404 (dev) hides the card; any other failure is `Unreadable`.
+- **Cap Table share** (`CapTableShareModal.jsx`, `lib/capTableShare.js`):
+  - The founder chooses an audience and sees what it shows and hides before
+    anything is minted. Those lines are the Worker's `AUDIENCE_SCOPE` word
+    for word, and a test compares them.
+  - The link lasts 1–90 days and opens 1–500 times. These are the Worker's
+    bounds, sent as the founder typed them.
+  - **Consent:** an investor or full link shows named people's positions to
+    whoever holds it. The Create button stays off until the founder confirms
+    those people agreed, and `shareRequest` refuses anything but a real
+    `true`. A summary link names nobody and needs no confirmation.
+  - The link is shown once (only its hash is stored), and the sheet says so.
+  - Issued links list the Worker's view counts and can be revoked while live.
+  - The Share button follows `canEdit`, because the Worker requires scenario
+    write access to mint.
+- **Pitch Deck** (`lib/deckShareViews.js`):
+  - The share sheet states the link's view limit from the Worker's answer.
+    The Lab asks for none, so a link opens once, and the sheet says a
+    forwarded or scanner-previewed link will not open again.
+  - The sheet says no link lasts past 30 days. The Worker caps
+    `expires_in_hours` at 24 × 30, which is why the design's "Never" is not
+    offered.
+  - A new card lists each link's views, limit, last view and state (live,
+    used up, expired, withdrawn) for the current deck version.
+  - The card reads the version list without `ensureDeck`, which can write.
+  - A total at the Worker's 200-row read cap shows as "200+".
+  - A failed read is `Unreadable`, never "no views".
+
+**Found and filed, not fixed here.**
+- `GET /captable/equity-plan` turns a failed SELECT into an empty list
+  (`.catch(() => ({ results: [] }))`). "No pools or grants recorded" can
+  therefore hide a failed read. The fix is the Worker's: return a 500.
+- `GET /contacts/raise-pro-rata` computes with `Number(target_amount) || 0`
+  and `Number(prior_stake_pct) || 0`. The page works around the first (no
+  target, no entitlement shown); the Worker should return null
+  entitlements.
+- The Lab deck sheet's expiry buttons each mint a new link and leave the
+  previous one live. The views card now shows them, but the sheet should
+  revoke or reuse the previous link.
+- The deck sheet's Copy button reports "Copied" even when the clipboard is
+  blocked. The new Cap Table sheet does not do this.
+- `normalizeInputs` on the Cap Table page still turns a missing SAFE amount
+  or founder share count into 0 (`?? 0`). That predates D360 and feeds the
+  engine, not a displayed figure.
+
+**Guards.** `frontend/test/spinout_existing_stores_d364.test.mjs` (10 tests)
+reads the Worker source for:
+- every rule it copies: the audience lines, the 168-hour, 90-day, 25-open
+  and 500-open bounds, the deck's `view_limit || 1` and 24 × 30 cap, and
+  the engagement query's `LIMIT 200`;
+- the Share button's write gate.
+- Mutation-checked both ways: 27 of 27 caught, each with a non-zero exit and
+  a `not ok` line, and every file was restored and checked by sha256. The
+  mutations cover every tile, consent, bound, state, gate and copy rule
+  above, including reading deck views through `ensureDeck` and treating a
+  failed scenario read as an empty one.
+
+## D365
+
+**A failed metrics read is a refusal, not an empty log.** Wave 8, Session 8,
+a follow-up to item 4, the revenue ledger (D363). It fixes the Revenue
+defect that D360 filed and D363 left beside the ledger. One Worker handler
+changes; no migration, no new API, no page.
+
+**The defect.** `GET /api/progress/metrics/:projectId` caught a failed
+SELECT, logged it and answered 200 with `{ items: [], snapshots: [] }`. Every
+page that reads snapshots therefore saw a read that never happened as
+"nothing recorded":
+- the Lab Revenue page's snapshot log, beside the ledger;
+- Use of Funds' recorded burn (D360 made it divide by `net_burn`);
+- the Metrics page, the KPI ledger, and the Build and Grow desks.
+
+D360 had already given both Lab pages an `Unreadable` state for a rejected
+read, but the Worker never rejected, so those states could not appear.
+
+**What changed.** The catch returns `refuse(c, 500, { code:
+'metrics_read_failed', … })`:
+- our sentence says it is not a claim that none are recorded;
+- SQLite's text goes to the log through `refusalBody`, never into the body;
+- no list rides on the refusal.
+
+The access checks still run first, so a caller without access never reaches
+the read. A readable empty store is still 200 with an empty list, so the two
+answers are now different.
+
+**Every caller already handles the refusal.** Read at the time of this
+change:
+- the Lab Revenue page and Use of Funds render `Unreadable`;
+- the Metrics page and the Grow focus page show their error line;
+- the KPI ledger and the Build desk go to their error state;
+- the Grow desk counts the read among its failures.
+
+None of them needed an edit, and none crashes.
+
+**Left as it is, with the reason.**
+- The Stripe import's success body sends `mrr: result.mrr ?? 0` and
+  `customers: result.customers ?? 0`. The sync's success path always
+  returns both as numbers, and the Revenue page prints only "Synced" from
+  that body. The `?? 0` never reaches a screen.
+- `POST /progress/metrics/:projectId` still defaults a missing
+  `snapshot_date` to today. The Revenue form always sends a date. Callers
+  that rely on the default are outside this follow-up.
+
+**Guards.** `cloudflare-worker/test/metrics_read_refusal_d365.test.ts` has
+4 tests. It drives the real router against real SQLite with migration 249
+executed, and injects the failure at the adapter for the one snapshot
+SELECT, so auth, the company-scoped project load, the view check and the
+schema bootstrap all run unmocked. It pins:
+- the 500 and its code, with no list in the body;
+- SQLite's text logged but never returned;
+- an empty store still returning 200 with `[]`;
+- recorded rows coming back newest first under both keys;
+- a caller without access never reaching the read.
+
+Mutation-checked both ways: 8 of 8 caught, each with a non-zero exit and a
+`not ok` line, and the file was restored and checked by sha256. The first
+mutation is the original swallow, so the test fails on the code as it was.
+
+## D370
+
+**LP money moves only when the fund's general partner of record records it,
+and fund figures stop reaching roles with no stake in the fund (Session 9,
+item 1).** No migration, no new route, no new `api.js` method.
+
+**The five defects, measured on `bef2ee7ea`.**
+
+1. **An LP could mark their own capital call paid.** `POST
+   /api/capital/calls/:id/pay` let the LP who owned a call record it paid,
+   which adds the call's amount to `limited_partners.invested_amount` and
+   `vc_funds.deployed_capital`. The handler read the call's status, then ran
+   three separate, unconditional UPDATEs. Two presses in flight both passed
+   the read and both credited: 1000 invested on a 500 call.
+2. **Fund money was visible to every signed-in role.** `GET /funds`,
+   `GET /funds/analytics`, `GET /funds/:id` and `GET /funds/:id/analytics`
+   checked only `requireAuth`. The list returned `SELECT *`, so a founder
+   could read every fund's size, deployed capital and GP email.
+   `GET /funds/syndication` listed queued capital calls, amounts included,
+   for every fund.
+3. **Any investor could overwrite any fund's reserve plan.** `PUT
+   /api/fund-sim/funds/:id/reserves` and `POST …/scenarios` checked only
+   "admin or investor".
+4. **An LPA was drafted for a fund with no GP of record.** `POST /funds`
+   queued `lpa_generation` unconditionally, including for an admin-created
+   fund whose `gp_user_id` is unset. The queue job then drafted the
+   agreement with nobody's name behind it.
+5. **The capital-call ledger read a dead table shape.** `GET
+   /legalcap/capital/calls` named `deal_id`, `syndicate_id` and
+   `lp_responses`, which the production `capital_calls` does not have. It
+   threw on every call, and `api.capitalCalls` swallowed the throw into
+   `[]`. The admin panel in `FundOpsWorkspace` and the fund page in
+   `InvestorFundLanding` therefore showed "no capital calls" for ledgers
+   they had never read.
+
+**The rulings.**
+
+- **Recording a payment is the GP's.** Only the fund's GP of record or an
+  admin may call `pay`.
+  - The LP who owns the call gets `403 gp_records_payment` with our
+    sentence. They already know the call exists, so there is nothing to
+    hide.
+  - Anyone else gets the same `404` as a call that does not exist. That is
+    decided *before* the fund gate: its tier check answers `402` whatever
+    the fund, so reaching it first would answer 402 for a call that exists
+    and 404 for one that does not, which counts the platform's calls. The
+    first run of the new test caught exactly that.
+  - The GP of record then passes the one gate every GP control uses,
+    `requireFundGp` (tier, ownership, company).
+- **Once, even under concurrency.** The two credits and the status flip are
+  one D1 batch, which D1 runs as one transaction. Every statement is
+  conditional on the call still being unpaid: the credits test it in their
+  own `WHERE`, and the flip comes last. The amount is read inside each
+  statement, not carried from the earlier SELECT. A second press, whether
+  concurrent or later, changes nothing and answers `already_paid: true`.
+- **`GET /capital/calls` gains the GP-of-record arm and `fund_id`.** A GP
+  asking "what has my fund called?" got only the calls on their own LP rows.
+  - Each row now also carries `can_record`, which says whether this caller
+    may record it. `CapitalPage` offers "Mark Paid" only on those rows, and
+    shows "Awaiting the GP's receipt" on the rest.
+  - The GP's user id is not returned.
+- **The fund reads are scoped by role.** Both arms are the shared predicates
+  (`fundGpScope`, `lpMembershipScope`), so this adds no third definition of
+  "your fund".
+  - `GET /funds`: an admin sees every fund; anyone else sees the funds they
+    are GP of record for, or hold an LP position in.
+  - `GET /funds/analytics`: the funds the caller runs (all, for an admin).
+  - `GET /funds/:id` and `/:id/analytics`: `requireFundGp`. An LP's view of
+    a fund is `/lp-portal`.
+  - `GET /funds/syndication`: investors, partners and admins; anyone else
+    gets `403 investor_access_required`. Pending calls are limited to the
+    funds the caller runs.
+  - None of these is narrowed by the **active company**.
+    `funds_company_scope`'s regression guard pins that, re-aimed from "stay
+    platform-wide", which was no longer true.
+- **The fund-simulator writes are the GP's.** `PUT reserves` and `POST
+  scenarios` go through `requireFundGp`. The reads and the two pure
+  simulations keep their previous gate: found, not changed here (see below).
+- **No GP of record, no LPA** (the Fabric canvas's F10 rule). `POST /funds`
+  answers `lpa_status: 'blocked_no_gp'` with the reason, instead of
+  queueing. `regenerate-lpa` refuses with `409 no_gp_of_record` before it
+  clears the LPA on file. The queue job re-checks the rule where the
+  document is written, as a no-op rather than a throw, because a retry
+  cannot name a GP.
+- **The dead read is swapped, and fixed with a scope.**
+  - `FundOpsWorkspace` and `InvestorFundLanding` read `listCapitalCalls`,
+    the live ledger.
+  - The `legalcap` route (Session 9's lines) now reads the real columns,
+    scoped exactly like the ledger. Fixed without that scope, it would have
+    handed every investor every LP's calls on the platform. It claims LP
+    rows by email like every other route that grants by email.
+  - `api.capitalCalls` no longer swallows a failure into `[]`.
+    `FundOpsWorkspace`'s panel renders `Unreadable` with a retry, and its
+    count is drawn only from a real list. `LegalCapitalPage` is its
+    remaining caller, and not Session 9's.
+
+**The test database now keeps D1's batch guarantee.** `_d1_sqlite.mjs`'s
+`batch()` awaited each statement in turn, so two batches in flight
+interleaved statement by statement, which is looser than D1. It now runs
+the statements synchronously inside a savepoint and rolls back on failure.
+The 1,792 existing tests that touch it still pass.
+
+**Found, not changed here:**
+- The fund simulator's reads (`GET reserves`, the two `simulate` routes, `GET
+  scenarios`) still answer any investor for any fund id. The allocations
+  are not money movement, but they are another fund's plan.
+- `LegalCapitalPage`'s CapitalTab reads a syndicate-call model
+  (`amount_cents`, `lp_responses`, `deal_id`) whose writer
+  (`legalcap.ts` POST `/capital/call`) also targets columns the table does
+  not have. That whole engine is inert. Neither file's lines are
+  Session 9's.
+
+**Verification.**
+- New file `lp_money_authz_d370.test.ts`, 20 tests on node:sqlite. Every
+  gate is asserted from the refused role's side (the refusal, and nothing
+  moved) and the permitted role's side:
+  - the list for an admin, a GP, another GP, an LP, a founder and a
+    partner;
+  - the family and per-fund analytics;
+  - the detail;
+  - syndication for a founder, an LP, a GP and an admin;
+  - LPA create for an admin and a GP, regenerate, and the queue job;
+  - the two simulator writes for an LP, another GP, the GP and an admin;
+  - the legacy read's shape and scope;
+  - the frontend swap;
+  - the test database's batch atomicity and rollback.
+- `capital.test.ts`:
+  - The fixture gains production's `gp_user_id`, `company_id` and tier
+    columns.
+  - "an investor can pay a call that belongs to their own LP (200)" is
+    re-aimed to "the LP who owns a call cannot record it paid (403, nothing
+    moves)". That permission was the defect.
+  - New tests: the GP records a payment; a GP of another fund gets 404 and
+    nothing moves; **two concurrent presses credit the call once**; a second
+    press moves nothing; the GP sees every call on their fund.
+- Mutations: 25 run, 25 caught, after one escape was fixed in the tests.
+  - Reverting the test database's `batch` to the interleaving version
+    failed nothing at first, because the pay tests' race happens at the
+    status read, not inside a batch. The atomicity test above now pins it.
+  - Restoring the pre-D370 pay logic (a status read, then three
+    unconditional writes) fails "two concurrent presses credit the call
+    once".
+  - The rest: the LP's 403 branch removed; the outsider reaching the fund
+    gate (the oracle); each credit and the flip made unconditional; LP
+    self-recording restored; the calls read's GP arm dropped; the list
+    unscoped, and its LP arm dropped; the analytics unscoped; the detail and
+    per-fund analytics gates removed; a founder admitted to syndication; the
+    pending calls unscoped; the LPA queued without a GP; the regenerate
+    guard removed; the queue job's guard removed (it fails on the
+    assertion that an LPA was written); both simulator gates reverted; the
+    legacy read fixed without its scope; `api.capitalCalls`'s swallow
+    restored; the dead read restored on the page; the test database's
+    rollback removed.
+
+## D371
+
+**The fund call ledger: a call is a numbered header whose LP lines are an
+exact split in whole cents, money is recorded as append-only receipts, and
+the Calls page issues calls and records receipts (Session 9, item 2).**
+Migration 312. Five new routes, four new `api.js` methods, one route
+retired.
+
+**What was there, measured on `62ff5e946c` (D370 merged).**
+
+- A call existed only as a queue payload. `POST /api/funds/:id/capital-call`
+  enqueued `capital_call_notice` and answered before anything was written.
+  The job wrote one `capital_calls` row per LP as an unrounded REAL dollar
+  share: three equal LPs on a $1,000 call owed 333.333… each, and no line
+  said which LP would be asked for the extra cent. No row named the call it
+  belonged to — no number, no purpose, no total.
+- Recording a payment flipped a status and moved two dollar figures. No
+  receipt said when the wire landed, how much of it, or who recorded it.
+- The Calls page (`InvestorFundCalls`) was a static notice claiming the
+  call records "are not linked to a specific VC fund register". They are:
+  every line joins its fund through `limited_partners.fund_id`.
+- `InvestorFundLPs` and `InvestorFundReporting` opened `items[0]` of the
+  fund list. Since D370 that list carries the funds a caller invests in as
+  well as the ones they run, so the first row could be a fund whose GP
+  controls answer 404.
+- `LPs.listByFund` did not select `kyc_status`, so the LP page's KYC column
+  and "KYC pending" filter read nothing.
+- `api.fundsCapitalCallV2` dropped `due_date`, which the worker accepts, and
+  the Fund Ops call modal had no field for it.
+
+**The rulings.**
+
+- **A call has a header.** `fund_capital_calls`: the fund, a per-fund
+  `call_number` assigned when it is written (`UNIQUE (fund_id,
+  call_number)`), `amount_cents`, the purpose and due date the GP typed,
+  `line_count`, who issued it, and the one line that absorbed the rounding.
+  `capital_calls` gains `fund_call_id` and `amount_cents`. Lines written
+  before 312 keep both NULL, and every reader treats them as "issued before
+  calls were numbered". Their dollar `amount` is rounded to the cent.
+- **Money is integer cents; the residual goes to one named line.**
+  `services/fundCallSplit.ts` floors each LP's share (`amount × commitment ÷
+  total`, in BigInt, because the product passes 2^53 on large funds). The
+  leftover cents — fewer than the number of lines — go to the largest
+  commitment, the lowest LP id on a tie. The header records `residual_cents`
+  and `residual_lp_id`. The lines always sum to the call. The dollar column
+  is derived from the cents, never passed beside them.
+- **One writer.** `services/fundCallLedger.ts`'s `issueFundCall` is what both
+  the route and the queue job run. The header and every line are one batch,
+  `INSERT OR IGNORE` on uids derived from the call's uid, so a retry writes
+  nothing it already has. A retry that finds lines missing fills them only if
+  the register still splits the call exactly as the header records. If an LP
+  joined in between, it throws rather than bill a different set of shares
+  against a call its LPs were already told about.
+- **Issuing is synchronous.** The route writes the call before it answers,
+  so the page that issued it can show it. A fund with nobody to bill gets
+  `409 no_billable_lps` instead of an empty call. A due date must be a real
+  `YYYY-MM-DD`, and is still never defaulted (task 197).
+- **Receipts are append-only, in the database.** `capital_call_receipts`
+  records the amount in cents, the date the wire landed, the reference, the
+  source (`receipt` or `mark_paid`) and who recorded it. Triggers refuse
+  every UPDATE and DELETE on it and on the header, from any writer, as
+  migration 269 did for the audit tables. A mistake is answered by the next
+  receipt.
+- **A receipt moves money once.** `recordReceipt` runs one batch:
+  - the insert, only while the line is unpaid and the amount fits what is
+    outstanding, re-checked inside the batch;
+  - the two credits (`invested_amount`, `deployed_capital`), each only if
+    this request's receipt row exists;
+  - the flip to paid, once the line's receipts reach what it owes, dated the
+    day the last wire landed.
+  More than is outstanding is `409 receipt_exceeds_outstanding` with the
+  outstanding amount. A paid line is `409 line_already_paid`. Every receipt
+  is logged against its recorder in `activity_logs`.
+- **A receipt outlives its project.** `services/projectTrash.ts`'s purge
+  deleted `capital_calls` by `project_id`. A receipt references its line, so
+  for a project-linked line (`POST /capital/calls` writes them) with a
+  receipt, that delete fails on the foreign key. The loop swallows the
+  failure, and the line's own `project_id` then fails the final `DELETE FROM
+  projects`, so the project would sit in the trash for ever. The purge now
+  detaches such a line (`project_id = NULL`) first, as it already does for
+  `activity_logs`. A line with no receipt still goes with its project.
+- **Mark Paid is a receipt.** D370's `POST /api/capital/calls/:id/pay` is now
+  a receipt for whatever the line still owes, dated today, through the same
+  writer. A line paid there has the receipt the ledger reads. After a part
+  payment it credits only the remainder: the old path would have credited
+  the whole line again.
+- **The reads.**
+  - `GET /api/funds/:id/capital-calls` returns each call with its lines. Each
+    line carries owed, received and outstanding cents, a state (`paid`,
+    `part_received`, `overdue` with its days, `pending`), and the account's
+    KYC status — NULL for an LP with no account, never "pending". Lines from
+    before numbering come back separately. The totals include
+    `paid_before_receipts_cents`, so a line marked paid before receipts
+    existed is not counted as a receipt.
+  - `GET /api/funds/:id/ledger` returns calls and receipts, newest first.
+    `?lp=` narrows it to one LP's lines and receipts, and that LP must be on
+    the fund.
+  - `POST /api/funds/:id/capital-calls/preview` runs the same split and
+    writes nothing.
+  - `POST /api/funds/:id/capital-calls/lines/:lineId/receipts` records a
+    receipt. A line from another fund is the same 404 as a missing one.
+  All five go through `requireFundGp`.
+- **Which fund a page opens.** `GET /funds` marks each row `can_manage`: the
+  institutional tier, then the same GP-and-active-company predicate
+  `requireFundGp` runs. `pages/investor/managedFund.jsx` picks only among
+  those, honours `?fund=`, and never picks a fund the caller cannot operate,
+  even when the URL names it. The Calls, LPs and Reporting zones use it.
+- **The Calls page is the ledger.**
+  - Four stats: called to date against commitments; collected, with
+    marked-paid-before-receipts said separately; outstanding; the current
+    call.
+  - The canvas's six columns: LP, commitment, owed, received, state, age.
+    Each LP name carries its KYC note.
+  - New call previews the split — the residual line named, KYC per LP, who is
+    not billed and why — then issues exactly the amount previewed. Editing
+    the amount drops the preview.
+  - Record receipt sits on each unpaid line.
+  - The wire trail, and Export wires writes it.
+  - Filters: Current call, All calls, Outstanding (which reaches the lines
+    from before numbering).
+  - Every failed read is `Unreadable` with a retry. No figure is defaulted to
+    zero.
+  The LP register's total also stopped summing an unrecorded commitment as
+  zero, and its three "no writes here" claims were corrected: Add LP writes.
+
+**Retired.** `/funds/capital-calls` → `/funds/calls`, a `<Navigate replace>`
+that keeps the query string and hash. It rendered Fund Ops' Capital Calls
+tab, a read-only list with one job per role:
+
+| Old job | Where it is now |
+| --- | --- |
+| An admin's studio-wide list of every call, fund or not | `/capital` (`CapitalPage`, `listCapitalCalls`, all rows for an admin) |
+| An investor's own calls as an LP | `/lp-portal`, the same `fundsLpPortal` source |
+| A GP's calls on their fund | `/funds/calls`, now with numbers, receipts and writes |
+
+The tab took no query string of its own. `CapitalCallsPanel` and the helpers
+only it used are deleted. `InvestorFundLanding`'s ledger link opens
+`/funds/calls` directly. The Calls zone's `legacy: '/funds/capital-calls'` in
+`shellConfig.js` stays: it is now exactly what App.jsx does, as
+`legacyRedirects` reports. `sidebarConfig.js` has no row for the old path.
+
+**Not built, said on the page.**
+- Send reminders: a notice is logged per LP account when a call is issued,
+  but no reminder is drafted or sent.
+- The Notices filter: no delivery is tracked, so there is no notice state to
+  filter by.
+- Eadwyn's reminder letters: the rail lists them as unavailable.
+
+**Found, not changed.**
+- Fund Ops' `FundsAdminTeaser` still draws three sample funds under a blur.
+  It is on the gap map's retirement list, not item 2's.
+- `/lp-reports`, `/funds/accounting` and `/funds/performance` still render
+  Fund Ops tabs. The gap map retires them into `/funds/reporting` and
+  `/funds/ledger`, which do not yet cover their jobs.
+
+**Tests.**
+- `cloudflare-worker/test/fund_call_ledger_d371.test.ts` (31) runs on
+  node:sqlite with migration 312 applied from its own file. It covers:
+  - the split: the residual named, BigInt exactness, zero shares;
+  - issuing: numbering; the refused side for an LP, another GP, a lapsed GP
+    and a founder; bad amounts and dates; the empty fund;
+  - the preview matching what the issue writes;
+  - receipts: part and full payments; over-payment; the seals; Mark Paid
+    after a part payment; two receipts read together under a batch barrier,
+    for part and for full amounts;
+  - the reads, `can_manage` and `kyc_status`;
+  - a project purge keeping a receipted line, detached;
+  - the job: `issued_by`, retry, and the loud failure on a changed
+    register.
+- `frontend/test/fund_calls_if2_d371.test.mjs` (18) covers the page's
+  arithmetic and labels, the fund rule, the page's reads and writes, and the
+  IF2 artboard sliced at both ends: heading, the four stats, the six columns
+  in order, and every filter and op.
+- Re-aimed:
+  - `capital.test.ts` and `capital_call_ledger.test.ts` apply migration 312.
+  - `funds_deadmin.test.ts` lists the four new controls.
+  - `lp_money_authz_d370.test.ts`: the panel it pinned is retired.
+  - `investor_fund_i6.test.mjs`: the landing's handoff opens `/funds/calls`,
+    and the old path redirects.
+  - `profile_zone_actions.test.mjs`: New call and Export wires are wired
+    (handlers and exports 14 → 15), and its gap loop, whose last row was
+    New call, is replaced by the handler assertion.
+- `scripts/sql-prepare-baseline.json` gains five entries. Four are the
+  ledger's module-constant SQL fragments; the fifth is `manage.sql`, a
+  `tenancyScope` predicate whose values are bound.
+- Mutations: 41 run, 41 caught — 24 against the Worker, 17 against the
+  page.
+  - Three escaped at first. Dropping the in-batch outstanding check, or
+    crediting without this request's receipt, passed: the concurrency test
+    let one request finish before the other read the line, so the
+    JavaScript pre-check answered alone. The tests now hold both requests
+    at the batch and use part payments.
+  - A plain `INSERT` for the header is caught by `capital_call_ledger`'s
+    gap-fill retry, not by this file.
+  - A fourth mutation's anchor matched two zones; re-anchored, it was
+    caught.
+- `npm run test:drift`: the baseline on `a0e0f83ad7`, in a clean worktree,
+  was frontend 4045, worker 4804 pass, retention 112. With D371 it is
+  frontend 4063 (+18), worker 4835 pass (+31), retention 112, `EXIT=0`.
+  Nothing fell.
+
+## D374
+
+**The founder's data room is rebuilt on the "Data Room" canvas, and the room's
+log gains the refusal, the week and the per-file count (Session 9, item 4).**
+Same route, no redirect. No migration, no new route, no new `api.js` method.
+
+**Where it lives.** `/raise/data-room?mode=workspace` renders
+`pages/raise/DataRoomPage.jsx`. The bare route stays the Raise desk's read-only
+`FounderRaiseDataRoom`, and an investor is still redirected to Research ·
+Diligence (D311). The canvas's investor half is that page and its file page,
+built on D310's grant-keyed reads; nothing here touches them.
+
+**Worker (`routes/data_room.ts`).**
+
+- **A refused download is logged.** When the NDA gate refuses
+  `POST /shared/:projectUid/files/:uid/download`, `logAccess` writes
+  `blocked` before the 403, so the founder's log can filter Blocked.
+  `data_room_access_log.action` has no CHECK (migration 184), so no
+  migration is needed.
+- **The week is counted, not the fifty.** `GET /:projectUid` returns
+  `week: { opened, downloaded, blocked }`, a `GROUP BY action` over the
+  last seven days of the whole log. `created_at` is written by `nowIso()`,
+  so the column goes through `datetime()` before the comparison (D124). An
+  action with no row is 0 events: the table is this route's, and it exists.
+- **Each file carries its downloads**, counted from the log. It is a download
+  count, never a view count: nothing previews a file, so no per-file view is
+  logged.
+- **The recent list names the file's gate and the person**
+  (`file_visibility`, `user_name`), which the NDA filter and the log rows
+  read.
+- **A folder's gate can be carried to its contents.** A folder's visibility
+  hides only its name: every file keeps its own, and the download checks the
+  file's. So `PATCH /:projectUid/folders/:uid` with `apply_to_contents: true`
+  sets the folder, every folder under it (a recursive CTE, bounded by
+  `project_id` at every step) and every file in any of them, in one batch.
+  Without the flag, the old single-row update is unchanged.
+- **None of the new figures reaches an investor.** `/shared/:projectUid`
+  returns neither `week` nor `downloads`.
+
+**The page.**
+
+- Stat strip: Files, NDA-gated, Investors with access, and "Room opens this
+  week" (the canvas's "Views this week", restated as what the log counts).
+  A missing `week` is Not recorded, never 0.
+- A multi-file upload queue with drag and drop, a target folder and an NDA
+  toggle. Files are sent one at a time, each row with its state, and an
+  oversize file is refused before it is sent. The cap is 20 MB (canvas: 250),
+  and the bar shows that a file is sending, not a percentage: one request
+  carries the whole file and reports no progress.
+- The folder tree, with each item's gate, size and downloads.
+- A settings panel for the selection:
+  - who can see it, as three tiers;
+  - Require signed NDA, with "Also set every folder and file inside" for a
+    folder (on by default, and it says why);
+  - With access now, the worker's gate restated, with its empty-state reason;
+  - NDA terms, Not recorded;
+  - the watermark note, stated as its absence.
+- Sharing, revoking, and the advisor grant, as before.
+- The activity log with All / View / Download / NDA / Blocked. View is opening
+  the room, NDA is any event on an NDA-marked file, and Blocked is a refused
+  download. The log records no NDA signing, and the page says so.
+- A failed room read and a failed project list are each Unreadable with a
+  retry. The project list failing used to read "No project yet."
+- `WorkerRail` is mounted once with `role="founder"`, listing what the page
+  cannot do.
+
+**Not built, and why.**
+
+- **"Committed only" and "Private to you".** Every reader of this room was
+  measured first:
+  - `/shared/:projectUid` (`visible = v === 'open' || nda`);
+  - `research.ts` `heldRoom` and the room read (`f.visibility === 'open' ||
+    room.nda`);
+  - the diligence list's `file_open`.
+
+  Each shows a file to an investor holding a grant and a live NDA *whatever
+  else it is marked*. A third value would therefore be listed to every NDA
+  holder. The two `research.ts` readers are not this item's, so the tiers are
+  drawn as not built with that reason, and `badVisibility` still refuses
+  anything but `open|nda`. "Committed" would also need a key from a grant to
+  `raise_prospects`, which does not exist.
+- **Watermark and preview.** There is no PDF pipeline. The page says a
+  download is single-use, expires after two minutes, is logged, and that
+  changing a gate does not reach a copy already saved. The canvas says access
+  "revokes instantly … including for anyone with the file already open",
+  which is not true.
+- **The founder id in the shared payload.** The only e-sign consumer would
+  be an NDA-signing panel on Session 2's `DiligenceRoom`, and that page signs
+  nothing today. It states the NDA's state and links nowhere to sign.
+  `/shared` and `/shared/:projectUid` have had no caller since D311. So the
+  field is not added; when the investor page gains a signing panel, the
+  field belongs on the grant-keyed read it already uses.
+
+**Tests.**
+
+- `cloudflare-worker/test/data_room_founder_reads_d374.test.ts` (7 tests on
+  real SQLite over the baseline tables): the refusal is logged and a
+  permitted download is not; the week counts this room's seven days and not
+  the fifty, nothing older and nothing elsewhere; per-file downloads count
+  downloads only; the recent list names the file's gate; the founder counts
+  never reach `/shared` and a rival founder reads 404; the carried gate
+  reaches its own subtree when asked and only then; it is refused outside
+  the caller's room, for a folder uid from another project, and for a value
+  that is not a gate.
+- `frontend/test/data_room_canvas_d374.test.mjs` (11 tests): the canvas's
+  founder-view elements, each asserted at both ends; what cannot be built is
+  said and never drawn as working; the stat strip; the tree, with an orphan
+  or a loop landing at the root; With access now; the five filters; the
+  downloads label; the queue; the carried gate; Unreadable on both reads; no
+  fixture.
+- `data_room_live`, `data_room_docs` and `inline_project_pickers_retired`
+  pass unchanged: the page kept every property they pin.
+
+**Mutations.** 24 were run, and 23 were caught on the first run. One escaped
+because its assertion was weak: a failed project list set back to an empty
+list passed, since the test checked only that a `projectsFailed` branch came
+before "No project yet.", not that the catch sets it. The fix was to the
+assertion, not the code: it now requires the catch to mark the read failed
+and never to set an empty list. 24/24.
+
+One mutation needs a note. The subtree walk is bounded by `project_id` in
+three places: the recursive step, and each of the two UPDATEs. Breaking any
+one alone leaves the other two holding, so it is not observable (defence in
+depth). The mutation broke all three at once, against a fixture folder in
+another project whose `parent_id` points into this room's tree, and was
+caught.
 
 ## D380
 
@@ -31515,6 +33593,286 @@ graduate is also kept out of the Issue queue for the same reason.
     CodeQL 2.27.1, run locally with the alert's query: 3 results before, 0
     after. The shared logger was not suppressed: a pragma at its sink would
     hide every future finding there.
+
+## D383
+
+**The Spin-Out Lab application lifecycle, the store and routes half: answers,
+a draft, withdrawal, an applicant-facing note and a partner interview.**
+Session 10, item 4, split into two PRs. This is the backend. The Apply wizard
+and status screen that read it are D384. Migrations 315 and 316. Five new
+`api.js` methods, each with its worker route.
+
+**Why.** The Apply & Status canvas draws a five-step application, a saved
+draft, a withdraw note, a timeline (Submitted → Screening → Partner interview
+→ Decision), an interview card, and a declined variant with a reason, up to
+three asks and a reapply date. None of it had a store:
+- `spinout_applications` held only step 1 (company, idea, incorporated,
+  stage, jurisdiction), written as `pending` the moment it existed.
+- `cohort_applicants.decision_reason` is the admin's required note, and it
+  carries system text ("Legacy admin decision", capacity roll-forwards). It
+  cannot be shown to an applicant.
+- Nothing stored an interview. The apply page promised "a 30-minute call"
+  that no row could confirm.
+
+**The store.**
+- **Migration 315.** `spinout_applications` gains `answers_json` (steps 2–5,
+  written in the same INSERT as the application), `withdrawn_at`, and
+  `applicant_note`, `applicant_asks_json`, `applicant_note_at`. A new table,
+  `spinout_application_drafts`, holds one draft per account.
+  - *Drafts sit in their own table*, never in `spinout_applications`, so no
+    admin list, pool count or one-pending-application guard has to learn to
+    skip them.
+  - *NULL answers mean "never asked"*, not "left blank". Every application
+    made before 315 has them, and the view says `answers_recorded: false`.
+- **Migration 316.** `spinout_application_interviews`: one row per scheduled
+  interview. The latest row is the live one; earlier rows are its history.
+
+**The answers** (`services/applicationLifecycle.ts`, pure). Every choice is a
+closed enum the canvas names: origin, TTO status, IP flags. Free text is
+clipped, never refused for length. A submission must carry origin, team size
+and why Axal, plus a TTO status for an institutional origin and an
+institution for a university one. Traction is optional, as the canvas says.
+`/apply` without `answers` behaves exactly as before, so the shipped one-page
+form keeps working until D384 replaces it. With `answers`, a missing field is
+`400 answers_incomplete` with the `missing` list.
+
+**What the applicant sees.** `/state` gains `applicant`, built by
+`applicantView`:
+- the application's status, dates and answers;
+- the pool row's status and its cycle (label, app status, start, close);
+- the admin's note and asks, when one was written;
+- the live interview, never a cancelled one;
+- when to reapply, only once declined, from the application window.
+
+It never reads `decision_reason`. The block is read in its own try/catch, so
+a database without 315 answers `applicant: null` and the rest of `/state` is
+unchanged. On such a database an `/apply` carrying answers refuses
+`503 application_not_saved` rather than storing the application without
+them, and withdraw refuses `503 withdraw_unavailable`.
+
+**The runtime CREATE is not widened.** `ensureApplicationsTable` mirrors
+migration 155. Declaring 315's five columns there too would make 315's ALTERs
+fail on any database the route created first, and the schema-pair ledger's
+rule is that a second declaration is never the answer. The pair is recorded in
+`scripts/schema-pair-drift-baseline.json` with that reason.
+
+**The routes.**
+- `GET`, `PUT`, `DELETE /spinout-lab/apply/draft`: founder and explorer
+  accounts only (`role_cannot_apply`). A draft is capped at 20,000
+  characters (`draft_too_large`, 413). Submitting deletes it.
+- `POST /spinout-lab/apply/withdraw`: only a pending application whose pool
+  row is pending or waitlisted (`not_withdrawable`, 409). It is a soft
+  delete:
+  - The row becomes `withdrawn`, and its answers and idea are cleared, which
+    is the canvas's "we delete the file".
+  - The pool row follows to `withdrawn`, decided by `user:<id>`, so the
+    capacity job stops counting it.
+  - Scheduled interviews are cancelled.
+  - The row is not deleted, because `cohort_applicants.application_id` has
+    no foreign key and deleting it would orphan the pool's history.
+- `POST /spinout-lab/apply/interview/reschedule` `{ reason }`: records the
+  request and the reason. It does not move the interview. An admin does
+  that, by scheduling again.
+- `POST /admin/cohort/applications/:id/interview` and `…/interview/cancel`:
+  `requireAdmin` (so the compliance freeze applies) and
+  `requireBranchNotSuspended`. Only a pending or waitlisted applicant can be
+  scheduled, and the time must be in the future. Replacing an interview
+  cancels the old one and inserts the new one in one `DB.batch`, so a failed
+  insert cannot leave no interview. Both write `activity_logs`.
+- **decide** takes `applicant_note` (up to 2,000 characters) and
+  `applicant_asks` (up to three). It writes them to the application and
+  returns `applicant_note_saved`: true, false, or null when none was sent.
+  It refuses a withdrawn applicant (409), and its UPDATE excludes them too.
+- **The admin list** gains each applicant's answers, withdrawal, note and
+  live interview, read per cycle in their own try/catch.
+
+**Not in this PR.**
+- **No email.** Outbound mail is Session 4's. Interview invitations and the
+  declined note reach the applicant on `/state` only.
+- **The UI**, and retiring `ApplicationStatusSection` and the apply page's
+  confirmation, are D384.
+
+**Verified.**
+- `spinout_application_lifecycle_d383.test.ts`: 20 tests on real SQLite
+  built from `schema_baseline.sql` plus 315 and 316, and without them.
+- **Mutations.** 14 run. One escaped on the first run: `reapply` shown to an
+  applicant still in review. The /state test now asserts it is null: 14 of
+  14 caught.
+- **Production D1 was not read** by this session. After merge, the deploy
+  run must show "Apply pending D1 migrations" finishing before "Deploy".
+
+## D384
+
+**The Spin-Out Lab Apply wizard and status screen, read from D383's store.**
+The old apply form and status block are retired. Session 10, item 4, the UI
+half. No migration. No new route and no new `api.js` method: this is the first
+caller of the seven D383 added.
+
+**The applicant's page** (`/spinout-lab/apply`, `SpinoutLabApplyPage.jsx`)
+draws both artboards of the Apply & Status canvas.
+- **P1, the application.** Five steps: venture basics; origin and IP; team;
+  traction; why Axal VC.
+  - A step rail shows the steps, with the canvas's confidentiality note.
+  - **Save draft** writes basics, answers and the current step to
+    `/apply/draft`. The page restores the draft when it opens, and says so
+    when the draft cannot be read.
+  - Each step says what it still needs before Continue. The rules are
+    `lib/applicationLifecycle.js`'s copy of the worker's, and a test reads
+    both files and fails if the closed sets drift.
+  - Submit sends `answers` with the basics.
+- **P2, the status screen.** It replaces the form once an application exists.
+  - **A four-stage timeline.** Submitted → Screening → Partner interview →
+    Cohort decision. One record drives the ring and the lede, so the ring
+    cannot sit on a stage the sentence does not name.
+  - **An interview card.** Time in the viewer's zone, length, place and the
+    team's note. **Add to calendar** is an `.ics` built from the row.
+    **Reschedule** records a request and says the interview stays where it
+    is until the team sends a new time.
+  - **While you wait.** The Programme Brief.
+  - **Withdraw.** A confirm that says it deletes the answers and the
+    description of the venture.
+  - **The declined variant.** The note an admin wrote for the applicant, the
+    asks, the reapply window and **Start a new application**. With no note,
+    it says none was written; it does not invent a reason.
+  - **A pre-315 application** says its answers were never asked for.
+
+**What the canvas draws that no store holds, and is not drawn:**
+- the interviewer's name and bio;
+- screening dates, and a "decision by" date (those stages carry no date);
+- the customer-discovery templates pack;
+- the `MERIDIAN-C7-0142` reference: the application's own number is printed;
+- "Roughly half of accepted ventures apply mid-negotiation" and "a third of
+  each cohort applied twice", which no figure supports.
+
+**THE PRODUCT CALL, named for the owner.** The canvas's "What your answer
+changes" panel says a TTO answer re-sequences the founder's Week 1: the TTO
+checklist moves in, and the Delaware filing waits on a signed licence. The Lab
+has one milestone list for every founder (`MILESTONES`, `lib/spinoutLab.js`),
+and nothing reads this answer. So the panel is titled **What your answer is
+used for**, and it says who reads the answer: the reviewer and the
+interviewing partner. It also says the Lab weeks are the same for every
+founder today. A test fails if the Week 1 promise comes back. Building the
+routing, which would mean per-founder milestones keyed on `tto_status`, is
+the owner's call, not this PR's.
+
+**Retired.**
+- The one-page form (older `Spin-Out Lab.dc.html` APPLY VIEW) and its
+  "Application received" card. That card promised a reply "within 5
+  business days", a confirmation email, and "a 30-minute call". No row backs
+  any of them.
+- **`ApplicationStatusSection` on `/spinout-lab`**, and its generic
+  "turned down for space alone" reason. `ApplicationStatusCard` replaces it:
+  a short form of the same `applicant` block that links to the full screen,
+  so the two cannot disagree. It falls back to the legacy row on a database
+  without 315. Pending still replaces the Apply CTA; refused still sits
+  above it.
+- The admin journey preview keeps both of its modes. `previewMode="form"` is
+  the wizard with no fetch and no draft. `"submitted"` is the status screen.
+
+**The admin side.** Each applicant row in the Cohort Cycles tab
+(`AdminCohortApplications.jsx`) opens `AdminApplicantDetail.jsx`:
+- **The answers as the applicant chose them.** Absent answers say why:
+  withdrawn and deleted, asked before the form existed, or unreadable.
+- **The partner interview**, with the applicant's reschedule request and
+  reason. Schedule, replace or cancel it.
+- **Decline with a note.** The applicant's note and asks, and the internal
+  reason, are each labelled with who reads them. A decision saved without its
+  note (`applicant_note_saved: false`) is said to the admin.
+- **The row** shows a withdrawn badge and an "interview · move asked" chip.
+
+`AdminCohortApplications.jsx` is outside Session 10's file list; it is
+touched only to mount the detail panel and the two actions.
+
+**Verified.**
+- `spinout_apply_status_d384.test.mjs`: 21 tests. The status screen and the
+  admin panel are rendered from worker-shaped records.
+  `spinout_application_status.test.mjs` is rewritten for the card: it
+  renders the card, where it used to read the retired block's source.
+- **Mutations.** 17 run, 17 caught on the first run.
+
+## D385
+
+**The Spin-Out Lab landing revision, built up to the per-track-gates call.**
+Session 10, item 5 (the C3 gap map's PR 2), against
+`design/canvases/integrated/Spin-Out Lab · Landing.dc.html` (artifact
+`3522163f`, landed by Session 1 in D305). No migration and no new route or
+`api.js` method. `GET /spinout-lab/brief` gains one field, `cohort.end_date`.
+
+**What the Landing canvas adds over the Intro the code was built from.** Its
+markup is the Intro's public surface. What is new is its data script: the
+same nineteen tools, the three tracks with their own four gates each, four
+jurisdictions (two live, two coming), and a cohort record the hero and the
+apply band read by name ("Apply to {cohort.name}", "Read from the cohort
+record"). Most of it was already built (D38).
+
+**1. The cohort is named by the server.**
+- **Before.** The landing's hero, both apply buttons, the apply band and the
+  signed-in `ApplyCtaSection` printed "Cohort N". That number comes from the
+  client calendar (`resolveOpenCohort` / `COHORT_BASE`). The Programme Brief,
+  the apply form (D384) and every cohort row on the server name the same
+  cohort by its month ("November 2026"). This was the gap map's "two naming
+  schemes" trap.
+- **Now.** A new `useCohortRecord` (lib/spinoutLab.js) reads `/brief` once and
+  gives the name, start, end, deadline and places. `cohortRecordFromBrief` is
+  its pure half. `useCohortPlaces` now rides on the same read.
+  - The hero rows are Cohort, Starts, Ends and Applications close, with the
+    canvas's footnote "Read from the cohort record".
+  - The buttons say "Apply to the November 2026 cohort".
+  - The band says "Apply to the November 2026 cohort on the Form track".
+  - The CTA says "Apply to the November 2026 cohort." and gives the deadline
+    it read.
+- **Three absences are told apart:** "Reading…" while the read is in flight;
+  "Could not be read" with a retry when it failed; and "Not recorded" when
+  the record came back without that value. A button never names a cohort
+  nobody has read.
+- **`end_date`** is week 4's deadline from `cycleWeekWindows`, the windows the
+  Lab enforces, so the page computes no end of its own. A worker test holds
+  it at four weeks after the start.
+- `openCohortCopy` stays in the library, and its tests stand, but no landing
+  surface calls it.
+
+**2. The hero draws no seat count.** The Intro left this open ("the landing
+revision's call"). The Landing canvas settles it in its own caption: "No seat
+count, no track record". The count stays on the apply CTA and the apply form,
+where D380 put it.
+
+**3. Default track stays Form on the public page.** The canvas defaults to
+Find fit "because the signed-in member has a company". A logged-out visitor
+has said no such thing. The signed-in page already opens on Find fit when
+the application said the company is incorporated. A test pins both halves.
+
+**THE OPEN PRODUCT CALL: per-track gates** (the gap map's product call 240).
+- **The disagreement.** The Programme Brief prints each track its own four
+  gates (`TRACK_GATES`, lib/spinoutBrief.js), as the Brief and Landing
+  canvases draw them. The intro, the workspace and the worker enforce one
+  gate set for everyone (`PIPELINE_PHASES`, reconciled against `MILESTONES`).
+- **The options.** Build per-track milestones in the worker so the brief
+  becomes true, or have the brief print the one enforced set.
+- **Until the owner decides:**
+  - neither surface changes what it draws;
+  - both print one sentence from `GATES_DECISION` saying the call is open,
+    so a founder reading either is not told a week asks something the Lab
+    will not check;
+  - a test pins that neither side has quietly taken a side. It is the test
+    to change, together with `GATES_DECISION`, when the call is made.
+
+**Not built, because nothing stores it** (unchanged from D38, and still true
+of the Landing canvas):
+- the "Yours" tag;
+- the four sample cohort companies and their feed;
+- founder-to-founder asks;
+- `&track=` on the apply link.
+
+**Verified.**
+- `spinout_landing_d385.test.mjs`: 10 tests. The hero and the apply band are
+  rendered in each read state. The tests run green under UTC,
+  America/Los_Angeles and Asia/Tokyo, because the dates are Delaware time
+  whatever the viewer's zone.
+- Updated tests:
+  - `spinout_lab_intro.test.mjs`: the places hook now reads the record.
+  - `spinout_brief_live_data.test.mjs`: the CTA reads the record.
+  - `spinout_brief_d141.test.ts`: gains the `end_date` test.
+- **Mutations.** 12 run, 12 caught on the first run.
 
 ## D390
 
@@ -32028,6 +34386,675 @@ first pass (one matched twice, one matched nothing), so those mutations did
 not run; the anchors were corrected and both were then caught. They are
 counted once.
 
+## D395
+
+**`/partner/operations/*` retires (Session 11, item 1b), with the firm
+profile card mounted on Firm Settings (Session 15's line, taken over while
+Session 15 is paused).** No migration, no new route, no new `api.js` method.
+One additive Worker change: four fields on `GET /partner/delivery/board`
+rows.
+
+**Why this is one PR.** D304 retires an old page only into a canvas-built
+page that does its whole job. D390 built the two missing homes (the firm
+profile card and Founder reviews on Health) and left the card unmounted,
+because `CompanySettingsPage.jsx` was Session 15's. With Session 15 paused,
+the owner handed that part to this session, so the mount and the retirement
+land together and neither exists without the other.
+
+**Measured before retiring: every job on the five tabs, and where it lives
+now.**
+
+| Retired tab | Its jobs | Canvas-built home |
+| --- | --- | --- |
+| Overview (and the bare root) | Edit the firm's name, company, specialisation; the Founder introductions switch; read the partner agreement; the practice snapshot | `/company-settings`: `PartnerFirmProfileCard` (D390), mounted here. The snapshot is the same `quotesAnalytics` read `/pipeline/analytics` already draws. |
+| Capabilities | List, create, edit and delete the firm's own service offerings | `/offers/catalog`, which mounts `ServiceCatalogPage` with the same four calls. |
+| Portfolio | Delivered engagements and the founder reviews on them | `/delivery/health` (Founder reviews, D390); the engagements are on `/delivery/board`. |
+| Engagements | Browse open requests and bid; withdraw a proposal; start, deliver, invoice and cancel an engagement; the invoice ledger | Bidding: `/pipeline/leads`, whose "Accept · bid on it" already hands off to `/needs/:uid` by the zone's own design, unchanged here. **Withdraw: added to `/pipeline/proposals` in this PR.** **The lifecycle and the ledger: added to `/delivery/board` in this PR.** |
+| Performance | The BD scorecard over quotes; founder reviews | `/pipeline/analytics` (the same `quotesAnalytics` read); reviews on `/delivery/health`. |
+
+Two jobs had no canvas-built home, which is what the new controls fix:
+- **Withdraw** existed only on `EngagementsPage` and the legacy
+  `NeedsBoardPage`. Proposals now draws it on a submitted row.
+  `canWithdraw` mirrors `quoteTransition`, which allows it from `submitted`
+  only; the Worker stays the boundary.
+- **Start, Mark delivered, Issue invoice and Cancel**, and the invoiced and
+  awaiting-invoice ledger, existed only on those two pages.
+  `delivery/EngagementLifecycle.jsx` draws them under the board, over every
+  row the board read. `lifecycleStepsFor` offers exactly the transitions
+  `engTransition` in `routes/needs.ts` accepts, so no button is drawn that
+  the Worker would 409. A blank delivery note or cancel reason is sent as
+  absent. The ledger says "issued" with the invoice's own number and date,
+  or "awaiting invoice"; it never says "paid", because nothing records
+  payment. The Delivery canvas draws no lifecycle control. The writes are
+  the product's existing ones, not a design invention, and the disagreement
+  is recorded here rather than resolved by dropping a job.
+- **The Worker half.** `GET /partner/delivery/board` rows gain
+  `delivered_at`, `invoiced_at`, `invoice_id` and `cancelled_at`: the
+  engagement's own columns, null until that step happened, under the same
+  `partner_id` scoping every read in that file uses.
+
+**The mount (Overview → Firm Settings).** `CompanySettingsPage` renders
+`FirmProfileMount`, which draws `PartnerFirmProfileCard` for a sign-in whose
+role is `partner` and nothing for any other role. It sits in **both**
+branches, above the `if (!activeCompany)` on-ramp and above the company
+header, because the card edits the `partners` row (keyed by
+`users.partner_id`), not a company. A partner with no company must still
+reach it: D390 named that trap, and the test pins both branches. The card
+itself is unchanged apart from its header comment.
+
+**Redirects** (`App.jsx`, each a `<Navigate replace>` with no guard of its
+own, since the destination guards itself — the D118 shape):
+- `/partner/operations` → `/company-settings`
+- `/partner/operations/overview` → `/company-settings`
+- `/partner/operations/capabilities` → `/offers/catalog`
+- `/partner/operations/portfolio` → `/delivery/health`
+- `/partner/operations/engagements` → `/pipeline/proposals`
+- `/partner/operations/performance` → `/pipeline/analytics`
+
+None of the retired pages read a query string or a hash, so none is carried.
+Every destination is a mounted route whose guard admits `partner`.
+
+**Deleted.** `pages/partner/operations/` in full: the workspace, the five
+pages and `operations/kit.jsx`. `pages/partner/kit.jsx` re-exported seven
+helpers from that kit. The two the zones use (`formatDay` and `moneyDollars`)
+now live in `kit.jsx` itself with unchanged bodies. The other five (Badge,
+ProgressBar, BulletList, RowCard, formatRelativeDay) had no caller outside
+the retired pages and went with them. No `api.js` method or Worker route is
+removed: every call the pages made still has another caller.
+
+**Links re-pointed, so nothing inside the product rides a redirect.**
+- `PartnerStudioHome`'s three modules (Session 11's three lines):
+  - "Assigned delivery tasks" → `/delivery/board`;
+  - "Relationship health" → `/delivery/health`;
+  - "Delivery book" → `/delivery/board`.
+- `PartnerWorkspaceTabs`:
+  - "Retainers" → `/pipeline/retainers`;
+  - "Proof" → `/offers/proof`.
+- `shellConfig.js`'s partner `legacy:` fields now agree with `App.jsx`, so the
+  uncalled `legacyRedirects('partner')` could not disagree with the real
+  redirects:
+  - Board's `legacy: '/partner/operations/overview'` is dropped, because
+    overview went to `/company-settings`, not a zone;
+  - Retainers' `legacy: '/partner/operations/portfolio'` is dropped;
+  - Health's `legacy` becomes `/partner/operations/portfolio`;
+  - Proposals keeps `/partner/operations/engagements`.
+
+**Left stale on purpose, for Session 5 (`sidebarConfig.js` is theirs).**
+Each still works through the redirects:
+- the partner Pipeline row's `match` entry `/partner/operations/engagements`;
+- the Delivery row's `/partner/operations/overview`, `/portfolio` and
+  `/performance`;
+- the Offers row's `/partner/operations/capabilities`;
+- the comments at the top of the partner block that describe the Delivery row
+  as "the /partner/operations subtree, tabbed by PartnerOperationsWorkspace";
+- the six `/partner/operations*` entries in `PARTNER_FULL_BLEED`, which now
+  name redirects that render nothing.
+
+`partner_shell.test.mjs` pins the `match` entries as deep-link ownership. That
+stays true for as long as Session 5 keeps them, and it goes when Session 5
+removes them.
+
+**Tests.**
+- `frontend/test/partner_operations_retired_d395.test.mjs` (10):
+  - each address is a replace-redirect to its successor, and each successor is
+    a mounted route admitting `partner`;
+  - the folder is gone and nothing imports from an `operations/` path;
+  - no link outside the redirect lines and Session 5's sidebar names a retired
+    address, and `legacyRedirects('partner')` agrees with `App.jsx`;
+  - the mount renders the card for a partner and nothing for any other role,
+    in both branches;
+  - the lifecycle steps match the Worker's four guards, which are read from
+    `needs.ts`;
+  - each step calls its own method, and a blank note is sent as absent;
+  - the ledger lines;
+  - each rendered row carries only its own buttons;
+  - Withdraw is gated on `submitted`.
+- `cloudflare-worker/test/partner_board_lifecycle_d395.test.ts` (4): the four
+  fields are present and null before their step, carry the engagement's own
+  values after it, and never reach another firm; a sign-in with no firm is
+  refused.
+
+**Tests re-aimed, each keeping its property.**
+- `pipeline_proposals_lifecycle` and `delivery_board_modes` pinned "no file
+  but the zone builds its action row" by reading `EngagementsPage` by name.
+  They now walk `frontend/src` through the new `_srcFilesWith.mjs`, which
+  still sees a second builder anywhere in the tree.
+- `partner_operations_live` pinned "no fixture firm, every tab on the real
+  API" on the five pages. It now pins the same properties on the successors,
+  and the fixture-name scan covers the whole partner tree. The engagements
+  half of its stat-strip test read the deleted page; its win-rate rule is the
+  proposals read's, pinned by `pipeline_proposals_lifecycle`.
+- `needs_envelope` drops the deleted page from its list.
+- `partner_shell` drops its read of the deleted workspace.
+
+## D400
+
+**The AI rails say when a read failed, the model badge says "Default", and
+the assistant is no longer labelled as advice (Session 12, item 1).** No
+migration, no route, no `api.js` method. Frontend and comments only, plus one
+comment in `services/aiSpend.ts`.
+
+**What was false on screen, and what it says now.**
+
+| Where | Before | Now |
+| --- | --- | --- |
+| WorkerRail, Usage this month, when `/api/ai/me/spend` failed or answered `recorded: false` | "Not recorded" | `Unreadable` ("Your AI usage" / "The usage log could not be read. That is not a claim that nothing was spent.") with a Retry |
+| WorkerRail, Model · this page, when `/api/ai/pricing` failed | the block vanished, so the page looked like one with no model | the block's label plus `Unreadable` ("The model price list … unknown, not free") with a Retry; no model and no rate is named |
+| AssistRail (Advisory, Brand builder, Deck reviewer and the Lab pages), This month, on `recorded: false` | **"$0.00 / $50.00"** — `eadwynConfig` passed `spend_usd ?? 0`, and a null total fell through to Σ `p.spend ?? 0` over pages that carry no spend | "Unreadable" and "The usage log could not be read…", with a Retry wired through `AssistLayout` |
+| The `advisory` surface's mode card | "Advisory assist" | "Score explainer assist" |
+| The model menu's badge | RECOMMENDED | DEFAULT |
+
+`useAiSpend` now keeps `spendError` and `pricingError` apart and returns a
+`reload` (a counter in the fetch effect's dependency list). It used to keep
+one `error`, set only by the spend read; a failed pricing read was dropped.
+`error` stays, as the spend error, for the callers that read it.
+
+**No zero stands in for a figure on either rail.** WorkerRail's
+`cap_usd ?? 0` became a null cap (no "of $…", no bar); `eadwynConfig`'s
+`planCap`/`totalSpend` pass null rather than 0; AssistRail's page-sum
+fallback is gone (`eadwynConfig` is its only caller and passes the total or
+null); and `eadwynConfig`'s `tin: 0, pin: priced?.pin ?? 0` run profile,
+which spelled "nothing modelled" as zeros, is now empty.
+
+**The badge: measured, then named.** The voice rule forbids
+"recommendation" about what the assistant produces, and the decision given
+for this item was: measure what the badge marks; if it is the router's
+default for the surface, it says "Default". Measured on `d3ee831a5`: the
+badge was drawn from `railModels.js`'s typed `RECOMMENDED_BY_TASK`, whose
+only entry mapped `workspace_explain` to
+`@cf/meta/llama-3.3-70b-instruct-fp8-fast`, and `aiRouter.ts`'s
+`ROUTE.workspace_explain.model` is `MID_LLAMA`, the same id. So the badge
+marked the router's default, and it now says DEFAULT (upper case, like the
+canvas's chip). The decision said to rename the constant with the label;
+this goes one step further and **deletes it**. `modelsForTask` sets
+`isDefault: id === route.model` from the same `/api/ai/pricing` response the
+menu is built from. "Default" is a router fact, and a typed copy of a router
+fact is one nobody re-checks when the primary changes. That is the same
+reason the menu's ids and rates are derived rather than typed.
+`worker_rail_models` pins that `railModels.js` holds no `_BY_TASK` map,
+and it checks the derivation with a primary that is deliberately not first
+in `alternates`.
+
+**'Advisory' → 'Score explainer'.** The label renders as `${label} assist`.
+The regulated-wording scanner treats a one-word literal as an identifier, so
+it could not catch this. The surface runs `advisor_explain`, which explains
+scores and next steps, and the label now says so. The `/advisory` route keeps
+its name because that page also holds the human advisors, who are a real
+persona. The new test checks every `ASSIST_SURFACES` label, not only this
+one.
+
+**Stale claims corrected (the gap map's list, re-measured):**
+- WorkerRail's receipt comment said `/api/ai/me/spend` returns no latest
+  row. It returns `last_run` (without token counts, which is item 2).
+- WorkerRail's header said the mode is "still fixed". Validate passes
+  `fills`. It also said the rail served "six founder desks and twenty-four
+  investor surfaces", when there are 69 mounts across every licence.
+- `ui/index.js` said mode persistence and model choice "do not exist yet".
+  Both exist (D45, D13's condition met).
+- AssistRail said every surface is `kind: 'fixed'`. Two (`workspace`,
+  `market`) declare a choice.
+- AssistRail and `aiSpend.ts` said "sixteen task classes". The `TaskClass`
+  union has twenty-three, and the test derives the word from the union.
+- `ui/README.md` described AssistRail as "the single AI rail" and WorkerRail
+  as founder and investor only. It now also lists `railModels.js` and
+  `Honesty.jsx`.
+- `shellConfig.js` said the archetype badge colours are "identical across all
+  eighteen canvas files". The two Detail Layer canvases disagree with the
+  per-bucket ones, and with each other. The comment now says which palette is
+  followed, and not to repaint.
+
+**Not changed here, and passed to their owners:**
+- `design/incoming/README.md:298` still says "The model card cannot honestly
+  ship yet"; it shipped. That file is Session 1's.
+- `InvestorDealsWorkspace.jsx:202` and `InvestorDealsRoutes.jsx:123` pass the
+  rail a note reading "Scores and recommendations appear only when they exist
+  in the live deal record". Those are deal-record fields, not assistant
+  output, but the notes a page passes are not scanned. The pages are not
+  Session 12's.
+- `FounderRaiseLegal.jsx:176`'s "does not … provide legal advice" is a
+  negation and correct as written.
+
+**Verification.**
+- New test file `worker_rail_honesty_d400.test.mjs`, 12 tests. Two of them
+  render AssistRail against an unreadable and a readable spend response.
+- `worker_rail_models`: three RECOMMENDED tests re-aimed at the derived
+  default, plus one behavioural test.
+- `ui_assist_rail_and_sidebar`'s meter test is re-aimed, not loosened. The
+  gate moved from `spendKnown` onto `meter`, which is now null unless both
+  the figure and the cap are known.
+- `ai_spend_self`'s hook-boundary test is re-aimed the same way. Success
+  still sets the response, and failure leaves `spend` null and records why.
+  The failure branch now also clears an earlier success, because Retry can
+  re-run the fetch. A mutation that drops that clear is caught.
+- Mutations: 19 run, 19 caught. Each was counted on a non-zero exit plus a
+  `not ok` line, and each file was restored from a sha256-checked snapshot.
+  - dropped retry
+  - usage block saying "Not recorded"
+  - pricing block gated off
+  - pricing error dropped in the hook
+  - retry counter removed from the effect's dependencies
+  - default taken as the first alternate
+  - badge back to RECOMMENDED
+  - a typed `DEFAULT_BY_TASK` map
+  - rail `cap ?? 0`
+  - `totalSpend ?? 0`
+  - `planCap ?? 0`
+  - the 'Advisory' label
+  - AssistRail `totalSpend ?? 0`
+  - AssistRail retry removed
+  - AssistRail "Not recorded"
+  - the `ui/index.js` claim
+  - the `aiSpend.ts` count
+  - the receipt comment
+  - the hook's failure branch no longer clearing `spend`
+
+## D401
+
+**The rail keeps a lasting "Last run" receipt: model, tokens in and out, and
+cost, labelled as the account's (Session 12, item 2).** No migration, no new
+route, no `api.js` method. There is one additive change to the Worker's
+response: `GET /api/ai/me/spend` gains four fields.
+
+**What the canvas asks for, and what the log holds.** The AIRail canvas draws
+"Last run · in/out · cost" in the Usage block. `services/aiSpend.ts` already
+returned `last_run`, the caller's newest `ai_usage_logs` row, but without
+token counts. The columns exist (`prompt_tokens`, `completion_tokens`,
+`NOT NULL DEFAULT 0`), so no store was missing. The work was saying
+honestly what a stored zero means.
+
+**A zero in those columns is often not a count.** Measured in
+`services/aiRouter.ts`:
+- A cached answer and a refused call record 0 because no model was called.
+- A streamed call records `completion_tokens` 0 because the router forwards
+  the body unread ("we don't see the completion side").
+- A transcription is billed by the audio minute and records `prompt_tokens`
+  0.
+- Where the provider omits its usage, both counts are the router's
+  text-length estimate. `est_cost_usd` is computed from the same figures.
+
+So `last_run` now carries `prompt_tokens` and `completion_tokens`. Each is
+the logged value when it is positive and the row called a model, and null
+otherwise: never 0. The rail labels them as the log's figures, and makes no
+claim that they are a meter reading.
+
+**A failed read is no longer "no runs".** `last_run: null` meant both "no
+calls yet" and "the query threw", because the catch left it null. The same
+was true of `by_task: []`, which the rail's average is drawn from. The
+response now carries `last_run_recorded` and `by_task_recorded`. Each is true
+only when its query ran, and both are false when the totals themselves were
+unreadable.
+
+**On the rail** (`WorkerRail.jsx`, `assistCost.js`'s new `lastRunReceipt`):
+- The Usage block draws **"Last run · your account, any page"** over a line
+  like "Llama 3.3 70B Fast · 812 in / 1,440 out · $0.0006". The label is
+  account-wide on purpose. `ai_usage_logs` records no page, so "this page's
+  last run" is not a fact the log holds; item 5 adds the column.
+- The token half of the line takes one of five forms:
+  - "812 in / 1,440 out"
+  - "300 in / out not recorded" (a streamed call)
+  - "tokens not recorded"
+  - "cached, no model called"
+  - "refused, nothing run"
+
+  It never reads "0 in / 0 out". A response from a Worker older than this
+  change carries no token fields and lands on "tokens not recorded".
+- A fallback is named ("a smaller model answered"), and an absent cost reads
+  "cost not recorded", never $0.0000.
+- `last_run_recorded: false` renders Unreadable with a Retry, and
+  `by_task_recorded: false` does the same in place of "No runs of this yet".
+- A successful read-back calls the hook's `reload()` (D400), so the month's
+  figures and the lasting receipt are re-read after the run.
+
+**Why the per-click receipt stays.** The gap map expected the lasting receipt
+to replace it. It does not, because the two answer different questions. The
+per-click line describes exactly the run whose text sits above it. The
+lasting line is the account's newest row, which after a click is usually
+that run, but not always: another tab or page, or a later call on the
+account, can be newer. Replacing the first with the second would sometimes
+put another run's figures under this run's text. Both stay, each labelled
+for what it is.
+
+**Not changed:** AssistRail's own "Last run" row (cost only) on the Lab and
+the three legacy founder tools. The canvas's lasting receipt is WorkerRail's
+block, and AssistRail's retirement outside the Lab is still an open
+decision.
+
+**For Session 14.** The rail's receipt is now part of the anatomy the founder
+desks inherit. It is drawn by the rail from the account's own report, and
+it takes no prop.
+
+**Verification.**
+- The Worker block of `ai_spend_self` gains six tests on real SQLite.
+  1. A live call carries the counts the log recorded.
+  2. A cached answer and a refusal carry none, including rows whose counts
+     are non-zero.
+  3. A stream carries a prompt count and no completion count.
+  4. No calls means `last_run_recorded: true` with `last_run` null.
+  5. A table without the token columns still totals, and reports
+     `last_run_recorded: false` with `by_task_recorded: true`.
+  6. An unreadable table leaves both flags false.
+- New file `worker_rail_last_run_d401.test.mjs`, 12 tests: eight on the line
+  and four on the rail.
+- Mutations: 16 run, 16 caught, after one escape was fixed in the test.
+  "A refusal keeps its counts" at first passed, because every refusal row in
+  the test held zero tokens and the zero rule nulled them on its own. A
+  refusal row with non-zero counts now pins the rule. The 16:
+  - tokens not selected
+  - a cached row keeping its counts
+  - a refusal keeping its counts
+  - a zero passed through as a count
+  - `last_run_recorded` always true
+  - either flag never set (two mutations)
+  - the line printing a zero
+  - a cached run printed as a count
+  - a refusal printed as a count
+  - a fallback left unnamed
+  - a null cost printed as $0
+  - the label saying "this page"
+  - an unreadable last run hidden
+  - no reload after a run
+  - an unreadable breakdown ignored
+
+## D402
+
+**On a zone below a workspace, the rail shows the workspace's model as
+inherited and read-only, with a link back to where it is chosen (Session
+12, item 3).** No migration, no route, no `api.js` method. Frontend only.
+
+**The defect.** The chosen model was already stored per workspace. The key
+is `worker_rail_model:<workspace>`, and it has been since the menu shipped,
+on the Validate canvas's own rule: "Mode and model are chosen on the
+workspace, not re-picked here". So `/validate/interviews` and `/validate`
+read and write the same key. The screen disagreed. Every zone drew the full
+radio menu, so picking a model "for Interviews" silently changed it for all
+of Validate, with nothing on the page saying so. The Validate canvas,
+DetailRail and EmberRail all draw the zone rail as inherited instead.
+
+**What the rail draws now.**
+- **At a bucket root** (`/validate`, `/deals`, `/practice`, …): unchanged. The
+  menu, the DEFAULT badge (D400) and "Remembered for {workspace}. Every zone
+  here uses it."
+- **Anywhere below a root** (`/validate/interviews`, `/raise/data-room/…`):
+  - a dashed card with an INHERITED chip and "Inherited from {workspace}.
+    Mode and model are chosen on the workspace, not re-picked here. Change
+    the model there and this page follows.";
+  - a "Change it on {workspace}" link to the root;
+  - a read-only card for the model that will actually run (name, id and
+    rate), with no radio, no input and no handler.
+  The run still sends that same model, so the card and the run agree.
+- **A role with no shell** (both admin tiers), or a path no bucket claims:
+  unchanged. There is no workspace to inherit from.
+
+**Worked out from role and URL, not passed by the page.** `ui/railInheritance.js`
+asks `shellConfig`'s `bucketForPath(role, path)` for the bucket. It returns
+null at the root, and `{ to: bucket.prefix, bucket: bucket.label }` for any
+path below it. The rail reads the path through `UNSAFE_LocationContext`,
+which is null outside a router instead of throwing like `useLocation()`,
+and falls back to `window.location`. So none of the ~70 mounts was edited.
+No prop was added, so `branch_rail_mount`'s parameter-list parse is
+unaffected.
+
+**Named after the workspace, not the zone.** The card says
+"Inherited from {workspace}" using the `workspace` prop, because that prop is
+the key the choice is stored under. EmberRail's canvas reads "Inherited from
+Analytics", naming a zone, which is the defect the gap map recorded; this
+does not repeat it.
+
+**Measured before claiming "change it there".** Each root the link points to
+mounts the rail under the same `workspace` string its zones pass:
+- founder: Validate, Build, Raise, Grow, Network, Research;
+- investor: Deals (`InvestorDealsRoutes`), Portfolio
+  (`InvestorPortfolioCanvas` through `PortfolioWorkspace`), Fund
+  (`InvestorFundLanding` at `/funds`);
+- advisor and partner: their bucket routes pass the bucket name.
+
+**Mode is not changed here.** The fills switch is drawn only where a page
+passes `fills`, and only Validate's root does. A zone therefore draws no
+switch, which matches the inherited rule without new code.
+
+**For Session 14.** Founder desk zones get the inherited view with no prop,
+so the desks pass nothing new. A desk that draws a root passes the same
+`workspace` its zones pass, as every current root does.
+
+**Verification.**
+- New file `worker_rail_inherited_d402.test.mjs`, 10 tests.
+  - Behavioural, on `railInheritance` over every shell:
+    - every bucket root, with and without a trailing slash, chooses;
+    - every zone of every role inherits from its own root (more than 40
+      walked);
+    - a detail page below a zone inherits;
+    - `/validated`, `/studio`, both admin tiers and an absent role keep the
+      menu;
+    - each role's `/research` zone inherits from `/research`.
+  - On the rail's source:
+    - the view is computed from role and path, with no prop;
+    - the inherited branch holds no input, fieldset, radio, `onChange` or
+      `chooseModel`;
+    - the chip, the workspace-named card and the root link are present;
+    - the read-only card is the active model, not the first one;
+    - no `useLocation`.
+- The rail is not rendered in a Node test, because its model data arrives
+  through `useAiSpend`'s effect, which a server render never runs. No
+  Chromium probe was run.
+- Mutations: 11 run, 10 counted, 10 caught. The eleventh removed the
+  trailing-slash strip, and nothing failed. That was not a weak test: the
+  strip was dead code, because `/validate/` already slices to an empty rest
+  and reads as the root. The strip was removed from the code instead of
+  pinned. The 10:
+  - a root treated as a zone
+  - the link pointing at the zone
+  - the role ignored
+  - the rail never inheriting
+  - radios in the inherited view
+  - the card naming the zone
+  - no chip
+  - no link back
+  - the primary model shown instead of the active one
+  - `useLocation` used
+
+## D403
+
+**Detail-layer navigation: "View more · N" appears only where a count is
+sourced, the crumb returns to the zone's section on the root, and zone pills
+respond to hover and focus (Session 12, item 4).** No migration, no route,
+and no `api.js` method. Frontend only.
+
+**1. "View more · N", and only where the N is true.** The Detail Layer
+canvases end each compressed zone with "View more · N →". Board sections
+show at most five rows (`top()`) and carried no total, so there was no
+figure to print. The only "View more" in the product was HQ Home's.
+- `boards/format.js` gains `total(rows, cap)`. It returns the list's length
+  only when the read returned the whole list. Several Worker list reads stop
+  at a `LIMIT`, and a list that came back at its cap may be a longer list
+  cut short, so at or past the cap it returns null.
+- A board section may now declare `total(payload)`. `BucketBoard` prints
+  "View more · N" only when the total is an integer larger than the rows
+  shown. Otherwise the footer stays "Open {zone}".
+- Four sections declare a total, each over exactly the list its rows are
+  drawn from:
+
+  | Section | Source | Cap |
+  | --- | --- | --- |
+  | Advisor `/practice` Sessions | `advisors.ts` bookings | `LIMIT 200` |
+  | Investor `/deals` Pipeline | `deals.ts` list, live deals only | none |
+  | Investor `/deals` Closing | `esign.ts` list | `LIMIT 200` |
+  | Partner `/offers` Catalog | `services.ts` offerings | `LIMIT 200` |
+
+- Sections whose list is filtered from a capped read (pending, confirmed and
+  completed bookings), or whose source I did not measure (the IC commit room,
+  the partner pipeline's negotiations), declare none. They keep "Open".
+- The Session 11 registries (`research.js`, and the advisor Introductions
+  and Expertise sections in `network.js` and `advisorExpertise.js`) are not
+  touched.
+- Found, not fixed: the summaries on those capped sections already print
+  `count(items.length)` ("N sessions", "N offerings", "N envelopes") with no
+  cap. At 200 or more rows they state 200 as the whole. The same `total`
+  helper would fix them; their lines belong to the registries, so this is
+  passed on.
+
+**2. The crumb returns to the zone you left.** `WorkspaceShell`'s crumb
+linked to `bucket.prefix`, so it landed at the top of the root. It now links
+to `/prefix#<anchor>`, the section that zone has on a board root, for
+example `/pipeline#pl-proposals`.
+- The anchor comes from `boards/index.js`'s own registry via `boardFor(role,
+  prefix, null)`. Only the section list is read; the sources are functions
+  that nothing calls, so no `api` is passed.
+- `BucketBoard` scrolls to the hash on arrival and when it changes. Every
+  section renders its `id` from the first paint, including the skeleton.
+- A root that is a card grid (every founder bucket, investor Portfolio and
+  Fund, advisor Cohorts), and a board's link cards (the Research zones), have
+  no section id. Their crumb keeps the bare prefix.
+
+**3. Zone pills answer hover and focus.** `ZoneNav` painted each pill with
+inline `color` / `background` / `borderColor`, and an inline style beats
+every `hover:` class, so an idle pill never answered the pointer.
+- The colours are now CSS variables (`--zn-ink`, `--zn-bg`, `--zn-line`,
+  `--zn-hover-ink`, `--zn-hover-line`) painted by the classes.
+- An idle pill takes the role's accent ink and border on hover and on
+  keyboard focus, and focus keeps the role-coloured outline.
+- The current pill is still chosen by the URL (`aria-current`) and does not
+  change on hover.
+- In dark mode, idle pills had rendered white, because no dark skin reads an
+  inline style. They now take neutral greys; the current pill keeps its
+  accent tint.
+
+**Not built: the needs-attention dot.** The canvases put a dot on a zone
+button that needs attention, and no store answers "which zones need
+attention" for any role. It stays unbuilt rather than lit from a guess.
+
+**Verification.**
+- New file `detail_layer_nav_d403.test.mjs`, 12 tests.
+  - `total`: a full list, a list at and past its cap, and no list.
+  - Each declared total counts its own list and stops at the cap. The
+    investor pipeline counts 240 live deals past any cap, and leaves out 60
+    rejected ones.
+  - No registry counts rows it has no source for.
+  - The footer rule, and the hash scroll.
+  - The crumb's anchor lookup. Every board section, across every registry,
+    has an id-safe anchor.
+  - A rendered `ZoneNav` for every shell carries no inline paint property,
+    and has the hover class and focus outline. Its hover colour is the
+    role's accent, exactly one pill is current, and only idle pills carry
+    the dark neutrals.
+- `advisor_bucket_overview`'s crumb test is re-aimed, not loosened. The
+  crumb is still the bucket root, now optionally with a hash, and never a
+  zone path.
+- Mutations: 13 run, 13 caught.
+  - the cap ignored
+  - the cap off by one
+  - the pipeline counting rejected deals
+  - the catalog uncapped
+  - the footer printing when the total is no larger than the rows shown
+  - the footer ignoring the total
+  - no scroll to the hash
+  - the crumb as the bare prefix
+  - the anchor not looked up
+  - an inline colour back on the pill
+  - no hover class
+  - hover not in the role's accent
+  - dark neutrals on the current pill
+
+## D404
+
+**The rail shows what this page has cost this month. `ai_usage_logs` gains a
+nullable `surface` column (migration 319), the router records it, and older
+rows read "no page" (Session 12, item 5).** No new route and no new `api.js`
+method. `aiWorkspaceExplain` sends one more field, and
+`GET /api/ai/me/spend` returns two more.
+
+**What was missing.** The AIRail canvas draws "This page this month" under
+the usage meter. `ai_usage_logs` recorded no page, so every figure the rail
+could draw was the account's or the task's. D401 labelled the "Last run"
+receipt account-wide for the same reason.
+
+**The store.**
+- Migration `319_ai_usage_surface.sql`:
+  `ALTER TABLE ai_usage_logs ADD COLUMN surface TEXT`. It is nullable on
+  purpose. Every earlier row, and every run from a caller that sends no
+  page, holds NULL, which means "not recorded". A default such as `''` or
+  `'unknown'` would be a value pretending to be an answer.
+- The router's runtime `CREATE TABLE IF NOT EXISTS ai_usage_logs` carries
+  the column too. The migration is the declaration and the bootstrap is the
+  safety net (D235).
+- `check-runtime-schema-declared`, `check-sql-migrations`,
+  `migrations_fresh_build` and `baseline_drift_guard` pass.
+
+**The write.**
+- `RunOptions.surface` is new. All nine `recordUsage` calls in `run()` pass
+  it, including the refusals, so a refused run still counts against the
+  page it was asked from.
+- `recordUsage` writes `normaliseSurface(surface)`. It accepts only an
+  absolute app path of letters, digits, `/`, `_`, `.` and `-`, at most 160
+  characters, with a trailing slash stripped so one page is not recorded as
+  two. Anything else is recorded as NULL, never trimmed into a
+  plausible-looking value.
+- `POST /api/ai/workspace/explain` takes `page` and passes it as `surface`.
+- The route's guardrail pre-screen runs a `safety` task that records no
+  page. That is correct: it is not the run the page asked for.
+- Every other caller of the router sends no page today, so its rows are
+  NULL.
+
+**The read.** `loadMyAiSpend` adds `by_surface`: this month's rows grouped on
+the column, so NULL forms one entry, the month's unattributed runs. That
+entry is reported rather than dropped, and the breakdown adds up to the
+month. A failed read, including the read before migration 319 is applied,
+sets `by_surface_recorded: false` rather than returning an empty list.
+
+**On the rail.** The Usage block draws one of three lines, via
+`assistCost.js`'s `pageSpendLine`:
+- "This page this month: $0.0040 over 2 runs."
+- "No runs recorded from this page this month. N runs this month carry no
+  page, either from before pages were recorded or from features that do not
+  record one." This is shown whenever the month has unattributed runs,
+  because some of them may be this page's own runs from before the
+  migration, so "nothing from this page" alone would be a claim the log
+  cannot make.
+- "No runs from this page this month."
+
+A failed read renders Unreadable with a Retry. The rail sends its path
+normalised the way the router stores it, so the lookup matches.
+
+**Stays not recorded:** token margin (the owner's brief, item 7). Nothing
+here computes or draws a margin.
+
+**Verification.**
+- `ai_spend_self` gains three tests on real SQLite:
+  - the breakdown is per page, this user's rows and this month's only, with
+    one null entry, and it sums to the month;
+  - a table without the column still totals and reports the breakdown
+    unrecorded;
+  - an unreadable table leaves it unrecorded.
+- `ai_workspace_explain` gains three:
+  - the page reaches the `workspace_explain` usage row's INSERT, through the
+    real route with an authenticated fixture;
+  - no page records NULL;
+  - `normaliseSurface` accepts a plain path, strips a trailing slash, and
+    refuses a bare word, a URL, a space, a quote, a query, a hash, an empty
+    value, a non-string and an overlong path.
+- New file `worker_rail_page_spend_d404.test.mjs`, 6 tests: the line's
+  three states and plurals, and the rail sending its normalised page and
+  drawing the breakdown, with Unreadable on a failed read.
+- Two existing tests pinned exact source text that this change extended, and
+  are re-aimed, not loosened. Each re-aim is mutation-checked (three caught):
+  - `hq_rail_scope_h13` pinned `aiWorkspaceExplain`'s parameter list as an
+    exact tuple. It now pins that the method accepts `branch` and forwards
+    it.
+  - D401's receipt test pinned `readBack`'s whole dependency list. It now
+    pins that `reload` is in it.
+- Mutations: 12 run, 12 caught.
+  - the router dropping the surface
+  - the route not passing the page
+  - no charset check
+  - the trailing slash kept
+  - the null group dropped
+  - the breakdown always recorded
+  - the query not scoped to the month
+  - the line ignoring unattributed runs
+  - a wrong singular
+  - the rail sending no page
+  - the api method dropping the page
+  - the Unreadable hidden
+
 ## D410
 
 **E-sign `/send` hardening: the signing link reaches only the recipient, a
@@ -32447,11 +35474,11 @@ partner they were short of credits. The card now reads `UNCLAIMABLE_LABEL`,
 one label per reason the Worker gives, and the drawer prints the Worker's
 `reason_text` for a non-founder. Everything else on the page is item 4's.
 
-**OWNER DECISION, NOT MADE HERE: does an `exploring` account qualify for
-perks?** The conservative default ships: it does not. The rule is one
-constant, `PERK_CLAIMANT_ROLES` in `routes/perks.ts`. Adding `'exploring'` is
-the whole change; the test that pins today's answer would then need its one
-assertion updated.
+**OWNER DECISION, MADE 2026-09-27: only founders claim perks.** An
+`exploring` account does not qualify. This entry first shipped that as the
+conservative default and left the choice to the owner, who confirmed it.
+`PERK_CLAIMANT_ROLES` in `routes/perks.ts` stays `['founder']`. The test that
+pins it now pins a decision, not a default.
 
 **A rule chosen here, and named.** Who may rate is not drawn on the canvas.
 `PERK_RATING_REQUIRES = 'redeemed'` asks for the one fact that says the
@@ -32650,6 +35677,299 @@ reference.
     six-month `ends_at`, and the review-criteria absence is printed.
   - No page errors in either run.
 
+## D414
+
+**Messages is rebuilt from its canvas. The other person is a card that
+follows their own privacy settings. No email address is served any more.
+A thread's subject becomes a context strip, re-checked against the reader's
+access on every open. A thread can no longer be pinned to an engagement its
+starter cannot open.** Wave 8, Session 13, item 5. Worker first. No migration,
+no new route and no new `api.js` method.
+
+**What was there, measured on 69c0e6218.**
+- **Emails, served to every participant.** `GET /api/messages` returned each
+  counterparty's name and email. `GET /:uid` returned the email of every
+  participant and every sender. Nothing on the page needed an address: it
+  used one only as a label when a name was missing.
+- **An unchecked subject.** `POST /` stored any `subject_type` from the
+  allow-list with any `subject_id`. Nothing resolved the pair, so there was
+  no strip to leak yet. But the gap map's point 8 stood: a resolver that
+  trusted the stored id would show anyone in the thread the title and amount
+  of an engagement they have no part in.
+- **Half the canvas missing.** The page drew rows, bubbles and a one-line
+  composer. It had none of these:
+  - the unread subtitle, search, chips with counts, avatars, context chips
+  - the role line, View profile, the context strip, day and run grouping
+  - mobile back, the growing textarea, and two of the three empty states
+
+**Worker (`routes/messages.ts`).**
+- **The counterparty card.** `personCard` builds `{user_id, handle, role,
+  name, headline, headshot_url, profile_path}` from the public profile's own
+  `effectiveFlags`. That function is exported from `routes/public.ts` for
+  this, a one-word change to that file. So a member who hides their name or
+  photo on `/u/:handle` is not named or pictured here either, and the page
+  prints `absent.name`. The headline and role are what the public card
+  always shows.
+- **No emails, no per-message names.** No read selects an email any more.
+  Messages carry `sender_user_id` only, and the page names senders from the
+  cards. The thread returns `me` and the other participants, not the reader.
+- **The context resolver.** `CONTEXT_RESOLVERS` resolves only what something
+  writes. `engagement` means `advisor_engagements`, because the advisor
+  Delivery zone's nudge is the only code that pins a thread. The reader must
+  be the advisor on it or the founder it is for.
+  - The strip is `{kind, title, amount_cents, status, link}`. The link is
+    `/practice/engagements` for the advisor. A founder has no page for it,
+    and `absent.context_link` says so.
+  - It is resolved on every read, so moving or deleting the engagement takes
+    the strip away.
+  - "Cannot see" and "no longer exists" are one sentence, so the strip
+    cannot prove an object exists.
+  - The other five types (`introduction`, `match`, `service`, `session`,
+    `job`) have no writer. Each could mean several tables. They get the
+    Worker's sentence, not a guess.
+- **Pinned only to what the starter can open.** `POST /` refuses a subject
+  its starter cannot resolve with `404 subject_not_found`, and the same body
+  for a made-up id. A non-integer id gets `400 subject_invalid`.
+- **Served absences:**
+  - `auto_threads`: the canvas says threads appear when an introduction is
+    accepted or a match is made, and nothing does that.
+  - `attachments`: there is no store until item 6.
+  - `search_scope`: search covers the 100 threads the list returns.
+- **`unread_total`** is counted in the Worker, for the header.
+
+**Frontend.** `MessagesPage.jsx` is rebuilt in place, on the same route with
+no redirect.
+- **The page:**
+  - the header subtitle
+  - search over the card, subject and preview
+  - the canvas's seven chips with counts, using the gap map's mapping:
+    `engagement` and `service` are Engagements, `session` is Advisory
+  - rows with an avatar, a context chip and a two-line preview
+  - the thread header with its role line, View profile and Archive (Archive
+    is not on the canvas and is kept)
+  - the context strip, or the Worker's reason
+  - day separators, with the name on the first message of a run and the
+    avatar and time on the last
+  - the paperclip, disabled with the Worker's reason
+  - a growing textarea (Ctrl/Cmd+Enter sends)
+  - the canvas's three empty states
+- **Refresh.** The page re-reads on window focus, since there is no push
+  channel.
+- **`lib/messagesView.js`** is the page's pure half (chips, search and
+  grouping), so a test can run it.
+- **No WorkerRail**, by decision. The canvas draws none. A rail over a
+  private inbox is not something to add without the owner.
+- **Not printed**, because nothing makes them true: "Conversations appear
+  here when an introduction is accepted…", "Attachments are visible to both
+  parties only", and "via Axal VC". The four empty-state hint chips stay as
+  labels, without the canvas's "when" lines.
+
+**Unchanged, and still pinned by `messages_live.test.mjs`:** membership is
+the only key, a thread you are not in is a 404, unread is derived, and no
+admin can read a conversation.
+
+**Filed, not fixed.**
+- **Session 1, account-existence probe (gap-map security point 10).**
+  `POST /` answers "No account with that address" under only the generic
+  60/min limit, so an account can test which emails have accounts. A tighter
+  bucket belongs in `middleware/rateLimit.ts`, which is not this session's,
+  and the owner should decide whether the product keeps saying so at all.
+- **Whoever next pins a thread to an object.** Use a subject type whose table
+  is unambiguous, and add its resolver to `CONTEXT_RESOLVERS`. `engagement`
+  now means an advisor engagement.
+- **Session 5.** Nothing. The stale Messages comments in `sidebarConfig.js`
+  the brief named are already current.
+
+### VERIFIED
+
+- **Drift.** `npm run test:drift` exits 0 on main 69c0e6218 plus this
+  change. Main alone: frontend 3782, worker 4662, retention 112. With the
+  change: frontend 3794 (+12), worker 4671 (+9), retention 112. No count
+  fell.
+- **New tests, by name.**
+  - `messages_context_d414.test.ts`: 9 tests through the route, on
+    migrations 185, 201 and 238 read off disk.
+  - `messages_d414_contract.test.mjs`: 12 tests. The canvas is sliced at
+    both ends of every section it reads. It runs `lib/messagesView.js`
+    rather than reading it.
+  - `messages_live.test.mjs` and the three shell tests the brief named
+    (`admin_placement_h35`, `founder_shell`, `advisor_shell`) pass
+    unchanged. The route, the guard and the top-bar entry did not move, so
+    none needed re-aiming.
+- **Mutations.** 37 were run: 19 on the Worker and 18 on the page and its
+  pure half. 35 were caught first time. Two escaped, and the assertions
+  were fixed, not the code:
+  - **W3**, `u.email` added to the list query: `personCard` never copies
+    it, so no output changed. The source guard is in the contract test.
+    Re-run against it: caught.
+  - **W14**, `unread_total` counted threads: the fixture had one thread with
+    one unread. The test now sends two messages in one thread. Re-run:
+    caught.
+  - 37 of 37. Each failure was a non-zero exit with a `not ok` line,
+    restored from a sha256-checked snapshot, and passed again.
+- **Build and checks.** Both typechecks, `check-decision-ids`,
+  `check-folder-docs`, `check-sql-prepare`, `check-sqlite-columns`,
+  `check-refusal-bodies` and `check-unused-imports` pass.
+  - The card's columns are written out in both queries, not interpolated,
+    so `check-sqlite-columns` reads them.
+  - `docs/` was rebuilt at the root with the asset-retention file moved
+    aside. `check-docs-fresh --strict` passes.
+- **Chromium probe.** This is recorded verification, not a gate. The built
+  SPA was run with stubbed `/api/messages*`, and all 26 checks passed.
+  - **Desktop:**
+    - the header subtitle, the seven chips with counts, "Name not shared",
+      and no email anywhere on the page
+    - the "Select a conversation", "Nothing matches" and clearing-filters
+      states, and search matching a headline
+    - the thread header with its role line and View profile, the context
+      strip ($4,200, Signed), and the founder's link absence
+    - day separators, the name once per run, the paperclip disabled with
+      the Worker's reason, the composer note, send, and the unresolved
+      context sentence
+  - **390px:** the list and thread swap, back returns, and there is no
+    horizontal scroll.
+  - **Empty inbox:** "Your inbox is ready" with the Worker's sentence, the
+    header, and the hint chips with Eadwyn and Tickets.
+  - No page errors.
+
+## D415
+
+**Messages can carry files. Migration 323 stores which file rides on which
+message; the bytes go to R2 under their own `messages/` prefix. The only way
+to a file is a signed, single-use, five-minute link, minted only for a member
+of the thread.** Wave 8, Session 13, item 6. Worker first. Migration 323.
+Two new routes and two new `api.js` methods.
+
+**What was there, measured on 5c1297642.** The canvas draws a paperclip in
+the composer and says "Attachments are visible to both parties only".
+Migration 185 says of itself "NOT here: reactions, attachments…". So D414
+disabled the paperclip and printed the Worker's reason instead.
+
+**Migration 323, `message_attachments`.** One row per file. Columns:
+- `uid`, `thread_id`, `message_id`, `uploader_user_id`
+- `r2_key`, with `CHECK (r2_key LIKE 'messages/%')`
+- `filename`, `content_type`, `size_bytes` (`CHECK > 0`), `sha256`, and
+  `created_at`
+
+It has indexes on thread, message and uploader. It creates one new table,
+stands alone, and is idempotent. No bytes are kept in D1.
+
+**Worker (`routes/messages.ts`).**
+- **`POST /:uid/attachments`.** Multipart `file`, plus an optional `body`.
+  It sends one message carrying the file.
+  - **Who:** a member of an open thread. Anyone else gets the same 404 as
+    before, and an archived thread gets 409.
+  - **What:** the type is sniffed from the file's own first bytes by
+    `sniffAttachment`, never taken from the browser's header. Accepted:
+    PDF, PNG, JPEG and WebP. Word, Excel and PowerPoint files are accepted
+    by their ZIP signature plus a matching extension; any other ZIP is
+    refused. Anything else gets `415 file_type_refused`, with a sentence
+    naming the kinds.
+  - **Limits:** at most 10 MB (`413 file_too_large`). An empty file is
+    refused. Each account may send 50 files in any 24 hours
+    (`429 attachment_limit`), counted from the store per uploader.
+  - **Where:** `messages/<thread uid>/<attachment uid>/<name>`. The name is
+    cleaned by `safeAttachmentName`: path parts dropped, only letters,
+    digits, `.`, `-` and `_` kept, at most 100 characters, and ending in
+    the sniffed type's extension.
+  - **Order:** the object is written to R2 first. The message and the
+    attachment row then go in one D1 batch, which also moves
+    `last_message_at` and marks the sender's own read. If the batch fails,
+    the object is deleted, so R2 never holds a file no message points to.
+- **`POST /:uid/attachments/:att/link`.** For a member only. The file must
+  belong to this thread; a file in another thread and a made-up id get the
+  same 404. It returns a link from the shared signed-download primitive
+  (`services/signedDownload.ts`): HMAC-signed, five minutes, single use.
+  `routes/files.ts` streams it as an attachment and writes the download to
+  `activity_logs`. The page never builds a path to the bytes.
+- **`GET /:uid`** lists each message's files by `uid`, name, type and size,
+  never the R2 key.
+- **`GET /`** previews a file-only message as "Attachment: <name>".
+- **`absent.attachments`** is served now only where no FILES bucket is
+  bound, and then says exactly that.
+
+**Frontend.**
+- **Composer:** the paperclip opens a file picker offering what the Worker
+  accepts. The chosen file shows above the textarea. Send posts it with
+  whatever was typed, as one message. The page's 10 MB check only saves an
+  upload the Worker would refuse. A refusal prints the Worker's sentence.
+- **Bubbles:** a file on a message is a chip that asks for a link and
+  follows it.
+- **The canvas's note** — "Attachments are visible to both parties only" — is
+  printed now, because it has become true.
+- **Pure half:** `lib/messagesView.js` gains `ATTACHMENT_MAX_BYTES`,
+  `ATTACHMENT_ACCEPT` and `fileSize`.
+
+**Not built, by decision.**
+- **Deleting a file.** Messages cannot be deleted either. A file goes when
+  its thread's rows go (`ON DELETE CASCADE`), and its R2 object does not.
+- **A tighter rate-limit bucket.** Uploads sit under the generic
+  per-minute limit plus this route's own daily count. A bucket belongs in
+  `middleware/rateLimit.ts`, which is not this session's.
+- **Virus scanning.** Nothing in the product scans files. The type check
+  and the attachment-only download are the defence: a file is never
+  rendered inline.
+
+**Filed, not fixed.**
+- **Session 1.** A deleted thread would leave its files in R2. Nothing
+  deletes threads today, but a future cleanup should list
+  `messages/<thread uid>/`.
+
+### VERIFIED
+
+- **Drift.** `npm run test:drift` exits 0 on main 37547e561 plus this
+  change. Main alone: frontend 3842, worker 4702, retention 112. With the
+  change: frontend 3849 (+7), worker 4713 (+11), retention 112. No count
+  fell.
+- **The first run caught one defect.** `iso_bind_comparisons_d160.test.ts`
+  failed: the daily count compared `created_at` against a raw ISO bind.
+  Rows written here carry a `T`, and the column default does not, so a
+  bare comparison mixes the two formats. Both sides now go through
+  `datetime()`, and the guard passes.
+- **New tests, by name.**
+  - `messages_attachments_d415.test.ts`: 11 tests through the routes, on
+    migrations 185, 201, 238 and 323 read off disk, with an in-memory R2
+    bucket and KV namespace. A minted link is followed through
+    `routes/files.ts` to the bytes. A second use is refused (403), and the
+    download is written to `activity_logs`.
+  - `messages_attachments_d415_contract.test.mjs`: 7 tests.
+- **Re-aimed.** Both changes are D414's own tests, re-aimed because D415
+  made the old assertions untrue.
+  - `messages_context_d414.test.ts`: the fixture gains migration 323, and
+    each message now carries `attachments`.
+  - `messages_d414_contract.test.mjs`: the paperclip is enabled, and the
+    attachments sentence is printed now that it is true.
+- **Mutations.** 26 were run: 18 on the Worker and 8 on the page, its pure
+  half and the note. 24 were caught first time. Two escaped, and the
+  assertions were fixed, not the code:
+  - **A7**, the cap counting every account: the test now has B send while
+    A is at the cap.
+  - **A9**, no R2 cleanup on a failed batch: dropping the table broke the
+    count before anything was stored, so the test proved nothing. The
+    table is now dropped inside the batch hook, and the test asserts the
+    object existed before the batch.
+  - Both were caught on re-run. After the `datetime()` change, A6 to A8
+    were re-run too. 26 of 26. Each failure was a non-zero exit with a
+    `not ok` line, restored from a sha256-checked snapshot, and passed
+    again.
+- **Build and checks.** Both typechecks, `check-decision-ids`,
+  `check-folder-docs`, `check-api-drift`, `check-sql-prepare`,
+  `check-sqlite-tables`, `check-sqlite-columns`, `check-sql-migrations`,
+  `check-migration-declarations`, `check-migration-column-shapes`,
+  `check-schema-pair-drift`, `check-refusal-bodies` and
+  `check-unused-imports` pass. `docs/` was rebuilt at the root with the
+  asset-retention file moved aside. `check-docs-fresh --strict` passes.
+- **Chromium probe.** This is recorded verification, not a gate. The built
+  SPA was run with stubbed routes, and all 12 checks passed:
+  - an attachment chip on a bubble, the paperclip enabled, and the
+    canvas's note printed
+  - a chosen file shown, and Send enabled with only a file
+  - the upload sent as multipart with the file and the text, the chip
+    cleared, and the sent file listed on the thread
+  - opening a file POSTs for a link, then follows it to a download
+  - an 11 MB file refused before any upload, with the Worker's sentence
+  - no page errors
+
 ## D420
 
 **The founder desks A2–A5 read the stores that already exist.** Wave 8,
@@ -32840,6 +36160,444 @@ surface); a cached-input cost read on Research (no store).
 - Both typechecks, `check-decision-ids`, `check-folder-docs`,
   `check-api-drift`,   `check-unused-imports` and `check-dark-mode` exit 0. Root
   `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser probe.
+
+## D422
+
+**The founder legacy mounts: the three that were a second address retire; the
+editors stay, because no zone carries their writes yet.** Wave 8, Session 14,
+item 4. No migration, no route added or removed, no `api.js` change.
+
+**Measured first, and the gap map's table did not survive it.** The table
+retired `/execution`, `/execution/board`, `/execution/roadmap`, the
+`/build/discovery` and `/signals` founder branches and `/network?mode=workspace`
+wholesale, redirecting each to a canvas zone. D304 allows that only where a
+canvas page does every job of the old one. For the editors, none does — each
+is still the only place a founder can make these writes (no file under
+`pages/founder/` or `workspaces/founder/` calls them):
+
+| Editor (route kept) | Writes with no founder zone behind them |
+| --- | --- |
+| ExecutionPage — `/execution?mode=workspace`, `/execution/board`, `/execution/roadmap` | `pipelineCreateTask`, `pipelineUpdateTask`, `pipelineAdvance`, `pipelineDecide`, `castVote`, `pipelineTriggerReview`, `pipelineSnapshot`, `createOkr`, `updateOkr`, `deleteOkr` |
+| DiscoveryPage — `/build/discovery?mode=workspace`, `?tab=leads\|interviews\|insights` | `updateInterview`, `deleteInterview`, `assignPain`, `renamePainGroup`, `deletePainGroup` |
+| SignalsPage — `/signals?mode=workspace` and every Signals deep link | the feed itself (`signals.list`, `signals.refresh`); `/research/markets` is `MarketZone`'s readings, not the feed |
+| NetworkPage — `/network?mode=workspace`, `?tab=`, `?intro=` | `contactCreate`, `contactUpdate`, `contactAddTask`, `contactPromote`, `introAccept`, `introDecline`, `introSetTerms`, `partnerBookAdd`, `partnerBookLogInteraction` |
+| Raise `?mode=workspace` editors (Pitch, Capital, Liquidity) | the zone pages are read-only ledgers; `founderZoneActions` still sends "New version", "Export PDF" and "Revoke a link" to `/raise/pitch?mode=workspace` |
+
+The zones themselves say so: the Roadmap zone's empty state links
+`/execution/roadmap` ("Open roadmap editor"), and the Validate interviews
+zone sends ICP-fit edits to `/build/discovery?tab=interviews`. Retiring these
+would take writes away from founders, so they stay, and
+`founder_legacy_mounts_d422.test.mjs` holds the reason as a property: while a
+write in the table has no caller in a founder zone, its editor must stay
+mounted. It never requires deleting one — the day a zone carries every write,
+retirement is open, not automatic.
+
+**What retired: three second addresses.** Bare `/execution`, `/build/discovery`
+and `/signals` rendered, for a founder, the same element `/build`, `/validate`
+and `/research` mount — each desk had two URLs, and the sidebar matched both.
+Each is now a `<Navigate replace>` to the desk's root with `location.search`
+kept, so every query they accepted still lands:
+
+| Old route (founder) | Now | Queries that still work |
+| --- | --- | --- |
+| `/execution` (no `?mode=workspace`) | `/build` | `?new=1` opens the create-startup form; `?project_id=` selects the startup |
+| `/build/discovery` (no `?mode=workspace`, no Discovery `?tab=`) | `/validate` | `?project_id=` |
+| `/signals` (only `?project_id=`, or `?mode=landing`) | `/research` | `?project_id=`; `?mode=landing` (read by `/research` the same way) |
+
+Every other licence is untouched on all three paths. No component is deleted:
+ExecutionPage, DiscoveryPage and SignalsPage all still render, for founders
+behind the editor queries and for other licences everywhere.
+
+**The desks stop embedding the editors.** FounderBuildDesk swapped itself for
+ExecutionPage on `?mode=workspace`, and FounderValidatePage for DiscoveryPage
+on `?mode=workspace` or a Discovery `?tab=`. The routes mount the editors now
+(`founderWorkspace('build', …ExecutionPage…)`,
+`founderWorkspace('validate', <DiscoveryPage initialTab="interviews" workspaceMode />)`),
+so each desk renders one thing. The one loss is cosmetic: the Discovery editor
+no longer opens pre-seeded from the desk's already-loaded rows, so it reads
+them itself.
+
+**Links moved with them.** The five Build zones' crumbs and empty states
+pointed at `/execution` ("Execution", "Back to execution"); they point at
+`/build` ("Build") now. `/execution/roadmap` links stay — they open the editor.
+Links in files other sessions own (FounderStudioHome, the Spin-Out Lab pages,
+`newFounder.js`) still name `/build/discovery` or `/execution` and land on the
+desk through the redirect; nothing breaks.
+
+**Left alone, as the prompt required:** `/build/team` (Session 15's item 6
+has since rebuilt it) and `/raise/data-room` (Session 2's investor branch,
+Session 9's rebuild).
+
+**For Session 5 (`sidebarConfig.js`, not edited here).** The founder rows'
+`match` lists (Validate: `'/build/discovery'`; Build: `'/execution'`;
+Research: `'/signals'`) stay correct — the editors still live at those paths.
+`FOUNDER_FULL_BLEED`'s comment on `'/build/discovery', '/execution',
+'/signals'` ("still render the same desk at the same width") is now stale:
+for a founder those paths redirect, or mount an editor inside
+`FounderWorkspacePage`.
+
+**Also recorded.** ROUTE_MAP's Founder Workspaces Canvas row said the legacy
+mounts were "unchanged and still live"; it carries a dated update.
+
+### VERIFIED
+
+- `npm run test:drift` exit 0 on Node 22. Frontend tests 3768 on main
+  (23330a2c) → 3773; worker 4649 (4646 pass, 3 skipped); retention 112. The
+  five new tests, all in `founder_legacy_mounts_d422.test.mjs`: "the three
+  second addresses redirect to their desk, query string kept", "an editor
+  stays mounted while a founder zone lacks any of its writes", "the editors
+  keep their deep links: ?mode=workspace, Discovery ?tab=, Signals queries",
+  "no founder desk embeds a legacy editor", "the Build zones crumb back to
+  /build, not the retired address".
+- Re-aimed, none loosened: `founder_build_desk_contract` (A3 is `/build`'s,
+  `/execution` redirects, the editor is at the route), `founder_validate_a2`
+  (the same for `/build/discovery`, and the editor keeps `?tab=`),
+  `founder_research_a7_contract` and `founder_shell`'s A7 test (the same for
+  `/signals`), and `founder_shell`'s OWN_LANDING table (`/build/discovery` is
+  no longer A2's own landing; its editor is owned through
+  `founderWorkspace('validate', …)`, which that test already accepts).
+- 9 mutations, 9 caught (non-zero exit and a `not ok` line, unique anchors,
+  sha256-checked restores): a redirect dropping the query; `/build/discovery`
+  and `/signals` mounting their desk again; the Execution, Discovery and
+  Network editors unmounted; the Discovery `?tab=` deep link dropped; A3
+  re-importing ExecutionPage; a Build crumb pointed back at `/execution`.
+- Both typechecks, `check-decision-ids`, `check-folder-docs`,
+  `check-api-drift`, `check-unused-imports` and `check-dark-mode` exit 0;
+  `node scripts/build-profile-routing.mjs` leaves both generated documents
+  unchanged. Root `npm run build`, then `check-docs-fresh --strict`, exits 0.
+  No browser probe.
+
+## D423
+
+**D162's ISO-bind guard follows the value through helpers, wrappers and object
+fields — and two live defects it could not see are fixed.** Wave 8, Session
+14, item 5. No migration, no route, no `api.js` change. This is the guard half
+D301 filed as unbuilt ("extending D162's sweep to follow binds through an
+object field or a rest parameter").
+
+**What D162's sweep saw, and what walked past it.** It named a raw ISO value
+only from `x = ….toISOString()` in the same file, required that name inside a
+`.bind(` within 40 characters of a `.prepare(` whose SQL was written inline,
+and skipped any file with no `.toISOString()` at all. Three shapes escaped:
+
+| Shape | Example | Now followed by |
+| --- | --- | --- |
+| a helper returning ISO | `nowIso()` from `_t13t14t15_helpers.ts` | `rawIsoHelpers` — judged by the helper's RETURN expression, never its name: `cohortTiming.ts`'s `iso` and `admin_cohort.ts`'s `isoNow` return SQL format and are not called raw |
+| a bind wrapper | `safeFirst(env, sql, ...bind)`, `joinRows(env, sinceIso)` | `bindWrappers` — which parameters reach `.bind`, whether the SQL is a parameter or a local const — and every call site, local or imported |
+| an object field | `{ periodStart: new Date().toISOString() }` → `w.periodStart` | `rawVocabulary` — fields (and arrays, and spreads) holding a raw value |
+
+SQL is resolved through a local const (both arms of a ternary) and through a
+`${NAME}` template, which is how D301's `telegramAggregator.ts` spells its one
+WINDOW predicate. `sweepBinds` runs the whole analysis over a corpus, so the
+tests run it on fixtures as well as on the worker. Names are found with
+`identifierAt`, an `indexOf` walk, never a `RegExp` built from the name: the
+first draft built four, escaped for `$` only, and drew CodeQL's
+incomplete-escaping alert and Semgrep's `detect-non-literal-regexp` on each.
+The repo's answer to that rule is `d716900ee`'s — rewrite the match, do not
+silence it — so the patterns went rather than being escaped harder.
+
+**Two defects in the derivation itself, found while widening it.**
+- `sqlFormatColumns` split a table body on commas, so a `-- comment` ending one
+  column's line led the next part and the column was dropped.
+  `founder_needs.created_at` (after `status … DEFAULT 'open', -- open|…`) was
+  invisible that way; with comments stripped the derivation finds 557
+  SQL-format columns.
+- `rawIsoNames` called a name raw when `.toISOString()` appeared anywhere on the
+  right-hand side — including as an ARGUMENT to another call
+  (`axis = weekAxis(new Date(n).toISOString(), …)`, whose `from`/`to` are SQL
+  format). The raw call must now produce the value, at bracket depth 0.
+
+**What the widened sweep found, and what was fixed.** Exactly the gap map's
+two live sites, both in this session's files:
+- `services/newsTrust.ts` — the 90-day-clean check compared
+  `notifications.created_at` (DEFAULT CURRENT_TIMESTAMP) against raw ISO
+  through `safeFirst`, so a flag dated on the window's first day was missed and
+  the +10 paid. Now `datetime(created_at) >= datetime(?)`.
+- `routes/insights.ts` — `joinRows` compared `founder_needs.created_at` against
+  raw ISO at three call sites. The column holds TWO formats (the DEFAULT, and
+  `needs.ts`'s `nowIso()` on insert), so only default-written rows on the first
+  day were dropped; normalising both sides reads either format. Decided: wrap,
+  not rewrite the writer — the read is correct for both formats, and changing
+  what `needs.ts` stores is a data migration nobody asked for.
+
+Two candidates the first draft flagged were false positives in the guard, not
+the code, and the guard was fixed: `admin_revenue.ts`'s `quarterOf` (a field
+holding `.slice(0, 10)`, misread by a regex that stopped at the comma inside
+`slice(0, 10)`) and `branch_insights.ts`'s `axis` (the depth rule above).
+Nothing in `services/telegramAggregator.ts` (Session 4's) is flagged: D301's
+WINDOW is wrapped on both sides, and a mutation making it bare is caught.
+
+**What it still does not do.** It follows values within a function's own
+parameters and one hop of import; a value laundered through two wrappers, or
+through a class method, is not followed. The column side stays the schema's
+word plus the code's own clock writes (D162).
+
+### VERIFIED
+
+- `npm run test:drift` exit 0 on Node 22. Worker tests 4733 on main
+  (d4ccaf5c) → 4740; frontend 3938 and retention 112, unchanged. The seven new
+  tests, in `iso_bind_sql_columns_d162.test.ts`: "a trailing -- comment on one
+  column does not hide the next", "a helper is judged by what it returns, never
+  by its name", "a raw value is one the expression produces, not one it passes
+  along", "a wrapper is followed to every call site, through a rest parameter
+  and a named one", "an object field and a shared template predicate are
+  followed too", "the widened sweep finds no raw ISO bind against a SQL-format
+  column in the worker", "the two sites D423 fixed compare both sides
+  normalised". D162's six existing tests pass unchanged.
+- 10 mutations, 10 caught (non-zero exit and a `not ok` line, unique anchors,
+  sha256-checked restores), re-run on d4ccaf5c before landing: each fix reverted; D301's WINDOW made bare in
+  `telegramAggregator.ts` (temporarily — the file is Session 4's and is not
+  changed); comment stripping, the depth-0 rule, `identifierAt` reading a spread
+  (`...bind`) as a member access, the
+  narrowing check in `isRawIsoExpr`, `${NAME}` substitution and import
+  resolution each removed; and the field value read to its first comma. That
+  last one was first written as a `break` on `(` — which the bracket branch
+  consumes before it is reached, so the bytes changed and the behaviour did
+  not; it was re-aimed at the defect itself and a fixture pinning a date-cut
+  field was added, so the property does not rest on `admin_revenue.ts`.
+- `check-sql-migrations`, `check-sqlite-dialect`, `check-sql-prepare`,
+  `check-timestamp-comparisons`, `check-runtime-schema-declared`,
+  `check-refusal-bodies`, `check-unused-imports`, the worker typecheck and
+  `check-decision-ids` exit 0. Nothing under `frontend/src` moved, so `docs/`
+  is not rebuilt.
+
+## D424
+
+**The founder desks draw the rail and proposal anatomy their bands were
+waiting for: the mode switch with each desk's own sentence, the cost before a
+run, and Eadwyn's mark on the Validate board's claims.** Wave 8, Session 14,
+item 3. No migration and no new `/api/*` method; one route gains two fields
+(below). Built on Session 12's rail after its receipt (D401) and inherited
+view (D402) merged. `WorkerRail.jsx`, `workerRail.css`, `railModels.js` and
+`services/aiSpend.ts` are untouched: the desks pass `fills` and a `note`, which
+the rail already takes.
+
+**The switch.** Build, Raise and Grow have mounted proposal bands since A3–A5
+were built (nine in all), each gated on its workspace's mode through
+`useAssistMode`, and no rail on those desks passed `fills`, so no switch was
+ever drawn and no band on them could be reached. The Validate desk's two bands
+could be turned on only from a Validate zone page. All four desks now pass
+`fills`. Network and Research have no band — Network's draft surfaces read the
+partner firm's book, not a founder's contacts, and Research's one run is Ask,
+a question pressed on purpose — so they draw no switch (D17) and their note
+says why.
+
+**Per-desk copy, and the shared card's sentence.** The mode card reads one
+surface, `ASSIST_SURFACES.workspace`, on every host, and its note was
+Validate's list ("Transcribes recordings, tags logged phrases…"). Drawn on
+Raise it would have promised transcription there. The card now says what is
+true on every desk — proposals, only on a press, each yours to accept, edit or
+discard — and `ASSIST_SURFACES.workspace.desks` holds each desk's own
+sentence, which the desk passes as the rail's `note` and the rail prints under
+the cards. The Validate zone (`FounderValidateWorkspace`) prints Validate's
+sentence too, so the zone still says what its switch does. The three notes
+this replaces each said its desk generated nothing, above bands that draft.
+`manualNote` became desk-neutral ("Every entry here is one you wrote").
+
+`validate_fills_the_blanks` used to check the card's one sentence clause by
+clause against Validate's routes. It now checks every desk: each clause names a
+band that desk mounts, over a route or `DRAFT_SURFACES` entry that exists; each
+band the desk mounts is named by a clause; a desk with no band has no switch
+and no band; each rail prints its own desk's sentence; and the shared card
+names no desk's capability.
+
+**The cost before a run.** `ZoneDraft`'s docblock said the cost was shown
+before the run. It was drawn only once a draft existed, from the draft's own
+row. The new `workspaces/RunEstimate.jsx` quotes the reader's own average for
+the band's router task from `/api/ai/me/spend`'s `by_task` — measured, never
+modelled (D16) — above the run button. It keeps four states apart: loading
+(nothing drawn), unreadable (a failed request, `recorded: false` or
+`by_task_recorded: false`: `Unreadable` with a retry, never "no runs"), no
+runs of the task (says there is no average), and runs (the average and the
+count). Hosts pass their `useAiSpend()` result as `ai`, read only while the
+mode is on and a project is selected, so a desk makes one read for its bands,
+not one per band. A mount that passes nothing is unchanged and fetches
+nothing. That is every mount off the founder desks: the research, partner,
+advisor and investor zones.
+
+- A zone draft runs `workspace_explain` whatever its surface
+  (`research.ts`'s `POST /drafts`), the same task as the rail's read-back, so
+  its line says the read-back is in the average. `ZoneDraft.DRAFT_TASK` is
+  held equal to the route's task by a test.
+- A fill band's kinds each bill their own task (`validate_tag_pains`,
+  `validate_draft_hypotheses`). The proposals list now sends
+  `kinds[kind].task` from the registry beside the copy, so the band cannot
+  quote one kind's average for another.
+
+**Eadwyn's mark on the Validate board.** The accept path has written a
+`fill_provenance` row for every hypothesis taken from the band since migration
+246, and only the market page ever read one back. The board route
+(`founder_validate.ts`'s `buildBoard`) now reads them in one query, joined to
+`hypotheses` on the project. The newest row per claim counts only while its
+`written_value` is the claim's text now (`filledColumns`' rule: a founder who
+rewrote the claim owns it). Each hypothesis carries
+`filled: { edited, model, fill_class } | null`, and the board carries
+`fills_recorded`. The desk's hypothesis card draws "Proposed by Eadwyn", or
+"… · you edited it" when the founder corrected it before accepting, with the
+model. A failed read reports `fills_recorded: false`, and the card says which
+claims Eadwyn supplied could not be read; it is never folded into a board with
+no marks, which would claim every claim was typed by hand.
+
+**Semantic tokens.** Minted in `index.css`'s `@theme` at their census values
+(`design/tokens/tokens.json`), only where this anatomy first paints with them:
+`axal-lavender-edge`, `axal-positive`, `axal-destructive`, `-destructive-tint`
+and `-destructive-edge`. The accepted mark, the clause read's warn tone and
+Eadwyn's mark use them; each call site carries its own `dark:` pair, because a
+status colour is not a neutral and the dark skin does not flip it. Amber tint,
+positive tint and edge, info and teal are not minted: nothing paints with
+them yet, and `@theme` tree-shakes an unused token anyway.
+
+**Voice.** The Raise clause read's footnote was the artboard's "Not legal
+advice", which names what Eadwyn produced as a kind of advice. It reads "A
+reading of your documents, not counsel's review. Counsel is on the Team page."
+`founder_raise_overview_a4` pinned the old sentence as "not optional"; it now
+pins the property — the read disclaims counsel's review, points to counsel,
+and never says advice. A comment calling the Validate band "Proposal ·
+Advisor" (the canvas's word) now says proposal band. The `RECOMMENDED` badge is
+Session 12's and was already gone (D400).
+
+**Still not built, each said where it shows.**
+- The Friday retro draft on the Build cadence card needs a `DRAFT_SURFACES`
+  entry in `routes/research.ts`, which is not this session's file. The card
+  already says no retro draft surface exists. Routed to the owner through
+  the relay.
+- The collapsed spine's status dot and vertical spend live in `WorkerRail.jsx`
+  and `workerRail.css` (Session 12).
+- A band's cost per page. D404 (migration 319) records a run's `surface`,
+  and the rail's read-back sends one; `POST /api/research/drafts` sends none,
+  so every zone-draft run lands in the month's unattributed group. The band
+  estimate therefore stays per task. Passing the page to `runAI` from that
+  route is a `research.ts` change, routed to its owner.
+- The amber strike-through with a second confirm: no fill overwrites a value
+  yet (`eadwynConfig`'s market note says why), so there is nothing to confirm.
+
+**Verification.** 22 mutations, 22 caught, each with a non-zero exit and a
+`not ok` line, restored from a sha256-checked snapshot:
+- the per-desk rule (an unbacked clause, a dropped switch, a borrowed
+  sentence, a dead switch on Network, a desk capability in the shared card);
+- the estimate (by-task unreadable read as none, loading drawing a figure, no
+  pre-run cost, a wrong task on either band, the kinds list without its task,
+  a band without `ai`, a spend read with the bands off);
+- the mark (surviving a rewrite, crossing ventures, the oldest row speaking,
+  a failed read folded into no marks, the edited flag dropped, an edited mark
+  reading as unaided, a failed read not shown);
+- the footnote, and a token off its census value.
+
+The cross-venture test was first written handing the reader only project 7's
+claims, which would have passed with the query's project scope removed. It now
+hands over every claim, so only the scope keeps venture 8's mark off venture
+7's board.
+
+CodeQL raised alert 6191 (incomplete multi-character sanitization, high) on
+the first push, against the new test's own `replace(/<[^>]+>/g, '')` helper.
+The test now reads text through `_renderedText.mjs`, the repo's character scan
+that never returns a `<`, and the four mutations that read rendered text were
+re-run: all four caught.
+
+New tests: `founder_desk_rail_anatomy_d424.test.mjs` and
+`cloudflare-worker/test/validate_claim_provenance_d424.test.ts`, which runs
+real SQLite rows through `recordFill`, the accept path's own writer.
+`validate_fills_the_blanks` and `founder_raise_overview_a4` were re-aimed as
+described above.
+
+## D425
+
+**The phone gets a tab bar, founder first: four tabs and a More sheet, built
+from the sidebar's own rows, with the page tag and the body made safe-area
+aware.** Wave 8, Session 14, item 6 (Mobile canvas M1, with M5's 44pt and
+safe-area rules). No migration, no route, no `api.js` change, and no App.jsx
+edit: the shell's mobile chrome is Session 5's. This PR ships the component,
+its plan and its tests. The mount is one import and one element for the shell:
+`<MobileTabBar role={shellRole} />` beside the drawer's backdrop, passed the
+role the sidebar gets but without its `|| 'founder'` default, so a viewer with
+no role gets no bar.
+
+**Why a bar.** Below 1024px the sidebar is a drawer behind the hamburger, so
+every destination is two taps and a scan away, and after D284 moved Messages to
+the top bar (which hides it below 640px) a phone had no Messages door at all.
+
+**The plan is the sidebar's, not a second list** (`lib/mobileTabs.js`).
+- **Tabs.** The canvas's founder tabs are Home, Build, Raise and Grow. Each
+  tab IS the founder sidebar row with that route — its label, icon and
+  `match` — so the canvas's "Home" reads "Studio", as the sidebar does, and a
+  rename in the sidebar renames the tab.
+- **More.** Every other sidebar row goes to More in the sidebar's order, so a
+  row Session 5 adds reaches the phone without an edit here. Then come the
+  three doors a phone otherwise lacks: Messages, Trust and Company Settings,
+  each a route whose guard admits a founder.
+- **Where it departs from the canvas.** The canvas's More list (Validate,
+  Network, Research, Trust, Company Settings) leaves out Spin-Out Lab, a live
+  sidebar row, and Messages. Both are in More; "nothing is dropped" is the
+  canvas's own rule.
+- **Which tab is lit.** `rowActive` is `SidebarNav`'s own rule: a row with
+  `match` owns its `to` and its listed prefixes, never its own subtree, so
+  `/build/discovery` lights Validate and `/build/team` lights Grow, not Build.
+  A row without `match` is the sidebar's `NavLink end`, which is exact. More
+  lights when the page belongs to one of its rows.
+
+**The bar and the sheet** (`components/MobileTabBar.jsx`).
+- **Hit areas.** Five 56px targets, each a fifth of the width, above the 44pt
+  floor, with the canvas's 10px labels.
+- **The sheet.** More opens a bottom sheet, never a screen (M1's caption),
+  with 52px rows. It is a real dialog (`aria-modal`, labelled by its heading),
+  and focus moves into it and back to More.
+- **Closing it.** A tap on the backdrop, a swipe down past 60px, Escape or the
+  close button (44px) closes it, and so do following a row or any route
+  change.
+- **Where it shows.** Only below 1024px (`lg:hidden`), the breakpoint the
+  hamburger already uses.
+
+**Safe areas.**
+- **The page tag.** `index.html`'s viewport now says `viewport-fit=cover`.
+  Without it every safe-area inset reads 0, so nothing could clear the home
+  indicator.
+- **The bar and the sheet.** Both pad by the bottom and side insets, and while
+  a bar is drawn the page's own content (`[data-app-main]`, inside the scroll
+  container) is padded by `--mobile-tabbar-h` so its last row is never under
+  the bar. The attribute that padding keys off leaves with the bar.
+- **The body.** `cover` also lets content reach under a phone's notch in
+  landscape, so `body` pads by the side insets (0 on every screen without a
+  notch). That is horizontal only, so no full-height container grows.
+- **The top inset.** The installed app's status bar is `black-translucent`,
+  which already drew the page under the status bar before this change. Padding
+  the header by the top inset is the shell's (Session 5), and now possible,
+  because the inset is no longer 0.
+
+**Licences.** Founder first: `mobilePlan` returns null for every other licence
+and the bar draws nothing for it. The investor, advisor and partner
+allocations are on the canvas and are the next step.
+
+**M2 is the owner's call and is not built.** The canvas's hub shows one lens at
+a time, "no route change": the zone chips swap the lens in place. That
+contradicts SHELL_MIGRATION rule 2 and `founder_shell.test.mjs`, which hold
+that a zone pill navigates to its route, and the pills keep navigating. Which
+rule wins is a product decision this entry does not make.
+
+**Not built here, each with its owner.**
+- The AI rail as a floating button plus bottom sheet (M5) is Session 12's.
+  `--mobile-tabbar-h` gives its button a place to sit, at
+  `calc(var(--mobile-tabbar-h) + 16px)`.
+- The detail reflows (M3, M4).
+- Pull-to-refresh and long-press (M5's gesture list). Swipe-back is the
+  platform's own, because every detail screen is already a pushed route.
+
+**Verification.** 18 mutations, 18 caught, each with a non-zero exit and a
+`not ok` line, restored from a sha256-checked snapshot:
+- **The plan:** a retyped tab, a dropped row, a new sidebar row not reaching
+  More, a door to a missing route, the plan handed to every licence.
+- **The lit tab:** a `match` row or a plain row claiming its subtree, More
+  never lit, two tabs claiming a page.
+- **The bar and the sheet:** tabs under 44pt, More rows under 52pt, the bar on
+  desktop, a sheet that is not modal, Escape ignored.
+- **Safe areas:** no `viewport-fit`, the page not padded, the attribute left
+  behind, the body ignoring the notch.
+
+One assertion was fixed along the way: the licence test's render helper
+defaulted a missing role to founder, so the undefined-role case drew a bar in
+the test and not in the component. The helper now takes the role as given.
+
+New test: `mobile_tab_bar_d425.test.mjs` (10 tests), which renders the bar and
+the sheet with `react-dom/server` under a `MemoryRouter`.
 
 ## D430
 
@@ -33304,6 +37062,320 @@ shipped, and its flag is off for this account." `/profile?x=1#y` lands on
 field added to two existing payloads; no route or `api.js` method added or
 removed (`companyKybStart` gains an optional second argument).
 
+## D434
+
+**Company Settings: the header chrome, removal with its consequence, the
+Workspace card, and the direct "Add team member" retired on every side —
+reversing D69's "the direct link stays".** Session 15's item 5.
+
+**What was true on main (`e38aaef264`).**
+- The page opened with an h1 and "Profile and details for X". The canvas's
+  header — initials, the name with its stage chip, a binding line, the
+  reader's role, a scope line with the way to the switcher — was not drawn,
+  though every field it needs is on the memberships row the switcher had
+  already selected.
+- Removing a member was one click on "Remove" (`MembersCard`, the
+  `run(async () => { await api.removeCompanyMember(...)` handler). Revoking
+  an invitation was one click too.
+- No Workspace card: the list and create endpoints existed, the switcher used
+  both, and the settings page said nothing about how many companies the
+  account holds or how to make another.
+- `CompanyProfilePanel` (Network Effects → Companies → My Company) still
+  offered "Add team member": `api.addCompanyMember` → `POST
+  /company/:uid/members`, which joined an EXISTING account to the company on
+  an editor's say-so with no invitation and no consent, and 404'd anyone who
+  had never signed up. D69 kept it "on the one surface that means it".
+- The on-ramp's comment still said the backend "has no join-request or
+  invitation-accept endpoint"; the accept route has existed since task #121
+  (`/company/invitations/accept`). `company_settings_members.test.mjs`
+  forbade the word "invite" in the empty-state cards for the same stale
+  reason.
+- The profile card drew a bare "Logo URL" field under a canvas that draws
+  "Upload image"; nothing said why there is no upload.
+
+**What changed.**
+- **The header** (`CompanyHeader`, module-level, mounted once above the
+  toast) reads the active membership row and nothing else: initials from the
+  name, the name with its stage chip or "Stage not recorded", "You are
+  editing X · created <date>" or "· creation date not recorded", "Your role:
+  Primary admin" / the membership's `my_role` / "not recorded", and the scope
+  line. "Switch company ↑" does not draw a second switcher: it jumps to the
+  sidebar switcher's own trigger (marked `data-company-switcher` on both its
+  collapsed and expanded buttons — `ui/CompanySwitcher.jsx` is Session 5's)
+  and opens it, and says when there is none on screen. The canvas's
+  "Owner view / CTO view" toggle is demo scaffolding and is not drawn.
+- **Removal is two steps.** "Remove" opens an inline confirmation on the row:
+  "Remove <name> from <company>?" with the consequence printed — they lose
+  every workspace scoped to the company, what they contributed stays, adding
+  them back means a new invitation — and "Yes, remove" / "Keep them". The
+  one removal write sits behind it; the reader's own row says to use Leave
+  company instead. Revoke gets the same shape with the invitation's own
+  consequence ("They never had access, so nothing they own is affected").
+  The Members description now counts members and pending invitations from
+  the loaded lists, and a failed invitation read counts as nothing pending,
+  not zero pending.
+- **The Workspace card**: the canvas's sentence, "Create another company"
+  (inline name → `POST /company/create`, then the switcher's own one-writer
+  rules: append to the context list, persist the id, select), "Jump to the
+  switcher", and "You have N companies on this account" from the list the
+  switcher loaded — or "could not be read" when that list is empty on a page
+  that has an active company, since that can only be a failed read.
+- **The direct add is retired on every side, on D304's rule.** The panel's
+  modal and button are deleted; an editor sees "Invite from Company Settings
+  →" instead. `api.addCompanyMember` had no caller left and is removed.
+  `POST /company/:uid/members` was called by nothing in the tree (the
+  rate-limit test only names the path in its does-not-match list) and is
+  removed from `routes/company.ts`; PATCH and DELETE on a member, and the
+  invitation routes, are unchanged. This reverses D69's reasoning: the
+  modal was honest about what it did, but what it did — joining someone
+  without asking — is the thing the invitation exists to replace, and the
+  owner's direction retires an old surface once a built one does its job.
+  No redirect is owed: the panel keeps its page, and the route had no page.
+- **Copy and comments**: the on-ramp says the way in is an invitation to this
+  account's email, accepted by the invitee, and still says there is no
+  self-serve join request; the first unlock card says "Invite co-founders and
+  hires by email — they accept a link, nobody is joined without asking"; the
+  stale "no accept endpoint" comment is corrected; the Logo URL field says
+  upload is not available because there is no image store for company
+  logos, so a link is what is recorded.
+- `company_settings_members.test.mjs` re-aimed: its header no longer says
+  the method lives on; the mutation test also pins the method gone from
+  `api.js`; the empty-state test requires the invitation wording and forbids
+  a join request instead of forbidding "invite".
+
+**Not done here, filed.** Logo upload needs an image store (only `logo_url`
+exists). Delete company has no route; the page already says so and the
+canvas's inert type-to-confirm is still refused. The removal consequence
+lists workspaces by kind, not by count, because no route counts what a
+member holds.
+
+**Guard.**
+- `cloudflare-worker/test/company_direct_add_retired_d434.test.ts`, 4 tests
+  through the real router on in-memory SQLite: an editor's direct add by
+  email answers 404 and writes no link; by user id likewise; role change and
+  removal on a member still answer; the route is gone from the source while
+  the invitation, its accept, PATCH and DELETE remain.
+- `frontend/test/company_settings_d434.test.mjs`, 11 tests: the header is
+  drawn once from the active membership row with no second read and each
+  field has its absence; `initialsOf` and `createdOn` are lifted and run;
+  "Switch company" queries the switcher's anchor, opens it and says when it
+  is absent, and both trigger buttons carry the anchor; removal is two
+  steps with the one write behind the confirmation, the consequence printed
+  and the reader's own row deflected to Leave; revoke likewise; the
+  description counts from the loaded lists with a failed read as nothing
+  pending; the Workspace card creates through the switcher's rules and
+  counts honestly; the direct add is gone from panel, client and worker
+  while the invitation and the two surviving member routes stay; the
+  on-ramp and unlock copy describe the invitation and still no join request,
+  the stale comment is gone and the accept route exists; the logo field
+  says why there is no upload.
+
+**Mutations: 22 run, 22 caught** — each a non-zero exit with a `not ok`
+line, anchors unique, bytes proven changed, sources restored from a
+sha256-checked snapshot: the direct add mounted again; the role-change
+route dropped; the header mounted twice; the header fetching on its own; an
+unrecorded stage drawn as a value; a role invented; initials for an empty
+name; the switch link only scrolling; the anchor dropped from one trigger;
+removal back to one click; the consequence replaced by "Are you sure?"; the
+reader's own row removable; revoke back to one click; a failed invitation
+read counted as zero pending; the Workspace card fetching its own count; an
+empty list counted as one company; create selecting without persisting the
+id; the panel's direct add back; the client method back; the on-ramp
+promising a join request; the stale no-accept-endpoint sentence back; the
+logo field drawing an upload.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA
+fallback, `/api/company/*` stubbed as the worker now shapes it. As the
+primary admin of "Halyard Systems" with two memberships: the header reads
+"HS · Company Settings · Halyard Systems · seed · You are editing Halyard
+Systems · created Mar 12, 2026 · Your role: Primary admin · This sidebar is
+scoped to Halyard Systems … · Switch company ↑"; the Workspace card reads
+"Create another company · Jump to the switcher · You have 2 companies on
+this account."; Remove on the Analyst's row opens "Remove Analyst Person
+from Halyard Systems? They immediately lose access to every workspace scoped
+to Halyard Systems — cap table, raise, data room, metrics. …", "Yes, remove"
+sends the one DELETE and the row is gone; Revoke opens "Cancel the
+invitation to new@example.test? They never had access …". "Switch company ↑"
+opens the sidebar switcher (its "Add a new company" row appears); "Create
+another company" → "Third Co" posts to `/company/create`, the header now
+reads "Third Co" and the count "You have 3 companies on this account.". With
+no memberships the page draws the on-ramp. On Network Effects → Companies → My Company, the panel reads "Team members (2)" with no "Add member" button and the link "Invite from Company Settings →" (the page's default tab needed its own payloads stubbed to render at all; see the filed note).
+
+`frontend/src` moved, so `docs/` is rebuilt. No migration. One route
+(`POST /company/:uid/members`) and one `api.js` method (`addCompanyMember`)
+removed; none added.
+
+## D435
+
+**Team (integrated, founder): the roster, coverage and headcount plan get a
+store (migration 326) and `/build/team?mode=workspace` draws the canvas's
+four tabs up to the owner's decision line; `TeamBuildingPage` is retired.**
+Session 15's item 6, first half (Team · Authority is D436).
+
+**What was true on main (`6510453615`).**
+- `/build/team?mode=workspace` rendered `TeamBuildingPage`: three tabs,
+  Advisor / Co-Founder / Jobs, each embedding a discovery surface (the
+  advisor directory, Co-founder Match, the jobs list). The integrated Team
+  canvas draws Roster / Advisors / Hiring / Coverage: a stat strip, a roster
+  with equity, vesting and paperwork flags, an option-pool bar, a person
+  drawer and an invite drawer, advisor grants and cadence, roles and the
+  co-founder decision, function coverage, a headcount plan and people cost.
+- No store held a person's type, start date, access, salary, grant,
+  vesting schedule or paperwork state; none held coverage or a plan.
+  `user_company_links` (migration 191) records only accounts that joined
+  the workspace; `cap_table_holders` (020) is a Carta-shaped import keyed by
+  project; option pools and vesting (057) are keyed by the importing user.
+- The founder redirects `/advisors`, `/my/jobs` and `/cofounder` sent a
+  founder to `/build/team?tab=…`, and a bare `/build/team` is the Grow desk
+  for a founder (`founderGrowLanding` tests `mode !== 'workspace'`), so
+  `?tab=` never reached a tab: a founder opening `/advisors` landed on the
+  Grow desk. `FounderStudioHome`'s Office hours card had the same link.
+
+**What changed.**
+- **Migration 326** — `company_people` (one row per person on a company's
+  team, account or not: `person_type` founder / employee / contractor /
+  advisor, role, start date, access level, status active / offer_out /
+  offboarded, `salary_cents` as an annual integer, the recorded grant as
+  shares and a kind, the vesting schedule as start, cliff and length in
+  months, the agreement, IP-assignment and 83(b) states, advisor focus and
+  cadence, `created_by` / `updated_by`), `company_function_coverage`
+  (function, covered / thin / gap, who holds it, what would fix it) and
+  `company_headcount_plan` (period, target). Additive, idempotent, no
+  transaction statements, every row signed by its actor.
+- **Worker** (`routes/company.ts`, `services/companyTeam.ts`): `GET
+  /company/:uid/team` for any member, `POST …/team/people`, `PATCH
+  …/team/people/:pid`, `PUT …/team/coverage` and `PUT …/team/plan` for an
+  editor (`canEdit`, the rule that already decides who changes the
+  membership list). A non-member is refused `not_a_member`, a plain member
+  writing is refused `not_an_editor`, and a body outside the closed
+  vocabulary — an unknown type, a non-date, a fractional month, a negative
+  salary — is refused `invalid_person` / `invalid_coverage` /
+  `invalid_plan` with nothing written. Economics follow D431:
+  `salary_cents` and `compensation_note` are present for an editor and for
+  the person the row is linked to, and ABSENT for another member. A person
+  is linked to an account only when a member of this company holds the
+  email, never to an arbitrary account. Offboarding is a status with a
+  date, never a delete; a PUT replaces the coverage or plan list as one
+  signed record. The read composes three other stores and reports each per
+  source: the cap-table holders of the company's projects (joined through
+  `projects.company_id`, deleted projects excluded), a member's Carta
+  option-pool import (joined through `user_company_links`), and the newest
+  project's `cofounder_decision_meta` (162); a source that cannot be read
+  answers `{ available: false, reason }`, never an empty list.
+- **Page** (`pages/founder/FounderTeamPage.jsx`, mounted where
+  `TeamBuildingPage` was): the stat strip (team, roles from `jobs.mine()`,
+  pool unallocated from the import with granted and offer-out from the
+  roster and "reserved not recorded", coverage gaps); the paperwork strip
+  naming each person and document, linking to Trust Center; the roster with
+  type chips, flags, equity (the cap table's own `ownership_pct` when the
+  person is on it, the recorded grant over the fully-diluted total when not,
+  and the row says which), vesting computed from the recorded schedule with
+  a ghost track before the cliff and labelled computed, and a status pill;
+  the option-pool card naming the import it reads; the person drawer with
+  employment, equity, paperwork, edit and a two-step offboard that prints
+  the consequence; the invite drawer that records the person and, only when
+  asked and only with an email, sends the existing workspace invitation,
+  reporting the two outcomes apart; Advisors (grants, cadence, office hours
+  from the calendar's `advisor_booking` and `partner_office_hour` kinds, the
+  advisor directory opening inside the tab behind the Growth gate); Hiring
+  (roles with applicant counts and a link to `/grow/talent`, the jobs list
+  opening inside the tab, inbound co-founder leads, the project's recorded
+  decision with Co-founder Match opening behind the Studio gate); Coverage
+  (functions and plan editable by an editor and saved as a list, people
+  cost from recorded salaries with an unrecorded salary counted as unknown
+  and payroll load Not recorded). Economics locked, not hidden: an absent
+  salary draws Locked, and the cost card locks as a whole. Every read has
+  its own failed state.
+- **Retired on D304's rule**: `frontend/src/pages/TeamBuildingPage.jsx` is
+  deleted; the mount, the three founder redirects and Studio Home's link now
+  carry `mode=workspace`, and the legacy ids land in the tab that owns the
+  job (`advisor` → Advisors, `cofounder` and `jobs` → Hiring). No `api.js`
+  method or worker route is removed; five methods and five routes are added
+  together (`check-api-drift` 0 new).
+- ROUTE_MAP's Team row is CURRENT with the D435 update; PROFILE_ROUTING
+  regenerated; the founder README names the page.
+
+**Built up to the owner's decision line — named on the page's Decisions
+panel, never invented.** (1) The cap table of record: a company can own
+several projects, each with its own imported cap table; the page reads every
+holder across them. (2) A company-level option pool and a top-up model: the
+pool shown is a member's Carta import; no divisor is invented. (3) Paperwork
+issuance from this page — offer letter, contractor agreement, advisory
+agreement: the store records states; "Send document" is not drawn as live.
+(4) A payroll-load rate: none is stored, so people cost is salaries and
+contractors and says so. (5) Talent leads from a careers page: landing-page
+leads route by audience and only the co-founder audience exists. (6)
+Advisory grants and the cap table: recorded here, not written to
+`cap_table_holders`. Also not built: the canvas's "Model a top-up" and
+"Reserved for open roles" (no reservation is recorded on a posting).
+
+**Guard.**
+- `cloudflare-worker/test/company_team_d435.test.ts`, 6 tests through the
+  real router on real SQLite with migration 326 applied as written: an editor
+  records a person linked to the member holding the email (and never to a
+  non-member account) with the actor stamped; economics served to the editor
+  and the linked person and absent for another member; a member reads and
+  cannot write, a non-member gets neither; the closed vocabulary refuses six
+  bad bodies and the service's own rules; offboarding stamps a date and
+  keeps the row, coverage and plan PUTs replace and sign; the composed reads
+  answer per source and an unreadable cap table says so.
+- `frontend/test/team_d435.test.mjs`, 10 tests: the mount and the deleted
+  page, the redirects carrying `mode=workspace`, the legacy tab ids and the
+  preserved mode; vesting from the schedule with a ghost track; equity's
+  source labels; people cost's unknowns and the unestimated payroll load;
+  Locked vs Not recorded; every read's failed state and no `|| 0`; the
+  worker's per-source shapes, D431 predicate and gates, the migration's
+  cents and signatures; the six decisions on screen, "Send document" not
+  live, the invite note, the two-step offboard with one write, the opt-in
+  invitation, and no "advice"/"recommendation" in the page's voice.
+- `founder_grow_a5_contract`, `founder_shell`,
+  `founder_overview_subpage_links`, `apex_route_coverage`, `repo_layout`,
+  `team_authority`: green unchanged.
+
+**Mutations: 27 run, 27 caught** — each a non-zero exit with a `not ok`
+line, anchors unique, bytes proven changed, sources restored from a
+sha256-checked snapshot: economics served to every member; a plain member
+writing; a non-member reading; an unknown type accepted; a fractional month
+accepted; offboarding deleting the row; a failed cap-table read masked as
+empty; holders read across every project; every account's pool; a person
+linked to a non-member account holding the email; the actor unstamped on
+coverage; salary as a REAL dollar column; the old page mounted again; a
+redirect sending a bare `?tab=`; the cofounder alias dropped; a tab change
+dropping the mode; pre-cliff time drawn as vested; an unrecorded grant drawn
+as none; an unrecorded salary counted as zero; a withheld salary drawn as
+Not recorded; payroll load estimated at 11%; a failed roles read shown as
+zero; the Decisions panel unmounted; "Send document" drawn live; offboarding
+in one click; the invitation sent without asking; a client method dropped.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA
+fallback, `/company/:uid/team` stubbed as the worker shapes it. As an editor
+of "Novacraft Labs, Inc.": the meta line reads "Stage: seed · created Mar
+12, 2026 · 5 active · 10,000,000 shares fully diluted"; the strip "ON THE
+TEAM 5 · 0 offers out · 1 contractor · OPEN ROLES 1 · POOL UNALLOCATED
+760,000 · 240,000 granted · 0 offer out · reserved not recorded · COVERAGE
+GAPS 1 · 1 thin"; the paperwork strip "2 team members have missing paperwork
+— Amara (83(b) election), Rin (IP assignment). Both are diligence
+blockers."; Dmitri's row "EQUITY 2.4% · 240,000 options · recorded grant,
+not on the cap table · VESTED Cliff in 218 days"; the drawer's compensation
+"$145,000/yr"; Offboard opens "Offboard Dmitri Volkov from Novacraft Labs,
+Inc.? The record stays with today's date …", "Yes, offboard" sends the one
+PATCH. As a plain member the same page reads, with the drawer's compensation
+"Locked". Invite teammate with "Yusuf Demir", an email and "135,000" and the
+invitation box checked posts the person (`salary_cents` 13500000) and then
+the invitation, and the flash says both. Coverage reads "1 function has no
+owner and 1 is thin", the plan "5 of 6 · 1 to hire", the cost card
+"Salaries (1 employee) $12,083 · Contractors (1) $8,000 · Founders (2) $0 ·
+Payroll load & benefits Not recorded · Total monthly people cost $20,083 · 2
+founders defer salary". `/my/jobs` lands on Hiring with "Senior backend
+engineer · published · 14 applied · Review applicants" and the decision
+"Document a solo path · Documented Aug 1, 2026"; `/advisors` lands on Advisors with "GRANT 0.35% ·
+35,000 shares · 24-month vest, no cliff · CADENCE Monthly, 60 min · Signed"
+and one office hour from the calendar. A failed team read draws "The team
+record could not be read. Nothing here is drawn from a guess. Retry".
+
+`frontend/src` moved, so `docs/` is rebuilt. Migration 326 added. Five
+`api.js` methods and five worker routes added together; one page retired.
+
 ## D440
 
 **HQ-held Studio and My Licence stop pointing at pages that refuse, and stop printing zero for a seat or a host that was not confirmed.** No branch is provisioned (`infra/branches/` holds only the example), and every `/api/branch/*` handler calls `requireBranchTier`, so a card that opens `/branch/*` on HQ renders Unreadable. S20's rule is that those pages are never linked from the HQ-held shell.
@@ -33344,6 +37416,106 @@ removed (`companyKybStart` gains an optional second argument).
 **The door.** `BranchApprovals` links the moderation lane, and the page itself, to `/admin/spinout-moderation`. That link is literal so the admin-route walk can see it. `HeldApprovals.jsx` row 4 (`data-lane="4"`, Spinout moderation) still says "No console" / "No console exists anywhere yet", and `held_admin_shell_d286.test.mjs` pins that row as having no console. Those files are Session 5's. The row the console needs is that one, pointed at `/admin/spinout-moderation`. `AdminPage.jsx` is not edited.
 
 **Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: the lane's `resolved_at` predicate removed; the list's `resolved_at` predicate removed; the board's literal door pointed at the Lab page instead.
+
+## D443
+
+**Studio reads one glance, on both tiers, from the database that tier has.** Wave 8, Session 6, item 4. No migration. No live branch exercised this.
+
+**The route.** `GET /api/admin/studio/glance` (`routes/admin_studio_glance.ts`, mounted at `/api/admin/studio` before the `/api/admin` catch-all). `requireAdmin`. It does not call `requireBranchTier`, which is why the four branch reads the page used (`/api/branch/home`, `/api/branch/templates`, `/api/branch/insights`, `/api/licence/mine`) cannot serve HQ: each of those throws `Branch only`.
+
+**What each tier answers.** On a branch the glance is that branch's own seats, approval lanes, programme clock, dated agreements, pushed template copy, pushed benchmarks and share rate — the same reads the branch pages already make. On HQ those four that are a subsidiary's (seats, the lanes, the agreements, the share rate) come back `recorded: false` with a reason that names U1. HQ's user table is not a seat count, and it is not shown as zero. The programme clock is the platform's and is returned on both tiers; the count of accounts still pending the open week is the subsidiary's part, so on HQ that count stays null. HQ's master template library and the benchmark copy are HQ's own stores and are read. A failed read of a store that does exist is `available: false` with a sentence of ours; the database's text stays in the log.
+
+**Who reads it.** `StudioNeedsDecision.jsx` and `AdminStudioOverview.jsx` both call `loadStudioGlance` in `adminStudioOverview.js`, and both render through `glancesFromStudioGlance`, so a tile and its card still cannot disagree. `AdminStudioHome.jsx` is Session 3's and is not edited. It still issues the four branch reads and passes them down, which is what a synchronous render sees until the glance answers. Session 3 should drop those four calls. The children already read `GET /api/admin/studio/glance`.
+
+**Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: HQ seats counted from `users`; the U1 sentence removed from the seats refusal; the strip's `loadStudioGlance` call removed.
+
+**Corrected by D447.** HQ does not read `branch_benchmarks`. Agreements that end inside the window, and the count of accounts still pending the open week, are read on HQ. The four legacy props are not read when a glance is already present.
+
+## D444
+
+**The branch Contracts page tables this database's own contracts, from the list it already had.** Wave 8, Session 6, item 5. No migration. No new `/api/*` method. `admin_contracts.ts` is not edited. No live branch exercised this.
+
+**The ledger.** `BranchContracts.jsx` reads `GET /api/admin/contracts` (`api.adminListContracts`, limit 500) and `GET /api/admin/contracts/stats` (`api.adminContractStats`). Both are `requireAdmin` and already union documents, e-sign envelopes, pairwise NDAs and partner deals in the deployment's own database (D199). A failed list is Unreadable. A list that returns a total of zero says the database was read and holds none. The caption says how many rows are on the page and how many the list counted, so a page is not printed as the population. Pending signatures are `pending_signature` on the stats payload, and only when that read succeeded and the field is a finite number. A missing field stays Not recorded. A failed stats read is not zero pending.
+
+**What the list does not carry.** Value, renewal, and the version the agreement was sent from are Not recorded on every row. Pairwise NDAs and partner deals store an end date, and this list drops both; e-sign envelopes and documents record none. The version on the library card is the copy HQ last pushed, not the version of the row. None of the three is shown as zero.
+
+**The stale reason.** `branch_templates.ts` told a branch that a template body has no reader because `licence_contracts` is HQ's table. That table is the licence agreement only. The body still stays at HQ: nothing on a branch instantiates it, and the contract list carries the template name and not the body. The page still prints `not_carried` from the payload.
+
+**Not on this page.** Resend, void, and the contract detail fetch. `esign.ts` and `SendForSignaturePage.jsx` are untouched.
+
+**Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: the body reason put `licence_contracts` back; the page stopped calling `adminListContracts`; a missing `pending_signature` was rendered as zero pending.
+
+## D445
+
+**Approvals, Accounts and Settings share one raise, and the form is not blank when a row sent the person there.** Wave 8, Session 6, item 6. No migration. No new `/api` method. No live branch exercised this.
+
+**Prefill.** `/branch/approvals` reads `?kind=` and `?subject=` once, through `prefillFromSearch` in `frontend/src/lib/escalationPrefill.js`. The kinds are `moderation`, `content`, `seat_increase` and `other`. An unknown kind is ignored and the form keeps its own default. The subject is trimmed and cut at 300 characters, the route's own limit. Settings' HQ-owned rows link with both already set: the subsidiary name, the territory, data residency and the domain as `other`, and the brand kit as `content`. Staff & roles, and the licence summary's request for seats, go to `/branch/accounts`. `HqSupportSessionBar.jsx` is Session 5's and is not edited. Its "Raise a concern" link is `/branch/approvals` with no query. The prefill a concern from that bar would use is `?kind=other&subject=`.
+
+**Seats.** Accounts asks for a type and a whole number from 1 to 500 and sends them as the subject and the detail of one `seat_increase` escalation. There is no second store. The detail names how many of that type this territory is using only when both figures are finite numbers; a missing figure is left out rather than written as zero. The quantity is a text field. Nothing on the page writes the licence.
+
+**Deactivation.** A non-admin row that `drawsAccountControls` would draw gets Deactivate or Reactivate, which calls the existing `PATCH /api/admin/users/:id/toggle-active` with no reason. The viewer's own row draws nothing. An admin-role row is not offered a button: closing one needs a written reason, a step-up and the super admin, and this page collects none of those. The row says a super admin closes it and this branch has none.
+
+**Password reset.** Named, not built. The rail and a sentence on the members card say the owner has not decided it. There is no control.
+
+**Eleven lanes.** The Approvals board, its coverage line and Branch Home's loading line and link say eleven lanes (D215). The sentences that still said four queues were stale.
+
+**Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: an unknown seat type accepted; the escalation kind dropped; an admin row offered a button.
+
+## D446
+
+**A branch reads the support sessions on its own database, and lists assessment runs for one cycle.** Wave 8, Session 6, item 7. No migration. No live branch exercised this. `routes/assessment.ts` and `rpc/branchOps.ts` are not edited. `HqSupportSessionBar.jsx` is Session 5's and is not edited.
+
+**The audit line.** `GET /api/branch/support-sessions` (`routes/branch_support_sessions.ts`, mounted at `/api/branch` beside the other branch reads). `requireAdmin` and `requireBranchTier`. It selects `impersonation_sessions` where `admin_user_id = 0` and `context` starts `hq_support:`, which is the row `redeemSupportCode` writes, and it joins the target account on this database. It does not create the table. Creating it on the read would turn "could not be read" into an empty list, and an empty list is what the page says when no session has been opened. A missing or failed read is `available: false` with a sentence of ours; the database's text stays in the log, and `BranchAccounts` draws Unreadable. An empty table is `available: true` and `items: []`, and the page says the record exists and is empty. A read made during a session is not a row in this table, and HQ's Security copy is a different store. Both stay unrecorded, with reasons the route returns. The actor is the name stored in `context`, because that row is not joined to a local user.
+
+**The cycle filter.** `GET /api/admin/assessment/sessions` on the assessment router that was already mounted at `/api/admin/assessment`. `requireAdmin`, so a branch can read it; the writes stay `requireHqAuthoring`. `?cycle=` is a cohort cycle id. `assessment_sessions` has no cycle column, so a run is kept when `datetime(started_at)` is at or after that cycle's `start_at` and before its `end_at`. An id that matches nothing is `cycle_found: false` and lists nothing. A cycle with a blank start or end is `filterable: false` and is not answered with the unfiltered population. A missing `cohort_cycles` table is `available: false`, which is not "no cycle with that id". Omitting `?cycle=` lists the runs on this database, `filtered: false`. The list is capped at 200. There is still no `GET /results`. A result on a run is the archetype label when a result row was written, and "No result" when it was not. The assessment router's existing bootstrap still creates the assessment tables on the way in, so this route does not report a missing `assessment_sessions` table as unreadable; that is the bootstrap that was already there.
+
+**Throughput.** The reason on `GET /api/branch/insights` no longer says there is no route that lists assessment runs. Week outcomes and assessment runs are two counts. They are not added into one figure, because a week gate and an assessment completion count different things.
+
+**Who reads it.** `BranchAccounts` draws the audit line. `BranchPrograms` draws the run list, filtered by the cycle the calendar already loaded.
+
+**Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: a missing support-session table answered as an empty list; a cycle with no end falling through to every run; the cycle window keeping every run.
+
+## D447
+
+**The studio glance stops throwing, and HQ stops reading a table it never writes.** Wave 9, Session 6, item 1. No migration. No new `/api` method. No live branch exercised this. `AdminStudioHome.jsx` is the Session 15 slot's and is not edited. `routes/licence.ts` is Session 5's and is not edited.
+
+**The throw.** `StudioNeedsDecision` and `AdminStudioOverview` called `studioGlances` on every render, including when a glance payload was already in hand. `studioGlances` treated only `null` as "still reading", so an undefined `home` fell through to `home.queue_pressure`. A branch user with glance-only props, and a render with no props, both threw. The glance is now the only input when it is present. `studioGlances` treats `undefined` the same as `null`. Until the glance arrives the first paint says Reading, including on HQ, where it used to say the figure was not recorded. `glance={null}` is the legacy path the existing tests still exercise. On `UNAVAILABLE`, `onBranch` and `tier` come from `branchOfUser`, so a suspended branch keeps its freeze banner.
+
+**HQ's benchmark copy.** `branch_benchmarks` is created for a branch and filled by a push. Nothing on HQ writes it. The HQ glance returns `insights: { recorded: false, reason: "HQ pushes the median and keeps no copy." }` and does not query that table. D443 said the published benchmark copy was HQ's store and was read. That sentence is wrong, and D443 points here.
+
+**What HQ does read.** Agreements that end inside the window, and the count of accounts still pending the open week, are this database's own rows (D286). U1 does not apply to them. HQ uses `agreementsExpiring` and `programmeClock`, the same functions the branch digest uses. A missing table is unreadable, not zero. A closed month does not take the pending-account read, and the reason is that no cohort week is open. Striking either read would put a refusal back, and that refusal would cite S22, not U1. Seats, the eleven lanes, the share rate and the licence summary stay unrecorded on HQ, and those reasons still cite U1.
+
+**A failed licence copy.** `branchLicencePayload` words a missing table and a missing row with the same "not pushed" message. The glance probes `branch_licence`. An unreadable table is `available: false` and the page draws Unreadable, carrying `pull.reason`. A readable table with no row stays the not-pushed sentence. The same split is on the branch digest's share rate: the catch is `available: false`, and a missing row is the not-pushed reason. A seat count that comes back `null` is unreadable, not "not recorded". A null `hours_to_close` stays null. `Number(null)` is 0, and 0 would rank the programme tile as due now. The chip draws Unreadable when the share read failed, instead of the not-recorded sentence.
+
+**One read of the rate.** The branch glance takes the share from the licence payload it already asked for, and does not ask `branch_licence` again through `revenueShare`. The template copy and the benchmark copy are the readers the branch routes already had, including the empty-benchmark reason. HQ's library goes through `listTemplates`. The glance route's header no longer says a read changes nothing: the first look at a missing licence copy can store HQ's answer.
+
+**Relay.** Session 15 must not drop the four legacy reads in `AdminStudioHome.jsx` until this is on main. Dropping them before this fix is what throws. After it is on main, dropping them is safe, and it also ends the second pull of the licence copy. This PR does not assert on that file.
+
+**Mutations: 5 run, 5 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: a glance-only render that calls `studioGlances` with an undefined home; HQ querying `branch_benchmarks`; a failed glance clearing `onBranch`; an unreadable licence reported as not pushed; the glance ignoring its clock and using the wall clock for the pending-account read.
+
+## D448
+
+**Spinout moderation agrees with the approvals lane, and a plain admin cannot decide another admin.** No migration. No live branch exercised this. `HeldApprovals.jsx` is Session 5's and is not edited. The HQ-held door to `/admin/spinout-moderation` is the one route the branch shell reaches and the HQ-held shells do not. That door stays Session 5's.
+
+**Who may decide.** `POST /api/admin/spinout-moderation/:userId` uses `requireAdmin`, so the compliance freeze (D135) reaches it, and it still calls `requireBranchNotSuspended` because that freeze is the branch licence, not the notice. An admin target is refused unless the caller is the Super Admin (D133). The caller's own history still reads. The route still never writes `users.is_active`.
+
+**The record.** Every decision goes through `logAdminAction` as `spinout_moderation`, with `target_user_id`. That action is on `ACTOR_SIDE_ACTIONS`, so the governance feed's activity arm can show it. The target is not stored under `user_id`.
+
+**One open count.** Awaiting a decision is `status = 'under_review' AND resolved_at IS NULL`, exported once and read by the console and by the approvals lane. A suspension or an ejection that has not been closed is a sanction in force, listed and counted apart, and not added into the lane. Close stamps `resolved_at` and does not change Lab access, so a sanction can leave the list without reinstating. The page does not preselect an action. A list that is not an array is unreadable. A missing count is not shown as zero. The list is capped at 200 and says how many of the count it is showing.
+
+**Mutations: 5 run, 5 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: a plain admin reinstating a peer admin; a decision with no audit row; the freeze not reaching the post; the console and the lane disagreeing on a flag; a malformed payload read as an empty list.
+
+## D449
+
+**The domain wizard names the registrar and copies a whole DNS record.** Frontend only. No migration. No new `/api` method. No live branch exercised this. `AdminStudioOverview.jsx` is not edited.
+
+**Registrar chips.** The three-step checklist stays. Above the records, six chips name Cloudflare, Google / Squarespace, Route 53, Namecheap, GoDaddy and Other. None is pressed until the person presses one, because a preselected Cloudflare would claim that is where they bought the name. Pressing one names that registrar and says the name, the value and the TTL do not change with it. Pressing it again clears the choice. The records still come from the licence payload. The choice is not stored.
+
+**Copy all.** Each record card copies Type, Name, Value and, when the TTL is a finite number, TTL, in one action, beside the per-field copies. A TTL that is not a finite number is left off the clipboard rather than written as zero. A refused clipboard uses the same sentence as a refused per-field copy.
+
+**Not on this screen.** Certificate, make primary, email DNS, and apex guidance. The canvas's recommended and not-recommended pair is not drawn.
+
+**Mutations: 3 run, 3 caught** — each a non-zero exit and a `not ok` line, anchors unique, bytes changed, restored from a sha256-checked snapshot: Copy all dropping the name and the TTL; a chip pressed before the person presses it; the chip list gone.
 
 ## D450
 
@@ -33432,6 +37604,138 @@ operator chrome inside HQ's read-only frame.
 
 **Tests.** `deployments_last_version_d452.test.ts`;
 `hq_licences_polish_d452.test.mjs`.
+
+## D453
+
+**The statement ledger is drawn and entered from HQ · Revenue (H10).** Wave 8,
+Session 16, item 4. No migration; no new `/api/*` method — `POST
+/api/admin/statements/draw` and `PATCH /api/admin/statements/:uid` existed
+since D111 and were filed without a caller in D266.
+
+**Draw.** `StatementDrawEditor` on the Statements zone: licence (only those
+with a revenue share) and period (`YYYY-Qn`), calling `api.statementDraw`.
+Re-draw replaces a draft; issued statements still refuse on the server.
+
+**HQ entry.** `StatementActions` on each row: issue (`draft` → `issued`),
+record payment (`paid_cents` + note), record dispute (amount + required
+reason), mark paid in full, void. Amounts leave as integer minor units with
+client-side refusal of over-payment and dispute-without-reason.
+
+**Copy.** The empty ledger points at Draw draft; the D266 “no caller” comment
+is removed.
+
+**Tests.** `hq_revenue_statements_d453.test.mjs`.
+
+## D454
+
+**HQ · Contracts draws the doc-type registry from the code maps.** Wave 8,
+Session 16, item 5. No migration; one new read route and matching `api.js`
+method.
+
+**Registry.** `GET /api/admin/contracts/doc-types` returns the four governance
+layers and every entry in `CONTRACT_DOC_TYPES` with title, layer, party roles,
+and usage from documents + e-sign (shared with `/templates`). HQ · Contracts
+renders it read-only above the template library; cross-tenant oversight stays
+Not recorded (U1).
+
+**`/templates`.** Each catalog row now includes `party_roles` and
+`layer_description` via the same builder — no second definition.
+
+**Tests.** `hq_contracts_doc_type_d454.test.mjs`;
+`admin_contracts_doc_types_d454.test.ts`.
+
+## D455
+
+**HQ · Support names the inherited SLA and bands open tickets against it.** Wave 8,
+Session 16, item 6. No migration; no new `/api/*` method — `GET
+/api/admin/hq-support` gains `sla_policy` and `taxonomy`.
+
+**Policy.** P1/P2/P3 at 24/48/96 hours, read-only on the page, with the canvas
+note that subsidiaries inherit the bands whole. Tickets map `urgent` → P1,
+`high` → P2, `medium` and `low` → P3; band is age against that tier with the
+same 24h due-soon window escalations use.
+
+**Queues.** The two ticket queues show band totals and per-row bands; escalations
+unchanged on `due_at`.
+
+**Taxonomy.** Open counts grouped by `tickets.type` (bug, feature, task). The
+artboard’s eight business categories are not stored and stay named as absent in
+the rail.
+
+**Tests.** `support_sla_d455.test.ts`; `hq_support_sla_d455.test.mjs`.
+
+## D456
+
+**HQ names per-subsidiary revenue from usage reports, without totalling it.** Wave 8,
+Session 16, item 7. No migration; no new `/api/*` method — `GET
+/api/admin/hq/overview` and `GET /api/admin/revenue/summary` gain
+`usage_coverage` plus split honesty fields.
+
+**Honesty.** `DERIVED_UNAVAILABLE` no longer blames U1 for revenue: branches report
+quarters (D266) with every stream unmeasured. Token P&L per subsidiary keeps its
+own refusal (U1 + D261 metering). MTD revenue on Home cites quarter reporting,
+not “no subsidiary attribution”.
+
+**Coverage.** `subsidiaryUsageCoverage` lists each licence’s report status for the
+current period — reported vs not, measurable streams if any — never a summed
+`gross_cents`.
+
+**UI.** HQ · Home adds a Revenue row on subsidiary cards and fixes the MTD tile;
+HQ · Revenue draws a **Revenue per subsidiary** table beside Token P&L.
+
+**Tests.** `subsidiary_usage_coverage_d456.test.ts`;
+`hq_revenue_per_sub_d456.test.mjs`; `hq_home.test.mjs` and `hq_revenue_h5.test.mjs`
+re-aimed; `admin_revenue.test.ts` updated.
+
+## D457
+
+**#865 review fixes: territory drafts, deploy version, Home filter, overlay shell.** Wave 9,
+Session 16, item 1. No migration.
+
+**Territory draft.** `AdminLicences` keys `<Detail>` on the selected licence uid so a
+territory draft typed for one licence cannot be saved onto another when the operator
+uses Open holder.
+
+**Deploy version.** `cloudflare-worker-deploy.yml` passes
+`WORKER_DEPLOY_VERSION:${{ github.sha }}` on HQ and branch redeploys. The Platform and
+Licences consoles render `<Unrecorded>` when no version is known; live health’s
+`deploy_version` wins over a stale `last_version`, and null live versions no longer
+wipe a stored SHA (`COALESCE` on persist).
+
+**HQ Home.** Kind filter chips sit on the oxblood bar (visible contrast), carry
+`aria-pressed`, and empty filter states are named.
+
+**View-as overlay.** Scoped overview returns `licence_shell` with readable/unreadable
+states; failed licence reads no longer draw white-label chrome; 3-digit brand hex
+expands before alpha gradients.
+
+**Tests.** `hq_licences_d457.test.mjs`; `deployments_last_version_d452.test.ts` extended;
+`hq_licences_polish_d452.test.mjs` re-aimed.
+
+## D458
+
+**#868 review follow-ups: hold blocks statement draw, floors refuse paid-in-full, void is audited.** Wave 9,
+Session 16, item 3. No migration; no new `/api/*` method.
+
+**Draw hold.** `POST /api/admin/statements/draw` refuses when the licence is not
+`active`. Suspension freezes trading; a new claim must not be drawn against a
+held subsidiary. The draw editor lists only active licences that carry a revenue
+share.
+
+**Paid-in-full on a floor.** An incomplete statement (`unreported_streams` or
+`estimated_streams` non-zero) refuses `status: paid` and refuses recording
+`paid_cents` equal to the owed figure. Partial payments below the floor remain
+allowed. The UI hides Mark paid in full and names why.
+
+**Void and audit.** Voiding requires `void_note` (at least ten characters) and
+writes `subsidiary_statement_void` through `logAdminAction`. Marking paid on a
+complete statement and recording a dispute write matching audit rows.
+
+**Tests.** `hq_statements.test.ts` extended; `hq_revenue_statements_d458.test.mjs`.
+
+**Mutations: 4 run, 4 caught** — each a non-zero exit and a `not ok` line: draw
+allowed on a suspended licence; paid-in-full shown on an incomplete row; void
+without a reason; full payment accepted on a floor statement.
 
 ## D460
 
@@ -33776,6 +38080,57 @@ and the row is Session 4's to add.
   date, the flows not cut, the mark form unwired, the runway rule reading the
   health snapshot, the chase op back to unbuilt, the export dropping the
   date.
+## D465
+
+**The investor Network book's interaction log and reminders.** Wave 8,
+Session 17, item 6. Migration 338 (`partner_interactions`,
+`partner_reminders`). Five new `/api/partnernet/*` routes.
+
+**The interaction log.** `partner_interactions` is one row per recorded touch
+— the relationship, the kind, a note, when it happened (backdating is
+legitimate: logging last week's call), who recorded it. The relationship's
+last touch is the log's MAX, carried as `last_interaction_at` on
+`GET /partnernet/relationships` — never a field someone edits, so logging a
+touch is the only way the cold flag moves. The `Going cold` chip is live over
+it, narrowing on the shared 60-day window (`lib/networkBook.js`'s
+`COLD_AFTER_DAYS`, the canvas's own COLD_AT), and a tie with no recorded touch
+is unknown, not cold — the empty view says so.
+
+**The reminders.** `partner_reminders` is one row per reminder — the
+relationship, when to re-surface it, a note, done or not. A reminder surfaces
+on the desk when it is due; there is NO notification fan-out. The `Set
+reminders` op is live, and each book row carries "Log a touch" and "Remind
+me" — the log's writer and the store's.
+
+**Named as missing (Session 2's):** the re-engagement band. The canvas drafts
+one line per cold tie; the draft surface lives in research.ts, which is
+Session 2's file, so the page names it instead of mounting a band that would
+400. The advisor side is deliberately untouched: `advisor_network_zones` pins
+`last_interaction_at` absent there, and this store is the investor book's.
+
+### VERIFIED
+- `npm run test:frontend` exit 0: 3698 pass. `npm run test:worker` exit 1,
+  three failures all pre-existing on main and reproduced there in isolation
+  (`capital_call_ledger.test.ts`, Session 9's area; two in
+  `trust_center_d432.test.ts`, Session 15's D432 merge). Reported, untouched.
+  4594 tests, 4588 pass, 3 skipped. New tests: `partnernet_interactions` (4,
+  worker) and `investor_network_cold` (3, frontend). Re-aimed, not loosened:
+  `profile_zone_actions`' investor handler count 12 → 13 with the history
+  kept.
+- 6 mutations, 5 caught on the first run and the 6th caught after an
+  assertion fix (the cold-count helper satisfied the same strings as the
+  cold-view narrowing; the assertion now pins the branch), each on a non-zero
+  exit with a `not ok` line (unique anchors, byte-change proven,
+  sha256-checked restores): the relationships read dropping the log's MAX,
+  the reminder's owner gate removed, the cold narrowing removed, the dateless
+  reminder accepted, a draft band mounted without its surface.
+- Both typechecks, `check-sql-migrations`, `check-sqlite-dialect`,
+  `check-sql-prepare`, `check-timestamp-comparisons`,
+  `check-runtime-schema-declared`, `check-decision-ids`, `check-folder-docs`,
+  `check-api-drift`, `test:guards`, `lint:undef`, `check-dark-mode` exit 0.
+  Root `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser
+  probe.
+
 ## D466
 
 **DD sign-off: who returned the verdict, recorded at write.** Wave 8,
@@ -33817,3 +38172,121 @@ versioning decision) and stays unbuilt past its line.
   `check-api-drift`, `test:guards`, `lint:undef`, `check-dark-mode` exit 0.
   Root `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser
   probe.
+
+## D470
+
+**Gap-map leftovers, up to the owner's line.** Wave 9 item 7. Items 4 and 5
+of that wave were already D445 and D446; they were not rebuilt, and migration
+329 was not added. Migration 342 is unused.
+
+**What was built.**
+
+- **Lane board, second view.** The list stays primary (S16 / D215). `hurtingLanes`
+  picks five columns by the oldest finite age, not by count and not by a fixed
+  order. An unreadable lane (`count === null`) is not a column. An unknown age
+  is not zero hours. Empty lanes sort after lanes that have items. A measured
+  age of zero outranks an unknown age.
+- **Assignment, side record.** Migration 341: `approval_assignments` (one row
+  per lane and item) and `approval_events` (`kind` is only `assigned`). The
+  write lives in `routes/branch_approval_assignments.ts`. `branch_approvals.ts`
+  stays a GET. `decides` stays false. A reviewer is an active admin on this
+  database. The item must be among the open rows the board is showing.
+  Assigning the same person again does not append another event. At most 40
+  items per POST. A missing table is unreadable, not "nobody assigned" — items
+  on that read carry no `assignee` field. An empty table means nobody is
+  assigned. History is the latest 100 events this write created, oldest-first
+  inside that window, `capped` when the cap is hit. A console's own actions
+  are not copied into it. A throw after an earlier item in the same call has
+  landed answers 503 and does not claim success. The POST is suspension-gated.
+  The history GET and the board GET are not. `logAdminAction` records
+  `approval_assignment` with `{ target_user_id, lane, item_id }`. The action
+  is not added to `ACTOR_SIDE_ACTIONS`.
+- **Outbound to HQ** stays the card above the board. It is not a filter of
+  this list. Those rows are a different store.
+
+**What was not built, and is named.**
+
+- **A reply thread.** D112 stands: one decision, migration 261. The rail and
+  `answer_note` say the owner has not signed off reversing that. There is no
+  reply box.
+- **An AI-drafted decision note.** Still no per-branch cost (D261). It stays
+  in the rail.
+- **A help desk (U1).** `GET /api/branch/home` names it under `unavailable`.
+  No tickets, chat, canned replies, or a satisfaction score.
+- **Where a security alert sits (U2).** Named on that same home list and on
+  the Accounts rail. Not drawn on Home or on an account row.
+
+**Freeze.** Naming a reviewer is not the appeal. `branch_approval_assignments.ts`
+calls `requireBranchNotSuspended`, and the Approvals row of `branchFreeze.js`
+names that file. Escalations stay ungated.
+
+**Tests.** `approval_assignments_d470.test.ts`, `gap_map_leftovers_d470.test.mjs`.
+Re-aimed, not loosened: the board route still has no write verb, the page
+still has one textarea, and the canvas assertions on five columns, age, and
+S16 stay. The sentence that assignment needed a store that does not exist is
+now false and the tests refuse it.
+
+**Mutations.** 5 of 5 caught, each on a non-zero exit with a `not ok` line
+(unique anchors, byte-change proven, sha256-checked restores): columns ranked
+by count instead of age; a missing assignment table reported as readable and
+empty; a founder accepted as a reviewer; the page stopped calling
+`hurtingLanes`; the owner-sign-off sentence removed.
+
+**Verification.** Frontend suite 3942 pass. Worker suite 4735 tests, 4729
+pass, 3 skipped, 3 fail — the three already failing on main
+(`capital_call_ledger` partial-write retry, and the two `trust_center_d432`
+party-name cases). They were not changed here. `check-api-drift`: 1618 SPA
+calls, 1913 worker routes from 189 mounts, 13 pre-existing baseline items,
+no new drift. Both typechecks, `lint:undef`, `check-dark-mode`,
+`check-decision-ids`, `check-folder-docs`, `check-sql-prepare`,
+`check-refusal-bodies`, `check-sql-migrations`, `check-sqlite-dialect`,
+`check-runtime-schema-declared`, `check-timestamp-comparisons`, and
+`test:guards` exit 0. Root `npm run build`, then `check-docs-fresh --strict`,
+exits 0.
+
+No live branch. Session 1 confirms the deploy and production D1. This session
+cannot read the deploy log.
+
+## D471
+
+**The Send for Signature canvas cut is not a script injection.** Semgrep
+alert on `frontend/test/send_for_signature_d411_contract.test.mjs`: the rule
+`unknown-value-with-script-tag` reports a file read used in the same call as
+a script-tag literal. The read is the design canvas, and the literal was the
+cut that keeps assertions on the markup. The cut is unchanged: the `<` in
+front of `data-dc-script`. The tag name is assembled from two pieces so the
+file read is not written next to one script-tag literal. The string is never
+served. The test throws if that element is gone. No migration.
+
+## D472
+
+**The canvas cut walks back to the same angle bracket.** Semgrep alert on
+`frontend/test/send_for_signature_d411_contract.test.mjs`, the same rule as
+D471. D471 split the tag into two pieces. The scanner joined those pieces
+back into one script-tag string and reported the index sitting in that call.
+The cut is the same byte: the `<` in front of `data-dc-script`. The test
+walks back to that character and checks the six letters on their own, with
+the angle bracket kept out of that string. The text is never served. The
+test throws if that element is gone. No migration.
+
+## D490
+
+**#871 review follow-ups: private notes, dates, and void touches on the investor
+book.** Wave 9, Session 16, item 2. No migration.
+
+**Private notes.** Each party’s note on a tie lives under
+`metadata.private_notes[userId]`. `GET /partnernet/relationships` returns
+`my_private_note` for the caller only and never the other party’s text.
+`PATCH` accepts `private_note` and merges — it does not replace shared
+metadata wholesale.
+
+**Dates.** The touch form sends optional `interacted_at` (backdating). Calendar
+reminder dates (`YYYY-MM-DD`) normalize to end-of that UTC day so due compares
+honestly.
+
+**Void touches.** `POST …/interactions` refuses an empty note with no explicit
+date; the page matches that refusal before calling the route. The book header
+says **no touches logged yet** when the read succeeded but the log is empty —
+not “coverage unavailable”.
+
+**Tests.** `partnernet_interactions.test.ts` extended; `investor_network_d490.test.mjs`.

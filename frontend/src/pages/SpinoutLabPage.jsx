@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Loader2, ArrowRight, FlaskConical } from "lucide-react";
 import { spinoutLab } from "../lib/api";
@@ -7,6 +7,8 @@ import { reportError } from "../lib/log";
 import SpinoutLabMarketingPage from "./SpinoutLabMarketingPage";
 import SpinoutLabWorkspace from "./SpinoutLabWorkspace";
 import LabIntro from "../components/spinout/LabIntro";
+import { ApplicationStatusCard } from "../components/spinout/ApplicationStatus";
+import { applicantFromLegacy } from "../lib/applicationLifecycle";
 import { Unreadable } from "../ui";
 // The facts both surfaces read. They live in lib/ rather than here because
 // this file imports the marketing page and the marketing page renders the
@@ -20,7 +22,7 @@ import {
   // ESLint's `no-undef`, which is the whole reason that step exists.
   LAB_APPLY_HREF,
   LAB_APPLY_HREF_SIGNED_IN, LAB_CONTACT_HREF,
-  parseSqliteUtc, fmtRaised, openCohortCopy,
+  parseSqliteUtc, fmtRaised, useCohortRecord,
   useCohortDirectory, useShippedFeed, useCohortPlaces, placesLabel,
 } from "../lib/spinoutLab";
 import { DEFAULT_TRACK } from "../lib/spinoutLabArsenal";
@@ -184,19 +186,20 @@ export function LpCtaSection() {
 }
 
 export function ApplyCtaSection({ applyHref = LAB_APPLY_HREF }) {
-  // Resolve the currently-open cohort client-side (mirrors Worker math).
-  // Deadline = 7 days before the 1st of the cohort month at 23:59:59 ET.
-  // Workspace access is automatically granted at midnight Delaware time on
-  // the 1st by the Worker's cohort-timing cron — no client action needed.
-  const cohort = useMemo(() => openCohortCopy(), []);
+  // D385 — the open cohort as the server names it: one `/brief` read gives the
+  // name and the deadline, the same record the landing above and the Programme
+  // Brief print. Workspace access is granted at midnight Delaware time on the
+  // 1st by the Worker's cohort-timing cron.
+  const read = useCohortRecord();
+  const cohort = read.status === 'ok' ? read.cohort : null;
 
-  const headline = cohort
-    ? `Apply to Cohort ${cohort.cohortNum}.`
+  const headline = cohort?.open && cohort.name
+    ? `Apply to the ${cohort.name} cohort.`
     : 'Apply to the next cohort.';
 
-  const sub = cohort
+  const sub = cohort?.deadlineLabel
     ? `Applications close ${cohort.deadlineLabel}.`
-    : 'Applications are now open.';
+    : 'Applications close seven days before the cohort starts, at 23:59 Delaware time.';
   // The place count is read, never typed: `cohort.places` from /brief.
   const places = useCohortPlaces();
 
@@ -225,96 +228,6 @@ export function ApplyCtaSection({ applyHref = LAB_APPLY_HREF }) {
         </a>
       </div>
       <p className="mt-6 text-[12px] text-[#c4b5fd]">Spin-Out Lab is open to all Axal VC users. Acceptance is selective. No equity taken by Axal VC.</p>
-    </section>
-  );
-}
-
-/**
- * Why a strong application can be refused: the cohort's place count, read from
- * `/brief`. While the read is in flight or has failed the sentence still holds
- * without a number — it never borrows one.
- */
-function CapacityReason() {
-  const places = useCohortPlaces();
-  return places.status === 'ok'
-    ? <>Each cohort has {placesLabel(places.places)}, so strong applications get turned down for space alone. </>
-    : <>Each cohort has a fixed number of places, so strong applications get turned down for space alone. </>;
-}
-
-/**
- * Standing acknowledgement of the founder's own application.
- *
- * `GET /spinout-lab/state` has always returned the founder's latest
- * `spinout_applications` row, and this page has always thrown it away — so a
- * founder who applied on Tuesday came back on Thursday to the same marketing
- * page and the same "Apply Now" button, with nothing anywhere confirming their
- * application exists. Pressing it again is not merely redundant: the apply
- * endpoint 409s a second pending application, so the only feedback the product
- * gave them was an error.
- *
- * Pending REPLACES the apply CTA (re-applying is the thing that 409s).
- * Refused sits ABOVE it, because a refused founder genuinely may re-apply —
- * the insert only guards against a second *pending* row.
- */
-export function ApplicationStatusSection({ application }) {
-  const status = String(application?.status || '').toLowerCase();
-  if (status !== 'pending' && status !== 'refused') return null;
-
-  const submitted = parseSqliteUtc(application.created_at);
-  const decided = parseSqliteUtc(application.decided_at);
-  const fmt = (d) => d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-
-  const pending = status === 'pending';
-  const tone = pending
-    ? { ring: 'ring-amber-300/70 dark:ring-amber-400/30', chip: 'bg-amber-100 text-amber-900 dark:bg-amber-400/15 dark:text-amber-300', dot: 'bg-amber-500' }
-    : { ring: 'ring-gray-300/70 dark:ring-gray-600/40', chip: 'bg-gray-100 text-gray-700 dark:bg-gray-700/40 dark:text-gray-300', dot: 'bg-gray-400' };
-
-  return (
-    <section
-      data-testid="application-status"
-      data-status={status}
-      className={`rounded-[20px] p-8 bg-white dark:bg-gray-800 ring-1 ${tone.ring} shadow-sm`}
-    >
-      <div className="flex items-center gap-2.5 mb-3">
-        <span className={`h-2 w-2 rounded-full ${tone.dot}`} aria-hidden="true" />
-        <span className={`text-[11px] font-bold uppercase tracking-[.08em] px-2 py-0.5 rounded-full ${tone.chip}`}>
-          {pending ? 'In review' : 'Not this cohort'}
-        </span>
-      </div>
-
-      <h2 className="m-0 text-[24px] font-black tracking-[-.02em] text-gray-900 dark:text-gray-50">
-        {pending ? 'Your application is in review.' : 'You weren’t selected for this cohort.'}
-      </h2>
-
-      <p className="mt-2.5 text-[14.5px] leading-relaxed text-gray-600 dark:text-gray-300">
-        {pending ? (
-          <>
-            We have your application{application.company_name ? <> for <strong className="font-semibold text-gray-900 dark:text-gray-100">{application.company_name}</strong></> : null}
-            {submitted ? <>, submitted {fmt(submitted)}</> : null}. Every application is read by a
-            program manager, and you’ll get an email either way — you don’t need to apply again.
-          </>
-        ) : (
-          <>
-            {decided ? <>We reviewed your application on {fmt(decided)}. </> : null}
-            <CapacityReason />
-            You’re welcome to apply again below.
-          </>
-        )}
-      </p>
-
-      {application.cohort ? (
-        <p className="mt-4 text-[12.5px] text-gray-500 dark:text-gray-400">
-          Applied to <span className="font-semibold text-gray-700 dark:text-gray-200">{application.cohort}</span>
-        </p>
-      ) : null}
-
-      {pending ? (
-        <div className="mt-6 flex gap-3 flex-wrap">
-          <a href={LAB_CONTACT_HREF} className="h-10 px-4 rounded-[10px] border border-gray-300 dark:border-gray-600 text-[13.5px] font-semibold text-gray-700 dark:text-gray-200 flex items-center hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-            Talk to a Program Manager
-          </a>
-        </div>
-      ) : null}
     </section>
   );
 }
@@ -402,7 +315,8 @@ export function Dashboard({ state, investorView = false }) {
 
   const [track, setTrack] = useState(appliedIncorporated ? 'fit' : DEFAULT_TRACK);
   const [jurisdiction, setJurisdiction] = useState('de');
-  const cohort = useMemo(() => openCohortCopy(), []);
+  // D385 — read from /brief, as the landing canvas's cohort record.
+  const cohort = useCohortRecord();
 
   const directory = useCohortDirectory();
   const shipped = useShippedFeed({ enabled: true });
@@ -433,8 +347,14 @@ export function Dashboard({ state, investorView = false }) {
           <>
             {/* A founder mid-review gets their own status instead of a button
                 that 409s. Refused founders get BOTH — the acknowledgement and
-                the CTA — because only a *pending* row blocks re-application. */}
-            <ApplicationStatusSection application={state?.application} />
+                the CTA — because only a *pending* row blocks re-application.
+                The card is the short form of the status screen on
+                /spinout-lab/apply (D384), read from the same `applicant`
+                block, so the two cannot disagree. */}
+            <ApplicationStatusCard
+              applicant={state?.applicant ?? applicantFromLegacy(state?.application)}
+              company={state?.application?.company_name || null}
+            />
             {String(state?.application?.status || '').toLowerCase() === 'pending'
               ? null
               : <ApplyCtaSection applyHref="/spinout-lab/apply" />}

@@ -262,7 +262,9 @@ test('the AI band never runs on mount, and its surfaces are allow-listed', () =>
   assert.match(DRAFT, /useEffect\(\(\) => \{ load\(\); \}, \[load\]\);/,
     'the band no longer loads exactly once');
   const load = DRAFT.slice(DRAFT.indexOf('const load = useCallback'), DRAFT.indexOf('const doRun ='));
-  assert.match(load, /api\.research\.zoneDrafts\(surface\)/, 'the band’s read is gone');
+  // The read may narrow to one record (`scoped`, D311) but it is still the
+  // surface's drafts that load, and nothing else.
+  assert.match(load, /api\.research\.zoneDrafts\(surface(?:, scoped \? scopeKey : undefined)?\)/, 'the band’s read is gone');
   assert.doesNotMatch(load, /zoneDraftRun/, 'the band drafts on mount, spending a budget for a page view');
 
   // ── THE ALLOW-LIST AND THE MOUNTS ARE ONE SET, CHECKED BOTH WAYS ─────────

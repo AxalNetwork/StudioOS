@@ -13,11 +13,12 @@
  * S6 DRAWS FOUR STATS AND THIS SHIPS TWO, which is the measurement rather than
  * a choice. Accounts and seats used are counted here the way `branchOverview`
  * counts them (D127's definition, stated with the figure). Activation has no
- * branch-side read anywhere in the worker, and programme throughput has half of
- * one — the cohort timeline's week outcomes, with no list route for assessment
- * runs (D210; this sentence said "no read" until D211) — so both arrive as
- * `unavailable` with their reasons instead of a derived-looking zero, the shape
- * `branch_home.ts` already uses for S1's three sourceless blocks.
+ * branch-side read anywhere in the worker. Programme throughput can be read as
+ * two counts that are not one figure: the cohort timeline's week outcomes, and
+ * assessment runs listed for one cycle (D446). Adding them would invent a
+ * definition, so the stat still arrives `unavailable` with that reason rather
+ * than a derived-looking zero, the shape `branch_home.ts` already uses for
+ * S1's three sourceless blocks.
  *
  * REVENUE SHARE IS THE FOURTH AND IT IS THE INTERESTING ABSENCE.
  * `branchOverview` returns `revenue_mtd_cents: null` BY CONSTRUCTION and
@@ -51,10 +52,42 @@ import { branchLicencePayload } from './licence';
 
 const r = new Hono<{ Bindings: Env }>();
 
-type BenchmarkRow = {
+export type BenchmarkRow = {
   metric_key: string; label: string; median_value: number;
   unit: string; n_branches: number; period: string; pushed_at: string;
 };
+
+export const BENCHMARKS_EMPTY_REASON =
+  'HQ has published no benchmark yet. A median is only anonymous once enough branches '
+  + 'answer — at one branch it IS that branch\'s figure, and at two a branch subtracts its '
+  + 'own and reads the other\'s exactly — so HQ withholds the row rather than naming a '
+  + 'territory. With the platform this size there is nothing to compare against yet.';
+
+const BENCHMARKS_UNREADABLE =
+  'The benchmark copy could not be read on this database (migration 256). That is not the '
+  + 'same as HQ having published nothing.';
+
+/** The pushed median copy. A missing table is unreadable, not an empty publish. */
+export async function readBranchBenchmarks(env: Env): Promise<
+  | { benchmarks_available: true; benchmarks: BenchmarkRow[]; benchmarks_empty_reason?: string }
+  | { benchmarks_available: false; benchmarks: []; benchmarks_reason: string }
+> {
+  try {
+    const q = await env.DB.prepare(
+      `SELECT metric_key, label, median_value, unit, n_branches, period, pushed_at
+         FROM branch_benchmarks ORDER BY metric_key`,
+    ).all<BenchmarkRow>();
+    const benchmarks = q.results || [];
+    return {
+      benchmarks_available: true,
+      benchmarks,
+      ...(benchmarks.length ? {} : { benchmarks_empty_reason: BENCHMARKS_EMPTY_REASON }),
+    };
+  } catch (e) {
+    console.error('[branch-insights] benchmarks', (e as Error).message);
+    return { benchmarks_available: false, benchmarks: [], benchmarks_reason: BENCHMARKS_UNREADABLE };
+  }
+}
 
 /**
  * Why activation is not a figure here. One sentence, read by both `/insights`
@@ -67,18 +100,16 @@ const ACTIVATION_REASON =
   + 'it here would be inventing the definition on the screen.';
 
 /**
- * Programme throughput, corrected in D210. It used to say the worker had no read
- * for it at all; the cohort timeline (`GET /api/admin/cohort/timeline`) returns
- * every week's outcomes per cycle and a branch admin can read it. What is still
- * missing is the other half — assessment runs have no list route — so this page
- * does not print one figure for it, and the Analytics page draws the half that
- * exists, by week, from the timeline.
+ * Programme throughput. D210 corrected the claim that the worker had no read
+ * at all. D446 lists assessment runs for one cycle. The two counts are still
+ * not one figure: a week gate and an assessment completion count different
+ * things, and this page does not add them.
  */
 const THROUGHPUT_REASON =
-  'Throughput needs two things and this branch can read one of them. Cohort week outcomes are '
-  + 'readable — the Analytics page draws them from the cohort timeline, week by week — but '
-  + 'assessment runs are not: the worker has no route that lists sessions or results, the gap '
-  + 'D140 named on Programs. One figure counting half a programme would not say which half.';
+  'Throughput is two counts, and they are not added here. Cohort week outcomes are on the '
+  + 'Analytics page, drawn from the cohort timeline week by week. Assessment runs are listed '
+  + 'on Programs for one cycle: a run is kept when its start falls inside that cycle. A week '
+  + 'gate and an assessment completion count different things, so one figure would not say which.';
 
 /** The window a decision age is measured over, in days. */
 const DECISION_WINDOW_DAYS = 30;
@@ -134,21 +165,10 @@ r.get('/insights', async (c) => {
       statsReason = `The account table could not be read on this branch: ${(e as Error)?.message || 'unknown'}.`;
     }
 
-    let benchmarks: BenchmarkRow[] = [];
-    let benchmarksAvailable = true;
-    let benchmarksReason: string | null = null;
-    try {
-      const q = await c.env.DB.prepare(
-        `SELECT metric_key, label, median_value, unit, n_branches, period, pushed_at
-           FROM branch_benchmarks ORDER BY metric_key`,
-      ).all<BenchmarkRow>();
-      benchmarks = q.results || [];
-    } catch (e) {
-      benchmarksAvailable = false;
-      benchmarksReason =
-        'The benchmark copy could not be read on this database (migration 256). That is not the '
-        + `same as HQ having published nothing: ${(e as Error)?.message || 'the table is missing'}.`;
-    }
+    const benchmarkCopy = await readBranchBenchmarks(c.env);
+    const benchmarks = benchmarkCopy.benchmarks;
+    const benchmarksAvailable = benchmarkCopy.benchmarks_available;
+    const benchmarksReason = benchmarkCopy.benchmarks_available ? null : benchmarkCopy.benchmarks_reason;
 
     return c.json({
       branch,
@@ -173,13 +193,9 @@ r.get('/insights', async (c) => {
       benchmarks,
       benchmarks_available: benchmarksAvailable,
       ...(benchmarksReason ? { benchmarks_reason: benchmarksReason } : {}),
-      ...(benchmarksAvailable && !benchmarks.length ? {
-        benchmarks_empty_reason:
-          'HQ has published no benchmark yet. A median is only anonymous once enough branches '
-          + 'answer — at one branch it IS that branch\'s figure, and at two a branch subtracts its '
-          + 'own and reads the other\'s exactly — so HQ withholds the row rather than naming a '
-          + 'territory. With the platform this size there is nothing to compare against yet.',
-      } : {}),
+      ...(benchmarkCopy.benchmarks_available && benchmarkCopy.benchmarks_empty_reason
+        ? { benchmarks_empty_reason: benchmarkCopy.benchmarks_empty_reason }
+        : {}),
       // THE TWO STATS S6 DRAWS AND THIS CANNOT COMPUTE, named on the payload
       // rather than written into the page: a page holding its own copy of a
       // reason is a second place to update, and the one that is not updated is

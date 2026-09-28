@@ -64,6 +64,10 @@ import {
   SUGGESTED_SHEET_URL,
 } from '../services/fundSheets';
 import { refuse } from '../util/refusal';
+// The data room's own gate, imported rather than retyped: the grant check, the
+// NDA check and the access log live in ONE place, and the D124 expiry tests
+// read their SQL from there.
+import { activeGrant, ndaActive, logAccess } from './data_room';
 
 const research = new Hono<{ Bindings: Env }>();
 
@@ -1252,6 +1256,13 @@ async function founderProject(
 const DRAFT_SURFACES: Record<string, {
   instruction: string;
   gather: (c: { env: Env }, userId: number, scope: string) => Promise<string[]>;
+  /**
+   * What Accept writes BESIDES stamping the draft, for a surface whose canvas
+   * says Accept writes somewhere ("Accept writes the note"). It runs before
+   * the stamp; a string it returns is a refusal code, and then nothing is
+   * written at all — neither the record nor `accepted_at`.
+   */
+  accept?: (c: { env: Env }, userId: number, scope: string, body: string) => Promise<string | null>;
 }> = {
   'research/ask': {
     instruction: [
@@ -3302,15 +3313,55 @@ const DRAFT_SURFACES: Record<string, {
       return lines;
     },
   },
+
+  // The investor's memo on ONE room (canvas b6a5f992, "Room · what is thin").
+  // The scope key is a grant uid, and the material comes from `roomMaterial`,
+  // which passes through the same held-grant gate as the room read: a uid the
+  // caller does not hold drafts nothing, and nothing behind an NDA the caller
+  // has not signed is named to the model — only counted.
+  'research/diligence': {
+    instruction: [
+      'Write a short private memo for the investor who holds access to the data room below.',
+      'Say what the founder has staged, and what is thin or absent for diligence, using only the facts listed.',
+      'Name a document only by the name given. Do not guess what any document says.',
+      'Anything behind an NDA is a count only. Do not name or guess it.',
+      'Do not tell the investor what to decide. Add no fact that is not below.',
+    ].join(' '),
+    gather: (c, userId, scope) => roomMaterial(c.env, userId, scope),
+  },
+
+  // The founder's pre-meeting brief on ONE researched fund (canvas c0834993,
+  // FS4d, "Proposal · pre-meeting brief"). The scope key is the fund uid and
+  // the material is that row alone, read owner-scoped. Accept writes the
+  // brief into the fund's note, after what the founder already wrote.
+  'research/funds': {
+    instruction: [
+      'Write a short pre-meeting brief for a founder about to meet the fund below.',
+      'Quote their thesis back in their own words if it is given. Use only the facts listed.',
+      'Turn every fact marked "not recorded" into a question to ask, not a fact to assert.',
+      'Do not name a partner, cite a fund size or an investment, or assume an introduction.',
+      'Do not score the fund or tell the founder what to decide.',
+    ].join(' '),
+    gather: (c, userId, scope) => fundMaterial(c.env, userId, scope),
+    accept: (c, userId, scope, body) => writeBriefIntoNote(c.env, userId, scope, body),
+  },
 };
 
 research.get('/drafts', async (c) => {
   const user = await requireAuth(c);
   const surface = String(c.req.query('surface') || '');
   if (!DRAFT_SURFACES[surface]) return c.json({ detail: 'unknown_surface' }, 400);
-  const rows = await c.env.DB.prepare(
-    `SELECT * FROM research_zone_drafts WHERE owner_user_id = ? AND surface = ? ORDER BY id DESC LIMIT 20`
-  ).bind(user.id, surface).all<ZoneDraftRow>();
+  // A page about ONE record (one room) asks for that record's drafts only, so
+  // a memo on one company's room never shows on another's. Pages that omit
+  // `scope_key` read the surface's newest drafts, as they always have.
+  const scopeKey = c.req.query('scope_key');
+  const rows = scopeKey !== undefined
+    ? await c.env.DB.prepare(
+        `SELECT * FROM research_zone_drafts WHERE owner_user_id = ? AND surface = ? AND scope_key = ? ORDER BY id DESC LIMIT 20`
+      ).bind(user.id, surface, scopeKey).all<ZoneDraftRow>()
+    : await c.env.DB.prepare(
+        `SELECT * FROM research_zone_drafts WHERE owner_user_id = ? AND surface = ? ORDER BY id DESC LIMIT 20`
+      ).bind(user.id, surface).all<ZoneDraftRow>();
   return c.json({ items: (rows.results || []).map(draftDto) });
 });
 
@@ -3377,6 +3428,19 @@ research.patch('/drafts/:uid', async (c) => {
   const edited = typeof body?.body === 'string' ? body.body.trim().slice(0, 8000) : null;
   if (edited !== null && !edited) return c.json({ detail: 'body_empty' }, 400);
 
+  // A surface whose Accept writes a record writes it FIRST, and a refusal
+  // leaves the draft unaccepted — never a stamped draft over a record that
+  // was not written.
+  const current = await c.env.DB.prepare(
+    `SELECT * FROM research_zone_drafts WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, user.id).first<ZoneDraftRow>();
+  if (!current) return c.json({ detail: 'not_found' }, 404);
+  const hook = DRAFT_SURFACES[current.surface]?.accept;
+  if (hook) {
+    const refused = await hook(c, user.id, current.scope_key || '', edited || current.body);
+    if (refused) return c.json({ error: refused, message: ACCEPT_REFUSALS[refused] || 'That could not be written.' }, 409);
+  }
+
   if (edited) {
     await c.env.DB.prepare(
       `UPDATE research_zone_drafts SET body = ?, accepted_at = datetime('now') WHERE uid = ? AND owner_user_id = ?`
@@ -3441,6 +3505,9 @@ const fundDto = (r: FundRow) => ({
   note: r.note,
   source_url: r.source_url,
   created_at: r.created_at,
+  // The dossier's "Last updated" tile. Every write to the row stamps it —
+  // PATCH, and a brief accepted into the note.
+  updated_at: r.updated_at,
 });
 
 const clampText = (v: unknown, max: number): string | null => {
@@ -3760,6 +3827,61 @@ research.get('/funds/:uid', async (c) => {
   });
 });
 
+/** The longest note a fund row takes, the same cap PATCH applies. */
+const FUND_NOTE_MAX = 2000;
+
+const ACCEPT_REFUSALS: Record<string, string> = {
+  fund_not_found: 'This fund is not on your list any more, so the brief was not written into a note.',
+  note_full: 'Your note and this brief together are over 2,000 characters. Shorten one of them, then accept again.',
+};
+
+/**
+ * The facts a pre-meeting brief is drafted from: one fund row the caller owns.
+ * Empty — so the model is never reached — when the row is not theirs, or when
+ * it holds neither a thesis nor a note, because a brief over a name alone
+ * would be written from the model's own knowledge of the fund.
+ */
+async function fundMaterial(env: Env, userId: number, fundUid: string): Promise<string[]> {
+  if (!fundUid) return [];
+  const f = await env.DB.prepare(
+    `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(fundUid, userId).first<FundRow>();
+  if (!f || (!f.thesis && !f.note)) return [];
+  const usdOf = (cents: number | null) => (cents == null ? null : `$${Math.round(cents / 100).toLocaleString('en-US')}`);
+  const nr = 'not recorded';
+  return [
+    `Fund: ${f.name}`,
+    `Their thesis, in their words: ${f.thesis ? `"${f.thesis}"` : nr}`,
+    `The founder's research note: ${f.note || nr}`,
+    `Cheque range: ${usdOf(f.cheque_min_cents) ?? nr} to ${usdOf(f.cheque_max_cents) ?? nr}`,
+    `Stage fit (the founder's read): ${f.stage_fit || nr}`,
+    `Route in: ${f.path === 'warm' ? 'warm path' : f.path === 'cold' ? 'no route in' : nr}`,
+    `Status: ${f.status}${f.status === 'passed' ? `, reason: ${f.pass_reason || nr}` : ''}`,
+    `Source: ${f.source_url || nr}`,
+    `Partner who will be in the room: ${nr}`,
+    `Public fund size and what they have funded: ${nr}`,
+  ];
+}
+
+/**
+ * Accept on the brief: append it to the fund's note, after the founder's own
+ * words, and stamp the row. It never replaces the note, and it refuses rather
+ * than truncating either text to fit the column.
+ */
+async function writeBriefIntoNote(env: Env, userId: number, fundUid: string, brief: string): Promise<string | null> {
+  const f = await env.DB.prepare(
+    `SELECT note FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(fundUid, userId).first<{ note: string | null }>();
+  if (!f) return 'fund_not_found';
+  const text = brief.trim();
+  const next = f.note ? `${f.note.trim()}\n\nPre-meeting brief:\n${text}` : `Pre-meeting brief:\n${text}`;
+  if (next.length > FUND_NOTE_MAX) return 'note_full';
+  await env.DB.prepare(
+    `UPDATE research_funds SET note = ?, updated_at = ? WHERE uid = ? AND owner_user_id = ?`
+  ).bind(next, nowIso(), fundUid, userId).run();
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Benchmarks (migration 217)
 // ---------------------------------------------------------------------------
@@ -3847,11 +3969,177 @@ research.post('/benchmarks', async (c) => {
 
 research.delete('/benchmarks/:uid', async (c) => {
   const user = await requireAuth(c);
-  const res = await c.env.DB.prepare(
-    `DELETE FROM research_benchmarks WHERE uid = ? AND owner_user_id = ?`
-  ).bind(c.req.param('uid'), user.id).run();
-  if (!res.meta?.changes) return c.json({ detail: 'Not found' }, 404);
+  // Its named constituents go with it (migration 303). D1 does not enforce the
+  // foreign key's cascade inside a batch, so the rows are removed by hand,
+  // owner-scoped, before the benchmark itself.
+  const row = await c.env.DB.prepare(
+    `SELECT id FROM research_benchmarks WHERE uid = ? AND owner_user_id = ?`
+  ).bind(c.req.param('uid'), user.id).first<{ id: number }>();
+  if (!row) return c.json({ detail: 'Not found' }, 404);
+  await c.env.DB.prepare(
+    `DELETE FROM research_benchmark_constituents WHERE benchmark_id = ? AND owner_user_id = ?`
+  ).bind(row.id, user.id).run();
+  await c.env.DB.prepare(
+    `DELETE FROM research_benchmarks WHERE id = ? AND owner_user_id = ?`
+  ).bind(row.id, user.id).run();
   return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// One benchmark (canvas f2eb2046) and its named constituents (migration 303)
+// ---------------------------------------------------------------------------
+//
+// EVERY READ AND WRITE IS OWNER-SCOPED, like the list. A benchmark uid that is
+// not the caller's answers exactly as one that does not exist.
+//
+// THE CHECK IS RE-VALIDATED ON EVERY EDIT. Migration 217 refuses a peer figure
+// without its source and sample size; PATCH merges the edit onto the stored row
+// and refuses the RESULT with a sentence before the schema would refuse it
+// with a constraint error. Clearing the peer figure is allowed — the row goes
+// back to tracked — unless constituents are named against it.
+//
+// A THIN BASE IS THIS ROW'S OWN n, not the list's minimum: the detail page's
+// banner reads the comparison in front of it.
+
+const BENCH_THIN_AT = 10;
+const BENCHMARK_NOT_FOUND = 'This benchmark is not on your list.';
+const PEER_BASE_REQUIRED = 'A peer figure needs its source and its sample size. A benchmark presented '
+  + 'without its base is arithmetic wearing a metric’s clothes.';
+
+interface ConstituentRow {
+  id: number; uid: string; benchmark_id: number; owner_user_id: number;
+  name: string; value: string | null; as_of: string | null; position: number; created_at: string;
+}
+
+const constituentDto = (r: ConstituentRow) => ({
+  uid: r.uid, name: r.name, value: r.value, as_of: r.as_of, created_at: r.created_at,
+});
+
+/** The caller's benchmark by uid, or null. */
+async function ownedBenchmark(env: Env, userId: number, uid: string): Promise<BenchRow | null> {
+  const row = await env.DB.prepare(
+    `SELECT * FROM research_benchmarks WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, userId).first<BenchRow>();
+  return row || null;
+}
+
+/** The detail read: the row, its constituents, and what the page says about them. */
+async function benchmarkDetail(env: Env, userId: number, row: BenchRow) {
+  const cons = await env.DB.prepare(
+    `SELECT * FROM research_benchmark_constituents
+      WHERE benchmark_id = ? AND owner_user_id = ?
+      ORDER BY position ASC, id ASC`
+  ).bind(row.id, userId).all<ConstituentRow>();
+  const constituents = (cons.results || []).map(constituentDto);
+  const item = { ...benchDto(row), updated_at: row.updated_at };
+  const n = item.is_comparison ? Number(row.peer_sample_size) : null;
+  return {
+    item,
+    constituents,
+    // Only a comparison has a sample to be thin, or a count to disagree with.
+    thin: n !== null && n < BENCH_THIN_AT,
+    sample_note: n !== null && n < BENCH_THIN_AT
+      ? `The smallest peer set behind this comparison is ${n}. A median over a set that size moves with one member and should not be presented as a market rate.`
+      : null,
+    count_mismatch: n !== null && constituents.length > 0 && constituents.length !== n,
+    mismatch_note: n !== null && constituents.length > 0 && constituents.length !== n
+      ? `${constituents.length} ${constituents.length === 1 ? 'constituent is' : 'constituents are'} named against a stored sample of ${n}.`
+      : null,
+  };
+}
+
+research.get('/benchmarks/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const row = await ownedBenchmark(c.env, user.id, c.req.param('uid'));
+  if (!row) return c.json({ error: 'benchmark_not_found', message: BENCHMARK_NOT_FOUND }, 404);
+  return c.json(await benchmarkDetail(c.env, user.id, row));
+});
+
+research.patch('/benchmarks/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const row = await ownedBenchmark(c.env, user.id, c.req.param('uid'));
+  if (!row) return c.json({ error: 'benchmark_not_found', message: BENCHMARK_NOT_FOUND }, 404);
+  const b = await c.req.json<any>().catch(() => ({}));
+  const has = (k: string) => Object.prototype.hasOwnProperty.call(b, k);
+  const next = {
+    metric: has('metric') ? clampText(b.metric, 200) : row.metric,
+    our_value: has('our_value') ? clampText(b.our_value, 100) : row.our_value,
+    peer_value: has('peer_value') ? clampText(b.peer_value, 100) : row.peer_value,
+    peer_source: has('peer_source') ? clampText(b.peer_source, 300) : row.peer_source,
+    peer_sample_size: has('peer_sample_size') ? clampInt(b.peer_sample_size) : row.peer_sample_size,
+    peer_as_of: has('peer_as_of') ? clampText(b.peer_as_of, 40) : row.peer_as_of,
+    reading: has('reading') ? clampText(b.reading, 2000) : row.reading,
+  };
+  if (!next.metric) return c.json({ error: 'metric_required', message: 'A benchmark needs a metric.' }, 400);
+  if (next.peer_sample_size !== null && next.peer_sample_size < 1) {
+    return c.json({ error: 'sample_size_invalid', message: 'A sample size is at least 1.' }, 400);
+  }
+  // The merged row, not the request, is what must satisfy migration 217.
+  if (next.peer_value && (!next.peer_source || next.peer_sample_size === null)) {
+    return c.json({ error: 'peer_base_required', message: PEER_BASE_REQUIRED }, 400);
+  }
+  if (!next.peer_value && row.peer_value) {
+    const named = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM research_benchmark_constituents WHERE benchmark_id = ? AND owner_user_id = ?`
+    ).bind(row.id, user.id).first<{ n: number }>();
+    if (Number(named?.n) > 0) {
+      return c.json({
+        error: 'constituents_exist',
+        message: 'Remove the named constituents before clearing the peer figure. They are members of a peer set this row would no longer have.',
+      }, 409);
+    }
+  }
+  await c.env.DB.prepare(
+    `UPDATE research_benchmarks
+        SET metric = ?, our_value = ?, peer_value = ?, peer_source = ?, peer_sample_size = ?,
+            peer_as_of = ?, reading = ?, updated_at = ?
+      WHERE id = ? AND owner_user_id = ?`
+  ).bind(
+    next.metric, next.our_value, next.peer_value, next.peer_source, next.peer_sample_size,
+    next.peer_as_of, next.reading, nowIso(), row.id, user.id,
+  ).run();
+  const fresh = await ownedBenchmark(c.env, user.id, row.uid);
+  return c.json(await benchmarkDetail(c.env, user.id, fresh as BenchRow));
+});
+
+research.post('/benchmarks/:uid/constituents', async (c) => {
+  const user = await requireAuth(c);
+  const row = await ownedBenchmark(c.env, user.id, c.req.param('uid'));
+  if (!row) return c.json({ error: 'benchmark_not_found', message: BENCHMARK_NOT_FOUND }, 404);
+  // A constituent is a member of a peer set. A tracked row has none to join.
+  if (!row.peer_value) {
+    return c.json({
+      error: 'not_a_comparison',
+      message: 'This benchmark is tracked, not compared. Enter a sourced peer figure before naming who it was measured over.',
+    }, 409);
+  }
+  const b = await c.req.json<any>().catch(() => ({}));
+  const name = clampText(b.name, 200);
+  if (!name) return c.json({ error: 'constituent_name_required', message: 'A constituent needs a name.' }, 400);
+  const last = await c.env.DB.prepare(
+    `SELECT MAX(position) AS p FROM research_benchmark_constituents WHERE benchmark_id = ? AND owner_user_id = ?`
+  ).bind(row.id, user.id).first<{ p: number | null }>();
+  await c.env.DB.prepare(
+    `INSERT INTO research_benchmark_constituents (uid, benchmark_id, owner_user_id, name, value, as_of, position, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    newUid(), row.id, user.id, name, clampText(b.value, 100), clampText(b.as_of, 40),
+    last?.p == null ? 0 : Number(last.p) + 1, nowIso(),
+  ).run();
+  return c.json(await benchmarkDetail(c.env, user.id, row), 201);
+});
+
+research.delete('/benchmarks/:uid/constituents/:cuid', async (c) => {
+  const user = await requireAuth(c);
+  const row = await ownedBenchmark(c.env, user.id, c.req.param('uid'));
+  if (!row) return c.json({ error: 'benchmark_not_found', message: BENCHMARK_NOT_FOUND }, 404);
+  const res = await c.env.DB.prepare(
+    `DELETE FROM research_benchmark_constituents WHERE uid = ? AND benchmark_id = ? AND owner_user_id = ?`
+  ).bind(c.req.param('cuid'), row.id, user.id).run();
+  if (!res.meta?.changes) {
+    return c.json({ error: 'constituent_not_found', message: 'That constituent is not on this benchmark.' }, 404);
+  }
+  return c.json(await benchmarkDetail(c.env, user.id, row));
 });
 
 // ---------------------------------------------------------------------------
@@ -3876,7 +4164,7 @@ research.delete('/benchmarks/:uid', async (c) => {
 research.get('/diligence', async (c) => {
   const user = await requireAuth(c);
   const rows = await c.env.DB.prepare(
-    `SELECT g.uid AS grant_uid, g.created_at, g.expires_at,
+    `SELECT g.uid AS grant_uid, g.created_at, g.expires_at, g.granted_by_user_id,
             p.uid AS project_uid, p.name AS project_name,
             (SELECT COUNT(*) FROM data_room_files f WHERE f.project_id = g.project_id) AS file_total,
             (SELECT COUNT(*) FROM data_room_files f
@@ -3890,19 +4178,38 @@ research.get('/diligence', async (c) => {
       ORDER BY g.created_at DESC LIMIT 200`
   ).bind(user.id, user.id).all<any>();
 
-  const items = (rows.results || []).map((r: any) => ({
-    grant_uid: r.grant_uid,
-    project_uid: r.project_uid,
-    project_name: r.project_name,
-    // Two numbers, never one ratio: what is absent from a room is diligence
-    // information too, and a percentage hides which rooms are thin.
-    file_open: Number(r.file_open || 0),
-    file_total: Number(r.file_total || 0),
-    withheld_behind_nda: Number(r.file_total || 0) - Number(r.file_open || 0),
-    last_opened_at: r.last_opened_at ?? null,
-    expires_at: r.expires_at ?? null,
-    created_at: r.created_at,
-  }));
+  // "Open to you" is what THIS investor may open, not what the founder marked
+  // `open`. An investor holding a live NDA with the founder who granted the
+  // room may open the `nda` files too — the download route already lets them —
+  // so counting only `visibility = 'open'` told a signed investor that files
+  // were behind an NDA they had already signed. One NDA check per granting
+  // founder, through the data room's own `ndaActive`, never a second copy of
+  // its predicate here.
+  const ndaByFounder = new Map<number, boolean>();
+  for (const r of rows.results || []) {
+    const founder = Number(r.granted_by_user_id);
+    if (!ndaByFounder.has(founder)) ndaByFounder.set(founder, await ndaActive(c.env, founder, user.id));
+  }
+
+  const items = (rows.results || []).map((r: any) => {
+    const total = Number(r.file_total);
+    const nda = ndaByFounder.get(Number(r.granted_by_user_id)) === true;
+    const open = nda ? total : Number(r.file_open);
+    return {
+      grant_uid: r.grant_uid,
+      project_uid: r.project_uid,
+      project_name: r.project_name,
+      nda_signed: nda,
+      // Two numbers, never one ratio: what is absent from a room is diligence
+      // information too, and a percentage hides which rooms are thin.
+      file_open: open,
+      file_total: total,
+      withheld_behind_nda: total - open,
+      last_opened_at: r.last_opened_at ?? null,
+      expires_at: r.expires_at ?? null,
+      created_at: r.created_at,
+    };
+  });
 
   return c.json({
     items,
@@ -3917,6 +4224,243 @@ research.get('/diligence', async (c) => {
     deal_stage: null,
     deal_stage_note: 'A data-room grant and a deal are separate records with no key between them, '
       + 'so no deal stage is attached to a room here. Opening the deal shows its own stage.',
+  });
+});
+
+// ---------------------------------------------------------------------------
+// One room, and one document in it — keyed by the GRANT, read by its holder.
+// ---------------------------------------------------------------------------
+//
+// The list above says which rooms are open to you; these two are the room and
+// the document pages behind it (canvases b6a5f992 and 96463a46). They read the
+// data room's own tables and pass through the data room's own gate —
+// `activeGrant`, `ndaActive` and `logAccess` from `data_room.ts` — so there is
+// one definition of "this investor may see this" in the worker, not two.
+//
+// KEYED BY GRANT UID, NOT PROJECT UID. The grant is the thing the investor
+// holds. A grant uid is resolved only against rows naming the caller as the
+// investor, and a uid they do not hold answers exactly like one that does not
+// exist: telling the two apart would tell an investor which rooms exist.
+//
+// OPENING THIS PAGE IS OPENING THE ROOM. The room read lists filenames, which
+// is what `GET /api/data-room/shared/:projectUid` logs as `open_room` and the
+// founder sees in their access log. Listing the same names from a second URL
+// without the same entry would be a quiet way into the room, so this read
+// logs `open_room` too. The document read logs nothing of its own: it shows
+// one name the room read already showed, and the download it offers goes
+// through the data room's own route, which logs `download`.
+//
+// WHAT THE ACTIVITY IS. Only the caller's own rows — the founder's view of
+// the same log shows investor emails, and nothing here reaches another
+// investor's. A row about an `nda` file keeps its time and action but loses
+// its name once the NDA that let the caller download it has lapsed: a name
+// the gate would withhold today is not re-served from the log.
+//
+// AND WHAT `download` MEANS. The log records a link being ISSUED, not used.
+// The link is single-use and short-lived (`signedDownload.ts`), but whether it
+// was followed is not joined here, so the response says "issued", never
+// "downloaded".
+
+const ROOM_NOT_OPEN = 'This room is not open to you. The grant may have been revoked or expired, or it was never yours.';
+const DOWNLOAD_NOTE = 'Each entry is a single-use link issued to you, valid for two minutes. '
+  + 'Whether the link was followed is not recorded here.';
+
+type HeldRoom = {
+  grant: { id: number; uid: string; project_id: number; granted_by_user_id: number;
+    expires_at: string | null; created_at: string };
+  project: { id: number; uid: string; name: string };
+  nda: boolean;
+};
+
+/**
+ * The room this grant opens for this caller, or null.
+ *
+ * The uid is looked up ONLY among the caller's own grants, and then the data
+ * room's `activeGrant` decides whether it is live — status and expiry are
+ * checked in one place. `data_room_grants` is UNIQUE on (project_id,
+ * investor_user_id), so the live grant it returns is this one; the uid check
+ * after it is belt and braces.
+ */
+async function heldRoom(env: Env, userId: number, grantUid: string): Promise<HeldRoom | null> {
+  const held = await env.DB.prepare(
+    `SELECT project_id FROM data_room_grants WHERE uid = ? AND investor_user_id = ?`
+  ).bind(grantUid, userId).first<{ project_id: number }>();
+  if (!held) return null;
+  const grant = await activeGrant(env, held.project_id, userId);
+  if (!grant || grant.uid !== grantUid) return null;
+  const project = await env.DB.prepare(
+    `SELECT id, uid, name FROM projects WHERE id = ?`
+  ).bind(grant.project_id).first<{ id: number; uid: string; name: string }>();
+  if (!project) return null;
+  return { grant, project, nda: await ndaActive(env, grant.granted_by_user_id, userId) };
+}
+
+/**
+ * The facts the room memo is drafted from, for a grant the caller holds.
+ *
+ * Empty when the grant is not the caller's or not live — the draft route turns
+ * that into `nothing_to_draft` and the model is never called. Only what the
+ * room read itself would show is listed: open files by name, withheld ones as
+ * a number.
+ */
+async function roomMaterial(env: Env, userId: number, grantUid: string): Promise<string[]> {
+  if (!grantUid) return [];
+  const room = await heldRoom(env, userId, grantUid);
+  if (!room) return [];
+  const pid = room.grant.project_id;
+  const files = await env.DB.prepare(
+    `SELECT name, content_type, size_bytes, visibility, created_at
+       FROM data_room_files WHERE project_id = ? ORDER BY name`
+  ).bind(pid).all<any>();
+  const all = files.results || [];
+  const open = all.filter((f: any) => f.visibility === 'open' || room.nda);
+  const lines = [
+    `Company: ${room.project.name}`,
+    `Room granted ${String(room.grant.created_at).slice(0, 10)}`
+      + (room.grant.expires_at ? `, access expires ${String(room.grant.expires_at).slice(0, 10)}` : ', no expiry set'),
+    `NDA with this founder: ${room.nda ? 'active' : 'none'}`,
+    `Documents in the room: ${all.length}. Open to this investor: ${open.length}. Behind an NDA, not named: ${all.length - open.length}.`,
+  ];
+  for (const f of open) {
+    lines.push(`Document: ${f.name} (${f.content_type || 'type not recorded'}, `
+      + `${f.size_bytes == null ? 'size not recorded' : `${f.size_bytes} bytes`}, staged ${String(f.created_at).slice(0, 10)})`);
+  }
+  return lines;
+}
+
+research.get('/diligence/:grantUid', async (c) => {
+  const user = await requireAuth(c);
+  const room = await heldRoom(c.env, user.id, c.req.param('grantUid'));
+  if (!room) return c.json({ error: 'room_not_found', message: ROOM_NOT_OPEN }, 404);
+  const pid = room.grant.project_id;
+
+  const files = await c.env.DB.prepare(
+    `SELECT id, uid, name, folder_id, content_type, size_bytes, visibility, created_at
+       FROM data_room_files WHERE project_id = ? ORDER BY name`
+  ).bind(pid).all<any>();
+  const folders = await c.env.DB.prepare(
+    `SELECT id, uid, name, visibility, display_order
+       FROM data_room_folders WHERE project_id = ? ORDER BY display_order, name`
+  ).bind(pid).all<any>();
+  // Read BEFORE this visit is logged, so "you last opened it" is the visit
+  // before this one rather than always "just now". Any action counts, as in
+  // the list's `last_opened_at`, so the two pages agree.
+  const activity = await c.env.DB.prepare(
+    `SELECT l.action, l.created_at, l.file_id
+       FROM data_room_access_log l
+      WHERE l.project_id = ? AND l.user_id = ?
+      ORDER BY l.created_at DESC, l.id DESC LIMIT 100`
+  ).bind(pid, user.id).all<any>();
+
+  const allFiles = files.results || [];
+  const visible = (v: string) => v === 'open' || room.nda;
+  const byId = new Map<number, any>(allFiles.map((f: any) => [Number(f.id), f]));
+  const folderUid = new Map<number, string>((folders.results || []).map((f: any) => [Number(f.id), f.uid]));
+  const acts = activity.results || [];
+
+  const lastDownload = new Map<number, string>();
+  for (const a of acts) {
+    if (a.action === 'download' && a.file_id != null && !lastDownload.has(Number(a.file_id))) {
+      lastDownload.set(Number(a.file_id), a.created_at);
+    }
+  }
+
+  const openFiles = allFiles.filter((f: any) => visible(f.visibility)).map((f: any) => ({
+    uid: f.uid,
+    name: f.name,
+    content_type: f.content_type ?? null,
+    size_bytes: f.size_bytes ?? null,
+    visibility: f.visibility,
+    folder_uid: f.folder_id == null ? null : folderUid.get(Number(f.folder_id)) ?? null,
+    created_at: f.created_at,
+    last_downloaded_at: lastDownload.get(Number(f.id)) ?? null,
+  }));
+  const withheld = allFiles.length - openFiles.length;
+
+  const yourActivity = acts.map((a: any) => {
+    const f = a.file_id == null ? null : byId.get(Number(a.file_id));
+    // A file deleted since, or one behind an NDA the caller no longer holds,
+    // keeps its line and loses its name.
+    const named = f && visible(f.visibility);
+    return {
+      action: a.action,
+      created_at: a.created_at,
+      file_uid: named ? f.uid : null,
+      file_name: named ? f.name : null,
+      file_withheld: !!(f && !named),
+      // The row's file is gone from the room (deleted since).
+      file_removed: a.file_id != null && !f,
+    };
+  });
+
+  await logAccess(c.env, pid, user.id, 'open_room', null);
+
+  return c.json({
+    grant: { uid: room.grant.uid, created_at: room.grant.created_at, expires_at: room.grant.expires_at ?? null },
+    project: { uid: room.project.uid, name: room.project.name },
+    nda_signed: room.nda,
+    file_total: allFiles.length,
+    file_open: openFiles.length,
+    // A count, never the names — the data room's own rule.
+    withheld_behind_nda: withheld,
+    last_opened_at: acts.length ? acts[0].created_at : null,
+    folders: (folders.results || []).filter((f: any) => visible(f.visibility))
+      .map((f: any) => ({ uid: f.uid, name: f.name, visibility: f.visibility })),
+    files: openFiles,
+    activity: yourActivity,
+    download_note: DOWNLOAD_NOTE,
+    // Same reason as the list: no key joins a grant to a deal.
+    deal_stage: null,
+    deal_stage_note: 'A data-room grant and a deal are separate records with no key between them, '
+      + 'so no deal stage is attached to a room here. Opening the deal shows its own stage.',
+  });
+});
+
+research.get('/diligence/:grantUid/files/:fileUid', async (c) => {
+  const user = await requireAuth(c);
+  const room = await heldRoom(c.env, user.id, c.req.param('grantUid'));
+  if (!room) return c.json({ error: 'room_not_found', message: ROOM_NOT_OPEN }, 404);
+  const pid = room.grant.project_id;
+
+  const file = await c.env.DB.prepare(
+    `SELECT id, uid, name, content_type, size_bytes, visibility, created_at
+       FROM data_room_files WHERE uid = ? AND project_id = ?`
+  ).bind(c.req.param('fileUid'), pid).first<any>();
+  const roomRef = { grant_uid: room.grant.uid, project_name: room.project.name };
+  if (!file) {
+    return c.json({ error: 'file_not_found', message: 'This document is not in the room. The founder may have removed it.', room: roomRef }, 404);
+  }
+  // Re-checked here, as the download route re-checks it: a uid captured while
+  // an NDA was live stops naming the file when it lapses. Nothing about the
+  // file travels — no name, size or type — only the room it sits in.
+  if (file.visibility === 'nda' && !room.nda) {
+    return c.json({
+      error: 'nda_required',
+      message: 'This document is behind an NDA you have not signed with this founder. Its name stays private until you do.',
+      room: roomRef,
+    }, 403);
+  }
+
+  const downloads = await c.env.DB.prepare(
+    `SELECT created_at FROM data_room_access_log
+      WHERE project_id = ? AND user_id = ? AND file_id = ? AND action = 'download'
+      ORDER BY created_at DESC, id DESC LIMIT 50`
+  ).bind(pid, user.id, file.id).all<{ created_at: string }>();
+  const mine = (downloads.results || []).map((d) => d.created_at);
+
+  return c.json({
+    room: { ...roomRef, project_uid: room.project.uid },
+    file: {
+      uid: file.uid,
+      name: file.name,
+      content_type: file.content_type ?? null,
+      size_bytes: file.size_bytes ?? null,
+      visibility: file.visibility,
+      created_at: file.created_at,
+    },
+    last_downloaded_at: mine[0] ?? null,
+    downloads: mine,
+    download_note: DOWNLOAD_NOTE,
   });
 });
 

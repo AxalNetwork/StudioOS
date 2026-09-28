@@ -278,7 +278,6 @@ export const SLOW_PATHS = [
   /^\/advisor\/transcribe$/,
   /^\/advisory\//,                       // ask, financial-plan, diligence
   /^\/competitors\//,                    // crawl + Workers AI synthesis
-  /^\/dashboard\/refresh-scores$/,
   /^\/dd\/cases\/[^/]+\/(scan|report)$/,
   /^\/deck-reviewer\/[^/]+\/regenerate$/,
   /^\/decks\/generate$/,
@@ -949,6 +948,11 @@ export const api = {
     request(`/legal/incorporate/status?id=${encodeURIComponent(id)}`),
   legalIncorporationOrders: () =>
     request('/legal/incorporate/orders'),
+  // D362 — the catalog price POST /incorporation/order would charge for this
+  // jurisdiction: { jurisdiction_id, label, amount_cents | null, currency,
+  // source: 'catalog' | null, reason?, message?, registered_agent }.
+  legalIncorporationQuote: (jurisdictionId) =>
+    request(`/legal/incorporation/quote?jurisdiction_id=${encodeURIComponent(jurisdictionId)}`),
   // Legacy free wizard — still available for admin/back-compat (admin only).
   legalIncorporateWizard: (data) =>
     request('/legal/incorporate/wizard', { method: 'POST', body: JSON.stringify(data) }),
@@ -1652,6 +1656,18 @@ export const api = {
   updateMvpFeature: (id, data) => request(`/progress/mvp-scope/feature/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteMvpFeature: (id) => request(`/progress/mvp-scope/feature/${id}`, { method: 'DELETE' }),
   listMetricsSnapshots: (projectId) => request(`/progress/metrics/${projectId}`),
+  // D363 — the revenue ledger (migration 311). Amounts are integer cents;
+  // verification is set by the Worker, never sent from here.
+  revenueEntries: (projectId) =>
+    request(`/revenue/projects/${encodeURIComponent(projectId)}/entries`),
+  revenueEntryCreate: (projectId, entry) =>
+    request(`/revenue/projects/${encodeURIComponent(projectId)}/entries`, { method: 'POST', body: JSON.stringify(entry) }),
+  revenueEntriesImport: (projectId, rows) =>
+    request(`/revenue/projects/${encodeURIComponent(projectId)}/entries/import`, { method: 'POST', body: JSON.stringify({ rows }) }),
+  revenueEntryUpdate: (projectId, uid, patch) =>
+    request(`/revenue/projects/${encodeURIComponent(projectId)}/entries/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  revenueEntryDelete: (projectId, uid) =>
+    request(`/revenue/projects/${encodeURIComponent(projectId)}/entries/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
   createMetricsSnapshot: (projectId, data) => request(`/progress/metrics/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   deleteMetricsSnapshot: (id) => request(`/progress/metrics/${id}`, { method: 'DELETE' }),
   // Task #194 — metric targets. `metric_targets` shipped in migration 173 and
@@ -1737,8 +1753,8 @@ export const api = {
   listQuotesForNeed: (needId) => request(`/needs/${needId}/quotes`),
   myQuotes: () => request('/quotes/me'),
   // `period` is one of all | quarter | prev_quarter | ytd | shape — the
-  // Analytics chip row. Omitted is `all`, which is what the two older callers
-  // (`/partner/operations/performance` and the Studio home card) send, so their
+  // Analytics chip row. Omitted is `all`, which is what the Studio home card
+  // sends (as the retired `/partner/operations/performance` did, D395), so its
   // response shape is unchanged. It narrows what was DECIDED; the forecast is
   // over the open pipeline either way, because an undecided quote sits in no
   // quarter.
@@ -1856,6 +1872,8 @@ export const api = {
   },
   adminContractStats: () => request('/admin/contracts/stats'),
   adminContractTemplates: () => request('/admin/contracts/templates'),
+  // D454 — code registry (layer, parties, usage) for HQ · Contracts.
+  adminContractDocTypes: () => request('/admin/contracts/doc-types'),
   adminContractTemplateUsage: (docType, params = {}) => {
     const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== null)).toString();
     return request(`/admin/contracts/templates/${encodeURIComponent(docType)}/usage${q ? `?${q}` : ''}`);
@@ -2459,6 +2477,9 @@ export const api = {
   adminCohortApplications: () => request('/admin/cohort/applications'),
   adminCohortAppSettings: (payload) => request('/admin/cohort/applications/settings', { method: 'POST', body: JSON.stringify(payload) }),
   adminCohortApplicantDecide: (applicantId, payload) => request(`/admin/cohort/applications/${applicantId}/decide`, { method: 'POST', body: JSON.stringify(payload) }),
+  // D383 — the partner interview on an applicant (schedule replaces the live one).
+  adminCohortScheduleInterview: (applicantId, payload) => request(`/admin/cohort/applications/${applicantId}/interview`, { method: 'POST', body: JSON.stringify(payload) }),
+  adminCohortCancelInterview: (applicantId) => request(`/admin/cohort/applications/${applicantId}/interview/cancel`, { method: 'POST' }),
   adminCohortForceProceed: (cycleId, payload) => request(`/admin/cohort/applications/cycles/${cycleId}/force-proceed`, { method: 'POST', body: JSON.stringify(payload) }),
   adminCohortAppNotifications: (cycleId) => request(`/admin/cohort/applications/notifications${cycleId ? `?cycle_id=${cycleId}` : ''}`),
   adminCohortAppEvents: (cycleId) => request(`/admin/cohort/applications/events${cycleId ? `?cycle_id=${cycleId}` : ''}`),
@@ -2688,7 +2709,6 @@ export const api = {
   networkFxMarketplaceMatch: (data) => request('/networkfx/marketplace/match', { method: 'POST', body: JSON.stringify(data) }),
 
   getDashboard: (fresh = false) => request('/dashboard' + (fresh ? '?fresh=1' : '')),
-  refreshDashboardScores: () => request('/dashboard/refresh-scores', { method: 'POST', body: JSON.stringify({}) }),
   // Task #81 — read-only investor deal lifecycle (funnel counts by stage).
   investorLifecycle: () => request('/dashboard/investor-lifecycle'),
 
@@ -2704,6 +2724,13 @@ export const api = {
 
   partnerSummary: () => request('/partnernet/summary'),
   partnerRelationships: () => request('/partnernet/relationships'),
+  // D465 — the interaction log and the reminders (migration 338). The book's
+  // cold flag reads the log's MAX; a reminder surfaces on the desk when due.
+  partnerInteractionLog: (id) => request(`/partnernet/relationships/${id}/interactions`),
+  partnerInteractionAdd: (id, data) => request(`/partnernet/relationships/${id}/interactions`, { method: 'POST', body: JSON.stringify(data) }),
+  partnerReminders: (all) => request(`/partnernet/reminders${all ? '?all=1' : ''}`),
+  partnerReminderSet: (id, data) => request(`/partnernet/relationships/${id}/reminders`, { method: 'POST', body: JSON.stringify(data) }),
+  partnerReminderDone: (uid, done) => request(`/partnernet/reminders/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify({ done }) }),
 
   // The firm relationship book (migration 224) — people the firm knows at
   // client companies, each owned by someone at the firm or conspicuously not.
@@ -2756,7 +2783,9 @@ export const api = {
   castVote: (dealId, body) =>
     request(`/pipeline/vote/${dealId}`, { method: 'POST', body: JSON.stringify(body) }),
   voteLeaderboard: (limit = 10) => request(`/pipeline/votes/leaderboard?limit=${limit}`),
-  capitalCalls: () => request('/legalcap/capital/calls').catch(() => []),
+  // D370: no `.catch(() => [])`. That turned a failed read into "no capital
+  // calls", which is a claim; a caller that wants a fallback writes its own.
+  capitalCalls: () => request('/legalcap/capital/calls'),
   diligenceReview: (data) => request('/legalcap/diligence/review', { method: 'POST', body: JSON.stringify(data) }),
   diligenceFor: (dealId) => request(`/legalcap/diligence/${dealId}`),
   complianceFor: (dealId) => request(`/legalcap/compliance/${dealId}`),
@@ -2830,11 +2859,15 @@ export const api = {
   // row saying a named branch was read back. Omitted means nothing privileged
   // happened and nothing is logged, which is what D150 correctly refused to
   // pretend otherwise about.
-  aiWorkspaceExplain: ({ workspace, zone, coverage, model, branch }) =>
+  //
+  // `page` is the app path the rail sits on (D404). The router records it as
+  // the run's `surface`, which is what lets the rail show "This page this
+  // month"; it is a path, never page content.
+  aiWorkspaceExplain: ({ workspace, zone, coverage, model, branch, page }) =>
     request('/ai/workspace/explain', {
       method: 'POST',
       timeoutMs: 60_000,
-      body: JSON.stringify({ workspace, zone, coverage, model, branch }),
+      body: JSON.stringify({ workspace, zone, coverage, model, branch, page }),
     }),
 
   // ---------- Monitoring → Analytics (admin, Task #3 / Task #13) ----------
@@ -3002,8 +3035,19 @@ export const api = {
     a.remove();
     URL.revokeObjectURL(url);
   },
-  fundsCapitalCallV2: (id, amount_cents, note) =>
-    request(`/funds/${id}/capital-call`, { method: 'POST', body: JSON.stringify({ amount_cents, note }) }),
+  // D371: `due_date` rides along (the worker always accepted it; this dropped
+  // it), and the call is written before the response — see funds.ts.
+  fundsCapitalCallV2: (id, amount_cents, note, due_date) =>
+    request(`/funds/${id}/capital-call`, { method: 'POST', body: JSON.stringify({ amount_cents, note, due_date: due_date || undefined }) }),
+  // D371: the fund call ledger — each call with its LP lines, the ledger of
+  // calls and receipts (one LP's history with `lpId`), the split a call would
+  // make before it is issued, and the GP's receipt against one LP's line.
+  fundsCallLedger: (id) => request(`/funds/${id}/capital-calls`),
+  fundsLedger: (id, lpId) => request(`/funds/${id}/ledger${lpId ? `?lp=${encodeURIComponent(lpId)}` : ''}`),
+  fundsCallPreview: (id, amount_cents) =>
+    request(`/funds/${id}/capital-calls/preview`, { method: 'POST', body: JSON.stringify({ amount_cents }) }),
+  fundsRecordReceipt: (id, lineId, data) =>
+    request(`/funds/${id}/capital-calls/lines/${lineId}/receipts`, { method: 'POST', body: JSON.stringify(data) }),
   fundsLpsList: (id) => request(`/funds/${id}/lps`),
   fundsAddLpV2: (id, data) =>
     request(`/funds/${id}/lps`, { method: 'POST', body: JSON.stringify(data) }),
@@ -3127,21 +3171,34 @@ export const api = {
   },
   createCompany: (data) => request('/company/create', { method: 'POST', body: JSON.stringify(data) }),
   updateCompany: (uid, data) => request(`/company/${uid}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  addCompanyMember: (uid, data) => request(`/company/${uid}/members`, { method: 'POST', body: JSON.stringify(data) }),
+  // The direct add (`addCompanyMember`, POST /company/:uid/members) is retired
+  // (D434): it joined an existing account without asking it. Membership is
+  // granted by the invitation below, accepted by the invitee.
   // Wave 2 — role change / primary-admin transfer. Send only the keys you are
-  // changing; both add and remove already existed, this closes the middle.
+  // changing; remove already existed, this closes the middle.
   updateCompanyMember: (uid, userId, data) =>
     request(`/company/${uid}/members/${userId}`, { method: 'PATCH', body: JSON.stringify(data) }),
   removeCompanyMember: (uid, userId) => request(`/company/${uid}/members/${userId}`, { method: 'DELETE' }),
   // The ladder, the named functions, and what each authority level MEANS.
   // A picker must never hardcode these — see services/teamAuthority.ts.
   teamVocabulary: () => request('/company/team-vocabulary'),
+  // D435 — the founder's Team page (migration 326): the roster, coverage and
+  // headcount plan of one company, plus the cap-table, option-pool and
+  // co-founder-decision reads it composes, each reported per source.
+  getCompanyTeam: (uid) => request(`/company/${uid}/team`),
+  addCompanyPerson: (uid, data) =>
+    request(`/company/${uid}/team/people`, { method: 'POST', body: JSON.stringify(data) }),
+  updateCompanyPerson: (uid, personUid, data) =>
+    request(`/company/${uid}/team/people/${personUid}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  saveCompanyCoverage: (uid, rows) =>
+    request(`/company/${uid}/team/coverage`, { method: 'PUT', body: JSON.stringify({ rows }) }),
+  saveCompanyHeadcountPlan: (uid, rows) =>
+    request(`/company/${uid}/team/plan`, { method: 'PUT', body: JSON.stringify({ rows }) }),
 
-  // Task #121 — a real invitation, as opposed to `addCompanyMember`, which
-  // links an EXISTING account without asking it and 404s on anyone who has
+  // Task #121 — a real invitation, as opposed to the retired direct add, which
+  // linked an EXISTING account without asking it and 404'd on anyone who had
   // not signed up. These five drive `company_invitations`: the first mails a
-  // hashed, expiring token, and the last is the invitee's own accept. `addCompanyMember` stays: it is the direct add for someone
-  // who has already agreed, and the admin console still uses it.
+  // hashed, expiring token, and the last is the invitee's own accept.
   inviteCompanyMember: (uid, data) =>
     request(`/company/${uid}/invitations`, { method: 'POST', body: JSON.stringify(data) }),
   listCompanyInvitations: (uid) => request(`/company/${uid}/invitations`),
@@ -3199,7 +3256,6 @@ export const api = {
     request(`/data-room/${encodeURIComponent(projectUid)}/grants`, { method: 'POST', body: JSON.stringify(data || {}) }),
   dataRoomRevoke: (projectUid, uid) =>
     request(`/data-room/${encodeURIComponent(projectUid)}/grants/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
-  dataRoomsSharedWithMe: () => request('/data-room/shared'),
 
   // Task #55 — the advisor grant. A founder opens one project to one named
   // advisor, scope by scope; the advisor reads it back through /shared/*.
@@ -3231,6 +3287,16 @@ export const api = {
     request(`/messages/${encodeURIComponent(uid)}/messages`, { method: 'POST', body: JSON.stringify({ body }) }),
   messageMarkRead: (uid) => request(`/messages/${encodeURIComponent(uid)}/read`, { method: 'POST' }),
   messageArchive: (uid) => request(`/messages/${encodeURIComponent(uid)}/archive`, { method: 'POST' }),
+  // D415 — a file sent as a message (multipart), and a signed, single-use,
+  // five-minute link to one, minted only for a member of the thread.
+  messageAttach: (uid, file, body) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (body) fd.append('body', body);
+    return request(`/messages/${encodeURIComponent(uid)}/attachments`, { method: 'POST', body: fd });
+  },
+  messageAttachmentLink: (uid, attUid) =>
+    request(`/messages/${encodeURIComponent(uid)}/attachments/${encodeURIComponent(attUid)}/link`, { method: 'POST' }),
 
   // Perks & Products (migration 186 + routes/perks.ts). `allowance_configured`
   // on the catalogue response is load-bearing: it lets the page say "no credit
@@ -3467,6 +3533,12 @@ export const api = {
   // every decision is still made in that queue's own console, and the payload
   // says so on `decides: false` rather than leaving the page to remember.
   branchApprovals: () => request('/branch/approvals'),
+  // D470 — a reviewer on a board item. Not a decision on the queue, and not a
+  // reply. History is the events that write recorded.
+  branchApprovalAssign: (data) =>
+    request('/branch/approvals/assignments', { method: 'POST', body: JSON.stringify(data || {}) }),
+  branchApprovalHistory: (lane, itemId) =>
+    request(`/branch/approvals/history?lane=${encodeURIComponent(lane)}&item_id=${encodeURIComponent(itemId)}`),
   // D131 — S1's digest: queue pressure ordered by the oldest item, the
   // programme clock with the zone it is enforced in, and the revenue-share
   // rate. The three blocks S1 draws that have no source arrive as
@@ -3474,6 +3546,10 @@ export const api = {
   branchHome: () => request('/branch/home'),
   // D246 — Studio's operating-posture strip: the caller's own admin-bank answers.
   adminPosture: () => request('/advisor/admin-posture'),
+  // D443 — one glance for Studio, on both tiers. Per-subsidiary figures on HQ
+  // come back recorded:false. The branch routes below stay for the pages that
+  // still call them.
+  adminStudioGlance: () => request('/admin/studio/glance'),
   // D147 — HQ's master contract library as this branch holds it. A COPY: the
   // payload carries HQ's `pushed_at`, and `not_carried` names what deliberately
   // does not travel (the document bodies, and an archived-version state HQ's own
@@ -3485,6 +3561,8 @@ export const api = {
   // `pushed_at` and its own `n_branches`. `unavailable` names the three stats
   // S6 draws that have no branch-side source.
   branchInsights: () => request('/branch/insights'),
+  // D446 — S13's audit line. The branch's own support-session rows.
+  branchSupportSessions: () => request('/branch/support-sessions'),
   // D210 — S15 · Analytics. This branch over time from its own request log,
   // the seats and decision ages it can measure, and each tile it cannot — with
   // the reason on the payload. Same `range` vocabulary as `hqAnalytics`.
@@ -3516,7 +3594,6 @@ export const api = {
     request(`/admin/licences/${encodeURIComponent(uid)}/renew`, { method: 'POST', body: JSON.stringify(data || {}) }),
   licenceTerminate: (uid, note) =>
     request(`/admin/licences/${encodeURIComponent(uid)}/terminate`, { method: 'POST', body: JSON.stringify({ note }) }),
-  dataRoomShared: (projectUid) => request(`/data-room/shared/${encodeURIComponent(projectUid)}`),
   dataRoomDownload: (projectUid, uid) =>
     request(`/data-room/shared/${encodeURIComponent(projectUid)}/files/${encodeURIComponent(uid)}/download`, { method: 'POST' }),
   // getCapTableByProject is NOT redeclared here. It was, and this copy — the
@@ -4384,6 +4461,25 @@ export const api = {
     request(`/partner-office-hours/bookings/${id}/complete`, { method: 'POST' }),
   noShowPartnerBooking: (id, reason) =>
     request(`/partner-office-hours/bookings/${id}/no-show`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  // D355 — what a session left behind. Both parties add and tick action items;
+  // only the booking's founder rates a completed session. No user id is sent:
+  // the Worker takes the actor, and their side, from the session.
+  listBookingActionItems: (bookingId) =>
+    request(`/partner-office-hours/bookings/${encodeURIComponent(bookingId)}/action-items`),
+  addBookingActionItem: (bookingId, { title, linked_tool, due_date }) =>
+    request(`/partner-office-hours/bookings/${encodeURIComponent(bookingId)}/action-items`, {
+      method: 'POST', body: JSON.stringify({ title, linked_tool: linked_tool || null, due_date: due_date || null }),
+    }),
+  updateBookingActionItem: (itemId, patch) =>
+    request(`/partner-office-hours/action-items/${encodeURIComponent(itemId)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteBookingActionItem: (itemId) =>
+    request(`/partner-office-hours/action-items/${encodeURIComponent(itemId)}`, { method: 'DELETE' }),
+  listMyBookingActionItems: () => request('/partner-office-hours/action-items/me'),
+  rateBooking: (bookingId, { rating, comment }) =>
+    request(`/partner-office-hours/bookings/${encodeURIComponent(bookingId)}/rating`, {
+      method: 'PUT', body: JSON.stringify({ rating, comment: comment ?? null }),
+    }),
+  partnerRatingSummary: () => request('/partner-office-hours/ratings/summary'),
 
   // ---------- Co-marketing (Task #54) ----------
   submitCoMarketingPitch: (data) =>
@@ -4852,7 +4948,10 @@ export const api = {
     // The AI band every Research and Network artboard ends with (migration
     // 221). `surface` is the zone key and is allow-listed in the worker, so a
     // page that has not mounted the band cannot spend on it.
-    zoneDrafts: (surface) => request(`/research/drafts?surface=${encodeURIComponent(surface)}`),
+    // `scopeKey` narrows the read to one record's drafts (one data room), so a
+    // page about one record never shows a draft written about another.
+    zoneDrafts: (surface, scopeKey) => request(`/research/drafts?surface=${encodeURIComponent(surface)}${
+      scopeKey !== undefined ? `&scope_key=${encodeURIComponent(scopeKey)}` : ''}`),
     zoneDraftRun: (surface, scopeKey) => request('/research/drafts', {
       method: 'POST', body: JSON.stringify({ surface, ...(scopeKey ? { scope_key: scopeKey } : {}) }),
     }),
@@ -4916,10 +5015,30 @@ export const api = {
     benchmarks: () => request('/research/benchmarks'),
     benchmarkCreate: (data) => request('/research/benchmarks', { method: 'POST', body: JSON.stringify(data || {}) }),
     benchmarkRemove: (uid) => request(`/research/benchmarks/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+    // One benchmark and its named constituents (D314, migration 303). The edit
+    // is re-validated against 217's CHECK on the merged row, so a peer figure
+    // without its source and sample is refused as `peer_base_required`.
+    benchmarkGet: (uid) => request(`/research/benchmarks/${encodeURIComponent(uid)}`),
+    benchmarkUpdate: (uid, patch) => request(`/research/benchmarks/${encodeURIComponent(uid)}`, {
+      method: 'PATCH', body: JSON.stringify(patch || {}),
+    }),
+    benchmarkConstituentAdd: (uid, data) => request(`/research/benchmarks/${encodeURIComponent(uid)}/constituents`, {
+      method: 'POST', body: JSON.stringify(data || {}),
+    }),
+    benchmarkConstituentRemove: (uid, cuid) => request(
+      `/research/benchmarks/${encodeURIComponent(uid)}/constituents/${encodeURIComponent(cuid)}`, { method: 'DELETE' },
+    ),
 
     // Diligence — no store of its own. Room access assembled from the grants
     // this investor already holds.
     diligence: () => request('/research/diligence'),
+    // One room and one document in it, keyed by the grant the investor holds.
+    // A grant they do not hold is a 404 (`room_not_found`), the same as one
+    // that does not exist; a document behind an NDA they have not signed is a
+    // 403 (`nda_required`) that carries the room and nothing about the file.
+    diligenceRoom: (grantUid) => request(`/research/diligence/${encodeURIComponent(grantUid)}`),
+    diligenceFile: (grantUid, fileUid) =>
+      request(`/research/diligence/${encodeURIComponent(grantUid)}/files/${encodeURIComponent(fileUid)}`),
   },
 };
 
@@ -5289,6 +5408,13 @@ export const spinoutLab = {
   // `lib/spinoutLabArsenal.js`; a route serving those too would be a store
   // invented so a page could look dynamic.
   brief: () => request('/spinout-lab/brief'),
+  // D383 — the caller's own application lifecycle. No id in any path: each
+  // acts on the signed-in account's draft or latest application only.
+  applyDraft: () => request('/spinout-lab/apply/draft'),
+  saveApplyDraft: (answers) => request('/spinout-lab/apply/draft', { method: 'PUT', body: JSON.stringify({ answers }) }),
+  discardApplyDraft: () => request('/spinout-lab/apply/draft', { method: 'DELETE' }),
+  withdrawApplication: () => request('/spinout-lab/apply/withdraw', { method: 'POST' }),
+  requestInterviewReschedule: (reason) => request('/spinout-lab/apply/interview/reschedule', { method: 'POST', body: JSON.stringify({ reason }) }),
   // Signed in only — which cohort companies cleared which gate, and when.
   // Deliberately gate-level and not milestone-level: `week` is already public
   // on /cohort, so this adds a timestamp to a transition whose state is
@@ -5488,6 +5614,8 @@ export const adminCircles = {
 // worker (api-drift guard checks this prefix).
 export const assessment = {
   myResults: () => request('/assessment/results/me'),
+  // D325 — the archetype card's Level / XP bar (GET /api/assessment/xp/me).
+  myXp: () => request('/assessment/xp/me'),
   results: (userId) => request(`/assessment/results/${userId}`),
 };
 
@@ -5551,6 +5679,14 @@ export const adminAssessment = {
     }),
   // Analytics — aggregate funnel/distribution/coverage for a game.
   analytics: (slug) => request(`/admin/assessment/games/${encodeURIComponent(slug)}/analytics`),
+  // D446 — runs on this database. `cycle` is a cohort cycle id; the worker
+  // keeps a run whose start falls inside that cycle. Omit it to list every run.
+  listSessions: (cycleId) => {
+    const q = new URLSearchParams();
+    if (cycleId !== undefined && cycleId !== null && String(cycleId) !== '') q.set('cycle', String(cycleId));
+    const s = q.toString();
+    return request(`/admin/assessment/sessions${s ? `?${s}` : ''}`);
+  },
   // D255 — `rescore` was removed here: no caller in frontend/src called it.
   // The worker route (admin_assessment.ts, POST /sessions/:id/rescore)
   // stays — check-api-drift reads api.js → worker only, so a route with no

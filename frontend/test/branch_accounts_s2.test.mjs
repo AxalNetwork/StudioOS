@@ -184,11 +184,12 @@ test('the search says what it searches, and the table says it is a page', () => 
 test('more seats is an escalation, not an input', () => {
   const code = blankComments(PAGE);
   assert.match(code, /kind: 'seat_increase'/, 'the request no longer raises the escalation kind HQ reads');
-  // A number input here would be a branch editing a licence term.
+  // D445 — the quantity is text and travels on the escalation. A number input
+  // would be a licence field, which this page does not have.
   assert.doesNotMatch(
     code,
     /type="number"/,
-    'the page grew a number input — seats are set by HQ, so there is nothing here to type into',
+    'the page grew a number input — the request quantity is text, and the licence is not a field here',
   );
   assert.match(code, /branchEscalate/, 'the request path does not reach the escalation route');
 });

@@ -38,11 +38,16 @@ const DASH = read('frontend/src/pages/Dashboard.jsx');
 
 test('an admin render returns Admin Studio before the founder fit block', () => {
   const adminAt = DASH.indexOf("if (activeRole === 'admin' && authUser)");
-  const fitAt = DASH.indexOf('<ProfileFitSection');
   assert.ok(adminAt > 0, 'Dashboard no longer has an admin return');
-  assert.ok(fitAt > adminAt, 'the fit block renders for an admin');
+  // Since D323 the dispatcher mounts no fit block of its own: each role's home
+  // mounts its own, and the admin home mounts none (asserted below).
+  assert.ok(!codeOnly(DASH).includes('<ProfileFitSection'), 'Dashboard mounts a fit block of its own again');
   assert.match(DASH, /<AdminStudioHome user=\{authUser\} \/>/);
-  assert.match(HOME, /<PersonalAdvisor \/>/);
+  // D324 — every Studio home mounts Eadwyn through StudioInterview, which
+  // collapses the chat to one row once the interview is complete.
+  assert.match(HOME, /<StudioInterview persona="admin" \/>/);
+  assert.equal((HOME.match(/<StudioInterview\b/g) || []).length, 1, 'Admin Studio mounts Eadwyn once');
+  assert.match(read('frontend/src/components/advisor/StudioInterview.jsx'), /<PersonalAdvisor\b/);
   assert.ok(!HOME.includes('ProfileFitSection'), 'Admin Studio mounts the founder fit block');
   assert.ok(!HOME.includes('WorkerRail') && !OVERVIEW.includes('WorkerRail'),
     'Admin Studio mounts a second assistant beside Eadwyn');
@@ -296,7 +301,7 @@ const STUDIO_CARDS = [
 ];
 
 function markup(props) {
-  return renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AdminStudioOverview, props)));
+  return renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AdminStudioOverview, { glance: null, ...props })));
 }
 
 function firstHref(html, testid) {

@@ -23,7 +23,8 @@ import { api } from '../../lib/api';
 // second header whose workspace label came from the same fallback and read
 // "Delivery · Ship the work" on a Pipeline route. Mounting its feature pages
 // directly removes the doubled chrome and the wrong-bucket header together,
-// and leaves /partner/operations/* exactly as it was.
+// and left /partner/operations/* as it was, until D395 retired it into
+// these zones.
 const PerksPage = lazy(() => import('../../pages/PerksPage'));
 const ServiceCatalogPage = lazy(() => import('../../pages/ServiceCatalogPage'));
 // Pipeline · analytics used to mount `PartnerInsightsPage` — Demand Insights,
@@ -74,8 +75,9 @@ const PartnerStatusReports = lazy(() => import('../../pages/partner/delivery/Sta
  * `/partner/insights` — and the shell mounted only some of them. Eight of the
  * fifteen zones now render one: Pipeline's leads, proposals, negotiations,
  * retainers and analytics, Delivery's board, and Offers' catalog and perk
- * deals. Every legacy prefix stays mounted; a zone and its legacy route are the
- * same component at two routes, which is not a fork.
+ * deals. Every other legacy prefix stays mounted; a zone and its legacy route
+ * are the same component at two routes, which is not a fork.
+ * `/partner/operations/*` retired in D395 and redirects to these zones.
  *
  * NEGOTIATIONS AND RETAINERS ARE THE TWO WITHOUT A LEGACY ROUTE. Every other
  * live zone mounts a page that already existed somewhere; these two are new
