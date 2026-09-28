@@ -46,7 +46,6 @@ import { markMilestone } from '../lib/spinoutLabHooks';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import { pickLabProject } from './SpinoutLabStartupPage';
-import { AssistLayout } from '../ui';
 import useAssistMode from '../hooks/useAssistMode';
 import FillProposals from '../workspaces/FillProposals';
 
@@ -265,6 +264,12 @@ function posDot(name) {
   };
 }
 
+// What the page's "AI fills the blanks" switch does (D317; the copy the Eadwyn
+// rail used to carry). It names both kinds and both refusals, because a note
+// that described one capability would read as the whole list.
+const FILLS_NOTE = 'Proposes two things, each only when Eadwyn can cite it: the sizing inputs this page multiplies — an addressable population, an ACV benchmark, a growth rate — and competitors not yet on your list. It never proposes your TAM: the page derives that from your own assumptions. And it adds to your competitor list rather than starting one. Every item is yours to accept, edit or discard.';
+const FILLS_OFF_NOTE = 'Nothing runs and nothing is spent. Every figure on this page is one you researched or derived.';
+
 export default function SpinoutLabMarketPage() {
   const { user } = useAuth();
   const [state, setState] = useState(null);
@@ -288,9 +293,9 @@ export default function SpinoutLabMarketPage() {
   // "Eadwyn" over their own number is the same lie this page's copy exists to
   // avoid, pointed the other way.
   const [filled, setFilled] = useState({});
-  // The rail's switch, read from the same module store the rail reads it from.
+  // The page's own switch (D317), from the module store every fill host reads.
   // Off until the founder turns it on, per D17 and the money rule behind it.
-  const [fillsOn] = useAssistMode('market');
+  const [fillsOn, setFillsOn] = useAssistMode('market');
 
   /**
    * Re-read the drawer's fields and their provenance after an accept.
@@ -800,11 +805,34 @@ export default function SpinoutLabMarketPage() {
       {/* THE FILL'S OWN BAND, and the page it fills. Task #188's market kind
           proposes an addressable population, an ACV benchmark and a growth rate —
           each with a citation or dropped — into the drawer's own fields. It
-          renders only when the rail's switch is on, reads existing proposals and
+          renders only when the switch above is on, reads existing proposals and
           runs nothing until the founder presses the button, and `onApplied`
           reloads so an accepted figure appears in the drawer rather than after a
-          refresh. `useAssistMode('market')` is the same module store the rail
-          reads, so the switch and this band cannot disagree. */}
+          refresh. `useAssistMode('market')` is the one store the switch below
+          writes, so the switch and this band cannot disagree. */}
+      {/* THE SWITCH LIVES ON THE PAGE (D317). It used to be the "AI fills the
+          blanks" card on the Eadwyn rail beside this page; the Spin-Out Lab
+          carries no Eadwyn rail, so the one control that turns these bands on
+          sits with them. Off by default: every run spends the founder's own
+          budget, so nothing runs until they turn it on. */}
+      {project && (
+        <label className="flex items-start gap-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[11px] px-4 py-3 mb-5 cursor-pointer" data-testid="market-fills-switch">
+          <input
+            type="checkbox"
+            role="switch"
+            checked={fillsOn}
+            onChange={(e) => setFillsOn(e.target.checked)}
+            className="mt-1 h-4 w-4 accent-violet-600"
+            data-testid="toggle-market-fills"
+          />
+          <span>
+            <span className="block text-[13px] font-semibold text-gray-900 dark:text-gray-50">AI fills the blanks</span>
+            <span className="block text-[12px] text-gray-500 dark:text-gray-400 mt-0.5">
+              {fillsOn ? FILLS_NOTE : FILLS_OFF_NOTE}
+            </span>
+          </span>
+        </label>
+      )}
       {project && (
         <FillProposals
           key="market-sizing"
@@ -1586,5 +1614,5 @@ export default function SpinoutLabMarketPage() {
     </LabPageShell>
   );
 
-  return <AssistLayout surface="market">{page}</AssistLayout>;
+  return page;
 }

@@ -39,9 +39,9 @@ import { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assis
  *     is quoting itself.
  *   - the mode TOGGLE renders only where a surface declares `kind: 'choice'`.
  *     Most are `'fixed'`, because their page does not branch on an assist
- *     mode and turning it "off" would change nothing (DECISIONS D17). Two
- *     declare a choice — `workspace` (Founder Validate's fills) and `market` —
- *     and `AssistLayout` wires `useAssistMode` (D45) behind the switch, so the
+ *     mode and turning it "off" would change nothing (DECISIONS D17). One
+ *     declares a choice — `workspace` (the founder desks' fills; `market` did
+ *     too until the Lab dropped the rail, D317) — and `AssistLayout` wires `useAssistMode` (D45) behind the switch, so the
  *     choice persists and the page reads the same answer. (This used to say
  *     every surface was fixed; D400.)
  *   - the model MENU is gone. aiRouter's ROUTE map picks the model from the
