@@ -33728,8 +33728,11 @@ this engine. It is left for whoever owns the in-app docs.
   `partner_shell`, `admin_placement_h35` and `workspaces_launcher_d284`.
 - 13 mutations, each restoring one piece of the engine, were all caught.
   Each file was restored from a sha256-checked snapshot.
-- Drift on main at `85f7fe914d`: BASE_COUNTS. On this branch: 4149 frontend,
-  4901 worker (3 skipped), 112 guard.
+- Drift on main at `85f7fe914d`: 4149 frontend, 4901 worker (3 skipped),
+  112 guard. On this branch, merged with main at `509fdd6e74`: 4156, 4905
+  (3 skipped), 112. The frontend's seven are this change's four plus the
+  three `509fdd6e74` brought (`app_typography`). The worker's four are this
+  change's.
 
 ## D380
 
