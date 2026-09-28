@@ -311,7 +311,7 @@ export const SIDEBAR_GROUPS = {
         match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/build/metrics', '/execution'] },
       { to: '/raise', icon: Sparkles, label: 'Raise', match: ['/raise', '/liquidity'] },
       { to: '/grow', icon: TrendingUp, label: 'Grow',
-        match: ['/grow', '/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications', '/spinout-lab/brand', '/build/brand', '/comarketing', '/perks', '/network-effects'] },
+        match: ['/grow', '/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications', '/build/brand', '/comarketing', '/perks', '/network-effects'] },
       // Points at /network, not at the first zone: /network is the one route
       // that role-branches its element, so it is the landing every license can
       // open, and it forwards to the zone. The three /network/* zone routes are

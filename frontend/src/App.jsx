@@ -2217,8 +2217,12 @@ function AppInner() {
           the founders' entry point for brand work. It does NOT replace
           /build/brand: layout and media editing still live there and the Lab
           page links to it (D360). It keeps the same roles as the old route
-          (any founder, plus active lab members). */}
-      <Route path="/spinout-lab/brand" element={guard(labRoles(['admin', 'founder']), founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><SpinoutLabBrandPage /></FounderWorkspaceTabs>))} />
+          (any founder, plus active lab members).
+          A SPIN-OUT LAB PAGE, NOT A GROW PAGE. It used to be wrapped in
+          founderWorkspace('grow', …) and the Grow tab bar, so the Lab tool
+          wore Grow's header, tabs and seam. Grow's Brand page is /grow/brand;
+          the two are separate pages and neither dresses as the other. */}
+      <Route path="/spinout-lab/brand" element={guard(labRoles(['admin', 'founder']), <SpinoutLabBrandPage />)} />
       <Route path="/spinout-lab/cofounder-agreement" element={guard(labRoles(['admin']), <SpinoutLabCofounderAgreementPage />)} />
       {/* Co-founder Match tool page (design: Co-founder Match.dc) — the Lab
           decision console; /cofounder stays the full browse/connections/NDA
