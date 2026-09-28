@@ -52,18 +52,15 @@ export default function FounderGrowPartnerships() {
       if (String(selected.id) !== requestedId) {
         setParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(selected.id)); return next; }, { replace: true });
       }
-      const results = await Promise.allSettled([
-        api.listMyCoMarketingPitches(),
-        api.listMyCoMarketingAttributions(),
-      ]);
-      const pitchResult = results[0];
-      const attributionResult = results[1];
-      const allPitches = pitchResult.status === 'fulfilled' ? list(pitchResult.value, 'items', 'pitches') : [];
-      const nextAttributions = attributionResult.status === 'fulfilled' ? list(attributionResult.value, 'items', 'attributions').filter((row) => linked(row, selected)) : [];
+      // The founder-side read: the pitches and attributions that touch this
+      // startup. `/me/pitches` and `/me/attributions` are the partner side and
+      // refuse every founder, which left this page permanently "unavailable".
+      const [result] = await Promise.allSettled([api.founderCoMarketing(selected.id)]);
+      const nextAttributions = result.status === 'fulfilled' ? list(result.value, 'attributions').filter((row) => linked(row, selected)) : [];
       const linkedPitchIds = new Set(nextAttributions.map((row) => String(row.pitch_id ?? '')).filter(Boolean));
-      const nextPitches = allPitches.filter((row) => linkedPitchIds.has(String(row.id)));
+      const nextPitches = result.status === 'fulfilled' ? list(result.value, 'pitches').filter((row) => linkedPitchIds.has(String(row.id))) : [];
       setPitches(nextPitches); setAttributions(nextAttributions);
-      if (results.some((result) => result.status === 'rejected')) setError('Some selected-project partnership sources are unavailable.');
+      if (result.status === 'rejected') setError(result.reason?.message || 'The selected-project partnership source is unavailable.');
     } catch (cause) {
       setProject(null); setPitches([]); setAttributions([]); setError(cause?.message || 'The partnership source is unavailable.');
     } finally { setLoading(false); }

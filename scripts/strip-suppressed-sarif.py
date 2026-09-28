@@ -46,11 +46,16 @@ def is_suppressed(result):
     """True when the scanner marked this result as suppressed in-source.
 
     SARIF 2.1.0 §3.27.23: an empty `suppressions` array means "known NOT to be
-    suppressed", and the property being absent means "no information". Only a
-    non-empty array is an actual suppression, so the emptiness check matters.
+    suppressed", and the property being absent means "no information". Only
+    entries with kind `inSource` represent inline suppression (`nosemgrep`).
     """
     suppressions = result.get("suppressions")
-    return isinstance(suppressions, list) and len(suppressions) > 0
+    if not isinstance(suppressions, list):
+        return False
+    return any(
+        isinstance(s, dict) and s.get("kind") == "inSource"
+        for s in suppressions
+    )
 
 
 def report_notifications(sarif):

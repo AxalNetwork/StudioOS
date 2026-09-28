@@ -165,7 +165,7 @@ test('the section draws each fund\'s committed, called, due and uncalled, and it
   assert.match(html, /\$150\.00(?:<!-- -->)? paid/, 'the violet share is what was paid, and it was labelled "called"');
   assert.doesNotMatch(html, /Call 0/, 'a line with no call number was drawn as call 0');
   assert.match(html, /data-testid="commitment-totals"/, 'two funds, no totals row');
-  assert.match(html, /data-testid="button-sign-lpa-101"/, 'an unsigned LPA offers no signature');
+  assert.match(html, /data-testid="button-sign-lpa-101"/, 'an unsigned LPA offers a signature action');
   assert.doesNotMatch(html, /data-testid="button-sign-lpa-100"/, 'a signed LPA is offered for signing again');
   assert.match(html, /Co-invest offers/);
 });

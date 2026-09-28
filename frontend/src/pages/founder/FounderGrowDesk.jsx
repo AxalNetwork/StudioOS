@@ -73,6 +73,13 @@ const calendarWindow = () => {
   return { from: from.toISOString(), to: to.toISOString() };
 };
 const text = (value) => String(value || '').trim();
+/** What each read is called when it fails, so the banner says which. */
+export const SOURCE_LABELS = {
+  snapshots: 'metric snapshots', summary: 'metric summary', customers: 'customer waitlist', jobs: 'roles',
+  landing: 'landing page', pages: 'landing pages', brandWaitlist: 'landing waitlist', prospects: 'raise prospects',
+  comarketing: 'co-marketing', events: 'launch calendar', targets: 'metric targets', funds: 'researched funds',
+};
+
 const linked = (row, project) => {
   if (!project || !row) return false;
   const numericMatch = [row.project_id, row.projectId].some((value) => value != null && String(value) === String(project.id));
@@ -136,7 +143,10 @@ export default function FounderGrowDesk() {
       snapshots: api.listMetricsSnapshots(projectId), summary: api.metricsSummary(projectId),
       customers: api.listWaitlistCustomers(projectId), jobs: jobsApi.mine(), landing: api.brandGetLanding(projectId),
       pages: api.brandListPages(projectId), brandWaitlist: api.brandListWaitlist(projectId), prospects: api.raiseProspects(projectId),
-      pitches: api.listMyCoMarketingPitches(),
+      // The founder-side co-marketing read. `/me/pitches` is the partner
+      // side and refuses every founder, which put "Some selected-project
+      // sources are unavailable" on this desk for everyone.
+      comarketing: api.founderCoMarketing(projectId),
       // A5's launch calendar. `/grow/launch` has read this since it was built;
       // the desk summarised the same zone off co-marketing attributions alone,
       // so a founder whose launches were on the calendar saw an empty card.
@@ -156,11 +166,8 @@ export default function FounderGrowDesk() {
         if (result.status === 'fulfilled') next[key] = result.value[1]; else failures.push(key);
       });
       const selectedProject = projects.find((item) => Number(item.id) === Number(projectId));
-      const pitches = list(next.pitches, 'items').filter((row) => linked(row, selectedProject));
-      if (pitches.length) {
-        const attributionResults = await Promise.allSettled(pitches.map((pitch) => api.listMyCoMarketingAttributions(pitch.uid || pitch.id)));
-        next.attributions = attributionResults.filter((item) => item.status === 'fulfilled').flatMap((item) => list(item.value, 'items')).filter((row) => linked(row, selectedProject));
-      } else next.attributions = [];
+      next.pitches = list(next.comarketing, 'pitches');
+      next.attributions = list(next.comarketing, 'attributions').filter((row) => linked(row, selectedProject));
       // Applicant counts per live role. A5's "1 role live · 14 applicants" is
       // backed by `jobsApi.applications`, which `/grow/talent` already calls
       // and this desk did not — so the card said "Applicant total: Not
@@ -174,7 +181,7 @@ export default function FounderGrowDesk() {
         count: item.status === 'fulfilled' ? list(item.value, 'applications').length : null,
       }));
       next.failed = failures;
-      if (alive) { setRecords(next); setError(failures.length ? 'Some selected-project sources are unavailable.' : ''); }
+      if (alive) { setRecords(next); setError(failures.length ? `Some selected-project sources are unavailable: ${failures.map((key) => SOURCE_LABELS[key] || key).join(', ')}.` : ''); }
     }).finally(() => alive && setLoading(false));
     return () => { alive = false; };
   }, [projectId, reload, setParams]);
@@ -202,7 +209,7 @@ export default function FounderGrowDesk() {
         key, label, count: customers.filter((row) => (text(row.crm_status) || 'new') === key).length,
       })),
       pages: list(records.pages, 'pages'), brandWaitlist: list(records.brandWaitlist, 'signups'),
-      prospects: list(records.prospects, 'items'), pitches: list(records.pitches, 'items').filter((row) => linked(row, project)),
+      prospects: list(records.prospects, 'items'), pitches: list(records.pitches, 'pitches').filter((row) => linked(row, project)),
       attributions: records.attributions || [], summary: records.summary || {}, landing: records.landing || {},
       events: list(records.events, 'items', 'events').filter((row) => linked(row, project)),
     };
