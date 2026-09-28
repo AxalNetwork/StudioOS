@@ -92,7 +92,7 @@ const SETS = {
   grow: [
     { to: '/build/team', label: 'Talent', icon: Users,
       roles: ['admin', 'founder'] },
-    { to: '/spinout-lab/brand', label: 'Brand', icon: Sparkles,
+    { to: '/grow/brand', label: 'Brand', icon: Sparkles,
       roles: ['admin', 'founder'] },
     { to: '/comarketing', label: 'Launch', icon: Megaphone,
       roles: ['admin', 'partner', 'founder', 'investor'] },

@@ -606,7 +606,12 @@ test('each mount wraps its own page, once, inside the exported component', () =>
   // a later helper function would still build — Vite transpiles rather than
   // type-checks — and would render nothing while looking correct in a diff.
   const PAGES = ['AdvisoryPage', 'SpinoutLabAdvisorsPage', 'BrandBuilderPage',
-    'SpinoutLabBrandPage', 'SpinoutLabMarketPage', 'DeckReviewerPage'];
+    'SpinoutLabMarketPage', 'DeckReviewerPage'];
+  // The Spin-Out Lab brand tool carries NO rail: the "Brand builder" card is
+  // the brand builder's (BrandBuilderPage above), and on the Lab tool it was
+  // Grow-side chrome on a Lab page.
+  assert.doesNotMatch(read('frontend/src/pages/SpinoutLabBrandPage.jsx'), /<AssistLayout\b/,
+    'the Spin-Out Lab brand page mounts an assist rail again');
   for (const name of PAGES) {
     const lines = read(`frontend/src/pages/${name}.jsx`).split('\n');
     const start = lines.findIndex((l) => l.startsWith('export default function'));
