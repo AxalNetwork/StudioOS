@@ -33059,7 +33059,7 @@ tab, a read-only list with one job per role:
 | Old job | Where it is now |
 | --- | --- |
 | An admin's studio-wide list of every call, fund or not | `/capital` (`CapitalPage`, `listCapitalCalls`, all rows for an admin) |
-| An investor's own calls as an LP | `/lp-portal`, the same `fundsLpPortal` source |
+| An investor's own calls as an LP | `/lp-portal`, the same `fundsLpPortal` source (since D372, My commitment on `/spinout-lab/investor-workspace`, which `/lp-portal` redirects to) |
 | A GP's calls on their fund | `/funds/calls`, now with numbers, receipts and writes |
 
 The tab took no query string of its own. `CapitalCallsPanel` and the helpers
@@ -33127,6 +33127,134 @@ only it used are deleted. `InvestorFundLanding`'s ledger link opens
   was frontend 4045, worker 4804 pass, retention 112. With D371 it is
   frontend 4063 (+18), worker 4835 pass (+31), retention 112, `EXIT=0`.
   Nothing fell.
+
+## D372
+
+**The LP workspace gets the LP's own position — My commitment — and the two
+duplicate routes to it retire (Session 9, item 3).** No migration, no new
+route, no new `api.js` method. It builds canvas I5 ("Investor LP Canvas") on
+the ledger D371 wrote.
+
+**What was there, measured on `b1b1cba9c1`.**
+- The LP's own commitments, calls, distributions and LPA signing lived on
+  `/lp-portal` (`LPPortalPage` around `FundsPage.jsx`'s `LPPortalView`). The
+  LP workspace (`/spinout-lab/investor-workspace`) linked there, and Fund Ops
+  carried the same workspace again as a tab at `/funds/lp-workspace`.
+- `GET /api/funds/lp-portal` returned each call line as `cc.*` and turned a
+  failed calls read into `[]`. TVPI and DPI read 0 when nothing was paid in.
+- "Message the GP" linked to `/help`.
+- The onboarding table's "Your status" came from the access ladder, so KYC
+  read "Complete" for anyone the GP had given a commitment, whatever Trust
+  said.
+- The fund model printed first close "Sep 15, 2026" and demo day "Aug 21,
+  2026" as ahead of the reader, both past, with the status "raising toward
+  first close".
+- The page said verification "is handled by Parallel Markets; the fund does
+  not store identity documents directly". Nothing in the code calls Parallel
+  Markets: KYC is submitted in Trust, the ID document is stored in R2
+  (`routes/kyc.ts`), and a person reviews it.
+- The raise panel said "Committed = countersigned subscription". The live
+  figure is commitments on the register; no subscription-document store
+  exists.
+
+**The rulings.**
+- **My commitment** (`pages/SpinoutLabLpCommitment.jsx`, summed by the pure
+  `lib/lpCommitmentModel.js`), on the workspace at `#my-commitment`, drawn for
+  anyone with a holding and when the portal read failed:
+  - per fund: committed, the LPA's signed date, a called / due / uncalled bar,
+    the next due date, and every call line with its state (paid, part
+    received, overdue, due). A line marked paid before receipts existed counts
+    as settled. Calls beyond the commitment are said, not hidden behind a
+    zero. Future calls: "the fund keeps no schedule of future calls";
+  - paid in, distributed with each distribution, TVPI and DPI ("Not recorded:
+    nothing has been paid in yet" when null);
+  - View LPA (`LPADrawer`, now exported from `FundsPage.jsx`) and Sign LPA
+    (`api.fundsSignLpa`, which keeps its KYC gate);
+  - totals across funds when there are several, with no total when any fund's
+    figure is unknown;
+  - co-invest offers "Not recorded" (no store) and Ask the report "Not built"
+    (Eadwyn has no investor reading surface) — the rest of the artboard, said.
+  A failed portal read, or a failed calls read, is `Unreadable` with a retry;
+  called, due and uncalled are then unknown, never zero.
+- **lp-portal** returns each line's `owed_cents`, `received_cents`,
+  `call_number`, `fund_id` and `fund_name`, reads 200 lines rather than 50,
+  and says `capital_calls_recorded: false` when the read fails. TVPI and DPI
+  are `null` with nothing paid in, here and in the GP's per-LP report, which
+  keeps the same arithmetic on purpose. The quarterly report never read the
+  holding's multiples, so nothing else moves.
+- **Message the GP** is an inline composer that starts a thread with the GP
+  of record's platform account through `POST /api/messages` (the existing
+  route; `MessagesPage` and `messages.ts` are Session 13's and untouched).
+  lp-portal's fund facts gain `gp.contact_email`, the GP of record's account
+  address, only on the LP's own funds. `gp.email` stays the address printed
+  on the LPA, which may not be an account. A fund with no GP account says so;
+  a viewer with no holding keeps "Contact the fund team" (`/help`).
+- **Onboarding status from records** (`onboardingStatus`): KYC from
+  `api.kycStatus` (Approved / In review / Rejected · resubmit in Trust / Not
+  started, or "Not read"); accreditation "Self-certified, not verified" from
+  the application; the LPA from the holdings; subscription documents and
+  banking "Not recorded".
+- **Dated facts.** `FUND_SCHEDULE` holds the two dates; a past one prints
+  "(date passed; outcome not recorded)", and the status line says the
+  first-close date has passed without claiming a close. The fund brief and
+  the quarterly report read the same values.
+- **The copy corrected.** The KYC paragraph now says what the code does; the
+  process step names Trust, not Parallel Markets; "Committed" is defined as
+  commitments recorded on the register. **Rights still follow the recorded
+  commitment** (`lpAccessState`), which is shipped behaviour on GP-written
+  rows; the copy stopped claiming a countersignature, the rule did not move.
+
+**Retired.**
+
+| Old route | Now | Jobs, and where they are |
+| --- | --- | --- |
+| `/lp-portal` ("My LP Portal") | `<Navigate replace>` to `/spinout-lab/investor-workspace#my-commitment`, keeping the query string; a bookmark's own hash wins | totals, the commitments table, view and sign LPA, TVPI/DPI, distributions, capital calls — all in My commitment |
+| `/funds/lp-workspace` (Fund Ops tab) | `<Navigate replace>` to `/spinout-lab/investor-workspace`, keeping query and hash | the same component, standalone |
+
+`LPPortalPage.jsx` and `LPPortalView` are deleted, with the chart imports only
+they used. Fund Ops loses its LP Workspace tab. The workspace's "My LP Portal"
+button is now "My commitment" (`#my-commitment`), and D371's pointer to
+`/lp-portal` for an LP's own calls, the Calls page's no-fund message and Fund
+Ops' locked preview all point at My commitment. No `sidebarConfig.js` row
+points at either path.
+
+**Found, not changed.**
+- The GP's per-LP report still turns a failed calls read into `[]`.
+- `GET /funds/:id/lpa` answers any signed-in user with a fund's LPA metadata
+  (redacted content) for any fund id.
+
+**Found and fixed on the way.** The card's integer reader turned an absent
+figure into 0 (`Number(null)` is 0): a line from before the ledger drew as
+"Call 0", and a line with no `owed_cents` would have owed nothing instead of
+its dollar amount. It now refuses a null before converting it. The bar's
+violet share is what was paid, and its legend said "called"; the legend now
+gives called, paid, due and uncalled separately.
+
+**Tests.** `cloudflare-worker/test/lp_portal_commitment_d372.test.ts` (6, on
+node:sqlite with migration 312 applied from its own file) and
+`frontend/test/lp_commitment_i5_d372.test.mjs` (16, the model, the
+onboarding statuses, the scheduled dates, the copy bans, the section drawn
+through `renderToStaticMarkup`, Message the GP and the retirements).
+`investor_workspaces.test.mjs` and `lp_spinout_lab_nav.test.mjs` are
+re-aimed at the redirects. Thirty mutations, each restored from a
+sha256-checked snapshot, were all caught by a failing named test: ten in the
+worker (receipts summed across the LP's lines, owed without the dollar
+fallback, a swallowed calls read, the LP scope dropped, TVPI 0 in the portal
+and in the GP's report, the document address as the message target, the
+signing date and the call number dropped, the account email dropped from the
+model) and twenty in the frontend (the null reader, called and TVPI read
+as 0, settled without the pre-ledger paid lines, negative uncalled, the
+over-call flag, overdue on the due date itself, KYC in review read as
+approved, an unread KYC given a status, accreditation shown as verified, the
+LPA and the storeless rows shown complete, a passed date not said, the sign
+button offered on a signed LPA, the totals row, the message sent to the
+document address, the paid legend, the `/lp-portal` hash and the
+`/funds/lp-workspace` route, and the calls-recorded flag ignored). The
+`/lp-portal` hash mutation escaped the new file and is caught by
+`investor_workspaces.test.mjs`, which is where that assertion lives. Drift on
+main at `b990540f47`: 4116 frontend, 4868 worker (3 skipped), 112 guard; on
+this branch 4132, 4874 (3 skipped), 112, which is the twenty-two new tests and
+no other change.
 
 ## D374
 

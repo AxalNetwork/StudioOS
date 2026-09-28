@@ -181,8 +181,10 @@ export const LPs = {
       `SELECT lp.*, f.name AS fund_name, f.status AS fund_status, f.carried_interest, f.management_fee,
               f.slug AS fund_slug, f.vintage_year AS fund_vintage,
               f.gp_name, f.gp_title, f.gp_email, f.gp_entity,
-              f.fund_admin, f.auditor, f.legal_counsel, f.custodian, f.valuation_policy
+              f.fund_admin, f.auditor, f.legal_counsel, f.custodian, f.valuation_policy,
+              gu.email AS gp_account_email
        FROM limited_partners lp JOIN vc_funds f ON f.id = lp.fund_id
+       LEFT JOIN users gu ON gu.id = f.gp_user_id
        WHERE ${scope.sql} ORDER BY lp.created_at DESC`
     ).bind(...scope.binds).all();
   },
