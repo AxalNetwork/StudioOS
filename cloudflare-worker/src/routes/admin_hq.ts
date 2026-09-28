@@ -41,6 +41,7 @@ import { fanOut, branchRead, coverage, withRegistry, type BranchResult } from '.
 import { openEscalations } from '../rpc/hqOps';
 import type { BranchOverview, BranchAccountHit, FundsRegistry } from '../rpc/branchOps';
 import { readFundsRegistry } from '../rpc/branchOps';
+import { FUND_METRIC_UNAVAILABLE } from '../services/fundRollup';
 import { FREEZING_STATUSES } from '../util/authErrors';
 import { ensureLastActiveColumn } from '../middleware/lastActive';
 import { ticketBacklog } from '../services/supportQueues';
@@ -823,7 +824,29 @@ r.get('/funds', async (c) => {
       reason: 'Opening a branch\'s Funds console from here is not built: no branch read renders a '
         + 'fund console, and the view-as overlay reads only a branch\'s overview and its accounts.',
     },
+    // D375 — what the Fabric canvas's F6 and F10 draw that no store holds.
+    // Each is said here, once, so the page prints the Worker's reason rather
+    // than its own, and none is drawn as a zero.
+    not_recorded: FABRIC_NOT_RECORDED,
   });
 });
+
+/**
+ * D375 — the F6 and F10 elements with no store behind them, and why. Exported
+ * so the test pins every key the page prints.
+ */
+export const FABRIC_NOT_RECORDED = {
+  platform_aum: 'No fund records a currency and no exchange rate is stored, so the funds\' figures cannot '
+    + 'be converted to one currency, and adding them would add euros to dollars.',
+  jurisdiction: 'No fund and no GP entity records a jurisdiction or domicile.',
+  hq_economics: 'HQ\'s share of each subsidiary GP\'s fees and carry is revenue per subsidiary, which stays '
+    + 'not recorded by the owner\'s brief: nothing records what a subsidiary owes HQ, accrued, invoiced '
+    + 'or collected.',
+  tvpi: `TVPI needs a fund-level valuation. ${FUND_METRIC_UNAVAILABLE.nav_cents}`,
+  obligations: 'No entity obligation store exists, so filing deadlines such as franchise tax are not '
+    + 'tracked and none can be flagged.',
+  report_cadence: 'No reporting cadence is stored, so how late a drafted report is cannot be said — only '
+    + 'that it is drafted and not issued.',
+} as const;
 
 export default r;
