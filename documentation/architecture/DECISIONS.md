@@ -31018,6 +31018,55 @@ Three mutations were run and all three were caught:
 - the shell no longer setting the class;
 - the rule no longer matching.
 
+## D316
+
+**The stale-chunk reload budget belongs to a build, not to the tab.**
+
+**The report.** On `/company-settings` (Safari), the card read "This page
+hit an unexpected error … A new version of the app was just deployed",
+followed by `undefined is not an object (evaluating 'e._result.default')`.
+
+**What it was.**
+
+- The page's chunk is sound. It loads, it has its default export, and every
+  file it references is in the build.
+- The card appears when a tab still running an old build asks for a chunk
+  that has since left `docs/`. The build keeps three builds' files, and
+  2026-09-28 had about ten deploys.
+- Recovery from that already existed: `main.jsx` and `RouteErrorBoundary`
+  each reload once to pick up the new build.
+- **But the bound was counted for the whole tab and never reset.** A tab
+  that recovered after the morning's first deploy had spent its budget. On
+  every later deploy it therefore showed the card instead of reloading.
+
+**The fix.** `reloadGuard.recordAttempt` stores each attempt with the build
+it was spent on, identified by the hashed entry script, for example
+`1@/assets/index-….js`. `readAttempts` does not count an attempt recorded
+against another build.
+
+- **The loop bound is unchanged.** Reloading onto the same build reads the
+  same count.
+- **A tab that has loaded a newer build gets its recovery back.**
+- **Older stored values still read.** The value still starts with the count,
+  so an untagged count from before this change reads as before, and so does
+  the boot watchdog's `parseInt`.
+- **With no entry script to read** (Node, the dev server), scoping stays off.
+- **Both callers write through the recorder:** `main.jsx`'s stale-chunk
+  recovery, and `reloadWithinBudget` (the boundary and the service worker).
+
+**Tests.** `chunk_reload_loop.test.mjs` gains two tests, and all 21 pass:
+
+- the same build stays bounded, a newer build reads a fresh budget, an
+  untagged count still counts, and no entry script means no scoping;
+- both callers use the recorder.
+
+Four mutations were run and all four were caught:
+
+- the build check removed (the bug returns);
+- every tagged attempt ignored (the loop becomes unbounded);
+- attempts no longer tagged with their build;
+- `main.jsx` bypassing the recorder.
+
 ## D320
 
 **The archetype banks go from three probes per trait to five, and every one
