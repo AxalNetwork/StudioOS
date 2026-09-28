@@ -2453,6 +2453,20 @@ export const api = {
   adminSpinoutModeration: (userId) => request(`/admin/spinout-moderation/${userId}`),
   adminSpinoutModerate: (userId, data) =>
     request(`/admin/spinout-moderation/${userId}`, { method: 'POST', body: JSON.stringify(data) }),
+  // D377 — who hosts Spin-Out Lab office hours. A partner or advisor applies
+  // from their own bookable profile (Investor / Advisor / Partner); an admin
+  // approves, rejects or revokes; /spinout-lab/office-hours lists approved
+  // hosts only. Worker: routes/lab_hosts.ts.
+  labHostsMe: () => request('/spinout-lab/hosts/me'),
+  labHostApply: (data) =>
+    request('/spinout-lab/hosts/apply', { method: 'POST', body: JSON.stringify(data) }),
+  labHostWithdraw: (uid) =>
+    request(`/spinout-lab/hosts/me/${encodeURIComponent(uid)}/withdraw`, { method: 'POST' }),
+  labHostDirectory: () => request('/spinout-lab/hosts/directory'),
+  adminLabHosts: (status) =>
+    request(`/admin/lab-hosts${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  adminDecideLabHost: (uid, decision, note) =>
+    request(`/admin/lab-hosts/${encodeURIComponent(uid)}/decision`, { method: 'POST', body: JSON.stringify(note ? { decision, note } : { decision }) }),
   // Cohort Timing & Gating — Worker-only endpoints (405/404 in dev backend;
   // callers show a fallback). Timeline of monthly cycles + week windows,
   // review queue (failed/grace/at-risk), grace extensions and pass/fail

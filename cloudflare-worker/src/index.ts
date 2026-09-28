@@ -195,6 +195,7 @@ import radarRoutes from './routes/radar';
 import spinoutLabRoutes from './routes/spinout_lab';
 import spinoutCertificateRoutes, { publicCertificateRoutes } from './routes/spinout_certificates';
 import spinoutModerationRoutes from './routes/spinout_moderation';
+import { labHosts, adminLabHosts } from './routes/lab_hosts';
 // T13/T14/T15 — port of FastAPI mentors/partner_office_hours/watchlist/journal/
 // portfolio_health/references/comarketing/company/needs/insights routers.
 import advisorsRoutes from './routes/advisors';
@@ -1067,6 +1068,11 @@ app.route('/api/spinout-lab', spinoutCertificateRoutes);
 // Lab participant moderation (admin only). Moves spinout_lab_active,
 // never users.is_active — see the route file header.
 app.route('/api/admin/spinout-moderation', spinoutModerationRoutes);
+// D377 — who hosts Spin-Out Lab office hours: the applicant side (apply from
+// your own partner or advisor profile, and the approved-only directory Office
+// Hours reads) and the admin review queue. See routes/lab_hosts.ts.
+app.route('/api/spinout-lab/hosts', labHosts);
+app.route('/api/admin/lab-hosts', adminLabHosts);
 // T13 — Advisors (formerly Mentors) + Partner Office Hours.
 // `/api/mentors` is kept as a permanent alias so old clients/bookmarks keep working.
 app.route('/api/advisors', advisorsRoutes);

@@ -424,7 +424,7 @@ test('the advisor catalogue can now reach the celebration threshold', async () =
 });
 
 test('the total is the role\'s own catalogue, so an investor can finish', async () => {
-  // D377. The total was a fixed 10 while every catalogue held ten steps. The
+  // D378. The total was a fixed 10 while every catalogue held ten steps. The
   // investor's now holds eight (inv.review and inv.intro left with the AI
   // Matching Engine), and a fixed 10 would read "8 / 10" with nothing left to
   // do and never reach "You're all set!".

@@ -33723,10 +33723,94 @@ A second create that sends only a name now asserts `fields: ['name']`.
 
 ## D377
 
+**Who appears on Spin-Out Lab Office Hours: hosts who applied and an admin
+approved (migration 313, Session 13).** `/spinout-lab/office-hours` read
+`GET /partners`, so every partner profile on the platform was shown to Lab
+founders as bookable. The owner's rule: only people who applied to the Lab as
+an Investor, Advisor or Partner, and whom an admin or super admin approved,
+appear there.
+
+**A host is a bookable profile.** A founder books a real calendar, so an
+application names one:
+
+- a partner profile (`users.partner_id`), booked through partner office-hour
+  slots; it applies as Investor, Advisor or Partner;
+- an advisor profile (`advisors.user_id`), booked through advisor slots; it
+  applies as Advisor (the owner's answer: "also advisor accounts").
+
+The Worker resolves the profile from the caller's account, never from the
+request, so nobody applies on another person's profile.
+
+**Migration 313** (additive, stands alone) adds `lab_host_applications`:
+
+- one row per application, with the host kind, host id, capacity, an
+  optional statement, and the status;
+- status runs pending → approved | rejected (an admin), pending → withdrawn
+  (the applicant), approved → revoked (an admin);
+- a decision records who made it and when, and an optional note the applicant
+  sees;
+- a partial unique index allows at most one live (pending or approved)
+  application per profile. Decided rows are kept, and a new application can
+  follow a rejection, withdrawal or revocation.
+
+Number 313 was free and the ledger runner is set-based, so it lands after 323.
+
+**Routes** (`routes/lab_hosts.ts`):
+
+- `/api/spinout-lab/hosts`: `GET /me`, `POST /apply`,
+  `POST /me/:uid/withdraw`, and `GET /directory`;
+- `/api/admin/lab-hosts`: `GET /` (by status, with counts per status) and
+  `POST /:uid/decision`.
+
+**The directory** reads approved rows only. It is further filtered by each
+host's own profile: an inactive partner or advisor is left out while still
+approved. Its readers are Lab founders, active Lab members and admins. It
+carries what a card and the booking drawer draw, and never an email, a
+statement or a review note.
+
+Decisions are `requireAdmin`, which includes every super admin. Each one is a
+conditional UPDATE on the from-status, logged through `logAdminAction` as
+`lab_host.approve|reject|revoke`, with the applicant as target.
+
+**It starts empty** (the owner's choice). Nothing was backfilled, so the page
+lists no one until an admin approves someone. Its empty state says who can
+be listed and how.
+
+**Pages:**
+
+- Office Hours reads the directory. A host is tagged with the capacity it was
+  approved as, and an Advisors filter joins the taxonomy.
+- An advisor host is booked on the advisor slot route, so that route's
+  Growth-tier gate applies and its refusal is what the drawer prints. The
+  booking also counts toward the advisor Week-3 milestone, as it would from
+  `/spinout-lab/advisors`. Partner hosts keep the untiered route and the
+  optional milestone, so the split pinned by `spinout_booking_surfaces.test.mjs`
+  still holds for partners.
+- Partners apply from Partner office hours, and advisors from Practice ·
+  Sessions (`LabHostApplyCard`).
+- Admins decide from a new "Office-hours hosts" tab of Admin · Spin-Out Lab
+  (`AdminLabHosts`).
+
+**Tests:**
+
+- `cloudflare-worker/test/lab_hosts_d377.test.ts`, 11 tests;
+- `frontend/test/lab_hosts_d377.test.mjs`, 14 tests;
+- `spinout_booking_surfaces.test.mjs`, re-aimed to the new tile description.
+
+Mutations: 40, all caught (21 Worker, 19 frontend). One escaped at first:
+the advisor half of the directory reading pending rows (W2), because the
+empty-until-approved test applied only from a partner profile. It now applies
+from an advisor profile too.
+
+## D378
+
 **The AI Matching Engine is deleted: the `/matches` page, its six worker
 endpoints and every link to it (Session 9).** No migration. Asked for by the
 owner, with a screenshot of the page: "Delete AI Matching Engine page and
 feature".
+
+Drafted as D377. #947 (Spin-Out Lab office hosts) merged first under that
+number, so this entry is D378, and its tests are named `_d378`.
 
 **What went.**
 
@@ -33792,12 +33876,12 @@ co-founder, advisor and partner tabs. No such page exists, and it was never
 this engine. It is left for whoever owns the in-app docs.
 
 **Tests.**
-- `cloudflare-worker/test/matches_engine_removed_d377.test.ts` (3 tests) holds
+- `cloudflare-worker/test/matches_engine_removed_d378.test.ts` (3 tests) holds
   three things:
   - the router serves exactly `GET /summary`;
   - the mount stays and the co-invest gate does not;
   - no checklist step routes to `/matches`.
-- `frontend/test/matches_engine_removed_d377.test.mjs` (4 tests) holds four:
+- `frontend/test/matches_engine_removed_d378.test.mjs` (4 tests) holds four:
   - the files and the route are gone;
   - `api.js` calls only `/matches/summary`;
   - no nav, launcher, persona, tab or checklist file points at `/matches`;

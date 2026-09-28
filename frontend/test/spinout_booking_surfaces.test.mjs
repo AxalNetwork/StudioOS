@@ -5,9 +5,12 @@
  *                              gaps in your latest scoring run. Growth-tier
  *                              gated. Completing a booking satisfies the
  *                              Week-3 REQUIRED milestone.
- *   /spinout-lab/office-hours  PARTNER ORGANISATIONS — investors, lawyers,
- *                              operators. No tier gate. Fires an OPTIONAL
- *                              milestone.
+ *   /spinout-lab/office-hours  APPROVED HOSTS (D377) — partner organisations
+ *                              an admin approved as Investor, Advisor or
+ *                              Partner (no tier gate; fires an OPTIONAL
+ *                              milestone), and advisors an admin approved to
+ *                              host here (booked through the advisor slot
+ *                              route, so its tier gate and milestone apply).
  *
  * They share no tables, and the split is deliberate: it is load-bearing in the
  * milestone gate, the paywall, the matching engine, the review system, and
@@ -46,7 +49,7 @@ test('the two tiles no longer describe themselves interchangeably', () => {
 
 test('each tile names who you actually book', () => {
   assert.match(WORKSPACE, /advisors: \{[^}]*desc: '1:1 advisors matched to your gaps'/);
-  assert.match(WORKSPACE, /'office-hours': \{[^}]*desc: 'Investors, lawyers & operators'/);
+  assert.match(WORKSPACE, /'office-hours': \{[^}]*desc: 'Approved investors, advisors & partners'/);
 });
 
 test('the two descriptions stay distinct', () => {
