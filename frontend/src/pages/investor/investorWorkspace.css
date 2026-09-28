@@ -10,7 +10,7 @@
   --inv-seam-soft: #f0fdff;
   --inv-seam-line: #a5edf5;
   color: var(--inv-ink);
-  font-family: "Space Grotesk", var(--font-sans), system-ui, sans-serif;
+  font-family:var(--font-app);
 }
 
 .investor-workspace * { box-sizing: border-box; }

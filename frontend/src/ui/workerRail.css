@@ -124,7 +124,7 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
 /* The model id under its short name — long, monospaced and deliberately quiet:
    it is there to be checked against the router's table, not read. */
 .fwr-model-id {
-  font-family: ui-monospace, Menlo, monospace;
+  font-family:var(--font-mono);
   font-size: 9.5px; word-break: break-all;
   color: var(--fwr-faint);
 }

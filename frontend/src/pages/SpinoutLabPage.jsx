@@ -238,7 +238,7 @@ export function ApplyCtaSection({ applyHref = LAB_APPLY_HREF }) {
 // the admin journey preview (Task #106), which feeds it simulated props.
 export function CongratulationsScreen({ cohort, onStart, starting, startError }) {
   return (
-    <div className="min-h-[100dvh] bg-[#F8F8FA] dark:bg-gray-950 font-sans text-gray-900 dark:text-gray-100 flex items-center justify-center px-6 py-16">
+    <div className="min-h-[100dvh] bg-[#F8F8FA] dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex items-center justify-center px-6 py-16">
       <div className="max-w-[620px] w-full text-center">
         <div className="rounded-[24px] p-10 md:p-14 text-white relative overflow-hidden mb-6" style={{ background: 'radial-gradient(1200px 400px at 12% -20%,rgba(139,92,246,.5),transparent 60%),linear-gradient(115deg,#1e1b3a 0%,#2a1d54 55%,#3b1d6e 100%)' }}>
           <div className="relative z-10">
@@ -322,7 +322,7 @@ export function Dashboard({ state, investorView = false }) {
   const shipped = useShippedFeed({ enabled: true });
 
   return (
-    <div className="min-h-[100dvh] bg-white dark:bg-gray-950 font-sans text-gray-900 dark:text-gray-100">
+    <div className="min-h-[100dvh] bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100">
       <LabIntro
         surface="app"
         cohort={cohort}
