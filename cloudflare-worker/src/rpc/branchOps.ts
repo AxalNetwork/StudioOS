@@ -890,6 +890,14 @@ export type RegistryFund = {
    * either sum could not be read.
    */
   dpi?: number | null;
+  /**
+   * D376 — the jurisdiction of the fund's vehicle entity (`vc_funds.
+   * vehicle_entity_id`, migration 314). Null when no vehicle is linked or it
+   * records none; absent when the entities could not be read.
+   */
+  jurisdiction?: string | null;
+  /** The same, for the fund's linked GP entity (`gp_entity_id`). */
+  gp_entity_jurisdiction?: string | null;
   flags: RegistryFlags;
 };
 
@@ -903,6 +911,8 @@ export type FundsRegistry = {
   calls_reason?: string;
   distributions_available: boolean;
   distributions_reason?: string;
+  entities_available: boolean;
+  entities_reason?: string;
 };
 
 const blank = (v: unknown) => typeof v !== 'string' || v.trim() === '';
@@ -938,8 +948,8 @@ const readError = (e: unknown) => String((e as Error)?.message || e).slice(0, 20
  * one fund's two figures in that fund's own currency, so it is a real ratio
  * even though neither figure's currency is recorded.
  *
- * EACH SECOND TABLE IS ITS OWN READ. Report periods, call lines and
- * distributions each answer or fail alone; a failure leaves the funds
+ * EACH SECOND TABLE IS ITS OWN READ. Report periods, call lines,
+ * distributions and (D376) the linked entities each answer or fail alone; a failure leaves the funds
  * answering, with that field absent and a reason on the registry — unknown,
  * never "none" and never 0.
  */
@@ -995,6 +1005,8 @@ export async function readFundsRegistry(env: Env): Promise<FundsRegistry> {
   let callsReason: string | undefined;
   let distributionsAvailable = true;
   let distributionsReason: string | undefined;
+  let entitiesAvailable = true;
+  let entitiesReason: string | undefined;
   if (funds.length) {
     try {
       // The newest period of each STATUS per fund: the issued one is the last
@@ -1063,6 +1075,28 @@ export async function readFundsRegistry(env: Env): Promise<FundsRegistry> {
       distributionsReason = 'The fund distributions could not be read on this database, so what each fund '
         + `has paid out is unknown rather than nothing: ${readError(e)}`;
     }
+
+    // D376 — a fund's jurisdiction is its vehicle entity's, and its GP's is
+    // the GP entity's (migration 314's two links). Only the jurisdiction
+    // leaves: no entity name, number, agent or officer crosses the RPC.
+    try {
+      const linked = await env.DB.prepare(
+        `SELECT f.id AS fund_id, ve.jurisdiction AS vehicle_jurisdiction, ge.jurisdiction AS gp_jurisdiction
+           FROM vc_funds f
+           LEFT JOIN entities ve ON ve.id = f.vehicle_entity_id
+           LEFT JOIN entities ge ON ge.id = f.gp_entity_id`,
+      ).all<{ fund_id: number; vehicle_jurisdiction: string | null; gp_jurisdiction: string | null }>();
+      const byFund = new Map((linked.results || []).map((x) => [Number(x.fund_id), x]));
+      for (const f of funds) {
+        const x = byFund.get(f.id);
+        f.jurisdiction = x && !blank(x.vehicle_jurisdiction) ? String(x.vehicle_jurisdiction).trim() : null;
+        f.gp_entity_jurisdiction = x && !blank(x.gp_jurisdiction) ? String(x.gp_jurisdiction).trim() : null;
+      }
+    } catch (e) {
+      entitiesAvailable = false;
+      entitiesReason = 'The fund entities could not be read on this database, so each fund\'s jurisdiction '
+        + `is unknown rather than unrecorded: ${readError(e)}`;
+    }
   }
 
   return {
@@ -1074,6 +1108,8 @@ export async function readFundsRegistry(env: Env): Promise<FundsRegistry> {
     ...(callsReason ? { calls_reason: callsReason } : {}),
     distributions_available: distributionsAvailable,
     ...(distributionsReason ? { distributions_reason: distributionsReason } : {}),
+    entities_available: entitiesAvailable,
+    ...(entitiesReason ? { entities_reason: entitiesReason } : {}),
   };
 }
 

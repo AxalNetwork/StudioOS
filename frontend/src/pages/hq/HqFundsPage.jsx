@@ -9,11 +9,13 @@
  * F6 · OVERSIGHT, READ-ONLY. Five stats, the all-funds table and the flags
  * feed. What the canvas draws that no store holds is printed as Not recorded
  * with the Worker's own reason (`not_recorded` on the payload), never as a
- * figure: platform AUM and the FX date (no fund records a currency), the
- * jurisdiction column and its count (no fund or GP entity records one), TVPI
+ * figure: platform AUM and the FX date (no fund records a currency), TVPI
  * (no fund-level valuation), HQ's economics ledger and "HQ accrued" (revenue
  * per subsidiary stays not recorded by the owner's brief), and a filing
- * deadline such as franchise tax (no obligation store).
+ * deadline such as franchise tax (no obligation store for a fund's entities).
+ * A fund's jurisdiction is its linked vehicle entity's, and the GP entities'
+ * count is of the linked GP entities' (D376, migration 314); an unlinked fund
+ * reads Not recorded.
  *
  * F10 · HONESTY STATES. Each fund's flags come from the database that holds
  * it: no GP of record (which blocks LPA issue — D370 enforces it), custodian
@@ -124,6 +126,18 @@ export function dpiCell(fund, source) {
 }
 
 /**
+ * The Jurisdiction cell (D376): the fund's vehicle entity's jurisdiction. A
+ * fund linked to no vehicle, or to one that records none, is Not recorded
+ * with the Worker's reason; a failed entities read is Unreadable.
+ */
+export function jurisdictionCell(fund, source, reason) {
+  if (source?.entities_available === false) return { kind: 'unreadable', reason: source.entities_reason || null };
+  if (fund?.jurisdiction === undefined) return { kind: 'not_reported', reason: NOT_REPORTED };
+  if (fund.jurisdiction === null) return { kind: 'unrecorded', reason: reason || null };
+  return { kind: 'value', text: fund.jurisdiction };
+}
+
+/**
  * One fund's F10 flags, worst first, or null when the answer carries none
  * (a branch on an earlier build) — which is "not reported", never "clear".
  */
@@ -202,6 +216,8 @@ export function oversightStats(payload) {
     funds: funds.length,
     withCommitted: funds.filter((f) => typeof f.committed_minor === 'number').length,
     gpEntities: new Set(funds.map((f) => f.gp_entity).filter(Boolean)).size,
+    // D376: counted from GP entities an admin has linked, so it is a floor.
+    jurisdictions: new Set(funds.map((f) => f.gp_entity_jurisdiction).filter(Boolean)).size,
     openFlags: flagFeed(payload).length,
     unreported,
     holding: answered.filter((s) => Array.isArray(s.data?.funds) && s.data.funds.length).length,
@@ -272,7 +288,7 @@ export function FundsTable({ payload }) {
                       {issued ?? <span className="italic text-red-700 dark:text-red-300" title={r.source.periods_reason || undefined}>Unreadable</span>}
                     </div>
                   </td>
-                  <td className="px-2 py-2"><Unrecorded reason={nr.jurisdiction} /></td>
+                  <td className="px-2 py-2 font-mono text-[11px]"><CellState cell={jurisdictionCell(f, r.source, nr.jurisdiction)} /></td>
                   <td className="px-2 py-2 tabular-nums">
                     {f.vintage_year === undefined ? <Unrecorded reason={NOT_REPORTED}>Not reported</Unrecorded>
                       : f.vintage_year === null ? <Unrecorded reason="The fund records no vintage year." />
@@ -323,7 +339,13 @@ export function OversightStats({ payload }) {
   const tiles = [
     { k: 'Platform AUM', v: <Unrecorded reason={nr.platform_aum} />, note: nr.platform_aum },
     { k: 'Funds', v: s.funds, note: `${s.withCommitted} with a committed figure` },
-    { k: 'GP entities', v: s.gpEntities, note: <>jurisdictions: <Unrecorded reason={nr.jurisdiction} /></> },
+    {
+      k: 'GP entities',
+      v: s.gpEntities,
+      note: s.jurisdictions
+        ? `across ${s.jurisdictions} ${s.jurisdictions === 1 ? 'jurisdiction' : 'jurisdictions'}, from linked GP entities`
+        : <>jurisdictions: <Unrecorded reason={nr.jurisdiction} /></>,
+    },
     { k: 'HQ accrued', v: <Unrecorded reason={nr.hq_economics} />, note: 'brand-licence share' },
     { k: 'Open flags', v: s.openFlags, note: s.unreported ? `${s.unreported} not reported` : 'see the feed', warn: s.openFlags > 0 },
   ];
@@ -446,6 +468,7 @@ export default function HqFundsPage() {
     ...(s.data.calls_available === false ? [`${s.label}: call lines unreadable`] : []),
     ...(s.data.distributions_available === false ? [`${s.label}: distributions unreadable`] : []),
     ...(s.data.periods_available === false ? [`${s.label}: report periods unreadable`] : []),
+    ...(s.data.entities_available === false ? [`${s.label}: fund entities unreadable`] : []),
   ]) : [];
   const coverage = ready ? [
     ...(data.hq?.status === 'ok' ? [`HQ: ${data.hq.data.funds.length} ${data.hq.data.funds.length === 1 ? 'fund' : 'funds'} read`] : []),

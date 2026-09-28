@@ -838,13 +838,14 @@ r.get('/funds', async (c) => {
 export const FABRIC_NOT_RECORDED = {
   platform_aum: 'No fund records a currency and no exchange rate is stored, so the funds\' figures cannot '
     + 'be converted to one currency, and adding them would add euros to dollars.',
-  jurisdiction: 'No fund and no GP entity records a jurisdiction or domicile.',
+  jurisdiction: 'A fund\'s jurisdiction is its vehicle entity\'s, and a GP\'s is its GP entity\'s (D376). '
+    + 'Until an admin links a fund to an entity that records one, it reads not recorded.',
   hq_economics: 'HQ\'s share of each subsidiary GP\'s fees and carry is revenue per subsidiary, which stays '
     + 'not recorded by the owner\'s brief: nothing records what a subsidiary owes HQ, accrued, invoiced '
     + 'or collected.',
   tvpi: `TVPI needs a fund-level valuation. ${FUND_METRIC_UNAVAILABLE.nav_cents}`,
-  obligations: 'No entity obligation store exists, so filing deadlines such as franchise tax are not '
-    + 'tracked and none can be flagged.',
+  obligations: 'Filing deadlines such as franchise tax are recorded only for founder companies, each '
+    + 'against a project; no fund or GP entity has an obligation store, so none can be flagged here.',
   report_cadence: 'No reporting cadence is stored, so how late a drafted report is cannot be said — only '
     + 'that it is drafted and not issued.',
 } as const;
