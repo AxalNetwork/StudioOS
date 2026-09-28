@@ -1,9 +1,9 @@
 /**
  * D357 — Profiling v2 scoring engine + profile history store
- * (documentation/architecture/PROFILING_V2.md; migration 362).
+ * (documentation/architecture/PROFILING_V2.md; migration 363).
  *
  * On node:sqlite over the baseline's own `users` and `advisor_answers` plus
- * the WHOLE migration 362 (its trigger included):
+ * the WHOLE migration 363 (its trigger included):
  *   1. the Session 6 personas: all 16 classify to their archetype from their
  *      target vectors AND from their answer ledgers; both blends report both
  *      archetypes; every evolution checkpoint's displayed and computed
@@ -48,7 +48,8 @@ import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel: string) => readFileSync(resolve(ROOT, rel), 'utf8');
 const BASELINE = read('cloudflare-worker/sql/schema_baseline.sql');
-const MIGRATION = read('cloudflare-worker/sql/migrations/362_profile_snapshots.sql');
+const MIGRATION = read('cloudflare-worker/sql/migrations/363_profile_snapshots.sql');
+const EVIDENCE_MIGRATION = read('cloudflare-worker/sql/migrations/362_skill_evidence.sql');
 const FIXTURE = JSON.parse(read('cloudflare-worker/test/fixtures/profiling-v2-personas.json'));
 const ADVISOR_ROUTE = read('cloudflare-worker/src/routes/advisor.ts');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -390,7 +391,7 @@ const itemsFor = () => ITEMS;
 const snapshots = (db: InstanceType<typeof DatabaseSync>, userId = 1) =>
   db.prepare('SELECT * FROM profile_snapshots WHERE user_id = ? ORDER BY id').all(userId).map((r: any) => ({ ...r }));
 
-test('migration 362 stands alone on the baseline: its tables, CHECKs and the answered_at column', () => {
+test('migration 363 stands alone on the baseline: its tables, CHECKs and the answered_at column', () => {
   const db = freshDb();
   const cols = db.prepare('PRAGMA table_info(advisor_answers)').all().map((c: any) => c.name);
   assert.ok(cols.includes('answered_at'));
@@ -440,6 +441,26 @@ test('a new engine version is material; the snapshot says which version wrote it
   assert.equal(isMaterialChange({ ...prev, traits: { ...prev.traits, builder: (prev.traits.builder as number) + 0.3 } } as any, prof), true);
   assert.equal(isMaterialChange({ ...prev, traits: { ...prev.traits, builder: (prev.traits.builder as number) + 0.1 } } as any, prof), false);
   assert.equal(isMaterialChange(null, prof), true);
+});
+
+test('Session 8’s stored evidence reaches the snapshot, weighted per source, and never becomes a level', async () => {
+  const db = freshDb();
+  db.exec(EVIDENCE_MIGRATION);
+  const ev = db.prepare(`INSERT INTO skill_evidence (user_id, axis, source, count_lifetime, count_window, weighted, first_at, last_at, computed_at)
+                         VALUES (1, ?, ?, ?, ?, ?, '2026-01-01T00:00:00Z', '2026-05-01T00:00:00Z', '2026-06-01T03:00:00Z')`);
+  ev.run('finance_ops', 'financial_model', 2, 2, 2);        // weight 1
+  ev.run('finance_ops', 'cap_table_security', 1, 1, 1);     // weight 1
+  ev.run('legal_compliance', 'esign_signed', 4, 4, 4);      // weight 0.5
+  ev.run('design', 'brand_site', 1, 1, 1);                  // another user's would not be read
+  db.prepare(`INSERT INTO skill_evidence (user_id, axis, source, count_lifetime, count_window, weighted, first_at, last_at, computed_at)
+              VALUES (2, 'product', 'okr_shipped', 9, 9, 9, '2026-01-01T00:00:00Z', '2026-05-01T00:00:00Z', '2026-06-01T03:00:00Z')`).run();
+  give(db, 1, answers(3, 2, 'cause', '2026-06-01T09:00:00Z'));
+  await recomputeProfile({ DB: d1(db) } as any, 1, { trigger: 'evidence', asOf: '2026-06-01T10:00:00Z', itemsFor });
+  const skills = JSON.parse(snapshots(db)[0].skills_json);
+  assert.deepEqual(skills.finance_ops, { self: null, evidence: 3, blended: null, state: 'evidence_only' });
+  assert.equal(skills.legal_compliance.evidence, 2, 'esign_signed counts half');
+  assert.equal(skills.product.evidence, null, 'another user’s evidence is not read');
+  assert.equal(skills.product.state, 'not_recorded');
 });
 
 test('snapshots are append-only: a rewrite is refused by the database', async () => {

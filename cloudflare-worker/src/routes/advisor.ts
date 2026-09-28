@@ -181,7 +181,7 @@ async function ensureSchema(env: Env): Promise<void> {
       "CREATE TABLE IF NOT EXISTS advisor_answers (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id INTEGER NOT NULL REFERENCES advisor_conversations(id) ON DELETE CASCADE, user_id INTEGER NOT NULL, question_id TEXT NOT NULL, raw_value TEXT, saved_to_table TEXT, saved_to_column TEXT, saved_to_id TEXT, saved_status TEXT NOT NULL, saved_error TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), answered_at TEXT, UNIQUE(conversation_id, question_id))"
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_advisor_answers_user_q ON advisor_answers(user_id, question_id)");
-    // D357 — migration 362's answered_at, for a table that predates it. The
+    // D357 — migration 363's answered_at, for a table that predates it. The
     // column is declared by the migration; this is the safety net only.
     const answerCols = await env.DB.prepare(`PRAGMA table_info(advisor_answers)`).all<{ name: string }>();
     if (!(answerCols.results || []).some((r) => r.name === 'answered_at')) {

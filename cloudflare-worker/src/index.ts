@@ -705,10 +705,6 @@ for (const p of INVESTOR_PRO_PREFIXES) {
 // browsing pulses/benchmarks remains free. Inline gate lives in
 // market_intel.ts /export.
 app.use('/api/market-intel/export', requireInvestorTier('professional'));
-// Institutional-only surfaces: co-invest discovery + dealroom Carta-write
-// (general /api/captable POST is still founder/admin; this guards investor
-// callers specifically). LP reporting + benchmarks ship in AC-1.
-app.use('/api/matches/co-invest', requireInvestorTier('institutional'));
 
 app.route('/api/scoring', scoring);
 app.route('/api/projects', projects);

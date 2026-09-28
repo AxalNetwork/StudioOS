@@ -1356,8 +1356,6 @@ export const api = {
   createUser: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
 
   matchPartnersLegacy: (data) => request('/partners/matchPartners', { method: 'POST', body: JSON.stringify(data) }),
-  // Task #16 — investor matching for founders
-  matchInvestors: (projectId) => request('/matches/investor-match', { method: 'POST', body: JSON.stringify({ project_id: projectId }) }),
   generateMemo: (data) => request('/scoring/generateMemo', { method: 'POST', body: JSON.stringify(data) }),
   capitalCall: (data) => request('/capital/capitalCall', { method: 'POST', body: JSON.stringify(data) }),
 
@@ -2698,12 +2696,6 @@ export const api = {
   deckPrintExportRead: (token) => request(`/decks/print-export/${encodeURIComponent(token)}`),
   deckGetBrand: () => request('/decks/brand'),
   deckSetWatermark: (url) => request('/decks/brand/watermark', { method: 'PUT', body: JSON.stringify({ watermark_url: url }) }),
-
-  matchDealFlow: () => request('/matches/deal-flow'),
-  matchCoInvest: () => request('/matches/co-invest'),
-  matchReferralScores: () => request('/matches/referral-scores'),
-  matchScore: (data) => request('/matches/score', { method: 'POST', body: JSON.stringify(data) }),
-  matchAdminAll: () => request('/matches/admin/all'),
 
   networkFxEffects: () => request('/networkfx/effects'),
   networkFxCompounding: () => request('/networkfx/referrals/compounding'),
@@ -4869,6 +4861,8 @@ export const api = {
     endorse: (data) =>
       request('/skills/endorsements', { method: 'POST', body: JSON.stringify(data) }),
     getMyAggregate: () => request('/skills/me/aggregate'),
+    // D318 — the caller's skill evidence from their own platform activity.
+    getMyEvidence: () => request('/skills/me/evidence'),
     getUserAggregate: (userId) => request(`/skills/users/${userId}/aggregate`),
   },
 

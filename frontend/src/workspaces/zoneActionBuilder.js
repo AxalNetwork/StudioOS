@@ -71,10 +71,10 @@ import { exportView } from '../lib/csvExport';
  * across profiles — what an empty export says, how a link carries the reader's
  * current scope, what an unbuilt op does — and this repo already carries three
  * copies of one CSV escaper that disagree with each other. The tables are per
- * profile because the answers are: `/matches` is a real destination for an
- * investor's "Request an intro" and a closed door for a founder's, and the same
- * label under the same canvas heading is therefore a link on one and absent on
- * the other.
+ * profile because the answers are: a route one licence may open is a closed
+ * door for another, and the same label under the same canvas heading is
+ * therefore a link on one and absent on the other. ("Request an intro" was the
+ * example, a link to `/matches` for an investor only; that page was removed.)
  */
 
 /** Merge a page's `?project_id=…` into a link that may carry its own query. */

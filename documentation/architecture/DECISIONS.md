@@ -31098,6 +31098,76 @@ intended.
 - The Lab test now bans `WorkerRail`, `AssistLayout` and `AssistRail` in every
   Spin-Out Lab page. The market test checks the page's own switch and copy.
 
+## D318
+
+**Skills carry evidence from what people do on the platform (Profiling v2,
+Session 9; migration 362).**
+
+**The brief.** The owner's requirement: skills are "based on questions but
+also on tools used on the platform", and "should evolve over time as the user
+uses the platform". Until now a skill was only what a person said
+(`user_skills.self_level`, from the fit bank and the Skills page).
+
+**The map is read from the schema, not from the brief.** Of the candidates
+the handoff listed, 21 sources were verified and kept. Each is a table that
+records the person's own action, with a column naming them and a column
+dating it. `documentation/architecture/PROFILING_V2.md` §S9 has the table, and
+`EVIDENCE_SOURCES` in `services/skillEvidence.ts` is the same list in code. A
+test holds the two in step, so adding a source is one entry plus one row.
+
+Left out, because nothing can attribute them to one person or they do not
+exist:
+
+- `deal_memos`: it has no author column.
+- follow-ons: there is no table.
+- `mentor_bookings`: it records the booker, not the mentor's work.
+
+Partner and advisor sources feed the axes that the person's own profile names
+(partner specialization, advisor expertise, expert categories). A profile that
+names none is reported as not counted, never guessed onto an axis.
+
+**Owner's decisions (2026-09-28), provisional until Session 7's spec.**
+`PROFILING_V2.md` had not landed, so the owner chose:
+
+- **12-month window.** An action in the last 12 months counts 1, and an older
+  one fades with a 12-month half-life. Lifetime totals are for display.
+- **Corroborate, not raise.** Evidence confirms a self-rating and never raises
+  or creates one. If evidence is at or above the self-rating, the blended
+  level is the self-rating. If evidence is below it, the level moves half-way
+  toward the evidence. Evidence with no self-rating is reported as "evidence
+  only" with no blended level. An axis with nothing behind it is null and
+  `none`, never 0.
+
+**Store, with the route computed on read.**
+
+- `GET /api/skills/me/evidence` computes the caller's own evidence on read:
+  about 22 indexed queries bound to the caller's id, and no user parameter. A
+  person therefore sees their activity as of now, and a GET writes nothing.
+- The store (`skill_evidence`, one row per user, axis and source, counts and
+  dates only) is for readers of many users at once: Session 14's snapshots,
+  change events and admin trends, which should not re-run 22 queries per
+  person.
+- `recomputeEvidenceBatch` fills the store. It walks users from a stored
+  cursor in bounded runs (default 25, clamped to 1–200). It rewrites a row
+  only when its figures change and deletes rows whose evidence is gone, so a
+  second pass at the same moment changes nothing.
+- Session 14 wires the nightly cron to call it. This session adds no cron.
+
+**Tests.** `skill_evidence_d318.test.ts` has 12 tests over the baseline tables
+plus migrations 238, 339, 360 and 361. For every source, each of two users per
+role sees exactly their own one action. It also covers the window and
+half-life, none as null, the blend, the route's own-only scope, and the
+batch's cursor and idempotence.
+
+Mutations:
+
+- **Owner filter:** 21 of 21 caught (each source's filter broken in turn).
+- **Rules:** 28 of 29 caught (status filters, distinct deals, rating
+  thresholds, lab milestone mapping, window, half-life, weights, blend,
+  self-level, idempotence, deletion, cursor, limit). The one survivor is
+  equivalent: dropping `signed_at IS NOT NULL` changes nothing, because a
+  missing date is already skipped.
+
 ## D320
 
 **The archetype banks go from three probes per trait to five, and every one
@@ -32466,7 +32536,9 @@ archetype that moves only under hysteresis, and an append-only snapshot
 history stamped with the engine version. The proposed Systems Builder
 centroid move is withdrawn.** Wave 8, Session 7 of the Profiling v2
 programme (Sessions 6–15), built on the spec (D356,
-`documentation/architecture/PROFILING_V2.md`). Migration 362.
+`documentation/architecture/PROFILING_V2.md`). Migration 363. Session 8's
+#949 took 362 for `skill_evidence` while this was in review, and the owner
+moved this one to 363.
 
 **What was built:**
 - **Item types.** The spec's shapes (`fitShared.ts`):
@@ -32501,7 +32573,7 @@ programme (Sessions 6–15), built on the spec (D356,
   replay is the spec's definition. The first classification is displayed at
   once. A challenger is displayed only after winning 14 consecutive days and
   leading by ≥ 0.25.
-- **History store** (`services/profileHistory.ts`, migration 362):
+- **History store** (`services/profileHistory.ts`, migration 363):
   - `profile_snapshots` is append-only. A BEFORE UPDATE trigger refuses a
     rewrite; rows go only with the account. **It supersedes
     `profile_archetypes` for v2.** That table keeps its v1 rows and v1
@@ -32521,9 +32593,13 @@ programme (Sessions 6–15), built on the spec (D356,
   - The advisor `/answer` route calls it with `'answer'` after every saved
     `fit.*` answer, beside v1's recompute.
   - Session 13's nightly and backfill runs call the same function.
-  - Session 8's evidence arrives as per-axis weights with the window already
-    applied (spec §5.3). With no evidence, an axis reads from the
-    self-rating alone.
+  - Evidence comes from Session 8's store by default (spec §5.3,
+    `storedEvidenceWeights`). Per axis the weight is Σ `skill_evidence.weighted`
+    × the source's weight, the total Session 8's `evidenceScore` saturates,
+    and it is read, never recomputed. With no store or no rows, an axis reads
+    from the self-rating alone.
+  - The level shown stays the self-rating (§5.2); Session 8's `blend()`
+    (`partly_corroborated`) is not applied in snapshots.
 - **Routes:** `GET /api/profile/history` returns the caller's own snapshots
   only. `GET` and `PUT /api/profile/archetype-published` read and set the
   caller's own consent. The matching `api.js` methods ship with them.
@@ -32554,9 +32630,10 @@ parameters.
 
 ### VERIFIED
 
-- `cloudflare-worker/test/profile_scoring_v2_d357.test.ts` (new, 24 tests)
+- `cloudflare-worker/test/profile_scoring_v2_d357.test.ts` (new, 25 tests)
   runs on node:sqlite over the baseline's `users` and `advisor_answers`,
-  with the whole of migration 362 applied. It checks:
+  with the whole of migration 363 applied (and Session 8's 362 for the
+  evidence test). It checks:
   - **personas:** all 16 archetypes classify as themselves from their target
     vectors and from their Session 6 answer ledgers; both blends report
     their secondary; all 29 evolution checkpoints are reproduced exactly by
@@ -32575,12 +32652,14 @@ parameters.
     displayed archetype alone; one that holds 14 days moves it;
   - **determinism:** same ledger, evidence and version give byte-identical
     profiles and snapshots;
+  - **evidence:** Session 8's stored evidence reaches the snapshot weighted
+    per source, only the caller's, and never as a level;
   - **history:** one snapshot on the first compute, none on an identical or
     merely aged recompute, and one on a material change carrying its trigger
     and the engine version; a rewrite is refused by the trigger;
   - **routes:** the "me" routes return the caller's own data only, and a
     `user_id` parameter is ignored.
-- **Mutations:** 25 of 25 caught, each exiting non-zero with a `not ok` line
+- **Mutations:** 28 of 28 caught, each exiting non-zero with a `not ok` line
   and restored from a sha256-checked snapshot. They include the five the
   handoff names: invert the reverse key, drop an option's loading, skip the
   material check, shorten the hold period, and drop the version stamp. One
@@ -32591,10 +32670,10 @@ parameters.
   `check-schema-pair-drift` needed `answered_at` added to the advisor
   route's runtime `CREATE TABLE advisor_answers`, plus a PRAGMA-checked
   ADD COLUMN safety net. `check-api-drift` reports no new drift.
-- **Drift run:** `npm run test:drift` on #948's head (5e1dec7a29, main
-  8e2120b4e3 plus the Session 6 spec) with this change exits 0:
-  - frontend 4172 pass (unchanged);
-  - worker 4951 tests, 4948 pass, 0 fail (4927 before; +24);
+- **Drift run:** `npm run test:drift` with main 4a9ea7b4ff (#948, #950 and
+  #949 merged) in this branch exits 0:
+  - frontend 4176 pass;
+  - worker 4968 tests, 4965 pass, 0 fail (main's 4943 + the 25 new);
   - retention 112.
 
   Both typechecks and `check-docs-fresh --strict` pass after the root build.
@@ -34042,6 +34121,102 @@ Mutations: 40, all caught (21 Worker, 19 frontend). One escaped at first:
 the advisor half of the directory reading pending rows (W2), because the
 empty-until-approved test applied only from a partner profile. It now applies
 from an advisor profile too.
+
+## D378
+
+**The AI Matching Engine is deleted: the `/matches` page, its six worker
+endpoints and every link to it (Session 9).** No migration. Asked for by the
+owner, with a screenshot of the page: "Delete AI Matching Engine page and
+feature".
+
+Drafted as D377. #947 (Spin-Out Lab office hosts) merged first under that
+number, so this entry is D378, and its tests are named `_d378`.
+
+**What went.**
+
+| What | Where it was |
+| --- | --- |
+| The page (Deal Flow, Co-Investment, Referral Quality; a founder's Investor Match tab) | `frontend/src/pages/MatchesPage.jsx`, route `/matches` in `App.jsx` |
+| Its deal card, the only UI caller of `api.introductionsRequest` | `frontend/src/components/ScoredDealCard.jsx` |
+| `GET /deal-flow`, `GET /co-invest`, `GET /referral-scores`, `POST /score`, `POST /investor-match`, `GET /admin/all` | `cloudflare-worker/src/routes/matches.ts` |
+| The institutional-tier gate on `/api/matches/co-invest` | `cloudflare-worker/src/index.ts` |
+| `api.matchDealFlow`, `matchCoInvest`, `matchReferralScores`, `matchScore`, `matchAdminAll`, `matchInvestors` | `frontend/src/lib/api.js` |
+| The Matches tab in the Partner Pipeline bar, the `/matches` entry in the Pipeline row's `match`, the AI Matches launcher entry, the Operator/Advisor persona's nav extra (both mirrors), the advisor router's page label (both mirrors) | `PartnerWorkspaceTabs.jsx`, `sidebarConfig.js`, `adminPlacement.js`, `personas.js` and `personas.ts`, `lib/advisor/router.js` and `services/advisor/tools.ts` |
+| The dev FastAPI port | `backend/app/api/routes/matches.py` and its `include_router` |
+
+**What stayed, and why.**
+- `GET /api/matches/summary` is Best-Fit's, not the engine's. The profile's
+  Fit section (`ProfileFitSection.jsx`) reads it, and it was only ever mounted
+  under this prefix. `routes/matches.ts` now holds that one handler and says
+  why.
+- `match_scores` and `user_preferences` stay in D1, and no table is dropped.
+  The dashboard, syndicate recommendations (`networkfx.ts`) and the
+  onboarding checklist's history read `match_scores`. They keep reading the
+  rows written before this change, and nothing writes new ones. Dropping the
+  tables would destroy data for no reader's benefit.
+- The matching services (`matchingVectors`, `matchingConsent`, `matchAudit`)
+  are Best-Fit's, the introductions service's and the partner, event and
+  co-founder routes' as well.
+- `POST /api/introductions/request` and `api.introductionsRequest` stay: the
+  route belongs to the introductions quota, not to the engine.
+
+**Consequences, stated rather than discovered.**
+- **No screen requests an intro any more.** The engine's deal card held the
+  only button that called `introductionsRequest`, and `LockedFounderCard`,
+  the other component that asks for an intro (through `trustIntroRequest`),
+  is imported by nothing. "Request an intro" on the investor's
+  Network · Introductions zone was a link to `/matches`. It is a stated gap
+  now, as it already was on the founder's zone, whose reason ("lives on a
+  surface a founder cannot open") had also stopped being true.
+- **Two investor checklist steps left.** `inv.review` ("Review 3 matched
+  founders") counted deal-flow scores that nothing writes now, and
+  `inv.intro` ("Request your first intro") asks for an action no screen
+  offers. Both routed to `/matches`. They left the catalogue in the worker
+  and in the dev mirror.
+- **The checklist total is the role's own count.** It was a fixed
+  `TOTAL_ITEMS = 10`, true while every catalogue held ten steps. The
+  investor's now holds eight, and a fixed 10 would have read "8 / 10" with
+  nothing left to do and never reached "You're all set!". The worker reports
+  `rows.length`, and so does the dev mirror. `CELEBRATION_THRESHOLD` stays an
+  absolute 8, which an investor reaches by completing all eight.
+- **`/matches` is not redirected.** The page was deleted, not moved, so no
+  successor exists to send a bookmark to. It lands on the not-found page.
+- **Two pinned counts moved, each with its reason in the test.**
+  - The H35 placement map's legacy question goes from fifty rows to 49, and
+    the launcher from 29 pages to 28 (Studio 8 to 7). A deleted console has no
+    route that an exception entry could name.
+  - `onboarding_checklist_repairs_d186` goes from 19 repointed detectors to
+    18, and its near-miss floor from 10 to 8: `inv.review` and its two near
+    misses left with the gate itself. The test still covers every gate left in
+    the catalogue.
+
+**Found, not changed.** The docs section `#network/matches`
+(`pages/docs/sections/network.js`) describes a "Matches" page with
+co-founder, advisor and partner tabs. No such page exists, and it was never
+this engine. It is left for whoever owns the in-app docs.
+
+**Tests.**
+- `cloudflare-worker/test/matches_engine_removed_d378.test.ts` (3 tests) holds
+  three things:
+  - the router serves exactly `GET /summary`;
+  - the mount stays and the co-invest gate does not;
+  - no checklist step routes to `/matches`.
+- `frontend/test/matches_engine_removed_d378.test.mjs` (4 tests) holds four:
+  - the files and the route are gone;
+  - `api.js` calls only `/matches/summary`;
+  - no nav, launcher, persona, tab or checklist file points at `/matches`;
+  - "Request an intro" is a stated gap on both desks.
+- `onboarding_checklist_repairs_d186` gains a behavioural test: the
+  investor's total is 8 and the advisor's 10.
+- The re-aimed tests are `profile_zone_actions` (investor links 1 to 0),
+  `partner_shell`, `admin_placement_h35` and `workspaces_launcher_d284`.
+- 13 mutations, each restoring one piece of the engine, were all caught.
+  Each file was restored from a sha256-checked snapshot.
+- Drift on main at `85f7fe914d`: 4149 frontend, 4901 worker (3 skipped),
+  112 guard. On this branch, merged with main at `509fdd6e74`: 4156, 4905
+  (3 skipped), 112. The frontend's seven are this change's four plus the
+  three `509fdd6e74` brought (`app_typography`). The worker's four are this
+  change's.
 
 ## D380
 

@@ -7,7 +7,7 @@
  * ENGINE_VERSION; `recomputeProfile` reads the ledger, builds the profile for
  * every persona the person has answered, and APPENDS a snapshot only when it
  * differs materially from their last one (§7.6). Nothing here updates or
- * deletes a snapshot; migration 362's trigger refuses an UPDATE outright.
+ * deletes a snapshot; migration 363's trigger refuses an UPDATE outright.
  *
  * Entry points for later sessions:
  *   - recomputeProfile(env, userId, { trigger, asOf?, evidence? })
@@ -16,8 +16,9 @@
  *       'answer'. It returns, per persona, whether a snapshot was written and
  *       whether the DISPLAYED archetype changed — the event Session 13's
  *       notification fires on.
- *   - evidence: Session 8's per-axis evidence weights (§7.4 window already
- *       applied). Absent → every axis reads from the self-rating alone.
+ *   - evidence: per-axis evidence weights. By default read from Session 8's
+ *       `skill_evidence` (storedEvidenceWeights, PROFILING_V2.md §5.3); no
+ *       store or no rows → every axis reads from the self-rating alone.
  *   - loadHistory / loadLatestSnapshot — the "me" reads (routes/profile_history.ts).
  *
  * A person's history is theirs: every read here takes the caller's id and
@@ -40,6 +41,7 @@ import {
   type ScoringItem,
 } from './archetypeScoring.ts';
 import { RADAR_AXES } from './skillsTaxonomySchema.ts';
+import { EVIDENCE_SOURCES } from './skillEvidence.ts';
 
 export const TRIGGERS = ['answer', 'evidence', 'scheduled', 'engine_bump'] as const;
 export type SnapshotTrigger = (typeof TRIGGERS)[number];
@@ -223,7 +225,7 @@ export function isMaterialChange(prev: Pick<SnapshotRow, 'engine_version' | 'dis
 
 /**
  * The person's fit answers, oldest first: one row per stored answer, dated by
- * when it was GIVEN (answered_at, migration 362) or, for rows from before
+ * when it was GIVEN (answered_at, migration 363) or, for rows from before
  * that column, when the row was created.
  */
 export async function loadLedger(env: Env, userId: number): Promise<LedgerAnswer[]> {
@@ -238,7 +240,7 @@ export async function loadLedger(env: Env, userId: number): Promise<LedgerAnswer
     ).bind(userId).all<Row>();
     rows = res.results || [];
   } catch {
-    // A database that has not taken migration 362 yet: date by creation.
+    // A database that has not taken migration 363 yet: date by creation.
     const res = await env.DB.prepare(
       `SELECT question_id, raw_value, created_at AS at
          FROM advisor_answers
@@ -325,7 +327,7 @@ export interface RecomputeOptions {
   trigger: SnapshotTrigger;
   /** ISO time of the recompute; default now. The profile is evaluated at the end of this UTC day. */
   asOf?: string;
-  /** Session 8's evidence weights per persona. */
+  /** Evidence weights per persona. Default: Session 8's stored `skill_evidence` (storedEvidenceWeights). */
   evidence?: (persona: FitPersona) => EvidenceWeights | null | Promise<EvidenceWeights | null>;
   /** Scoring items per persona; default the real banks. Tests pass their own. */
   itemsFor?: (persona: FitPersona) => ScoringItem[];
@@ -352,13 +354,15 @@ export async function recomputeProfile(env: Env, userId: number, opts: Recompute
   const ledger = await loadLedger(env, userId);
   const answeredPersonas = new Set(ledger.map((a) => a.question_id.split('.')[1]));
   const out: RecomputeResult[] = [];
+  // Evidence is about the person, not a persona: read Session 8's store once.
+  const stored = opts.evidence || !answeredPersonas.size ? null : await storedEvidenceWeights(env, userId);
   for (const persona of PERSONAS) {
     if (!answeredPersonas.has(persona)) continue;
     const items = (opts.itemsFor ?? scoringItemsFor)(persona);
     const ids = new Set(items.map((i) => i.question_id));
     const own = ledger.filter((a) => ids.has(a.question_id));
     if (!own.length) continue;
-    const evidence = opts.evidence ? await opts.evidence(persona) : null;
+    const evidence = opts.evidence ? await opts.evidence(persona) : stored;
     const profile = buildProfile(persona, items, own, asOfDay, evidence);
     const prev = await loadLatestSnapshot(env, userId, persona);
     const material = isMaterialChange(prev, profile);
@@ -385,6 +389,33 @@ export async function recomputeProfile(env: Env, userId: number, opts: Recompute
     });
   }
   return out;
+}
+
+/**
+ * Session 8's stored evidence as this store's weights (PROFILING_V2.md §5.3):
+ * per axis, Σ weighted × the source's weight — the weighted-action total
+ * skillEvidence.evidenceScore saturates, before saturation. `skill_evidence`
+ * is refreshed by Session 8's nightly pass, so this reads, never recomputes.
+ * null when the store cannot be read; {} when the person has no evidence.
+ */
+export async function storedEvidenceWeights(env: Env, userId: number): Promise<EvidenceWeights | null> {
+  try {
+    const res = await env.DB.prepare(
+      'SELECT axis, source, weighted FROM skill_evidence WHERE user_id = ? ORDER BY axis, source',
+    ).bind(userId).all<{ axis: string; source: string; weighted: number }>();
+    const weightOf = new Map(EVIDENCE_SOURCES.map((src) => [src.key, src.weight ?? 1]));
+    const out: Record<string, number> = {};
+    for (const r of res.results || []) {
+      const w = Number(r.weighted);
+      if (!Number.isFinite(w) || w <= 0) continue;
+      out[r.axis] = (out[r.axis] ?? 0) + w * (weightOf.get(r.source) ?? 1);
+    }
+    for (const k of Object.keys(out)) out[k] = round2(out[k]);
+    return out;
+  } catch (e) {
+    console.warn('[profileHistory] skill_evidence unreadable:', (e as Error).message);
+    return null;
+  }
 }
 
 /** Has the person published their displayed archetype (decision c)? No row = no. */

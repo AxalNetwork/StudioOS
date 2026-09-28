@@ -213,7 +213,7 @@ reads the **ledger**, not `field_sources`.
 
 **When an answer was given (D357).** A re-answer within one conversation
 upserts the same `advisor_answers` row, and `created_at` kept the time of the
-first answer. Migration 362 adds `advisor_answers.answered_at`, which the
+first answer. Migration 363 adds `advisor_answers.answered_at`, which the
 route sets on every insert and re-answer. The ledger dates an answer by
 `COALESCE(answered_at, created_at)`.
 
@@ -296,20 +296,27 @@ off by default. The owner turns it on.
 
 ### 5.3 The evidence interface (D357)
 
-Session 7's engine takes Session 8's numbers without knowing how they were
-made:
+The history store takes Session 8's numbers without recomputing them:
 
 ```ts
 recomputeProfile(env, userId, {
   trigger,                                   // 'answer' | 'evidence' | 'scheduled' | 'engine_bump'
-  evidence?: (persona) => EvidenceWeights,   // { [radar axis]: weight } — the §7.4 window ALREADY applied
+  evidence?: (persona) => EvidenceWeights,   // { [radar axis]: weight }
 })
 ```
 
-An axis's weight is the number §5.2 compares with `corroborated_at`. No
-evidence supplied, or an axis missing from the map, means the axis reads
-from the self-rating alone (`self_rated_only`), or `not_recorded` when it
-has none. It is never 0 evidence-as-a-level.
+- An axis's weight is the number §5.2 compares with `corroborated_at`.
+- **The default reads `skill_evidence`** (Session 8's store, migration 362):
+  per axis, Σ `weighted` × the source's weight in `EVIDENCE_SOURCES`. This is
+  the same weighted-action total `evidenceScore` saturates, taken before
+  saturation, so three full-weight actions in the window corroborate. The
+  store is refreshed by Session 8's nightly pass; the history store never
+  runs the 21 source queries itself.
+- With no store, no row, or an axis missing from the map, the axis reads
+  from the self-rating alone (`self_rated_only`), or `not_recorded` when it
+  has none. It is never 0 evidence-as-a-level.
+- Snapshots keep §5.2's rule: the level shown is the self-rating. Session 8's
+  `blend()` (`partly_corroborated`) is not applied.
 
 ### 5.4 Evidence rules (Session 8 details the tool map)
 
@@ -325,8 +332,40 @@ has none. It is never 0 evidence-as-a-level.
   one event, not ten.
 - Lifetime totals are kept for display ("42 sessions hosted"), but only the
   window (§7.4) feeds the state.
-- The fixture's evidence `source` names are provisional until Session 8 publishes
-  the map. The axis keys are final.
+- Session 8 published the map below (D318, migration 362). It is the same list as `EVIDENCE_SOURCES` in `skillEvidence.ts`. A test fails if a source key there is missing here. The axis keys stay final.
+- **The displayed level still follows §5.2.** Evidence changes the state, not the number. D318's `blend` currently returns `partly_corroborated` and the halfway point when evidence is below the self-rating. That is ahead of this rule. §5.2 is the rule. Session 13 is where a blend can be switched on.
+
+| Role | Source key | What is counted | Axes | Weight |
+| --- | --- | --- | --- | --- |
+| Founder | `deck_version` | each deck version saved (`pitch_decks.created_by`) | marketing_brand, capital_network | 1 |
+| Founder | `brand_site` | each brand site on a project the user founded | marketing_brand, design | 1 |
+| Founder | `discovery_interview` | each interview on an own project | gtm_sales, product | 1 |
+| Founder | `okr_shipped` | each roadmap objective with `kanban_status = 'done'` | product, engineering | 1 |
+| Founder | `financial_model` | each model kept (`financial_models.updated_by`) | finance_ops | 1 |
+| Founder | `cap_table_security` | each security the user recorded | legal_compliance, finance_ops | 1 |
+| Founder | `esign_sent_completed` | each envelope the user sent that fully signed | legal_compliance | 1 |
+| Founder | `esign_signed` | each document the user signed | legal_compliance | 0.5 |
+| Founder | `lab_milestone` | each skill milestone below | per milestone | 0.5 |
+| Investor | `dd_section_signed_off` | each due-diligence section the user signed off | per section below | 1 |
+| Investor | `commitment` | each pending or confirmed commitment | capital_network, finance_ops | 1 |
+| Investor | `deal_worked` | each distinct deal the user moved | capital_network | 0.5 |
+| Partner | `office_hours_completed` | each completed session on the user's partner profile | specialization | 1 |
+| Partner | `office_hours_rated_well` | each session rated 4 or higher | specialization | 0.5 |
+| Partner | `office_hours_action_closed` | each action item closed on the user's bookings | specialization | 0.5 |
+| Partner | `engagement_milestone` | each milestone on the user's engagements | specialization | 1 |
+| Partner | `perk_redeemed` | each redeemed claim on the user's perks | specialization | 0.5 |
+| Advisor | `advisor_engagement` | each started engagement on the user's advisor profile | specialization | 1 |
+| Advisor | `expert_session_completed` | each completed session on the user's expert profile | specialization | 1 |
+| Advisor | `expert_rated_well` | each session rated 4 or higher | specialization | 0.5 |
+| Advisor | `guidance_answered` | each cohort question the user answered | specialization | 0.5 |
+
+Partner and advisor sources use the axes the person's own profile names (`partners.specialization`, `advisors.expertise_json`, `experts.categories_json`), matched on whole words. If the profile names no axis, those actions are `unmapped` and are not guessed onto an axis.
+
+Lab milestones that count: `pitch_deck_drafted` (marketing_brand, capital_network); `brand_basics_filled` and `landing_page_created` (marketing_brand, design); `icp_defined`, `discovery_followups_mapped` and `market_research_shared` (gtm_sales, product); `market_sizing_completed` (gtm_sales, finance_ops); `mvp_scoped` (product, engineering); `okrs_created` (product); `incorporation_completed`, `ein_received`, `founder_stock_issued`, `section83b_filed`, `cofounder_agreement_signed` (legal_compliance); `captable_locked` (legal_compliance, finance_ops); `use_of_funds_filled` and `revenue_summary_generated` (finance_ops); `revenue_proof_added` (finance_ops, gtm_sales); `fundraise_ask_locked`, `investor_intros_secured` and `data_room_built` (capital_network). Milestones that only record taking part are not evidence.
+
+Due-diligence sections: `corporate_legal`, `compliance_aml`, `kyb_entity`, `kyc_individual` and `accreditation` are legal_compliance; `financial_health` is finance_ops; `product_tech` is engineering and product; `cyber_posture` is engineering; `market_position` is product; `market_traction` is product and gtm_sales; `founder_integrity` and `reputation_press` are capital_network.
+
+`skill_evidence` (migration 362) stores one row per user, axis and source. `GET /api/skills/me/evidence` is the caller's own read. The nightly pass is `recomputeEvidenceBatch`, on the existing `0 3 * * *` cron when Session 13 wires it.
 
 ---
 
@@ -536,7 +575,7 @@ skill_evidence
 
 Decision c needs a publish flag on the canonical archetype. Built by D357 as
 a side table, `profile_archetype_publish (user_id PRIMARY KEY, published
-0|1, updated_at)` (migration 362), rather than a column on `users` or
+0|1, updated_at)` (migration 363), rather than a column on `users` or
 `user_settings`. No row means not published. The caller sets it through
 `PUT /api/profile/archetype-published`. The legacy `assessment_results.published` stays readable for the
 fallback (decision a) and is not copied across: publishing is a new consent.
