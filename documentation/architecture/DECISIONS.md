@@ -31098,6 +31098,76 @@ intended.
 - The Lab test now bans `WorkerRail`, `AssistLayout` and `AssistRail` in every
   Spin-Out Lab page. The market test checks the page's own switch and copy.
 
+## D318
+
+**Skills carry evidence from what people do on the platform (Profiling v2,
+Session 9; migration 362).**
+
+**The brief.** The owner's requirement: skills are "based on questions but
+also on tools used on the platform", and "should evolve over time as the user
+uses the platform". Until now a skill was only what a person said
+(`user_skills.self_level`, from the fit bank and the Skills page).
+
+**The map is read from the schema, not from the brief.** Of the candidates
+the handoff listed, 21 sources were verified and kept. Each is a table that
+records the person's own action, with a column naming them and a column
+dating it. `documentation/architecture/PROFILING_V2.md` §S9 has the table, and
+`EVIDENCE_SOURCES` in `services/skillEvidence.ts` is the same list in code. A
+test holds the two in step, so adding a source is one entry plus one row.
+
+Left out, because nothing can attribute them to one person or they do not
+exist:
+
+- `deal_memos`: it has no author column.
+- follow-ons: there is no table.
+- `mentor_bookings`: it records the booker, not the mentor's work.
+
+Partner and advisor sources feed the axes that the person's own profile names
+(partner specialization, advisor expertise, expert categories). A profile that
+names none is reported as not counted, never guessed onto an axis.
+
+**Owner's decisions (2026-09-28), provisional until Session 7's spec.**
+`PROFILING_V2.md` had not landed, so the owner chose:
+
+- **12-month window.** An action in the last 12 months counts 1, and an older
+  one fades with a 12-month half-life. Lifetime totals are for display.
+- **Corroborate, not raise.** Evidence confirms a self-rating and never raises
+  or creates one. If evidence is at or above the self-rating, the blended
+  level is the self-rating. If evidence is below it, the level moves half-way
+  toward the evidence. Evidence with no self-rating is reported as "evidence
+  only" with no blended level. An axis with nothing behind it is null and
+  `none`, never 0.
+
+**Store, with the route computed on read.**
+
+- `GET /api/skills/me/evidence` computes the caller's own evidence on read:
+  about 22 indexed queries bound to the caller's id, and no user parameter. A
+  person therefore sees their activity as of now, and a GET writes nothing.
+- The store (`skill_evidence`, one row per user, axis and source, counts and
+  dates only) is for readers of many users at once: Session 14's snapshots,
+  change events and admin trends, which should not re-run 22 queries per
+  person.
+- `recomputeEvidenceBatch` fills the store. It walks users from a stored
+  cursor in bounded runs (default 25, clamped to 1–200). It rewrites a row
+  only when its figures change and deletes rows whose evidence is gone, so a
+  second pass at the same moment changes nothing.
+- Session 14 wires the nightly cron to call it. This session adds no cron.
+
+**Tests.** `skill_evidence_d318.test.ts` has 12 tests over the baseline tables
+plus migrations 238, 339, 360 and 361. For every source, each of two users per
+role sees exactly their own one action. It also covers the window and
+half-life, none as null, the blend, the route's own-only scope, and the
+batch's cursor and idempotence.
+
+Mutations:
+
+- **Owner filter:** 21 of 21 caught (each source's filter broken in turn).
+- **Rules:** 28 of 29 caught (status filters, distinct deals, rating
+  thresholds, lab milestone mapping, window, half-life, weights, blend,
+  self-level, idempotence, deletion, cursor, limit). The one survivor is
+  equivalent: dropping `signed_at IS NOT NULL` changes nothing, because a
+  missing date is already skipped.
+
 ## D320
 
 **The archetype banks go from three probes per trait to five, and every one

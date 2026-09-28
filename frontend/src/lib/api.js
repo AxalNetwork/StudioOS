@@ -4852,6 +4852,8 @@ export const api = {
     endorse: (data) =>
       request('/skills/endorsements', { method: 'POST', body: JSON.stringify(data) }),
     getMyAggregate: () => request('/skills/me/aggregate'),
+    // D318 — the caller's skill evidence from their own platform activity.
+    getMyEvidence: () => request('/skills/me/evidence'),
     getUserAggregate: (userId) => request(`/skills/users/${userId}/aggregate`),
   },
 
