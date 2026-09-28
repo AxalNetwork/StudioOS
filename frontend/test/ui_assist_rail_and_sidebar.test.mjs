@@ -606,8 +606,11 @@ test('each mount wraps its own page, once, inside the exported component', () =>
   // a later helper function would still build — Vite transpiles rather than
   // type-checks — and would render nothing while looking correct in a diff.
   // The three Spin-Out Lab pages left this list with D317: the Lab carries no
-  // Eadwyn rail (workspace_frame_contract asserts that).
+  // Eadwyn rail (workspace_frame_contract asserts that). The brand tool's
+  // "Brand builder" card stays on BrandBuilderPage.
   const PAGES = ['AdvisoryPage', 'BrandBuilderPage', 'DeckReviewerPage'];
+  assert.doesNotMatch(read('frontend/src/pages/SpinoutLabBrandPage.jsx'), /<AssistLayout\b/,
+    'the Spin-Out Lab brand page mounts an assist rail again');
   for (const name of PAGES) {
     const lines = read(`frontend/src/pages/${name}.jsx`).split('\n');
     const start = lines.findIndex((l) => l.startsWith('export default function'));
