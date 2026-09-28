@@ -9,6 +9,8 @@ import { requireAuth } from '../auth';
 import { ensureTier } from '../middleware/requireTier';
 import { isAdmin, isPartner, mapError, nowIso, newUid, requirePartnerProfile } from './_t13t14t15_helpers';
 import { activeCompanyFor } from '../middleware/activeCompany';
+import { projectInActiveCompany } from '../services/tenancyScope';
+import { refuse } from '../util/refusal';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -381,6 +383,78 @@ r.post('/campaigns', async (c) => {
   url.search = '';
   const body = await c.req.text();
   return r.fetch(new Request(url, { method: 'POST', headers: c.req.raw.headers, body }), c.env, c.executionCtx);
+});
+
+// Founder side ----------------------------------------------------------
+
+/** How many attribution rows one founder read returns before it says it stopped. */
+export const FOUNDER_ATTRIBUTIONS_CAP = 500;
+
+/**
+ * GET /api/comarketing/founder/by-project/:pid — the co-marketing records that
+ * touch one of the caller's own startups: every attribution recorded against
+ * the project, and the pitches those attributions belong to.
+ *
+ * WHY IT EXISTS. `/me/pitches` and `/me/attributions` are the PARTNER side:
+ * `requirePartnerProfile` refuses anyone who is not a partner, so a founder
+ * always got 403. The founder's Grow desk, Launch and Partnerships pages read
+ * those two routes, so each of them showed "Some selected-project sources are
+ * unavailable" on every load for every founder, and Retry could not clear it.
+ *
+ * WHAT IT RETURNS, AND WHAT IT DOES NOT. What the pages draw: a pitch's title,
+ * kind, status, dates, published link and the partner's company; an attribution's
+ * kind, pitch and time. Never the attribution's lead email, referrer, landing
+ * path or notes — those are the partner's campaign data, not the founder's.
+ *
+ * WHO. The project's own founder (inside their active company, as the brand
+ * routes scope it) or an admin. Anyone else — including a founder asking for a
+ * project that is not theirs — gets the same 404 as a project that does not
+ * exist, so the route does not confirm another founder's project id.
+ */
+r.get('/founder/by-project/:pid', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = Number(c.req.param('pid'));
+    const notFound = () => refuse(c, 404, {
+      code: 'project_not_found',
+      message: 'No startup of yours has that id, so there are no co-marketing records to show for it.',
+    });
+    if (!Number.isSafeInteger(pid) || pid <= 0) return notFound();
+    const project = await c.env.DB.prepare('SELECT id, founder_id, company_id FROM projects WHERE id = ?')
+      .bind(pid).first<{ id: number; founder_id: number | null; company_id: number | null }>();
+    if (!project) return notFound();
+    if (!isAdmin(user)) {
+      const own = user.role === 'founder' && user.founder_id != null && project.founder_id === user.founder_id;
+      if (!own || !projectInActiveCompany(await activeCompanyFor(c, user), project)) return notFound();
+    }
+
+    const attributionRows = (await c.env.DB.prepare(
+      `SELECT id, uid, pitch_id, event_kind, project_id, created_at
+         FROM comarketing_attributions
+        WHERE project_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?`,
+    ).bind(pid, FOUNDER_ATTRIBUTIONS_CAP + 1).all<any>()).results || [];
+    const complete = attributionRows.length <= FOUNDER_ATTRIBUTIONS_CAP;
+    const attributions = complete ? attributionRows : attributionRows.slice(0, FOUNDER_ATTRIBUTIONS_CAP);
+
+    const pitches = (await c.env.DB.prepare(
+      `SELECT p.id, p.uid, p.title, p.asset_type, p.status, p.proposed_date, p.published_at, p.published_url,
+              pa.company AS partner_company, ? AS project_id,
+              (SELECT COUNT(*) FROM comarketing_attributions a WHERE a.pitch_id = p.id AND a.project_id = ?) AS attribution_count
+         FROM comarketing_pitches p
+         LEFT JOIN partners pa ON pa.id = p.partner_id
+        WHERE p.id IN (SELECT DISTINCT pitch_id FROM comarketing_attributions WHERE project_id = ?)
+        ORDER BY p.created_at DESC, p.id DESC`,
+    ).bind(pid, pid, pid).all<any>()).results || [];
+
+    return c.json({
+      project_id: pid,
+      pitches: pitches.map((p) => ({ ...p, attribution_count: Number(p.attribution_count) })),
+      attributions,
+      complete,
+    });
+  } catch (e) { return mapError(c, e); }
 });
 
 export default r;
