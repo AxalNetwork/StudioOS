@@ -118,7 +118,8 @@ test('the five landings are guard([\'admin\']) without hqOnly, under a prefix no
 });
 
 test('every console link on a landing is literal, registered, and never under /branch/', () => {
-  const expectedDoors = { Accounts: 4, Approvals: 14, Programs: 4, Community: 5, Insights: 0 };
+  // D358 — Programs gained a fifth door, Profiling trends.
+  const expectedDoors = { Accounts: 4, Approvals: 14, Programs: 5, Community: 5, Insights: 0 };
   for (const [label, file] of Object.entries(LANDINGS)) {
     const doors = doorsIn(CODE[file]);
     assert.equal(doors.length, expectedDoors[label], `${label} draws ${doors.length} literal links, expected ${expectedDoors[label]}`);
@@ -226,9 +227,9 @@ test('Community links its five consoles at their own routes — Advisors & Partn
     'the console prose is BranchCommunity\'s own list, read rather than copied');
 });
 
-test('Programs links its four consoles; Accounts links the Users table, Exploring, Personas and Trash', () => {
+test('Programs links its five consoles; Accounts links the Users table, Exploring, Personas and Trash', () => {
   assert.deepEqual(doorsIn(CODE[LANDINGS.Programs]),
-    ['/admin?tab=lab-applications', '/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/assessment']);
+    ['/admin?tab=lab-applications', '/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/assessment', '/admin/profiling-trends']);
   assert.deepEqual(doorsIn(CODE[LANDINGS.Accounts]),
     ['/admin', '/admin/exploring', '/admin?tab=personas', '/admin/trash']);
 });

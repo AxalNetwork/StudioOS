@@ -32707,6 +32707,170 @@ parameters.
 
   Both typechecks and `check-docs-fresh --strict` pass after the root build.
 
+## D358
+
+**Profiling v2 evolution loop: profiles move as people use the platform
+(migration 364, Session 13).** Session 7 (D357) made a profile a pure
+function of the answer ledger, the evidence and the date, and gave it one
+entry point, `recomputeProfile`. Session 8 (D318) built the evidence store
+and its batch pass. Neither ran on its own: the only trigger was a saved
+`fit.*` answer. This entry adds the loop the spec (§7) describes:
+`services/profileEvolution.ts`, one nightly job, the re-ask, change events,
+and an admin trends read.
+
+**One evaluation path.** `evaluateUser(env, userId, trigger)` calls
+`recomputeProfile`, records a displayed-archetype change once, and stamps
+when the person was last evaluated. The advisor `/answer` route now calls it
+with `'answer'` in place of the bare recompute; the nightly run calls it with
+`'evidence'`, `'scheduled'` or `'engine_bump'`.
+
+**Migration 364** (stands alone; CREATE … IF NOT EXISTS only):
+
+- `advisor_answer_revisions`, append-only, filled by an AFTER UPDATE trigger
+  on `advisor_answers`. The answers table is UNIQUE on (conversation,
+  question) and both write paths upsert, so answering a question again in
+  the same conversation overwrote the earlier answer. A six-month re-ask
+  does exactly that, and the spec says the old answer stays (§7.1). Because
+  the displayed archetype is defined by replaying the ledger (§7.5), a lost
+  answer would also rewrite the past. The trigger copies the replaced row
+  whenever a saved `fit.*` answer changes value, time or status, on either
+  write path, with no route change. `loadLedger` reads the revisions first.
+- `profile_change_events`, append-only, one row per displayed-archetype
+  change, UNIQUE on (user, persona, day, new archetype). Two recomputes
+  racing (an answer and the nightly run) record one event.
+- `profile_evolution_state` (when each person was last evaluated, under
+  which engine version) and `profile_evolution_cursor` (where the nightly
+  run stopped, and the day Session 8's evidence pass last completed).
+
+**The nightly run** joins the existing daily 03:00 slot. No new cron:
+- It runs every minute of 03:00–03:59 UTC except :15 and :45, where heavier
+  jobs run.
+- Even minutes serve Session 8's evidence pass (10 users a tick) and odd
+  minutes the profile pass (20 people a tick). Once one stage is done for
+  the day, the other gets every tick.
+- Each stage makes at most one complete pass per UTC day. A pass that does
+  not finish tonight resumes tomorrow at its cursor. At these sizes a night
+  covers about 290 evidence users and 580 people.
+- The pass walks people with at least one saved `fit.*` answer and evaluates
+  only those with something new:
+  - never evaluated;
+  - a different engine version (`engine_bump`);
+  - evidence computed since their last evaluation (`evidence`);
+  - a hysteresis clock running in their latest snapshot;
+  - or 30 days since their last evaluation, so slow drift from ageing lands.
+- One person's failure is counted and logged by error name only, and the
+  batch goes on. The person stays due, so the next pass picks them up.
+- It is not gated on `hqCadences`: profiles live in each deployment's own D1.
+
+**Change events and the notification (spec §7.7, decision e).** When the
+DISPLAYED archetype changes, the first insert of that change sends one in-app
+`notifications_inbox` row ("Your archetype is now {label}", linking to
+`/studio/archetype`, category `scoring`, no email). There is no event for a
+first classification, a computed-only flip, or a secondary change. The
+person's `activity_logs` gets `profile.archetype_changed` with the persona
+and trigger but not the archetype, because admins see aggregates only (§7.9).
+
+**Re-asking (§7.3).**
+- A profiling answer at least 182 days old is re-askable.
+- `reaskOverlay` is applied at all six question-picking paths of
+  `routes/advisor.ts`: `/start`, `/answer`, `/skip`, `/next-question`,
+  `/turn` and `/queue`.
+- It offers re-askable questions only once `selectAdaptiveProfiling` has
+  nothing unanswered left, so re-asks come after uncovered questions.
+- The question carries its `reask_prompt`, or "It has been a while since you
+  answered this. Is it still true? {prompt}" when the item has none.
+- Module confidence is still computed from the full answered set: a
+  re-askable answer keeps counting.
+- A re-ask put to the person (`advisor_state.last_asked_at` after the
+  answer) and left unanswered rests for another 182 days, except while it is
+  the question on screen, so a refresh stays idempotent.
+- The state machine's `nextTurn` takes a `reaskable` set and removes it from
+  the answered set it loads itself.
+
+**Routes:**
+- `GET /api/profile/reask`: the caller's own re-askable answers, with
+  wording, age and `resting_until`. Read-only; nothing is marked asked.
+- `GET /api/admin/profiling/trends?months=` (`requireAdmin`), counts only:
+  - displayed archetype per role per month;
+  - displayed-archetype changes per month, and their share of that role's
+    profiles;
+  - skill-axis states today (self-rated vs evidence);
+  - answers revised per month.
+- Small cells follow the owner's threshold of 5 (asked 2026-09-29). A count
+  from 1 to 4 is hidden. Where that leaves a single hidden cell in a group,
+  the next smallest is hidden too. A total, and a share, are shown only when
+  they cannot give a hidden count away.
+- Page: `/admin/profiling-trends` (`AdminProfilingTrends.jsx`), a fifth card
+  on Admin · Programs, lit under the Programs row. A hidden cell reads "<5"
+  and a month with no profile reads "—".
+
+**Deviations and findings:**
+- The handoff asked for `activity_logs` at minimum. The change is logged
+  there without the archetype, and the event itself lives in the person's
+  own `profile_change_events`, because spec §7.9 keeps individual timelines
+  from admins.
+- **An engine bump can move a displayed archetype at once.** `replayDisplayed`
+  replays the whole ledger under the new rules and does not remember what
+  was displayed under the old ones. The spec's claim that hysteresis stops an
+  overnight flip on an engine bump (§7.8) does not hold. This loop records
+  and notifies such a change like any other. Whoever next bumps
+  `ENGINE_VERSION` should compare displayed archetypes before and after on
+  the personas.
+- Blending evidence into the skill level (decision b's "later") is not
+  switched on. Snapshots still show the self level, and the trends read
+  shows the split, which is the evidence for the owner's call.
+
+### VERIFIED
+
+- `cloudflare-worker/test/profile_evolution_d358.test.ts` (new, 18 tests)
+  runs on node:sqlite over the baseline with migrations 048, 238, 339, 360,
+  361, 362, 363 and 364. It uses the Session 6 personas:
+  - **Eli** answers his whole timeline in one conversation. Every earlier
+    answer stays in the ledger, and all 7 checkpoints replay exactly.
+  - Evaluated nightly from 28 June to 16 July, Eli gets exactly one event
+    (Missionary → Architect, on 14 July), one in-app notice and one log line
+    without the archetype.
+  - **Oscar**'s seven-day March flip writes nothing; the May flip writes one
+    event, on 14 May.
+  - Two racing recomputes record and notify once.
+  - **The nightly run:**
+    - evidence goes first on even minutes;
+    - batches are bounded and there is one pass a day;
+    - a second night with nothing new evaluates no one and writes nothing;
+    - only the person with new evidence is evaluated;
+    - an engine bump backfills everyone across batches and resumes after an
+      interrupted night;
+    - one failure does not stop the batch.
+  - **Re-asking:**
+    - the 182-day threshold, the rest after an unanswered re-ask, and the
+      on-screen exemption;
+    - the item's own wording and the fallback;
+    - no re-ask while a profiling question is unanswered;
+    - `pickNext` and `nextTurn` both offer the re-ask;
+    - all six advisor paths apply the overlay.
+  - **Routes:** `/profile/reask` returns the caller's own answers only, and
+    `?user_id=` is ignored. `/admin/profiling/trends` refuses a founder,
+    hides small cells, gives no share for a hidden count, and carries no id,
+    email or name.
+- `frontend/test/profiling_trends_d358.test.mjs` (new, 6 tests) covers the
+  page: "<5" vs 0 vs "—", empty states, Unreadable with retry, the route,
+  the Programs door and row, and the two `api.js` calls.
+- Re-aimed tests:
+  - `profile_scoring_v2_d357.test.ts`: the answer route calls
+    `evaluateUser`, which calls `recomputeProfile` with the trigger.
+  - `held_admin_shell_d286.test.mjs`: Programs has five doors.
+- **Mutations:** 36, of which 35 were caught (31 Worker, 5 page).
+  - Two escaped on the first run; the tests were strengthened and both are
+    now caught:
+    - the nightly run evaluating everyone: the test counted evaluations but
+      not failures. A second form of the same mutation (every walked person
+      evaluated as `'scheduled'`) was added and is caught;
+    - a share shown for a hidden change count: no case had a hidden count
+      with a shown total, which would let the count be recovered.
+  - One is equivalent: dropping the "no previous archetype" check in
+    `recordChangeEvents`. `from_slug` is NOT NULL under `INSERT OR IGNORE`,
+    so the database drops that row anyway.
+
 ## D360
 
 **The Spin-Out Lab's capital and legal tools say when a read failed, and
