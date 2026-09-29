@@ -31197,6 +31197,122 @@ Tests: 13, with the state table and linear fade asserted. The new rules'
 mutations were caught 12 of 12, after adding a ten-month case for the one
 that first escaped.
 
+## D319
+
+**The founder fit bank v2 (Profiling v2, Session 9).**
+
+**The brief.** Tell the four founder archetypes apart reliably, cover all
+eight skill axes, and measure founder values by behaviour rather than by
+flattering self-rating, using the item formats Session 7 built (D357).
+`PROFILING_V2.md` is the rule wherever it and the handoff differ.
+
+**What was added.** `fit_founder.ts` grows from 58 to 97 items. Every id is
+new: no v1 id was renamed, reworded or retired.
+
+- **Archetype, 16 items.**
+  - Eight situational pick-ones, each offering three or four archetypes.
+    At least three put Missionary against Rocketeer (mission against
+    momentum), and at least three put Rocketeer against Maverick (team-led
+    against lone).
+    Each option loads the two traits on which its archetype stands apart,
+    at that archetype's own centroid values, so a choice pulls straight
+    towards one archetype.
+  - Eight reverse-keyed probes, two per trait.
+- **Skills, 8 items.** One behavioural "in the last year, how often did
+  you…" item per radar axis. This includes legal_compliance, which the v1
+  founder bank never asked. They are siblings of the v1 self-ratings, which
+  stay. `PROFILING_V2.md` §5.5 names the Session 8 evidence sources that
+  corroborate each one.
+- **Values, 9 items.**
+  - A concrete situation for each of the five founder spectrums, with the
+    slugs unchanged.
+  - The four Schwartz values the founder bank never asked, so Session 14
+    can compare them across roles.
+- **Axal values, 6 items.** A behavioural situation beside each v1
+  self-rating. The v1 red-flag probes are unchanged.
+- **Re-ask wording on every founder item.** New items carry it inline. v1
+  and shared rows get it through `FOUNDER_REASK`, so the shared rows other
+  banks read are untouched.
+
+**Deviations from the handoff.**
+
+- **Value pick-ones are not built.** The handoff asked for a pick-one per
+  founder spectrum and "a situation, then the choice" for the Axal values.
+  `PROFILING_V2.md` §3.3 allows pick-ones to feed archetype traits only, and
+  `assertFitRow` refuses anything else. The handoff says to stop and report
+  a missing format rather than add one, so these items are situational 0–5
+  scales ("how likely are you to…", with 5 at `pole_high`). A value pick-one
+  needs a spec change first.
+- **The weak v1 founder probes are kept, not retired.** For example,
+  `arch_fo_conviction` is tagged connector although it asks about mission.
+  The new items outweigh them. Retiring them is left to a later session with
+  real answer data.
+- **Axal values are last-write-wins in `axal_values` today.** The write
+  router upserts one row per value, so the behavioural situation, if it is
+  answered after the self-rating, replaces it rather than averaging with it.
+  The v2 ledger reading (Session 13) averages all answers to a value.
+
+**Order is part of the design.** Adaptive selection
+(`profilingModules.ts`) asks gap-filling items first and then follows bank
+order. The bank therefore opens with one reverse-keyed probe per trait,
+then the pick-ones, with the two pair-targeted items first, then the second
+reverse round. A founder reaches every module's floor in 23 answers. The six
+archetype answers at the floor are four reverse-keyed probes (one per
+trait) and two pick-ones, one per close pair.
+
+**Acquiescence.**
+
+- Five to everything: the reverse-keyed probes cancel the plain ones, which
+  zeroes the engine's consistency term.
+- Always the first option: an exhaustive search over the option orders
+  (11 664 of them) chose the order in which picking every first option lands
+  between archetypes. That peaks at 0.30 confidence against the 0.6
+  threshold, and the first options span three archetypes.
+
+**The fixture.** The four founder archetype personas and the
+Rocketeer/Maverick blend answer the 16 new archetype items.
+
+- **Reverse probes:** each persona's own measured trait, with the fixture's
+  20% pull towards 3.5, inverted.
+- **Pick-ones:** the option nearest that trait vector. The blend takes the
+  Maverick option on three of the six items that offer both.
+- **The fixture test** now accepts a pick-one's option key as a value.
+- **Evolution persona:** its answers are unchanged, so every checkpoint
+  still holds.
+
+**Tests.** `founder_bank_v2_d319.test.ts` has 8 tests on the real bank and
+the real v2 engine.
+
+- The four personas classify to their archetype, confidently, from their
+  answers to this bank.
+- The blend reports Rocketeer with Maverick.
+- On every pick-one, each persona chose the option that speaks for its own
+  archetype.
+- The adaptive run reaches the floors in 23 answers with the archetype
+  already right.
+- No acquiescent pattern is confident: all 5s, all 0s, always the first
+  option, or all 5s with the first options.
+- Every radar axis, founder spectrum, Schwartz value and Axal value is
+  covered; there are two reverse keys per trait and three pick-ones per
+  close pair; every item has re-ask wording; and all 58 v1 ids are still
+  present.
+- `advisor.profiling.test.ts` now pins the founder bank at 97 items (15 / 14
+  / 45 / 23 across the four modules).
+
+**Mutations:** 13 of 13 caught, each with a non-zero exit and a `not ok`
+line:
+
+- two options' loadings swapped;
+- a reverse key dropped;
+- a reverse probe on the wrong trait;
+- a skill item on the wrong axis;
+- a loading off its centroid, or a signature on the wrong traits;
+- the first options collapsed to one archetype;
+- a value item on the wrong dimension, or a Schwartz slug misspelt;
+- re-ask wording missing, inline or from the shared map;
+- the pick-ones moved after the second reverse round;
+- an Axal situation dropped.
+
 ## D320
 
 **The archetype banks go from three probes per trait to five, and every one

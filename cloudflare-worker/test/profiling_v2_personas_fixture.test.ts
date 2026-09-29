@@ -52,7 +52,7 @@ test('every answer is a real fit question of the persona’s role, with a value 
       } else if (q!.measures.archetype_presentation) {
         assert.ok((ARCHETYPE_PRESENTATION_OPTIONS as readonly string[]).includes(a.value), `${p.key}: ${a.value}`);
       } else if (q!.measures.archetype_choice) {
-        // D491: a pick-one stores the key of one of its own options (§3.3).
+        // A pick-one stores the key of one of its own options (D319, D491, §3.3).
         assert.ok((q!.choices || []).some((c) => c.key === a.value), `${p.key}: ${a.question_id} = ${a.value} is not one of its options`);
       } else {
         assert.ok(Number.isInteger(a.value) && a.value >= 0 && a.value <= 5, `${p.key}: ${a.question_id} = ${a.value}`);
@@ -61,9 +61,9 @@ test('every answer is a real fit question of the persona’s role, with a value 
   }
 });
 
-test('each archetype persona answers every archetype-trait question of its role, once', () => {
+test('each archetype persona answers every archetype question of its role — trait probe or pick-one — once', () => {
   for (const p of PERSONAS.filter((x) => x.kind === 'archetype')) {
-    const traitIds = [...INDEX.values()].filter((e) => e.persona === p.role && e.measures.archetype_trait).map((e) => e.question_id).sort();
+    const traitIds = [...INDEX.values()].filter((e) => e.persona === p.role && (e.measures.archetype_trait || e.measures.archetype_choice)).map((e) => e.question_id).sort();
     const answered = p.answers.map((a: any) => a.question_id);
     assert.equal(new Set(answered).size, answered.length, `${p.key}: a question answered twice`);
     assert.deepEqual(traitIds.filter((id) => answered.includes(id)), traitIds, `${p.key}: a trait question is missing`);

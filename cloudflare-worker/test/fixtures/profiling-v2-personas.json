@@ -5,7 +5,7 @@
   "notes": [
     "Synthetic people only: every name is invented and every address is @example.test.",
     "answers[] is a ledger: a question may appear more than once; the latest answered_at at or before a date wins (PROFILING_V2.md §7.1).",
-    "value is 0-5 for scale questions; fit.<role>.arch_illustration takes one of the select options.",
+    "value is 0-5 for scale questions (a reverse-keyed scale stores what the person chose; scoring inverts it); fit.<role>.arch_illustration takes one of the select options; a pick-one (input_kind choice) stores its option key.",
     "expected.primary / expected.secondary for kind \"archetype\" and \"blend\" is the ground truth the persona was written to be, not what any engine returned. The baseline report prints what the engine of the day returns.",
     "checkpoints[] (kind \"evolution\") are computed with the reference model and the parameters below; displayed is what the card shows under hysteresis, computed is the nearest centroid on that day.",
     "evidence[] axis values are RADAR_AXES keys; source names are provisional until Session 8 publishes the tool map (PROFILING_V2.md §5.3).",
@@ -92,7 +92,23 @@
         {"question_id": "fit.founder.axal_curiosity", "value": 3, "answered_at": "2026-08-03T10:48:00Z"},
         {"question_id": "fit.founder.axal_resilience", "value": 2, "answered_at": "2026-08-03T10:50:00Z"},
         {"question_id": "fit.founder.axal_collaboration", "value": 3, "answered_at": "2026-08-03T10:52:00Z"},
-        {"question_id": "fit.founder.axal_ambition", "value": 4, "answered_at": "2026-08-03T10:54:00Z"}
+        {"question_id": "fit.founder.axal_ambition", "value": 4, "answered_at": "2026-08-03T10:54:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_builder_describe", "value": 3, "answered_at": "2026-08-03T10:56:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_visionary_quarter", "value": 0, "answered_at": "2026-08-03T10:58:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_connector_alone", "value": 1, "answered_at": "2026-08-03T11:00:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_operator_improvise", "value": 2, "answered_at": "2026-08-03T11:02:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_contract", "value": "b", "answered_at": "2026-08-03T11:04:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_weekend", "value": "b", "answered_at": "2026-08-03T11:06:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_hire", "value": "a", "answered_at": "2026-08-03T11:08:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_disagree", "value": "c", "answered_at": "2026-08-03T11:10:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_story", "value": "a", "answered_at": "2026-08-03T11:12:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_scale", "value": "a", "answered_at": "2026-08-03T11:14:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_proud", "value": "a", "answered_at": "2026-08-03T11:16:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_stuck", "value": "d", "answered_at": "2026-08-03T11:18:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_builder_away", "value": 2, "answered_at": "2026-08-03T11:20:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_visionary_distraction", "value": 0, "answered_at": "2026-08-03T11:22:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_connector_intro", "value": 0, "answered_at": "2026-08-03T11:24:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_operator_meetings", "value": 2, "answered_at": "2026-08-03T11:26:00Z"}
       ]
     },
     {
@@ -164,7 +180,23 @@
         {"question_id": "fit.founder.axal_curiosity", "value": 3, "answered_at": "2026-08-04T10:48:00Z"},
         {"question_id": "fit.founder.axal_resilience", "value": 3, "answered_at": "2026-08-04T10:50:00Z"},
         {"question_id": "fit.founder.axal_collaboration", "value": 3, "answered_at": "2026-08-04T10:52:00Z"},
-        {"question_id": "fit.founder.axal_ambition", "value": 2, "answered_at": "2026-08-04T10:54:00Z"}
+        {"question_id": "fit.founder.axal_ambition", "value": 2, "answered_at": "2026-08-04T10:54:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_builder_describe", "value": 1, "answered_at": "2026-08-04T10:56:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_visionary_quarter", "value": 2, "answered_at": "2026-08-04T10:58:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_connector_alone", "value": 1, "answered_at": "2026-08-04T11:00:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_operator_improvise", "value": 3, "answered_at": "2026-08-04T11:02:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_contract", "value": "c", "answered_at": "2026-08-04T11:04:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_weekend", "value": "b", "answered_at": "2026-08-04T11:06:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_hire", "value": "b", "answered_at": "2026-08-04T11:08:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_disagree", "value": "a", "answered_at": "2026-08-04T11:10:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_story", "value": "b", "answered_at": "2026-08-04T11:12:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_scale", "value": "a", "answered_at": "2026-08-04T11:14:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_proud", "value": "c", "answered_at": "2026-08-04T11:16:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_stuck", "value": "c", "answered_at": "2026-08-04T11:18:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_builder_away", "value": 1, "answered_at": "2026-08-04T11:20:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_visionary_distraction", "value": 2, "answered_at": "2026-08-04T11:22:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_connector_intro", "value": 1, "answered_at": "2026-08-04T11:24:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_operator_meetings", "value": 3, "answered_at": "2026-08-04T11:26:00Z"}
       ]
     },
     {
@@ -236,7 +268,23 @@
         {"question_id": "fit.founder.axal_curiosity", "value": 3, "answered_at": "2026-08-05T10:48:00Z"},
         {"question_id": "fit.founder.axal_resilience", "value": 4, "answered_at": "2026-08-05T10:50:00Z"},
         {"question_id": "fit.founder.axal_collaboration", "value": 3, "answered_at": "2026-08-05T10:52:00Z"},
-        {"question_id": "fit.founder.axal_ambition", "value": 3, "answered_at": "2026-08-05T10:54:00Z"}
+        {"question_id": "fit.founder.axal_ambition", "value": 3, "answered_at": "2026-08-05T10:54:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_builder_describe", "value": 1, "answered_at": "2026-08-05T10:56:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_visionary_quarter", "value": 2, "answered_at": "2026-08-05T10:58:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_connector_alone", "value": 3, "answered_at": "2026-08-05T11:00:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_operator_improvise", "value": 0, "answered_at": "2026-08-05T11:02:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_contract", "value": "a", "answered_at": "2026-08-05T11:04:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_weekend", "value": "c", "answered_at": "2026-08-05T11:06:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_hire", "value": "c", "answered_at": "2026-08-05T11:08:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_disagree", "value": "b", "answered_at": "2026-08-05T11:10:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_story", "value": "c", "answered_at": "2026-08-05T11:12:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_scale", "value": "b", "answered_at": "2026-08-05T11:14:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_proud", "value": "b", "answered_at": "2026-08-05T11:16:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_stuck", "value": "b", "answered_at": "2026-08-05T11:18:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_builder_away", "value": 1, "answered_at": "2026-08-05T11:20:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_visionary_distraction", "value": 3, "answered_at": "2026-08-05T11:22:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_connector_intro", "value": 3, "answered_at": "2026-08-05T11:24:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_operator_meetings", "value": 1, "answered_at": "2026-08-05T11:26:00Z"}
       ]
     },
     {
@@ -308,7 +356,23 @@
         {"question_id": "fit.founder.axal_curiosity", "value": 3, "answered_at": "2026-08-06T10:48:00Z"},
         {"question_id": "fit.founder.axal_resilience", "value": 2, "answered_at": "2026-08-06T10:50:00Z"},
         {"question_id": "fit.founder.axal_collaboration", "value": 3, "answered_at": "2026-08-06T10:52:00Z"},
-        {"question_id": "fit.founder.axal_ambition", "value": 4, "answered_at": "2026-08-06T10:54:00Z"}
+        {"question_id": "fit.founder.axal_ambition", "value": 4, "answered_at": "2026-08-06T10:54:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_builder_describe", "value": 1, "answered_at": "2026-08-06T10:56:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_visionary_quarter", "value": 1, "answered_at": "2026-08-06T10:58:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_connector_alone", "value": 3, "answered_at": "2026-08-06T11:00:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_operator_improvise", "value": 3, "answered_at": "2026-08-06T11:02:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_contract", "value": "a", "answered_at": "2026-08-06T11:04:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_weekend", "value": "a", "answered_at": "2026-08-06T11:06:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_hire", "value": "b", "answered_at": "2026-08-06T11:08:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_disagree", "value": "b", "answered_at": "2026-08-06T11:10:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_story", "value": "b", "answered_at": "2026-08-06T11:12:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_scale", "value": "c", "answered_at": "2026-08-06T11:14:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_proud", "value": "d", "answered_at": "2026-08-06T11:16:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_stuck", "value": "a", "answered_at": "2026-08-06T11:18:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_builder_away", "value": 1, "answered_at": "2026-08-06T11:20:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_visionary_distraction", "value": 1, "answered_at": "2026-08-06T11:22:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_connector_intro", "value": 3, "answered_at": "2026-08-06T11:24:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_operator_meetings", "value": 2, "answered_at": "2026-08-06T11:26:00Z"}
       ]
     },
     {
@@ -1685,7 +1749,23 @@
         {"question_id": "fit.founder.axal_curiosity", "value": 3, "answered_at": "2026-08-24T11:48:00Z"},
         {"question_id": "fit.founder.axal_resilience", "value": 2, "answered_at": "2026-08-24T11:50:00Z"},
         {"question_id": "fit.founder.axal_collaboration", "value": 3, "answered_at": "2026-08-24T11:52:00Z"},
-        {"question_id": "fit.founder.axal_ambition", "value": 4, "answered_at": "2026-08-24T11:54:00Z"}
+        {"question_id": "fit.founder.axal_ambition", "value": 4, "answered_at": "2026-08-24T11:54:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_builder_describe", "value": 1, "answered_at": "2026-08-24T11:56:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_visionary_quarter", "value": 1, "answered_at": "2026-08-24T11:58:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_connector_alone", "value": 2, "answered_at": "2026-08-24T12:00:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_operator_improvise", "value": 3, "answered_at": "2026-08-24T12:02:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_contract", "value": "c", "answered_at": "2026-08-24T12:04:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_weekend", "value": "a", "answered_at": "2026-08-24T12:06:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_hire", "value": "b", "answered_at": "2026-08-24T12:08:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_disagree", "value": "b", "answered_at": "2026-08-24T12:10:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_story", "value": "b", "answered_at": "2026-08-24T12:12:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_scale", "value": "a", "answered_at": "2026-08-24T12:14:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_proud", "value": "c", "answered_at": "2026-08-24T12:16:00Z"},
+        {"question_id": "fit.founder.arch_fo_pick_stuck", "value": "a", "answered_at": "2026-08-24T12:18:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_builder_away", "value": 1, "answered_at": "2026-08-24T12:20:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_visionary_distraction", "value": 1, "answered_at": "2026-08-24T12:22:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_connector_intro", "value": 2, "answered_at": "2026-08-24T12:24:00Z"},
+        {"question_id": "fit.founder.arch_fo_rev_operator_meetings", "value": 3, "answered_at": "2026-08-24T12:26:00Z"}
       ]
     },
     {
