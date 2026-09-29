@@ -26,32 +26,36 @@
  * or advisor profile the user holds. Another user's rows never count, and the
  * route that reads this only ever passes the caller's own id.
  *
- * AGEING (the handoff's proposal, confirmed by the owner for D318 pending
- * S7's spec): an action in the last 12 months counts 1; an older one fades
- * with a 12-month half-life. Lifetime totals are kept for display only.
+ * AGEING (PROFILING_V2.md §7.4, the owner's decision d): an action counts 1
+ * for `EVIDENCE_FULL_DAYS`, then fades linearly to 0 over the next
+ * `EVIDENCE_FADE_DAYS`. Lifetime totals are kept for display; only the window
+ * feeds the state.
  *
- * BLEND — "CORROBORATE" (owner's decision for D318, pending S7): evidence
- * confirms a self-rating, it never raises one and never creates one.
- *   - self and evidence, evidence ≥ self → blended = self ("corroborated");
- *   - self and evidence, evidence < self → blended moves half-way toward the
- *     evidence ("partly corroborated");
- *   - self only → blended = self ("self-rated only");
- *   - evidence only → no blended level ("evidence only — not self-rated");
- *   - neither → nothing, and the axis says so. It is never drawn as 0.
+ * STATE, NOT LEVEL (§5.2, decision b "corroborate"): evidence never changes
+ * the displayed level in v2. The level is the self-rating, or none. Evidence
+ * moves the axis's state:
+ *   - no self-rating, no evidence weight      → `not_recorded` (never 0);
+ *   - self-rating, evidence weight 0          → `self_rated_only`;
+ *   - self-rating, 0 < weight < CORROBORATED_AT → `some_evidence`;
+ *   - self-rating, weight ≥ CORROBORATED_AT   → `corroborated`;
+ *   - no self-rating, weight > 0              → `evidence_only` (a count, no level).
+ * A blend that moves the level is a later session's to propose, behind a
+ * switch the owner turns on. (D318 first shipped a half-way blend; the spec
+ * that landed beside it rules that out, and this follows the spec.)
  */
 import type { Env } from '../types';
 import { RADAR_AXES, type RadarAxisSlug } from './skillsTaxonomySchema';
 
-export const EVIDENCE_ENGINE_VERSION = 1;
+export const EVIDENCE_ENGINE_VERSION = 2;
 
-/** An action this old or newer counts fully. */
-export const WINDOW_DAYS = 365;
-/** Past the window, an action's weight halves every this many days. */
-export const HALF_LIFE_DAYS = 365;
-/** Weighted actions at which the evidence score reaches ~63% of the scale. */
-export const SATURATION = 3;
-/** The radar scale. */
-export const SCALE_MAX = 5;
+/** PROFILING_V2.md §7.0: an action this old or newer counts fully… */
+export const EVIDENCE_FULL_DAYS = 365;
+/** …then fades linearly to 0 over this many more days. */
+export const EVIDENCE_FADE_DAYS = 365;
+/** §7.0: evidence weight at which a self-rated axis reads "corroborated". */
+export const CORROBORATED_AT = 3.0;
+/** Events listed per axis in the route's `recent_events`. */
+export const RECENT_EVENTS = 5;
 
 const DAY_MS = 86_400_000;
 const AXIS_SLUGS = RADAR_AXES.map((a) => a.slug) as RadarAxisSlug[];
@@ -334,11 +338,11 @@ export function parseAt(v: unknown): number | null {
   return Number.isFinite(t) ? t : null;
 }
 
-/** 1 inside the window; past it, halves every HALF_LIFE_DAYS. */
+/** §7.4: 1 while age ≤ full days, then linear to 0 over the fade days. */
 export function ageWeight(atMs: number, nowMs: number): number {
   const days = Math.max(0, (nowMs - atMs) / DAY_MS);
-  if (days <= WINDOW_DAYS) return 1;
-  return Math.pow(0.5, (days - WINDOW_DAYS) / HALF_LIFE_DAYS);
+  if (days <= EVIDENCE_FULL_DAYS) return 1;
+  return Math.max(0, 1 - (days - EVIDENCE_FULL_DAYS) / EVIDENCE_FADE_DAYS);
 }
 
 export interface EvidenceRow {
@@ -351,6 +355,13 @@ export interface EvidenceRow {
   last_at: string;
 }
 
+/** One action, for the route's `recent_events`: its source and date only. */
+export interface EvidenceEvent {
+  axis: RadarAxisSlug;
+  source: string;
+  occurred_at: string;
+}
+
 const round = (n: number, d: number) => Math.round(n * 10 ** d) / 10 ** d;
 
 /**
@@ -358,7 +369,7 @@ const round = (n: number, d: number) => Math.round(n * 10 ** d) / 10 ** d;
  * profile words; every query is bound to `userId`.
  */
 export async function collectEvidence(env: Env, userId: number, now: Date = new Date()):
-  Promise<{ rows: EvidenceRow[]; unmapped: Array<{ source: string; count: number }> }> {
+  Promise<{ rows: EvidenceRow[]; events: EvidenceEvent[]; unmapped: Array<{ source: string; count: number }> }> {
   const nowMs = now.getTime();
   const spec = await env.DB.prepare(
     `SELECT
@@ -370,6 +381,7 @@ export async function collectEvidence(env: Env, userId: number, now: Date = new 
 
   const acc = new Map<string, { axis: RadarAxisSlug; source: string; n: number; win: number; w: number; first: number; last: number }>();
   const unmapped: Array<{ source: string; count: number }> = [];
+  const events: EvidenceEvent[] = [];
   for (const src of EVIDENCE_SOURCES) {
     const res = await env.DB.prepare(src.sql).bind(userId).all<{ at: unknown; k?: unknown }>();
     let noAxis = 0;
@@ -381,8 +393,9 @@ export async function collectEvidence(env: Env, userId: number, now: Date = new 
         : specAxes;
       if (axes.length === 0) { noAxis += 1; continue; }
       const w = ageWeight(at, nowMs);
-      const inWin = (nowMs - at) / DAY_MS <= WINDOW_DAYS ? 1 : 0;
+      const inWin = (nowMs - at) / DAY_MS <= EVIDENCE_FULL_DAYS ? 1 : 0;
       for (const axis of axes) {
+        events.push({ axis, source: src.key, occurred_at: new Date(at).toISOString() });
         const id = `${axis}|${src.key}`;
         const e = acc.get(id) || { axis, source: src.key, n: 0, win: 0, w: 0, first: at, last: at };
         e.n += 1; e.win += inWin; e.w += w;
@@ -401,26 +414,26 @@ export async function collectEvidence(env: Env, userId: number, now: Date = new 
       first_at: new Date(e.first).toISOString(), last_at: new Date(e.last).toISOString(),
     }))
     .sort((a, b) => (a.axis === b.axis ? a.source.localeCompare(b.source) : a.axis.localeCompare(b.axis)));
-  return { rows, unmapped };
+  events.sort((a, b) => b.occurred_at.localeCompare(a.occurred_at) || a.source.localeCompare(b.source));
+  return { rows, events, unmapped };
 }
 
-/** 0..SCALE_MAX from the axis's weighted actions; null when there are none. */
-export function evidenceScore(rows: EvidenceRow[]): number | null {
-  if (rows.length === 0) return null;
+/**
+ * §7.4: an axis's evidence weight — the sum of its aged actions, each times
+ * its source's weight. 0 when there are none, or when all have faded.
+ */
+export function evidenceWeight(rows: EvidenceRow[]): number {
   const weightOf = new Map(EVIDENCE_SOURCES.map((s) => [s.key, s.weight ?? 1]));
-  const W = rows.reduce((s, r) => s + r.weighted * (weightOf.get(r.source) ?? 1), 0);
-  return round(SCALE_MAX * (1 - Math.exp(-W / SATURATION)), 2);
+  return round(rows.reduce((sum, r) => sum + r.weighted * (weightOf.get(r.source) ?? 1), 0), 4);
 }
 
-export type BlendBasis = 'none' | 'self_rated_only' | 'evidence_only' | 'corroborated' | 'partly_corroborated';
+export type AxisState = 'not_recorded' | 'self_rated_only' | 'some_evidence' | 'corroborated' | 'evidence_only';
 
-/** The owner's "corroborate" rule (D318). */
-export function blend(self: number | null, evidence: number | null): { blended: number | null; basis: BlendBasis } {
-  if (self == null && evidence == null) return { blended: null, basis: 'none' };
-  if (self == null) return { blended: null, basis: 'evidence_only' };
-  if (evidence == null) return { blended: self, basis: 'self_rated_only' };
-  if (evidence >= self) return { blended: self, basis: 'corroborated' };
-  return { blended: round(self - 0.5 * (self - evidence), 2), basis: 'partly_corroborated' };
+/** §5.2. The level shown is the self-rating or none; evidence moves the state only. */
+export function axisState(self: number | null, weight: number): { state: AxisState; level: number | null } {
+  if (self == null) return { state: weight > 0 ? 'evidence_only' : 'not_recorded', level: null };
+  if (weight <= 0) return { state: 'self_rated_only', level: self };
+  return { state: weight >= CORROBORATED_AT ? 'corroborated' : 'some_evidence', level: self };
 }
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -451,32 +464,38 @@ export async function selfLevels(env: Env, userId: number): Promise<Map<string, 
 export interface AxisEvidence {
   axis: RadarAxisSlug;
   label: string;
+  state: AxisState;
+  /** The level shown: the self-rating, or null. Evidence never sets it. */
+  level: number | null;
   self_level: number | null;
-  evidence: number | null;
-  blended: number | null;
-  basis: BlendBasis;
+  evidence_weight: number;
+  lifetime_count: number;
+  recent_events: Array<{ source: string; occurred_at: string }>;
   provenance: string[];
-  lifetime_actions: number;
 }
 
 /** What GET /api/skills/me/evidence returns: every axis, absent drawn as absent. */
 export async function evidenceReport(env: Env, userId: number, now: Date = new Date()) {
-  const [{ rows, unmapped }, self] = await Promise.all([collectEvidence(env, userId, now), selfLevels(env, userId)]);
+  const [{ rows, events, unmapped }, self] = await Promise.all([collectEvidence(env, userId, now), selfLevels(env, userId)]);
   const axes: AxisEvidence[] = RADAR_AXES.map((a) => {
     const mine = rows.filter((r) => r.axis === a.slug);
-    const evidence = evidenceScore(mine);
+    const weight = evidenceWeight(mine);
     const s = self.has(a.slug) ? self.get(a.slug)! : null;
-    const { blended, basis } = blend(s, evidence);
+    const { state, level } = axisState(s, weight);
     return {
-      axis: a.slug, label: a.label, self_level: s, evidence, blended, basis,
+      axis: a.slug, label: a.label, state, level, self_level: s,
+      evidence_weight: weight,
+      lifetime_count: mine.reduce((n, r) => n + r.count_lifetime, 0),
+      recent_events: events.filter((e) => e.axis === a.slug).slice(0, RECENT_EVENTS)
+        .map((e) => ({ source: e.source, occurred_at: e.occurred_at })),
       provenance: [...mine].sort((x, y) => y.last_at.localeCompare(x.last_at)).map(provenanceLine),
-      lifetime_actions: mine.reduce((n, r) => n + r.count_lifetime, 0),
     };
   });
   return {
     engine_version: EVIDENCE_ENGINE_VERSION,
-    window_days: WINDOW_DAYS,
-    half_life_days: HALF_LIFE_DAYS,
+    evidence_full_days: EVIDENCE_FULL_DAYS,
+    evidence_fade_days: EVIDENCE_FADE_DAYS,
+    corroborated_at: CORROBORATED_AT,
     computed_at: now.toISOString(),
     axes,
     unmapped: unmapped.map((u) => ({ ...u, note: `${u.count} not counted: your profile's specialization names no radar axis` })),
