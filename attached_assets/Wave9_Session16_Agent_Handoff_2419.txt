@@ -1,0 +1,140 @@
+Wave 9 · Session 16 — Cloud agent handoff to Session 1 (coordinator)
+====================================================================
+Agent run branch family: cursor/*-2419
+Report date (UTC): 2026-09-29
+Repo: AxalNetwork/StudioOS
+Base integration branch: main
+
+Purpose
+-------
+Summarize work delivered in this agent session for Wave 9, Session 16 review
+follow-ups (#865 / #871 / #868 family), so Session 1 can reconcile queue state,
+merged PRs, and remaining gaps.
+
+
+Wave 9 · Session 16 queue (documented in DECISIONS.md)
+------------------------------------------------------
+
+Item 1 — D457 (#865 review)
+  Topic: Territory draft leak, deploy version stamping, HQ Home kind filter,
+         HqBranchOverlay licence_shell
+  Branch: cursor/hq-territory-draft-d457-2419
+  PR: https://github.com/AxalNetwork/StudioOS/pull/885
+  Status: MERGED to main (before this session’s D458 push; confirmed on remote)
+  Migration: none
+  Tests: hq_licences_d457.test.mjs; deployments_last_version extended;
+         hq_licences_polish re-aimed
+
+Item 2 — D490 (#871 review)
+  Topic: Partnernet interaction log follow-ups — per-party private notes,
+         reminder date handling (end of UTC day), void touch refusal,
+         investor UI copy/dates
+  Branch: cursor/partnernet-d490-2419
+  PR: https://github.com/AxalNetwork/StudioOS/pull/887
+  Status: MERGED 2026-09-27T14:45:20Z
+  Migration: none
+  Key paths:
+    cloudflare-worker/src/routes/partnernet.ts
+    frontend/src/pages/investor/InvestorNetworkWorkspace.jsx
+    cloudflare-worker/test/partnernet_interactions.test.ts (+3 tests)
+    frontend/test/investor_network_d490.test.mjs
+    frontend/test/investor_network_cold.test.mjs (re-aimed)
+    documentation/architecture/DECISIONS.md — D490 entry (on main after merge)
+  Build: docs/ rebuilt; check-docs-fresh --strict OK locally before merge
+
+Item 3 — D458 (#868 / D453 statement follow-ups) — PRIMARY WORK THIS SESSION
+  Topic: HQ Revenue statement ledger honesty — hold blocks draw, floors refuse
+         paid-in-full, void requires reason + admin audit
+  Branch: cursor/hq-statements-d458-2419
+  PR: https://github.com/AxalNetwork/StudioOS/pull/889
+  Status: MERGED 2026-09-27T15:00:49Z
+  Commit on branch: a5f8de709e — "D458: statement draw hold, floor paid-in-full
+         refusal, void audit"
+  Migration: none; no new /api/* methods
+
+  Worker (production path: cloudflare-worker/src/routes/admin_statements.ts)
+    • POST /api/admin/statements/draw refuses when territory_licences.status
+      is not active (error licence_not_active).
+    • PATCH refuses marking paid in full on incomplete statements
+      (unreported_streams or estimated_streams non-zero): incomplete_statement
+      for status paid and for paid_cents === owed_cents.
+    • Partial payments below owed on incomplete statements still allowed.
+    • Void requires void_note (≥10 chars); logAdminAction rows:
+      subsidiary_statement_void, subsidiary_statement_paid (complete only),
+      subsidiary_statement_dispute when dispute recorded.
+
+  Frontend (frontend/src/pages/hq/RevenuePage.jsx)
+    • licencesDrawableForStatements: active licences with revenue share only.
+    • statementVoidPayload, statementAllowsPaidInFull; StatementActions void
+      form with required reason; "Mark paid in full" hidden on floor rows with
+      explanatory copy.
+    • Draw editor copy mentions active-licence-only rule.
+
+  Docs / decisions
+    • documentation/architecture/DECISIONS.md — new ## D458 (inserted between
+      D457 and D460); mutations 4/4 documented.
+    • frontend/src/pages/hq/README.md — Revenue row mentions D458 behaviour.
+    • docs/ rebuilt via npm run build (Worker assets bundle includes RevenuePage).
+
+  Tests
+    • cloudflare-worker/test/hq_statements.test.ts — extended (29 tests pass
+      locally): suspended draw refusal, incomplete paid-in-full refusal, void
+      note required; paid-in-full test updated to report all streams first.
+    • frontend/test/hq_revenue_statements_d458.test.mjs — new.
+    • frontend/test/hq_revenue_statements_d453.test.mjs — suspended licence in
+      fixture; drawable list expects active-only.
+
+  Local verification (this session)
+    • hq_statements.test.ts: 29/29 pass
+    • frontend statement tests via npm run test:frontend (full suite green)
+    • node scripts/check-decision-ids.mjs — OK (348 decisions through D465)
+    • npm run build + check-docs-fresh --strict — OK after docs rebuild
+
+Item 4+ — NOT STARTED IN REPO
+  No DECISIONS.md entry for D459, D480, or further Wave 9 Session 16 items.
+  No open cursor/*-2419 PRs at handoff time (887 and 889 merged).
+
+
+Out of scope for this session (informational only)
+--------------------------------------------------
+User asked how Values, Skills, and Archetype question banks work on /studio
+with Eadwyn AI. No code changes. Summary for coordinator:
+
+  • /studio → Dashboard.jsx: PersonalAdvisor (Eadwyn) + ProfileFitSection.
+  • Profiling bank: fit.* questions in cloudflare-worker/src/services/advisor/
+    banks/fit_<persona>.ts; four modules Skills / Work values / Archetype /
+    Axal Fit & values (profilingModules.ts floors, not full bank size).
+  • APIs: /api/advisor/start, /answer, /skip, /progress; answers in
+    advisor_answers → user_skills, user_values, archetype scoring, axalFit.
+  • Separate gamified assessment track (assessment.myResults) still exists;
+    Eadwyn fit answers can recompute archetype via recomputeUserArchetype.
+
+
+Git / environment notes
+-----------------------
+  • Pre-existing local modifications in attached_assets/*.pptx and *.docx were
+    never staged or committed (binary noise from snapshot).
+  • Known pre-existing worker test flakes on main (not introduced by D458):
+    capital_call_ledger.test.ts, trust_center_d432.test.ts — called out in
+    other Wave 8 decision VERIFIED blocks; full test:drift not re-run as gate
+    for this handoff after merge.
+
+
+Session 1 action items (suggested)
+----------------------------------
+  1. Mark Wave 9 Session 16 items 1–3 complete on coordinator board (PRs 885,
+     887, 889 merged).
+  2. Define item 4+ (if any) with PR numbers and decision IDs — not present in
+     DECISIONS.md beyond D458.
+  3. Confirm production deploy includes D458 worker + docs bundle after main CI.
+  4. If partnernet or statements need UX walkthrough, use merged main — no open
+     draft PRs for this wave item set.
+
+
+Quick reference — merged PRs (Wave 9 Session 16)
+------------------------------------------------
+  #885  D457  cursor/hq-territory-draft-d457-2419
+  #887  D490  cursor/partnernet-d490-2419
+  #889  D458  cursor/hq-statements-d458-2419
+
+End of handoff.
