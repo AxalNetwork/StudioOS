@@ -10,8 +10,10 @@
  *      are seeded per role, one row each per source, and each owner must see
  *      exactly one per source.
  *   3. THE WINDOW: an action in the last 12 months counts 1, an older one fades
- *      with a 12-month half-life; lifetime totals stay for display.
- *   4. NO EVIDENCE IS "none", never 0; the corroborate blend never raises or
+ *      linearly to 0 over the next 12 (PROFILING_V2.md §7.4); lifetime totals
+ *      stay for display.
+ *   4. NO EVIDENCE IS "not_recorded", never 0; evidence moves the axis's state
+ *      (§5.2) and never the level shown, which stays the self-rating or
  *      creates a self-rating.
  *   5. THE ROUTE reads the caller's own evidence only.
  *   6. THE BATCH is bounded, resumable and idempotent: a second pass at the
@@ -33,7 +35,7 @@ import { SignJWT } from 'jose';
 import skillsRoutes from '../src/routes/skills.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import {
-  EVIDENCE_SOURCES, ageWeight, blend, collectEvidence, evidenceReport, evidenceScore,
+  EVIDENCE_SOURCES, CORROBORATED_AT, ageWeight, axisState, collectEvidence, evidenceReport, evidenceWeight,
   parseAt, provenanceLine, recomputeEvidenceBatch, recomputeUserEvidence, specializationAxes,
 } from '../src/services/skillEvidence.ts';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
@@ -52,7 +54,7 @@ const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
 const NOW = new Date('2026-09-28T12:00:00Z');
 const RECENT = '2026-08-15 10:00:00';
-const OLD = '2024-09-28 12:00:00'; // 730 days before NOW → weight 0.5
+const OLD = '2025-03-29 12:00:00'; // 548 days before NOW → weight 1 − 183/365 ≈ 0.4986
 
 // Two of each role: the owner (first) and someone else (second).
 const FAY = 1; const FRED = 2;   // founders (founders.id 100, 101)
@@ -251,7 +253,7 @@ test('D318: a specialization that names no axis is reported as not counted, not 
   const db = seeded();
   db.prepare(`UPDATE partners SET specialization = 'Good vibes' WHERE id = 20`).run();
   const r = await evidenceReport(env(db), PIA, NOW);
-  assert.ok(r.axes.every((a) => a.evidence === null), 'an unmapped specialization produced evidence on some axis');
+  assert.ok(r.axes.every((a) => a.evidence_weight === 0 && a.state === 'not_recorded'), 'an unmapped specialization produced evidence on some axis');
   const office = r.unmapped.find((u) => u.source === 'office_hours_completed');
   assert.ok(office && office.count === 1 && /names no radar axis/.test(office.note));
   assert.deepEqual(specializationAxes(['["Legal","Ops"]', 'Brand design']).sort(), ['design', 'finance_ops', 'legal_compliance', 'marketing_brand']);
@@ -292,11 +294,15 @@ test('D318: what is not evidence is not counted — unfinished, unsigned, poorly
 
 /* 3 · the window --------------------------------------------------------- */
 
-test('D318: an action inside 12 months counts 1, an older one fades with a 12-month half-life', async () => {
+test('D318: an action counts 1 for 12 months, then fades linearly to 0 over the next 12 (§7.4)', async () => {
+  const ago = (d: number) => NOW.getTime() - d * 86_400_000;
   assert.equal(ageWeight(Date.parse('2026-09-01T00:00:00Z'), NOW.getTime()), 1);
-  assert.equal(ageWeight(NOW.getTime() - 365 * 86_400_000, NOW.getTime()), 1);
-  assert.equal(ageWeight(NOW.getTime() - 730 * 86_400_000, NOW.getTime()), 0.5);
-  assert.equal(ageWeight(NOW.getTime() - 1095 * 86_400_000, NOW.getTime()), 0.25);
+  assert.equal(ageWeight(ago(300), NOW.getTime()), 1, 'ten months old still counts in full');
+  assert.equal(ageWeight(ago(365), NOW.getTime()), 1);
+  assert.equal(ageWeight(ago(365 + 73), NOW.getTime()), 0.8);
+  assert.equal(ageWeight(ago(365 + 182.5), NOW.getTime()), 0.5);
+  assert.equal(ageWeight(ago(730), NOW.getTime()), 0, 'gone at 24 months');
+  assert.equal(ageWeight(ago(1095), NOW.getTime()), 0, 'never negative');
   assert.equal(ageWeight(NOW.getTime() + 86_400_000, NOW.getTime()), 1, 'a future date is not a bonus');
   assert.equal(parseAt('2026-08-15 10:00:00'), Date.parse('2026-08-15T10:00:00Z'));
   assert.equal(parseAt(null), null);
@@ -304,47 +310,53 @@ test('D318: an action inside 12 months counts 1, an older one fades with a 12-mo
 
   const db = seeded();
   db.prepare(`INSERT INTO pitch_decks (project_id, version, slides, title, is_current, created_by, created_at) VALUES (10, 2, '[]', 'Deck', 0, ?, ?)`).run(FAY, OLD);
+  db.prepare(`INSERT INTO pitch_decks (project_id, version, slides, title, is_current, created_by, created_at) VALUES (10, 3, '[]', 'Deck', 0, ?, '2023-01-01 00:00:00')`).run(FAY);
   const deck = (await collectEvidence(env(db), FAY, NOW)).rows.find((r) => r.source === 'deck_version' && r.axis === 'marketing_brand')!;
-  assert.equal(deck.count_lifetime, 2);
+  assert.equal(deck.count_lifetime, 3, 'lifetime keeps every version, faded or not');
   assert.equal(deck.count_window, 1);
-  assert.equal(deck.weighted, 1.5);
-  assert.equal(deck.first_at, '2024-09-28T12:00:00.000Z');
-  assert.equal(provenanceLine(deck), '2 pitch-deck versions saved, last in August 2026 (1 in the last 12 months)');
+  assert.equal(deck.weighted, 1.4986);
+  assert.equal(deck.first_at, '2023-01-01T00:00:00.000Z');
+  assert.equal(provenanceLine(deck), '3 pitch-deck versions saved, last in August 2026 (1 in the last 12 months)');
   // The investor's two moves on one deal are one deal, dated by the latest.
   const deal = (await collectEvidence(env(db), IVY, NOW)).rows.find((r) => r.source === 'deal_worked')!;
   assert.equal(deal.count_lifetime, 1);
   assert.equal(deal.weighted, 1);
 });
 
-/* 4 · none is none, and the blend corroborates --------------------------- */
+/* 4 · state, not level (§5.2) ------------------------------------------- */
 
-test('D318: an axis with no evidence says so — null and "none", never 0', async () => {
+test('D318: an axis with nothing behind it is not_recorded — no level, weight 0, never drawn as 0', async () => {
   const db = seeded();
   const r = await evidenceReport(env(db), NIL, NOW);
   assert.equal(r.axes.length, 8);
   for (const a of r.axes) {
-    assert.equal(a.evidence, null, `${a.axis} drew absent evidence as a number`);
-    assert.equal(a.blended, null);
-    assert.equal(a.basis, 'none');
+    assert.equal(a.state, 'not_recorded');
+    assert.equal(a.level, null, `${a.axis} drew an absent level as a number`);
+    assert.equal(a.self_level, null);
+    assert.equal(a.evidence_weight, 0);
+    assert.equal(a.lifetime_count, 0);
+    assert.deepEqual(a.recent_events, []);
     assert.deepEqual(a.provenance, []);
   }
-  assert.equal(evidenceScore([]), null);
+  assert.equal(evidenceWeight([]), 0);
 });
 
-test('D318: the corroborate blend — evidence confirms a self-rating, never raises or creates one', () => {
-  assert.deepEqual(blend(null, null), { blended: null, basis: 'none' });
-  assert.deepEqual(blend(3, null), { blended: 3, basis: 'self_rated_only' });
-  assert.deepEqual(blend(null, 4.2), { blended: null, basis: 'evidence_only' });
-  assert.deepEqual(blend(3, 4.2), { blended: 3, basis: 'corroborated' });
-  assert.deepEqual(blend(3, 3), { blended: 3, basis: 'corroborated' });
-  assert.deepEqual(blend(4, 1), { blended: 2.5, basis: 'partly_corroborated' });
+test('D318: evidence moves the state, never the level (§5.2)', () => {
+  assert.equal(CORROBORATED_AT, 3);
+  assert.deepEqual(axisState(null, 0), { state: 'not_recorded', level: null });
+  assert.deepEqual(axisState(null, 4.2), { state: 'evidence_only', level: null }, 'evidence never creates a level');
+  assert.deepEqual(axisState(3, 0), { state: 'self_rated_only', level: 3 });
+  assert.deepEqual(axisState(3, 0.5), { state: 'some_evidence', level: 3 });
+  assert.deepEqual(axisState(3, 2.99), { state: 'some_evidence', level: 3 });
+  assert.deepEqual(axisState(3, 3), { state: 'corroborated', level: 3 });
+  assert.deepEqual(axisState(1, 40), { state: 'corroborated', level: 1 }, 'evidence never raises a level');
+  assert.deepEqual(axisState(5, 0.1), { state: 'some_evidence', level: 5 }, 'thin evidence never lowers a level');
   const one = [{ axis: 'product', source: 'deck_version', count_lifetime: 3, count_window: 3, weighted: 3, first_at: '', last_at: '' }] as any;
-  assert.equal(evidenceScore(one), 3.16, '3 weighted actions reach ~63% of the scale');
-  const half = [{ ...one[0], source: 'lab_milestone' }];
-  assert.equal(evidenceScore(half), 1.97, 'a half-weight source counts half');
+  assert.equal(evidenceWeight(one), 3);
+  assert.equal(evidenceWeight([{ ...one[0], source: 'lab_milestone' }]), 1.5, 'a half-weight source counts half');
 });
 
-test('D318: the report joins the self-rating per axis and blends it', async () => {
+test('D318: the report joins the self-rating per axis, and faded evidence leaves the state', async () => {
   const db = seeded();
   db.exec(`INSERT INTO skills (id, slug, category_slug, label, is_active) VALUES
     (1, 'legal-basics', 'legal_compliance', 'Legal basics', 1), (2, 'ux', 'design', 'UX', 1), (3, 'contracts', 'legal_compliance', 'Contracts', 1)`);
@@ -353,14 +365,37 @@ test('D318: the report joins the self-rating per axis and blends it', async () =
   const r = await evidenceReport(env(db), FAY, NOW);
   const legal = r.axes.find((a) => a.axis === 'legal_compliance')!;
   assert.equal(legal.self_level, 4, 'the highest of Fay’s legal skills, never Fred’s 5');
-  assert.ok(legal.evidence! > 0);
-  assert.ok(['corroborated', 'partly_corroborated'].includes(legal.basis));
+  assert.equal(legal.level, 4);
+  // cap table 1 + sent-and-signed 1 + signed 0.5 + incorporation milestone 0.5
+  assert.equal(legal.evidence_weight, 3);
+  assert.equal(legal.state, 'corroborated');
+  assert.equal(legal.lifetime_count, 4);
+  assert.equal(legal.recent_events.length, 4);
+  assert.ok(legal.recent_events.every((e) => e.occurred_at === '2026-08-15T10:00:00.000Z' && typeof e.source === 'string'));
   assert.ok(legal.provenance.some((l) => /^1 document signed, last in August 2026$/.test(l)));
+  const design = r.axes.find((a) => a.axis === 'design')!;
+  assert.deepEqual([design.state, design.level, design.evidence_weight], ['some_evidence', 3, 1], 'one brand site');
   const eng = r.axes.find((a) => a.axis === 'engineering')!;
-  assert.equal(eng.basis, 'evidence_only', 'a shipped OKR is evidence, but Fay never rated engineering');
-  assert.equal(eng.blended, null);
+  assert.deepEqual([eng.state, eng.level], ['evidence_only', null], 'a shipped OKR is evidence, but Fay never rated engineering');
   const gtm = r.axes.find((a) => a.axis === 'gtm_sales')!;
   assert.equal(gtm.self_level, null);
+  // Two years on, the same actions have faded: counted for display, not for state.
+  const later = await evidenceReport(env(db), FAY, new Date('2028-09-01T00:00:00Z'));
+  const legalLater = later.axes.find((a) => a.axis === 'legal_compliance')!;
+  assert.deepEqual([legalLater.state, legalLater.level, legalLater.evidence_weight, legalLater.lifetime_count], ['self_rated_only', 4, 0, 4]);
+  assert.equal(later.axes.find((a) => a.axis === 'engineering')!.state, 'not_recorded');
+});
+
+test('D318: recent_events lists at most five, newest first', async () => {
+  const db = seeded();
+  for (let v = 2; v <= 8; v++) {
+    db.prepare(`INSERT INTO pitch_decks (project_id, version, slides, title, is_current, created_by, created_at) VALUES (10, ?, '[]', 'Deck', 0, ?, ?)`)
+      .run(v, FAY, `2026-0${v}-01 09:00:00`);
+  }
+  const brand = (await evidenceReport(env(db), FAY, NOW)).axes.find((a) => a.axis === 'marketing_brand')!;
+  assert.equal(brand.recent_events.length, 5);
+  const dates = brand.recent_events.map((e) => e.occurred_at);
+  assert.deepEqual(dates, [...dates].sort().reverse());
 });
 
 /* 5 · the route ---------------------------------------------------------- */
@@ -390,15 +425,15 @@ test('D318: GET /api/skills/me/evidence returns the caller’s own evidence, and
   const fay = await call(db, FAY, '/api/skills/me/evidence');
   assert.equal(fay.status, 200);
   assert.equal(fay.body.user_id, FAY);
-  assert.equal(fay.body.window_days, 365);
+  assert.deepEqual([fay.body.evidence_full_days, fay.body.evidence_fade_days, fay.body.corroborated_at], [365, 365, 3]);
   const brand = fay.body.axes.find((a: any) => a.axis === 'marketing_brand');
   assert.ok(brand.provenance.includes('1 pitch-deck version saved, last in August 2026'));
-  assert.equal(brand.lifetime_actions, 2, 'one deck and one brand site — not Fred’s');
+  assert.equal(brand.lifetime_count, 2, 'one deck and one brand site — not Fred’s');
   // A query string cannot point it at someone else.
   const sneaky = await call(db, FAY, `/api/skills/me/evidence?user_id=${FRED}`);
   assert.equal(sneaky.body.user_id, FAY);
   const partner = await call(db, PIA, '/api/skills/me/evidence');
-  assert.equal(partner.body.axes.find((a: any) => a.axis === 'marketing_brand').evidence, null,
+  assert.equal(partner.body.axes.find((a: any) => a.axis === 'marketing_brand').state, 'not_recorded',
     'Pia’s axes are her own specialization, not Fay’s deck');
 });
 
@@ -434,7 +469,7 @@ test('D318: the batch is bounded and resumable, stores what the report reads, an
   assert.ok(await recomputeUserEvidence(e, FAY, later) > 0, 'ageing past the window did not rewrite the rows');
   const aged = db.prepare(`SELECT count_window, weighted FROM skill_evidence WHERE user_id = ? AND source = 'deck_version' AND axis = 'marketing_brand'`).get(FAY);
   assert.equal(aged.count_window, 0);
-  assert.ok(aged.weighted < 1 && aged.weighted > 0.5);
+  assert.ok(aged.weighted < 1 && aged.weighted > 0.5, `aged weight ${aged.weighted}`);
   // Nobody else's rows moved.
   assert.deepEqual(db.prepare('SELECT * FROM skill_evidence WHERE user_id <> ? ORDER BY user_id, axis, source').all(FAY),
     before.filter((r: any) => r.user_id !== FAY));
