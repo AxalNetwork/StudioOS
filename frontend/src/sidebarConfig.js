@@ -201,7 +201,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/held/approvals', icon: Inbox, label: 'Approvals',
         match: ['/admin/lp-applications', '/admin/refer-earn', '/admin/best-fit', '/admin/due-diligence', '/admin/partners'] },
       { to: '/admin/held/programs', icon: Calendar, label: 'Programs',
-        match: ['/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/assessment'] },
+        match: ['/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/assessment', '/admin/profiling-trends'] },
       { to: '/admin/held/community', icon: Network, label: 'Community', match: ['/admin/events', '/admin/jobs', '/admin/circles'] },
       // The template library, on the Admin Console's Legal tab. Not "read-only":
       // `requireHqAuthoring` refuses only on a branch, so a plain HQ admin

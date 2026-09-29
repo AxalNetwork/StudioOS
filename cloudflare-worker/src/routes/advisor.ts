@@ -75,7 +75,7 @@ import { explorerBankForTrack } from '../services/advisor/banks/explorer';
 // answer lands (the raw score is persisted to field_sources below).
 import { recomputeUserFit } from '../services/axalFit';
 import { recomputeUserArchetype } from '../services/archetypeScoring';
-import { recomputeProfile } from '../services/profileHistory';
+import { evaluateUser, reaskOverlay } from '../services/profileEvolution';
 import { normalizeFitAnswer } from '../services/advisor/banks/fitShared';
 import { computeProfilingCompletion, applyAdaptiveProfiling } from '../services/advisor/profilingModules';
 import { routeAnswer, recordFieldSource, type WriteResult } from '../services/advisor/writeRouter';
@@ -693,10 +693,13 @@ advisor.post('/start', async (c) => {
   // Task #46 — adaptive candidate pool: drop fit questions from already-
   // confident modules and gap-fill-order the rest before ranking. Keep the
   // pinned question so the poll/refresh idempotence above still holds.
-  const rankBank = applyAdaptiveProfiling(bank, answered, {
+  // D358 — once no unanswered profiling question is left, answers six
+  // months old come back with their re-ask wording (reaskOverlay).
+  const reask = await reaskOverlay(c.env, user.id, bank, answered, { keepId: conv.current_question_id });
+  const rankBank = applyAdaptiveProfiling(reask.bank, answered, {
     keepIds: conv.current_question_id ? new Set([conv.current_question_id]) : undefined,
   });
-  const next = await pickNextQuestion(c.env, user.id, conv.id, rankBank, answered, {
+  const next = await pickNextQuestion(c.env, user.id, conv.id, rankBank, reask.answered, {
     pinnedId: conv.current_question_id,
   });
 
@@ -1146,11 +1149,14 @@ advisor.post('/answer', async (c) => {
     }
     // D357 — Profiling v2: recompute the person's profile from the answer
     // ledger and append a snapshot if it changed materially. v1 above keeps
-    // feeding the card until Session 15 moves it.
+    // feeding the card until Session 15 moves it. D358 — through
+    // evaluateUser, which also records a displayed-archetype change once
+    // (with its in-app notification) and stamps the evaluation for the
+    // nightly run.
     try {
-      await recomputeProfile(c.env, user.id, { trigger: 'answer' });
+      await evaluateUser(c.env, user.id, 'answer');
     } catch (e) {
-      console.warn('[advisor] recomputeProfile failed', (e as Error).message);
+      console.warn('[advisor] profile evaluation failed', (e as Error).message);
     }
   }
 
@@ -1217,11 +1223,14 @@ advisor.post('/answer', async (c) => {
   // (and any hydrated) ids are honoured even before the cross-conv
   // read inside nextTurn sees them.
   // Task #46 — trim confident-module fit questions from the ranker's pool.
-  const rankBank = applyAdaptiveProfiling(bank, answered);
+  // D358 — plus re-askable profiling questions, after every unanswered one.
+  const reask = await reaskOverlay(c.env, liveUser.id, bank, answered);
+  const rankBank = applyAdaptiveProfiling(reask.bank, answered);
   const turn = await smNextTurn(c.env, liveUser.id, rankBank, {
     week: gate.week,
     completedMilestones: gate.completedMilestones,
-    extraAnswered: answered,
+    extraAnswered: reask.answered,
+    reaskable: reask.reask,
   });
   const next = turn.next_question;
   await syncBankTotal(c.env, conv, bank.length, personaFor(liveUser));
@@ -1463,11 +1472,14 @@ advisor.post('/skip', async (c) => {
   // skipped question is already in `answered` — extraAnswered is a
   // belt-and-braces guard against same-isolate read lag.
   // Task #46 — trim confident-module fit questions from the ranker's pool.
-  const rankBank = applyAdaptiveProfiling(bank, answered);
+  // D358 — plus re-askable profiling questions, after every unanswered one.
+  const reask = await reaskOverlay(c.env, user.id, bank, answered);
+  const rankBank = applyAdaptiveProfiling(reask.bank, answered);
   const turn = await smNextTurn(c.env, user.id, rankBank, {
     week: gate.week,
     completedMilestones: gate.completedMilestones,
-    extraAnswered: answered,
+    extraAnswered: reask.answered,
+    reaskable: reask.reask,
   });
   const next = turn.next_question;
   await syncBankTotal(c.env, conv, bank.length, personaFor(user));
@@ -1759,10 +1771,12 @@ advisor.get('/next-question', async (c) => {
   // so the helper's "pinnedId must be in bank" check handles this).
   // Task #46 — adaptive candidate pool (skip confident modules, gap-fill
   // first). Preserve the pinned question so a poll/refresh stays idempotent.
-  const rankBank = applyAdaptiveProfiling(bank, answered, {
+  // D358 — plus re-askable profiling questions, after every unanswered one.
+  const reask = await reaskOverlay(c.env, user.id, bank, answered, { keepId: conv.current_question_id });
+  const rankBank = applyAdaptiveProfiling(reask.bank, answered, {
     keepIds: conv.current_question_id ? new Set([conv.current_question_id]) : undefined,
   });
-  const next = await pickNextQuestion(c.env, user.id, conv.id, rankBank, answered, {
+  const next = await pickNextQuestion(c.env, user.id, conv.id, rankBank, reask.answered, {
     pinnedId: conv.current_question_id,
   });
   return c.json({
@@ -2640,12 +2654,15 @@ advisor.post('/turn', async (c) => {
   const focus = (c.req.query('focus') || '').trim() || null;
   const { user, visible, deferred, answered, gate, focusPage } = await buildVisibleBank(c, focus);
   // Task #46 — adaptive candidate pool: skip already-confident modules.
-  const rankVisible = applyAdaptiveProfiling(visible, answered);
+  // D358 — plus re-askable profiling questions, after every unanswered one.
+  const reask = await reaskOverlay(c.env, user.id, visible, answered);
+  const rankVisible = applyAdaptiveProfiling(reask.bank, answered);
   const result = await smNextTurn(c.env, user.id, rankVisible, {
     focusPage,
     week: gate.week,
     completedMilestones: gate.completedMilestones,
-    extraAnswered: answered,
+    extraAnswered: reask.answered,
+    reaskable: reask.reask,
     // Task #12 (BLOCK-ADV-07) — when the persona bank is exhausted,
     // /turn surfaces a dynamic `dyn.reflect.N` reflection instead of
     // an empty turn. /answer + /skip deliberately omit persona so they
@@ -2688,8 +2705,10 @@ advisor.get('/queue', async (c) => {
   // matches what /turn will actually ask (must use mergedAnswered, not the
   // request-scoped `answered`, so already-answered ids across conversations
   // count toward module confidence here too).
-  const rankVisible = applyAdaptiveProfiling(visible, mergedAnswered);
-  const result = pickNext(rankVisible, mergedAnswered, {
+  // D358 — the same re-ask overlay /turn applies, so the peek matches.
+  const reask = await reaskOverlay(c.env, user.id, visible, mergedAnswered);
+  const rankVisible = applyAdaptiveProfiling(reask.bank, mergedAnswered);
+  const result = pickNext(rankVisible, reask.answered, {
     focusPage,
     week: gate.week,
     completedMilestones: gate.completedMilestones,
