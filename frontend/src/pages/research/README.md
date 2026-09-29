@@ -16,7 +16,8 @@ zones: one record each, reached from a zone's list.
 | `DiligenceFile.jsx` | `/research/diligence/:grantUid/files/:fileUid`. One document's facts and its download. A document behind an unsigned NDA has no name on the page. |
 | `diligenceRead.js` | The size, date and file-state readings those two pages and their tests share. |
 | `ClientPrepZone.jsx` | Advisor and partner client prep. |
-| `FundsZone.jsx` | The founder shortlist at `/research/funds`. Stage, path and status stay three columns. |
+| `FundsZone.jsx` | The founder shortlist at `/research/funds`. Stage, path and status stay three columns; the read-only fund directory below it is generated from the attached public mapping exports and only enters a founder's shortlist after an explicit Add. |
+| `../../data/fundDirectory.json` | Deduplicated catalog of the attached Euro tech VC and deep-tech investor mapping exports. Refresh with `python3 scripts/build-fund-directory.py`; records are source-backed discovery data, not endorsements or a live market feed. |
 | `FundDossier.jsx` | `/research/funds/:uid`. One row. A blank cheque stays blank. The pre-meeting brief is drafted from this row on the press, and Accept appends it to the note; it does not email the fund. |
 | `fundDossierRead.js` | The dossier's checklist and Last-updated readings. A fact no store holds is Not recorded, never a gap. |
 | `CompanyAnalysis.jsx` | `/research/companies/:id`. One saved analysis. A save sends the title and the output, never the candidate set. The landscape read restates the page and Accept appends it to the notes. |

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, Pill } from '../../ui';
 import { api } from '../../lib/api';
@@ -78,6 +78,8 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
   const [form, setForm] = useState({ name: '', thesis: '', note: '' });
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(null);
+  const [directory, setDirectory] = useState({ loading: true, error: null, items: [], generated_at: null });
+  const [directoryBusy, setDirectoryBusy] = useState(null);
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true }));
@@ -89,6 +91,29 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
     }
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // The catalog is a read-only build asset generated from the two public
+  // mapping exports in attached_assets. Loading it as a split chunk keeps the
+  // initial workspace bundle small, while the source remains reviewable in git.
+  useEffect(() => {
+    let alive = true;
+    import('../../data/fundDirectory.json')
+      .then((module) => {
+        if (!alive) return;
+        const payload = module.default || module;
+        setDirectory({
+          loading: false,
+          error: null,
+          items: Array.isArray(payload.items) ? payload.items : [],
+          generated_at: payload.generated_at || null,
+        });
+      })
+      .catch((error) => {
+        if (!alive) return;
+        setDirectory({ loading: false, error: error?.message || 'The fund directory did not load.', items: [], generated_at: null });
+      });
+    return () => { alive = false; };
+  }, []);
 
   // One PATCH per change, then a reload — the row the worker returns is the row
   // that is stored, and the counts in the strip above are computed there too.
@@ -118,6 +143,25 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
 
   const data = state.data;
   const items = data?.items || [];
+  const researchedNames = useMemo(
+    () => new Set(items.map((fund) => normalizeFundName(fund.name))),
+    [items],
+  );
+
+  const addDirectoryFund = async (fund) => {
+    if (!fund || researchedNames.has(normalizeFundName(fund.name)) || directoryBusy) return;
+    setDirectoryBusy(fund.id);
+    setSaved(null);
+    try {
+      await api.research.fundCreate({ name: fund.name, source_url: fund.website || null });
+      setSaved(`${fund.name} added to your research list.`);
+      await load();
+    } catch (e) {
+      setSaved(e?.detail || e?.message || 'That did not save.');
+    } finally {
+      setDirectoryBusy(null);
+    }
+  };
   // The canvas has no `All` of its own — its first slot reads `Best fit`, which
   // the table renders as the unfiltered view because no fit score is stored. So
   // the chip that is on is also the way back off it.
@@ -331,6 +375,13 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
         </Card>
       </ZoneBody>
 
+      <FundDirectoryCard
+        directory={directory}
+        researchedNames={researchedNames}
+        busy={directoryBusy}
+        onAdd={addDirectoryFund}
+      />
+
       {canSyncSheets ? <SheetsSyncCard /> : null}
 
       <Card padding="lg">
@@ -378,6 +429,141 @@ function Stat({ label, value, note }) {
       </div>
       <div className="mt-1 text-[10px] leading-relaxed text-gray-600 dark:text-gray-300">{note}</div>
     </Card>
+  );
+}
+
+const normalizeFundName = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+function FundDirectoryCard({ directory, researchedNames, busy, onAdd }) {
+  const [query, setQuery] = useState('');
+  const [stage, setStage] = useState('');
+  const [region, setRegion] = useState('');
+  const [sector, setSector] = useState('');
+
+  const items = directory.items || [];
+  const stages = useMemo(
+    () => [...new Set(items.flatMap((fund) => fund.stages || []))].sort(),
+    [items],
+  );
+  const regions = useMemo(
+    () => [...new Set(items.flatMap((fund) => fund.regions || []))].sort(),
+    [items],
+  );
+  const sectors = useMemo(
+    () => [...new Set(items.flatMap((fund) => fund.sectors || []))].sort(),
+    [items],
+  );
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return items.filter((fund) => {
+      const haystack = [fund.name, fund.hq, fund.type, ...(fund.sectors || []), ...(fund.stages || []), ...(fund.regions || [])]
+        .filter(Boolean).join(' ').toLowerCase();
+      if (needle && !haystack.includes(needle)) return false;
+      if (stage && !(fund.stages || []).includes(stage)) return false;
+      if (region && !(fund.regions || []).includes(region)) return false;
+      if (sector && !(fund.sectors || []).includes(sector)) return false;
+      return true;
+    });
+  }, [items, query, region, sector, stage]);
+
+  if (directory.loading) {
+    return <Card padding="lg"><h3 className="text-sm font-extrabold tracking-tight">Fund directory</h3><p className="mt-2 text-[12px] text-gray-600 dark:text-gray-300">Loading sourced fund data…</p></Card>;
+  }
+  if (directory.error) {
+    return <Card padding="lg"><h3 className="text-sm font-extrabold tracking-tight">Fund directory</h3><p className="mt-2 text-[12px] text-red-700 dark:text-red-300">{directory.error}</p></Card>;
+  }
+
+  return (
+    <Card padding="lg">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-extrabold tracking-tight">Fund directory</h3>
+          <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-gray-600 dark:text-gray-300">
+            Browse {items.length.toLocaleString()} real fund and investor records from Axal’s public mapping exports. Add a row to your private research list when you want to assess it.
+          </p>
+        </div>
+        <span className="text-[11px] text-gray-500 dark:text-gray-400">{filtered.length.toLocaleString()} matches</span>
+      </div>
+
+      <div className="mt-4 grid gap-2 md:grid-cols-4">
+        <input
+          className={inputClass}
+          aria-label="Search fund directory"
+          placeholder="Search funds, sectors, regions…"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <select className={READ_SELECT} aria-label="Fund directory stage" value={stage} onChange={(event) => setStage(event.target.value)}>
+          <option value="">All stages</option>
+          {stages.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select>
+        <select className={READ_SELECT} aria-label="Fund directory region" value={region} onChange={(event) => setRegion(event.target.value)}>
+          <option value="">All regions</option>
+          {regions.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select>
+        <select className={READ_SELECT} aria-label="Fund directory sector" value={sector} onChange={(event) => setSector(event.target.value)}>
+          <option value="">All sectors</option>
+          {sectors.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select>
+      </div>
+
+      {!filtered.length ? (
+        <p className="mt-4 text-[12px] text-gray-600 dark:text-gray-300">No sourced fund matches those filters.</p>
+      ) : (
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.slice(0, 48).map((fund) => {
+            const added = researchedNames.has(normalizeFundName(fund.name));
+            const ticket = [fund.min_ticket, fund.max_ticket].filter(Boolean).join('–');
+            return (
+              <article key={fund.id} className="rounded-xl border border-gray-200 p-3 dark:border-gray-800">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h4 className="truncate text-[13px] font-extrabold">{fund.name}</h4>
+                    <p className="mt-0.5 text-[11px] text-gray-600 dark:text-gray-300">
+                      {[fund.type, fund.hq].filter(Boolean).join(' · ') || 'Investor profile'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className={ghostButtonClass}
+                    disabled={added || !!busy}
+                    onClick={() => onAdd(fund)}
+                  >
+                    {added ? 'Added' : busy === fund.id ? 'Adding…' : 'Add'}
+                  </button>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
+                  <DirectoryFact label="Stages" value={(fund.stages || []).join(' · ')} />
+                  <DirectoryFact label="Regions" value={(fund.regions || []).join(' · ')} />
+                  <DirectoryFact label="Sectors" value={(fund.sectors || []).join(' · ')} />
+                  <DirectoryFact label="Ticket" value={ticket} />
+                  <DirectoryFact label="Fund size" value={fund.fund_size} />
+                  <DirectoryFact label="Latest fund" value={fund.fund_date} />
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-2 text-[10px] dark:border-gray-800">
+                  <span className="text-gray-500 dark:text-gray-400">{fund.source_label}</span>
+                  {fund.website && <a className="font-semibold text-axal-ink underline-offset-2 hover:underline" href={fund.website} target="_blank" rel="noreferrer">Website</a>}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+
+      {filtered.length > 48 && <p className="mt-3 text-[11px] text-gray-500 dark:text-gray-400">Showing the first 48 matches. Narrow the search to find a specific fund.</p>}
+      <p className="mt-4 text-[10px] leading-relaxed text-gray-500 dark:text-gray-400">
+        Source: attached public mapping exports, generated {directory.generated_at || 'unknown date'}. Records are not endorsements and fund terms change; verify the official website before relying on a stage, ticket, or fund-size field.
+      </p>
+    </Card>
+  );
+}
+
+function DirectoryFact({ label, value }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[9px] font-extrabold uppercase tracking-[.07em] text-gray-500 dark:text-gray-400">{label}</div>
+      <div className="mt-0.5 truncate text-gray-700 dark:text-gray-300">{value || 'Not recorded'}</div>
+    </div>
   );
 }
 
