@@ -378,5 +378,104 @@
         "source_url": "https://hginsights.com/"
       }
     }
+  },
+  "prospecting": {
+    "provider": "Phoenix by HG Insights / Vibe Prospecting workflow",
+    "retrieved_at": "2026-09-30",
+    "lead_list": [
+      {
+        "name": "International Business Machines Corporation",
+        "domain": "ibm.com",
+        "hg_id": "34C9AC8C735058C40C1379D5658FA926"
+      },
+      {
+        "name": "Verizon Communications Inc.",
+        "domain": "verizon.com",
+        "hg_id": "C77B631C83C1EAD0A44E6BC008D153C"
+      },
+      {
+        "name": "Dell Technologies Inc.",
+        "domain": "dell.com",
+        "hg_id": "3FA78507406AA86255E5F4504B6A1DD2"
+      },
+      {
+        "name": "Wells Fargo & Company",
+        "domain": "wellsfargo.com",
+        "hg_id": "3AA5AE0AA564B61C47A9F4B121491DC0"
+      },
+      {
+        "name": "Jpmorgan Chase & Co.",
+        "domain": "jpmorganchase.com",
+        "hg_id": "20841466807F2274DBB04962E39367C0"
+      },
+      {
+        "name": "Bank of America Corporation",
+        "domain": "bankofamerica.com",
+        "hg_id": "1796B3CFA33536E0BA5104F00E7C09BA"
+      },
+      {
+        "name": "AT&T Inc.",
+        "domain": "att.com",
+        "hg_id": "16B0B9A01A9C3AB290FCF6195A0C2412"
+      },
+      {
+        "name": "Capital One Financial Corporation",
+        "domain": "capitalone.com",
+        "hg_id": "2C838EC2CC763B527A75278902C20810"
+      },
+      {
+        "name": "Walmart Inc.",
+        "domain": "walmart.com",
+        "hg_id": "1698C53EBC888758570396E0334965C1"
+      },
+      {
+        "name": "Unitedhealth Group Incorporated",
+        "domain": "unitedhealthgroup.com",
+        "hg_id": "89643064D08C1E16DA168272CC946B8"
+      }
+    ],
+    "decision_makers": {
+      "apple.com": [
+        {
+          "department": "Engineering",
+          "title": "Director, AIML Data Operations",
+          "product": "Toloka",
+          "location": "Cupertino, CA"
+        },
+        {
+          "department": "Sales",
+          "title": "Head of Industry, \uf8ff Ads",
+          "product": "Salesforce Nonprofit Cloud",
+          "location": "Cupertino, CA"
+        },
+        {
+          "department": "Marketing",
+          "title": "Director of Retail Engagement and Marketing, APAC",
+          "product": "LinkedIn Ads",
+          "location": "Singapore"
+        }
+      ],
+      "microsoft.com": [
+        {
+          "department": "Product Management",
+          "title": "Partner Director of Product for Azure App Platform Services",
+          "product": "Redis",
+          "location": "Redmond, WA"
+        },
+        {
+          "department": "Marketing",
+          "title": "Director Marketing Operations & Technology, Xbox",
+          "product": "Braze",
+          "location": "Redmond, WA"
+        },
+        {
+          "department": "Sales",
+          "title": "Director - Strategic Accounts - AI",
+          "product": "UiPath",
+          "location": "Atlanta, GA"
+        }
+      ]
+    },
+    "source_note": "Decision-maker titles are modeled/observed signals tied to departmental technology usage; they are not verified personal contact records."
   }
 }
