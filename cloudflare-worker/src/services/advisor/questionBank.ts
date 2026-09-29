@@ -172,7 +172,7 @@ export const BANK_SIZE_TARGETS = {
   // Adaptive selection means a user answers only the minimum, not all of these.
   fitFounder: 45,
   fitInvestor: 41,
-  fitPartner: 40,
+  fitPartner: 83, // D491: the v2 partner bank (situations, reverse keys, every radar axis)
   fitAdvisor: 42,
   fitCoach: 17, // coach rides in the advisor conversation; skills/values/archetype
                 // stay on the advisor bank so they're never asked twice.

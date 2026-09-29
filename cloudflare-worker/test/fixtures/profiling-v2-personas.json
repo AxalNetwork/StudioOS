@@ -9,6 +9,7 @@
     "expected.primary / expected.secondary for kind \"archetype\" and \"blend\" is the ground truth the persona was written to be, not what any engine returned. The baseline report prints what the engine of the day returns.",
     "checkpoints[] (kind \"evolution\") are computed with the reference model and the parameters below; displayed is what the card shows under hysteresis, computed is the nearest centroid on that day.",
     "evidence[] axis values are RADAR_AXES keys; source names are provisional until Session 8 publishes the tool map (PROFILING_V2.md §5.3).",
+    "D491 (Session 11) added the partner archetype personas' answers to the partner bank's new reverse-keyed and pick-one items. Rule: take the persona's own mean on each trait over its plain archetype-trait answers; a reverse-keyed item on trait T is answered 5 - round(mean_T); a pick-one takes the option whose loadings are nearest that mean over the traits the option loads (root-mean-square; a tie takes the first option). partner_bank_v2_d491.test.ts recomputes every one of these answers from the rule.",
     "Coach has no personas: the coach bank asks no archetype-trait questions today (PROFILING_V2.md §2.4)."
   ],
   "params": {
@@ -646,7 +647,23 @@
         {"question_id": "fit.partner.axal_curiosity", "value": 4, "answered_at": "2026-08-11T10:38:00Z"},
         {"question_id": "fit.partner.axal_resilience", "value": 3, "answered_at": "2026-08-11T10:40:00Z"},
         {"question_id": "fit.partner.axal_collaboration", "value": 3, "answered_at": "2026-08-11T10:42:00Z"},
-        {"question_id": "fit.partner.axal_ambition", "value": 3, "answered_at": "2026-08-11T10:44:00Z"}
+        {"question_id": "fit.partner.axal_ambition", "value": 3, "answered_at": "2026-08-11T10:44:00Z"},
+        {"question_id": "fit.partner.rev_builder_hand_off", "value": 3, "answered_at": "2026-08-11T10:46:00Z"},
+        {"question_id": "fit.partner.rev_visionary_brief", "value": 1, "answered_at": "2026-08-11T10:48:00Z"},
+        {"question_id": "fit.partner.rev_connector_solo", "value": 0, "answered_at": "2026-08-11T10:50:00Z"},
+        {"question_id": "fit.partner.rev_operator_no_process", "value": 2, "answered_at": "2026-08-11T10:52:00Z"},
+        {"question_id": "fit.partner.rev_builder_conversation", "value": 3, "answered_at": "2026-08-11T10:54:00Z"},
+        {"question_id": "fit.partner.rev_visionary_quarter", "value": 1, "answered_at": "2026-08-11T10:56:00Z"},
+        {"question_id": "fit.partner.rev_connector_small_circle", "value": 0, "answered_at": "2026-08-11T10:58:00Z"},
+        {"question_id": "fit.partner.rev_operator_improvise", "value": 2, "answered_at": "2026-08-11T11:00:00Z"},
+        {"question_id": "fit.partner.pick_first_month", "value": "people", "answered_at": "2026-08-11T11:02:00Z"},
+        {"question_id": "fit.partner.pick_leave_behind", "value": "doors", "answered_at": "2026-08-11T11:04:00Z"},
+        {"question_id": "fit.partner.pick_breaking_process", "value": "expert", "answered_at": "2026-08-11T11:06:00Z"},
+        {"question_id": "fit.partner.pick_short_staffed", "value": "intros", "answered_at": "2026-08-11T11:08:00Z"},
+        {"question_id": "fit.partner.pick_success_signal", "value": "intros", "answered_at": "2026-08-11T11:10:00Z"},
+        {"question_id": "fit.partner.pick_growth_stall", "value": "unlock", "answered_at": "2026-08-11T11:12:00Z"},
+        {"question_id": "fit.partner.pick_new_market", "value": "who_to_call", "answered_at": "2026-08-11T11:14:00Z"},
+        {"question_id": "fit.partner.pick_good_week", "value": "connecting", "answered_at": "2026-08-11T11:16:00Z"}
       ]
     },
     {
@@ -713,7 +730,23 @@
         {"question_id": "fit.partner.axal_curiosity", "value": 2, "answered_at": "2026-08-12T10:38:00Z"},
         {"question_id": "fit.partner.axal_resilience", "value": 3, "answered_at": "2026-08-12T10:40:00Z"},
         {"question_id": "fit.partner.axal_collaboration", "value": 4, "answered_at": "2026-08-12T10:42:00Z"},
-        {"question_id": "fit.partner.axal_ambition", "value": 3, "answered_at": "2026-08-12T10:44:00Z"}
+        {"question_id": "fit.partner.axal_ambition", "value": 3, "answered_at": "2026-08-12T10:44:00Z"},
+        {"question_id": "fit.partner.rev_builder_hand_off", "value": 0, "answered_at": "2026-08-12T10:46:00Z"},
+        {"question_id": "fit.partner.rev_visionary_brief", "value": 3, "answered_at": "2026-08-12T10:48:00Z"},
+        {"question_id": "fit.partner.rev_connector_solo", "value": 2, "answered_at": "2026-08-12T10:50:00Z"},
+        {"question_id": "fit.partner.rev_operator_no_process", "value": 1, "answered_at": "2026-08-12T10:52:00Z"},
+        {"question_id": "fit.partner.rev_builder_conversation", "value": 0, "answered_at": "2026-08-12T10:54:00Z"},
+        {"question_id": "fit.partner.rev_visionary_quarter", "value": 3, "answered_at": "2026-08-12T10:56:00Z"},
+        {"question_id": "fit.partner.rev_connector_small_circle", "value": 2, "answered_at": "2026-08-12T10:58:00Z"},
+        {"question_id": "fit.partner.rev_operator_improvise", "value": 1, "answered_at": "2026-08-12T11:00:00Z"},
+        {"question_id": "fit.partner.pick_first_month", "value": "inside", "answered_at": "2026-08-12T11:02:00Z"},
+        {"question_id": "fit.partner.pick_leave_behind", "value": "team", "answered_at": "2026-08-12T11:04:00Z"},
+        {"question_id": "fit.partner.pick_breaking_process", "value": "join", "answered_at": "2026-08-12T11:06:00Z"},
+        {"question_id": "fit.partner.pick_short_staffed", "value": "step_in", "answered_at": "2026-08-12T11:08:00Z"},
+        {"question_id": "fit.partner.pick_success_signal", "value": "same_way", "answered_at": "2026-08-12T11:10:00Z"},
+        {"question_id": "fit.partner.pick_growth_stall", "value": "sell", "answered_at": "2026-08-12T11:12:00Z"},
+        {"question_id": "fit.partner.pick_new_market", "value": "go_with", "answered_at": "2026-08-12T11:14:00Z"},
+        {"question_id": "fit.partner.pick_good_week", "value": "hands_on", "answered_at": "2026-08-12T11:16:00Z"}
       ]
     },
     {
@@ -780,7 +813,23 @@
         {"question_id": "fit.partner.axal_curiosity", "value": 3, "answered_at": "2026-08-13T10:38:00Z"},
         {"question_id": "fit.partner.axal_resilience", "value": 3, "answered_at": "2026-08-13T10:40:00Z"},
         {"question_id": "fit.partner.axal_collaboration", "value": 3, "answered_at": "2026-08-13T10:42:00Z"},
-        {"question_id": "fit.partner.axal_ambition", "value": 3, "answered_at": "2026-08-13T10:44:00Z"}
+        {"question_id": "fit.partner.axal_ambition", "value": 3, "answered_at": "2026-08-13T10:44:00Z"},
+        {"question_id": "fit.partner.rev_builder_hand_off", "value": 1, "answered_at": "2026-08-13T10:46:00Z"},
+        {"question_id": "fit.partner.rev_visionary_brief", "value": 1, "answered_at": "2026-08-13T10:48:00Z"},
+        {"question_id": "fit.partner.rev_connector_solo", "value": 1, "answered_at": "2026-08-13T10:50:00Z"},
+        {"question_id": "fit.partner.rev_operator_no_process", "value": 3, "answered_at": "2026-08-13T10:52:00Z"},
+        {"question_id": "fit.partner.rev_builder_conversation", "value": 1, "answered_at": "2026-08-13T10:54:00Z"},
+        {"question_id": "fit.partner.rev_visionary_quarter", "value": 1, "answered_at": "2026-08-13T10:56:00Z"},
+        {"question_id": "fit.partner.rev_connector_small_circle", "value": 1, "answered_at": "2026-08-13T10:58:00Z"},
+        {"question_id": "fit.partner.rev_operator_improvise", "value": 3, "answered_at": "2026-08-13T11:00:00Z"},
+        {"question_id": "fit.partner.pick_first_month", "value": "lever", "answered_at": "2026-08-13T11:02:00Z"},
+        {"question_id": "fit.partner.pick_leave_behind", "value": "curve", "answered_at": "2026-08-13T11:04:00Z"},
+        {"question_id": "fit.partner.pick_breaking_process", "value": "growth", "answered_at": "2026-08-13T11:06:00Z"},
+        {"question_id": "fit.partner.pick_short_staffed", "value": "growth", "answered_at": "2026-08-13T11:08:00Z"},
+        {"question_id": "fit.partner.pick_success_signal", "value": "revenue", "answered_at": "2026-08-13T11:10:00Z"},
+        {"question_id": "fit.partner.pick_growth_stall", "value": "experiments", "answered_at": "2026-08-13T11:12:00Z"},
+        {"question_id": "fit.partner.pick_new_market", "value": "launch", "answered_at": "2026-08-13T11:14:00Z"},
+        {"question_id": "fit.partner.pick_good_week", "value": "experiments", "answered_at": "2026-08-13T11:16:00Z"}
       ]
     },
     {
@@ -847,7 +896,23 @@
         {"question_id": "fit.partner.axal_curiosity", "value": 4, "answered_at": "2026-08-14T10:38:00Z"},
         {"question_id": "fit.partner.axal_resilience", "value": 3, "answered_at": "2026-08-14T10:40:00Z"},
         {"question_id": "fit.partner.axal_collaboration", "value": 2, "answered_at": "2026-08-14T10:42:00Z"},
-        {"question_id": "fit.partner.axal_ambition", "value": 3, "answered_at": "2026-08-14T10:44:00Z"}
+        {"question_id": "fit.partner.axal_ambition", "value": 3, "answered_at": "2026-08-14T10:44:00Z"},
+        {"question_id": "fit.partner.rev_builder_hand_off", "value": 1, "answered_at": "2026-08-14T10:46:00Z"},
+        {"question_id": "fit.partner.rev_visionary_brief", "value": 3, "answered_at": "2026-08-14T10:48:00Z"},
+        {"question_id": "fit.partner.rev_connector_solo", "value": 3, "answered_at": "2026-08-14T10:50:00Z"},
+        {"question_id": "fit.partner.rev_operator_no_process", "value": 0, "answered_at": "2026-08-14T10:52:00Z"},
+        {"question_id": "fit.partner.rev_builder_conversation", "value": 1, "answered_at": "2026-08-14T10:54:00Z"},
+        {"question_id": "fit.partner.rev_visionary_quarter", "value": 3, "answered_at": "2026-08-14T10:56:00Z"},
+        {"question_id": "fit.partner.rev_connector_small_circle", "value": 3, "answered_at": "2026-08-14T10:58:00Z"},
+        {"question_id": "fit.partner.rev_operator_improvise", "value": 0, "answered_at": "2026-08-14T11:00:00Z"},
+        {"question_id": "fit.partner.pick_first_month", "value": "system", "answered_at": "2026-08-14T11:02:00Z"},
+        {"question_id": "fit.partner.pick_leave_behind", "value": "machine", "answered_at": "2026-08-14T11:04:00Z"},
+        {"question_id": "fit.partner.pick_breaking_process", "value": "redesign", "answered_at": "2026-08-14T11:06:00Z"},
+        {"question_id": "fit.partner.pick_short_staffed", "value": "tooling", "answered_at": "2026-08-14T11:08:00Z"},
+        {"question_id": "fit.partner.pick_success_signal", "value": "no_questions", "answered_at": "2026-08-14T11:10:00Z"},
+        {"question_id": "fit.partner.pick_growth_stall", "value": "funnel", "answered_at": "2026-08-14T11:12:00Z"},
+        {"question_id": "fit.partner.pick_new_market", "value": "playbook", "answered_at": "2026-08-14T11:14:00Z"},
+        {"question_id": "fit.partner.pick_good_week", "value": "repeatable", "answered_at": "2026-08-14T11:16:00Z"}
       ]
     },
     {

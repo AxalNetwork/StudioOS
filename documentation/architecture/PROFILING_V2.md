@@ -272,7 +272,7 @@ Axes each bank does not ask about today:
 | --- | --- |
 | Founder | legal_compliance |
 | Investor | engineering, design, marketing_brand |
-| Partner | engineering, design, marketing_brand |
+| Partner | none since D491 (engineering, design and marketing_brand were added) |
 | Advisor | engineering, design, legal_compliance |
 | Coach | all eight (no `skill_axis` question) |
 
@@ -367,6 +367,26 @@ Due-diligence sections: `corporate_legal`, `compliance_aml`, `kyb_entity`, `kyc_
 
 `skill_evidence` (migration 362) stores one row per user, axis and source. `GET /api/skills/me/evidence` is the caller's own read. The nightly pass is `recomputeEvidenceBatch`, on the existing `0 3 * * *` cron when Session 13 wires it.
 
+
+### 5.5 Partner questions and the evidence that corroborates them (D491)
+
+The partner bank's self-rating questions, and the Session 8 sources that
+can corroborate each one. The prompts never name a tool; this table does.
+Partner sources reach an axis only when the partner's own profile names it
+(`partners.specialization`, §5.4), so a question here is corroborated only
+for a partner whose specialisation includes that axis.
+
+| Question (`fit.partner.…`) | Axis | Sources that can corroborate it |
+| --- | --- | --- |
+| `skill_product` | product | `office_hours_completed`, `engagement_milestone` |
+| `skill_engineering_review` | engineering | `office_hours_completed`, `engagement_milestone`, `office_hours_action_closed` |
+| `skill_design_feedback` | design | `office_hours_completed`, `engagement_milestone`, `office_hours_rated_well` |
+| `exec_hands_on` | gtm_sales | `engagement_milestone`, `office_hours_action_closed` |
+| `skill_marketing_delivery` | marketing_brand | `engagement_milestone`, `perk_redeemed`, `office_hours_rated_well` |
+| `skill_finance_ops` | finance_ops | `office_hours_completed`, `engagement_milestone` |
+| `skill_legal` | legal_compliance | `office_hours_completed`, `engagement_milestone` |
+| `network_depth` | capital_network | `office_hours_completed`, `perk_redeemed` |
+
 ---
 
 ## 6. Values within the Axal ecosystem
@@ -378,7 +398,7 @@ per user and dimension (no history before Session 7):
 | --- | --- | --- |
 | Axal values (`axal_values`, 0..1) | integrity, stewardship, curiosity, resilience, collaboration, ambition. v1 `axalFit.ts` scores the first five; v2 `fitV2Decision.ts` scores all six. | every role (`axalValueRows`) |
 | Founder spectrums (`user_values`) | mission_vs_profit, speed_vs_quality, risk_appetite, growth_vs_sustain, autonomy_vs_structure | founder (all five); investor asks risk_appetite and growth_vs_sustain; partner asks autonomy_vs_structure |
-| Schwartz (`user_values`) | achievement, benevolence, universalism, self_direction | investor: achievement, benevolence, universalism · partner: benevolence, self_direction, universalism · advisor: all four · **founder: none** |
+| Schwartz (`user_values`) | achievement, benevolence, universalism, self_direction | investor: achievement, benevolence, universalism · partner: achievement (D491), benevolence, self_direction, universalism · advisor: all four · **founder: none** |
 
 **Compared across roles for matching (Session 14 implements):**
 

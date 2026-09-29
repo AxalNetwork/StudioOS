@@ -33,7 +33,7 @@ import {
 const EXPECTED: Record<string, number> = {
   founder: 58,
   investor: 54,
-  partner: 53,
+  partner: 83, // D491: 8 situations, 8 reverse-keyed probes, 3 skill, 5 value and 6 Axal situations
   advisor: 55, // advisor primary bank — coach bank excluded from the completion card
 };
 
@@ -42,7 +42,7 @@ const EXPECTED: Record<string, number> = {
 const EXPECTED_SECTIONS: Record<string, Record<string, number>> = {
   founder:  { skills: 7, work_values: 5, archetype: 29, axal_fit: 17 },
   investor: { skills: 5, work_values: 5, archetype: 29, axal_fit: 15 },
-  partner:  { skills: 5, work_values: 4, archetype: 29, axal_fit: 15 },
+  partner:  { skills: 8, work_values: 9, archetype: 45, axal_fit: 21 }, // D491
   advisor:   { skills: 5, work_values: 4, archetype: 29, axal_fit: 17 },
 };
 

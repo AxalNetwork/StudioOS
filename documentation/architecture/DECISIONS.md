@@ -39282,3 +39282,102 @@ says **no touches logged yet** when the read succeeded but the log is empty —
 not “coverage unavailable”.
 
 **Tests.** `partnernet_interactions.test.ts` extended; `investor_network_d490.test.mjs`.
+
+## D491
+
+**The partner fit bank v2: the four partner archetypes told apart by
+situations and reverse keys, every radar axis asked, values asked as
+behaviour.** Profiling v2, Session 11. Content and tests only: no route, no
+migration, no engine change. `fit_partner.ts` grows from 53 to 83 questions;
+no id is renamed or removed.
+
+**What the bank adds.** All of it uses Session 7's formats (D357) and no new
+one:
+- **Eight situational pick-ones.** Five separate Embedded Operator from
+  Systems Builder, the 1.73 pair that D357 decided to leave close and separate
+  with questions. Three separate Strategic Connector from Growth Catalyst.
+  Each situation has four options, one per partner archetype. Each option
+  loads that archetype's two telling traits at its own centroid values, so a
+  person of any archetype finds an answer that is theirs. The archetype
+  behind the first option rotates: each archetype is first exactly twice. So
+  always picking the first option lands near the middle, with confidence
+  0.46, which is not confident.
+- **Eight reverse-keyed probes, two per trait (§3.2).** Rating every scale 5
+  now scores consistency 0 and confidence 0.
+- **Three behavioural skill questions** for engineering, design and
+  marketing_brand ("In the last year, how often did you…"). Every radar axis
+  now has a partner question. The Session 8 sources that corroborate each
+  partner skill question are named in PROFILING_V2.md §5.5, not in the
+  prompts.
+- **Five value situations** on the partner's dimensions:
+  `founder_autonomy_vs_structure` and Schwartz benevolence, self_direction
+  and universalism. The fifth adds Schwartz achievement, so Session 14 can
+  compare it with the investor's. Slugs and direction match the other banks.
+- **Six Axal situations**, one per value. The red flags stay on the shared
+  rows only, so none is counted twice.
+- **A re-ask wording on every question, shared rows included.** It is
+  written in `PARTNER_REASK` in `fit_partner.ts` and applied only where a row
+  has none of its own. `fitShared.ts` is untouched, because four bank sessions
+  run in parallel and the 20 shared trait probes are theirs too. Once
+  Sessions 9, 10 and 12 land, the shared wording can move into `fitShared.ts`
+  in one change.
+
+**Order is part of the design.** Adaptive selection asks the first unanswered
+item of each uncovered trait, then goes by module deficit and bank order. The
+bank therefore places one reverse-keyed probe per trait first, then the eight
+situations, then the second reverse-keyed probe per trait, all before the
+shared module rows. A partner reaching the archetype floor (6 answers)
+answers one reverse-keyed probe per trait and the first two Embedded
+Operator / Systems Builder situations.
+
+**Measured with the real engine on the Session 6 personas.**
+- **Whole bank.** All four partner personas classify as themselves,
+  confidently. The close pair separates about twice as far as before:
+  - Embedded Operator: margin 0.34 → 0.60, confidence 0.60 → 0.72.
+  - Systems Builder: margin 0.27 → 0.55, confidence 0.56 → 0.68.
+- **Floor.** Answering in queue order, each persona reaches every module's
+  floor in 23 answers, with all four traits covered, and is classified
+  correctly at the floor.
+- **Blends.** A blend made by interleaving two personas' answers reports both
+  archetypes, for each close pair.
+- **v1 card.** The card still reads v1 until Session 15. It reads each
+  persona correctly, with reverse keys inverted as D357 made it.
+
+**The fixture changes, as §12 requires.** The Session 6 fixture test demands
+that every archetype persona answer every archetype-trait question of its
+role. The four partner archetype personas therefore gain answers to the 16
+new archetype items, by a rule written into the fixture's notes. The rule
+takes the persona's own mean on each trait over its plain probes; a
+reverse-keyed item on trait T gets 5 − round(mean); a pick-one gets the
+option whose loadings are nearest that mean over the traits the option loads.
+`partner_bank_v2_d491.test.ts` recomputes every one of those answers from the
+bank, so a swapped loading or a dropped reverse key fails there. The fixture
+test now also accepts an option key as a pick-one's answer, checked against
+that question's own options. No other persona, parameter or checkpoint
+changed.
+
+**Where this departs from its handoff.**
+- **Values: the spec wins over the handoff.** The handoff expected partners
+  to be matched on autonomy_vs_structure and speed_vs_quality. §6 of the spec
+  matches partners on autonomy_vs_structure only, so no speed_vs_quality item
+  was added.
+- **No partner blend persona exists in the fixture.** The two blends there
+  are founder and investor. The partner blend is built in the test from two
+  fixture personas, rather than by adding a persona to Session 6's contract.
+- **Scale items only for skills, values and Axal.** D357 allows reverse keys
+  and pick-ones only on archetype items (`assertFitRow`), so the behavioural
+  skill, value and Axal variants are scale items phrased as a situation, as
+  that rule requires.
+- **The number.** D491 was taken as the next free number after the highest
+  in the file, on the owner's instruction for this session.
+
+**Sizes.** `advisor.profiling.test.ts` pins every bank's size and module
+sizes. The partner row now reads 83 (skills 8, work values 9, archetype 45,
+Axal Fit 21). `BANK_SIZE_TARGETS.fitPartner` (documentation-only) moves from
+40 to 83 with it. `check-advisor-bank-drift` does not read fit banks, and it
+passes unchanged.
+
+**Tests.** `partner_bank_v2_d491.test.ts` (17);
+`profiling_v2_personas_fixture.test.ts` (pick-one answers accepted);
+`advisor.profiling.test.ts` (the partner sizes above). 16 mutations, 16
+caught.
