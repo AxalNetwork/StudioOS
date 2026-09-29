@@ -367,6 +367,31 @@ Due-diligence sections: `corporate_legal`, `compliance_aml`, `kyb_entity`, `kyc_
 
 `skill_evidence` (migration 362) stores one row per user, axis and source. `GET /api/skills/me/evidence` is the caller's own read. The nightly pass is `recomputeEvidenceBatch`, on the existing `0 3 * * *` cron when Session 13 wires it.
 
+### 5.5 Founder skill items and the evidence that corroborates them (D319)
+
+The founder bank's behavioural skill items ("in the last year, how often did
+you…") and the Session 8 sources that corroborate the same axis. The prompt
+never names the tool; this table does.
+
+| Founder item | Axis | Corroborating sources (§5.4) |
+| --- | --- | --- |
+| `skill_product_cut` | product | `okr_shipped`, `discovery_interview`, `lab_milestone` (`mvp_scoped`, `okrs_created`) |
+| `skill_engineering_built` | engineering | `okr_shipped`, `lab_milestone` (`mvp_scoped`) |
+| `skill_design_tested` | design | `brand_site`, `lab_milestone` (`brand_basics_filled`, `landing_page_created`) |
+| `skill_gtm_calls` | gtm_sales | `discovery_interview`, `lab_milestone` (`icp_defined`, `discovery_followups_mapped`) |
+| `skill_brand_written` | marketing_brand | `deck_version`, `brand_site` |
+| `skill_finance_model` | finance_ops | `financial_model`, `cap_table_security` |
+| `skill_legal_handled` | legal_compliance | `esign_sent_completed`, `esign_signed`, `cap_table_security`, `lab_milestone` (incorporation set) |
+| `skill_capital_asks` | capital_network | `deck_version`, `lab_milestone` (`fundraise_ask_locked`, `investor_intros_secured`) |
+
+**Situational value items are 0–5 scales, not pick-ones (D319).** §3.3
+allows pick-ones to feed archetype traits only, and `assertFitRow` enforces
+it. So a founder value situation is a concrete situation followed by "how
+likely are you to…", with 5 at the dimension's `pole_high`. A value pick-one,
+where each option carries a value score, needs a new format and a change to
+this spec first. The Session 9 handoff asked for one per spectrum, and it is
+not built.
+
 ---
 
 ## 6. Values within the Axal ecosystem
@@ -378,7 +403,7 @@ per user and dimension (no history before Session 7):
 | --- | --- | --- |
 | Axal values (`axal_values`, 0..1) | integrity, stewardship, curiosity, resilience, collaboration, ambition. v1 `axalFit.ts` scores the first five; v2 `fitV2Decision.ts` scores all six. | every role (`axalValueRows`) |
 | Founder spectrums (`user_values`) | mission_vs_profit, speed_vs_quality, risk_appetite, growth_vs_sustain, autonomy_vs_structure | founder (all five); investor asks risk_appetite and growth_vs_sustain; partner asks autonomy_vs_structure |
-| Schwartz (`user_values`) | achievement, benevolence, universalism, self_direction | investor: achievement, benevolence, universalism · partner: benevolence, self_direction, universalism · advisor: all four · **founder: none** |
+| Schwartz (`user_values`) | achievement, benevolence, universalism, self_direction | investor: achievement, benevolence, universalism · partner: benevolence, self_direction, universalism · advisor: all four · founder: all four (Session 9, D319) |
 
 **Compared across roles for matching (Session 14 implements):**
 
@@ -388,7 +413,7 @@ per user and dimension (no history before Session 7):
 | `founder_risk_appetite` | investor `lean_risk` (the same dimension) | a mismatch here is the commonest failed round |
 | `founder_growth_vs_sustain` | investor `values_patience` (the same dimension) | holding period against growth plan |
 | `founder_autonomy_vs_structure` | partner `collab_founder_led` (the same dimension) | how much a partner should steer |
-| Schwartz: none today | investor, partner and advisor Schwartz dims | **Session 9 adds achievement, benevolence, universalism and self_direction to the founder bank**, so the comparison has two sides. Until then Session 14 compares Schwartz only among investor, partner and advisor. |
+| Schwartz: achievement, benevolence, universalism, self_direction (Session 9, D319) | investor, partner and advisor Schwartz dims | The founder bank asks all four since D319, so the comparison has two sides. |
 
 Values age like any answer (§7.2) and re-ask like any answer (§7.3).
 Evidence does not move a value.
