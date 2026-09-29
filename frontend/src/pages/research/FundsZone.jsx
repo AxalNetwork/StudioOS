@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card, Pill } from '../../ui';
 import { api } from '../../lib/api';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -435,6 +435,7 @@ function Stat({ label, value, note }) {
 const normalizeFundName = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 
 function FundDirectoryCard({ directory, researchedNames, busy, onAdd }) {
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [stage, setStage] = useState('');
   const [region, setRegion] = useState('');
@@ -515,7 +516,19 @@ function FundDirectoryCard({ directory, researchedNames, busy, onAdd }) {
             const added = researchedNames.has(normalizeFundName(fund.name));
             const ticket = [fund.min_ticket, fund.max_ticket].filter(Boolean).join('–');
             return (
-              <article key={fund.id} className="rounded-xl border border-gray-200 p-3 dark:border-gray-800">
+              <article
+                key={fund.id}
+                role="link"
+                tabIndex={0}
+                className="cursor-pointer rounded-xl border border-gray-200 p-3 transition hover:border-violet-300 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-500 dark:border-gray-800"
+                onClick={() => navigate(`/research/funds/catalog/${encodeURIComponent(fund.id)}`)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    navigate(`/research/funds/catalog/${encodeURIComponent(fund.id)}`);
+                  }
+                }}
+              >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <h4 className="truncate text-[13px] font-extrabold">{fund.name}</h4>
@@ -527,7 +540,7 @@ function FundDirectoryCard({ directory, researchedNames, busy, onAdd }) {
                     type="button"
                     className={ghostButtonClass}
                     disabled={added || !!busy}
-                    onClick={() => onAdd(fund)}
+                    onClick={(event) => { event.stopPropagation(); onAdd(fund); }}
                   >
                     {added ? 'Added' : busy === fund.id ? 'Adding…' : 'Add'}
                   </button>
@@ -542,7 +555,7 @@ function FundDirectoryCard({ directory, researchedNames, busy, onAdd }) {
                 </div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-2 text-[10px] dark:border-gray-800">
                   <span className="text-gray-500 dark:text-gray-400">{fund.source_label}</span>
-                  {fund.website && <a className="font-semibold text-axal-ink underline-offset-2 hover:underline" href={fund.website} target="_blank" rel="noreferrer">Website</a>}
+                  {fund.website && <a className="font-semibold text-axal-ink underline-offset-2 hover:underline" href={fund.website} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>Website</a>}
                 </div>
               </article>
             );

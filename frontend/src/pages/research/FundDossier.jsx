@@ -6,6 +6,7 @@ import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import { Field, StatedLimit } from '../advisor/expertise/kit';
 import { NO_STORE, gapCount, missingChecklist, updatedAgo } from './fundDossierRead';
+import FundReportsPanel from './FundReportsPanel';
 
 /**
  * `/research/funds/:uid` — one fund the founder has researched.
@@ -510,6 +511,8 @@ export default function FundDossier({ role = 'founder' }) {
                 </p>
               </Card>
             </div>
+
+            <FundReportsPanel fundUid={fund.uid} />
 
             <Card data-testid="fund-dossier-missing">
               <div className="flex items-baseline justify-between gap-3">

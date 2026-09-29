@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { ExternalLink, Search, Database } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card } from '../../ui';
 import data from '../../data/companyDirectory.json';
 
 const items = data.items || [];
 
 export default function CompanyDirectoryZone() {
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [country, setCountry] = useState('all');
   const countries = useMemo(() => [...new Set(items.map((x) => x.country).filter(Boolean))].sort(), []);
@@ -50,12 +51,12 @@ export default function CompanyDirectoryZone() {
               <tr><th className="px-4 py-2.5">Company</th><th className="px-4 py-2.5">Country</th><th className="px-4 py-2.5">Founded</th><th className="px-4 py-2.5">Source</th><th className="px-4 py-2.5" /></tr>
             </thead>
             <tbody className="divide-y divide-axal-hairline dark:divide-gray-800">
-              {visible.map((x) => <tr key={x.uid} className="hover:bg-violet-50/40 dark:hover:bg-violet-950/10">
+              {visible.map((x) => <tr key={x.uid} role="link" tabIndex={0} onClick={() => navigate(`/research/companies/company/${x.uid}`)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(`/research/companies/company/${x.uid}`); } }} className="cursor-pointer hover:bg-violet-50/40 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-violet-500 dark:hover:bg-violet-950/10">
                 <td className="px-4 py-3"><Link to={`/research/companies/company/${x.uid}`} className="font-semibold text-axal-violet underline dark:text-violet-300">{x.name}</Link><div className="mt-0.5 max-w-[360px] truncate text-[11px] text-axal-faint">{x.website}</div></td>
                 <td className="px-4 py-3 text-axal-muted">{x.country || 'Not recorded'}</td>
                 <td className="px-4 py-3 font-mono text-axal-muted">{x.founded_year || 'Not recorded'}</td>
                 <td className="px-4 py-3 text-axal-muted">Wikidata</td>
-                <td className="px-4 py-3 text-right"><a href={x.website} target="_blank" rel="noreferrer" aria-label={`Open ${x.name} website`} className="text-axal-faint hover:text-axal-violet"><ExternalLink size={14} /></a></td>
+                <td className="px-4 py-3 text-right"><a href={x.website} target="_blank" rel="noreferrer" aria-label={`Open ${x.name} website`} onClick={(event) => event.stopPropagation()} className="text-axal-faint hover:text-axal-violet"><ExternalLink size={14} /></a></td>
               </tr>)}
             </tbody>
           </table>

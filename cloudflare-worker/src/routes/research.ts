@@ -3811,6 +3811,85 @@ research.post('/funds/sheet/push', async (c) => {
   }
 });
 
+// Quarterly public reporting snapshots for a founder's fund dossier. A report
+// is not inferred from the fund directory: every metric remains nullable and
+// must carry a source URL when entered.
+research.get('/funds/:uid/reports', async (c) => {
+  const user = await requireAuth(c);
+  const fundUid = c.req.param('uid');
+  const fund = await c.env.DB.prepare(
+    `SELECT uid FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(fundUid, user.id).first();
+  if (!fund) return c.json({ detail: 'Not found' }, 404);
+  const rows = await c.env.DB.prepare(
+    `SELECT uid, period, report_date, fund_size_cents, nav_cents,
+            quarterly_return_bps, net_irr_bps, tvpi_bps,
+            source_url, report_url, notes, created_at, updated_at
+       FROM research_fund_reports
+      WHERE fund_uid = ? AND owner_user_id = ?
+      ORDER BY period ASC`
+  ).bind(fundUid, user.id).all();
+  return c.json({ items: rows.results || [] });
+});
+
+research.post('/funds/:uid/reports', async (c) => {
+  const user = await requireAuth(c);
+  const fundUid = c.req.param('uid');
+  const fund = await c.env.DB.prepare(
+    `SELECT uid FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(fundUid, user.id).first();
+  if (!fund) return c.json({ detail: 'Not found' }, 404);
+  const body = await c.req.json<any>().catch(() => ({}));
+  const period = String(body.period || '').trim();
+  if (!/^\d{4}-Q[1-4]$/.test(period)) return c.json({ detail: 'Period must use YYYY-Q1 through YYYY-Q4.' }, 400);
+  const sourceUrl = clampText(body.source_url, 500);
+  if (!sourceUrl) return c.json({ detail: 'A source URL is required for a quarterly report.' }, 400);
+  const uid = newUid();
+  const now = nowIso();
+  await c.env.DB.prepare(
+    `INSERT INTO research_fund_reports
+       (uid, fund_uid, owner_user_id, period, report_date, fund_size_cents,
+        nav_cents, quarterly_return_bps, net_irr_bps, tvpi_bps, source_url,
+        report_url, notes, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (fund_uid, owner_user_id, period) DO UPDATE SET
+       report_date = excluded.report_date,
+       fund_size_cents = excluded.fund_size_cents,
+       nav_cents = excluded.nav_cents,
+       quarterly_return_bps = excluded.quarterly_return_bps,
+       net_irr_bps = excluded.net_irr_bps,
+       tvpi_bps = excluded.tvpi_bps,
+       source_url = excluded.source_url,
+       report_url = excluded.report_url,
+       notes = excluded.notes,
+       updated_at = excluded.updated_at`
+  ).bind(
+    uid, fundUid, user.id, period, clampText(body.report_date, 30),
+    clampInt(body.fund_size_cents), clampInt(body.nav_cents),
+    clampInt(body.quarterly_return_bps), clampInt(body.net_irr_bps),
+    clampInt(body.tvpi_bps), sourceUrl, clampText(body.report_url, 500),
+    clampText(body.notes, 2000), now, now,
+  ).run();
+  const row = await c.env.DB.prepare(
+    `SELECT uid, period, report_date, fund_size_cents, nav_cents,
+            quarterly_return_bps, net_irr_bps, tvpi_bps,
+            source_url, report_url, notes, created_at, updated_at
+       FROM research_fund_reports
+      WHERE fund_uid = ? AND owner_user_id = ? AND period = ?`
+  ).bind(fundUid, user.id, period).first();
+  return c.json(row, 201);
+});
+
+research.delete('/funds/:uid/reports/:reportUid', async (c) => {
+  const user = await requireAuth(c);
+  const result = await c.env.DB.prepare(
+    `DELETE FROM research_fund_reports
+      WHERE uid = ? AND fund_uid = ? AND owner_user_id = ?`
+  ).bind(c.req.param('reportUid'), c.req.param('uid'), user.id).run();
+  if (!result.meta?.changes) return c.json({ detail: 'Not found' }, 404);
+  return c.json({ ok: true });
+});
+
 research.patch('/funds/:uid', async (c) => {
   const user = await requireAuth(c);
   const uid = c.req.param('uid');
