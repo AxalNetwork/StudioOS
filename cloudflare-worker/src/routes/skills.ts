@@ -16,7 +16,8 @@
  *   GET    /me/aggregate             the caller's blended self+peer scores.
  *   GET    /me/evidence              the caller's skill evidence from their
  *                                     own platform activity, per radar axis:
- *                                     self level, evidence score, blended and
+ *                                     §5.2 state, level (the self-rating),
+ *                                     evidence weight, recent events and
  *                                     provenance lines (D318). Own only.
  *   GET    /users/:userId/aggregate  another user's blended scores — self,
  *                                     admin, or a connected peer only (403).

@@ -333,7 +333,7 @@ recomputeProfile(env, userId, {
 - Lifetime totals are kept for display ("42 sessions hosted"), but only the
   window (§7.4) feeds the state.
 - Session 8 published the map below (D318, migration 362). It is the same list as `EVIDENCE_SOURCES` in `skillEvidence.ts`. A test fails if a source key there is missing here. The axis keys stay final.
-- **The displayed level still follows §5.2.** Evidence changes the state, not the number. D318's `blend` currently returns `partly_corroborated` and the halfway point when evidence is below the self-rating. That is ahead of this rule. §5.2 is the rule. Session 13 is where a blend can be switched on.
+- **The displayed level follows §5.2.** Evidence changes the state, not the number. D318 first shipped a halfway blend. The follow-up in D318 removed it: `axisState` returns the §5.2 state with the self-rating as the level, and ageing follows §7.4. Session 13 is where a blend can be switched on.
 
 | Role | Source key | What is counted | Axes | Weight |
 | --- | --- | --- | --- | --- |

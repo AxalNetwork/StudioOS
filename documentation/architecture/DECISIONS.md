@@ -31168,6 +31168,35 @@ Mutations:
   equivalent: dropping `signed_at IS NOT NULL` changes nothing, because a
   missing date is already skipped.
 
+
+**Revised the same day: the spec wins.** Session 7's `PROFILING_V2.md` (#950)
+merged a few minutes before this entry's PR (#949). It settles two things the
+first version had decided provisionally, and the evidence code now follows
+it:
+
+- **Ageing (§7.4).** An action counts 1 for 365 days, then fades *linearly*
+  to 0 over the next 365 (`evidence_full_days`, `evidence_fade_days`). The
+  first version used a 12-month half-life, which never reached 0.
+- **State, not level (§5.2).** Evidence never changes the level shown. The
+  level is the self-rating, or none. The axis's state is one of
+  `not_recorded`, `self_rated_only`, `some_evidence`, `corroborated` or
+  `evidence_only`, from the evidence weight against `corroborated_at` = 3.0.
+  The first version's halfway blend (`partly_corroborated`) and its 0–5
+  evidence score are removed. A blend that moves the level is Session 13's to
+  propose, behind a switch.
+- **The route (§10).** Per axis it now returns `state`, `level`,
+  `self_level`, `evidence_weight`, `lifetime_count`, `recent_events` (the five
+  newest, as source and `occurred_at`) and `provenance`. At the top level it
+  returns `evidence_full_days`, `evidence_fade_days` and `corroborated_at`.
+  `EVIDENCE_ENGINE_VERSION` is 2.
+- **The store is unchanged.** Migration 362's `weighted` column holds the
+  aged count under the new curve from the next recompute. Its header comment
+  still says half-life, and it stays as applied (migrations are immutable).
+
+Tests: 13, with the state table and linear fade asserted. The new rules'
+mutations were caught 12 of 12, after adding a ten-month case for the one
+that first escaped.
+
 ## D319
 
 **The founder fit bank v2 (Profiling v2, Session 9).**
