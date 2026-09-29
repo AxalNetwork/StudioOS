@@ -221,6 +221,23 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, projectId]);
 
+  // Public directory handoff: a company profile can open this workspace with
+  // the sourced company name and website already in view. This remains a
+  // custom analysis until the user explicitly runs it; the query never writes
+  // a saved analysis by itself.
+  useEffect(() => {
+    if (embedded) return;
+    const market = searchParams.get('market');
+    const website = searchParams.get('website');
+    if (!market) return;
+    setMode('custom');
+    setInputs((prev) => ({
+      ...prev,
+      market: market.slice(0, 200),
+      known_competitors: website ? `Official website: ${website}` : prev.known_competitors,
+    }));
+  }, [embedded, searchParams]);
+
   const setInput = (k, v) => setInputs((prev) => ({ ...prev, [k]: v }));
 
   function scrollToResults() {

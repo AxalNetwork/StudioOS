@@ -61,8 +61,10 @@ const ResearchWorkspace = lazy(() => import('./workspaces/ResearchWorkspace'));
 const FundDossier = lazy(() => import('./pages/research/FundDossier'));
 const CompanyCandidate = lazy(() => import('./pages/research/CompanyCandidate'));
 const CompanyAnalysis = lazy(() => import('./pages/research/CompanyAnalysis'));
+const CompanyProfile = lazy(() => import('./pages/research/CompanyProfile'));
 const BenchmarkDetail = lazy(() => import('./pages/research/BenchmarkDetail'));
 const MarketReading = lazy(() => import('./pages/research/MarketReading'));
+const MarketSectorProfile = lazy(() => import('./pages/research/MarketSectorProfile'));
 const DiligenceRoom = lazy(() => import('./pages/research/DiligenceRoom'));
 const DiligenceFile = lazy(() => import('./pages/research/DiligenceFile'));
 const InvestorDealsRoutes = lazy(() => import('./workspaces/investor/InvestorDealsRoutes'));
@@ -2373,8 +2375,10 @@ function AppInner() {
             : <Navigate to="/research/ask" replace />} />
       <Route path="/research/ask" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/markets" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/markets/sector/:slug" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <MarketSectorProfile role={researchRole} />)} />
       <Route path="/research/markets/:uid" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <MarketReading role={researchRole} />)} />
       <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/companies/company/:uid" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyProfile role={researchRole} />)} />
       <Route path="/research/companies/:id" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyAnalysis role={researchRole} />)} />
       <Route path="/research/companies/:analysisId/:candidateId" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyCandidate role={researchRole} />)} />
       <Route path="/research/funds" element={guard(labRoles(['admin', 'founder']), <ResearchWorkspace role={researchRole} user={user} />)} />

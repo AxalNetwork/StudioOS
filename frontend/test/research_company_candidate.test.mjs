@@ -55,13 +55,12 @@ test('an empty detail stays empty beside a filled one', () => {
   assert.equal(rows.find((r) => r.k === 'Traction').nr, true);
 });
 
-test('the company page is a route for the same licences as the list', () => {
+test('the company directory and profile are routes for the same licences as analysis', () => {
+  assert.match(app, /path="\/research\/companies\/company\/:uid"/);
+  assert.match(workspace, /CompanyDirectoryZone/);
   assert.match(app, /path="\/research\/companies\/:analysisId\/:candidateId"/);
   assert.match(app, /guard\(labRoles\(\['admin', 'founder', 'advisor'\]\), <CompanyCandidate/);
-  assert.match(workspace, /linkToDossier/);
-  assert.match(list, /linkToDossier=\{linkToDossier\}/,
-    'the list accepts the flag and must hand it to the results view, or Open is a free variable');
-  assert.match(list, /\/research\/companies\/\$\{encodeURIComponent\(analysis\.id\)\}/);
+  assert.match(list, /searchParams\.get\('market'\)/);
 });
 
 test('the page states the limits and does not stamp fixture data as SAMPLE', () => {

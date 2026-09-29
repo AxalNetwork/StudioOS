@@ -3580,6 +3580,56 @@ research.get('/funds', async (c) => {
   });
 });
 
+// Public discovery catalog. These rows are source-backed identity metadata,
+// not a user's private company research and not financial/diligence claims.
+research.get('/company-directory', async (c) => {
+  await requireAuth(c);
+  const q = String(c.req.query('q') || '').trim().slice(0, 120);
+  const country = String(c.req.query('country') || '').trim().slice(0, 120);
+  const rows = await c.env.DB.prepare(
+    `SELECT uid, name, website, country, founded_year, sector, source_name,
+            source_url, source_license, as_of
+       FROM research_company_directory
+      WHERE (? = '' OR name LIKE '%' || ? || '%' OR website LIKE '%' || ? || '%')
+        AND (? = '' OR country = ?)
+      ORDER BY name COLLATE NOCASE LIMIT 1000`
+  ).bind(q, q, q, country, country).all();
+  return c.json({ items: rows.results || [], source: 'Wikidata', source_boundary: 'Discovery metadata only; no funding, valuation, revenue, market-size, or diligence claims.' });
+});
+
+research.get('/company-directory/:uid', async (c) => {
+  await requireAuth(c);
+  const row = await c.env.DB.prepare(
+    `SELECT uid, name, website, country, founded_year, sector, source_name,
+            source_url, source_license, as_of
+       FROM research_company_directory WHERE uid = ?`
+  ).bind(c.req.param('uid')).first();
+  if (!row) return c.json({ detail: 'Not found' }, 404);
+  return c.json({ item: row, source_boundary: 'Discovery metadata only; no funding, valuation, revenue, market-size, or diligence claims.' });
+});
+
+research.get('/market-directory', async (c) => {
+  await requireAuth(c);
+  const q = String(c.req.query('q') || '').trim().slice(0, 120);
+  const rows = await c.env.DB.prepare(
+    `SELECT slug, name, company_count, source_name, source_boundary, as_of
+       FROM research_market_directory
+      WHERE (? = '' OR name LIKE '%' || ? || '%')
+      ORDER BY name COLLATE NOCASE LIMIT 200`
+  ).bind(q, q).all();
+  return c.json({ items: rows.results || [], source_boundary: 'Counts are discovery-universe counts supplied by Axal, not TAM or valuation.' });
+});
+
+research.get('/market-directory/:slug', async (c) => {
+  await requireAuth(c);
+  const row = await c.env.DB.prepare(
+    `SELECT slug, name, company_count, source_name, source_boundary, as_of
+       FROM research_market_directory WHERE slug = ?`
+  ).bind(c.req.param('slug')).first();
+  if (!row) return c.json({ detail: 'Not found' }, 404);
+  return c.json({ item: row, source_boundary: 'Counts are discovery-universe counts supplied by Axal, not TAM or valuation.' });
+});
+
 research.post('/funds', async (c) => {
   const user = await requireAuth(c);
   const body = await c.req.json<any>().catch(() => ({}));

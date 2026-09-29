@@ -5038,6 +5038,17 @@ export const api = {
     fundSheetPull: () => request('/research/funds/sheet/pull', { method: 'POST' }),
     fundSheetPush: () => request('/research/funds/sheet/push', { method: 'POST' }),
 
+    companyDirectory: (params = {}) => {
+      const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')).toString();
+      return request(`/research/company-directory${qs ? `?${qs}` : ''}`);
+    },
+    companyDirectoryGet: (uid) => request(`/research/company-directory/${encodeURIComponent(uid)}`),
+    marketDirectory: (params = {}) => {
+      const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')).toString();
+      return request(`/research/market-directory${qs ? `?${qs}` : ''}`);
+    },
+    marketDirectoryGet: (slug) => request(`/research/market-directory/${encodeURIComponent(slug)}`),
+
     // Benchmarks (migration 217). A peer figure without its source and sample
     // size is refused by the route AND by the schema's CHECK.
     benchmarks: () => request('/research/benchmarks'),
