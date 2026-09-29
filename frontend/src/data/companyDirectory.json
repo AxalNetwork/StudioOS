@@ -165,7 +165,7 @@
     },
     {
       "uid": "q124155619",
-      "name": "SpareBank 1 S\u00f8r-Norge",
+      "name": "SpareBank 1 Sør-Norge",
       "website": "https://www.sb1sornorge.no/",
       "country": null,
       "founded_year": 2024,
@@ -213,7 +213,7 @@
     },
     {
       "uid": "q5618977",
-      "name": "Gunnar Dafg\u00e5rd AB",
+      "name": "Gunnar Dafgård AB",
       "website": "https://www.dafgards.se",
       "country": null,
       "founded_year": 2024,
@@ -273,7 +273,7 @@
     },
     {
       "uid": "q265183",
-      "name": "geobra Brandst\u00e4tter Stiftung & Co. KG",
+      "name": "geobra Brandstätter Stiftung & Co. KG",
       "website": "http://www.playmobil.de",
       "country": null,
       "founded_year": 2024,
@@ -429,7 +429,7 @@
     },
     {
       "uid": "q796010",
-      "name": "BIT\u0116 Group",
+      "name": "BITĖ Group",
       "website": "https://www.bitegroup.net/",
       "country": null,
       "founded_year": 2023,
@@ -1389,7 +1389,7 @@
     },
     {
       "uid": "q108369321",
-      "name": "Certificaci\u00f3n Fonogr\u00e1fica Centroamericana",
+      "name": "Certificación Fonográfica Centroamericana",
       "website": "https://cfc-musica.com/",
       "country": null,
       "founded_year": 2021,
@@ -1845,7 +1845,7 @@
     },
     {
       "uid": "q97219287",
-      "name": "T\u00dcRASA\u015e",
+      "name": "TÜRASAŞ",
       "website": "https://www.turasas.gov.tr/",
       "country": null,
       "founded_year": 2020,
@@ -2085,7 +2085,7 @@
     },
     {
       "uid": "q111248075",
-      "name": "Ta\u010dno d.o.o.",
+      "name": "Tačno d.o.o.",
       "website": "http://www.tanjug.rs/",
       "country": null,
       "founded_year": 2020,
@@ -2805,7 +2805,7 @@
     },
     {
       "uid": "q104177614",
-      "name": "V\u00e5r Energi",
+      "name": "Vår Energi",
       "website": "https://varenergi.no/",
       "country": null,
       "founded_year": 2018,
@@ -3606,6 +3606,32 @@
       "source_url": "https://www.wikidata.org/wiki/Q86681792",
       "source_license": "CC0 (Wikidata data); website links are references",
       "as_of": "2026-09-30"
+    },
+    {
+      "uid": "public-D8442A",
+      "name": "Apple Inc.",
+      "website": "https://www.apple.com",
+      "country": "United States",
+      "founded_year": 1976,
+      "sector": "Technology",
+      "provider_id": "D8442A",
+      "source_name": "Bigdata.com / FMP",
+      "source_url": "https://site.financialmodelingprep.com",
+      "source_license": "Provider-reported public-company data",
+      "as_of": "2026-09-29"
+    },
+    {
+      "uid": "public-228D42",
+      "name": "Microsoft Corporation",
+      "website": "https://www.microsoft.com",
+      "country": "United States",
+      "founded_year": 1975,
+      "sector": "Technology",
+      "provider_id": "228D42",
+      "source_name": "Bigdata.com / FMP",
+      "source_url": "https://site.financialmodelingprep.com",
+      "source_license": "Provider-reported public-company data",
+      "as_of": "2026-09-29"
     }
   ]
 }

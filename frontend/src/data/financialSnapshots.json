@@ -1,0 +1,26 @@
+{
+  "as_of": "2026-09-29",
+  "sources": [
+    {"name":"Bigdata.com market tearsheet","provider":"FMP","retrieved_at":"2026-09-29T23:16:16Z","source_url":"https://site.financialmodelingprep.com"},
+    {"name":"Bigdata.com company tearsheet","provider":"FMP","retrieved_at":"2026-09-29T23:16:51Z","source_url":"https://site.financialmodelingprep.com"},
+    {"name":"Bigdata.com ETF tearsheet","provider":"FMP","retrieved_at":"2026-09-29T23:16:42Z","source_url":"https://site.financialmodelingprep.com"},
+    {"name":"Alpha Vantage SPY monthly adjusted history","provider":"Alpha Vantage","retrieved_at":"2026-09-29","source_url":"https://www.alphavantage.co/"}
+  ],
+  "markets": {
+    "benchmark": {"name":"SPDR S&P 500 ETF Trust","ticker":"SPY","price":764.2,"change_1d_pct":-0.18,"change_1m_pct":-0.67,"change_3m_pct":2.33,"change_6m_pct":20.92,"change_ytd_pct":12.07,"change_1y_pct":15.15,"aum":"$817.16B","nav":771.35,"expense_ratio_pct":0.09,"volatility_20d_pct":11.03,"max_drawdown_1y_pct":-9.13,"as_of":"2026-09-29"},
+    "sector_etfs": [
+      {"sector":"Technology","ticker":"XLK","price":194.5,"change_1d_pct":-0.02,"change_1m_pct":4.74,"change_3m_pct":2.09,"change_ytd_pct":35.1},
+      {"sector":"Health Care","ticker":"XLV","price":170.73,"change_1d_pct":-0.31,"change_1m_pct":-0.25,"change_3m_pct":7.61,"change_ytd_pct":10.29},
+      {"sector":"Financials","ticker":"XLF","price":54.01,"change_1d_pct":-0.33,"change_1m_pct":-7.04,"change_3m_pct":0.75,"change_ytd_pct":-1.39},
+      {"sector":"Energy","ticker":"XLE","price":61.54,"change_1d_pct":-0.9,"change_1m_pct":-1.82,"change_3m_pct":15.87,"change_ytd_pct":37.64}
+    ]
+  },
+  "companies": {
+    "D8442A": {"name":"Apple Inc.","ticker":"AAPL","sector":"Technology","industry":"Consumer Electronics","country":"US","exchange":"NASDAQ","employees":166000,"last_price":329.4,"change_1d_pct":-2.66,"market_cap":"$4.838T","price_change_1y_pct":29.47,"gross_margin_ttm":0.4865,"operating_margin_ttm":0.3317,"pe_ttm":37.6,"revenue_latest_quarter":"$109.42B","net_income_latest_quarter":"$29.79B","fcf_latest_quarter":"$31.91B","latest_quarter":"Q3 FY2026","next_earnings":"2026-10-29","analyst_consensus":"Buy","website":"https://www.apple.com"},
+    "228D42": {"name":"Microsoft Corporation","ticker":"MSFT","sector":"Technology","industry":"Software - Infrastructure","country":"US","exchange":"NASDAQ","employees":223000,"last_price":508.96,"change_1d_pct":-0.05,"market_cap":"$3.779T","price_change_1y_pct":-1.1,"gross_margin_ttm":0.6794,"operating_margin_ttm":0.4678,"pe_ttm":28.28,"revenue_latest_quarter":"$90.01B","net_income_latest_quarter":"$35.77B","fcf_latest_quarter":"$19.64B","latest_quarter":"Q4 FY2026","next_earnings":"2026-10-28","analyst_consensus":"Buy","website":"https://www.microsoft.com"}
+  },
+  "funds": {
+    "672082": {"name":"State Street SPDR S&P 500 ETF Trust","ticker":"SPY","isin":"US78462F1030","provider":"SPDR","nav":771.35,"aum":"$817.16B","expense_ratio_pct":0.09,"holdings_count":504,"inception_date":"1993-01-22","last_price":764.2,"change_1d_pct":-0.18,"returns":{"1m":-0.67,"3m":2.33,"6m":20.92,"ytd":12.07,"1y":15.15,"3y":78.77},"volatility_20d_pct":11.03,"max_drawdown_1y_pct":-9.13,"top10_weight_pct":38.78,"source":"Bigdata.com ETF tearsheet / FMP"},
+    "5FJWA4": {"name":"Invesco QQQ Trust, Series 1","ticker":"QQQ","isin":"US46090E1038","provider":"Invesco","nav":744.46,"aum":"$500.94B","expense_ratio_pct":0.18,"holdings_count":102,"inception_date":"1999-03-10","last_price":737.93,"change_1d_pct":0.19,"returns":{"1m":3.0,"3m":0.21,"6m":32.18,"ytd":20.12,"1y":23.25,"3y":105.97},"volatility_20d_pct":16.02,"max_drawdown_1y_pct":-12.19,"top10_weight_pct":46.87,"source":"Bigdata.com ETF tearsheet / FMP"}
+  }
+}
