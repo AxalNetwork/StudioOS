@@ -172,10 +172,13 @@ export const BANK_SIZE_TARGETS = {
   // Adaptive selection means a user answers only the minimum, not all of these.
   fitFounder: 45,
   fitInvestor: 41,
-  fitPartner: 40,
-  fitAdvisor: 42,
-  fitCoach: 17, // coach rides in the advisor conversation; skills/values/archetype
-                // stay on the advisor bank so they're never asked twice.
+  // D491 raised the partner bank. Session 12 raised the advisor and coach banks
+  // (pick-ones, reverse keys, every radar axis). Coach still rides in the
+  // advisor conversation after the advisor bank. fit_advisor_coach_bank_v2.test.ts
+  // holds the advisor and coach minimums.
+  fitPartner: 83,
+  fitAdvisor: 85,
+  fitCoach: 76,
   // Explorer Problem/Challenge Discovery — one 12-question track per persona
   // the user might become (founder/investor/advisor/partner), selected by
   // the `role_detect.primary` answer. Documentation-only (not enforced by
@@ -382,9 +385,11 @@ export const PROFILING_SECTION_ORDER: ProfilingSectionKey[] = [
  * the identical five Axal values, so counting both would make an advisor answer
  * roughly double every other persona. Scoping the card to the primary bank keeps
  * the completion effort comparable without dropping any conversational coverage
- * or axalFit/bestFit signal. Task #45 keeps Skills/Work-values/Archetype trait
- * questions ONLY on the advisor bank (not coach) for the same "never asked twice"
- * reason, so the advisor completion card measures them exactly once.
+ * or axalFit/bestFit signal. The card measures Skills/Work-values/Archetype on
+ * the advisor bank only. Since Session 12 (Profiling v2) the coach bank carries
+ * its own archetype, skill and value items so a coach can be classified; they
+ * trail the advisor bank in the conversation and are reached only past the
+ * advisor floors, so nothing is asked twice on the way to "confident".
  *
  * Admin / unknown have no fit bank, so profiling is "not applicable".
  */

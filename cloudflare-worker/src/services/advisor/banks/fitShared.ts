@@ -480,55 +480,124 @@ export function archetypePersonaRows(persona: FitPersona): FitRowSpec[] {
         },
       ];
     case 'advisor':
-    case 'coach':
       return [
         {
           key: 'arch_mt_craft',
           prompt: 'How much of what you share is deep craft you have personally mastered?',
           hint: '0 = I mostly hold space and ask, 5 = I teach a craft I have done.',
           measures: { archetype_trait: 'builder' },
+          reask_prompt: 'Is what you share still mostly craft you have personally mastered?',
         },
         {
           key: 'arch_mt_demo',
           prompt: 'How often do you teach by demonstrating the craft in the work, not by telling?',
           hint: '0 = I tell, 5 = I demonstrate in the work.',
           measures: { archetype_trait: 'builder' },
+          reask_prompt: 'Do you still teach by demonstrating in the work rather than telling?',
         },
         {
           key: 'arch_mt_perspective',
           prompt: 'How much of your value is perspective and judgment at the hard moments, not hours of doing?',
           hint: '0 = I do the hours, 5 = I bring judgment when it counts.',
           measures: { archetype_trait: 'visionary' },
+          reask_prompt: 'Is your value still mostly judgment at the hard moments?',
         },
         {
           key: 'arch_mt_altitude',
           prompt: 'How often is your best move a high-altitude reframe rather than a tactic for this week?',
           hint: '0 = this week’s tactic, 5 = a reframe of the decade.',
           measures: { archetype_trait: 'visionary' },
+          reask_prompt: 'Is your best move still a high-altitude reframe?',
         },
         {
           key: 'arch_mt_beside',
           prompt: 'How much do you coach session by session, beside the person, rather than from a distance?',
           hint: '0 = at a distance, 5 = beside them, session by session.',
           measures: { archetype_trait: 'connector' },
+          reask_prompt: 'Do you still work beside the person, session by session?',
         },
         {
           key: 'arch_mt_relationship',
           prompt: 'How much of the work is the relationship itself, rebuilt every session?',
           hint: '0 = the work is the advice, 5 = the work is the relationship.',
           measures: { archetype_trait: 'connector' },
+          reask_prompt: 'Is the relationship itself still most of the work?',
         },
         {
           key: 'arch_mt_honest',
           prompt: 'How firmly do you keep commitments honest even when it strains the relationship?',
           hint: '0 = I protect the relationship first, 5 = honesty holds even when it is hard.',
           measures: { archetype_trait: 'operator' },
+          reask_prompt: 'Do you still keep commitments honest when it strains the relationship?',
         },
         {
           key: 'arch_mt_cadence',
           prompt: 'How strictly do you run a cadence of commitments the person can see and inspect?',
           hint: '0 = informal follow-up, 5 = a visible cadence with owners and dates.',
           measures: { archetype_trait: 'operator' },
+          reask_prompt: 'Do you still run a visible cadence of commitments?',
+        },
+      ];
+    // Session 12 — the coach's own role probes (PROFILING_V2.md §2.4). Coach
+    // shares the advisor archetype set, so these lean the same four ways,
+    // worded for someone whose work is the coaching relationship itself.
+    case 'coach':
+      return [
+        {
+          key: 'arch_co_skill_drill',
+          prompt: 'How often do you have the person practise a specific skill with you in the session, rather than talk about it?',
+          hint: '0 = we talk it through, 5 = we practise it together.',
+          measures: { archetype_trait: 'builder' },
+          reask_prompt: 'Do you still have people practise the skill with you in the session?',
+        },
+        {
+          key: 'arch_co_own_practice',
+          prompt: 'How much of your coaching draws on work you still do yourself, not only on coaching others?',
+          hint: '0 = it draws on coaching alone, 5 = it draws on work I still do.',
+          measures: { archetype_trait: 'builder' },
+          reask_prompt: 'Does your coaching still draw on work you do yourself?',
+        },
+        {
+          key: 'arch_co_meaning',
+          prompt: 'How often do you help the person reconnect a hard week to what they are ultimately trying to build?',
+          hint: '0 = rarely, we stay with the week, 5 = that is a core move of mine.',
+          measures: { archetype_trait: 'visionary' },
+          reask_prompt: 'Do you still reconnect hard weeks to what the person is ultimately building?',
+        },
+        {
+          key: 'arch_co_possibility',
+          prompt: 'How much do you stretch the person’s sense of what they could become, beyond the goal they came in with?',
+          hint: '0 = I coach to the goal they bring, 5 = I stretch it on purpose.',
+          measures: { archetype_trait: 'visionary' },
+          reask_prompt: 'Do you still stretch people beyond the goal they came in with?',
+        },
+        {
+          key: 'arch_co_rapport',
+          prompt: 'How much effort do you put into the relationship itself — checking in, remembering what matters to them, being reachable?',
+          hint: '0 = the sessions are the relationship, 5 = I invest in it all the time.',
+          measures: { archetype_trait: 'connector' },
+          reask_prompt: 'Do you still invest in the relationship between sessions as much?',
+        },
+        {
+          key: 'arch_co_bring_people',
+          prompt: 'How often do you bring other people into someone’s growth — a peer, a mentor, a group?',
+          hint: '0 = it stays between the two of us, 5 = I often bring others in.',
+          measures: { archetype_trait: 'connector' },
+          reask_prompt: 'Do you still bring other people into someone’s growth as often?',
+        },
+        {
+          key: 'arch_co_written_goals',
+          prompt: 'How consistently do the people you coach have written goals that you review together on a set rhythm?',
+          hint: '0 = goals stay informal, 5 = always written and reviewed on a rhythm.',
+          measures: { archetype_trait: 'operator' },
+          reask_prompt: 'Do the people you coach still have written goals you review on a rhythm?',
+        },
+        {
+          key: 'arch_co_follow_up',
+          prompt: 'How reliably do you follow up on exactly what the person said they would do by the next session?',
+          hint: '0 = I let them raise it, 5 = I always follow up on it.',
+          measures: { archetype_trait: 'operator' },
+          reask_prompt: 'Do you still follow up on exactly what the person committed to?',
         },
       ];
     default:

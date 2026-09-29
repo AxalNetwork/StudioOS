@@ -5,6 +5,9 @@
  *   GET /history?persona=      the caller's own snapshots, newest first
  *   GET /archetype-published   the caller's consent to show their archetype
  *   PUT /archetype-published   { published: boolean } — set it
+ *   GET /reask                 D358 — the caller's answers old enough to be
+ *                              asked again ("is this still true?"); a
+ *                              read-only peek, nothing is marked asked
  *
  * Every read and write is keyed on the session user; no request field names
  * whose history is read, so there is no way to ask for anyone else's. Another
@@ -17,6 +20,7 @@ import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import type { FitPersona } from '../services/advisor/questionBank';
 import { loadHistory, isArchetypePublished, setArchetypePublished } from '../services/profileHistory';
+import { reaskList } from '../services/profileEvolution';
 
 const r = new Hono<{ Bindings: Env }>();
 const PERSONAS: FitPersona[] = ['founder', 'investor', 'partner', 'advisor', 'coach'];
@@ -32,6 +36,15 @@ r.get('/history', async (c) => {
     return c.json({ items });
   } catch (e) {
     return refuse(c, 503, { code: 'profile_history_unreadable', message: 'Your profile history could not be read. Try again in a moment.', raw: e });
+  }
+});
+
+r.get('/reask', async (c) => {
+  const user = await requireAuth(c);
+  try {
+    return c.json(await reaskList(c.env, user.id));
+  } catch (e) {
+    return refuse(c, 503, { code: 'profile_reask_unreadable', message: 'Which of your answers are due for a refresh could not be read. Try again in a moment.', raw: e });
   }
 });
 
