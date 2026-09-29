@@ -34,7 +34,7 @@ const EXPECTED: Record<string, number> = {
   founder: 58,
   investor: 54,
   partner: 53,
-  advisor: 55, // advisor primary bank — coach bank excluded from the completion card
+  advisor: 85, // advisor primary bank — coach bank excluded from the completion card (Session 12: +30)
 };
 
 // Every persona's profiling bank must offer all four modules with enough
@@ -43,7 +43,7 @@ const EXPECTED_SECTIONS: Record<string, Record<string, number>> = {
   founder:  { skills: 7, work_values: 5, archetype: 29, axal_fit: 17 },
   investor: { skills: 5, work_values: 5, archetype: 29, axal_fit: 15 },
   partner:  { skills: 5, work_values: 4, archetype: 29, axal_fit: 15 },
-  advisor:   { skills: 5, work_values: 4, archetype: 29, axal_fit: 17 },
+  advisor:   { skills: 13, work_values: 8, archetype: 41, axal_fit: 23 },
 };
 
 test('profilingBankFor returns the fit.* bank sized per persona', () => {
@@ -168,7 +168,7 @@ test('advisor completion card is scoped to the primary bank, but coach is still 
   // so a advisor reaches "Profiling complete" with the same effort as other
   // personas instead of ~double (was 34).
   const card = profilingBankFor('advisor' as Persona);
-  assert.equal(card.length, 55);
+  assert.equal(card.length, 85);
   assert.ok(card.some((q) => q.id.startsWith('fit.advisor.')), 'card must contain the advisor fit bank');
   assert.ok(card.every((q) => !q.id.startsWith('fit.coach.')), 'coach questions must NOT count toward the advisor card');
 

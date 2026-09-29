@@ -114,11 +114,21 @@ expectations are over those four.
 ### 2.4 Coach
 
 Coach shares the advisor archetype set (`ARCHETYPES.coach =
-ADVISOR_ARCHETYPES`). **Today a coach can never be classified:** the coach
-bank (`fit_coach.ts`, 18 questions) asks no `archetype_trait` question, so
-`computeArchetype(…, 'coach')` returns null. Session 12 adds
-`archetypeModuleRows('coach')`, with coach-flavoured role probes, to that
-bank. Until then the fixture carries no coach personas.
+ADVISOR_ARCHETYPES`). Until Session 12 a coach could never be classified:
+the coach bank (`fit_coach.ts`, 18 questions) asked no `archetype_trait`
+question, so `computeArchetype(…, 'coach')` returned null.
+
+**Session 12 (done).** The coach bank now carries the 20 shared trait probes,
+eight coach-flavoured role probes (`archetypePersonaRows('coach')`), four
+pick-ones and two reverse-keyed probes per trait. It does **not** repeat the
+illustration question: the advisor bank asks it in the same conversation and
+it sets one account-wide choice, so the coach module is
+`archetypeModuleRows('coach')` less `arch_illustration`. Coach questions ride
+in the advisor conversation after the advisor bank, and the profiling modules
+are pooled over both, so adaptive selection reaches them only past the
+advisor floors: they are the coach's own signal and the conversation's
+headroom, not a second survey. There are no separate coach personas; the
+four advisor personas and the advisor blend also answer the coach bank (§9).
 
 ### 2.5 Classification rule (unchanged method)
 
@@ -273,10 +283,10 @@ Axes each bank does not ask about today:
 | Founder | legal_compliance |
 | Investor | engineering, design, marketing_brand |
 | Partner | engineering, design, marketing_brand |
-| Advisor | engineering, design, legal_compliance |
-| Coach | all eight (no `skill_axis` question) |
+| Advisor | none (Session 12 added engineering, design and legal_compliance) |
+| Coach | none (Session 12 added all eight; before, no `skill_axis` question) |
 
-Sessions 8–11 decide whether to add a question for each gap. Evidence may fill a
+Sessions 9–12 decide whether to add a question for each gap. Evidence may fill a
 gap anyway, and the axis then reads "Evidence only".
 
 ### 5.2 Axis state (decision b: corroborate)
@@ -584,16 +594,23 @@ fallback (decision a) and is not copied across: publishing is a new consent.
 
 ## 9. Test personas and baseline
 
-`cloudflare-worker/test/fixtures/profiling-v2-personas.json` holds 22
+`cloudflare-worker/test/fixtures/profiling-v2-personas.json` holds 23
 synthetic people (every name invented, every address `@example.test`):
 
 - **16 archetype personas**, one per archetype. Each answers every scale and
-  select question of its role's current bank (880 answers across the sixteen), with a
+  select question of its role's bank as Session 6 found it (880 answers across the sixteen), with a
   20% pull towards 3.5 and item-level jitter, so the answers are not
   centroid copies. `expected.primary` is the archetype the persona was
-  written to be.
-- **2 blend personas**: Bo Blend (Rocketeer, secondary Maverick) and Bea
-  Balance (Thesis-Driven Backer, secondary Disciplined Allocator).
+  written to be. Session 12 added, for the four advisor personas, an answer
+  to every new advisor question and to the whole coach bank (the advisor
+  conversation delivers both): each persona's trait vector from its
+  Session 6 answers sets its reverse-keyed and new scale answers, and it
+  takes the pick-one option written for its own archetype.
+- **3 blend personas**: Bo Blend (Rocketeer, secondary Maverick), Bea
+  Balance (Thesis-Driven Backer, secondary Disciplined Allocator) and, from
+  Session 12, Hollis Holdfast (Hands-On Coach, secondary Accountability
+  Anchor — the advisor set's closest pair), who answers both the advisor and
+  the coach bank.
 - **4 evolution personas**, each with dated `checkpoints` computed with the
   reference model and §7.0's parameters:
   - `missionary_to_architect` (Eli Evolve): Missionary in January, a partial
