@@ -42,9 +42,14 @@ test('every answer is a real fit question of the persona’s role, with a value 
     for (const a of p.answers) {
       const q = INDEX.get(a.question_id);
       assert.ok(q, `${p.key}: ${a.question_id} is not a fit question`);
-      assert.equal(q!.persona, p.role, `${p.key}: ${a.question_id} belongs to ${q!.persona}`);
+      // The advisor conversation delivers the coach bank too (questionBank.ts
+      // bankFor), so an advisor persona also answers fit.coach.* (Session 12).
+      const roles = p.role === 'advisor' ? ['advisor', 'coach'] : [p.role];
+      assert.ok(roles.includes(q!.persona), `${p.key}: ${a.question_id} belongs to ${q!.persona}`);
       assert.match(a.answered_at, ISO, `${p.key}: ${a.question_id} answered_at`);
-      if (q!.measures.archetype_presentation) {
+      if (q!.choices) {
+        assert.ok(q!.choices.some((c) => c.key === a.value), `${p.key}: ${a.question_id} = ${a.value} is not an option key`);
+      } else if (q!.measures.archetype_presentation) {
         assert.ok((ARCHETYPE_PRESENTATION_OPTIONS as readonly string[]).includes(a.value), `${p.key}: ${a.value}`);
       } else if (q!.measures.archetype_choice) {
         // D491: a pick-one stores the key of one of its own options (§3.3).
