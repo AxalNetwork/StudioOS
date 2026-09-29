@@ -3608,6 +3608,40 @@ research.get('/company-directory/:uid', async (c) => {
   return c.json({ item: row, source_boundary: 'Discovery metadata only; no funding, valuation, revenue, market-size, or diligence claims.' });
 });
 
+// Public EuroTech fund catalog. Spreadsheet observations are reported fund-size
+// snapshots only; they are not private-fund NAV, IRR, TVPI, or performance data.
+research.get('/fund-directory', async (c) => {
+  await requireAuth(c);
+  const q = String(c.req.query('q') || '').trim().slice(0, 120);
+  const hq = String(c.req.query('hq') || '').trim().slice(0, 120);
+  const rows = await c.env.DB.prepare(
+    `SELECT uid, name, website, linkedin, hq, fund_number, fund_size_cents,
+            fund_date, quarter, fund_year, sector_focus, notable_lps,
+            eif_flag, eifo_flag, source_name, source_url, as_of
+       FROM research_fund_directory
+      WHERE (? = '' OR name LIKE '%' || ? || '%' OR sector_focus LIKE '%' || ? || '%')
+        AND (? = '' OR hq = ?)
+      ORDER BY name COLLATE NOCASE LIMIT 2000`
+  ).bind(q, q, q, hq, hq).all();
+  return c.json({ items: rows.results || [], source: 'EuroTech VC Funds (public spreadsheet)', source_boundary: 'Reported fund-size snapshots and discovery metadata only; no NAV, IRR, TVPI, or performance is inferred.' });
+});
+
+research.get('/fund-directory/:uid', async (c) => {
+  await requireAuth(c);
+  const item = await c.env.DB.prepare(
+    `SELECT uid, name, website, linkedin, hq, fund_number, fund_size_cents,
+            fund_date, quarter, fund_year, sector_focus, notable_lps,
+            eif_flag, eifo_flag, source_name, source_url, as_of
+       FROM research_fund_directory WHERE uid = ?`
+  ).bind(c.req.param('uid')).first();
+  if (!item) return c.json({ detail: 'Not found' }, 404);
+  const reports = await c.env.DB.prepare(
+    `SELECT period, report_date, fund_size_cents, source_url
+       FROM research_fund_directory_reports WHERE fund_uid = ? ORDER BY period ASC`
+  ).bind(c.req.param('uid')).all();
+  return c.json({ item, reports: reports.results || [], source_boundary: 'Reported fund-size snapshots and discovery metadata only; no NAV, IRR, TVPI, or performance is inferred.' });
+});
+
 research.get('/market-directory', async (c) => {
   await requireAuth(c);
   const q = String(c.req.query('q') || '').trim().slice(0, 120);

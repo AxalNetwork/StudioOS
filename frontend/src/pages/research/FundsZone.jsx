@@ -481,7 +481,7 @@ function FundDirectoryCard({ directory, researchedNames, busy, onAdd }) {
         <div>
           <h3 className="text-sm font-extrabold tracking-tight">Fund directory</h3>
           <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-gray-600 dark:text-gray-300">
-            Browse {items.length.toLocaleString()} real fund and investor records from Axal’s public mapping exports. Add a row to your private research list when you want to assess it.
+            Browse {items.length.toLocaleString()} real fund and investor records from Axal’s public mapping exports. The EuroTech sheet contributes {directory.eurotech_import?.unique_funds?.toLocaleString() || '1,076'} funds and {directory.eurotech_import?.observations?.toLocaleString() || '2,364'} reported size observations. Add a row to your private research list when you want to assess it.
           </p>
         </div>
         <span className="text-[11px] text-gray-500 dark:text-gray-400">{filtered.length.toLocaleString()} matches</span>
@@ -553,6 +553,7 @@ function FundDirectoryCard({ directory, researchedNames, busy, onAdd }) {
                   <DirectoryFact label="Ticket" value={ticket} />
                   <DirectoryFact label="Fund size" value={fund.fund_size} />
                   <DirectoryFact label="Latest fund" value={fund.fund_date} />
+                  <DirectoryFact label="Reported periods" value={fund.eurotech_report_count} />
                 </div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-2 text-[10px] dark:border-gray-800">
                   <span className="text-gray-500 dark:text-gray-400">{fund.source_label}</span>

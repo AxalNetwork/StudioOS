@@ -5051,6 +5051,11 @@ export const api = {
       return request(`/research/market-directory${qs ? `?${qs}` : ''}`);
     },
     marketDirectoryGet: (slug) => request(`/research/market-directory/${encodeURIComponent(slug)}`),
+    fundDirectory: (params = {}) => {
+      const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')).toString();
+      return request(`/research/fund-directory${qs ? `?${qs}` : ''}`);
+    },
+    fundDirectoryGet: (uid) => request(`/research/fund-directory/${encodeURIComponent(uid)}`),
 
     // Benchmarks (migration 217). A peer figure without its source and sample
     // size is refused by the route AND by the schema's CHECK.
