@@ -33,8 +33,8 @@ import {
 const EXPECTED: Record<string, number> = {
   founder: 58,
   investor: 54,
-  partner: 53,
-  advisor: 85, // advisor primary bank — coach bank excluded from the completion card (Session 12: +30)
+  partner: 83, // D491 partner bank
+  advisor: 85, // Session 12 advisor bank; the coach bank is not on the completion card
 };
 
 // Every persona's profiling bank must offer all four modules with enough
@@ -42,7 +42,7 @@ const EXPECTED: Record<string, number> = {
 const EXPECTED_SECTIONS: Record<string, Record<string, number>> = {
   founder:  { skills: 7, work_values: 5, archetype: 29, axal_fit: 17 },
   investor: { skills: 5, work_values: 5, archetype: 29, axal_fit: 15 },
-  partner:  { skills: 5, work_values: 4, archetype: 29, axal_fit: 15 },
+  partner:  { skills: 8, work_values: 9, archetype: 45, axal_fit: 21 },
   advisor:   { skills: 13, work_values: 8, archetype: 41, axal_fit: 23 },
 };
 

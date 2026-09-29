@@ -430,6 +430,11 @@ export interface NextTurnContext {
    *  shim, but the field is still honoured so callers (e.g. tests)
    *  can pre-seed answered ids without touching the DB. */
   extraAnswered?: Set<string>;
+  /** D358 — profiling questions whose answer is old enough to ask again
+   *  (services/profileEvolution reaskOverlay). They are taken back OUT of
+   *  the answered set after the cross-conversation read, so the ranker may
+   *  offer them; the bank passed in carries their re-ask wording. */
+  reaskable?: Set<string>;
   /** Pre-loaded recent activity pages. When omitted, nextTurn
    *  loads them itself via `loadRecentActivityPages`. */
   recentActivityPages?: Set<string>;
@@ -460,6 +465,7 @@ export async function nextTurn(
   const answered = ctx.extraAnswered
     ? new Set<string>([...fromAnswers, ...ctx.extraAnswered])
     : fromAnswers;
+  if (ctx.reaskable) for (const id of ctx.reaskable) answered.delete(id);
   const recentlyAsked = await loadRecentlyAsked(env, userId, now - ANTI_REPEAT_WINDOW_MS);
   const recentActivityPages = ctx.recentActivityPages
     ?? await loadRecentActivityPages(env, userId, now - RECENT_ACTIVITY_WINDOW_MS);

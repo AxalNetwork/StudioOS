@@ -51,6 +51,9 @@ test('every answer is a real fit question of the persona’s role, with a value 
         assert.ok(q!.choices.some((c) => c.key === a.value), `${p.key}: ${a.question_id} = ${a.value} is not an option key`);
       } else if (q!.measures.archetype_presentation) {
         assert.ok((ARCHETYPE_PRESENTATION_OPTIONS as readonly string[]).includes(a.value), `${p.key}: ${a.value}`);
+      } else if (q!.measures.archetype_choice) {
+        // D491: a pick-one stores the key of one of its own options (§3.3).
+        assert.ok((q!.choices || []).some((c) => c.key === a.value), `${p.key}: ${a.question_id} = ${a.value} is not one of its options`);
       } else {
         assert.ok(Number.isInteger(a.value) && a.value >= 0 && a.value <= 5, `${p.key}: ${a.question_id} = ${a.value}`);
       }

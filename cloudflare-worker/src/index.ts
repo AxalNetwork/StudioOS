@@ -42,6 +42,7 @@ import adminPublications from './routes/admin_publications';
 import adminTeam from './routes/admin_team';
 import adminNetworkProfiles from './routes/admin_network_profiles';
 import profileHistoryRoutes from './routes/profile_history';
+import adminProfilingRoutes from './routes/admin_profiling';
 import networkPublic from './routes/network_public';
 // Task #3 — Admin Telegram channels + aggregator + post send.
 import adminTelegram from './routes/admin_telegram';
@@ -1018,6 +1019,8 @@ app.route('/api/profiling', profiling);
 // D357 — Profiling v2 "me" routes: the caller's own snapshot history and
 // their archetype publish consent (routes/profile_history.ts).
 app.route('/api/profile', profileHistoryRoutes);
+// D358 — admin aggregates of how profiles move over time (routes/admin_profiling.ts).
+app.route('/api/admin/profiling', adminProfilingRoutes);
 app.route('/api/dashboard', dashboard);
 // Task #39 — Event engine authed routes (§8.1).
 app.route('/api/events', eventsRoutes);
@@ -1806,6 +1809,25 @@ export default {
             if (!p.readable) console.warn('[cron] cron_run_history prune could not read the table');
             else if (p.deleted || p.capped) console.info(`[cron] cron_run_history pruned=${p.deleted} batches=${p.batches} kept=${p.kept}${p.capped ? ' capped' : ''}`);
           } catch (e) { console.error('[cron] cron_run_history prune failed', e); }
+        }
+        // D358 — the Profiling v2 evolution loop (PROFILING_V2.md §7.8). Every
+        // minute of 03:00–03:59 UTC except :15 and :45 (heavier jobs), one
+        // bounded tick: Session 8's evidence pass once a day, then each person
+        // with something new — evidence, a hysteresis clock running, an engine
+        // bump, or a month since their last evaluation — is recomputed, and a
+        // displayed-archetype change is recorded and notified once. A pass
+        // that does not finish tonight resumes tomorrow at its cursor. NOT
+        // GATED ON `hqCadences`: profiles live in this deployment's own D1.
+        if (now.getUTCHours() === 3) {
+          const { isNightlyTick, runProfileEvolutionTick } = await import('./services/profileEvolution');
+          if (isNightlyTick(now)) {
+            try {
+              const t = await runProfileEvolutionTick(env, now);
+              if (t.processed || t.failed) {
+                console.info(`[cron] profile evolution stage=${t.stage} processed=${t.processed} evaluated=${t.evaluated} events=${t.events} failed=${t.failed}${t.pass_complete ? ' pass_complete' : ''}`);
+              }
+            } catch (e) { console.error('[cron] profile evolution failed', e); }
+          }
         }
         // D148 — the anonymised platform median, computed at HQ and pushed to
         // every branch. `branch_benchmarks` was created by migration 256 and

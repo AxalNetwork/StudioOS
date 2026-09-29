@@ -6,9 +6,9 @@ import HeldZone from './HeldZone';
 /**
  * Admin · Programs on HQ-held accounts — S20's row (D286).
  *
- * FOUR LITERAL LINKS: the Spin-Out Lab applications tab, the Lab console
- * (cohort calendar and applications), advisor cohort access, and the
- * Assessment Studio. `/admin/advisor-cohorts` has this page and the
+ * FIVE LITERAL LINKS: the Spin-Out Lab applications tab, the Lab console
+ * (cohort calendar and applications), advisor cohort access, the
+ * Assessment Studio, and Profiling trends (D358, aggregates only). `/admin/advisor-cohorts` has this page and the
  * Approvals lane as its only doors on this shell, so the links are written
  * out for the reachability walk.
  *
@@ -27,8 +27,8 @@ export default function HeldPrograms() {
   return (
     <HeldZone
       workspace="Programs"
-      stance="Four consoles, each opened where it is decided"
-      coverage={['Four programme consoles on this page, none counted here']}
+      stance="Five consoles, each opened where it is decided"
+      coverage={['Five programme consoles on this page, none counted here']}
       coverageNote="Applications, cohorts and runs are counted in their consoles."
       unavailable={[
         ['A cohort figure for a branch', 'No branch is deployed; the Lab console reads HQ’s own cohorts.'],
@@ -74,6 +74,15 @@ export default function HeldPrograms() {
               today; the route refuses authoring only on a branch.
             </p>
             <p className="mt-2 text-[11.5px]"><Link to="/admin/assessment" className={OPEN}>Open Assessment Studio</Link></p>
+          </Card>
+        </li>
+        <li>
+          <Card className="h-full p-4" data-testid="held-programs-profiling-trends">
+            <h2 className="text-[13px] font-extrabold tracking-tight text-axal-ink">Profiling trends</h2>
+            <p className="mt-1.5 text-[12px] leading-relaxed text-axal-muted">
+              How archetypes, skills and answers shift over time. Counts only; groups under 5 are hidden.
+            </p>
+            <p className="mt-2 text-[11.5px]"><Link to="/admin/profiling-trends" className={OPEN}>Open profiling trends</Link></p>
           </Card>
         </li>
       </ul>

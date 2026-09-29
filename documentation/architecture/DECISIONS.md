@@ -32707,6 +32707,170 @@ parameters.
 
   Both typechecks and `check-docs-fresh --strict` pass after the root build.
 
+## D358
+
+**Profiling v2 evolution loop: profiles move as people use the platform
+(migration 364, Session 13).** Session 7 (D357) made a profile a pure
+function of the answer ledger, the evidence and the date, and gave it one
+entry point, `recomputeProfile`. Session 8 (D318) built the evidence store
+and its batch pass. Neither ran on its own: the only trigger was a saved
+`fit.*` answer. This entry adds the loop the spec (§7) describes:
+`services/profileEvolution.ts`, one nightly job, the re-ask, change events,
+and an admin trends read.
+
+**One evaluation path.** `evaluateUser(env, userId, trigger)` calls
+`recomputeProfile`, records a displayed-archetype change once, and stamps
+when the person was last evaluated. The advisor `/answer` route now calls it
+with `'answer'` in place of the bare recompute; the nightly run calls it with
+`'evidence'`, `'scheduled'` or `'engine_bump'`.
+
+**Migration 364** (stands alone; CREATE … IF NOT EXISTS only):
+
+- `advisor_answer_revisions`, append-only, filled by an AFTER UPDATE trigger
+  on `advisor_answers`. The answers table is UNIQUE on (conversation,
+  question) and both write paths upsert, so answering a question again in
+  the same conversation overwrote the earlier answer. A six-month re-ask
+  does exactly that, and the spec says the old answer stays (§7.1). Because
+  the displayed archetype is defined by replaying the ledger (§7.5), a lost
+  answer would also rewrite the past. The trigger copies the replaced row
+  whenever a saved `fit.*` answer changes value, time or status, on either
+  write path, with no route change. `loadLedger` reads the revisions first.
+- `profile_change_events`, append-only, one row per displayed-archetype
+  change, UNIQUE on (user, persona, day, new archetype). Two recomputes
+  racing (an answer and the nightly run) record one event.
+- `profile_evolution_state` (when each person was last evaluated, under
+  which engine version) and `profile_evolution_cursor` (where the nightly
+  run stopped, and the day Session 8's evidence pass last completed).
+
+**The nightly run** joins the existing daily 03:00 slot. No new cron:
+- It runs every minute of 03:00–03:59 UTC except :15 and :45, where heavier
+  jobs run.
+- Even minutes serve Session 8's evidence pass (10 users a tick) and odd
+  minutes the profile pass (20 people a tick). Once one stage is done for
+  the day, the other gets every tick.
+- Each stage makes at most one complete pass per UTC day. A pass that does
+  not finish tonight resumes tomorrow at its cursor. At these sizes a night
+  covers about 290 evidence users and 580 people.
+- The pass walks people with at least one saved `fit.*` answer and evaluates
+  only those with something new:
+  - never evaluated;
+  - a different engine version (`engine_bump`);
+  - evidence computed since their last evaluation (`evidence`);
+  - a hysteresis clock running in their latest snapshot;
+  - or 30 days since their last evaluation, so slow drift from ageing lands.
+- One person's failure is counted and logged by error name only, and the
+  batch goes on. The person stays due, so the next pass picks them up.
+- It is not gated on `hqCadences`: profiles live in each deployment's own D1.
+
+**Change events and the notification (spec §7.7, decision e).** When the
+DISPLAYED archetype changes, the first insert of that change sends one in-app
+`notifications_inbox` row ("Your archetype is now {label}", linking to
+`/studio/archetype`, category `scoring`, no email). There is no event for a
+first classification, a computed-only flip, or a secondary change. The
+person's `activity_logs` gets `profile.archetype_changed` with the persona
+and trigger but not the archetype, because admins see aggregates only (§7.9).
+
+**Re-asking (§7.3).**
+- A profiling answer at least 182 days old is re-askable.
+- `reaskOverlay` is applied at all six question-picking paths of
+  `routes/advisor.ts`: `/start`, `/answer`, `/skip`, `/next-question`,
+  `/turn` and `/queue`.
+- It offers re-askable questions only once `selectAdaptiveProfiling` has
+  nothing unanswered left, so re-asks come after uncovered questions.
+- The question carries its `reask_prompt`, or "It has been a while since you
+  answered this. Is it still true? {prompt}" when the item has none.
+- Module confidence is still computed from the full answered set: a
+  re-askable answer keeps counting.
+- A re-ask put to the person (`advisor_state.last_asked_at` after the
+  answer) and left unanswered rests for another 182 days, except while it is
+  the question on screen, so a refresh stays idempotent.
+- The state machine's `nextTurn` takes a `reaskable` set and removes it from
+  the answered set it loads itself.
+
+**Routes:**
+- `GET /api/profile/reask`: the caller's own re-askable answers, with
+  wording, age and `resting_until`. Read-only; nothing is marked asked.
+- `GET /api/admin/profiling/trends?months=` (`requireAdmin`), counts only:
+  - displayed archetype per role per month;
+  - displayed-archetype changes per month, and their share of that role's
+    profiles;
+  - skill-axis states today (self-rated vs evidence);
+  - answers revised per month.
+- Small cells follow the owner's threshold of 5 (asked 2026-09-29). A count
+  from 1 to 4 is hidden. Where that leaves a single hidden cell in a group,
+  the next smallest is hidden too. A total, and a share, are shown only when
+  they cannot give a hidden count away.
+- Page: `/admin/profiling-trends` (`AdminProfilingTrends.jsx`), a fifth card
+  on Admin · Programs, lit under the Programs row. A hidden cell reads "<5"
+  and a month with no profile reads "—".
+
+**Deviations and findings:**
+- The handoff asked for `activity_logs` at minimum. The change is logged
+  there without the archetype, and the event itself lives in the person's
+  own `profile_change_events`, because spec §7.9 keeps individual timelines
+  from admins.
+- **An engine bump can move a displayed archetype at once.** `replayDisplayed`
+  replays the whole ledger under the new rules and does not remember what
+  was displayed under the old ones. The spec's claim that hysteresis stops an
+  overnight flip on an engine bump (§7.8) does not hold. This loop records
+  and notifies such a change like any other. Whoever next bumps
+  `ENGINE_VERSION` should compare displayed archetypes before and after on
+  the personas.
+- Blending evidence into the skill level (decision b's "later") is not
+  switched on. Snapshots still show the self level, and the trends read
+  shows the split, which is the evidence for the owner's call.
+
+### VERIFIED
+
+- `cloudflare-worker/test/profile_evolution_d358.test.ts` (new, 18 tests)
+  runs on node:sqlite over the baseline with migrations 048, 238, 339, 360,
+  361, 362, 363 and 364. It uses the Session 6 personas:
+  - **Eli** answers his whole timeline in one conversation. Every earlier
+    answer stays in the ledger, and all 7 checkpoints replay exactly.
+  - Evaluated nightly from 28 June to 16 July, Eli gets exactly one event
+    (Missionary → Architect, on 14 July), one in-app notice and one log line
+    without the archetype.
+  - **Oscar**'s seven-day March flip writes nothing; the May flip writes one
+    event, on 14 May.
+  - Two racing recomputes record and notify once.
+  - **The nightly run:**
+    - evidence goes first on even minutes;
+    - batches are bounded and there is one pass a day;
+    - a second night with nothing new evaluates no one and writes nothing;
+    - only the person with new evidence is evaluated;
+    - an engine bump backfills everyone across batches and resumes after an
+      interrupted night;
+    - one failure does not stop the batch.
+  - **Re-asking:**
+    - the 182-day threshold, the rest after an unanswered re-ask, and the
+      on-screen exemption;
+    - the item's own wording and the fallback;
+    - no re-ask while a profiling question is unanswered;
+    - `pickNext` and `nextTurn` both offer the re-ask;
+    - all six advisor paths apply the overlay.
+  - **Routes:** `/profile/reask` returns the caller's own answers only, and
+    `?user_id=` is ignored. `/admin/profiling/trends` refuses a founder,
+    hides small cells, gives no share for a hidden count, and carries no id,
+    email or name.
+- `frontend/test/profiling_trends_d358.test.mjs` (new, 6 tests) covers the
+  page: "<5" vs 0 vs "—", empty states, Unreadable with retry, the route,
+  the Programs door and row, and the two `api.js` calls.
+- Re-aimed tests:
+  - `profile_scoring_v2_d357.test.ts`: the answer route calls
+    `evaluateUser`, which calls `recomputeProfile` with the trigger.
+  - `held_admin_shell_d286.test.mjs`: Programs has five doors.
+- **Mutations:** 36, of which 35 were caught (31 Worker, 5 page).
+  - Two escaped on the first run; the tests were strengthened and both are
+    now caught:
+    - the nightly run evaluating everyone: the test counted evaluations but
+      not failures. A second form of the same mutation (every walked person
+      evaluated as `'scheduled'`) was added and is caught;
+    - a share shown for a hidden change count: no case had a hidden count
+      with a shown total, which would let the count be recovered.
+  - One is equivalent: dropping the "no previous archetype" check in
+    `recordChangeEvents`. `from_slug` is NOT NULL under `INSERT OR IGNORE`,
+    so the database drops that row anyway.
+
 ## D360
 
 **The Spin-Out Lab's capital and legal tools say when a read failed, and
@@ -39282,3 +39446,102 @@ says **no touches logged yet** when the read succeeded but the log is empty —
 not “coverage unavailable”.
 
 **Tests.** `partnernet_interactions.test.ts` extended; `investor_network_d490.test.mjs`.
+
+## D491
+
+**The partner fit bank v2: the four partner archetypes told apart by
+situations and reverse keys, every radar axis asked, values asked as
+behaviour.** Profiling v2, Session 11. Content and tests only: no route, no
+migration, no engine change. `fit_partner.ts` grows from 53 to 83 questions;
+no id is renamed or removed.
+
+**What the bank adds.** All of it uses Session 7's formats (D357) and no new
+one:
+- **Eight situational pick-ones.** Five separate Embedded Operator from
+  Systems Builder, the 1.73 pair that D357 decided to leave close and separate
+  with questions. Three separate Strategic Connector from Growth Catalyst.
+  Each situation has four options, one per partner archetype. Each option
+  loads that archetype's two telling traits at its own centroid values, so a
+  person of any archetype finds an answer that is theirs. The archetype
+  behind the first option rotates: each archetype is first exactly twice. So
+  always picking the first option lands near the middle, with confidence
+  0.46, which is not confident.
+- **Eight reverse-keyed probes, two per trait (§3.2).** Rating every scale 5
+  now scores consistency 0 and confidence 0.
+- **Three behavioural skill questions** for engineering, design and
+  marketing_brand ("In the last year, how often did you…"). Every radar axis
+  now has a partner question. The Session 8 sources that corroborate each
+  partner skill question are named in PROFILING_V2.md §5.5, not in the
+  prompts.
+- **Five value situations** on the partner's dimensions:
+  `founder_autonomy_vs_structure` and Schwartz benevolence, self_direction
+  and universalism. The fifth adds Schwartz achievement, so Session 14 can
+  compare it with the investor's. Slugs and direction match the other banks.
+- **Six Axal situations**, one per value. The red flags stay on the shared
+  rows only, so none is counted twice.
+- **A re-ask wording on every question, shared rows included.** It is
+  written in `PARTNER_REASK` in `fit_partner.ts` and applied only where a row
+  has none of its own. `fitShared.ts` is untouched, because four bank sessions
+  run in parallel and the 20 shared trait probes are theirs too. Once
+  Sessions 9, 10 and 12 land, the shared wording can move into `fitShared.ts`
+  in one change.
+
+**Order is part of the design.** Adaptive selection asks the first unanswered
+item of each uncovered trait, then goes by module deficit and bank order. The
+bank therefore places one reverse-keyed probe per trait first, then the eight
+situations, then the second reverse-keyed probe per trait, all before the
+shared module rows. A partner reaching the archetype floor (6 answers)
+answers one reverse-keyed probe per trait and the first two Embedded
+Operator / Systems Builder situations.
+
+**Measured with the real engine on the Session 6 personas.**
+- **Whole bank.** All four partner personas classify as themselves,
+  confidently. The close pair separates about twice as far as before:
+  - Embedded Operator: margin 0.34 → 0.60, confidence 0.60 → 0.72.
+  - Systems Builder: margin 0.27 → 0.55, confidence 0.56 → 0.68.
+- **Floor.** Answering in queue order, each persona reaches every module's
+  floor in 23 answers, with all four traits covered, and is classified
+  correctly at the floor.
+- **Blends.** A blend made by interleaving two personas' answers reports both
+  archetypes, for each close pair.
+- **v1 card.** The card still reads v1 until Session 15. It reads each
+  persona correctly, with reverse keys inverted as D357 made it.
+
+**The fixture changes, as §12 requires.** The Session 6 fixture test demands
+that every archetype persona answer every archetype-trait question of its
+role. The four partner archetype personas therefore gain answers to the 16
+new archetype items, by a rule written into the fixture's notes. The rule
+takes the persona's own mean on each trait over its plain probes; a
+reverse-keyed item on trait T gets 5 − round(mean); a pick-one gets the
+option whose loadings are nearest that mean over the traits the option loads.
+`partner_bank_v2_d491.test.ts` recomputes every one of those answers from the
+bank, so a swapped loading or a dropped reverse key fails there. The fixture
+test now also accepts an option key as a pick-one's answer, checked against
+that question's own options. No other persona, parameter or checkpoint
+changed.
+
+**Where this departs from its handoff.**
+- **Values: the spec wins over the handoff.** The handoff expected partners
+  to be matched on autonomy_vs_structure and speed_vs_quality. §6 of the spec
+  matches partners on autonomy_vs_structure only, so no speed_vs_quality item
+  was added.
+- **No partner blend persona exists in the fixture.** The two blends there
+  are founder and investor. The partner blend is built in the test from two
+  fixture personas, rather than by adding a persona to Session 6's contract.
+- **Scale items only for skills, values and Axal.** D357 allows reverse keys
+  and pick-ones only on archetype items (`assertFitRow`), so the behavioural
+  skill, value and Axal variants are scale items phrased as a situation, as
+  that rule requires.
+- **The number.** D491 was taken as the next free number after the highest
+  in the file, on the owner's instruction for this session.
+
+**Sizes.** `advisor.profiling.test.ts` pins every bank's size and module
+sizes. The partner row now reads 83 (skills 8, work values 9, archetype 45,
+Axal Fit 21). `BANK_SIZE_TARGETS.fitPartner` (documentation-only) moves from
+40 to 83 with it. `check-advisor-bank-drift` does not read fit banks, and it
+passes unchanged.
+
+**Tests.** `partner_bank_v2_d491.test.ts` (17);
+`profiling_v2_personas_fixture.test.ts` (pick-one answers accepted);
+`advisor.profiling.test.ts` (the partner sizes above). 16 mutations, 16
+caught.

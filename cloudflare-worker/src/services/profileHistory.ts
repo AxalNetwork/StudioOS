@@ -249,7 +249,23 @@ export async function loadLedger(env: Env, userId: number): Promise<LedgerAnswer
     ).bind(userId).all<Row>();
     rows = res.results || [];
   }
-  return rows
+  // D358 — answers a later answer replaced in the same conversation (a
+  // re-ask, or a change of mind), kept by migration 364's trigger. They come
+  // FIRST: they are older than the row that replaced them, and latestAnswers
+  // lets the later ledger entry win a tie.
+  let revisions: Row[] = [];
+  try {
+    const res = await env.DB.prepare(
+      `SELECT question_id, raw_value, answered_at AS at
+         FROM advisor_answer_revisions
+        WHERE user_id = ? AND question_id LIKE 'fit.%'
+        ORDER BY id`,
+    ).bind(userId).all<Row>();
+    revisions = res.results || [];
+  } catch {
+    // A database that has not taken migration 364 yet: nothing was kept.
+  }
+  return [...revisions, ...rows]
     .filter((r) => r.raw_value != null && r.at != null)
     .map((r) => ({ question_id: r.question_id, value: String(r.raw_value), answered_at: String(r.at) }));
 }
@@ -337,6 +353,8 @@ export interface RecomputeResult {
   persona: FitPersona;
   written: boolean;
   displayed_changed: boolean;
+  /** D358 — the displayed archetype of the last snapshot; null when there was none (first classification). */
+  previous_displayed_slug: string | null;
   profile: ProfileV2;
 }
 
@@ -385,6 +403,7 @@ export async function recomputeProfile(env: Env, userId: number, opts: Recompute
       persona,
       written: material,
       displayed_changed: !!prev && prev.displayed_slug !== profile.displayed_slug,
+      previous_displayed_slug: prev?.displayed_slug ?? null,
       profile,
     });
   }

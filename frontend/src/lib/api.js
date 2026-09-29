@@ -4452,6 +4452,13 @@ export const api = {
   archetypePublished: () => request('/profile/archetype-published'),
   setArchetypePublished: (published) =>
     request('/profile/archetype-published', { method: 'PUT', body: JSON.stringify({ published: published === true }) }),
+  // D358 — the caller's answers old enough to be asked again ("is this still
+  // true?"). A read-only peek; nothing is marked asked.
+  profileReask: () => request('/profile/reask'),
+  // D358 — admin: how the profiling population shifts over time. Counts only,
+  // small cells hidden by the Worker.
+  adminProfilingTrends: (months) =>
+    request(`/admin/profiling/trends${months ? `?months=${encodeURIComponent(months)}` : ''}`),
 
   // ---------- Partner office hours (Task #54) ----------
   createPartnerSlot: (data) =>

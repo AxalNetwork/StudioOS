@@ -172,14 +172,11 @@ export const BANK_SIZE_TARGETS = {
   // Adaptive selection means a user answers only the minimum, not all of these.
   fitFounder: 45,
   fitInvestor: 41,
-  fitPartner: 40,
-  // Session 12 (Profiling v2) — the advisor bank gained pick-ones, reverse-keyed
-  // probes and behavioural skill/value items; the coach bank gained its own
-  // archetype module, skills on all 8 axes and the Schwartz values. Coach still
-  // rides in the advisor conversation after the advisor bank, and the modules
-  // are pooled over both, so adaptive selection reaches coach items only past
-  // the advisor floors. fit_advisor_coach_bank_v2.test.ts holds both banks to
-  // these minimums.
+  // D491 raised the partner bank. Session 12 raised the advisor and coach banks
+  // (pick-ones, reverse keys, every radar axis). Coach still rides in the
+  // advisor conversation after the advisor bank. fit_advisor_coach_bank_v2.test.ts
+  // holds the advisor and coach minimums.
+  fitPartner: 83,
   fitAdvisor: 85,
   fitCoach: 76,
   // Explorer Problem/Challenge Discovery — one 12-question track per persona

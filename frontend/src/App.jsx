@@ -251,6 +251,8 @@ const FounderTeamPage = lazy(() => import('./pages/founder/FounderTeamPage'));
 // their routes redirect to /studio, where the profile band draws both. The two
 // pages were imported by nothing and were deleted in D323.
 const AdminBestFitPage = lazy(() => import('./pages/admin/AdminBestFitPage'));
+// D358 — aggregates of how profiles move over time (counts only).
+const AdminProfilingTrends = lazy(() => import('./pages/admin/AdminProfilingTrends'));
 const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage'));
 const RiskMatrixPage = lazy(() => import('./pages/RiskMatrixPage'));
 const WatchlistJournalPage = lazy(() => import('./pages/WatchlistJournalPage'));
@@ -2522,6 +2524,7 @@ function AppInner() {
       <Route path="/admin/assessment" element={guard(['admin'], <AdminAssessment />)} />
       {/* Task #20 — Admin Best-Fit console (consultation queue + full report). */}
       <Route path="/admin/best-fit" element={guard(['admin'], <AdminBestFitPage />)} />
+      <Route path="/admin/profiling-trends" element={guard(['admin'], <AdminProfilingTrends />)} />
       {/* Task #3 — News & Articles admin queues merged into one Content Queue. Legacy routes redirect. */}
       <Route path="/admin/news" element={<Navigate to="/admin/articles" replace />} />
       <Route path="/news" element={<Navigate to="/articles/draft" replace />} />

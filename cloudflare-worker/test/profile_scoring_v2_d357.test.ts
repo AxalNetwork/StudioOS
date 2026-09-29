@@ -219,7 +219,13 @@ test('a pick-one answer stores its option key; anything undeclared is refused', 
   assert.match(batch, /normalizeFitAnswer\(q, valueStr\)/);
   assert.match(batch, /conv\.id, user\.id, q\.id, ledgerValue,/);
   assert.match(batch, /answered_at = excluded\.answered_at/);
-  assert.match(ADVISOR_ROUTE, /await recomputeProfile\(c\.env, user\.id, \{ trigger: 'answer' \}\);/);
+  // D358 — the route recomputes through evaluateUser, which calls
+  // recomputeProfile with the same trigger and then records change events.
+  assert.match(ADVISOR_ROUTE, /await evaluateUser\(c\.env, user\.id, 'answer'\);/);
+  assert.match(
+    readFileSync(fileURLToPath(new URL('../src/services/profileEvolution.ts', import.meta.url)), 'utf8'),
+    /const results = await recomputeProfile\(env, userId, \{ trigger, asOf: now\.toISOString\(\) \}\);/,
+  );
 });
 
 test('a retired question is not delivered but still scores the answers it has', () => {

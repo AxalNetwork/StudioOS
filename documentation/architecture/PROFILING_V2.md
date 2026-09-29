@@ -282,7 +282,7 @@ Axes each bank does not ask about today:
 | --- | --- |
 | Founder | legal_compliance |
 | Investor | engineering, design, marketing_brand |
-| Partner | engineering, design, marketing_brand |
+| Partner | none since D491 (engineering, design and marketing_brand were added) |
 | Advisor | none (Session 12 added engineering, design and legal_compliance) |
 | Coach | none (Session 12 added all eight; before, no `skill_axis` question) |
 
@@ -377,6 +377,26 @@ Due-diligence sections: `corporate_legal`, `compliance_aml`, `kyb_entity`, `kyc_
 
 `skill_evidence` (migration 362) stores one row per user, axis and source. `GET /api/skills/me/evidence` is the caller's own read. The nightly pass is `recomputeEvidenceBatch`, on the existing `0 3 * * *` cron when Session 13 wires it.
 
+
+### 5.5 Partner questions and the evidence that corroborates them (D491)
+
+The partner bank's self-rating questions, and the Session 8 sources that
+can corroborate each one. The prompts never name a tool; this table does.
+Partner sources reach an axis only when the partner's own profile names it
+(`partners.specialization`, §5.4), so a question here is corroborated only
+for a partner whose specialisation includes that axis.
+
+| Question (`fit.partner.…`) | Axis | Sources that can corroborate it |
+| --- | --- | --- |
+| `skill_product` | product | `office_hours_completed`, `engagement_milestone` |
+| `skill_engineering_review` | engineering | `office_hours_completed`, `engagement_milestone`, `office_hours_action_closed` |
+| `skill_design_feedback` | design | `office_hours_completed`, `engagement_milestone`, `office_hours_rated_well` |
+| `exec_hands_on` | gtm_sales | `engagement_milestone`, `office_hours_action_closed` |
+| `skill_marketing_delivery` | marketing_brand | `engagement_milestone`, `perk_redeemed`, `office_hours_rated_well` |
+| `skill_finance_ops` | finance_ops | `office_hours_completed`, `engagement_milestone` |
+| `skill_legal` | legal_compliance | `office_hours_completed`, `engagement_milestone` |
+| `network_depth` | capital_network | `office_hours_completed`, `perk_redeemed` |
+
 ---
 
 ## 6. Values within the Axal ecosystem
@@ -388,7 +408,7 @@ per user and dimension (no history before Session 7):
 | --- | --- | --- |
 | Axal values (`axal_values`, 0..1) | integrity, stewardship, curiosity, resilience, collaboration, ambition. v1 `axalFit.ts` scores the first five; v2 `fitV2Decision.ts` scores all six. | every role (`axalValueRows`) |
 | Founder spectrums (`user_values`) | mission_vs_profit, speed_vs_quality, risk_appetite, growth_vs_sustain, autonomy_vs_structure | founder (all five); investor asks risk_appetite and growth_vs_sustain; partner asks autonomy_vs_structure |
-| Schwartz (`user_values`) | achievement, benevolence, universalism, self_direction | investor: achievement, benevolence, universalism · partner: benevolence, self_direction, universalism · advisor: all four · **founder: none** |
+| Schwartz (`user_values`) | achievement, benevolence, universalism, self_direction | investor: achievement, benevolence, universalism · partner: achievement (D491), benevolence, self_direction, universalism · advisor: all four · **founder: none** |
 
 **Compared across roles for matching (Session 14 implements):**
 
@@ -465,6 +485,20 @@ A question is **re-askable** when its latest answer is at least
 old answer counting at its aged weight. Re-askability is a queue signal and
 never changes a score by itself.
 
+**Built by D358 (Session 13).**
+- `reaskOverlay` is applied at every question-picking path of the advisor.
+  It offers re-askable questions only once no unanswered profiling question
+  is left.
+- An item with no `reask_prompt` is re-asked as "It has been a while since
+  you answered this. Is it still true? {prompt}".
+- A re-ask put to the person and left unanswered rests for another
+  `reask_after_days`, except while it is the question on screen.
+- A re-answer in the SAME conversation used to overwrite the row, because
+  `advisor_answers` upserts on (conversation, question). Migration 364's
+  trigger now keeps the replaced answer in `advisor_answer_revisions`, and
+  the ledger reads both, so "a re-answer is a new ledger row" holds on every
+  write path.
+
 ### 7.4 Evidence window
 
 An event's weight by age: 1 while `age ≤ evidence_full_days`; then
@@ -515,6 +549,12 @@ to that user, in-app only: "Your archetype is now {label}", linking to
 `/studio/archetype`. It is not sent for a computed-only change, a secondary
 change, or the first classification.
 
+Built by D358: each change is one row in `profile_change_events` (UNIQUE on
+user, persona, day and new archetype, so two racing recomputes notify once).
+Session 15 can draw the timeline from those rows. The person's
+`activity_logs` gets `profile.archetype_changed` without the archetype
+(§7.9).
+
 ### 7.8 Triggers
 
 | Trigger (`snapshot.trigger`) | When |
@@ -523,6 +563,18 @@ change, or the first classification.
 | `evidence` | the nightly cron (`0 3 * * *`, already in both envs), for users with new evidence or crossing a window edge |
 | `scheduled` | the same cron, for users whose hysteresis clock or re-ask state moved |
 | `engine_bump` | once per user, batched, when `engine_version` changes (e.g. a changed centroid or scoring rule); hysteresis applies, so nobody's displayed archetype flips overnight |
+
+**Built by D358.** The run uses every minute of 03:00–03:59 UTC except :15
+and :45, on the existing ticker.
+- Even minutes serve Session 8's evidence pass and odd minutes the profile
+  pass. Each makes one pass a day, and an unfinished pass resumes the next
+  night.
+- A person is evaluated when never evaluated, on an engine bump, when their
+  evidence is newer than their last evaluation, while a hysteresis clock
+  runs, or after 30 days.
+- **Finding:** the replay does not remember what was displayed under the old
+  engine, so an engine bump CAN move a displayed archetype at once. The
+  sentence above does not hold for it. Compare personas before bumping.
 
 ### 7.9 Visibility
 
@@ -661,6 +713,14 @@ against.
 | `GET /api/profile/reask` | the caller (own only) | re-askable question ids with `reask_prompt` (read-only peek, like `/advisor/queue`) |
 | `PUT /api/profile/archetype-published` | the caller (own only) | `{ published: boolean }` (decision c) |
 | `GET /api/admin/profiling/trends` | `requireAdmin` | aggregates only: distribution per role and month, change counts, re-ask response rate; small cells suppressed |
+
+D358 built `/profile/reask` and `/admin/profiling/trends`, with the page
+`/admin/profiling-trends`.
+- The trends read hides counts under 5 (the owner's threshold) and the next
+  smallest cell where a total would reveal one.
+- It reports answers revised per month rather than a re-ask response rate.
+  A revision is a re-ask answered, or a change of mind; the ledger cannot
+  tell the two apart.
 
 Every `/api/*` method added to `frontend/src/lib/api.js` ships in the same
 commit as its mounted Worker route.
