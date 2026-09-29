@@ -41,6 +41,7 @@ import adminPublications from './routes/admin_publications';
 // Task #10 (LD) — Admin team roster + public team endpoint.
 import adminTeam from './routes/admin_team';
 import adminNetworkProfiles from './routes/admin_network_profiles';
+import profileHistoryRoutes from './routes/profile_history';
 import networkPublic from './routes/network_public';
 // Task #3 — Admin Telegram channels + aggregator + post send.
 import adminTelegram from './routes/admin_telegram';
@@ -1014,6 +1015,9 @@ app.route('/api/network', network);
 app.route('/api/refer-earn', referEarn);
 app.route('/api/networkfx', networkfx);
 app.route('/api/profiling', profiling);
+// D357 — Profiling v2 "me" routes: the caller's own snapshot history and
+// their archetype publish consent (routes/profile_history.ts).
+app.route('/api/profile', profileHistoryRoutes);
 app.route('/api/dashboard', dashboard);
 // Task #39 — Event engine authed routes (§8.1).
 app.route('/api/events', eventsRoutes);

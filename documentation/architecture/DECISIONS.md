@@ -32528,6 +32528,156 @@ any later handoff for Sessions 6–14. What it fixes:
   retention 112. `check-docs-fresh --strict` passes. `docs/` is unchanged,
   since no frontend source moved.
 
+## D357
+
+**Profiling v2 has an engine: pick-one items with per-option trait loadings,
+reverse-keyed scales, answer ageing, a secondary archetype, a displayed
+archetype that moves only under hysteresis, and an append-only snapshot
+history stamped with the engine version. The proposed Systems Builder
+centroid move is withdrawn.** Wave 8, Session 7 of the Profiling v2
+programme (Sessions 6–15), built on the spec (D356,
+`documentation/architecture/PROFILING_V2.md`). Migration 363. Session 8's
+#949 took 362 for `skill_evidence` while this was in review, and the owner
+moved this one to 363.
+
+**What was built:**
+- **Item types.** The spec's shapes (`fitShared.ts`):
+  - `FitRowSpec` gains `reverse`, `choices`, `reask_prompt` and `retired`;
+    `FitMeasures` gains `archetype_choice`;
+  - `pickOne` and `reverseKeyed` declare them;
+  - `assertFitRow` fails a bank at module load when an item breaks the spec.
+    A pick-one needs 2+ options, keys matching `[a-z0-9_]`, distinct labels,
+    and one or two traits per option loaded 0..5. A reverse key is allowed
+    only on an archetype-trait row.
+  - A pick-one reaches the chat as a plain `select` over its labels. The
+    route stores the option KEY (`normalizeFitAnswer`: key or exact label;
+    anything else is refused with the options listed).
+  - A reverse-keyed scale is stored as answered and inverted only at scoring
+    time. v1's `computeArchetype` inverts it too, so the card never reads
+    one backwards.
+  - A retired question leaves `bankFor` but stays in `BANKS`, so its answers
+    still score, until its `replaced_by` question is answered.
+- **Engine** (`archetypeScoring.ts`, pure, `ENGINE_VERSION =
+  'profiling-v2.1'`). It reads a ledger of dated answers: the latest per
+  question at or before the evaluation time, each weighted
+  0.5^(age/365 days). Traits combine plain probes, reverse-keyed probes and
+  pick-one loadings. Classification is the v1 nearest-centroid method. v2
+  adds:
+  - **Secondary:** the runner-up within 0.5 is reported as a secondary, and
+    the result is flagged a blend.
+  - **Confidence:** coverage × consistency × (0.4 + 0.6 × separation).
+  - **Consistency** falls when a person's plain and reverse-keyed answers on
+    a trait contradict each other, so answering 5 to everything scores
+    consistency 0 and is never confident.
+- **Hysteresis:** `replayDisplayed` replays the daily evaluations; that
+  replay is the spec's definition. The first classification is displayed at
+  once. A challenger is displayed only after winning 14 consecutive days and
+  leading by ≥ 0.25.
+- **History store** (`services/profileHistory.ts`, migration 363):
+  - `profile_snapshots` is append-only. A BEFORE UPDATE trigger refuses a
+    rewrite; rows go only with the account. **It supersedes
+    `profile_archetypes` for v2.** That table keeps its v1 rows and v1
+    writes until Session 15 moves the card page, because v1 callers
+    (`/best-fit/me`, the card page) still read it. v2 never reads it: it
+    holds only the archetype, one row per persona, and no skills or values.
+  - A snapshot is written only on a material change (§7.6), with the trigger
+    and engine version.
+  - `profile_archetype_publish` holds the consent the owner's decision c
+    needs. It is a side table because `users` is at D1's column cap.
+  - `advisor_answers.answered_at` dates each answer. A re-answer within one
+    conversation upserts the row, and `created_at` kept the first answer's
+    time, so ageing would have read a changed answer as old.
+- **Entry point:** `recomputeProfile(env, userId, { trigger, asOf?,
+  evidence?, itemsFor? })` recomputes one person under the current version
+  and returns, per persona, `written` and `displayed_changed`.
+  - The advisor `/answer` route calls it with `'answer'` after every saved
+    `fit.*` answer, beside v1's recompute.
+  - Session 13's nightly and backfill runs call the same function.
+  - Evidence comes from Session 8's store by default (spec §5.3,
+    `storedEvidenceWeights`). Per axis the weight is Σ `skill_evidence.weighted`
+    × the source's weight, the total Session 8's `evidenceScore` saturates,
+    and it is read, never recomputed. With no store or no rows, an axis reads
+    from the self-rating alone.
+  - The level shown stays the self-rating (§5.2); Session 8's `blend()`
+    (`partly_corroborated`) is not applied in snapshots.
+- **Routes:** `GET /api/profile/history` returns the caller's own snapshots
+  only. `GET` and `PUT /api/profile/archetype-published` read and set the
+  caller's own consent. The matching `api.js` methods ship with them.
+
+**The centroid move is withdrawn.** D356's spec moved Systems Builder from
+(4, 2, 2, 5) to (3, 2, 2, 5) to widen the only pair under 2. Measured
+against the Session 6 personas before shipping:
+- the move widens the Embedded Operator persona's margin from 0.30 to 0.67;
+- but it classifies the Systems Builder persona as an Embedded Operator.
+  That persona has builder 4.3, operator 4.6 and connector 2.3: a hands-on
+  person who installs the machinery, and nothing in the owner's description
+  makes a Systems Builder less hands-on.
+
+With the centroids unchanged, all 16 personas classify correctly. The close
+pair reads as a blend, and Session 11's situational items separate it. The
+spec's §2.2 now says so.
+
+**Other deviations from the spec, each now written into it:**
+- the snapshot column is `trigger_kind`, because `trigger` is an SQL
+  keyword;
+- the publish flag is a side table, not a column;
+- reverse keys are allowed only on archetype-trait rows, which keeps the
+  structured skill, value and Axal-value writes free of inverted answers.
+
+The engine's own confidence settings (`confident_at` 0.6,
+`separation_full_at` 1.0) are in `PROFILE_V2_PARAMS` beside the spec's
+parameters.
+
+### VERIFIED
+
+- `cloudflare-worker/test/profile_scoring_v2_d357.test.ts` (new, 25 tests)
+  runs on node:sqlite over the baseline's `users` and `advisor_answers`,
+  with the whole of migration 363 applied (and Session 8's 362 for the
+  evidence test). It checks:
+  - **personas:** all 16 archetypes classify as themselves from their target
+    vectors and from their Session 6 answer ledgers; both blends report
+    their secondary; all 29 evolution checkpoints are reproduced exactly by
+    the replay;
+  - **reverse keys:** a reverse-keyed 5 moves its trait the other way from
+    a plain 5;
+  - **"5 to everything":** answering every scale 5 and every pick-one with
+    its first option is not confident;
+  - **pick-one:** each option moves the result towards the archetype it
+    loads, and an undeclared option key is refused and contributes nothing;
+  - **item rules:** bad declarations throw at build time; a retired question
+    is not delivered but still scores until its replacement is answered;
+  - **ageing:** the 12-month half-life, latest-answer-wins, and a future
+    answer ignored;
+  - **hysteresis:** a short lead, and a long lead under the margin, leave the
+    displayed archetype alone; one that holds 14 days moves it;
+  - **determinism:** same ledger, evidence and version give byte-identical
+    profiles and snapshots;
+  - **evidence:** Session 8's stored evidence reaches the snapshot weighted
+    per source, only the caller's, and never as a level;
+  - **history:** one snapshot on the first compute, none on an identical or
+    merely aged recompute, and one on a material change carrying its trigger
+    and the engine version; a rewrite is refused by the trigger;
+  - **routes:** the "me" routes return the caller's own data only, and a
+    `user_id` parameter is ignored.
+- **Mutations:** 28 of 28 caught, each exiting non-zero with a `not ok` line
+  and restored from a sha256-checked snapshot. They include the five the
+  handoff names: invert the reverse key, drop an option's loading, skip the
+  material check, shorten the hold period, and drop the version stamp. One
+  escaped on the first run: ignoring the lead margin. A test was added for a
+  challenger that holds for 60 days but leads by about 0.06.
+- **Guards:** `check-sql-prepare`, `check-sqlite-columns`,
+  `check-runtime-schema-declared` and `check-schema-pair-drift` pass.
+  `check-schema-pair-drift` needed `answered_at` added to the advisor
+  route's runtime `CREATE TABLE advisor_answers`, plus a PRAGMA-checked
+  ADD COLUMN safety net. `check-api-drift` reports no new drift.
+- **Drift run:** `npm run test:drift` with main 4a9ea7b4ff (#948, #950 and
+  #949 merged) in this branch exits 0:
+  - frontend 4176 pass;
+  - worker 4968 tests, 4965 pass, 0 fail (main's 4943 + the 25 new);
+  - retention 112.
+
+  Both typechecks and `check-docs-fresh --strict` pass after the root build.
+
 ## D360
 
 **The Spin-Out Lab's capital and legal tools say when a read failed, and

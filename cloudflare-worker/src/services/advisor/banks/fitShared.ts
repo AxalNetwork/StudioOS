@@ -18,7 +18,7 @@
  * don't need manifest coverage. Importance is `low` so they trail the persona's
  * onboarding questions without disturbing the existing ranking / anti-repeat.
  */
-import type { Question, FitMeasures, FitPersona, Importance, ValidateKind } from '../questionBank.ts';
+import type { Question, FitMeasures, FitPersona, Importance, ValidateKind, FitChoice, FitRetirement } from '../questionBank.ts';
 import { ARCHETYPE_PRESENTATION_OPTIONS } from '../../archetypePresentation.ts';
 
 const SCALE_HINT = 'No wrong answers — rate 0 (not at all) to 5 (completely).';
@@ -28,10 +28,104 @@ export interface FitRowSpec {
   prompt: string;
   hint?: string;
   measures: FitMeasures;
-  input_kind?: Question['input_kind'];
+  /** 'choice' is a situational pick-one (D357); it is delivered to the chat as a `select`. */
+  input_kind?: Question['input_kind'] | 'choice';
   options?: string[];
   validate?: ValidateKind;
   importance?: Importance;
+  // ---- Profiling v2 (D357, PROFILING_V2.md §3.1) ----
+  /** Reverse-keyed scale: scored as 5 − value. Only on an `archetype_trait` row. */
+  reverse?: boolean;
+  /** Pick-one options with per-trait loadings. Required when input_kind = 'choice'. */
+  choices?: FitChoice[];
+  /** Wording used when an aged answer is re-asked. */
+  reask_prompt?: string;
+  retired?: FitRetirement;
+}
+
+const TRAIT_KEYS = ['builder', 'visionary', 'connector', 'operator'] as const;
+const CHOICE_KEY_RE = /^[a-z0-9_]{1,24}$/;
+
+/**
+ * Hold a v2 row to the spec's shape before it can reach a bank. A bank that
+ * breaks a rule fails at module load — in every test and in the build — never
+ * at scoring time on a real answer.
+ */
+export function assertFitRow(persona: FitPersona, r: FitRowSpec): void {
+  const where = `fit.${persona}.${r.key}`;
+  const m = r.measures || {};
+  if (r.reverse) {
+    if (!m.archetype_trait || r.input_kind === 'choice') throw new Error(`${where}: reverse-keyed rows must be archetype_trait scales`);
+    if (m.skill_axis || m.value_dim || m.axal_value || m.rubric_category || m.red_flag) {
+      throw new Error(`${where}: a reverse-keyed row measures one trait and nothing else`);
+    }
+  }
+  const isChoice = r.input_kind === 'choice' || !!r.choices || !!m.archetype_choice;
+  if (!isChoice) return;
+  if (r.input_kind !== 'choice' || !m.archetype_choice) throw new Error(`${where}: a pick-one needs input_kind 'choice' and measures.archetype_choice`);
+  if (m.archetype_trait || m.skill_axis || m.value_dim || m.axal_value || m.rubric_category || m.red_flag) {
+    throw new Error(`${where}: a pick-one feeds archetype traits only`);
+  }
+  const choices = r.choices || [];
+  if (choices.length < 2) throw new Error(`${where}: a pick-one needs at least two options`);
+  const keys = new Set<string>();
+  const labels = new Set<string>();
+  for (const c of choices) {
+    if (!CHOICE_KEY_RE.test(c.key)) throw new Error(`${where}: option key "${c.key}" must match ${CHOICE_KEY_RE}`);
+    if (keys.has(c.key)) throw new Error(`${where}: duplicate option key "${c.key}"`);
+    keys.add(c.key);
+    const label = String(c.label || '').trim().toLowerCase();
+    if (!label || labels.has(label)) throw new Error(`${where}: option labels must be present and distinct`);
+    labels.add(label);
+    const traits = Object.keys(c.loadings || {});
+    if (traits.length < 1 || traits.length > 2) throw new Error(`${where}: option "${c.key}" must load one or two traits`);
+    for (const t of traits) {
+      if (!(TRAIT_KEYS as readonly string[]).includes(t)) throw new Error(`${where}: option "${c.key}" loads unknown trait "${t}"`);
+      const v = (c.loadings as Record<string, number>)[t];
+      if (!Number.isFinite(v) || v < 0 || v > 5) throw new Error(`${where}: option "${c.key}" loading for ${t} must be 0..5`);
+    }
+  }
+}
+
+/**
+ * The option key a pick-one answer stores. Accepts the key itself or the exact
+ * label (the chat sends the label it showed), case-insensitively; anything
+ * else is null and the answer is refused. A non-choice question returns the
+ * trimmed value unchanged.
+ */
+export function normalizeFitAnswer(q: Pick<Question, 'choices'>, raw: string): string | null {
+  const v = String(raw ?? '').trim();
+  if (!q.choices) return v;
+  const lower = v.toLowerCase();
+  const hit = q.choices.find((c) => c.key === v || c.label.trim().toLowerCase() === lower);
+  return hit ? hit.key : null;
+}
+
+/** Declare a situational pick-one (PROFILING_V2.md §3.2). */
+export function pickOne(spec: { key: string; prompt: string; hint?: string; choices: FitChoice[]; reask_prompt?: string; retired?: FitRetirement }): FitRowSpec {
+  return {
+    key: spec.key,
+    prompt: spec.prompt,
+    hint: spec.hint ?? 'Pick the one closest to what you would actually do.',
+    input_kind: 'choice',
+    choices: spec.choices,
+    measures: { archetype_choice: true },
+    reask_prompt: spec.reask_prompt,
+    retired: spec.retired,
+  };
+}
+
+/** Declare a reverse-keyed trait probe: a 5 here pulls the trait DOWN. */
+export function reverseKeyed(spec: { key: string; prompt: string; hint?: string; trait: (typeof TRAIT_KEYS)[number]; reask_prompt?: string; retired?: FitRetirement }): FitRowSpec {
+  return {
+    key: spec.key,
+    prompt: spec.prompt,
+    hint: spec.hint,
+    measures: { archetype_trait: spec.trait },
+    reverse: true,
+    reask_prompt: spec.reask_prompt,
+    retired: spec.retired,
+  };
 }
 
 /**
@@ -41,21 +135,32 @@ export interface FitRowSpec {
  */
 export function buildFitBank(persona: FitPersona, rows: FitRowSpec[]): Question[] {
   const qPersona: Question['persona'] = persona === 'coach' ? 'advisor' : persona;
-  return rows.map((r) => ({
-    id: `fit.${persona}.${r.key}`,
-    persona: qPersona,
-    section: 'FIT',
-    prompt: r.prompt,
-    hint: r.hint ?? SCALE_HINT,
-    input_kind: r.input_kind ?? 'scale',
-    options: r.options,
-    validate: r.validate ?? (r.input_kind === 'select' ? 'select' : 'scale'),
-    importance: r.importance ?? 'low',
-    skip_allowed: true,
-    page_target: '/dashboard',
-    doc_anchor: 'getting-started/personas',
-    measures: r.measures,
-  }));
+  return rows.map((r) => {
+    assertFitRow(persona, r);
+    const isChoice = r.input_kind === 'choice';
+    const q: Question = {
+      id: `fit.${persona}.${r.key}`,
+      persona: qPersona,
+      section: 'FIT',
+      prompt: r.prompt,
+      hint: r.hint ?? SCALE_HINT,
+      // A pick-one reaches the chat as a plain select over its labels; the
+      // route stores the option KEY (normalizeFitAnswer).
+      input_kind: isChoice ? 'select' : ((r.input_kind as Question['input_kind'] | undefined) ?? 'scale'),
+      options: isChoice ? r.choices!.map((c) => c.label) : r.options,
+      validate: r.validate ?? (isChoice || r.input_kind === 'select' ? 'select' : 'scale'),
+      importance: r.importance ?? 'low',
+      skip_allowed: true,
+      page_target: '/dashboard',
+      doc_anchor: 'getting-started/personas',
+      measures: r.measures,
+    };
+    if (r.reverse) q.reverse = true;
+    if (isChoice) q.choices = r.choices;
+    if (r.reask_prompt) q.reask_prompt = r.reask_prompt;
+    if (r.retired) q.retired = r.retired;
+    return q;
+  });
 }
 
 /**

@@ -21,6 +21,7 @@ import type { User } from '../../types';
 import { questionById, mapRoleAnswer, DYNAMIC_ID_RE, FIT_ID_RE } from './questionBank.ts';
 import { ensureTaxonomyVersionColumns, getTaxonomyVersion } from '../taxonomyVersion.ts';
 import { parseArchetypeSex } from '../archetypePresentation.ts';
+import { normalizeFitAnswer } from './banks/fitShared.ts';
 import { upsertUserSettings } from '../userSettings.ts';
 
 export type WriteStatus = 'saved' | 'skipped' | 'paywalled' | 'failed' | 'noop' | 'needs_evidence' | 'invalid';
@@ -580,6 +581,28 @@ async function routeFitAnswer(
     return { status: 'saved', saved_to: { table: 'user_settings', column: 'archetype_sex', id: user.id, page_url: '/settings' } };
   }
 
+  // D357 — a situational pick-one. Only one of the item's declared option keys
+  // (or its exact label, which the chat sends) is accepted; the route stores
+  // the KEY in the ledger. It feeds archetype traits only, so there is no
+  // structured write: the answer lives in advisor_answers + field_sources.
+  if (q.choices) {
+    if (normalizeFitAnswer(q, value) === null) {
+      return {
+        status: 'invalid',
+        error: 'schema_validation_failed',
+        hint: `Please pick one of: ${q.choices.map((c) => `"${c.label}"`).join(', ')}.`,
+        evidence_kind: 'free_text',
+        field: q.id,
+        open_url: q.page_target || undefined,
+      };
+    }
+    return { status: 'saved', saved_to: { table: 'field_sources', column: 'evidence_text', id: user.id } };
+  }
+
+  // A reverse-keyed scale (D357) is validated like any scale and stored as
+  // given; it is inverted only when the trait is scored. assertFitRow keeps
+  // reverse keys on archetype-trait rows, so no structured write below ever
+  // sees one.
   const n = Number(value);
   if (!Number.isInteger(n) || n < 0 || n > 5) {
     return {
