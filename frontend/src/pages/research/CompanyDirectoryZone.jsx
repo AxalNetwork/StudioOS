@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ExternalLink, Search, Database } from 'lucide-react';
+import { ExternalLink, Search, Database, BrainCircuit } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card } from '../../ui';
 import data from '../../data/companyDirectory.json';
@@ -26,12 +26,12 @@ export default function CompanyDirectoryZone() {
           A public discovery baseline for competitor research. Open a company to review sourced identity facts, then launch an analysis with the company name prefilled.
         </p>
       </div>
-      <Card className="border-violet-200 bg-violet-50/60 dark:border-violet-900 dark:bg-violet-950/20">
+      <div className="flex flex-wrap items-center gap-3"><Card className="flex-1 border-violet-200 bg-violet-50/60 dark:border-violet-900 dark:bg-violet-950/20">
         <div className="flex items-start gap-2 text-[12px] leading-relaxed text-violet-950 dark:text-violet-100">
           <Database size={15} className="mt-0.5 shrink-0" />
           <span><strong>Source boundary:</strong> {items.length} records combine a Wikidata discovery baseline with {Object.keys(finance.companies || {}).length} provider-reported public-company snapshots. Financial figures are as-of {finance.as_of}; private-company fields remain unrecorded unless sourced.</span>
         </div>
-      </Card>
+      </Card><Link to="/research/gtm" className="inline-flex items-center gap-2 rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-bold text-white hover:bg-violet-800"><BrainCircuit size={15} /> Go-to-market intelligence</Link></div>
       <div className="grid gap-3 sm:grid-cols-2">
         {Object.values(finance.companies || {}).map((x) => <Link key={x.ticker} to={`/research/companies/company/public-${x.ticker === 'AAPL' ? 'D8442A' : '228D42'}`}><Card className="transition hover:border-violet-300 hover:shadow-sm dark:hover:border-violet-700"><div className="flex items-start justify-between gap-3"><div><h2 className="text-[14px] font-extrabold text-axal-ink dark:text-gray-100">{x.name}</h2><p className="mt-1 text-[11px] text-axal-muted">{x.ticker} · {x.sector} · {x.exchange}</p></div><span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">Public snapshot</span></div><div className="mt-3 grid grid-cols-3 gap-3 text-[11px]"><div><div className="text-axal-faint">Price</div><strong className="text-axal-ink dark:text-gray-100">${x.last_price}</strong></div><div><div className="text-axal-faint">Market cap</div><strong className="text-axal-ink dark:text-gray-100">{x.market_cap}</strong></div><div><div className="text-axal-faint">1Y price</div><strong className={x.price_change_1y_pct >= 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}>{x.price_change_1y_pct}%</strong></div></div><p className="mt-3 text-[11px] text-axal-faint">Quarterly financials, valuation, earnings, and analyst context →</p></Card></Link>)}
       </div>

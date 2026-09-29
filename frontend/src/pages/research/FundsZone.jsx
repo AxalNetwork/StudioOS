@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { BrainCircuit } from 'lucide-react';
 import { Card, Pill } from '../../ui';
 import { api } from '../../lib/api';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -184,7 +185,7 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
         />
       )}
       <ZoneHeading
-        title="Fund research"
+        title={<span className="flex flex-wrap items-center gap-3">Fund research <Link to="/research/gtm" className="inline-flex items-center gap-1 rounded-lg bg-violet-700 px-3 py-2 text-[11px] font-bold text-white"><BrainCircuit size={13} /> GTM intelligence</Link></span>}
         sub="Thesis in their words, stage and path as separate facts — every fund you have looked into, and why it is on or off the list."
         right={data ? <Pill tone={data.warm_path_count ? 'ok' : 'neutral'}>{`${data.warm_path_count} with a route in`}</Pill> : null}
       />

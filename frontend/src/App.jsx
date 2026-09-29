@@ -66,6 +66,7 @@ const CompanyProfile = lazy(() => import('./pages/research/CompanyProfile'));
 const BenchmarkDetail = lazy(() => import('./pages/research/BenchmarkDetail'));
 const MarketReading = lazy(() => import('./pages/research/MarketReading'));
 const MarketSectorProfile = lazy(() => import('./pages/research/MarketSectorProfile'));
+const GtmIntelligence = lazy(() => import('./pages/research/GtmIntelligence'));
 const DiligenceRoom = lazy(() => import('./pages/research/DiligenceRoom'));
 const DiligenceFile = lazy(() => import('./pages/research/DiligenceFile'));
 const InvestorDealsRoutes = lazy(() => import('./workspaces/investor/InvestorDealsRoutes'));
@@ -2379,6 +2380,7 @@ function AppInner() {
       <Route path="/research/markets/sector/:slug" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <MarketSectorProfile role={researchRole} />)} />
       <Route path="/research/markets/:uid" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <MarketReading role={researchRole} />)} />
       <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/gtm" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <GtmIntelligence />)} />
       <Route path="/research/companies/company/:uid" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyProfile role={researchRole} />)} />
       <Route path="/research/companies/:id" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyAnalysis role={researchRole} />)} />
       <Route path="/research/companies/:analysisId/:candidateId" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyCandidate role={researchRole} />)} />

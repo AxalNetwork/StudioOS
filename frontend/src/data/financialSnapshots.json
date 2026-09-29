@@ -1,26 +1,382 @@
 {
   "as_of": "2026-09-29",
   "sources": [
-    {"name":"Bigdata.com market tearsheet","provider":"FMP","retrieved_at":"2026-09-29T23:16:16Z","source_url":"https://site.financialmodelingprep.com"},
-    {"name":"Bigdata.com company tearsheet","provider":"FMP","retrieved_at":"2026-09-29T23:16:51Z","source_url":"https://site.financialmodelingprep.com"},
-    {"name":"Bigdata.com ETF tearsheet","provider":"FMP","retrieved_at":"2026-09-29T23:16:42Z","source_url":"https://site.financialmodelingprep.com"},
-    {"name":"Alpha Vantage SPY monthly adjusted history","provider":"Alpha Vantage","retrieved_at":"2026-09-29","source_url":"https://www.alphavantage.co/"}
+    {
+      "name": "Bigdata.com market tearsheet",
+      "provider": "FMP",
+      "retrieved_at": "2026-09-29T23:16:16Z",
+      "source_url": "https://site.financialmodelingprep.com"
+    },
+    {
+      "name": "Bigdata.com company tearsheet",
+      "provider": "FMP",
+      "retrieved_at": "2026-09-29T23:16:51Z",
+      "source_url": "https://site.financialmodelingprep.com"
+    },
+    {
+      "name": "Bigdata.com ETF tearsheet",
+      "provider": "FMP",
+      "retrieved_at": "2026-09-29T23:16:42Z",
+      "source_url": "https://site.financialmodelingprep.com"
+    },
+    {
+      "name": "Alpha Vantage SPY monthly adjusted history",
+      "provider": "Alpha Vantage",
+      "retrieved_at": "2026-09-29",
+      "source_url": "https://www.alphavantage.co/"
+    },
+    {
+      "name": "Financial Modeling Prep",
+      "retrieved_at": "2026-09-30",
+      "source_url": "https://financialmodelingprep.com/",
+      "note": "Public company profile and quarterly income-statement data. Quote and ETF endpoints are plan-gated in the connected FMP account."
+    }
   ],
   "markets": {
-    "benchmark": {"name":"SPDR S&P 500 ETF Trust","ticker":"SPY","price":764.2,"change_1d_pct":-0.18,"change_1m_pct":-0.67,"change_3m_pct":2.33,"change_6m_pct":20.92,"change_ytd_pct":12.07,"change_1y_pct":15.15,"aum":"$817.16B","nav":771.35,"expense_ratio_pct":0.09,"volatility_20d_pct":11.03,"max_drawdown_1y_pct":-9.13,"as_of":"2026-09-29"},
+    "benchmark": {
+      "name": "SPDR S&P 500 ETF Trust",
+      "ticker": "SPY",
+      "price": 764.2,
+      "change_1d_pct": -0.18,
+      "change_1m_pct": -0.67,
+      "change_3m_pct": 2.33,
+      "change_6m_pct": 20.92,
+      "change_ytd_pct": 12.07,
+      "change_1y_pct": 15.15,
+      "aum": "$817.16B",
+      "nav": 771.35,
+      "expense_ratio_pct": 0.09,
+      "volatility_20d_pct": 11.03,
+      "max_drawdown_1y_pct": -9.13,
+      "as_of": "2026-09-29"
+    },
     "sector_etfs": [
-      {"sector":"Technology","ticker":"XLK","price":194.5,"change_1d_pct":-0.02,"change_1m_pct":4.74,"change_3m_pct":2.09,"change_ytd_pct":35.1},
-      {"sector":"Health Care","ticker":"XLV","price":170.73,"change_1d_pct":-0.31,"change_1m_pct":-0.25,"change_3m_pct":7.61,"change_ytd_pct":10.29},
-      {"sector":"Financials","ticker":"XLF","price":54.01,"change_1d_pct":-0.33,"change_1m_pct":-7.04,"change_3m_pct":0.75,"change_ytd_pct":-1.39},
-      {"sector":"Energy","ticker":"XLE","price":61.54,"change_1d_pct":-0.9,"change_1m_pct":-1.82,"change_3m_pct":15.87,"change_ytd_pct":37.64}
+      {
+        "sector": "Technology",
+        "ticker": "XLK",
+        "price": 194.5,
+        "change_1d_pct": -0.02,
+        "change_1m_pct": 4.74,
+        "change_3m_pct": 2.09,
+        "change_ytd_pct": 35.1
+      },
+      {
+        "sector": "Health Care",
+        "ticker": "XLV",
+        "price": 170.73,
+        "change_1d_pct": -0.31,
+        "change_1m_pct": -0.25,
+        "change_3m_pct": 7.61,
+        "change_ytd_pct": 10.29
+      },
+      {
+        "sector": "Financials",
+        "ticker": "XLF",
+        "price": 54.01,
+        "change_1d_pct": -0.33,
+        "change_1m_pct": -7.04,
+        "change_3m_pct": 0.75,
+        "change_ytd_pct": -1.39
+      },
+      {
+        "sector": "Energy",
+        "ticker": "XLE",
+        "price": 61.54,
+        "change_1d_pct": -0.9,
+        "change_1m_pct": -1.82,
+        "change_3m_pct": 15.87,
+        "change_ytd_pct": 37.64
+      }
     ]
   },
   "companies": {
-    "D8442A": {"name":"Apple Inc.","ticker":"AAPL","sector":"Technology","industry":"Consumer Electronics","country":"US","exchange":"NASDAQ","employees":166000,"last_price":329.4,"change_1d_pct":-2.66,"market_cap":"$4.838T","price_change_1y_pct":29.47,"gross_margin_ttm":0.4865,"operating_margin_ttm":0.3317,"pe_ttm":37.6,"revenue_latest_quarter":"$109.42B","net_income_latest_quarter":"$29.79B","fcf_latest_quarter":"$31.91B","latest_quarter":"Q3 FY2026","next_earnings":"2026-10-29","analyst_consensus":"Buy","website":"https://www.apple.com"},
-    "228D42": {"name":"Microsoft Corporation","ticker":"MSFT","sector":"Technology","industry":"Software - Infrastructure","country":"US","exchange":"NASDAQ","employees":223000,"last_price":508.96,"change_1d_pct":-0.05,"market_cap":"$3.779T","price_change_1y_pct":-1.1,"gross_margin_ttm":0.6794,"operating_margin_ttm":0.4678,"pe_ttm":28.28,"revenue_latest_quarter":"$90.01B","net_income_latest_quarter":"$35.77B","fcf_latest_quarter":"$19.64B","latest_quarter":"Q4 FY2026","next_earnings":"2026-10-28","analyst_consensus":"Buy","website":"https://www.microsoft.com"}
+    "D8442A": {
+      "name": "Apple Inc.",
+      "ticker": "AAPL",
+      "sector": "Technology",
+      "industry": "Consumer Electronics",
+      "country": "US",
+      "exchange": "NASDAQ",
+      "employees": 166000,
+      "last_price": 329.4,
+      "change_1d_pct": -2.66,
+      "market_cap": "$4.838T",
+      "price_change_1y_pct": 29.47,
+      "gross_margin_ttm": 0.4865,
+      "operating_margin_ttm": 0.3317,
+      "pe_ttm": 37.6,
+      "revenue_latest_quarter": "$109.42B",
+      "net_income_latest_quarter": "$29.79B",
+      "fcf_latest_quarter": "$31.91B",
+      "latest_quarter": "Q3 FY2026",
+      "next_earnings": "2026-10-29",
+      "analyst_consensus": "Buy",
+      "website": "https://www.apple.com"
+    },
+    "228D42": {
+      "name": "Microsoft Corporation",
+      "ticker": "MSFT",
+      "sector": "Technology",
+      "industry": "Software - Infrastructure",
+      "country": "US",
+      "exchange": "NASDAQ",
+      "employees": 223000,
+      "last_price": 508.96,
+      "change_1d_pct": -0.05,
+      "market_cap": "$3.779T",
+      "price_change_1y_pct": -1.1,
+      "gross_margin_ttm": 0.6794,
+      "operating_margin_ttm": 0.4678,
+      "pe_ttm": 28.28,
+      "revenue_latest_quarter": "$90.01B",
+      "net_income_latest_quarter": "$35.77B",
+      "fcf_latest_quarter": "$19.64B",
+      "latest_quarter": "Q4 FY2026",
+      "next_earnings": "2026-10-28",
+      "analyst_consensus": "Buy",
+      "website": "https://www.microsoft.com"
+    }
   },
   "funds": {
-    "672082": {"name":"State Street SPDR S&P 500 ETF Trust","ticker":"SPY","isin":"US78462F1030","provider":"SPDR","nav":771.35,"aum":"$817.16B","expense_ratio_pct":0.09,"holdings_count":504,"inception_date":"1993-01-22","last_price":764.2,"change_1d_pct":-0.18,"returns":{"1m":-0.67,"3m":2.33,"6m":20.92,"ytd":12.07,"1y":15.15,"3y":78.77},"volatility_20d_pct":11.03,"max_drawdown_1y_pct":-9.13,"top10_weight_pct":38.78,"source":"Bigdata.com ETF tearsheet / FMP"},
-    "5FJWA4": {"name":"Invesco QQQ Trust, Series 1","ticker":"QQQ","isin":"US46090E1038","provider":"Invesco","nav":744.46,"aum":"$500.94B","expense_ratio_pct":0.18,"holdings_count":102,"inception_date":"1999-03-10","last_price":737.93,"change_1d_pct":0.19,"returns":{"1m":3.0,"3m":0.21,"6m":32.18,"ytd":20.12,"1y":23.25,"3y":105.97},"volatility_20d_pct":16.02,"max_drawdown_1y_pct":-12.19,"top10_weight_pct":46.87,"source":"Bigdata.com ETF tearsheet / FMP"}
+    "672082": {
+      "name": "State Street SPDR S&P 500 ETF Trust",
+      "ticker": "SPY",
+      "isin": "US78462F1030",
+      "provider": "SPDR",
+      "nav": 771.35,
+      "aum": "$817.16B",
+      "expense_ratio_pct": 0.09,
+      "holdings_count": 504,
+      "inception_date": "1993-01-22",
+      "last_price": 764.2,
+      "change_1d_pct": -0.18,
+      "returns": {
+        "1m": -0.67,
+        "3m": 2.33,
+        "6m": 20.92,
+        "ytd": 12.07,
+        "1y": 15.15,
+        "3y": 78.77
+      },
+      "volatility_20d_pct": 11.03,
+      "max_drawdown_1y_pct": -9.13,
+      "top10_weight_pct": 38.78,
+      "source": "Bigdata.com ETF tearsheet / FMP"
+    },
+    "5FJWA4": {
+      "name": "Invesco QQQ Trust, Series 1",
+      "ticker": "QQQ",
+      "isin": "US46090E1038",
+      "provider": "Invesco",
+      "nav": 744.46,
+      "aum": "$500.94B",
+      "expense_ratio_pct": 0.18,
+      "holdings_count": 102,
+      "inception_date": "1999-03-10",
+      "last_price": 737.93,
+      "change_1d_pct": 0.19,
+      "returns": {
+        "1m": 3.0,
+        "3m": 0.21,
+        "6m": 32.18,
+        "ytd": 20.12,
+        "1y": 23.25,
+        "3y": 105.97
+      },
+      "volatility_20d_pct": 16.02,
+      "max_drawdown_1y_pct": -12.19,
+      "top10_weight_pct": 46.87,
+      "source": "Bigdata.com ETF tearsheet / FMP"
+    }
+  },
+  "fmp": {
+    "as_of": "2026-09-29",
+    "companies": {
+      "AAPL": {
+        "name": "Apple Inc.",
+        "price": 329.4,
+        "market_cap": 4838015066400,
+        "employees": 166000,
+        "sector": "Technology",
+        "industry": "Consumer Electronics",
+        "exchange": "NASDAQ",
+        "website": "https://www.apple.com",
+        "quarterly": [
+          {
+            "period": "Q3 FY2026",
+            "date": "2026-06-27",
+            "revenue": 109417000000,
+            "gross_profit": 54770000000,
+            "net_income": 29789000000,
+            "eps": 2.03
+          },
+          {
+            "period": "Q2 FY2026",
+            "date": "2026-03-28",
+            "revenue": 111184000000,
+            "gross_profit": 54781000000,
+            "net_income": 29578000000,
+            "eps": 2.01
+          },
+          {
+            "period": "Q1 FY2026",
+            "date": "2025-12-27",
+            "revenue": 143756000000,
+            "gross_profit": 69231000000,
+            "net_income": 42097000000,
+            "eps": 2.84
+          }
+        ]
+      },
+      "MSFT": {
+        "name": "Microsoft Corporation",
+        "price": 508.96,
+        "market_cap": 3779307928000,
+        "employees": 223000,
+        "sector": "Technology",
+        "industry": "Software - Infrastructure",
+        "exchange": "NASDAQ",
+        "website": "https://www.microsoft.com",
+        "quarterly": [
+          {
+            "period": "Q4 FY2026",
+            "date": "2026-06-30",
+            "revenue": 90007000000,
+            "gross_profit": 60482000000,
+            "net_income": 35766000000,
+            "eps": 4.8
+          },
+          {
+            "period": "Q3 FY2026",
+            "date": "2026-03-31",
+            "revenue": 82886000000,
+            "gross_profit": 56058000000,
+            "net_income": 31778000000,
+            "eps": 4.27
+          },
+          {
+            "period": "Q2 FY2026",
+            "date": "2025-12-31",
+            "revenue": 81273000000,
+            "gross_profit": 55295000000,
+            "net_income": 38458000000,
+            "eps": 5.16
+          }
+        ]
+      }
+    },
+    "sector_performance": [
+      {
+        "date": "2026-09-29",
+        "sector": "Technology",
+        "average_change_pct": -0.6122
+      },
+      {
+        "date": "2026-09-29",
+        "sector": "Healthcare",
+        "average_change_pct": 0.71
+      },
+      {
+        "date": "2026-09-29",
+        "sector": "Industrials",
+        "average_change_pct": 0.713
+      },
+      {
+        "date": "2026-09-29",
+        "sector": "Utilities",
+        "average_change_pct": 1.5014
+      },
+      {
+        "date": "2026-09-29",
+        "sector": "Financial Services",
+        "average_change_pct": -1.0062
+      }
+    ]
+  },
+  "phoenix": {
+    "source": {
+      "name": "Phoenix by HG Insights",
+      "retrieved_at": "2026-09-29",
+      "source_url": "https://hginsights.com/",
+      "note": "Modeled firmographic, spend, technographic, AI and cloud maturity data; spend values are estimates, not invoices."
+    },
+    "companies": {
+      "apple.com": {
+        "company_id": "20AF36FA31AE3B2AB818ECB0EC1923EE",
+        "name": "Apple, Inc.",
+        "domain": "apple.com",
+        "industry": "Computer and Electronic Product Manufacturing",
+        "naics": "Electronic Computer Manufacturing",
+        "country": "United States of America (the)",
+        "state": "CA",
+        "city": "Cupertino",
+        "employees": 166000,
+        "revenue_total": 416161000000,
+        "revenue_band": "Over $1,000,000,000",
+        "it_spend": 33201501575,
+        "fortune_500_rank": 4,
+        "forbes_2000_rank": 11,
+        "total_external_it": 23743122458,
+        "software_spend": 6964506882,
+        "services_spend": 10630904959,
+        "total_ai_spend": 16246729377,
+        "ai_software_spend": 6300350363,
+        "gen_ai_spend": 6092334460,
+        "ai_maturity_score": 71.37,
+        "ai_maturity_rank": 25,
+        "ai_maturity_6m_delta": 9.35,
+        "data_maturity_score": 84.17,
+        "data_maturity_level": "HIGH",
+        "genai_intent_score": 63022,
+        "dominant_cloud_provider": "Multicloud",
+        "cloud_stack_percent_change": -5,
+        "current_products_used_total_count": 3088,
+        "current_products_used_cloud_percent": 62,
+        "aws_products_count": 124,
+        "azure_products_count": 2,
+        "gcp_products_count": 56,
+        "source": "Phoenix by HG Insights",
+        "retrieved_at": "2026-09-29",
+        "source_url": "https://hginsights.com/"
+      },
+      "microsoft.com": {
+        "company_id": "1488903ED478F8C51D09F2EC5F2DCDA2",
+        "name": "Microsoft Corporation",
+        "domain": "microsoft.com",
+        "industry": "Computer and Electronic Product Manufacturing",
+        "naics": "Software Publishers",
+        "country": "United States of America (the)",
+        "state": "WA",
+        "city": "Redmond",
+        "employees": 223000,
+        "revenue_total": 331839000000,
+        "revenue_band": "Over $1,000,000,000",
+        "it_spend": 31896091593,
+        "fortune_500_rank": 11,
+        "forbes_2000_rank": 7,
+        "total_external_it": 22727207821,
+        "software_spend": 6905071052,
+        "services_spend": 9973245494,
+        "total_ai_spend": 41409623016,
+        "ai_software_spend": 3461574936,
+        "gen_ai_spend": 3604983740,
+        "ai_maturity_score": 76.67,
+        "ai_maturity_rank": 16,
+        "ai_maturity_6m_delta": -1.98,
+        "data_maturity_score": 38.39,
+        "data_maturity_level": "MEDIUM",
+        "genai_intent_score": 58083,
+        "dominant_cloud_provider": "Multicloud",
+        "cloud_stack_percent_change": -5,
+        "current_products_used_total_count": 3131,
+        "current_products_used_cloud_percent": 64,
+        "aws_products_count": 106,
+        "azure_products_count": 12,
+        "gcp_products_count": 53,
+        "source": "Phoenix by HG Insights",
+        "retrieved_at": "2026-09-29",
+        "source_url": "https://hginsights.com/"
+      }
+    }
   }
 }
