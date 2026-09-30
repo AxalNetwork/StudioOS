@@ -3696,6 +3696,333 @@ research.get('/market-directory/:slug', async (c) => {
   return c.json({ item: row, source_boundary: 'Counts are discovery-universe counts supplied by Axal, not TAM or valuation.' });
 });
 
+// ---------------------------------------------------------------------------
+// Markets as a dataset (migration 368)
+//
+// A market used to be a label: a row in `research_market_directory` and, for a
+// company, one `sector` string. This is the record — identity, sourced
+// observations, and the relationships to the companies in it.
+//
+// THE RULE EVERY WRITE ROUTE HERE ENFORCES: a number without a source and a
+// date is not a number this dataset stores. `POST /markets/:slug/metrics`
+// refuses an observation with no citation, and `research_market_metrics` is
+// append-only, so a correction is a new row and the superseded one stays as the
+// record of what was published. The composed read returns what exists and omits
+// what does not; the UI renders the omission as "Not recorded" rather than as a
+// zero, because those are different facts.
+//
+// WHAT IS NOT HERE IS THE POINT. There is no licensed market-intelligence
+// source in this deployment, so `metrics`, `funds` and `investments` come back
+// empty for every seeded market and the page says so. The tables exist so that
+// licensing one is a data task rather than a schema change.
+// ---------------------------------------------------------------------------
+const MARKET_RELATIONSHIPS = new Set([
+  'core', 'adjacent', 'enabler', 'supplier', 'customer', 'competitor', 'disruptor', 'incumbent',
+]);
+const MARKET_METRIC_NAMES = new Set([
+  'tam', 'sam', 'som', 'market_size', 'cagr', 'growth_rate', 'vc_funding', 'deal_count',
+  'average_deal_size', 'median_deal_size', 'investor_count', 'ipo_count', 'ma_count',
+  'exit_value', 'supplied_company_count',
+]);
+const MARKET_FACET_KINDS = new Set([
+  'industry_resolution', 'trend', 'technology', 'customer_segment', 'use_case', 'competitor',
+  'exit', 'event', 'forecast', 'regulation', 'risk', 'catalyst',
+]);
+// Axal's own taxonomy is the one source with no URL, because it is not an
+// external publication — it is what Axal asserts about its own directory.
+const MARKET_INTERNAL_SOURCES = new Set(['axal_taxonomy']);
+const MARKET_RECORD_FIELDS = new Set([
+  'canonical_name', 'sector', 'industry', 'subindustry', 'category', 'vertical',
+  'technology_category', 'description', 'definition', 'inclusion_criteria',
+  'exclusion_criteria', 'market_stage', 'market_maturity', 'fragmentation',
+  'concentration', 'consolidation_trend', 'demand_drivers', 'customer_segments',
+  'buyer_types', 'use_cases', 'key_players', 'leading_companies', 'emerging_companies',
+  'incumbents', 'competitive_intensity', 'barriers_to_entry', 'switching_costs',
+  'substitutes', 'technologies', 'technology_trends', 'enabling_technologies',
+  'disruptive_technologies', 'regulatory_environment', 'regulatory_changes',
+  'licensing_requirements', 'market_trends', 'emerging_trends', 'declining_trends',
+  'catalysts', 'risks', 'market_start_date', 'inflection_points', 'adoption_stage',
+  'forecast_horizon', 'axal_thesis', 'axal_relevance', 'axal_focus',
+]);
+
+research.get('/market-sources', async (c) => {
+  await requireAuth(c);
+  const rows = await c.env.DB.prepare(
+    `SELECT source_id, name, source_type, homepage, license, quality_weight, notes
+       FROM research_market_sources WHERE enabled = 1 ORDER BY source_type, name COLLATE NOCASE`
+  ).all();
+  return c.json({ items: rows.results || [] });
+});
+
+research.get('/markets/:slug/metrics', async (c) => {
+  await requireAuth(c);
+  const metric = String(c.req.query('metric') || '');
+  const rows = await c.env.DB.prepare(
+    `SELECT * FROM research_market_metrics
+      WHERE market_id = ? AND (? = '' OR metric_name = ?)
+      ORDER BY COALESCE(base_year, 0) DESC, retrieved_at DESC LIMIT 200`
+  ).bind(c.req.param('slug'), metric, metric).all();
+  return c.json({ items: rows.results || [] });
+});
+
+research.get('/markets/:slug/facets', async (c) => {
+  await requireAuth(c);
+  const kind = String(c.req.query('kind') || '');
+  const rows = await c.env.DB.prepare(
+    `SELECT * FROM research_market_facets
+      WHERE market_id = ? AND (? = '' OR kind = ?)
+      ORDER BY kind, label COLLATE NOCASE LIMIT 300`
+  ).bind(c.req.param('slug'), kind, kind).all();
+  return c.json({ items: rows.results || [] });
+});
+
+research.get('/markets/:slug/companies', async (c) => {
+  await requireAuth(c);
+  const relationship = oneOf(c.req.query('relationship'), MARKET_RELATIONSHIPS) || 'core';
+  const limit = Math.min(Math.max(clampInt(c.req.query('limit')) ?? 48, 1), 200);
+  const offset = Math.max(clampInt(c.req.query('offset')) ?? 0, 0);
+  const slug = c.req.param('slug');
+  // Read in parallel rather than in a batch: these are reads, so there is
+  // nothing to make atomic, and `batch` is a write-shaped call in this codebase
+  // (D370) whose fixture returns meta rather than rows.
+  const [rows, counted] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT l.id, l.company_uid, l.relationship_type, l.primary_market, l.relevance,
+              l.source_url, l.verified_at, l.confidence,
+              d.name, d.website, d.country, d.founded_year, d.sector
+        FROM research_market_companies l
+         LEFT JOIN research_company_directory d ON d.uid = l.company_uid
+        WHERE l.market_id = ? AND l.relationship_type = ?
+        ORDER BY (l.primary_market = 1) DESC, d.name COLLATE NOCASE
+        LIMIT ? OFFSET ?`
+    ).bind(slug, relationship, limit, offset).all(),
+    c.env.DB.prepare(
+      `SELECT COUNT(*) AS total FROM research_market_companies
+         WHERE market_id = ? AND relationship_type = ?`
+    ).bind(slug, relationship).all(),
+  ]);
+  return c.json({
+    items: rows.results || [],
+    total: Number(((counted.results || []) as any[])[0]?.total || 0),
+    relationship,
+  });
+});
+
+research.get('/markets/:slug/funds', async (c) => {
+  await requireAuth(c);
+  const rows = await c.env.DB.prepare(
+    `SELECT * FROM research_market_funds WHERE market_id = ?
+      ORDER BY recent_investment_count DESC, fund_name COLLATE NOCASE LIMIT 100`
+  ).bind(c.req.param('slug')).all();
+  return c.json({
+    items: rows.results || [],
+    boundary: 'No licensed fund or deal register is connected, so this list is empty by default rather than estimated.',
+  });
+});
+
+research.get('/markets/:slug/investments', async (c) => {
+  await requireAuth(c);
+  const rows = await c.env.DB.prepare(
+    `SELECT * FROM research_market_investments WHERE market_id = ?
+      ORDER BY COALESCE(announced_at, '') DESC LIMIT 100`
+  ).bind(c.req.param('slug')).all();
+  return c.json({
+    items: rows.results || [],
+    boundary: 'No licensed deal feed is connected, so a round appears here only when an observation with a citation records it.',
+  });
+});
+
+// The market record in one call: what the page needs to draw a market without
+// six round trips. Every child list is capped and can be read in full from its
+// own route.
+research.get('/markets/:slug', async (c) => {
+  await requireAuth(c);
+  const slug = c.req.param('slug');
+  const market = await c.env.DB.prepare(
+    `SELECT * FROM research_markets WHERE market_id = ?`
+  ).bind(slug).first<any>();
+  if (!market) return c.json({ detail: 'Not found' }, 404);
+  // EVERY STATEMENT IS AWAITED THROUGH `.all()`, deliberately. A D1 statement is
+  // thenable in production, so `await prepare(...).bind(...)` resolves to the
+  // result — but the test fixture's prepared statement is not thenable, and
+  // awaiting it returns the STATEMENT, whose `.results` is undefined. A route
+  // that leaned on the implicit await would return empty lists under test and
+  // populated ones in production, which is the one direction of difference no
+  // test can catch. Asking for `.all()` is the same thing production does, and
+  // it is the house pattern in this file.
+  const [metrics, facets, companies, companyTotals, funds, investments] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT * FROM research_market_metrics WHERE market_id = ?
+        ORDER BY COALESCE(base_year, 0) DESC, retrieved_at DESC LIMIT 60`
+    ).bind(slug).all(),
+    c.env.DB.prepare(
+      `SELECT * FROM research_market_facets WHERE market_id = ?
+        ORDER BY kind, label COLLATE NOCASE LIMIT 120`
+    ).bind(slug).all(),
+    c.env.DB.prepare(
+      `SELECT l.id, l.company_uid, l.relationship_type, l.primary_market, l.relevance,
+              l.source_url, l.verified_at, l.confidence,
+              d.name, d.website, d.country, d.founded_year, d.sector
+         FROM research_market_companies l
+         LEFT JOIN research_company_directory d ON d.uid = l.company_uid
+        WHERE l.market_id = ? AND l.relationship_type = 'core'
+        ORDER BY (l.primary_market = 1) DESC, d.name COLLATE NOCASE LIMIT 48`
+    ).bind(slug).all(),
+    c.env.DB.prepare(
+      `SELECT COUNT(*) AS total, COUNT(DISTINCT relationship_type) AS kinds
+         FROM research_market_companies WHERE market_id = ?`
+    ).bind(slug).all(),
+    c.env.DB.prepare(
+      `SELECT * FROM research_market_funds WHERE market_id = ?
+        ORDER BY recent_investment_count DESC, fund_name COLLATE NOCASE LIMIT 24`
+    ).bind(slug).all(),
+    c.env.DB.prepare(
+      `SELECT * FROM research_market_investments WHERE market_id = ?
+        ORDER BY COALESCE(announced_at, '') DESC LIMIT 24`
+    ).bind(slug).all(),
+  ]);
+  const metricRows = (metrics.results || []) as any[];
+  const facetRows = (facets.results || []) as any[];
+  const companyRows = (companies.results || []) as any[];
+  const fundRows = (funds.results || []) as any[];
+  const investmentRows = (investments.results || []) as any[];
+  // Only the sources the returned rows actually lean on, so the page cannot
+  // print a source list longer than what it is showing.
+  const used = Array.from(new Set([
+    market.source_id,
+    ...metricRows.map((r) => r.source_id),
+    ...facetRows.map((r) => r.source_id),
+    ...companyRows.map(() => 'wikidata'),
+    ...fundRows.map((r) => r.source_id),
+    ...investmentRows.map((r) => r.source_id),
+  ].filter(Boolean)));
+  const sources = used.length
+    // Read the registry and narrow it here rather than building an IN list.
+    // The ledger is five rows and the alternative is interpolating a clause
+    // into the query text to save nothing (check-sql-prepare).
+    ? (((await c.env.DB.prepare(
+        `SELECT source_id, name, source_type, homepage, license, quality_weight, notes
+           FROM research_market_sources
+          WHERE enabled = 1
+          ORDER BY source_type, name COLLATE NOCASE`
+      ).all()).results || []) as any[]).filter((s) => used.includes(s.source_id))
+    : [];
+  const totals = (companyTotals.results || [{}])[0] as any;
+  return c.json({
+    market,
+    metrics: metricRows,
+    facets: facetRows,
+    companies: {
+      items: companyRows,
+      total: Number(totals?.total || 0),
+      relationships: Number(totals?.kinds || 0),
+    },
+    funds: fundRows,
+    investments: investmentRows,
+    sources,
+    boundary:
+      'Every number here is an individual observation with its source and date. Nothing is estimated, and a missing figure is shown as not recorded rather than as zero.',
+  });
+});
+
+research.patch('/markets/:slug', async (c) => {
+  await requireSuperAdmin(c);
+  const slug = c.req.param('slug');
+  const body = await c.req.json<any>().catch(() => ({}));
+  const updates: string[] = [];
+  const values: any[] = [];
+  for (const key of Object.keys(body || {})) {
+    if (!MARKET_RECORD_FIELDS.has(key)) continue;
+    updates.push(`${key} = ?`);
+    values.push(clampText(body[key], 8000));
+  }
+  if (updates.length === 0) return c.json({ detail: 'Nothing to update' }, 400);
+  updates.push("updated_at = datetime('now')");
+  const res = await c.env.DB.prepare(
+    `UPDATE research_markets SET ${updates.join(', ')} WHERE market_id = ?`
+  ).bind(...values, slug).run();
+  if (Number((res.meta as any)?.changes || 0) === 0) return c.json({ detail: 'Not found' }, 404);
+  const row = await c.env.DB.prepare(`SELECT * FROM research_markets WHERE market_id = ?`).bind(slug).first();
+  return c.json({ item: row });
+});
+
+research.post('/markets/:slug/metrics', async (c) => {
+  await requireSuperAdmin(c);
+  const slug = c.req.param('slug');
+  const body = await c.req.json<any>().catch(() => ({}));
+  const metricName = oneOf(body.metric_name, MARKET_METRIC_NAMES);
+  if (!metricName) return c.json({ detail: 'Unknown metric_name' }, 400);
+  const value = body.metric_value === null || body.metric_value === undefined || body.metric_value === ''
+    ? null
+    : Number(body.metric_value);
+  const text = clampText(body.metric_text, 200);
+  if (value === null && !text) return c.json({ detail: 'An observation needs a value' }, 400);
+  if (value !== null && !Number.isFinite(value)) return c.json({ detail: 'metric_value must be a number' }, 400);
+  const sourceId = clampText(body.source_id, 60);
+  const sourceUrl = clampText(body.source_url, 500);
+  // The rule, enforced at the door: a number arrives with a citation, or it does
+  // not arrive. Axal's own taxonomy is the only source allowed to have no URL.
+  if (!sourceUrl && !(sourceId && MARKET_INTERNAL_SOURCES.has(sourceId))) {
+    return c.json({ detail: 'A recorded metric needs source_url (or source_id=axal_taxonomy)' }, 400);
+  }
+  const retrievedAt = clampText(body.retrieved_at, 40) || nowIso();
+  const baseYear = clampInt(body.base_year);
+  const geography = clampText(body.geography, 80) || 'Global';
+  const market = await c.env.DB.prepare(`SELECT market_id FROM research_markets WHERE market_id = ?`).bind(slug).first();
+  if (!market) return c.json({ detail: 'Not found' }, 404);
+  // Deterministic for one (market, metric, period, geography, source): re-ingesting
+  // the same publication is a no-op, while a new period or a new publication adds a
+  // row and leaves the previous observation standing.
+  const id = `${sourceId || 'source'}:${slug}:${metricName}:${baseYear ?? 'na'}:${geography}:${retrievedAt}`.slice(0, 200);
+  await c.env.DB.prepare(
+    `INSERT INTO research_market_metrics
+       (market_metric_id, market_id, metric_name, metric_value, metric_text, metric_unit, currency,
+        period_start, period_end, base_year, forecast_year, geography, source_id, source_name,
+        source_url, publication_date, retrieved_at, confidence, note)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(market_metric_id) DO NOTHING`
+  ).bind(
+    id, slug, metricName, value, text, clampText(body.metric_unit, 40), clampText(body.currency, 8),
+    clampText(body.period_start, 20), clampText(body.period_end, 20), baseYear, clampInt(body.forecast_year),
+    geography, sourceId, clampText(body.source_name, 120), sourceUrl,
+    clampText(body.publication_date, 40), retrievedAt, clampInt(body.confidence),
+    clampText(body.note, 1000),
+  ).run();
+  return c.json({ item: { market_metric_id: id }, appended: true }, 201);
+});
+
+research.post('/markets/:slug/facets', async (c) => {
+  await requireSuperAdmin(c);
+  const slug = c.req.param('slug');
+  const body = await c.req.json<any>().catch(() => ({}));
+  const kind = oneOf(body.kind, MARKET_FACET_KINDS);
+  if (!kind) return c.json({ detail: 'Unknown facet kind' }, 400);
+  const label = clampText(body.label, 200);
+  if (!label) return c.json({ detail: 'A facet needs a label' }, 400);
+  const sourceId = clampText(body.source_id, 60);
+  const sourceUrl = clampText(body.source_url, 500);
+  if (!sourceUrl && !(sourceId && MARKET_INTERNAL_SOURCES.has(sourceId))) {
+    return c.json({ detail: 'A recorded statement needs source_url (or source_id=axal_taxonomy)' }, 400);
+  }
+  const market = await c.env.DB.prepare(`SELECT market_id FROM research_markets WHERE market_id = ?`).bind(slug).first();
+  if (!market) return c.json({ detail: 'Not found' }, 404);
+  const id = `${kind}:${slug}:${label}:${sourceUrl || sourceId}`.slice(0, 200);
+  await c.env.DB.prepare(
+    `INSERT INTO research_market_facets
+       (id, market_id, kind, label, detail, value, unit, geography, observed_at, source_id, source_url, confidence)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET detail = excluded.detail, value = excluded.value,
+       unit = excluded.unit, geography = excluded.geography, observed_at = excluded.observed_at,
+       confidence = excluded.confidence, updated_at = datetime('now')`
+  ).bind(
+    id, slug, kind, label, clampText(body.detail, 4000),
+    body.value === null || body.value === undefined || body.value === '' ? null : Number(body.value),
+    clampText(body.unit, 40), clampText(body.geography, 80), clampText(body.observed_at, 40),
+    sourceId, sourceUrl, clampInt(body.confidence),
+  ).run();
+  return c.json({ item: { id } }, 201);
+});
+
 research.post('/funds', async (c) => {
   const user = await requireAuth(c);
   const body = await c.req.json<any>().catch(() => ({}));

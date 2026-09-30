@@ -39721,3 +39721,89 @@ It also does not paginate the sector page: the universe section shows the first
 blank label means every sector, `total` versus page, paging composition, unknown
 sector). Production reads confirmed the empty universe before the change:
 300 rows, 0 with a sector; 10 signals, 3 distinct sector labels.
+## D493
+**A market is a record with sourced observations, not a label with a number
+beside it.**
+
+**Context.** D492 populated the market pages from the two sources this
+deployment actually holds — a Wikidata company universe and public discussion
+evidence — and left one thing standing: the market itself was still a row in
+`research_market_directory` (a slug, a name, a supplied count) plus whatever a
+company happened to carry in its single `sector` column. The fields a reader
+asks about — TAM, SAM, SOM, market size, growth, funding, deals, investors,
+IPOs, exits, competitors, technologies, regulation — had no home at all, so
+there was nowhere to put a figure even when somebody had one, and no place for
+the citation that makes it checkable.
+
+**Decision.** Migration 368 makes the market a first-class record and states one
+rule the whole dataset rests on: **every quantitative claim is an individual
+observation with a source and a date, and the observations table is
+append-only.** `research_market_metrics` holds one row per published figure; the
+write route refuses a metric that names no source, and the period is part of the
+row's identity (`base_year`, `forecast_year`, `geography`, `source`) — so an
+FY26 figure and an FY32 forecast coexist instead of one silently replacing the
+other. A correction is a new row: the superseded figure stands as the record of
+what was published, and the movement between the two is itself a signal a reader
+can see.
+
+`research_market_sources` carries `source_type`, which is the mechanism that
+keeps the honesty: `primary` and `research` may carry a number, `alternative`
+carries a proxy, and `axal` carries what Axal asserts about its own directory —
+the supplied count enters the dataset as `axal_taxonomy`, at its own date, never
+dressed as an external measurement.
+
+**The hierarchy is supported and deliberately unasserted.** `parent_market_id`
+exists and is indexed, and every seeded market leaves it NULL. The 82 labels are
+flat, and typing a hierarchy in by hand is the "taxonomy as source of truth"
+mistake this dataset exists to avoid. A parent is set when a source defines one.
+
+**The companies are a graph, not a column.** `research_market_companies` records
+the relationship — `core`, `adjacent`, `enabler`, `supplier`, `customer`,
+`competitor`, `disruptor`, `incumbent` — so a company can be core in one market
+and a supplier in another, instead of forcing one `sector` string to be the whole
+truth. The seeded relationships are all `core`, derived by INSERT..SELECT from
+the directory's own sector labels and claiming nothing beyond "this record is in
+this market's universe".
+
+**Nineteen fields, one table.** Trends, technologies, customer segments, use
+cases, competitors, exits, events, forecasts, regulation, risks and catalysts are
+the same shape — a label, a sourced detail, an optional value with a unit, a
+source and a date — so `research_market_facets` holds all of them under a `kind`
+rather than adding nineteen link tables and nineteen places to forget the
+citation. A sector's industry resolution is recorded the same way (`kind =
+industry_resolution`), which is what lets a reader see how a universe was built
+rather than being told to trust it.
+
+**What is deliberately empty.** `research_market_funds` and
+`research_market_investments` are created and seeded with nothing. There is no
+licensed fund or deal register in this deployment (no Dealroom, Harmonic,
+Crunchbase, PitchBook, Tracxn, CB Insights or Preqin feed), and D9's rule stands
+unchanged: a third-party research surface returns when a licence exists, not
+before. The routes return the empty list **with the reason attached** and the
+page renders "Not recorded" — a missing figure a reader can trust, rather than an
+estimate they cannot. Filling these tables plausibly would be the exact failure
+this dataset is built to prevent.
+
+**The record's prose is patchable, its identity is not.**
+`PATCH /markets/:slug` writes only the fields in a fixed vocabulary (definition,
+inclusion and exclusion criteria, stage, competitive structure, regulation,
+thesis, and so on) and ignores anything else; `market_id` and `parent_market_id`
+are not among them, so no request can re-key or re-parent a market by accident.
+
+**Completeness is shown, not implied.** The record holds 47 fields; the page
+states how many currently hold a value, so an empty market reads as an empty
+market rather than as a researched one.
+
+**What it does not do.** This creates no figure. No TAM, growth rate, funding
+total or exit value is invented to fill those fields, and the platform's own
+supplied count is still the supplied count — recorded, dated and labelled as
+Axal's. What changes is that the moment a sourced figure exists there is
+somewhere honest to put it, and the difference between "we know this" and
+"nobody has published this" is visible on the page instead of papered over.
+
+**Evidence.** `research_markets_dataset.test.ts` (an uncited metric is refused;
+Axal's taxonomy is the only source allowed no URL; the same observation stored
+twice is one row; a newer period is a second row and the first still stands;
+relationships filter and `total` counts the market rather than the page; funds
+and rounds read empty with their reason; a PATCH sets record fields and not
+identity). D492 supplies the population; this supplies the shape.
