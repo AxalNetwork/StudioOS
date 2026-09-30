@@ -1,0 +1,1810 @@
+{
+ "advertising": {
+  "name": "Advertising",
+  "industries": [
+   {
+    "id": "Q37038",
+    "label": "advertising",
+    "companies": 236,
+    "description": "communication aimed at promoting products, services, or ideas to a target audience through various media channels"
+   },
+   {
+    "id": "Q23700481",
+    "label": "advertising industry",
+    "companies": 76,
+    "description": "businesses offering advertising creation and/or placement in media"
+   },
+   {
+    "id": "Q216931",
+    "label": "advertising agency",
+    "companies": 39,
+    "description": "business creating advertisements and/or placing them in third-party media publications"
+   },
+   {
+    "id": "Q39809",
+    "label": "marketing",
+    "companies": 312,
+    "description": "study and process of promoting, distributing, and selling products or services to customers"
+   }
+  ]
+ },
+ "agtech": {
+  "name": "AgTech",
+  "industries": [
+   {
+    "id": "Q4057127",
+    "label": "agricultural technology",
+    "companies": 4,
+    "description": "use of technology in agriculture, horticulture, and aquaculture with the aim of improving yield, efficiency, and profitability"
+   },
+   {
+    "id": "Q11451",
+    "label": "agriculture",
+    "companies": 254,
+    "description": "practice of cultivating plants and raising animals to produce food, fiber, fuel, and other products; one of humanity's oldest and most widespread activities, forming the foundation of most human civilizations"
+   },
+   {
+    "id": "Q24886094",
+    "label": "farming",
+    "companies": 30,
+    "description": "practice of running a farm"
+   }
+  ]
+ },
+ "ai": {
+  "name": "AI",
+  "industries": [
+   {
+    "id": "Q11660",
+    "label": "artificial intelligence",
+    "companies": 889,
+    "description": "field that develops and studies software enabling machines to exhibit intelligent behavior"
+   },
+   {
+    "id": "Q2539",
+    "label": "machine learning",
+    "companies": 10,
+    "description": "scientific study of algorithms and statistical models that computer systems use to perform tasks without explicit instructions"
+   }
+  ]
+ },
+ "analytics": {
+  "name": "Analytics",
+  "industries": [
+   {
+    "id": "Q97466014",
+    "label": "data analytics software industry",
+    "companies": 8,
+    "description": ""
+   },
+   {
+    "id": "Q3353185",
+    "label": "business intelligence",
+    "companies": 45,
+    "description": "strategies, technologies, and practices used by enterprises for the data analysis and management of business information to support strategic decision-making"
+   },
+   {
+    "id": "Q485396",
+    "label": "analytics",
+    "companies": 37,
+    "description": "discovery, interpretation, and communication of meaningful patterns in data"
+   }
+  ]
+ },
+ "ar-vr": {
+  "name": "AR/VR",
+  "industries": [
+   {
+    "id": "Q170519",
+    "label": "virtual reality",
+    "companies": 23,
+    "description": "computer-simulated environment simulating physical presence in real or imagined worlds"
+   },
+   {
+    "id": "Q107400701",
+    "label": "virtual reality industry",
+    "companies": 5,
+    "description": "industry focused on development and manufacture of virtual reality hardware, software, and services"
+   }
+  ]
+ },
+ "audiotech": {
+  "name": "AudioTech",
+  "industries": [
+   {
+    "id": "Q746369",
+    "label": "recording studio",
+    "companies": 5,
+    "description": "specialized facility for sound recording"
+   },
+   {
+    "id": "Q746359",
+    "label": "music industry",
+    "companies": 205,
+    "description": "added from a targeted Wikidata search"
+   }
+  ]
+ },
+ "autotech": {
+  "name": "AutoTech",
+  "industries": [
+   {
+    "id": "Q124192",
+    "label": "automotive engineering",
+    "companies": 20,
+    "description": "discipline of engineering"
+   },
+   {
+    "id": "Q190117",
+    "label": "automotive industry",
+    "companies": 1476,
+    "description": "range of organizations associated with motor vehicles, such as automobiles, trucks and motorcycles"
+   },
+   {
+    "id": "Q2140665",
+    "label": "charging station",
+    "companies": 18,
+    "description": "infrastructure that supplies electric energy for the recharging of electric vehicles"
+   },
+   {
+    "id": "Q37929123",
+    "label": "electric vehicle charging network",
+    "companies": 16,
+    "description": "infrastructure system of charging stations for electric vehicles"
+   }
+  ]
+ },
+ "biotech": {
+  "name": "BioTech",
+  "industries": [
+   {
+    "id": "Q7108",
+    "label": "biotechnology",
+    "companies": 379,
+    "description": "technologies directly involving biology; formerly or more narrowly the use of living systems and organisms to develop or make useful products"
+   },
+   {
+    "id": "Q12303494",
+    "label": "biotechnology industry",
+    "companies": 57,
+    "description": "a science-based sector that uses living organisms and molecular biology to create products and processes"
+   },
+   {
+    "id": "Q864928",
+    "label": "life sciences",
+    "companies": 18,
+    "description": "branch of science about life"
+   }
+  ]
+ },
+ "chemicals": {
+  "name": "Chemicals",
+  "industries": [
+   {
+    "id": "Q207652",
+    "label": "chemical industry",
+    "companies": 503,
+    "description": "a sector of the economy that manufactures, processes, and sells chemicals"
+   },
+   {
+    "id": "Q2309453",
+    "label": "specialty chemicals",
+    "companies": 7,
+    "description": "production of particular chemical products which provide a wide variety of effects on which many other industry sectors rely"
+   }
+  ]
+ },
+ "climatetech-cleantech": {
+  "name": "ClimateTech/CleanTech",
+  "industries": [
+   {
+    "id": "Q743030",
+    "label": "environmental technology",
+    "companies": 19,
+    "description": "technical and technological processes for protection of the environment"
+   },
+   {
+    "id": "Q48767813",
+    "label": "renewable energy industry",
+    "companies": 34,
+    "description": "electric energy utility industry"
+   },
+   {
+    "id": "Q12705",
+    "label": "renewable energy",
+    "companies": 68,
+    "description": "energy collected from renewable resources"
+   }
+  ]
+ },
+ "cloud-infrastructure": {
+  "name": "Cloud Infrastructure",
+  "industries": [
+   {
+    "id": "Q1346018",
+    "label": "infrastructure as a service",
+    "companies": 13,
+    "description": "cloud computing service model"
+   },
+   {
+    "id": "Q671224",
+    "label": "data center",
+    "companies": 12,
+    "description": "building or room where computer servers and related equipment are operated"
+   },
+   {
+    "id": "Q483639",
+    "label": "cloud computing",
+    "companies": 124,
+    "description": "form of Internet-based computing, whereby shared resources, software and information are provided to computers and other devices"
+   }
+  ]
+ },
+ "constructiontech": {
+  "name": "ConstructionTech",
+  "industries": [
+   {
+    "id": "Q13405640",
+    "label": "construction industry",
+    "companies": 251,
+    "description": "production of goods and services involved in the process of constructing buildings or infrastructure"
+   },
+   {
+    "id": "Q385378",
+    "label": "construction",
+    "companies": 537,
+    "description": "economic activity that consists of the building or assembling of a building or infrastructure"
+   },
+   {
+    "id": "Q77590",
+    "label": "civil engineering",
+    "companies": 61,
+    "description": "engineering discipline specializing in design, construction and maintenance of the built environment"
+   }
+  ]
+ },
+ "consumer-health": {
+  "name": "Consumer Health",
+  "industries": [
+   {
+    "id": "Q15067276",
+    "label": "health care industry",
+    "companies": 232,
+    "description": "industry dedicated to providing health care services and products"
+   },
+   {
+    "id": "Q645858",
+    "label": "dietary supplement",
+    "companies": 52,
+    "description": "Product intended to supplement the diet with vitamins, minerals, herbs, amino acids, or enzymes"
+   },
+   {
+    "id": "Q31207",
+    "label": "health care",
+    "companies": 438,
+    "description": "prevention of disease and promotion of wellbeing of humans and animals"
+   }
+  ]
+ },
+ "consumer-internet": {
+  "name": "Consumer Internet",
+  "industries": [
+   {
+    "id": "Q56611700",
+    "label": "Internet industry",
+    "companies": 156,
+    "description": "type of industry for Internet activities"
+   },
+   {
+    "id": "Q19967801",
+    "label": "online service",
+    "companies": 15,
+    "description": "product or service provided on the Internet"
+   },
+   {
+    "id": "Q75",
+    "label": "Internet",
+    "companies": 205,
+    "description": "global system of connected computer networks based on IP addressing and routing protocols"
+   }
+  ]
+ },
+ "cosmetics": {
+  "name": "Cosmetics",
+  "industries": [
+   {
+    "id": "Q12752882",
+    "label": "cosmetics industry",
+    "companies": 333,
+    "description": "industry that manufactures and distributes cosmetic products"
+   },
+   {
+    "id": "Q3246832",
+    "label": "personal care product",
+    "companies": 49,
+    "description": "consumer product used in personal hygiene or for beautification"
+   }
+  ]
+ },
+ "creator-passion-economy": {
+  "name": "Creator/Passion Economy",
+  "industries": [
+   {
+    "id": "Q6030243",
+    "label": "influencer marketing",
+    "companies": 14,
+    "description": "type of social media marketing"
+   },
+   {
+    "id": "Q109536937",
+    "label": "creator economy",
+    "companies": 7,
+    "description": "economic activities impacting online content creators"
+   },
+   {
+    "id": "Q5276056",
+    "label": "content creation",
+    "companies": 3,
+    "description": "activity of the contribution of information to any media"
+   }
+  ]
+ },
+ "cybersecurity": {
+  "name": "Cybersecurity",
+  "industries": [
+   {
+    "id": "Q3510521",
+    "label": "computer security",
+    "companies": 373,
+    "description": "protection of computer systems and networks from theft, damage, misuse or data leak"
+   },
+   {
+    "id": "Q17233037",
+    "label": "cybersecurity",
+    "companies": 24,
+    "description": "study of information security on connected systems"
+   },
+   {
+    "id": "Q870898",
+    "label": "computer security software",
+    "companies": 7,
+    "description": "any computer software designed to enhance or safeguard information or system security"
+   }
+  ]
+ },
+ "data-services": {
+  "name": "Data Services",
+  "industries": [
+   {
+    "id": "Q11492760",
+    "label": "information services",
+    "companies": 11,
+    "description": "services provided by libraries, information institutions or other organizations for the purpose of conveying information"
+   },
+   {
+    "id": "Q1149776",
+    "label": "data management",
+    "companies": 9,
+    "description": "disciplines related to managing data as a resource"
+   },
+   {
+    "id": "Q112165979",
+    "label": "data processing, hosting and related activities",
+    "companies": 5,
+    "description": "economic activity defined by the French nomenclature of activities rev. 2"
+   }
+  ]
+ },
+ "deeptech": {
+  "name": "DeepTech",
+  "industries": [
+   {
+    "id": "Q11023",
+    "label": "engineering",
+    "companies": 156,
+    "description": "type of applied science"
+   },
+   {
+    "id": "Q11016",
+    "label": "technology",
+    "companies": 194,
+    "description": "making, modification, usage, and knowledge of tools, machines, techniques, crafts, systems, and methods of organization, or tools and techniques so created"
+   }
+  ]
+ },
+ "defensetech": {
+  "name": "DefenseTech",
+  "industries": [
+   {
+    "id": "Q392933",
+    "label": "weapons industry",
+    "companies": 360,
+    "description": "industrial sector which manufactures weapons and military technology and equipment"
+   },
+   {
+    "id": "Q3477363",
+    "label": "aerospace industry",
+    "companies": 676,
+    "description": "type of industry"
+   }
+  ]
+ },
+ "developer-tools": {
+  "name": "Developer Tools",
+  "industries": [
+   {
+    "id": "Q638608",
+    "label": "software development",
+    "companies": 400,
+    "description": "creation and maintaining of programs and applications"
+   },
+   {
+    "id": "Q880371",
+    "label": "software industry",
+    "companies": 2457,
+    "description": "businesses for development, maintenance and publication of software"
+   }
+  ]
+ },
+ "diagnostics": {
+  "name": "Diagnostics",
+  "industries": [
+   {
+    "id": "Q931309",
+    "label": "medical imaging",
+    "companies": 8,
+    "description": "added from a targeted Wikidata search"
+   },
+   {
+    "id": "Q2296168",
+    "label": "medical laboratory",
+    "companies": 2,
+    "description": "added from a targeted Wikidata search"
+   }
+  ]
+ },
+ "digital-health": {
+  "name": "Digital Health",
+  "industries": [
+   {
+    "id": "Q1519843",
+    "label": "medical technology",
+    "companies": 68,
+    "description": "application of organized knowledge and skills in the form of devices, medicines, vaccines, procedures and systems developed to solve a health problem"
+   },
+   {
+    "id": "Q46994",
+    "label": "telemedicine",
+    "companies": 36,
+    "description": "providing clinical health care from a distance through telecommunication and information technology"
+   },
+   {
+    "id": "Q870895",
+    "label": "health informatics",
+    "companies": 18,
+    "description": "discipline at the intersection of information science, computer science, and health care"
+   }
+  ]
+ },
+ "direct-to-consumer-dtc": {
+  "name": "Direct-to-Consumer (DTC)",
+  "industries": [
+   {
+    "id": "Q56573357",
+    "label": "consumer goods industry",
+    "companies": 100,
+    "description": "economic branch that produces goods for final consumption"
+   },
+   {
+    "id": "Q484847",
+    "label": "e-commerce",
+    "companies": 1068,
+    "description": "type of business industry usually conducted over the Internet"
+   },
+   {
+    "id": "Q126793",
+    "label": "retail",
+    "companies": 3197,
+    "description": "sale of goods and services from individuals or businesses to the end-user"
+   }
+  ]
+ },
+ "drug-delivery": {
+  "name": "Drug Delivery",
+  "industries": [
+   {
+    "id": "Q507443",
+    "label": "pharmaceutical industry",
+    "companies": 761,
+    "description": "develops, produces, and markets drugs or pharmaceuticals licensed for use as medications"
+   },
+   {
+    "id": "Q614304",
+    "label": "pharmacy",
+    "companies": 47,
+    "description": "science that studies the chemical, pharmacological and pharmaceutical properties of drugs"
+   }
+  ]
+ },
+ "e-commerce": {
+  "name": "E-commerce",
+  "industries": [
+   {
+    "id": "Q484847",
+    "label": "e-commerce",
+    "companies": 1068,
+    "description": "type of business industry usually conducted over the Internet"
+   },
+   {
+    "id": "Q3390477",
+    "label": "online marketplace",
+    "companies": 48,
+    "description": "type of e-commerce site"
+   },
+   {
+    "id": "Q4382945",
+    "label": "online shop",
+    "companies": 39,
+    "description": "Internet-based retailer"
+   }
+  ]
+ },
+ "education": {
+  "name": "Education",
+  "industries": [
+   {
+    "id": "Q1068473",
+    "label": "educational technology",
+    "companies": 171,
+    "description": "use of technology in education to improve learning and teaching; not restricted to high technology"
+   },
+   {
+    "id": "Q11499366",
+    "label": "education industry",
+    "companies": 38,
+    "description": "economic branch of learning activites"
+   },
+   {
+    "id": "Q8434",
+    "label": "education",
+    "companies": 168,
+    "description": "transmission of knowledge and skills"
+   }
+  ]
+ },
+ "energytech": {
+  "name": "EnergyTech",
+  "industries": [
+   {
+    "id": "Q2316331",
+    "label": "electric power industry",
+    "companies": 190,
+    "description": "industry that provides the production and delivery of electric energy"
+   },
+   {
+    "id": "Q2151621",
+    "label": "energy industry",
+    "companies": 394,
+    "description": "industries involved in producing, selling, and distributing energy (in all forms, e.g. petroleum, natural gas, coal, peat, firewood, nuclear energy, solar energy, hydroelectric energy, wind energy, geothermal energy)"
+   },
+   {
+    "id": "Q12705",
+    "label": "renewable energy",
+    "companies": 68,
+    "description": "energy collected from renewable resources"
+   }
+  ]
+ },
+ "enterprise-applications": {
+  "name": "Enterprise Applications",
+  "industries": [
+   {
+    "id": "Q166142",
+    "label": "application software",
+    "companies": 34,
+    "description": "software program or group of programs designed for end-users"
+   },
+   {
+    "id": "Q1318054",
+    "label": "enterprise software",
+    "companies": 56,
+    "description": "software targeted towards corporations/organisations"
+   },
+   {
+    "id": "Q97466003",
+    "label": "business software industry",
+    "companies": 17,
+    "description": ""
+   },
+   {
+    "id": "Q880371",
+    "label": "software industry",
+    "companies": 2457,
+    "description": "businesses for development, maintenance and publication of software"
+   }
+  ]
+ },
+ "enterprise-infrastructure": {
+  "name": "Enterprise Infrastructure",
+  "industries": [
+   {
+    "id": "Q1540863",
+    "label": "information technology consulting",
+    "companies": 202,
+    "description": "field that focuses on advising businesses on how best to use information technology"
+   },
+   {
+    "id": "Q11661",
+    "label": "information technology",
+    "companies": 823,
+    "description": "development, management, and use of computer-based information systems"
+   },
+   {
+    "id": "Q3510521",
+    "label": "computer security",
+    "companies": 373,
+    "description": "protection of computer systems and networks from theft, damage, misuse or data leak"
+   }
+  ]
+ },
+ "enterprise": {
+  "name": "Enterprise",
+  "industries": [
+   {
+    "id": "Q97466003",
+    "label": "business software industry",
+    "companies": 17,
+    "description": ""
+   },
+   {
+    "id": "Q11661",
+    "label": "information technology",
+    "companies": 823,
+    "description": "development, management, and use of computer-based information systems"
+   },
+   {
+    "id": "Q880371",
+    "label": "software industry",
+    "companies": 2457,
+    "description": "businesses for development, maintenance and publication of software"
+   }
+  ]
+ },
+ "entertainment-sports": {
+  "name": "Entertainment & Sports",
+  "industries": [
+   {
+    "id": "Q19595701",
+    "label": "entertainment industry",
+    "companies": 124,
+    "description": "part of the tertiary sector of the economy and includes a large number of sub-industries devoted to entertainment"
+   },
+   {
+    "id": "Q4438117",
+    "label": "sports industry",
+    "companies": 70,
+    "description": "industry focused on sports"
+   },
+   {
+    "id": "Q746359",
+    "label": "music industry",
+    "companies": 205,
+    "description": "companies and individuals that create and sell music and make money off of sales"
+   }
+  ]
+ },
+ "fashion": {
+  "name": "Fashion",
+  "industries": [
+   {
+    "id": "Q11828862",
+    "label": "clothing industry",
+    "companies": 575,
+    "description": "industry encompassing the design, manufacturing, wholesaling and retailing of clothes"
+   },
+   {
+    "id": "Q607081",
+    "label": "textile industry",
+    "companies": 396,
+    "description": "economic sector"
+   },
+   {
+    "id": "Q12684",
+    "label": "fashion",
+    "companies": 309,
+    "description": "popular style or practice in clothing, personal adornment, or decorative arts"
+   },
+   {
+    "id": "Q1065579",
+    "label": "fashion accessory",
+    "companies": 4,
+    "description": "item carried or worn which is used to contribute to the wearer's outfit"
+   }
+  ]
+ },
+ "fintech": {
+  "name": "FinTech",
+  "industries": [
+   {
+    "id": "Q16319025",
+    "label": "fintech",
+    "companies": 427,
+    "description": "innovative technologies and systems that improve, automate, or disrupt the delivery of financial services across sectors including payments, lending, investments, insurance and digital assets"
+   }
+  ]
+ },
+ "food-and-beverage": {
+  "name": "Food and Beverage",
+  "industries": [
+   {
+    "id": "Q540912",
+    "label": "food industry",
+    "companies": 1124,
+    "description": "type of industry; collective of diverse businesses that supplies much of the world's food"
+   },
+   {
+    "id": "Q4899370",
+    "label": "beverage industry",
+    "companies": 301,
+    "description": "drink-producing industry"
+   },
+   {
+    "id": "Q11707",
+    "label": "restaurant",
+    "companies": 297,
+    "description": "single establishment which prepares and serves food, located in building"
+   }
+  ]
+ },
+ "future-of-work": {
+  "name": "Future of Work",
+  "industries": [
+   {
+    "id": "Q63348704",
+    "label": "employment services industry",
+    "companies": 27,
+    "description": "field of business that comprises the companies which provide staffing and recruiting services"
+   },
+   {
+    "id": "Q1056396",
+    "label": "human resource management",
+    "companies": 75,
+    "description": "field in economy"
+   }
+  ]
+ },
+ "games": {
+  "name": "Games",
+  "industries": [
+   {
+    "id": "Q941594",
+    "label": "video game industry",
+    "companies": 1147,
+    "description": "economic sector involved with the development, marketing and sales of video games"
+   }
+  ]
+ },
+ "gaming-esports": {
+  "name": "Gaming/eSports",
+  "industries": [
+   {
+    "id": "Q300920",
+    "label": "esports",
+    "companies": 13,
+    "description": "form of competition that is facilitated by electronic systems, particularly video games"
+   },
+   {
+    "id": "Q941594",
+    "label": "video game industry",
+    "companies": 1147,
+    "description": "economic sector involved with the development, marketing and sales of video games"
+   }
+  ]
+ },
+ "general-tech": {
+  "name": "General Tech",
+  "industries": [
+   {
+    "id": "Q18388277",
+    "label": "technology company",
+    "companies": 25,
+    "description": "company specializing in technology"
+   },
+   {
+    "id": "Q11661",
+    "label": "information technology",
+    "companies": 823,
+    "description": "development, management, and use of computer-based information systems"
+   }
+  ]
+ },
+ "generative-tech-ai": {
+  "name": "Generative Tech/AI",
+  "industries": [
+   {
+    "id": "Q117246174",
+    "label": "generative artificial intelligence",
+    "companies": 10,
+    "description": "artificial intelligence model capable of generating content in response to a prompt"
+   },
+   {
+    "id": "Q11660",
+    "label": "artificial intelligence",
+    "companies": 889,
+    "description": "field that develops and studies software enabling machines to exhibit intelligent behavior"
+   },
+   {
+    "id": "Q2539",
+    "label": "machine learning",
+    "companies": 10,
+    "description": "scientific study of algorithms and statistical models that computer systems use to perform tasks without explicit instructions"
+   }
+  ]
+ },
+ "gig-economy": {
+  "name": "Gig Economy",
+  "industries": [
+   {
+    "id": "Q2277143",
+    "label": "sharing economy",
+    "companies": 9,
+    "description": "economic and social systems that enable shared access to goods, services, data and talent"
+   },
+   {
+    "id": "Q59545",
+    "label": "temporary work agency",
+    "companies": 6,
+    "description": "agency that connects temp workers with other businesses"
+   },
+   {
+    "id": "Q667944",
+    "label": "temporary work",
+    "companies": 4,
+    "description": "situation where the employee is expected to leave the employer within a certain period of time"
+   }
+  ]
+ },
+ "govtech": {
+  "name": "GovTech",
+  "industries": [
+   {
+    "id": "Q294217",
+    "label": "public sector",
+    "companies": 6,
+    "description": "public part of the economy"
+   },
+   {
+    "id": "Q270791",
+    "label": "state-owned enterprise",
+    "companies": 4,
+    "description": "legal entity controlled by a government to undertake commercial activities"
+   }
+  ]
+ },
+ "hardware": {
+  "name": "Hardware",
+  "industries": [
+   {
+    "id": "Q73768396",
+    "label": "consumer electronics industry",
+    "companies": 301,
+    "description": "economic sector concerned with electronic equipment intended for everyday use"
+   },
+   {
+    "id": "Q5358497",
+    "label": "electronics industry",
+    "companies": 324,
+    "description": "industry focused in any electronics manufacturing, not only semiconductors"
+   },
+   {
+    "id": "Q581105",
+    "label": "consumer electronics",
+    "companies": 5,
+    "description": "electronic equipment intended for everyday use, typically in private homes"
+   }
+  ]
+ },
+ "health-hospital-services": {
+  "name": "Health & Hospital Services",
+  "industries": [
+   {
+    "id": "Q16917",
+    "label": "hospital",
+    "companies": 5,
+    "description": "health care facility"
+   },
+   {
+    "id": "Q15067276",
+    "label": "health care industry",
+    "companies": 232,
+    "description": "industry dedicated to providing health care services and products"
+   },
+   {
+    "id": "Q31207",
+    "label": "health care",
+    "companies": 438,
+    "description": "prevention of disease and promotion of wellbeing of humans and animals"
+   }
+  ]
+ },
+ "health-it": {
+  "name": "Health IT",
+  "industries": [
+   {
+    "id": "Q870895",
+    "label": "health informatics",
+    "companies": 18,
+    "description": "discipline at the intersection of information science, computer science, and health care"
+   },
+   {
+    "id": "Q10910281",
+    "label": "health information technology",
+    "companies": 18,
+    "description": "health technology applied to health and health care"
+   },
+   {
+    "id": "Q3751111",
+    "label": "medical software",
+    "companies": 10,
+    "description": "type of software"
+   }
+  ]
+ },
+ "human-capital-hrtech": {
+  "name": "Human Capital/HRTech",
+  "industries": [
+   {
+    "id": "Q899277",
+    "label": "recruitment",
+    "companies": 70,
+    "description": "process of attracting, selecting and appointing candidates to a job or other organization"
+   },
+   {
+    "id": "Q261362",
+    "label": "employment agency",
+    "companies": 19,
+    "description": "organization which matches employers to employees"
+   },
+   {
+    "id": "Q1056396",
+    "label": "human resource management",
+    "companies": 75,
+    "description": "field in economy"
+   }
+  ]
+ },
+ "impact": {
+  "name": "Impact",
+  "industries": [
+   {
+    "id": "Q17082023",
+    "label": "impact investing",
+    "companies": 3,
+    "description": "investing in enterprises aiming at creating social/environmental impact alongside profit"
+   },
+   {
+    "id": "Q219416",
+    "label": "sustainability",
+    "companies": 7,
+    "description": "ability of human civilization to coexist with the biosphere in a steady state"
+   }
+  ]
+ },
+ "insurance": {
+  "name": "Insurance",
+  "industries": [
+   {
+    "id": "Q2518196",
+    "label": "insurance industry",
+    "companies": 221,
+    "description": "aggregate of insurance supply and demand"
+   },
+   {
+    "id": "Q2143354",
+    "label": "insurance company",
+    "companies": 71,
+    "description": "business enterprise which provides a means of protection from financial loss"
+   },
+   {
+    "id": "Q43183",
+    "label": "insurance",
+    "companies": 485,
+    "description": "equitable transfer of the risk of a loss, from one entity to another in exchange for payment"
+   }
+  ]
+ },
+ "iot": {
+  "name": "IoT",
+  "industries": [
+   {
+    "id": "Q251212",
+    "label": "Internet of Things",
+    "companies": 22,
+    "description": "Internet-like structure connecting everyday physical objects"
+   },
+   {
+    "id": "Q848436",
+    "label": "home automation",
+    "companies": 30,
+    "description": "building automation for a home"
+   },
+   {
+    "id": "Q193040",
+    "label": "embedded system",
+    "companies": 9,
+    "description": "computer system with a dedicated function within a larger mechanical or electrical system"
+   }
+  ]
+ },
+ "legaltech": {
+  "name": "LegalTech",
+  "industries": [
+   {
+    "id": "Q23931362",
+    "label": "legal tech",
+    "companies": 55,
+    "description": "technology and software to provide legal education/services knowledge"
+   },
+   {
+    "id": "Q1494322",
+    "label": "legal services",
+    "companies": 65,
+    "description": "service provided within the legal area"
+   }
+  ]
+ },
+ "local-services": {
+  "name": "Local Services",
+  "industries": [
+   {
+    "id": "Q126793",
+    "label": "retail",
+    "companies": 3197,
+    "description": "sale of goods and services from individuals or businesses to the end-user"
+   },
+   {
+    "id": "Q1495452",
+    "label": "hospitality industry",
+    "companies": 235,
+    "description": "broad category of fields within the service industry"
+   },
+   {
+    "id": "Q55638",
+    "label": "tertiary sector of the economy",
+    "companies": 114,
+    "description": "service sector, as opposed to raw materials & manufacturing"
+   },
+   {
+    "id": "Q507619",
+    "label": "retail chain",
+    "companies": 35,
+    "description": "retail outlets that share a brand and central management, and usually have standardized business methods and practices"
+   },
+   {
+    "id": "Q1959446",
+    "label": "service sector",
+    "companies": 32,
+    "description": "third of the three economic sectors of the three-sector theory"
+   },
+   {
+    "id": "Q213441",
+    "label": "shop",
+    "companies": 8,
+    "description": "place where items or services are sold"
+   }
+  ]
+ },
+ "lodging-hospitality": {
+  "name": "Lodging/Hospitality",
+  "industries": [
+   {
+    "id": "Q1285245",
+    "label": "hotel industry",
+    "companies": 53,
+    "description": "service industry sector involved in the provision of lodging"
+   },
+   {
+    "id": "Q1495452",
+    "label": "hospitality industry",
+    "companies": 235,
+    "description": "broad category of fields within the service industry"
+   },
+   {
+    "id": "Q11707",
+    "label": "restaurant",
+    "companies": 297,
+    "description": "single establishment which prepares and serves food, located in building"
+   }
+  ]
+ },
+ "logistics": {
+  "name": "Logistics",
+  "industries": [
+   {
+    "id": "Q177777",
+    "label": "logistics",
+    "companies": 423,
+    "description": "management of the flow of resources"
+   },
+   {
+    "id": "Q651658",
+    "label": "freight transport",
+    "companies": 143,
+    "description": "physical process of transporting commodities and merchandise goods and cargo"
+   },
+   {
+    "id": "Q492886",
+    "label": "supply chain management",
+    "companies": 22,
+    "description": "management of the flow of goods and services"
+   }
+  ]
+ },
+ "manufacturing": {
+  "name": "Manufacturing",
+  "industries": [
+   {
+    "id": "Q187939",
+    "label": "industrial manufacturing",
+    "companies": 1180,
+    "description": "industrial activity producing goods for sale using labor and machines"
+   },
+   {
+    "id": "Q11049265",
+    "label": "manufacturing engineering",
+    "companies": 5,
+    "description": "discipline of engineering dealing with various manufacturing sciences and practices including the research, design and development of systems, processes, machines, tools, and equipment"
+   },
+   {
+    "id": "Q83405",
+    "label": "factory",
+    "companies": 13,
+    "description": "facility where goods are industrially made, or processed"
+   }
+  ]
+ },
+ "marketingtech": {
+  "name": "MarketingTech",
+  "industries": [
+   {
+    "id": "Q216931",
+    "label": "advertising agency",
+    "companies": 39,
+    "description": "business creating advertisements and/or placing them in third-party media publications"
+   },
+   {
+    "id": "Q37038",
+    "label": "advertising",
+    "companies": 236,
+    "description": "communication aimed at promoting products, services, or ideas to a target audience through various media channels"
+   },
+   {
+    "id": "Q39809",
+    "label": "marketing",
+    "companies": 312,
+    "description": "study and process of promoting, distributing, and selling products or services to customers"
+   }
+  ]
+ },
+ "marketplaces": {
+  "name": "Marketplaces",
+  "industries": [
+   {
+    "id": "Q3390477",
+    "label": "online marketplace",
+    "companies": 48,
+    "description": "type of e-commerce site"
+   },
+   {
+    "id": "Q177923",
+    "label": "auction",
+    "companies": 39,
+    "description": "process of buying and selling goods or services by offering them up for bid, taking bids, and then selling the item to the highest bidder"
+   },
+   {
+    "id": "Q484847",
+    "label": "e-commerce",
+    "companies": 1068,
+    "description": "type of business industry usually conducted over the Internet"
+   }
+  ]
+ },
+ "material-science": {
+  "name": "Material Science",
+  "industries": [
+   {
+    "id": "Q1085159",
+    "label": "Advanced Materials",
+    "companies": 4,
+    "description": "peer-reviewed scientific journal"
+   },
+   {
+    "id": "Q228736",
+    "label": "materials science",
+    "companies": 6,
+    "description": "research, discovery and design of physical materials (especially solids)"
+   },
+   {
+    "id": "Q11468",
+    "label": "nanotechnology",
+    "companies": 19,
+    "description": "field of applied science whose theme is the control of matter on atomic and (supra)molecular scale"
+   }
+  ]
+ },
+ "media-content": {
+  "name": "Media/Content",
+  "industries": [
+   {
+    "id": "Q56611639",
+    "label": "media industry",
+    "companies": 164,
+    "description": "business model based on communicating information, art and entertainment to a large audience"
+   },
+   {
+    "id": "Q3972943",
+    "label": "publishing",
+    "companies": 517,
+    "description": "process of production and dissemination of literature, music, or information"
+   },
+   {
+    "id": "Q11033",
+    "label": "mass media",
+    "companies": 309,
+    "description": "media technologies that are intended to reach a large audience by mass communication"
+   },
+   {
+    "id": "Q1415395",
+    "label": "film industry",
+    "companies": 218,
+    "description": "comprises the technological and commercial institutions of filmmaking"
+   }
+  ]
+ },
+ "medical-devices": {
+  "name": "Medical Devices",
+  "industries": [
+   {
+    "id": "Q63383285",
+    "label": "medical technology industry",
+    "companies": 65,
+    "description": "economic branch and concept"
+   },
+   {
+    "id": "Q1519843",
+    "label": "medical technology",
+    "companies": 68,
+    "description": "application of organized knowledge and skills in the form of devices, medicines, vaccines, procedures and systems developed to solve a health problem"
+   },
+   {
+    "id": "Q6554101",
+    "label": "medical device",
+    "companies": 24,
+    "description": "any device intended to be used for medical purposes"
+   },
+   {
+    "id": "Q6657015",
+    "label": "medical equipment",
+    "companies": 15,
+    "description": "equipment designed to aid in the diagnosis, monitoring or treatment of medical conditions"
+   }
+  ]
+ },
+ "messaging": {
+  "name": "Messaging",
+  "industries": [
+   {
+    "id": "Q2401749",
+    "label": "telecommunications company",
+    "companies": 16,
+    "description": "company that operates in the telecommunications industry"
+   },
+   {
+    "id": "Q418",
+    "label": "telecommunications",
+    "companies": 742,
+    "description": "electronic transmission of information between locations"
+   }
+  ]
+ },
+ "parenting-families": {
+  "name": "Parenting/Families",
+  "industries": [
+   {
+    "id": "Q1455871",
+    "label": "child care",
+    "companies": 14,
+    "description": "action or skill of looking after children by a day-care center, babysitter, or other providers"
+   },
+   {
+    "id": "Q1472221",
+    "label": "early childhood education",
+    "companies": 11,
+    "description": "early childhood educationeducation for young children before primary school"
+   },
+   {
+    "id": "Q1217379",
+    "label": "parenting",
+    "companies": 4,
+    "description": "process of raising a child"
+   }
+  ]
+ },
+ "payments": {
+  "name": "Payments",
+  "industries": [
+   {
+    "id": "Q1956140",
+    "label": "payment service provider",
+    "companies": 9,
+    "description": "company that allows businesses to accept electronic payments"
+   },
+   {
+    "id": "Q97466005",
+    "label": "mobile payment industry",
+    "companies": 8,
+    "description": ""
+   },
+   {
+    "id": "Q986008",
+    "label": "payment system",
+    "companies": 5,
+    "description": "system used to transfer monetary value, including institutions, instruments, people, rules, procedures, standards, and technologies"
+   }
+  ]
+ },
+ "pharmaceuticals": {
+  "name": "Pharmaceuticals",
+  "industries": [
+   {
+    "id": "Q507443",
+    "label": "pharmaceutical industry",
+    "companies": 761,
+    "description": "develops, produces, and markets drugs or pharmaceuticals licensed for use as medications"
+   },
+   {
+    "id": "Q614304",
+    "label": "pharmacy",
+    "companies": 47,
+    "description": "science that studies the chemical, pharmacological and pharmaceutical properties of drugs"
+   }
+  ]
+ },
+ "real-estate-proptech": {
+  "name": "Real Estate/PropTech",
+  "industries": [
+   {
+    "id": "Q1660132",
+    "label": "real estate industry",
+    "companies": 350,
+    "description": "type of industry that is engaged in the development, production, management and marketing of real estate"
+   },
+   {
+    "id": "Q1618728",
+    "label": "property management",
+    "companies": 88,
+    "description": "operation, control, and oversight of real estate and physical property"
+   },
+   {
+    "id": "Q684740",
+    "label": "real property",
+    "companies": 79,
+    "description": "subset of land that has been legally defined and the improvements to it made by human efforts"
+   }
+  ]
+ },
+ "retail": {
+  "name": "Retail",
+  "industries": [
+   {
+    "id": "Q56573357",
+    "label": "consumer goods industry",
+    "companies": 100,
+    "description": "economic branch that produces goods for final consumption"
+   },
+   {
+    "id": "Q126793",
+    "label": "retail",
+    "companies": 3197,
+    "description": "sale of goods and services from individuals or businesses to the end-user"
+   },
+   {
+    "id": "Q484847",
+    "label": "e-commerce",
+    "companies": 1068,
+    "description": "type of business industry usually conducted over the Internet"
+   }
+  ]
+ },
+ "robotics": {
+  "name": "Robotics",
+  "industries": [
+   {
+    "id": "Q170978",
+    "label": "robotics",
+    "companies": 99,
+    "description": "design, construction, operation, and application of robots"
+   },
+   {
+    "id": "Q184199",
+    "label": "automation",
+    "companies": 51,
+    "description": "control systems using technology such that a process or procedure is performed with minimal human assistance"
+   }
+  ]
+ },
+ "saas": {
+  "name": "SaaS",
+  "industries": [
+   {
+    "id": "Q1254596",
+    "label": "software as a service",
+    "companies": 263,
+    "description": "software licensing and delivery model in which software is licensed on a subscription basis and is centrally hosted"
+   },
+   {
+    "id": "Q483639",
+    "label": "cloud computing",
+    "companies": 124,
+    "description": "form of Internet-based computing, whereby shared resources, software and information are provided to computers and other devices"
+   },
+   {
+    "id": "Q880371",
+    "label": "software industry",
+    "companies": 2457,
+    "description": "businesses for development, maintenance and publication of software"
+   }
+  ]
+ },
+ "sales-crm": {
+  "name": "Sales & CRM",
+  "industries": [
+   {
+    "id": "Q485643",
+    "label": "customer relationship management",
+    "companies": 24,
+    "description": "process of managing interactions with customers"
+   },
+   {
+    "id": "Q97466003",
+    "label": "business software industry",
+    "companies": 17,
+    "description": ""
+   },
+   {
+    "id": "Q39809",
+    "label": "marketing",
+    "companies": 312,
+    "description": "study and process of promoting, distributing, and selling products or services to customers"
+   }
+  ]
+ },
+ "security": {
+  "name": "Security",
+  "industries": [
+   {
+    "id": "Q3510521",
+    "label": "computer security",
+    "companies": 373,
+    "description": "protection of computer systems and networks from theft, damage, misuse or data leak"
+   },
+   {
+    "id": "Q12458062",
+    "label": "security industry",
+    "companies": 18,
+    "description": ""
+   },
+   {
+    "id": "Q1116826",
+    "label": "private security company",
+    "companies": 13,
+    "description": "type of company"
+   }
+  ]
+ },
+ "semiconductors": {
+  "name": "Semiconductors",
+  "industries": [
+   {
+    "id": "Q2986369",
+    "label": "semiconductor industry",
+    "companies": 160,
+    "description": "companies engaged in the design and fabrication of semiconductor devices"
+   },
+   {
+    "id": "Q5358497",
+    "label": "electronics industry",
+    "companies": 324,
+    "description": "industry focused in any electronics manufacturing, not only semiconductors"
+   },
+   {
+    "id": "Q11456",
+    "label": "semiconductor",
+    "companies": 24,
+    "description": "material that has electrical conductivity intermediate to that of a conductor and an insulator"
+   }
+  ]
+ },
+ "smart-cities-urbantech": {
+  "name": "Smart Cities/UrbanTech",
+  "industries": [
+   {
+    "id": "Q1231558",
+    "label": "smart city",
+    "companies": 4,
+    "description": "urban area that uses different types of electronic Internet of things sensors to collect data and then use these data to manage assets and resources efficiently"
+   },
+   {
+    "id": "Q69883",
+    "label": "urban planning",
+    "companies": 8,
+    "description": "technical and political process concerned with the use of land and design of the urban environment"
+   },
+   {
+    "id": "Q77590",
+    "label": "civil engineering",
+    "companies": 61,
+    "description": "engineering discipline specializing in design, construction and maintenance of the built environment"
+   }
+  ]
+ },
+ "smb-software": {
+  "name": "SMB Software",
+  "industries": [
+   {
+    "id": "Q97466003",
+    "label": "business software industry",
+    "companies": 17,
+    "description": ""
+   },
+   {
+    "id": "Q1318054",
+    "label": "enterprise software",
+    "companies": 56,
+    "description": "software targeted towards corporations/organisations"
+   },
+   {
+    "id": "Q166142",
+    "label": "application software",
+    "companies": 34,
+    "description": "software program or group of programs designed for end-users"
+   },
+   {
+    "id": "Q880371",
+    "label": "software industry",
+    "companies": 2457,
+    "description": "businesses for development, maintenance and publication of software"
+   }
+  ]
+ },
+ "social-commerce": {
+  "name": "Social Commerce",
+  "industries": [
+   {
+    "id": "Q212930",
+    "label": "online shopping",
+    "companies": 39,
+    "description": "form of electronic commerce"
+   },
+   {
+    "id": "Q3220391",
+    "label": "social networking service",
+    "companies": 21,
+    "description": "online platform that facilitates the building of social relations"
+   },
+   {
+    "id": "Q484847",
+    "label": "e-commerce",
+    "companies": 1068,
+    "description": "type of business industry usually conducted over the Internet"
+   }
+  ]
+ },
+ "social-networks": {
+  "name": "Social Networks",
+  "industries": [
+   {
+    "id": "Q3220391",
+    "label": "social networking service",
+    "companies": 21,
+    "description": "online platform that facilitates the building of social relations"
+   },
+   {
+    "id": "Q202833",
+    "label": "social media",
+    "companies": 29,
+    "description": "virtual online communities"
+   },
+   {
+    "id": "Q75",
+    "label": "Internet",
+    "companies": 205,
+    "description": "global system of connected computer networks based on IP addressing and routing protocols"
+   }
+  ]
+ },
+ "space": {
+  "name": "Space",
+  "industries": [
+   {
+    "id": "Q2729047",
+    "label": "space industry",
+    "companies": 113,
+    "description": "activities related to manufacturing components that go into Earth's orbit or beyond"
+   },
+   {
+    "id": "Q3477363",
+    "label": "aerospace industry",
+    "companies": 676,
+    "description": "type of industry"
+   }
+  ]
+ },
+ "supply-chain-tech": {
+  "name": "Supply Chain Tech",
+  "industries": [
+   {
+    "id": "Q492886",
+    "label": "supply chain management",
+    "companies": 22,
+    "description": "management of the flow of goods and services"
+   },
+   {
+    "id": "Q829492",
+    "label": "procurement",
+    "companies": 16,
+    "description": "acquisition of goods and services"
+   },
+   {
+    "id": "Q177777",
+    "label": "logistics",
+    "companies": 423,
+    "description": "management of the flow of resources"
+   },
+   {
+    "id": "Q651658",
+    "label": "freight transport",
+    "companies": 143,
+    "description": "physical process of transporting commodities and merchandise goods and cargo"
+   }
+  ]
+ },
+ "therapeutics": {
+  "name": "Therapeutics",
+  "industries": [
+   {
+    "id": "Q679692",
+    "label": "biopharmaceutical",
+    "companies": 6,
+    "description": "type of pharmaceutical drug product"
+   },
+   {
+    "id": "Q507443",
+    "label": "pharmaceutical industry",
+    "companies": 761,
+    "description": "develops, produces, and markets drugs or pharmaceuticals licensed for use as medications"
+   }
+  ]
+ },
+ "transportationtech": {
+  "name": "TransportationTech",
+  "industries": [
+   {
+    "id": "Q2516512",
+    "label": "transport industry",
+    "companies": 155,
+    "description": "type of industry as part of the tertiary sector of the economy; the commercial industry of transporting people and goods"
+   },
+   {
+    "id": "Q7590",
+    "label": "transport",
+    "companies": 253,
+    "description": "human-directed movement of things or people between locations"
+   },
+   {
+    "id": "Q190117",
+    "label": "automotive industry",
+    "companies": 1476,
+    "description": "range of organizations associated with motor vehicles, such as automobiles, trucks and motorcycles"
+   }
+  ]
+ },
+ "travel": {
+  "name": "Travel",
+  "industries": [
+   {
+    "id": "Q1423777",
+    "label": "travel industry",
+    "companies": 24,
+    "description": "economic sector related to travel"
+   },
+   {
+    "id": "Q217107",
+    "label": "travel agency",
+    "companies": 35,
+    "description": "private retailer or public service that provides tourism-related services to the public"
+   },
+   {
+    "id": "Q49389",
+    "label": "tourism",
+    "companies": 362,
+    "description": "travel for pleasure or business"
+   },
+   {
+    "id": "Q1495452",
+    "label": "hospitality industry",
+    "companies": 235,
+    "description": "broad category of fields within the service industry"
+   }
+  ]
+ },
+ "web3-blockchain": {
+  "name": "Web3/Blockchain",
+  "industries": [
+   {
+    "id": "Q20514253",
+    "label": "blockchain",
+    "companies": 47,
+    "description": "distributed data store for digital transactions"
+   },
+   {
+    "id": "Q100269062",
+    "label": "cryptocurrency industry",
+    "companies": 151,
+    "description": "industry related to cryptocurrency"
+   }
+  ]
+ },
+ "web3-crypto": {
+  "name": "Web3/Crypto",
+  "industries": [
+   {
+    "id": "Q13479982",
+    "label": "cryptocurrency",
+    "companies": 28,
+    "description": "digital currency not reliant on a central authority"
+   },
+   {
+    "id": "Q100269062",
+    "label": "cryptocurrency industry",
+    "companies": 151,
+    "description": "industry related to cryptocurrency"
+   },
+   {
+    "id": "Q21769973",
+    "label": "cryptocurrency mining",
+    "companies": 6,
+    "description": "generation of new monetary units through computing cryptographic hashes of transaction data"
+   }
+  ]
+ },
+ "wellness-fitness": {
+  "name": "Wellness & Fitness",
+  "industries": [
+   {
+    "id": "Q112166133",
+    "label": "fitness industry",
+    "companies": 14,
+    "description": "industry"
+   },
+   {
+    "id": "Q1065656",
+    "label": "health club",
+    "companies": 15,
+    "description": "place which houses exercise equipment for the purpose of physical exercise"
+   },
+   {
+    "id": "Q1077209",
+    "label": "wellness",
+    "companies": 21,
+    "description": "holistic concept of health"
+   },
+   {
+    "id": "Q3246832",
+    "label": "personal care product",
+    "companies": 49,
+    "description": "consumer product used in personal hygiene or for beautification"
+   }
+  ]
+ }
+}

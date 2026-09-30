@@ -3586,15 +3586,47 @@ research.get('/company-directory', async (c) => {
   await requireAuth(c);
   const q = String(c.req.query('q') || '').trim().slice(0, 120);
   const country = String(c.req.query('country') || '').trim().slice(0, 120);
+  // A SECTOR FILTER, BECAUSE THE UNIVERSE IS ONLY USABLE PER SECTOR. The
+  // taxonomy count on `/research/markets` argues for a company universe behind
+  // each sector card, and a reader who opens a sector has to be able to see the
+  // records that universe holds — a directory that can only be searched by name
+  // and country cannot answer "which of these are in this sector".
+  //
+  // MATCHED CASE-INSENSITIVELY, and only when the caller supplied a label: the
+  // stored label is the taxonomy name verbatim, and an exact-case comparison
+  // would turn one capitalisation change in the taxonomy into an empty page
+  // that looks like an empty universe.
+  const sector = String(c.req.query('sector') || '').trim().slice(0, 120);
+  // Paged rather than capped silently: `total` is what the caller reports, so a
+  // sector with 1,400 records never reads as the 200 this row happens to return.
+  const limit = Math.min(Math.max(Number(c.req.query('limit') || 200) || 200, 1), 2000);
+  const offset = Math.max(Number(c.req.query('offset') || 0) || 0, 0);
   const rows = await c.env.DB.prepare(
     `SELECT uid, name, website, country, founded_year, sector, source_name,
             source_url, source_license, as_of
        FROM research_company_directory
       WHERE (? = '' OR name LIKE '%' || ? || '%' OR website LIKE '%' || ? || '%')
         AND (? = '' OR country = ?)
-      ORDER BY name COLLATE NOCASE LIMIT 1000`
-  ).bind(q, q, q, country, country).all();
-  return c.json({ items: rows.results || [], source: 'Wikidata', source_boundary: 'Discovery metadata only; no funding, valuation, revenue, market-size, or diligence claims.' });
+        AND (? = '' OR (sector IS NOT NULL AND lower(sector) = lower(?)))
+      ORDER BY name COLLATE NOCASE
+      LIMIT ? OFFSET ?`
+  ).bind(q, q, q, country, country, sector, sector, limit, offset).all();
+  const counted = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n
+       FROM research_company_directory
+      WHERE (? = '' OR name LIKE '%' || ? || '%' OR website LIKE '%' || ? || '%')
+        AND (? = '' OR country = ?)
+        AND (? = '' OR (sector IS NOT NULL AND lower(sector) = lower(?)))`
+  ).bind(q, q, q, country, country, sector, sector).first<{ n: number }>();
+  return c.json({
+    items: rows.results || [],
+    total: Number(counted?.n || 0),
+    limit,
+    offset,
+    sector: sector || null,
+    source: 'Wikidata',
+    source_boundary: 'Discovery metadata only; no funding, valuation, revenue, market-size, or diligence claims.',
+  });
 });
 
 research.get('/company-directory/:uid', async (c) => {

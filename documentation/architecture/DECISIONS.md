@@ -39661,3 +39661,63 @@ passes unchanged.
 `profiling_v2_personas_fixture.test.ts` (pick-one answers accepted);
 `advisor.profiling.test.ts` (the partner sizes above). 16 mutations, 16
 caught.
+
+## D492
+**The markets page stops being a headline and becomes a universe: every taxonomy
+sector gets source-backed company records and its own labelled signal.**
+Reported as a live defect: `/research/markets` showed 82 sector cards with
+supplied counts (488 Advertising, 3,083 AI) and opening any one of them showed
+nothing at all. Two separate causes, both fixed here, and neither was a
+rendering bug.
+
+**Cause 1 — no company records carried a sector.** `research_company_directory`
+(migration 228) shipped 300 rows, and every one of them had `sector = NULL`; the
+sector profile page had no company section at all. The cards' counts were a
+bundled taxonomy constant (`marketDirectory.json`) with nothing behind them.
+
+**Cause 2 — 79 of 82 sectors had no signal.** `MarketSectorProfile` asks
+`GET /api/signals?sector=<taxonomy name>`, and the worker matches that label
+case-insensitively against the seeded feed, which only ever carried
+`Financial Services`, `Technology` and `Healthcare`. Every other sector page
+therefore said "No exact live signal is recorded for this taxonomy label yet" —
+accurate, and useless to the reader who clicked a card.
+
+**What was decided.**
+- **A sector's universe is the directory's rows for that label, read live.**
+  `GET /research/company-directory` gains `sector` (case-insensitive), `limit`,
+  `offset` and a `total`, so a page can say how many records exist rather than
+  how many it happened to return. The bundled `companyDirectory.json` stays as
+  first paint and as the answer when the API cannot be reached; it is no longer
+  the only copy a reader can see.
+- **Records come from Wikidata, and the record cites itself.**
+  `scripts/build-company-universe.py` resolves each taxonomy sector to Wikidata
+  industry items (`scripts/sector-industry-map.json`, curated from
+  `wbsearchentities` candidates ranked by how many companies each one actually
+  carries) and pulls the companies in them, with official website, country and
+  inception year. Every row's `source_url` is its Wikidata entity. These are
+  discovery records; they do not claim to reach the supplied counts, and the
+  page says so beside them.
+- **Signals are drafted, not invented.** `scripts/build-sector-signals.py` gives
+  each sector one signal whose evidence rows are real and are attached to it: a
+  Wikidata entity record, a Hacker News thread, a public repository, a Stack
+  Overflow question — each with the URL a reader can open and the date it was
+  observed. The drafting model is instructed to state nothing that is not in
+  those inputs: no market sizes, no funding, no valuation, and no claim about a
+  named company beyond its identity facts. `confidence_score` and
+  `freshness_score` are computed by the same formulas the worker's ranking
+  engine already uses (`d_e`/`xB`), so the stored hint and the read-time value
+  agree.
+- **A sector label is the taxonomy name, matched case-insensitively, and that is
+  the whole join.** No second taxonomy, no per-sector table, no mapping the two
+  sides can disagree about.
+
+**What this deliberately does not do.** It does not make the supplied counts
+verifiable, and it does not add a licensed private-market source; when one is
+added it replaces the discovery records rather than sitting beside them silently.
+It also does not paginate the sector page: the universe section shows the first
+48 records and links into the directory, which pages the rest.
+
+**Evidence.** `research_company_directory_sector.test.ts` (case-insensitivity,
+blank label means every sector, `total` versus page, paging composition, unknown
+sector). Production reads confirmed the empty universe before the change:
+300 rows, 0 with a sector; 10 signals, 3 distinct sector labels.
