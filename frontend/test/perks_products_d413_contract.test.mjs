@@ -271,11 +271,12 @@ test('the canvas’s placeholder companies stay out, including the partner-side 
  * 3 · Where each side lives                                         *
  * ---------------------------------------------------------------- */
 
-test('a partner on /perks is sent to /offers/perk-deals; founders and the rest keep the marketplace', () => {
+test('a partner on /perks is sent to /offers/perk-deals; the rest use the standalone Perks page', () => {
   const at = app.indexOf('<Route path="/perks"');
   const line = app.slice(at, app.indexOf('\n', at));
-  assert.match(line, /effectiveRole === 'founder' \? founderWorkspace\('grow', <FounderWorkspaceTabs set="grow" user=\{user\}><PerksPage user=\{user\} \/>/);
-  assert.match(line, /: effectiveRole === 'partner' \? <Navigate replace to="\/offers\/perk-deals" \/> : <PartnerWorkspaceTabs set="offers" user=\{user\}><PerksPage user=\{user\} \/>/);
+  assert.match(line, /effectiveRole === 'partner' \? <Navigate replace to="\/offers\/perk-deals" \/> : <PerksPage user=\{user\} \/>/);
+  assert.doesNotMatch(line, /PartnerWorkspaceTabs|FounderWorkspaceTabs/,
+    'the standalone Perks page must not inherit the Offers or Founder shell tabs');
   // And the destination admits a partner, or the redirect lands on a refusal.
   assert.match(app, /<Route path="\/offers\/perk-deals" element=\{guard\(\['admin', 'partner'\], <PartnerBucketRoutes \/>\)\} \/>/);
 });

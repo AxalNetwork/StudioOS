@@ -102,6 +102,11 @@ test('collapsed Pipeline and Offers sections remain reachable from Partner tabs'
     assert.ok(bars.includes(`to: '${path}'`), `${path} is in no Partner tab set`);
     const line = routeLine(path);
     assert.ok(line, `no route for ${path}`);
+    if (path === '/perks') {
+      assert.ok(line.includes('Navigate replace to="/offers/perk-deals"'),
+        '/perks must redirect partners to the dedicated perk-deals zone');
+      continue;
+    }
     assert.ok(line.includes('PartnerWorkspaceTabs'), `${path} does not mount the Partner tab shell`);
   }
   assert.doesNotMatch(bars, /label: 'Office hours'/,

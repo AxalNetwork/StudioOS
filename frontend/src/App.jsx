@@ -2639,11 +2639,10 @@ function AppInner() {
       {/* Same explicit list. The partner and admin tabs inside the page are
           gated on the role again there — a role that cannot submit a listing
           simply does not see the tab. */}
-      {/* D413 — a partner's side of Perks & Products is Submit a perk and
-          Performance, and both live in /offers/perk-deals; claiming is a
-          founder's (D412). So a partner here is sent there. Every other role
-          keeps the marketplace. */}
-      <Route path="/perks" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], effectiveRole === 'founder' ? founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><PerksPage user={user} /></FounderWorkspaceTabs>) : effectiveRole === 'partner' ? <Navigate replace to="/offers/perk-deals" /> : <PartnerWorkspaceTabs set="offers" user={user}><PerksPage user={user} /></PartnerWorkspaceTabs>)} />
+      {/* D413 — the standalone /perks page owns its own Marketplace, My perks
+          and admin Review queue tabs. The partner-side Submit and Performance
+          surface lives separately at /offers/perk-deals. */}
+      <Route path="/perks" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], effectiveRole === 'partner' ? <Navigate replace to="/offers/perk-deals" /> : <PerksPage user={user} />)} />
       <Route path="/raise/capital/pipeline" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapitalWorkspacePage />))} />
        <Route path="/raise/legal" element={guard(['admin', 'founder'], <FounderRaiseLegal />)} />
       <Route path="/raise/legal-engine" element={guard(['admin', 'founder', 'partner'], founderWorkspace('raise', <FounderWorkspaceTabs set="raise" user={user}><LegalEnginePage /></FounderWorkspaceTabs>))} />
