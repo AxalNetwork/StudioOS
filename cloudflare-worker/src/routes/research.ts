@@ -3582,19 +3582,48 @@ research.get('/funds', async (c) => {
 
 // Public discovery catalog. These rows are source-backed identity metadata,
 // not a user's private company research and not financial/diligence claims.
+// The market directory uses Axal's sector taxonomy while the discovery
+// company directory stores Wikidata's free-form industry labels. Keep the
+// mapping explicit so a taxonomy card can produce an honest drill-down.
+const MARKET_SECTOR_ALIASES: Record<string, string[]> = {
+  ai: ['artificial intelligence', 'ai'],
+  'cloud-infrastructure': ['cloud infrastructure', 'cloud computing'],
+  biotech: ['biotechnology', 'biotech'],
+  cybersecurity: ['cybersecurity', 'computer security', 'information security'],
+  fintech: ['financial technology', 'financial services', 'fintech'],
+  autotech: ['automotive industry', 'automotive'],
+  telecommunications: ['telecommunications industry', 'telecommunications'],
+  software: ['software industry', 'software'],
+  'e-commerce': ['e-commerce', 'electronic commerce', 'online shopping'],
+  retail: ['retail'],
+  space: ['space industry', 'space'],
+  'media-content': ['media industry', 'mass media', 'news media'],
+  'food-and-beverage': ['food industry', 'food and beverage'],
+  energytech: ['energy industry', 'energy'],
+  hardware: ['hardware industry', 'hardware'],
+  robotics: ['robotics'],
+  pharmaceuticals: ['pharmaceutical industry', 'pharmaceuticals'],
+  'health-hospital-services': ['health care', 'healthcare', 'hospital'],
+};
+
 research.get('/company-directory', async (c) => {
   await requireAuth(c);
   const q = String(c.req.query('q') || '').trim().slice(0, 120);
   const country = String(c.req.query('country') || '').trim().slice(0, 120);
-  const rows = await c.env.DB.prepare(
-    `SELECT uid, name, website, country, founded_year, sector, source_name,
+  const sectorKey = String(c.req.query('sector') || '').trim().slice(0, 120).toLowerCase();
+  const sectorLabel = sectorKey.replace(/-/g, ' ');
+  const sectorTerms = [...new Set(MARKET_SECTOR_ALIASES[sectorKey] || [sectorLabel])].filter(Boolean);
+  const sectorClause = sectorKey ? ` AND (${sectorTerms.map(() => `LOWER(COALESCE(sector, '')) LIKE ?`).join(' OR ')})` : '';
+  const sql = `SELECT uid, name, website, country, founded_year, sector, source_name,
             source_url, source_license, as_of
        FROM research_company_directory
       WHERE (? = '' OR name LIKE '%' || ? || '%' OR website LIKE '%' || ? || '%')
         AND (? = '' OR country = ?)
-      ORDER BY name COLLATE NOCASE LIMIT 1000`
-  ).bind(q, q, q, country, country).all();
-  return c.json({ items: rows.results || [], source: 'Wikidata', source_boundary: 'Discovery metadata only; no funding, valuation, revenue, market-size, or diligence claims.' });
+        ${sectorClause}
+      ORDER BY name COLLATE NOCASE LIMIT 1000`;
+  const bindings = [q, q, q, country, country, ...sectorTerms.map((term) => `%${term.toLowerCase()}%`)];
+  const rows = await c.env.DB.prepare(sql).bind(...bindings).all();
+  return c.json({ items: rows.results || [], requested_sector: sectorKey || null, matched_terms: sectorKey ? sectorTerms : [], source: 'Wikidata', source_boundary: 'Discovery metadata only; taxonomy matches are normalized labels and do not equal the separate taxonomy company count.' });
 });
 
 research.get('/company-directory/:uid', async (c) => {
