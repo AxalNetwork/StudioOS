@@ -1,5 +1,5 @@
 import React from 'react';
-import { Target, TrendingUp, Layers, Package, Gift, Megaphone, Calendar, Award } from 'lucide-react';
+import { Target, TrendingUp, Layers, Package, Gift, Megaphone, Award } from 'lucide-react';
 import WorkspaceTabs from '../../components/WorkspaceTabs';
 import PartnerWorkspaceShell from './PartnerWorkspaceShell';
 
@@ -53,8 +53,6 @@ const SETS = {
     { to: '/comarketing', label: 'Visibility', icon: Megaphone,
       roles: ['admin', 'partner', 'founder', 'investor'] },
     { to: '/offers/proof', label: 'Proof', icon: Award,
-      roles: ['admin', 'partner'] },
-    { to: '/partner/office-hours', label: 'Office hours', icon: Calendar,
       roles: ['admin', 'partner'] },
   ],
 };

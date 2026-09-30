@@ -72,7 +72,7 @@ test('canonical Partner deep links are owned by the correct workspace', () => {
     // '/matches' left with the AI Matching Engine, which was deleted.
     Pipeline: ['/pipeline', '/needs', '/partner/insights', '/partner/operations/engagements'],
     Delivery: ['/delivery', '/partner/operations/overview', '/partner/operations/portfolio', '/partner/operations/performance'],
-    Offers: ['/offers', '/services', '/perks', '/comarketing', '/partner/office-hours', '/partner/operations/capabilities'],
+    Offers: ['/offers', '/services', '/perks', '/comarketing', '/partner/operations/capabilities'],
     Network: ['/network', '/relationships', '/contacts'],
     Research: ['/research', '/signals', '/market-intel'],
   };
@@ -98,13 +98,14 @@ test('collapsed Pipeline and Offers sections remain reachable from Partner tabs'
     '/services',
     '/perks',
     '/comarketing',
-    '/partner/office-hours',
   ]) {
     assert.ok(bars.includes(`to: '${path}'`), `${path} is in no Partner tab set`);
     const line = routeLine(path);
     assert.ok(line, `no route for ${path}`);
     assert.ok(line.includes('PartnerWorkspaceTabs'), `${path} does not mount the Partner tab shell`);
   }
+  assert.doesNotMatch(bars, /label: 'Office hours'/,
+    'Office hours is unrelated to the Perks & Products Offers container');
 });
 
 test('Partner pages share amber identity and cyan provenance without recoloring other roles', () => {
