@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ExternalLink, ArrowLeft, ShieldCheck } from 'lucide-react';
 import { Card } from '../../ui';
+import { api } from '../../lib/api';
 import data from '../../data/companyDirectory.json';
 import finance from '../../data/financialSnapshots.json';
 import { BrainCircuit } from 'lucide-react';
@@ -12,7 +13,20 @@ function Fact({ label, value }) {
 
 export default function CompanyProfile() {
   const { uid } = useParams();
-  const company = (data.items || []).find((x) => x.uid === uid);
+  // The bundled baseline answers on first paint; the directory is the record,
+  // so a profile reachable per sector is readable even when the bundle lags.
+  const [company, setCompany] = useState(() => (data.items || []).find((x) => x.uid === uid) || null);
+  const [reading, setReading] = useState(true);
+  useEffect(() => {
+    let live = true;
+    setReading(true);
+    api.research.companyDirectoryGet(uid)
+      .then((r) => { if (live && r?.item) setCompany(r.item); })
+      .catch(() => { /* bundled baseline stays on screen */ })
+      .finally(() => { if (live) setReading(false); });
+    return () => { live = false; };
+  }, [uid]);
+  if (!company && reading) return <Card variant="dashed"><p className="text-[12px] text-axal-muted">Reading the company directory…</p></Card>;
   if (!company) return <Card variant="dashed"><h1 className="text-sm font-extrabold">Company not found</h1><Link to="/research/companies" className="mt-2 inline-block text-[12px] text-axal-violet underline">Back to companies</Link></Card>;
   const analysisUrl = `/build/competitors?market=${encodeURIComponent(company.name)}&website=${encodeURIComponent(company.website)}`;
   const snapshot = Object.values(finance.companies || {}).find((x) => company.website?.toLowerCase().includes(x.domain) || company.name?.toLowerCase().includes(x.name.split(',')[0].toLowerCase()));

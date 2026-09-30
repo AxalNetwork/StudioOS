@@ -5051,6 +5051,36 @@ export const api = {
       return request(`/research/market-directory${qs ? `?${qs}` : ''}`);
     },
     marketDirectoryGet: (slug) => request(`/research/market-directory/${encodeURIComponent(slug)}`),
+    // The markets dataset (migration 368). `marketRecord` is the whole market in
+    // one call — the record, its sourced observations, its company graph and the
+    // sources they lean on — because the page draws them together and six round
+    // trips would let the sections disagree about what exists. The narrower
+    // reads stay available for a surface that wants only one of them.
+    marketSources: () => request('/research/market-sources'),
+    marketRecord: (slug) => request(`/research/markets/${encodeURIComponent(slug)}`),
+    marketMetrics: (slug, params = {}) => {
+      const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')).toString();
+      return request(`/research/markets/${encodeURIComponent(slug)}/metrics${qs ? `?${qs}` : ''}`);
+    },
+    marketFacets: (slug, params = {}) => {
+      const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')).toString();
+      return request(`/research/markets/${encodeURIComponent(slug)}/facets${qs ? `?${qs}` : ''}`);
+    },
+    marketCompanies: (slug, params = {}) => {
+      const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')).toString();
+      return request(`/research/markets/${encodeURIComponent(slug)}/companies${qs ? `?${qs}` : ''}`);
+    },
+    marketFunds: (slug) => request(`/research/markets/${encodeURIComponent(slug)}/funds`),
+    marketInvestments: (slug) => request(`/research/markets/${encodeURIComponent(slug)}/investments`),
+    marketUpdate: (slug, data) => request(`/research/markets/${encodeURIComponent(slug)}`, {
+      method: 'PATCH', body: JSON.stringify(data || {}),
+    }),
+    marketMetricCreate: (slug, data) => request(`/research/markets/${encodeURIComponent(slug)}/metrics`, {
+      method: 'POST', body: JSON.stringify(data || {}),
+    }),
+    marketFacetCreate: (slug, data) => request(`/research/markets/${encodeURIComponent(slug)}/facets`, {
+      method: 'POST', body: JSON.stringify(data || {}),
+    }),
     fundDirectory: (params = {}) => {
       const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')).toString();
       return request(`/research/fund-directory${qs ? `?${qs}` : ''}`);
