@@ -2,12 +2,13 @@ import React, { useMemo, useState } from 'react';
 import { ExternalLink, Search, Database, BrainCircuit } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card } from '../../ui';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import data from '../../data/companyDirectory.json';
 import finance from '../../data/financialSnapshots.json';
 
 const items = data.items || [];
 
-export default function CompanyDirectoryZone() {
+export default function CompanyDirectoryZone({ role = 'founder', zoneActions = null }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [country, setCountry] = useState('all');
@@ -20,6 +21,7 @@ export default function CompanyDirectoryZone() {
 
   return (
     <div data-testid="company-directory" className="space-y-4">
+      {zoneActions ? <ZoneToolbar role={role} className="mb-3" actions={zoneActions(visible)} /> : null}
       <div>
         <h1 className="text-xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Company directory</h1>
         <p className="mt-1 max-w-3xl text-[12.5px] leading-relaxed text-axal-muted">

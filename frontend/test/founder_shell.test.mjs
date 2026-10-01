@@ -169,6 +169,11 @@ test('each row that owns sections is actually wrapped at its routes', () => {
   const OWN_LANDING = {
     '/build/roadmap': '<FounderBuildRoadmap />',
     '/grow/brand': '<FounderGrowBrand />',
+    // /perks is in the Grow bar and draws its own full-bleed canvas. The
+    // founderWorkspace frame would pad that canvas back into a card, so the
+    // route renders PerksPage directly. A partner is redirected before the
+    // page mounts.
+    '/perks': '<PerksPage ',
   };
 
   const rendersBar = new Set();
@@ -242,15 +247,21 @@ test('A7 owns the founder Research landing while workspace mode retains Signals'
 });
 
 test('a founder never gets two tab bars on one page', () => {
-  // /perks and /comarketing already carried the Partner Offers bar. The fix is
-  // a branch, not a second bar stacked on the first.
-  for (const p of ['/perks', '/comarketing']) {
-    const line = app.split('\n').find((l) => l.includes(`path="${p}"`));
-    assert.match(line, /effectiveRole === 'founder'\s*\?\s*founderWorkspace\('grow', <FounderWorkspaceTabs/,
-      `${p} must serve founders the Grow bar INSTEAD of the Partner bar`);
-    assert.ok(line.includes('<PartnerWorkspaceTabs set="offers"'),
-      `${p} must still serve everyone else the Partner bar`);
-  }
+  // /comarketing already carried the Partner Offers bar. The fix is a branch,
+  // not a second bar stacked on the first.
+  const comarketing = app.split('\n').find((l) => l.includes('path="/comarketing"'));
+  assert.match(comarketing, /effectiveRole === 'founder'\s*\?\s*founderWorkspace\('grow', <FounderWorkspaceTabs/,
+    '/comarketing must serve founders the Grow bar INSTEAD of the Partner bar');
+  assert.ok(comarketing.includes('<PartnerWorkspaceTabs set="offers"'),
+    '/comarketing must still serve everyone else the Partner bar');
+
+  // /perks is that same Grow row's full-bleed canvas. It does not take the
+  // Offers bar, and it does not take the Grow frame either: the page is the
+  // surface. A partner never reaches it.
+  const perks = app.split('\n').find((l) => l.includes('path="/perks"'));
+  assert.match(perks, /<PerksPage user=\{user\} \/>/);
+  assert.ok(!perks.includes('PartnerWorkspaceTabs') && !perks.includes('FounderWorkspaceTabs'),
+    '/perks must not stack a second tab bar on the canvas');
 });
 
 test("liquidity's tier gate moved onto the tab rather than being dropped", () => {

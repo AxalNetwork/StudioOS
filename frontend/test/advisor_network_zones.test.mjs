@@ -189,7 +189,7 @@ test('Signals is given who you are wherever it is mounted', () => {
   // heading about prices.
   assert.doesNotMatch(codeOnly(research), /<SignalsPage\b/,
     'the Research workspace mounts the signals feed again, under a zone about comparable ranges');
-  assert.match(codeOnly(research), /<MarketZone\b/, 'the markets zone no longer mounts its own page');
+  assert.match(codeOnly(research), /<MarketDirectoryZone\b/, 'the markets zone no longer mounts the sector directory');
 
   // `mode` is explicit rather than re-derived, because an admin previewing the
   // Advisor role has `user.role === 'admin'` and would otherwise get an advisor
@@ -334,13 +334,17 @@ test('the withdrawn Research tabs stay withdrawn, and the reason is written down
 
 test('Companies says whose analyses it is showing', () => {
   const code = codeOnly(research);
-  // `competitor_analyses` is keyed on user_id with no company column, so there
-  // is no client to switch between — and no CompanySwitcher may appear here
-  // implying otherwise.
-  assert.match(code, /function CompanyScopeNote\(\{ role \}\)/);
-  assert.match(research, /These analyses are yours, not a client/);
+  // The list is the public directory. A saved analysis is a different page,
+  // and `competitor_analyses` is still keyed on the person who ran it, with
+  // no company column — so neither surface may offer a client switcher.
+  const directory = codeOnly(read('frontend/src/pages/research/CompanyDirectoryZone.jsx'));
+  const analysis = read('frontend/src/pages/research/CompanyAnalysis.jsx');
+  assert.match(directory, /public discovery baseline/);
+  assert.match(directory, /Source boundary/);
+  assert.match(analysis, /These analyses are yours, not a client/);
   assert.doesNotMatch(code, /CompanySwitcher/, 'this store has no company dimension to switch');
-  // And the rail must not call it a live client book.
+  assert.doesNotMatch(directory, /CompanySwitcher/);
+  // And the rail must not call an advisor's own runs a live client book.
   assert.match(code, /Companies · your own analyses, not a client book/);
 });
 
@@ -355,14 +359,17 @@ test('`chromeless` is not `embedded`, and the difference is load-bearing', () =>
   // The mode default and the project fetch stay on `embedded` alone.
   assert.match(comp, /useState\(embedded \? 'startup' : 'custom'\)/);
   assert.match(comp, /if \(embedded\) \{\s*\n\s*const list = await api\.competitors\.list\(\)/);
-  // Same correction: what matters is which flag is asked for, not that it is
-  // the only prop. `chromeless` present and `embedded` absent is the rule.
-  const cmount = codeOnly(research).match(/<CompetitorAnalysisPage\b[\s\S]*?\/>/);
-  assert.ok(cmount, 'Research no longer mounts the competitor analysis');
-  assert.match(cmount[0], /\bchromeless\b/,
-    'Research · Companies must ask for the layout flag, not the lock');
+  // The companies zone is the directory now. The analysis page remains, and
+  // the one place that still mounts it must not lock it to a startup the
+  // workspace was not handed. `embedded` is that lock; leaving it off is the
+  // rule. The directory mount is not that page, so it must not pretend to be.
+  const app = codeOnly(read('frontend/src/App.jsx'));
+  const cmount = app.match(/<CompetitorAnalysisPage\b[^/]*\/>/);
+  assert.ok(cmount, 'the competitor analysis page is no longer mounted');
   assert.doesNotMatch(cmount[0], /\bembedded\b/,
-    'Research · Companies must not lock the analysis to a startup it was not handed');
+    'the remaining mount must not lock the analysis to a startup it was not handed');
+  assert.match(codeOnly(research), /<CompanyDirectoryZone\b/);
+  assert.doesNotMatch(codeOnly(research), /<CompetitorAnalysisPage\b/);
 });
 
 test('ORG_BACKED has one definition, and both consumers decide with it', () => {
