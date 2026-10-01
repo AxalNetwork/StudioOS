@@ -67,6 +67,22 @@ export const title = (value) => {
 /** The rows a board section shows. The zone behind it shows the rest. */
 export const top = (rows, n = 5) => (Array.isArray(rows) ? rows.slice(0, n) : []);
 
+/**
+ * How many rows the zone behind a section holds — a section's `total` (D403).
+ *
+ * THE LIST'S LENGTH IS A COUNT ONLY WHEN THE READ RETURNED ALL OF IT. Several
+ * Worker list reads stop at a `LIMIT` (200 for bookings, offerings and e-sign
+ * envelopes), and a list that came back AT its cap may be a longer list cut
+ * short. `cap` names that limit, and a list at or past it returns null — "View
+ * more" then carries no number rather than one the read cannot support. A
+ * read with no LIMIT passes no cap.
+ */
+export const total = (rows, cap = null) => {
+  if (!Array.isArray(rows)) return null;
+  if (cap !== null && rows.length >= cap) return null;
+  return rows.length;
+};
+
 /** Join the halves of a summary line, dropping the ones with no figure. */
 export const summary = (...parts) => {
   const live = parts.filter((p) => p !== null && p !== undefined && p !== '');

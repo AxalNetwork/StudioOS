@@ -115,7 +115,7 @@ export async function runExtractorSweep(env: Env, opts?: { sinceIso?: string }):
               a.question_id, a.raw_value
          FROM advisor_answers a
          JOIN users u ON u.id = a.user_id
-         WHERE a.created_at >= ?
+         WHERE datetime(a.created_at) >= datetime(?)
            AND COALESCE(u.mi_contribution_optout, 0) = 0
          ORDER BY a.id ASC
          LIMIT 5000`,

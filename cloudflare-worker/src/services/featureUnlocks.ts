@@ -12,6 +12,7 @@
  * exists even before the migration is applied.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export interface FeatureUnlockRow {
   id: number;
@@ -22,11 +23,11 @@ export interface FeatureUnlockRow {
   created_at: string;
 }
 
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 
 /** Idempotent schema bootstrap — mirrors migration 098_feature_unlocks.sql. */
 export async function ensureFeatureUnlockSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       'CREATE TABLE IF NOT EXISTS feature_unlocks (' +
@@ -46,7 +47,7 @@ export async function ensureFeatureUnlockSchema(env: Env): Promise<void> {
       'CREATE INDEX IF NOT EXISTS idx_feature_unlocks_user_feature ' +
         'ON feature_unlocks(user_id, feature_key)',
     );
-    _schemaReady = true;
+    SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[featureUnlocks] ensureFeatureUnlockSchema failed:', (e as Error).message);
   }
@@ -94,7 +95,7 @@ export async function hasFeatureUnlock(
   const row = await env.DB.prepare(
     `SELECT 1 FROM feature_unlocks
       WHERE user_id = ? AND feature_key = ?
-        AND (expires_at IS NULL OR expires_at > datetime('now'))
+        AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
       LIMIT 1`,
   ).bind(userId, featureKey).first();
   return !!row;
@@ -109,7 +110,7 @@ export async function listActiveUnlocks(
   const res = await env.DB.prepare(
     `SELECT feature_key, expires_at FROM feature_unlocks
       WHERE user_id = ?
-        AND (expires_at IS NULL OR expires_at > datetime('now'))
+        AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
       ORDER BY created_at DESC`,
   ).bind(userId).all<{ feature_key: string; expires_at: string | null }>();
   return res.results ?? [];

@@ -68,7 +68,10 @@ export default function PublicJobDetailPage() {
       } catch (e) {
         if (!cancelled) {
           setLoadError(e?.status === 404 ? 'This role could not be found.' : 'Could not load this role.');
-          reportError(e, { where: 'PublicJobDetailPage.load', slug });
+          // `slug` is dropped rather than folded into the scope: it is the
+          // page's own path segment, so `entry.path` already records it, and a
+          // per-slug scope would break the beacon's `scope|message` dedupe.
+          reportError('PublicJobDetailPage:load', e);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -191,14 +194,21 @@ export default function PublicJobDetailPage() {
       }
       setStatus({ state: 'sent', error: '', result: res });
     } catch (err) {
-      const raw = err?.message || '';
-      const msg = APPLY_ERROR_MESSAGES[raw] || raw || 'Something went wrong. Please try again.';
+      // D258 — the table is keyed by the refusal's CODE, which travels on
+      // `err.code`. It used to be keyed by `err.message`, which held the code
+      // only while `request()` put a code there; `resume_rejected` arrives
+      // with the storage layer's own exception text as its `message`, so
+      // keying on the message showed that text instead of this page's sentence.
+      const known = Object.hasOwn(APPLY_ERROR_MESSAGES, err?.code ?? '')
+        ? APPLY_ERROR_MESSAGES[err.code]
+        : null;
+      const msg = known || err?.message || 'Something went wrong. Please try again.';
       setStatus({ state: 'error', error: msg, result: null });
       if (TURNSTILE_SITE_KEY && turnstileWidgetId.current !== null) {
         try { window.turnstile.reset(turnstileWidgetId.current); } catch {}
         setTurnstileToken('');
       }
-      if (!APPLY_ERROR_MESSAGES[raw]) reportError(err, { where: 'PublicJobDetailPage.apply', slug });
+      if (!known) reportError('PublicJobDetailPage:apply', err);
     }
   };
 

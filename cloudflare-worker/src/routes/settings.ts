@@ -22,10 +22,11 @@ import * as QRCode from 'qrcode';
 import type { Env, UserSessionRow } from '../types';
 import { decodeJwt } from 'jose';
 import { getSQL } from '../db';
-import { requireAuth, hashToken, generateToken, selectJwt } from '../auth';
+import { requireAuth, hashToken, generateToken, selectJwt, bumpJwtMinIat, jwtMinIatFloor } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
-import { hasTotpConfigured, loadTotp, persistNewTotpEnrolment } from '../services/authTotp';
+import { hasTotpConfigured, loadTotp, loadTotpPairedAt, persistNewTotpEnrolment, replaceRecoveryHashes } from '../services/authTotp';
 import { loadSms, getUserFactors, setUserFactor } from '../services/authSms';
+import { ensureAuthBlockersSchema } from '../services/authBlockersSchema';
 import { putHeadshotFromDataUri, getHeadshot } from '../services/r2';
 import { sendVerificationEmail } from '../services/email';
 import { send as sendSecurityEmail } from '../services/email/send';
@@ -49,6 +50,7 @@ import {
   updateProfileBackground,
 } from '../services/profileExpansion';
 import { hashEmail } from '../util/hashEmail';
+import { openDsrRequest, withdrawDsrRequest, loadOwnDsrOutcome } from '../services/dsrRequests';
 import { MATCHING_MIN_COMPLETION_PCT } from '../services/matchingConsent';
 import {
   LinkedInImportError,
@@ -60,6 +62,8 @@ import {
   normalizeProposalForApply,
   type ImportProposal,
 } from '../services/linkedinImport';
+import { bindingKey } from '../util/schemaBootstrap';
+import { refuse } from '../util/refusal';
 
 const settings = new Hono<{ Bindings: Env }>();
 
@@ -80,9 +84,9 @@ const SETTINGS_USER_COLUMNS: Array<[string, string]> = [
   // at D1's 100-column limit); ensured by ensureProfileExpansionSchema.
 ];
 
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env) {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const db = env.DB;
   for (const [col, type] of SETTINGS_USER_COLUMNS) {
     try { await db.prepare(`ALTER TABLE users ADD COLUMN ${col} ${type}`).run(); } catch {}
@@ -136,7 +140,27 @@ async function ensureSchema(env: Env) {
     await db.prepare(`CREATE INDEX IF NOT EXISTS idx_fi_inviter ON founder_invites(inviter_user_id)`).run();
     await db.prepare(`CREATE INDEX IF NOT EXISTS idx_fi_project ON founder_invites(project_id)`).run();
   } catch {}
-  migrated = true;
+  // THE CREATE ABOVE IS EIGHT COLUMNS AND THIS FILE READS TWELVE (D192).
+  // `user_sessions` is declared twice — here, and by migration 083 / the
+  // baseline — and D1 holds one table per name, so whichever runs first wins
+  // and `IF NOT EXISTS` cannot add a column to the other's. On a database this
+  // bootstrap reached first, the step-up UPDATE in this same file
+  // (`SET factor = 'totp', assurance_level = 'full', last_step_up_at = ?,
+  // step_up_due_at = NULL`) names four columns the live table does not have and
+  // throws — which is auth state, on the screen where a person turns 2FA on.
+  //
+  // So the owner is awaited rather than the CREATE widened: widening it would
+  // put a second declaration of those four columns beside
+  // `authBlockersSchema.ts`'s, which is the exact defect
+  // `check-schema-pair-drift` exists to catch. This is `routes/brand.ts:99`'s
+  // idiom — after the CREATEs, before the memo lands.
+  //
+  // It is best-effort BY DESIGN and that is not an oversight: the helper
+  // carries its own deadline and cooldown, and its header says a route that
+  // needs one of these columns keeps its own try/catch. What this call removes
+  // is the case where NOTHING ever declared them on this path.
+  await ensureAuthBlockersSchema(env);
+  MIGRATED.set(bindingKey(env), true);
 }
 
 const FOUNDER_INVITE_CAP_PER_PROJECT = 10;
@@ -172,6 +196,26 @@ function isEmail(v: string): boolean {
 
 const APP_URL = (env: Env) => env.APP_URL || 'https://axal.vc';
 
+// D258 — A WRONG AUTHENTICATOR CODE IS A 400, NEVER A 401, and the reason is on
+// the client. `request()` in frontend/src/lib/api.js treats any 401 from a
+// non-`/auth/` path on a protected page as an expired session: it clears the
+// token, sends the person to /login and throws "Session expired". Every route
+// below lives under `/settings/`, so a single typo in a six-digit code used to
+// sign the person out mid-enrolment — on the one screen they came to in order
+// to secure the account. The session is fine; the CODE is wrong, and that is a
+// refusal of the input.
+//
+// One body for all four routes (re-enrol confirm, enrol confirm, repair,
+// recovery-codes regenerate): `error` is the machine code a page branches on
+// (`e.code` after readRefusal) and `message` is the sentence it prints. Codes
+// rotate every 30 seconds and `validate` already allows one step either side,
+// so the likeliest cause after a typo is a device clock that has drifted —
+// which is what the sentence tells the person to check.
+const WRONG_TOTP_CODE = {
+  error: 'invalid_code',
+  message: "That code didn't match. Check the time on your device and try again.",
+} as const;
+
 // --- GET /api/settings ------------------------------------------------------
 
 function currentJtiFromRequest(c: Context<{ Bindings: Env }>): string | null {
@@ -206,11 +250,16 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
   if (rows.length) {
     rows[0].totp_configured = (await hasTotpConfigured(c.env, user.id)) ? 1 : 0;
   }
+  // D433 — the Account page's "Authenticator app" row reads the pairing date.
+  // Read only when a factor is configured: an unpaired account has no date,
+  // and a legacy row's absence must read as null rather than as a stamp.
+  const totpPairedAt = rows.length && rows[0].totp_configured
+    ? await loadTotpPairedAt(c.env, user.id) : null;
   const pendingChange = await sql`
     SELECT id, new_email, requested_at, confirm_expires_at, confirmed_at, revoked_at
     FROM email_change_requests
     WHERE user_id = ${user.id} AND confirmed_at IS NULL AND revoked_at IS NULL
-      AND confirm_expires_at > datetime('now')
+      AND datetime(confirm_expires_at) > datetime('now')
     ORDER BY requested_at DESC LIMIT 1
   `;
   // AE-1: include only currently-connected integrations on the root
@@ -239,6 +288,13 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
   await sql.end();
   if (rows.length === 0) return c.json({ error: 'User not found' }, 404);
   const u = rows[0];
+  // D169 — WHAT WAS DECIDED, for the subject, on the screen where they asked.
+  // `deletion_requested_at` above is the OPEN flag and HQ's close clears it,
+  // so without this the amber line vanishes the moment a decision is made and
+  // the page reads as if no request was ever filed. Its own availability state
+  // rather than a bare value: an unreadable ledger is not "nothing was
+  // decided" (#204). No new `/api/*` method is owed — it rides this payload.
+  const dsrOutcome = await loadOwnDsrOutcome(c.env, user.id);
   return c.json({
     integrations: integrationsList,
     id: u.id,
@@ -248,6 +304,7 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
     role: u.role,
     email_verified: !!u.email_verified,
     totp_configured: !!u.totp_configured,
+    totp_paired_at: totpPairedAt,
     kyc_status: u.kyc_status || 'not_started',
     access_level: u.access_level || null,
     last_active_at: u.last_active_at || null,
@@ -263,6 +320,7 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
     privacy_prefs: safeJson(u.privacy_prefs, { public_profile: { name: true, bio: true, headshot: true, socials: false } }),
     role_prefs: safeJson(u.role_prefs, {}),
     deletion_requested_at: u.deletion_requested_at || null,
+    dsr_outcome: dsrOutcome,
     pending_email_change: pendingChange[0] ? {
       new_email: pendingChange[0].new_email,
       requested_at: pendingChange[0].requested_at,
@@ -369,7 +427,7 @@ settings.post('/headshot', async (c) => {
   try {
     meta = await putHeadshotFromDataUri(c.env, user.id, dataUri);
   } catch (e: any) {
-    return c.json({ error: e?.message || 'Upload failed' }, 400);
+    return refuse(c, 400, { code: 'upload_failed', message: 'The photo could not be uploaded. Use a JPEG, PNG or WebP image of 3 MB or less.', raw: e });
   }
 
   const sql = getSQL(c.env);
@@ -514,8 +572,16 @@ settings.post('/email-change/revoke', async (c) => {
   }
   await sql`UPDATE email_change_requests SET revoked_at = datetime('now') WHERE id = ${rec.id}`;
   // Bump min_iat so any tokens minted under the new email are forced out.
-  const nowSec = Math.floor(Date.now() / 1000);
-  await sql`UPDATE users SET jwt_min_iat = ${nowSec} WHERE id = ${rec.user_id}`;
+  //
+  // D165 — this was an inlined copy of `bumpJwtMinIat` WITHOUT its `+1`, and the
+  // activity_logs line two statements below says "all sessions invalidated". The
+  // comparison in getCurrentUser is a strict `<`, so a token minted in this same
+  // second was NOT invalidated and the record said it was. The helper is the
+  // one definition of both the floor and the write. Nothing here reads the
+  // returned floor — this handler answers with the reverted email, not a stamp —
+  // so the call is not assigned. CodeQL caught the binding this left behind on
+  // the first draft; see the worker tsconfig for why nothing local did.
+  await bumpJwtMinIat(c.env, rec.user_id);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('email_change_revoked',
                     ${`Email change revoked: ${rec.new_email} -> ${rec.old_email}; all sessions invalidated`},
@@ -529,7 +595,8 @@ settings.post('/email-change/revoke', async (c) => {
 /**
  * Task #50 — Fresh TOTP re-enrolment path that does NOT require an
  * existing TOTP code. Eligibility: the caller must be on a session
- * minted via recovery (i.e. users.recovery_step_up_due_at IS NOT NULL).
+ * minted via recovery (i.e. user_recovery_state.step_up_due_at IS NOT NULL;
+ * D189 moved it off `users`, which is at D1's 100-column cap).
  * This unblocks the "I lost my authenticator → recover via email magic
  * → re-pair within 7 days" loop. /totp/repair still exists for users
  * who have a working code and want to swap secrets.
@@ -542,9 +609,9 @@ settings.post('/totp/re-enrol/start', async (c) => {
   await ensureSchema(c.env);
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
-  const row = await sql`SELECT recovery_step_up_due_at FROM users WHERE id = ${user.id}`;
+  const row = await sql`SELECT step_up_due_at FROM user_recovery_state WHERE user_id = ${user.id}`;
   await sql.end();
-  if (!row.length || !row[0].recovery_step_up_due_at) {
+  if (!row.length || !row[0].step_up_due_at) {
     return c.json({ error: 'not_eligible', message: 'Fresh re-enrol is only available after account recovery. Use /totp/repair if you still have a working authenticator.' }, 403);
   }
   const secret = new Secret();
@@ -566,8 +633,8 @@ settings.post('/totp/re-enrol/confirm', async (c) => {
   const code = clampStr(body?.totp_code, 12);
   if (!proposedSecret || !code) return c.json({ error: 'totp_secret and totp_code required' }, 400);
   const sql = getSQL(c.env);
-  const row = await sql`SELECT recovery_step_up_due_at FROM users WHERE id = ${user.id}`;
-  if (!row.length || !row[0].recovery_step_up_due_at) {
+  const row = await sql`SELECT step_up_due_at FROM user_recovery_state WHERE user_id = ${user.id}`;
+  if (!row.length || !row[0].step_up_due_at) {
     await sql.end();
     return c.json({ error: 'not_eligible' }, 403);
   }
@@ -576,7 +643,7 @@ settings.post('/totp/re-enrol/confirm', async (c) => {
   catch { await sql.end(); return c.json({ error: 'invalid_secret' }, 400); }
   if (totp.validate({ token: code, window: 1 }) === null) {
     await sql.end();
-    return c.json({ error: 'invalid_code' }, 401);
+    return c.json(WRONG_TOTP_CODE, 400);
   }
   // Mint fresh recovery codes alongside the new secret. Task #11 — must use
   // the canonical XXXX-XXXX-XXXX format: the previous generateToken().slice(0,10)
@@ -594,11 +661,36 @@ settings.post('/totp/re-enrol/confirm', async (c) => {
   // Clear the step-up nag AND bump jwt_min_iat so the lower-assurance
   // session minted at recovery time is invalidated (forces a fresh
   // login with the new TOTP, which lands at factor='totp').
-  const nowSec = Math.floor(Date.now() / 1000);
-  await sql`UPDATE users
-            SET recovery_step_up_due_at = NULL,
-                jwt_min_iat = ${nowSec}
-            WHERE id = ${user.id}`;
+  //
+  // D165 — THE ONE SITE THAT DOES NOT CALL `bumpJwtMinIat`, deliberately. These
+  // two columns move together in ONE statement: clearing the step-up nag while
+  // the lower-assurance session is still valid is exactly the state this write
+  // exists to leave behind, so splitting it in two to reuse the helper would
+  // trade a real atomicity guarantee for a tidier call site. What it DOES share
+  // is `jwtMinIatFloor()` — this site had re-typed the arithmetic and dropped
+  // the `+1`, so the session minted at recovery time survived if it was minted
+  // in the same second as its own invalidation.
+  const nowSec = jwtMinIatFloor();
+  // D189 — THE TWO HALVES NOW LIVE IN TWO TABLES, AND THE BATCH IS WHAT KEEPS
+  // D165'S GUARANTEE TRUE. The note above argues these move together in ONE
+  // statement because clearing the step-up nag while the lower-assurance
+  // session is still valid is exactly the state this write exists to leave
+  // behind. `recovery_step_up_due_at` is no longer a column on `users` — it
+  // could never be one, `users` being at D1's 100-column cap, and migration
+  // 277 moved it to `user_recovery_state` — so the single statement is not
+  // available any more. `DB.batch` runs its statements as one transaction,
+  // which preserves the property rather than trading it away for a tidier
+  // diff. Splitting this into two awaits would reintroduce exactly the window
+  // D165 closed.
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO user_recovery_state (user_id, step_up_due_at, updated_at)
+       VALUES (?, NULL, datetime('now'))
+       ON CONFLICT(user_id) DO UPDATE SET step_up_due_at = NULL,
+                                          updated_at     = datetime('now')`,
+    ).bind(user.id),
+    c.env.DB.prepare(`UPDATE users SET jwt_min_iat = ? WHERE id = ?`).bind(nowSec, user.id),
+  ]);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('totp_reenrolled_post_recovery',
                     'Fresh authenticator paired after recovery; old session signed out',
@@ -658,7 +750,7 @@ settings.post('/totp/enrol/confirm', async (c) => {
   try { totp = new TOTP({ secret: Secret.fromBase32(proposedSecret) }); }
   catch { return c.json({ error: 'invalid_secret' }, 400); }
   if (totp.validate({ token: code, window: 1 }) === null) {
-    return c.json({ error: 'invalid_code' }, 401);
+    return c.json(WRONG_TOTP_CODE, 400);
   }
   // Recovery codes in the canonical XXXX-XXXX-XXXX format — the only shape
   // tryConsumeRecoveryCode will redeem at login.
@@ -692,9 +784,9 @@ settings.post('/totp/enrol/confirm', async (c) => {
   }
   const sql = getSQL(c.env);
   // Defensive: also clear the user-level relock deadline (getCurrentUser reads
-  // session step_up_due_at || users.recovery_step_up_due_at; re-enrol clears
+  // session step_up_due_at || user_recovery_state.step_up_due_at; re-enrol clears
   // this too).
-  try { await sql`UPDATE users SET recovery_step_up_due_at = NULL WHERE id = ${user.id}`; } catch {}
+  try { await sql`UPDATE user_recovery_state SET step_up_due_at = NULL, updated_at = datetime('now') WHERE user_id = ${user.id}`; } catch {}
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('totp_enrolled', 'Authenticator app enrolled (first-time, optional TOTP)', ${user.email}, ${user.id})`;
   await sql.end();
@@ -736,23 +828,31 @@ settings.post('/totp/repair', async (c) => {
   const current = new TOTP({ secret: Secret.fromBase32(totpRow.secret) });
   if (current.validate({ token: code, window: 1 }) === null) {
     await sql.end();
-    return c.json({ error: 'Invalid current TOTP code' }, 401);
+    return c.json(WRONG_TOTP_CODE, 400);
   }
 
   const secret = new Secret();
   const newTotp = new TOTP({ issuer: 'Axal VC StudioOS', label: user.email, secret });
   const newSecret = secret.base32;
-  await persistNewTotpEnrolment(c.env, user.id, newSecret, totpRow.recoveryHashes);
+  // D430 — a repair mints a new SECRET and keeps the recovery set the person
+  // holds. That set is the one login consumes from, `users.totp_recovery_codes`
+  // (read above), never the `auth_totp` mirror `loadTotp` returned: before
+  // D430 regenerate wrote the `users` column alone, so the mirror could still
+  // hold the set the person had just discarded, and re-persisting it here
+  // brought those codes back to life and killed the ones they had saved.
+  await persistNewTotpEnrolment(c.env, user.id, newSecret, recoveryCodesOf(userRow[0].totp_recovery_codes));
   try { await setUserFactor(c.env, user.id, 'totp'); } catch {}
   // Invalidate existing sessions — the user is about to scan a new QR.
-  const nowSec = Math.floor(Date.now() / 1000);
-  await sql`UPDATE users SET jwt_min_iat = ${nowSec} WHERE id = ${user.id}`;
+  //
+  // D165 — the third inlined copy that dropped the `+1`, on a handler whose own
+  // response says "Your existing sessions have been signed out."
+  await bumpJwtMinIat(c.env, user.id);
   // Task #50 — clear the step-up deadline once the user has re-paired
   // their authenticator. The cool-off is intentionally NOT cleared
   // (the spec ties it to time, not factor enrolment) but the auto-
   // relock guard in getCurrentUser() now stops firing.
   try {
-    await sql`UPDATE users SET recovery_step_up_due_at = NULL WHERE id = ${user.id}`;
+    await sql`UPDATE user_recovery_state SET step_up_due_at = NULL, updated_at = datetime('now') WHERE user_id = ${user.id}`;
   } catch {}
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('totp_repaired', 'User re-paired TOTP from /settings; all sessions invalidated',
@@ -780,9 +880,10 @@ settings.post('/sessions/revoke-all', async (c) => {
   await ensureSchema(c.env);
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
-  // +1s so that even tokens issued in this same second (rounding) get bounced.
-  const nowSec = Math.floor(Date.now() / 1000) + 1;
-  await sql`UPDATE users SET jwt_min_iat = ${nowSec} WHERE id = ${user.id}`;
+  // D165 — this site was the only one of four that had the `+1`, and its comment
+  // is where the rule was written down. Both now live in `bumpJwtMinIat`, so the
+  // rule cannot be re-typed correctly here and wrongly three handlers up again.
+  const nowSec = await bumpJwtMinIat(c.env, user.id);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('sessions_revoked_all', 'User revoked all active sessions from /settings',
                     ${user.email}, ${user.id})`;
@@ -797,6 +898,21 @@ settings.post('/account/delete-request', async (c) => {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
   await sql`UPDATE users SET deletion_requested_at = COALESCE(deletion_requested_at, datetime('now')) WHERE id = ${user.id}`;
+  // D168 — OPEN THE LEDGER ROW HQ CAN LATER CLOSE. Until migration 272 there
+  // was nothing to close: the column above was the whole record, HQ could
+  // read it and had no way to act on it, so the only way a request ever left
+  // HQ's list was the cancel below. Runs AFTER the UPDATE because it reads
+  // that column, which is what gives the clock one value rather than two.
+  //
+  // BEST-EFFORT, DELIBERATELY. A database that has not applied 272 has no
+  // table, and a member must not be unable to request erasure because HQ's
+  // ledger is behind. The request is recorded either way — the column is what
+  // HQ reads — and the close route derives the missing row from it.
+  try {
+    await openDsrRequest(c.env, user.id);
+  } catch (e) {
+    console.warn('[settings] dsr_requests open failed', (e as Error).message);
+  }
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('account_deletion_requested',
                     'User requested account deletion via /settings (manual review required)',
@@ -810,6 +926,19 @@ settings.post('/account/delete-request/cancel', async (c) => {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
   await sql`UPDATE users SET deletion_requested_at = NULL WHERE id = ${user.id}`;
+  // D168 — `withdrawn` IS THE SUBJECT'S OWN OUTCOME, and it is the one HQ's
+  // close route refuses to write: an operator recording a withdrawal would be
+  // saying the subject changed their mind when they did not. So it is written
+  // here, where that is true, and `closed_by_user_id` stays NULL because
+  // naming an operator would record an act nobody performed.
+  //
+  // Best-effort for the same reason as the request above: a member must be
+  // able to cancel whatever state HQ's ledger is in.
+  try {
+    await withdrawDsrRequest(c.env, user.id);
+  } catch (e) {
+    console.warn('[settings] dsr_requests withdraw failed', (e as Error).message);
+  }
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('account_deletion_cancelled', 'User cancelled their pending deletion request',
                     ${user.email}, ${user.id})`;
@@ -894,6 +1023,16 @@ settings.post('/sessions/:id/revoke', async (c) => {
 // and rotation, which is the architect's explicit ask for "recovery codes
 // management".
 
+/**
+ * D430 — the recovery set as login reads it: `users.totp_recovery_codes`,
+ * a JSON array of hashes, or the empty set when the column holds nothing
+ * parseable (which is also the set login would accept from it).
+ */
+function recoveryCodesOf(json: string | null | undefined): string[] {
+  const arr = safeJson<unknown>(json, []);
+  return Array.isArray(arr) ? arr.filter((h): h is string => typeof h === 'string') : [];
+}
+
 function generateRecoveryCode(): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // skip ambiguous I,O,0,1
   const bytes = new Uint8Array(12);
@@ -922,7 +1061,7 @@ settings.post('/totp/recovery-codes/regenerate', async (c) => {
   const totp = new TOTP({ secret: Secret.fromBase32(totpRow.secret) });
   if (totp.validate({ token: code, window: 1 }) === null) {
     await sql.end();
-    return c.json({ error: 'Invalid current TOTP code' }, 401);
+    return c.json(WRONG_TOTP_CODE, 400);
   }
   // T5 — 10 codes (was 8) to match the audit-plan spec and the Settings UI
   // copy ("X of 10 remaining"). Single-use semantics are enforced on the
@@ -934,7 +1073,10 @@ settings.post('/totp/recovery-codes/regenerate', async (c) => {
     plain.push(c1);
     hashes.push(await hashToken(c1));
   }
-  await sql`UPDATE users SET totp_recovery_codes = ${JSON.stringify(hashes)} WHERE id = ${user.id}`;
+  // D430 — both stores in one batch. Writing `users.totp_recovery_codes`
+  // alone left `auth_totp.recovery_hashes` holding the discarded set, which
+  // the next /totp/repair read back and re-persisted to both columns.
+  await replaceRecoveryHashes(c.env, user.id, hashes);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('totp_recovery_codes_regenerated', 'User regenerated TOTP recovery codes', ${user.email}, ${user.id})`;
   await sql.end();
@@ -1058,6 +1200,7 @@ function pickProfile(row: UserSettingsRow) {
     timezone: row.timezone,
     locale: row.locale,
     pronouns: row.pronouns,
+    archetype_sex: row.archetype_sex ?? null,
     profile_slug: row.profile_slug,
   };
 }
@@ -1160,6 +1303,7 @@ settings.put('/profile', async (c) => {
   if ('timezone' in body) patch.timezone = body.timezone;
   if ('locale' in body) patch.locale = body.locale;
   if ('pronouns' in body) patch.pronouns = body.pronouns;
+  if ('archetype_sex' in body) patch.archetype_sex = body.archetype_sex;
   if ('profile_slug' in body) patch.profile_slug = body.profile_slug;
   try {
     const row = await upsertUserSettings(c.env, user.id, patch);
@@ -1241,7 +1385,7 @@ settings.put('/profile/personal', async (c) => {
 // the read path. profile_completion_pct is recomputed inside those helpers
 // and returned in every response.
 const IDENTITY_PERSONAL_KEYS = ['display_name','headline','full_legal_name','date_of_birth','nationality'] as const;
-const IDENTITY_SETTINGS_KEYS = ['pronouns','profile_slug','timezone','locale'] as const;
+const IDENTITY_SETTINGS_KEYS = ['pronouns','archetype_sex','profile_slug','timezone','locale'] as const;
 const DETAILS_PERSONAL_KEYS = [
   'tax_residency_country','tax_id_number','phone_e164',
   'address_line1','address_line2','city','state_or_region','postal_code','country',
@@ -1256,6 +1400,7 @@ function pickIdentity(
     display_name: personal.display_name,
     headline: personal.headline,
     pronouns: settingsRow.pronouns,
+    archetype_sex: settingsRow.archetype_sex ?? null,
     profile_slug: settingsRow.profile_slug,
     timezone: settingsRow.timezone,
     locale: settingsRow.locale,
@@ -1729,9 +1874,11 @@ settings.get('/security', async (c) => {
   // intentionally NEVER return the full phone number — only the trailing 4.
   const smsRow = await loadSms(c.env, user.id);
   const factors = await getUserFactors(c.env, user.id);
+  const totpPairedAt = rows[0].totp_configured ? await loadTotpPairedAt(c.env, user.id) : null;
   return c.json({
     email_verified: !!rows[0].email_verified,
     totp_configured: !!rows[0].totp_configured,
+    totp_paired_at: totpPairedAt,
     totp_recovery_codes_remaining: remaining,
     active_sessions: Number(sessions[0]?.active || 0),
     sms_configured: !!smsRow,
@@ -1844,7 +1991,7 @@ settings.post('/connected-accounts/google/unlink', async (c) => {
               VALUES ('google_account_unlinked', 'user unlinked Google sign-in', ${eh}, ${user.id})`;
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: e?.message || 'Unlink failed' }, 500);
+    return refuse(c, 500, { code: 'unlink_failed', message: 'Google sign-in could not be unlinked. Nothing changed; try again in a moment.', raw: e });
   } finally {
     try { await sql.end(); } catch {}
   }

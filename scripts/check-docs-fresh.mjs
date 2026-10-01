@@ -42,9 +42,11 @@
  *   cd frontend && npm ci && cd .. && npm run build && git add docs && git commit -m "Rebuild docs/"
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { sourceTreeHash } from './lib/sourceTreeHash.mjs';
+import { classifyStamp } from './lib/buildStamp.mjs';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 
@@ -77,8 +79,127 @@ const skip = (why) => {
   process.exit(0);
 };
 
-if (!existsSync(join(ROOT, '.git'))) skip('not a git checkout');
 if (!existsSync(join(ROOT, 'docs'))) skip('no docs/ directory');
+
+// ---------------------------------------------------------------------------
+// THE DIRECT ANSWER, WHEN THE BUILD LEFT ONE.
+//
+// Everything below this block is the commit-timestamp proxy, and a proxy is all
+// it was: "docs/ was committed after frontend/src" is evidence that someone
+// probably rebuilt, not that they did. It is wrong in both directions.
+//
+//   FALSE PASS — commit docs/ without rebuilding and the timestamps say fresh
+//   forever. Nothing caught that.
+//   FALSE FAIL — a comment-only or type-only edit to frontend/src emits a
+//   BYTE-IDENTICAL bundle (the minifier strips comments, tsc erases types), so
+//   `npm run build` leaves docs/ untouched, there is nothing to `git add`, and
+//   the gate fails with no way to satisfy it. Its own printed fix — rebuild and
+//   commit — cannot pass, because `git commit` on an empty change refuses.
+//   #207's PR hit exactly this and is why this block exists (D103).
+//
+// So `scripts/build-frontend.mjs` now stamps the retention ledger with a hash
+// of the source tree it consumed, and the question becomes the real one: is the
+// committed docs/ the build of THIS source? That needs no git history, so it
+// also answers in a tarball, where the proxy could only refuse.
+// ---------------------------------------------------------------------------
+// NOT `docs/.asset-retention.json`, which is the other file every build writes:
+// that one is gitignored on purpose (45 KB of churn), so CI never sees it.
+const STAMP = join(ROOT, 'docs', '.build-source');
+const SRC = join(ROOT, 'frontend', 'src');
+
+const stamp = classifyStamp((() => {
+  try {
+    return readFileSync(STAMP, 'utf8');
+  } catch {
+    return null;  // absent stamp: either deleted or built with bare `vite build`
+  }
+})());
+
+// A STAMP THAT IS PRESENT BUT UNREADABLE IS A FAILURE, NOT A FALLBACK.
+//
+// This used to collapse "no file" and "corrupt file" into one `null`, and
+// `null` falls through to the commit-timestamp proxy below — the proxy D103
+// exists instead of, which passes whenever docs/ was committed after
+// frontend/src. So a stamp nobody could parse silently downgraded this gate to
+// the thing it replaced, and said ✓ while doing it.
+//
+// Absent is now a strict failure (D218): the build records its source hash
+// under D103, so absent means someone deleted the file or ran a bare `vite build`.
+//
+// The case this was written for is a MERGE. `.gitattributes` marks this path
+// `merge=union` so two branches that both rebuilt produce a two-line file
+// rather than a conflict (D113); the rebuild that must follow overwrites it,
+// and this is what refuses to let it pass if nobody rebuilds.
+if (stamp.present && !stamp.valid) {
+  const mark = strict ? '✖' : '⚠';
+  (strict ? console.error : console.warn)(`
+${mark} check-docs-fresh: docs/.build-source is there but cannot be read — ${stamp.why}.
+
+  A build writes exactly 64 hex characters, so this file was edited, truncated,
+  or merged. Two lines means two branches each rebuilt and git kept both
+  (see D113); the fix is the same either way, and it is not to delete the file:
+
+    npm run build && git add docs && git commit -m "Rebuild docs/"
+
+  Refusing to fall back to the commit-timestamp proxy: that proxy passes
+  whenever docs/ was committed after frontend/src, which a merge commit always
+  is, so falling back here would report fresh without checking anything.
+`);
+  if (strict) process.exit(1);
+}
+
+const stampedSource = stamp.valid ? stamp.value : null;
+
+if (stampedSource && existsSync(SRC)) {
+  const actual = sourceTreeHash(SRC);
+  if (actual === stampedSource) {
+    console.log('✓ check-docs-fresh: committed docs/ is the build of the current frontend/src.');
+    process.exit(0);
+  }
+  const mark = strict ? '✖' : '⚠';
+  const write = strict ? console.error : console.warn;
+  write(`
+${mark} check-docs-fresh: the committed docs/ build is not the build of this source.
+
+  docs/ was built from:  ${stampedSource.slice(0, 12)}…
+  frontend/src is now:   ${actual.slice(0, 12)}…
+
+  The live SPA is fine — \`npm run deploy\` rebuilds docs/ before deploying.
+  What IS stale is everything served from the committed bytes: prerendered OG
+  metadata and social link previews, and the og-tags CI job that validates them.
+
+  Fix (the npm ci matters — building from drifted dependency versions emits a
+  bundle that differs from the deploy's, which is worse than a stale one):
+    cd frontend && npm ci && cd .. && npm run build && git add docs && git commit -m "Rebuild docs/"
+`);
+  process.exit(strict ? 1 : 0);
+}
+
+// ABSENT STAMP: the file never existed at all.
+//
+// From D103 forward, every build writes docs/.build-source. Absent means one
+// of two things: either someone deleted it, or someone ran a bare `vite build`
+// instead of `npm run build`. Both are the defect this gate exists to catch.
+if (!stamp.present) {
+  const mark = strict ? '✖' : '⚠';
+  const write = strict ? console.error : console.warn;
+  write(`
+${mark} check-docs-fresh: docs/.build-source is missing.
+
+  The build writes a stamp of the source tree it consumed. Missing means either
+  you deleted the file or you ran a bare \`vite build\` instead of
+  \`npm run build\`. Either way, the fix is the same:
+
+    npm run build && git add docs && git commit -m "Rebuild docs/"
+`);
+  if (strict) process.exit(1);
+}
+
+// ---------------------------------------------------------------------------
+// FALLBACK: the commit-timestamp proxy, for a docs/ built before the stamp
+// existed. Kept rather than deleted so an older checkout still gets an answer.
+// ---------------------------------------------------------------------------
+if (!existsSync(join(ROOT, '.git'))) skip('not a git checkout');
 
 // A SHALLOW CHECKOUT CANNOT ANSWER THIS, AND USED TO PASS ANYWAY.
 //

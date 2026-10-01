@@ -51,6 +51,46 @@
 /** Every icon inside a Lab header control renders at this size. */
 export const LAB_ICON_SIZE = 13;
 
+/* ----------------------------------------------------------- page gutters */
+
+/**
+ * Canonical left / top / right gutters for every Spin-Out Lab surface.
+ *
+ * The workspace overview (`SpinoutLabWorkspace`) and every tool page share
+ * these tokens so the back link, program timeline, and feature workbenches
+ * line up on the same vertical rails. The app shell runs flush (`p-0`) on
+ * `/spinout-lab` and `/spinout-lab/*`; each page owns its own gutters here.
+ *
+ *   px-4 sm:px-6  — 16px mobile, 24px sm+ (matches the workspace sticky
+ *                    header's negative-margin bleed)
+ *   py-6          — 24px top and bottom; LabPageHeader's pt-[19px] sits
+ *                    inside this, not instead of it
+ */
+export const LAB_PAGE_PAD = 'px-4 sm:px-6 py-6';
+
+/** Extra bottom room on the scrollable workspace overview (sticky footer). */
+export const LAB_PAGE_PAD_LOOSE = 'pb-24';
+
+/**
+ * Per-tool max-widths stay separate — a 1200px workbench and a 7xl reading
+ * page are both intentional — but every variant shares LAB_PAGE_PAD above.
+ */
+export const LAB_PAGE_WIDTHS = {
+  workbench: 'max-w-[1200px] mx-auto w-full',
+  reading: 'max-w-7xl mx-auto w-full',
+  narrow: 'max-w-6xl mx-auto w-full',
+  agreement: 'max-w-[1100px] mx-auto w-full',
+  apply: 'max-w-[1080px] mx-auto w-full',
+  brief: 'max-w-[960px] mx-auto w-full',
+  /** Full-bleed within the gutters — workspace overview, no max-width cap. */
+  full: 'w-full',
+};
+
+export function labPageShellClass(width = 'workbench', { spaceY = 'space-y-5', className = '' } = {}) {
+  const w = LAB_PAGE_WIDTHS[width] || LAB_PAGE_WIDTHS.workbench;
+  return `${w} ${LAB_PAGE_PAD}${spaceY ? ` ${spaceY}` : ''}${className ? ` ${className}` : ''}`.trim();
+}
+
 /* ------------------------------------------------------------------ chips */
 
 const CHIP_BASE = 'inline-flex items-center gap-1 whitespace-nowrap rounded-full';

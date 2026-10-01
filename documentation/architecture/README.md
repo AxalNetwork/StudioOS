@@ -12,8 +12,10 @@ disagrees with the code, the document is the thing to fix.
 | `PAGE_INVENTORY.md` | **Generated.** The same projection from the nav side: every destination each role sidebar can reach, and which canvas is behind it. |
 | `UNRESOLVED_ITEMS.md` | The routing decisions that cannot be made from the code, what each blocks, and what a wrong guess would cost. |
 | `ASSUMPTIONS_LOG.md` | Routing calls taken without an explicit instruction, what each was decided from, and what would make it wrong. |
+| `PROFILING_V2.md` | Profiling v2 (archetype, skills, values that evolve with use). Holds S9's skill-evidence tool map; S7 owns the rest of the spec. |
 | `DECISIONS.md` | Why is it built this way and not the obvious way? Numbered, D1…, each recording what was decided and what it cost. |
 | `GOTCHAS.md` | What will bite me? |
+| `PROFILING_V2.md` | The Profiling v2 spec (D356): trait model, question formats, skills evidence, values across roles, the evolution model and its parameters, and what Sessions 7–15 build. The source of truth for that programme; `cloudflare-worker/test/fixtures/profiling-v2-personas.json` is held to it. |
 | `PRODUCTION.md` | What production actually is, and how a deploy works. |
 | `CLOUDFLARE-CUTOVER.md` | **Superseded record (2026-08).** The plan that retired GitHub Pages at the apex — executed, then overtaken: since 2026-09-01 the Worker serves both hosts (`PRODUCTION.md` has the current topology). Kept for the 5xx baseline table and the OAuth re-registration table, which is still live work. |
 | `CLOUDFLARE-PAGES-MIGRATION.md` | **Superseded record (2026-08-31).** How the apex moved to Cloudflare Pages for one day, and what bit — the failure mode that still forbids path-scoped apex routes. Pages is a mirror of `docs/` now, not a host. |

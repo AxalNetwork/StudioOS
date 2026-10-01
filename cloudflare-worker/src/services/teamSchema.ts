@@ -8,13 +8,14 @@
  * Cached per isolate (no re-execution on every hot request).
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 export async function ensureTeamMembersSchema(env: Env): Promise<void> {
-  if (_ready) return;
+  if (READY.get(bindingKey(env))) return;
   if (env.ENVIRONMENT === 'production') {
-    _ready = true;
+    READY.set(bindingKey(env), true);
     return;
   }
   try {
@@ -41,7 +42,7 @@ export async function ensureTeamMembersSchema(env: Env): Promise<void> {
       env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_team_members_published_order
         ON team_members (published, display_order)`),
     ]);
-    _ready = true;
+    READY.set(bindingKey(env), true);
   } catch (err) {
      
     console.warn('[teamSchema] ensure failed', err);

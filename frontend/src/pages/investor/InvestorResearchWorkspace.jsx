@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, RefreshCw, Search } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { WorkerRail } from '../../ui';
+import { Unreadable, WorkerRail } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorResearchWorkspace.css';
@@ -13,7 +14,13 @@ function Skeleton() { return <div className="ir-skeleton" data-testid="research-
 
 export default function InvestorResearchWorkspace() {
   const [question, setQuestion] = useState('What evidence is available for this market?');
-  const [submitted, setSubmitted] = useState(false);
+  // The desk below is the compressed IR1 question box, and it is WIRED:
+  // `asked` holds what POST /research/ask returned, in the three shapes that
+  // route answers (see AskAnswer). Nothing runs until the button is pressed —
+  // a visit spends nothing.
+  const [asking, setAsking] = useState(false);
+  const [asked, setAsked] = useState(null);
+  const [askError, setAskError] = useState('');
   const [data, setData] = useState(null);
   const [errors, setErrors] = useState({});
   const [refreshing, setRefreshing] = useState(false);
@@ -33,6 +40,28 @@ export default function InvestorResearchWorkspace() {
     setData(next); setErrors(nextErrors); setRefreshing(false);
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  /**
+   * ASK RUNS ON THE PRESS, NEVER ON THE PAGE. The box used to set a flag and
+   * show a panel claiming there is no scoped research-chat service on this
+   * route. There is one — POST /research/ask, open to every signed-in user —
+   * and the desk now submits to it: the same thread /research/ask shows, so
+   * the answer is there to follow up on. The question joins the caller's own
+   * session (the worker falls back to the most recent one), and the answer
+   * comes back with its citations, or with the route's own reason for not
+   * answering.
+   */
+  const runAsk = useCallback(async () => {
+    const q = question.trim();
+    if (!q || asking) return;
+    setAsking(true); setAskError('');
+    try {
+      setAsked(await api.research.ask(q));
+    } catch (cause) {
+      setAsked(null);
+      setAskError(cause?.message || 'That question could not be answered right now.');
+    } finally { setAsking(false); }
+  }, [question, asking]);
 
   const sources = useMemo(() => arrayOf(data?.sources, ['sources', 'items', 'data']), [data]);
   const rounds = useMemo(() => arrayOf(data?.rounds, ['rounds', 'items', 'data']), [data]);
@@ -54,10 +83,10 @@ export default function InvestorResearchWorkspace() {
         <header className="ir-hero">
           <h1 data-testid="heading-investor-research">Go deep before money moves</h1>
           <p>The page opens as a question. Evidence remains attached to its source, permission, freshness, and uncertainty.</p>
-          <form className="ir-question" id="research-ask" onSubmit={(event) => { event.preventDefault(); setSubmitted(true); }} data-testid="form-research-question">
+          <form className="ir-question" id="research-ask" onSubmit={(event) => { event.preventDefault(); runAsk(); }} data-testid="form-research-question">
             <Search size={15} aria-hidden="true" />
-            <input value={question} onChange={(event) => setQuestion(event.target.value)} aria-label="Research question" data-testid="input-research-question" />
-            <button className="ir-button" type="submit" data-testid="button-submit-research-question">Find evidence</button>
+            <input value={question} onChange={(event) => setQuestion(event.target.value)} aria-label="Research question" data-testid="input-research-question" maxLength={1000} />
+            <button className="ir-button" type="submit" disabled={asking || !question.trim()} data-testid="button-submit-research-question">{asking ? 'Asking…' : 'Find evidence'}</button>
           </form>
           {/* Five real links. These were `href="#research-ask"` and four more —
               anchors onto this page, while /research/ask and its four siblings
@@ -65,9 +94,9 @@ export default function InvestorResearchWorkspace() {
           <ZoneNav bucket={bucketForPath('investor', '/research')} role="investor" activeSlug={null} className="mt-2.5" />
         </header>
 
-        {submitted && <section className="ir-card">
-          <div className="ir-head"><h2>Question desk</h2><span data-testid="text-research-question-state">{question.trim() ? 'Question ready for evidence review' : 'Enter a question to orient the evidence'}</span></div>
-          <div className="ir-answer unavailable" data-testid="status-research-answer-unavailable"><div className="ir-answer-top"><b className="ir-label">Sourced answer</b><small>Automated run unavailable</small></div><p>There is no scoped research-chat service on this route. Review the available source library and market records below; no answer has been generated.</p></div>
+        {(asking || asked || askError) && <section className="ir-card">
+          <div className="ir-head"><h2>Question desk</h2><span data-testid="text-research-question-state">{asking ? 'Asking your research library' : askError ? 'The question could not be asked' : asked?.reason === 'answered' ? 'Answered from your research library' : asked?.reason === 'no_source' ? 'No source cleared the bar' : 'No answer could be written'}</span></div>
+          <AskAnswer asked={asked} error={askError} asking={asking} onRetry={runAsk} />
         </section>}
 
         <section className="ir-card" id="research-evidence">
@@ -101,7 +130,7 @@ export default function InvestorResearchWorkspace() {
         ]}
         coverageNote="Use only records whose source and permission are explicit. Re-check dated evidence before relying on it in diligence."
         unavailable={[
-          ['Sourced answers', 'There is no scoped research-chat service on this route. The question desk states that rather than answering from general knowledge.'],
+          ['General-knowledge answers', 'The question desk answers only from documents you have added to your own research library, with citations. When nothing there is close enough it says so — it does not answer from general knowledge, the web, or company databases.'],
           ['Inferred provenance', 'Private or founder-shared evidence is labelled only when the returned record supplies that provenance.'],
         ]}
         action={(
@@ -112,4 +141,37 @@ export default function InvestorResearchWorkspace() {
       />
     </div>
   </main>;
+}
+
+/**
+ * What POST /research/ask said, in the three shapes it says it.
+ *
+ * `no_source` has two meanings the route keeps apart on purpose — an empty
+ * library and a library with nothing on this — and `indexed_documents` is how
+ * the desk tells them apart. `model_unavailable` still carries the passages it
+ * found, so they are listed rather than hidden. A question the library cannot
+ * answer never reaches the model and is charged nothing; the charge shown is
+ * the route's own receipt, never an estimate typed here.
+ */
+function AskAnswer({ asked, error, asking, onRetry }) {
+  if (error) {
+    return <Unreadable what="The answer" claim="That is a failed read, not a claim that no answer exists." onRetry={onRetry} />;
+  }
+  if (asking) {
+    return <div className="ir-answer unavailable" data-testid="status-research-answer-asking"><div className="ir-answer-top"><b className="ir-label">Sourced answer</b><small>Reading your library</small></div><p>Your research library is being searched. An answer is written only when a passage in it clears the bar, and is cited to that passage.</p></div>;
+  }
+  if (!asked) return null;
+  const citations = Array.isArray(asked.citations) ? asked.citations : [];
+  const said = asked.reason === 'answered' ? asked.answer
+    : asked.reason === 'no_source'
+      ? (Number(asked.indexed_documents) === 0
+        ? 'Your research library holds no indexed document yet, so there is nothing to answer from. Add a document on the Library page and it becomes answerable here.'
+        : 'Nothing in your research library answers this question closely enough to cite. The desk does not answer from general knowledge.')
+      : 'Relevant passages were found and are listed below, but no answer could be written from them just now. Adding documents will not help with that.';
+  return <div className={asked.reason === 'answered' ? 'ir-answer' : 'ir-answer unavailable'} data-testid="card-research-answer">
+    <div className="ir-answer-top"><b className="ir-label">Sourced answer</b><small>{Number.isFinite(Number(asked.cost_usd)) ? `Charged $${Number(asked.cost_usd).toFixed(4)}` : 'Charge not recorded'}</small></div>
+    <p>{said}</p>
+    {citations.length ? <ol>{citations.map((citation, index) => <li key={`${citation.title}-${index}`}>{citation.title || 'Untitled document'}{Number.isFinite(Number(citation.chunk)) ? ` · passage ${Number(citation.chunk) + 1}` : ''}</li>)}</ol> : null}
+    <p><Link to="/research/ask" data-testid="link-research-ask-thread">Continue in Ask</Link> — the question and its answer are on your thread there.</p>
+  </div>;
 }

@@ -13,13 +13,14 @@
  * calendar migration), the helper bootstraps it lazily.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const TEXT = new TextEncoder();
 
-let _stateSchemaReady = false;
+const STATE_SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureStateSchema(env: Env): Promise<void> {
-  if (_stateSchemaReady) return;
+  if (STATE_SCHEMA_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       'CREATE TABLE IF NOT EXISTS oauth_state_tokens (' +
@@ -31,7 +32,7 @@ async function ensureStateSchema(env: Env): Promise<void> {
       'created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, ' +
       'consumed_at TIMESTAMP)',
     );
-    _stateSchemaReady = true;
+    STATE_SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[oauth] ensureStateSchema failed:', (e as Error).message);
   }

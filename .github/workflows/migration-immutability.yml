@@ -1,0 +1,60 @@
+name: Migration immutability
+
+# A migration already on main is never edited, deleted or renamed (D269).
+# scripts/migration-immutability-gate.mjs holds the check; this file only
+# decides WHEN it runs and WHAT it compares against.
+#
+# WHY ITS OWN WORKFLOW AND NOT A ci.yml JOB. ci.yml cancels an in-progress run
+# on the same ref (`cancel-in-progress: true`). On main that means a push that
+# lands while the previous push is still being checked cancels the previous
+# run, and the previous push's commit range is then never checked by anything.
+# Six of the eight drifts D269 records arrived in ONE direct push (1563f0aa8),
+# which is exactly the run a cancellation would have skipped. So a push to
+# main is checked to completion here, one run per pushed commit; only pull
+# request runs, which are superseded by the next push to the same PR, cancel.
+#
+# WHY fetch-depth 0. The check is a three-dot diff from the merge base of the
+# base and HEAD. A depth-1 clone has no merge base, so the diff cannot be
+# made; the script fails rather than passes when that happens, but a gate that
+# can only fail is no more use than one that can only pass.
+#
+# THE TWO MODES, and the event chooses between them:
+#   · pull_request — the base is the PR's base branch (GITHUB_BASE_REF).
+#   · push to main — the base is the commit main pointed at before the push
+#     (github.event.before). A push cannot be blocked, so what the job does
+#     there is turn main red the minute the edit lands, not at the next
+#     deploy's "checksum drift" warning.
+#
+# Every value reaches the script through `env:`, never `${{ }}` inside `run:`,
+# so nothing a PR controls is ever parsed as shell.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migration-immutability-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  gate:
+    name: applied migrations unchanged
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: '22'
+      - name: No migration on the base was edited, deleted or renamed
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          MIGRATION_GATE_BEFORE: ${{ github.event_name == 'push' && github.event.before || '' }}
+        run: node scripts/migration-immutability-gate.mjs

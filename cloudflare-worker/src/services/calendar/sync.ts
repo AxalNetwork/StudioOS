@@ -75,7 +75,7 @@ async function pushOneUserOneProvider(
       ? await refreshGoogleAccessToken(env, tok.raw)
       : await refreshMicrosoftAccessToken(env, tok.raw);
   } catch (e) {
-    console.warn(`[calendar/sync] ${provider} refresh failed user=${userId}`, e);
+    console.warn('[calendar/sync] refresh failed', { provider, user: userId }, e);
     return;
   }
   if (tok.wasPlaintext) await reencryptRefreshToken(env, tokTable, userId, tok.raw);
@@ -189,7 +189,7 @@ export async function onAxalSessionCancelled(
       } catch (e) {
         // Stamp the row with an error so an admin / future retry job
         // can see it failed; do NOT delete the mapping.
-        console.warn(`[calendar/sync] cancel ${r.provider} failed user=${r.user_id}`, e);
+        console.warn('[calendar/sync] cancel failed', { provider: r.provider, user: r.user_id }, e);
         try {
           await sql`
             UPDATE calendar_sync_records

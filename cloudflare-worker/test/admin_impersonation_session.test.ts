@@ -35,6 +35,8 @@ const TARGET = 703;
 const JTI = 'jti-admin-session-1';
 const OTHER_JTI = 'jti-other-admin-1';
 const REASON = 'Password reset support ticket 4821';
+// D248 — Extend asks for its own reason, at least 10 characters.
+const EXTEND_REASON = 'Still resetting: the second factor needs re-binding';
 
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
@@ -92,7 +94,7 @@ function freshDb() {
   return db;
 }
 
-async function call(db: any, actor: number, jti: string, path: string) {
+async function call(db: any, actor: number, jti: string, path: string, body?: Record<string, unknown>) {
   const jwt = await new SignJWT({ user_id: actor, role: 'admin', jti })
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
     .sign(new TextEncoder().encode(JWT_SECRET));
@@ -100,6 +102,7 @@ async function call(db: any, actor: number, jti: string, path: string) {
     new Request(`http://x${path}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
     }),
     { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db) } as any,
   );
@@ -183,7 +186,7 @@ test('extending mints a fresh thirty minutes and says so in the log', async () =
   const first = await open(db);
   const id = first.body.impersonation_session_id;
 
-  const ext = await call(db, ADMIN, JTI, `/impersonate-sessions/${id}/extend`);
+  const ext = await call(db, ADMIN, JTI, `/impersonate-sessions/${id}/extend`, { reason: EXTEND_REASON });
   assert.equal(ext.status, 200, JSON.stringify(ext.body));
 
   // NOT `notEqual(ext.token, first.token)`, which is what this asserted at
@@ -211,7 +214,7 @@ test('only the admin who opened a session may extend it', async () => {
   const db = freshDb();
   const first = await open(db);
   const id = first.body.impersonation_session_id;
-  const r = await call(db, OTHER_ADMIN, OTHER_JTI, `/impersonate-sessions/${id}/extend`);
+  const r = await call(db, OTHER_ADMIN, OTHER_JTI, `/impersonate-sessions/${id}/extend`, { reason: EXTEND_REASON });
   assert.equal(r.status, 404, 'another admin extended a session they did not open');
   assert.equal(r.body.code, 'session_not_open');
   assert.equal(r.body.token, undefined, 'a token was handed to the wrong admin');
@@ -227,7 +230,7 @@ test('an ended session cannot be revived', async () => {
   assert.equal(ended.status, 200);
   assert.ok(sessions(db)[0].ended_at, 'ending the session did not stamp it');
 
-  const r = await call(db, ADMIN, JTI, `/impersonate-sessions/${id}/extend`);
+  const r = await call(db, ADMIN, JTI, `/impersonate-sessions/${id}/extend`, { reason: EXTEND_REASON });
   assert.equal(r.status, 404, 'a closed support session was reopened by extending it');
   assert.equal(r.body.token, undefined);
 });

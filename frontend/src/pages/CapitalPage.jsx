@@ -17,9 +17,11 @@ function ModernSelect({ value, onChange, children, ...props }) {
 }
 
 export default function CapitalPage() {
-  // Task #9 — creating capital calls is a fund/GP (admin) action. Investors
-  // keep read + pay-own-call access, so hide the create control for non-admins
-  // (the server also enforces admin-only on POST /api/capital/calls).
+  // Task #9 — creating capital calls is a fund/GP (admin) action, so the create
+  // control is hidden for non-admins (the server also enforces admin-only on
+  // POST /api/capital/calls). D370 — recording a call PAID is the fund's GP of
+  // record's, not the LP's: each call carries `can_record` from the server,
+  // and only those rows offer the button.
   const { role } = useAuth();
   const isAdmin = role === 'admin';
   const [portfolio, setPortfolio] = useState(null);
@@ -211,9 +213,9 @@ export default function CapitalPage() {
                     </td>
                     <td className="px-5 py-3 text-gray-600">{c.due_date || '—'}</td>
                     <td className="px-5 py-3">
-                      {c.status === 'pending' && (
-                        <button onClick={() => payCall(c.id)} className="text-xs text-emerald-400 hover:text-emerald-300">Mark Paid</button>
-                      )}
+                      {c.status === 'pending' && (c.can_record
+                        ? <button onClick={() => payCall(c.id)} className="text-xs text-emerald-400 hover:text-emerald-300">Mark Paid</button>
+                        : <span className="text-xs text-gray-500 dark:text-gray-400">Awaiting the GP's receipt</span>)}
                     </td>
                   </tr>
                 );

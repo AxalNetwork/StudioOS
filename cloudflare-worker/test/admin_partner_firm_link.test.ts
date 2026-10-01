@@ -37,6 +37,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import adminPartners from '../src/routes/admin_partners.ts';
+import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 
 /**
  * The sub-app under the SAME error mapping production gives it.
@@ -109,8 +110,21 @@ function freshDb() {
     CREATE TABLE activity_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, details TEXT, actor TEXT, user_id INTEGER
     );
+    -- D159 — WIDENED TO THE SHAPE PRODUCTION HAS. This was a four-column
+    -- stand-in (id, admin_user_id, action, filters_json), and it was narrower
+    -- than the thing it stood in for in a way that changed behaviour:
+    -- ensureAdminAuditLogTable creates its index on (admin_user_id,
+    -- exported_at DESC) in the SAME try block as its PRAGMA-guarded ADD
+    -- COLUMNs, so a table with no exported_at made the index throw and the
+    -- ADD COLUMNs never ran -- and the audit INSERT then failed against a
+    -- column the fixture had silently refused to grow. A fixture narrower
+    -- than the schema reports a defect that is its own; the D133 lesson, one
+    -- table over.
     CREATE TABLE admin_audit_log (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER, action TEXT, filters_json TEXT
+      id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER NOT NULL, action TEXT NOT NULL,
+      report_type TEXT, format TEXT, filters_json TEXT, storage_key TEXT, download_url TEXT,
+      exported_at TEXT NOT NULL DEFAULT (datetime('now')),
+      viewed_user_id INTEGER, conversation_id INTEGER, viewed_at TEXT
     );
   `);
   const u = db.prepare('INSERT INTO users (id, role, partner_id, name, email) VALUES (?,?,?,?,?)');
@@ -191,10 +205,17 @@ test('an admin attaches one named account to one named firm', async () => {
   // And it is written down. An attach nobody can trace afterwards is the thing
   // impersonation exists to avoid.
   const logged = db.prepare(
-    "SELECT filters_json FROM admin_audit_log WHERE action = 'partner_firm_link_set'").all();
+    "SELECT filters_json, viewed_user_id FROM admin_audit_log WHERE action = 'partner_firm_link_set'")
+    .all();
   assert.equal(logged.length, 1);
   const details = JSON.parse((logged[0] as any).filters_json);
-  assert.deepEqual([details.user_id, details.from, details.to], [ORPHAN, null, 9]);
+  // D159 — the key is `target_user_id`, not `user_id`. This call site was the
+  // one of five that named its subject differently, so the shared
+  // logAdminAction could not find it and the row landed with no subject.
+  assert.deepEqual([details.target_user_id, details.from, details.to], [ORPHAN, null, 9]);
+  // And the subject now reaches the column HQ's governance feed joins on,
+  // which is what makes the Target column say who this was done to.
+  assert.equal((logged[0] as any).viewed_user_id, ORPHAN);
 });
 
 test('detaching is a real answer, and is recorded as one', async () => {
@@ -268,17 +289,21 @@ test('a partner cannot reach either endpoint', async () => {
   assert.equal(linkOf(db, ORPHAN), null);
 });
 
-test('the statuses this file asserts are the ones index.ts actually sends', () => {
-  // The harness above replicates two rows of `AUTH_ERROR_STATUSES`, which is a
-  // private const rather than an export. Replicating a mapping is fine; letting
-  // the copy outlive the original is not — the authorization tests would then
-  // pass against a status nothing produces.
+test('the statuses this file asserts are the ones the Worker actually sends', () => {
+  // The harness above replicates two rows of `AUTH_ERROR_STATUSES`. Replicating
+  // a mapping is fine; letting the copy outlive the original is not — the
+  // authorization tests would then pass against a status nothing produces.
+  //
+  // D110 — the table moved out of `index.ts` into `util/authErrors.ts` when it
+  // turned out there were TWO of them: `app.onError` read this one and
+  // `mapError` had its own list. So this now reads the real object rather than
+  // scanning a file for it, and checks both readers are still wired.
+  assert.equal(AUTH_ERROR_STATUSES.Unauthorized, 401);
+  assert.equal(AUTH_ERROR_STATUSES['Admin required'], 403);
   const HERE = dirname(fileURLToPath(import.meta.url));
   const index = readFileSync(resolve(HERE, '../src/index.ts'), 'utf8');
-  const at = index.indexOf('const AUTH_ERROR_STATUSES');
-  assert.ok(at > 0, 'index.ts no longer declares AUTH_ERROR_STATUSES');
-  const table = index.slice(at, index.indexOf('};', at));
-  assert.match(table, /Unauthorized:\s*401/);
-  assert.match(table, /'Admin required':\s*403/);
   assert.match(index, /app\.onError/, 'nothing maps the auth throws to a status any more');
+  assert.match(index, /AUTH_ERROR_STATUSES\[msg\]/, 'app.onError must read the shared table');
+  const helpers = readFileSync(resolve(HERE, '../src/routes/_t13t14t15_helpers.ts'), 'utf8');
+  assert.match(helpers, /AUTH_ERROR_STATUSES\[msg\]/, 'mapError must read the same table, not its own list');
 });

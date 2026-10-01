@@ -17,6 +17,8 @@ import { loadAllLatestFit, loadAxalValues } from '../services/axalFit';
 import { ensureAxalFitSchema } from '../services/axalFitSchema';
 import { loadAllLatestArchetype } from '../services/archetypeScoring';
 import { loadFitV2Report } from '../services/fitV2Decision';
+import { getUserSettings } from '../services/userSettings';
+import { resolveArchetypeSex } from '../services/archetypePresentation';
 
 const bestFitSelf = new Hono<{ Bindings: Env }>();
 
@@ -25,12 +27,13 @@ const bestFitSelf = new Hono<{ Bindings: Env }>();
 bestFitSelf.get('/me', async (c) => {
   const user = await requireAuth(c);
   await ensureAxalFitSchema(c.env);
-  const [fit, axalValues, archetypes, fitV2] = await Promise.all([
+  const [fit, axalValues, archetypes, fitV2, settings] = await Promise.all([
     loadAllLatestFit(c.env, user.id),
     loadAxalValues(c.env, user.id),
     loadAllLatestArchetype(c.env, user.id),
     // Task #19 — Axal Fit & Values v2: weighted 6-outcome decision, live-computed.
     loadFitV2Report(c.env, user.id),
+    getUserSettings(c.env, user.id),
   ]);
   const primary_persona = fit.length
     ? [...fit].sort((a, b) => b.total_score - a.total_score)[0].persona
@@ -42,7 +45,8 @@ bestFitSelf.get('/me', async (c) => {
   // Prefer the archetype that matches the primary fit persona so the card
   // matches the scorecard; otherwise take the highest-confidence one.
   const archetype = archetypes.find((a) => a.persona === primary_persona) || archetypes[0] || null;
-  return c.json({ primary_persona, fit, axal_values: axalValues, archetype, archetypes, computed_at, fit_v2: fitV2 });
+  const archetype_sex = resolveArchetypeSex(settings.archetype_sex, settings.pronouns);
+  return c.json({ primary_persona, fit, axal_values: axalValues, archetype, archetypes, archetype_sex, computed_at, fit_v2: fitV2 });
 });
 
 export default bestFitSelf;

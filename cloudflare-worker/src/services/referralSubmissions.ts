@@ -12,6 +12,7 @@
  * platform.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export const CATEGORIES = ['startup', 'customer', 'strategic'] as const;
 export type Category = (typeof CATEGORIES)[number];
@@ -107,7 +108,7 @@ export function isStatus(v: unknown): v is Status {
 // Schema
 // ---------------------------------------------------------------------------
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 /**
  * Dev/preview only. Production D1 owns this schema via migration 175 — running
@@ -115,8 +116,8 @@ let _ready = false;
  * to the apex 504s, so production short-circuits and trusts the migration.
  */
 export async function ensureReferralSubmissionsSchema(env: Env): Promise<void> {
-  if (_ready) return;
-  if (env.ENVIRONMENT === 'production') { _ready = true; return; }
+  if (READY.get(bindingKey(env))) return;
+  if (env.ENVIRONMENT === 'production') { READY.set(bindingKey(env), true); return; }
   const stmts = [
     `CREATE TABLE IF NOT EXISTS referral_submissions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -163,7 +164,7 @@ export async function ensureReferralSubmissionsSchema(env: Env): Promise<void> {
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch { /* idempotent */ }
   }
-  _ready = true;
+  READY.set(bindingKey(env), true);
 }
 
 // ---------------------------------------------------------------------------
@@ -305,6 +306,51 @@ export async function countsForReferrer(
   return { total, byStatus, converted, rewardIssued: byStatus.reward_issued || 0 };
 }
 
+/** One status-change event, joined to the submission it belongs to. */
+export type VerdictEventRow = {
+  submission_id: number;
+  submitted_at: string | null;
+  event_status: string | null;
+  event_at: string | null;
+};
+
+/**
+ * submission id → { submitted, EARLIEST verdict }, in epoch ms.
+ *
+ * ONE DEFINITION OF "HOW LONG A REFERRAL WAITED", read by two screens (D210):
+ * the referrer's own average below, and a branch's median decision age on its
+ * Analytics page. Before D210 the rule lived inside the average, and a second
+ * reader would have been a second copy of it.
+ *
+ * THE EARLIEST VERDICT IS THE DECISION. A referral can move on after it is
+ * decided — converted, then reward-eligible, then reward-issued — and every one
+ * of those is a verdict status; counting from a later one would make a quick
+ * decision look slow because the referral went on succeeding.
+ *
+ * D1 writes `CURRENT_TIMESTAMP` as `YYYY-MM-DD HH:MM:SS` with no zone marker,
+ * which `Date.parse` would read as LOCAL time. Both ends are stamped UTC, so
+ * both are read as UTC.
+ */
+export function verdictSpans(rows: readonly VerdictEventRow[]): Map<number, { from: number; to: number }> {
+  const at = (raw: string | null): number =>
+    Date.parse(`${(raw ?? '').replace(' ', 'T')}Z`);
+  const verdict = new Set(VERDICT_STATUSES);
+  const perSubmission = new Map<number, { from: number; to: number }>();
+  for (const row of rows) {
+    if (!row.event_status || !verdict.has(row.event_status)) continue;
+    const from = at(row.submitted_at);
+    const to = at(row.event_at);
+    if (!Number.isFinite(from) || !Number.isFinite(to)) continue;
+    // A verdict stamped before the submission it belongs to is impossible in
+    // the write path, so it is corrupt rather than fast. Counting it would
+    // drag a real figure toward a lie.
+    if (to < from) continue;
+    const seen = perSubmission.get(row.submission_id);
+    if (!seen || to < seen.to) perSubmission.set(row.submission_id, { from, to });
+  }
+  return perSubmission;
+}
+
 /**
  * Mean days from submission to a verdict — or `null` when nothing has one yet.
  *
@@ -351,29 +397,7 @@ export async function avgReviewDaysForReferrer(
     event_at: string | null;
   }>();
 
-  // D1 writes `CURRENT_TIMESTAMP` as `YYYY-MM-DD HH:MM:SS` with no zone marker,
-  // which `Date.parse` would read as LOCAL time. Both ends are stamped UTC, so
-  // both are read as UTC.
-  const at = (raw: string | null): number =>
-    Date.parse(`${(raw ?? '').replace(' ', 'T')}Z`);
-
-  const verdict = new Set(VERDICT_STATUSES);
-  /** submission id → { submitted, earliest verdict } */
-  const perSubmission = new Map<number, { from: number; to: number }>();
-
-  for (const row of res.results || []) {
-    if (!row.event_status || !verdict.has(row.event_status)) continue;
-    const from = at(row.submitted_at);
-    const to = at(row.event_at);
-    if (!Number.isFinite(from) || !Number.isFinite(to)) continue;
-    // A verdict stamped before the submission it belongs to is impossible in
-    // the write path, so it is corrupt rather than fast. Averaging it in would
-    // drag a real figure toward a lie.
-    if (to < from) continue;
-    const seen = perSubmission.get(row.submission_id);
-    if (!seen || to < seen.to) perSubmission.set(row.submission_id, { from, to });
-  }
-
+  const perSubmission = verdictSpans(res.results || []);
   if (!perSubmission.size) return null;
   let sum = 0;
   for (const { from, to } of perSubmission.values()) sum += (to - from) / 86_400_000;

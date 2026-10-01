@@ -60,8 +60,11 @@ export function ledgerShapeProblem(columns) {
 
 // Sort key: numeric prefix first (so 9 < 10 < 100), then the full filename as a
 // deterministic tiebreak. Tiebreak matters — this repo has duplicate prefixes
-// (011_, 068_, 118_ each appear twice); without it their order would be
-// undefined and a deploy could apply them in a different order than the last.
+// (011_, 068_, 118_ and 259_ each appear twice); without it their order would
+// be undefined and a deploy could apply them in a different order than the
+// last. 259_ is the one that makes this load-bearing rather than historical:
+// it is the first duplicate ABOVE BASELINE_CUTOFF, so it is the first pair a
+// live forward deploy actually orders, where 011/068/118 are only ever marked.
 export function migrationSortKey(name) {
   const m = /^(\d+)/.exec(name);
   const num = m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
@@ -283,7 +286,7 @@ export function expectedEffects(sql) {
   const tables = new Set();
   const columns = [];
   const re =
-    /\b(?:CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"[]?(\w+)|ALTER\s+TABLE\s+[`"[]?(\w+)[`"\]]?\s+RENAME\s+TO\s+[`"[]?(\w+)|DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?[`"[]?(\w+)|ALTER\s+TABLE\s+[`"[]?(\w+)[`"\]]?\s+ADD\s+(?:COLUMN\s+)?[`"[]?(\w+))/gi;
+    /\b(?:CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"[]?(\w+)|ALTER\s+TABLE\s+[`"[]?(\w+)[`"\]]?\s+RENAME\s+TO\s+[`"[]?(\w+)|DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?[`"[]?(\w+)|ALTER\s+TABLE\s+[`"[]?(\w+)[`"\]]?\s+ADD\s+(?:COLUMN\s+)?(?:IF\s+NOT\s+EXISTS\s+)?[`"[]?(\w+))/gi;
   for (const m of body.matchAll(re)) {
     const [, created, renameFrom, renameTo, dropped, alterTable, alterColumn] = m;
     if (created) {

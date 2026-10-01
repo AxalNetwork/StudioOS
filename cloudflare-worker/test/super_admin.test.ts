@@ -54,12 +54,25 @@ test('the gate is layered on requireAdmin, so it can only ever narrow', () => {
   assert.match(fn.slice(0, 400), /Super admin required/);
 });
 
-test("the refusal is a 403, not a 500", () => {
+test("the refusal is a 403 — not a 500, and not a 400", () => {
   // AUTH_ERROR_STATUSES maps thrown messages to statuses; anything missing
   // falls through to the generic 500. A gate that works and reports a server
   // error is a gate nobody can act on.
-  const src = read('cloudflare-worker/src/index.ts');
+  const src = read('cloudflare-worker/src/util/authErrors.ts');
   assert.match(src, /'Super admin required': 403/);
+
+  // D110 — AND THE OTHER READER, which is the one this console actually goes
+  // through. Every route in `admin_licences.ts` catches its own throws with
+  // `mapError`, so `app.onError` never sees them; `mapError` had its own list
+  // of sentences, that list did not include this one, and the whole franchise
+  // console answered a permission refusal with **400 Bad Request**. There is
+  // one table now and both readers index it.
+  const helpers = read('cloudflare-worker/src/routes/_t13t14t15_helpers.ts');
+  assert.match(helpers, /AUTH_ERROR_STATUSES\[msg\] \?\? 400/);
+  assert.ok(
+    !/msg === 'Forbidden' \|\| msg === 'Admin required'/.test(helpers),
+    'mapError must not carry a second list of which sentence is which status',
+  );
 });
 
 test('every route on the franchise console is super-admin only', () => {
@@ -134,7 +147,22 @@ test('the elevation is read from super_admins, never from a users column', () =>
     'getCurrentUser hydrates the flag from the side table before anything downstream reads the row');
   const hydrate = exportedFn(auth, 'hydrateSuperAdmin');
   assert.match(hydrate, /\.is_super_admin = flag;/, "the row's own value, if a column still exists, is overwritten");
-  assert.match(hydrate, /isAdminRole \? await loadSuperAdminFlag\(/, 'non-admins are 0 without a lookup');
+  // The lookup is behind `isAdminRole` and stays behind it. D106 added a
+  // second conjunct (`&& !onBranch`), so this matches the CONDITION rather
+  // than the exact expression it was: a further narrowing is fine — every one
+  // makes more accounts read 0 without a lookup — while moving the call out
+  // from behind `isAdminRole`, or dropping the guard entirely, still fails.
+  assert.match(
+    hydrate,
+    /const flag: 0 \| 1 = isAdminRole[^?]*\? await loadSuperAdminFlag\(/,
+    'non-admins are 0 without a lookup, and the lookup stays behind isAdminRole',
+  );
+  assert.match(hydrate, /: 0;/, 'the other arm is the literal 0, not a second lookup');
+  // D106 — on a branch the answer is 0 and the table is not consulted at all.
+  // Pinned here as well as in branch_mode_gates.test.ts because this file is
+  // the one that reads as "everything about how the elevation is resolved".
+  assert.match(hydrate, /const onBranch = branchOf\(env\) !== null;/,
+    'branch mode decides the elevation, not a row count (D106)');
 });
 
 function fakeEnv(first: () => Promise<unknown>) {
@@ -192,17 +220,30 @@ test('migration 207 narrows the elevation to the one named account, after 199', 
     '199 is not edited to carry the decision; 207 is the decision');
 });
 
-test('the holder console gates every write behind TOTP, step-up and the elevation', () => {
+test('the holder console gates every write behind the shared write bar', () => {
+  // RE-POINTED IN D134, AND THE REASON IS WORTH KEEPING. This used to read the
+  // bar's three checks out of THIS file, because the bar was declared here. It
+  // now lives in `auth.ts` — promoting an admin through a licence and demoting
+  // one want the same three checks in the same order, and a third hand-written
+  // copy is how one of them comes to check only two. A guard that pins WHERE a
+  // helper is declared fails a correct move; this pins what this router does,
+  // which is the claim it actually owns.
+  //
+  // The bar's CONTENTS and their order are pinned once, in
+  // `licence_admin_lifecycle_d134.test.ts`, beside the definition. Asserting
+  // them here as well would be two tests of one fact that can be changed apart.
   const src = read(ROUTER);
   assert.doesNotMatch(src, /\brequireAdmin\b/, 'a plain admin gate here is a franchisee minting franchisors');
-  assert.match(src, /requireFactor\(c, 'totp'\)/);
-  assert.match(src, /requireStepUp\(c\)/);
-  assert.match(src, /requireSuperAdmin\(c\)/);
-  // The bar is one function, so a new write cannot forget one of the three.
-  const bar = src.slice(src.indexOf('async function requireWriteBar'), src.indexOf('function parseUserId'));
-  assert.ok(bar.indexOf("requireFactor(c, 'totp')") < bar.indexOf('requireStepUp(c)'), 'factor before step-up');
-  assert.ok(bar.indexOf('requireStepUp(c)') < bar.indexOf('requireSuperAdmin(c)'), 'step-up before the elevation');
-  assert.equal((src.match(/await requireWriteBar\(c\)/g) || []).length, 2, 'both writes use the bar');
+  assert.match(src, /import \{[^}]*requireSuperAdminWriteBar[^}]*\} from '\.\.\/auth'/,
+    'the bar is not the shared one — a local copy can drift from it silently');
+  assert.doesNotMatch(src, /^async function requireWriteBar/m,
+    'this router declared its own bar again');
+  assert.equal((src.match(/await requireSuperAdminWriteBar\(c\)/g) || []).length, 2,
+    'both writes use the bar');
+  // Reads take the elevation alone, deliberately: a step-up on every list
+  // trains the holder to type a TOTP code without reading why.
+  assert.match(src, /r\.get\('\/', async \(c\) => \{\s*await requireSuperAdmin\(c\);/,
+    'the holder list stopped taking the elevation, or started taking the write bar');
 });
 
 test('the holder console never empties the set, never elevates a non-admin, never self-revokes', () => {
@@ -214,8 +255,17 @@ test('the holder console never empties the set, never elevates a non-admin, neve
 });
 
 test('every holder change is written to admin_audit_log', () => {
+  // RE-POINTED IN D221. This pinned the router's own hand-written INSERT, which
+  // left `viewed_user_id` empty — the column HQ Security's feed joins to name
+  // who an act was about — so the feed showed a transfer with no target. The
+  // rows now go through the shared writer (D159), and what is pinned is that
+  // both halves of a holder change are recorded through it, never by hand.
+  // The rows themselves are read back in `hq_team_actions_d221.test.ts`.
   const src = read(ROUTER);
-  assert.match(src, /INSERT INTO admin_audit_log \(admin_user_id, action, filters_json\)/);
+  assert.match(src, /import \{ logAdminAction \} from '\.\.\/services\/adminAudit'/,
+    'the holder console does not record through the shared writer');
+  assert.doesNotMatch(src, /INSERT INTO admin_audit_log/,
+    'the holder console writes its audit by hand again, beside the shared writer');
   assert.match(src, /'super_admin_grant'/);
   assert.match(src, /'super_admin_revoke'/);
 });
@@ -259,20 +309,110 @@ test('the HQ overview is super-admin only, mounted before the catch-all, and say
   assert.ok(idx.indexOf("app.route('/api/admin/hq', adminHq)") < idx.indexOf("app.route('/api/admin', admin)"));
 });
 
+/**
+ * ONE HANDLER'S OWN TEXT, bounded at both ends.
+ *
+ * This existed as `src.slice(src.indexOf(route))` — a slice to END OF FILE — and
+ * D165 added a second `/force-reauth` handler beside the first. A slice that runs
+ * past its own handler can be satisfied by the NEXT one, which is the D147/D161
+ * failure exactly: an assertion a neighbour can satisfy is not an assertion about
+ * this one. Bounded to the next top-level route registration or the export.
+ */
+function handlerBody(src: string, opening: string): string {
+  const at = src.indexOf(opening);
+  assert.ok(at >= 0, `${opening} is no longer registered`);
+  const rest = src.slice(at + opening.length);
+  const ends = [/\nr\.(get|post|put|patch|delete)\(/.exec(rest)?.index, rest.indexOf('\nexport default')]
+    .filter((n): n is number => typeof n === 'number' && n >= 0);
+  return rest.slice(0, ends.length ? Math.min(...ends) : rest.length);
+}
+
 test('force re-auth is behind the impersonation bar, needs a reason, and is audited', () => {
   const src = read('cloudflare-worker/src/routes/admin_security.ts');
   assert.doesNotMatch(src, /\brequireAdmin\b/);
-  const write = src.slice(src.indexOf("r.post('/force-reauth'"));
-  assert.match(write, /await requireFactor\(c, 'totp'\);\s+await requireStepUp\(c\);\s+const actor = await requireSuperAdmin\(c\);/);
+
+  // D165 RE-AIMED THIS, and the re-aim is the point rather than an accommodation.
+  // It used to match the three gates as adjacent SOURCE TEXT inside this handler:
+  //
+  //   await requireFactor(c, 'totp'); await requireStepUp(c);
+  //   const actor = await requireSuperAdmin(c);
+  //
+  // That is a copy of `requireSuperAdminWriteBar`, which already existed and
+  // already carried the argument for the order — so the assertion was pinning the
+  // FOURTH hand-rolled copy of a shared helper, and would have gone on passing
+  // while a fifth route composed the same three in the wrong order. Asserting the
+  // route takes the bar, and asserting the bar's own composition where it is
+  // DEFINED, covers every caller instead of this one.
+  const write = handlerBody(src, "r.post('/force-reauth'");
+  assert.match(write, /await requireSuperAdminWriteBar\(c\)/,
+    'the platform-wide revoke must take the shared write bar, not a private copy of its three gates');
   assert.match(write, /code: 'reason_required'/);
-  assert.match(write, /INSERT INTO admin_audit_log \(admin_user_id, action, filters_json\)/);
+
+  const auth = read('cloudflare-worker/src/auth.ts');
+  const bar = auth.slice(auth.indexOf('export async function requireSuperAdminWriteBar'));
+  assert.match(bar.slice(0, 400),
+    /await requireFactor\(c, 'totp'\);\s+await requireStepUp\(c\);\s+return await requireSuperAdmin\(c\);/,
+    'the bar must still be TOTP-minted, then a recent step-up, then the elevation, in that order');
+
+  // And the audit through the one writer rather than a raw INSERT — the third
+  // copy D159 set out to end and missed.
+  assert.match(write, /await logAdminAction\(c\.env, actor\.id, actor\.email, 'security_force_reauth'/,
+    'the governance row must go through logAdminAction, which also writes activity_logs');
+  assert.doesNotMatch(write, /INSERT INTO admin_audit_log/,
+    'a raw audit INSERT is back in this handler; it can throw, and a failed audit would turn a '
+    + 'completed platform-wide sign-out into a 500');
+
   const idx = read('cloudflare-worker/src/index.ts');
   assert.ok(idx.indexOf("app.route('/api/admin/security', adminSecurity)") < idx.indexOf("app.route('/api/admin', admin)"));
 });
 
+test('the per-account revoke exists, takes the same bar, and names its subject', () => {
+  // The defect D165 closed: the only revoke was platform-wide, so signing out one
+  // compromised admin meant signing out every account on every tenant.
+  const src = read('cloudflare-worker/src/routes/admin_security.ts');
+  const one = handlerBody(src, "r.post('/force-reauth/:userId'");
+  assert.match(one, /await requireSuperAdminWriteBar\(c\)/, 'same bar as the bulk revoke');
+  assert.match(one, /code: 'reason_required'/, 'a reason is stored with this act too');
+  assert.match(one, /code: 'user_not_found'/, 'an absent target is refused, not reported as a revoke of nobody');
+  assert.match(one, /await bumpJwtMinIat\(c\.env, uid\)/, 'it uses the per-account primitive');
+  assert.doesNotMatch(one, /WHERE is_active = 1/,
+    'the per-account route must never widen to every active account — that is the bug it exists to fix');
+  // `target_user_id` is the only key logAdminAction reads for viewed_user_id.
+  // Spelt `user_id` the act would be recorded with a blank Target, silently.
+  assert.match(one, /target_user_id: uid/,
+    'the subject must ride across so HQ\'s feed can name who was signed out');
+});
+
 test('the SPA reaches the console through api.js', () => {
+  // THIS PINNED A SPELLING AND A LEGITIMATE CHANGE FAILED IT — the fourth time
+  // in this programme (`branch_rail_mount`, `branch_approvals_board_d130`, the
+  // `flushSurface` quartet). D133 gave `superAdminGrant` an options argument so
+  // a holder can hand the platform on, and the old regex matched the exact
+  // single-parameter source line, so it refused a signature change that broke
+  // nothing it was written to protect.
+  //
+  // What it was written to protect is that each method exists and reaches its
+  // OWN path and verb, so that is what it now asserts — bounded to each
+  // method's own body so a neighbour's `request(...)` cannot satisfy it.
   const api = read('frontend/src/lib/api.js');
-  assert.match(api, /superAdmins: \(\) => request\('\/admin\/super-admins'\)/);
-  assert.match(api, /superAdminGrant: \(userId\) => request\(`\/admin\/super-admins\/\$\{userId\}`, \{ method: 'POST' \}\)/);
-  assert.match(api, /superAdminRevoke: \(userId\) => request\(`\/admin\/super-admins\/\$\{userId\}`, \{ method: 'DELETE' \}\)/);
+  for (const [name, verb] of [
+    ['superAdmins', null], ['superAdminGrant', 'POST'], ['superAdminRevoke', 'DELETE'],
+  ] as [string, string | null][]) {
+    const at = api.indexOf(`${name}:`);
+    assert.ok(at > 0, `${name} no longer reaches the console`);
+    // BOUNDED AT THE NEXT METHOD, NOT AT A CHARACTER COUNT. A first draft took
+    // 300 characters and a mutation walked straight through it: the window ran
+    // past `superAdminGrant` into `superAdminRevoke`, whose own URL satisfied
+    // the path assertion. That is the one failure mode a substring scan has,
+    // and it is the second time in two days it has had to be closed.
+    const rest = api.slice(at);
+    const nextKey = rest.slice(1).search(/\n {2}[A-Za-z_$][\w$]*:/);
+    const body = nextKey > 0 ? rest.slice(0, nextKey + 1) : rest;
+    assert.ok(body.includes('/admin/super-admins'),
+      `${name} no longer calls the super-admin route`);
+    if (verb) {
+      assert.ok(body.includes(`method: '${verb}'`), `${name} stopped using ${verb}`);
+      assert.ok(/\$\{userId\}/.test(body), `${name} stopped naming the target`);
+    }
+  }
 });

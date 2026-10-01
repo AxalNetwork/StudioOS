@@ -11,6 +11,13 @@
  */
 import type { Env } from '../types';
 import { getSQL } from '../db';
+import { dlqDepth } from './deadLetters';
+import { MIRROR_KIND } from './auditMirror';
+import { branchOf } from '../util/branch';
+import {
+  aeLoggedRequestPredicate, foldDailyActives,
+  type ActiveFold, type WeekAxis,
+} from './activeAccounts';
 import {
   loadPlanPriceMap, priceFor, ensureSubscriptionPlansSchema,
   loadFxRates, convertFromUsd,
@@ -710,10 +717,47 @@ export interface TechnicalReport {
   }>;
   error_rate_by_route: Array<{ endpoint: string; error_rate_pct: number; errors_5xx: number; hits: number }>;
   slow_queries: Array<{ endpoint: string; p95_ms: number; hits: number }>;
-  queue_depth: number; dlq_count: number;
+  queue_depth: number | null;
+  queue_depth_reason: string | null;
+  dlq_count: number | null;
+  dlq_reason: string | null;
   top_errors: Array<{ endpoint: string; status_code: number; message: string; c: number }>;
   // Task #13 — see OverviewReport.meta.
   meta?: { reason: 'ok' | 'no_data' };
+}
+
+const QUEUE_DEPTH_UNREADABLE =
+  'The pending-job count (queue_jobs) could not be read, so the queue depth is unknown rather than empty.';
+
+/** Pending D1 jobs. A failed read is null plus a reason, never a zero. */
+async function pendingQueueDepth(env: Env): Promise<{ count: number | null; reason: string | null }> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS c FROM queue_jobs WHERE status = 'pending'`,
+    ).first<{ c: number }>();
+    const n = Number(row?.c);
+    if (!Number.isFinite(n)) return { count: null, reason: QUEUE_DEPTH_UNREADABLE };
+    return { count: n, reason: null };
+  } catch {
+    return { count: null, reason: QUEUE_DEPTH_UNREADABLE };
+  }
+}
+
+/** A counted figure, or an empty cell plus the reason. Never a zero standing in for a failed read. */
+function countCell(
+  value: number | null | undefined,
+  reason: string | null | undefined,
+): { value: number | ''; note: string } {
+  if (typeof value === 'number' && Number.isFinite(value)) return { value, note: '' };
+  const why = reason && String(reason).trim();
+  return { value: '', note: why || 'unreadable' };
+}
+
+/** The same figure for the report email. A failed read says unreadable, never null or 0. */
+function countText(value: number | null | undefined, reason: string | null | undefined): string {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  const why = reason && String(reason).trim();
+  return why ? `unreadable — ${why}` : 'unreadable';
 }
 
 // Task #13 — read true edge-level traffic + latency from Workers Analytics
@@ -722,29 +766,85 @@ export interface TechnicalReport {
 // the caller falls back to D1 `system_metrics`. Uses the SQL HTTP endpoint
 // (`api.cloudflare.com/.../analytics_engine/sql`) — see wrangler.toml's
 // `[[analytics_engine_datasets]]` block for the dataset name.
-async function loadTechnicalFromAnalyticsEngine(
+/**
+ * D161 — the dataset name, read from config rather than hardcoded.
+ *
+ * `AE_DATASET` has been written into every generated branch config since D105
+ * (`scripts/lib/branchConfig.mjs`), whose comment says it exists so "the
+ * SQL-API reader" stops "hardcoding HQ's" — and until now nothing read it,
+ * because the query below carried `FROM studioos_metrics` as a literal. That
+ * was not merely untidy: `[env.preview]` writes to `studioos_metrics_preview`
+ * (wrangler.toml), so a preview deployment's reads could not see its own
+ * writes, and the mismatch was invisible because a failed read returns null
+ * and silently falls back to D1 `system_metrics`.
+ *
+ * It is a NAME, never a tier discriminator — every branch points at the same
+ * shared dataset, which is D105's design, with the branch carried per row.
+ */
+export function aeDataset(env: Env): string {
+  return env.AE_DATASET || 'studioos_metrics';
+}
+
+/**
+ * D209 — whether THIS Worker holds what the SQL API needs to read the dataset:
+ * an account id and a token scoped to Account Analytics · Read.
+ *
+ * `aeSql` refuses on exactly this test, and HQ's topology page and the
+ * branch's "This deployment" zone report it, so the two cannot disagree about
+ * what "can read Analytics Engine here" means. It is a fact about secrets, not
+ * about the binding: every Worker can WRITE the dataset through `ANALYTICS`
+ * with no credential at all. A branch cannot read it back even when these
+ * two are set: that read stays at HQ (D230). On HQ, the two secrets are
+ * what makes the read possible.
+ */
+export function aeReadable(env: Env): boolean {
+  if (branchOf(env)) return false;
+  return Boolean(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_AE_API_TOKEN);
+}
+
+/**
+ * D163 — THE TWO REPORTS BELOW COUNT HTTP ROWS ONLY, AND SAYING SO IS NOT
+ * OPTIONAL.
+ *
+ * The dataset is shared (D105) and, since D163, carries a second kind of row:
+ * one HQ act against one branch, written by `services/auditMirror.ts`. Neither
+ * query below filtered by row kind, because until now there was only one kind
+ * — so without this predicate a mirror row would appear in the technical
+ * report as an endpoint named `hq:branch_action`, and would be counted into a
+ * branch's `hits` in the traffic split. Both are figures on a live HQ screen.
+ *
+ * It matches on blob1 rather than index1 deliberately: blob1 is the slot both
+ * queries already project and group by, so a WHERE over it is a demonstrated
+ * construct in this repo, and the Cloudflare docs are unreachable from this
+ * environment (EGRESS_BLOCKED) to verify an untested one. An HTTP row's blob1
+ * is always a path starting `/api/` (`middleware/observability.ts:26` only
+ * meters those), and the mirror's is the `MIRROR_KIND` sentinel, so the two
+ * cannot collide.
+ */
+const HTTP_ROWS_ONLY = "blob1 LIKE '/%'";
+
+/**
+ * D161 — the AE SQL call, in one place because there are now two queries.
+ *
+ * Returns the rows, or `null` for EVERY failure: unconfigured credentials, a
+ * non-OK response, a throw. Callers must treat `null` as "could not read" and
+ * NOT as "no traffic" — those are different claims and the surfaces render
+ * them differently.
+ *
+ * D210 — A 200 WITH NO `data` ARRAY IS A FAILURE TOO. It used to come back as
+ * `[]`, which every caller reads as "the store answered and holds nothing":
+ * the traffic split would have printed "no branch has traffic yet" and the
+ * weekly active-account read would have drawn a platform with nobody on it,
+ * both about a response that did not say either thing. An answer this reader
+ * cannot understand is not an empty answer.
+ */
+async function aeSql(
   env: Env,
-  range: DateRange,
-): Promise<TechnicalReport['by_route'] | null> {
+  sqlText: string,
+): Promise<Array<Record<string, unknown>> | null> {
+  if (!aeReadable(env)) return null;
   const accountId = env.CLOUDFLARE_ACCOUNT_ID;
   const token = env.CLOUDFLARE_AE_API_TOKEN;
-  if (!accountId || !token) return null;
-  // AE timestamps are stored in UTC; bound by range.from/to as date-only.
-  const sqlText = `
-    SELECT blob1 AS endpoint,
-           COUNT() AS hits,
-           AVG(double1) AS avg_latency_ms,
-           QUANTILEMERGE(0.5, double1) AS p50,
-           QUANTILEMERGE(0.95, double1) AS p95,
-           QUANTILEMERGE(0.99, double1) AS p99,
-           SUMIF(1, double2 >= 500) AS errors_5xx
-    FROM studioos_metrics
-    WHERE timestamp >= toDateTime('${range.fromIso}')
-      AND timestamp <= toDateTime('${range.toIso}')
-    GROUP BY blob1
-    ORDER BY hits DESC
-    LIMIT 25
-  `.trim();
   try {
     const res = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${accountId}/analytics_engine/sql`,
@@ -756,7 +856,55 @@ async function loadTechnicalFromAnalyticsEngine(
     );
     if (!res.ok) return null;
     const json = await res.json() as { data?: Array<Record<string, unknown>> };
-    const data = Array.isArray(json.data) ? json.data : [];
+    return Array.isArray(json.data) ? json.data : null;
+  } catch {
+    return null;
+  }
+}
+
+async function loadTechnicalFromAnalyticsEngine(
+  env: Env,
+  range: DateRange,
+): Promise<TechnicalReport['by_route'] | null> {
+  // D161 — NO BRANCH PREDICATE HERE, DELIBERATELY, AND THIS IS THE SECOND
+  // TIME THAT IS THE RIGHT ANSWER.
+  //
+  // The gate reason first: this feeds `/monitoring/analytics/technical` and
+  // `/management`, both `requireAdmin`, and a plain admin is a branch admin on
+  // this platform. What it returns is a platform-wide aggregate with no branch
+  // attribution — which a branch admin may defensibly see, and which a
+  // `?branch=` would turn into every branch admin reading every other branch's
+  // traffic.
+  //
+  // And the simpler reason: an optional `branch` argument was written here
+  // first and had NO CALLER — `loadTrafficByBranch` answers the per-branch
+  // question by grouping, not by filtering. A parameter no reader uses is the
+  // producer-with-no-reader shape this very PR exists to correct, so it was
+  // removed rather than shipped dead. Its removal also deletes the only place
+  // a caller-supplied value would have reached AE SQL, which matters because
+  // the AE SQL API takes `text/plain` and has no binding mechanism at all:
+  // every value in these queries is interpolated. There is now none to escape.
+  //
+  // AE timestamps are stored in UTC; bound by range.from/to as date-only.
+  const sqlText = `
+    SELECT blob1 AS endpoint,
+           COUNT() AS hits,
+           AVG(double1) AS avg_latency_ms,
+           QUANTILEMERGE(0.5, double1) AS p50,
+           QUANTILEMERGE(0.95, double1) AS p95,
+           QUANTILEMERGE(0.99, double1) AS p99,
+           SUMIF(1, double2 >= 500) AS errors_5xx
+    FROM ${aeDataset(env)}
+    WHERE timestamp >= toDateTime('${range.fromIso}')
+      AND timestamp <= toDateTime('${range.toIso}')
+      AND ${HTTP_ROWS_ONLY}
+    GROUP BY blob1
+    ORDER BY hits DESC
+    LIMIT 25
+  `.trim();
+  {
+    const data = await aeSql(env, sqlText);
+    if (data === null) return null;
     if (data.length === 0) return null;
     return data.map(r => {
       const hits = num(r.hits as number);
@@ -772,9 +920,276 @@ async function loadTechnicalFromAnalyticsEngine(
         error_rate_pct: hits > 0 ? Number(((errs / hits) * 100).toFixed(2)) : 0,
       };
     });
-  } catch {
-    return null;
   }
+}
+
+/** D161 — one branch's traffic, as HQ reads it. */
+export interface BranchTrafficRow {
+  branch: string;
+  hits: number;
+  avg_latency_ms: number;
+  p95_ms: number;
+  errors_5xx: number;
+  error_rate_pct: number;
+}
+
+/**
+ * D202 — the window a traffic read covered, said with the figures. `hits` is a
+ * count over a window, and a count with no window cannot be turned into a
+ * rate: HQ Platform's Monitoring console divides one by the other and labels
+ * the result an AVERAGE over this window, never a live rate. Both bounds are
+ * UTC, in the `YYYY-MM-DD HH:MM:SS` form the AE query was bound to.
+ */
+export interface TrafficWindow {
+  range: { from: string; to: string };
+  window_minutes: number;
+}
+
+export function trafficWindow(range: DateRange): TrafficWindow {
+  const at = (s: string) => Date.parse(`${s.replace(' ', 'T')}Z`);
+  const minutes = Math.round((at(range.toIso) - at(range.fromIso)) / 60_000);
+  return {
+    range: { from: range.fromIso, to: range.toIso },
+    window_minutes: Number.isFinite(minutes) && minutes > 0 ? minutes : 1,
+  };
+}
+
+/**
+ * D161 — traffic split BY BRANCH, for HQ only.
+ *
+ * WHY THIS IS A SEPARATE FUNCTION AND NOT A FLAG ON `loadTechnical`.
+ * `/monitoring/analytics/technical` and `/monitoring/analytics/management` are
+ * `requireAdmin`, and on this platform's tier model a plain admin IS a branch
+ * admin. Today those routes return platform-wide AGGREGATES with no branch
+ * attribution, which a branch admin may defensibly see. Letting the branch
+ * dimension through them would turn an aggregate into per-branch attribution —
+ * every branch admin reading every other branch's traffic, which is precisely
+ * what the branch programme exists to prevent. `monitoring_analytics.ts`'s own
+ * header states the rule D133 set: gating some of these reads and not others
+ * is gating none of them. So the split lives behind `requireSuperAdmin` and
+ * the existing aggregate is left exactly as it was.
+ *
+ * `available: false` carries a REASON and is not a zero. An empty split has
+ * two entirely different causes — no branch has traffic, or AE could not be
+ * read at all — and a caller that rendered both as "0" would be making a claim
+ * nothing measured.
+ */
+export async function loadTrafficByBranch(
+  env: Env,
+  range: DateRange,
+): Promise<{ available: boolean; reason?: string; as_of: string; rows: BranchTrafficRow[] } & TrafficWindow> {
+  const as_of = new Date().toISOString();
+  const span = trafficWindow(range);
+  const sqlText = `
+    SELECT blob6 AS branch,
+           COUNT() AS hits,
+           AVG(double1) AS avg_latency_ms,
+           QUANTILEMERGE(0.95, double1) AS p95,
+           SUMIF(1, double2 >= 500) AS errors_5xx
+    FROM ${aeDataset(env)}
+    WHERE timestamp >= toDateTime('${range.fromIso}')
+      AND timestamp <= toDateTime('${range.toIso}')
+      AND ${HTTP_ROWS_ONLY}
+    GROUP BY blob6
+    ORDER BY hits DESC
+    LIMIT 50
+  `.trim();
+  const data = await aeSql(env, sqlText);
+  if (data === null) {
+    return {
+      available: false,
+      reason: 'The metrics store could not be read, so this is not a count of zero — '
+        + 'Analytics Engine is unconfigured or did not answer.',
+      as_of,
+      rows: [],
+      ...span,
+    };
+  }
+  const rows = data.map(r => {
+    const hits = num(r.hits as number);
+    const errs = num(r.errors_5xx as number);
+    return {
+      branch: str(r.branch as string) || 'hq',
+      hits,
+      avg_latency_ms: Math.round(num(r.avg_latency_ms as number)),
+      p95_ms: Math.round(num(r.p95 as number)),
+      errors_5xx: errs,
+      error_rate_pct: hits > 0 ? Number(((errs / hits) * 100).toFixed(2)) : 0,
+    };
+  });
+  return { available: true, as_of, rows, ...span };
+}
+
+/** D163 — one branch, and how HQ's own acts against it went. */
+export interface BranchActionRow {
+  branch: string;
+  action: string;
+  outcome: string;
+  count: number;
+  last_at: string | null;
+}
+
+/**
+ * D163 — HQ's own branch-targeting acts, grouped by branch and outcome.
+ *
+ * WHAT THIS IS NOT. It is not a second copy of the audit trail, and it is not
+ * a window into a branch's own console. Every row here was written by HQ,
+ * about an act HQ performed, recording only whether the branch it targeted
+ * answered — see `services/auditMirror.ts` for what is deliberately absent
+ * from it (actor, email, reason: all held authoritatively in HQ's own D1).
+ * The governance feed's stated scope is untouched by it.
+ *
+ * `available: false` CARRIES A REASON AND IS NOT AN EMPTY LIST. `aeSql`
+ * returns `null` for unconfigured credentials, a non-OK response and a throw
+ * alike; "HQ has pushed nothing" and "the telemetry store could not be read"
+ * are different claims and the surface renders them differently — the rule
+ * `loadTrafficByBranch` states one function up.
+ */
+export async function loadBranchActionMirror(
+  env: Env,
+  range: DateRange,
+): Promise<{ available: boolean; reason?: string; as_of: string; rows: BranchActionRow[] }> {
+  const as_of = new Date().toISOString();
+  const sqlText = `
+    SELECT blob6 AS branch,
+           blob2 AS action,
+           blob3 AS outcome,
+           COUNT() AS n,
+           MAX(timestamp) AS last_at
+    FROM ${aeDataset(env)}
+    WHERE timestamp >= toDateTime('${range.fromIso}')
+      AND timestamp <= toDateTime('${range.toIso}')
+      AND blob1 = '${MIRROR_KIND}'
+    GROUP BY blob6, blob2, blob3
+    ORDER BY last_at DESC
+    LIMIT 200
+  `.trim();
+  const data = await aeSql(env, sqlText);
+  if (data === null) {
+    return {
+      available: false,
+      reason: 'The telemetry store could not be read, so this is not "HQ has pushed nothing" — '
+        + 'Analytics Engine is unconfigured or did not answer.',
+      as_of,
+      rows: [],
+    };
+  }
+  return {
+    available: true,
+    as_of,
+    rows: data.map((r) => ({
+      branch: str(r.branch as string) || 'hq',
+      action: str(r.action as string),
+      outcome: str(r.outcome as string),
+      count: num(r.n as number),
+      last_at: r.last_at ? str(r.last_at as string) : null,
+    })),
+  };
+}
+
+/**
+ * D210 — the most rows one weekly read may return. Each row is one account (or
+ * the anonymous `0`) on one branch on one day, so this is roughly a year of
+ * the platform at today's size. Past it the read is cut OLDEST-first (the query
+ * orders newest first), and the weeks it did not reach are blanked with that
+ * reason rather than drawn short.
+ */
+export const AE_ACTIVE_ROW_CAP = 10000;
+
+export type ActiveAccountsRead =
+  /**
+   * `unreadable` separates a read that FAILED from a store this Worker cannot
+   * reach at all (D211): the page draws the first as Unreadable with a retry
+   * and the second as Not recorded — and neither as a zero.
+   */
+  | { available: false; unreadable?: true; reason: string; as_of: string }
+  | { available: true; as_of: string; fold: ActiveFold; cap_day: string | null; row_cap: number };
+
+/**
+ * D210 — signed-in accounts per branch per week, as HQ reads them (H15).
+ *
+ * ONE ROW PER ACCOUNT PER BRANCH PER DAY, folded into weeks in
+ * `foldDailyActives`. The reasons are there: `toStartOfWeek()`'s first day is
+ * not documented, and neither is a distinct count. `toStartOfDay()`, `count()`
+ * and `sum(_sample_interval)` are — the last is the documented way to see
+ * sampling, and a sampled read makes every distinct count a floor, which the
+ * page must say.
+ *
+ * THE WHERE CLAUSE IS `activityLogged()`, NOT A SECOND IDEA OF ACTIVITY. It is
+ * built from the list the middleware reads, so a branch's line here and that
+ * branch's own count from `activity_logs` describe the same requests.
+ *
+ * ANONYMOUS ROWS ARE READ ON PURPOSE. They count nobody, but they date the
+ * store: the earliest day anything was recorded is how the page knows where the
+ * store's history begins inside the window, and a week before that is blank
+ * rather than zero.
+ *
+ * SUPER ADMIN ONLY BY ITS CALLER, and it has to be: grouped by blob6, this is
+ * every branch's figures side by side — exactly what `loadTrafficByBranch`'s
+ * header says a branch admin must not read (D133's rule).
+ */
+export async function loadActiveAccountsByBranchWeek(env: Env, axis: WeekAxis): Promise<ActiveAccountsRead> {
+  const as_of = new Date().toISOString();
+  if (!aeReadable(env)) {
+    return {
+      available: false,
+      as_of,
+      reason:
+        'This Worker holds no Analytics Engine read credential (CLOUDFLARE_ACCOUNT_ID and '
+        + 'CLOUDFLARE_AE_API_TOKEN), so the dataset every branch writes to cannot be read here. '
+        + 'That is not a count of zero.',
+    };
+  }
+  // The bounds are interpolated, because the SQL API has no binding. They can
+  // only be what `weekAxis` builds; the shape is checked anyway, so a future
+  // caller that passes something else is refused rather than sent.
+  const SHAPE = /^\d{4}-\d{2}-\d{2} 00:00:00$/;
+  if (!SHAPE.test(axis.from) || !SHAPE.test(axis.to)) {
+    throw new Error('loadActiveAccountsByBranchWeek takes the bounds weekAxis builds, and nothing else');
+  }
+  const sqlText = `
+    SELECT toStartOfDay(timestamp) AS day,
+           blob6 AS branch,
+           double3 AS uid,
+           count() AS n,
+           sum(_sample_interval) AS weight
+    FROM ${aeDataset(env)}
+    WHERE timestamp >= toDateTime('${axis.from}')
+      AND timestamp < toDateTime('${axis.to}')
+      AND ${aeLoggedRequestPredicate()}
+    GROUP BY day, branch, uid
+    ORDER BY day DESC
+    LIMIT ${AE_ACTIVE_ROW_CAP}
+  `.trim();
+  const data = await aeSql(env, sqlText);
+  if (data === null) {
+    return {
+      available: false,
+      unreadable: true,
+      as_of,
+      reason:
+        'Analytics Engine did not answer, or answered in a shape this page cannot read, so these '
+        + 'are not counts of zero.',
+    };
+  }
+  const fold = foldDailyActives(data, axis);
+  if (!fold) {
+    return {
+      available: false,
+      unreadable: true,
+      as_of,
+      reason:
+        'Analytics Engine answered with a day this page could not read, so the weeks cannot be '
+        + 'built from it. Nothing is drawn rather than a chart with holes nobody can see.',
+    };
+  }
+  return {
+    available: true,
+    as_of,
+    fold,
+    cap_day: data.length >= AE_ACTIVE_ROW_CAP ? fold.floorDay : null,
+    row_cap: AE_ACTIVE_ROW_CAP,
+  };
 }
 
 export async function loadTechnical(env: Env, range: DateRange): Promise<TechnicalReport> {
@@ -820,10 +1235,8 @@ export async function loadTechnical(env: Env, range: DateRange): Promise<Technic
       });
     }
   }
-  const queueDepth = await sql`SELECT COUNT(*) AS c FROM queue_jobs WHERE status = 'pending'`
-    .then(r => rows<SqlRow>(r)).catch(() => [{ c: 0 } as SqlRow]);
-  const dlqCount = await sql`SELECT COUNT(*) AS c FROM dead_letter_queue`
-    .then(r => rows<SqlRow>(r)).catch(() => [{ c: 0 } as SqlRow]);
+  const queueDepth = await pendingQueueDepth(env);
+  const depth = await dlqDepth(env);
   const topErrorsRaw = rows<SqlRow>(await sql`
     SELECT endpoint, status_code, message, COUNT(*) AS c
     FROM error_logs
@@ -847,8 +1260,10 @@ export async function loadTechnical(env: Env, range: DateRange): Promise<Technic
     by_route: enriched,
     error_rate_by_route: errorRateByRoute,
     slow_queries: slowQueries,
-    queue_depth: num(queueDepth[0]?.c),
-    dlq_count: num(dlqCount[0]?.c),
+    queue_depth: queueDepth.count,
+    queue_depth_reason: queueDepth.reason,
+    dlq_count: depth.available ? depth.total : null,
+    dlq_reason: depth.available ? null : depth.reason,
     top_errors: topErrorsRaw.map(r => ({
       endpoint: str(r.endpoint),
       status_code: num(r.status_code),
@@ -929,10 +1344,10 @@ export function reportToCsv(report: string, data: unknown): string {
     { section: 'overview', metric: 'churn_rate_pct', value: m.overview?.churn_rate_pct ?? 0 },
     { section: 'financial', metric: 'new_mrr_usd', value: m.financial?.new_mrr_usd ?? 0 },
     { section: 'financial', metric: 'churn_mrr_usd', value: m.financial?.churn_mrr_usd ?? 0 },
-    { section: 'technical', metric: 'queue_depth', value: m.technical?.queue_depth ?? 0 },
-    { section: 'technical', metric: 'dlq_count', value: m.technical?.dlq_count ?? 0 },
+    { section: 'technical', metric: 'queue_depth', ...countCell(m.technical?.queue_depth, m.technical?.queue_depth_reason) },
+    { section: 'technical', metric: 'dlq_count', ...countCell(m.technical?.dlq_count, m.technical?.dlq_reason) },
   ];
-  return toCsv(rowsOut, ['section', 'metric', 'value']);
+  return toCsv(rowsOut, ['section', 'metric', 'value', 'note']);
 }
 
 // Task #20 — CSV export of the Plan change history panel.
@@ -1079,7 +1494,7 @@ export function reportToHtml(report: string, data: unknown, range: DateRange): s
   }
   if (report === 'technical' || report === 'management') {
     const t = (report === 'management' ? d.technical : d) as TechnicalReport;
-    body += `<p><strong>Queue depth:</strong> ${esc(String(t?.queue_depth))} · <strong>DLQ:</strong> ${esc(String(t?.dlq_count))}</p>`;
+    body += `<p><strong>Queue depth:</strong> ${esc(countText(t?.queue_depth, t?.queue_depth_reason))} · <strong>DLQ:</strong> ${esc(countText(t?.dlq_count, t?.dlq_reason))}</p>`;
     body += table('Per-route latency', t?.by_route as unknown as Array<Record<string, unknown>> || [], ['endpoint', 'hits', 'p50_ms', 'p95_ms', 'p99_ms', 'errors_5xx', 'error_rate_pct']);
     body += table('Slow queries (P95)', t?.slow_queries as unknown as Array<Record<string, unknown>> || [], ['endpoint', 'p95_ms', 'hits']);
     body += table('Top errors', t?.top_errors as unknown as Array<Record<string, unknown>> || [], ['endpoint', 'status_code', 'message', 'c']);

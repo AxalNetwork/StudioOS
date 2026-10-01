@@ -23,8 +23,8 @@ import { api } from '../../lib/api';
 // second header whose workspace label came from the same fallback and read
 // "Delivery · Ship the work" on a Pipeline route. Mounting its feature pages
 // directly removes the doubled chrome and the wrong-bucket header together,
-// and leaves /partner/operations/* exactly as it was.
-const PartnerEngagements = lazy(() => import('../../pages/partner/operations/EngagementsPage'));
+// and left /partner/operations/* as it was, until D395 retired it into
+// these zones.
 const PerksPage = lazy(() => import('../../pages/PerksPage'));
 const ServiceCatalogPage = lazy(() => import('../../pages/ServiceCatalogPage'));
 // Pipeline · analytics used to mount `PartnerInsightsPage` — Demand Insights,
@@ -75,8 +75,9 @@ const PartnerStatusReports = lazy(() => import('../../pages/partner/delivery/Sta
  * `/partner/insights` — and the shell mounted only some of them. Eight of the
  * fifteen zones now render one: Pipeline's leads, proposals, negotiations,
  * retainers and analytics, Delivery's board, and Offers' catalog and perk
- * deals. Every legacy prefix stays mounted; a zone and its legacy route are the
- * same component at two routes, which is not a fork.
+ * deals. Every other legacy prefix stays mounted; a zone and its legacy route
+ * are the same component at two routes, which is not a fork.
+ * `/partner/operations/*` retired in D395 and redirects to these zones.
  *
  * NEGOTIATIONS AND RETAINERS ARE THE TWO WITHOUT A LEGACY ROUTE. Every other
  * live zone mounts a page that already existed somewhere; these two are new
@@ -152,18 +153,28 @@ function Loading() {
  * licences could do. The marketplace itself is still at `/needs`, and the
  * zone's empty state links there.
  *
- * `embedded` suppresses each page's own heading block — the shell above has
- * already drawn the crumb, the h1 and the zone pills. It deliberately does NOT
- * suppress their tab rows: Browse / My quotes / Engagements and Perks / My
- * perks / My listings are views WITHIN a zone, not sibling zones, so they are
- * this page's controls rather than a second copy of the navigation.
+ * `embedded` MAKES EACH PAGE RENDER ITS ZONE AND NOTHING ELSE — no heading
+ * block of its own, because the shell above has already drawn the crumb, the h1
+ * and the zone pills, and no tab row either.
  *
- * `PartnerEngagements` takes no `embedded`, and that is deliberate rather than
- * an oversight: it draws no heading and no rail of its own — its host has
- * always supplied both — so there is nothing for the flag to suppress. The
- * class guard in `advisor_network_zones.test.mjs` catches a component handed
- * `embedded` that never reads it, and it caught this one; a prop that does
- * nothing reads as a seam that has been dealt with when it has not.
+ * The second half of that is a reversal. What stood here was: "It deliberately
+ * does NOT suppress their tab rows: Browse / My quotes / Engagements and Perks /
+ * My perks / My listings are views WITHIN a zone, not sibling zones, so they are
+ * this page's controls rather than a second copy of the navigation." The test it
+ * applied was whether a tab row is navigation or a control. The test that
+ * settles it is what the tabs select BETWEEN: Browse catalogue is every other
+ * firm's offerings, My perks is what this reader redeemed, Review queue is admin
+ * moderation, Stripe Connect is payouts. None is a view of "what this firm
+ * sells" or "this firm's own perk listings" — they are different subjects that
+ * share a component, and each keeps its own route (`/services`, `/perks`).
+ *
+ * The artboards agree and are the contract: PO1 and PO2 in `design/canvases/
+ * integrated/Pages · Partner Offers.dc.html` each declare one `filters` row and
+ * one `ops` row, which is the `ZoneToolbar` these tables already supply, and no
+ * tab row anywhere. And the cost was not cosmetic — `ServiceCatalogPage` starts
+ * on its `mine` tab only when `isPartner`, so every admin opening
+ * /offers/catalog got the public marketplace grid under the Catalog heading and
+ * never saw the LEDGER body at all.
  *
  * TWO ZONES ONCE RESOLVED HERE BY ACCIDENT, and the trail is worth keeping.
  * Pipeline · retainers and Delivery · health both fell through to the
@@ -237,9 +248,12 @@ const LIVE = {
     'perk-deals': (user) => <PerksPage user={user} embedded role="partner"
       zoneFilters={(opts) => partnerZoneFilters('offers/perk-deals', opts)}
       zoneActions={(rows, handlers) => partnerZoneActions('offers/perk-deals', { handlers, view: {
-        header: ['Offer', 'State', 'Redeemed', 'Cap', 'Ends', 'What it granted', 'Revoked on', 'Review state'],
+        // `Claimed` and `Redeemed` are two columns since D413: the export
+        // wrote the claim count under "Redeemed" until a claim could be
+        // marked redeemed.
+        header: ['Offer', 'State', 'Claimed', 'Redeemed', 'Cap', 'Ends', 'What it granted', 'Revoked on', 'Review state'],
         rows,
-        cells: (p) => [p.offer, p.lifecycle, p.claim_count, p.claim_cap,
+        cells: (p) => [p.offer, p.lifecycle, p.claim_count, p.redeemed_count, p.claim_cap,
           p.ends_at, p.grant_scope, p.grant_revoked_on, p.status],
       } })} />,
     visibility: () => <PartnerVisibility />,
@@ -277,9 +291,11 @@ const LIVE = {
  * TWO OF THOSE SENTENCES WERE NOT FULLY ANSWERED, and the zones say so on
  * themselves rather than a card saying it for them:
  *
- *   · "an embedded seat burning its cap" — nothing records the firm's CAP.
- *     Capacity shows real hours and real seats and refuses to mark anyone over,
- *     because a threshold nobody set is not a finding.
+ *   · "an embedded seat burning its cap" — the CAP is the firm's to state
+ *     (migration 230, firm-wide or per person). Capacity marks someone over
+ *     only against a cap that was stated, and until one is it refuses to,
+ *     because a threshold nobody set is not a finding (D391 corrected this
+ *     line, which still said nothing records a cap).
  *   · "whether the client opened it" — `opened_at` is the CLIENT'S to set and
  *     no surface in this product lets them. Deliverables shows every sent item
  *     as unopened and says the absence is ours, not theirs.
@@ -344,7 +360,7 @@ const ZONE_LINES = {
     // work: both of its partner-facing tabs read a response shape the worker
     // does not send, so the catalogue was permanently empty either way.
     catalog: 'What the firm sells, at what price — the record lead scoring reads a match against.',
-    'perk-deals': 'Deals that expire in public, with grants revoked when they do.',
+    'perk-deals': 'Deals that expire in public, with grants revoked when they do — and where a perk is submitted and its claims are marked redeemed.',
     // Written to what the store can support. "Views" is deliberately absent
     // from this line as it is from the zone: nothing records an impression, so
     // naming it here would promise a column that renders as an absence.
@@ -485,11 +501,12 @@ export default function PartnerBucketRoutes() {
     },
   }[prefix];
 
+  // NO `scope` PROP — it read `scope="One firm"`, which named no firm. The shell
+  // fills the slot from `ActiveCompanyContext`, the same way in all four profiles.
   return (
     <WorkspaceShell
       role="partner"
       title={isRoot ? bucketTitle(bucket) : undefined}
-      scope="One firm"
       intro={INTRO[prefix]}
       activeSlug={isRoot ? null : undefined}
       rail={RAIL && (

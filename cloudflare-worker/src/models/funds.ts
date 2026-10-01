@@ -54,6 +54,11 @@ export interface LimitedPartner {
   lpa_signed_at: string | null;
   commitment_date: string | null;
   distribution_history: string | null;   // json array
+  // Present on the table since a later migration and read by the register, the
+  // LP self-view and `routes/capital.ts`'s legacy email mapping. An LP with no
+  // platform account has no other identity, so these are not decoration.
+  name: string | null;
+  email: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -140,11 +145,16 @@ export const LPs = {
     // user_id came back with name/email NULL — exactly the unlinked LPs whose
     // only identity IS the operator-entered pair. The account's values still
     // take precedence when the row is linked.
+    //
+    // `kyc_status` (D371) is the linked account's; an LP with no account has
+    // none, and reads NULL rather than a status nobody recorded. The LP page's
+    // KYC column and "KYC pending" filter read it, and got nothing before.
     return env.DB.prepare(
       `SELECT lp.*,
               COALESCE(u.email, lp.email) AS email,
               COALESCE(u.name,  lp.name)  AS name,
-              u.id AS account_user_id
+              u.id AS account_user_id,
+              u.kyc_status AS kyc_status
          FROM limited_partners lp
          LEFT JOIN users u ON u.id = lp.user_id
         WHERE lp.fund_id = ? ORDER BY lp.commitment_amount DESC`
@@ -171,20 +181,48 @@ export const LPs = {
       `SELECT lp.*, f.name AS fund_name, f.status AS fund_status, f.carried_interest, f.management_fee,
               f.slug AS fund_slug, f.vintage_year AS fund_vintage,
               f.gp_name, f.gp_title, f.gp_email, f.gp_entity,
-              f.fund_admin, f.auditor, f.legal_counsel, f.custodian, f.valuation_policy
+              f.fund_admin, f.auditor, f.legal_counsel, f.custodian, f.valuation_policy,
+              gu.email AS gp_account_email
        FROM limited_partners lp JOIN vc_funds f ON f.id = lp.fund_id
+       LEFT JOIN users gu ON gu.id = f.gp_user_id
        WHERE ${scope.sql} ORDER BY lp.created_at DESC`
     ).bind(...scope.binds).all();
   },
+  /**
+   * `name` AND `email` WERE ON THE TABLE AND NOT IN THIS INSERT, so every LP
+   * this function created was anonymous.
+   *
+   * Both columns exist on `limited_partners` and both are load-bearing: the
+   * register renders `lp.name || lp.email` and falls back to `LP #<id>`, the LP
+   * self-view joins `users` for them, and `routes/capital.ts` maps a legacy
+   * `lp_investors` row to the canonical one BY EMAIL. Writing neither meant a
+   * created row read as "LP #41 · Unrecorded" on the page that lists it and
+   * could never be matched to its legacy record.
+   *
+   * It went unnoticed because nothing called this with a name: the only caller
+   * was `POST /api/funds/:id/lps`, and no screen offered that form. Task #195
+   * adds the form, which is what made the omission visible.
+   *
+   * `user_id` STAYS OPTIONAL. An LP is often an institution with no platform
+   * login, and requiring an account to record a commitment would make the
+   * register unable to describe most real funds. When there is no `user_id`,
+   * `name`/`email` are the only identity the row has — which is exactly why
+   * they must be written.
+   */
   async create(env: Env, data: Partial<LimitedPartner>) {
+    const text = (v: unknown, max: number) => {
+      const s = v == null ? '' : String(v).trim();
+      return s ? s.slice(0, max) : null;
+    };
     const r = await env.DB.prepare(
       `INSERT INTO limited_partners
-        (user_id, fund_id, commitment_amount, invested_amount, returns, status, commitment_date)
-       VALUES (?, ?, ?, ?, ?, ?, datetime('now')) RETURNING *`
+        (user_id, fund_id, commitment_amount, invested_amount, returns, status, commitment_date, name, email)
+       VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?, ?) RETURNING *`
     ).bind(
       data.user_id ?? null, data.fund_id,
       data.commitment_amount ?? 0, data.invested_amount ?? 0,
       data.returns ?? 0, data.status ?? 'committed',
+      text(data.name, 200), text(data.email, 320),
     ).first<LimitedPartner>();
     if (data.fund_id) await Funds.recountLPs(env, data.fund_id);
     return r;

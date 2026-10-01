@@ -313,8 +313,11 @@ test('the advisor preview boundary is stated, and covers every surface that rend
   // covered /advisor/advisory/* and /office-hours while /practice/* and
   // /expertise/* rendered the same two components ungated.
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /advisorRolePreview \? <AdvisorPreviewNotice \/> : component/,
-    'the gate must state its reason rather than redirect to /studio');
+  // WAS `advisorRolePreview ? <AdvisorPreviewNotice /> : component`. The notice
+  // now sits ABOVE the component instead of replacing it — see the block at the
+  // foot of this test for why, and for what that does NOT give up.
+  assert.match(app, /advisorRolePreview\s*\n?\s*\? <><AdvisorPreviewNotice \/>\{component\}<\/>/,
+    'the gate must state its reason above the workspace, not instead of it');
   assert.doesNotMatch(app, /advisorRolePreview \? <Navigate to="\/studio"/,
     'the silent redirect is back');
 
@@ -336,9 +339,33 @@ test('the advisor preview boundary is stated, and covers every surface that rend
       `${cohortZone} reads the signed-in advisor's own assignments and must be gated`);
   }
 
-  // And the notice keeps the shell around it, so the reader can still see which
-  // workspace they are in — the thing the redirect destroyed.
-  assert.match(codeOnly(read('frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx')),
-    /if \(preview\) return <AdvisorPreviewNotice \/>;/,
-    'the notice must replace the body, not the whole page');
+  // AND THE NOTICE IS A LINE ABOVE THE ZONE, NOT THE ZONE.
+  //
+  // What stood here required `if (preview) return <AdvisorPreviewNotice />;`
+  // under the message "the notice must replace the body, not the whole page".
+  // That was one step out of two. Keeping the shell fixed the redirect; the
+  // body was still a card, on twenty routes, and the reader who reported the
+  // redirect reported the card next — "it's unnecessary".
+  //
+  // The `no batch assigned` argument above is not given up by this. It is about
+  // whether the boundary is STATED, so that an admin does not read a boundary
+  // as an absence; it is not about whether the statement takes over the page.
+  // The strip states it, in words, immediately above the zone it applies to,
+  // and the zone renders underneath. Access is untouched — `requireMyAdvisor`
+  // throws for a caller with no advisor row, so the zone draws its own frame
+  // over no rows rather than over someone else's.
+  const routes = codeOnly(read('frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx'));
+  assert.doesNotMatch(routes, /if \(preview\) return <AdvisorPreviewNotice \/>;/,
+    'the notice is replacing the body again — twenty routes, one card, no product');
+  assert.match(routes, /\{preview && <AdvisorPreviewNotice \/>\}\s*\n\s*\{body\}/,
+    'the notice must render above the zone body, and the body must still render');
+
+  // A strip, not a card: the component itself has to be the size that can sit
+  // above eighteen different pages. A `<Card>` cannot, which is how it became
+  // the page in the first place.
+  const notice = codeOnly(read('frontend/src/pages/advisor/AdvisorPreviewNotice.jsx'));
+  assert.doesNotMatch(notice, /<Card\b/, 'the notice is a card again, so it will read as the page');
+  assert.match(notice, /data-testid="advisor-preview-notice"/, 'the notice lost its testid');
+  assert.match(notice, /Impersonate an advisor to open theirs/,
+    'the one thing only this notice says — how to get in — must survive the shrink');
 });

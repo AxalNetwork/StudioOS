@@ -1,12 +1,11 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { UserCog } from 'lucide-react';
-import { Card } from '../../ui';
 
 /**
- * What an admin previewing the Advisor role sees instead of a practice.
+ * What an admin previewing the Advisor role is told, ABOVE the workspace.
  *
- * WHAT THIS REPLACES. `advisorPrivateWorkspace` used to return
+ * WHAT THIS REPLACED FIRST. `advisorPrivateWorkspace` returned
  * `<Navigate to="/studio" replace />`. The access boundary was right — these
  * surfaces render one advisor's clients, bookings and engagements, and an admin
  * in View-as-Advisor has selected a ROLE, not a person, so there is no practice
@@ -14,40 +13,44 @@ import { Card } from '../../ui';
  * on Studio with no explanation is indistinguishable from a broken link, and
  * that is exactly how it was reported.
  *
- * THE BOUNDARY IS NOW STATED, AND CONSISTENT. It used to guard
- * `/advisor/advisory/*` and `/office-hours` while `/practice/*` and
- * `/expertise/*` rendered the same two components ungated — the same private
- * data reachable at one path and blocked at another.
+ * WHAT IT REPLACES NOW, AND WHY THE SHAPE CHANGED. It became a full card that
+ * stood INSTEAD of the body, on every one of twenty routes. The reader clicked
+ * eighteen Practice, Cohorts and Expertise zones plus two advisory routes and
+ * got the same card each time — reported, in these words, as "unnecessary". The
+ * boundary was being stated twenty times and the product never once.
  *
- * Impersonating a specific advisor is the way in, and it is a different act
- * from previewing a role: it names whose practice is being opened, and the
- * audit trail records it.
+ * So it is a LINE now, and the zone renders under it. That keeps the thing the
+ * card was defending, which `advisor_shell.test.mjs` argued for when Cohorts
+ * joined the gate: without a stated boundary an admin sees "no batch assigned"
+ * and reads a boundary as an absence. The boundary is still stated — in words,
+ * on the page, above the zone — and the zone is visible beneath it, so the two
+ * are no longer in competition. A one-line strip can sit above eighteen
+ * different pages; a card cannot, because it IS the page.
+ *
+ * Nothing about access changed. Every `/api/advisors/me/*` read goes through
+ * `requireMyAdvisor`, which throws "No advisor profile attached to your
+ * account" for a caller with no advisor row — so an admin's zone renders its
+ * own frame over no rows, and no endpoint hands back a practice that is not
+ * theirs. Impersonating a specific advisor remains the way in, and it is a
+ * different act from previewing a role: it names whose practice is being
+ * opened, and the audit trail records it.
  */
 export default function AdvisorPreviewNotice() {
   return (
-    <Card className="border-dashed bg-axal-surface-2 p-6" data-testid="advisor-preview-notice">
-      <div className="max-w-2xl">
-        <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
-          <UserCog size={13} /> Advisor preview
-        </div>
-        <h2 className="mt-2 text-lg font-extrabold tracking-tight">
-          This workspace belongs to one advisor
-        </h2>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">
-          You are previewing the Advisor role, not a person. Practice and Expertise render a
-          single advisor’s clients, bookings, engagements and profile — there is no practice to
-          show until the workspace is scoped to someone.
-        </p>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">
-          Impersonate a specific advisor to open theirs. That is a deliberate act with an audit
-          trail behind it, which is the difference between reading a role and reading a person’s
-          book.
-        </p>
-        <p className="mt-3 flex flex-wrap gap-3 text-[12px]">
-          <Link to="/admin" className="text-emerald-700 underline">Find an advisor to impersonate →</Link>
-          <Link to="/studio" className="text-emerald-700 underline">Back to Studio →</Link>
-        </p>
-      </div>
-    </Card>
+    <div
+      className="mb-3.5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-[8px] border border-dashed border-axal-hairline bg-axal-ground px-3 py-2 text-[11.5px] leading-relaxed text-axal-muted"
+      data-testid="advisor-preview-notice"
+    >
+      <span className="inline-flex items-center gap-1.5 font-extrabold uppercase tracking-[.08em] text-[10px] text-axal-faint">
+        <UserCog size={12} /> Advisor preview
+      </span>
+      <span>
+        You are previewing the Advisor role, not a person — this workspace belongs to one
+        advisor, so it is showing you nobody’s.
+      </span>
+      <Link to="/admin" className="font-bold text-emerald-700 underline">
+        Impersonate an advisor to open theirs →
+      </Link>
+    </div>
   );
 }

@@ -51,6 +51,39 @@ export interface Env {
   // must stay on the host registered in Google Cloud Console
   // (app.axal.vc). Override here when registering a new host.
   OAUTH_CALLBACK_BASE_URL?: string;
+  // Branch mode (D104). Set only in a branch Worker's generated config
+  // (`studioos-<code>` at `<code>.axal.vc`); unset on HQ. `BRANCH_CODE` is
+  // the hostname's first label and suffixes the branch's cookie names — see
+  // util/branch.ts. `BRANCH_TERRITORY` is comma-separated ISO 3166-1 alpha-2.
+  BRANCH_CODE?: string;
+  BRANCH_NAME?: string;
+  BRANCH_TERRITORY?: string;
+  // D264 — the branch's Durable Object jurisdiction (eu, us or fedramp),
+  // rendered by scripts/lib/branchConfig.mjs from residency.do_jurisdiction
+  // and applied by util/doNamespace.ts. Unset on HQ and on a branch
+  // provisioned with none; write-once, because an object's jurisdiction is
+  // fixed when it is first created.
+  BRANCH_DO_JURISDICTION?: string;
+  // D452 — git ref or deploy id stamped at provision/deploy time; branch health
+  // returns it so HQ can persist `licence_deployments.last_version` on read.
+  WORKER_DEPLOY_VERSION?: string;
+  // The branch→HQ RPC leg (D111), set only on a branch. `branch-provision.yml`
+  // generates it per deployment, puts the plaintext here and writes its SHA-256
+  // into HQ's `licence_deployments.rpc_secret_hash`. A branch presents it on
+  // every call HQ must be able to attribute — `reportUsage`, and since D244 the
+  // licence pull — and a branch without it refuses before calling HQ, because
+  // HQ would refuse the call anyway (`authenticateBranch`, rpc/hqOps.ts).
+  // Declared here in D244: it had been set on every provisioned branch and
+  // named in this file only in the comment below, so no code could read it.
+  RPC_SECRET?: string;
+  // The HQ→branch RPC leg (D120), the mirror of the branch's own RPC_SECRET.
+  // `branch-provision.yml` generates one value per deployment and splits it:
+  // the plaintext becomes a Worker secret on HQ, the SHA-256 becomes one on the
+  // branch. So exactly one of these is ever set on a given Worker, and a branch
+  // that holds no hash refuses every call claiming to be HQ rather than
+  // defaulting open — see `rpc/branchOps.ts`'s `authenticateHq`.
+  HQ_RPC_SECRET?: string;
+  HQ_RPC_SECRET_HASH?: string;
   GMAIL_CLIENT_ID?: string;
   GMAIL_CLIENT_SECRET?: string;
   GMAIL_REFRESH_TOKEN?: string;
@@ -70,6 +103,20 @@ export interface Env {
   // "Continue with Google" buttons.
   GOOGLE_AUTH_CLIENT_ID?: string;
   GOOGLE_AUTH_CLIENT_SECRET?: string;
+  // Dedicated Google Sheets OAuth for `/research/funds` sync. SEPARATE from
+  // the calendar client (`GOOGLE_CAL_*` / `GOOGLE_CLIENT_*`) so adding the
+  // spreadsheets scope never forces calendar users to re-consent. Resolution
+  // in `services/fundSheets.ts`: SHEETS-specific → legacy GOOGLE_CLIENT_* →
+  // calendar client as last resort (same Cloud project, different redirect
+  // URI and token table). When none resolve, the Funds page says so instead
+  // of offering a Connect button that cannot complete.
+  GOOGLE_SHEETS_CLIENT_ID?: string;
+  GOOGLE_SHEETS_CLIENT_SECRET?: string;
+  GOOGLE_SHEETS_REDIRECT_URI?: string;
+  // Calendar-specific OAuth client (Task #52). Optional; `services/calendar.ts`
+  // already reads these via `(env as any)` and falls back to GOOGLE_CLIENT_*.
+  GOOGLE_CAL_CLIENT_ID?: string;
+  GOOGLE_CAL_CLIENT_SECRET?: string;
   MICROSOFT_CLIENT_ID?: string;
   MICROSOFT_CLIENT_SECRET?: string;
   MICROSOFT_TENANT_ID?: string;
@@ -201,9 +248,11 @@ export interface Env {
   // the third leg of the 3-way Founder/Investor/Axal NDA. Defaults to
   // 'legal@axal.vc' when unset (see services/trustEnvelope.ts).
   AXAL_COUNTERSIGNER_EMAIL?: string;
-  // Task #33 — Cloudflare Access perimeter for /api/admin|monitoring|infra.
-  // Both MUST be set in production for the gate to engage; either unset
-  // means the middleware is a no-op (dev / preview).
+  // Cloudflare Access verification (middleware/cfAccess.ts). Task #33
+  // removed it from /api/admin, /api/monitoring and /api/infra; today it
+  // gates only the two KYC document routes (index.ts). Both MUST be set in
+  // production for that gate to engage; either unset means the middleware is
+  // a no-op (dev / preview).
   CF_ACCESS_TEAM_DOMAIN?: string;   // e.g. "axal.cloudflareaccess.com"
   CF_ACCESS_AUD?: string;           // Application AUD tag from the Access dashboard
   // Task #6 — Google Cloud Identity Platform / Firebase Phone Auth.
@@ -277,6 +326,21 @@ export interface Env {
   // 32-hex account UUID. Both unset → `loadTechnical` reads from D1.
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_AE_API_TOKEN?: string;
+  // D161 — the dataset name the SQL reader queries. The generated branch
+  // configs have written this since D105 (scripts/lib/branchConfig.mjs) with
+  // the stated purpose of "keeping the SQL-API reader from hardcoding HQ's",
+  // and until now NOTHING read it: `loadTechnicalFromAnalyticsEngine` had
+  // `FROM studioos_metrics` as a literal. That cost something real — the
+  // preview environment writes to `studioos_metrics_preview`
+  // (wrangler.toml [env.preview]), so a preview deployment's reads could not
+  // see its own writes, and the mismatch was invisible because a failed read
+  // returns null and falls back to D1 `system_metrics`.
+  //
+  // It is a NAME, not a tier discriminator: every branch points at the same
+  // shared `studioos_metrics`, which is D105's whole design — one dataset so
+  // cross-branch figures are possible without a cross-branch read, with the
+  // branch carried per row in blob6 instead. Unset → `studioos_metrics`.
+  AE_DATASET?: string;
   // Task #7 — Cloudflare API token scoped to `Workers Scripts: Edit`,
   // used by services/cloudflareSecrets.ts to promote admin-entered
   // integration keys into real Worker secrets via the CF API. Reuses
@@ -390,6 +454,9 @@ export interface Env {
   // main worker ever needs to read from the same bucket directly. The
   // tail consumer worker (cloudflare-worker-tail/) writes the events.
   LOGS?: R2Bucket;
+  // D200 — `studioos-backups`, declared in both wrangler.toml tables; optional
+  // at runtime, which is why services/backup.ts treats its absence as a state.
+  BACKUPS?: R2Bucket;
 
   // Wide allowlist for preview/dev CORS, see middleware/cors guard.
   EXTRA_DEV_ORIGINS?: string;

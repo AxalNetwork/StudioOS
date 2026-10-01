@@ -41,7 +41,7 @@ async function safeQuery<T>(label: string, fn: () => Promise<T>, fallback: T): P
   try {
     return await fn();
   } catch (e: any) {
-    console.error(`[dashboard:${label}]`, String(e?.message || e));
+    console.error('[dashboard]', label, String(e?.message || e));
     return fallback;
   }
 }

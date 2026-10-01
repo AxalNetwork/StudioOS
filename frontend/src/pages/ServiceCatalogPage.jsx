@@ -20,12 +20,25 @@ const CAT_LABEL = {
 };
 
 /**
- * `embedded`: mounted on /offers/catalog inside a WorkspaceShell that already
- * draws the crumb, the h1 and the zone pills. It suppresses this page's own
- * heading block and NOTHING else — Browse / My offerings / Stripe Connect are
- * views WITHIN the catalog rather than sibling zones, so they are this page's
- * controls and stay, exactly as the tab rows on the Leads and Perk deals zones
- * do.
+ * `embedded`: mounted on /offers/catalog as the zone body, inside a
+ * WorkspaceShell that has already drawn the crumb, the h1 and the zone pills.
+ * It renders `MineTab` ALONE — no heading block and no tab row.
+ *
+ * That last clause is a reversal, and the sentence it replaces is worth keeping
+ * visible: "Browse / My offerings / Stripe Connect are views WITHIN the catalog
+ * rather than sibling zones, so they are this page's controls and stay." The
+ * reasoning was that a tab row is a control, and a zone may draw its own
+ * controls. What it missed is what the tabs actually select between. Browse
+ * catalogue is the PUBLIC marketplace — every other firm's offerings — and
+ * Stripe Connect is payouts. Neither is a view of "what this firm sells", which
+ * is what PO1 defines the zone to be; they are different subjects that happened
+ * to share a component. Both keep their own route at `/services`.
+ *
+ * It was not a theoretical objection. `tab` initialises to `'mine'` only when
+ * `isPartner`, so an admin — a super admin previewing the workspace, most often
+ * — opened /offers/catalog and got the public marketplace grid under the
+ * "Service catalog" heading, with the LEDGER body never mounted at all. Every
+ * element of the artboard was present in this file and none of it on screen.
  */
 /**
  * `zoneActions` is a render prop, and it is deliberately not a role check.
@@ -48,17 +61,45 @@ export default function ServiceCatalogPage({ user, embedded = false, zoneActions
     ...(isPartner ? [{ key: 'stripe', label: 'Stripe Connect', icon: ShieldCheck }] : []),
   ];
 
+  // MOUNTED AS `/offers/catalog`, THE ZONE IS `MineTab` AND NOTHING ELSE.
+  //
+  // The note that stood in `PartnerBucketRoutes` said `embedded` deliberately
+  // keeps these tab rows, because Browse / My offerings / Stripe Connect are
+  // "views WITHIN a zone, not sibling zones". Two facts say otherwise.
+  //
+  // The first is the artboard. PO1 in `design/canvases/integrated/Pages ·
+  // Partner Offers.dc.html` declares one control row — `filters: ['All',
+  // 'Fixed','Retainer','Seat']`, `ops: ['New service','Pricing history',
+  // 'Export']` — and no tab row at all. Its h1 is "Service catalog" and its
+  // blurb is "What the firm sells". Browse catalogue is the PUBLIC
+  // marketplace: every OTHER firm's offerings. That is a different subject
+  // under this zone's heading, not a view of it. Stripe Connect is payouts.
+  //
+  // The second is what an admin actually saw. `tab` starts at `'mine'` only
+  // when `isPartner`, so every admin — including a super admin previewing the
+  // workspace — landed on `/offers/catalog` and got the public marketplace
+  // grid under the Catalog heading, with the LEDGER body below never mounted.
+  // A control row that can put a different subject under the zone's own h1 is
+  // navigation, and the shell has already drawn the navigation.
+  //
+  // Nothing is removed from the product: both other subjects keep their own
+  // routes, `/services` (this same page, unembedded, with all three tabs) and
+  // `/perks`. What changes is that the zone renders the zone.
+  if (embedded) {
+    return <MineTab user={user} zoneActions={zoneActions} zoneFilters={zoneFilters} role={role} />;
+  }
+
+  // Everything below is the standalone `/services` page: the zone mount
+  // returned above, so nothing here needs to ask whether it is embedded.
   return (
     <div className="space-y-6">
-      {!embedded && (
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Service Catalogue</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Productised partner offerings — fixed price, fixed scope, fixed SLA. Founders book
-            directly; engagements run through the same lifecycle as accepted quotes.
-          </p>
-        </div>
-      )}
+      <div>
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Service Catalogue</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          Productised partner offerings — fixed price, fixed scope, fixed SLA. Founders book
+          directly; engagements run through the same lifecycle as accepted quotes.
+        </p>
+      </div>
 
       <div className="border-b border-gray-200 flex gap-6 overflow-x-auto dark:border-gray-800">
         {tabs.map((t) => {

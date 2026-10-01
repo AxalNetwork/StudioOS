@@ -151,10 +151,12 @@ export default function TotpEnrollment({ onDone, onCancel }) {
       setRecoveryCodes(res?.recovery_codes || []);
       setPhase('recovery');
     } catch (e) {
-      const msg = e.message || '';
-      setError(/invalid_code/i.test(msg)
+      // D258 — the refusal's code travels on `e.code`. settings.ts answers a
+      // wrong code with 400 `invalid_code` (it used to be a 401, which signed
+      // the user out before this branch could ever run).
+      setError(e?.code === 'invalid_code'
         ? "That code didn't match. Codes rotate every 30 seconds — wait for a fresh one and try again."
-        : (msg || 'Could not confirm your authenticator. Please try again.'));
+        : (e?.message || 'Could not confirm your authenticator. Please try again.'));
     }
     setBusy(false);
   };

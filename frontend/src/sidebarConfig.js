@@ -16,14 +16,11 @@
 //   - Items must not appear in more than one group within a role.
 
 import {
-  LayoutDashboard, Target, FileText, Users, DollarSign,
-  Ticket, Handshake, Rocket, UserCircle,
-  Globe, Brain, Activity, Shield, ShieldCheck,
-  Network, Sparkles, Briefcase, TrendingUp, Layers, Scale,
-  MessageSquare, Package, Calendar, Heart, Bookmark, Megaphone, Send,
-  Gamepad2, ShieldAlert,
-  Inbox, Radar, Wallet, Landmark,
-  Mail, Gift, Map, UserCog, Coins, FileStack, SlidersHorizontal,
+  LayoutDashboard, Target, FileText, Users, Handshake, Rocket,
+  UserCircle, Shield, ShieldCheck, Network, Sparkles, Briefcase,
+  TrendingUp, MessageSquare, Package, Calendar,
+  Inbox, Radar, Wallet, Landmark, Mail,
+  Map, UserCog, Coins, FileStack, SlidersHorizontal,
 } from 'lucide-react';
 
 // `workspaces/shellConfig.js` is a pure leaf module — it imports nothing — so
@@ -80,12 +77,21 @@ export const SIDEBAR_GROUPS = {
   // laid over the top, and `shellRoleFor` (lib/shellRole.js) picks it when the
   // flag is set and the holder has not switched to the plain Admin view.
   //
-  // ROWS ARE ADDED AS THEIR PAGES LAND. The approved canvas has eight rows —
-  // Home, Licences, Funds, Contracts, Team, Support, Security, Settings. A row
+  // ROWS ARE ADDED AS THEIR PAGES LAND. The approved canvas has ELEVEN rows —
+  // Home, Licences, Funds, Contracts, Team, Revenue, Content, Platform,
+  // Support, Security, Settings — and its own changelog says so: "Sidebar is
+  // the eleven-row HQ group … The seven-row nav is not drawn anywhere." A row
   // pointing at a route that does not exist is worse than a missing row: it
-  // looks shipped and 404s. All eight resolve today, and
+  // looks shipped and 404s. All eleven resolve today, and
   // `super_admin_shell.test.mjs` fails if a row is added whose route is not
   // registered in App.jsx.
+  //
+  // This sentence said EIGHT until D146, and omitted Revenue, Content and
+  // Platform — the three rows whose own comments sit a few lines below it. The
+  // array was never wrong; the prose describing it was, and the test three
+  // files away is literally named "all eleven rows are present, in canvas
+  // order". A comment a guard already contradicts is the cheapest kind of
+  // false claim to leave lying around, and the most misleading to read.
   //
   // Two rows deliberately do not point where their labels first suggest:
   //   Team  → /admin/accounts, the cross-tenant accounts table with the holder
@@ -95,11 +101,14 @@ export const SIDEBAR_GROUPS = {
   //           row away under Team, and in the admin group the holder keeps.
   super_admin: [
     { key: 'hq', label: 'HQ', items: [
-      { to: '/hq', icon: Shield, label: 'Home' },
+      // D210 — H15 lights this row (its artboard's own nav). The row's own `to`
+      // still matches exactly (SidebarNav), so `match` adds only the page it
+      // reaches by the Accounts tile's link.
+      { to: '/hq', icon: Shield, label: 'Home', match: ['/admin/analytics'] },
       // The one row this tier exists for. Every route behind it is
       // super-admin-only server-side (routes/admin_licences.ts).
       { to: '/admin/licences', icon: Map, label: 'Licences' },
-      { to: '/funds', icon: Landmark, label: 'Funds' },
+      { to: '/admin/funds', icon: Landmark, label: 'Funds' },
       // The master template library. The doc-type REGISTRY the Contracts ·
       // Super canvas draws above it has no store; the page says so.
       { to: '/admin/contracts', icon: FileText, label: 'Contracts' },
@@ -112,7 +121,8 @@ export const SIDEBAR_GROUPS = {
       // plain-admin Content Queue that reviews one piece at a time.
       { to: '/admin/content', icon: FileStack, label: 'Content' },
       { to: '/admin/platform', icon: SlidersHorizontal, label: 'Platform' },
-      { to: '/help', icon: Inbox, label: 'Support' },
+      // Y1 — three queues, not the shared Help Center. /help stays for every role.
+      { to: '/admin/hq-support', icon: Inbox, label: 'Support' },
       // "Security", not "Governance" (ASSUMPTIONS_LOG A4): the audit log is
       // what someone finds inside, not what they come for.
       { to: '/admin/security', icon: ShieldCheck, label: 'Security' },
@@ -120,84 +130,92 @@ export const SIDEBAR_GROUPS = {
     ]},
   ],
 
-  admin: [
-    { key: 'home', label: 'Home', items: [
+  // The subsidiary tier (D107). Eight rows, one group — the canvas draws no
+  // second group and the territory badge sits above them all, in App.jsx.
+  //
+  // THE FIRST ROW IS STUDIO, NOT THE CANVAS'S HOME. The product owner replaced
+  // the S1 digest as the front door: `/studio` is Eadwyn plus one card per
+  // other Admin page. `/branch` stays registered — it is still the digest —
+  // and it is no longer a sidebar row, because a row labelled Home that opens
+  // the digest is the front door this shell just retired.
+  //
+  // WHY EVERY ROW SHIPS AT ONCE, WHICH READS AS A REVERSAL OF THE COMMENT ON
+  // THE GROUP ABOVE AND IS NOT ONE. That comment forbids a row pointing at a
+  // route that does not exist, because such a row "looks shipped and 404s".
+  // Every row here HAS a route, registered in App.jsx. The seven `/branch/*`
+  // rows are `guard(['admin'])`. Studio is the shared `/studio` route, whose
+  // guard includes admin — and as of D155 every branch artboard is a real
+  // page. The interim arrangement this comment used to describe (rows whose artboards
+  // were not built rendering `BranchZonePending`, a notice naming the artboard
+  // and the PR that would build it) is over, and the component is deleted
+  // rather than left unused. What it bought was a sidebar matching the canvas
+  // while the pages landed one at a time; a one-row sidebar — which is what the
+  // rule applied literally would have shipped, since only Settings had a page —
+  // is not the subsidiary canvas and does not answer the question the frame
+  // exists to answer.
+  branch_admin: [
+    { key: 'branch', label: 'Branch', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
-      { to: '/messages', icon: Mail, label: 'Messages' },
+      { to: '/branch/accounts', icon: Users, label: 'Accounts' },
+      { to: '/branch/approvals', icon: Inbox, label: 'Approvals' },
+      { to: '/branch/programs', icon: Calendar, label: 'Programs' },
+      { to: '/branch/community', icon: Network, label: 'Community' },
+      { to: '/branch/contracts', icon: FileText, label: 'Contracts' },
+      // D210 — S15 (/branch/insights/analytics) lights this row, per its
+      // artboard; `match` covers the row's subtree, which `end` alone does not.
+      { to: '/branch/insights', icon: TrendingUp, label: 'Insights', match: ['/branch/insights'] },
+      { to: '/branch/settings', icon: UserCog, label: 'Settings' },
     ]},
+  ],
+
+  // D286 — THE ADMIN SHELL ON ACCOUNTS HQ HOLDS DIRECTLY (canvas S20). No
+  // branch is deployed yet (`infra/branches` holds only `_example.json`, and
+  // `tenancyScope.ts` leaves `admin` unscoped), so every plain admin today
+  // administers accounts on HQ's own database, on axal.vc. S20 draws that as
+  // the branch shell's eight rows, in the same order, with every row pointing
+  // at the `/admin` console that already does that work on HQ — never at
+  // `/branch/*`, which refuses on HQ.
+  //
+  // WHAT THIS REPLACED, AND WHERE IT WENT. Until D286 this shell was the old
+  // admin sidebar: Studio, then an Admin group of nineteen live console rows
+  // (twenty with the parked X), after D284 had already moved the 29 working
+  // pages to the Workspaces launcher and Messages to the top bar. The H35
+  // placement map (`lib/adminPlacement.js`, D283) is the record of where each
+  // of those rows lives now, and `admin_placement_h35.test.mjs` pins the
+  // legacy list by value so the map keeps answering for it. Five rows are
+  // landings of their own (`pages/admin/Held*.jsx`), each carrying its
+  // consoles as literal links so `admin_route_reachability.test.mjs` can walk
+  // to them; three point straight at the console that IS the row.
+  //
+  // `match` lists the consoles a landing leads to, so the row stays lit
+  // inside them. A path can light one row only, so a console placed on two
+  // rows (Exploring: Accounts, and an Approvals lane) matches its FIRST
+  // placement in the map. The `/admin` tabs light rows by QUERY, not path —
+  // `adminRowFor` in `lib/hqStrips.js`, read from the same map — which is why
+  // the Contracts row can point at `/admin?tab=legal` without lighting on
+  // every other tab.
+  admin: [
     { key: 'admin', label: 'Admin', items: [
-      { to: '/admin', icon: Shield, label: 'Admin Console' },
-      { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
-      { to: '/admin/assessment', icon: Gamepad2, label: 'Assessment Studio' },
-      { to: '/admin/best-fit', icon: Sparkles, label: 'Best-Fit Console' },
-      { to: '/admin/events', icon: Ticket, label: 'Event Admin' },
-      { to: '/admin/jobs', icon: Briefcase, label: 'Job Board Admin' },
-      { to: '/admin/circles', icon: Network, label: 'Communities Admin' },
-      // Which advisor may read which Lab cohort's founders. Its own row rather
-      // than a Spin-Out Lab tab: that console is Lab-owned, and this grant is
-      // advisor-domain — the backend already draws the same line.
-      { to: '/admin/advisor-cohorts', icon: UserCog, label: 'Advisor Cohort Access' },
-      // Task #9 — chat-onboarded users awaiting binding agreement + role assignment.
-      { to: '/admin/exploring', icon: UserCircle, label: 'Exploring Users' },
-      // GP review queue for Spin-Out Fund I LP applications (migration 165).
-      { to: '/admin/lp-applications', icon: Inbox, label: 'LP Applications' },
-      { to: '/monitoring', icon: Activity, label: 'Monitoring' },
-      { to: '/admin/telegram', icon: Send, label: 'Telegram Channels' },
+      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+      { to: '/admin/held/accounts', icon: Users, label: 'Accounts', match: ['/admin/exploring', '/admin/trash'] },
+      { to: '/admin/held/approvals', icon: Inbox, label: 'Approvals',
+        match: ['/admin/lp-applications', '/admin/refer-earn', '/admin/best-fit', '/admin/due-diligence', '/admin/partners'] },
+      { to: '/admin/held/programs', icon: Calendar, label: 'Programs',
+        match: ['/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/assessment', '/admin/profiling-trends'] },
+      { to: '/admin/held/community', icon: Network, label: 'Community', match: ['/admin/events', '/admin/jobs', '/admin/circles'] },
+      // The template library, on the Admin Console's Legal tab. Not "read-only":
+      // `requireHqAuthoring` refuses only on a branch, so a plain HQ admin
+      // authors templates today. Whether they should is D286's filed question.
+      { to: '/admin?tab=legal', icon: FileText, label: 'Contracts' },
+      { to: '/admin/held/insights', icon: TrendingUp, label: 'Insights' },
+      // Licensing appears only here, as the administrator's own read of their
+      // licence (S20's wall rule 4). HQ's ledger of every licence
+      // (/admin/licences) is super-admin-only server-side and lives in the HQ
+      // group above; a row for it here was a door that opened onto 403s.
+      { to: '/admin/my-licence', icon: UserCog, label: 'Settings' },
       // X (Twitter) broadcaster temporarily hidden — OAuth not provisioned yet.
       // Re-enable once X_CLIENT_ID/SECRET are bound on the prod worker.
       // { to: '/admin/x', icon: Megaphone, label: 'X (Twitter)' },
-      { to: '/admin/articles', icon: FileText, label: 'Content Queue' },
-      // A subsidiary administrator's read of their OWN licence — terms,
-      // territories, seats licensed, history. HQ's ledger of every licence
-      // (/admin/licences) is NOT here: every call behind it is
-      // super-admin-only server-side, so a row for it in the plain admin shell
-      // was a door that opened onto 403s. It lives in the HQ group above.
-      // GET /licence/mine 404s for anyone who administers none.
-      { to: '/admin/my-licence', icon: Map, label: 'My Licence' },
-    ]},
-    { key: 'studio', label: 'Studio', items: [
-      { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
-      { to: '/scoring', icon: Target, label: 'Scoring Engine' },
-      { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
-      { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
-      { to: '/signals', icon: Radar, label: 'Signals' },
-      { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
-      { to: '/matches', icon: Sparkles, label: 'AI Matches' },
-      { to: '/deals', icon: Handshake, label: 'Deal Flow' },
-    ]},
-    { key: 'capital', label: 'Capital & Legal', items: [
-      { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
-      { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
-      { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
-      { to: '/portfolio/coverage', icon: Network, label: 'Portfolio Coverage' },
-      { to: '/portfolio/reserves', icon: Layers, label: 'Reserve Allocation' },
-      { to: '/portfolio/waterfall', icon: TrendingUp, label: 'Exit Waterfall' },
-      { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
-      { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
-      { to: '/incorporate', icon: Scale, label: 'Incorporate' },
-      { to: '/compliance', icon: Calendar, label: 'Compliance Calendar' },
-    ]},
-    { key: 'network', label: 'Network & Growth', items: [
-      // Task #4 — "Referrals" moved into Settings (/settings/referrals); the
-      // /refer route redirects there. Removed from the admin nav.
-      // Task #1 — "Contacts" merged into this "Network" page (Contacts +
-      // Relationships tabs); /contacts and /relationships redirect to /network.
-      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
-      { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
-      { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
-      // "Integrations" merged into Settings (/settings/integrations); the
-      // /integrations route redirects there. Removed from the admin nav.
-      { to: '/services', icon: Package, label: 'Service Catalogue' },
-      { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
-      { to: '/partner/insights', icon: TrendingUp, label: 'Demand Insights' },
-      { to: '/partner/office-hours', icon: Calendar, label: 'Partner Office Hours' },
-      { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing Review' },
-    ]},
-    { key: 'more', label: 'More', items: [
-      { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement' },
-      { to: '/spinout-lab/83b', icon: Calendar, label: '83(b) Tracker' },
-      { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
-      { to: '/perks', icon: Gift, label: 'Perks' },
     ]},
     // No 'account' group here on purpose. It once held Articles / Activity Log
     // / Support / Documentation; those moved to the user menu (7c93b83e and
@@ -240,7 +258,9 @@ export const SIDEBAR_GROUPS = {
   // Raise · Grow · Network · Research · Trust · Company Settings). Eight land
   // here; Trust is deliberately absent, pinned out of every sidebar by
   // trust_center_navigation.test.mjs — it is reached from the user dropdown.
-  // Spin-Out Lab and Messages keep rows of their own on top of that, so ten.
+  // Spin-Out Lab keeps a row of its own on top of that, so nine. Messages is
+  // not a row here: since D284 it is a top-bar button on every shell the
+  // /messages route admits, and only the exploring group still carries a row.
   //
   // The twenty-one items this replaces all keep a door. Five rows own their
   // sections through FounderWorkspaceTabs, which wraps each route in App.jsx:
@@ -255,7 +275,8 @@ export const SIDEBAR_GROUPS = {
   // Seven destinations had ZERO inbound links anywhere outside this file —
   // /messages, /execution, /signals, /build/team, /build/metrics,
   // /network-effects and /raise/capital. Six of them are now reachable only
-  // because those bars exist; /messages keeps a row.
+  // because those bars exist; /messages is reached from the top-bar Messages
+  // button (D284), which replaced the row it kept here.
   //
   // /liquidity's `requiredTier: 'studio'` moved onto its tab rather than being
   // dropped: the route itself has no tier gate, so the nav was the whole gate.
@@ -290,7 +311,7 @@ export const SIDEBAR_GROUPS = {
         match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/build/metrics', '/execution'] },
       { to: '/raise', icon: Sparkles, label: 'Raise', match: ['/raise', '/liquidity'] },
       { to: '/grow', icon: TrendingUp, label: 'Grow',
-        match: ['/grow', '/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications', '/spinout-lab/brand', '/build/brand', '/comarketing', '/perks', '/network-effects'] },
+        match: ['/grow', '/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications', '/build/brand', '/comarketing', '/perks', '/network-effects'] },
       // Points at /network, not at the first zone: /network is the one route
       // that role-branches its element, so it is the landing every license can
       // open, and it forwards to the zone. The three /network/* zone routes are
@@ -329,8 +350,8 @@ export const SIDEBAR_GROUPS = {
   // Intentional removals from the partner nav (documented so a nav-integrity
   // guard treats them as deliberate, not silent drops — every route below
   // stays registered and reachable for other roles or via deep link):
-  //   • /partner-portal "Partner Portal" — Studio is the home now, so the
-  //     duplicate portal tile is dropped (route stays for admin / deep links).
+  //   • /partner-portal "Partner Portal" — the page is retired. The route
+  //     redirects to Studio, which is the home.
   //   • /projects "Projects" and /pipeline "Pipeline Board" — studio/investor
   //     execution + deal-pipeline surfaces, not partner-facing.
   //   • /deals "Deal Flow" — only relevant to investor-type partners
@@ -369,10 +390,11 @@ export const SIDEBAR_GROUPS = {
   // TWO DEPARTURES FROM THE CANVAS, both deliberate:
   //   Home → /studio, not a new /home. Per the product owner, and it keeps
   //     /partner from becoming a root.
-  //   Messages is a ninth row. The canvas's eight rows have nowhere to put it,
-  //     and deleting the entry would leave a live surface reachable only by
-  //     typing the URL — the Wave 4 mistake in reverse. It stays until the
-  //     canvas says where a cross-cutting inbox lives.
+  //   Messages is not a row. The canvas's eight rows have nowhere to put it,
+  //     and until D284 it sat here as a ninth row so the live surface was not
+  //     reachable only by typing the URL — the Wave 4 mistake in reverse.
+  //     D284 put a Messages button in the top bar for every shell /messages
+  //     admits, which is where a cross-cutting inbox lives; the row went.
   // ── Partner / Operator — the canonical shell, now complete ─────────────────
   // Canvas ROWS: Home · Pipeline · Delivery · Offers · Network · Research ·
   // Trust · Firm Settings. "CANONICAL Partner shell — 8 rows, no tier gating
@@ -404,7 +426,7 @@ export const SIDEBAR_GROUPS = {
       // (PartnerBucketRoutes); the legacy destinations stay in `match` so a
       // deep link still lights the right row.
       { to: '/pipeline', icon: Target, label: 'Pipeline',
-        match: ['/pipeline', '/needs', '/matches', '/partner/insights', '/partner/operations/engagements'] },
+        match: ['/pipeline', '/needs', '/partner/insights', '/partner/operations/engagements'] },
       { to: '/delivery', icon: Briefcase, label: 'Delivery',
         match: ['/delivery', '/partner/operations/overview', '/partner/operations/portfolio',
                 '/partner/operations/performance'] },
@@ -500,7 +522,9 @@ export const SIDEBAR_GROUPS = {
       { to: '/messages', icon: Mail, label: 'Messages' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/profile', icon: UserCircle, label: 'My Profile' },
+      // D433 — /profile is a redirect to /account now (the second mount of
+      // SettingsPage retired); the row points where it lands.
+      { to: '/account', icon: UserCircle, label: 'My Profile' },
     ]},
   ],
 };
@@ -643,8 +667,27 @@ export const PARTNER_FULL_BLEED = [
  * and `flushSurface` in App.jsx, which is exactly the shape that let
  * `/grow/focus` go missing from one array and not the other.
  */
+/**
+ * Role wizards that paint inside the app shell. Exact paths, not the
+ * `/onboarding/` prefix: `/onboarding` itself is the licence picker and
+ * renders outside this shell (it keeps its own logo), and `/onboarding/chat`
+ * is the same kind of full-screen step. These three are the body under the
+ * sidebar and the header, so the shell flushes its padding and drops the
+ * footer and the page's background runs to every edge of that column.
+ */
+export const ONBOARDING_CANVAS_PATHS = [
+  '/onboarding/founder',
+  '/onboarding/investor',
+  '/onboarding/partner',
+];
+
 export const SHARED_FULL_BLEED = [
   '/referrals',
+  // `/perks` is one page for founder, investor, advisor, admin and exploring
+  // (a partner is sent to /offers/perk-deals). It draws its own canvas, the
+  // same way /raise does: the listings fill the column and the Worker rail is
+  // the canvas's right edge, not a card floating in the shell's padded column.
+  '/perks',
   // `/spinout-lab` — the Lab introduction opens with a full-bleed hero that has
   // to run from the sidebar's right border to the viewport edge, which the
   // shell's own `p-4 md:p-6` prevents. Role-agnostic for the same reason
@@ -654,4 +697,42 @@ export const SHARED_FULL_BLEED = [
   // SpinoutLabInvestorPage.jsx had to be given some in the same commit, because
   // it had none and was relying on the shell's.
   '/spinout-lab',
+  ...ONBOARDING_CANVAS_PATHS,
+];
+
+/**
+ * Full-bleed by PREFIX, for a family of routes rather than a path.
+ *
+ * WHY A SECOND EXPORT AND NOT TWENTY-THREE MORE ENTRIES ABOVE. The Lab's tool
+ * routes are one surface with many doors, and listing each would mean a new
+ * tool is full width only if somebody remembers to add it here — the exact
+ * failure `FOUNDER_FULL_BLEED` was derived from the shell config to prevent.
+ * The Lab has no shell config to derive from, so the prefix is the derivation.
+ *
+ * AND WHY IT LIVES HERE RATHER THAN IN `App.jsx`. It was written there first,
+ * as a `startsWith` on the padding flag — but `App.jsx` already tested the same
+ * prefix on the WIDTH flag, so the two could be changed apart, and a route
+ * could end up full width with the shell's padding or flush inside a centred
+ * column. One list, read once, and both flags follow it.
+ *
+ * Every `/spinout-lab/<tool>` page owns its own gutters through `LabPageShell`
+ * (`LAB_PAGE_PAD`), which is what makes flushing the shell correct rather than
+ * merely tidier. `/spinout-lab/brief` is outside the shell entirely (public
+ * marketing collateral that prints with no nav), and
+ * `/spinout-lab/investor-workspace` is a workspace route, which `WorkspaceShell`
+ * pads from the canvases' own `.main` — both are flush for reasons that predate
+ * this list.
+ */
+export const SHARED_FULL_BLEED_PREFIXES = [
+  '/spinout-lab/',
+  // A researched fund's own page. The list `/research/funds` is already full
+  // bleed because it is a shell zone; the child is not in that derived list,
+  // and without this prefix the dossier would sit inside App's padding on top
+  // of WorkspaceShell's own. The trailing slash keeps the list itself on the
+  // zone rule.
+  '/research/funds/',
+  // One competitor inside an analysis. The list `/research/companies` is
+  // already a shell zone; the child is not, and without this prefix the page
+  // would sit inside App's padding on top of WorkspaceShell's own.
+  '/research/companies/',
 ];

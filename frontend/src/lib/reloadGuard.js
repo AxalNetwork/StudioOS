@@ -68,12 +68,51 @@ export const RELOAD_GUARD_KEYS = [
 ];
 
 /**
- * How many times this recovery has already reloaded, from storage or — where
- * storage is refused — from the URL marker that rode along with the last one.
+ * Which build this document is running: the hashed entry script, e.g.
+ * `/assets/index-Cnhe9zl7.js`. Null where there is none to read (Node, the
+ * dev server), which turns the build scoping below off rather than guessing.
+ */
+export function currentBuild() {
+  try {
+    const el = document.querySelector('script[type="module"][src*="/assets/index-"]');
+    return el ? el.getAttribute('src') : null;
+  } catch { return null; }
+}
+
+/**
+ * THE BUDGET BELONGS TO A BUILD, NOT TO THE TAB.
+ *
+ * The count used to live for the whole tab. A tab open across a day of
+ * deploys spent its one recovery reload on the first stale chunk, and every
+ * later deploy then showed "This page hit an unexpected error" with Safari's
+ * `e._result.default` instead of reloading — on /company-settings, among
+ * others, for anyone who had kept a tab open since the morning. A reload loop
+ * is a loop on ONE build, so the attempt is stored with the build it was
+ * spent on (`2@/assets/index-….js`) and an attempt spent on another build
+ * does not count. The loop bound is unchanged: reloading onto the same build
+ * still reads the same count.
+ *
+ * The value still starts with the count, so anything reading it with
+ * parseInt (the boot watchdog in index.html) reads what it always did.
+ */
+export function recordAttempt(storageKey, n) {
+  const build = currentBuild();
+  sessionStorage.setItem(storageKey, build ? `${n}@${build}` : String(n));
+}
+
+/**
+ * How many times this recovery has already reloaded on THIS build, from
+ * storage or — where storage is refused — from the URL marker that rode
+ * along with the last one.
  */
 export function readAttempts(storageKey, urlParam) {
   try {
-    const n = parseInt(sessionStorage.getItem(storageKey) || '0', 10);
+    const raw = sessionStorage.getItem(storageKey) || '';
+    const at = raw.indexOf('@');
+    const build = currentBuild();
+    // Spent on another build: that build is gone, so its budget is too.
+    if (at >= 0 && build && raw.slice(at + 1) !== build) return 0;
+    const n = parseInt(raw || '0', 10);
     if (Number.isFinite(n) && n > 0) return n;
   } catch { /* storage blocked — fall through to the URL marker */ }
   try {
@@ -122,7 +161,7 @@ export function reloadWithinBudget(storageKey, urlParam, max, before) {
   const attempts = readAttempts(storageKey, urlParam);
   if (attempts >= max) return false;
   const next = attempts + 1;
-  try { sessionStorage.setItem(storageKey, String(next)); } catch { /* the URL marker carries it */ }
+  try { recordAttempt(storageKey, next); } catch { /* the URL marker carries it */ }
   const go = () => reloadCarryingCount(urlParam, next);
   if (typeof before === 'function') { before(go); } else { go(); }
   return true;

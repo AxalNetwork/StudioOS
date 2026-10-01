@@ -28,7 +28,7 @@ export const DEAL_METRIC_UNAVAILABLE = {
   stage_history:
     'Stage transitions were not recorded before this release. Conversion and time-in-stage begin from the first recorded move.',
   source_quality:
-    'Deals do not record where they came from. There is no source field, no IC decision record and no term-sheet object, so a source table would be three invented columns.',
+    'Deals record where they came from now (migration 336), but the source taxonomy is not decided and no term-sheet object exists, so a source-quality table would rank sources by a definition nobody has set.',
 } as const;
 
 export interface PassBucket {

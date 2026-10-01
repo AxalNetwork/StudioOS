@@ -34,6 +34,7 @@ import {
 import {
   safeHarbourStatus, triggerChecklist, commonToPreferredRatio, type TriggerKind,
 } from '../services/valuation409a';
+import { bindingKey } from '../util/schemaBootstrap';
 
 /**
  * Build queue #120 — lazy bootstrap for the share tables. Canonical
@@ -41,9 +42,9 @@ import {
  * deploy but not the migration yet, matching the pattern used by
  * ensureCapTableVariantColumn above. Cached per isolate.
  */
-let _shareSchemaReady = false;
+const SHARE_SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureCapTableShareSchema(env: Env): Promise<void> {
-  if (_shareSchemaReady) return;
+  if (SHARE_SCHEMA_READY.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS captable_share_tokens (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,7 +78,7 @@ async function ensureCapTableShareSchema(env: Env): Promise<void> {
     try { await env.DB.prepare(s).run(); }
     catch (e) { console.warn('[captable] share schema bootstrap:', (e as Error).message); }
   }
-  _shareSchemaReady = true;
+  SHARE_SCHEMA_READY.set(bindingKey(env), true);
 }
 
 const captable = new Hono<{ Bindings: Env }>();
@@ -779,9 +780,9 @@ captable.get('/share/:token', async (c) => {
 // makes that a matter of luck rather than design.
 // ---------------------------------------------------------------------------
 
-let valuation409aSchemaReady = false;
+const VALUATION409A_SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensure409aSchema(env: Env): Promise<void> {
-  if (valuation409aSchemaReady) return;
+  if (VALUATION409A_SCHEMA_READY.get(bindingKey(env))) return;
   await env.DB.prepare(
     `CREATE TABLE IF NOT EXISTS valuations_409a (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -808,7 +809,7 @@ async function ensure409aSchema(env: Env): Promise<void> {
        created_at TEXT NOT NULL DEFAULT (datetime('now'))
      )`,
   ).run();
-  valuation409aSchemaReady = true;
+  VALUATION409A_SCHEMA_READY.set(bindingKey(env), true);
 }
 
 const TRIGGER_KINDS = new Set<TriggerKind>([

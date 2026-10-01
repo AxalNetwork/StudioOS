@@ -17,12 +17,13 @@
  * so the smoke test can exercise the routing logic without a live D1/Stripe.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 
 /** Idempotent schema bootstrap. Statement-for-statement mirror of migration 134. */
 export async function ensureAccountPlanSchema(env: Env): Promise<void> {
-  if (_migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS account_subscriptions (
        user_id INTEGER PRIMARY KEY,
@@ -40,7 +41,7 @@ export async function ensureAccountPlanSchema(env: Env): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_account_sub_status ON account_subscriptions(status)`,
   ];
   for (const s of stmts) await env.DB.prepare(s).run();
-  _migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 // Roles with their OWN dedicated billing pipeline — they never use this one

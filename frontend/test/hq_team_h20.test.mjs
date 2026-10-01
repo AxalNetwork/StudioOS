@@ -1,0 +1,534 @@
+/**
+ * D221 / H20 — HQ · Team: the people desk, and the line between what only HQ
+ * may do and what every admin may.
+ *
+ * WHAT H20 DRAWS AND WHAT IS TRUE. The artboard names five HQ-only powers and
+ * four admin powers, each with a one-line note. The NAMES are held to the
+ * canvas here, verbatim and in order, read out of the artboard's own data
+ * model so a renamed row fails. The NOTES are held to the opposite rule: five of
+ * them describe a platform that does not exist (a banner the impersonated
+ * person sees, Admit to Lab landing on Programs, a seat check on a grant, a
+ * decision taken on Approvals, and "live on Admin · Accounts"), and the cards
+ * say instead what the route that performs each act actually requires. So the
+ * test asserts the canvas still SAYS each false thing — this is a guard against
+ * repeating the canvas, not a quote of it — and that the rendered cards do not.
+ *
+ * A SIXTH WAS FALSE AND IS NOW TRUE: "both parties notified". D241 made the
+ * transfer tell the successor and the former holder, so it left the false list
+ * and is held the other way — the card says it, and the route's two notices are
+ * read to prove the sentence is still earned.
+ *
+ * ONE OF THE CARD'S OWN NOTES CHANGED WITH ITS ROUTE: D247 put deactivating an
+ * administrator on demote's bar, so "no authenticator, step-up or reason
+ * asked" became the three the route now checks, and the route is read for them.
+ *
+ * RENDERED, NOT MATCHED. `HqTeamActions` is pure over one prop, so both of its
+ * states are rendered with renderToStaticMarkup; the account drawer's footer is
+ * rendered too, with and without each handler. The Users table itself loads in
+ * an effect, which static rendering never runs, so its row rule is held two
+ * ways: the rule's own function is exercised case by case, and the row is read
+ * as source to prove both controls sit inside the one guard.
+ *
+ * Pinned elsewhere and not repeated here: the worker half — Extend re-running
+ * D133, the transfer's reason and its two audit rows — in
+ * cloudflare-worker/test/hq_team_actions_d221.test.ts; the page's older H9
+ * facts in hq_team_h9.test.mjs; the rail's row and coverage shapes in
+ * hq_home.test.mjs and branch_rail_mount.test.mjs.
+ *
+ * Run with:
+ *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/hq_team_h20.test.mjs
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
+import { codeOnly } from './_codeOnly.mjs';
+import HqTeamActions, { HQ_ONLY_ACTIONS, ADMIN_ACTIONS, SUPPORT_SESSION_CEILING_HOURS } from '../src/pages/hq/HqTeamActions.jsx';
+import { drawsAccountControls } from '../src/lib/accountControls.js';
+import { UserDetailModal } from '../src/pages/AdminPage.jsx';
+
+const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
+const CANVAS = raw('design/canvases/integrated/Admin · Super.dc.html');
+const PAGE = codeOnly(raw('frontend/src/pages/hq/AccountsPage.jsx'));
+const TABLE = codeOnly(raw('frontend/src/pages/hq/HqTeamTable.jsx'));
+const ACTIONS = codeOnly(raw('frontend/src/pages/hq/HqTeamActions.jsx'));
+const CONTROLS = codeOnly(raw('frontend/src/lib/accountControls.js'));
+const ADMIN = codeOnly(raw('frontend/src/pages/AdminPage.jsx'));
+const HOLDERS = codeOnly(raw('frontend/src/pages/hq/SuperAdminHolders.jsx'));
+const WORKER_HOLDERS = codeOnly(raw('cloudflare-worker/src/routes/admin_super_admins.ts'));
+const API = codeOnly(raw('frontend/src/lib/api.js'));
+const APP = codeOnly(raw('frontend/src/App.jsx'));
+
+const render = (C, props) => renderToStaticMarkup(
+  React.createElement(MemoryRouter, null, React.createElement(C, props)),
+);
+/** The five entities renderToStaticMarkup writes into text, each to its character. */
+const ENTITY = { '&#x27;': "'", '&quot;': '"', '&amp;': '&', '&lt;': '<', '&gt;': '>' };
+/** Visible text, tags stripped, each entity decoded exactly once (one pass). */
+const text = (html) => html
+  .replace(/<[^>]+>/g, ' ')
+  .replace(/&(?:#x27|quot|amp|lt|gt);/g, (entity) => ENTITY[entity])
+  .replace(/\s+/g, ' ');
+const hrefs = (html) => [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1].replaceAll('&amp;', '&'));
+const count = (hay, needle) => hay.split(needle).length - 1;
+
+/** H20, bounded at both ends so the slice cannot run into H21. */
+function h20() {
+  const a = CANVAS.indexOf('<section class="ab" id="h20">');
+  assert.ok(a >= 0, 'the H20 artboard could not be found in the canvas');
+  const b = CANVAS.indexOf('<section class="ab" id="h21">', a);
+  assert.ok(b > a, 'H21 no longer follows H20 — this slice would run past the artboard');
+  return CANVAS.slice(a, b).replaceAll('&amp;', '&');
+}
+
+/**
+ * One list out of the canvas's data model, as `{ name, note }` pairs in order.
+ * The model is JavaScript inside the export, so a `’` there is six
+ * characters of source; it is decoded here so a note reads as the canvas
+ * renders it.
+ */
+function canvasList(key) {
+  const opener = `${key}: [`;
+  assert.equal(count(CANVAS, opener), 1, `the canvas must declare ${key} exactly once`);
+  const at = CANVAS.indexOf(opener);
+  const body = CANVAS.slice(at, CANVAS.indexOf('],', at));
+  const unescape = (s) => s.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  return [...body.matchAll(/\{\s*name:'((?:[^'\\]|\\.)*)',\s*note:'((?:[^'\\]|\\.)*)'\s*\}/g)]
+    .map((m) => ({ name: unescape(m[1]), note: unescape(m[2]) }));
+}
+
+const HQ_CANVAS = canvasList('t1HqActions');
+const ADMIN_CANVAS = canvasList('t1AdminActions');
+const PLAIN = render(HqTeamActions, {});
+const OVERLAY = render(HqTeamActions, { viewAs: 'fr' });
+
+test('the two cards carry H20\'s names, verbatim and in its order', () => {
+  const art = h20();
+  // The lists read below are the ones this artboard draws, not a neighbour's.
+  assert.ok(art.includes('{{ t1HqActions }}') && art.includes('{{ t1AdminActions }}'),
+    'H20 no longer draws the two action lists this test reads');
+  assert.ok(art.includes('HQ-only actions') && art.includes("Admin's actions"),
+    'H20 no longer titles its two cards as the page does');
+  assert.equal(HQ_CANVAS.length, 5, 'the canvas list could not be parsed — the names below would compare nothing');
+  assert.equal(ADMIN_CANVAS.length, 4, 'the canvas list could not be parsed — the names below would compare nothing');
+
+  // D288 / H38 renames the top-bar picker "Preview shell"; H20's action list
+  // still says "View as a role shell" (D282, tension 9). The picker's own
+  // artboard wins for the one row that names it, and the row says the new
+  // name — every other name is H20's verbatim.
+  const RENAMED_BY_H38 = { 'View as a role shell': 'Preview shell' };
+  const hqExpected = HQ_CANVAS.map((a) => ({ ...a, name: RENAMED_BY_H38[a.name] || a.name }));
+  assert.ok(HQ_CANVAS.some((a) => a.name === 'View as a role shell'),
+    'H20 no longer names the picker "View as a role shell" — drop the H38 override here');
+  assert.deepEqual(HQ_ONLY_ACTIONS.map((a) => a.name), hqExpected.map((a) => a.name),
+    'an HQ-only row was renamed, dropped or reordered against H20 (the picker row excepted, per H38)');
+  assert.deepEqual(ADMIN_ACTIONS.map((a) => a.name), ADMIN_CANVAS.map((a) => a.name),
+    'an admin row was renamed, dropped or reordered against H20');
+
+  // And the rendered card draws them in that order — the data could be right
+  // and the render could drop one.
+  const plain = text(PLAIN);
+  const at = [...hqExpected, ...ADMIN_CANVAS].map(({ name }) => plain.indexOf(name));
+  assert.ok(at.every((i) => i >= 0), 'a row the canvas names is not rendered');
+  assert.deepEqual([...at].sort((x, y) => x - y), at, 'the rendered rows are out of the canvas\'s order');
+});
+
+test('the canvas notes that describe a platform that does not exist do not reach the page', () => {
+  const notes = [...HQ_CANVAS, ...ADMIN_CANVAS].map((a) => a.note).join(' | ');
+  const art = h20();
+  // Each claim is asserted to be the CANVAS'S first — a phrase the canvas no
+  // longer makes would pass the second half vacuously.
+  const FALSE_CLAIMS = [
+    ['banner both sides see', notes], // the target sees no banner (D248 tells them by notice, not banner)
+    ['Lands on Programs as well', notes], // spinout-admit writes user_spinout_flags only
+    ['seats only', notes], // no grant is checked against a seat count
+    ['The decision happens on Approvals', notes], // Approvals decides nothing
+    ['live on Admin · Accounts', art], // they live on /admin's Users table and the directory
+  ];
+  for (const [claim, source] of FALSE_CLAIMS) {
+    assert.ok(source.includes(claim), `the canvas no longer says "${claim}" — drop it from this list`);
+    for (const [state, html] of [['HQ view', PLAIN], ['under the overlay', OVERLAY]]) {
+      assert.ok(!text(html).includes(claim), `the cards repeat the canvas's false "${claim}" (${state})`);
+    }
+  }
+  // What each row says instead is the route's own requirement, stated where the
+  // canvas stated the fiction.
+  const plain = text(PLAIN);
+  // D248 — re-aimed. "The person is not told" was true until D248; the
+  // banner half of the canvas's claim stays false and the card still says so.
+  // D259 — narrowed, not loosened: the sentence is true of an HQ-held account,
+  // and the card now says so, and says a branch account is not told yet.
+  assert.match(plain, /On an HQ-held account the person is told when it opens, in the app and by email, with your name and your reason; there is no banner on their side\./);
+  assert.match(plain, /An account on a branch, opened with Support in the Team table’s branch search, is not told yet\./);
+  assert.match(plain, /The successor and the former holder are both notified, in the app and by email\./);
+  assert.match(plain, /It does not place them in a cohort on Programs\./);
+  assert.match(plain, /Neither is checked against the licence’s seats — no grant on the platform is\./);
+  assert.match(plain, /Approvals shows the outcome and offers no decision\./);
+});
+
+test('D241: "both parties notified" is now true, and the card says so only while the route earns it', () => {
+  // The canvas note that used to be on the false list. It is held the other
+  // way now: the canvas still says it, the card says it in its own words, and
+  // the route that performs the transfer is read for the two notices that make
+  // the sentence true — so removing either notice fails here, not only in the
+  // worker suite.
+  const notes = [...HQ_CANVAS, ...ADMIN_CANVAS].map((a) => a.note).join(' | ');
+  assert.ok(notes.includes('both parties notified'), 'the canvas no longer says "both parties notified"');
+  for (const [state, html] of [['HQ view', PLAIN]]) {
+    assert.match(text(html), /The successor and the former holder are both notified, in the app and by email\./, state);
+  }
+  const route = codeOnly(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_super_admins.ts'), 'utf8'));
+  assert.match(route, /import \{ notify \} from '\.\.\/services\/notify';/, 'the route no longer imports notify');
+  assert.match(route, /await notify\(env, \{[^}]*category: 'security'/, 'the transfer notice is not a security notice');
+  assert.match(route, /successor: await tellOfTransfer\(\s*c\.env, target\.id,/, 'the successor is no longer notified');
+  assert.match(route, /former: await tellOfTransfer\(\s*c\.env, actor\.id,/, 'the former holder is no longer notified');
+  // After D240's check, so a transfer that moved nothing tells nobody.
+  assert.ok(route.indexOf('successor: await tellOfTransfer(') > route.indexOf('if (!(granted === 1 && released === 1))'),
+    'a notice is sent before the write is known to have moved the elevation');
+});
+
+test('D248: the target is told, Extend has a reason and a ceiling, and the card says so only while the route does', () => {
+  const plain = text(PLAIN);
+  assert.ok(!plain.includes('The person is not told'), 'the card still says the person is not told');
+  assert.ok(!plain.includes('with no new reason'), 'the card still says Extend asks for no reason');
+  assert.ok(!plain.includes('An extension is not in the feed'), 'the card still says an extension is not recorded');
+  assert.match(plain, new RegExp(`Extend adds 30 more for a new reason, up to ${SUPPORT_SESSION_CEILING_HOURS} hours from when it opened, and not in the day after an account recovery\\.`));
+  assert.match(plain, /each extension, with its reason, in the audit log\./);
+
+  // The ceiling the card states is the ceiling the worker enforces.
+  const auth = codeOnly(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/auth.ts'), 'utf8'));
+  const m = auth.match(/export const IMPERSONATION_CEILING_MINUTES = (\d+);/);
+  assert.ok(m, 'the worker no longer exports IMPERSONATION_CEILING_MINUTES');
+  assert.equal(Number(m[1]) / 60, SUPPORT_SESSION_CEILING_HOURS,
+    'the card states a different ceiling from the one the worker enforces');
+
+  // The route: the open handler tells the target after every refusal and
+  // after the grant; Extend asks for a reason and measures from started_at.
+  const route = codeOnly(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin.ts'), 'utf8'));
+  const slice = (from, to) => {
+    const a = route.indexOf(from);
+    assert.ok(a >= 0, `${from} is gone`);
+    const b = route.indexOf(to, a + from.length);
+    return route.slice(a, b > a ? b : route.length);
+  };
+  const openH = slice("admin.post('/impersonate/:userId'", "\nadmin.");
+  const at = openH.indexOf('await tellOfSupportSession(');
+  assert.ok(at > 0, 'the open handler no longer tells the target');
+  for (const refusal of ["code: 'impersonation_reason_required'", "code: 'cannot_impersonate_super_admin'", "code: 'super_admin_required'", 'await createJWT(']) {
+    assert.ok(openH.indexOf(refusal) >= 0 && openH.indexOf(refusal) < at, `the target is told before ${refusal}`);
+  }
+  assert.match(route, /category: 'security',/);
+  const ext = slice("admin.post('/impersonate-sessions/:id/extend'", "\nadmin.");
+  // The check itself, not only its refusal code: an `if (false)` in front of
+  // the code string passed the first draft of this pin (D248 records it).
+  assert.match(ext, /if \(reason\.length < 10\) \{\s*await sql\.end\(\);\s*return c\.json\(\{\s*error: 'A reason of at least 10 characters is required to extend/,
+    'Extend no longer checks the reason');
+  assert.ok(ext.indexOf("code: 'extend_reason_required'") < ext.indexOf('await createJWT('),
+    'the reason is checked after the token is minted');
+  assert.match(ext, /const ceilingMs = startedMs \+ IMPERSONATION_CEILING_MINUTES \* 60_000;/,
+    'the ceiling is no longer measured from when the session opened');
+  assert.ok(ext.indexOf("code: 'support_session_ceiling'") < ext.indexOf('await createJWT('),
+    'the ceiling is checked after the token is minted');
+
+  // The page: Extend sends a reason, asking for one when the bar passes none.
+  const method = API.slice(API.indexOf('adminImpersonateExtend:'), API.indexOf('adminImpersonateEnd:'));
+  assert.match(method, /adminImpersonateExtend: async \(sessionId, reason\) =>/);
+  assert.match(method, /window\.prompt\(/, 'Extend no longer asks for a reason when its caller has none');
+  assert.match(method, /if \(!why\) return null;/, 'a cancelled prompt still sends the request');
+  assert.match(method, /body: JSON\.stringify\(\{ reason: why \}\)/, 'the reason is not sent');
+});
+
+test('D249: the role override takes demote\'s bar, tells the person, and the card says so only while the route does', () => {
+  const plain = text(PLAIN);
+  assert.ok(!plain.includes('No authenticator or step-up is asked'), 'the card still says the override asks for no authenticator');
+  assert.match(plain, /The Super Admin alone: your authenticator, a fresh step-up and a typed reason of at least 10 characters\. Only a change out of Exploring is an override, and the person’s own activity says it was one, and why\./);
+  assert.match(plain, /the Spin-Out Lab is left to the Exploring queue\./);
+  assert.match(plain, /in the audit log as an override naming the person\./);
+
+  const route = codeOnly(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin.ts'), 'utf8'));
+  const start = route.indexOf("admin.patch('/users/:userId/role'");
+  assert.ok(start >= 0, 'the role route is gone');
+  const end = route.indexOf('\nadmin.', start + 1);
+  const h = route.slice(start, end > start ? end : route.length);
+  assert.match(h, /const isOverride = fromExploring && reason\.length > 0;/,
+    'an override is no longer a change out of exploring with a reason');
+  assert.match(h, /if \(isOverride\) \{\s*if \(!isSuperAdmin\(adminUser as any\)\) \{/);
+  const factor = h.indexOf("await requireFactor(c, 'totp');");
+  const stepUp = h.indexOf('await requireStepUp(c);');
+  const write = h.indexOf('UPDATE users SET role');
+  assert.ok(factor > 0 && factor < stepUp && stepUp < write, 'the override\'s authenticator and step-up are not checked before the write');
+  assert.match(h, /without a completed binding agreement: a Super Admin override\. Reason: \$\{reason\}/,
+    'the person\'s own row no longer says it was an override');
+  assert.match(h, /logAdminAction\(c\.env, adminUser\.id, adminUser\.email, 'role_override', \{\s*target_user_id: rows\[0\]\.id,/,
+    'the override is no longer one audit row naming the person');
+  assert.doesNotMatch(h, /startLab/, 'the override starts the Spin-Out Lab, which D249 leaves to assign-role');
+  // The card says a founder or investor starts their onboarding, and the
+  // Exploring queue reads the account as assigned: both are held to the
+  // writes, conditions included. The first draft of this test did not read
+  // them, and an `if (false)` in front of either passed it (D249 records it).
+  const ov = h.slice(h.indexOf('  if (isOverride) {\n    try {\n      await ensureExploringSchema(c.env);'));
+  assert.ok(ov.length > 0, 'the override\'s own writes are gone');
+  assert.match(ov, /^  if \(isOverride\) \{\s*try \{\s*await ensureExploringSchema\(c\.env\);\s*await c\.env\.DB\.prepare\(\s*`INSERT INTO user_role_review/,
+    'the override no longer stamps user_role_review');
+  assert.match(ov, /if \(role === 'founder' \|\| role === 'investor'\) \{\s*try \{\s*await c\.env\.DB\.prepare\(\s*`INSERT INTO onboarding_progress/,
+    'the override no longer starts a founder\'s or investor\'s onboarding, which the card says it does');
+});
+
+test('D247: deactivating an administrator takes demote\'s bar, and the card says so only while the route asks for it', () => {
+  // The card said the Super Admin closed an administrator's account with "no
+  // authenticator, step-up or reason asked" — true until D247. It now says the
+  // route asks for all three, and the route is read for them, in order: after
+  // the D132 refusal (which answers without them) and before the write.
+  const plain = text(PLAIN);
+  assert.ok(!plain.includes('no authenticator, step-up or reason asked'),
+    'the card still says deactivating an administrator asks for nothing');
+  assert.match(plain, /Deactivate: the Super Admin alone, with the same three — your authenticator, a fresh step-up and a typed reason of at least 10 characters — and re-opening the account asks for them again\./);
+  assert.match(plain, /a deactivation as a suspension, and in the audit log with the account and the reason\./);
+
+  const route = codeOnly(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin.ts'), 'utf8'));
+  const start = route.indexOf("admin.patch('/users/:userId/toggle-active'");
+  assert.ok(start >= 0, 'the toggle-active route is gone');
+  const end = route.indexOf('\nadmin.', start + 1);
+  const handler = route.slice(start, end > start ? end : route.length);
+  const at = (needle) => {
+    const i = handler.indexOf(needle);
+    assert.ok(i >= 0, `the toggle-active handler no longer contains ${needle}`);
+    return i;
+  };
+  const gate = at('const adminUser = await requireAdmin(c);');
+  const refusal = at("code: 'super_admin_required'");
+  const factor = at("await requireFactor(c, 'totp');");
+  const stepUp = at('await requireStepUp(c);');
+  const short = at('if (reason.length < 10)');
+  const write = at('UPDATE users SET is_active');
+  const audit = at('await logAdminAction(');
+  assert.ok(gate < refusal, 'requireAdmin (D135\'s freeze gate) is no longer the first check');
+  assert.ok(refusal < factor && factor < stepUp && stepUp < short && short < write,
+    'the authenticator, the step-up and the reason are not all checked between the D132 refusal and the write');
+  assert.ok(write < audit, 'the audit row is written before the act it records');
+  assert.match(handler, /if \(adminTarget\) \{\s*try \{\s*await requireFactor\(c, 'totp'\);/,
+    'the bar is no longer scoped to an administrator target');
+
+  // The page asks for the reason on an administrator's row, and forwards what
+  // was typed.
+  assert.match(ADMIN, /if \(user\.role === 'admin'\) \{\s*reason = window\.prompt\(/,
+    'the directory no longer asks for a reason before toggling an administrator');
+  assert.match(ADMIN, /await api\.adminToggleActive\(user\.id, reason\)/, 'the typed reason is not sent');
+  const method = API.slice(API.indexOf('adminToggleActive:'), API.indexOf('adminSetAccessLevel:'));
+  assert.match(method, /adminToggleActive: \(userId, reason\) =>/, 'adminToggleActive takes no reason');
+  assert.match(method, /\.\.\.\(reason \? \{ body: JSON\.stringify\(\{ reason \}\) \} : \{\}\)/,
+    'the api method does not forward the reason as typed');
+});
+
+test('the HQ-only card: five rows, the role shell marked as every admin\'s, the count stated from the data', () => {
+  assert.ok(PLAIN.includes('data-testid="hq-team-actions-hq"'), 'the HQ-only card is not drawn on HQ');
+  const rowAt = (key) => PLAIN.indexOf(`data-testid="hq-team-action-${key}"`);
+  const keys = HQ_ONLY_ACTIONS.map((a) => a.key);
+  assert.deepEqual(keys, ['impersonate', 'role_shell', 'demote_deactivate', 'transfer', 'role_override']);
+  const at = keys.map(rowAt);
+  assert.ok(at.every((i) => i > 0), 'an HQ-only row is not rendered');
+
+  // The one row that is not HQ's says so, and it is that row that says it.
+  assert.equal(count(PLAIN, 'data-testid="hq-team-action-not-hq"'), 1,
+    'exactly one row is every admin\'s — the chip is missing or repeated');
+  const shell = PLAIN.slice(rowAt('role_shell'), rowAt('demote_deactivate'));
+  assert.ok(shell.includes('data-testid="hq-team-action-not-hq"'), 'the "every admin\'s" chip is not on the role-shell row');
+  assert.deepEqual(HQ_ONLY_ACTIONS.filter((a) => a.hq === false).map((a) => a.key), ['role_shell']);
+
+  // The footnote's count is a claim about the list above it.
+  const WORD = ['None', 'One', 'Two', 'Three', 'Four', 'Five', 'Six'];
+  const hq = HQ_ONLY_ACTIONS.filter((a) => a.hq).length;
+  const total = HQ_ONLY_ACTIONS.length;
+  assert.ok(text(PLAIN).includes(`${WORD[hq]} of these ${WORD[total].toLowerCase()} are the Super Admin’s alone`),
+    'the footnote\'s count no longer matches the rows it counts');
+});
+
+test('under the overlay the HQ-only card is absent and the admin card says whose actions these are', () => {
+  assert.ok(!OVERLAY.includes('data-testid="hq-team-actions-hq"'), 'the HQ-only card is drawn under a branch\'s name');
+  for (const a of HQ_ONLY_ACTIONS) {
+    assert.ok(!OVERLAY.includes(`data-testid="hq-team-action-${a.key}"`), `${a.key} is drawn under the overlay`);
+  }
+  assert.ok(!hrefs(OVERLAY).includes('/admin/security'), 'the Security link survives with the card it belongs to gone');
+  assert.ok(OVERLAY.includes('data-testid="hq-team-actions-admin"'), 'the admin card must still be drawn');
+  const note = text(OVERLAY);
+  assert.match(note, /These are fr's own, on its Admin Console\./, 'the admin card does not name the branch it describes');
+  // D260 — the reason changed, not the rule: the branch hit now carries the
+  // three states, so the card says they are shown read-only and whose the
+  // decision is, and it keeps no sentence claiming the search lacks them.
+  assert.match(note, /HQ is reading fr's answer\. Each account it returns shows its KYC, access and Lab state, read-only — deciding them is fr's/,
+    'the admin card does not say why there are no row actions');
+  assert.doesNotMatch(note, /not KYC, access or Lab state/, 'the admin card still says a branch hit lacks the states D260 added');
+  // And on HQ it says they are every admin's, HQ's included.
+  assert.match(text(PLAIN), /Every admin has these four, HQ included/);
+});
+
+test('the cards carry no control of their own, in either state', () => {
+  for (const html of [PLAIN, OVERLAY]) {
+    for (const tag of ['<button', '<input', '<select', '<textarea', '<form']) {
+      assert.ok(!html.includes(tag), `the action cards render a ${tag} — they describe powers, they do not exercise them`);
+    }
+  }
+  assert.ok(!/\bonClick=|\bonSubmit=/.test(ACTIONS), 'the action cards carry a handler');
+});
+
+test('every link is literal and lands on a registered route', () => {
+  // Literal in the source: a `to={…}` is a route the reachability walk cannot read.
+  assert.equal(count(ACTIONS, 'to={'), 0, 'a link in the action cards is built rather than written');
+  assert.ok(count(ACTIONS, 'to="') >= 3, 'the action cards lost a link');
+
+  const all = [...new Set([...hrefs(PLAIN), ...hrefs(OVERLAY)])].sort();
+  assert.deepEqual(all, ['/admin/licences', '/admin/security', '/admin?tab=kyc']);
+  for (const href of all) {
+    const path = href.split('?')[0];
+    assert.ok(APP.includes(`<Route path="${path}" element=`), `${path} is not a registered route`);
+  }
+  // `?tab=kyc` resolves to /admin and opens its KYC section only if the Admin
+  // Console knows the section by that value.
+  assert.match(ADMIN, /\{ value: 'kyc', label: 'KYC Queue'/, 'the Admin Console has no kyc section for the link to open');
+  assert.match(ADMIN, /get\('tab'\);\s*return t && ADMIN_SECTION_VALUES\.has\(t\)/, 'the Admin Console no longer honours ?tab=');
+});
+
+test('drawsAccountControls: an admin row is the Super Admin\'s alone, and the viewer\'s own row draws neither', () => {
+  const holder = { id: 1, is_super_admin: 1 };
+  const plainAdmin = { id: 2, is_super_admin: 0 };
+  const cases = [
+    // [row, viewer, expected, why]
+    [{ id: 9, role: 'founder' }, plainAdmin, true, 'a plain admin acts on a non-admin'],
+    [{ id: 9, role: 'founder' }, holder, true, 'the holder acts on a non-admin'],
+    [{ id: 9, role: 'admin' }, plainAdmin, false, 'a plain admin can only be refused on an admin (D132, D133)'],
+    [{ id: 9, role: 'admin' }, holder, true, 'the holder acts on an admin'],
+    [{ id: 9, role: 'ADMIN' }, plainAdmin, false, 'the role is compared without case'],
+    [{ id: 2, role: 'admin' }, plainAdmin, false, 'the viewer\'s own row draws neither'],
+    [{ id: 1, role: 'admin' }, holder, false, 'the holder\'s own row draws neither'],
+    [{ id: '1', role: 'founder' }, holder, false, 'an id that arrives as a string is still the viewer'],
+    [{ id: 9, role: 'admin' }, { id: 1, is_super_admin: true }, true, 'a boolean elevation reads as held'],
+    [{ id: 9, role: 'admin' }, { id: 1 }, false, 'an absent elevation is not held'],
+    [{ id: 9, role: 'admin' }, null, false, 'no viewer holds nothing'],
+    [null, holder, false, 'no row draws nothing'],
+  ];
+  for (const [row, viewer, want, why] of cases) {
+    assert.equal(drawsAccountControls(row, viewer), want, why);
+  }
+  // The elevation is read the way `canOverrideRole` reads it on the same page.
+  assert.match(CONTROLS, /Number\(viewer\?\.is_super_admin \?\? 0\) === 1/);
+  assert.match(ADMIN, /const canOverrideRole = Number\(viewer\?\.is_super_admin \?\? 0\) === 1;/);
+});
+
+test('the directory draws View As and Disable only inside the one guard, on the row and in the drawer', () => {
+  assert.match(ADMIN, /import \{ drawsAccountControls \} from '\.\.\/lib\/accountControls';/);
+
+  // The row: both controls between the guard and the fragment it opens.
+  const guard = '{drawsAccountControls(u, viewer) && (';
+  assert.equal(count(ADMIN, guard), 1, 'the row guard is missing or doubled');
+  const g = ADMIN.indexOf(guard);
+  const close = ADMIN.indexOf('</>', g);
+  // D247 — the toggle takes the ROW, not its id, because an admin row asks for
+  // a reason and the handler has to see the role to know. The count still
+  // pins one call from the directory.
+  for (const call of ['handleImpersonate(u)', 'handleToggleActive(u)']) {
+    assert.equal(count(ADMIN, call), 1, `${call} is called from more than one place in the directory`);
+    const at = ADMIN.indexOf(call);
+    assert.ok(at > g && at < close, `${call} is drawn outside the guard`);
+  }
+
+  // The drawer is handed no handler where the rule says no.
+  assert.match(ADMIN, /onImpersonate=\{drawsAccountControls\(openUser, viewer\) \? \(\) => \{[^\n]*\} : null\}/,
+    'the drawer is handed View As regardless of the rule');
+  assert.match(ADMIN, /onToggleActive=\{drawsAccountControls\(openUser, viewer\) \? \(\) => \{[^\n]*\} : null\}/,
+    'the drawer is handed Disable regardless of the rule');
+
+  // And a missing handler is ABSENT in the drawer, not disabled — rendered.
+  const row = { id: 7, name: 'A. Person', email: 'a@example.test', role: 'founder', is_active: 1 };
+  const both = render(UserDetailModal, { userRow: row, onClose() {}, onImpersonate() {}, onToggleActive() {} });
+  const neither = render(UserDetailModal, { userRow: row, onClose() {}, onImpersonate: null, onToggleActive: null });
+  const onlyView = render(UserDetailModal, { userRow: row, onClose() {}, onImpersonate() {}, onToggleActive: null });
+  assert.ok(text(both).includes('View As') && text(both).includes('Disable account'), 'the drawer lost a control it was handed');
+  assert.ok(!text(neither).includes('View As') && !text(neither).includes('Disable account'),
+    'the drawer draws a control it was not handed');
+  assert.ok(text(onlyView).includes('View As') && !text(onlyView).includes('Disable account'),
+    'the two controls are not decided independently');
+});
+
+test('the Admin role badge no longer says the role changes only through SQL', () => {
+  assert.ok(!ADMIN.includes('direct database SQL'), 'the picker still claims SQL is the only way to change the admin role');
+  assert.ok(ADMIN.includes('title="An administrator is opened and demoted on the licence they hold (Licences → Administrators), by the Super Admin — not from this picker"'),
+    'the badge no longer names where an administrator is opened and demoted');
+});
+
+test('the transfer asks for the reason the worker requires, at the same floor, and sends it', () => {
+  // Read as a literal scan, not a pattern built from the name: the name is data.
+  const floorOf = (src, decl) => {
+    const at = src.indexOf(`${decl} = `);
+    assert.ok(at >= 0, `no ${decl} found`);
+    const value = src.slice(at + decl.length + 3, src.indexOf(';', at));
+    assert.ok(/^\d+$/.test(value), `${decl} is not a plain number: ${value}`);
+    return Number(value);
+  };
+  assert.equal(floorOf(HOLDERS, 'const HOLDER_REASON_MIN'), floorOf(WORKER_HOLDERS, 'export const HOLDER_REASON_MIN'),
+    'the form and the route disagree about how long a reason must be');
+  assert.match(HOLDERS, /const reasonReady = reason\.trim\(\)\.length >= HOLDER_REASON_MIN;/);
+  assert.match(HOLDERS, /disabled=\{busy \|\| !pick \|\| !reasonReady\}/, 'the form submits a reason the route will refuse');
+  assert.match(HOLDERS, /api\.superAdminGrant\(Number\(pick\), \{ transfer: hasHolder, reason: reason\.trim\(\) \}\)/,
+    'the form does not send the reason it asked for');
+  assert.match(API, /superAdminGrant: \(userId, \{ transfer = false, reason = '' \} = \{\}\) =>/);
+  assert.match(API, /body: JSON\.stringify\(\{ reason: String\(reason \|\| ''\)\.trim\(\) \}\)/,
+    'the api method drops the reason on the way out');
+});
+
+test('the transfer offers only an active administrator, because the route refuses the rest', () => {
+  // D221 — the route refuses a deactivated successor (`not_active`): an account
+  // that cannot sign in would hold an elevation nobody could use. So the
+  // picker must not draw one, and the card must not describe a gate the route
+  // does not have. Both halves are read, because either alone can drift.
+  assert.ok(WORKER_HOLDERS.includes("code: 'not_active'"), 'the route no longer refuses a deactivated successor');
+  assert.match(HOLDERS, /const candidates = admins\.filter\(\(a\) => !holderIds\.has\(a\.id\) && Number\(a\.is_active\) === 1\);/,
+    'the picker offers a deactivated admin the route will refuse');
+  // The flag has to survive the normalisation, or the filter reads undefined
+  // and offers nobody at all — which fails closed, but says the wrong thing.
+  assert.ok(HOLDERS.includes('is_active: x.is_active'), 'the admin list drops the active flag before the picker reads it');
+  const row = HQ_ONLY_ACTIONS.find((a) => a.key === 'transfer');
+  assert.ok(row.gate.includes('an administrator whose account is active'),
+    'the card does not say the successor must be active');
+});
+
+test('the page: H20\'s order, and under the overlay nothing that reads HQ\'s database is drawn', () => {
+  assert.match(PAGE, />Team<\/h1>/, 'the page is not headed Team');
+  const holders = PAGE.indexOf('<SuperAdminHolders');
+  const table = PAGE.indexOf('<HqTeamTable');
+  const actions = PAGE.indexOf('<HqTeamActions');
+  const directory = PAGE.indexOf('<AdminPage');
+  assert.ok(holders > 0 && table > holders && actions > table && directory > actions,
+    'the order is not holders → Team table → action cards → directory');
+  assert.ok(PAGE.includes('<HqTeamActions viewAs={viewAs} />'), 'the cards are not told whose view this is');
+  assert.ok(PAGE.includes('const { branch: viewAs } = useViewAsBranch();'));
+
+  // The holder console is the ELSE of the overlay; the directory sits behind
+  // `!viewAs` with nothing between the guard and it but its caption.
+  assert.match(PAGE, /\{viewAs \? \([\s\S]*?data-testid="hq-team-view-as-omitted"[\s\S]*?\) : \(\s*<SuperAdminHolders/,
+    'the holder console is drawn under a branch\'s name');
+  const guard = PAGE.lastIndexOf('{!viewAs && (', directory);
+  assert.ok(guard > actions, 'the directory is drawn under the overlay');
+  assert.ok(!PAGE.slice(guard, directory).includes(')}'), 'the overlay guard closes before the directory it guards');
+});
+
+test('the rail reads what the Team table read, on the super_admin tier', () => {
+  const tag = PAGE.slice(PAGE.indexOf('<HqTeamTable'), PAGE.indexOf('/>', PAGE.indexOf('<HqTeamTable')) + 2);
+  assert.ok(tag.includes('onLoaded={setTeam}'), 'the table does not hand the page what it read');
+  assert.match(TABLE, /useEffect\(\(\) => \{\s*if \(data !== undefined && typeof onLoaded === 'function'\) onLoaded\(data\);\s*\}, \[data, onLoaded\]\);/,
+    'the table does not report its read — the rail would need a second fetch of the roster');
+  assert.match(PAGE, /<WorkerRail[\s\S]*?role="super_admin"[\s\S]*?coverage=\{coverage\}/);
+  assert.match(PAGE, /const coverage = \[[\s\S]*?\]\.filter\(Boolean\);/);
+  // Every coverage line about HQ's own roster is withheld under the overlay,
+  // where the table read one branch instead.
+  assert.equal(count(PAGE, 'team && !viewAs &&'), 3, 'a line about HQ\'s roster is stated under a branch\'s name');
+});
+
+test('the voice rule holds on everything this page says', () => {
+  const BANNED = /advisor|advice|recommendation|fiduciar/i;
+  for (const [what, s] of [['HQ view', text(PLAIN)], ['overlay', text(OVERLAY)], ['cards', ACTIONS], ['page', PAGE], ['rule', CONTROLS]]) {
+    assert.ok(!BANNED.test(s), `the ${what} uses a banned word`);
+  }
+});

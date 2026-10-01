@@ -1,0 +1,1 @@
+function e(e,t){if(!e||t?.id!=null&&Number(e.id)===Number(t.id))return!1;let n=String(e.role||``).toLowerCase()===`admin`,r=Number(t?.is_super_admin??0)===1;return!n||r}export{e as t};

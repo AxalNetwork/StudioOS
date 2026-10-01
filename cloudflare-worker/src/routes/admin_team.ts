@@ -1,8 +1,9 @@
 /**
  * Task #10 (LD) — Admin endpoints for the public team roster.
  *
- * Mounted at /api/admin/team. All endpoints require admin auth + (in prod)
- * pass the /api/admin/* Cloudflare Access perimeter applied in index.ts.
+ * Mounted at /api/admin/team. Every endpoint calls requireAdmin, and that is
+ * the whole gate: nothing at the edge sits in front of /api/admin (Task #33,
+ * index.ts).
  *
  * Endpoints:
  *   GET    /                   — list all members (published + drafts)

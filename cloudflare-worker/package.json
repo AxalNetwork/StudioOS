@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --config ../wrangler.toml",
-    "deploy": "wrangler deploy --config ../wrangler.toml",
+    "deploy": "cd .. && npm run deploy",
     "db:create": "wrangler d1 create studioos-db",
     "db:schema": "wrangler d1 execute studioos-db --config ../wrangler.toml --file=sql/schema_baseline.sql",
     "db:schema:remote": "wrangler d1 execute studioos-db --config ../wrangler.toml --remote --file=sql/schema_baseline.sql",
@@ -12,18 +12,21 @@
     "lint": "npm run lint:no-console && tsc --noEmit"
   },
   "dependencies": {
-    "@simplewebauthn/server": "^13.3.3",
-    "hono": "^4.13.5",
-    "jose": "^6.2.10",
+    "@simplewebauthn/server": "^14.0.2",
+    "hono": "^4.13.8",
+    "jose": "^6.2.12",
     "mimetext": "^3.0.28",
-    "otpauth": "^9.5.1",
+    "otpauth": "^9.5.2",
     "pdf-lib": "^1.17.1",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260831.1",
+    "@cloudflare/workers-types": "^5.20260921.1",
     "@types/qrcode": "^1.5.5",
     "typescript": "^7.0.2",
-    "wrangler": "^4.131.0"
+    "wrangler": "^4.135.0"
+  },
+  "overrides": {
+    "undici": "7.29.1"
   }
 }

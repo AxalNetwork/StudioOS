@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
 
 /**
@@ -29,8 +29,14 @@ import { api } from '../lib/api';
 export default function useAiSpend({ enabled = true } = {}) {
   const [spend, setSpend] = useState(null);
   const [pricing, setPricing] = useState(null);
-  const [error, setError] = useState(null);
+  const [spendError, setSpendError] = useState(null);
+  const [pricingError, setPricingError] = useState(null);
   const [loading, setLoading] = useState(!!enabled);
+  // Bumped by `reload`, which is what an Unreadable's Retry calls. A counter
+  // rather than a callback that re-runs the fetch inline, so the one effect
+  // below stays the only place the two reads happen.
+  const [attempt, setAttempt] = useState(0);
+  const reload = useCallback(() => setAttempt((n) => n + 1), []);
 
   useEffect(() => {
     if (!enabled) { setLoading(false); return undefined; }
@@ -44,14 +50,22 @@ export default function useAiSpend({ enabled = true } = {}) {
       // A failed fetch is NOT "recorded: true, spend 0". Leaving `spend` null
       // keeps the two indistinguishable states apart at the component
       // boundary, which is the whole point of the contract above.
-      if (s && !s.__err) setSpend(s); else setError(s?.__err ?? null);
-      if (p && !p.__err) setPricing(p);
+      //
+      // EACH READ KEEPS ITS OWN ERROR. There used to be one `error`, set only
+      // by the spend read, and a failed PRICING read was dropped on the floor:
+      // `pricing` stayed null, the rail's model card vanished, and a page that
+      // could not read the price list looked exactly like a page with no model
+      // to offer. D400 splits them so a caller can say which read failed.
+      if (s && !s.__err) { setSpend(s); setSpendError(null); } else { setSpend(null); setSpendError(s?.__err ?? new Error('spend read failed')); }
+      if (p && !p.__err) { setPricing(p); setPricingError(null); } else { setPricing(null); setPricingError(p?.__err ?? new Error('pricing read failed')); }
       setLoading(false);
     });
     return () => { live = false; };
-  }, [enabled]);
+  }, [enabled, attempt]);
 
-  return { spend, pricing, error, loading };
+  // `error` stays for the callers that read it: the spend read's failure, as
+  // it always was.
+  return { spend, pricing, error: spendError, spendError, pricingError, loading, reload };
 }
 
 /**
@@ -90,10 +104,9 @@ export function priceForTask(pricing, task) {
  * router offers it, and the only thing missing is a description someone has yet
  * to write.
  */
-export function modelsForTask(pricing, task, { copy = {}, recommended = [] } = {}) {
+export function modelsForTask(pricing, task, { copy = {} } = {}) {
   const route = pricing?.routes?.[task];
   if (!route || !Array.isArray(route.alternates)) return [];
-  const rec = new Set(recommended);
   return route.alternates
     .map((id) => {
       const p = pricing?.prices?.[id];
@@ -106,7 +119,12 @@ export function modelsForTask(pricing, task, { copy = {}, recommended = [] } = {
         tags: Array.isArray(c.tags) ? c.tags : [],
         pin: p.in,
         pout: p.out,
-        recommended: rec.has(id),
+        // The model the router runs when nobody picks one: `ROUTE[task].model`,
+        // read from the same response as the menu. DERIVED, not typed (D400) —
+        // the badge this drives says "Default", which is a fact about the
+        // router, and a fact typed into the copy table would be one nobody
+        // re-checks when the router's primary changes.
+        isDefault: id === route.model,
       };
     })
     .filter(Boolean);

@@ -9,6 +9,7 @@ import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit'
 import {
   ZoneBody, NothingYet, StatedLimit,
 } from '../../advisor/expertise/kit';
+import { SearchInput } from '../../advisor/network/kit';
 import {
   DEAL_STAGE_LABEL, dealStage, dealMoneyExact,
   passReasonLabel, slaBand, slaPreset, DEFAULT_SLA,
@@ -38,16 +39,16 @@ import {
  * is the point; a second copy in this file would drift the day someone tunes
  * one of them.
  *
- * THE FOURTH TILE IS NOT `From the Lab`. The artboard's fourth reads
- * "proprietary sourcing", and NO SOURCING CHANNEL IS STORED on a deal —
- * `deals` has no `source` column, and the Lab's own tables (`spinout_*`,
- * `cohort_applicants`) attach to people and applications rather than to deals.
- * Deriving it through project → founder → cohort would be a claim about
- * provenance the product never made. What IS recorded is whether a deal hangs
- * off a project on this platform, so the tile counts that and the Lab gap is
- * named in the limits below. A tile reading "Not recorded" because the PRODUCT
- * never built the store is design commentary on a customer's screen (D56), and
- * this is not one.
+ * THE FOURTH TILE IS `Source recorded`, NOT `From the Lab`. The artboard's
+ * fourth reads "proprietary sourcing". `deals.source` (migration 336, D463)
+ * records where a deal came from — written at draft and editable after it —
+ * so the tile counts the deals carrying one. What it cannot count is the
+ * artboard's own label: which sources exist and which count as the Lab is the
+ * owner's call, and a tile reading "From the Lab" over an undecided vocabulary
+ * would be a guess wearing a store. The Lab's own tables (`spinout_*`,
+ * `cohort_applicants`) still attach to people and applications rather than to
+ * deals, so deriving it would remain a claim about provenance nobody made.
+ * The decision is named in the limits below.
  *
  * A PASSED DEAL IS NOT ON THE BOARD. `dealStage` returns null for one and the
  * board excludes it, which is why the strip's "Live deals" and the Passed chip
@@ -107,6 +108,7 @@ export default function InvestorPipelineZone() {
   const navigate = useNavigate();
   const [state, setState] = useState({ loading: true, error: '', deals: null });
   const [view, setView] = useState('all');
+  const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: '' }));
@@ -163,6 +165,11 @@ export default function InvestorPipelineZone() {
   const unassigned = useMemo(() => live.filter((d) => !d.lead_partner_id), [live]);
   // The one sourcing fact the record actually carries. See the docblock.
   const onPlatform = useMemo(() => live.filter((d) => d.project_id), [live]);
+  // D463 — where a deal came from is recorded now (migration 336). What is
+  // NOT decided is the taxonomy: which sources exist and which of them count
+  // as the Lab, so the tile counts a recorded source rather than the
+  // artboard's "From the Lab" — that count awaits the owner's vocabulary.
+  const sourced = useMemo(() => live.filter((d) => String(d.source || '').trim()), [live]);
 
   /**
    * THE CHIP ROW'S NARROWING, AND IT RENDERS.
@@ -170,13 +177,27 @@ export default function InvestorPipelineZone() {
    * `Mine` is not here because the whole page is already scoped to `mine` —
    * the filter table marks it `unbuilt` for that reason and the builder drops
    * it, so no chip claims a narrowing that would select everything.
+   *
+   * SEARCH NARROWS WHATEVER THE CHIP SELECTED, rather than sitting beside it.
+   * The two compose in one direction only: pick a chip, then type. Company and
+   * sector are the two fields the row actually shows, so they are the two it
+   * searches — searching a field the reader cannot see returns rows they
+   * cannot account for. Legacy `/pipeline/screening` had this and the zone did
+   * not, which is the half of D118 that was a real absence.
    */
-  const visible = useMemo(() => {
+  const chipped = useMemo(() => {
     if (view === 'passed') return passed;
     if (view === 'unassigned') return unassigned;
     if (view === 'stale') return amber;
     return live;
   }, [view, live, passed, unassigned, amber]);
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return chipped;
+    return chipped.filter((d) => `${d.project_name || ''} ${d.project_sector || ''}`
+      .toLowerCase().includes(q));
+  }, [chipped, query]);
 
   const rowActions = investorZoneActions('deals/pipeline', {
     view: {
@@ -198,9 +219,25 @@ export default function InvestorPipelineZone() {
       <ZoneToolbar
         className="mb-3"
         role="investor"
-        filters={investorZoneFilters('deals/pipeline', { value: view, onChange: setView })}
+        filters={investorZoneFilters('deals/pipeline', {
+          value: view,
+          onChange: setView,
+          // Counts come from the rows this page actually loaded. The builder
+          // DROPS a `{n}` clause rather than printing a zero it was not given
+          // (zoneFilterBuilder's withCount), so an unreadable board shows chips
+          // with no figures instead of chips claiming nothing is there.
+          counts: {
+            all: live.length,
+            unassigned: unassigned.length,
+            stale: amber.length,
+            passed: passed.length,
+          },
+        })}
         actions={rowActions}
       />
+      <div className="mb-3 flex" data-testid="pipeline-search">
+        <SearchInput value={query} onChange={setQuery} placeholder="Search company or sector" />
+      </div>
       <ZoneBody
         loading={state.loading}
         error={state.error}
@@ -248,9 +285,9 @@ export default function InvestorPipelineZone() {
               tone={unassigned.length ? 'text-amber-700 dark:text-amber-300' : ''}
             />
             <PipelineTile
-              label="On-platform"
-              value={String(onPlatform.length)}
-              note="hang off a project here · sourcing channel not recorded"
+              label="Source recorded"
+              value={String(sourced.length)}
+              note={`${onPlatform.length} hang off a project here · which sources count as the Lab is the owner's call`}
             />
           </div>
 
@@ -308,13 +345,17 @@ export default function InvestorPipelineZone() {
 
           <StatedLimit title="What this board cannot see">
             <p>
-              <strong>No sourcing channel is recorded on a deal.</strong>{' '}
-              The artboard&rsquo;s fourth tile counts deals that came from the
-              Spin-Out Lab, and <code>deals</code> has no column for where a deal
-              came from. The Lab&rsquo;s own records attach to people and
-              applications rather than to deals, so deriving it would be a claim
-              about provenance nobody made. The tile counts what IS recorded —
-              whether the deal hangs off a project on this platform.
+              <strong>A deal&rsquo;s source is recorded; the taxonomy is not
+              decided.</strong>{' '}
+              <code>deals.source</code> (migration 336) is written at draft and
+              editable after it, and the tile above counts the deals carrying
+              one. What nobody has decided is the vocabulary: which sources
+              exist and which of them count as the Spin-Out Lab, so the
+              artboard&rsquo;s &ldquo;From the Lab&rdquo; count is the
+              owner&rsquo;s call and is named here rather than guessed at.
+              Deriving it from the Lab&rsquo;s own tables would still be a
+              claim about provenance nobody made — they attach to people and
+              applications, not to deals.
             </p>
             <p className="mt-2">
               <strong>Stages are the deal record&rsquo;s stored status, translated.</strong>{' '}

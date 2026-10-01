@@ -9,7 +9,8 @@ code. Reading an old audit as a to-do list is how work gets redone.
 
 | File | Covers |
 | --- | --- |
-| `PLATFORM-DELIVERY-AUDIT.md` | The most recent full sweep — canvas-by-canvas delivery status. Start here. |
+| `SCALE_1000_DAU_AUDIT_2026-09-18.md` | Worker + D1 + SPA load for the first 1,000 daily users, with a Claude Code implementation plan. |
+| `PLATFORM-DELIVERY-AUDIT.md` | The most recent canvas-by-canvas delivery sweep. Start here for “what shipped.” |
 | `BETA_READINESS_AUDIT_2026-05-20.md`, `BETA_READINESS_AUDIT_2026-06-03.md`, `BETA_READINESS_AUDIT_2026-07-03.md` | Three successive beta-readiness passes. |
 | `BETA_READINESS_ISSUES_2026-05-20.md` | The issue list from the first of those. |
 | `FOUNDER_UX_AUDIT.md`, `INVESTOR_UX_AUDIT.md`, `PARTNER_UX_AUDIT.md`, `ADVISOR_UX_AUDIT.md` | Per-persona journey audits. |

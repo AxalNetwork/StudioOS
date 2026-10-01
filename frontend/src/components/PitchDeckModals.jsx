@@ -13,10 +13,15 @@
 //     copy-to-clipboard, and the expiry choice fed back to the caller.
 //     The design's password/PIN toggle has no backend and is omitted rather
 //     than stubbed as a dead control.
+//   - D364: the sheet states the link's view limit from the Worker's own
+//     answer (a Lab link opens once unless a limit is asked for) and that no
+//     link outlives 30 days, the Worker's cap — the design's "Never" is not
+//     offered because nothing honours it.
 
 import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { Check, Copy, FileDown, Loader2, X } from 'lucide-react';
+import { viewLimitCopy } from '../lib/deckShareViews';
 
 /** Export progress modal. `phase` is 'running' | 'done' | null. */
 export function PitchDeckExportModal({ phase, progress, filename, error, onClose }) {
@@ -84,7 +89,7 @@ const EXPIRY_OPTS = [
 ];
 
 /** Share sheet: real read-only link + QR + expiry. */
-export function PitchDeckShareModal({ open, url, busy, expiryHours, onExpiryChange, onClose }) {
+export function PitchDeckShareModal({ open, url, busy, expiryHours, onExpiryChange, onClose, viewLimit = null }) {
   const [copied, setCopied] = useState(false);
   const [qr, setQr] = useState('');
   const timer = useRef(null);
@@ -161,10 +166,18 @@ export function PitchDeckShareModal({ open, url, busy, expiryHours, onExpiryChan
             </div>
           </div>
 
+          {!busy && url && (
+            <p className="text-[12px] text-gray-600 dark:text-gray-300 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 px-3 py-2" data-testid="share-view-limit">
+              {viewLimitCopy(viewLimit) || 'The server did not say how many times this link opens.'}
+            </p>
+          )}
+
           <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-800">
             <div>
               <div className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Link expires</div>
-              <div className="text-[11.5px] text-gray-400 dark:text-gray-500">Re-share any time to issue a new link</div>
+              <div className="text-[11.5px] text-gray-400 dark:text-gray-500" data-testid="share-expiry-cap">
+                Each choice issues a new link. No link lasts longer than 30 days.
+              </div>
             </div>
             <div className="flex gap-1.5">
               {EXPIRY_OPTS.map((o) => (

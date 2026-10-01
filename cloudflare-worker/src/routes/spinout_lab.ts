@@ -8,8 +8,12 @@
  * "pre-incorporation sprint", which described a restriction the code has
  * never implemented and which the public page repeated for months.
  *
- * Mounted at /api/spinout-lab. JWT-auth-gated for every route (no admin
- * escape hatch). The lab is detected from `users.spinout_lab_active`.
+ * Mounted at /api/spinout-lab. JWT-auth-gated (no admin escape hatch) for
+ * every route EXCEPT four public reads the logged-out Lab pages need:
+ * `/graduates`, `/stats`, `/brief` and `/cohort`. Those return company-level
+ * facts only — never a founder's identity, track or milestones — and anything
+ * added to them has to hold to that. The lab is detected from
+ * `users.spinout_lab_active`.
  *
  *   GET  /state      → current week, days remaining, milestones, unlocked
  *                       features for the caller
@@ -47,6 +51,7 @@ import {
   weekClearsFor,
   unlockedFeaturesThrough,
 } from '../services/spinoutLabCatalog';
+import { bindingKey } from '../util/schemaBootstrap';
 // Re-export so existing external imports of these names from this
 // module keep working unchanged.
 export { MILESTONES, VALID_MILESTONE_KEYS, weekMet, unlockedFeaturesThrough };
@@ -254,9 +259,9 @@ export async function exitLab(sql: Sql, userId: number): Promise<LabState> {
 
 // Cohort applications — lazy table ensure (mirrors migration 155) so
 // databases that haven't run the migration yet still answer.
-let applicationsSchemaEnsured = false;
+const APPLICATIONS_SCHEMA_ENSURED = new WeakMap<object, boolean>();
 async function ensureApplicationsTable(env: Env): Promise<void> {
-  if (applicationsSchemaEnsured) return;
+  if (APPLICATIONS_SCHEMA_ENSURED.get(bindingKey(env))) return;
   try {
     await env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS spinout_applications (
@@ -274,7 +279,7 @@ async function ensureApplicationsTable(env: Env): Promise<void> {
       )`,
     ).run();
   } catch { /* ignore */ }
-  applicationsSchemaEnsured = true;
+  APPLICATIONS_SCHEMA_ENSURED.set(bindingKey(env), true);
 }
 
 type ApplicationRow = {
@@ -299,6 +304,65 @@ async function latestApplication(env: Env, userId: number): Promise<ApplicationR
   } catch {
     return null; // table not yet migrated
   }
+}
+
+/**
+ * The applicant's own view of their latest application (D383): its status,
+ * answers, pool row, the note an admin wrote FOR them, the live interview and,
+ * once declined, when they can reapply. Read at the wire layer, like every
+ * other /state addition, and try/caught so a database without migrations
+ * 315–316 still answers — with `applicant: null` rather than a guess.
+ */
+async function loadApplicantBlock(env: Env, userId: number) {
+  const { applicantView } = await import('../services/applicationLifecycle');
+  let app: import('../services/applicationLifecycle').ApplicationRowForView | null = null;
+  try {
+    app = await env.DB.prepare(
+      `SELECT id, status, created_at, decided_at, withdrawn_at, answers_json,
+              applicant_note, applicant_asks_json, applicant_note_at
+         FROM spinout_applications WHERE user_id = ? ORDER BY id DESC LIMIT 1`,
+    ).bind(userId).first();
+  } catch {
+    return null; // columns from migration 315 not applied here
+  }
+  if (!app) return null;
+  let pool: import('../services/applicationLifecycle').PoolRowForView = null;
+  try {
+    const { monthLabel } = await import('../services/cohortApplications');
+    const r = await env.DB.prepare(
+      `SELECT ca.status, ca.decided_at, cc.year, cc.month, cc.app_status, cc.start_at,
+              cc.applications_close_at AS close_at
+         FROM cohort_applicants ca JOIN cohort_cycles cc ON cc.id = ca.cohort_cycle_id
+        WHERE ca.application_id = ? ORDER BY ca.id DESC LIMIT 1`,
+    ).bind(app.id).first<{ status: string; decided_at: string | null; year: number; month: number;
+      app_status: string | null; start_at: string | null; close_at: string | null }>();
+    if (r) {
+      pool = {
+        status: r.status, decided_at: r.decided_at,
+        cycle_label: monthLabel(Number(r.year), Number(r.month)),
+        cycle_app_status: r.app_status, cycle_start_at: r.start_at, cycle_close_at: r.close_at,
+      };
+    }
+  } catch { /* cycle tables not migrated: no pool row to show */ }
+  let interview: import('../services/applicationLifecycle').InterviewRowForView = null;
+  try {
+    interview = await env.DB.prepare(
+      `SELECT id, scheduled_at, duration_min, location, note, status, reschedule_requested_at
+         FROM spinout_application_interviews WHERE application_id = ? ORDER BY id DESC LIMIT 1`,
+    ).bind(app.id).first();
+  } catch { /* migration 316 not applied: no interview can exist */ }
+  let reapply: { label: string; opens_at: string; closes_at: string } | null = null;
+  try {
+    const { resolveApplicationTarget, monthLabel } = await import('../services/cohortApplications');
+    const t = resolveApplicationTarget(Date.now());
+    const w = t.ok ? { y: t.year, m: t.month, win: t.window } : { y: t.next.year, m: t.next.month, win: t.next.window };
+    reapply = {
+      label: monthLabel(w.y, w.m),
+      opens_at: new Date(w.win.openMs).toISOString(),
+      closes_at: new Date(w.win.closeMs).toISOString(),
+    };
+  } catch { /* calendar unavailable: no reapply window to state */ }
+  return applicantView(app, pool, interview, reapply);
 }
 
 spinoutLab.get('/state', async (c) => {
@@ -347,8 +411,9 @@ spinoutLab.get('/state', async (c) => {
       };
     }
   } catch { /* service not available */ }
+  const applicant = await loadApplicantBlock(c.env, user.id);
   const payload: Record<string, unknown> = {
-    ...state, admitted, cohort, application,
+    ...state, admitted, cohort, application, applicant,
     cohort_timing: cohortTiming,
     application_window: applicationWindow,
     server_time: new Date().toISOString(),
@@ -373,6 +438,7 @@ type ApplyBody = {
   jurisdiction?: unknown;
   cohort?: unknown;
   target_cycle?: unknown; // Task #5 — optional {year, month} the applicant is targeting
+  answers?: unknown; // D383 — steps 2–5; required when present, see missingForSubmit
 };
 
 spinoutLab.post('/apply', async (c) => {
@@ -387,6 +453,20 @@ spinoutLab.post('/apply', async (c) => {
   const idea = (typeof body.idea === 'string' ? body.idea : '').trim().slice(0, 4000);
   if (!company) return c.json({ error: 'Company / working name is required' }, 400);
   if (!idea) return c.json({ error: 'Please describe your idea or project' }, 400);
+  // D383 — the wizard sends steps 2–5 as `answers`. An older client that
+  // sends none still submits (its application simply records no answers);
+  // one that sends answers must send the required ones.
+  let answersJson: string | null = null;
+  if (body.answers !== undefined && body.answers !== null) {
+    const { normaliseAnswers, missingForSubmit } = await import('../services/applicationLifecycle');
+    const answers = normaliseAnswers(body.answers);
+    const missing = missingForSubmit(answers);
+    if (missing.length) {
+      const message = 'Some required answers are missing. Complete every step before submitting.';
+      return c.json({ error: 'answers_incomplete', message, detail: message, missing }, 400);
+    }
+    answersJson = JSON.stringify(answers);
+  }
   const incorporated = (typeof body.incorporated === 'string' && body.incorporated.toLowerCase() === 'yes') ? 'yes' : 'no';
   const stage = (typeof body.stage === 'string' ? body.stage : '').trim().slice(0, 100) || null;
   const jurisdiction = (typeof body.jurisdiction === 'string' ? body.jurisdiction : '').trim().slice(0, 100) || null;
@@ -431,16 +511,45 @@ spinoutLab.post('/apply', async (c) => {
 
   // Conditional insert — the NOT EXISTS guard makes "one pending application
   // per user" atomic, so concurrent submissions can't both pass the pre-check.
-  const ins = await c.env.DB.prepare(
-    `INSERT INTO spinout_applications (user_id, company_name, idea, incorporated, stage, jurisdiction, cohort)
-     SELECT ?, ?, ?, ?, ?, ?, ?
-     WHERE NOT EXISTS (
-       SELECT 1 FROM spinout_applications WHERE user_id = ? AND status = 'pending'
-     )`,
-  ).bind(user.id, company, idea, incorporated, stage, jurisdiction, cohort, user.id).run();
+  // D383 — the answers go in the same statement, so an application is never
+  // stored without the answers it was submitted with. Only when some were
+  // sent: an older client's insert names no column migration 315 added.
+  // A database without 315 refuses rather than storing the application
+  // without the answers it was submitted with.
+  const withAnswers = async () => {
+    try {
+      return await c.env.DB.prepare(
+        `INSERT INTO spinout_applications (user_id, company_name, idea, incorporated, stage, jurisdiction, cohort, answers_json)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?
+         WHERE NOT EXISTS (
+           SELECT 1 FROM spinout_applications WHERE user_id = ? AND status = 'pending'
+         )`,
+      ).bind(user.id, company, idea, incorporated, stage, jurisdiction, cohort, answersJson, user.id).run();
+    } catch (err) {
+      console.error('[spinout-lab/apply] insert with answers failed', err);
+      return null;
+    }
+  };
+  const ins = answersJson
+    ? await withAnswers()
+    : await c.env.DB.prepare(
+      `INSERT INTO spinout_applications (user_id, company_name, idea, incorporated, stage, jurisdiction, cohort)
+       SELECT ?, ?, ?, ?, ?, ?, ?
+       WHERE NOT EXISTS (
+         SELECT 1 FROM spinout_applications WHERE user_id = ? AND status = 'pending'
+       )`,
+    ).bind(user.id, company, idea, incorporated, stage, jurisdiction, cohort, user.id).run();
+  if (!ins) {
+    return refusal(c, 503, 'application_not_saved', 'Your application could not be saved just now. Your answers are still on this page; try again in a moment.');
+  }
   if ((ins.meta?.changes ?? 1) === 0) {
     return c.json({ error: 'You already have an application in review' }, 409);
   }
+
+  // D383 — the draft this application came from is done with.
+  try {
+    await c.env.DB.prepare(`DELETE FROM spinout_application_drafts WHERE user_id = ?`).bind(user.id).run();
+  } catch { /* drafts table not migrated */ }
 
   // Task #5 — pin the application to its target cycle so the close/
   // capacity/activation jobs know exactly which pool it belongs to.
@@ -470,6 +579,152 @@ spinoutLab.post('/apply', async (c) => {
   }
 
   return c.json({ ok: true, emailed, application: await latestApplication(c.env, user.id) });
+});
+
+// ---------------------------------------------------------------------------
+// D383 — the application lifecycle, applicant side. Every route here acts on
+// the caller's OWN application or draft; there is no id in any path, so there
+// is no way to address someone else's.
+// ---------------------------------------------------------------------------
+
+/** Founder and explorer accounts apply (the /apply rule); nobody else drafts. */
+function mayApply(role: string | null | undefined): boolean {
+  return ['founder', 'exploring'].includes(String(role || '').toLowerCase());
+}
+function refusal(c: any, status: number, code: string, message: string) {
+  return c.json({ error: code, message, detail: message }, status);
+}
+
+// GET /apply/draft — the caller's saved draft, or null.
+spinoutLab.get('/apply/draft', async (c) => {
+  const user = await requireAuth(c);
+  if (!mayApply(user.role)) return refusal(c, 403, 'role_cannot_apply', 'Only founder and explorer accounts can apply to the Lab.');
+  const { parseStoredAnswers } = await import('../services/applicationLifecycle');
+  let row: { answers_json: string; updated_at: string } | null = null;
+  try {
+    row = await c.env.DB.prepare(
+      `SELECT answers_json, updated_at FROM spinout_application_drafts WHERE user_id = ?`,
+    ).bind(user.id).first();
+  } catch (e) {
+    console.error('[spinout-lab/draft] read failed', (e as Error)?.message);
+    return refusal(c, 503, 'draft_unreadable', 'Your saved draft could not be read. Nothing was lost; try again.');
+  }
+  if (!row) return c.json({ draft: null });
+  // A draft is saved as typed, including the step-1 basics, so it is parsed
+  // as an object rather than normalised to the submitted shape.
+  let answers: Record<string, unknown> = {};
+  try { const v = JSON.parse(row.answers_json); if (v && typeof v === 'object' && !Array.isArray(v)) answers = v; } catch { /* keep {} */ }
+  return c.json({ draft: { answers, steps: parseStoredAnswers(row.answers_json), updated_at: row.updated_at } });
+});
+
+// PUT /apply/draft { answers } — save (replace) the caller's draft.
+spinoutLab.put('/apply/draft', async (c) => {
+  const user = await requireAuth(c);
+  if (!mayApply(user.role)) return refusal(c, 403, 'role_cannot_apply', 'Only founder and explorer accounts can apply to the Lab.');
+  const body = (await c.req.json().catch(() => ({}))) as { answers?: unknown };
+  const raw = body.answers && typeof body.answers === 'object' && !Array.isArray(body.answers) ? body.answers : null;
+  if (!raw) return refusal(c, 400, 'answers_required', 'A draft needs its answers.');
+  const json = JSON.stringify(raw);
+  if (json.length > 20000) return refusal(c, 413, 'draft_too_large', 'This draft is longer than an application can be. Shorten an answer and save again.');
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO spinout_application_drafts (user_id, answers_json) VALUES (?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET answers_json = excluded.answers_json, updated_at = datetime('now')`,
+    ).bind(user.id, json).run();
+    const row = await c.env.DB.prepare(`SELECT updated_at FROM spinout_application_drafts WHERE user_id = ?`)
+      .bind(user.id).first<{ updated_at: string }>();
+    return c.json({ ok: true, updated_at: row?.updated_at ?? null });
+  } catch (e) {
+    console.error('[spinout-lab/draft] save failed', (e as Error)?.message);
+    return refusal(c, 503, 'draft_not_saved', 'Your draft was not saved. Your answers are still on this page; try again.');
+  }
+});
+
+// DELETE /apply/draft — discard the caller's draft.
+spinoutLab.delete('/apply/draft', async (c) => {
+  const user = await requireAuth(c);
+  try {
+    await c.env.DB.prepare(`DELETE FROM spinout_application_drafts WHERE user_id = ?`).bind(user.id).run();
+  } catch (e) {
+    console.error('[spinout-lab/draft] delete failed', (e as Error)?.message);
+    return refusal(c, 503, 'draft_not_deleted', 'The draft could not be discarded. Try again.');
+  }
+  return c.json({ ok: true });
+});
+
+// POST /apply/withdraw — withdraw the caller's application while it is still
+// undecided (pending, or waitlisted in the pool). The row stays, because the
+// cohort pool's history points at it; its answers and idea are cleared, which
+// is the "we delete the file" the apply page promises.
+spinoutLab.post('/apply/withdraw', async (c) => {
+  const user = await requireAuth(c);
+  const app = await latestApplication(c.env, user.id);
+  if (!app) return refusal(c, 404, 'no_application', 'There is no application to withdraw.');
+  let poolStatus: string | null = null;
+  try {
+    const r = await c.env.DB.prepare(
+      `SELECT status FROM cohort_applicants WHERE application_id = ? ORDER BY id DESC LIMIT 1`,
+    ).bind(app.id).first<{ status: string }>();
+    poolStatus = r?.status ?? null;
+  } catch { /* pool not migrated */ }
+  if (app.status !== 'pending' || (poolStatus && !['pending', 'waitlisted'].includes(poolStatus))) {
+    return refusal(c, 409, 'not_withdrawable',
+      'This application has already been decided, so there is nothing to withdraw. Contact the programme team if you need to step back.');
+  }
+  let upd: { meta?: { changes?: number } };
+  try {
+    upd = await c.env.DB.prepare(
+      `UPDATE spinout_applications
+          SET status = 'withdrawn', withdrawn_at = datetime('now'), answers_json = NULL, idea = ''
+        WHERE id = ? AND user_id = ? AND status = 'pending'`,
+    ).bind(app.id, user.id).run();
+  } catch (err) {
+    console.error('[spinout-lab/apply/withdraw] update failed', err);
+    return refusal(c, 503, 'withdraw_unavailable', 'Your application could not be withdrawn just now. Try again in a moment.');
+  }
+  if ((upd.meta?.changes ?? 0) === 0) {
+    return refusal(c, 409, 'not_withdrawable', 'This application changed while you were withdrawing it. Refresh and check its status.');
+  }
+  try {
+    await c.env.DB.prepare(
+      `UPDATE cohort_applicants SET status = 'withdrawn', decided_at = datetime('now'), decided_by = ?
+        WHERE application_id = ? AND status IN ('pending', 'waitlisted')`,
+    ).bind(`user:${user.id}`, app.id).run();
+  } catch { /* pool not migrated */ }
+  try {
+    await c.env.DB.prepare(
+      `UPDATE spinout_application_interviews SET status = 'cancelled', updated_at = datetime('now')
+        WHERE application_id = ? AND status = 'scheduled'`,
+    ).bind(app.id).run();
+  } catch { /* interviews not migrated */ }
+  return c.json({ ok: true, applicant: await loadApplicantBlock(c.env, user.id) });
+});
+
+// POST /apply/interview/reschedule { reason } — ask to move the interview.
+// It does not move it: an admin does, by scheduling again.
+spinoutLab.post('/apply/interview/reschedule', async (c) => {
+  const user = await requireAuth(c);
+  const body = (await c.req.json().catch(() => ({}))) as { reason?: unknown };
+  const reason = (typeof body.reason === 'string' ? body.reason : '').trim().slice(0, 500);
+  if (!reason) return refusal(c, 400, 'reason_required', 'Say what time would work, or why this one does not.');
+  const app = await latestApplication(c.env, user.id);
+  if (!app) return refusal(c, 404, 'no_application', 'There is no application with an interview.');
+  let iv: { id: number; status: string } | null = null;
+  try {
+    iv = await c.env.DB.prepare(
+      `SELECT id, status FROM spinout_application_interviews WHERE application_id = ? ORDER BY id DESC LIMIT 1`,
+    ).bind(app.id).first();
+  } catch (e) {
+    console.error('[spinout-lab/reschedule] read failed', (e as Error)?.message);
+    return refusal(c, 503, 'interview_unreadable', 'Your interview could not be read. Try again.');
+  }
+  if (!iv || iv.status !== 'scheduled') return refusal(c, 409, 'no_scheduled_interview', 'There is no scheduled interview to move.');
+  await c.env.DB.prepare(
+    `UPDATE spinout_application_interviews
+        SET reschedule_requested_at = datetime('now'), reschedule_reason = ?, updated_at = datetime('now')
+      WHERE id = ?`,
+  ).bind(reason, iv.id).run();
+  return c.json({ ok: true, applicant: await loadApplicantBlock(c.env, user.id) });
 });
 
 spinoutLab.post('/start', async (c) => {
@@ -702,6 +957,65 @@ spinoutLab.get('/stats', async (c) => {
   } catch {
     return c.json({ companies: 0, total_raised: null });
   }
+});
+
+// GET /brief — PUBLIC (deliberately no requireAuth, the `/stats` precedent
+// above): the six live values the Programme Brief prints. The brief is a
+// marketing page a prospective founder reads before they have an account, so a
+// gated route here would leave every figure on it blank for exactly the reader
+// it is written for.
+//
+// WHY THE PAYLOAD IS SHAPED LIKE THIS. The brief's design names each live value
+// as a dotted token — `{cohort.close_at}`, `{brief.year}` — and there are
+// exactly six. The response mirrors those paths one for one, so the page has no
+// mapping layer to get wrong and a test can assert that every token the design
+// declares resolves to a key the route sends.
+//
+// FIVE OF THE SIX ARE PURE ARITHMETIC AND CANNOT FAIL. `resolveApplicationTarget`
+// derives the cohort a new application lands in from the wall clock in
+// `COHORT_TZ` and nothing else — no table is read — so the brief's dates are
+// correct on a database that has never run the cohort migrations. Only `places`
+// touches D1, through the shared `getCohortSizeSettings`, which falls back to
+// the product default; that default IS the operative number when nobody has
+// overridden it, so returning it is the true answer rather than a stand-in.
+//
+// NOTHING ELSE ON THE BRIEF COMES FROM HERE. The tracks, the tools, the gates,
+// the jurisdictions and the deliverables are the programme's own description,
+// held in the SPA beside the pages that already render them. A route that also
+// served those would be a store invented so a page could look dynamic, holding
+// values nobody measures and nobody edits.
+spinoutLab.get('/brief', async (c) => {
+  const nowMs = Date.now();
+  const { resolveApplicationTarget, monthLabel, getCohortSizeSettings } =
+    await import('../services/cohortApplications');
+  // From `cohortTiming`, which DECLARES it — `cohortApplications` imports the
+  // constant but does not re-export it, so destructuring it there is undefined.
+  const { COHORT_TZ, cycleWeekWindows } = await import('../services/cohortTiming');
+  const t = resolveApplicationTarget(nowMs);
+  // `resolveApplicationTarget` reports `ok: false` when no window is open —
+  // between a close and the next month's opening. The brief then has no cohort
+  // to name, and says so rather than naming the wrong one.
+  const cohortOpen = t.ok;
+  const { max } = await getCohortSizeSettings(c.env);
+  return c.json({
+    brief: {
+      generated_at: new Date(nowMs).toISOString(),
+      year: new Date(nowMs).toISOString().slice(0, 4),
+    },
+    cohort: cohortOpen ? {
+      name: monthLabel(t.year, t.month),
+      start_date: new Date(t.window.startMs).toISOString(),
+      close_at: new Date(t.window.closeMs).toISOString(),
+      // D385 — the landing's "Ends" row. Week 4's deadline from the same week
+      // windows the Lab enforces, so the page never computes its own end.
+      end_date: new Date(cycleWeekWindows(t.year, t.month)[3].deadlineMs).toISOString(),
+      places: max,
+    } : { name: null, start_date: null, end_date: null, close_at: null, places: max },
+    // The zone every date above is enforced in. Named rather than assumed: a
+    // reader outside America/New_York is told which midnight the deadline is.
+    zone: COHORT_TZ,
+    applications_open: cohortOpen,
+  });
 });
 
 spinoutLab.get('/cohort', async (c) => {
@@ -1036,9 +1350,9 @@ spinoutLab.get('/fund-metrics', async (c) => {
 const LP_FUND_SLUG = 'spinout-fund-i';
 
 /** Self-heal on a cold isolate (migration 165 is the canonical DDL). */
-let _lpAppSchemaReady = false;
+const LP_APP_SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureLpApplicationsSchema(env: Env): Promise<void> {
-  if (_lpAppSchemaReady) return;
+  if (LP_APP_SCHEMA_READY.get(bindingKey(env))) return;
   await env.DB.exec(
     'CREATE TABLE IF NOT EXISTS lp_applications ('
     + 'id INTEGER PRIMARY KEY AUTOINCREMENT, '
@@ -1061,7 +1375,7 @@ async function ensureLpApplicationsSchema(env: Env): Promise<void> {
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_lp_applications_user_fund '
     + 'ON lp_applications(user_id, fund_slug)',
   );
-  _lpAppSchemaReady = true;
+  LP_APP_SCHEMA_READY.set(bindingKey(env), true);
 }
 
 // GET /lp-application — the caller's own application, or null.

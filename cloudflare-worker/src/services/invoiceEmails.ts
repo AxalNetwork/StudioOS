@@ -28,10 +28,11 @@
  */
 import type { Env } from '../types';
 import { sendBrandedInvoiceEmail } from './email';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 export async function ensureInvoiceEmailSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS invoice_email_log (
       id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -46,7 +47,7 @@ export async function ensureInvoiceEmailSchema(env: Env): Promise<void> {
        ON invoice_email_log(stripe_invoice_id)`,
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch { /* idempotent */ } }
-  _schemaReady = true;
+  SCHEMA_READY.set(bindingKey(env), true);
 }
 
 // True once a branded email has been confirmed-sent for this key. Sequential

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { WORKSPACES } from '../src/lib/adminPlacement.js';
 
 const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
@@ -84,7 +85,17 @@ test('no fiduciary figure is hardcoded into a fund or portfolio page', () => {
 
 test('a metric with no source is named, never blanked or zeroed', () => {
   const lib = scan(read('frontend/src/lib/fundAnalytics.js'));
-  assert.match(lib, /Not recorded/, 'the absence has to be said out loud');
+  // The literal used to be declared here and, identically, in `lib/dealFlow.js`.
+  // D117 gave it one home, so this follows the reference one hop instead of
+  // matching a string that has moved — and asserts the thing the old version
+  // could not: that `fmtCents` actually ANSWERS with it. A file can mention
+  // "Not recorded" in a comment and still return a zero.
+  assert.match(lib, /import \{ NOT_RECORDED \} from '\.\/absence'/,
+    'fundAnalytics must reach for the shared constant, not re-declare it');
+  assert.match(scan(read('frontend/src/lib/absence.js')), /NOT_RECORDED = 'Not recorded'/,
+    'the absence has to be said out loud');
+  assert.match(lib.slice(lib.indexOf('export function fmtCents')), /return NOT_RECORDED/,
+    'fmtCents must answer a null with the absence, never a zero');
   // An em-dash or a 0 in place of a null reads as a measured result.
   for (const fn of ['fmtMultiple', 'fmtRate']) {
     const body = lib.slice(lib.indexOf(`export function ${fn}`));
@@ -131,6 +142,12 @@ test('both pages are still mounted as FundOpsWorkspace tabs', () => {
   // rows into one row on /portfolio/health, so Growth's door is now this
   // workspace's tab bar rather than a nav entry of its own. Assert the door.
   assert.match(pw, /to: '\/portfolio\/growth'/);
+  // Re-aimed in D284: the row that satisfied this was the admin's Portfolio
+  // Health row, which left the sidebar for the Workspaces launcher with the
+  // other working pages. The property is unchanged — something still lands
+  // on the portfolio workspace — and either door satisfies it.
   const sidebar = scan(read('frontend/src/sidebarConfig.js'));
-  assert.match(sidebar, /to: '\/portfolio\/health'/, 'nothing lands on the portfolio workspace');
+  const viaRow = /to: '\/portfolio\/health'/.test(sidebar);
+  const viaLauncher = WORKSPACES.some((w) => w.route === '/portfolio/health');
+  assert.ok(viaRow || viaLauncher, 'nothing lands on the portfolio workspace');
 });

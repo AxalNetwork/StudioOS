@@ -86,24 +86,24 @@ export default function ThisWeekZone() {
             <>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <Card padding="md">
-                  <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Batch</div>
+                  <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Batch</div>
                   <div className="mt-1 text-[16px] font-extrabold">{cohortLabel(current?.cohort || d.cycle)}</div>
-                  <div className="mt-0.5 text-[11.5px] text-axal-ink-3">Cycle is {d.cycle?.status || 'not recorded'}</div>
+                  <div className="mt-0.5 text-[11.5px] text-axal-faint">Cycle is {d.cycle?.status || 'not recorded'}</div>
                 </Card>
                 <Card variant="accent" padding="md">
-                  <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Week</div>
+                  <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Week</div>
                   <div className="mt-1 text-[22px] font-extrabold tabular-nums">
                     {d.windows_recorded && week != null ? week : <Unrecorded>Not recorded</Unrecorded>}
                   </div>
                   {!d.windows_recorded && (
-                    <div className="mt-0.5 text-[11px] leading-relaxed text-axal-ink-3">
+                    <div className="mt-0.5 text-[11px] leading-relaxed text-axal-faint">
                       This cycle has no week windows recorded, so which week it is in cannot be
                       derived. It is not week one by default.
                     </div>
                   )}
                 </Card>
                 <Card padding="md">
-                  <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Founders</div>
+                  <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Founders</div>
                   <div className="mt-1 text-[22px] font-extrabold tabular-nums">{(d.founders || []).length}</div>
                 </Card>
               </div>
@@ -113,9 +113,9 @@ export default function ThisWeekZone() {
                   <table className="w-full text-[12.5px]">
                     <thead>
                       <tr className="border-b border-axal-hairline text-left dark:border-gray-700">
-                        <th className="px-4 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Founder</th>
-                        <th className="px-4 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Week {week}</th>
-                        <th className="px-4 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Deliverables</th>
+                        <th className="px-4 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Founder</th>
+                        <th className="px-4 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Week {week}</th>
+                        <th className="px-4 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Deliverables</th>
                       </tr>
                     </thead>
                     <tbody>

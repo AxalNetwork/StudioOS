@@ -11,6 +11,21 @@ import { ensureExploringSchema, upsertSuggestedRole } from '../services/explorin
 
 const profiling = new Hono<{ Bindings: Env }>();
 
+// THIS LIST IS THE THIRD DEFINITION OF partner_profiles, AND IT IS THE ONE
+// THAT WON. `ensureProfileTable` below is a CREATE TABLE IF NOT EXISTS, which
+// cannot add a column to a table that already exists — so on every database
+// where this bootstrap ran first, migrations/028's whole shape (id,
+// invitation_id, organization, …) was a no-op and 042's four advisor-bank
+// ALTERs went with it. Production is exactly that database: measured
+// 2026-09-21, its partner_profiles carried this shape's 22 columns and none of
+// 028's eighteen, so routes/partner_onboarding.ts, services/advisor/
+// writeRouter.ts and routes/partners.ts were all reading columns that were not
+// there. See D187 and migration 275.
+//
+// SO THIS LIST AND MIGRATION 275 MUST DECLARE THE SAME SET, and a test asserts
+// it. Fixing one alone leaves the other stale and puts which shape a database
+// ends up with back at the mercy of which ran first — which is how this
+// collision was born, and the metrics_snapshots one (#183, #202) before it.
 const NEW_COLUMNS: Array<[string, string]> = [
   ['company_established', 'INTEGER'],
   ['founder_track', 'TEXT'],
@@ -19,6 +34,24 @@ const NEW_COLUMNS: Array<[string, string]> = [
   ['existing_jurisdiction', 'TEXT'],
   ['product_strategy', 'TEXT'],
   ['existing_investors', 'TEXT'],
+  // --- migration 275: the columns 028 and 042 never landed here -----------
+  ['invitation_id', 'INTEGER'],
+  ['full_name', 'TEXT'],
+  ['organization', 'TEXT'],
+  ['role_title', 'TEXT'],
+  ['expertise', 'TEXT'],
+  ['sectors', 'TEXT'],
+  ['geography', 'TEXT'],
+  ['capacity_per_month', 'TEXT'],
+  ['capital_capacity_usd', 'INTEGER'],
+  ['motivation', 'TEXT'],
+  ['prior_deals', 'TEXT'],
+  ['linkedin_url', 'TEXT'],
+  ['raw_chat_json', "TEXT NOT NULL DEFAULT '{}'"],
+  ['services_offered', 'TEXT'],
+  ['dealflow_channels', 'TEXT'],
+  ['conflicts_text', 'TEXT'],
+  ['focus_text', 'TEXT'],
 ];
 
 async function ensureProfileTable(env: Env) {
@@ -57,6 +90,20 @@ async function ensureProfileTable(env: Env) {
       await db.prepare(`ALTER TABLE partner_profiles ADD COLUMN ${col} ${type}`).run();
     } catch {}
   }
+  // Migration 275's indexes, so a database bootstrapped through THIS path and
+  // not through the migration runner still supports partner_onboarding.ts's
+  // `ON CONFLICT(invitation_id) DO UPDATE`. A plain UNIQUE index: SQLite
+  // treats NULLs as distinct, so rows with no invitation coexist.
+  try {
+    await db.prepare(
+      `CREATE UNIQUE INDEX IF NOT EXISTS uq_partner_profiles_invitation ON partner_profiles(invitation_id)`,
+    ).run();
+  } catch {}
+  try {
+    await db.prepare(
+      `CREATE INDEX IF NOT EXISTS idx_partner_profiles_user ON partner_profiles(user_id)`,
+    ).run();
+  } catch {}
 }
 
 const SYSTEM_PROMPT = `You are the Axal VC StudioOS Onboarding Assistant. Axal VC is a Delaware LLC venture studio operating as a Global Venture Network — combining a "28-Day Spin-Out Engine" for new ventures with a "Strategic Scale" partnership track for existing companies that want capital, AI integration, distribution, or M&A support.

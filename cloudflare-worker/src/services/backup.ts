@@ -52,8 +52,151 @@ function resolveBackupNamespaces(env: Env): string[] {
 const EPHEMERAL_EXCLUDE = new Set(['TOKENS', 'RATE_LIMITS']);
 
 function resolveBucket(env: Env): R2BackupBucket | null {
-  const cast = env as unknown as Record<string, R2BackupBucket | undefined>;
-  return cast.BACKUPS || null;
+  // D200 — `BACKUPS` is a typed field on Env now (it always was a declared
+  // binding in both wrangler.toml tables); the cast this used to reach it
+  // through is gone.
+  return env.BACKUPS || null;
+}
+
+/**
+ * D263 — the restore drill's outcome, read from the marker it writes.
+ *
+ * Until D263 this half of HQ's "Backup / DR" card was a stated absence: the
+ * drill wrote nothing the Worker could read. `scripts/dr-drill.sh` now writes
+ * `drill-d1.json` to the backups bucket from its EXIT trap on every exit,
+ * pass or fail (at, outcome, duration_s, source, step, exit_code,
+ * backup_key, run_id), so the card can say what the last run did.
+ *
+ * Four states, each its own claim, and none inferred from the backup half:
+ *   unreadable       no binding, the read threw, the JSON did not parse, or
+ *                    the outcome is not one the drill writes;
+ *   never_run        the bucket answered and holds no marker;
+ *   last_run_failed  the marker says failed, with the step and exit code;
+ *   last_run_passed  the marker says passed, with the backup it restored.
+ * No reason string carries a count: a count belongs in a D-entry, where it
+ * does not go stale.
+ */
+export const RESTORE_DRILL_KEY = 'drill-d1.json';
+
+export type RestoreDrill =
+  | { available: false; state: 'unreadable'; reason: string }
+  | { available: true; state: 'never_run'; reason: string }
+  | {
+      available: true;
+      state: 'last_run_failed' | 'last_run_passed';
+      at: string | null;
+      step: string | null;
+      exit_code: number | null;
+      backup_key: string | null;
+      duration_s: number | null;
+      source: string | null;
+      run_id: string | null;
+    };
+
+const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
+const int = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+export async function readRestoreDrill(env: Env): Promise<RestoreDrill> {
+  const bucket = env.BACKUPS;
+  if (!bucket) {
+    return {
+      available: false,
+      state: 'unreadable',
+      reason: 'The BACKUPS R2 binding is not bound on this deployment, so the restore drill\'s marker cannot be read here.',
+    };
+  }
+  let body: Record<string, unknown>;
+  try {
+    const obj = await bucket.get(RESTORE_DRILL_KEY);
+    if (!obj) {
+      return {
+        available: true,
+        state: 'never_run',
+        reason: `No ${RESTORE_DRILL_KEY} has been written to the backups bucket, so no restore drill has recorded a run.`,
+      };
+    }
+    const parsed = await obj.json<unknown>();
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('the marker is not a JSON object');
+    body = parsed as Record<string, unknown>;
+  } catch (e) {
+    return {
+      available: false,
+      state: 'unreadable',
+      reason: `The restore drill's marker could not be read (${e instanceof Error ? e.message : String(e)}).`,
+    };
+  }
+  if (body.outcome !== 'passed' && body.outcome !== 'failed') {
+    return {
+      available: false,
+      state: 'unreadable',
+      reason: `The restore drill's marker names an outcome the drill never writes (${JSON.stringify(body.outcome ?? null)}).`,
+    };
+  }
+  return {
+    available: true,
+    state: body.outcome === 'passed' ? 'last_run_passed' : 'last_run_failed',
+    at: str(body.at),
+    step: str(body.step),
+    exit_code: int(body.exit_code),
+    backup_key: str(body.backup_key),
+    duration_s: int(body.duration_s),
+    source: str(body.source),
+    run_id: body.run_id === null || body.run_id === undefined ? null : String(body.run_id),
+  };
+}
+
+export type BackupHeartbeat =
+  | {
+      available: true;
+      kind: 'd1' | 'kv';
+      at: string | null;
+      source: string | null;
+      key: string | null;
+      size_bytes: number | null;
+    }
+  | { available: false; reason: string };
+
+/**
+ * D200 — the READ half of the heartbeat `writeBackupHeartbeat` documents.
+ * `heartbeat-d1.json` is written by .github/workflows/backup-d1.yml after a
+ * successful R2 put (at, source, kind, key, size_bytes); `heartbeat-kv.json`
+ * by the 02:00 worker cron. Three states, each its own claim: the binding is
+ * absent (this deployment cannot read backups at all), the object has never
+ * been written (no export has recorded a run), or the object is there and
+ * says when. Never a zero, never a green light inferred from nothing.
+ */
+export async function readBackupHeartbeat(env: Env, kind: 'd1' | 'kv' = 'd1'): Promise<BackupHeartbeat> {
+  const bucket = env.BACKUPS;
+  if (!bucket) {
+    return {
+      available: false,
+      reason: 'The BACKUPS R2 binding is not bound on this deployment, so the backup heartbeat cannot be read here.',
+    };
+  }
+  const key = kind === 'd1' ? 'heartbeat-d1.json' : 'heartbeat-kv.json';
+  try {
+    const obj = await bucket.get(key);
+    if (!obj) {
+      return {
+        available: false,
+        reason: `No ${key} has ever been written to the backups bucket, so no export has recorded a run.`,
+      };
+    }
+    const body = (await obj.json<Record<string, unknown>>()) || {};
+    return {
+      available: true,
+      kind,
+      at: typeof body.at === 'string' ? body.at : null,
+      source: typeof body.source === 'string' ? body.source : null,
+      key: typeof body.key === 'string' ? body.key : null,
+      size_bytes: typeof body.size_bytes === 'number' ? body.size_bytes : null,
+    };
+  } catch (e) {
+    return {
+      available: false,
+      reason: `The backup heartbeat could not be read (${e instanceof Error ? e.message : String(e)}).`,
+    };
+  }
 }
 
 function isoDateUTC(): string {
@@ -143,7 +286,7 @@ export async function runDailyKvSnapshot(env: Env): Promise<{ ok: number; failed
         failed += 1;
       }
     } catch (e) {
-      console.error(`[backup] KV snapshot failed for ${name}:`, e);
+      console.error('[backup] KV snapshot failed', name, e);
       failed += 1;
     }
   }
@@ -185,6 +328,6 @@ export async function writeBackupHeartbeat(
   try {
     await bucket.put(key, payload, { httpMetadata: { contentType: 'application/json' } });
   } catch (e) {
-    console.warn(`[backup] heartbeat write failed (${key})`, e);
+    console.warn('[backup] heartbeat write failed', key, e);
   }
 }

@@ -49,19 +49,26 @@ test('both surfaces read the shared rule, not their own copy', () => {
   }
 });
 
-test('the docs block renders no status line until the probe answers', () => {
+test('the docs block renders no status line until the probe FIRST answers, and says so when it fails (D332)', () => {
   const s = read('frontend/src/pages/docs/DocsLayout.jsx');
   const i = s.indexOf('function StillStuck');
   const body = s.slice(i, s.indexOf('export default function DocsLayout'));
   assert.match(body, /useState\(null\)/, 'the initial state must be absent, not a guess');
-  assert.match(body, /\{line && \(/, 'the line renders only for a known state');
-  // 'unknown' has no entry in the label map, so a failed or empty probe shows
-  // nothing rather than a colour.
+  assert.match(body, /\{line && \(/, 'the line renders only once a state is known');
+  // D332 — 'unknown' USED to have no entry, so a failed or empty probe
+  // rendered nothing at all: indistinguishable from the pre-answer silence
+  // this same `{line && (` guard produces before the request even resolves.
+  // A probe that failed is not the same claim as one that hasn't run yet, so
+  // 'unknown' now has its own honest label.
   const map = s.slice(s.indexOf('const STATUS_LINE'), i);
-  assert.ok(!map.includes('unknown:'), 'unknown must have no label to render');
-  for (const k of ['operational', 'degraded', 'down']) {
+  assert.ok(map.includes('unknown:'), 'a failed or empty probe renders no different from one still in flight');
+  for (const k of ['operational', 'degraded', 'down', 'unknown']) {
     assert.ok(map.includes(`${k}:`), `${k} must have a label`);
   }
+  // The pre-answer state (`overall === null`) must still render nothing —
+  // 'unknown' is reachable only from the probe's own catch, never the initial
+  // state, so `STATUS_LINE[null]` staying undefined is the one silence left.
+  assert.ok(!map.includes('null:'), 'the pre-answer state gained a label — it must stay silent, only the failure case speaks');
 });
 
 test('the status page can now reach its own unknown pill', () => {

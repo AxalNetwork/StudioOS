@@ -73,7 +73,7 @@ async function activeGrant(env: Env, projectId: number, advisorUserId: number) {
   return env.DB.prepare(
     `SELECT * FROM advisor_client_grants
       WHERE project_id = ? AND advisor_user_id = ? AND status = 'active'
-        AND (expires_at IS NULL OR expires_at > datetime('now'))`,
+        AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))`,
   ).bind(projectId, advisorUserId).first<GrantRow>();
 }
 
@@ -377,7 +377,7 @@ grants.get('/shared/list', async (c) => {
        FROM advisor_client_grants g
        JOIN projects p ON p.id = g.project_id
       WHERE g.advisor_user_id = ? AND g.status = 'active'
-        AND (g.expires_at IS NULL OR g.expires_at > datetime('now'))
+        AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))
       ORDER BY g.created_at DESC LIMIT 200`,
   ).bind(user.id).all<any>();
   return c.json({

@@ -12,11 +12,13 @@ import {
 import {
   LAB_TRACKS, TOOL_COUNT, arsenalFor, labTrack, leadsWithFor,
 } from '../../lib/spinoutLabArsenal';
+import { GATES_DECISION } from '../../lib/spinoutBrief';
 
 /**
  * The Spin-Out Lab introduction — one design, two surfaces.
  *
  * DESIGN HANDOFF: `design/canvases/integrated/Spin-Out Lab · Intro.dc.html`,
+ * revised by `Spin-Out Lab · Landing.dc.html` (the public surface, D385),
  * which draws both surfaces from a single `surfaces` list for exactly the
  * reason this component exists: `/spinout-lab` logged out and `/spinout-lab`
  * signed-in-but-not-applied were two hand-maintained copies of the same page
@@ -39,7 +41,10 @@ import {
  *     the worker's spinoutLabCatalog — identically for everyone. Four invented
  *     gate sets would tell a founder that week 2 asks something it does not.
  *     The gates render from `PIPELINE_PHASES` and the page says out loud that
- *     they are the same whichever track you pick.
+ *     they are the same whichever track you pick. The Programme Brief DOES
+ *     print per-track gates (`TRACK_GATES`), so the two surfaces disagree;
+ *     which one is right is the owner's open call (D385), and both print
+ *     `GATES_DECISION` from lib/spinoutBrief.js until it is made.
  *
  *   · A "YOURS" TAG on tools the member supposedly already has. Nothing
  *     answers that question. `state.unlocked_features` describes the week a
@@ -57,7 +62,18 @@ import {
  *     directory reads the live `/cohort` endpoint and the feed reads
  *     `/shipped`; when either is empty it says so.
  *
- *   · A SEAT COUNT ("8 spots available"). Nothing stores one.
+ *   · A SEAT COUNT ("8 spots available") — not the canvas's 8, and not here.
+ *     The count IS stored: `cohort_settings.max_cohort_size`, returned as
+ *     `cohort.places` by the public `GET /spinout-lab/brief`. The apply CTA,
+ *     the apply form and the refused-application note print it through
+ *     `useCohortPlaces` (lib/spinoutLab.js). The hero does not draw it: the
+ *     Landing canvas settles that ("No seat count, no track record"), D385.
+ *
+ * THE COHORT IS NAMED BY THE SERVER (D385). The hero, the apply buttons and
+ * the apply band read `useCohortRecord` — `/brief`'s name, start, end and
+ * deadline — as the Landing canvas's "Read from the cohort record" does. They
+ * used to print the client calendar's "Cohort N" while the brief and the apply
+ * form called the same cohort by its month.
  *
  * WHY THE ARSENAL CARDS ARE NOT LINKS: see `lib/spinoutLabArsenal.js`. Every
  * `/spinout-lab/<tool>` route is guarded on `spinout_lab_active === 1`, and
@@ -77,13 +93,32 @@ import {
  * why `/spinout-lab` is in `SHARED_FULL_BLEED` (frontend/src/sidebarConfig.js)
  * — the shell's own `p-4 md:p-6` is what used to stop it.
  */
+/**
+ * The open cohort, as read from `/brief` by `useCohortRecord` (D385): the
+ * record when the read succeeded, and nothing otherwise. The landing canvas
+ * names the cohort from the cohort record — "Apply to {cohort.name}" — so the
+ * landing, the Programme Brief and the apply form print one name for it.
+ */
+export function cohortOf(read) {
+  return read?.status === 'ok' ? read.cohort : null;
+}
+
+/** The apply button's words: the cohort's own name once it has been read. */
+export function applyLabelFor(read) {
+  const c = cohortOf(read);
+  return c?.open && c.name ? `Apply to the ${c.name} cohort` : 'Apply to the next cohort';
+}
+
 export function LabHero({ surface, cohort, applyHref, briefHref }) {
+  const record = cohortOf(cohort);
   const rows = [
-    ['Cohort', cohort ? `Cohort ${cohort.cohortNum}` : null],
-    ['Starts', cohort?.startLabel ?? null],
-    ['Ends', cohort?.endLabel ?? null],
-    ['Applications close', cohort?.deadlineLabel ?? null],
+    ['Cohort', record ? (record.open ? record.name : 'None taking applications') : null],
+    ['Starts', record?.startLabel ?? null],
+    ['Ends', record?.endLabel ?? null],
+    ['Applications close', record?.deadlineLabel ?? null],
   ];
+  const reading = cohort?.status === 'loading';
+  const failed = cohort?.status === 'error';
   return (
     <section
       className="relative overflow-hidden text-white"
@@ -126,7 +161,7 @@ export function LabHero({ surface, cohort, applyHref, briefHref }) {
           </p>
           <div className="mt-7 flex flex-wrap gap-2.5">
             <Link className={LAB_BTN_ON_DARK} to={applyHref}>
-              {cohort ? `Apply to Cohort ${cohort.cohortNum}` : 'Apply to the next cohort'} →
+              {applyLabelFor(cohort)} →
             </Link>
             <Link className={LAB_BTN_GHOST_ON_DARK} to={briefHref}>
               Download the programme brief
@@ -143,17 +178,30 @@ export function LabHero({ surface, cohort, applyHref, briefHref }) {
                 className="flex items-baseline justify-between gap-3 border-t border-white/10 pt-2.5"
               >
                 <dt className={`text-[12px] ${LAB_ON_DARK_MUTED}`}>{label}</dt>
-                {/* Absent renders as absent. The cohort calendar is computed,
-                    so a null here means the computation threw — which is a
-                    different thing from a date, and must not read as one. */}
-                <dd className={value ? LAB_ON_DARK_FIGURE : 'text-[12px] italic text-white/45'}>
-                  {value ?? 'Not recorded'}
+                {/* Absent renders as absent, and three absences are told
+                    apart: still reading, a read that failed, and a record
+                    that came back without this value. */}
+                <dd
+                  data-testid={`hero-${label.toLowerCase().replace(/\s+/g, '-')}`}
+                  className={value ? LAB_ON_DARK_FIGURE : 'text-[12px] italic text-white/45'}
+                >
+                  {reading ? 'Reading…' : failed ? 'Could not be read' : (value ?? 'Not recorded')}
                 </dd>
               </div>
             ))}
           </dl>
+          {failed ? (
+            <button
+              type="button"
+              onClick={cohort.retry}
+              data-testid="hero-cohort-retry"
+              className="mt-3 text-[12px] font-semibold text-white underline underline-offset-2"
+            >
+              The cohort record could not be read. Try again
+            </button>
+          ) : null}
           <p className="mt-4 text-[11px] leading-relaxed text-white/50">
-            Read from the cohort calendar. The deadline is computed as seven days before the
+            Read from the cohort record. The deadline is computed as seven days before the
             start, 23:59 Delaware time — never typed.
           </p>
         </div>
@@ -233,7 +281,8 @@ export function LabGates({ jurisdiction }) {
         </div>
         <p className={`max-w-[380px] ${LAB_LEDE}`}>
           The four gates are the same for every track today. The track you pick changes
-          which tools lead, not what the gates require.
+          which tools lead, not what the gates require.{' '}
+          <span data-testid="intro-gates-decision">{GATES_DECISION.intro}</span>
         </p>
       </div>
 
@@ -563,6 +612,7 @@ export function LabCommunity({ surface, directory, shipped }) {
 /* ── Apply ────────────────────────────────────────────────────────────── */
 
 export function LabApplyBand({ cohort, applyHref, briefHref, track }) {
+  const record = cohortOf(cohort);
   return (
     <section className="mt-16 pb-16">
       <div
@@ -572,13 +622,15 @@ export function LabApplyBand({ cohort, applyHref, briefHref, track }) {
         <div className="max-w-[580px]">
           <div className={LAB_EYEBROW_ON_DARK}>How to apply</div>
           <h2 className="mt-2 text-[24px] font-black tracking-axal-heading">
-            Apply on the {labTrack(track).name} track.
+            {record?.open && record.name
+              ? `Apply to the ${record.name} cohort on the ${labTrack(track).name} track.`
+              : `Apply on the ${labTrack(track).name} track.`}
           </h2>
           <p className={`mt-2.5 text-[14px] leading-relaxed ${LAB_ON_DARK_MUTED}`}>
-            {cohort?.deadlineLabel ? (
+            {record?.deadlineLabel ? (
               <>
                 Applications close{' '}
-                <span className={LAB_ON_DARK_FIGURE}>{cohort.deadlineLabel}</span> — seven days
+                <span className={LAB_ON_DARK_FIGURE}>{record.deadlineLabel}</span> — seven days
                 before the cohort starts, at 23:59 Delaware time.{' '}
               </>
             ) : (
@@ -597,7 +649,7 @@ export function LabApplyBand({ cohort, applyHref, briefHref, track }) {
         </div>
         <div className="flex flex-none flex-col gap-2.5">
           <Link className={LAB_BTN_ON_DARK} to={applyHref}>
-            {cohort ? `Apply to Cohort ${cohort.cohortNum}` : 'Apply to the next cohort'} →
+            {applyLabelFor(cohort)} →
           </Link>
           <Link className={LAB_BTN_GHOST_ON_DARK} to={briefHref}>
             Download the programme brief

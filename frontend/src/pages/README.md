@@ -10,7 +10,7 @@ so the filename is usually the fastest way from a URL to its code: `/deals` →
 2. The component name is the filename.
 
 Naming follows the surface, not the persona: `PortfolioHealthPage`,
-`SpinoutLabCapitalPage`, `PartnerPortal`.
+`SpinoutLabCapitalPage`, `PartnerDealPortal`.
 
 ## Subfolders
 
@@ -21,7 +21,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `founder/` | The founder shell's workspace tab bars. |
 | `investor/` | Investor-only workspace framing and visual-system styles. |
 | `partner/` | Partner-side operations (BD console). |
-| `research/` | The two Research zones every licence shares — Library and Ask. Not role-scoped: `RESEARCH_ZONES` lists both for founder, investor, advisor and partner, and one store keyed on `user_id` serves all four. |
+| `research/` | Research zone bodies. Library and Ask are on every licence. Funds is the founder shortlist, and `FundDossier.jsx` is one row of it at `/research/funds/:uid`. `CompanyCandidate.jsx` is one competitor at `/research/companies/:analysisId/:candidateId`. |
 | `captable/` | Cap-table panels composed into `CapTablePage.jsx`. |
 | `raise/` | Round-manager panels. |
 | `referrals/` | The Refer & Earn canvas stylesheet for `ReferralsPage.jsx`. |
@@ -31,6 +31,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `legal/` | Non-admin document origination (Send for signature). |
 | `subsidiary/` | A territory licence holder's read of their own licence. |
 | `hq/` | The Super Admin's HQ-only surfaces: the holder console, the HQ framings of Accounts and Contracts, and the notice a plain admin sees instead. |
+| `branch/` | The subsidiary shell's own pages, S1–S11, all eight rows built (D107 for why every row shipped with a route rather than only the built ones; D155 for the last of them). Start at `branch/README.md`. |
 | `insights/` | Insight reader and its public variant. |
 | `docs/` | The Help Center layout and its content sections. |
 | `templates/` | Persona home-page templates. |

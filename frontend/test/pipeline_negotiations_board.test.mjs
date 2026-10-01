@@ -35,6 +35,11 @@ const read = (p) => codeOnly(raw(p));
 
 const CANVAS = raw('design/canvases/integrated/Pages · Partner Pipeline.dc.html');
 const zone = read('frontend/src/pages/partner/pipeline/NegotiationsZone.jsx');
+// The SAME file unstripped. One slice below is bounded by a `{/* ══ … *\/}`
+// section marker, and `codeOnly` now removes those — so a landmark that is
+// itself a comment has to be read from the source that still has it. Every
+// assertion stays on the stripped copy; only the boundary moves.
+const zoneRaw = raw('frontend/src/pages/partner/pipeline/NegotiationsZone.jsx');
 const worker = raw('cloudflare-worker/src/routes/partner_pipeline.ts');
 const filters = read('frontend/src/workspaces/partnerZoneFilters.js');
 const actions = read('frontend/src/workspaces/partnerZoneActions.js');
@@ -104,7 +109,7 @@ test('the lanes are the board, and the count is a count', () => {
   // which is what a computed-but-undrawn narrowing looks like from outside the
   // React model. `profile_zone_filters.test.mjs` now holds that rule for every
   // zone in every licence; this pins it for the board it was found on.
-  const lane = between(zone, 'const cards = visible.filter', '{/* ══ TERMS IN PLAY');
+  const lane = between(zoneRaw, 'const cards = visible.filter', '{/* ══ TERMS IN PLAY');
   assert.ok(!/const cards = open\.filter/.test(zone),
     'the lanes went back to drawing the unnarrowed board, so the chips select nothing');
   assert.ok(!/\/ 5|\/5/.test(lane), 'the zone prints the canvas’s own WIP limit as this firm’s');

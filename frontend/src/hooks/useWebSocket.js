@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { reportError } from '../lib/log';
 
 /**
  * useWebSocket — auto-reconnecting WebSocket hook for the StudioOS realtime API.
@@ -87,7 +88,7 @@ export function useWebSocket(path, { enabled = true, onMessage } = {}) {
         // Swallow pongs so consumers don't see them.
         if (data && data.type === 'pong') return;
         try { onMessageRef.current(data); } catch (e) {
-          console.error('[ws] onMessage handler threw', e);
+          reportError('ws:onMessage', e);
         }
       };
 

@@ -761,13 +761,16 @@ function AdminAggregate() {
 
   const load = async (d = days) => {
     setErr(null);
+    // D332 — a request failure of ANY kind used to be rendered as
+    // `insufficient_data: true`, the exact shape the worker's own /aggregate
+    // sends for a genuinely small cohort (see its catch block, which already
+    // answers 200 with that shape on an internal read failure). So a request
+    // that never reached the worker at all — a 404 from a stale deploy, a
+    // network failure — read on screen as "not enough people have checked in
+    // yet", which is a claim about the cohort, not about the read. The
+    // worker's own response is trusted as-is; any thrown error goes to `err`.
     try { setData(await api.wellbeingAggregate(d)); }
-    catch (e) {
-      const msg = (e?.message || '').toLowerCase();
-      if (e?.status === 404 || msg === 'not found') {
-        setData({ insufficient_data: true, cohort_size: 0, submissions: 0, window_days: d, min_cohort: 0, averages: {} });
-      } else { setErr(e.message || 'Failed'); }
-    }
+    catch (e) { setErr(e?.message || 'Failed'); }
   };
   useEffect(() => { load(days); /* eslint-disable-next-line */ }, [days]);
 
@@ -852,16 +855,18 @@ export default function WellbeingPage() {
 
   const load = async () => {
     setLoading(true); setErr(null);
-    const quiet404 = (fallback) => (e) => {
-      const msg = (e?.message || '').toLowerCase();
-      if (e?.status === 404 || msg === 'not found') return fallback;
-      throw e;
-    };
+    // D332 — a failed read used to be quietly rewritten into the same shape
+    // as a genuinely empty one (`quiet404`), so a broken `/resources` or
+    // `/daily` route rendered exactly like "no resources yet" / "nothing
+    // logged yet" instead of a failure. Both routes are unconditionally
+    // mounted for a non-investor sign-in, so a 404 here is a real defect,
+    // not a shape this page should absorb — it now reaches the outer catch
+    // like any other failed read.
     try {
       const [res, d] = await Promise.all([
-        api.wellbeingResources().catch(quiet404({ resources: [] })),
+        api.wellbeingResources(),
         canCheckIn
-          ? api.wellbeingDaily(30).catch(quiet404({ pulses: [], submitted_today: false }))
+          ? api.wellbeingDaily(30)
           : Promise.resolve({ pulses: [], submitted_today: false }),
       ]);
       setResources(res.resources || []);

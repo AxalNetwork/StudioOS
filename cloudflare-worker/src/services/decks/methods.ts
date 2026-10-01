@@ -77,8 +77,26 @@ export type DeckMethodSpec = {
   slide_count: number;
   /** Premium templates require Growth tier; free tier sees a paywall. */
   premium?: boolean;
-  /** Suggested category badge in the picker. */
-  category: 'fundraising' | 'commercial' | 'event' | 'narrative';
+  /**
+   * Who the deck is for — which is what every consumer of this field routes on.
+   *
+   * THE PICKER BADGE IS NOT THE ONLY READER, AND #207 IS WHAT THAT COST.
+   * `PitchDeckPage.jsx` prefers this value over the frontend registry's
+   * (`m.category || tpl.category`) for both the card label and the filter chips,
+   * and `frontend/src/lib/shareDeckAudience.js` maps a category to the flow a
+   * share link offers after the NDA: `commercial` asks for feedback,
+   * `fundraising` and `event` open the deal pack.
+   *
+   * `'narrative'` USED TO BE A FOURTH VALUE HERE and it described a STYLE, not
+   * an audience — which is why it could not be routed. It filed
+   * `sequoia_classic` (the template founders raise money with) and
+   * `narrative_brand` beside each other while the registry called them
+   * `fundraising` and `commercial`, so those two cards displayed "NARRATIVE" in
+   * the picker and fell out of every filter chip. Retired in #207 (D102);
+   * `frontend/test/deck_category_sources_agree.test.mjs` now holds this table,
+   * the registry and the FastAPI dev mirror to one answer.
+   */
+  category: 'fundraising' | 'commercial' | 'event';
   /** Task #6 — brand kit theming tier. */
   brandTheme: BrandTheme;
   fields_from_project: string[];
@@ -261,7 +279,8 @@ const closingSlide: DeckSlideSpec = {
 };
 
 // ---------------------------------------------------------------------
-// 12 method specs.
+// 13 method specs. (Said 12 until #207 counted them — `axal_spinout_demoday`
+// is the thirteenth and has been since Task #15.)
 // ---------------------------------------------------------------------
 export const DECK_METHODS: DeckMethodSpec[] = [
   {
@@ -293,7 +312,10 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     prompt_hint: 'Narrative-driven 12-slide investor deck. Future → Shift → Broken → Insight → Opportunity → Solution → Product → Why We Win → Traction → Flywheel → Team → Vision.',
     best_for: 'Seed / Series A with a clear narrative + sizable market.',
     slide_count: 12,
-    category: 'narrative',
+    // `narrative` until #207. The narrative is the deck's STYLE; the audience is
+    // an investor, which is what the category answers and what the registry has
+    // always said.
+    category: 'fundraising',
     brandTheme: 'off',
     fields_from_project: ['name', 'tagline', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'som', 'users_count', 'revenue', 'funding_needed', 'use_of_funds', 'sector', 'contact_email'],
     fields_from_financials: ['mrr', 'mrr_usd', 'runway_months', 'ltv', 'ltv_cac_ratio', 'avg_monthly_burn', 'breakeven_month', 'mom_growth_pct', 'nrr_pct'],
@@ -768,7 +790,9 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     prompt_hint: 'Story-led brand deck. Heavy on imagery + tone.',
     best_for: 'Mission-driven companies; brand-first founders.',
     slide_count: 15, premium: true,
-    category: 'narrative',
+    // `narrative` until #207 — a brand deck goes to customers and partners, so
+    // its share link asks for feedback rather than opening a deal pack.
+    category: 'commercial',
     brandTheme: 'full',
     fields_from_project: ['name', 'tagline', 'description', 'problem_statement', 'solution', 'why_now'],
     fields_from_financials: [],

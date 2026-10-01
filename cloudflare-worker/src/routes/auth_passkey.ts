@@ -24,6 +24,7 @@ import {
 import { isoBase64URL } from '@simplewebauthn/server/helpers';
 import type { Env } from '../types';
 import { getSQL } from '../db';
+import { recordSecurityEvent } from '../services/securityEvents';
 import {
   createJWT, requireAuth, setAuthCookies, generateCsrfToken,
   revokeStaleCrossIdentitySession,
@@ -38,7 +39,7 @@ const CHALLENGE_TTL_MIN = 5;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 function err(c: any, label: string, friendly: string, e: unknown, status = 500) {
-  console.error(`[PASSKEY:${label}]`, e);
+  console.error('[PASSKEY]', label, e);
   return c.json({ error: friendly }, status);
 }
 
@@ -71,7 +72,7 @@ async function storeChallenge(env: Env, challenge: string, userId: number | null
 async function claimChallenge(env: Env, challenge: string, kind: 'registration' | 'authentication') {
   return env.DB.prepare(
     `UPDATE webauthn_challenges SET used_at = CURRENT_TIMESTAMP
-       WHERE challenge = ? AND kind = ? AND used_at IS NULL AND expires_at > CURRENT_TIMESTAMP
+       WHERE challenge = ? AND kind = ? AND used_at IS NULL AND datetime(expires_at) > datetime('now')
        RETURNING challenge, user_id`,
   ).bind(challenge, kind).first<{ challenge: string; user_id: number | null }>();
 }
@@ -223,6 +224,13 @@ passkey.post('/auth-options', async (c) => {
 passkey.post('/auth-verify', async (c) => {
   try {
     await ensureAuthBlockersSchema(c.env);
+    // D200 — every refusal of a presented passkey is recorded in
+    // security_events; the status it already answered is unchanged. Most of
+    // these know no address yet (the credential resolves to an account only
+    // once it is recognised), so the row carries the network and, where the
+    // credential named one, the account id.
+    const passkeyRefuse = (detail: string, subject?: { userId?: number; email?: string }) =>
+      recordSecurityEvent(c.env, { kind: 'signin', factor: 'passkey', outcome: 'refused', detail, ip: c.req.header('cf-connecting-ip'), ...subject });
     const body = await readJson(c);
     const response = body?.response;
     if (!response?.id) return c.json({ error: 'Missing passkey response' }, 400);
@@ -230,7 +238,7 @@ passkey.post('/auth-verify', async (c) => {
     const challenge = challengeFromResponse(response);
     if (!challenge) return c.json({ error: 'Malformed passkey response' }, 400);
     const claimed = await claimChallenge(c.env, challenge, 'authentication');
-    if (!claimed) return c.json({ error: 'Sign-in challenge expired. Please try again.' }, 400);
+    if (!claimed) { await passkeyRefuse('challenge_expired'); return c.json({ error: 'Sign-in challenge expired. Please try again.' }, 400); }
 
     // Resolve the credential the authenticator used.
     const stored = await c.env.DB.prepare(
@@ -238,9 +246,10 @@ passkey.post('/auth-verify', async (c) => {
     ).bind(String(response.id)).first<{
       id: number; user_id: number; credential_id: string; public_key: string; counter: number; transports: string | null;
     }>();
-    if (!stored) return c.json({ error: 'Unrecognized passkey.' }, 401);
+    if (!stored) { await passkeyRefuse('unrecognised_credential'); return c.json({ error: 'Unrecognized passkey.' }, 401); }
     // If the challenge was scoped to a user (targeted login), it must match.
     if (claimed.user_id != null && Number(claimed.user_id) !== Number(stored.user_id)) {
+      await passkeyRefuse('account_mismatch', { userId: Number(stored.user_id) });
       return c.json({ error: 'Passkey does not match this account.' }, 401);
     }
 
@@ -260,9 +269,10 @@ passkey.post('/auth-verify', async (c) => {
         requireUserVerification: false,
       });
     } catch (e) {
+      await passkeyRefuse('verify_error', { userId: Number(stored.user_id) });
       return err(c, 'auth-verify', 'We could not verify that passkey. Please try again.', e, 401);
     }
-    if (!verification.verified) return c.json({ error: 'Passkey verification failed.' }, 401);
+    if (!verification.verified) { await passkeyRefuse('not_verified', { userId: Number(stored.user_id) }); return c.json({ error: 'Passkey verification failed.' }, 401); }
 
     // Advance the signature counter (clone-detection) + stamp last use.
     try {
@@ -276,9 +286,9 @@ passkey.post('/auth-verify', async (c) => {
     let user: any;
     try {
       const rows = await sql`SELECT * FROM users WHERE id = ${stored.user_id}`;
-      if (!rows.length) { await sql.end(); return c.json({ error: 'Account not found.' }, 401); }
+      if (!rows.length) { await sql.end(); await passkeyRefuse('account_not_found', { userId: Number(stored.user_id) }); return c.json({ error: 'Account not found.' }, 401); }
       user = rows[0];
-      if (Number(user.is_active ?? 1) === 0) { await sql.end(); return c.json({ error: 'Your Axal account is inactive. Contact support.' }, 403); }
+      if (Number(user.is_active ?? 1) === 0) { await sql.end(); await passkeyRefuse('inactive', { userId: Number(user.id), email: String(user.email) }); return c.json({ error: 'Your Axal account is inactive. Contact support.' }, 403); }
 
       const jti = crypto.randomUUID();
       const jwtToken = await createJWT(c.env, user.id, user.email, user.role, undefined, jti);

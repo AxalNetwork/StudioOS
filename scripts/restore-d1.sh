@@ -4,8 +4,26 @@
 #
 # Operator-runnable D1 restore. Walks the user through importing a
 # nightly backup file (`backup-YYYY-MM-DD.sql`) into a target D1
-# database. The default target is the `--preview` DB so you can verify
-# the restore before flipping prod.
+# database.
+#
+# READ documentation/operations/D1_RECOVERY.md FIRST. This is the SECOND
+# recovery path, not the first: `wrangler d1 time-travel restore` rewinds the
+# live database in place to any instant in the last 30 days, loses far less,
+# and creates nothing. Use this script only for damage older than that window,
+# or for a database that is gone rather than wrong.
+#
+# TWO THINGS ABOUT THE DEFAULT TARGET (D167):
+#
+#   1. `studioos-db-preview` DOES NOT EXIST in the account — measured, not
+#      assumed. wrangler resolves a target by NAME, so this default does not
+#      fail on the `REPLACE_WITH_PREVIEW_D1_ID` placeholder still sitting in
+#      wrangler.toml; it fails because the database was never created. Pass an
+#      explicit target you have just created.
+#
+#   2. CREATE IT WITH `--jurisdiction eu`. Production is EU-resident
+#      account-side and that fact is in no config file, so a database created
+#      without the flag is not EU-resident and cannot be moved afterwards.
+#      Verify with `wrangler d1 info <db> --json` before importing.
 #
 # Required env (or interactive prompts):
 #   CLOUDFLARE_ACCOUNT_ID   — accountId from `wrangler whoami`
@@ -21,7 +39,7 @@
 #
 # Examples:
 #   scripts/restore-d1.sh ./backup-2026-05-20.sql studioos-db-restore
-#   scripts/restore-d1.sh r2://studioos-backups/d1/backup-2026-05-20.sql studioos-db-preview
+#   scripts/restore-d1.sh r2://studioos-backups/d1/studioos-db/backup-2026-05-20.sql studioos-db-preview
 #
 # WARNING: This imports into the TARGET database. It does NOT truncate
 # existing tables first — apply against an EMPTY DB (e.g. a freshly
@@ -37,7 +55,7 @@ BUCKET="${BACKUP_BUCKET:-studioos-backups}"
 if [[ -z "${BACKUP_ARG}" ]]; then
   echo "usage: $0 <backup-file-or-r2-key> [target-db-name]" >&2
   echo "       $0 ./backup-2026-05-20.sql studioos-db-restore" >&2
-  echo "       $0 r2://studioos-backups/d1/backup-2026-05-20.sql studioos-db-preview" >&2
+  echo "       $0 r2://studioos-backups/d1/studioos-db/backup-2026-05-20.sql studioos-db-preview" >&2
   exit 2
 fi
 

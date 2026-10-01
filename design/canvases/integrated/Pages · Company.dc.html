@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeeec;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}
+    .ab{padding:40px 46px 32px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px;flex-wrap:wrap}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:rgba(24,24,27,.6);max-width:1040px;margin:0 0 18px}
+    .mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .eye{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+    .nm{font-size:13px;font-weight:800;letter-spacing:-.01em}
+    .body{font-size:12px;line-height:1.55}
+    .pill{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;line-height:1.5}
+    .nr{display:inline-flex;font-size:10px;font-weight:700;border-radius:4px;padding:2px 7px;white-space:nowrap}
+    .card{border-radius:14px;padding:16px 18px;box-sizing:border-box}
+    .sel{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;padding:6px 10px 6px 12px;border-radius:9px;cursor:pointer}
+    .inp{width:100%;box-sizing:border-box;border-radius:9px;padding:9px 12px;font-size:12.5px;font-family:inherit}
+    .btn{font-size:11.5px;font-weight:700;padding:7px 13px;border-radius:8px;cursor:pointer;white-space:nowrap}
+    .nav{display:flex;align-items:center;gap:9px;padding:7px 14px;font-size:12px;font-weight:600;border-radius:8px}
+    .zp{font-size:11px;font-weight:700;padding:5px 12px;border-radius:99px;white-space:nowrap}
+    .chip{display:inline-flex;font-size:11px;font-weight:600;padding:3px 9px;border-radius:99px;white-space:nowrap}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;text-align:left;padding:0 0 8px}
+    .td{font-size:11.5px;padding:9px 0;border-top:1px solid}
+    .cap{font-size:11px;color:rgba(24,24,27,.58);line-height:1.5;margin-top:9px}
+    .ph{width:390px;min-width:390px;flex:none;border-radius:34px;box-shadow:0 4px 22px rgba(24,24,27,.16),0 0 0 9px #1a1a1c;overflow:hidden}
+  </style>
+</helmet>
+
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="4">
+  <section class="ab" id="{{ b.id }}">
+    <div class="ab-hd"><a class="ab-id" href="#{{ b.id }}">{{ b.badge }}</a><span class="ab-nm">{{ b.title }}</span><span class="mono" style="font-size:11px;color:#615c6e">/research/companies/{{ b.an.id }}/{{ b.c.id }}</span></div>
+    <div class="ab-sub">{{ b.blurb }}</div>
+
+    <!-- ══ DESKTOP 1280 ══ -->
+    <sc-if value="{{ b.desktop }}">
+      <div style="width:1280px;min-width:1280px;display:flex;border-radius:14px;overflow:hidden;box-shadow:0 2px 14px rgba(24,24,27,.08);background:{{ b.t.ground }};position:relative">
+        <div style="width:200px;flex:none;background:{{ b.t.card }};border-right:1px solid {{ b.t.hair }};padding:16px 10px">
+          <div style="display:flex;align-items:center;gap:8px;padding:4px 14px 16px"><img src="../assets/axal-dossier-mark.png" alt="Axal VC" width="16" height="16" style="display:block;object-fit:contain"><span style="font-size:12px;font-weight:800;letter-spacing:-.01em;color:{{ b.t.ink }}">StudioOS</span></div>
+          <sc-for list="{{ b.nav }}" as="n" hint-placeholder-count="9"><div class="nav" style="{{ n.style }}">{{ n.label }}</div></sc-for>
+        </div>
+        <div style="flex:1;min-width:0;padding:22px 30px 30px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:{{ b.t.muted }};flex-wrap:wrap"><span>Research</span><span>‹</span><span>Companies</span><span>‹</span><span>{{ b.an.title }}</span><span>‹</span><span style="color:{{ b.t.ink }};font-weight:700">{{ b.c.name }}</span></div>
+            <span class="pill" style="background:#f0fdf6;color:#065f46;border:1px solid #a7f3d0;letter-spacing:.05em">COLLECTION</span>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:12px"><sc-for list="{{ b.zones }}" as="z" hint-placeholder-count="5"><span class="zp" style="{{ z.style }}">{{ z.t }}</span></sc-for></div>
+
+          <!-- 1 · header -->
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:16px">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap">
+              <div style="min-width:0">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span class="sel" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.t.ink }}">{{ b.catLabel }}<span style="color:{{ b.t.muted }}">⌄</span></span>
+                  <span class="pill" style="{{ b.originStyle }}">{{ b.c.origin }}</span>
+                  <sc-if value="{{ b.relPill }}"><span class="pill mono" style="{{ b.relStyle }}">{{ b.relPill }}</span></sc-if>
+                  <sc-if value="{{ b.noRel }}"><span class="nr" style="{{ b.t.nr }}">Relevance not recorded</span></sc-if>
+                </div>
+                <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px"><h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em;color:{{ b.t.ink }};border-bottom:1px dashed {{ b.t.hair }}">{{ b.c.name }}</h1><span class="body" style="color:{{ b.t.muted }}">editable</span></div>
+                <div class="body" style="color:{{ b.t.muted }};margin-top:4px">{{ b.subtitle }}</div>
+                <div style="margin-top:8px">
+                  <sc-if value="{{ b.c.url }}"><a href="{{ b.c.url }}" style="font-size:12px;font-weight:600;color:{{ b.violet }};text-decoration:underline">{{ b.c.domain }} →</a><span class="mono" style="font-size:10px;color:{{ b.t.muted }};margin-left:8px">placeholder domain</span></sc-if>
+                  <sc-if value="{{ b.noUrl }}"><span class="nr" style="{{ b.t.nr }}">Not recorded</span><span class="body" style="color:{{ b.t.muted }};margin-left:8px">no URL — nothing here will invent one</span></sc-if>
+                </div>
+                <div class="body" style="color:{{ b.keepInk }};margin-top:8px">{{ b.keepNote }}</div>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start">
+                <span class="btn" style="background:#7c3aed;color:#fff">Save</span>
+                <sc-if value="{{ b.c.url }}"><span class="btn" style="border:1px solid {{ b.t.hair }};color:{{ b.t.ink }};background:{{ b.t.chipBg }}">Crawl site</span></sc-if>
+                <span class="btn" style="border:1px solid {{ b.dangerHair }};color:{{ b.danger }};background:transparent">Remove from analysis</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2 · tiles -->
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px">
+            <sc-for list="{{ b.tiles }}" as="tl" hint-placeholder-count="4">
+              <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }}">
+                <div class="eye" style="color:{{ b.t.muted }}">{{ tl.k }}</div>
+                <sc-if value="{{ tl.nr }}"><div style="margin-top:8px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+                <sc-if value="{{ tl.v }}"><div class="mono" style="font-size:17px;font-weight:700;letter-spacing:-.02em;margin-top:6px;color:{{ tl.ink }}">{{ tl.v }}</div></sc-if>
+                <div class="body" style="color:{{ b.t.muted }};margin-top:4px">{{ tl.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- 3 · summary + 4 · details -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }}">
+              <div style="display:flex;align-items:baseline;justify-content:space-between"><span class="eye" style="color:{{ b.t.muted }}">Summary</span><span class="btn" style="background:#7c3aed;color:#fff">Save</span></div>
+              <div class="inp" style="margin-top:10px;min-height:96px;background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.sumInk }}">{{ b.sumText }}</div>
+              <sc-if value="{{ b.noSum }}"><div style="margin-top:8px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+            </div>
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }}">
+              <div class="eye" style="color:{{ b.t.muted }}">Details</div>
+              <div style="display:grid;gap:11px;margin-top:10px">
+                <sc-for list="{{ b.details }}" as="d" hint-placeholder-count="4">
+                  <div>
+                    <div style="display:flex;align-items:baseline;gap:8px"><span class="eye" style="color:{{ b.t.muted }};font-size:9px">{{ d.k }}</span><sc-if value="{{ d.sample }}"><span class="mono" style="font-size:9px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:3px;padding:0 5px">SAMPLE</span></sc-if></div>
+                    <sc-if value="{{ d.chips }}"><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px"><sc-for list="{{ d.chips }}" as="ch" hint-placeholder-count="3"><span class="chip" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.t.ink }}">{{ ch }}</span></sc-for></div></sc-if>
+                    <sc-if value="{{ d.text }}"><div class="body" style="color:{{ b.t.ink }};margin-top:4px">{{ d.text }}</div></sc-if>
+                    <sc-if value="{{ d.nr }}"><div style="margin-top:5px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+
+          <!-- 5 · sources -->
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:12px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><span class="eye" style="color:{{ b.t.muted }}">Sources</span><span class="mono" style="font-size:11px;color:{{ b.t.muted }}">{{ b.srcCount }}</span></div>
+            <sc-if value="{{ b.hasSources }}">
+              <div style="display:grid;grid-template-columns:.8fr 1.6fr 1.6fr 1fr .6fr;gap:12px;margin-top:10px">
+                <span class="th" style="color:{{ b.t.muted }}">Kind</span><span class="th" style="color:{{ b.t.muted }}">Title</span><span class="th" style="color:{{ b.t.muted }}">URL</span><span class="th" style="color:{{ b.t.muted }}">Fetched</span><span class="th" style="color:{{ b.t.muted }}">HTTP</span>
+              </div>
+              <sc-for list="{{ b.c.sources }}" as="s" hint-placeholder-count="2">
+                <div style="display:grid;grid-template-columns:.8fr 1.6fr 1.6fr 1fr .6fr;gap:12px;align-items:center">
+                  <span class="td" style="border-color:{{ b.t.hair }}"><span class="chip" style="{{ s.kindStyle }}">{{ s.kind }}</span></span>
+                  <span class="td" style="border-color:{{ b.t.hair }};color:{{ b.t.ink }};font-weight:600">{{ s.title }}</span>
+                  <span class="td mono" style="border-color:{{ b.t.hair }};color:{{ b.violet }};font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.url }}</span>
+                  <span class="td mono" style="border-color:{{ b.t.hair }};color:{{ b.t.muted }};font-size:10.5px">{{ s.fetched_at }}</span>
+                  <span class="td mono" style="border-color:{{ b.t.hair }};color:{{ s.statusInk }};font-size:10.5px;font-weight:700">{{ s.status }}</span>
+                </div>
+              </sc-for>
+            </sc-if>
+            <sc-if value="{{ b.noSources }}">
+              <div style="border:1.5px dashed {{ b.t.hair }};border-radius:12px;padding:18px 20px;margin-top:10px">
+                <div class="nm" style="color:{{ b.t.ink }}">No source on this company</div>
+                <div class="body" style="color:{{ b.t.body }};margin-top:5px;max-width:620px">A competitor with no URL is a name. Fetch is a controlled public GET of one URL, not a database. Do not invent a homepage to look complete.</div>
+                <div style="display:flex;gap:8px;margin-top:12px;max-width:520px"><div class="inp mono" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.t.muted }};font-size:12px">https://</div><span class="btn" style="background:#7c3aed;color:#fff;align-self:center">Add URL</span></div>
+                <div class="body" style="color:{{ b.t.muted }};margin-top:6px;font-size:11px">POST /competitors/fetch needs a url. This is that field, nothing more.</div>
+              </div>
+            </sc-if>
+          </div>
+
+          <!-- 6 · signals (omitted when empty) -->
+          <sc-if value="{{ b.hasSignals }}">
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:12px">
+              <div class="eye" style="color:{{ b.t.muted }}">Signals</div>
+              <div style="display:grid;gap:8px;margin-top:10px">
+                <sc-for list="{{ b.c.signals }}" as="g" hint-placeholder-count="2">
+                  <div style="display:flex;align-items:baseline;gap:9px"><span class="pill" style="{{ g.typeStyle }}">{{ g.signal_type }}</span><span class="body" style="color:{{ b.t.ink }}"><strong>{{ g.label }}</strong> — {{ g.detail }}</span></div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- 7 · parent analysis -->
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div>
+              <div class="eye" style="color:{{ b.t.muted }}">In this analysis</div>
+              <div class="nm" style="color:{{ b.t.ink }};margin-top:5px">{{ b.an.title }}</div>
+              <div class="body" style="color:{{ b.t.muted }};margin-top:3px"><span class="pill" style="background:{{ b.t.chipBg }};color:{{ b.t.ink }};border:1px solid {{ b.t.hair }}">{{ b.an.mode }}</span><span style="margin-left:8px">updated {{ b.an.updated_at }}</span><span style="margin-left:8px">· {{ b.othersNote }}</span></div>
+            </div>
+            <a href="#" style="font-size:12px;font-weight:700;color:{{ b.violet }}">‹ Back to analysis</a>
+          </div>
+
+          <!-- 8 · zonedraft -->
+          <div style="border:1px solid #ddd6fe;background:{{ b.t.draftBg }};border-radius:14px;padding:14px 18px;margin-top:12px">
+            <div style="display:flex;align-items:center;gap:9px"><span class="pill" style="background:#7c3aed;color:#fff;letter-spacing:.06em">ZONEDRAFT</span><span class="nm" style="color:{{ b.t.ink }}">Company · what we know</span></div>
+            <div class="body" style="color:{{ b.t.ink }};margin-top:9px">{{ b.draft }}</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap">
+              <span class="btn" style="{{ b.draftBtn }}">Draft</span><span class="btn" style="{{ b.acceptBtn }}">Accept</span><span class="btn" style="color:{{ b.t.muted }};padding:7px 6px">Discard</span>
+              <span class="body" style="color:{{ b.t.muted }};margin-left:auto">Accept writes the summary. It does not add sources.</span>
+            </div>
+          </div>
+
+          <!-- 9 · stated limit -->
+          <div style="background:{{ b.t.sunk }};border:1px solid {{ b.t.hair }};border-radius:14px;padding:14px 18px;margin-top:12px">
+            <div class="eye" style="color:{{ b.t.muted }}">This is not a company you track</div>
+            <div class="body" style="color:{{ b.t.body }};margin-top:6px;max-width:760px">Direct and adjacent describe how they sit in this analysis. Nothing here stores whether they are a client, a prospect, or a comparable. Headcount and funding are not fields. A missing source is Not recorded, not Stale.</div>
+          </div>
+        </div>
+
+        <!-- REMOVE confirm overlay -->
+        <sc-if value="{{ b.removing }}">
+          <div style="position:absolute;inset:0;background:rgba(24,24,27,.42);display:flex;align-items:center;justify-content:center">
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};width:440px;box-shadow:0 20px 60px rgba(24,24,27,.3)">
+              <div class="nm" style="color:{{ b.t.ink }};font-size:15px">Remove from this analysis?</div>
+              <div class="body" style="color:{{ b.t.body }};margin-top:8px">A re-run will not bring a manual row back unless you add it again.</div>
+              <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><span class="btn" style="border:1px solid {{ b.t.hair }};color:{{ b.t.ink }}">Keep it</span><span class="btn" style="background:#b91c1c;color:#fff">Remove</span></div>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <!-- ══ MOBILE 390 ══ -->
+    <sc-if value="{{ b.mobile }}">
+      <div class="ph" style="background:{{ b.t.ground }}">
+        <div style="height:44px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 6px;font-size:11px;font-weight:700;background:{{ b.t.card }};color:{{ b.t.ink }}"><span class="mono">9:41</span><span style="font-size:10px;letter-spacing:.06em">▮▮▮ ◗</span></div>
+        <div style="background:{{ b.t.card }};padding:4px 16px 12px;border-bottom:1px solid {{ b.t.hair }}">
+          <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:{{ b.t.muted }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="font-weight:700;color:#6d28d9">‹ {{ b.an.title }}</span></div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px"><span class="pill" style="background:{{ b.t.chipBg }};color:{{ b.t.ink }};border:1px solid {{ b.t.hair }}">{{ b.catLabel }}</span><span class="pill" style="{{ b.originStyle }}">{{ b.c.origin }}</span><sc-if value="{{ b.relPill }}"><span class="pill mono" style="{{ b.relStyle }}">{{ b.relPill }}</span></sc-if></div>
+          <h1 style="margin:6px 0 0;font-size:21px;font-weight:800;letter-spacing:-.024em;color:{{ b.t.ink }}">{{ b.c.name }}</h1>
+          <div class="body" style="color:{{ b.t.muted }};margin-top:3px;font-size:11px">{{ b.subtitle }}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:7px;flex-wrap:wrap"><span class="pill" style="background:#f0fdf6;color:#065f46;border:1px solid #a7f3d0;letter-spacing:.05em">COLLECTION</span><sc-if value="{{ b.c.url }}"><a href="{{ b.c.url }}" style="font-size:11.5px;font-weight:600;color:{{ b.violet }};text-decoration:underline">{{ b.c.domain }} →</a></sc-if><sc-if value="{{ b.noUrl }}"><span class="nr" style="{{ b.t.nr }}">URL not recorded</span></sc-if></div>
+          <div class="body" style="color:{{ b.keepInk }};margin-top:7px;font-size:11px">{{ b.keepNote }}</div>
+        </div>
+        <div style="padding:12px 14px 22px;display:grid;gap:10px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <sc-for list="{{ b.tiles }}" as="tl" hint-placeholder-count="4">
+              <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:11px 12px">
+                <div class="eye" style="color:{{ b.t.muted }};font-size:9px">{{ tl.k }}</div>
+                <sc-if value="{{ tl.nr }}"><div style="margin-top:6px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+                <sc-if value="{{ tl.v }}"><div class="mono" style="font-size:14px;font-weight:700;letter-spacing:-.02em;margin-top:5px;color:{{ tl.ink }}">{{ tl.v }}</div></sc-if>
+                <div class="body" style="color:{{ b.t.muted }};margin-top:3px;font-size:10.5px">{{ tl.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between"><span class="eye" style="color:{{ b.t.muted }}">Summary</span><span class="btn" style="background:#7c3aed;color:#fff;padding:5px 11px">Save</span></div>
+            <div class="inp" style="margin-top:8px;min-height:70px;background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.sumInk }};font-size:12px">{{ b.sumText }}</div>
+            <sc-if value="{{ b.noSum }}"><div style="margin-top:7px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+          </div>
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px">
+            <div class="eye" style="color:{{ b.t.muted }}">Details</div>
+            <div style="display:grid;gap:10px;margin-top:8px">
+              <sc-for list="{{ b.details }}" as="d" hint-placeholder-count="4">
+                <div>
+                  <div style="display:flex;align-items:baseline;gap:8px"><span class="eye" style="color:{{ b.t.muted }};font-size:9px">{{ d.k }}</span><sc-if value="{{ d.sample }}"><span class="mono" style="font-size:9px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:3px;padding:0 5px">SAMPLE</span></sc-if></div>
+                  <sc-if value="{{ d.chips }}"><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px"><sc-for list="{{ d.chips }}" as="ch" hint-placeholder-count="3"><span class="chip" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.t.ink }}">{{ ch }}</span></sc-for></div></sc-if>
+                  <sc-if value="{{ d.text }}"><div class="body" style="color:{{ b.t.ink }};margin-top:4px;font-size:11.5px">{{ d.text }}</div></sc-if>
+                  <sc-if value="{{ d.nr }}"><div style="margin-top:5px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between"><span class="eye" style="color:{{ b.t.muted }}">Sources</span><span class="mono" style="font-size:10.5px;color:{{ b.t.muted }}">{{ b.srcCount }}</span></div>
+            <sc-if value="{{ b.hasSources }}">
+              <div style="display:grid;gap:8px;margin-top:9px">
+                <sc-for list="{{ b.c.sources }}" as="s" hint-placeholder-count="2">
+                  <div style="border:1px solid {{ b.t.hair }};border-radius:10px;padding:9px 11px">
+                    <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap"><span class="chip" style="{{ s.kindStyle }}">{{ s.kind }}</span><span style="font-size:12px;font-weight:700;color:{{ b.t.ink }}">{{ s.title }}</span><span class="mono" style="font-size:10px;color:{{ s.statusInk }};font-weight:700;margin-left:auto">{{ s.status }}</span></div>
+                    <div class="mono" style="font-size:10px;color:{{ b.violet }};margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.url }}</div>
+                    <div class="mono" style="font-size:10px;color:{{ b.t.muted }};margin-top:2px">fetched {{ s.fetched_at }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ b.noSources }}">
+              <div style="border:1.5px dashed {{ b.t.hair }};border-radius:12px;padding:13px 14px;margin-top:9px">
+                <div class="nm" style="color:{{ b.t.ink }};font-size:12.5px">No source on this company</div>
+                <div class="body" style="color:{{ b.t.body }};margin-top:4px;font-size:11px">A competitor with no URL is a name. Fetch is a controlled public GET of one URL, not a database. Do not invent a homepage to look complete.</div>
+                <div style="display:flex;gap:7px;margin-top:10px"><div class="inp mono" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.t.muted }};font-size:11.5px;padding:8px 10px">https://</div><span class="btn" style="background:#7c3aed;color:#fff;align-self:center;padding:7px 11px">Add URL</span></div>
+              </div>
+            </sc-if>
+          </div>
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px">
+            <div class="eye" style="color:{{ b.t.muted }}">In this analysis</div>
+            <div class="nm" style="color:{{ b.t.ink }};margin-top:5px">{{ b.an.title }}</div>
+            <div class="body" style="color:{{ b.t.muted }};margin-top:3px;font-size:11px">{{ b.an.mode }} · updated {{ b.an.updated_at }} · {{ b.othersNote }}</div>
+            <a href="#" style="display:block;font-size:12px;font-weight:700;color:{{ b.violet }};margin-top:8px">‹ Back to analysis</a>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+    <div class="cap" style="width:{{ b.capW }}">{{ b.cap }}</div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    // ══ A candidate is a row hanging off one analysis: it has a category (how it sits in THIS
+    // run), an origin (how it got here) and a relevance score that may be blank. It has no
+    // relationship, no headcount, no funding — those are not fields, so nothing draws them. ══
+    const CAT = { direct:'Direct', adjacent:'Adjacent' };
+    const ORIGIN = {
+      known:['#f4f4f6','#52525b','#e4e4e8'], discovered:['#eef2ff','#3730a3','#c7d2fe'], manual:['#f5f3ff','#6d28d9','#ddd6fe'] };
+    const KIND = { homepage:['#f4f4f6','#52525b','#e4e4e8'], pricing:['#fffbeb','#92400e','#fde68a'], features:['#eef2ff','#3730a3','#c7d2fe'],
+      about:['#f4f4f6','#52525b','#e4e4e8'], news:['#f0fdf6','#065f46','#a7f3d0'], careers:['#fdf4ff','#86198f','#f5d0fe'] };
+    const SIG = { pricing:KIND.pricing, hiring:KIND.careers, content:KIND.news, web:KIND.homepage, funding:KIND.features };
+    const pillStyle = (c) => 'background:' + c[0] + ';color:' + c[1] + ';border:1px solid ' + c[2];
+
+    // Every semantic ink is a theme token — violet, ok, warn, danger — so no colour is typed
+    // where it is used. The light values are the platform's; dark lifts each to clear 4.5:1
+    // on gray-900, the same way violet already lifted for nav and zones.
+    const LIGHT = { ground:'#f4f3f7', card:'#fff', hair:'#ececf1', ink:'#18181b', body:'#3f3f46', muted:'#52525b',
+      violet:'#7c3aed', ok:'#047857', warn:'#92400e', danger:'#b91c1c', dangerHair:'#fecaca',
+      chipBg:'#fafafa', sunk:'#f4f3f7', draftBg:'#f5f3ff', nr:'background:#f4f4f6;color:#52525b;border:1px solid #e4e4e8' };
+    const DARK = { ground:'#140c26', card:'#111827', hair:'#374151', ink:'#f4f4f5', body:'#d1d5db', muted:'#9ca3af',
+      violet:'#c4b5fd', ok:'#4ade80', warn:'#fbbf24', danger:'#fca5a5', dangerHair:'#7f1d1d',
+      chipBg:'#0b1220', sunk:'#0f0a1e', draftBg:'#1e1b4b', nr:'background:#1f2937;color:#9ca3af;border:1px solid #374151' };
+
+    const NAV = ['Studio','Validate','Build','Raise','Grow','Network','Research','Trust','Company Settings'];
+    const nav = (t) => NAV.map(l => ({ label:l, style: l === 'Research'
+      ? (t === DARK ? 'background:#1e1b4b;color:#c4b5fd;font-weight:700;box-shadow:inset 2px 0 0 #7c3aed' : 'background:#f5f3ff;color:#6d28d9;font-weight:700;box-shadow:inset 2px 0 0 #7c3aed')
+      : 'color:' + t.muted }));
+    const ZONES = ['Ask','Markets','Companies','Funds','Library'];
+    const zones = (t) => ZONES.map(z => ({ t:z, style: z === 'Companies'
+      ? (t === DARK ? 'background:#1e1b4b;color:#c4b5fd;border:1px solid #4c1d95' : 'background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe')
+      : 'color:' + t.muted + ';border:1px solid transparent' }));
+
+    // ══ One parent analysis, two candidates from it. ══
+    const AN = { id:'an_7f3k', title:'Async workflow tooling — seed', mode:'competitive scan', updated_at:'Sep 18, 2026', candidate_count:6 };
+    const HELIOS = { id:'cc_02', name:'Helios', url:null, domain:null, category:'direct', origin:'manual', relevance_score:null,
+      summary:null, details:{ features:[], pricing:null, positioning:null, traction:null }, sources:[], signals:[] };
+    const LOOM = { id:'cc_05', name:'Loomwright', url:'https://example.com', domain:'example.com', category:'adjacent', origin:'discovered', relevance_score:74,
+      summary:'Positions as a review layer for distributed product teams rather than a task tool. Two of the three public case studies are design-led companies under 40 people.',
+      details:{ features:['Async video review','Threaded comments','Slack sync'], pricing:null,
+        positioning:'“Ship decisions, not meetings.” Sells to the design lead, not the PM.', traction:null },
+      sources:[ { url:'https://example.com/', kind:'homepage', title:'Loomwright — home', status:200, fetched_at:'Sep 17, 2026 09:12' },
+                { url:'https://example.com/pricing', kind:'pricing', title:'Pricing', status:200, fetched_at:'Sep 17, 2026 09:12' } ],
+      signals:[ { signal_type:'pricing', label:'Seat-based tiers', detail:'three tiers on the pricing page, no usage metering' },
+                { signal_type:'hiring', label:'Two GTM roles open', detail:'careers page lists an AE and a partnerships lead' } ] };
+
+    const board = (id, badge, raw, t, kind, extra) => {
+      const c = withTheme(raw, t);
+      const dark = t === DARK;
+      const rel = c.relevance_score;
+      const nSrc = c.sources.length;
+      const manual = c.origin === 'manual';
+      const hasDraftSource = !!(c.summary || nSrc);
+      const dt = c.details;
+      const draft = !hasDraftSource ? 'Add a summary or a source first.'
+        : 'Draft concatenates only what is already here: ' + (c.summary ? 'the summary' : '') + (c.summary && nSrc ? ' and ' : '')
+          + (nSrc ? nSrc + ' source ' + (nSrc === 1 ? 'title' : 'titles') + ' (' + c.sources.map(s => s.title).join(', ') + ')' : '')
+          + '. It adds no source and invents no fact.';
+      return Object.assign({
+        id, badge, c, an: AN, t, desktop: kind === 'desktop', mobile: kind === 'mobile',
+        capW: kind === 'desktop' ? '1280px' : '390px',
+        title: c.name + ' · ' + (kind === 'desktop' ? '1280' : '390') + (dark ? ' · dark' : ''),
+        nav: nav(t), zones: zones(t),
+        catLabel: CAT[c.category], originStyle: pillStyle(ORIGIN[c.origin]),
+        subtitle: CAT[c.category] + ' · ' + c.origin + ' · in “' + AN.title + '”',
+        relPill: rel != null ? rel + ' / 100' : null, noRel: rel == null,
+        relStyle: pillStyle(rel != null && rel >= 70 ? ['#f0fdf6','#065f46','#a7f3d0'] : ['#f4f4f6','#52525b','#e4e4e8']),
+        noUrl: !c.url,
+        keepNote: manual ? 'Kept when this analysis is re-run.' : 'A re-run may replace this row unless you add it again by hand.',
+        keepInk: manual ? t.violet : t.warn,
+        violet: t.violet, danger: t.danger, dangerHair: t.dangerHair,
+        tiles: [
+          { k:'Category', v: CAT[c.category], ink: t.ink, sub:'how they sit in this analysis' },
+          { k:'Origin', v: c.origin, ink: t.ink, sub: manual ? 'typed by hand, kept on re-run' : (c.origin === 'discovered' ? 'found by the scan' : 'named before the scan') },
+          nSrc ? { k:'Sources', v: nSrc + ' fetched', ink: t.ink, sub:'public GETs of one URL each' }
+               : { k:'Sources', nr:true, sub:'a name you are willing to defend without a URL' },
+          rel != null ? { k:'Relevance', v: rel + ' / 100', ink: rel >= 70 ? t.ok : t.ink, sub:'from the scan; blank is not 0' }
+                      : { k:'Relevance', nr:true, sub:'blank, not zero' }
+        ],
+        noSum: !c.summary, sumText: c.summary || 'What this company is, in your words…', sumInk: c.summary ? t.ink : t.muted,
+        // Each detail is independently empty. SAMPLE is stamped only where the fixture typed a
+        // value that a founder did not; pricing is deliberately left Not recorded so the twin state
+        // sits beside the filled ones.
+        details: [
+          dt.features.length ? { k:'Features', chips: dt.features, sample:true } : { k:'Features', nr:true },
+          dt.pricing ? { k:'Pricing', text: dt.pricing, sample:true } : { k:'Pricing', nr:true },
+          dt.positioning ? { k:'Positioning', text: dt.positioning, sample:true } : { k:'Positioning', nr:true },
+          dt.traction ? { k:'Traction', text: dt.traction, sample:true } : { k:'Traction', nr:true }
+        ],
+        hasSources: nSrc > 0, noSources: nSrc === 0, srcCount: nSrc ? nSrc + ' fetched' : 'none',
+        hasSignals: c.signals.length > 0,
+        othersNote: (AN.candidate_count - 1) + ' other competitors in this run',
+        draft, draftBtn: hasDraftSource ? 'background:#7c3aed;color:#fff' : 'background:#c4b5fd;color:#fff;cursor:not-allowed',
+        acceptBtn: 'border:1px solid ' + (dark ? '#4c1d95' : '#ddd6fe') + ';color:' + (dark ? '#c4b5fd' : '#6d28d9') + ';background:transparent',
+        removing:false
+      }, extra || {});
+    };
+    // Joined rows are decorated per board, because statusInk is a theme read and the same
+    // source renders on both a light and a dark board.
+    const withTheme = (c, t) => Object.assign({}, c, {
+      sources: c.sources.map(s => Object.assign({}, s, { kindStyle: pillStyle(KIND[s.kind]), statusInk: s.status === 200 ? t.ok : t.danger })),
+      signals: c.signals.map(g => Object.assign({}, g, { typeStyle: pillStyle(SIG[g.signal_type]) }))
+    });
+
+    const boards = [
+      board('d1','D1',HELIOS,LIGHT,'desktop',{
+        blurb:'Sparse, and mandatory: the row a founder typed by hand. Helios is direct, manual, with no URL, no sources, no relevance and no summary. Every one of those reads Not recorded with its reason, the Sources instrument shows its empty state with the one field the fetch endpoint needs, and Crawl site is absent because there is nothing to crawl.',
+        cap:'The manual origin earns the note "Kept when this analysis is re-run" — a sentence, not a fake tracked switch. Signals is omitted entirely rather than drawn empty.' }),
+      board('d2','D2',LOOM,LIGHT,'desktop',{
+        blurb:'Dense, labelled SAMPLE where the fixture typed a value. Loomwright is adjacent, discovered, relevance 74, with a homepage and a pricing source fetched on a stated date. Pricing is deliberately Not recorded beside the filled details so the twin state is visible — no "$12/seat" is invented from a fetched page.',
+        cap:'Discovered origin earns the amber note that a re-run may replace the row. The parent card links back to the analysis and names five other competitors; it does not embed the matrix.' }),
+      board('d3','D3',HELIOS,LIGHT,'desktop',{ removing:true,
+        blurb:'Remove state. The confirm names the consequence for a manual row exactly: a re-run will not bring it back unless it is added again by hand.',
+        cap:'Destructive action is red and sits right; the safe action is named "Keep it" rather than "Cancel", so the two read as choices about the row rather than about the dialog.' }),
+      board('d4','D4',LOOM,DARK,'desktop',{
+        blurb:'Dark mode of D2. Night well on the ground, gray-900 cards, every surface with its dark pair, nav and zone pills themed. Kind, origin and signal chips keep their hue.',
+        cap:'The COLLECTION badge is an archetype colour and stays as it is; violet accents lift to #c4b5fd on dark.' }),
+      board('m1','M1',HELIOS,LIGHT,'mobile',{
+        blurb:'Mobile 390, sparse. Header with category, origin and the keep-on-rerun note; 2×2 tiles; summary; details; the Sources empty state with its URL field; the parent card.',
+        cap:'The back chevron carries the analysis title, since that is where the row lives.' }),
+      board('m2','M2',LOOM,LIGHT,'mobile',{
+        blurb:'Mobile 390, dense. Sources become cards — kind, title, status on one line, URL and fetch time beneath — because a five-column table does not survive 358px.',
+        cap:'Signals are omitted on mobile to keep the stack to the brief\u2019s six blocks; they remain one tap away on the analysis.' })
+    ];
+
+    return { boards };
+  }
+}
+</script>
+</body></html>

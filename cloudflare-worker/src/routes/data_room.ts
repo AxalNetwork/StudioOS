@@ -4,9 +4,13 @@
  * Mounted at /api/data-room. Schema: migration 184.
  *
  * FOUNDER SIDE (owner of the project)
- *   GET    /:projectUid                       folders + files + grants + recent access
+ *   GET    /:projectUid                       folders + files (each with its download
+ *                                             count) + grants + recent access + the
+ *                                             last seven days counted by action
  *   POST   /:projectUid/folders               create
- *   PATCH  /:projectUid/folders/:uid          rename / re-file / change visibility
+ *   PATCH  /:projectUid/folders/:uid          rename / re-file / change visibility;
+ *                                             `apply_to_contents` carries a visibility
+ *                                             change to every folder and file under it
  *   DELETE /:projectUid/folders/:uid          delete (files inside are orphaned, not lost)
  *   POST   /:projectUid/files                 upload (base64 data URI → R2)
  *   PATCH  /:projectUid/files/:uid            rename / move / change visibility
@@ -18,6 +22,12 @@
  *   GET    /shared                            rooms shared with me
  *   GET    /shared/:projectUid                the room as I may see it
  *   POST   /shared/:projectUid/files/:uid/download   one-time signed URL
+ *
+ * THE LOG (D374). `open_room`, `download`, and `blocked` — a download the NDA
+ * gate refused. A refusal is evidence the founder needs ("who tried to open the
+ * term sheet without signing"), so it is written like the other two. There is
+ * no per-file VIEW: nothing here streams a file except as a download, so a
+ * per-file count is a download count and the page labels it that way.
  *
  * THE GATE. A file is `open` or `nda`. `open` needs an active grant. `nda`
  * needs an active grant AND an active row in `pairwise_ndas` between the
@@ -85,11 +95,11 @@ function activeCompany(c: any, user: any): Promise<number | null> {
 }
 
 /** An active, unexpired grant for this investor on this project, or null. */
-async function activeGrant(env: Env, projectId: number, userId: number): Promise<GrantRow | null> {
+export async function activeGrant(env: Env, projectId: number, userId: number): Promise<GrantRow | null> {
   const row = await env.DB.prepare(
     `SELECT * FROM data_room_grants
       WHERE project_id = ? AND investor_user_id = ? AND status = 'active'
-        AND (expires_at IS NULL OR expires_at > datetime('now'))`,
+        AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))`,
   ).bind(projectId, userId).first<GrantRow>();
   return row || null;
 }
@@ -102,16 +112,16 @@ async function activeGrant(env: Env, projectId: number, userId: number): Promise
  * two-column lookup rather than an OR over both orderings. Checking both ways
  * round would quietly accept a row the rest of the system considers malformed.
  */
-async function ndaActive(env: Env, founderUserId: number, investorUserId: number): Promise<boolean> {
+export async function ndaActive(env: Env, founderUserId: number, investorUserId: number): Promise<boolean> {
   const row = await env.DB.prepare(
     `SELECT 1 FROM pairwise_ndas
       WHERE party_a_user_id = ? AND party_b_user_id = ? AND status = 'active'
-        AND (valid_until IS NULL OR valid_until > datetime('now'))`,
+        AND (valid_until IS NULL OR datetime(valid_until) > datetime('now'))`,
   ).bind(founderUserId, investorUserId).first();
   return !!row;
 }
 
-async function logAccess(env: Env, projectId: number, userId: number, action: string, fileId: number | null) {
+export async function logAccess(env: Env, projectId: number, userId: number, action: string, fileId: number | null) {
   try {
     await env.DB.prepare(
       `INSERT INTO data_room_access_log (project_id, file_id, user_id, action, created_at)
@@ -143,7 +153,7 @@ r.get('/shared', async (c) => {
          FROM data_room_grants g
          JOIN projects p ON p.id = g.project_id
         WHERE g.investor_user_id = ? AND g.status = 'active'
-          AND (g.expires_at IS NULL OR g.expires_at > datetime('now'))
+          AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))
         ORDER BY g.created_at DESC`,
     ).bind(user.id).all<any>();
     return c.json({ items: rows.results || [] });
@@ -213,6 +223,9 @@ r.post('/shared/:projectUid/files/:uid/download', async (c) => {
     // The gate is re-checked HERE, not inherited from the listing. A uid
     // captured while an NDA was live must stop working when it lapses.
     if (file.visibility === 'nda' && !(await ndaActive(c.env, grant.granted_by_user_id, user.id))) {
+      // Logged before the refusal (D374): the founder's activity log filters
+      // Blocked, and an attempt nobody recorded is one they cannot see.
+      await logAccess(c.env, project.id, user.id, 'blocked', file.id);
       return c.json({ detail: 'This file requires a signed NDA' }, 403);
     }
 
@@ -241,9 +254,13 @@ r.get('/:projectUid', async (c) => {
       `SELECT id, uid, name, parent_id, visibility, display_order
          FROM data_room_folders WHERE project_id = ? ORDER BY display_order, name`,
     ).bind(project.id).all<any>();
+    // `downloads` is counted from the log, per file. It is a download count
+    // and never a view count — no per-file view is logged (header note).
     const files = await c.env.DB.prepare(
-      `SELECT id, uid, name, folder_id, content_type, size_bytes, visibility, created_at
-         FROM data_room_files WHERE project_id = ? ORDER BY name`,
+      `SELECT f.id, f.uid, f.name, f.folder_id, f.content_type, f.size_bytes, f.visibility, f.created_at,
+              (SELECT COUNT(*) FROM data_room_access_log l
+                WHERE l.file_id = f.id AND l.project_id = f.project_id AND l.action = 'download') AS downloads
+         FROM data_room_files f WHERE f.project_id = ? ORDER BY f.name`,
     ).bind(project.id).all<any>();
     const grants = await c.env.DB.prepare(
       `SELECT g.uid, g.status, g.created_at, g.expires_at,
@@ -253,19 +270,33 @@ r.get('/:projectUid', async (c) => {
                  WHERE n.party_a_user_id = g.granted_by_user_id
                    AND n.party_b_user_id = g.investor_user_id
                    AND n.status = 'active'
-                   AND (n.valid_until IS NULL OR n.valid_until > datetime('now'))
+                   AND (n.valid_until IS NULL OR datetime(n.valid_until) > datetime('now'))
               ) AS nda_signed
          FROM data_room_grants g
          JOIN users u ON u.id = g.investor_user_id
         WHERE g.project_id = ? ORDER BY g.created_at DESC`,
     ).bind(project.id).all<any>();
     const access = await c.env.DB.prepare(
-      `SELECT l.action, l.created_at, u.email AS user_email, f.name AS file_name
+      `SELECT l.action, l.created_at, u.email AS user_email, u.name AS user_name,
+              f.name AS file_name, f.visibility AS file_visibility
          FROM data_room_access_log l
          JOIN users u ON u.id = l.user_id
          LEFT JOIN data_room_files f ON f.id = l.file_id
         WHERE l.project_id = ? ORDER BY l.created_at DESC LIMIT 50`,
     ).bind(project.id).all<any>();
+    // The last seven days, counted in SQL over the whole log — not the length
+    // of the fifty rows above, which would stop at fifty. `created_at` is
+    // written as an ISO string (`nowIso`), so the column is normalised with
+    // datetime() before it is compared (D124).
+    const weekRows = await c.env.DB.prepare(
+      `SELECT action, COUNT(*) AS n FROM data_room_access_log
+        WHERE project_id = ? AND datetime(created_at) > datetime('now', '-7 days')
+        GROUP BY action`,
+    ).bind(project.id).all<{ action: string; n: number }>();
+    const weekOf = (action: string) => {
+      const hit = (weekRows.results || []).find((w) => w.action === action);
+      return hit ? Number(hit.n) : 0;
+    };
 
     return c.json({
       project: { uid: project.uid, name: project.name },
@@ -273,6 +304,9 @@ r.get('/:projectUid', async (c) => {
       files: files.results || [],
       grants: (grants.results || []).map((g) => ({ ...g, nda_signed: !!g.nda_signed })),
       recent_access: access.results || [],
+      // A real count of a table this route owns: an action with no row in the
+      // window is zero events, not an unknown.
+      week: { opened: weekOf('open_room'), downloaded: weekOf('download'), blocked: weekOf('blocked') },
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -327,9 +361,47 @@ r.patch('/:projectUid/folders/:uid', async (c) => {
 
     // project_id in the WHERE, not just the uid: the uid alone would let one
     // founder patch another's folder.
-    const res = await c.env.DB.prepare(
+    const update = c.env.DB.prepare(
       `UPDATE data_room_folders SET ${sets.join(', ')} WHERE uid = ? AND project_id = ?`,
-    ).bind(...params, c.req.param('uid'), project.id).run();
+    ).bind(...params, c.req.param('uid'), project.id);
+
+    // A folder's gate is the folder's NAME only — every file keeps its own
+    // visibility, and that is what the download checks. So "mark this folder
+    // NDA" means nothing to the files inside unless it is carried to them, and
+    // `apply_to_contents` is that: one batch sets the folder, every folder
+    // under it, and every file in any of them. The tree walk is bounded by
+    // project_id at each step, so it cannot leave this founder's room.
+    if (body.apply_to_contents === true && body.visibility !== undefined) {
+      const vis = String(body.visibility);
+      // The same walk in both statements, written out rather than spliced in,
+      // so each query text is a literal. SQLite needs no RECURSIVE keyword for
+      // a CTE that names itself; `tree` is that CTE, not a table.
+      const [res] = await c.env.DB.batch([
+        update,
+        c.env.DB.prepare(
+          `WITH tree AS (
+             SELECT id FROM data_room_folders WHERE uid = ? AND project_id = ?
+             UNION ALL
+             SELECT f.id FROM data_room_folders f JOIN tree t ON f.parent_id = t.id WHERE f.project_id = ?
+           )
+           UPDATE data_room_folders SET visibility = ?, updated_at = ?
+             WHERE project_id = ? AND id IN (SELECT id FROM tree)`,
+        ).bind(c.req.param('uid'), project.id, project.id, vis, nowIso(), project.id),
+        c.env.DB.prepare(
+          `WITH tree AS (
+             SELECT id FROM data_room_folders WHERE uid = ? AND project_id = ?
+             UNION ALL
+             SELECT f.id FROM data_room_folders f JOIN tree t ON f.parent_id = t.id WHERE f.project_id = ?
+           )
+           UPDATE data_room_files SET visibility = ?, updated_at = ?
+             WHERE project_id = ? AND folder_id IN (SELECT id FROM tree)`,
+        ).bind(c.req.param('uid'), project.id, project.id, vis, nowIso(), project.id),
+      ]);
+      if (!(res as any).meta?.changes) return c.json({ detail: 'Folder not found' }, 404);
+      return c.json({ ok: true });
+    }
+
+    const res = await update.run();
     if (!(res as any).meta?.changes) return c.json({ detail: 'Folder not found' }, 404);
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }

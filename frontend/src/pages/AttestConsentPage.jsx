@@ -75,7 +75,7 @@ export default function AttestConsentPage() {
         {done === 'given' && (
           <>
             <h1 className="text-lg font-extrabold tracking-tight">Thank you — recorded</h1>
-            <p className="mt-2 text-[13px] leading-relaxed text-axal-ink-2">
+            <p className="mt-2 text-[13px] leading-relaxed text-axal-muted">
               Your confirmation is on the record and the claim now shows as confirmed by you.
               If you change your mind, ask the advisor to send this link again — answering it a
               second time replaces your answer, and a withdrawal is kept on the record too.
@@ -85,7 +85,7 @@ export default function AttestConsentPage() {
         {done === 'declined' && (
           <>
             <h1 className="text-lg font-extrabold tracking-tight">Recorded — you declined</h1>
-            <p className="mt-2 text-[13px] leading-relaxed text-axal-ink-2">
+            <p className="mt-2 text-[13px] leading-relaxed text-axal-muted">
               The claim stays marked as the advisor’s own statement, unconfirmed. Your answer is
               kept so the request cannot simply be asked again as though it never happened.
             </p>
@@ -93,13 +93,13 @@ export default function AttestConsentPage() {
         )}
         {!done && (
           <>
-            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
               Confirm a claim
             </div>
             <h1 className="mt-2 text-lg font-extrabold tracking-tight">
               Someone has asked you to confirm something about their work
             </h1>
-            <p className="mt-2 text-[13px] leading-relaxed text-axal-ink-2">
+            <p className="mt-2 text-[13px] leading-relaxed text-axal-muted">
               An advisor on Axal has recorded a claim about work they did and named you as
               someone who can confirm it. The claim itself is not shown here — they will have
               told you what it is when they sent you this link. If you are not sure what you are
@@ -107,13 +107,13 @@ export default function AttestConsentPage() {
             </p>
 
             <label className="mt-5 block">
-              <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+              <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
                 Add a sentence (optional)
               </span>
               <textarea rows={3} className={inputClass} value={statement}
                 onChange={(e) => setStatement(e.target.value)}
                 placeholder="Anything you want shown alongside the confirmation." />
-              <span className="mt-1 block text-[11.5px] leading-relaxed text-axal-ink-3">
+              <span className="mt-1 block text-[11.5px] leading-relaxed text-axal-faint">
                 This is shown publicly with your name. Leave it blank to confirm without a quote —
                 agreeing that something is true is a different act from writing a testimonial.
               </span>
@@ -140,7 +140,7 @@ export default function AttestConsentPage() {
                 I would rather not
               </button>
             </div>
-            <p className="mt-3 text-[11.5px] leading-relaxed text-axal-ink-3">
+            <p className="mt-3 text-[11.5px] leading-relaxed text-axal-faint">
               Declining is recorded too. Neither answer creates an account for you or signs you up
               to anything.
             </p>

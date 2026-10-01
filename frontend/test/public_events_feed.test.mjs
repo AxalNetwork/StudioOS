@@ -29,9 +29,16 @@ const PAGE = 'frontend/src/pages/events/PublicEventsPage.jsx';
 
 test('the archive is its own range and reads backwards', () => {
   const w = read('cloudflare-worker/src/routes/events_public.ts');
-  assert.match(w, /includePast\s*\n?\s*\?\s*`COALESCE\(ends_at, starts_at\) < datetime\('now'\)`/,
+  // The COALESCE is wrapped in datetime() as of D125, and that is load-bearing
+  // rather than cosmetic: `events.starts_at` is bound straight from caller JSON
+  // (`events.ts:214`; `:188` checks only that it is present), so an ISO value
+  // compared as bare TEXT sorts above a space-separated `datetime('now')` on the
+  // same UTC date — which put finished events in the upcoming feed and kept
+  // today's from the archive. `services/eventReminders.ts:159-160` already read
+  // this column the normalised way, so the column was being read two ways at once.
+  assert.match(w, /includePast\s*\n?\s*\?\s*`datetime\(COALESCE\(ends_at, starts_at\)\) < datetime\('now'\)`/,
     'past=1 must select finished events only');
-  assert.match(w, /:\s*`COALESCE\(ends_at, starts_at\) >= datetime\('now'\)`/,
+  assert.match(w, /:\s*`datetime\(COALESCE\(ends_at, starts_at\)\) >= datetime\('now'\)`/,
     'upcoming must run until an event ENDS, so a session in progress stays listed');
   assert.match(w, /const order = includePast \? 'DESC' : 'ASC'/,
     'the archive must be most-recent-first');

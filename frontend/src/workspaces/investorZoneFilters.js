@@ -23,9 +23,12 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  * does the translation, exactly as `investorZoneActions.js` describes for the
  * ops half.
  *
- * SIXTEEN OF THE NINETEEN ARE HERE. The three left out are Deals' decision
- * zones, and the guard records why: each renders a single-record panel, so the
- * list surfaces their canvas filters describe would have to be built first.
+ * ALL NINETEEN ARE HERE. The three Deals decision zones were the last to
+ * arrive: each rendered a single-record panel, and filtering one record
+ * narrows nothing — so they waited for the lists their canvases draw, which
+ * ID2–ID4 built. `profile_zone_filters.test.mjs`'s `excluded` list for this
+ * profile is empty, and it stays that way by construction: a zone without a
+ * row fails the exact-set check there.
  *
  * SOME ZONES WERE ALREADY RIGHT AND ARE NOT BEING CHANGED. `funds/lps` and
  * `funds/reporting` each carry four real predicates over rows they load; their
@@ -34,11 +37,9 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  * working code.
  */
 
-// `/funds/calls` and `/funds/ledger` each fail for one reason across several
-// filters, so the reason is written once and shared by every entry it covers
-// rather than restated per label.
-const NO_FUND_SCOPED_CALLS =
-  'capital calls are recorded, but nothing links one to a fund register, so none can be listed against this fund';
+// `/funds/ledger` fails for one reason across several filters, so the reason
+// is written once and shared by every entry it covers rather than restated per
+// label. (`/funds/calls` shared one too, until D371 built its ledger.)
 const NO_LEDGER_LINES =
   'the fund analytics contract returns totals, not the journal, fee movements or audit rows behind them';
 const NO_EXTRACTION_LAYER =
@@ -50,23 +51,27 @@ const NO_EXTRACTION_LAYER =
 // it. What is true is that the question has already been answered upstream.
 const ALREADY_MINE =
   'every deal on this board is already one of yours; it loads only the deals you were invited to, committed to, or are a room member of';
-// `/network/relationships`, and all three failures are the same one column
-// short. `partner_relationships` is `partner_a_id, partner_b_id,
-// relationship_type, strength_score, metadata` and nothing else — no
-// counterpart role, no interaction date, no fund tie.
-const NO_COUNTERPART_ROLE =
-  'no relationship type names an investor-to-founder tie, and the payload carries the counterpart’s name and email without their role';
+// `/network/relationships`. `partner_relationships` is `partner_a_id,
+// partner_b_id, relationship_type, strength_score, metadata` and nothing else
+// — no interaction date and no fund tie, so `Going cold` and `LPs` keep their
+// reasons. The third gap this comment used to name is closed: the counterpart's
+// role was missing from the payload, and `/partnernet/relationships` now
+// returns it, which is what the `Founders` chip narrows on.
 const NO_LP_RELATIONSHIP =
   'an LP register is kept against a fund rather than as a relationship, and this page never reads it';
-const NO_INTERACTION_DATE =
-  'no interaction date is stored on a relationship; the only history kept is that the row was created and edited';
-// `/network/introductions`. Word for word what the founder table says, because
-// it is the same store and the same absence: `intro_propositions` has no
-// direction column, and every row is one addressed to the reader. Note the
-// canvas order differs from founder's — `Offered` before `Asked` — which is
-// exactly why these are four tables and not one.
-const NO_DIRECTION_RECORDED =
-  'nothing records who asked: every proposition here is addressed to you, and the response names the counterpart without a direction';
+// `Going cold` went live with D465: `partner_interactions` (migration 338) is
+// the interaction log, and the relationship's last touch is its MAX.
+// `/network/introductions`. NOT word for word what the founder table says, and
+// the difference is a store: the founder desk reads `intro_propositions` alone,
+// where every row is addressed to the reader, but an investor's own asks live
+// in `investor_introductions` (`GET /api/introductions`) — so `Asked` is a live
+// chip here and stays prose there. `Offered` keeps a reason of its own: an
+// introduction you gave is value-add support (the ledger the Portfolio desk
+// keeps), not a row on this desk. Note the canvas order differs from
+// founder's — `Offered` before `Asked` — which is exactly why these are four
+// tables and not one.
+const NO_OFFER_ON_THIS_DESK =
+  'an introduction you offered is logged as value-add support, not on this desk — every row here is one addressed to you, or one you asked for';
 // `/network/organizations`, AND THE FOUR-STEP CHECK ENDS AT STEP FOUR HERE.
 // `metadata` is a real column on `partner_relationships` and it is free-text
 // JSON, so `metadata.organization_name` is a shape the store could physically
@@ -140,11 +145,17 @@ export const INVESTOR_ZONE_FILTERS = {
   // `Call 3` is that artboard's sample datum — one specific call, not a count
   // welded onto a filter, so `{n}` is not the repair. It renders as the
   // positional filter it actually is.
+  // D371: the call ledger exists, so three of the four run. `Current call` is
+  // the newest numbered call's lines, `All calls` every numbered call's, and
+  // `Outstanding` every line — numbered or from before numbering — that still
+  // owes something. `Notices` keeps a reason, corrected: a notice IS logged per
+  // LP account when a call is issued, but no letter is kept and no delivery is
+  // tracked, so there is no notice state to filter lines by.
   'funds/calls': [
-    { canvas: 'Call 3', label: 'Current call', unbuilt: NO_FUND_SCOPED_CALLS },
-    { canvas: 'All calls', unbuilt: NO_FUND_SCOPED_CALLS },
-    { canvas: 'Outstanding', unbuilt: NO_FUND_SCOPED_CALLS },
-    { canvas: 'Notices', unbuilt: 'no call notice is stored, sent or tracked anywhere in this product' },
+    { canvas: 'Call 3', label: 'Current call', key: 'latest' },
+    { canvas: 'All calls', key: 'all' },
+    { canvas: 'Outstanding', key: 'outstanding' },
+    { canvas: 'Notices', unbuilt: 'an in-app notice is logged for each LP account when a call is issued, but no letter is kept and no delivery is tracked, so there is no notice state to filter by', hover: 'Call notices are logged, but their delivery is not tracked, so there is nothing to filter.' },
   ],
 
   // `Summary` is real — it reads the fund analytics totals. The other three
@@ -252,32 +263,41 @@ export const INVESTOR_ZONE_FILTERS = {
   // `rubric` shows the six dimensions the scorer writes, and `passes` is the
   // CHECKed pass taxonomy `GET /api/deals/pass-analytics` already served.
   'deals/screening': [
-    { canvas: 'Scored', key: 'scored' },
+    { canvas: 'Scored', key: 'scored', label: 'Scored {n}' },
     { canvas: 'Rubric', key: 'rubric' },
-    { canvas: 'Red flags', key: 'flags' },
+    { canvas: 'Red flags', key: 'flags', label: 'Red flags {n}' },
     { canvas: 'Pass reasons', key: 'passes' },
   ],
 
+  // `Blocking` went live with D461: a blocking item is a Commit condition, and
+  // `ic_conditions` (migration 334) is the store the hand-off runs on — the
+  // chip narrows to the deals at closing with an open condition. `Wires` went
+  // live with D462: `deal_transfers` (migration 335) records a transfer out to
+  // a company — the direction `capital_calls` never covered.
   'deals/closing': [
-    { canvas: 'This close', key: 'close' },
-    { canvas: 'Blocking', unbuilt: 'a blocking item is a Commit condition, and no condition is stored on either side of that hand-off' },
-    { canvas: 'Documents', key: 'documents' },
-    { canvas: 'Wires', unbuilt: 'no transfer out to a company is recorded — capital_calls is an LP paying into the fund' },
+    { canvas: 'This close', key: 'close', label: 'This close {n}' },
+    { canvas: 'Blocking', key: 'blocking', label: 'Blocking {n}' },
+    { canvas: 'Documents', key: 'documents', label: 'Documents {n}' },
+    { canvas: 'Wires', key: 'wires', label: 'Wires {n}' },
   ],
 
+  // `Conditions` and `Minutes` went live with D461: conditions are their own
+  // table (migration 334) and minutes live on the meeting record. Both were
+  // `unbuilt` with reasons that were true when written — the memo and terms
+  // were free text, and ic_meetings carried only its agenda.
   'deals/commit': [
     { canvas: 'This deal', key: 'current' },
     { canvas: 'All decisions', key: 'decisions' },
-    { canvas: 'Conditions', unbuilt: 'a condition is not a stored record; ic_decisions carries a memo and a free-text terms blob, and neither is something a later stage could block on' },
-    { canvas: 'Minutes', unbuilt: 'no minutes are stored — ic_meetings carries an agenda, which is written before the room rather than after it' },
+    { canvas: 'Conditions', key: 'conditions', label: 'Conditions {n}' },
+    { canvas: 'Minutes', key: 'minutes' },
   ],
 
   'deals/pipeline': [
-    { canvas: 'All stages', key: 'all' },
+    { canvas: 'All stages', key: 'all', label: 'All stages {n}' },
     { canvas: 'Mine', unbuilt: ALREADY_MINE },
-    { canvas: 'Unassigned', key: 'unassigned' },
-    { canvas: 'Stale', key: 'stale' },
-    { canvas: 'Passed', key: 'passed' },
+    { canvas: 'Unassigned', key: 'unassigned', label: 'Unassigned {n}' },
+    { canvas: 'Stale', key: 'stale', label: 'Stale {n}' },
+    { canvas: 'Passed', key: 'passed', label: 'Passed {n}' },
   ],
 
   // ── Network ──────────────────────────────────────────────────────────────
@@ -291,16 +311,16 @@ export const INVESTOR_ZONE_FILTERS = {
   // member of it.
   'network/relationships': [
     { canvas: 'Everyone', key: 'all' },
-    { canvas: 'Founders', unbuilt: NO_COUNTERPART_ROLE },
+    { canvas: 'Founders', key: 'founders' },
     { canvas: 'Co-investors', key: 'coinvestors' },
     { canvas: 'LPs', unbuilt: NO_LP_RELATIONSHIP },
-    { canvas: 'Going cold', unbuilt: NO_INTERACTION_DATE },
+    { canvas: 'Going cold', key: 'cold', label: 'Going cold {n}' },
   ],
 
   'network/introductions': [
     { canvas: 'All', key: 'all' },
-    { canvas: 'Offered', unbuilt: NO_DIRECTION_RECORDED },
-    { canvas: 'Asked', unbuilt: NO_DIRECTION_RECORDED },
+    { canvas: 'Offered', unbuilt: NO_OFFER_ON_THIS_DESK },
+    { canvas: 'Asked', key: 'asked' },
     { canvas: 'Stalled', key: 'stalled' },
   ],
 
@@ -377,7 +397,7 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Requested', key: 'partial', label: 'Partly staged' },
     {
       canvas: 'Not staged',
-      unbuilt: 'a company that never opened a room is not on this list at all, because the grant is what puts a room here and an unstaged one leaves no row to find',
+      unbuilt: 'a company that never opened a room is not on this list at all, because the grant is what puts a room here and an unstaged one leaves no row to find', hover: 'A company that never opened a room leaves no row here to find.',
     },
   ],
   // `Peer set` IS RELABELLED BECAUSE THE OPS HALF WOULD CONTRADICT IT. That
@@ -395,7 +415,7 @@ export const INVESTOR_ZONE_FILTERS = {
     },
     {
       canvas: 'Export',
-      unbuilt: 'an export is an action rather than a view; the ops half of this row is where it belongs, and it says there why no chart is drawn',
+      unbuilt: 'an export is an action rather than a view; the ops half of this row is where it belongs, and it says there why no chart is drawn', hover: 'Export is an action, not a view — it sits in the other half of this row.',
     },
   ],
   'research/markets': [

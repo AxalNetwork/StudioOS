@@ -3,6 +3,11 @@
  * Partner-only page mirroring the advisor OfficeHoursPage flow but for
  * Partner records. Lets a partner publish bookable slots, manage incoming
  * bookings (confirm / complete / cancel / no-show) and see who booked.
+ *
+ * D355: each session carries the founder's rating once they give one
+ * (completed sessions only, comment included — it rides on GET
+ * /partner-office-hours/me/bookings) and the action items both parties keep
+ * on it, drawn by the same component as the founder's page.
  */
 import { useEffect, useState } from 'react';
 import { Calendar, Plus, Trash2, CheckCircle, Loader2 } from 'lucide-react';
@@ -13,6 +18,8 @@ import { api } from '../lib/api';
 // the founder-facing Office Hours page uses, so this console renders correctly
 // in both environments instead of printing "Invalid Date" against the Worker.
 import { normSlot, normBooking } from './SpinoutLabOfficeHoursPage';
+import { SessionActionItems, SessionRating } from '../components/officehours/SessionFollowups';
+import LabHostApplyCard from '../components/officehours/LabHostApplyCard';
 
 // `new Date(undefined)` is Invalid Date and renders as the literal string
 // "Invalid Date" — guard every timestamp before formatting.
@@ -235,6 +242,7 @@ function GuidanceCard({ draft, setDraft, base, loadState, busy, saved, error, on
 export default function PartnerOfficeHoursPage() {
   const [slots, setSlots] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [openItemsFor, setOpenItemsFor] = useState(null);
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
   // Guidance editor state. `gBase` is the last known server value — the Save
@@ -333,6 +341,9 @@ export default function PartnerOfficeHoursPage() {
         </div>
       )}
 
+      {/* D377 — Spin-Out Lab founders see only approved hosts. */}
+      <LabHostApplyCard kind="partner" />
+
       <GuidanceCard
         draft={gDraft} setDraft={setGDraft} base={gBase} loadState={gLoadState}
         busy={gBusy} saved={gSaved} error={gErr} onSave={saveGuidance}
@@ -397,6 +408,7 @@ export default function PartnerOfficeHoursPage() {
                       {fmtDateTime(b.scheduled_start)} · status: <span className="font-medium">{b.status || 'unknown'}</span>
                     </div>
                     {b.questions && <div className="text-xs text-gray-600 mt-2 whitespace-pre-wrap">{b.questions}</div>}
+                    <SessionRating booking={b} viewerSide="partner" />
                   </div>
                   <div className="flex gap-2 flex-wrap justify-end">
                     {b.status === 'requested' && (
@@ -429,6 +441,13 @@ export default function PartnerOfficeHoursPage() {
                     )}
                   </div>
                 </div>
+                {b.status !== 'cancelled' && (
+                  <button type="button" onClick={() => setOpenItemsFor(openItemsFor === b.id ? null : b.id)}
+                    className="mt-2 text-xs font-medium text-teal-700 dark:text-teal-300" data-testid={`button-session-actions-${b.id}`}>
+                    {openItemsFor === b.id ? 'Hide action items' : 'Action items'}
+                  </button>
+                )}
+                {openItemsFor === b.id && <SessionActionItems booking={b} />}
               </div>
             ))}
           </div>

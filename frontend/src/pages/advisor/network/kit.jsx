@@ -5,7 +5,7 @@
 // the kit behind because eight unrelated pages had already adopted it. Its
 // real consumers today are Pipeline (screening / commit / transactions),
 // Portfolio (performance / growth), Fund (accounting / performance) and
-// `pages/partner/operations/kit.jsx` — nothing advisor, nothing Network.
+// `pages/partner/kit.jsx` — nothing advisor, nothing Network.
 //
 // The three advisor Network zones now sitting beside this file deliberately do
 // NOT use it: they build on `pages/advisor/expertise/kit.jsx`, the shared

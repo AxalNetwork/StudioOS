@@ -191,7 +191,8 @@ export async function seedStandardEventsForJurisdiction(
       }
     } catch (e) {
       console.warn(
-        `seedStandardEvents: skipped ${spec.event_type} for project=${opts.projectId}:`,
+        'seedStandardEvents: skipped event for project',
+        { event_type: spec.event_type, project_id: opts.projectId },
         (e as Error)?.message,
       );
     }

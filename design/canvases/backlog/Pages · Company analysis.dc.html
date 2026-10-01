@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeeec;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}
+    .ab{padding:40px 46px 32px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px;flex-wrap:wrap}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:rgba(24,24,27,.6);max-width:1040px;margin:0 0 18px}
+    .mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .eye{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+    .nm{font-size:13px;font-weight:800;letter-spacing:-.01em}
+    .body{font-size:12px;line-height:1.55}
+    .pill{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;line-height:1.5}
+    .nr{display:inline-flex;font-size:10px;font-weight:700;border-radius:4px;padding:2px 7px;white-space:nowrap}
+    .card{border-radius:14px;padding:16px 18px;box-sizing:border-box}
+    .sel{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:4px 8px 4px 10px;border-radius:7px}
+    .inp{width:100%;box-sizing:border-box;border-radius:9px;padding:9px 12px;font-size:12.5px;font-family:inherit}
+    .btn{font-size:11.5px;font-weight:700;padding:7px 13px;border-radius:8px;cursor:pointer;white-space:nowrap}
+    .nav{display:flex;align-items:center;gap:9px;padding:7px 14px;font-size:12px;font-weight:600;border-radius:8px}
+    .zp{font-size:11px;font-weight:700;padding:5px 12px;border-radius:99px;white-space:nowrap}
+    .chip{display:inline-flex;font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:99px;white-space:nowrap}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;text-align:left;padding:0 0 8px}
+    .td{font-size:11.5px;padding:10px 0;border-top:1px solid}
+    .cap{font-size:11px;color:rgba(24,24,27,.58);line-height:1.5;margin-top:9px}
+    .ph{width:390px;min-width:390px;flex:none;border-radius:34px;box-shadow:0 4px 22px rgba(24,24,27,.16),0 0 0 9px #1a1a1c;overflow:hidden}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .spin{width:18px;height:18px;border-radius:50%;border:2px solid #ddd6fe;border-top-color:#7c3aed;animation:spin .9s linear infinite;flex:none}
+  </style>
+</helmet>
+
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="6">
+  <section class="ab" id="{{ b.id }}">
+    <div class="ab-hd"><a class="ab-id" href="#{{ b.id }}">{{ b.badge }}</a><span class="ab-nm">{{ b.title }}</span><span class="mono" style="font-size:11px;color:#615c6e">/research/companies/{{ b.a.id }}</span></div>
+    <div class="ab-sub">{{ b.blurb }}</div>
+
+    <!-- ══ DESKTOP 1280 ══ -->
+    <sc-if value="{{ b.desktop }}">
+      <div style="width:1280px;min-width:1280px;display:flex;border-radius:14px;overflow:hidden;box-shadow:0 2px 14px rgba(24,24,27,.08);background:{{ b.t.ground }}">
+        <div style="width:200px;flex:none;background:{{ b.t.card }};border-right:1px solid {{ b.t.hair }};padding:16px 10px">
+          <div style="display:flex;align-items:center;gap:8px;padding:4px 14px 16px"><img src="../assets/axal-dossier-mark.png" alt="Axal VC" width="16" height="16" style="display:block;object-fit:contain"><span style="font-size:12px;font-weight:800;letter-spacing:-.01em;color:{{ b.t.ink }}">StudioOS</span></div>
+          <sc-for list="{{ b.nav }}" as="n" hint-placeholder-count="9"><div class="nav" style="{{ n.style }}">{{ n.label }}</div></sc-for>
+        </div>
+        <div style="flex:1;min-width:0;padding:22px 30px 30px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:{{ b.t.muted }};flex-wrap:wrap"><span>Research</span><span>‹</span><span>Companies</span><span>‹</span><span style="color:{{ b.t.ink }};font-weight:700">{{ b.a.title }}</span></div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="pill" style="background:#f0fdf6;color:#065f46;border:1px solid #a7f3d0;letter-spacing:.05em">COLLECTION</span>
+              <sc-if value="{{ b.scope }}"><span class="pill" style="background:{{ b.t.chipBg }};color:{{ b.t.ink }};border:1px solid {{ b.t.hair }}">{{ b.scope }}</span></sc-if>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:12px"><sc-for list="{{ b.zones }}" as="z" hint-placeholder-count="5"><span class="zp" style="{{ z.style }}">{{ z.t }}</span></sc-for></div>
+
+          <!-- 1 · header -->
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:16px">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap">
+              <div style="min-width:0">
+                <div style="display:flex;align-items:baseline;gap:10px"><h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em;color:{{ b.t.ink }};border-bottom:1px dashed {{ b.t.hair }}">{{ b.a.title }}</h1><span class="body" style="color:{{ b.t.muted }}">editable · max 200</span></div>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
+                  <span class="pill" style="background:{{ b.t.chipBg }};color:{{ b.t.ink }};border:1px solid {{ b.t.hair }}">{{ b.a.mode }}</span>
+                  <span class="pill" style="{{ b.statusStyle }}">{{ b.a.status }}</span>
+                  <span class="mono" style="font-size:11px;color:{{ b.t.muted }}">updated {{ b.a.updated_at }}</span>
+                  <sc-if value="{{ b.a.edited }}"><span class="mono" style="font-size:11px;color:{{ b.t.warn }};font-weight:700">· edited since last run</span></sc-if>
+                </div>
+              </div>
+              <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:flex-start">
+                <span class="btn" style="{{ b.saveBtn }}">Save</span>
+                <span class="btn" style="{{ b.ghost }}">Re-run</span>
+                <span class="btn" style="{{ b.ghost }}">Refresh sources</span>
+                <span class="btn" style="{{ b.ghost }}">JSON</span>
+                <span class="btn" style="{{ b.ghost }}">Markdown</span>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-top:14px;padding-top:13px;border-top:1px solid {{ b.t.hair }}">
+              <sc-for list="{{ b.inputs }}" as="i" hint-placeholder-count="5">
+                <div>
+                  <div class="eye" style="color:{{ b.t.muted }};font-size:9px">{{ i.k }}</div>
+                  <sc-if value="{{ i.v }}"><div class="body" style="color:{{ b.t.ink }};margin-top:4px">{{ i.v }}</div></sc-if>
+                  <sc-if value="{{ i.nr }}"><div style="margin-top:4px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+                </div>
+              </sc-for>
+            </div>
+            <div class="body" style="color:{{ b.t.muted }};margin-top:11px;padding-top:10px;border-top:1px solid {{ b.t.hair }};background:{{ b.t.sunk }};margin-left:-18px;margin-right:-18px;margin-bottom:-16px;padding:11px 18px 14px;border-radius:0 0 14px 14px">These analyses are yours, not a client’s. An analysis is stored against the person who ran it and carries no company, so there is no client to switch between.</div>
+          </div>
+
+          <!-- running -->
+          <sc-if value="{{ b.running }}">
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:12px;display:flex;align-items:center;gap:13px">
+              <span class="spin"></span>
+              <div><div class="nm" style="color:{{ b.t.ink }}">Discovering candidates, crawling public sites…</div><div class="body" style="color:{{ b.t.muted }};margin-top:4px">Nothing is listed until the run returns. No names appear while it is working.</div></div>
+            </div>
+          </sc-if>
+
+          <!-- failed read -->
+          <sc-if value="{{ b.readFailed }}">
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.dangerHair }};margin-top:12px">
+              <div class="nm" style="color:{{ b.t.danger }}">Your saved analyses could not be read.</div>
+              <div class="body" style="color:{{ b.t.body }};margin-top:5px">A failed read is not an empty list — nothing here is drawn as 0 until the store answers.</div>
+              <span class="btn" style="background:#7c3aed;color:#fff;display:inline-block;margin-top:12px">Try again</span>
+            </div>
+          </sc-if>
+
+          <!-- 2 · tiles -->
+          <sc-if value="{{ b.tiles }}">
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px">
+              <sc-for list="{{ b.tiles }}" as="tl" hint-placeholder-count="4">
+                <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }}">
+                  <div class="eye" style="color:{{ b.t.muted }}">{{ tl.k }}</div>
+                  <sc-if value="{{ tl.nr }}"><div style="margin-top:8px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+                  <sc-if value="{{ tl.v }}"><div class="mono" style="font-size:20px;font-weight:700;letter-spacing:-.025em;margin-top:5px;color:{{ tl.ink }}">{{ tl.v }}</div></sc-if>
+                  <div class="body" style="color:{{ b.t.muted }};margin-top:4px">{{ tl.sub }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <!-- error -->
+          <sc-if value="{{ b.errored }}">
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.dangerHair }};margin-top:12px">
+              <div class="nm" style="color:{{ b.t.danger }}">The analysis pipeline failed. Try again or reduce depth.</div>
+              <div class="body" style="color:{{ b.t.body }};margin-top:5px">A failed run is not an empty landscape. Nothing was discovered, so nothing is listed.</div>
+              <div style="display:flex;gap:8px;margin-top:12px"><span class="btn" style="background:#7c3aed;color:#fff">Re-run</span><span class="btn" style="{{ b.ghost }}">Quick scan</span></div>
+            </div>
+          </sc-if>
+
+          <!-- 3 · market summary -->
+          <sc-if value="{{ b.showBody }}">
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:12px">
+              <div style="display:flex;align-items:baseline;justify-content:space-between"><span class="eye" style="color:{{ b.t.muted }}">Market summary</span><span class="btn" style="background:#7c3aed;color:#fff">Save</span></div>
+              <div class="inp" style="margin-top:10px;min-height:62px;background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.sumInk }}">{{ b.sumText }}</div>
+              <sc-if value="{{ b.noSum }}"><div style="margin-top:8px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span><span class="body" style="color:{{ b.t.muted }};margin-left:8px">the run returned no summary, and none is generated to fill the box</span></div></sc-if>
+            </div>
+
+            <!-- 4 · competitors -->
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:12px">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><span class="eye" style="color:{{ b.t.muted }}">Competitors</span><span class="mono" style="font-size:11px;color:{{ b.t.muted }}">{{ b.candCount }}</span></div>
+              <sc-if value="{{ b.hasCands }}">
+                <div style="display:grid;grid-template-columns:1.2fr .8fr .8fr .7fr .7fr 1.8fr .5fr;gap:12px;margin-top:10px">
+                  <span class="th" style="color:{{ b.t.muted }}">Company</span><span class="th" style="color:{{ b.t.muted }}">Category</span><span class="th" style="color:{{ b.t.muted }}">Origin</span><span class="th" style="color:{{ b.t.muted }}">Relevance</span><span class="th" style="color:{{ b.t.muted }}">Sources</span><span class="th" style="color:{{ b.t.muted }}">Summary</span><span class="th" style="color:{{ b.t.muted }}"></span>
+                </div>
+                <sc-for list="{{ b.cands }}" as="c" hint-placeholder-count="3">
+                  <div style="display:grid;grid-template-columns:1.2fr .8fr .8fr .7fr .7fr 1.8fr .5fr;gap:12px;align-items:center">
+                    <span class="td" style="border-color:{{ b.t.hair }}"><a href="#" style="font-weight:700;color:{{ b.t.violet }};font-size:12.5px">{{ c.name }}</a><sc-if value="{{ c.domain }}"><span class="mono" style="display:block;font-size:10px;color:{{ b.t.muted }};margin-top:2px">{{ c.domain }}</span></sc-if></span>
+                    <span class="td" style="border-color:{{ b.t.hair }}"><span class="sel" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.t.ink }}">{{ c.categoryLabel }}<span style="color:{{ b.t.muted }}">⌄</span></span></span>
+                    <span class="td" style="border-color:{{ b.t.hair }}"><span class="chip" style="{{ c.originStyle }}">{{ c.origin }}</span></span>
+                    <span class="td" style="border-color:{{ b.t.hair }}"><sc-if value="{{ c.rel }}"><span class="pill mono" style="background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe">{{ c.rel }}</span></sc-if><sc-if value="{{ c.noRel }}"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></sc-if></span>
+                    <span class="td" style="border-color:{{ b.t.hair }}"><sc-if value="{{ c.srcChips }}"><span style="display:flex;gap:4px;flex-wrap:wrap"><sc-for list="{{ c.srcChips }}" as="k" hint-placeholder-count="2"><span class="chip" style="{{ k.style }}">{{ k.t }}</span></sc-for></span></sc-if><sc-if value="{{ c.noSrc }}"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></sc-if></span>
+                    <span class="td" style="border-color:{{ b.t.hair }};color:{{ b.t.body }};line-height:1.5">{{ c.summary }}</span>
+                    <span class="td" style="border-color:{{ b.t.hair }};text-align:right"><span style="font-size:11px;font-weight:700;color:{{ b.t.danger }};cursor:pointer">Remove</span></span>
+                  </div>
+                </sc-for>
+              </sc-if>
+              <sc-if value="{{ b.noCands }}">
+                <div style="border:1.5px dashed {{ b.t.hair }};border-radius:12px;padding:18px 20px;margin-top:10px">
+                  <div class="nm" style="color:{{ b.t.ink }}">No competitors yet</div>
+                  <div class="body" style="color:{{ b.t.body }};margin-top:5px">Add one manually or re-run. The product will not invent a top-10.</div>
+                  <span class="btn" style="background:#7c3aed;color:#fff;display:inline-block;margin-top:12px">Add competitor</span>
+                </div>
+              </sc-if>
+              <div style="border-top:1px solid {{ b.t.hair }};margin-top:12px;padding-top:12px">
+                <div class="eye" style="color:{{ b.t.muted }};font-size:9px">Add competitor</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1.6fr .8fr auto;gap:8px;align-items:center;margin-top:8px">
+                  <div class="inp" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.t.muted }};font-size:12px">Name *</div>
+                  <div class="inp mono" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.t.muted }};font-size:12px">https://</div>
+                  <div class="inp" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.t.muted }};font-size:12px">Summary</div>
+                  <span class="sel" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.t.ink }};justify-content:space-between">Direct<span style="color:{{ b.t.muted }}">⌄</span></span>
+                  <span class="btn" style="background:#7c3aed;color:#fff">Add</span>
+                </div>
+                <div class="body" style="color:{{ b.t.muted }};margin-top:7px"><span style="border:1px solid {{ b.t.hair }};border-radius:3px;padding:0 4px;margin-right:6px">☐</span>Crawl site · origin becomes <strong>manual</strong>, and the row takes the next position — it is appended, not stacked on the first.</div>
+              </div>
+            </div>
+
+            <!-- 5 · feature comparison (omitted when empty) -->
+            <sc-if value="{{ b.hasFeatures }}">
+              <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:12px">
+                <div class="eye" style="color:{{ b.t.muted }}">Feature comparison</div>
+                <div style="display:grid;grid-template-columns:{{ b.featCols }};gap:10px;margin-top:10px">
+                  <span class="th" style="color:{{ b.t.muted }}">Feature</span>
+                  <sc-for list="{{ b.featHead }}" as="h" hint-placeholder-count="3"><span class="th" style="color:{{ b.t.muted }}">{{ h }}</span></sc-for>
+                </div>
+                <sc-for list="{{ b.featRows }}" as="r" hint-placeholder-count="3">
+                  <div style="display:grid;grid-template-columns:{{ b.featCols }};gap:10px;align-items:center">
+                    <span class="td" style="border-color:{{ b.t.hair }};color:{{ b.t.ink }};font-weight:600">{{ r.f }}</span>
+                    <sc-for list="{{ r.cells }}" as="cl" hint-placeholder-count="3"><span class="td" style="border-color:{{ b.t.hair }};color:{{ cl.ink }}">{{ cl.v }}</span></sc-for>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+
+            <!-- 6 · signal lists -->
+            <sc-if value="{{ b.signalCols }}">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+                <sc-for list="{{ b.signalCols }}" as="col" hint-placeholder-count="2">
+                  <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }}">
+                    <div class="eye" style="color:{{ b.t.muted }}">{{ col.k }}</div>
+                    <div style="display:grid;gap:7px;margin-top:9px">
+                      <sc-for list="{{ col.lines }}" as="ln" hint-placeholder-count="2"><div class="body" style="color:{{ b.t.ink }}"><strong>{{ ln.who }}:</strong> {{ ln.text }}</div></sc-for>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+
+            <!-- 7 · gaps, wedge, actions, notes -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+              <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }}">
+                <div class="eye" style="color:{{ b.t.muted }}">Gaps &amp; opportunities</div>
+                <sc-if value="{{ b.gaps }}"><div style="display:grid;gap:7px;margin-top:9px"><sc-for list="{{ b.gaps }}" as="g" hint-placeholder-count="2"><div style="display:flex;gap:9px;align-items:flex-start"><span style="width:5px;height:5px;border-radius:50%;background:{{ b.t.violet }};flex:none;margin-top:7px"></span><span class="body" style="color:{{ b.t.ink }}">{{ g }}</span></div></sc-for></div></sc-if>
+                <sc-if value="{{ b.noGaps }}"><div style="margin-top:9px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+                <div class="eye" style="color:{{ b.t.muted }};margin-top:14px">Suggested wedge</div>
+                <sc-if value="{{ b.wedge }}"><div class="body" style="color:{{ b.t.ink }};margin-top:6px">{{ b.wedge }}</div></sc-if>
+                <sc-if value="{{ b.noWedge }}"><div style="margin-top:6px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+              </div>
+              <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }}">
+                <div class="eye" style="color:{{ b.t.muted }}">Recommended next actions</div>
+                <sc-if value="{{ b.actions }}"><div style="display:grid;gap:7px;margin-top:9px"><sc-for list="{{ b.actions }}" as="x" hint-placeholder-count="2"><div style="display:flex;gap:9px;align-items:flex-start"><span style="width:5px;height:5px;border-radius:50%;background:{{ b.t.violet }};flex:none;margin-top:7px"></span><span class="body" style="color:{{ b.t.ink }}">{{ x }}</span></div></sc-for></div></sc-if>
+                <sc-if value="{{ b.noActions }}"><div style="margin-top:9px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+                <div class="eye" style="color:{{ b.t.muted }};margin-top:14px">Notes</div>
+                <div class="inp" style="margin-top:6px;min-height:52px;background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.notesInk }}">{{ b.notesText }}</div>
+                <sc-if value="{{ b.noNotes }}"><div style="margin-top:7px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+              </div>
+            </div>
+
+            <!-- 8 · zonedraft -->
+            <div style="border:1px solid #ddd6fe;background:{{ b.t.draftBg }};border-radius:14px;padding:14px 18px;margin-top:12px">
+              <div style="display:flex;align-items:center;gap:9px"><span class="pill" style="background:#7c3aed;color:#fff;letter-spacing:.06em">ZONEDRAFT</span><span class="nm" style="color:{{ b.t.ink }}">Analysis · landscape read</span></div>
+              <div class="body" style="color:{{ b.t.ink }};margin-top:9px">{{ b.draft }}</div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap">
+                <span class="btn" style="{{ b.draftBtn }}">Draft</span><span class="btn" style="{{ b.acceptBtn }}">Accept</span><span class="btn" style="color:{{ b.t.muted }};padding:7px 6px">Discard</span>
+                <span class="body" style="color:{{ b.t.muted }};margin-left:auto">Accept writes notes/gaps. It does not add competitors.</span>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- 9 · stated limit -->
+          <div style="background:{{ b.t.sunk }};border:1px solid {{ b.t.hair }};border-radius:14px;padding:14px 18px;margin-top:12px">
+            <div class="eye" style="color:{{ b.t.muted }}">What this page will not do</div>
+            <div class="body" style="color:{{ b.t.body }};margin-top:6px;max-width:820px">An analysis maps players you named or that a run returned, with the URLs that fed them. Direct and adjacent are filed per competitor. Nothing here is a relationship, a headcount, or a comparable. Re-run replaces discovered rows and keeps origin=manual.</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ══ MOBILE 390 ══ -->
+    <sc-if value="{{ b.mobile }}">
+      <div class="ph" style="background:{{ b.t.ground }}">
+        <div style="height:44px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 6px;font-size:11px;font-weight:700;background:{{ b.t.card }};color:{{ b.t.ink }}"><span class="mono">9:41</span><span style="font-size:10px;letter-spacing:.06em">▮▮▮ ◗</span></div>
+        <div style="background:{{ b.t.card }};padding:4px 16px 12px;border-bottom:1px solid {{ b.t.hair }}">
+          <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:{{ b.t.muted }}"><span style="font-weight:700;color:{{ b.t.violet }}">‹ Companies</span><span>·</span><span>Research</span></div>
+          <h1 style="margin:7px 0 0;font-size:19px;font-weight:800;letter-spacing:-.022em;color:{{ b.t.ink }};line-height:1.2">{{ b.a.title }}</h1>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:7px;flex-wrap:wrap">
+            <span class="pill" style="background:#f0fdf6;color:#065f46;border:1px solid #a7f3d0;letter-spacing:.05em">COLLECTION</span>
+            <span class="pill" style="background:{{ b.t.chipBg }};color:{{ b.t.ink }};border:1px solid {{ b.t.hair }}">{{ b.a.mode }}</span>
+            <span class="pill" style="{{ b.statusStyle }}">{{ b.a.status }}</span>
+          </div>
+          <div class="mono" style="font-size:10.5px;color:{{ b.t.muted }};margin-top:6px">updated {{ b.a.updated_at }}<sc-if value="{{ b.a.edited }}"><span style="color:{{ b.t.warn }};font-weight:700"> · edited</span></sc-if></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px"><span class="btn" style="{{ b.saveBtn }};padding:6px 11px">Save</span><span class="btn" style="{{ b.ghost }};padding:6px 11px">Re-run</span><span class="btn" style="{{ b.ghost }};padding:6px 11px">Sources</span><span class="btn" style="{{ b.ghost }};padding:6px 11px">JSON</span></div>
+        </div>
+        <div style="padding:12px 14px 22px;display:grid;gap:10px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <sc-for list="{{ b.tiles }}" as="tl" hint-placeholder-count="4">
+              <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:11px 12px">
+                <div class="eye" style="color:{{ b.t.muted }};font-size:9px">{{ tl.k }}</div>
+                <sc-if value="{{ tl.nr }}"><div style="margin-top:6px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+                <sc-if value="{{ tl.v }}"><div class="mono" style="font-size:17px;font-weight:700;letter-spacing:-.025em;margin-top:4px;color:{{ tl.ink }}">{{ tl.v }}</div></sc-if>
+                <div class="body" style="color:{{ b.t.muted }};margin-top:3px;font-size:10.5px">{{ tl.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px">
+            <div class="eye" style="color:{{ b.t.muted }}">Market summary</div>
+            <div class="inp" style="margin-top:8px;min-height:56px;background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.sumInk }};font-size:12px">{{ b.sumText }}</div>
+            <sc-if value="{{ b.noSum }}"><div style="margin-top:7px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+          </div>
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between"><span class="eye" style="color:{{ b.t.muted }}">Competitors</span><span class="mono" style="font-size:10.5px;color:{{ b.t.muted }}">{{ b.candCount }}</span></div>
+            <sc-if value="{{ b.hasCands }}">
+              <div style="display:grid;gap:8px;margin-top:9px">
+                <sc-for list="{{ b.cands }}" as="c" hint-placeholder-count="3">
+                  <div style="border:1px solid {{ b.t.hair }};border-radius:10px;padding:10px 12px">
+                    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px"><a href="#" style="font-size:13px;font-weight:800;color:{{ b.t.violet }}">{{ c.name }}</a><sc-if value="{{ c.rel }}"><span class="pill mono" style="background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe">{{ c.rel }}</span></sc-if><sc-if value="{{ c.noRel }}"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></sc-if></div>
+                    <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:6px"><span class="chip" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.t.ink }}">{{ c.categoryLabel }}</span><span class="chip" style="{{ c.originStyle }}">{{ c.origin }}</span><sc-if value="{{ c.srcChips }}"><sc-for list="{{ c.srcChips }}" as="k" hint-placeholder-count="2"><span class="chip" style="{{ k.style }}">{{ k.t }}</span></sc-for></sc-if></div>
+                    <div class="body" style="color:{{ b.t.body }};margin-top:6px;font-size:11.5px">{{ c.summary }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ b.noCands }}">
+              <div style="border:1.5px dashed {{ b.t.hair }};border-radius:12px;padding:14px;margin-top:9px">
+                <div class="nm" style="color:{{ b.t.ink }};font-size:12.5px">No competitors yet</div>
+                <div class="body" style="color:{{ b.t.body }};margin-top:4px;font-size:11px">Add one manually or re-run. The product will not invent a top-10.</div>
+                <span class="btn" style="background:#7c3aed;color:#fff;display:inline-block;margin-top:10px;padding:6px 11px">Add competitor</span>
+              </div>
+            </sc-if>
+          </div>
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px">
+            <div class="eye" style="color:{{ b.t.muted }}">Gaps &amp; opportunities</div>
+            <sc-if value="{{ b.gaps }}"><div style="display:grid;gap:6px;margin-top:8px"><sc-for list="{{ b.gaps }}" as="g" hint-placeholder-count="2"><div class="body" style="color:{{ b.t.ink }};font-size:11.5px">· {{ g }}</div></sc-for></div></sc-if>
+            <sc-if value="{{ b.noGaps }}"><div style="margin-top:8px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+            <div class="eye" style="color:{{ b.t.muted }};margin-top:12px">Suggested wedge</div>
+            <sc-if value="{{ b.wedge }}"><div class="body" style="color:{{ b.t.ink }};margin-top:5px;font-size:11.5px">{{ b.wedge }}</div></sc-if>
+            <sc-if value="{{ b.noWedge }}"><div style="margin-top:5px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+          </div>
+          <div style="background:{{ b.t.sunk }};border:1px solid {{ b.t.hair }};border-radius:14px;padding:13px 15px">
+            <div class="eye" style="color:{{ b.t.muted }}">What this page will not do</div>
+            <div class="body" style="color:{{ b.t.body }};margin-top:5px;font-size:11.5px">An analysis maps players you named or that a run returned, with the URLs that fed them. Nothing here is a relationship, a headcount, or a comparable.</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+    <div class="cap" style="width:{{ b.capW }}">{{ b.cap }}</div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    // ══ Status is the run, not a relationship. complete means the pipeline finished; it says
+    // nothing about diligence. error is a failed pipeline with Retry, never an empty landscape. ══
+    const STATUS = { draft:['#f4f4f6','#52525b','#e4e4e8'], running:['#eef2ff','#3730a3','#c7d2fe'],
+      complete:['#f0fdf6','#065f46','#a7f3d0'], error:['#fef2f2','#b91c1c','#fecaca'] };
+    // Two categories only. Anything a writer sends that is not adjacent is coerced to direct,
+    // so there is no third option to offer here.
+    const CAT = { direct:'Direct', adjacent:'Adjacent' };
+    const ORIGIN = { known:['#f4f4f6','#52525b','#e4e4e8'], discovered:['#eef2ff','#3730a3','#c7d2fe'], manual:['#f5f3ff','#6d28d9','#ddd6fe'] };
+    const KIND = { homepage:['#f4f4f6','#52525b','#e4e4e8'], pricing:['#fffbeb','#92400e','#fde68a'], features:['#eef2ff','#3730a3','#c7d2fe'],
+      about:['#f4f4f6','#52525b','#e4e4e8'], news:['#f0fdf6','#065f46','#a7f3d0'], careers:['#fdf4ff','#86198f','#f5d0fe'] };
+    const ps = (c) => 'background:' + c[0] + ';color:' + c[1] + ';border:1px solid ' + c[2];
+
+    const LIGHT = { ground:'#f4f3f7', card:'#fff', hair:'#ececf1', ink:'#18181b', body:'#3f3f46', muted:'#52525b',
+      violet:'#7c3aed', ok:'#047857', warn:'#92400e', danger:'#b91c1c', dangerHair:'#fecaca',
+      chipBg:'#fafafa', sunk:'#f4f3f7', draftBg:'#f5f3ff', nr:'background:#f4f4f6;color:#52525b;border:1px solid #e4e4e8' };
+    const DARK = { ground:'#140c26', card:'#111827', hair:'#374151', ink:'#f4f4f5', body:'#d1d5db', muted:'#9ca3af',
+      violet:'#c4b5fd', ok:'#4ade80', warn:'#fbbf24', danger:'#fca5a5', dangerHair:'#7f1d1d',
+      chipBg:'#0b1220', sunk:'#0f0a1e', draftBg:'#1e1b4b', nr:'background:#1f2937;color:#9ca3af;border:1px solid #374151' };
+
+    const NAV = ['Studio','Validate','Build','Raise','Grow','Network','Research','Trust','Company Settings'];
+    const nav = (t) => NAV.map(l => ({ label:l, style: l === 'Research'
+      ? (t === DARK ? 'background:#1e1b4b;color:#c4b5fd;font-weight:700;box-shadow:inset 2px 0 0 #7c3aed' : 'background:#f5f3ff;color:#6d28d9;font-weight:700;box-shadow:inset 2px 0 0 #7c3aed')
+      : 'color:' + t.muted }));
+    const ZONES = ['Ask','Markets','Companies','Funds','Library'];
+    const zones = (t) => ZONES.map(z => ({ t:z, style: z === 'Companies'
+      ? (t === DARK ? 'background:#1e1b4b;color:#c4b5fd;border:1px solid #4c1d95' : 'background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe')
+      : 'color:' + t.muted + ';border:1px solid transparent' }));
+
+    // ══ Fixtures. DENSE is labelled SAMPLE; SPARSE is a finished run that found nothing. ══
+    const DENSE = { id:'an_7f3k', mode:'startup', title:'Climate software · UK pre-seed', status:'complete', edited:true,
+      updated_at:'2026-09-18',
+      inputs:{ market:'Climate software', target_customer:'Sustainability leads at UK mid-market', geography:'UK',
+        depth:'deep', known_competitors:['Loomwright','Verdant IO'] },
+      candidates:[
+        { name:'Loomwright', domain:'example.com', category:'direct', origin:'known', relevance_score:81, srcKinds:['homepage','pricing'],
+          summary:'Carbon accounting with a reporting layer aimed at the sustainability lead rather than finance.' },
+        { name:'Verdant IO', domain:'example.org', category:'direct', origin:'discovered', relevance_score:74, srcKinds:['homepage'],
+          summary:'Supply-chain emissions; two of three case studies are manufacturers over 500 people.' },
+        { name:'Helios', domain:null, category:'adjacent', origin:'manual', relevance_score:null, srcKinds:[],
+          summary:'Named by hand after a founder call. No site recorded, so nothing was fetched.' } ],
+      output:{ market_summary:'Three UK players sell carbon accounting to the sustainability lead, and all three price per seat. None publishes a self-serve tier under £500 a month, which is where the mid-market buyer starts.',
+        features:{ head:['Loomwright','Verdant IO','Helios'], rows:[
+          { f:'Self-serve onboarding', cells:['yes','no',null] },
+          { f:'Supply-chain scope 3', cells:['no','yes',null] },
+          { f:'Published pricing', cells:['yes','no',null] } ] },
+        pricing_signals:[ { who:'Loomwright', text:'three seat-based tiers, no usage metering' } ],
+        activity_signals:[ { who:'Verdant IO', text:'careers page lists two enterprise AE roles' } ],
+        gaps:['No self-serve tier below the enterprise motion','Scope 3 is either absent or sold only to large manufacturers'],
+        wedge:'A self-serve scope 1–2 product for UK mid-market, priced under the seat minimum the incumbents enforce.',
+        next_actions:['Fetch Verdant IO pricing when the page returns 200','Ask two design partners what they pay today'],
+        notes:null } };
+    const SPARSE = { id:'an_2b9q', mode:'custom', title:'AI sales enablement for SMBs', status:'complete', edited:false,
+      updated_at:'2026-09-20',
+      inputs:{ market:'AI sales enablement', target_customer:null, geography:null, depth:'quick', known_competitors:[] },
+      candidates:[], output:{ market_summary:null, features:null, pricing_signals:[], activity_signals:[], gaps:[], wedge:null, next_actions:[], notes:null } };
+    const ERRORED = Object.assign({}, SPARSE, { id:'an_5m1x', title:'Developer tooling · Series A', status:'error', updated_at:'2026-09-20' });
+    const RUNNING = Object.assign({}, SPARSE, { id:'an_8k4p', title:'Robotics middleware', status:'running', updated_at:'2026-09-20' });
+
+    const SCOPE = 'Novacraft Labs';
+
+    const board = (id, badge, a, t, kind, extra) => {
+      const dark = t === DARK;
+      const o = a.output, cands = a.candidates;
+      const direct = cands.filter(c => c.category === 'direct').length;
+      const adjacent = cands.filter(c => c.category === 'adjacent').length;
+      const nSrc = cands.reduce((n, c) => n + c.srcKinds.length, 0);
+      const errored = a.status === 'error', running = a.status === 'running';
+      const readFailed = !!(extra && extra.readFailed);
+      const showBody = !errored && !running && !readFailed;
+      const hasSum = !!o.market_summary;
+      const hasCands = cands.length > 0;
+      const hasDraft = hasCands || hasSum;
+      // Three distinct shapes, because the three states are distinct facts:
+      //   failed read → no tiles at all, only the card. We could not ask, so there is nothing
+      //     to report, not even an absence.
+      //   error      → Not recorded tiles. We asked, the run failed, so the counts are unknown.
+      //   complete   → a number, even 0. A finished run that found nothing is a fact.
+      const tiles = readFailed ? null
+        : errored
+        ? [ { k:'Competitors', nr:true, sub:'the run failed before it returned' },
+            { k:'Direct', nr:true, sub:'nothing to count' }, { k:'Adjacent', nr:true, sub:'nothing to count' },
+            { k:'Sources fetched', nr:true, sub:'no fetch was attempted' } ]
+        : [ { k:'Competitors', v:String(cands.length), ink:t.ink, sub: hasCands ? 'direct + adjacent in this run' : 'none recorded yet' },
+            { k:'Direct', v:String(direct), ink:t.ink, sub:'category=direct' },
+            { k:'Adjacent', v:String(adjacent), ink:t.ink, sub:'category=adjacent' },
+            { k:'Sources fetched', v:String(nSrc), ink:t.ink, sub:'public URLs, not a database' } ];
+      // Feature comparison is omitted entirely when the run returned no features — an empty
+      // grid with invented column heads would be the worst thing this page could draw.
+      const feat = o.features && o.features.rows && o.features.rows.length ? o.features : null;
+      const sigCols = [
+        { k:'Pricing signals', lines:o.pricing_signals || [] },
+        { k:'Hiring & content activity', lines:o.activity_signals || [] }
+      ].filter(c => c.lines.length);
+
+      return Object.assign({
+        id, badge, a, t, desktop: kind === 'desktop', mobile: kind === 'mobile',
+        capW: kind === 'desktop' ? '1280px' : '390px',
+        title: a.title + ' · ' + (kind === 'desktop' ? '1280' : '390') + (dark ? ' · dark' : ''),
+        nav: nav(t), zones: zones(t), scope: SCOPE,
+        statusStyle: ps(STATUS[a.status]),
+        saveBtn: a.edited ? 'background:#7c3aed;color:#fff' : 'border:1px solid ' + t.hair + ';color:' + t.muted + ';background:transparent',
+        ghost: 'border:1px solid ' + t.hair + ';color:' + t.ink + ';background:transparent',
+        inputs: [
+          { k:'Market', v:a.inputs.market },
+          a.inputs.target_customer ? { k:'Customer', v:a.inputs.target_customer } : { k:'Customer', nr:true },
+          a.inputs.geography ? { k:'Geography', v:a.inputs.geography } : { k:'Geography', nr:true },
+          { k:'Depth', v:a.inputs.depth },
+          a.inputs.known_competitors.length ? { k:'Known competitors', v:a.inputs.known_competitors.join(', ') } : { k:'Known competitors', nr:true }
+        ],
+        running, errored, readFailed, showBody, tiles,
+        noSum: !hasSum, sumText: o.market_summary || 'What this landscape looks like, in your words…', sumInk: hasSum ? t.ink : t.muted,
+        hasCands, noCands: !hasCands, candCount: cands.length + (cands.length === 1 ? ' competitor' : ' competitors'),
+        cands: cands.map(c => ({
+          name:c.name, domain:c.domain, categoryLabel:CAT[c.category], origin:c.origin, originStyle: ps(ORIGIN[c.origin]),
+          rel: c.relevance_score != null ? c.relevance_score + ' / 100' : null, noRel: c.relevance_score == null,
+          srcChips: c.srcKinds.length ? c.srcKinds.map(k => ({ t:k, style: ps(KIND[k]) })) : null, noSrc: !c.srcKinds.length,
+          summary:c.summary })),
+        hasFeatures: !!feat, featHead: feat ? feat.head : null,
+        featCols: feat ? '1.4fr ' + feat.head.map(() => '1fr').join(' ') : null,
+        // A cell the run did not fill reads "Not recorded", never "no" — an unfetched site is
+        // not evidence that a feature is absent.
+        featRows: feat ? feat.rows.map(r => ({ f:r.f, cells: r.cells.map(v => v == null
+          ? { v:'Not recorded', ink:t.muted } : { v, ink: v === 'yes' ? t.ok : t.body }) })) : null,
+        signalCols: sigCols.length ? sigCols : null,
+        gaps: o.gaps.length ? o.gaps : null, noGaps: !o.gaps.length,
+        wedge: o.wedge, noWedge: !o.wedge,
+        actions: o.next_actions.length ? o.next_actions : null, noActions: !o.next_actions.length,
+        notesText: o.notes || 'Your own conclusions…', notesInk: o.notes ? t.ink : t.muted, noNotes: !o.notes,
+        draft: !hasDraft ? 'Add a competitor or a summary first.'
+          : 'Draft restates only what is on this page: ' + (hasCands ? cands.length + ' competitor ' + (cands.length === 1 ? 'name' : 'names') + ' and their summaries' : '')
+            + (hasCands && hasSum ? ', plus ' : '') + (hasSum ? 'the market summary' : '')
+            + (nSrc ? ', and the source kinds already fetched' : '') + '. It will not invent a wedge, a price, or a company.',
+        // Disabled still has to be readable: white on violet-300 measured 1.85:1, so the
+        // disabled fill goes pale and the ink stays deep violet.
+        draftBtn: hasDraft ? 'background:#7c3aed;color:#fff'
+          : 'background:' + (dark ? '#2e1065' : '#ede9fe') + ';color:' + (dark ? '#a78bfa' : '#6d28d9') + ';cursor:not-allowed',
+        acceptBtn: 'border:1px solid ' + (dark ? '#4c1d95' : '#ddd6fe') + ';color:' + (dark ? '#c4b5fd' : '#6d28d9') + ';background:transparent'
+      }, extra || {});
+    };
+
+    const boards = [
+      board('d1','D1',DENSE,LIGHT,'desktop',{
+        blurb:'Dense, labelled SAMPLE. Three candidates — two direct, one adjacent, one typed by hand — with relevance scores, source-kind chips and the inputs the human actually gave. The feature grid renders because the run returned features; its unfilled cells read Not recorded rather than "no", since an unfetched site is not evidence a feature is absent.',
+        cap:'Pricing cells are Not recorded throughout: the pricing signal says the tiers are seat-based, which is what the page fetched, and no list price is invented from that. Helios has no domain, so its Sources cell is Not recorded and its relevance is blank — not 0.' }),
+      board('d2','D2',SPARSE,LIGHT,'desktop',{
+        blurb:'Sparse and mandatory: a finished run that found nothing. Competitors reads 0 with "none recorded yet" — a completed run returning an empty set is a fact, so it is a number, not a Not recorded chip. Summary, gaps, wedge and notes are Not recorded; the feature grid and both signal columns are omitted entirely.',
+        cap:'The empty competitors state says the product will not invent a top-10, and the add-competitor row underneath is the only way a name gets here by hand.' }),
+      board('d3','D3',ERRORED,LIGHT,'desktop',{
+        blurb:'Pipeline error. Tiles read Not recorded rather than 0, because nothing was counted — the run never returned. The body offers Re-run and a quick scan at reduced depth.',
+        cap:'An error is not an empty landscape: the competitors table, summary and draft band are all withheld rather than drawn hollow.' }),
+      board('d4','D4',SPARSE,LIGHT,'desktop',{ readFailed:true,
+        blurb:'Failed read. The store did not answer, so no count is drawn at all — the failed-read card from the list page appears instead, with Try again. Drawing 0 here would claim a fact the product does not have.',
+        cap:'Compare the tile row against D2 and D3: complete shows 0, error shows Not recorded, and a failed read shows nothing — three states, three shapes, because "the run found nothing", "the run failed" and "we could not ask" are three different facts.' }),
+      board('d5','D5',RUNNING,LIGHT,'desktop',{
+        blurb:'Running. A progress card states what the pipeline is doing and nothing else — no names appear while it works, because a name on screen during a run is a name the product is claiming to have found.',
+        cap:'Tiles still show 0 from the current stored state rather than spinning, so the page does not pretend the previous result has been replaced yet.' }),
+      board('d6','D6',DENSE,DARK,'desktop',{
+        blurb:'Dark mode of D1. Night well on the ground, gray-900 cards, every semantic ink — violet, ok, warn, danger — read from the theme rather than typed, so the edited marker and the relevance links clear contrast on the dark card.',
+        cap:'The COLLECTION badge and the category, origin and kind chips keep their hue; they are data colours, not theme ones.' }),
+      board('m1','M1',DENSE,LIGHT,'mobile',{
+        blurb:'Mobile 390, dense. Header and actions wrap, tiles 2×2, then the competitors table as stacked rows — name and relevance on one line, category, origin and source kinds as chips beneath, summary last.',
+        cap:'A seven-column table does not survive 358px, so the row becomes a card with the same fields in the same order.' }),
+      board('m2','M2',SPARSE,LIGHT,'mobile',{
+        blurb:'Mobile 390, sparse. The same stack with 0 competitors, the no-competitors empty state, and Not recorded on summary, gaps and wedge.',
+        cap:'The StatedLimit is shortened on mobile but keeps the three claims that matter: not a relationship, not a headcount, not a comparable.' })
+    ];
+
+    return { boards };
+  }
+}
+</script>
+</body></html>

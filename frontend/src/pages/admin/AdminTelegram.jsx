@@ -5,6 +5,7 @@ import {
   ExternalLink, ShieldAlert,
 } from 'lucide-react';
 import { adminTelegram as api } from '../../lib/api';
+import { toLocalInput, scheduledNote, failedNote } from '../../lib/scheduledPost';
 import { useToast } from '../../components/useToast';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 
@@ -53,7 +54,11 @@ function ChannelsTab({ channels, refresh, toast }) {
       toast.success(`Sent hello to channel (msg #${res.message_id})`);
       refresh();
     } catch (e) {
-      const msg = e?.body?.message || e?.body?.code || e.message;
+      // D258 — a refusal's sentence is `e.message` and its body is `e.data`.
+      // Every catch on this page used to read `e.body`, which nothing in the
+      // SPA sets, so each toast showed its fallback and never the server's
+      // own reason.
+      const msg = e?.message || 'no reason was given';
       toast.error(`Test failed: ${msg}`);
       refresh();
     } finally {
@@ -68,7 +73,7 @@ function ChannelsTab({ channels, refresh, toast }) {
       toast.success('Channel removed');
       refresh();
     } catch (e) {
-      toast.error(e?.body?.message || e?.body?.error || 'Delete failed');
+      toast.error(e?.message || 'Delete failed');
     }
   };
 
@@ -136,7 +141,7 @@ function ChannelRow({ ch, testingId, onTest, onRemove, onSaved, toast }) {
       setEditingChat(false);
       onSaved();
     } catch (e) {
-      toast.error(e?.body?.message || 'Save failed');
+      toast.error(e?.message || 'Save failed');
     } finally {
       setBusy(false);
     }
@@ -150,7 +155,7 @@ function ChannelRow({ ch, testingId, onTest, onRemove, onSaved, toast }) {
       setEditingSig(false);
       onSaved();
     } catch (e) {
-      toast.error(e?.body?.message || 'Save failed');
+      toast.error(e?.message || 'Save failed');
     } finally {
       setBusy(false);
     }
@@ -161,7 +166,7 @@ function ChannelRow({ ch, testingId, onTest, onRemove, onSaved, toast }) {
       await api.updateChannel(ch.id, { enabled: !ch.enabled });
       onSaved();
     } catch (e) {
-      toast.error(e?.body?.message || 'Toggle failed');
+      toast.error(e?.message || 'Toggle failed');
     }
   };
 
@@ -271,7 +276,7 @@ function AddChannelModal({ onClose, onSaved, toast }) {
       toast.success('Channel added');
       onSaved();
     } catch (e) {
-      toast.error(e?.body?.message || e?.body?.error || 'Create failed');
+      toast.error(e?.message || 'Create failed');
     } finally {
       setBusy(false);
     }
@@ -336,6 +341,8 @@ function DraftsTab({ channels, refresh, toast, onEdit }) {
   const [loading, setLoading] = useState(true);
   const [periodDays, setPeriodDays] = useState(7);
   const [running, setRunning] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [previewing, setPreviewing] = useState(false);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -343,7 +350,7 @@ function DraftsTab({ channels, refresh, toast, onEdit }) {
       const res = await api.listPosts({ status: 'draft', limit: 100 });
       setDrafts(res.posts || []);
     } catch (e) {
-      toast.error(e?.body?.message || 'Load failed');
+      toast.error(e?.message || 'Load failed');
     } finally {
       setLoading(false);
     }
@@ -356,11 +363,28 @@ function DraftsTab({ channels, refresh, toast, onEdit }) {
     try {
       const res = await api.runAggregator({ period_days: periodDays });
       toast.success(`Aggregator ran — drafted ${res.drafted.length} posts`);
+      setPreview(null);
       reload();
     } catch (e) {
-      toast.error(e?.body?.message || 'Aggregator failed');
+      toast.error(e?.message || 'Aggregator failed');
     } finally {
       setRunning(false);
+    }
+  };
+
+  // D330 — a preview of what the NEXT run would produce, including the
+  // audiences it drafts nothing for. `runAggregator` never persists a draft
+  // with `drafted: false` (D301), so that audience never shows up in the
+  // list above; without this, "no draft made" is silent rather than stated.
+  const runPreview = async () => {
+    setPreviewing(true);
+    try {
+      const res = await api.previewAggregator({ period_days: periodDays });
+      setPreview(res.drafts || []);
+    } catch (e) {
+      toast.error(e?.message || 'Preview failed');
+    } finally {
+      setPreviewing(false);
     }
   };
 
@@ -370,7 +394,7 @@ function DraftsTab({ channels, refresh, toast, onEdit }) {
       await api.removePost(id);
       reload();
     } catch (e) {
-      toast.error(e?.body?.message || 'Delete failed');
+      toast.error(e?.message || 'Delete failed');
     }
   };
 
@@ -391,6 +415,14 @@ function DraftsTab({ channels, refresh, toast, onEdit }) {
           />
         </label>
         <button
+          onClick={runPreview}
+          disabled={previewing}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
+        >
+          {previewing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+          Preview
+        </button>
+        <button
           onClick={runAgg}
           disabled={running}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 text-white text-sm hover:bg-violet-700 disabled:opacity-50"
@@ -399,6 +431,36 @@ function DraftsTab({ channels, refresh, toast, onEdit }) {
           Run aggregator
         </button>
       </div>
+
+      {/* D330 — the preview shows every audience the NEXT run would touch,
+          including one `runAggregator` drafts nothing for (D301: a draft
+          whose every figure line was dropped is not persisted). Without this,
+          that audience's absence from the list below is silent. */}
+      {preview && (
+        <div className="space-y-2">
+          {preview.map((d) => (
+            <div key={d.audience} className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">{d.audience}</span>
+                {d.drafted === false && (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                    no draft made
+                  </span>
+                )}
+              </div>
+              {d.drafted === false ? (
+                <div className="text-xs text-slate-500 dark:text-slate-400" data-testid="telegram-aggregator-not-drafted-reason">
+                  No draft was made: {d.reason || 'no reason was given'}.
+                </div>
+              ) : (
+                <div className="text-xs text-slate-600 dark:text-slate-400 line-clamp-3 whitespace-pre-wrap font-mono">
+                  {d.body_md}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {loading ? (
         <div className="text-center py-8 text-slate-500"><Loader2 className="w-5 h-5 animate-spin inline" /></div>
@@ -475,10 +537,10 @@ function ComposeTab({ channels, toast, editingId, setEditingId, onSent }) {
       setLintResult(null);
       setOverrideReason('');
       setShowOverride(false);
-      setScheduleAt(found?.scheduled_for || '');
+      setScheduleAt(toLocalInput(found?.scheduled_for));
     } catch (e) {
       setPost(null);
-      toast.error(e?.body?.error || e?.body?.message || 'Load draft failed');
+      toast.error(e?.message || 'Load draft failed');
     } finally {
       setLoading(false);
     }
@@ -505,7 +567,7 @@ function ComposeTab({ channels, toast, editingId, setEditingId, onSent }) {
       setEditingId(res.id);
       setNewForm({ channel_id: '', title: '', body_md: '' });
     } catch (e) {
-      toast.error(e?.body?.message || 'Create failed');
+      toast.error(e?.message || 'Create failed');
     } finally {
       setBusy(false);
     }
@@ -519,7 +581,7 @@ function ComposeTab({ channels, toast, editingId, setEditingId, onSent }) {
       toast.success('Saved');
       loadDraft(post.id);
     } catch (e) {
-      toast.error(e?.body?.message || 'Save failed');
+      toast.error(e?.message || 'Save failed');
     } finally {
       setBusy(false);
     }
@@ -535,7 +597,7 @@ function ComposeTab({ channels, toast, editingId, setEditingId, onSent }) {
       if (res.ok) toast.success('Linter passed — no PII detected');
       else toast.error(`Linter flagged ${res.findings.length} issue(s)`);
     } catch (e) {
-      toast.error(e?.body?.message || 'Lint failed');
+      toast.error(e?.message || 'Lint failed');
     } finally {
       setBusy(false);
     }
@@ -558,7 +620,7 @@ function ComposeTab({ channels, toast, editingId, setEditingId, onSent }) {
       toast.success('Media attached');
       loadDraft(post.id);
     } catch (e) {
-      toast.error(e?.body?.message || 'Upload failed');
+      toast.error(e?.message || 'Upload failed');
     } finally {
       setBusy(false);
     }
@@ -579,12 +641,15 @@ function ComposeTab({ channels, toast, editingId, setEditingId, onSent }) {
       setEditingId(null);
       onSent();
     } catch (e) {
-      if (e?.body?.code === 'pii_linter_blocked') {
-        setLintResult({ ok: false, findings: e.body.findings || [] });
+      // D258 — the code is `e.code` and the findings ride the body on `e.data`.
+      // Read off `e.body`, a send the linter refused showed "Send failed" and
+      // dropped its findings, so the override only opened through Lint.
+      if (e?.code === 'pii_linter_blocked') {
+        setLintResult({ ok: false, findings: e?.data?.findings || [] });
         setShowOverride(true);
         toast.error('Linter blocked the send — provide an override reason.');
       } else {
-        toast.error(e?.body?.message || e?.body?.code || 'Send failed');
+        toast.error(e?.message || 'Send failed');
       }
     } finally {
       setBusy(false);
@@ -600,7 +665,7 @@ function ComposeTab({ channels, toast, editingId, setEditingId, onSent }) {
       toast.success(`Scheduled for ${new Date(iso).toLocaleString()}`);
       loadDraft(post.id);
     } catch (e) {
-      toast.error(e?.body?.message || 'Schedule failed');
+      toast.error(e?.message || 'Schedule failed');
     } finally {
       setBusy(false);
     }
@@ -698,13 +763,24 @@ function ComposeTab({ channels, toast, editingId, setEditingId, onSent }) {
           <div className="flex-1" />
           <input
             type="datetime-local"
-            value={scheduleAt ? scheduleAt.slice(0, 16) : ''}
+            value={scheduleAt || ''}
             onChange={(e) => setScheduleAt(e.target.value)}
             className="text-sm px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800"
           />
           <button onClick={schedule} disabled={busy || !scheduleAt} className="text-sm px-3 py-1.5 rounded border border-slate-300 dark:border-slate-600 inline-flex items-center gap-1">
             <Calendar className="w-3 h-3" /> Schedule
           </button>
+          {/* D250 — the scheduler's promise and a failure's reason, beside the controls. */}
+          {post?.status === 'scheduled' && scheduledNote(post.scheduled_for) && (
+            <span className="basis-full text-xs text-slate-500" data-testid="telegram-scheduled-note">
+              {scheduledNote(post.scheduled_for)}
+            </span>
+          )}
+          {post?.status === 'failed' && (
+            <span className="basis-full text-xs text-red-600 dark:text-red-300" data-testid="telegram-failed-note">
+              {failedNote(post.send_error)}
+            </span>
+          )}
           <button
             onClick={send}
             disabled={busy}
@@ -781,7 +857,7 @@ function HistoryTab({ toast }) {
       setPosts(res.posts || []);
       setTotal(res.total || 0);
     } catch (e) {
-      toast.error(e?.body?.message || 'Load failed');
+      toast.error(e?.message || 'Load failed');
     } finally {
       setLoading(false);
     }
@@ -851,7 +927,7 @@ export default function AdminTelegram() {
       const res = await api.listChannels();
       setChannels(res.channels || []);
     } catch (e) {
-      toast.error(e?.body?.message || 'Load failed');
+      toast.error(e?.message || 'Load failed');
     }
   }, [toast.error]);
 

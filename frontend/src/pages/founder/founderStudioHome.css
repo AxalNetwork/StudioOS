@@ -10,7 +10,7 @@
   margin: auto;
   padding-bottom: 12px;
   color: var(--fs-ink);
-  font-family: var(--font-display);
+  font-family:var(--font-app);
 }
 
 .fs-context {
@@ -19,6 +19,42 @@
   align-items: flex-end;
   gap: 24px;
   padding: 5px 2px 18px;
+}
+
+.fs-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.fs-title h2 {
+  margin: 0;
+}
+
+.fs-role {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #ecfdf5;
+  color: #047857;
+  font: 800 10px var(--font-mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.fs-bar {
+  height: 5px;
+  margin: 2px 0 6px;
+  border-radius: 999px;
+  background: var(--fs-line);
+  overflow: hidden;
+}
+
+.fs-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #047857;
 }
 
 .fs-kicker {
@@ -338,6 +374,15 @@
 
 .dark .fs-card {
   background: #151321;
+}
+
+.dark .fs-bar span {
+  background: #34d399;
+}
+
+.dark .fs-role {
+  background: #0f2e25;
+  color: #6ee7b7;
 }
 
 .dark .fs-advisor-unavailable {

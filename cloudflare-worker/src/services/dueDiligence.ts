@@ -253,7 +253,7 @@ interface ConnectorResult {
   error_message?: string;
 }
 
-function isFlagged(env: Env, flag: string): boolean {
+export function isFlagged(env: Env, flag: string): boolean {
   const v = (env as unknown as Record<string, string | undefined>)[flag];
   return Boolean(v && /^(1|true|on|yes)$/i.test(String(v)));
 }
@@ -526,6 +526,11 @@ export interface ReportSection {
   status: string;
   verdict: string | null;
   reviewer_notes: string | null;
+  // D466 — the sign-off: who returned the verdict, and when. Null on a
+  // section completed before migration 339, rendered as unrecorded rather
+  // than a guessed signer.
+  signed_off_by_name?: string | null;
+  completed_at?: string | null;
   findings: Array<{ severity: string; title: string; detail: string | null; evidence_url: string | null }>;
 }
 
@@ -566,6 +571,7 @@ export function renderReportHtml(cs: ReportCase, sections: ReportSection[]): str
           </div>
         </header>
         ${sec.reviewer_notes ? `<p style="font-size:13px;color:#374151;background:#f9fafb;padding:10px;border-radius:8px;margin:0 0 12px;"><strong>Reviewer:</strong> ${esc(sec.reviewer_notes)}</p>` : ''}
+        ${sec.verdict ? `<p style="font-size:11px;color:#6b7280;margin:0 0 12px;">${sec.signed_off_by_name ? `Signed off by ${esc(sec.signed_off_by_name)}` : 'Sign-off not recorded'}${sec.completed_at ? ` · ${esc(String(sec.completed_at).slice(0, 10))}` : ''}</p>` : ''}
         ${findings ? `<table style="width:100%;border-collapse:collapse;font-family:-apple-system,sans-serif;">${findings}</table>` : '<p style="color:#9ca3af;font-size:12px;margin:0;">No findings recorded.</p>'}
       </section>`;
   }).join('');

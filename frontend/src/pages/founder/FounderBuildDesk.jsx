@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowUpRight, ChevronRight, ClipboardCheck, KanbanSquare, LineChart, Route, Target } from 'lucide-react';
 import { api } from '../../lib/api';
-import { WorkerRail } from '../../ui';
-import ExecutionPage from '../ExecutionPage';
+import { Unreadable, WorkerRail } from '../../ui';
+import { kindLabel, scheduleLabel } from '../../lib/cadence';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import useAssistMode from '../../hooks/useAssistMode';
+import useAiSpend from '../../hooks/useAiSpend';
+import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import { zonePillClass } from './deskZoneNav';
 import CreateStartupForm from '../../components/CreateStartupForm';
 import './founderBuildDesk.css';
@@ -111,7 +113,6 @@ export default function FounderBuildDesk() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const seed = location.state?.founderBuildSeed;
-  const workspace = searchParams.get('mode') === 'workspace';
   const [projects, setProjects] = useState(() => seed?.projects || []);
   const [projectId, setProjectId] = useState(() => seed?.projectId || null);
   const [okrs, setOkrs] = useState(() => seed?.okrs || []);
@@ -119,18 +120,35 @@ export default function FounderBuildDesk() {
   const [cards, setCards] = useState(() => seed?.cards ?? null);
   const [snapshots, setSnapshots] = useState(() => seed?.snapshots || []);
   const [summary, setSummary] = useState(() => seed?.summary || null);
+  // `undefined` while unread, `null` when the read failed. Migration 250's
+  // cadence store has served `/build/cadence` since it shipped; this card said
+  // "no cadence store" beside it.
+  const [cadence, setCadence] = useState(() => seed?.cadence);
   const [state, setState] = useState(() => seed ? 'ready' : 'loading');
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [fillsOn] = useAssistMode('Build');
+  // The cost before a run (D424): the founder's own average for the task the
+  // three bands run, read only while they are drawn.
+  const ai = useAiSpend({ enabled: fillsOn && Boolean(projectId) });
   // `/projects` is retired (task #101) and this desk inherited the one thing it
   // could do that nothing else can: create a startup. `?new=1` opens the form,
   // because that is how the Command Palette's "Create startup" entry addressed
   // /projects and a <Navigate> redirect cannot carry a query string.
   const [creating, setCreating] = useState(() => searchParams.get('new') === '1');
+  // AND IT HAS TO FOLLOW THE PARAM, not just seed from it. `?new=1` used to be
+  // read once, at mount, which is enough for the twelve links that arrive here
+  // from another route — but not for the Command Palette, which can be opened
+  // from this very page. `nav('/build?new=1')` from /build changes the search
+  // string without remounting, so the initializer never ran again and the entry
+  // did nothing at all. That went unnoticed because the form also carried its
+  // own "New Startup" button, and #181 has just removed it: the URL is the only
+  // handle now, so the URL has to work from everywhere.
+  useEffect(() => {
+    if (searchParams.get('new') === '1') setCreating(true);
+  }, [searchParams]);
 
   useEffect(() => {
-    if (workspace) return;
     let alive = true;
     setState(seed ? 'ready' : 'loading');
     Promise.all([api.listProjects(), api.pipelineActive().catch(() => [])]).then(([list, active]) => {
@@ -145,10 +163,10 @@ export default function FounderBuildDesk() {
       setError(err?.message || 'The operating records could not be loaded.'); setState('error');
     });
     return () => { alive = false; };
-  }, [workspace, reloadKey]);
+  }, [reloadKey]);
 
   useEffect(() => {
-    if (!projectId || workspace) return;
+    if (!projectId) return;
     let alive = true;
     setState('loading');
     setSearchParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(projectId)); return next; }, { replace: true });
@@ -160,16 +178,18 @@ export default function FounderBuildDesk() {
       // counts alone, so the notes need the rows — and this is the same read
       // `/build/board` already makes, not a new surface.
       api.pipelineDealDetail(projectId).catch(() => null),
-    ]).then(([roadmap, metrics, metricSummary, detail]) => {
+      api.getCadence(projectId).catch(() => null),
+    ]).then(([roadmap, metrics, metricSummary, detail, rituals]) => {
       if (!alive) return;
       setOkrs(roadmap?.okrs || []); setSnapshots(metrics?.snapshots || []); setSummary(metricSummary);
+      setCadence(rituals);
       setCards(detail ? (detail.tasks || []) : null); setState('ready'); setError('');
     }).catch((err) => {
       if (!alive) return;
       setError(err?.message || 'Records for this startup could not be loaded.'); setState('error');
     });
     return () => { alive = false; };
-  }, [projectId, workspace, reloadKey]);
+  }, [projectId, reloadKey]);
 
   const data = useMemo(() => {
     const now = okrs.filter((item) => item.kanban_status === 'now');
@@ -202,8 +222,11 @@ export default function FounderBuildDesk() {
     return { now, commitments, board, boardTotal, roadmap, selectedDeal };
   }, [okrs, deals, cards, projectId]);
 
-  const navigationState = { founderBuildSeed: { projects, projectId, okrs, deals, cards, snapshots, summary } };
-  if (workspace) return <ExecutionPage />;
+  const navigationState = { founderBuildSeed: { projects, projectId, okrs, deals, cards, snapshots, summary, cadence } };
+  // THE DESK NO LONGER EMBEDS THE EDITOR (D422). `?mode=workspace` used to
+  // swap this whole page for ExecutionPage; `/build?mode=workspace` never
+  // reached it (the route redirects to This week) and `/execution?mode=workspace`
+  // now mounts ExecutionPage at the route, so the desk renders one thing.
   const query = projectId ? `?project_id=${projectId}` : '';
   const links = Object.fromEntries(SECTIONS.map(([, slug]) => [slug, `/build/${slug}${query}`]));
   const metricsLink = `/build/metrics${query}`;
@@ -255,13 +278,19 @@ export default function FounderBuildDesk() {
           </nav>
         </header>
         {state === 'error' && <div className="build-error" data-testid="status-build-error"><AlertCircle size={16} /> {error} <button data-testid="button-retry-build" onClick={() => setReloadKey((value) => value + 1)}>Retry</button></div>}
-        <BuildSections loading={state === 'loading'} hasProjects={projects.length > 0} data={data} snapshots={snapshots} summary={summary} links={links} metricsLink={metricsLink} executionLink={executionLink} navigationState={navigationState} projectId={projectId} fillsOn={fillsOn} onSaved={() => setReloadKey((value) => value + 1)} />
+        <BuildSections loading={state === 'loading'} hasProjects={projects.length > 0} data={data} snapshots={snapshots} summary={summary} cadence={cadence} onRetry={() => setReloadKey((value) => value + 1)} links={links} metricsLink={metricsLink} executionLink={executionLink} navigationState={navigationState} projectId={projectId} fillsOn={fillsOn} ai={ai} onSaved={() => setReloadKey((value) => value + 1)} />
       </div>
       <WorkerRail
         workspace="Build"
         className="build-rail"
         stance="Manual operating view"
-        note="This desk reads stored records. It does not move cards, generate plans, or change commitments."
+        // THE SWITCH THE THREE BANDS WAITED FOR (D424). They have been gated
+        // on this workspace's mode since they were mounted, and no rail on
+        // Build drew a switch for it, so none of them could ever be reached.
+        // The note it replaces said the desk generates no plans, above a band
+        // that drafts one.
+        fills
+        note={ASSIST_SURFACES.workspace.desks.Build.fills}
         coverage={[
           `${data.commitments.length} current key result${data.commitments.length === 1 ? '' : 's'}`,
           `${data.boardTotal} stored execution card${data.boardTotal === 1 ? '' : 's'} for this startup`,
@@ -272,7 +301,7 @@ export default function FounderBuildDesk() {
   </main>;
 }
 
-function BuildSections({ loading, hasProjects, data, snapshots, summary, links, metricsLink, executionLink, navigationState, projectId, fillsOn, onSaved }) {
+function BuildSections({ loading, hasProjects, data, snapshots, summary, cadence, onRetry, links, metricsLink, executionLink, navigationState, projectId, fillsOn, ai, onSaved }) {
   const latest = snapshots[0];
   const previous = snapshots[1];
   const objectives = data.roadmap.reduce((count, column) => count + column.items.length, 0);
@@ -281,6 +310,7 @@ function BuildSections({ loading, hasProjects, data, snapshots, summary, links, 
       {fillsOn && projectId ? <ZoneDraft
         surface="build/this-week"
         scopeKey={String(projectId)}
+        ai={ai}
         accent="violet"
         label="Proposal · Monday plan"
         run="Draft a Monday plan"
@@ -299,7 +329,8 @@ function BuildSections({ loading, hasProjects, data, snapshots, summary, links, 
         <p className="build-source">Cards are yours. This desk only ever proposes new ones or summarises movement — it never moves a card for you.</p>
         <Link data-testid="link-open-board-workspace" className="manage-link" to={links.board} state={navigationState}>Open detailed board <ChevronRight size={14} /></Link>
       </section>
-      <section className="build-card" id="build-2"><SectionHead icon={Route} title="Operating cadence" meta="Not recorded" /><div className="cadence-empty"><Route size={20} /><strong>No operating cadence recorded</strong><p>There is no cadence store connected to this operating desk, so no plan, standup or retro is assumed to exist. Once one is recorded, a Friday retro can be drafted from the board's own history — until then there is no history of a review to draft from.</p></div>
+      <section className="build-card" id="build-2"><SectionHead icon={Route} title="Operating cadence" meta={loading ? 'Reading cadence' : cadenceLabel(cadence)} />
+        {loading ? <Skeleton rows={2} /> : <Cadence cadence={cadence} onRetry={onRetry} />}
         <Link data-testid="link-open-cadence" className="manage-link" to={links.cadence} state={navigationState}>Open cadence <ChevronRight size={14} /></Link>
       </section>
     </div>
@@ -308,6 +339,7 @@ function BuildSections({ loading, hasProjects, data, snapshots, summary, links, 
       {fillsOn && projectId ? <ZoneDraft
         surface="build/roadmap"
         scopeKey={String(projectId)}
+        ai={ai}
         accent="violet"
         label="Proposal · tradeoff, reasoned"
         run="Argue the ordering"
@@ -323,6 +355,7 @@ function BuildSections({ loading, hasProjects, data, snapshots, summary, links, 
       {fillsOn && projectId ? <ZoneDraft
         surface="build/kpi"
         scopeKey={String(projectId)}
+        ai={ai}
         accent="violet"
         label="Out of range · explain this?"
         run="Draft an annotation"
@@ -400,6 +433,37 @@ function KpiEntry({ projectId, latest, previous, summary, onSaved }) {
   </>;
 }
 
+/**
+ * A3's cadence card: the rituals a founder scheduled, from migration 250.
+ *
+ * THREE ABSENCES, KEPT APART. An unreadable read is not "no cadence"; a store
+ * the worker could not ready (`store_ready: false`) is not a founder who set
+ * nothing up; and a ready store with no ritual in it is the one real empty.
+ * The artboard's `Mon 9:00` has no column behind it — a ritual stores a weekday
+ * and a frequency, never a time — so the time is not drawn.
+ *
+ * THE FRIDAY RETRO DRAFT IS NAMED, NOT DRAWN. The artboard promises a retro
+ * summary "from the board's own history"; no draft surface for it exists in
+ * `DRAFT_SURFACES`, so a button here would be a control that does nothing.
+ */
+function Cadence({ cadence, onRetry }) {
+  if (cadence === null) return <Unreadable what="The operating cadence" claim="This is not a sign that no ritual is scheduled." onRetry={onRetry} />;
+  if (!cadence) return null;
+  if (cadence.store_ready === false) return <div className="cadence-empty"><Route size={20} /><strong>Cadence store not ready</strong><p>The cadence tables could not be prepared on this server, so no ritual can be read or scheduled yet.</p></div>;
+  const rituals = (cadence.rituals || []).filter((ritual) => ritual.active !== 0 && ritual.active !== false);
+  const adherence = cadence.stats?.adherence_pct;
+  return <>
+    {rituals.length ? <div className="cadence-list" data-testid="list-desk-rituals">{rituals.slice(0, 4).map((ritual) => <div className="cadence-row" key={ritual.id}><strong>{clean(ritual.name) || kindLabel(ritual.kind)}</strong><span>{scheduleLabel(ritual)}</span></div>)}</div>
+      : <div className="cadence-empty"><Route size={20} /><strong>No ritual is scheduled yet</strong><p>Schedule a Monday plan, a standup or a Friday retro on the cadence page; nothing is assumed to run until it is filed there.</p></div>}
+    <p className="build-source">{adherence == null ? 'No run has been logged as done or missed, so there is no adherence to report.' : `${adherence}% of logged runs were held · ${cadence.stats.runs_recorded} run${cadence.stats.runs_recorded === 1 ? '' : 's'} recorded.`} A drafted retro summary is not offered here: no retro draft surface exists yet, so none is drawn.</p>
+  </>;
+}
+function cadenceLabel(cadence) {
+  if (cadence === null) return 'Unreadable';
+  if (!cadence || cadence.store_ready === false) return 'Not recorded';
+  const active = (cadence.rituals || []).filter((ritual) => ritual.active !== 0 && ritual.active !== false).length;
+  return active ? `${active} ritual${active === 1 ? '' : 's'} scheduled` : 'No ritual scheduled';
+}
 /** The quarter a horizon's objectives were filed under, when they agree on one. */
 function periodOf(items) {
   const quarters = [...new Set(items.map((item) => clean(item.quarter)).filter(Boolean))];

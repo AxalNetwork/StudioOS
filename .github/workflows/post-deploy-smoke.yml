@@ -31,6 +31,18 @@ on:
         description: 'Space/comma-separated base URLs to check'
         required: false
         default: 'https://axal.vc https://app.axal.vc'
+      # The two /api/* probes, exposed because an incident is exactly when you
+      # want to aim them by hand — at the path that is actually failing, or at a
+      # real non-exempt route instead of the synthetic one. Left blank they fall
+      # back to the script's own defaults.
+      api_probe:
+        description: 'Rate-limit-EXEMPT /api/* path (blank = /api/health)'
+        required: false
+        default: ''
+      api_probe_limited:
+        description: 'NON-exempt /api/* path (blank = /api/__smoke/rate-limited)'
+        required: false
+        default: ''
   schedule:
     # Every 6 hours. Frequent enough to catch a blank prod fast, cheap enough
     # to stay well inside free CI minutes.
@@ -52,4 +64,6 @@ jobs:
       - name: Live SPA smoke check
         env:
           SMOKE_HOSTS: ${{ github.event.inputs.hosts }}
+          SMOKE_API_PROBE: ${{ github.event.inputs.api_probe }}
+          SMOKE_API_PROBE_LIMITED: ${{ github.event.inputs.api_probe_limited }}
         run: node scripts/check-spa-live.mjs

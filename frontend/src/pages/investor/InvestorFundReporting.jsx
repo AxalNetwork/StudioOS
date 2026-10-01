@@ -9,34 +9,41 @@ import './investorFundReporting.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
+import { titleCase as caseLabel } from '../../lib/absence';
+import { useManagedFund, FundPicker } from './managedFund';
 
-const titleCase = (value) => String(value || 'Unrecorded').replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+const titleCase = (value) => caseLabel(value) || 'Unrecorded';
 const periodOf = (row) => row.period || row.label || row.reporting_period || `Period ${row.id || 'unrecorded'}`;
 const statusOf = (row) => String(row.status || (row.issued_at ? 'published' : 'drafted')).toLowerCase();
 const date = (value) => value ? String(value).slice(0, 10) : 'Unrecorded';
 
 export default function InvestorFundReporting() {
-  const [state, setState] = useState({ loading: true, rows: [], error: null });
+  // D371: the periods are read for a fund the caller operates (`can_manage`,
+  // `?fund=`), not `items[0]` of a list that also carries LP-only funds.
+  const managed = useManagedFund();
+  const [state, setState] = useState({ loading: true, rows: [], error: null, fund: null });
   const [filter, setFilter] = useState('all');
 
   const load = useCallback(async () => {
-    setState({ loading: true, rows: [], error: null });
+    if (managed.loading) { setState({ loading: true, rows: [], error: null, fund: null }); return; }
+    if (managed.error) { setState({ loading: false, rows: [], error: managed.error, fund: null }); return; }
+    setState({ loading: true, rows: [], error: null, fund: managed.fund });
     try {
-      const [reports, funds] = await Promise.all([api.lpReportsList(), api.fundsList()]);
+      const reports = await api.lpReportsList();
       const reportRows = Array.isArray(reports?.items) ? reports.items : [];
-      const fundsRows = Array.isArray(funds) ? funds : funds?.items || [];
       let periodRows = [];
-      if (fundsRows[0]?.id) {
-        const periods = await api.fundsReportPeriods(fundsRows[0].id);
+      if (managed.fund?.id) {
+        const periods = await api.fundsReportPeriods(managed.fund.id);
         periodRows = periods?.items || periods?.periods || [];
       }
       const rows = reportRows.length ? reportRows : periodRows;
-      setState({ loading: false, rows, error: null });
+      setState({ loading: false, rows, error: null, fund: managed.fund });
     } catch (error) {
-      setState({ loading: false, rows: [], error: error?.message || 'The reporting archive is unavailable.' });
+      setState({ loading: false, rows: [], error: error?.message || 'The reporting archive is unavailable.', fund: managed.fund });
     }
-  }, []);
+  }, [managed.loading, managed.error, managed.fund]);
   useEffect(() => { load(); }, [load]);
+  const refresh = () => (managed.error ? managed.reload() : load());
 
   const visible = useMemo(() => {
     if (filter === 'all') return state.rows;
@@ -47,8 +54,9 @@ export default function InvestorFundReporting() {
   const latest = state.rows[0];
   const deliveryKnown = state.rows.some((row) => row.delivery_count != null || row.delivered_count != null || row.delivery_status);
 
-  return <div className="i6-fund if4-shell"><main className="i6-main if4-main" data-testid="investor-fund-reporting"><header className="i6-header"><div><div className="i6-breadcrumb">Fund <span>‹</span> <b>Reporting</b></div><h1><FileBarChart size={19} /> LP reporting</h1><p>Pack builder, archive and per-LP delivery status.</p></div><button type="button" className="if4-refresh" onClick={load} disabled={state.loading} aria-label="Refresh reporting archive"><RefreshCw size={14} className={state.loading ? 'if4-spin' : ''} /></button></header>
+  return <div className="i6-fund if4-shell"><main className="i6-main if4-main" data-testid="investor-fund-reporting"><header className="i6-header"><div><div className="i6-breadcrumb">Fund <span>‹</span> <b>Reporting</b></div><h1><FileBarChart size={19} /> LP reporting</h1><p>Pack builder, archive and per-LP delivery status.</p></div><button type="button" className="if4-refresh" onClick={refresh} disabled={state.loading} aria-label="Refresh reporting archive"><RefreshCw size={14} className={state.loading ? 'if4-spin' : ''} /></button></header>
     <ZoneNav bucket={bucketForPath('investor', '/funds')} role="investor" activeSlug="reporting" className="my-3" />
+    <FundPicker funds={managed.funds} fund={managed.fund} onSelect={managed.select} />
     {/* Four real predicates over the same `visible` memo as before — this row
         moved into the canvas's shape and nothing about what it selects changed.
         `Delivery` narrows on optional fields, which is honest: a period with no

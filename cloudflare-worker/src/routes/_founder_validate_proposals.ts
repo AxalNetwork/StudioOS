@@ -170,12 +170,20 @@ export type StoredProposal = {
   task: string | null;
   status: string;
   created_at: string;
+  /** Migration 246. Null on a row written before it, and on an unmigrated dev db. */
+  fill_class: string | null;
+  citation_json: string | null;
 };
 
 /** One project's pending proposals, newest first. */
 export async function listPending(env: Env, projectId: number): Promise<StoredProposal[]> {
   const r = await env.DB.prepare(
-    `SELECT id, kind, payload_json, model, task, status, created_at
+    // `fill_class` and `citation_json` join the select for the band: a `sourced`
+    // proposal has to show its source, because a citation nobody is shown is a
+    // label. Migration 246 added them; a database that has not applied it returns
+    // them as null, which the band reads as "no citation".
+    `SELECT id, kind, payload_json, model, task, status, created_at,
+            fill_class, citation_json
        FROM validate_proposals
       WHERE project_id = ? AND status = 'pending'
       ORDER BY id DESC

@@ -300,8 +300,18 @@ dd.get('/cases/:uid', async (c) => {
       resolved_at: f.resolved_at,
       created_at: f.created_at,
     })));
+    // D466 — the signer's name travels with the section: the Sign-off column
+    // reads it, and a section completed before the column existed renders
+    // unrecorded rather than a guessed signer.
+    const signerIds = [...new Set(sections.map((s) => Number(s.signed_off_by)).filter(Number.isFinite))];
+    const signerNames = new Map<number, string>();
+    for (const sid of signerIds) {
+      const u = await c.env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(sid).first<{ name: string }>().catch(() => null);
+      if (u?.name) signerNames.set(sid, u.name);
+    }
     const decryptedSections = await Promise.all(sections.map(async s => ({
       ...s,
+      signed_off_by_name: Number.isFinite(Number(s.signed_off_by)) ? (signerNames.get(Number(s.signed_off_by)) ?? null) : null,
       reviewer_notes: await decField(c.env, 'dd_sections', 'reviewer_notes', s.id, s.reviewer_notes_enc),
       reviewer_notes_enc: undefined,
     })));
@@ -422,7 +432,7 @@ dd.post('/cases/:uid/scan', async (c) => {
       const meta = CONNECTORS.find(m => m.key === q.connector);
       if (!meta) continue;
       try { await processConnector(c.env, q.id, caseId, meta, subjectLabel, ownerUserId, caseUid); }
-      catch (e) { console.warn(`[dd] connector ${q.connector} failed:`, (e as Error).message); }
+      catch (e) { console.warn('[dd] connector failed', q.connector, (e as Error).message); }
     }
     try {
       const sql2 = getSQL(c.env);
@@ -533,8 +543,12 @@ dd.post('/cases/:uid/sections/:sectionId/verdict', async (c) => {
     await sql`
       UPDATE dd_sections
          SET verdict = ${verdict}, reviewer_notes_enc = ${notesEnc},
-             status = 'completed', completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+             status = 'completed', completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP,
+             signed_off_by = ${user.id}
        WHERE id = ${sectionId} AND case_id = ${caseId}`;
+    // D466 — the signer is who returned the verdict, recorded at write. The
+    // reviewer path also stamps `responded_at`; an admin override has no
+    // reviewer row, and before the column it recorded no signer at all.
     await sql`UPDATE dd_reviewers SET responded_at = CURRENT_TIMESTAMP WHERE section_id = ${sectionId} AND user_id = ${user.id}`;
     await audit(c.env, caseId, user, 'section_completed', { type: 'dd_section', id: sectionId }, { verdict });
     await notify(c.env, {
@@ -865,9 +879,19 @@ dd.post('/cases/:uid/report', async (c) => {
   try {
     const sections: any[] = await sql`SELECT * FROM dd_sections WHERE case_id = ${caseId} ORDER BY id`;
     const findings: any[] = await sql`SELECT * FROM dd_findings WHERE case_id = ${caseId} ORDER BY severity DESC, created_at DESC`;
+    // D466 — the sign-off travels into the report: the canvas's own sentence
+    // is that every figure traces to a checklist item, a flag, or a sign-off.
+    const signerIds = [...new Set(sections.map((s) => Number(s.signed_off_by)).filter(Number.isFinite))];
+    const signerNames = new Map<number, string>();
+    for (const sid of signerIds) {
+      const u = await c.env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(sid).first<{ name: string }>().catch(() => null);
+      if (u?.name) signerNames.set(sid, u.name);
+    }
     const reportSections: ReportSection[] = await Promise.all(sections.map(async s => ({
       section_key: s.section_key, title: s.title, weight: Number(s.weight),
       status: s.status, verdict: s.verdict,
+      signed_off_by_name: Number.isFinite(Number(s.signed_off_by)) ? (signerNames.get(Number(s.signed_off_by)) ?? null) : null,
+      completed_at: s.completed_at ?? null,
       reviewer_notes: await decField(c.env, 'dd_sections', 'reviewer_notes', s.id, s.reviewer_notes_enc),
       findings: await Promise.all(findings.filter(f => f.section_id === s.id).map(async f => ({
         severity: f.severity, title: f.title,

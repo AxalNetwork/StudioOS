@@ -103,7 +103,7 @@ function freshDb() {
       last_error TEXT,
       updated_at TEXT
     );
-    CREATE TABLE metrics_snapshots (
+    CREATE TABLE project_metrics (
       id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL,
       snapshot_date TEXT NOT NULL, mrr REAL, arr REAL, cac REAL, ltv REAL,
       monthly_churn_pct REAL, active_users INTEGER, new_users INTEGER,
@@ -203,7 +203,7 @@ function activeSub(id: string, customer: string, unitAmountCents: number) {
 }
 
 function stripeSnapshotCount(db: InstanceType<typeof DatabaseSync>): number {
-  const r = db.prepare("SELECT COUNT(*) AS c FROM metrics_snapshots WHERE source = 'stripe'").get() as { c: number };
+  const r = db.prepare("SELECT COUNT(*) AS c FROM project_metrics WHERE source = 'stripe'").get() as { c: number };
   return Number(r.c);
 }
 
@@ -249,9 +249,16 @@ test('upstream Stripe failure → 502 with detail.code stripe_sync_failed', with
   assert.equal(res.status, 502);
   const body = (await res.json()) as any;
   assert.equal(body.detail.code, 'stripe_sync_failed');
-  // The upstream reason is surfaced (not swallowed) so the page can show it.
+  // RE-AIMED BY D278, and what this protects stays true: the upstream reason
+  // is surfaced, not swallowed — on `upstream`, because the founder owns the
+  // Stripe account the import used. `detail.message` is our sentence and never
+  // the provider's text.
   assert.equal(typeof body.detail.message, 'string');
-  assert.ok(body.detail.message.length > 0);
+  assert.match(body.detail.message, /Stripe import did not complete/);
+  assert.doesNotMatch(body.detail.message, /boom/, 'the provider text reached the sentence');
+  assert.equal(typeof body.upstream, 'string');
+  assert.match(body.upstream, /boom/, 'the owner lost the upstream reason');
+  assert.ok(body.upstream.length <= 301, 'upstream is clipped');
   // A failed import must not leave a stripe snapshot row behind.
   assert.equal(stripeSnapshotCount(db), 0);
 }));
@@ -294,7 +301,7 @@ test('success (mrr or customers > 0) → 200 source:stripe + snapshot written', 
     assert.equal(body.imported, 1);
     // The happy path persists exactly one stripe snapshot.
     assert.equal(stripeSnapshotCount(db), 1);
-    const row = db.prepare("SELECT mrr, project_id, source FROM metrics_snapshots WHERE source = 'stripe'").get() as any;
+    const row = db.prepare("SELECT mrr, project_id, source FROM project_metrics WHERE source = 'stripe'").get() as any;
     assert.equal(row.mrr, 10);
     assert.equal(row.project_id, PROJECT_ID);
   },

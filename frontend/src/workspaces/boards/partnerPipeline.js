@@ -3,14 +3,20 @@ import { budget, count, day, summary, title, top, usd, usdCents } from './format
 /*
  * `/pipeline` — Partner Operator Canvas P3, "Win the work".
  *
- * WHAT THE CANVAS DRAWS THAT THE STORE CANNOT ANSWER. P3's lead table heads
- * `['Lead','Source','Match','Budget','Read']` and marks some rows with a
- * provenance seam. `founder_needs` (sql/t13_t14_t15.sql:316) holds a category,
- * a title, a description, a budget range, a timeline and a status — and no
- * source column, no match score, and nowhere a written "read" could live. So
- * three of the canvas's five columns are drawn here as what they are: absent.
- * The footnote says which, rather than the table quietly having fewer columns
- * than the design and nobody knowing why.
+ * THE LEAD TABLE READS WHAT THE LEADS ZONE READS (D391). P3 heads it
+ * `['Lead','Source','Match','Budget','Read']`. This section used to read
+ * `api.listNeeds()` — the raw marketplace list — and its footnote said a source
+ * and a match score did not exist. Both did: `GET /partner/pipeline/leads`
+ * (`listPartnerLeads`, the call `LeadsZone.jsx` makes) returns every open need
+ * the firm has not passed on, with `source_label`, a `score` counted from the
+ * firm's own fit rules, and the receipts that score is made of. So the board
+ * and the zone now show one list, and the footnote is the worker's
+ * `scoring_note`, which says what the score is and when there is none.
+ *
+ * `Read` is the receipts, not prose: nothing writes a sentence about a lead,
+ * and the column heading says what it holds. An excluded lead reads "Excluded"
+ * with no number, and an unscored one reads absent — the two absences the zone
+ * keeps apart.
  *
  * The same discipline settles the rest of the artboard. Proposals prints a win
  * rate only because `analysePipeline` computes one and hands back
@@ -36,7 +42,7 @@ import { budget, count, day, summary, title, top, usd, usdCents } from './format
 export default function partnerPipelineBoard(role, api) {
   return {
     sources: {
-      needs: () => api.listNeeds(),
+      leads: () => api.listPartnerLeads(),
       // One fetch feeding two sections. `/quotes/analytics` answers the
       // proposals header AND the whole analytics section, so asking for it
       // twice would be two round trips for one answer.
@@ -51,18 +57,25 @@ export default function partnerPipelineBoard(role, api) {
         anchor: 'pl-leads',
         title: 'Lead sources',
         span: 'full',
-        source: 'needs',
-        cols: '1.6fr 1fr 1fr .9fr',
-        columns: ['Lead', 'Shape', 'Budget', 'Posted'],
-        empty: 'No open need is posted for this firm to answer yet.',
-        summary: (d) => summary(count(Array.isArray(d?.items) ? d.items.length : null, 'open lead')),
-        rows: (d) => top(d?.items).map((n) => [
-          n.title, title(n.category), budget(n.budget_min, n.budget_max), day(n.created_at),
+        source: 'leads',
+        cols: '1.6fr .9fr .7fr 1fr 1.6fr',
+        columns: ['Lead', 'Source', 'Match', 'Budget', 'Receipts'],
+        empty: 'No open need is waiting for this firm to answer or pass on.',
+        summary: (d) => summary(
+          count(d?.open_count, 'open lead'),
+          count(d?.strong_fit_count, 'strong fit'),
+        ),
+        rows: (d) => top(d?.items).map((l) => [
+          l.title,
+          l.source_label,
+          l.excluded_by ? 'Excluded' : l.score,
+          budget(l.budget_min, l.budget_max),
+          l.excluded_by
+            || (Array.isArray(l.receipts) && l.receipts.length ? l.receipts.map((r) => r.label).join(' · ') : null),
         ]),
-        footnote: () =>
-          'The canvas heads this table with a source, a match score and a written read. '
-          + 'A posted need records its shape, its budget and its timeline and none of those three, '
-          + 'so they are absent here rather than inferred from the category or from who posted it.',
+        // The worker's own sentence: what the score is counted from, or that
+        // nothing is scored because the firm has stated no rule to score with.
+        footnote: (d) => d?.scoring_note || null,
       },
       {
         slug: 'proposals',

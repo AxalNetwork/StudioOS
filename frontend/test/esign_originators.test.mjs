@@ -11,9 +11,9 @@
  * puts them in TEMPLATES; forty-five more .md files sit unimported in
  * templates/legal/ and `getLegalTemplateBody` throws on every one. A doc type
  * may therefore appear in the registry only if `templateKeyForDocType` maps it
- * to one of the nine. These tests are that constraint, and they read all three
- * files as text — legalTemplates.ts cannot be imported outside the wrangler
- * bundler, which is why esignOriginators.ts imports nothing.
+ * to one of the nine. These tests are that constraint, and they read the files as
+ * text — legalTemplates.ts cannot be imported outside the wrangler bundler, which
+ * is why esignOriginators.ts imports nothing.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,6 +23,11 @@ import { resolve } from 'node:path';
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const registry = read('cloudflare-worker/src/services/esignOriginators.ts');
 const templates = read('cloudflare-worker/src/services/legalTemplates.ts');
+// The doc_type → key table moved out of legalTemplates.ts into its own module so
+// that code needing only the mapping is not dragged into nine `.md?raw` imports
+// a bundler alone can resolve. The bodies stayed behind, so this file now reads
+// two sources: `templates` for what has a body, `docTypes` for what maps.
+const docTypes = read('cloudflare-worker/src/services/legalDocTypes.ts');
 const route = read('cloudflare-worker/src/routes/esign.ts');
 const app = read('frontend/src/App.jsx');
 const page = read('frontend/src/pages/legal/SendForSignaturePage.jsx');
@@ -41,9 +46,9 @@ function wiredKeys() {
 
 /** doc_type → template key, as the worker resolves it. */
 function docTypeMap() {
-  const block = templates.slice(
-    templates.indexOf('const DOC_TYPE_TO_TEMPLATE_KEY'),
-    templates.indexOf('export function templateKeyForDocType'),
+  const block = docTypes.slice(
+    docTypes.indexOf('const DOC_TYPE_TO_TEMPLATE_KEY'),
+    docTypes.indexOf('export function templateKeyForDocType'),
   );
   return Object.fromEntries(
     [...block.matchAll(/^\s{2}([a-z0-9_]+):\s*'([a-z0-9_]+)',/gm)].map((m) => [m[1], m[2]]),
@@ -103,8 +108,33 @@ test('what the canvas asked for and did not get is stated, not silently dropped'
   // message nobody reads later.
   assert.match(registry, /SAFE/);
   assert.match(registry, /Term Sheet/);
-  assert.match(page, /spinout-lab\/cofounder-agreement/,
-    'the page should send founders to the real co-founder flow');
+  // D411 re-aimed the co-founder link. It pointed at /spinout-lab/cofounder-agreement,
+  // which only admins and active Spin-Out Lab members can open, so the founder
+  // it was written for landed on a guard. It now travels with the registry's
+  // NOT_OFFERED entry, and the page renders whatever path that entry names.
+  const cofounder = registry.slice(registry.indexOf("name: 'Co-founder Agreement'"));
+  assert.match(cofounder.slice(0, 400), /instead: \{ path: '\/incorporate\/cofounder-agreement'/,
+    'the Co-founder Agreement must point founders at the flow they can open');
+  assert.doesNotMatch(page, /spinout-lab\/cofounder-agreement/, 'the Lab-only link is back');
+  assert.match(page, /<Link to=\{t\.instead\.path\}/, 'the page no longer renders the registry’s link');
+});
+
+test('the co-founder flow the registry names is routed, and a founder can open it', () => {
+  const line = app.split('\n').find((l) => l.includes('path="/incorporate/cofounder-agreement"'));
+  assert.ok(line, '/incorporate/cofounder-agreement is not routed');
+  assert.match(line, /'founder'/, 'founders cannot open the co-founder flow the page links them to');
+});
+
+test('completion notices link to /legal/send only for roles its guard admits (D411)', () => {
+  // esign.ts decides per reader whether the envelope's status view is a link
+  // they can open. Its role set and App.jsx's guard must be the same set, or a
+  // notice sends someone to a page that turns them away.
+  const line = app.split('\n').find((l) => l.includes('path="/legal/send"'));
+  const guard = new Set([...line.matchAll(/'([a-z]+)'/g)].map((m) => m[1]));
+  const decl = /STATUS_VIEW_ROLES: ReadonlySet<string> = new Set\(\[([^\]]+)\]\)/.exec(route);
+  assert.ok(decl, 'STATUS_VIEW_ROLES is gone from esign.ts');
+  const worker = new Set([...decl[1].matchAll(/'([a-z]+)'/g)].map((m) => m[1]));
+  assert.deepEqual([...worker].sort(), [...guard].sort());
 });
 
 test('/legal has no path-scoped Worker route — the assets binding serves it', () => {

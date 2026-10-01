@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { planAssetRetention } from './assetRetention.mjs';
+import { planAssetRetention, seedFilesFor, SEED_COMMITTED_TREE_FLAG } from './assetRetention.mjs';
 
 test('first run seeds pre-existing assets so the live build is not dropped', () => {
   const prevFiles = ['index-OLD.js', 'vendor-OLD.js', 'style-OLD.css'];
@@ -147,4 +147,87 @@ test('a rebuild that changes even one file is a new build and does take a slot',
   assert.equal(plan.nextLedger.builds[0].ts, 't3');
   assert.equal(plan.nextLedger.builds[1].ts, 't2', 'the previous build stays; the oldest ages out normally');
   assert.deepEqual(new Set(plan.keep), new Set([...CUR, ...NEXT]));
+});
+
+// D252 (task 333). A ledger whose window is full of other rebuilds used to
+// drop the generation the seed was computed to keep.
+const STALE_LEDGER = [
+  { ts: 't3', files: ['index-L3.js'] },
+  { ts: 't2', files: ['index-L2.js'] },
+  { ts: 't1', files: ['index-L1.js'] },
+];
+
+test('D252: a stale ledger plus seedFiles PREV keeps and restores all of PREV', () => {
+  const PREV = ['index-PREV.js', 'chunk-PREV.js'];
+  const plan = planAssetRetention({
+    prevFiles: [...PREV, 'index-L3.js', 'index-DEAD.js'],
+    seedFiles: PREV,
+    newFiles: ['index-NEW.js'],
+    ledgerBuilds: STALE_LEDGER,
+    retainBuilds: 3,
+    now: 't4',
+  });
+  for (const f of PREV) {
+    assert.ok(plan.keep.includes(f), `${f} is kept`);
+    assert.ok(plan.restore.includes(f), `${f} is restored`);
+  }
+  // The seed joins the kept set; it does not take a ledger slot.
+  assert.deepEqual(plan.nextLedger.builds.map((b) => b.ts), ['t4', 't3', 't2']);
+  // Nothing outside the window or the seed comes back.
+  assert.ok(!plan.keep.includes('index-DEAD.js'));
+  assert.ok(!plan.keep.includes('index-L1.js'));
+});
+
+test('D252: no seed plus a stale ledger behaves as before, keeping only the window', () => {
+  const plan = planAssetRetention({
+    prevFiles: ['index-PREV.js', 'index-L3.js', 'index-L2.js', 'index-L1.js'],
+    newFiles: ['index-NEW.js'],
+    ledgerBuilds: STALE_LEDGER,
+    retainBuilds: 3,
+    now: 't4',
+  });
+  // The prevFiles fallback never joins the kept set: that is D183's high-water mark.
+  assert.deepEqual(new Set(plan.keep), new Set(['index-NEW.js', 'index-L3.js', 'index-L2.js']));
+  assert.deepEqual(new Set(plan.restore), new Set(['index-L3.js', 'index-L2.js']));
+});
+
+test('D252: the deploy flag seeds the committed tree, and its absence does not', () => {
+  const GEN = ['index-GEN.js'];
+  const TREE = ['index-GEN.js', 'index-LAST-DEPLOY.js'];
+  const savedCI = process.env.CI;
+  try {
+    // Without the flag, even under CI, the seed is the previous generation.
+    process.env.CI = 'true';
+    assert.deepEqual(seedFilesFor({ argv: [], prevGeneration: GEN }), GEN);
+    // With the flag, and no CI, the seed falls back to the whole committed tree.
+    delete process.env.CI;
+    assert.equal(seedFilesFor({ argv: [SEED_COMMITTED_TREE_FLAG], prevGeneration: GEN }), null);
+  } finally {
+    if (savedCI === undefined) delete process.env.CI; else process.env.CI = savedCI;
+  }
+
+  const flagged = planAssetRetention({
+    prevFiles: TREE,
+    seedFiles: seedFilesFor({ argv: [SEED_COMMITTED_TREE_FLAG], prevGeneration: GEN }),
+    newFiles: ['index-NEW.js'],
+    now: 't1',
+  });
+  assert.ok(flagged.keep.includes('index-LAST-DEPLOY.js'), 'the flag keeps what the last deploy uploaded');
+
+  const unflagged = planAssetRetention({
+    prevFiles: TREE,
+    seedFiles: seedFilesFor({ argv: [], prevGeneration: GEN }),
+    newFiles: ['index-NEW.js'],
+    now: 't1',
+  });
+  assert.ok(!unflagged.keep.includes('index-LAST-DEPLOY.js'), 'without the flag the seed is the generation only');
+});
+
+test('D252: only the production deploy workflow passes the flag', async () => {
+  const { readFileSync } = await import('node:fs');
+  const read = (f) => readFileSync(new URL(`../../.github/workflows/${f}`, import.meta.url), 'utf8');
+  assert.match(read('cloudflare-worker-deploy.yml'), /^\s+run: npm run build -- --seed-committed-tree$/m);
+  for (const f of ['ci.yml', 'pr-preview.yml', 'branch-provision.yml']) {
+    assert.doesNotMatch(read(f), /seed-committed-tree/, `${f} must not seed the committed tree`);
+  }
 });

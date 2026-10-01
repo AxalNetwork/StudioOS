@@ -23,12 +23,32 @@
 //     as "Filed · complete" or "3 days left" would misstate a STATUTORY tax
 //     deadline the founder is reading to decide when to mail. The chips render
 //     as a state indicator with the live one active.
-//   - Operator assist (a named legal-ops contact and follow-up dates) has no
-//     data source. Omitted rather than invented.
-//   - Tracking number and company-acknowledgment date are not columns on
-//     section_83b_trackers; those rows read "Not recorded" instead of a
-//     plausible-looking number.
+//   - Operator assist (a named legal-ops contact and follow-up dates) and
+//     deadline reminders have no store: each renders "Not recorded" with its
+//     reason. Operator review is an owner decision; no reminder job exists on
+//     the Worker for 83(b).
 //   - The checklist is the server's six real items, not the design's nine.
+//
+// The filing record (D361, migration 310). "Mark as filed" opens a form: the
+// date it was mailed or submitted (required, no default — it used to send the
+// moment of the click), how it was filed (required, no default and no
+// suggestion), and the tracking number and IRS service center when there are
+// any. The company's acknowledgment and the tax-return copy are dates the
+// founder records the same way, and "Confirm IRS delivery" is offered only
+// once a mailing date is on record. The Worker refuses a date before the grant
+// or after today with its own sentence, which the page prints.
+//
+// Honest reads (D360). Each of the three reads on this page can fail on its
+// own, and before D360 every one of them was caught into an empty value: a
+// failed tracker read painted "No 83(b) tracker yet" against a statutory
+// deadline, a failed project read said "create your company record first",
+// and a failed cap-table read showed the founder's shares as a dash. Each
+// failure now renders `Unreadable` with a retry, and the create flow is not
+// offered while the page cannot tell whether a tracker already exists.
+// The tracker is created only from a taxpayer name and a stock-transfer date
+// the founder typed or confirmed: the name no longer falls back to "Founder"
+// and the date no longer defaults to today, because either default writes a
+// wrong 30-day deadline onto an IRS filing.
 //
 // Same rule the Customer Discovery page documents: derive honestly from real
 // records, or show an explicit empty state.
@@ -46,8 +66,10 @@ import {
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
+import { Unreadable, Unrecorded } from '../ui';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import LabPageHeader from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 import { pickLabProject } from './SpinoutLabStartupPage';
 
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -112,11 +134,32 @@ function timelineFor(tracker, checklist) {
       state: done('mail') ? 'done' : tracker?.overdue ? 'miss' : 'active',
     },
     { label: 'Personal copy stored', date: done('personal_records') ? 'Stored' : '—', state: done('personal_records') ? 'done' : 'todo' },
-    { label: 'Company copy delivered', date: done('copy_company') ? 'Delivered' : '—', state: done('copy_company') ? 'done' : 'todo' },
-    { label: 'Tax-return copy', date: status === 'confirmed' ? 'With next return' : '—', state: status === 'confirmed' ? 'active' : 'todo' },
+    {
+      label: 'Company copy delivered',
+      date: tracker?.company_ack_at ? fmtDate(tracker.company_ack_at) : done('copy_company') ? 'Delivered' : '—',
+      state: done('copy_company') ? 'done' : 'todo',
+    },
+    {
+      label: 'Tax-return copy',
+      date: tracker?.tax_return_copy_at ? fmtDate(tracker.tax_return_copy_at) : '—',
+      state: tracker?.tax_return_copy_at ? 'done' : status === 'confirmed' ? 'active' : 'todo',
+    },
   ];
   return steps;
 }
+
+/**
+ * How the election was filed — the Worker's FILING_METHODS, labelled. A
+ * record of what the founder did: no default, no order of preference.
+ */
+export const FILING_METHODS = [
+  { k: 'certified_mail', label: 'USPS Certified Mail' },
+  { k: 'private_delivery', label: 'IRS-designated private delivery service' },
+  { k: 'irs_online', label: 'Submitted online to the IRS' },
+];
+
+/** A real YYYY-MM-DD, the only date shape the filing record accepts. */
+export const isoDay = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 
 const STEP_WORD = { done: 'Complete', active: 'In progress', todo: 'Pending', miss: 'Missed' };
 const STEP_TONE = {
@@ -146,7 +189,13 @@ const CONNECTIONS = [
   { tool: 'Capital · Data room', to: '/spinout-lab/capital', rel: 'Receives the filed election and proof as diligence artifacts.' },
 ];
 
-export default function SpinoutLab83bPage() {
+/**
+ * `embedded` — rendered inside the Legal Engine's "Equity Elections" card
+ * (/raise/legal-engine/equity), which replaced Section83bPage there (D361).
+ * The card supplies its own title and back control, so the Lab header and the
+ * page gutters are left out; everything else is the same page.
+ */
+export default function SpinoutLab83bPage({ embedded = false }) {
   const { user } = useAuth();
   const [trackers, setTrackers] = useState([]);
   const [project, setProject] = useState(null);
@@ -156,25 +205,46 @@ export default function SpinoutLab83bPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [creating, setCreating] = useState(false);
-  const [grantDate, setGrantDate] = useState(() => new Date().toISOString().slice(0, 10));
+  // D361 — the open filing-record form: { kind: 'filed' | 'ack' | 'taxcopy', … }.
+  const [record, setRecord] = useState(null);
+  const [recordErr, setRecordErr] = useState('');
+  // Both start from what the founder supplies: no "today", no "Founder".
+  const [grantDate, setGrantDate] = useState('');
+  const [taxpayerName, setTaxpayerName] = useState('');
+  // Which reads failed. A failed read is never folded into an empty one.
+  const [unread, setUnread] = useState({ projects: false, trackers: false, capTable: false });
 
   const load = useCallback(async () => {
     setStatus('loading');
     try {
-      const projects = await api.listProjects().catch(() => []);
-      const p = pickLabProject(projects, user);
+      const failed = { projects: false, trackers: false, capTable: false };
+      const projects = await api.listProjects().catch((e) => {
+        reportError('SpinoutLab83bPage:projects', e);
+        failed.projects = true;
+        return null;
+      });
+      const p = failed.projects ? null : pickLabProject(projects, user);
       setProject(p);
       const [tr, ct] = await Promise.all([
-        api.legal83bList(p?.id).catch(() => []),
-        p ? api.getCapTableByProject(p.id).catch(() => null) : Promise.resolve(null),
+        failed.projects ? null : api.legal83bList(p?.id).catch((e) => {
+          reportError('SpinoutLab83bPage:trackers', e);
+          failed.trackers = true;
+          return null;
+        }),
+        p ? api.getCapTableByProject(p.id).catch((e) => {
+          reportError('SpinoutLab83bPage:capTable', e);
+          failed.capTable = true;
+          return null;
+        }) : Promise.resolve(null),
       ]);
       const list = Array.isArray(tr) ? tr : tr?.trackers || [];
       setTrackers(list);
       setCapTable(ct);
+      setUnread(failed);
       setActiveId((cur) => cur ?? list[0]?.id ?? null);
       setStatus('ready');
     } catch (e) {
-      reportError(e, { where: 'SpinoutLab83bPage.load' });
+      reportError('SpinoutLab83bPage:load', e);
       setStatus('error');
     }
   }, [user]);
@@ -185,20 +255,28 @@ export default function SpinoutLab83bPage() {
     () => trackers.find((t) => t.id === activeId) || trackers[0] || null,
     [trackers, activeId],
   );
-  const scen = scenarioFor(tracker);
-  const tone = TONE[scen];
+  // A failed read derives no state: "Not required" is only ever reached by a
+  // tracker list that was READ and is empty, never by one that failed.
+  const readFailed = unread.projects || unread.trackers;
+  const scen = readFailed ? null : scenarioFor(tracker);
+  const tone = TONE[scen] || TONE.none;
   const checklist = tracker?.checklist || [];
   const timeline = useMemo(() => timelineFor(tracker, checklist), [tracker, checklist]);
 
   // Founder share count from the cap-table scenario, matched on the taxpayer
-  // name the tracker was created with. No match → "—", never a placeholder.
+  // name the tracker was created with. A failed cap-table read says so; no
+  // match says "Not recorded" with the reason, never a placeholder.
   const shares = useMemo(() => {
-    const founders = capTable?.inputs?.founders || capTable?.founders || [];
+    if (unread.capTable) return <Unrecorded reason="The cap table could not be read. Reload to try again.">Unreadable</Unrecorded>;
+    const scenario = capTable?.scenario || capTable;
+    const founders = scenario?.inputs?.founders || scenario?.founders || [];
     const want = String(tracker?.taxpayer_name || '').trim().toLowerCase();
     const hit = founders.find((f) => String(f?.name || '').trim().toLowerCase() === want);
     const n = Number(hit?.shares);
-    return Number.isFinite(n) && n > 0 ? `${n.toLocaleString('en-US')} restricted` : '—';
-  }, [capTable, tracker]);
+    return Number.isFinite(n) && n > 0
+      ? `${n.toLocaleString('en-US')} restricted`
+      : <Unrecorded reason="No founder on the saved cap table has this taxpayer name." />;
+  }, [capTable, tracker, unread.capTable]);
 
   const daysLeft = Number(tracker?.days_left);
   const countNum = scen === 'filed' ? '✓' : Number.isFinite(daysLeft) ? String(daysLeft) : '—';
@@ -211,27 +289,75 @@ export default function SpinoutLab83bPage() {
   }, [tracker, daysLeft]);
 
   const proofs = useMemo(() => ([
-    { name: 'Signed 83(b) election', have: tracker?.election_doc_id != null, meta: tracker?.election_doc_id != null ? 'On file' : 'Not generated' },
+    // The server GENERATES the election statement when the tracker is created;
+    // nothing records a signature, so this row never says "signed".
+    { name: '83(b) election statement', have: tracker?.election_doc_id != null, meta: tracker?.election_doc_id != null ? 'Generated — sign it before mailing' : 'Not generated' },
     { name: 'Certified-mail receipt', have: tracker?.receipt_doc_id != null, meta: tracker?.receipt_doc_id != null ? 'On file' : 'Awaiting mailing' },
-    { name: 'Company acknowledgment', have: String(tracker?.status || '') === 'confirmed', meta: String(tracker?.status || '') === 'confirmed' ? 'Confirmed' : 'Pending' },
+    { name: 'Company acknowledgment', have: Boolean(tracker?.company_ack_at), meta: tracker?.company_ack_at ? `Acknowledged ${fmtDate(tracker.company_ack_at)}` : 'Not recorded yet' },
   ]), [tracker]);
   const proofHave = proofs.filter((p) => p.have).length;
 
-  const act = async (fn, where) => {
+  // `op` is the operation alone, not a whole scope: the page name belongs here
+  // once rather than at each caller, and a template literal is a scope
+  // `check-frontend-logging.mjs` can read. Passing the assembled string in a
+  // variable would be correct at runtime and unverifiable statically — the
+  // guard cannot tell a scope variable from an error variable, which is the
+  // reversed-argument bug it exists to catch.
+  const act = async (fn, op) => {
     setBusy(true); setErr('');
     try { await fn(); await load(); } catch (e) {
-      reportError(e, { where }); setErr(e?.message || 'Action failed.');
+      reportError(`SpinoutLab83bPage:${op}`, e); setErr(e?.message || 'Action failed.');
     } finally { setBusy(false); }
   };
 
-  const markMailed = () => act(async () => {
-    await api.legal83bUpdate(tracker.id, { mailed_at: new Date().toISOString(), status: 'mailed' });
-    await markMilestone(user, 'section83b_filed');
-  }, 'SpinoutLab83bPage.markMailed');
+  // D361 — every date below is typed by the founder; none defaults to today.
+  const openRecord = (kind) => {
+    setRecordErr('');
+    setRecord(kind === 'filed'
+      ? {
+        kind,
+        mailed_on: tracker?.mailed_at ? String(tracker.mailed_at).slice(0, 10) : '',
+        filing_method: tracker?.filing_method || '',
+        tracking_number: tracker?.tracking_number || '',
+        irs_service_center: tracker?.irs_service_center || '',
+      }
+      : { kind, date: '' });
+  };
+  const recordReady = record && (record.kind === 'filed'
+    ? isoDay(record.mailed_on) && FILING_METHODS.some((m) => m.k === record.filing_method)
+    : isoDay(record.date));
+  const saveRecord = async () => {
+    if (!record || !recordReady || busy) return;
+    const body = record.kind === 'filed'
+      ? {
+        mailed_on: record.mailed_on,
+        filing_method: record.filing_method,
+        tracking_number: record.tracking_number.trim() || null,
+        irs_service_center: record.irs_service_center.trim() || null,
+      }
+      : record.kind === 'ack' ? { company_ack_on: record.date } : { tax_return_copy_on: record.date };
+    setBusy(true); setRecordErr('');
+    try {
+      await api.legal83bUpdate(tracker.id, body);
+      if (record.kind === 'filed') await markMilestone(user, 'section83b_filed');
+      setRecord(null);
+      await load();
+    } catch (e) {
+      // The Worker's own sentence ("…between the stock transfer date and today").
+      reportError(`SpinoutLab83bPage:record-${record.kind}`, e);
+      setRecordErr(e?.message || 'Could not save the filing record.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const confirmDelivery = () => act(
+    () => api.legal83bUpdate(tracker.id, { status: 'confirmed' }),
+    'confirmDelivery',
+  );
 
   const uploadReceipt = (file) => act(
     () => api.legal83bUploadReceipt(tracker.id, file),
-    'SpinoutLab83bPage.uploadReceipt',
+    'uploadReceipt',
   );
 
   // The election statement is generated server-side when the tracker is
@@ -252,42 +378,61 @@ export default function SpinoutLab83bPage() {
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     } catch (e) {
-      reportError(e, { where: 'SpinoutLab83bPage.downloadElection' });
+      reportError('SpinoutLab83bPage:downloadElection', e);
       setErr(e?.message || 'Could not download the election.');
     } finally {
       setBusy(false);
     }
   };
 
+  // Both fields are the founder's own: the name is prefilled from the account
+  // when "Start a tracker" opens, but it is shown and editable, and neither
+  // has a fallback. canCreate gates the button; createTracker re-checks.
+  const canCreate = Boolean(project && taxpayerName.trim() && /^\d{4}-\d{2}-\d{2}$/.test(grantDate));
   const createTracker = () => act(async () => {
     if (!project) throw new Error('Create your company record first.');
+    if (!taxpayerName.trim()) throw new Error('Enter the taxpayer name exactly as it will appear on the election.');
+    if (!grantDate) throw new Error('Enter the date the stock was transferred to you.');
     await api.legal83bCreate({
       project_id: Number(project.id),
-      taxpayer_name: (user?.name || user?.display_name || '').trim() || 'Founder',
+      taxpayer_name: taxpayerName.trim(),
       grant_date: grantDate,
     });
     setCreating(false);
-  }, 'SpinoutLab83bPage.create');
+  }, 'create');
+  const startCreating = () => {
+    setTaxpayerName((cur) => cur || String(user?.name || user?.display_name || '').trim());
+    setCreating(true);
+  };
 
+  // Outside the Legal Engine card the page owns the Lab gutters (LabPageShell);
+  // embedded, the card owns them, so the same stack renders without them.
+  const wrap = (props, children) => (embedded
+    ? <div className="space-y-5" data-testid={props.testId}>{children}</div>
+    : <LabPageShell {...props}>{children}</LabPageShell>);
   if (status === 'loading') {
     return (
-      <div className="max-w-[1200px] mx-auto px-4 py-6" data-testid="page-spinout-83b">
+      wrap({ width: 'full', spaceY: '', testId: 'page-spinout-83b' }, (
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <Loader2 size={15} className="animate-spin" /> Loading your 83(b) tracker…
         </div>
-      </div>
+      ))
     );
   }
 
-  return (
-    <div className="max-w-[1200px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-83b">
-      {/* Header — Lab shell, back to WORKSPACE (not Incorporate). */}
-      <LabPageHeader
-        icon={FileText}
-        title="83(b) Election Tracker"
-        subtitle="Track your 83(b) filing deadline, documents, and proof of submission."
-        status={tracker ? 'Active' : 'Not started'}
-      />
+  return wrap({ width: 'full', testId: 'page-spinout-83b' }, (
+    <>
+      {/* Header — Lab shell, back to WORKSPACE (not Incorporate). Embedded in
+          the Legal Engine card, the card's own title and back control stand in. */}
+      {!embedded && (
+        <LabPageHeader
+          icon={FileText}
+          title="83(b) Election Tracker"
+          subtitle="Track your 83(b) filing deadline, documents, and proof of submission."
+          status={readFailed ? 'Unreadable' : tracker ? 'Active' : 'Not started'}
+        />
+      )}
+
 
       {/* State band. The design ships these as a clickable scenario switcher;
           here the live state is derived and the others are inert, because
@@ -331,12 +476,21 @@ export default function SpinoutLab83bPage() {
             >
               <Download size={13} /> Download election
             </button>
+            {tracker.mailed_at && String(tracker.status) !== 'confirmed' && (
+              <button
+                type="button" onClick={confirmDelivery} disabled={busy}
+                data-testid="button-confirm-delivery"
+                className="h-9 px-3.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Check size={13} /> Confirm IRS delivery
+              </button>
+            )}
             <button
-              type="button" onClick={markMailed} disabled={busy || checklist.find((c) => c.key === 'mail')?.done}
+              type="button" onClick={() => openRecord('filed')} disabled={busy}
               data-testid="button-mark-filed"
               className="h-9 px-4 rounded-lg bg-violet-600 text-white text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-50"
             >
-              {busy && <Loader2 size={13} className="animate-spin" />} Mark as filed
+              {busy && <Loader2 size={13} className="animate-spin" />} {tracker.mailed_at ? 'Edit filing record' : 'Mark as filed'}
             </button>
           </div>
         )}
@@ -346,8 +500,16 @@ export default function SpinoutLab83bPage() {
         <p role="alert" data-testid="text-83b-error" className="text-[12.5px] font-semibold text-rose-600 dark:text-rose-400">{err}</p>
       )}
 
-      {/* No tracker yet — honest empty state, plus the real create flow. */}
-      {!tracker ? (
+      {/* A failed read is not an empty one: no "No tracker yet", no create. */}
+      {readFailed ? (
+        <div className={`${CARD} p-6`} data-testid="unreadable-83b">
+          <Unreadable
+            what={unread.projects ? 'Your company record' : 'Your 83(b) trackers'}
+            claim="This is not a claim that no tracker exists — check again before you rely on the deadline."
+            onRetry={load}
+          />
+        </div>
+      ) : !tracker ? (
         <div className={`${CARD} p-8 text-center`} data-testid="empty-83b">
           <Calendar size={26} className="mx-auto text-gray-300 dark:text-gray-600 mb-3" />
           <div className="text-base font-bold text-gray-900 dark:text-gray-50">No 83(b) tracker yet</div>
@@ -358,15 +520,24 @@ export default function SpinoutLab83bPage() {
           {creating ? (
             <div className="mt-5 inline-flex items-end gap-2 flex-wrap justify-center">
               <div className="text-left">
+                <label htmlFor="taxpayer-name" className={`${LBL} block mb-1`}>Taxpayer name</label>
+                <input
+                  id="taxpayer-name" type="text" value={taxpayerName} data-testid="input-taxpayer-name"
+                  required placeholder="As it appears on your tax return"
+                  onChange={(e) => setTaxpayerName(e.target.value)}
+                  className="h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 text-[13px] text-gray-800 dark:text-gray-100"
+                />
+              </div>
+              <div className="text-left">
                 <label htmlFor="grant-date" className={`${LBL} block mb-1`}>Stock transfer date</label>
                 <input
-                  id="grant-date" type="date" value={grantDate} data-testid="input-grant-date"
+                  id="grant-date" type="date" value={grantDate} data-testid="input-grant-date" required
                   onChange={(e) => setGrantDate(e.target.value)}
                   className="h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 text-[13px] text-gray-800 dark:text-gray-100"
                 />
               </div>
               <button
-                type="button" onClick={createTracker} disabled={busy || !project} data-testid="button-create-tracker"
+                type="button" onClick={createTracker} disabled={busy || !canCreate} data-testid="button-create-tracker"
                 className="h-9 px-4 rounded-lg bg-violet-600 text-white text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-50"
               >
                 {busy && <Loader2 size={13} className="animate-spin" />} Create tracker
@@ -374,7 +545,7 @@ export default function SpinoutLab83bPage() {
             </div>
           ) : (
             <button
-              type="button" onClick={() => setCreating(true)} data-testid="button-start-tracker"
+              type="button" onClick={startCreating} data-testid="button-start-tracker"
               className="mt-5 h-9 px-4 rounded-lg bg-violet-600 text-white text-xs font-bold"
             >
               + Start a tracker
@@ -514,10 +685,24 @@ export default function SpinoutLab83bPage() {
                 <div className={`${CARD} p-5`}>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {[
-                      { k: 'Submitted', v: tracker.mailed_at ? fmtDate(tracker.mailed_at) : 'Not sent' },
+                      { k: 'Submitted', v: tracker.mailed_at ? fmtDate(tracker.mailed_at) : <Unrecorded reason="No mailing date recorded yet — use Mark as filed." /> },
+                      { k: 'Filing method', v: FILING_METHODS.find((m) => m.k === tracker.filing_method)?.label || <Unrecorded reason="Recorded with Mark as filed." /> },
+                      { k: 'Tracking number', v: tracker.tracking_number || <Unrecorded reason="None recorded with the filing." /> },
+                      { k: 'IRS service center', v: tracker.irs_service_center || <Unrecorded reason="None recorded with the filing." /> },
                       { k: 'Proof uploaded', v: tracker.receipt_doc_id != null ? 'Yes' : 'Pending' },
-                      { k: 'Company acknowledged', v: String(tracker.status) === 'confirmed' ? 'Confirmed' : 'Pending' },
-                      { k: 'Tracking number', v: 'Not recorded' },
+                      { k: 'IRS delivery', v: String(tracker.status) === 'confirmed' ? 'Confirmed' : 'Not confirmed' },
+                      {
+                        k: 'Company acknowledged',
+                        v: tracker.company_ack_at ? fmtDate(tracker.company_ack_at) : (
+                          <button type="button" onClick={() => openRecord('ack')} disabled={busy} data-testid="button-record-ack" className="text-violet-700 dark:text-violet-300 underline disabled:opacity-50">Record date</button>
+                        ),
+                      },
+                      {
+                        k: 'Tax-return copy',
+                        v: tracker.tax_return_copy_at ? fmtDate(tracker.tax_return_copy_at) : (
+                          <button type="button" onClick={() => openRecord('taxcopy')} disabled={busy} data-testid="button-record-taxcopy" className="text-violet-700 dark:text-violet-300 underline disabled:opacity-50">Record date</button>
+                        ),
+                      },
                     ].map((m) => (
                       <div key={m.k} className="flex items-center justify-between gap-2.5 px-3.5 py-3 bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 rounded-xl">
                         <span className="text-[11.5px] text-gray-500 dark:text-gray-400">{m.k}</span>
@@ -614,6 +799,21 @@ export default function SpinoutLab83bPage() {
                 </div>
               </div>
 
+              {/* Canvas features with no store (D361): named, not invented. */}
+              <div data-testid="card-83b-unrecorded">
+                <div className={`${LBL} mb-3`}>Assist &amp; reminders</div>
+                <div className={`${CARD} p-4 flex flex-col gap-2.5 text-[12px]`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-gray-600 dark:text-gray-300">Operator assist</span>
+                    <Unrecorded reason="No operator is assigned to 83(b) filings: operator review needs an owner decision before it has a store." />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-gray-600 dark:text-gray-300">Deadline reminders</span>
+                    <Unrecorded reason="Nothing on the Worker sends 83(b) deadline reminders yet; the countdown on this page is the only one." />
+                  </div>
+                </div>
+              </div>
+
               {trackers.length > 1 && (
                 <div>
                   <div className={`${LBL} mb-3`}>Other founders</div>
@@ -636,6 +836,97 @@ export default function SpinoutLab83bPage() {
           </div>
         </>
       )}
-    </div>
-  );
+      {record && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          role="dialog" aria-modal="true" data-testid="modal-83b-record"
+          onClick={() => !busy && setRecord(null)}
+        >
+          <div className={`${CARD} w-full max-w-md p-5`} onClick={(e) => e.stopPropagation()}>
+            <div className="text-[15px] font-bold text-gray-900 dark:text-gray-50 mb-1">
+              {record.kind === 'filed' ? 'Record the filing' : record.kind === 'ack' ? "Company's acknowledgment" : 'Tax-return copy'}
+            </div>
+            <p className="text-[12px] text-gray-500 dark:text-gray-400 mb-4 leading-relaxed">
+              {record.kind === 'filed'
+                ? 'Enter the date on the postmark or submission confirmation — not today, unless that is the date.'
+                : record.kind === 'ack'
+                  ? 'The date the company acknowledged receiving its copy of the election.'
+                  : 'The date a copy went with your tax return for the year of the grant.'}
+            </p>
+            {record.kind === 'filed' ? (
+              <div className="flex flex-col gap-3">
+                <label className="block">
+                  <span className={`${LBL} block mb-1`}>Mailed or submitted on</span>
+                  <input
+                    type="date" required value={record.mailed_on} data-testid="input-mailed-on"
+                    min={String(tracker?.grant_date || '').slice(0, 10) || undefined}
+                    onChange={(e) => setRecord({ ...record, mailed_on: e.target.value })}
+                    className="h-9 w-full px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 text-[13px] text-gray-800 dark:text-gray-100"
+                  />
+                </label>
+                <fieldset>
+                  <legend className={`${LBL} mb-1`}>Filed by</legend>
+                  <div className="flex flex-col gap-1.5">
+                    {FILING_METHODS.map((m) => (
+                      <label key={m.k} className="flex items-center gap-2 text-[12.5px] text-gray-700 dark:text-gray-200">
+                        <input
+                          type="radio" name="filing-method" value={m.k} data-testid={`radio-method-${m.k}`}
+                          checked={record.filing_method === m.k}
+                          onChange={() => setRecord({ ...record, filing_method: m.k })}
+                        />
+                        {m.label}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                <label className="block">
+                  <span className={`${LBL} block mb-1`}>Tracking number (optional)</span>
+                  <input
+                    type="text" maxLength={40} value={record.tracking_number} data-testid="input-tracking-number"
+                    onChange={(e) => setRecord({ ...record, tracking_number: e.target.value })}
+                    className="h-9 w-full px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 text-[13px] text-gray-800 dark:text-gray-100"
+                  />
+                </label>
+                <label className="block">
+                  <span className={`${LBL} block mb-1`}>IRS service center (optional)</span>
+                  <input
+                    type="text" maxLength={120} value={record.irs_service_center} data-testid="input-service-center"
+                    onChange={(e) => setRecord({ ...record, irs_service_center: e.target.value })}
+                    className="h-9 w-full px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 text-[13px] text-gray-800 dark:text-gray-100"
+                  />
+                </label>
+              </div>
+            ) : (
+              <label className="block">
+                <span className={`${LBL} block mb-1`}>Date</span>
+                <input
+                  type="date" required value={record.date} data-testid="input-record-date"
+                  min={String(tracker?.grant_date || '').slice(0, 10) || undefined}
+                  onChange={(e) => setRecord({ ...record, date: e.target.value })}
+                  className="h-9 w-full px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 text-[13px] text-gray-800 dark:text-gray-100"
+                />
+              </label>
+            )}
+            {recordErr && (
+              <p role="alert" data-testid="text-record-error" className="text-[12px] font-semibold text-rose-600 dark:text-rose-400 mt-3">{recordErr}</p>
+            )}
+            <div className="flex justify-end gap-2 mt-5">
+              <button
+                type="button" onClick={() => setRecord(null)} disabled={busy}
+                className="h-9 px-3.5 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-600 dark:text-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="button" onClick={saveRecord} disabled={busy || !recordReady} data-testid="button-save-record"
+                className="h-9 px-4 rounded-lg bg-violet-600 text-white text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {busy && <Loader2 size={13} className="animate-spin" />} Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  ));
 }

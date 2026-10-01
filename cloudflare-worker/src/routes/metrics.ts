@@ -5,7 +5,7 @@
  * `routes/progress.ts`); this router exposes the same handlers under the
  * shorter `/api/metrics/*` path so callers don't have to know about the
  * progress-suite history. Both prefixes are kept; the shared handlers
- * (and the lazy `ensureMetricsSnapshotsSchema()` schema bootstrap) live in
+ * (and the lazy `ensureProjectMetricsSchema()` schema bootstrap) live in
  * `progress.ts` to avoid duplication.
  *
  * Routes:

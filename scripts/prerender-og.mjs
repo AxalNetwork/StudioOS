@@ -18,10 +18,14 @@
  * THE FIX
  * -------
  * After `vite build`, write a real `docs/<route>/index.html` for each public
- * route, identical to the shell except for its `<head>` metadata. Static Assets
- * resolves `/spinout-lab` to `docs/spinout-lab/index.html` (directory-index
- * handling) *before* the SPA fallback runs, so a crawler gets correct tags in
- * the raw response with no JavaScript and no worker involvement.
+ * route, identical to the shell except for its `<head>` metadata. With
+ * `html_handling = "drop-trailing-slash"`, Static Assets serves `/spinout-lab`
+ * from `docs/spinout-lab/index.html` as a 200 — not a 307 to `/spinout-lab/` —
+ * before the SPA fallback runs, so a crawler gets correct tags in the raw
+ * response with no JavaScript and no worker involvement. The 307 the other
+ * way (`/spinout-lab/` → `/spinout-lab`) is one hop. Do not switch this back
+ * to the default `auto-trailing-slash`: that 307s `/login` to `/login/`, and
+ * Safari crashes in a loop when a service worker returns that redirect.
  *
  * The SPA itself is unaffected: every emitted file is the same document with
  * the same script tags, so React boots and client-routes exactly as before.

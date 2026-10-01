@@ -97,7 +97,12 @@ export default function DiligenceZone({ zoneActions, zoneFilters, role = 'founde
             {visible.map((r) => (
               <li key={r.grant_uid} className="py-3">
                 <div className="flex flex-wrap items-baseline gap-2">
-                  <strong className="text-[13px]">{r.project_name}</strong>
+                  <Link
+                    to={`/research/diligence/${encodeURIComponent(r.grant_uid)}`}
+                    className="text-[13px] font-bold text-indigo-700 hover:underline dark:text-indigo-300"
+                  >
+                    {r.project_name}
+                  </Link>
                   <span className="text-[12px] tabular-nums text-gray-700 dark:text-gray-300">
                     {`${r.file_open} of ${r.file_total} open to you`}
                   </span>
@@ -117,7 +122,7 @@ export default function DiligenceZone({ zoneActions, zoneFilters, role = 'founde
                   {r.expires_at ? ` Access expires ${day(r.expires_at)}.` : ''}
                 </p>
                 <p className="mt-1 text-[11px]">
-                  <Link to="/raise/data-room" className="text-indigo-700 underline dark:text-indigo-300">Open the room →</Link>
+                  <Link to={`/research/diligence/${encodeURIComponent(r.grant_uid)}`} className="text-indigo-700 underline dark:text-indigo-300">Open the room →</Link>
                 </p>
               </li>
             ))}

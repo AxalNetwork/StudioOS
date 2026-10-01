@@ -16,6 +16,10 @@ import {
 import { isAdmin, mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { clampLimit, parseOffset } from '../util/pagination';
 import { hashInviteToken } from '../services/projectAccess';
+import { refuse } from '../util/refusal';
+import {
+  validatePerson, validateCoverage, validatePlan, personDto,
+} from '../services/companyTeam';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -76,6 +80,10 @@ async function detailDto(env: Env, c: Company, viewer: User): Promise<any> {
   out.created_at = c.created_at;
   out.updated_at = c.updated_at;
   const isMember = await viewerIsMember(env, c.id, viewer);
+  // D431 — economics are the member's and the editors'. `canEdit` is the rule
+  // that already decides who may WRITE carry; the same rule decides who may
+  // read it, so a reader who could not change a figure is never shown it.
+  const editor = await canEdit(env, c, viewer);
   const links = await env.DB.prepare('SELECT * FROM user_company_links WHERE company_id = ?')
     .bind(c.id).all<Link>();
   const members: any[] = [];
@@ -93,7 +101,15 @@ async function detailDto(env: Env, c: Company, viewer: User): Promise<any> {
       // Analyst on VIEW would be inventing a fact about a real person.
       title: (lnk as any).title ?? null,
       authority: (lnk as any).authority ?? null,
-      carry_bps: (lnk as any).carry_bps ?? null,
+      // D431 — carry is served to its holder and to an editor, and to nobody
+      // else: the FIELD is absent for a refused reader, not null, because null
+      // already means "not recorded" and a reader must not confuse "withheld"
+      // with "none". Canvas T4: economics are locked when the viewer is
+      // neither the member nor a partner, "visible as a locked section,
+      // because a hidden one teaches people the wrong shape of the org".
+      ...(editor || lnk.user_id === viewer.id
+        ? { carry_bps: (lnk as any).carry_bps ?? null }
+        : {}),
       joined_at: lnk.created_at,
     });
   }
@@ -343,37 +359,15 @@ r.get('/companies', async (c) => {
 });
 
 // Members
-r.post('/company/:uid/members', async (c) => {
-  try {
-    const user = await requireAuth(c);
-    const company = await getCompanyOr404(c.env, c.req.param('uid'));
-    if (!company) return c.json({ detail: 'Company not found' }, 404);
-    if (!(await canEdit(c.env, company, user))) return c.json({ detail: 'Not authorized to manage members' }, 403);
-    const body = await c.req.json().catch(() => ({} as any));
-    let target: any = null;
-    if (body.user_id) {
-      target = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(Number(body.user_id)).first();
-    } else if (body.email) {
-      target = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(String(body.email)).first();
-    }
-    if (!target) return c.json({ detail: 'User not found (provide user_id or registered email)' }, 404);
-    if (await getLink(c.env, company.id, target.id)) {
-      return c.json({ detail: 'User is already a member of this company' }, 409);
-    }
-    if (body.is_primary_admin && !isAdmin(user)) {
-      const my = await getLink(c.env, company.id, user.id);
-      if (!(my && my.is_primary_admin)) {
-        return c.json({ detail: 'Only the primary admin can grant primary admin status' }, 403);
-      }
-    }
-    await c.env.DB.prepare(
-      `INSERT INTO user_company_links (uid, company_id, user_id, role_in_company, is_primary_admin, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).bind(newUid(), company.id, target.id,
-           String(body.role_in_company || 'Member'), body.is_primary_admin ? 1 : 0, nowIso()).run();
-    return c.json(await detailDto(c.env, company, user));
-  } catch (e) { return mapError(c, e); }
-});
+//
+// POST /company/:uid/members IS GONE (D434). It joined an EXISTING account to
+// the company on an editor's say-so — no invitation, no consent, and a 404
+// for anyone who had never signed up. Task #121 built the invitation the
+// invitee accepts (POST /company/:uid/invitations and the accept below); the
+// one page that still called the direct add (CompanyProfilePanel's "Add team
+// member") now points at Company Settings, so nothing in the tree called this
+// route and it is retired on D304's rule with its client method. Role change
+// and removal below are unchanged.
 
 // Wave 2 — change a member's role, or move primary-admin status.
 //
@@ -763,7 +757,7 @@ r.post('/company/invitations/accept', async (c) => {
     // Expiry is checked in SQL so both sides are the same `datetime()` format,
     // and stamped when found so the list stops calling it pending.
     const exp = await c.env.DB.prepare(
-      `SELECT CASE WHEN expires_at < datetime('now') THEN 1 ELSE 0 END AS expired
+      `SELECT CASE WHEN datetime(expires_at) < datetime('now') THEN 1 ELSE 0 END AS expired
          FROM company_invitations WHERE id = ?`,
     ).bind(inv.id).first<{ expired: number }>();
     if (Number(exp?.expired) === 1) {
@@ -811,6 +805,286 @@ r.post('/company/invitations/accept', async (c) => {
       role_in_company: inv.role_in_company,
       already_member: !!already,
     });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// D435 — the founder's Team page: roster, coverage and headcount plan
+// (migration 326). Read by every member; written by an editor (`canEdit`, the
+// same rule that decides who may change the membership list). Economics —
+// `salary_cents`, `compensation_note` — follow D431: present for an editor and
+// for the person the row is linked to, ABSENT for everyone else.
+//
+// THE READS THIS PAGE COMPOSES FROM OTHER STORES are attempted here and
+// reported per source, never masked: `cap_table_holders` (migration 020) is
+// keyed by project, so the company's holders are those of the projects that
+// name this company, matched to a person by email; `cap_table_option_pools`
+// (migration 057) is keyed by the member who imported it from Carta, so the
+// pool shown is a member's import and the page says so; the co-founder
+// decision is `projects.cofounder_decision_meta` (migration 162), read from
+// the newest project of this company that recorded one. A source that cannot
+// be read answers `{ available: false, reason }`, which the page prints as
+// Unreadable rather than as an empty section.
+// ---------------------------------------------------------------------------
+
+async function teamCompanyOr404(c: any): Promise<{ user: User; company: Company; editor: boolean } | Response> {
+  const user = await requireAuth(c);
+  const company = await getCompanyOr404(c.env, c.req.param('uid'));
+  if (!company) return c.json({ detail: 'Company not found' }, 404);
+  if (!(await viewerIsMember(c.env, company.id, user))) {
+    return refuse(c, 403, { code: 'not_a_member', message: 'Only members of this company can read its team.', raw: null });
+  }
+  return { user, company, editor: await canEdit(c.env, company, user) };
+}
+
+function teamWriteGate(c: any, ctx: { editor: boolean }): Response | null {
+  if (ctx.editor) return null;
+  return refuse(c, 403, {
+    code: 'not_an_editor',
+    message: 'Only an Owner, Admin, Founder or the primary admin can change the team record.',
+    raw: null,
+  });
+}
+
+r.get('/company/:uid/team', async (c) => {
+  try {
+    const ctx = await teamCompanyOr404(c);
+    if (ctx instanceof Response) return ctx;
+    const { user, company, editor } = ctx;
+
+    const people = await c.env.DB.prepare(
+      `SELECT * FROM company_people WHERE company_id = ?
+        ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'offer_out' THEN 1 ELSE 2 END, start_date, id`,
+    ).bind(company.id).all<any>();
+    const rows = (people.results || []).map((p) => personDto(p, editor || Number(p.user_id) === user.id));
+
+    // The company's projects, then their cap-table holders. The join is by
+    // project because that is how migration 020 keyed the import; a company
+    // with several projects has several cap tables here, and which one is
+    // the company's is an owner decision the page names (D435).
+    let capTable: any;
+    try {
+      const projects = await c.env.DB.prepare(
+        'SELECT id, name FROM projects WHERE company_id = ? AND deleted_at IS NULL ORDER BY created_at DESC',
+      ).bind(company.id).all<{ id: number; name: string }>();
+      const projRows = projects.results || [];
+      let holders: any[] = [];
+      if (projRows.length) {
+        const h = await c.env.DB.prepare(
+          `SELECT h.project_id, h.name, h.email, h.security_type, h.shares, h.ownership_pct, h.source, h.updated_at
+             FROM cap_table_holders h
+             JOIN projects p ON p.id = h.project_id
+            WHERE p.company_id = ? AND p.deleted_at IS NULL`,
+        ).bind(company.id).all<any>();
+        holders = (h.results || []).map((x) => ({
+          project_id: x.project_id,
+          name: x.name,
+          email: x.email ? String(x.email).toLowerCase() : null,
+          security_type: x.security_type ?? null,
+          shares: x.shares == null ? null : Number(x.shares),
+          ownership_pct: x.ownership_pct == null ? null : Number(x.ownership_pct),
+          source: x.source,
+          as_of: x.updated_at,
+        }));
+      }
+      capTable = { available: true, projects: projRows, holders };
+    } catch (e) {
+      capTable = { available: false, reason: 'The cap table could not be read just now.', projects: [], holders: [] };
+      console.error('[company/team] cap_table read failed', String((e as any)?.message || e).slice(0, 200));
+    }
+
+    // Option pools: a member's Carta import (migration 057, keyed by user).
+    let pool: any;
+    try {
+      const p = await c.env.DB.prepare(
+        `SELECT o.id, o.user_id, o.name, o.shares_authorized, o.shares_issued, o.shares_available, o.source, o.updated_at
+           FROM cap_table_option_pools o
+           JOIN user_company_links ucl ON ucl.user_id = o.user_id
+          WHERE ucl.company_id = ? ORDER BY o.name`,
+      ).bind(company.id).all<any>();
+      const poolRows: any[] = (p.results || []).map((x) => ({
+        id: x.id,
+        imported_by_user_id: x.user_id,
+        name: x.name,
+        shares_authorized: x.shares_authorized == null ? null : Number(x.shares_authorized),
+        shares_issued: x.shares_issued == null ? null : Number(x.shares_issued),
+        shares_available: x.shares_available == null ? null : Number(x.shares_available),
+        source: x.source,
+        as_of: x.updated_at,
+      }));
+      pool = { available: true, rows: poolRows };
+    } catch (e) {
+      pool = { available: false, reason: 'The option pool could not be read just now.', rows: [] };
+      console.error('[company/team] option_pool read failed', String((e as any)?.message || e).slice(0, 200));
+    }
+
+    const coverage = await c.env.DB.prepare(
+      'SELECT uid, function_name, state, owner_note, fix_note, updated_by, updated_at FROM company_function_coverage WHERE company_id = ? ORDER BY id',
+    ).bind(company.id).all<any>();
+    const plan = await c.env.DB.prepare(
+      'SELECT uid, period_label, target_headcount, note, updated_by, updated_at FROM company_headcount_plan WHERE company_id = ? ORDER BY id',
+    ).bind(company.id).all<any>();
+
+    // The co-founder decision (migration 162): the newest project of this
+    // company that recorded one. The blob is returned parsed; the page reads
+    // its `outcome`, `note` and `decided_at` with the same model the Match
+    // page writes (lib/cofounderMatchViewModel.js).
+    let cofounder: any;
+    try {
+      const row = await c.env.DB.prepare(
+        `SELECT id, name, cofounder_decision_meta FROM projects
+          WHERE company_id = ? AND deleted_at IS NULL AND cofounder_decision_meta IS NOT NULL
+          ORDER BY updated_at DESC LIMIT 1`,
+      ).bind(company.id).first<{ id: number; name: string; cofounder_decision_meta: string }>();
+      if (!row) cofounder = { available: false, reason: 'No project of this company has recorded a co-founder decision.' };
+      else {
+        let meta: any = null;
+        try { meta = JSON.parse(row.cofounder_decision_meta); } catch { meta = null; }
+        cofounder = { available: true, project_id: row.id, project_name: row.name, meta };
+      }
+    } catch (e) {
+      cofounder = { available: false, reason: 'The co-founder decision could not be read just now.' };
+      console.error('[company/team] cofounder read failed', String((e as any)?.message || e).slice(0, 200));
+    }
+
+    return c.json({
+      company: { id: company.id, uid: company.uid, company_name: company.company_name, stage: company.stage, created_at: company.created_at },
+      viewer: { editor, user_id: user.id },
+      people: rows,
+      coverage: coverage.results || [],
+      plan: plan.results || [],
+      cap_table: capTable,
+      pool,
+      cofounder,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+r.post('/company/:uid/team/people', async (c) => {
+  try {
+    const ctx = await teamCompanyOr404(c);
+    if (ctx instanceof Response) return ctx;
+    const gate = teamWriteGate(c, ctx);
+    if (gate) return gate;
+    const { user, company } = ctx;
+    const body = await c.req.json().catch(() => ({}));
+    const v = validatePerson(body, true);
+    if (v.error || !v.value) return refuse(c, 400, { code: 'invalid_person', message: v.error || 'Invalid person', raw: null });
+    const p = v.value;
+    // A row may name an account: matched by email to a member of THIS company
+    // only, never to an arbitrary account — the roster must not become a way
+    // to look up who holds which email on the platform.
+    let userId: number | null = null;
+    if (p.email) {
+      const m = await c.env.DB.prepare(
+        `SELECT u.id FROM users u JOIN user_company_links ucl ON ucl.user_id = u.id
+          WHERE ucl.company_id = ? AND lower(u.email) = ?`,
+      ).bind(company.id, String(p.email)).first<{ id: number }>();
+      userId = m?.id ?? null;
+    }
+    const uid = newUid();
+    const f = (k: string) => (p[k] === undefined ? null : p[k]);
+    await c.env.DB.prepare(
+      `INSERT INTO company_people
+         (uid, company_id, user_id, name, email, person_type, role_title, start_date, access_level, status,
+          salary_cents, compensation_note, equity_shares, equity_kind, vest_start_date, cliff_months, vest_months,
+          agreement_status, ip_assignment, election_83b, advisor_focus, advisor_cadence, note,
+          created_by, updated_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(uid, company.id, userId, p.name, f('email'), p.person_type, f('role_title'), f('start_date'), f('access_level'), p.status,
+           f('salary_cents'), f('compensation_note'), f('equity_shares'), f('equity_kind'), f('vest_start_date'), f('cliff_months'), f('vest_months'),
+           f('agreement_status'), f('ip_assignment'), f('election_83b'), f('advisor_focus'), f('advisor_cadence'), f('note'),
+           user.id, user.id, nowIso(), nowIso()).run();
+    const row = await c.env.DB.prepare('SELECT * FROM company_people WHERE uid = ?').bind(uid).first<any>();
+    return c.json(personDto(row, true), 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+r.patch('/company/:uid/team/people/:pid', async (c) => {
+  try {
+    const ctx = await teamCompanyOr404(c);
+    if (ctx instanceof Response) return ctx;
+    const gate = teamWriteGate(c, ctx);
+    if (gate) return gate;
+    const { user, company } = ctx;
+    const existing = await c.env.DB.prepare(
+      'SELECT * FROM company_people WHERE company_id = ? AND uid = ?',
+    ).bind(company.id, c.req.param('pid')).first<any>();
+    if (!existing) return c.json({ detail: 'Person not found' }, 404);
+    const body = await c.req.json().catch(() => ({}));
+    const v = validatePerson(body, false);
+    if (v.error || !v.value) return refuse(c, 400, { code: 'invalid_person', message: v.error || 'Invalid person', raw: null });
+    const sets: string[] = []; const params: any[] = [];
+    for (const [k, val] of Object.entries(v.value)) { sets.push(`${k} = ?`); params.push(val); }
+    // Offboarding is a status with a date, never a delete: the record of who
+    // was on the team, and on what terms, is what a later diligence reads.
+    if (v.value.status === 'offboarded' && existing.status !== 'offboarded') {
+      sets.push('offboarded_at = ?'); params.push(nowIso());
+    } else if (v.value.status && v.value.status !== 'offboarded' && existing.status === 'offboarded') {
+      sets.push('offboarded_at = ?'); params.push(null);
+    }
+    if (!sets.length) return c.json(personDto(existing, true));
+    sets.push('updated_by = ?'); params.push(user.id);
+    sets.push('updated_at = ?'); params.push(nowIso());
+    params.push(existing.id);
+    await c.env.DB.prepare(`UPDATE company_people SET ${sets.join(', ')} WHERE id = ?`).bind(...params).run();
+    const row = await c.env.DB.prepare('SELECT * FROM company_people WHERE id = ?').bind(existing.id).first<any>();
+    return c.json(personDto(row, true));
+  } catch (e) { return mapError(c, e); }
+});
+
+// PUT replaces the list: a function taken off the list is a function the
+// company stopped tracking, so its row goes rather than lingering as "gap".
+// The rows are rewritten rather than upserted, so each save re-stamps the
+// actor on every row: the list is one record, signed as a whole.
+r.put('/company/:uid/team/coverage', async (c) => {
+  try {
+    const ctx = await teamCompanyOr404(c);
+    if (ctx instanceof Response) return ctx;
+    const gate = teamWriteGate(c, ctx);
+    if (gate) return gate;
+    const { user, company } = ctx;
+    const body = await c.req.json().catch(() => ({}));
+    const v = validateCoverage(body);
+    if (v.error || !v.value) return refuse(c, 400, { code: 'invalid_coverage', message: v.error || 'Invalid coverage', raw: null });
+    // One batch, atomic on D1: the old list goes, the new list lands.
+    const stmts = [c.env.DB.prepare('DELETE FROM company_function_coverage WHERE company_id = ?').bind(company.id)];
+    for (const x of v.value) {
+      stmts.push(c.env.DB.prepare(
+        `INSERT INTO company_function_coverage (uid, company_id, function_name, state, owner_note, fix_note, updated_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(newUid(), company.id, x.function_name, x.state, x.owner_note, x.fix_note, user.id, nowIso(), nowIso()));
+    }
+    await c.env.DB.batch(stmts);
+    const rows = await c.env.DB.prepare(
+      'SELECT uid, function_name, state, owner_note, fix_note, updated_by, updated_at FROM company_function_coverage WHERE company_id = ? ORDER BY id',
+    ).bind(company.id).all<any>();
+    return c.json({ coverage: rows.results || [] });
+  } catch (e) { return mapError(c, e); }
+});
+
+r.put('/company/:uid/team/plan', async (c) => {
+  try {
+    const ctx = await teamCompanyOr404(c);
+    if (ctx instanceof Response) return ctx;
+    const gate = teamWriteGate(c, ctx);
+    if (gate) return gate;
+    const { user, company } = ctx;
+    const body = await c.req.json().catch(() => ({}));
+    const v = validatePlan(body);
+    if (v.error || !v.value) return refuse(c, 400, { code: 'invalid_plan', message: v.error || 'Invalid plan', raw: null });
+    const stmts = [c.env.DB.prepare('DELETE FROM company_headcount_plan WHERE company_id = ?').bind(company.id)];
+    for (const x of v.value) {
+      stmts.push(c.env.DB.prepare(
+        `INSERT INTO company_headcount_plan (uid, company_id, period_label, target_headcount, note, updated_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(newUid(), company.id, x.period_label, x.target_headcount, x.note, user.id, nowIso(), nowIso()));
+    }
+    await c.env.DB.batch(stmts);
+    const rows = await c.env.DB.prepare(
+      'SELECT uid, period_label, target_headcount, note, updated_by, updated_at FROM company_headcount_plan WHERE company_id = ? ORDER BY id',
+    ).bind(company.id).all<any>();
+    return c.json({ plan: rows.results || [] });
   } catch (e) { return mapError(c, e); }
 });
 

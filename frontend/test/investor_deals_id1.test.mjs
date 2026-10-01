@@ -142,18 +142,21 @@ test('none of the artboard’s fixture companies or figures reaches the page', (
   assert.ok(board.includes('viewMore:'), 'the artboard no longer carries a compressed card');
 });
 
-test('the fourth tile counts something recorded, and names what is not', () => {
-  // The artboard's fourth is `From the Lab · proprietary sourcing`, and NO
-  // sourcing channel is stored on a deal. A tile reading "Not recorded"
-  // because the PRODUCT never built the store is design commentary on a
-  // customer's screen (D56), so the tile counts what the record does carry and
-  // the gap is stated in the limits instead.
+test('the fourth tile counts something recorded, and names what is not decided', () => {
+  // The artboard's fourth is `From the Lab · proprietary sourcing`. D463 added
+  // `deals.source` (migration 336), so the tile counts the deals carrying a
+  // recorded source. What it still cannot do is the artboard's own label:
+  // which sources count as the Lab is the owner's call, so no TILE wears it —
+  // naming it in the limits prose to say it is undecided is not drawing it.
   assert.match(id1(), /label:'From the Lab'/, 'the artboard changed its fourth tile');
-  assert.ok(!Z.includes('From the Lab'), 'the zone draws a tile it has no store for');
-  assert.match(Z, /label="On-platform"/);
-  assert.match(Z, /live\.filter\(\(d\) => d\.project_id\)/, 'the tile stopped counting anything');
-  assert.match(ZONE, /sourcing channel is recorded on a deal/i,
-    'the missing sourcing channel is no longer stated anywhere');
+  assert.ok(!/label="From the Lab"/.test(Z), 'the zone draws a tile named for a taxonomy nobody decided');
+  assert.match(Z, /label="Source recorded"/, 'the tile must count what the record carries');
+  assert.match(Z, /live\.filter\(\(d\) => String\(d\.source \|\| ''\)\.trim\(\)\)/,
+    'the tile stopped counting recorded sources');
+  assert.match(Z, /live\.filter\(\(d\) => d\.project_id\)/, 'the on-platform count is gone from the note');
+  // And the missing decision is stated on screen, not only in a comment.
+  assert.match(ZONE, /owner&rsquo;s call|owner's call/i,
+    'the undecided source taxonomy is no longer stated anywhere');
   assert.match(ZONE, /<StatedLimit/, 'the limits block is gone');
 });
 
@@ -174,7 +177,12 @@ test('every chip narrows, and the narrowing is what the instrument draws', () =>
 test('the zone is mounted on its own route and the workspace no longer draws it', () => {
   assert.match(ROUTES, /pipeline: lazy\(\(\) => import\('\.\.\/\.\.\/pages\/investor\/deals\/PipelineZone'\)\)/);
   assert.match(ROUTES, /const Zone = ZONES\[zone\?\.slug\]/);
-  assert.match(ROUTES, /\{Zone && !isRoot/, 'the registry is declared and never consulted');
+  // WAS `/\{Zone && !isRoot/`. The root no longer reaches this expression at
+  // all — it renders the bucket board — so the shape is a root branch and then
+  // the registry. The invariant is unchanged and is the one the message names:
+  // `ZONES` must be consulted, or four artboards sit in a map nothing reads.
+  assert.match(ROUTES, /\{isRoot\s*\n?\s*\? <DealsRoot /, 'the root no longer renders its own overview');
+  assert.match(ROUTES, /\(Zone \? <Zone \/>/, 'the registry is declared and never consulted');
   // Two files mounting one zone row is two chip rows and two export buttons
   // for one route — the defect `profile_zone_actions` caught when this landed.
   assert.ok(!WORKSPACE.includes("investorZoneFilters('deals/pipeline'"),

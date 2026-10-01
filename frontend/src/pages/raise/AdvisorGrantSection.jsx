@@ -1,5 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../../lib/api';
+// ONE DEFINITION OF A LOCAL DAY, shared with the advisor's Delivery zone rather
+// than re-written here. `sent_at` and `opened_at` are instants written by the
+// worker's `nowIso()`, and that module's header argues why they go through the
+// browser's own formatter while a stored calendar day must not.
+import { shortMoment } from '../advisor/practice/deliveryTrail';
 
 /**
  * Who among your advisors can read this startup's record, and how much of it.
@@ -163,6 +168,158 @@ function DocumentShares({ projectUid, grants, busyOuter }) {
   );
 }
 
+/**
+ * WHAT MY ADVISORS HAVE SENT ME — and the only place in this product where an
+ * open receipt is written.
+ *
+ * THE MIRROR OF `DocumentShares` ABOVE. That one is founder → advisor: one file,
+ * pushed to one person. This is advisor → founder: the work products they have
+ * sent, version by version, with the control that records having read one. The
+ * section's own docblock argues why both live here — a founder deciding what
+ * they see and share from their advisors should not need two screens.
+ *
+ * ONLY THE CLIENT CAN SAY A THING WAS READ. Migration 208's header, inherited by
+ * 239, states it: `opened_at` is the client's to set, because an advisor-side
+ * write would be the practice reporting a metric about itself. Their Delivery
+ * page prints Unopened, Median to open and Never opened straight off this
+ * button, and there is no advisor route that can move any of them. D73.
+ *
+ * FIRST OPEN WINS, so the button disappears once used rather than becoming a
+ * counter: the worker stamps only where `opened_at IS NULL`, and a receipt that
+ * moved every time it was viewed would be a last-read time pretending to be a
+ * first-read one.
+ *
+ * WHERE A FOUNDER ACTUALLY FINDS IT, said plainly because it took a browser run
+ * to establish: this whole section renders inside `DataRoomPage`, which
+ * `/raise/data-room` mounts only under `?mode=workspace` — the canvas zone
+ * `FounderRaiseDataRoom` is the default body, and its "Open workspace" link is
+ * the way through. So the receipt is two clicks from the Raise bucket, exactly as
+ * `DocumentShares` above it has always been. That is the right home for the
+ * mirror of a control, and it is not the most discoverable place in the product;
+ * if the advisor's tiles turn out to sit unopened, surfacing this list on the
+ * canvas zone as well is the fix, not moving it.
+ *
+ * IT IS NOT GRANT-GATED, unlike everything above it, and that difference is
+ * stated on the card. The grants are project-scoped; this list is keyed on the
+ * reader's own account through the ENGAGEMENT, so it shows work from every
+ * advisor under contract whether or not they were ever granted a record.
+ */
+function ReceivedWorkProducts() {
+  const [state, setState] = useState({ loading: true, error: null, items: [], totals: null });
+  const [busy, setBusy] = useState('');
+
+  const load = useCallback(async () => {
+    setState((s) => ({ ...s, loading: true }));
+    try {
+      const res = await api.listReceivedDeliverables();
+      setState({ loading: false, error: null, items: res?.items || [], totals: res?.totals || null });
+    } catch (e) {
+      setState({
+        loading: false,
+        error: e?.detail || e?.message || 'Work products from your advisors did not load.',
+        items: [], totals: null,
+      });
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const open = async (uid) => {
+    setBusy(uid);
+    try { await api.openReceivedDeliverableVersion(uid); await load(); }
+    catch { /* the row simply stays unopened; the next load is the truth */ }
+    finally { setBusy(''); }
+  };
+
+  if (state.loading) return null;
+  if (state.error) {
+    return (
+      <div className="mt-4 border-t border-gray-100 pt-3 dark:border-gray-800">
+        <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100">From your advisors</h4>
+        <p className="mt-1 text-xs text-amber-700 dark:text-amber-500">{state.error}</p>
+      </div>
+    );
+  }
+
+  const totals = state.totals || {};
+  return (
+    <div className="mt-4 border-t border-gray-100 pt-3 dark:border-gray-800" data-testid="received-pr3c">
+      <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100">From your advisors</h4>
+      <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+        Work products your advisors have sent you, newest first. Marking one open is the only
+        record either of you has that it was read — nothing on their side can set it, and it is
+        kept as the FIRST time you opened it rather than the last.
+        {' '}This list comes from your engagements, not from the grants above, so it shows every
+        advisor you are under contract with whether or not you opened your record to them.
+      </p>
+
+      {state.items.length === 0 ? (
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          Nothing has been sent to you yet. A draft your advisor has not sent does not appear
+          here, which is deliberate: it is their work in progress until they hand it over.
+        </p>
+      ) : (
+        <>
+          <div className="mt-2 text-[11px] font-semibold text-gray-600 dark:text-gray-400">
+            {totals.work_products} from {totals.advisors}
+            {totals.advisors === 1 ? ' advisor' : ' advisors'}
+            {totals.unread ? ` · ${totals.unread} unread` : ' · all read'}
+          </div>
+          <div className="mt-2 space-y-2">
+            {state.items.map((item) => (
+              <div key={item.uid} data-testid={`received-pr3c-${item.uid}`}
+                className="rounded-lg border border-gray-200 p-2.5 dark:border-gray-700">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <div className="text-[13px] font-semibold text-gray-900 dark:text-gray-100">{item.title}</div>
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400">{item.advisor_name}</div>
+                </div>
+                <ul className="mt-1.5 space-y-1">
+                  {item.versions.map((v) => (
+                    <li key={v.uid} className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                      <span className="min-w-0 text-gray-600 dark:text-gray-400">
+                        <strong className="font-semibold text-gray-800 dark:text-gray-200">
+                          {v.label || `v${v.version}`}
+                        </strong>
+                        {v.summary ? ` · ${v.summary}` : ''}
+                        {v.sent_at ? ` · sent ${shortMoment(v.sent_at)}` : ''}
+                      </span>
+                      {v.opened_at ? (
+                        <span className="shrink-0 font-semibold text-emerald-700 dark:text-emerald-400">
+                          Opened {shortMoment(v.opened_at)}
+                        </span>
+                      ) : (
+                        <button type="button" disabled={busy === v.uid}
+                          data-testid={`open-pr3c-${v.uid}`} onClick={() => open(v.uid)}
+                          className="shrink-0 rounded-lg bg-violet-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-violet-700 disabled:opacity-50">
+                          {busy === v.uid ? 'Recording…' : 'Mark open'}
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {item.versions.some((v) => v.link_url) && (
+                  <div className="mt-1.5 flex flex-wrap gap-2">
+                    {item.versions.filter((v) => v.link_url).map((v) => (
+                      <a key={v.uid} href={v.link_url} target="_blank" rel="noopener noreferrer"
+                        className="text-[11px] font-semibold text-violet-700 underline dark:text-violet-300">
+                        Open {v.label || `v${v.version}`} ↗
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+            <strong>Signing a work product off is not recorded anywhere yet.</strong> The store
+            carries the column beside the open receipt, and nothing writes it — no screen on
+            either side asks for a sign-off, so a control here would save a fact nobody reads.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function AdvisorGrantSection({ projectUid }) {
   const [state, setState] = useState({ loading: true, error: null, items: [] });
   const [email, setEmail] = useState('');
@@ -286,6 +443,7 @@ export default function AdvisorGrantSection({ projectUid }) {
       </div>
 
       <DocumentShares projectUid={projectUid} grants={state.items} busyOuter={busy} />
+      <ReceivedWorkProducts />
     </section>
   );
 }

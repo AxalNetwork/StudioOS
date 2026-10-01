@@ -13,15 +13,16 @@ import { verifySignedToken } from './decks';
 import { createJWT, setAuthCookies, generateCsrfToken, requireAuth } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { renderLegalTemplate, templateKeyForDocType } from '../services/legalTemplates';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const deckShareActions = new Hono<{ Bindings: Env }>();
 
 // Lazy schema bootstrap — migration 071 is additive but unapplied in
 // some environments. Mirrors the ensureTelegramSchema / ensureXSchema
 // pattern so the routes work regardless of remote migration state.
-let SCHEMA_READY = false;
+const SCHEMA_READY_MAP = new WeakMap<object, boolean>();
 async function ensureDeckShareConversionSchema(env: Env): Promise<void> {
-  if (SCHEMA_READY) return;
+  if (SCHEMA_READY_MAP.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS deck_share_conversions (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,7 +59,7 @@ async function ensureDeckShareConversionSchema(env: Env): Promise<void> {
       console.error('[deck_share] schema bootstrap failed:', (e as Error).message);
     }
   }
-  SCHEMA_READY = true;
+  SCHEMA_READY_MAP.set(bindingKey(env), true);
 }
 
 async function sha256HexLocal(s: string): Promise<string> {

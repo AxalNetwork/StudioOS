@@ -35,7 +35,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BASELINE = path.join(ROOT, 'scripts/regulated-wording-baseline.json');
@@ -44,7 +44,7 @@ const BASELINE = path.join(ROOT, 'scripts/regulated-wording-baseline.json');
  * The AI surfaces. Each entry is a file whose strings are either the model
  * speaking or the product naming the model.
  */
-const SURFACES = [
+export const SURFACES = [
   ['copy', 'frontend/src/ui/eadwynConfig.js', 'every string on the AI rail: mode notes, guardrail, footers'],
   ['copy', 'frontend/src/ui/AssistRail.jsx', 'the rail itself — headings, buttons, empty states'],
   ['copy', 'frontend/src/ui/AssistLayout.jsx', 'the shell that mounts the rail beside a page'],
@@ -59,6 +59,23 @@ const SURFACES = [
   ['copy', 'frontend/src/components/advisor/AdvisorFilledBanner.jsx', 'tells the user the model filled their fields'],
   ['copy', 'frontend/src/components/advisor/AdvisorProgressWidget.jsx', 'the chatbot progress rail'],
   ['copy', 'frontend/src/components/PageExplainer.jsx', 'AI page explanations rendered as prose'],
+  // The Studio (D322). Each home mounts the Eadwyn chat and says what happens
+  // when it is unavailable; the profile band and the archetype card tell the
+  // user where their answers come from. The advisor home is also the human
+  // advisor's own page, so its role and practice copy is on record below.
+  ['copy', 'frontend/src/components/profile/ProfileFitSection.jsx', 'the profile band: skills, values, archetype, and where the answers come from'],
+  ['copy', 'frontend/src/pages/ArchetypeCardPage.jsx', 'the full archetype card and its empty state'],
+  ['copy', 'frontend/src/pages/founder/FounderStudioHome.jsx', 'the founder Studio home, around the Eadwyn chat'],
+  ['copy', 'frontend/src/pages/founder/founderStudioCards.jsx', 'the founder Studio cards'],
+  ['copy', 'frontend/src/pages/investor/InvestorStudioHome.jsx', 'the investor Studio home, around the Eadwyn chat'],
+  ['copy', 'frontend/src/pages/investor/investorStudioParts.jsx', 'the investor Studio stat rows'],
+  ['copy', 'frontend/src/pages/advisor/AdvisorStudioHome.jsx', 'the advisor Studio home, around the Eadwyn chat'],
+  ['copy', 'frontend/src/pages/partner/PartnerStudioHome.jsx', 'the partner Studio home, around the Eadwyn chat'],
+  ['copy', 'frontend/src/pages/admin/AdminStudioHome.jsx', 'the admin Studio home, which mounts the Eadwyn chat'],
+  // D324 — every Studio home mounts Eadwyn through these two: the wrapper, and
+  // the collapsed "interview complete" row with its proposals and ticket action.
+  ['copy', 'frontend/src/components/advisor/StudioInterview.jsx', 'the Studio chat wrapper'],
+  ['copy', 'frontend/src/components/advisor/interviewCompleteRow.jsx', 'the collapsed interview row: completion, proposals, ticket, Resume'],
   ['prompt', 'cloudflare-worker/src/services/advisor/guardrails.ts', 'ADVISOR_SYSTEM_PROMPT — the model being told who it is'],
   ['prompt', 'cloudflare-worker/src/services/decks/autofill.ts', 'the deck autofill system message'],
   ['prompt', 'cloudflare-worker/src/services/publications.ts', 'buildSystemPrompt for drafted publications'],
@@ -113,6 +130,9 @@ const NOT_COPY = [
   /^\[/,                                        // "[advisor] schema:" — a log tag
   /\b(CREATE|SELECT|INSERT|UPDATE|DELETE|ALTER)\s/i, // SQL
   /^https?:\/\//,                               // URLs
+  // A className list: every token carries a hyphen, underscore or colon
+  // ("advisor-row advisor-row--open"). Prose never hyphenates every word (D322).
+  /^(?=\S)(?:\w+[-_:]|[-_:]\w|[-_:])[\w:-]*(?:\s+(?=\S)(?:\w+[-_:]|[-_:]\w|[-_:])[\w:-]*)*$/,
 ];
 const isCopy = (s) => !NOT_COPY.some((re) => re.test(s));
 
@@ -124,7 +144,7 @@ const isCopy = (s) => !NOT_COPY.some((re) => re.test(s));
  * `"AdvisorFilledBanner"` are all machine names; nobody reads them as a
  * sentence, and flagging them would make the check unusable.
  */
-function visibleText(src) {
+export function visibleText(src) {
   const code = codeOnly(src);
   const out = [];
   for (const m of code.matchAll(/'([^'\\\n]{4,})'|"([^"\\\n]{4,})"/g)) {
@@ -135,6 +155,18 @@ function visibleText(src) {
   for (const m of code.matchAll(/>([^<>{}\n]{4,})</g)) {
     const s = m[1].trim();
     if (s.includes(' ') && isCopy(s)) out.push(s);
+  }
+  // JSX text on lines of its own. The pattern above stops at a newline, so
+  //   <MessageSquare />
+  //   Your advisor will guide you…
+  //   </div>
+  // was never read: a tag ending one line, prose filling the next, and a tag
+  // or an expression opening the line after (D322). Only whole lines are
+  // taken, each neither opening a tag nor an expression, so code between a
+  // comparison and a later `<` does not count as text.
+  for (const m of code.matchAll(/>[ \t]*\n((?:[ \t]*[^<>{}\s][^<>{}\n]*\n)+)[ \t]*[<{]/g)) {
+    const s = m[1].replace(/\s+/g, ' ').trim();
+    if (s.length >= 4 && s.includes(' ') && isCopy(s)) out.push(s);
   }
   return out;
 }
@@ -218,4 +250,5 @@ function main() {
   );
 }
 
-main();
+// Run only when invoked as a script; a test imports the scanner (D322).
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) main();

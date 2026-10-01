@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import { Link, useSearchParams } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { Plus, Trash2, AlertCircle, Save, X, Download, TrendingUp, FolderPlus } from 'lucide-react';
+import { Plus, Trash2, AlertCircle, Save, X, Download, TrendingUp, FolderPlus, Send } from 'lucide-react';
 import { api } from '../lib/api';
 
 const FIELDS = [
@@ -345,6 +345,8 @@ export default function MetricsPage() {
         </div>
       )}
 
+      {hasProjects && <InvestorUpdateCard projectId={projectId} latest={latest} />}
+
       {adding && <SnapshotModal value={adding} onChange={setAdding} onSave={handleSave} onClose={() => setAdding(null)} />}
     </div>
   );
@@ -473,6 +475,164 @@ function DerivedKpiBoard({ summary }) {
           </ul>
         </details>
       )}
+    </section>
+  );
+}
+
+/**
+ * The founder's half of the Updates seam — canvas IP2's inbox is "the seam
+ * view of what founders enter in Build", and this card is where they enter it.
+ *
+ * OVER THE EXISTING STORE, never a parallel one: POST /portfolio-updates takes
+ * the owning founder, and the list below is what the investor's Updates inbox
+ * reads. The KPIs pre-fill from the latest snapshot ON THIS PAGE so the update
+ * and the metrics start from the same numbers; every field stays editable,
+ * because the founder may be reporting a different period than the latest
+ * snapshot's.
+ *
+ * NOT WIRED, AND NAMED: "Send test to myself" and a send log need outbound
+ * mail, which this page does not have — submitting puts the update in the
+ * investors' inbox and nothing else leaves the firm.
+ */
+const UPDATE_KPIS = [
+  ['mrr', 'MRR'], ['arr', 'ARR'], ['burn', 'Burn'],
+  ['runway_months', 'Runway (mo)'], ['headcount', 'Headcount'], ['cash', 'Cash'],
+];
+
+function InvestorUpdateCard({ projectId, latest }) {
+  const [updates, setUpdates] = useState(null);
+  const [readFailed, setReadFailed] = useState(false);
+  const [form, setForm] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const load = useCallback(() => {
+    setReadFailed(false);
+    api.portfolioUpdatesList({ project_id: projectId })
+      .then((r) => setUpdates(Array.isArray(r?.items) ? r.items : []))
+      .catch(() => { setUpdates(null); setReadFailed(true); });
+  }, [projectId]);
+  useEffect(() => { setUpdates(null); load(); }, [load]);
+
+  const openComposer = () => {
+    setError('');
+    setForm({
+      period: new Date().toISOString().slice(0, 7),
+      title: '',
+      body: '',
+      kpis: {
+        mrr: latest?.mrr ?? '', arr: latest?.arr ?? '', burn: latest?.net_burn ?? '',
+        cash: latest?.cash_balance ?? '', headcount: latest?.headcount ?? '', runway_months: '',
+      },
+    });
+  };
+
+  const submit = async (send) => {
+    if (!form || busy) return;
+    if (!form.title.trim()) { setError('Give the update a title — the inbox lists it by title.'); return; }
+    setBusy(true); setError('');
+    try {
+      const kpis = {};
+      for (const [k] of UPDATE_KPIS) {
+        if (form.kpis[k] !== undefined && form.kpis[k] !== '') kpis[k] = Number(form.kpis[k]);
+      }
+      await api.portfolioUpdateCreate({
+        project_id: projectId,
+        title: form.title.trim(),
+        period: form.period || undefined,
+        body: form.body || undefined,
+        kpis,
+        status: send ? 'submitted' : 'draft',
+      });
+      setForm(null);
+      load();
+    } catch (cause) {
+      setError(cause?.message || 'The update could not be saved.');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <section className="bg-white border border-gray-200 rounded-xl dark:bg-gray-900 dark:border-gray-800" data-testid="investor-update-card">
+      <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between dark:border-gray-800">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Investor update</h3>
+          <p className="text-xs text-gray-500 mt-0.5">
+            What you send here is what your investors’ Updates inbox reads.
+          </p>
+        </div>
+        {!form && (
+          <button
+            type="button"
+            onClick={openComposer}
+            data-testid="button-write-investor-update"
+            className="flex items-center gap-2 px-3 py-2 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium"
+          >
+            <Plus size={14} /> Write an update
+          </button>
+        )}
+      </div>
+
+      {form && (
+        <div className="p-5 border-b border-gray-100 dark:border-gray-800">
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <input value={form.period} onChange={(e) => setForm({ ...form, period: e.target.value })} placeholder="Period (e.g. 2026-09)" data-testid="input-update-period"
+              className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
+            <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Title" data-testid="input-update-title"
+              className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
+          </div>
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-3">
+            {UPDATE_KPIS.map(([k, label]) => (
+              <input key={k} value={form.kpis[k] ?? ''} onChange={(e) => setForm({ ...form, kpis: { ...form.kpis, [k]: e.target.value } })}
+                placeholder={label} inputMode="decimal" data-testid={`input-update-kpi-${k}`}
+                className="px-2 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
+            ))}
+          </div>
+          <textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} placeholder="Narrative / highlights / asks" rows={4} data-testid="input-update-body"
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm mb-3" />
+          {error && <p className="mb-3 text-sm text-rose-700 dark:text-rose-400" role="alert" data-testid="status-update-error">{error}</p>}
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => submit(false)} disabled={busy} data-testid="button-update-draft"
+              className="px-4 py-2 bg-gray-200 dark:bg-gray-700 disabled:opacity-50 rounded-lg text-sm">Save draft</button>
+            <button type="button" onClick={() => submit(true)} disabled={busy} data-testid="button-update-submit"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-sm">
+              <Send size={14} /> Submit to investors
+            </button>
+            <button type="button" onClick={() => setForm(null)} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-800 dark:hover:text-gray-200">Cancel</button>
+          </div>
+          <p className="mt-3 text-[11px] text-gray-500 dark:text-gray-400">
+            Submitting puts the update in your investors’ inbox. A test copy to yourself and a send log need outbound mail, which this page does not have yet.
+          </p>
+        </div>
+      )}
+
+      <div className="p-5">
+        {readFailed ? (
+          <p className="text-sm text-rose-700 dark:text-rose-300" role="alert" data-testid="status-updates-unreadable">
+            Your sent updates could not be read. That is not a claim that none exists.
+            <button type="button" onClick={load} className="ml-1 underline">Retry</button>
+          </p>
+        ) : updates === null ? (
+          <p className="text-sm text-gray-400">Loading your updates…</p>
+        ) : updates.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400" data-testid="empty-investor-updates">
+            No update is recorded for this startup yet. One you write above lands here — and in your investors’ inbox when you submit it.
+          </p>
+        ) : (
+          <div className="space-y-2" data-testid="list-investor-updates">
+            {updates.map((u) => (
+              <div key={u.uid} className="flex items-center justify-between gap-3 border border-gray-100 dark:border-gray-800 rounded-lg px-3 py-2">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{u.title}</div>
+                  <div className="text-xs text-gray-500">{u.period || 'No period recorded'} · {u.status === 'submitted' ? 'Submitted' : 'Draft'}</div>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${u.status === 'submitted' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}>
+                  {u.status === 'submitted' ? 'In their inbox' : 'Draft'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </section>
   );
 }

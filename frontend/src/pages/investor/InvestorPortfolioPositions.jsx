@@ -4,6 +4,7 @@ import ZoneNav from '../../workspaces/ZoneNav';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
+import { exportView } from '../../lib/csvExport';
 import './investorPortfolioCanvas.css';
 import './investorPortfolioPositions.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
@@ -78,17 +79,23 @@ export default function InvestorPortfolioPositions() {
   const rows = useMemo(() => {
     const healthByProject = new Map((state.health?.items || []).map((item) => [String(item.project_id), item]));
     const lastUpdateByProject = new Map();
+    // The latest update OBJECT per project, not only its date: the runway
+    // alert reads the self-reported runway off the update's own KPIs.
+    const lastUpdateObjByProject = new Map();
     state.updates.forEach((update) => {
       const date = update.submitted_at || update.updated_at || update.created_at;
       const current = lastUpdateByProject.get(String(update.project_id));
-      if (date && (!current || new Date(date) > new Date(current))) lastUpdateByProject.set(String(update.project_id), date);
+      if (date && (!current || new Date(date) > new Date(current))) {
+        lastUpdateByProject.set(String(update.project_id), date);
+        lastUpdateObjByProject.set(String(update.project_id), update);
+      }
     });
     return state.positions.map((position) => {
       const health = healthByProject.get(String(position.project_id)) || null;
       const lastUpdate = lastUpdateByProject.get(String(position.project_id)) || null;
       const updateDays = daysSince(lastUpdate);
       const overdue = updateDays !== null && updateDays > 30;
-      return { ...position, health, lastUpdate, updateDays, overdue, needsAttention: Boolean(position.marked_down || health?.intervention || health?.badge === 'red' || health?.badge === 'yellow' || overdue) };
+      return { ...position, health, lastUpdate, lastUpdateObj: lastUpdateObjByProject.get(String(position.project_id)) || null, updateDays, overdue, needsAttention: Boolean(position.marked_down || health?.intervention || health?.badge === 'red' || health?.badge === 'yellow' || overdue) };
     }).sort((a, b) => healthRank(a) - healthRank(b) || (b.updateDays ?? -1) - (a.updateDays ?? -1));
   }, [state.positions, state.health, state.updates]);
   const stages = [...new Set(rows.map((row) => row.project?.stage).filter(Boolean))].sort();
@@ -125,6 +132,16 @@ export default function InvestorPortfolioPositions() {
     {state.loading ? <Skeleton /> : !state.error && <>{filter === 'stage' && <div className="ip1-filters"><label>Stage<select value={stage} onChange={(event) => setStage(event.target.value)}><option value="all">All recorded stages</option>{stages.map((item) => <option key={item} value={item}>{title(item)}</option>)}</select></label></div>}
       <section className="i4-stats"><Stat label="Invested" value={money(invested)} note="Recorded cost basis, including follow-ons" /><Stat label="Current FMV" value={money(carryingValue)} note={latestMark ? `Latest mark in book: ${latestMark}` : rows.length ? 'Unmarked positions carried at cost' : 'No positions recorded'} /><Stat label="TVPI · gross" value={state.unavailable.analytics ? 'Unavailable' : ratio(state.analytics?.tvpi)} note={state.unavailable.analytics ? 'Analytics source unavailable' : `DPI ${ratio(state.analytics?.dpi)} · gross of fees and carry`} /><Stat label="Needs attention" value={attentionPartial ? `≥ ${needsAttention}` : needsAttention} note={state.unavailable.health ? 'Health source unavailable' : `${red} red, ${amber} amber`} /></section>
       <section className="i4-card i4-positions ip1-ledger"><div className="i4-section-head"><div><h2>Positions</h2><p>{filter === 'attention' ? 'Sorted by recorded attention signals, worst first' : `${visible.length} visible of ${rows.length} recorded positions`}</p></div><span>Read-only ledger</span></div><PositionsTable rows={visible} healthUnavailable={state.unavailable.health} updatesUnavailable={state.unavailable.updates} filter={filter} /><p className="i4-seam-note"><span>Valuation boundary</span> FMV uses the latest stored mark. Unmarked positions are carried at cost and labelled as such; realised cash remains separate in DPI.</p></section>
+      {/* ══ ALERTS — the Portfolio canvas's four rules, evaluated against the
+          book this page already loaded. Every alert names the rule that fired
+          and the position it fired on; a rule with no hits says so, and a rule
+          whose source failed says THAT, never zero. ══ */}
+      <AlertsSection rows={rows} unavailable={state.unavailable} />
+      {/* ══ QUARTER-END EXPORT — the book read as of a date. `as_of` cuts the
+          flows AND the marks at the date (positions.ts), so the figures are
+          the quarter's own rather than today's with an old label. The rendered
+          four-page LP document is /lp-reports, not this page. ══ */}
+      <QuarterEndExport />
       {/* WAS a card asserting "History remains read-only on this collection"
           and that IP1 "does not ... write marks, add follow-ons, or accept an
           AI-generated performance narrative". Read-only is right and the rest
@@ -169,7 +186,14 @@ function PositionsTable({ rows, healthUnavailable, updatesUnavailable, filter })
  * LP. A row whose basis is NULL predates the column's default and renders as
  * unrecorded — reporting it as a GP estimate would invent the provenance.
  */
-function MarkHistory({ state, onClose }) {
+// EXPORTED FOR THE TEST, and that is the whole reason. The page loads in a
+// `useEffect`, and `renderToStaticMarkup` never runs one — so a render of the
+// page itself emits the skeleton and nothing else, and these four states are
+// unreachable from the top. This component is pure and prop-driven (no hooks,
+// no `api`), so handing it a state renders the real markup. The alternative
+// was asserting the four states as source text, which cannot tell a rendered
+// row from a string that merely appears in the file.
+export function MarkHistory({ state, onClose }) {
   if (state === null) return null;
   return (
     <section className="i4-card ip1-marks" data-testid="ip1-mark-history">
@@ -244,3 +268,199 @@ function PositionsRail({ rows, analytics, unavailable, sourceError }) {
   );
 }
 function Skeleton() { return <div className="i4-skeleton" aria-busy="true"><i /><i /><i /><i /></div>; }
+/**
+ * The Portfolio canvas's four alert rules, evaluated against the book this
+ * page already loaded. Every alert names the rule that fired and the position
+ * it fired on. A rule with no hits says so; a rule whose source failed says
+ * THAT — never a zero in place of an unreadable source.
+ *
+ * Rule 3 (health flipped to red) is the only one needing a second read: a flip
+ * is latest-red AND an earlier snapshot inside the window not red, and the
+ * dated history lives behind `/portfolio/health/:uid?history_days=`. It loads
+ * lazily, for the red positions only.
+ */
+function AlertsSection({ rows, unavailable }) {
+  const [histories, setHistories] = useState({});
+  const redRows = rows.filter((row) => row.health?.badge === 'red');
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      for (const row of redRows) {
+        const uid = row.project?.uid;
+        if (!uid || histories[uid]) continue;
+        try {
+          const r = await api.portfolioHealthGet(uid, 90);
+          if (alive) setHistories((current) => ({ ...current, [uid]: { items: Array.isArray(r?.history) ? r.history : [] } }));
+        } catch {
+          if (alive) setHistories((current) => ({ ...current, [uid]: { error: true } }));
+        }
+      }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows.length, redRows.length]);
+
+  /** Latest red with an earlier non-red inside the window = flipped. */
+  const flipped = (row) => {
+    const h = row.project?.uid ? histories[row.project.uid] : null;
+    if (!h || h.error) return null;
+    const history = h.items || [];
+    const earlier = history.slice(1);
+    return earlier.some((snap) => snap.badge && snap.badge !== 'red');
+  };
+
+  const rules = [
+    {
+      key: 'runway',
+      name: 'Runway below 6 months',
+      rule: 'runway ≤ 6 · self-reported, from the latest update',
+      unavailable: unavailable.updates,
+      hits: unavailable.updates ? null : rows.filter((row) => {
+        const runway = Number(row.lastUpdateObj?.kpis?.runway_months);
+        return Number.isFinite(runway) && runway < 6;
+      }).map((row) => ({ row, value: `${Number(row.lastUpdateObj.kpis.runway_months)}mo`, why: `Reported ${row.lastUpdate || 'recently'}` })),
+      clear: 'Every position’s latest update reports more than six months of runway, or none reports one.',
+    },
+    {
+      key: 'overdue',
+      name: 'Update overdue 30 days',
+      rule: 'days since last update ≥ 30',
+      unavailable: unavailable.updates,
+      hits: unavailable.updates ? null : rows.filter((row) => row.overdue).map((row) => ({ row, value: `${row.updateDays}d`, why: `Last reported ${row.lastUpdate}` })),
+      clear: 'Every position has an update inside 30 days.',
+    },
+    {
+      key: 'health',
+      name: 'Health flipped to red',
+      rule: 'health signal transitioned to red within 90 days',
+      unavailable: unavailable.health,
+      hits: unavailable.health ? null : redRows.filter((row) => flipped(row)).map((row) => ({ row, value: 'red', why: 'an earlier snapshot inside 90 days was not red' })),
+      clear: 'No position flipped to red inside 90 days.',
+    },
+    {
+      key: 'markdown',
+      name: 'Valuation marked down',
+      rule: 'carrying value below invested cost',
+      unavailable: false,
+      hits: rows.filter((row) => row.marked_down).map((row) => ({ row, value: row.multiple != null ? `${Number(row.multiple).toFixed(2)}×` : '', why: 'carried below cost' })),
+      clear: 'No position is carried below its invested cost.',
+    },
+  ];
+
+  return (
+    <section className="i4-card" data-testid="ip1-alerts">
+      <div className="i4-section-head">
+        <div><h2>Alerts</h2><p>Four rules, evaluated against the positions above. Every alert names the rule that fired.</p></div>
+      </div>
+      <div className="space-y-3">
+        {rules.map((rule) => (
+          <div key={rule.key} className="i4-card" data-testid={`alert-rule-${rule.key}`}>
+            <div className="i4-section-head">
+              <div><h3 className="text-[13px]">{rule.name}</h3><p className="text-[10.5px]">{rule.rule}</p></div>
+              <span className="text-[10.5px] font-bold text-gray-600 dark:text-gray-400">
+                {rule.unavailable ? 'Unavailable' : `${rule.hits.length} ${rule.hits.length === 1 ? 'position' : 'positions'}`}
+              </span>
+            </div>
+            {rule.unavailable ? (
+              <p className="text-[11.5px] text-gray-500 dark:text-gray-400">The source this rule reads is unavailable, so it is not evaluated — that is not a claim that nothing fired.</p>
+            ) : rule.hits.length === 0 ? (
+              <p className="text-[11.5px] text-gray-500 dark:text-gray-400">{rule.clear}</p>
+            ) : (
+              <div className="i4-table-wrap">
+                <table>
+                  <tbody>
+                    {rule.hits.map(({ row, value, why }) => (
+                      <tr key={row.project_id} data-testid={`alert-${rule.key}-${row.project_id}`}>
+                        <td><strong>{row.project?.name || `Startup ${row.project_id}`}</strong><small>{why}</small></td>
+                        <td className="text-right font-semibold">{value}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The quarter-end export: the book read as of a date. `positionsAnalytics`
+ * takes `as_of` and the route cuts the flows AND the marks at the date, so the
+ * figures are the quarter's own. The rendered four-page LP document is
+ * /lp-reports — this export is the book's figures, traced to the positions.
+ */
+function lastQuarterEnd() {
+  const now = new Date();
+  const quarterEndMonth = Math.floor((now.getMonth() - 1) / 3) * 3; // the month a quarter last ended in
+  const end = new Date(now.getFullYear(), quarterEndMonth, 0);
+  return end.toISOString().slice(0, 10);
+}
+
+function QuarterEndExport() {
+  const [asOf, setAsOf] = useState(lastQuarterEnd());
+  const [state, setState] = useState(null); // null | 'loading' | payload | 'error'
+  const read = async () => {
+    setState('loading');
+    try {
+      setState(await api.positionsAnalytics(asOf || undefined));
+    } catch {
+      setState('error');
+    }
+  };
+  const write = () => {
+    if (!state || state === 'loading' || state === 'error') return;
+    exportView({
+      scope: 'portfolio',
+      zone: `quarter-end-${state.as_of || asOf}`,
+      header: ['Metric', 'Value'],
+      rows: [
+        ['As of', state.as_of || asOf],
+        ['Positions', state.position_count],
+        ['Paid in', state.paid_in],
+        ['Distributed', state.distributed],
+        ['NAV', state.nav],
+        ['TVPI (gross)', state.tvpi],
+        ['DPI', state.dpi],
+        ['RVPI', state.rvpi],
+        ['MOIC', state.moic],
+        ['IRR', state.irr == null ? 'Not recorded' : state.irr],
+        ['Mark coverage', state.mark_coverage == null ? 'Not recorded' : `${Math.round(state.mark_coverage * 100)}%`],
+        ['Unmarked positions (carried at cost)', state.unmarked_position_count],
+      ],
+      cells: (pair) => [pair[0], pair[1]],
+    });
+  };
+  return (
+    <section className="i4-card" data-testid="ip1-quarter-end">
+      <div className="i4-section-head">
+        <div><h2>Quarter-end export</h2><p>The book read as of a date — flows and marks both cut at it. The rendered LP document is /lp-reports.</p></div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} aria-label="Export as of" data-testid="input-quarter-end-date"
+          className="rounded-[7px] border border-gray-200 bg-white px-2 py-1.5 text-[12px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" />
+        <button type="button" onClick={read} disabled={state === 'loading'} data-testid="button-quarter-end-read"
+          className="rounded-[7px] border border-gray-300 bg-white px-[11px] py-1.5 text-[11px] font-bold text-gray-800 hover:border-gray-400 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+          {state === 'loading' ? 'Reading…' : 'Read the book as of that date'}
+        </button>
+        {state && state !== 'loading' && state !== 'error' && (
+          <button type="button" onClick={write} data-testid="button-quarter-end-export"
+            className="rounded-[7px] border border-violet-600 bg-violet-600 px-[11px] py-1.5 text-[11px] font-bold text-white hover:bg-violet-700">
+            Export the figures
+          </button>
+        )}
+      </div>
+      {state === 'error' && (
+        <p className="mt-2 text-[11.5px] text-red-700 dark:text-red-300" role="alert">The book could not be read as of that date. That is not a claim about the quarter.</p>
+      )}
+      {state && state !== 'loading' && state !== 'error' && (
+        <p className="mt-2 text-[11.5px] text-gray-600 dark:text-gray-400" data-testid="text-quarter-end-preview">
+          As of {state.as_of || asOf}: TVPI {ratio(state.tvpi)} · DPI {ratio(state.dpi)} · NAV {money(state.nav)} across {state.position_count} positions
+          {state.mark_coverage != null ? ` · ${Math.round(state.mark_coverage * 100)}% carry an explicit mark` : ''}.
+        </p>
+      )}
+    </section>
+  );
+}

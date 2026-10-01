@@ -34,6 +34,7 @@ import { resolve } from 'node:path';
 
 import ai from '../src/routes/ai.ts';
 import { ROUTE } from '../src/services/aiRouter.ts';
+import { createJWT } from '../src/auth.ts';
 
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const SRC = read('cloudflare-worker/src/routes/ai.ts');
@@ -179,4 +180,174 @@ test('a model the task does not offer comes back as its own reason', () => {
   const refusal = SRC.slice(SRC.indexOf('if (!r.ok)'));
   assert.ok(refusal.indexOf('model_not_offered') < refusal.indexOf('budget_user_month'),
     'the request-was-wrong case must be distinguished before the budget cases');
+});
+
+/* ------------------------------------------------------------------ *
+ * D154 · H13 rule 4 — "anything about a named branch is logged"
+ * ------------------------------------------------------------------ */
+
+/**
+ * WHY THIS IS TESTED AT ALL, given D150 refused it.
+ *
+ * D150 declined to log a rail read-back, and its reason was right: the rail
+ * summarises coverage lines the PAGE rendered, not rows, so no branch was
+ * named in them and a row claiming one had been read would have been FALSE.
+ * D153's view-as overlay changed the fact under that reason — under it a page
+ * routes its reads through one branch, so those same lines are that branch's
+ * figures. The rule then applies on the canvas's own terms: "reading a branch
+ * is a privileged act even when it is only a question."
+ *
+ * So the row is conditional, and BOTH directions matter. A row on every run
+ * would resurrect exactly the false entry D150 refused; no row on a scoped run
+ * leaves a privileged read with no trace.
+ */
+function envThatRecordsWrites() {
+  const sql: string[] = [];
+  const binds: unknown[][] = [];
+  return {
+    sql,
+    binds,
+    env: {
+      JWT_SECRET,
+      DB: {
+        prepare: (q: string) => {
+          sql.push(q);
+          let bound: unknown[] = [];
+          const api: any = {
+            bind: (...b: unknown[]) => { bound = b; binds.push(b); return api; },
+            // THE ACCOUNT LOOKUP HAS TO ANSWER, or every test below passes
+            // without reaching a line of the code it claims to test — which is
+            // exactly what the first version of this harness did: `first()`
+            // returned null, `requireAuth` threw, and the two NEGATIVE tests
+            // went green because nothing ran at all. An assertion that cannot
+            // fail is not a guard, and a fixture that cannot authenticate
+            // makes every assertion behind it one.
+            // The live session row. Without it `getCurrentUser` refuses the
+            // Bearer and every assertion behind this fixture is vacuous.
+            first: async () => (/FROM user_sessions/i.test(q)
+              ? { revoked_at: null, step_up_due_at: null }
+              : null),
+            // `getCurrentUser` reads the account through a tagged-template
+            // helper that returns an ARRAY, not through `.first()` — measured
+            // by probing the real route rather than assumed, after a fixture
+            // that only answered `.first()` authenticated nobody.
+            all: async () => ({
+              results: /FROM\s+users/i.test(q)
+                ? [{ id: USER_ID, email: 'hq@axal.vc', role: 'admin', is_active: 1, name: 'HQ' }]
+                : [],
+            }),
+            run: async () => ({ meta: { changes: 1 }, bound }),
+          };
+          return api;
+        },
+        exec: async () => ({ count: 0, duration: 0 }),
+      },
+      AI: { run: async () => ({ response: 'x' }) },
+    } as any,
+  };
+}
+
+const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
+const USER_ID = 7;
+
+/** A Bearer for that account, minted the way sign-in does. */
+async function bearer(env: any): Promise<Record<string, string>> {
+  const token = await createJWT(env, USER_ID, 'hq@axal.vc', 'admin', undefined, `jti-${USER_ID}`);
+  return { authorization: `Bearer ${token}` };
+}
+
+const auditWrites = (sql: string[]) => sql.filter((q) => /INSERT INTO admin_audit_log/i.test(q));
+
+test('rule 4 — a scoped read-back writes ONE audit row naming the branch', async () => {
+  const { env, sql, binds } = envThatRecordsWrites();
+  await post(
+    { workspace: 'HQ', zone: 'Read-only branch view', coverage: ['12 accounts on fr'], branch: 'fr' },
+    env, await bearer(env),
+  ).catch(() => null);
+  const rows = auditWrites(sql);
+  assert.equal(rows.length, 1, 'a scoped read-back left no audit row, or left more than one');
+  assert.match(rows[0], /'ai_branch_readback'/, 'the row does not say what act it records');
+  // The branch is IN the row, not merely implied by its existence. A row that
+  // recorded "a branch was read" without saying which answers nothing.
+  const payload = binds.find((b) => b.some((v) => typeof v === 'string' && v.includes('ai_branch_readback')))
+    || binds.find((b) => b.some((v) => typeof v === 'string' && v.includes('"branch"')));
+  assert.ok(payload, 'the audit row was prepared but never bound');
+  assert.ok(
+    payload.some((v) => typeof v === 'string' && v.includes('"branch":"fr"')),
+    'the audit row does not name the branch it recorded',
+  );
+});
+
+test('rule 4 — an UNSCOPED read-back writes nothing, which is D150\'s point kept', async () => {
+  const { env, sql } = envThatRecordsWrites();
+  await post({ workspace: 'HQ', coverage: ['4 licences on the ledger'] }, env, await bearer(env)).catch(() => null);
+  assert.deepEqual(
+    auditWrites(sql),
+    [],
+    'an unscoped run wrote a branch-read audit row — the false entry D150 refused to write',
+  );
+});
+
+test('rule 4 — a branch code that is not one is not logged as though it were', async () => {
+  // The value arrives from a client. Logging it unvalidated would put arbitrary
+  // text into the audit trail under a column an operator reads as a branch.
+  for (const bad of ['../etc', 'All branches', 'FR; DROP', '', 'a'.repeat(200)]) {
+    const { env, sql } = envThatRecordsWrites();
+    await post({ workspace: 'HQ', coverage: ['1 row'], branch: bad }, env, await bearer(env)).catch(() => null);
+    assert.deepEqual(auditWrites(sql), [], `"${bad.slice(0, 20)}" was logged as a branch code`);
+  }
+});
+
+test('rule 4 — the row is written BEFORE the run, so a refused read still leaves one', () => {
+  // "What was asked of this branch" is the question the row answers, and the
+  // reads an operator most wants to see are the ones that did not come back.
+  const handler = SRC.slice(SRC.indexOf("ai.post('/workspace/explain'"));
+  const auditAt = handler.indexOf("'ai_branch_readback'");
+  const runAt = handler.indexOf('aiRun(');
+  assert.ok(auditAt > 0, 'the branch read-back is no longer audited');
+  assert.ok(auditAt < runAt, 'the audit row is written after the run, so a refused read leaves no trace');
+});
+
+/* ------------------------------------------------------------------ *
+ * D404 — the run records the page it was asked from
+ * ------------------------------------------------------------------ */
+
+import { normaliseSurface } from '../src/services/aiRouter.ts';
+
+// The read-back's own usage row. The route's guardrail screen runs a
+// `safety` task first, which writes a row of its own with no page — correctly:
+// it is not the run the page asked for — so the row is picked by task.
+const usageInserts = (sql: string[], binds: unknown[][]) => sql
+  .map((q, i) => ({ q, b: binds[i] }))
+  .filter(({ q, b }) => /INSERT INTO ai_usage_logs/i.test(q) && Array.isArray(b) && b[1] === 'workspace_explain');
+
+test('D404: the rail\'s page reaches the usage row as its surface', async () => {
+  const { env, sql, binds } = envThatRecordsWrites();
+  const res = await post(
+    { workspace: 'Validate', coverage: ['4 interviews'], page: '/validate/interviews' },
+    env, await bearer(env),
+  );
+  assert.ok(res.status < 500, `the run failed outright (${res.status})`);
+  const rows = usageInserts(sql, binds);
+  assert.ok(rows.length >= 1, 'the run wrote no usage row at all — the fixture is not reaching recordUsage');
+  assert.match(rows[0].q, /\bsurface\b/, 'the INSERT does not name the surface column');
+  assert.equal(rows[0].b.at(-1), '/validate/interviews', 'the page was not bound as the surface');
+});
+
+test('D404: a run with no page records NULL, never a guess', async () => {
+  const { env, sql, binds } = envThatRecordsWrites();
+  await post({ workspace: 'Validate', coverage: ['4 interviews'] }, env, await bearer(env));
+  const rows = usageInserts(sql, binds);
+  assert.ok(rows.length >= 1);
+  assert.equal(rows[0].b.at(-1), null);
+});
+
+test('D404: only a plain app path is recorded', () => {
+  assert.equal(normaliseSurface('/validate/interviews'), '/validate/interviews');
+  assert.equal(normaliseSurface('/validate/interviews/'), '/validate/interviews', 'a trailing slash splits one page into two');
+  assert.equal(normaliseSurface('/raise/data-room/ab12.x_y'), '/raise/data-room/ab12.x_y');
+  assert.equal(normaliseSurface('/'), '/');
+  for (const bad of ['validate', 'https://evil.example/x', '/a b', "/x'; DROP TABLE", '/x?y=1', '/x#y', '', null, 42, `/${'a'.repeat(200)}`]) {
+    assert.equal(normaliseSurface(bad as any), null, `${JSON.stringify(bad)} was recorded as a page`);
+  }
 });

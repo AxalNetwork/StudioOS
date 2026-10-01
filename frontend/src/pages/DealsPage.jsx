@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import {
   PASS_TAXONOMY, PASS_REASON_UNRECORDED, passReasonLabel, passReasonRevisit,
-  SLA_PRESETS, DEFAULT_SLA, slaPreset, slaBand, SLA_BAND_CLASS, fmtPct, NOT_RECORDED,
+  SLA_PRESETS, DEFAULT_SLA, slaPreset, slaBand, SLA_BAND_CLASS, fmtPct, fmtDays, NOT_RECORDED,
 } from '../lib/dealFlow';
 
 // Task #18 — read role from the live AuthProvider so a stale localStorage
@@ -67,6 +67,10 @@ export default function DealsPage() {
   const [passTarget, setPassTarget] = useState(null);   // deal awaiting a reason
   const [passStats, setPassStats] = useState(null);
   const [passReasonQuery, setPassReasonQuery] = useState(null);
+  // D463 — the stage funnel with per-stage conversion and time-in-stage,
+  // measured from the recorded stage events rather than from who is standing
+  // in each stage now.
+  const [stageAnalytics, setStageAnalytics] = useState(null);
   const [sla, setSla] = useState(() => safeReadJSON('dealFlowSla', DEFAULT_SLA) || DEFAULT_SLA);
 
   useEffect(() => { document.title = 'Deal Flow — axal'; }, []);
@@ -88,6 +92,9 @@ export default function DealsPage() {
         // "no passes recorded" and "we could not read the passes" are
         // different statements and the panel renders them differently.
         api.dealPassAnalytics().then(setPassStats).catch(() => setPassStats(null));
+        // Same rule for the stage funnel: null is "unreadable", and the panel
+        // says so rather than rendering a zero funnel.
+        api.dealStageAnalytics().then(setStageAnalytics).catch(() => setStageAnalytics(null));
       }
       if (isInvestor) {
         api.myDealInvitations().then(r => setInvitations(Array.isArray(r) ? r : [])).catch(() => {});
@@ -290,6 +297,7 @@ export default function DealsPage() {
                   <SortHead label="Target Raise" k="target_raise" />
                   <SortHead label="Committed" k="capital_committed" />
                   <th className="px-3 py-2 text-left font-medium text-gray-500">Lead Partner</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-500">Source</th>
                   <SortHead label="Days in Stage" k="days_in_stage" />
                   <th className="px-3 py-2 text-right font-medium text-gray-500"></th>
                 </tr>
@@ -312,6 +320,7 @@ export default function DealsPage() {
                       )}
                     </td>
                     <td className="px-3 py-3 text-gray-600 dark:text-gray-400">{deal.lead_partner_name || '—'}</td>
+                    <td className="px-3 py-3 text-gray-600 dark:text-gray-400">{deal.source || '—'}</td>
                     <td className="px-3 py-3 text-gray-600 dark:text-gray-400">{deal.days_in_stage ?? 0}d</td>
                     <td className="px-3 py-3 text-right">
                       <button onClick={() => setDrawer(deal)} className="text-gray-400 hover:text-violet-600 p-1" aria-label="View deal">
@@ -350,6 +359,65 @@ export default function DealsPage() {
         </div>
       )}
 
+      {/* D463 — the stage funnel the canvas draws: per-stage conversion and
+          time-in-stage, measured from the recorded stage events. Conversion is
+          measured on deals that ENTERED a stage inside the window, never on
+          who is standing in it now (survivor bias), and the panel says when
+          recording began rather than implying a full history. */}
+      {(canOperate || isAdmin) && stageAnalytics && Array.isArray(stageAnalytics.stages) && (
+        <section className="mb-5 bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800" data-testid="stage-analytics">
+          <div className="flex items-baseline justify-between gap-3 mb-3">
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Stage funnel</h2>
+            <span className="text-[11px] text-gray-500">
+              {stageAnalytics.events_counted} recorded moves
+              {stageAnalytics.recording_started_at ? ` · recording since ${String(stageAnalytics.recording_started_at).slice(0, 10)}` : ''}
+            </span>
+          </div>
+          {stageAnalytics.unavailable ? (
+            <p className="text-xs text-gray-500 dark:text-gray-400">{stageAnalytics.unavailable}</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs uppercase tracking-wide text-gray-500 border-b border-gray-100 dark:border-gray-800">
+                    <th className="text-left py-1.5 pr-3">Stage</th>
+                    <th className="text-right py-1.5 px-3">Entered</th>
+                    <th className="text-right py-1.5 px-3">Advanced</th>
+                    <th className="text-right py-1.5 px-3">Conversion</th>
+                    <th className="text-right py-1.5 pl-3">Avg days in stage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stageAnalytics.stages.map((s) => (
+                    <tr key={s.stage} className="border-b border-gray-50 dark:border-gray-800/60">
+                      <td className="py-2 pr-3 font-medium text-gray-900 capitalize dark:text-gray-100">{s.stage}</td>
+                      <td className="py-2 px-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{s.entered}</td>
+                      <td className="py-2 px-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{s.advanced}</td>
+                      <td className="py-2 px-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmtPct(s.conversion)}</td>
+                      <td className="py-2 pl-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmtDays(s.avg_days)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!stageAnalytics.covers_full_window && stageAnalytics.recording_started_at && (
+                <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
+                  The window reaches back further than the record does — an empty early period is not a quiet quarter.
+                </p>
+              )}
+            </div>
+          )}
+          {/* The source-quality table the canvas draws next to this: the source
+              column exists now (migration 336), but the taxonomy and the
+              term-sheet definition are the owner's call, so the route's own
+              sentence renders rather than a table ranked by neither. */}
+          {stageAnalytics.source_quality_unavailable && (
+            <p className="mt-3 border-t border-gray-100 pt-3 text-[11px] text-gray-500 dark:border-gray-800 dark:text-gray-400" data-testid="source-quality-note">
+              {stageAnalytics.source_quality_unavailable}
+            </p>
+          )}
+        </section>
+      )}
+
       {/* Task #127 — Why we passed. Pass data is the fund's memory; the point of
           recording a reason is being able to query it a year later, so each row
           is a filter rather than a chart segment. */}
@@ -378,6 +446,7 @@ export default function DealsPage() {
           onAdvance={() => advance(drawer)}
           onPass={() => setPassTarget(drawer)}
           sla={sla}
+          onUpdated={(updated) => { setDrawer(updated); load(); }}
         />
       )}
 
@@ -400,11 +469,12 @@ function Row({ label, value }) {
   );
 }
 
-function DealDrawer({ deal, onClose, onOpenRoom, canOperate, onAdvance, onPass, sla }) {
+function DealDrawer({ deal, onClose, onOpenRoom, canOperate, onAdvance, onPass, sla, onUpdated }) {
   const pct = deal.progress_pct || 0;
   const canAdvance = PIPELINE.includes(deal.status) && PIPELINE.indexOf(deal.status) < PIPELINE.length - 1;
   const canPass = deal.status !== 'rejected';
   const band = slaBand(deal.days_in_stage, sla);
+  const [editing, setEditing] = useState(false);
   return (
     <>
       <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} />
@@ -444,7 +514,25 @@ function DealDrawer({ deal, onClose, onOpenRoom, canOperate, onAdvance, onPass, 
             <Row label="Management Fee" value={deal.management_fee_pct != null ? `${deal.management_fee_pct}%` : null} />
             <Row label="Closing Deadline" value={deal.closing_deadline} />
             <Row label="Lead Partner" value={deal.lead_partner_name} />
+            {/* D463 — where the deal came from. Recorded at draft and editable
+                after it; the taxonomy is the owner's call. */}
+            <Row label="Source" value={deal.source} />
           </div>
+
+          {/* The terms are editable after the draft (D463): a deal's terms
+              change in negotiation, and a store that only writes them at birth
+              freezes the first answer as the permanent one. Operators only —
+              the route refuses anyone else. */}
+          {canOperate && (
+            editing
+              ? <DealTermsEditor deal={deal} onDone={(updated) => { setEditing(false); onUpdated(updated); }} onCancel={() => setEditing(false)} />
+              : (
+                <button onClick={() => setEditing(true)} data-testid="button-edit-terms"
+                  className="w-full px-3 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg text-sm font-medium dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+                  Edit terms
+                </button>
+              )
+          )}
 
           {/* Task #127 — time in stage, banded against the viewer's SLA. An
               unknown age gets no band: colouring it red would invent urgency
@@ -495,6 +583,78 @@ function DealDrawer({ deal, onClose, onOpenRoom, canOperate, onAdvance, onPass, 
         </div>
       </div>
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// D463 — the deal's terms, editable after the draft (operators only).
+// ---------------------------------------------------------------------------
+function DealTermsEditor({ deal, onDone, onCancel }) {
+  const num = (v) => (v === '' || v == null ? null : Number(v));
+  const [form, setForm] = useState({
+    target_raise: deal.target_raise ?? '', minimum_check: deal.minimum_check ?? '',
+    valuation_cap: deal.valuation_cap ?? '', carry_pct: deal.carry_pct ?? '',
+    management_fee_pct: deal.management_fee_pct ?? '', instrument: deal.instrument || '',
+    spv_jurisdiction: deal.spv_jurisdiction || '', closing_deadline: deal.closing_deadline || '',
+    website: deal.website || '', source: deal.source || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const input = 'w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg focus:border-violet-500 focus:outline-none dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100';
+  const label = 'block text-[11px] font-medium text-gray-500 mb-0.5 dark:text-gray-400';
+
+  const submit = async () => {
+    setSaving(true); setErr('');
+    try {
+      const updated = await api.updateDeal(deal.id, {
+        target_raise: num(form.target_raise),
+        minimum_check: num(form.minimum_check),
+        valuation_cap: num(form.valuation_cap),
+        carry_pct: num(form.carry_pct),
+        management_fee_pct: num(form.management_fee_pct),
+        instrument: form.instrument || null,
+        spv_jurisdiction: form.spv_jurisdiction || null,
+        closing_deadline: form.closing_deadline || null,
+        website: form.website || null,
+        source: form.source.trim() || null,
+      });
+      onDone(updated);
+    } catch (e) {
+      setErr(e?.message || 'The terms could not be saved.');
+      reportError('DealsPage:editTerms', e);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-gray-200 p-3 space-y-3 dark:border-gray-700" data-testid="panel-edit-terms">
+      <div className="grid grid-cols-2 gap-2">
+        <div><label className={label}>Target Raise ($)</label><input type="number" value={form.target_raise} onChange={(e) => set('target_raise', e.target.value)} className={input} /></div>
+        <div><label className={label}>Minimum Check ($)</label><input type="number" value={form.minimum_check} onChange={(e) => set('minimum_check', e.target.value)} className={input} /></div>
+        <div><label className={label}>Valuation Cap ($)</label><input type="number" value={form.valuation_cap} onChange={(e) => set('valuation_cap', e.target.value)} className={input} /></div>
+        <div><label className={label}>Instrument</label>
+          <select value={form.instrument} onChange={(e) => set('instrument', e.target.value)} className={input}>
+            {['SAFE', 'Convertible Note', 'Equity', 'SPV'].map((i) => <option key={i} value={i}>{i}</option>)}
+          </select>
+        </div>
+        <div><label className={label}>SPV Jurisdiction</label><input value={form.spv_jurisdiction} onChange={(e) => set('spv_jurisdiction', e.target.value)} className={input} /></div>
+        <div><label className={label}>Closing Deadline</label><input type="date" value={form.closing_deadline} onChange={(e) => set('closing_deadline', e.target.value)} className={input} /></div>
+        <div><label className={label}>Carry (%)</label><input type="number" value={form.carry_pct} onChange={(e) => set('carry_pct', e.target.value)} className={input} /></div>
+        <div><label className={label}>Management Fee (%)</label><input type="number" value={form.management_fee_pct} onChange={(e) => set('management_fee_pct', e.target.value)} className={input} /></div>
+        <div className="col-span-2"><label className={label}>Website</label><input value={form.website} onChange={(e) => set('website', e.target.value)} className={input} placeholder="https://" /></div>
+        <div className="col-span-2"><label className={label}>Source</label><input value={form.source} onChange={(e) => set('source', e.target.value)} className={input} placeholder="Where this deal came from" data-testid="input-edit-source" /></div>
+      </div>
+      {err && <p className="text-sm text-red-600" role="alert">{err}</p>}
+      <div className="flex justify-end gap-2">
+        <button onClick={onCancel} className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400">Cancel</button>
+        <button onClick={submit} disabled={saving} data-testid="button-save-terms"
+          className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white rounded-lg text-sm font-medium flex items-center gap-1.5">
+          {saving && <Loader2 size={13} className="animate-spin" />} Save terms
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -598,7 +758,7 @@ function PassModal({ deal, onClose, onConfirm }) {
               Cancel
             </button>
             <button onClick={submit} disabled={!reason || saving}
-              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gray-100 dark:text-gray-900">
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-black dark:hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gray-100 dark:text-gray-900">
               {saving && <Loader2 size={15} className="animate-spin" />}
               {reason ? `Record pass · ${passReasonLabel(reason)}` : 'Select a reason to continue'}
             </button>
@@ -709,7 +869,7 @@ function DraftDealModal({ onClose, onCreated }) {
   const [form, setForm] = useState({
     project_id: '', lead_partner_id: '', status: 'applied', description: '', website: '',
     target_raise: '', minimum_check: '', valuation_cap: '', carry_pct: '', management_fee_pct: '',
-    instrument: 'SAFE', spv_jurisdiction: '', closing_deadline: '',
+    instrument: 'SAFE', spv_jurisdiction: '', closing_deadline: '', source: '',
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
@@ -740,6 +900,7 @@ function DraftDealModal({ onClose, onCreated }) {
         instrument: form.instrument || null,
         spv_jurisdiction: form.spv_jurisdiction || null,
         closing_deadline: form.closing_deadline || null,
+        source: form.source.trim() || null,
       });
       onCreated();
     } catch (e) {
@@ -801,6 +962,10 @@ function DraftDealModal({ onClose, onCreated }) {
               <div><label className={label}>Carry (%)</label><input type="number" value={form.carry_pct} onChange={e => set('carry_pct', e.target.value)} className={input} /></div>
               <div><label className={label}>Management Fee (%)</label><input type="number" value={form.management_fee_pct} onChange={e => set('management_fee_pct', e.target.value)} className={input} /></div>
               <div className="col-span-2"><label className={label}>Closing Deadline</label><input type="date" value={form.closing_deadline} onChange={e => set('closing_deadline', e.target.value)} className={input} /></div>
+              {/* D463 — where the deal came from. Free text on purpose: the
+                  source taxonomy is the owner's call, and a select written
+                  before it would enshrine a guess. */}
+              <div className="col-span-2"><label className={label}>Source</label><input value={form.source} onChange={e => set('source', e.target.value)} className={input} placeholder="Where this deal came from — e.g. a referral, the Lab, inbound" data-testid="input-deal-source" /></div>
             </div>
             {err && <div className="text-sm text-red-600">{err}</div>}
           </div>

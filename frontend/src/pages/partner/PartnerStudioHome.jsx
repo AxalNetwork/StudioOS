@@ -5,9 +5,10 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { api } from '../../lib/api';
-import PersonalAdvisor from '../../components/advisor/PersonalAdvisor';
+import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
 import './partnerStudioHome.css';
+import { titleCase as caseLabel } from '../../lib/absence';
 
 const loading = { state: 'loading' };
 const unavailable = (message) => ({ state: 'unavailable', message: message || 'Not available from a connected source.' });
@@ -19,8 +20,9 @@ const asItems = (data) => {
   }
   return [];
 };
-const label = (value) => String(value || 'Not recorded').replace(/[_-]/g, ' ');
-const titleCase = (value) => label(value).replace(/\b\w/g, (letter) => letter.toUpperCase());
+// D268 — the fallback is applied AFTER casing, so an absence reads
+// "Not recorded" and never "Not Recorded".
+const titleCase = (value) => caseLabel(value) || 'Not recorded';
 
 function money(value) {
   if (value == null || value === '') return 'Not recorded';
@@ -120,7 +122,6 @@ export default function PartnerStudioHome({
 
       <header className="partner-masthead">
         <div>
-          <div className="partner-eyebrow">Service Partner / Operator</div>
           <div className="partner-title"><h1>Studio</h1><Status tone="violet">Partner</Status><span>Good to see you, {first}.</span></div>
         </div>
         <time>{new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date())}</time>
@@ -134,7 +135,7 @@ export default function PartnerStudioHome({
 
       <section className="partner-assistant" data-testid="module-eadwyn">
         {previewing ? <div className="partner-assistant-placeholder"><Sparkles size={18} /><div><strong>Eadwyn</strong><span>Partner/Operator assessment is unavailable in role preview.</span></div><Status>Preview only</Status></div>
-          : assistantAvailable ? <PersonalAdvisor disablePersistedFullscreen onAvailabilityChange={setAssistantAvailable} />
+          : assistantAvailable ? <StudioInterview persona="partner" disablePersistedFullscreen onAvailabilityChange={setAssistantAvailable} />
             : <State>Eadwyn is unavailable in this environment. Your studio data remains available below.</State>}
       </section>
 
@@ -143,7 +144,7 @@ export default function PartnerStudioHome({
         : <ProfileFitSection compact studio audience="partner" className="partner-fit" />}
 
       <div className="partner-grid">
-        <Module title="Assigned delivery tasks" action="Open delivery" to="/partner/operations/engagements" testid="module-assigned-tasks" previewing={previewing} wide>
+        <Module title="Assigned delivery tasks" action="Open delivery" to="/delivery/board" testid="module-assigned-tasks" previewing={previewing} wide>
           {engagements.state === 'loading' ? <Skeleton lines={3} /> : engagements.state === 'unavailable' ? <State>{engagements.message}</State> : taskRows.length ? <div className="partner-list">{taskRows.map((item, index) => <div className="partner-row" key={item.id || item.uid || index}><div><strong>{item.task_title || item.assigned_task_title || item.need_title || item.title || 'Assigned task'}</strong><span>{item.due_at || item.due_date ? `Due ${date(item.due_at || item.due_date)}` : 'Due date not recorded'}</span></div><Status tone={['accepted', 'in_progress', 'active'].includes(item.status) ? 'good' : 'neutral'}>{titleCase(item.status)}</Status></div>)}</div> : <State>Assigned delivery tasks are not available from a connected source.</State>}
         </Module>
 
@@ -157,7 +158,7 @@ export default function PartnerStudioHome({
           </div>}
         </Module>
 
-        <Module title="Relationship health" action="Open relationships" to="/partner/operations/portfolio" testid="module-relationship-health" previewing={previewing}>
+        <Module title="Relationship health" action="Open relationships" to="/delivery/health" testid="module-relationship-health" previewing={previewing}>
           {engagements.state === 'loading' ? <Skeleton /> : engagements.state === 'unavailable' ? <State>{engagements.message}</State> : activeRelationships.length ? <div className="partner-list">{activeRelationships.map((item, index) => <div className="partner-row" key={item.id || item.uid || index}><div><strong>{item.project_name || item.client_name || item.founder_name || item.need_title || 'Engagement'}</strong><span>{item.updated_at ? `Updated ${date(item.updated_at)}` : item.created_at ? `Created ${date(item.created_at)}` : 'Activity date not recorded'}</span></div><Status tone={['accepted', 'in_progress', 'active'].includes(item.status) ? 'good' : 'neutral'}>{titleCase(item.status)}</Status></div>)}</div> : <State>No relationship state is available from connected engagements.</State>}
         </Module>
 
@@ -177,7 +178,7 @@ export default function PartnerStudioHome({
           </div>}
         </Module>
 
-        <Module title="Delivery book" action="Open engagements" to="/partner/operations/engagements" testid="module-delivery-book" previewing={previewing}>
+        <Module title="Delivery book" action="Open engagements" to="/delivery/board" testid="module-delivery-book" previewing={previewing}>
           {analytics.state === 'loading' ? <Skeleton /> : !delivery ? <State>{analytics.message || 'Delivery analytics are not recorded.'}</State> : <div className="partner-kv">
             {delivery.active != null && <div><span>Active engagements</span><b>{delivery.active}</b></div>}
             {delivery.active_value != null && <div><span>Active value</span><b>{money(delivery.active_value)}</b></div>}

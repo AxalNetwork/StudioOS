@@ -28,7 +28,7 @@ import { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assis
  * to say "there is no `eadwyn` AI Gateway yet (Phase 4)". That was false, and
  * false in the way a name makes easy: nothing in the tree is called `eadwyn`,
  * so the gateway looked absent. `cloudflare-worker/src/services/aiRouter.ts` is
- * it — sixteen task classes across Workers AI models, a fallback chain, a
+ * it — twenty-three task classes (its `TaskClass` union) across Workers AI models, a fallback chain, a
  * llama-guard safety pass, content-hash caching, per-user $/day and $/month KV
  * caps, an org kill switch, and a row in `ai_usage_logs` for every call.
  *
@@ -37,14 +37,13 @@ import { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assis
  *   - `totalSpend` / `planCap` now HAVE a live source (`api.myAiSpend()`, over
  *     the caller's own `ai_usage_logs` rows). A caller that passes them by hand
  *     is quoting itself.
- *   - the mode TOGGLE is not rendered, and this is a decision rather than a
- *     gap. `eadwynConfig` declares every surface `kind: 'fixed'`, because no
- *     page branches on an assist mode: turning it "off" would change nothing
- *     it does. Shipping the switch with a `useAssistMode(pageKey)` behind it
- *     would persist a preference nothing reads — the same objection that
- *     removed the model menu (D13), one control over. The switch is still
- *     supported for a surface that ever grows real manual behaviour: declare
- *     `kind: 'choice'` and pass `mode`/`onModeChange`. See DECISIONS D17.
+ *   - the mode TOGGLE renders only where a surface declares `kind: 'choice'`.
+ *     Most are `'fixed'`, because their page does not branch on an assist
+ *     mode and turning it "off" would change nothing (DECISIONS D17). One
+ *     declares a choice — `workspace` (the founder desks' fills; `market` did
+ *     too until the Lab dropped the rail, D317) — and `AssistLayout` wires `useAssistMode` (D45) behind the switch, so the
+ *     choice persists and the page reads the same answer. (This used to say
+ *     every surface was fixed; D400.)
  *   - the model MENU is gone. aiRouter's ROUTE map picks the model from the
  *     TASK CLASS — llama-guard for safety, bge for embeddings, qwen-coder for
  *     tool calls — so a picker could only offer wrong answers or duplicate the
@@ -80,6 +79,7 @@ export default function AssistRail({
   mode,
   onModeChange,
   lastRun,
+  onRetrySpend,
   className = '',
   'data-testid': testId,
 }) {
@@ -135,14 +135,18 @@ export default function AssistRail({
   const modelled = pc.assists?.length ? batchCost(pc.run, pc.assists) : runCost(pc.run);
   const estimate = pc.observed?.cost ?? (modelled > 0 ? modelled : null);
 
-  // Account-wide spend: explicit total, else the sum of every page's spend.
-  // `null` here means the usage table could not be read — NOT that nothing was
-  // spent. Drawing an empty bar from it would assert a fact the platform does
-  // not have, so the meter is replaced by a line saying so.
-  const spent = config.totalSpend
-    ?? Object.values(config.pages ?? {}).reduce((s, p) => s + (p.spend ?? 0), 0);
+  // Account-wide spend. `null` means the usage table could not be read — NOT
+  // that nothing was spent. Drawing an empty bar from it would assert a fact
+  // the platform does not have, so the meter is replaced by a line saying so.
+  //
+  // THERE IS NO FALLBACK SUM ANY MORE (D400). A null total used to fall
+  // through to Σ `p.spend ?? 0` over the pages, and no page carries `spend`,
+  // so an unreadable usage log summed to a known $0.00. `eadwynConfig` is the
+  // only caller and passes the total or null.
+  const spent = config.totalSpend;
   const spendKnown = typeof spent === 'number' && Number.isFinite(spent);
-  const meter = spendMeter(spendKnown ? spent : 0, config.planCap);
+  const capKnown = typeof config.planCap === 'number' && config.planCap > 0;
+  const meter = spendKnown && capKnown ? spendMeter(spent, config.planCap) : null;
 
   return (
     <aside
@@ -235,11 +239,21 @@ export default function AssistRail({
           <SectionLabel tone="faint">This month</SectionLabel>
           <span className="font-mono tabular-nums text-xs">
             {spendKnown
-              ? <>{formatSpend(spent)} <span className="text-axal-faint">/ {formatSpend(config.planCap)}</span></>
-              : <span className="text-axal-faint">Not recorded</span>}
+              ? <>{formatSpend(spent)}{capKnown && <span className="text-axal-faint"> / {formatSpend(config.planCap)}</span>}</>
+              : <span className="text-red-700 dark:text-red-300">Unreadable</span>}
           </span>
         </div>
-        {spendKnown && (
+        {/* A failed read, said as one (D400): this was "Not recorded", which
+            claims the log was read and holds nothing. */}
+        {!spendKnown && (
+          <div className="text-[11px] text-axal-muted dark:text-gray-400 mt-1">
+            The usage log could not be read. That is not a claim that nothing was spent.
+            {onRetrySpend && (
+              <button type="button" onClick={onRetrySpend} className="ml-1 underline">Retry</button>
+            )}
+          </div>
+        )}
+        {meter && (
           <div className="h-[5px] rounded-axal-pill bg-axal-hairline dark:bg-gray-700 mt-2 overflow-hidden">
             <div
               className={`h-full ${meter.over ? 'bg-red-500' : accent.fill}`}
@@ -247,7 +261,7 @@ export default function AssistRail({
             />
           </div>
         )}
-        {spendKnown && meter.over && <div className="text-[11px] text-red-700 dark:text-red-400 mt-1">Over plan cap</div>}
+        {meter?.over && <div className="text-[11px] text-red-700 dark:text-red-400 mt-1">Over plan cap</div>}
         {config.margin && (
           <div className="flex items-baseline justify-between mt-2 text-[11px] text-axal-muted dark:text-gray-400">
             <span>Axal VC margin</span>

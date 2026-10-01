@@ -22,6 +22,7 @@
 import type { Env } from '../types';
 import { stripeCall } from '../routes/billing';
 import { writeFeatureUnlock } from './featureUnlocks';
+import { bindingKey } from '../util/schemaBootstrap';
 
 // Stripe rejects PaymentIntents below the per-currency minimum (~50 cents for
 // USD). A discount that drops a one-time charge below this is treated as "free"
@@ -56,6 +57,8 @@ export interface PromoView {
   currency: string | null;
   duration: string;
   product_ids: string[];
+  /** False when product_ids_json is not a JSON array of strings. [] is readable and means every product. */
+  product_ids_readable: boolean;
   max_redemptions: number | null;
   times_redeemed: number;
   active: boolean;
@@ -64,11 +67,11 @@ export interface PromoView {
   created_at: string;
 }
 
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 
 /** Idempotent schema bootstrap — mirrors migration 099_promo_codes.sql. */
 export async function ensurePromoSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       'CREATE TABLE IF NOT EXISTS promo_codes (' +
@@ -109,7 +112,7 @@ export async function ensurePromoSchema(env: Env): Promise<void> {
     await env.DB.exec(
       'CREATE INDEX IF NOT EXISTS idx_promo_redemptions_promo ON promo_redemptions(promo_id)',
     );
-    _schemaReady = true;
+    SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[promos] ensurePromoSchema failed:', (e as Error).message);
   }
@@ -120,16 +123,26 @@ export function normalizeCode(code: string): string {
   return code.trim().toUpperCase();
 }
 
-function parseProductIds(json: string): string[] {
+/**
+ * The one reading of a product allow-list.
+ *
+ * A JSON array of strings is readable. `[]` is readable and means every
+ * product (migration 099). Anything else — bad JSON, an object, a number,
+ * a mixed array — is not a list, and it is not "every product".
+ */
+export function readProductIds(json: string): { ok: true; ids: string[] } | { ok: false } {
+  let v: unknown;
   try {
-    const v = JSON.parse(json);
-    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+    v = JSON.parse(json);
   } catch {
-    return [];
+    return { ok: false };
   }
+  if (!Array.isArray(v) || v.some((x) => typeof x !== 'string')) return { ok: false };
+  return { ok: true, ids: v };
 }
 
 export function rowToView(row: PromoRow): PromoView {
+  const products = readProductIds(row.product_ids_json);
   return {
     id: row.id,
     code: row.code,
@@ -138,7 +151,8 @@ export function rowToView(row: PromoRow): PromoView {
     amount_off: row.amount_off,
     currency: row.currency,
     duration: row.duration,
-    product_ids: parseProductIds(row.product_ids_json),
+    product_ids: products.ok ? products.ids : [],
+    product_ids_readable: products.ok,
     max_redemptions: row.max_redemptions,
     times_redeemed: row.times_redeemed,
     active: row.active === 1,
@@ -228,6 +242,49 @@ export async function getPromoByCode(env: Env, code: string): Promise<PromoRow |
     .first<PromoRow>();
 }
 
+/**
+ * D213 — THE ONE DEFINITION OF EXPIRED, read by checkout, by HQ · Platform and
+ * by Revenue's count. Before it, checkout checked expiry inline and Revenue
+ * counted every `active = 1` code as "redeemable now", expired ones included.
+ *
+ * `expires_at` is written as an ISO string by `routes/admin_promos.ts`. A
+ * SQL-format stamp (`YYYY-MM-DD HH:MM:SS`) is read as UTC rather than left to
+ * the runtime's local zone. An expiry that does not parse is not treated as
+ * expired — checkout's behaviour before this helper, kept rather than changed.
+ */
+export function promoExpired(expiresAt: string | null | undefined, nowMs: number): boolean {
+  if (!expiresAt) return false;
+  const raw = String(expiresAt).trim();
+  const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(raw) ? `${raw.replace(' ', 'T')}Z` : raw;
+  const t = new Date(iso).getTime();
+  return Number.isFinite(t) && t <= nowMs;
+}
+
+export type PromoState = 'inactive' | 'expired' | 'exhausted' | 'active';
+
+/**
+ * A code's one state, checked in this order: switched off, then past its
+ * expiry, then at its cap, then active.
+ *
+ * `redeemed` IS THE CALLER'S COUNT AND THE CALLER SAYS WHICH. Checkout adds
+ * Stripe's live counter to the mirror's (`totalRedeemed`); a page load may not
+ * call Stripe, so HQ passes the mirror's `times_redeemed` alone — a lower bound,
+ * because subscription redemptions are counted by Stripe and not mirrored. So
+ * `exhausted` is claimed only when the mirror alone reaches the cap, which is
+ * sound: a code the mirror calls exhausted is exhausted. `>=`, as checkout
+ * refuses at the cap.
+ */
+export function promoState(
+  row: { active: number | boolean; expires_at: string | null; max_redemptions: number | null },
+  redeemed: number,
+  nowMs: number,
+): PromoState {
+  if (!(row.active === 1 || row.active === true)) return 'inactive';
+  if (promoExpired(row.expires_at, nowMs)) return 'expired';
+  if (row.max_redemptions != null && redeemed >= row.max_redemptions) return 'exhausted';
+  return 'active';
+}
+
 /** Reflect an active toggle into the mirror. */
 export async function setPromoActiveMirror(env: Env, id: string, active: boolean): Promise<void> {
   await ensurePromoSchema(env);
@@ -263,6 +320,7 @@ export type PromoRejectReason =
   | 'inactive'
   | 'expired'
   | 'product_not_eligible'
+  | 'product_list_unreadable'
   | 'usage_limit_reached'
   | 'currency_mismatch';
 
@@ -312,7 +370,7 @@ export async function validatePromoForProduct(
   const promo = await getPromoByCode(env, code);
   if (!promo) return { ok: false, reason: 'not_found' };
   if (promo.active !== 1) return { ok: false, reason: 'inactive' };
-  if (promo.expires_at && new Date(promo.expires_at).getTime() <= Date.now()) {
+  if (promoExpired(promo.expires_at, Date.now())) {
     return { ok: false, reason: 'expired' };
   }
   // amount_off coupons are currency-scoped; a USD coupon can't discount a EUR
@@ -325,8 +383,9 @@ export async function validatePromoForProduct(
   ) {
     return { ok: false, reason: 'currency_mismatch' };
   }
-  const allow = parseProductIds(promo.product_ids_json);
-  if (allow.length > 0 && !allow.includes(productId)) {
+  const allow = readProductIds(promo.product_ids_json);
+  if (!allow.ok) return { ok: false, reason: 'product_list_unreadable' };
+  if (allow.ids.length > 0 && !allow.ids.includes(productId)) {
     return { ok: false, reason: 'product_not_eligible' };
   }
   if (promo.max_redemptions != null) {

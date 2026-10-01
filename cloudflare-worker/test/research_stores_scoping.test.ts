@@ -19,9 +19,15 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const routes = read('cloudflare-worker/src/routes/research.ts');
+const handlers = read('cloudflare-worker/src/routes/research.ts');
+const sheetService = read('cloudflare-worker/src/services/fundSheets.ts');
+// Sheets sync writes the same owner-scoped table from a service module. A
+// statement that forgot its WHERE would be just as bad there, so both files
+// are one corpus for the owner filter.
+const routes = `${handlers}\n${sheetService}`;
 const funds = read('cloudflare-worker/sql/migrations/216_research_funds.sql');
 const bench = read('cloudflare-worker/sql/migrations/217_research_benchmarks.sql');
+const sheetMig = read('cloudflare-worker/sql/migrations/274_research_fund_sheets.sql');
 
 /**
  * Every `DB.prepare(`…`)` template in the file, whole.
@@ -34,8 +40,21 @@ const bench = read('cloudflare-worker/sql/migrations/217_research_benchmarks.sql
 const preparedTemplates = (src: string): string[] =>
   [...src.matchAll(/prepare\(\s*`([\s\S]*?)`\s*\)/g)].map((m) => m[1]);
 
+function mentionsTable(stmt: string, table: string): boolean {
+  let from = 0;
+  while (from < stmt.length) {
+    const at = stmt.indexOf(table, from);
+    if (at < 0) return false;
+    const prev = at === 0 ? '' : stmt[at - 1];
+    const next = stmt[at + table.length] ?? '';
+    if (!/[A-Za-z0-9_]/.test(prev) && !/[A-Za-z0-9_]/.test(next)) return true;
+    from = at + 1;
+  }
+  return false;
+}
+
 const touching = (src: string, table: string) =>
-  preparedTemplates(src).filter((t) => new RegExp(`\\b${table}\\b`).test(t));
+  preparedTemplates(src).filter((t) => mentionsTable(t, table));
 
 for (const table of ['research_funds', 'research_benchmarks']) {
   test(`every ${table} read, update and delete filters on owner_user_id`, () => {
@@ -90,13 +109,31 @@ test('no research route takes an identity from the request', () => {
  * safety is a different property. Bounding the slice is what keeps each rule on
  * the statement it is a rule about.
  */
+const DILIGENCE_AT = routes.indexOf("research.get('/diligence'");
+// The slice ends at the next thing declared at the top level after the list
+// handler — the grant-keyed room reads follow it, and they are a DIFFERENT
+// property (a single grant the caller holds), tested below and in
+// `research_diligence_room.test.ts`. The old end, "the next `/funds` route or
+// the end of the file", silently swallowed them into this slice.
 const DILIGENCE = routes.slice(
-  routes.indexOf("research.get('/diligence'"),
-  routes.indexOf("research.get('/funds'") > routes.indexOf("research.get('/diligence'")
-    ? routes.indexOf("research.get('/funds'")
-    : routes.length,
+  DILIGENCE_AT,
+  (() => {
+    const next = routes.slice(DILIGENCE_AT + 1).search(/\n(?:research\.|const |async function |export )/);
+    return next < 0 ? routes.length : DILIGENCE_AT + 1 + next;
+  })(),
 );
 assert.ok(DILIGENCE.includes('data_room_grants'), 'the diligence handler could not be found');
+
+/**
+ * The grant-keyed room and document reads, with the helper that resolves the
+ * grant. They read another founder's project too, and their safety is the
+ * grant: resolved only among rows naming the caller as the investor, then
+ * handed to the data room's own `activeGrant`.
+ */
+const ROOM_AT = routes.indexOf('async function heldRoom(');
+const ROOM = routes.slice(ROOM_AT, routes.indexOf('export default research'));
+assert.ok(ROOM_AT > 0 && ROOM.includes("research.get('/diligence/:grantUid/files/:fileUid'"),
+  'the grant-keyed room reads could not be found');
 
 test('the diligence read is scoped to the caller as the grantee', () => {
   // This one reads ANOTHER user's project, which is the point of a grant. The
@@ -106,7 +143,10 @@ test('the diligence read is scoped to the caller as the grantee', () => {
   assert.ok(stmt, 'no prepared statement in /diligence reads data_room_grants');
   assert.match(stmt, /g\.investor_user_id = \?/);
   assert.match(stmt, /g\.status = 'active'/);
-  assert.match(stmt, /expires_at IS NULL OR g\.expires_at > datetime\('now'\)/);
+  // The COLUMN is normalised, not just the clock (D124) — see
+  // `cloudflare-worker/test/expiry_gate_datetime_d124.test.ts`, which proves
+  // this gate closes against a real database rather than pinning its text.
+  assert.match(stmt, /expires_at IS NULL OR datetime\(g\.expires_at\) > datetime\('now'\)/);
 });
 
 test('diligence counts withheld files and never names them', () => {
@@ -126,7 +166,7 @@ test('every other room read in this file is bound to an owned project', () => {
   // asserting against, and it needs saying in its own right.
   for (const table of ['data_room_grants', 'data_room_files', 'data_room_folders', 'data_room_access_log']) {
     for (const stmt of touching(routes, table)) {
-      if (DILIGENCE.includes(stmt)) continue;
+      if (DILIGENCE.includes(stmt) || ROOM.includes(stmt)) continue;
       assert.match(stmt, /project_id = \?|f\.project_id = \?/,
         `a ${table} statement outside /diligence reads without narrowing to one project`);
       // And the binding for it is `pid`, which only `founderProject` produces.
@@ -136,6 +176,34 @@ test('every other room read in this file is bound to an owned project', () => {
     }
   }
   assert.match(routes, /async function founderProject\(/, 'the founder ownership check is gone');
+});
+
+test('the room reads resolve a grant only among the caller’s own, and read only its project', () => {
+  // The one statement that turns a uid from the URL into a project names the
+  // caller as the investor; liveness is then the data room's own check, not a
+  // second copy of its predicate.
+  const lookups = touching(ROOM, 'data_room_grants');
+  assert.equal(lookups.length, 1, 'the room reads grew a second grant lookup');
+  assert.match(lookups[0], /uid = \? AND investor_user_id = \?/);
+  assert.match(ROOM, /activeGrant\(env, held\.project_id, userId\)/);
+  assert.match(routes, /import \{ activeGrant, ndaActive, logAccess \} from '\.\/data_room'/);
+  // Every room table read after that is narrowed to the grant's project and
+  // bound to `pid`, which only the grant produces.
+  for (const table of ['data_room_files', 'data_room_folders', 'data_room_access_log']) {
+    const stmts = touching(ROOM, table);
+    assert.ok(stmts.length, `the room reads no longer read ${table}`);
+    for (const stmt of stmts) {
+      assert.match(stmt, /project_id = \?/, `a ${table} read in the room is not narrowed to one project`);
+      const tail = ROOM.slice(ROOM.indexOf(stmt) + stmt.length, ROOM.indexOf(stmt) + stmt.length + 200);
+      assert.match(tail, /\)\s*\.bind\((?:c\.req\.param\('fileUid'\), )?pid\b/,
+        `a ${table} read in the room binds something other than the grant's project`);
+    }
+  }
+  // And the log is read for the caller alone: the founder's view of the same
+  // table carries every investor's email.
+  for (const stmt of touching(ROOM, 'data_room_access_log')) {
+    assert.match(stmt, /user_id = \?/, 'the room reads another investor’s activity');
+  }
 });
 
 test('the project read behind the cheque-overlap figure goes through companyScope', () => {
@@ -189,4 +257,58 @@ test('fund money is cents', () => {
   assert.match(funds, /cheque_min_cents INTEGER/);
   assert.match(funds, /cheque_max_cents INTEGER/);
   assert.doesNotMatch(funds, /cheque_(min|max)_usd/);
+});
+
+test('the sheets link is one per owner and every statement names that owner', () => {
+  assert.match(sheetMig, /owner_user_id INTEGER NOT NULL UNIQUE/);
+  const found = touching(routes, 'research_fund_sheet_links');
+  assert.ok(found.length > 0, 'no prepared statement names research_fund_sheet_links');
+  for (const stmt of found.filter((t) => !/^\s*INSERT/i.test(t.trim()))) {
+    assert.match(stmt, /owner_user_id = \?/,
+      'a research_fund_sheet_links statement reads without narrowing to its owner');
+  }
+  for (const stmt of found.filter((t) => /^\s*INSERT/i.test(t.trim()))) {
+    assert.match(stmt, /owner_user_id/);
+  }
+});
+
+test('sheets OAuth tokens are a separate table keyed on the signed-in user', () => {
+  assert.match(sheetMig, /CREATE TABLE IF NOT EXISTS google_sheets_oauth_tokens/);
+  assert.doesNotMatch(sheetService, /google_oauth_tokens/,
+    'sheets sync must not read or write the calendar token table');
+  const found = touching(routes, 'google_sheets_oauth_tokens');
+  assert.ok(found.length > 0, 'no prepared statement names google_sheets_oauth_tokens');
+  for (const stmt of found.filter((t) => !/^\s*INSERT/i.test(t.trim()))) {
+    assert.match(stmt, /user_id = \?/,
+      'a google_sheets_oauth_tokens statement is not keyed on the signed-in user');
+  }
+});
+
+test('calendar consent still does not ask for spreadsheets', () => {
+  const calendar = read('cloudflare-worker/src/services/calendar.ts');
+  const scopes = calendar.slice(
+    calendar.indexOf('const GOOGLE_SCOPES'),
+    calendar.indexOf('const MICROSOFT_SCOPES'),
+  );
+  assert.doesNotMatch(scopes, /spreadsheets/,
+    'adding Sheets to the calendar consent screen forces every connected calendar to re-consent');
+});
+
+test('sheet sync is super-admin only', () => {
+  // Founders keep a shortlist. A Google copy of it is an HQ power, so every
+  // authenticated sheet handler goes through requireSuperAdmin rather than
+  // requireAuth. The OAuth callback cannot sit behind a session gate — Google
+  // redirects there — and instead re-hydrates the state user and refuses
+  // anyone who is not a Super Admin before a refresh token is stored.
+  const start = handlers.indexOf("research.get('/funds/sheet/status'");
+  const end = handlers.indexOf("research.patch('/funds/:uid'");
+  assert.ok(start > 0 && end > start, 'the sheet-route block could not be found');
+  const sheet = handlers.slice(start, end);
+  assert.equal((sheet.match(/requireSuperAdmin\(c\)/g) || []).length, 7,
+    'a sheet handler is still on requireAuth — founders would get a Google copy');
+  assert.equal((sheet.match(/requireAuth\(c\)/g) || []).length, 0,
+    'a sheet handler fell back to requireAuth');
+  const callback = sheet.slice(sheet.indexOf("research.get('/funds/sheet/callback'"));
+  assert.match(callback, /hydrateSuperAdmin/);
+  assert.match(callback, /isSuperAdmin\(actor/);
 });

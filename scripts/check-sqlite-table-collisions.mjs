@@ -70,10 +70,50 @@ export function tableColumns(body) {
   return cols;
 }
 
+/**
+ * `sql/historical/` IS EXCLUDED, and this guard was the last one harvesting it.
+ *
+ * Its sibling `check-sqlite-columns.mjs` stopped in #182, and its docblock says
+ * why in terms that apply here word for word: that folder's own README is
+ * unambiguous — "`../schema_baseline.sql` … supersedes every SQL file in this
+ * folder, and numbered files under `../migrations/` are the only incremental
+ * build inputs. The files here are kept for archaeology only. Nothing builds from
+ * them." `walk()` recurses, so every archived shape was being counted as an equal
+ * authority anyway.
+ *
+ * What that cost HERE is different from what it cost there, and milder: not a
+ * false pass but a false FINDING. This gate's whole output is "these tables have
+ * two definitions that cannot describe one table", and a definition nothing has
+ * ever built from cannot be one of the two. An archived shape on this list reads
+ * as a live product question — someone has to go and decide which of two writers
+ * is dead — when the honest answer is that one of them is a museum piece.
+ *
+ * THE SHARPEST EVIDENCE came from removing the filter again to check it. The
+ * collision that returns first is `advisor_bookings`, reported between
+ * `historical/schema.sql:1024` and `historical/t13_t14_t15.sql:52` — TWO MUSEUM
+ * PIECES DISAGREEING WITH EACH OTHER, on the ledger as a live product question
+ * for someone to go and resolve. Its one live definition is in the baseline and
+ * conflicts with nothing. `service_offerings` was the same story, and worse: its
+ * archived shape is the one that caused the production outage in #182, so the
+ * "collision" was between the live table and the file that had already been
+ * established as wrong.
+ *
+ * The columns guard's docblock is explicit that this does not fix the general
+ * union problem: "a table legitimately defined twice across the baseline and a
+ * migration is still unioned, and `check-sqlite-table-collisions.mjs` is still
+ * the complement for that." That complement is this file, and it is what it
+ * should be measuring — baseline against migration against a runtime
+ * `ensureSchema`, all three of which are real build inputs. Excluding the archive
+ * is what makes its output answerable: five entries that are all live, instead of
+ * seven of which two were unanswerable by construction.
+ */
+const ARCHIVE_DIR = path.join(ROOT, 'cloudflare-worker/sql/historical');
+
 /** Every CREATE TABLE in the worker, by table name. */
 export function definitions() {
   const defs = new Map();
   const files = walk(path.join(ROOT, 'cloudflare-worker/sql'), ['.sql'])
+    .filter((f) => !f.startsWith(ARCHIVE_DIR + path.sep))
     .concat(walk(path.join(ROOT, 'cloudflare-worker/src'), ['.ts']));
   for (const f of files) {
     const src = fs.readFileSync(f, 'utf8');

@@ -16,10 +16,12 @@
  *      **Task #121 built the missing half** (`company_invitations`, a hashed
  *      14-day token, accept bound to the invited address), so the honest copy
  *      is now the opposite one and this guard was rewritten to hold it. The
- *      rule did not change; the backend did. `api.addCompanyMember` still
- *      exists and is still the direct add for an account that already exists
- *      — `CompanyProfilePanel`'s "Add team member" modal, which says so — but
- *      Company Settings no longer reaches for it.
+ *      rule did not change; the backend did. `api.addCompanyMember` — the
+ *      direct add for an account that already exists — outlived this page
+ *      on `CompanyProfilePanel`'s "Add team member" modal until D434 retired
+ *      that surface, the method and the worker route together (D69 had kept
+ *      them for that one modal; the owner's direction for wave 8 retires an
+ *      old surface once a built one does its job, and the invitation does).
  *   2. The last primary admin cannot be demoted or removed. The worker enforces
  *      both; the UI must not offer a control that can only fail.
  */
@@ -48,9 +50,12 @@ test('every member mutation the backend offers has a control', () => {
   }
   // `addCompanyMember` was the whole defect: it joins an existing account to
   // the company WITHOUT asking, and 404s anyone who has no account. Task #121
-  // replaced it here. It stays in api.js for the surface that still means it.
+  // replaced it here; D434 removed it everywhere (company_settings_d434 pins
+  // the panel, the client method and the worker route).
   assert.doesNotMatch(s, /api\.addCompanyMember\(/,
     'Company Settings is linking an account again instead of inviting one');
+  assert.doesNotMatch(read('frontend/src/lib/api.js'), /addCompanyMember:/,
+    'the direct-add client method is back');
 });
 
 test('the add-member copy promises exactly the invitation that now exists', () => {
@@ -365,7 +370,13 @@ test('the empty state promises only things that exist', () => {
   // because it is the easiest to write and the easiest to get wrong.
   assert.match(read('frontend/src/lib/api.js'), /listMyCompanies: \(\) => request\('\/company\/memberships'\)/,
     'the "more than one company" card claims a list endpoint that must exist');
-  // And no card may promise an invitation — same trap as the add-member copy.
-  assert.doesNotMatch(block, /\binvite\b/i,
-    'membership is granted from the other side; no card may imply an invitation');
+  // A card may promise an invitation now, because one exists (task #121) —
+  // and D434 makes the first card say so. What no card may promise is the
+  // thing that still does not exist: a self-serve join request, or being
+  // added without asking.
+  assert.match(block, /Invite co-founders and hires by email/,
+    'the team card should describe the invitation that exists');
+  assert.match(block, /nobody is joined without asking/);
+  assert.doesNotMatch(block, /join request|request to join/i,
+    'no card may imply a self-serve join request; none exists');
 });

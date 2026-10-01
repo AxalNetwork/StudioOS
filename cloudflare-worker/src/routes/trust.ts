@@ -3,6 +3,9 @@
  *
  *   GET    /api/trust/me               — obligations + summary for caller
  *   GET    /api/trust/agreements       — signed + pending NDAs touching caller
+ *   GET    /api/trust/agreements/:envelope_uuid/history
+ *                                      — that envelope's Sent/Viewed/Signed
+ *                                        trail, recipients only
  *   POST   /api/trust/intro/request    — investor → founder; auto-issues NDA
  *   GET    /api/trust/intro/status     — pair NDA status check
  *   POST   /api/trust/obligation/:key/start
@@ -26,11 +29,16 @@ import {
   getPairwiseNda,
   hasActivePairwiseNda,
   upsertPairwiseNda,
+  obligationSource,
+  trustScoreOf,
+  recordAndCompareScore,
+  envelopeHistory,
   type ObligationKey,
 } from '../services/trust';
 import { getSQL } from '../db';
 import { companyKybScope } from '../services/tenancyScope';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
+import { refusalBody, refuse } from '../util/refusal';
 
 const trust = new Hono<{ Bindings: Env }>();
 
@@ -45,16 +53,44 @@ trust.get('/me', async (c) => {
   await seedObligations(c.env, user.id, user.role);
   const rows: any = await c.env.DB.prepare(
     `SELECT obligation_key, required, status, expires_at, evidence_envelope_uuid,
-            updated_at, created_at
+            evidence_meta, updated_at, created_at
        FROM legal_obligations WHERE user_id = ? ORDER BY required DESC, obligation_key`,
   ).bind(user.id).all();
-  const obligations = (rows?.results || []) as any[];
+  const obligations = ((rows?.results || []) as any[]).map(o => ({
+    ...o,
+    // PROVENANCE, which Trust Center v2 draws under every obligation row as
+    // "Synced from …" / "From envelope …". The fact was already in the table —
+    // `evidence_meta` has carried `{"source":"kyc_provider",…}` since the KYC
+    // sync landed — it simply never left the worker, so the page had nothing to
+    // render and drew the row bare. Derived here rather than in the client
+    // because `evidence_meta` is an opaque JSON blob whose shape is this
+    // module's business, and shipping the raw blob would make every consumer
+    // re-learn it.
+    source: obligationSource(o),
+  }));
   const requiredOpen = obligations.filter(o => o.required && o.status !== 'satisfied' && o.status !== 'waived');
+
+  // The score, and what it was the last month we have on record.
+  //
+  // Computed HERE and not read back from the client: this value is written to
+  // `trust_score_snapshots`, and a history a caller can set is not a history.
+  // `trustScoreOf` is the worker's copy of the frontend's `computeTrustScore`;
+  // `cloudflare-worker/test/trust_score_parity.test.ts` runs both over the
+  // same fixtures and fails if they ever disagree.
+  const score = trustScoreOf(obligations);
+  const history = await recordAndCompareScore(c.env, user.id, score);
+
   return c.json({
     role: user.role,
     obligations,
     required_open_count: requiredOpen.length,
     fully_compliant: requiredOpen.length === 0,
+    score,
+    // null when this is the first month on record. The page states that
+    // absence instead of rendering a zero delta — an account with no prior
+    // month has not "held steady", it has no comparison (D56/D68).
+    previous_score: history.previousScore,
+    previous_month: history.previousMonth,
   });
 });
 
@@ -265,6 +301,32 @@ trust.get('/agreements/:envelope_uuid/my_signing_url', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /agreements/:envelope_uuid/history — Trust Center v2's timeline.
+//
+// The per-agreement Sent / Viewed / Signed trail the canvas draws when a row
+// is expanded. Fetched on expand rather than folded into /agreements: that
+// endpoint already returns up to 200 pairwise rows, 100 pending envelopes and
+// 100 documents, and almost none of them are ever opened.
+//
+// SECURITY: `envelopeHistory` returns null unless the caller is a recipient,
+// and strips `ip` / `ua` / `signer_email` / `meta` from every event. 404 on
+// not-a-recipient, matching /my_signing_url — this must not become the oracle
+// that confirms an envelope exists.
+// ---------------------------------------------------------------------------
+trust.get('/agreements/:envelope_uuid/history', async (c) => {
+  const user = await requireAuth(c);
+  const envelopeUuid = c.req.param('envelope_uuid');
+  if (!envelopeUuid || envelopeUuid.length > 64) {
+    return c.json({ error: 'invalid_envelope' }, 400);
+  }
+  const history = await envelopeHistory(c.env, envelopeUuid, user);
+  if (history === null) return c.json({ error: 'not_a_recipient' }, 404);
+  // An empty array is a real answer — a legacy envelope with no recorded
+  // events — and the page says so rather than drawing an empty box.
+  return c.json({ history });
+});
+
+// ---------------------------------------------------------------------------
 // POST /intro/request — investor asks for an intro to a founder.
 // Body: { founder_user_id }
 // Behaviour:
@@ -391,8 +453,15 @@ export async function requestIntroLogic(
       appUrl: env.APP_URL || 'https://axal.vc',
     });
   } catch (e) {
-    console.error('[trust] 3-way envelope creation failed', e);
-    return { status: 500, body: { error: 'envelope_creation_failed', message: (e as Error).message } };
+    // D278 — DocuSign's text goes to the log; the member reads our sentence.
+    return {
+      status: 500,
+      body: refusalBody({
+        code: 'envelope_creation_failed',
+        message: 'The NDA could not be sent for signature. Nothing was sent; try again in a moment.',
+        raw: e,
+      }),
+    };
   }
   await deps.upsertPairwise(env, founderUserId, investor.id, envelope.envelope_uuid);
 
@@ -532,44 +601,14 @@ trust.post('/sanctions/screen/:user_id', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /summary — single-call payload for TrustCenterPage.
-// Combines obligations (matrix), the caller's pairwise NDA list, and a
-// compact completion-ring breakdown so the SPA doesn't have to fan out.
+// GET /summary IS GONE (D432). It was the single-call payload of the first
+// Trust Center; every field it returned had been repointed — role, score and
+// obligations to /trust/me, the NDA card to /nda/required — and its `kyb` and
+// `accreditation` were literal nulls. The SPA stopped calling it, `api.js`'s
+// `getTrustSummary` had no caller, and it still cost requireAuth,
+// ensureTrustSchema, seedObligations and two D1 reads per hit. Retired with
+// its client method, on D304's rule: nothing in the tree called the route.
 // ---------------------------------------------------------------------------
-trust.get('/summary', async (c) => {
-  const user = await requireAuth(c);
-  await ensureTrustSchema(c.env);
-  await seedObligations(c.env, user.id, user.role);
-  const obligations: any[] = ((await c.env.DB.prepare(
-    `SELECT obligation_key, required, status, expires_at, evidence_envelope_uuid, updated_at
-       FROM legal_obligations WHERE user_id = ? ORDER BY required DESC, obligation_key`,
-  ).bind(user.id).all())?.results || []) as any[];
-  const required = obligations.filter(o => o.required);
-  const satisfied = required.filter(o => o.status === 'satisfied' || o.status === 'waived').length;
-  const score = required.length === 0 ? 100 : Math.round((satisfied / required.length) * 100);
-  const ndas: any[] = ((await c.env.DB.prepare(
-    `SELECT id, party_a_user_id, party_b_user_id, intermediary, nda_envelope_uuid,
-            status, valid_until, updated_at
-       FROM pairwise_ndas
-      WHERE party_a_user_id = ? OR party_b_user_id = ?
-      ORDER BY updated_at DESC LIMIT 50`,
-  ).bind(user.id, user.id).all())?.results || []) as any[];
-  return c.json({
-    role: user.role,
-    score,
-    obligations,
-    required_total: required.length,
-    required_satisfied: satisfied,
-    fully_compliant: required.length === satisfied,
-    ndas,
-    // Legacy shape preserved so TrustCenterPage's `legacy.kyb` /
-    // `legacy.accreditation` / `legacy.ndas` reads keep working —
-    // Task AH leaves the KYB+Accred cards out of scope, so they are
-    // surfaced via /api/kyc/* and the obligation matrix.
-    kyb: null,
-    accreditation: null,
-  });
-});
 
 // ---------------------------------------------------------------------------
 // GET /nda/required — the per-role NDA obligation set the caller still
@@ -635,6 +674,7 @@ trust.get('/pairwise-ndas', async (c) => {
                 p.nda_envelope_uuid, p.status, p.valid_until, p.created_at, p.updated_at,
                 p.signers_json, p.voided_at, p.voided_reason,
                 ua.email AS party_a_email, ub.email AS party_b_email,
+                ua.name AS party_a_name, ub.name AS party_b_name,
                 e.status AS envelope_status
            FROM pairwise_ndas p
            LEFT JOIN users ua ON ua.id = p.party_a_user_id
@@ -647,6 +687,7 @@ trust.get('/pairwise-ndas', async (c) => {
                 p.nda_envelope_uuid, p.status, p.valid_until, p.created_at, p.updated_at,
                 p.signers_json, p.voided_at, p.voided_reason,
                 ua.email AS party_a_email, ub.email AS party_b_email,
+                ua.name AS party_a_name, ub.name AS party_b_name,
                 e.status AS envelope_status
            FROM pairwise_ndas p
            LEFT JOIN users ua ON ua.id = p.party_a_user_id
@@ -784,51 +825,30 @@ trust.post('/pairwise-ndas/:id/void', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /kyb/start — thin facade so the SPA can launch entity verification
-// from the Trust Center even though the canonical KYB flow lives under
-// /api/kyc. Marks the kyb_v1 obligation as `in_review` and upserts a
-// minimal `corporate_profiles` row so subsequent KYC submissions have a
-// row to attach to.
+// POST /kyb/start IS GONE (D432). It was a facade that upserted a minimal
+// `corporate_profiles` row and flipped `kyb_v1` to `in_review`, and it was
+// orphaned on both sides: `api.startKyb` had no caller under `frontend/src`,
+// and the page's Start action goes through POST /obligation/:key/start
+// instead. Retired with its client method, on D304's rule: nothing in the
+// tree called the route.
+//
+// What it did NOT fix stays recorded: a partner seeded a REQUIRED `kyb_v1` at
+// deal signature (`services/partnerDeals.ts`) presses Start, lands on
+// `in_review`, and `ObligationList` renders no action for `in_review` while
+// `lib/trustCenter.js` classes it as waiting on us. `kyb_v1` has no working
+// satisfier either — `resyncKycKyb` reads a column no table defines. Both are
+// held, with the rest of the obligation gap, in
+// `cloudflare-worker/test/obligation_satisfiable.test.ts`.
 // ---------------------------------------------------------------------------
-trust.post('/kyb/start', async (c) => {
-  const user = await requireAuth(c);
-  await ensureTrustSchema(c.env);
-  const body = await c.req.json().catch(() => ({} as any));
-  const legalName = String(body?.legal_name || '').slice(0, 255).trim();
-  const businessId = String(body?.business_id || '').slice(0, 120).trim();
-  const country = String(body?.country || body?.country_code || '').slice(0, 8).trim().toUpperCase();
-  // Best-effort upsert against the canonical corporate_profiles columns
-  // (entity_name + registration_number + registered_country). Dev D1 may
-  // be missing the table on a stale checkout, so we swallow + warn.
-  try {
-    await c.env.DB.prepare(
-      `INSERT INTO corporate_profiles (user_id, entity_name, registration_number, registered_country, updated_at)
-       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-       ON CONFLICT(user_id) DO UPDATE SET
-         entity_name = COALESCE(excluded.entity_name, corporate_profiles.entity_name),
-         registration_number = COALESCE(excluded.registration_number, corporate_profiles.registration_number),
-         registered_country = COALESCE(excluded.registered_country, corporate_profiles.registered_country),
-         updated_at = CURRENT_TIMESTAMP`,
-    ).bind(user.id, legalName || null, businessId || null, country || null).run();
-  } catch (e) {
-    console.warn('[trust] kyb_start corporate_profiles upsert failed', (e as Error).message);
-  }
-  await c.env.DB.prepare(
-    `UPDATE legal_obligations
-        SET status = 'in_review', required = 1, updated_at = CURRENT_TIMESTAMP
-      WHERE user_id = ? AND obligation_key = 'kyb_v1'`,
-  ).bind(user.id).run();
-  return c.json({ ok: true, status: 'in_review' });
-});
 
 // ---------------------------------------------------------------------------
 // The company's own KYB — task #108, migration 220.
 //
-// `POST /kyb/start` above is the ACCOUNT's entity and it is untouched:
-// `corporate_profiles.user_id` is the primary key, one row per account, and
-// D40/D42 argue twice that the account's entity and the company's are different
-// objects that "must not drift into each other". These two endpoints are the
-// second object, not a replacement for the first.
+// The ACCOUNT's entity is `corporate_profiles`, whose `user_id` is the primary
+// key — one row per account — and D40/D42 argue twice that the account's
+// entity and the company's are different objects that "must not drift into
+// each other". These two endpoints are the second object, not a replacement
+// for the first.
 //
 // WHAT THEY MAKE POSSIBLE. `TrustCenterPage`'s Entity tab carries a comment
 // saying the v2 canvas draws a "Your companies" card, one row per company with
@@ -855,17 +875,32 @@ trust.get('/companies/kyb', async (c) => {
   //
   // LEFT JOIN, because a company with no KYB row is the common case and the
   // card has to show it rather than omit the company.
-  const rows = await c.env.DB.prepare(
-    `SELECT cp.id AS company_id, cp.uid AS company_uid, cp.company_name,
-            ucl.role_in_company, ucl.is_primary_admin,
-            k.uid AS kyb_uid, k.status, k.entity_name, k.entity_type,
-            k.jurisdiction, k.registration_number, k.submitted_at, k.reviewed_at
-       FROM user_company_links ucl
-       JOIN company_profiles cp ON cp.id = ucl.company_id
-       LEFT JOIN company_kyb_records k ON k.company_id = ucl.company_id
-      WHERE ucl.user_id = ?
-      ORDER BY cp.company_name`,
-  ).bind(user.id).all<any>().catch(() => ({ results: [] as any[] }));
+  //
+  // D432 — A FAILED READ IS A REFUSAL, NOT AN EMPTY LIST. This used to catch
+  // every error into `{ results: [] }`, so a database that could not be read
+  // answered exactly like an account with no companies, and the card drew
+  // nothing. The page now gets a refusal body (D278: our sentence, the raw
+  // text in the log) and draws "Unreadable" with a retry.
+  let rows: { results?: any[] };
+  try {
+    rows = await c.env.DB.prepare(
+      `SELECT cp.id AS company_id, cp.uid AS company_uid, cp.company_name,
+              ucl.role_in_company, ucl.is_primary_admin,
+              k.uid AS kyb_uid, k.status, k.entity_name, k.entity_type,
+              k.jurisdiction, k.registration_number, k.submitted_at, k.reviewed_at
+         FROM user_company_links ucl
+         JOIN company_profiles cp ON cp.id = ucl.company_id
+         LEFT JOIN company_kyb_records k ON k.company_id = ucl.company_id
+        WHERE ucl.user_id = ?
+        ORDER BY cp.company_name`,
+    ).bind(user.id).all<any>();
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'company_kyb_unreadable',
+      message: 'Your companies’ entity records could not be read just now. Try again in a moment.',
+      raw: e,
+    });
+  }
 
   return c.json({
     items: (rows.results || []).map((r: any) => ({

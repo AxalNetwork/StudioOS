@@ -21,6 +21,7 @@
  * is the second line of defence against any out-of-band insert.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
 // Crockford alphabet — no I/L/O/U so IDs are unambiguous when copy-pasted.
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -145,9 +146,9 @@ export function assignPartnerPublicId(env: Env, userId: number): Promise<string 
  * been applied (dev D1 / pre-merge preview / partial prod apply)
  * still serves /api/admin/users/:id/profile correctly.
  */
-let publicIdSchemaReady = false;
+const PUBLIC_ID_SCHEMA_READY = new WeakMap<object, boolean>();
 export async function ensurePublicIdColumns(env: Env): Promise<void> {
-  if (publicIdSchemaReady) return;
+  if (PUBLIC_ID_SCHEMA_READY.get(bindingKey(env))) return;
   const stmts = [
     `ALTER TABLE users ADD COLUMN founder_public_id TEXT`,
     `ALTER TABLE users ADD COLUMN partner_public_id TEXT`,
@@ -165,7 +166,7 @@ export async function ensurePublicIdColumns(env: Env): Promise<void> {
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch {}
   }
-  publicIdSchemaReady = true;
+  PUBLIC_ID_SCHEMA_READY.set(bindingKey(env), true);
 }
 
 /**

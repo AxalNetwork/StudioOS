@@ -13,7 +13,7 @@ canvas behind it still shows up here.
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
 | Home | Studio | `/studio` | Founder Studio |
-| Home | Spin-Out Lab | `/spinout-lab` | Spin-Out Lab · Intro, Spin-Out Lab Workspace |
+| Home | Spin-Out Lab | `/spinout-lab` | Spin-Out Lab · Intro, Spin-Out Lab · Landing, Spin-Out Lab Workspace |
 | Home | Validate | `/validate` | Founder Workspaces Canvas, Pages · Founder Validate |
 | Home | Build | `/build` | Founder Workspaces Canvas |
 | Home | Raise | `/raise` | Founder Workspaces Canvas |
@@ -29,7 +29,7 @@ canvas behind it still shows up here.
 | Home | Spin-Out Lab | `/spinout-lab` | — (no canvas; shipped ahead of the design corpus) |
 | Home | Practice | `/practice` | — (no canvas; shipped ahead of the design corpus) |
 | Home | Cohorts | `/cohorts` | — (no canvas; shipped ahead of the design corpus) |
-| Home | Expertise | `/expertise` | — (no canvas; shipped ahead of the design corpus) |
+| Home | Expertise | `/expertise` | Pages · Advisor Expertise |
 | Home | Network | `/network` | Advisor Canvas |
 | Home | Research | `/research` | — (no canvas; shipped ahead of the design corpus) |
 
@@ -39,10 +39,10 @@ canvas behind it still shows up here.
 | --- | --- | --- | --- |
 | Home | Studio | `/studio` | Investor LP Canvas |
 | Home | Spin-Out Lab | `/spinout-lab` | Explore the Spin-Out Lab, Fund Brief One-Pager |
-| Home | Deals | `/deals` | Deal Flow, Investor LP Canvas |
+| Home | Deals | `/deals` | Deal Flow, Investor LP Canvas, Pages · Investor Deals |
 | Home | Portfolio | `/portfolio` | Investor LP Canvas |
-| Home | Axal VC Fund | `/spinout-lab/investor-workspace` | Fund Brief One-Pager, LP Investor Workspace |
-| Home | Fund | `/funds` | Investor LP Canvas, Pages · Investor Fund |
+| Home | Axal VC Fund | `/spinout-lab/investor-workspace` | Fund Brief One-Pager, LP Investor Workspace, Quarterly Report |
+| Home | Fund | `/funds` | Investor LP Canvas, Pages · Funds and fund research, Pages · Investor Fund |
 | Home | Network | `/network` | Investor LP Canvas, Pages · Investor Network |
 | Home | Research | `/research` | Investor LP Canvas |
 | Home | Trust | `/trust` | — (no canvas; shipped ahead of the design corpus) |
@@ -59,56 +59,18 @@ canvas behind it still shows up here.
 | Headerless | Network | `/network` | Partner Operator Canvas |
 | Headerless | Research | `/research` | — (no canvas; shipped ahead of the design corpus) |
 
-## `admin` — 46 destinations in 6 groups
+## `admin` — 8 destinations in 1 group
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
-| Home | Studio | `/studio` | — (no canvas; shipped ahead of the design corpus) |
-| Home | Messages | `/messages` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Admin Console | `/admin` | Contracts · Subsidiary |
-| Admin | Due Diligence | `/admin/due-diligence` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Assessment Studio | `/admin/assessment` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Best-Fit Console | `/admin/best-fit` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Event Admin | `/admin/events` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Job Board Admin | `/admin/jobs` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Communities Admin | `/admin/circles` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Advisor Cohort Access | `/admin/advisor-cohorts` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Exploring Users | `/admin/exploring` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | LP Applications | `/admin/lp-applications` | GP Application Review |
-| Admin | Monitoring | `/monitoring` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Telegram Channels | `/admin/telegram` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Content Queue | `/admin/articles` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | My Licence | `/admin/my-licence` | — (no canvas; shipped ahead of the design corpus) |
-| Studio | Pipeline Board | `/pipeline` | — (no canvas; shipped ahead of the design corpus) |
-| Studio | Scoring Engine | `/scoring` | Scoring Engine v2 |
-| Studio | Risk Matrix | `/portfolio/risk-matrix` | — (no canvas; shipped ahead of the design corpus) |
-| Studio | Market Intelligence | `/market-intel` | — (no canvas; shipped ahead of the design corpus) |
-| Studio | Signals | `/signals` | — (no canvas; shipped ahead of the design corpus) |
-| Studio | AI Advisory Suite | `/advisory` | — (no canvas; shipped ahead of the design corpus) |
-| Studio | AI Matches | `/matches` | — (no canvas; shipped ahead of the design corpus) |
-| Studio | Deal Flow | `/deals` | — (no canvas; shipped ahead of the design corpus) |
-| Capital & Legal | Capital & Investment | `/capital` | — (no canvas; shipped ahead of the design corpus) |
-| Capital & Legal | Liquidity & Exits | `/liquidity` | — (no canvas; shipped ahead of the design corpus) |
-| Capital & Legal | Portfolio Health | `/portfolio/health` | — (no canvas; shipped ahead of the design corpus) |
-| Capital & Legal | Portfolio Coverage | `/portfolio/coverage` | — (no canvas; shipped ahead of the design corpus) |
-| Capital & Legal | Reserve Allocation | `/portfolio/reserves` | — (no canvas; shipped ahead of the design corpus) |
-| Capital & Legal | Exit Waterfall | `/portfolio/waterfall` | — (no canvas; shipped ahead of the design corpus) |
-| Capital & Legal | Watchlist & Journal | `/watchlist` | — (no canvas; shipped ahead of the design corpus) |
-| Capital & Legal | Legal & Capital | `/legal-capital` | Legal & Capital Engine |
-| Capital & Legal | Incorporate | `/incorporate` | — (no canvas; shipped ahead of the design corpus) |
-| Capital & Legal | Compliance Calendar | `/compliance` | — (no canvas; shipped ahead of the design corpus) |
-| Network & Growth | Network | `/network` | — (no canvas; shipped ahead of the design corpus) |
-| Network & Growth | Network Effects | `/network-effects` | — (no canvas; shipped ahead of the design corpus) |
-| Network & Growth | Jobs | `/my/jobs` | — (no canvas; shipped ahead of the design corpus) |
-| Network & Growth | Service Catalogue | `/services` | — (no canvas; shipped ahead of the design corpus) |
-| Network & Growth | Needs Board | `/needs` | — (no canvas; shipped ahead of the design corpus) |
-| Network & Growth | Demand Insights | `/partner/insights` | — (no canvas; shipped ahead of the design corpus) |
-| Network & Growth | Partner Office Hours | `/partner/office-hours` | — (no canvas; shipped ahead of the design corpus) |
-| Network & Growth | Co-Marketing Review | `/comarketing` | — (no canvas; shipped ahead of the design corpus) |
-| More | Co-Founder Agreement | `/incorporate/cofounder-agreement` | — (no canvas; shipped ahead of the design corpus) |
-| More | 83(b) Tracker | `/spinout-lab/83b` | — (no canvas; shipped ahead of the design corpus) |
-| More | Partner / Investor Portal | `/partner-portal` | — (no canvas; shipped ahead of the design corpus) |
-| More | Perks | `/perks` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Studio | `/studio` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Accounts | `/admin/held/accounts` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Approvals | `/admin/held/approvals` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Programs | `/admin/held/programs` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Community | `/admin/held/community` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Contracts | `/admin?tab=legal` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Insights | `/admin/held/insights` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Settings | `/admin/my-licence` | — (no canvas; shipped ahead of the design corpus) |
 
 ## `exploring` — 4 destinations in 2 groups
 
@@ -117,7 +79,7 @@ canvas behind it still shows up here.
 | Home | Studio | `/exploring` | — (no canvas; shipped ahead of the design corpus) |
 | Home | Spin-Out Lab | `/spinout-lab` | — (no canvas; shipped ahead of the design corpus) |
 | Home | Messages | `/messages` | — (no canvas; shipped ahead of the design corpus) |
-| Account | My Profile | `/profile` | — (no canvas; shipped ahead of the design corpus) |
+| Account | My Profile | `/account` | — (no canvas; shipped ahead of the design corpus) |
 
 ## `super_admin` — 11 destinations in 1 group
 
@@ -125,19 +87,32 @@ canvas behind it still shows up here.
 | --- | --- | --- | --- |
 | HQ | Home | `/hq` | Admin · Super |
 | HQ | Licences | `/admin/licences` | Admin · Super |
-| HQ | Funds | `/funds` | Funds · Fabric |
+| HQ | Funds | `/admin/funds` | Admin · Super |
 | HQ | Contracts | `/admin/contracts` | Admin · Super, Contracts · Super |
 | HQ | Team | `/admin/accounts` | Admin · Super |
 | HQ | Revenue | `/admin/revenue` | — (no canvas; shipped ahead of the design corpus) |
 | HQ | Content | `/admin/content` | — (no canvas; shipped ahead of the design corpus) |
 | HQ | Platform | `/admin/platform` | — (no canvas; shipped ahead of the design corpus) |
-| HQ | Support | `/help` | Support Security · Super |
+| HQ | Support | `/admin/hq-support` | Support Security · Super |
 | HQ | Security | `/admin/security` | Support Security · Super |
 | HQ | Settings | `/account` | — (no canvas; shipped ahead of the design corpus) |
 
+## `branch_admin` — 8 destinations in 1 group
+
+| Group | Label | Route | Canvas behind it |
+| --- | --- | --- | --- |
+| Branch | Studio | `/studio` | — (no canvas; shipped ahead of the design corpus) |
+| Branch | Accounts | `/branch/accounts` | — (no canvas; shipped ahead of the design corpus) |
+| Branch | Approvals | `/branch/approvals` | — (no canvas; shipped ahead of the design corpus) |
+| Branch | Programs | `/branch/programs` | — (no canvas; shipped ahead of the design corpus) |
+| Branch | Community | `/branch/community` | — (no canvas; shipped ahead of the design corpus) |
+| Branch | Contracts | `/branch/contracts` | — (no canvas; shipped ahead of the design corpus) |
+| Branch | Insights | `/branch/insights` | — (no canvas; shipped ahead of the design corpus) |
+| Branch | Settings | `/branch/settings` | — (no canvas; shipped ahead of the design corpus) |
+
 ## Destinations with no canvas
 
-60 of the 92 sidebar rows above are not claimed
+33 of the 62 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
@@ -146,62 +121,35 @@ rather than merely absent.
 - advisor · Home · Spin-Out Lab (`/spinout-lab`)
 - advisor · Home · Practice (`/practice`)
 - advisor · Home · Cohorts (`/cohorts`)
-- advisor · Home · Expertise (`/expertise`)
 - advisor · Home · Research (`/research`)
 - investor · Home · Trust (`/trust`)
 - partner · Headerless · Pipeline (`/pipeline`)
 - partner · Headerless · Delivery (`/delivery`)
 - partner · Headerless · Offers (`/offers`)
 - partner · Headerless · Research (`/research`)
-- admin · Home · Studio (`/studio`)
-- admin · Home · Messages (`/messages`)
-- admin · Admin · Due Diligence (`/admin/due-diligence`)
-- admin · Admin · Assessment Studio (`/admin/assessment`)
-- admin · Admin · Best-Fit Console (`/admin/best-fit`)
-- admin · Admin · Event Admin (`/admin/events`)
-- admin · Admin · Job Board Admin (`/admin/jobs`)
-- admin · Admin · Communities Admin (`/admin/circles`)
-- admin · Admin · Advisor Cohort Access (`/admin/advisor-cohorts`)
-- admin · Admin · Exploring Users (`/admin/exploring`)
-- admin · Admin · Monitoring (`/monitoring`)
-- admin · Admin · Telegram Channels (`/admin/telegram`)
-- admin · Admin · Content Queue (`/admin/articles`)
-- admin · Admin · My Licence (`/admin/my-licence`)
-- admin · Studio · Pipeline Board (`/pipeline`)
-- admin · Studio · Risk Matrix (`/portfolio/risk-matrix`)
-- admin · Studio · Market Intelligence (`/market-intel`)
-- admin · Studio · Signals (`/signals`)
-- admin · Studio · AI Advisory Suite (`/advisory`)
-- admin · Studio · AI Matches (`/matches`)
-- admin · Studio · Deal Flow (`/deals`)
-- admin · Capital & Legal · Capital & Investment (`/capital`)
-- admin · Capital & Legal · Liquidity & Exits (`/liquidity`)
-- admin · Capital & Legal · Portfolio Health (`/portfolio/health`)
-- admin · Capital & Legal · Portfolio Coverage (`/portfolio/coverage`)
-- admin · Capital & Legal · Reserve Allocation (`/portfolio/reserves`)
-- admin · Capital & Legal · Exit Waterfall (`/portfolio/waterfall`)
-- admin · Capital & Legal · Watchlist & Journal (`/watchlist`)
-- admin · Capital & Legal · Incorporate (`/incorporate`)
-- admin · Capital & Legal · Compliance Calendar (`/compliance`)
-- admin · Network & Growth · Network (`/network`)
-- admin · Network & Growth · Network Effects (`/network-effects`)
-- admin · Network & Growth · Jobs (`/my/jobs`)
-- admin · Network & Growth · Service Catalogue (`/services`)
-- admin · Network & Growth · Needs Board (`/needs`)
-- admin · Network & Growth · Demand Insights (`/partner/insights`)
-- admin · Network & Growth · Partner Office Hours (`/partner/office-hours`)
-- admin · Network & Growth · Co-Marketing Review (`/comarketing`)
-- admin · More · Co-Founder Agreement (`/incorporate/cofounder-agreement`)
-- admin · More · 83(b) Tracker (`/spinout-lab/83b`)
-- admin · More · Partner / Investor Portal (`/partner-portal`)
-- admin · More · Perks (`/perks`)
+- admin · Admin · Studio (`/studio`)
+- admin · Admin · Accounts (`/admin/held/accounts`)
+- admin · Admin · Approvals (`/admin/held/approvals`)
+- admin · Admin · Programs (`/admin/held/programs`)
+- admin · Admin · Community (`/admin/held/community`)
+- admin · Admin · Contracts (`/admin?tab=legal`)
+- admin · Admin · Insights (`/admin/held/insights`)
+- admin · Admin · Settings (`/admin/my-licence`)
 - exploring · Home · Studio (`/exploring`)
 - exploring · Home · Spin-Out Lab (`/spinout-lab`)
 - exploring · Home · Messages (`/messages`)
-- exploring · Account · My Profile (`/profile`)
+- exploring · Account · My Profile (`/account`)
 - super_admin · HQ · Revenue (`/admin/revenue`)
 - super_admin · HQ · Content (`/admin/content`)
 - super_admin · HQ · Platform (`/admin/platform`)
 - super_admin · HQ · Settings (`/account`)
+- branch_admin · Branch · Studio (`/studio`)
+- branch_admin · Branch · Accounts (`/branch/accounts`)
+- branch_admin · Branch · Approvals (`/branch/approvals`)
+- branch_admin · Branch · Programs (`/branch/programs`)
+- branch_admin · Branch · Community (`/branch/community`)
+- branch_admin · Branch · Contracts (`/branch/contracts`)
+- branch_admin · Branch · Insights (`/branch/insights`)
+- branch_admin · Branch · Settings (`/branch/settings`)
 
-**Canvas corpus:** 110. **Workspace assignments:** 130.
+**Canvas corpus:** 125. **Workspace assignments:** 148.

@@ -28,7 +28,23 @@ import { DatabaseSync } from 'node:sqlite';
 /**
  * `.run()` reports `meta.changes`, which lpClaim reads to decide whether to
  * log a link. node:sqlite returns `changes` from `run()` directly.
+ *
+ * IT ALSO REPORTS `meta.last_row_id`, and that one was MISSING until D190.
+ * `routes/customer_chat.ts:229` reads it to key the message it is about to
+ * write to the thread it has just created; with the field absent the shim
+ * handed back `undefined`, the message bound a null `thread_id`, and the
+ * write landed nowhere while every call still resolved. That is D187's M6
+ * shape exactly — a restored statement that writes no row — so a shim that
+ * cannot carry the id cannot see the defect it exists to catch. node:sqlite
+ * returns it as `lastInsertRowid`, a BigInt, which Number() narrows.
  */
+function meta(info) {
+  return {
+    changes: Number(info?.changes ?? 0),
+    last_row_id: Number(info?.lastInsertRowid ?? 0),
+  };
+}
+
 function shape(stmt, binds) {
   return {
     async all() {
@@ -39,7 +55,7 @@ function shape(stmt, binds) {
         return { results: stmt.all(...binds), success: true };
       } catch {
         const info = stmt.run(...binds);
-        return { results: [], success: true, meta: { changes: Number(info?.changes ?? 0) } };
+        return { results: [], success: true, meta: meta(info) };
       }
     },
     async first(col) {
@@ -51,26 +67,27 @@ function shape(stmt, binds) {
     async run() {
       try {
         const info = stmt.run(...binds);
-        return { success: true, meta: { changes: Number(info?.changes ?? 0) } };
+        return { success: true, meta: meta(info) };
       } catch {
         // A RETURNING clause makes node:sqlite treat it as a reader.
-        return { success: true, results: stmt.all(...binds), meta: { changes: 0 } };
+        return { success: true, results: stmt.all(...binds), meta: { changes: 0, last_row_id: 0 } };
       }
     },
   };
 }
 
 /**
- * @param {string} schema  DDL applied once at construction.
- * @param {string} [seed]  Optional INSERTs.
- * @returns {{ DB: object, db: import('node:sqlite').DatabaseSync }}
+ * Wrap a database this caller already built. `makeD1` applies one blob of DDL
+ * and is the common case; a fixture assembled statement by statement — the
+ * baseline plus every post-cutoff migration, each in its own try/catch — has
+ * no such blob, so it builds the DatabaseSync itself and binds it here rather
+ * than growing a second copy of the binding below.
+ *
+ * @param {import('node:sqlite').DatabaseSync} db
+ * @returns {object} the D1 binding surface the worker uses
  */
-export function makeD1(schema, seed = '') {
-  const db = new DatabaseSync(':memory:');
-  db.exec(schema);
-  if (seed) db.exec(seed);
-
-  const DB = {
+export function d1Over(db) {
+  return {
     prepare(sql) {
       // Prepared lazily: a statement the route builds but never binds (or one
       // referencing a table this fixture omits) must not throw at prepare
@@ -84,15 +101,55 @@ export function makeD1(schema, seed = '') {
         all: async () => shape(get(), binds).all(),
         first: async (col) => shape(get(), binds).first(col),
         run: async () => shape(get(), binds).run(),
+        // The same answer as `run()`, synchronously — `batch` needs every
+        // statement to execute before control returns to the event loop.
+        runSync: () => {
+          const st = get();
+          try {
+            return { success: true, meta: meta(st.run(...binds)) };
+          } catch (e) {
+            // A RETURNING clause makes node:sqlite treat it as a reader; any
+            // other error is real and aborts the batch.
+            if (!/RETURNING/i.test(sql)) throw e;
+            return { success: true, results: st.all(...binds), meta: { changes: 0, last_row_id: 0 } };
+          }
+        },
       };
       return api;
     },
+    // ONE TRANSACTION, LIKE D1 (D370). D1 runs a batch as a single
+    // transaction: every statement or none, and nothing from another request
+    // lands between them. This used to `await` each statement in turn, so two
+    // batches in flight at once interleaved statement by statement — a
+    // fixture looser than production, which let a test "prove" a race that D1
+    // cannot have, and could not prove the absence of one it can. Each
+    // statement now runs synchronously inside a savepoint, so no other
+    // request's code can run until the batch has committed or rolled back.
     async batch(stmts) {
-      const out = [];
-      for (const s of stmts || []) out.push(await s.run());
-      return out;
+      const list = stmts || [];
+      db.exec('SAVEPOINT d1_batch');
+      try {
+        const out = list.map((s) => s.runSync());
+        db.exec('RELEASE d1_batch');
+        return out;
+      } catch (e) {
+        db.exec('ROLLBACK TO d1_batch');
+        db.exec('RELEASE d1_batch');
+        throw e;
+      }
     },
     async exec(sql) { db.exec(sql); return { count: 0, duration: 0 }; },
   };
-  return { DB, db };
+}
+
+/**
+ * @param {string} schema  DDL applied once at construction.
+ * @param {string} [seed]  Optional INSERTs.
+ * @returns {{ DB: object, db: import('node:sqlite').DatabaseSync }}
+ */
+export function makeD1(schema, seed = '') {
+  const db = new DatabaseSync(':memory:');
+  db.exec(schema);
+  if (seed) db.exec(seed);
+  return { DB: d1Over(db), db };
 }

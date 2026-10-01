@@ -69,9 +69,17 @@ function freshDb() {
   });
   // Verbatim shapes: `founders`/`projects` from sql/schema_baseline.sql,
   // `roadmap_okrs` from sql/migrations/001_progress_tables.sql, `mvp_tasks`
-  // from the baseline, and `metrics_snapshots` in the shape
-  // `ensureMetricsSnapshotsSchema` creates (project_id, not the baseline
-  // dump's historical deal_id).
+  // from the baseline, and `project_metrics` from migration 249.
+  //
+  // THAT LAST ONE USED TO BE THE BUG, AND ITS OWN COMMENT SAID SO. It read
+  // "`project_metrics` in the shape `ensureMetricsSnapshotsSchema` creates
+  // (project_id, not the baseline dump's historical deal_id)" — calling the
+  // production shape "historical" and building the one production has never had.
+  // So this harness created a `project_metrics` with `project_id`, the route
+  // under test wrote to it happily, and the same route threw `no such column:
+  // project_id` against the real database. A fixture that is a schema production
+  // does not have is how a test passes over a broken feature, which is the rule
+  // `partner_pipeline_stores.test.ts` states and the reason migration 249 exists.
   db.exec(`
     CREATE TABLE users (
       id INTEGER PRIMARY KEY, role TEXT NOT NULL, founder_id INTEGER, partner_id INTEGER,
@@ -99,7 +107,7 @@ function freshDb() {
       ai_generated INTEGER DEFAULT 0, due_date TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
-    CREATE TABLE metrics_snapshots (
+    CREATE TABLE project_metrics (
       id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, snapshot_date TEXT NOT NULL,
       mrr REAL, arr REAL, cac REAL, ltv REAL, monthly_churn_pct REAL,
       active_users INTEGER, new_users INTEGER, net_burn REAL, cash_balance REAL,
@@ -218,7 +226,7 @@ function freshDb() {
                 VALUES (?, ?, ?, 'now', 'Q3 2026')`)
       .run(pid, `Objective for ${pid}`, JSON.stringify([{ text: 'Ship it', current: 1, target: 4, unit: '' }]));
     db.prepare('INSERT INTO mvp_tasks (deal_id, title, status) VALUES (?, ?, ?)').run(pid, `Card for ${pid}`, 'todo');
-    db.prepare('INSERT INTO metrics_snapshots (project_id, snapshot_date, mrr) VALUES (?, ?, ?)')
+    db.prepare('INSERT INTO project_metrics (project_id, snapshot_date, mrr) VALUES (?, ?, ?)')
       .run(pid, '2026-09-01', 4200);
     db.prepare(`INSERT INTO raise_rounds (uid, project_id, name, target_amount, pre_money, status)
                 VALUES (?, ?, ?, 1500000, 12000000, 'active')`).run(`r${pid}`, pid, `Round for ${pid}`);
@@ -371,7 +379,7 @@ test('build/kpi says so rather than treating one snapshot as a movement', async 
   assert.match(String(one.prompt), /ONLY ONE SNAPSHOT EXISTS/,
     'a lone snapshot went to the model with nothing saying it is not a movement');
 
-  db.prepare('INSERT INTO metrics_snapshots (project_id, snapshot_date, mrr) VALUES (?, ?, ?)')
+  db.prepare('INSERT INTO project_metrics (project_id, snapshot_date, mrr) VALUES (?, ?, ?)')
     .run(MY_PROJECT, '2026-08-01', 3000);
   const two = await draft(db, MINE, 'build/kpi', String(MY_PROJECT));
   assert.doesNotMatch(String(two.prompt), /ONLY ONE SNAPSHOT EXISTS/,
@@ -379,7 +387,7 @@ test('build/kpi says so rather than treating one snapshot as a movement', async 
   assert.match(String(two.prompt), /2026-09-01[\s\S]*2026-08-01/,
     'the two snapshots reach the model newest first, so "moved" has a direction');
 
-  db.prepare('DELETE FROM metrics_snapshots WHERE project_id = ?').run(MY_PROJECT);
+  db.prepare('DELETE FROM project_metrics WHERE project_id = ?').run(MY_PROJECT);
   assert.equal(await statusOf(db, MINE, 'build/kpi', String(MY_PROJECT)), 409,
     'with no snapshot at all there is nothing to draft');
 });

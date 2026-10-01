@@ -1,6 +1,9 @@
 // Pure, dependency-free helpers for the investor Pipeline lifecycle pages.
 // Kept in their own module (no React / api imports) so the stage-bucketing
 // contract can be unit-tested directly — see frontend/test/pipeline_bucketing.test.mjs.
+// lib/absence is dependency-free too, so importing its titleCase keeps that true.
+
+import { titleCase } from '../../lib/absence';
 
 const norm = (s) => String(s || '').toLowerCase().trim();
 
@@ -39,7 +42,8 @@ export function prettyStage(s) {
   const k = norm(s);
   if (STAGE_LABELS[k]) return STAGE_LABELS[k];
   if (!s) return '—';
-  return String(s).replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  // D268 — the run of `_`/`-` still collapses here, before titleCase.
+  return titleCase(String(s).replace(/[_-]+/g, ' '));
 }
 
 export function fmtDate(iso) {

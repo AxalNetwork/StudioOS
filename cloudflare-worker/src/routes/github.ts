@@ -27,6 +27,7 @@ import {
   ensureTicketSyncSchema, recordSyncEvent, releaseSyncEvent, sha256Hex,
   mapGithubStatusToLocal, parseLabelsFromGithub, hasSyncMarker,
 } from '../services/githubSync';
+import { refuse } from '../util/refusal';
 
 const github = new Hono<{ Bindings: Env }>();
 
@@ -195,7 +196,7 @@ github.post('/webhook', async (c) => {
     // Release the delivery claim so GitHub's retry of this delivery is
     // reprocessed rather than dropped as a duplicate.
     if (deliveryKey) await releaseSyncEvent(c.env, deliveryKey);
-    return c.json({ error: 'db_error', detail: String(e?.message || e).slice(0, 200) }, 500);
+    return refuse(c, 500, { code: 'db_error', message: 'The delivery could not be recorded; GitHub will retry it.', raw: e });
   }
 });
 

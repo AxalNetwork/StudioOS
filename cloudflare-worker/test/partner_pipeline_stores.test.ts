@@ -83,6 +83,33 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
 
 const migration = (name: string) => readFileSync(`${SQL}/migrations/${name}.sql`, 'utf8');
 
+/**
+ * One table, lifted verbatim out of the production schema baseline.
+ *
+ * `schema_baseline.sql` is the dump of the live D1 and is what
+ * `check-baseline-drift.mjs` verifies production against, so a fixture built
+ * from it cannot describe a shape production does not have. Used where a
+ * migration cannot simply be replayed — `200_service_offerings_shape.sql`
+ * opens with a preflight (`SELECT partner_id FROM service_offerings WHERE 0`)
+ * that only makes sense against the pre-200 table, so replaying it on an empty
+ * database is not possible.
+ *
+ * THIS EXISTS BECAUSE HAND-COPYING THE SHAPE HID A PRODUCTION OUTAGE. This file
+ * used to declare `service_offerings` inline with `partner_id INTEGER NOT NULL`
+ * — the retired `sql/historical/t13_t14_t15.sql` marketplace shape — so every
+ * test here passed while `GET /partner/pipeline/leads` answered
+ * `D1_ERROR: no such column: partner_id` to every partner in production. The
+ * header below already stated the rule; this makes it enforceable.
+ */
+function baselineTable(name: string): string {
+  const sql = readFileSync(`${SQL}/schema_baseline.sql`, 'utf8');
+  const at = sql.indexOf(`CREATE TABLE ${name} (`);
+  if (at < 0) throw new Error(`${name} is not in schema_baseline.sql`);
+  const end = sql.indexOf(');', at);
+  if (end < 0) throw new Error(`${name}'s definition in schema_baseline.sql is unterminated`);
+  return sql.slice(at, end + 2);
+}
+
 function freshDb() {
   const db = new DatabaseSync(':memory:', {
     enableForeignKeyConstraints: false,
@@ -146,14 +173,11 @@ function freshDb() {
     CREATE TABLE IF NOT EXISTS projects (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE, name TEXT NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS service_offerings (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
-      partner_id INTEGER NOT NULL, category TEXT NOT NULL, title TEXT NOT NULL,
-      description TEXT, price_min REAL, price_max REAL,
-      is_active INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
   `);
+  // Production's shape, read out of the baseline rather than retyped — see
+  // `baselineTable`. It keys on `owner_user_id REFERENCES users(id)`, NOT on
+  // `partner_id`, which is the whole reason the leads query had to change.
+  db.exec(baselineTable('service_offerings'));
 
   const u = db.prepare('INSERT INTO users (id, role, partner_id, name, email) VALUES (?,?,?,?,?)');
   u.run(OURS_USER, 'partner', 1, 'Ours', 'ours@example.com');
@@ -749,8 +773,11 @@ test('a firm with no rules gets no score, and says so', async () => {
 test('a score counts the rules it met over the rules it was measured against', async () => {
   const db = freshDb();
   const e = env(db);
-  db.prepare('INSERT INTO service_offerings (uid, partner_id, category, title) VALUES (?,?,?,?)')
-    .run('so-1', 1, 'design', 'Design system');
+  // OURS_USER, not partner id 1: offerings key on `owner_user_id REFERENCES
+  // users(id)`, and the route reaches them through `users.partner_id` exactly
+  // as migration 200's own backfill does.
+  db.prepare('INSERT INTO service_offerings (uid, owner_user_id, category, title) VALUES (?,?,?,?)')
+    .run('so-1', OURS_USER, 'design', 'Design system');
   rule(db, 1, 'budget_floor', { floor_cents: 1000000 }); // $10,000
 
   // Meets both: the title names the offering, the budget clears the floor.
@@ -788,8 +815,8 @@ test('a score counts the rules it met over the rules it was measured against', a
 test('an exclusion is not a low score, and it quotes the firm’s own sentence', async () => {
   const db = freshDb();
   const e = env(db);
-  db.prepare('INSERT INTO service_offerings (uid, partner_id, category, title) VALUES (?,?,?,?)')
-    .run('so-2', 1, 'design', 'Design system');
+  db.prepare('INSERT INTO service_offerings (uid, owner_user_id, category, title) VALUES (?,?,?,?)')
+    .run('so-2', OURS_USER, 'design', 'Design system');
   rule(db, 1, 'capability_absent', {
     value: 'native mobile',
     statement: 'We do not build native mobile. Honest gap — we say so rather than bidding to learn.',

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CalendarDays, ChevronRight, FileSignature, FileText, RefreshCw, Scale, ShieldCheck, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
+import { NOT_RECORDED, text, titleCase } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
 import './founderRaiseCapital.css';
 import './founderRaiseLegal.css';
@@ -15,8 +16,7 @@ const asList = (value, ...keys) => {
   return [];
 };
 const clean = (value) => String(value ?? '').trim();
-const display = (value, fallback = 'Not recorded') => clean(value) || fallback;
-const pretty = (value) => display(value).replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+const pretty = (value) => titleCase(value) || NOT_RECORDED;
 const formatDate = (value) => {
   if (!value) return 'Date not recorded';
   const parsed = new Date(value);
@@ -105,7 +105,7 @@ export default function FounderRaiseLegal() {
     ...documents.map((document, index) => ({
       id: `document-${document.id || index}`,
       kind: 'document',
-      title: display(document.title || document.name || document.template_name || document.doc_type, 'Untitled legal document'),
+      title: text(document.title || document.name || document.template_name || document.doc_type, 'Untitled legal document'),
       type: pretty(document.doc_type || document.template_name || 'Document'),
       status: pretty(document.status),
       detail: document.signed_at ? `Signed ${formatDate(document.signed_at)}` : clean(document.status).toLowerCase() === 'sent' ? 'Awaiting signature' : 'No signature recorded',
@@ -113,7 +113,7 @@ export default function FounderRaiseLegal() {
     ...compliance.map((event, index) => ({
       id: `compliance-${event.id || index}`,
       kind: 'compliance',
-      title: display(event.title, 'Untitled compliance event'),
+      title: text(event.title, 'Untitled compliance event'),
       type: pretty(event.event_type || 'Compliance'),
       status: clean(event.completion_status).toLowerCase() === 'completed' ? 'Completed' : Number(event.days_until) < 0 ? 'Overdue' : pretty(event.completion_status),
       detail: event.due_date ? `Due ${formatDate(event.due_date)}` : 'Deadline not recorded',
@@ -128,22 +128,12 @@ export default function FounderRaiseLegal() {
         : rows;
   const query = projectId ? `?project_id=${projectId}` : '';
 
-  const chooseProject = (value) => {
-    const id = Number(value);
-    setProjectId(id);
-    setParams((old) => {
-      const next = new URLSearchParams(old);
-      next.set('project_id', String(id));
-      return next;
-    }, { replace: true });
-  };
-
   return <main className="fr-capital" data-testid="founder-raise-legal">
     <div className="fr-capital-shell">
       <section className="fr-capital-main">
         <header className="fr-capital-header">
           <div className="fr-capital-crumb"><Link to={`/raise/status${query}`} data-testid="link-legal-back"><ArrowLeft size={13} /> Raise</Link><span>/</span><strong>Legal</strong></div>
-          <div className="fr-capital-title-row"><div><p className="fr-capital-kicker">Founder / Raise</p><h1>Legal engine</h1><p className="fr-capital-subtitle">Entity, agreements, compliance calendar and signature archive.</p></div>{projects.length > 1 && <label className="fr-capital-picker"><span>Startup</span><select data-testid="select-legal-project" value={projectId || ''} onChange={(event) => chooseProject(event.target.value)}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}</div>
+          <div className="fr-capital-title-row"><div><h1>Legal engine</h1><p className="fr-capital-subtitle">Entity, agreements, compliance calendar and signature archive.</p></div></div>
           <nav className="fr-capital-zone-nav" aria-label="Raise sections"><Link to={`/raise/status${query}`}>Status</Link><Link to={`/raise/pitch${query}`}>Pitch</Link><Link to={`/raise/capital${query}`}>Capital</Link><Link to={`/raise/legal${query}`} className="is-active" data-testid="link-legal-zone">Legal</Link><Link to={`/raise/data-room${query}`}>Data room</Link><span className="fr-capital-zone-disabled">Liquidity unavailable</span></nav>
           <ZoneToolbar
               filters={founderZoneFilters('raise/legal', { value: filter, onChange: setFilter })}
@@ -161,8 +151,8 @@ export default function FounderRaiseLegal() {
 function LegalContent({ project, documents, compliance, trackers, entities, signed, awaiting, openCompliance, overdue, nextDeadline, rows, allRows, errors, filter, setFilter, query }) {
   const entity = entities[0] || null;
   return <div className="fr-capital-content">
-    <div className="fr-capital-context"><div><span className="fr-capital-label">Selected startup</span><strong data-testid="text-legal-project">{display(project.name)}</strong><span>{display(project.sector, 'Sector not recorded')}</span></div><div className="fr-capital-context-right"><span className="fr-capital-label">Entity record</span><strong>{errors.entities ? 'Entity source unavailable' : display(entity?.legal_name || entity?.name, 'No entity recorded')}</strong><span>{errors.entities ? 'Could not read this source' : [entity?.jurisdiction, entity?.entity_type].filter(Boolean).join(' · ') || 'Formation details not recorded'}</span></div></div>
-    <div className="fr-capital-stat-strip"><LegalStat label="Documents" value={errors.documents ? 'Unavailable' : documents.length} note={errors.documents ? 'Document source unavailable' : `${signed.length} signed`} muted={Boolean(errors.documents)} /><LegalStat label="Awaiting signature" value={errors.documents ? 'Unavailable' : awaiting.length} note={errors.documents ? 'Document source unavailable' : 'Sent documents only'} muted={Boolean(errors.documents)} /><LegalStat label="Compliance open" value={errors.compliance ? 'Unavailable' : openCompliance.length} note={errors.compliance ? 'Compliance source unavailable' : `${overdue.length} overdue`} muted={Boolean(errors.compliance)} /><LegalStat label="Next deadline" value={errors.compliance ? 'Unavailable' : (nextDeadline ? formatDate(nextDeadline.due_date) : 'Not recorded')} note={errors.compliance ? 'Compliance source unavailable' : display(nextDeadline?.title, 'No open deadline')} muted={Boolean(errors.compliance) || !nextDeadline} /></div>
+    <div className="fr-capital-context"><div><span className="fr-capital-label">Selected startup</span><strong data-testid="text-legal-project">{text(project.name)}</strong><span>{text(project.sector, 'Sector not recorded')}</span></div><div className="fr-capital-context-right"><span className="fr-capital-label">Entity record</span><strong>{errors.entities ? 'Entity source unavailable' : text(entity?.legal_name || entity?.name, 'No entity recorded')}</strong><span>{errors.entities ? 'Could not read this source' : [entity?.jurisdiction, entity?.entity_type].filter(Boolean).join(' · ') || 'Formation details not recorded'}</span></div></div>
+    <div className="fr-capital-stat-strip"><LegalStat label="Documents" value={errors.documents ? 'Unavailable' : documents.length} note={errors.documents ? 'Document source unavailable' : `${signed.length} signed`} muted={Boolean(errors.documents)} /><LegalStat label="Awaiting signature" value={errors.documents ? 'Unavailable' : awaiting.length} note={errors.documents ? 'Document source unavailable' : 'Sent documents only'} muted={Boolean(errors.documents)} /><LegalStat label="Compliance open" value={errors.compliance ? 'Unavailable' : openCompliance.length} note={errors.compliance ? 'Compliance source unavailable' : `${overdue.length} overdue`} muted={Boolean(errors.compliance)} /><LegalStat label="Next deadline" value={errors.compliance ? 'Unavailable' : (nextDeadline ? formatDate(nextDeadline.due_date) : 'Not recorded')} note={errors.compliance ? 'Compliance source unavailable' : text(nextDeadline?.title, 'No open deadline')} muted={Boolean(errors.compliance) || !nextDeadline} /></div>
     <section className="fr-capital-card fr-capital-ledger">
       <div className="fr-capital-card-head"><div><FileText size={16} /><h2>Document library</h2></div><span>{allRows.length} source record{allRows.length === 1 ? '' : 's'} · audit fields only</span></div>
       {/* Its four filters are the zone header's now, where the canvas

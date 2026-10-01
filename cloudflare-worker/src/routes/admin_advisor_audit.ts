@@ -2,8 +2,12 @@
  * Task #4 (AW) L6 — Admin reader for advisor_turn_audit.
  *
  * Mounted at /api/admin/advisor-audit. Every endpoint gates on
- * requireAdmin. Writes (clear-shadow, lock/unlock) log to activity_logs
- * with the hashed-actor pattern (T22.1).
+ * requireAdmin. Writes (clear-shadow, lock/unlock) go through the shared
+ * `logAdminAction` (services/adminAudit.ts), which records them in BOTH
+ * activity_logs — the hashed-actor pattern (T22.1) — and admin_audit_log,
+ * which is what HQ's governance feed reads. This file's own copy of that
+ * helper wrote only the first, so until D159 an admin clearing a shadow flag
+ * or locking an advisor left no trace on H7.
  *
  *   GET  /                           → recent audit rows (?flagged=1, ?limit=50)
  *   GET  /user/:userId               → per-user audit + current lock/shadow state
@@ -13,7 +17,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAdmin } from '../auth';
-import { hashEmail } from '../util/hashEmail';
+import { logAdminAction } from '../services/adminAudit';
 import { ensureAuditSchema, ensureGuardrailColumns } from '../services/advisor/guardrails';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -32,19 +36,6 @@ interface AuditRow {
   refusal_reason: string | null;
   shadow_flagged: number;
   created_at: string;
-}
-
-async function logAdminAction(
-  env: Env, adminUserId: number, adminEmail: string, action: string, details: Record<string, unknown>,
-): Promise<void> {
-  try {
-    const actor = await hashEmail(adminEmail || '');
-    await env.DB.prepare(
-      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
-    ).bind(action, JSON.stringify(details), actor, adminUserId).run();
-  } catch (e) {
-    console.warn('[admin_advisor_audit] activity log:', (e as Error).message);
-  }
 }
 
 r.get('/', async (c) => {

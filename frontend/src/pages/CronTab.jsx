@@ -4,15 +4,26 @@ import { api } from '../lib/api';
 
 const PAGE_SIZE = 50;
 
+/**
+ * D201 — two statuses a tick writes when it finds the queue lease held:
+ * `deduped` (a tick scheduled for the same minute holds the lease and runs the
+ * minute) reads as done, and `skipped` (the holder was scheduled for another
+ * minute, so this minute's work ran nowhere) reads as failed. One table of
+ * statuses, read by the icon and the label alike, so the two cannot disagree.
+ */
+const DONE = new Set(['completed', 'ok', 'deduped']);
+const NOT_DONE = new Set(['failed', 'error', 'skipped']);
+
 function StatusIcon({ status }) {
-  if (status === 'completed' || status === 'ok') return <CheckCircle size={14} className="text-emerald-600" />;
-  if (status === 'failed' || status === 'error') return <XCircle size={14} className="text-red-600" />;
+  if (DONE.has(status)) return <CheckCircle size={14} className="text-emerald-600" />;
+  if (NOT_DONE.has(status)) return <XCircle size={14} className="text-red-600" />;
   return <AlertCircle size={14} className="text-amber-600" />;
 }
 
 export default function CronTab() {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
+  const [retentionDays, setRetentionDays] = useState(null);
   const [offset, setOffset] = useState(0);
   const [trigger, setTrigger] = useState('');
   const [triggers, setTriggers] = useState([]);
@@ -32,6 +43,7 @@ export default function CronTab() {
       if (cr.status === 'fulfilled') {
         setItems(cr.value.items || []);
         setTotal(cr.value.total || 0);
+        setRetentionDays(Number.isInteger(cr.value.retention_days) ? cr.value.retention_days : null);
         setTriggers(cr.value.triggers || []);
       }
       if (ws.status === 'fulfilled') setWsCheck(ws.value);
@@ -129,7 +141,11 @@ export default function CronTab() {
           <div className="flex items-center gap-2">
             <Clock size={18} className="text-violet-600" />
             <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Cron run history</h2>
-            <span className="text-xs text-gray-500">{total} run(s)</span>
+            {/* D237 — the table keeps a retention window, so the count is
+                not all-time; the window comes from the worker. */}
+            <span className="text-xs text-gray-500" data-testid="cron-history-total">
+              {total} run(s){retentionDays ? ` in the last ${retentionDays} days (older runs are pruned; each trigger's newest run is kept)` : ''}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <input
@@ -174,7 +190,7 @@ export default function CronTab() {
                     <td>
                       <span className="inline-flex items-center gap-1">
                         <StatusIcon status={it.status} />
-                        <span className={it.status === 'completed' ? 'text-emerald-700' : it.status === 'failed' ? 'text-red-700' : 'text-amber-700'}>
+                        <span className={DONE.has(it.status) ? 'text-emerald-700' : NOT_DONE.has(it.status) ? 'text-red-700' : 'text-amber-700'}>
                           {it.status}
                         </span>
                       </span>
@@ -199,7 +215,7 @@ export default function CronTab() {
             <button
               onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
               disabled={offset === 0 || busy}
-              className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 rounded-lg flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
             >
               <ChevronLeft size={14} /> Previous
             </button>
@@ -207,7 +223,7 @@ export default function CronTab() {
             <button
               onClick={() => setOffset(offset + PAGE_SIZE)}
               disabled={offset + PAGE_SIZE >= total || busy}
-              className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 rounded-lg flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
             >
               Next <ChevronRight size={14} />
             </button>

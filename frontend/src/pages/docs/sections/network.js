@@ -106,7 +106,7 @@ export default {
       howto: [
         'Open Relationships from the sidebar.',
         'Browse contacts by name, role, or last interaction.',
-        'Add private notes on any contact — only you see them.',
+        'On the investor relationship book, add a private note on a tie — only you see it.',
         'Use the "Request intro" action to ask a mutual contact for a warm introduction.',
       ],
       tips: [

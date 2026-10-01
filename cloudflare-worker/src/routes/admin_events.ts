@@ -2,8 +2,8 @@
  * Task #39 — Event engine: admin routes (design §8.3).
  *
  * Mounted at /api/admin/events, BEFORE the catch-all /api/admin router (same
- * mount-before-catch-all precedence as admin_news / admin_articles). Every
- * handler is requireAdmin; mutating actions append to admin_audit_log with
+ * mount-before-catch-all precedence as admin_articles). Every handler is
+ * requireAdmin; mutating actions append to admin_audit_log with
  * report_type='events' (the audit writer mirrors admin_telegram.ts, tolerating
  * the optional `actor` column).
  *
@@ -13,7 +13,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin } from '../auth';
+import { requireAdmin, requireBranchNotSuspended } from '../auth';
 import { notify } from '../services/notify';
 import { ensureEventsSchema } from '../services/eventsSchema';
 import { shapeEvent } from '../services/eventsCommon';
@@ -208,6 +208,10 @@ adminEvents.get('/:id', async (c) => {
 adminEvents.post('/:id/approve', async (c) => {
   const a = await admin(c);
   if (a instanceof Response) return a;
+  // D142 — a suspended branch cannot put anything NEW under the brand. The
+  // gate is after the admin check, so an anonymous caller still gets 401
+  // rather than learning the licence state.
+  await requireBranchNotSuspended(c);
   const id = intParam(c.req.param('id'));
   if (!id) return c.json({ error: 'not_found' }, 404);
   const event = await loadEvent(c.env, id);
@@ -287,6 +291,10 @@ adminEvents.post('/:id/unpublish', async (c) => {
 adminEvents.post('/:id/feature', async (c) => {
   const a = await admin(c);
   if (a instanceof Response) return a;
+  // D142 — a suspended branch cannot put anything NEW under the brand. The
+  // gate is after the admin check, so an anonymous caller still gets 401
+  // rather than learning the licence state.
+  await requireBranchNotSuspended(c);
   const id = intParam(c.req.param('id'));
   if (!id) return c.json({ error: 'not_found' }, 404);
   const event = await loadEvent(c.env, id);

@@ -1,8 +1,8 @@
 /**
  * Task #1 — Public photo proxy for network_profiles.
  *
- * Mounted at /api/public so it bypasses the /api/admin/* CF-Access
- * perimeter. Only serves active profiles. The FILES R2 bucket stays
+ * Mounted at /api/public, outside the auth layer and the admin routers'
+ * gates. Only serves active profiles. The FILES R2 bucket stays
  * private — bytes flow through the Worker.
  */
 import { Hono } from 'hono';

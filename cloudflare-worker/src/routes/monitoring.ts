@@ -5,6 +5,7 @@ import { requireAuth, requireAdmin } from '../auth';
 import type { ScoreSnapshotRow, AnomalyFlag } from '../services/scoreIntegrity';
 import analytics from './monitoring_analytics';
 import { loadAiUsageReport } from '../services/aiRouter';
+import { refuse } from '../util/refusal';
 
 const monitoring = new Hono<{ Bindings: Env }>();
 
@@ -22,7 +23,7 @@ monitoring.get('/ai-usage', async (c) => {
     const report = await loadAiUsageReport(c.env, days);
     return c.json(report);
   } catch (e) {
-    return c.json({ error: (e as Error).message || 'failed to load ai usage' }, 500);
+    return refuse(c, 500, { code: 'ai_usage_unreadable', message: 'AI usage could not be read. This is not a claim that there was none; try again in a moment.', raw: e });
   }
 });
 
@@ -251,6 +252,19 @@ Detected anomalies: ${anomalies.length === 0 ? 'none' : anomalies.map(a => `${a.
 });
 
 // ---------- /throughput (operator-visible limited stats) ----------
+//
+// THE WIDER GATE IS DELIBERATE, AND D156 ALREADY RULED ON IT — twice re-opened
+// as "the one route in this file that is not requireAdmin", so the reason is
+// written here rather than re-derived a third time. Its nine siblings are
+// `requireAdmin` because they return per-user, per-firm or per-branch figures.
+// This one returns two bare COUNT(*)s over a one-hour window with no user,
+// firm or branch attribution, so it never reaches the cross-admin shape D133's
+// rule covers. Widening the gate would cost partner and investor operators a
+// figure that discloses nothing about anyone.
+//
+// Its SPA method was deleted in D167: `api.monitoringThroughput` had zero
+// callers. The route stays because the figures are real and operator-facing;
+// a reader can be added without touching this gate.
 monitoring.get('/throughput', async (c) => {
   const user = await requireAuth(c);
   if (user.role !== 'admin' && user.role !== 'partner' && user.role !== 'investor') {

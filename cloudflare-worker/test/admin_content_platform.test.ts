@@ -5,15 +5,22 @@
  * pipeline replacing three systems", and checking that premise before
  * building is what shaped both endpoints:
  *
- *   - News is NOT a third system. `admin_news.ts` reads the same `articles`
- *     table and already answers with a Deprecation header. A third of the
- *     unification has happened; reporting it as outstanding would be wrong
+ *   - News is NOT a third system. The `/api/admin/news` queue read the same
+ *     `articles` table behind a Deprecation header, and D166 retired it
+ *     outright — it accepted `in_review` at publish, so the approval gate on
+ *     `/api/admin/articles` could be walked around by calling it. A third of
+ *     the unification is DONE; reporting it as outstanding would be wrong
  *     about the repo's own state.
  *   - The master template library the artboard draws in this zone already
  *     exists at `/admin/contracts`. Two pages over one store drift apart, so
  *     this one points rather than rebuilds.
- *   - Feature flags have no store at all. What is called flags is per-user
- *     settings, which is a preference and not an operator switch.
+ *   - Feature flags. This header first said there was no store at all and
+ *     that what is called flags is per-user settings; D202 found the second
+ *     half false (MI_FLAG_* and DD_FLAG_* are platform switches set at
+ *     deploy), and D203 the first — `platform_switches` (migration 283) is an
+ *     operator store for the one switch HQ can throw. The switches and the
+ *     H17 consoles are held by platform_consoles_d202.test.ts, the store by
+ *     operator_switches_d203.test.ts.
  *
  * So most of what follows asserts a figure is ABSENT with its reason, or
  * that a count is computed from the store rather than assumed — the two
@@ -28,6 +35,10 @@ import { SignJWT } from 'jose';
 
 import content from '../src/routes/admin_content.ts';
 import platform from '../src/routes/admin_platform.ts';
+import {
+  CRON_TRIGGERS, STALE_GRACE_MINUTES, leaseHolderValue, recordLeaseHeldFire, writeCronRunHistory,
+} from '../src/util/cronHistory.ts';
+import { sqlStamp } from '../src/util/cronSchedule.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const SUPER = 801;
@@ -180,7 +191,20 @@ test('publications are reported as the SECOND vocabulary, not merged into the fi
   assert.match(String(r.body.unified_pipeline_reason), /two stores with two meanings/);
   // And the reason says the part that is already done, or the page misreports
   // the repo's own state as worse than it is.
-  assert.match(String(r.body.unified_pipeline_reason), /News is no longer a third/);
+  //
+  // D166 RE-AIMED THIS, and finding it was the point. Two files assert this
+  // premise against the same live response STRING — here and
+  // frontend/test/hq_content_platform_h6.test.mjs — and a third asserted it
+  // by reading routes/admin_news.ts, which the delete made throw ENOENT.
+  // Only that third one fails loudly when the router goes. These two keep
+  // passing on whatever the sentence happens to say, so had the wording not
+  // moved with the delete, the product would have gone on telling operators
+  // that a router which no longer exists "already answers with a Deprecation
+  // header". The assertion now pins the retirement and explicitly refuses
+  // the alias wording, so it cannot drift back.
+  assert.match(String(r.body.unified_pipeline_reason), /News is not a third/);
+  assert.doesNotMatch(String(r.body.unified_pipeline_reason), /Deprecation header pointing at/,
+    'the reason describes admin_news as a live deprecated alias again');
 });
 
 test('the template library is pointed at, not rebuilt', async () => {
@@ -193,11 +217,34 @@ test('the template library is pointed at, not rebuilt', async () => {
     'the summary does not say which page owns the library');
 });
 
-test('localisation is refused, with its own reason', async () => {
+test('localisation is counted from what branches send, and the reason names what still is not recorded', async () => {
+  // NARROWED IN D112, NOT LIFTED. The refusal used to cover three absences —
+  // no localisation link, no brand-approval state, no per-subsidiary
+  // attribution. Two of them acquired a store (a content escalation carries
+  // its branch code and takes a decision), so this assertion moved with the
+  // sentence rather than being deleted.
+  //
+  // RE-AIMED IN D275, NOT RELAXED. The third acquired a store too: a content
+  // escalation that names an item records whether it localises it (migration
+  // 296), and the board's Localisation lane counts that. So the payload says
+  // localisation is available — and the reason, which stays, must name the two
+  // things that are still not recorded rather than the link that now is.
   const db = freshDb();
   const r = await call(content, db, SUPER);
-  assert.equal(r.body.localisation_available, false);
-  assert.match(String(r.body.localisation_reason), /no localisation link/);
+  assert.equal(r.body.localisation_available, true);
+  const reason = String(r.body.localisation_reason);
+  assert.match(reason, /localisation of another/,
+    'the reason stopped saying a pre-296 row is never counted as a localisation');
+  assert.match(reason, /raised before that was recorded/,
+    'the reason no longer says rows older than the relation are not recorded');
+  assert.match(reason, /localises in its own database without sending it to HQ/,
+    'the reason no longer says a branch-local localisation is invisible here');
+  assert.doesNotMatch(reason, /What is still not recorded is the RELATION/,
+    'the reason still says the relation is not recorded, which D275 made false');
+  assert.doesNotMatch(String(r.body.localisation_reason), /no brand-approval state/,
+    'the reason still claims there is no brand-approval state, which D112 made false');
+  assert.equal(r.body.localisation_lane_endpoint, '/api/admin/escalations?kind=content',
+    'the summary does not point at the lane that closed the other two absences');
   assert.equal(r.body.localised, undefined, 'a localisation count appeared');
   assert.equal(r.body.derived_metrics_available, false, 'per-subsidiary content is not U1-gated');
 });
@@ -246,36 +293,76 @@ test('integrations are grouped by provider and state, and no secret is read', as
   }
 });
 
-test('a job is failed, stale or running — three states, not one bucket', async () => {
+test('each DECLARED trigger is read against its own schedule, from rows the writers wrote', async () => {
+  // D201 — RE-AIMED. This test used to insert ISO strings under invented
+  // trigger names and assert a 26-hour window. ISO is not the format the
+  // writer stores, so the test agreed with the bug it should have caught: on
+  // the same date ' ' sorts before 'T', and a fresh daily run read as stale.
+  // Rows now come from the production writers themselves, under the declared
+  // expressions, so the format under test is the format that ships.
   const db = freshDb();
-  const ins = db.prepare(
-    'INSERT INTO cron_run_history (trigger_name, started_at, finished_at, status, error) VALUES (?, ?, ?, ?, ?)',
-  );
-  const now = new Date().toISOString();
-  const old = new Date(Date.now() - 72 * 3600_000).toISOString();
-  ins.run('nightly-ok', now, now, 'ok', null);
-  ins.run('nightly-broken', now, now, 'error', 'boom');
-  ins.run('nightly-silent', old, old, 'ok', null);
-  ins.run('nightly-running', now, null, 'started', null);
+  const env = { DB: makeD1(db) } as any;
+  const now = Date.now();
+  const ago = (min: number) => sqlStamp(now - min * 60_000);
+  await writeCronRunHistory(env, { triggerName: '* * * * *', startedAt: ago(2), cronError: null, summary: [] });
+  await writeCronRunHistory(env, { triggerName: '0 3 * * *', startedAt: ago(0), cronError: 'boom', summary: [] });
+  await writeCronRunHistory(env, { triggerName: '0 */6 * * *', startedAt: ago(8 * 24 * 60), cronError: null, summary: [] });
+  // '0 4 * * *' has no row at all.
+  await recordLeaseHeldFire(env, {
+    triggerName: '0 9 * * *', scheduledTime: now, holder: leaseHolderValue('a', now, '* * * * *'),
+  });
+  await recordLeaseHeldFire(env, {
+    triggerName: '0 9 * * 2', scheduledTime: now, holder: leaseHolderValue('b', now - 60_000, '* * * * *'),
+  });
+  // A name no deployment declares is not a job HQ runs, however recent.
+  await writeCronRunHistory(env, { triggerName: 'nightly-legacy', startedAt: ago(0), cronError: null, summary: [] });
 
   const r = await call(platform, db, SUPER);
-  const by = Object.fromEntries(r.body.jobs.triggers.map((j: any) => [j.trigger_name, j.state]));
-  assert.equal(by['nightly-ok'], 'ok');
-  assert.equal(by['nightly-broken'], 'failed');
-  assert.equal(by['nightly-silent'], 'stale', 'a trigger that stopped firing reads as healthy');
-  assert.equal(by['nightly-running'], 'running', 'an unfinished run reads as a failure');
-  assert.equal(r.body.jobs.failing, 1);
-  assert.equal(r.body.jobs.stale, 1);
-  assert.equal(r.body.jobs.stale_after_hours, 26, 'the staleness window is not stated in the payload');
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const jobs = r.body.jobs;
+  assert.deepEqual(jobs.triggers.map((j: any) => j.trigger_name), CRON_TRIGGERS.map((t) => t.expr),
+    'the list is not the declared triggers, in their declared order');
+  const by = Object.fromEntries(jobs.triggers.map((j: any) => [j.trigger_name, j]));
+  assert.equal(by['* * * * *'].state, 'ok');
+  assert.equal(by['* * * * *'].name, 'scheduled', 'the display name is missing');
+  assert.equal(by['0 3 * * *'].state, 'failed');
+  assert.equal(by['0 3 * * *'].error, 'boom');
+  assert.equal(by['0 */6 * * *'].state, 'stale', 'a trigger that stopped firing reads as healthy');
+  assert.equal(by['0 4 * * *'].state, 'never', 'a trigger with no row at all is not reported as such');
+  assert.equal(by['0 4 * * *'].last_started_at, null);
+  assert.equal(by['0 9 * * *'].state, 'ok', 'a minute run by the concurrent tick read as a failure');
+  assert.equal(by['0 9 * * *'].status, 'deduped');
+  assert.equal(by['0 9 * * 2'].state, 'failed', 'a minute that ran nowhere read as healthy');
+  assert.match(String(by['0 9 * * 2'].error), /this tick ran nothing/);
+  for (const j of jobs.triggers) {
+    assert.match(String(j.expected_at), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:00$/, `${j.trigger_name} has no expected time`);
+  }
+  assert.ok(!by['nightly-legacy'], 'an undeclared trigger name was listed as a job');
+  assert.equal(jobs.failing, 2);
+  assert.equal(jobs.stale, 1);
+  assert.equal(jobs.never, 1);
+  assert.equal(jobs.grace_minutes, STALE_GRACE_MINUTES, 'the grace is not stated in the payload');
+  assert.equal(jobs.stale_after_hours, undefined, 'the one-window-for-every-cadence figure came back');
 });
 
-test('flags are refused: per-user settings are not a platform switch', async () => {
+test('flags are no longer refused: the switches carry the operator store (D203)', async () => {
+  // This test pinned `flags_available: false` and a reason saying no store
+  // existed. D203 built one and retired the pair; per-user settings still are
+  // not a platform switch, and nothing here turns one into a flag.
   const db = freshDb();
   const r = await call(platform, db, SUPER);
-  assert.equal(r.body.flags_available, false);
-  assert.match(String(r.body.flags_reason), /no feature-flag store/);
-  assert.match(String(r.body.flags_reason), /per-user settings/);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.flags_available, undefined, 'the retired flags pair came back');
+  assert.equal(r.body.flags_reason, undefined, 'the retired flags pair came back');
   assert.equal(r.body.flags, undefined, 'a flags list appeared');
+  // THIS FIXTURE HAS NO `platform_switches`, which is what a database that has
+  // not applied 283 looks like — so the switch the store backs reads
+  // unreadable with the store's own reason, never "off".
+  const eadwyn = r.body.switches.items.find((sw: any) => sw.key === 'eadwyn_off');
+  assert.ok(eadwyn, 'the Eadwyn switch is not listed');
+  assert.equal(eadwyn.state, 'unreadable', 'an uncreated store read as a switch nobody threw');
+  assert.equal(eadwyn.operator.available, false);
+  assert.match(String(eadwyn.operator.reason), /has not been created on this database yet/);
 });
 
 test('an unreadable platform store says so and leaves the other alone', async () => {

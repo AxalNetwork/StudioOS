@@ -15,6 +15,9 @@ import { requireAuth } from '../auth';
 import { ensureProfileExpansionSchema } from '../services/profileExpansion';
 import { ensureFollowsSchema } from './follows';
 import { kvGetJSON, kvPutJSON, createL1 } from '../kv';
+import { bindingKey } from '../util/schemaBootstrap';
+import { likeNeedleLower } from '../util/likeSearch';
+import { refuse } from '../util/refusal';
 
 const publicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -75,13 +78,13 @@ publicRoutes.get('/stats', async (c) => {
 // makes this idempotent on prod too. Cached per isolate to avoid
 // re-executing on every request.
 // ------------------------------------------------------------------
-let _marketingSchemaReady = false;
+const MARKETING_SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureMarketingSchema(env: Env): Promise<void> {
-  if (_marketingSchemaReady) return;
+  if (MARKETING_SCHEMA_READY.get(bindingKey(env))) return;
   // Production migrations own these tables. A cold status read must not run a
   // five-statement DDL batch before returning its public health information.
   if (env.ENVIRONMENT === 'production') {
-    _marketingSchemaReady = true;
+    MARKETING_SCHEMA_READY.set(bindingKey(env), true);
     return;
   }
   try {
@@ -127,7 +130,7 @@ async function ensureMarketingSchema(env: Env): Promise<void> {
         PRIMARY KEY (day, path)
       )`),
     ]);
-    _marketingSchemaReady = true;
+    MARKETING_SCHEMA_READY.set(bindingKey(env), true);
   } catch {
     // Best-effort — main endpoints handle missing-table errors gracefully.
   }
@@ -148,7 +151,12 @@ const _PROFILE_DEFAULTS: Record<string, Record<string, boolean>> = {
   admin: { name: true, bio: true, headshot: true, socials: false, background: true },
 };
 
-function effectiveFlags(privacyPrefs: any, role: string): Record<string, boolean> {
+/**
+ * Which profile fields a member shows, after their own privacy_prefs.
+ * Exported (D414) so the Messages counterparty card applies the SAME rules as
+ * this public card rather than a copy of them.
+ */
+export function effectiveFlags(privacyPrefs: any, role: string): Record<string, boolean> {
   const base = { ...(_PROFILE_DEFAULTS[role] || _PROFILE_DEFAULTS.admin) };
   const pp = (safeJsonParse<any>(privacyPrefs, {}) || {}).public_profile || {};
   if (pp && typeof pp === 'object') {
@@ -400,7 +408,9 @@ publicRoutes.get('/partners', async (c) => {
   const params: any[] = [];
   let where = `status = 'active' AND directory_listed = 1`;
   if (q) {
-    const like = `%${q.replace(/[%_]/g, (m) => `\\${m}`)}%`;
+    // `1`, not the helper's default: this search accepts a single character
+    // today and D128 is a de-duplication, not a behaviour change.
+    const like = likeNeedleLower(q, 1)!;
     where += ` AND (lower(name) LIKE ? ESCAPE '\\' OR lower(coalesce(company, '')) LIKE ? ESCAPE '\\' OR lower(coalesce(specialization, '')) LIKE ? ESCAPE '\\')`;
     params.push(like, like, like);
   }
@@ -756,7 +766,7 @@ publicRoutes.post('/roadmap/votes', async (c) => {
       `INSERT OR IGNORE INTO roadmap_votes (user_id, item_id) VALUES (?, ?)`,
     ).bind(user.id, itemId).run();
   } catch (ex) {
-    return c.json({ detail: 'could not record vote', error: String(ex) }, 500);
+    return refuse(c, 500, { code: 'vote_failed', message: 'Your vote could not be recorded. Try again in a moment.', raw: ex });
   }
   return c.json({ ok: true, item_id: itemId });
 });
@@ -772,7 +782,7 @@ publicRoutes.delete('/roadmap/votes', async (c) => {
       `DELETE FROM roadmap_votes WHERE user_id = ? AND item_id = ?`,
     ).bind(user.id, itemId).run();
   } catch (ex) {
-    return c.json({ detail: 'could not remove vote', error: String(ex) }, 500);
+    return refuse(c, 500, { code: 'unvote_failed', message: 'Your vote could not be removed. Try again in a moment.', raw: ex });
   }
   return c.json({ ok: true, item_id: itemId });
 });
@@ -827,7 +837,7 @@ publicRoutes.post('/demo-request', async (c) => {
     ).bind(topic, name, email, company || null, message || null).run();
     insertedId = (r.meta?.last_row_id as number) || null;
   } catch (ex) {
-    return c.json({ detail: 'could not record request', error: String(ex) }, 500);
+    return refuse(c, 500, { code: 'request_failed', message: 'Your request could not be recorded. Try again in a moment.', raw: ex });
   }
 
   // Email the lead a confirmation out-of-band. Uses sendRawEmail rather
@@ -926,7 +936,7 @@ publicRoutes.post('/demo-request', async (c) => {
 
 // ---------- admin: status incident management ----------------------
 // These are auth-gated inside the handler (role === 'admin'). The
-// /api/public mount-point skips cfAccess + auth middleware, so we
+// /api/public mount-point runs no auth middleware, so we
 // re-check the caller here.
 
 async function requireAdminInline(c: Parameters<typeof requireAuth>[0]) {

@@ -86,7 +86,7 @@ async function computeScore(env: Env, projectId: number): Promise<{ score: numbe
   const thirty = new Date(Date.now() - 30 * 86400000).toISOString();
   const a = await env.DB.prepare(
     `SELECT COUNT(*) AS c FROM activity_logs
-     WHERE created_at >= ? AND (
+     WHERE datetime(created_at) >= datetime(?) AND (
        details LIKE ('%project=' || ? || '%') OR details LIKE ('%project_id=' || ? || '%')
      )`
   ).bind(thirty, projectId, projectId).first<{ c: number }>().catch(() => null);
@@ -335,6 +335,97 @@ async function projectTeamUserIds(env: Env, project: { id: number; founder_id: n
   }
   return [...ids].sort((a, b) => a - b);
 }
+
+// ---------------------------------------------------------------------------
+// D464 — the chase (canvas IP2's "Chase all overdue", and the Portfolio
+// canvas's per-company Nudge — the same act). An investor asks a silent
+// company for its update; the chase is LOGGED (migration 337) and the founder
+// is notified. The notification type's settings row is Session 4's to add;
+// notify() delivers without it (channels default on, Slack falls through).
+// ---------------------------------------------------------------------------
+
+r.get('/chases', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!isAdmin(user) && !isInvestor(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const visible = await visibleProjectIds(c, user);
+    if (visible != null && visible.length === 0) return c.json({ items: [] });
+    // An investor reads their own chases; an admin reads the log. Either way
+    // the project scope still applies — a chase names a company.
+    const rows = await c.env.DB.prepare(
+      `SELECT ch.uid, ch.project_id, ch.chased_by, ch.created_at,
+              p.name AS project_name, u.name AS chased_by_name
+         FROM portfolio_update_chases ch
+         LEFT JOIN projects p ON p.id = ch.project_id
+         LEFT JOIN users u ON u.id = ch.chased_by
+        WHERE (? IS NULL OR ch.chased_by = ?)
+        ORDER BY ch.created_at DESC LIMIT 500`
+    ).bind(isAdmin(user) ? null : user.id, user.id).all<any>();
+    const items = (rows.results || []).filter((r: any) => visible == null || visible.includes(Number(r.project_id)));
+    return c.json({ items });
+  } catch (e) { return mapError(c, e); }
+});
+
+r.post('/chase', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!isAdmin(user) && !isInvestor(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const body = await c.req.json().catch(() => ({} as any));
+    const ids: number[] = Array.isArray(body?.project_ids)
+      ? [...new Set<number>((body.project_ids as any[]).map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0))]
+      : [];
+    if (!ids.length) {
+      return c.json({ error: 'chase_targets_required', message: 'Name the companies to chase.' }, 400);
+    }
+    const visible = await visibleProjectIds(c, user);
+    const chased: any[] = [];
+    const skipped: number[] = [];
+    for (const pid of ids.slice(0, 100)) {
+      // The tenancy gate is on the project, not on the page's overdue list.
+      if (visible != null && !visible.includes(pid)) { skipped.push(pid); continue; }
+      const project = await c.env.DB.prepare('SELECT id, uid, name, founder_id FROM projects WHERE id = ? AND deleted_at IS NULL')
+        .bind(pid).first<any>();
+      if (!project) { skipped.push(pid); continue; }
+      // A repeat chase inside the hour answers the existing row rather than
+      // re-notifying the founder — a double-click is not a second ask.
+      const recent = await c.env.DB.prepare(
+        `SELECT uid, created_at FROM portfolio_update_chases
+          WHERE project_id = ? AND chased_by = ? AND created_at > datetime('now', '-1 hour')
+          ORDER BY created_at DESC LIMIT 1`
+      ).bind(pid, user.id).first<any>();
+      if (recent) {
+        chased.push({ project_id: pid, uid: recent.uid, created_at: recent.created_at, already: true });
+        continue;
+      }
+      const uid = newUid();
+      const at = nowIso();
+      await c.env.DB.prepare(
+        'INSERT INTO portfolio_update_chases (uid, project_id, chased_by, created_at) VALUES (?, ?, ?, ?)'
+      ).bind(uid, pid, user.id, at).run();
+      chased.push({ project_id: pid, uid, created_at: at, already: false });
+      // The founder behind the project is notified. Best-effort: the chase
+      // row is the record, and a failed notify must not unwrite it.
+      try {
+        const founders = await c.env.DB.prepare('SELECT id FROM users WHERE founder_id = ? AND is_active = 1')
+          .bind(project.founder_id).all<any>();
+        const { notify } = await import('../services/notify');
+        for (const f of (founders.results || [])) {
+          await notify(c.env, {
+            userId: f.id,
+            type: 'portfolio_update_chase',
+            title: `Update requested${project.name ? ` for ${project.name}` : ''}`,
+            body: 'Your investor is asking for this period’s update.',
+            link: '/build/metrics',
+            payload: { project_id: pid },
+            channels: ['in_app', 'email'],
+            category: 'portfolio',
+          });
+        }
+      } catch (e) { console.warn('[portfolio] chase notify failed', (e as any)?.message); }
+    }
+    return c.json({ chased, skipped });
+  } catch (e) { return mapError(c, e); }
+});
 
 r.get('/coverage', async (c) => {
   try {

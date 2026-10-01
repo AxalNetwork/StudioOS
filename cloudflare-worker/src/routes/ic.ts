@@ -47,6 +47,12 @@ export type VoteRow = {
   created_at: string; user_name: string | null;
 };
 
+export type ConditionRow = {
+  uid: string; body: string; status: string;
+  created_by: number; created_at: string;
+  resolved_at: string | null; resolved_by: number | null;
+};
+
 function canUseIc(user: User): boolean {
   return isAdmin(user) || isInvestor(user) || isPartner(user);
 }
@@ -95,7 +101,7 @@ async function loadDecision(env: Env, user: User, uid: string): Promise<Decision
  */
 export async function scopedDecisions(
   env: Env, user: User, limit = 100,
-): Promise<Array<DecisionRow & { votes: VoteRow[] }>> {
+): Promise<Array<DecisionRow & { votes: VoteRow[]; conditions: ConditionRow[] }>> {
   const scope = icDecisionScope(user);
   const where = scope.sql;
   // `limit` is a clamped integer from this module's own callers, never from a
@@ -103,23 +109,34 @@ export async function scopedDecisions(
   const rows = await env.DB.prepare(
     `SELECT d.* FROM ic_decisions d WHERE ${where} ORDER BY d.updated_at DESC LIMIT ?`
   ).bind(...scope.binds, Math.max(1, Math.min(500, Math.trunc(limit)))).all<DecisionRow>();
-  const out: Array<DecisionRow & { votes: VoteRow[] }> = [];
+  const out: Array<DecisionRow & { votes: VoteRow[]; conditions: ConditionRow[] }> = [];
   for (const d of ((rows.results || []) as DecisionRow[])) {
     const votes = await env.DB.prepare(
       `SELECT v.vote, v.rationale, v.user_id, v.created_at, u.name AS user_name
          FROM ic_votes v LEFT JOIN users u ON u.id = v.user_id
         WHERE v.ic_decision_id = ? ORDER BY v.created_at ASC`
     ).bind(d.id).all<VoteRow>();
-    out.push({ ...d, votes: (votes.results || []) as VoteRow[] });
+    // The conditions ride the same read: a condition is visible exactly when
+    // its decision is, so no second predicate exists to forget.
+    const conditions = await env.DB.prepare(
+      `SELECT uid, body, status, created_by, created_at, resolved_at, resolved_by
+         FROM ic_conditions WHERE ic_decision_id = ? ORDER BY created_at ASC`
+    ).bind(d.id).all<ConditionRow>();
+    out.push({ ...d, votes: (votes.results || []) as VoteRow[], conditions: (conditions.results || []) as ConditionRow[] });
   }
   return out;
 }
 
-async function tally(env: Env, decisionId: number): Promise<{ yes: number; no: number; abstain: number }> {
+async function tally(env: Env, decisionId: number): Promise<{ yes: number; no: number; abstain: number; recused: number }> {
   const rows = await env.DB.prepare(
     'SELECT vote, COUNT(*) AS n FROM ic_votes WHERE ic_decision_id = ? GROUP BY vote'
   ).bind(decisionId).all<{ vote: string; n: number }>();
-  const out = { yes: 0, no: 0, abstain: 0 };
+  // A RECUSAL IS COUNTED BESIDE THE TALLY, NEVER IN IT. The voter declared a
+  // conflict and leaves the yes/no/abstain denominator — an abstention is a
+  // vote cast and stays in it. The two were one value before `recused`
+  // joined the vocabulary, which is the conflation the ID3 artboard's note
+  // is written against.
+  const out = { yes: 0, no: 0, abstain: 0, recused: 0 };
   for (const row of (rows.results || [])) {
     if (row.vote in out) (out as any)[row.vote] = Number(row.n) || 0;
   }
@@ -151,6 +168,17 @@ async function dto(env: Env, d: DecisionRow, opts: { votes?: boolean } = {}): Pr
         WHERE v.ic_decision_id = ? ORDER BY v.created_at ASC`
     ).bind(d.id).all<any>();
     base.votes = votes.results || [];
+    // The decision's conditions (migration 334), oldest first — the record a
+    // later stage checks.
+    const conditions = await env.DB.prepare(
+      `SELECT cond.uid, cond.body, cond.status, cond.created_by, cond.created_at,
+              cond.resolved_at, cond.resolved_by, cu.name AS created_by_name, ru.name AS resolved_by_name
+         FROM ic_conditions cond
+         LEFT JOIN users cu ON cu.id = cond.created_by
+         LEFT JOIN users ru ON ru.id = cond.resolved_by
+        WHERE cond.ic_decision_id = ? ORDER BY cond.created_at ASC`
+    ).bind(d.id).all<any>();
+    base.conditions = conditions.results || [];
   }
   return base;
 }
@@ -281,18 +309,22 @@ r.post('/', async (c) => {
 // What is missing is a SCREEN, which is a much narrower claim and the one the
 // table now makes.
 //
-// WHAT THE ARTBOARD DRAWS THAT NO STORE HOLDS, reported rather than invented:
-// recusal, conditions, quorum and minutes. Each is returned as an explicit
-// unavailable-with-reason rather than omitted, so the page states the gap
-// instead of rendering a plausible number in its place.
+// WHAT THE ARTBOARD DRAWS THAT NO STORE HELD when this route was written —
+// recusal, conditions, quorum and minutes — was first returned as an explicit
+// unavailable-with-reason rather than omitted. D461 (wave 8) built three of
+// the four: `recused` is a vote value with its declaration required as the
+// rationale, conditions are their own table, and minutes live on the meeting.
+// QUORUM is the one that remains unstored: the IC charter states one in
+// prose, and a document body is not a number the product can check a tally
+// against — so it is still reported as a gap rather than rendered.
 //
-// RECUSAL IS THE ONE THAT MUST NOT BE FAKED. `ic_votes.vote` is
-// `yes | no | abstain`, and an abstention is a vote CAST — the voter was
-// counted and declined. A recusal is a declared conflict that removes the
-// voter from the DENOMINATOR. The artboard's own note makes that distinction
-// load-bearing ("excluded from the denominator — cast of eligible, not of
-// PARTNERS.length"), so mapping `abstain` onto it would put a false statement
-// about a conflict of interest on a fund's screen.
+// RECUSAL IS THE ONE THAT MUST NOT BE FAKED, and the distinction the
+// artboard's note makes load-bearing survives the build: an abstention is a
+// vote CAST — the voter was counted and declined — while a recusal is a
+// declared conflict that removes the voter from the DENOMINATOR. Mapping one
+// onto the other would put a false statement about a conflict of interest on
+// a fund's screen, which is why they are different values with different
+// arithmetic rather than two spellings of one.
 // ---------------------------------------------------------------------------
 r.get('/commit-room', async (c) => {
   try {
@@ -327,6 +359,14 @@ r.get('/commit-room', async (c) => {
         title: d.title,
         project_name: proj?.name ?? null,
         deal_id: d.deal_id ?? null,
+        // WHO MAY CLOSE THIS ONE, and the reason it travels with the summary.
+        // `PUT /:uid` admits the decision's author and an admin, and refuses a
+        // colleague with a 403 — a rule about authorship inside a firm, not a
+        // tenancy boundary. Without this field the Commit page would have to
+        // offer the close form to everyone who can SEE the decision and let the
+        // 403 be the explanation, which is a control teaching a reader it is
+        // dead by failing. Additive: no existing consumer reads it.
+        created_by: d.created_by ?? null,
         status: d.status,
         decision: d.decision ?? null,
         decided_at: d.decided_at ?? null,
@@ -340,6 +380,10 @@ r.get('/commit-room', async (c) => {
           rationale: String(v.rationale || '').trim() || null,
           created_at: v.created_at,
         })),
+        conditions: {
+          open: (d.conditions || []).filter((cond) => cond.status === 'open').length,
+          total: (d.conditions || []).length,
+        },
       });
     }
 
@@ -359,9 +403,15 @@ r.get('/commit-room', async (c) => {
       available: false,
       reason: 'No IC meeting is linked to this decision’s deal, so no attendee roster can be read.',
     };
+    // The minutes answer rides the same meeting: none linked, none to read.
+    let minutes: any = {
+      available: false,
+      reason: 'No IC meeting is linked to this decision’s deal, so there are no minutes to read.',
+    };
     if (current?.deal_id != null) {
       const meeting = await c.env.DB.prepare(
-        `SELECT id, title, start_at, status FROM ic_meetings
+        `SELECT id, uid, title, start_at, status, organizer_user_id, minutes, minutes_recorded_at, minutes_recorded_by
+           FROM ic_meetings
           WHERE deal_id = ? ORDER BY start_at DESC LIMIT 1`
       ).bind(current.deal_id).first<any>().catch(() => null);
       if (meeting) {
@@ -382,6 +432,26 @@ r.get('/commit-room', async (c) => {
           starts_at: meeting.start_at ?? null,
           status: meeting.status ?? null,
           note: 'An invitation to the meeting, not an entitlement to vote. No voting roster is stored.',
+        };
+        // Minutes (migration 334): what the room concluded, written after it.
+        // The organiser or an admin records them; everyone who can see the
+        // decision reads them. Unrecorded is a state, not an absence of the
+        // store.
+        let recordedByName: string | null = null;
+        if (meeting.minutes_recorded_by != null) {
+          const recorder = await c.env.DB.prepare('SELECT name FROM users WHERE id = ?')
+            .bind(meeting.minutes_recorded_by).first<{ name: string }>().catch(() => null);
+          recordedByName = recorder?.name ?? null;
+        }
+        minutes = {
+          available: true,
+          meeting_uid: meeting.uid,
+          meeting_title: meeting.title ?? null,
+          recorded: meeting.minutes != null && String(meeting.minutes).trim().length > 0,
+          minutes: meeting.minutes ?? null,
+          recorded_by: recordedByName,
+          recorded_at: meeting.minutes_recorded_at ?? null,
+          may_record: meeting.organizer_user_id === user.id || isAdmin(user),
         };
       }
     }
@@ -406,22 +476,30 @@ r.get('/commit-room', async (c) => {
           + 'The count is what was actually written, not what a rule guarantees.',
       },
       room,
+      // RECUSAL IS A REAL VALUE NOW (D461). `ic_votes.vote` carries no CHECK,
+      // so `recused` joined the vocabulary at the vote endpoint with the
+      // declaration required as its rationale; the tally counts recusals
+      // beside the denominator and never in it.
       recusal: {
-        available: false,
-        reason: 'ic_votes.vote is yes | no | abstain. An abstention is a vote cast; a recusal is a declared '
-          + 'conflict that leaves the denominator. Nothing stores the second, so no vote is shown as recused '
-          + 'and no denominator is reduced.',
+        available: true,
+        recused: list.reduce((n, d) => n + d.votes.filter((v) => v.vote === 'recused').length, 0),
+        note: 'A recusal is a declared conflict: the voter writes the declaration as the vote’s rationale, '
+          + 'is counted as recused, and leaves the yes/no/abstain denominator. An abstention is a vote cast '
+          + 'and stays in it.',
       },
+      // CONDITIONS ARE A STORE NOW (migration 334): one row per condition on a
+      // decision, open | met | waived, and an open one is what ID4's Blocking
+      // chip reads.
       conditions: {
-        available: false,
-        reason: 'No condition is stored. ic_decisions carries a free-text memo and a terms blob, and neither '
-          + 'is a condition another stage could block a wire on.',
+        available: true,
+        rows: list.flatMap((d) => (d.conditions || []).map((cond) => ({
+          ...cond,
+          decision_uid: d.uid,
+          decision_title: d.title,
+          deal_id: d.deal_id ?? null,
+        }))),
       },
-      minutes: {
-        available: false,
-        reason: 'No minutes are stored. ic_meetings carries an agenda, which is written before the room rather '
-          + 'than after it, and nothing records what the room concluded beyond the votes themselves.',
-      },
+      minutes,
       quorum: {
         available: false,
         reason: 'No quorum is stored. The IC charter template states one in prose, but that is a document body — '
@@ -437,6 +515,41 @@ r.get('/commit-room', async (c) => {
           + 'no screen offers the form yet.',
       },
     });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/ic/conditions — the conditions on every decision this caller may
+// see, joined to the deal each could block. Canvas ID3's Conditions chip and
+// ID4's Blocking chip read the same rows.
+//
+// REGISTERED BEFORE `/:uid`, like `commit-room`: Hono matches in registration
+// order and `conditions` would otherwise be read as a decision uid. The scope
+// is the decisions' own — a condition is visible exactly when its decision is,
+// so the join carries `icDecisionScope` rather than a second predicate.
+// ---------------------------------------------------------------------------
+r.get('/conditions', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!canUseIc(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const status = String(c.req.query('status') || '');
+    const scope = icDecisionScope(user);
+    const params: any[] = [...scope.binds];
+    let where = scope.sql;
+    if (['open', 'met', 'waived'].includes(status)) { where += ' AND cond.status = ?'; params.push(status); }
+    const rows = await c.env.DB.prepare(
+      `SELECT cond.id, cond.uid, cond.ic_decision_id, cond.body, cond.status,
+              cond.created_by, cond.created_at, cond.resolved_at, cond.resolved_by,
+              d.title AS decision_title, d.deal_id AS deal_id,
+              cu.name AS created_by_name, ru.name AS resolved_by_name
+         FROM ic_conditions cond
+         JOIN ic_decisions d ON d.id = cond.ic_decision_id
+         LEFT JOIN users cu ON cu.id = cond.created_by
+         LEFT JOIN users ru ON ru.id = cond.resolved_by
+        WHERE ${where}
+        ORDER BY cond.created_at DESC LIMIT 500`
+    ).bind(...params).all<any>();
+    return c.json({ items: rows.results || [] });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -505,8 +618,18 @@ r.post('/:uid/vote', async (c) => {
     if (!d) return c.json({ detail: 'Not found' }, 404);
     const body = await c.req.json().catch(() => ({} as any));
     const vote = String(body.vote || '').toLowerCase();
-    if (!['yes', 'no', 'abstain'].includes(vote)) return c.json({ detail: 'vote must be yes|no|abstain' }, 400);
+    // `recused` needs no migration: ic_votes.vote carries no CHECK, and the
+    // vocabulary is enforced here. What it DOES need is the declaration — a
+    // recusal with no conflict written down is an unattributed change to the
+    // denominator, so the rationale is required for this one value.
+    if (!['yes', 'no', 'abstain', 'recused'].includes(vote)) return c.json({ detail: 'vote must be yes|no|abstain|recused' }, 400);
     const rationale = body.rationale ? String(body.rationale).slice(0, 2000) : null;
+    if (vote === 'recused' && !rationale?.trim()) {
+      return c.json({
+        error: 'recusal_requires_declaration',
+        message: 'A recusal records the conflict it declares. Write the declaration as the rationale.',
+      }, 400);
+    }
     await c.env.DB.prepare(
       `INSERT INTO ic_votes (ic_decision_id, user_id, vote, rationale, created_at)
        VALUES (?, ?, ?, ?, ?)
@@ -522,7 +645,15 @@ r.post('/:uid/vote', async (c) => {
     // Idempotent per (owner_user_id, ic_decision_id) via the partial unique
     // index from migration 142: re-voting UPDATES the same draft. Never let a
     // journal failure fail the vote — the vote is the source of truth.
-    if (d.project_id != null) {
+    //
+    // A RECUSAL IS EXCLUDED, because it is not a decision: the map has no key
+    // for it and no journal row may claim one. The recusal's own record is the
+    // vote row, declaration included. If an auto-draft already exists from an
+    // earlier vote, it is now false — remove it when it still carries only the
+    // auto-generated fallback thesis (nothing hand-written is lost), and
+    // otherwise re-mark it 'other' so the ledger stops saying invest/pass/
+    // defer while keeping the voter's own words.
+    if (d.project_id != null && vote !== 'recused') {
       try {
         const decisionMap: Record<string, string> = { yes: 'invest', no: 'pass', abstain: 'defer' };
         const journalDecision = decisionMap[vote];
@@ -551,9 +682,136 @@ r.post('/:uid/vote', async (c) => {
           ).bind(newUid(), user.id, d.project_id, d.deal_id, d.id, journalDecision, thesis, nowIso(), nowIso(), nowIso()).run();
         }
       } catch { /* journal is best-effort; never block the vote */ }
+    } else if (d.project_id != null && vote === 'recused') {
+      try {
+        const existing = await c.env.DB.prepare(
+          'SELECT id, thesis FROM decision_journal_entries WHERE owner_user_id = ? AND ic_decision_id = ?'
+        ).bind(user.id, d.id).first<{ id: number; thesis: string }>();
+        if (existing) {
+          if (String(existing.thesis || '').startsWith('IC vote (')) {
+            // The fallback thesis carries nothing hand-written; the draft
+            // exists only as the old vote's shadow and is now false.
+            await c.env.DB.prepare('DELETE FROM decision_journal_entries WHERE id = ?').bind(existing.id).run();
+          } else {
+            await c.env.DB.prepare(
+              "UPDATE decision_journal_entries SET decision='other', updated_at=? WHERE id=?"
+            ).bind(nowIso(), existing.id).run();
+          }
+        }
+      } catch { /* same rule: never block the vote on the journal */ }
     }
     const fresh = await c.env.DB.prepare('SELECT * FROM ic_decisions WHERE id = ?').bind(d.id).first<DecisionRow>();
     return c.json(await dto(c.env, fresh!, { votes: true }));
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// Conditions (migration 334) — the record a later stage can block on.
+// ---------------------------------------------------------------------------
+
+// POST /api/ic/:uid/conditions — add one to a decision the caller may see.
+// Seeing the decision is the gate: a condition is proposed in the room, and
+// the room is everyone the decision is scoped to. Resolving one is the
+// narrower act, on the resolve route below.
+r.post('/:uid/conditions', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!canUseIc(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const d = await loadDecision(c.env, user, c.req.param('uid'));
+    if (!d) return c.json({ detail: 'Not found' }, 404);
+    const body = await c.req.json().catch(() => ({} as any));
+    const text = body?.body != null ? String(body.body).trim().slice(0, 2000) : '';
+    if (!text) {
+      return c.json({
+        error: 'condition_body_required',
+        message: 'A condition is the sentence a later stage checks — write it.',
+      }, 400);
+    }
+    const uid = newUid();
+    const ins = await c.env.DB.prepare(
+      `INSERT INTO ic_conditions (uid, ic_decision_id, body, status, created_by, created_at)
+       VALUES (?, ?, ?, 'open', ?, ?)`
+    ).bind(uid, d.id, text, user.id, nowIso()).run();
+    const row = await c.env.DB.prepare(
+      `SELECT cond.*, cu.name AS created_by_name FROM ic_conditions cond
+        LEFT JOIN users cu ON cu.id = cond.created_by WHERE cond.id = ?`
+    ).bind((ins as any).meta?.last_row_id).first<any>();
+    return c.json({ item: row }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+// PATCH /api/ic/conditions/:uid — mark met or waived, or set back to open.
+// The decision's author or an admin: resolving a condition is what unblocks
+// the wire, so it sits with whoever may close the vote, not with the room.
+r.patch('/conditions/:uid', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!canUseIc(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const cond = await c.env.DB.prepare('SELECT * FROM ic_conditions WHERE uid = ?')
+      .bind(c.req.param('uid')).first<any>();
+    if (!cond) return c.json({ detail: 'Not found' }, 404);
+    // The scope check rides on the decision: a condition on a decision this
+    // caller may not see is the same 404 as the decision itself. The fragment
+    // reaches the query through `where`, the interpolation this file already
+    // carries in scripts/sql-prepare-baseline.json — literal SQL from
+    // tenancyScope with every value bound.
+    const scope = icDecisionScope(user);
+    const where = `d.id = ? AND ${scope.sql}`;
+    const d = await c.env.DB.prepare(`SELECT d.* FROM ic_decisions d WHERE ${where}`)
+      .bind(cond.ic_decision_id, ...scope.binds).first<DecisionRow>();
+    if (!d) return c.json({ detail: 'Not found' }, 404);
+    if (d.created_by !== user.id && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const body = await c.req.json().catch(() => ({} as any));
+    const status = String(body?.status || '');
+    if (!['open', 'met', 'waived'].includes(status)) {
+      return c.json({
+        error: 'condition_status_invalid',
+        message: 'A condition is open, met or waived.',
+      }, 400);
+    }
+    const resolving = status !== 'open';
+    await c.env.DB.prepare(
+      'UPDATE ic_conditions SET status = ?, resolved_at = ?, resolved_by = ? WHERE id = ?'
+    ).bind(status, resolving ? nowIso() : null, resolving ? user.id : null, cond.id).run();
+    const row = await c.env.DB.prepare(
+      `SELECT cond.*, cu.name AS created_by_name, ru.name AS resolved_by_name FROM ic_conditions cond
+        LEFT JOIN users cu ON cu.id = cond.created_by LEFT JOIN users ru ON ru.id = cond.resolved_by
+       WHERE cond.id = ?`
+    ).bind(cond.id).first<any>();
+    return c.json({ item: row });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// Minutes (migration 334) — what the room concluded, written after it.
+// ---------------------------------------------------------------------------
+
+// PATCH /api/ic/meetings/:uid/minutes — record or replace the minutes. The
+// organiser or an admin writes them; the room reads them through the
+// commit-room payload, which reaches the meeting only through a decision it
+// may already see.
+r.patch('/meetings/:uid/minutes', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!canUseIc(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const m = await c.env.DB.prepare('SELECT * FROM ic_meetings WHERE uid = ?')
+      .bind(c.req.param('uid')).first<any>();
+    if (!m) return c.json({ detail: 'Not found' }, 404);
+    if (m.organizer_user_id !== user.id && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const body = await c.req.json().catch(() => ({} as any));
+    if (body?.minutes != null && typeof body.minutes !== 'string') {
+      return c.json({ error: 'minutes_invalid', message: 'Minutes are the room’s own text.' }, 400);
+    }
+    const minutes = body?.minutes != null ? String(body.minutes).slice(0, 20000) : null;
+    const recording = minutes != null && minutes.trim().length > 0;
+    await c.env.DB.prepare(
+      'UPDATE ic_meetings SET minutes = ?, minutes_recorded_by = ?, minutes_recorded_at = ?, updated_at = ? WHERE id = ?'
+    ).bind(recording ? minutes : null, recording ? user.id : null, recording ? nowIso() : null, nowIso(), m.id).run();
+    const fresh = await c.env.DB.prepare(
+      `SELECT m.uid, m.title, m.start_at, m.status, m.minutes, m.minutes_recorded_at, u.name AS minutes_recorded_by_name
+         FROM ic_meetings m LEFT JOIN users u ON u.id = m.minutes_recorded_by WHERE m.id = ?`
+    ).bind(m.id).first<any>();
+    return c.json({ item: fresh });
   } catch (e) { return mapError(c, e); }
 });
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CalendarDays, ChevronRight, RefreshCw, Rocket, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
+import { text, titleCase } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowLaunch.css';
@@ -14,20 +15,18 @@ const list = (value, ...keys) => {
   for (const key of keys) if (Array.isArray(value?.[key])) return value[key];
   return [];
 };
-const text = (value, fallback = 'Not recorded') => String(value ?? '').trim() || fallback;
 const linked = (row, project) => row?.project_id != null && project?.id != null && String(row.project_id) === String(project.id);
 const dateLabel = (value) => {
   if (!value) return 'Date not recorded';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 };
-const kindLabel = (value) => text(value, 'Event').replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
-const statusLabel = (value) => text(value, 'State not recorded').replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+const kindLabel = (value) => titleCase(value) || 'Event';
+const statusLabel = (value) => titleCase(value) || 'State not recorded';
 
 export default function FounderGrowLaunch() {
   const [params, setParams] = useSearchParams();
   const requestedId = params.get('project_id');
-  const [projects, setProjects] = useState([]);
   const [project, setProject] = useState(null);
   const [events, setEvents] = useState([]);
   const [attributions, setAttributions] = useState([]);
@@ -44,7 +43,6 @@ export default function FounderGrowLaunch() {
         setSourceErrors(['startup list']);
       }
       const selected = available.find((item) => String(item.id) === requestedId) || available[0] || (requestedId ? { id: Number(requestedId), name: 'Selected project' } : null);
-      setProjects(available.length ? available : selected ? [selected] : []);
       setProject(selected);
       if (!selected) { setEvents([]); setAttributions([]); return; }
       if (String(selected.id) !== requestedId) {
@@ -55,12 +53,13 @@ export default function FounderGrowLaunch() {
       const to = new Date(now); to.setFullYear(to.getFullYear() + 1);
       const results = await Promise.allSettled([
         api.listCalendarEvents({ from: from.toISOString(), to: to.toISOString() }),
-        api.listMyCoMarketingAttributions(),
+        // Founder side; `/me/attributions` is the partner's and refuses a founder.
+        api.founderCoMarketing(selected.id),
       ]);
       const eventResult = results[0];
       const attributionResult = results[1];
       setEvents(eventResult.status === 'fulfilled' ? list(eventResult.value, 'items', 'events').filter((row) => linked(row, selected)) : []);
-      setAttributions(attributionResult.status === 'fulfilled' ? list(attributionResult.value, 'items', 'attributions').filter((row) => linked(row, selected)) : []);
+      setAttributions(attributionResult.status === 'fulfilled' ? list(attributionResult.value, 'attributions').filter((row) => linked(row, selected)) : []);
       const failed = [];
       if (eventResult.status === 'rejected') failed.push('calendar');
       if (attributionResult.status === 'rejected') failed.push('co-marketing attribution');
@@ -81,7 +80,7 @@ export default function FounderGrowLaunch() {
   const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Capital match', `/grow/capital-match${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-launch" data-testid="founder-grow-launch"><div className="a5-grow-canvas"><div className="a5-grow-main">
-    <header className="a5-grow-hero"><div className="fg-launch-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Launch</b></div><span>Founder / Grow</span><div><h1>Launch calendar</h1><p>Events, co-marketing and the article calendar.</p></div>{projects.length > 1 && <label className="fg-launch-picker"><span>Startup</span><select data-testid="select-grow-launch-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-launch-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Launch' ? 'is-active' : ''}>{label}</Link>)}</nav>
+    <header className="a5-grow-hero"><div className="fg-launch-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Launch</b></div><div><h1>Launch calendar</h1><p>Events, co-marketing and the article calendar.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-launch-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Launch' ? 'is-active' : ''}>{label}</Link>)}</nav>
     <ZoneToolbar
               filters={founderZoneFilters('grow/launch', { value: view, onChange: setView })}
               actions={founderZoneActions('grow/launch', { query, view: { scope: project?.name, header: ['Item', 'Starts', 'Ends', 'State'], rows: events, cells: (r) => [r.title, r.start_at, r.end_at, r.status || r.state] } })}

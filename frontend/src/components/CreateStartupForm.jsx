@@ -31,7 +31,6 @@
  * templates read.
  */
 import React, { useState } from 'react';
-import { Plus } from 'lucide-react';
 import SectorSelect from './SectorSelect';
 import { api } from '../lib/api';
 import { safeReadJSON } from '../lib/storage';
@@ -126,18 +125,17 @@ export default function CreateStartupForm({ open, onOpenChange, onCreated }) {
     }
   };
 
+  // NO "NEW STARTUP" BUTTON HERE ANY MORE (#181). This component is mounted in
+  // the Build desk's header, and a button that sits in a page body to toggle a
+  // form is the same class of control the in-body startup pickers were: a
+  // second, page-local way to do something the app already addresses by URL.
+  // `?new=1` is the real entry point and thirteen places across the SPA use it
+  // (the Command Palette's "Create startup", ten empty states, two Lab pages) —
+  // so the capability is not being removed, only its duplicate handle. Opening
+  // the form is now entirely the host's decision, which is what `open` always
+  // meant.
   return (
     <>
-      <div className="flex justify-end mb-4">
-        <button
-          data-testid="button-new-startup"
-          onClick={() => onOpenChange(!open)}
-          className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm font-medium text-white transition-colors"
-        >
-          <Plus size={14} /> New Startup
-        </button>
-      </div>
-
       {open && (
         <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-gray-800">
           <h2 className="font-semibold text-gray-900 text-sm mb-4 dark:text-gray-100">Add New Startup</h2>

@@ -9,11 +9,12 @@
  * no-op (D1's ALTER is not natively idempotent).
  */
 import type { Env } from '../../types';
+import { bindingKey } from '../../util/schemaBootstrap';
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 export async function ensureExtractorSchema(env: Env): Promise<void> {
-  if (_ready) return;
+  if (READY.get(bindingKey(env))) return;
   const stmts: Array<{ sql: string; ignoreDuplicateColumn?: boolean }> = [
     { sql:
       `CREATE TABLE IF NOT EXISTS market_intel_signals (
@@ -85,5 +86,5 @@ export async function ensureExtractorSchema(env: Env): Promise<void> {
       console.warn('[mi.extractor_schema]', msg);
     }
   }
-  _ready = true;
+  READY.set(bindingKey(env), true);
 }

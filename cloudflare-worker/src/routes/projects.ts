@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { schedulePush } from '../integrations/autopush';
 import { getSQL } from '../db';
@@ -27,6 +28,13 @@ import {
 import { ensureMethodAllowed } from '../services/decks/branding';
 import { PREMIUM_METHOD_IDS } from '../services/decks/methods';
 import { normalizeUseOfFunds, formatUseOfFundsText } from '../util/useOfFunds';
+import {
+  ASSUMPTION_COLUMNS, ASSUMPTION_KEYS,
+  loadAssumptions, sanitizeAssumptions, saveAssumptions,
+} from '../services/marketAssumptions';
+import { fillsForRow, filledColumns } from '../services/fills/provenance';
+import { refuse } from '../util/refusal';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const projects = new Hono<{ Bindings: Env }>();
 
@@ -175,6 +183,117 @@ export function normalizeCofounderDecisionMeta(raw: unknown): { value?: string |
   }
   const out = JSON.stringify(obj);
   if (out.length > 8000) return { error: 'cofounder_decision_meta too large' };
+  return { value: out };
+}
+
+// D353 — lazy bootstrap for `projects.icp_definition_meta`. Migration 308 is
+// the declaration and the canonical apply path; this is the safety net for a
+// cold isolate on a database the ledger has not reached (D235). Readiness is
+// cached per binding, never in a module-level boolean.
+const _icpDefinitionReady = new WeakMap<object, true>();
+export async function ensureProjectIcpDefinitionColumn(env: Env): Promise<void> {
+  const key = bindingKey(env);
+  if (_icpDefinitionReady.has(key)) return;
+  try { await env.DB.exec(`ALTER TABLE projects ADD COLUMN icp_definition_meta TEXT`); } catch (_e) { /* duplicate column on re-run is fine */ }
+  _icpDefinitionReady.set(key, true);
+}
+
+/**
+ * The ICP definition's fields, exactly the Customer Discovery canvas's five
+ * wizard steps. `choice` fields accept only the canvas's options; `text` and
+ * `area` are trimmed and capped. A key not listed here is dropped, so the blob
+ * can never grow a field no screen reads.
+ */
+export const ICP_FIELDS: Record<string, { step: 1 | 2 | 3 | 4 | 5; kind: 'choice' | 'text' | 'area'; options?: readonly string[]; optional?: boolean }> = {
+  type: { step: 1, kind: 'choice', options: ['B2B', 'B2C', 'Both'] },
+  industry: { step: 1, kind: 'text' },
+  size: { step: 1, kind: 'choice', options: ['1–20 employees', '20–50 employees', '50–500 employees', '500+ employees'] },
+  persona: { step: 1, kind: 'text' },
+  geo: { step: 1, kind: 'text' },
+  pain1: { step: 2, kind: 'area' },
+  pain2: { step: 2, kind: 'text', optional: true },
+  pain3: { step: 2, kind: 'text', optional: true },
+  alternative: { step: 2, kind: 'text' },
+  whyFail: { step: 2, kind: 'area' },
+  outcome: { step: 3, kind: 'area' },
+  trigger: { step: 3, kind: 'text' },
+  metric: { step: 3, kind: 'text' },
+  urgency: { step: 4, kind: 'choice', options: ['Active — looking now', 'Aware — not yet looking', 'Latent — does not know it is a problem'] },
+  budget: { step: 4, kind: 'choice', options: ['Low — free or near-free', 'Mid — $200/mo per team ceiling', 'High — budget exists, needs a case'] },
+  objection: { step: 4, kind: 'area' },
+  valueProp: { step: 5, kind: 'area' },
+  differentiator: { step: 5, kind: 'area' },
+  tone: { step: 5, kind: 'choice', options: ['Confident', 'Technical', 'Friendly', 'Premium'] },
+};
+const ICP_TEXT_MAX = 200;
+const ICP_AREA_MAX = 600;
+
+/** Required fields the blob does not fill — confirming needs none missing. */
+export function icpMissingFields(fields: Record<string, string>): string[] {
+  return Object.entries(ICP_FIELDS)
+    .filter(([k, spec]) => !spec.optional && !(fields[k] || '').trim())
+    .map(([k]) => k);
+}
+
+/**
+ * Validate + canonicalise the ICP definition (D353). `previous` is the stored
+ * column, so `version`, `confirmed_at` and `updated_at` come from the server's
+ * own record and clock — a request cannot set them. Confirming requires every
+ * non-optional field; a draft may be partial. `null` / '' clears the store.
+ */
+export function normalizeIcpDefinitionMeta(
+  raw: unknown,
+  previous: unknown,
+  now: string,
+): { value?: string | null; error?: string; message?: string } {
+  if (raw === null || raw === undefined || raw === '') return { value: null };
+  let obj: unknown = raw;
+  if (typeof raw === 'string') {
+    if (raw.length > 16000) return { error: 'icp_definition_too_large', message: 'The ICP definition is too long to save. Shorten a few answers and try again.' };
+    try { obj = JSON.parse(raw); } catch { return { error: 'icp_definition_invalid', message: 'The ICP definition could not be read. Reload the page and try again.' }; }
+  }
+  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
+    return { error: 'icp_definition_invalid', message: 'The ICP definition could not be read. Reload the page and try again.' };
+  }
+  const o = obj as Record<string, unknown>;
+  const status = o.status === 'confirmed' ? 'confirmed' : o.status === 'draft' ? 'draft' : null;
+  if (!status) return { error: 'icp_definition_invalid', message: 'The ICP definition must be saved as a draft or confirmed.' };
+  const stepN = Number(o.step);
+  const step = Number.isInteger(stepN) && stepN >= 1 && stepN <= 5 ? stepN : 1;
+
+  const inFields = o.fields && typeof o.fields === 'object' && !Array.isArray(o.fields) ? o.fields as Record<string, unknown> : {};
+  const fields: Record<string, string> = {};
+  for (const [k, spec] of Object.entries(ICP_FIELDS)) {
+    const v = inFields[k];
+    if (v === undefined || v === null) continue;
+    const t = String(v).trim();
+    if (!t) continue;
+    if (spec.kind === 'choice') {
+      if (!(spec.options || []).includes(t)) {
+        return { error: 'icp_definition_invalid_choice', message: `That answer is not one of the options for "${k}". Pick one of the listed choices.` };
+      }
+      fields[k] = t;
+    } else {
+      fields[k] = t.slice(0, spec.kind === 'area' ? ICP_AREA_MAX : ICP_TEXT_MAX);
+    }
+  }
+  if (status === 'confirmed') {
+    const missing = icpMissingFields(fields);
+    if (missing.length) {
+      return { error: 'icp_definition_incomplete', message: `The ICP definition cannot be confirmed yet: ${missing.length} required answer${missing.length === 1 ? ' is' : 's are'} still empty.` };
+    }
+  }
+
+  // The server's own record, never the request's.
+  let prev: Record<string, unknown> = {};
+  if (typeof previous === 'string' && previous) {
+    try { const p = JSON.parse(previous); if (p && typeof p === 'object' && !Array.isArray(p)) prev = p; } catch { /* unreadable previous is no previous */ }
+  }
+  const prevVersion = Number.isInteger(Number(prev.version)) && Number(prev.version) > 0 ? Number(prev.version) : 0;
+  // A version is a CONFIRMATION: it moves only when a definition is confirmed.
+  const version = status === 'confirmed' ? prevVersion + 1 : prevVersion;
+  const confirmedAt = status === 'confirmed' ? now : (typeof prev.confirmed_at === 'string' ? prev.confirmed_at : null);
+  const out = JSON.stringify({ status, step, fields, version, confirmed_at: confirmedAt, updated_at: now });
   return { value: out };
 }
 
@@ -697,6 +816,14 @@ projects.put('/:id', async (c) => {
     if (meta.error) { await sql.end(); return c.json({ error: meta.error, code: 'invalid_cofounder_decision_meta' }, 400); }
     data.cofounder_decision_meta = meta.value;
   }
+  // D353 — the ICP definition. Normalised against the STORED row so version
+  // and timestamps are the server's; a refusal carries our sentence.
+  if (data.icp_definition_meta !== undefined) {
+    await ensureProjectIcpDefinitionColumn(c.env);
+    const meta = normalizeIcpDefinitionMeta(data.icp_definition_meta, (project as any).icp_definition_meta, new Date().toISOString());
+    if (meta.error) { await sql.end(); return refuse(c, 400, { code: meta.error, message: meta.message || 'The ICP definition was not saved.' }); }
+    data.icp_definition_meta = meta.value;
+  }
   // Task #31 — Product demo source columns are owner-editable (founders
   // manage their own demo media on the project detail page). Trim URLs/text;
   // explicit '' / null clears the column.
@@ -728,7 +855,7 @@ projects.put('/:id', async (c) => {
       return c.json({ error: 'invalid_market_sizing', detail: 'SOM cannot exceed SAM' }, 400);
     }
   }
-  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'som', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'use_of_funds_meta', 'incorporation_meta', 'cofounder_decision_meta', 'data_room_url', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status', 'product_demo_video_url', 'product_demo_live_url', 'product_demo_caption', 'product_demo_screenshot_url', 'website'];
+  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'som', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'use_of_funds_meta', 'incorporation_meta', 'cofounder_decision_meta', 'icp_definition_meta', 'data_room_url', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status', 'product_demo_video_url', 'product_demo_live_url', 'product_demo_caption', 'product_demo_screenshot_url', 'website'];
   // Normalise: coerce boolean → 0/1 for the NDA flag, trim URL, allow
   // explicit null to clear either field.
   if (data.data_room_nda_required !== undefined) {
@@ -823,7 +950,7 @@ projects.delete('/:id', async (c) => {
     } catch (e) {
       await sql.end();
       console.error('[projects:delete:hard] cascade failed for', id, (e as Error).message);
-      return c.json({ error: 'Could not hard-delete project', detail: (e as Error).message }, 409);
+      return refuse(c, 409, { code: 'hard_delete_failed', message: 'The project could not be deleted permanently: other records still point at it. Nothing was removed.', raw: e });
     }
     try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_delete', { type: 'project', id }); } catch {}
     await sql.end();
@@ -1034,6 +1161,126 @@ projects.put('/:projectId/spinout-deck/overrides', async (c) => {
 
   const overrides = await saveSpinoutDeckOverrides(c.env, projectId, Number(user.id), raw, remove);
   return c.json({ overrides, overridable_keys: SPINOUT_OVERRIDABLE_KEYS });
+});
+
+// ===========================================================================
+// Task #188 / #198 — the market-sizing assumptions behind TAM/SAM/SOM.
+//
+// `PUT /:id` saves the three RESULTS. These two routes save the reasoning, which
+// `SpinoutLabMarketPage` has been holding in session state since it was written —
+// its own comment asked for "a project_market_assumptions table that doesn't
+// exist yet", and migration 247 is it. A page whose claim is that its figures are
+// derived rather than invented was keeping the conclusion and dropping the
+// derivation the moment the tab closed.
+//
+// The access rule is `PUT /:id`'s, deliberately: an assumption is project data,
+// so whoever may edit the project's TAM may edit what produced it. Admins and
+// partners anywhere, the owning founder, an accepted co-founder. Advisors read
+// only and investors are never editors — the same write-IDOR audit M2 closed on
+// `PUT /:id`, which would otherwise reopen here one route later.
+// ===========================================================================
+
+/**
+ * May this caller write project data? The rule `PUT /:id` applies, in one place.
+ *
+ * Kept as a local helper rather than folded into `projectAccess`: `canAccessProject`
+ * there answers a different and looser question (may they SEE it), and an
+ * investor passes that one.
+ */
+async function canEditProjectData(
+  env: Env, project: { id: number; founder_id: number | null }, user: User,
+): Promise<boolean> {
+  if (user.role === 'admin' || user.role === 'partner') return true;
+  if (user.role === 'investor') return false;
+  if (user.founder_id && project.founder_id === user.founder_id) return true;
+  const memberRole = await getProjectMembershipRole(env, project.id, user.id);
+  return memberRole === 'cofounder' || memberRole === 'owner';
+}
+
+/** The project row both routes below need, or the response to send instead. */
+async function loadProjectForAssumptions(
+  c: Context<{ Bindings: Env }>, user: User,
+): Promise<{ project: { id: number; founder_id: number | null } } | { error: Response }> {
+  const id = parseInt(String(c.req.param('projectId') ?? ''), 10);
+  if (!Number.isFinite(id)) return { error: c.json({ error: 'Invalid project id' }, 400) };
+  const row = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
+    .bind(id).first<{ id: number; founder_id: number | null }>();
+  if (!row) return { error: c.json({ error: 'Project not found' }, 404) };
+  if (!(await canEditProjectData(c.env, row, user))) {
+    return { error: c.json({ detail: 'Forbidden: you do not own this project' }, 403) };
+  }
+  return { project: row };
+}
+
+projects.get('/:projectId/market-assumptions', async (c) => {
+  const user = await requireAuth(c);
+  const found = await loadProjectForAssumptions(c, user);
+  if ('error' in found) return found.error;
+  const assumptions = await loadAssumptions(c.env, found.project.id);
+
+  // WHICH FIGURES EADWYN SUPPLIED, and only the ones that are still its figures.
+  //
+  // This is the read that keeps the market page's three provenance statements
+  // true rather than merely uncontradicted. `filledColumns` compares each
+  // provenance row against what the row HOLDS NOW, so a founder who typed over a
+  // researched figure by hand owns it and the drawer stops marking it — a card
+  // still reading "Eadwyn" over their number is the same lie pointed the other
+  // way. Keyed back to the drawer's own field names, because the client should
+  // not have to know the column map to read its own labels.
+  const columnToKey = Object.fromEntries(
+    Object.entries(ASSUMPTION_COLUMNS).map(([key, column]) => [column, key]),
+  );
+  const row = await c.env.DB.prepare(
+    'SELECT * FROM project_market_assumptions WHERE project_id = ?',
+  ).bind(found.project.id).first<Record<string, unknown>>().catch(() => null);
+  const filled: Record<string, unknown> = {};
+  if (row) {
+    const fills = await fillsForRow(c.env, 'project_market_assumptions', Number(row.id));
+    for (const [column, fill] of filledColumns(fills, row)) {
+      const key = columnToKey[column];
+      if (!key) continue;
+      filled[key] = {
+        fill_class: fill.fill_class,
+        edited: fill.edited,
+        model: fill.model,
+        citation: fill.citation,
+        proposed_value: fill.proposed_value,
+      };
+    }
+  }
+
+  return c.json({
+    assumptions,
+    // The keys this store accepts, so the drawer cannot send a field the server
+    // will reject and find out only from a 400.
+    keys: ASSUMPTION_KEYS,
+    filled,
+  });
+});
+
+// A PATCH, not a replace: fields that are not sent are left alone. That is what
+// lets a single cited fill write one population without blanking the eleven
+// values the founder typed. An unknown key is rejected by name rather than
+// dropped, because a save that silently ignored a field looks like one that
+// worked.
+projects.put('/:projectId/market-assumptions', async (c) => {
+  const user = await requireAuth(c);
+  const found = await loadProjectForAssumptions(c, user);
+  if ('error' in found) return found.error;
+
+  let body: any = {};
+  try { body = await c.req.json(); } catch { body = {}; }
+  const raw = body?.assumptions ?? body ?? {};
+
+  // CHECKED BEFORE ANYTHING IS WRITTEN. Returning a 400 after the good fields
+  // landed would be a response that contradicts what the request did — the caller
+  // reads a rejection and the row has changed.
+  const { rejected } = sanitizeAssumptions(raw);
+  if (rejected.length) {
+    return c.json({ error: 'Unknown market assumption fields', rejected, keys: ASSUMPTION_KEYS }, 400);
+  }
+  const { assumptions } = await saveAssumptions(c.env, found.project.id, raw, Number(user.id));
+  return c.json({ assumptions, keys: ASSUMPTION_KEYS });
 });
 
 // ===========================================================================

@@ -41,7 +41,7 @@ export default function PublicJobsPage() {
       } catch (e) {
         if (!cancelled) {
           setError('Could not load open roles. Please try again.');
-          reportError(e, { where: 'PublicJobsPage.load' });
+          reportError('PublicJobsPage:load', e);
         }
       } finally {
         if (!cancelled) setLoading(false);

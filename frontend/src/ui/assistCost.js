@@ -76,3 +76,64 @@ export function spendMeter(spent = 0, cap = 0) {
   const ratio = cap > 0 ? spent / cap : 0;
   return { ratio, fraction: Math.max(0, Math.min(1, ratio)), over: ratio > 1 };
 }
+
+/**
+ * The lasting "Last run" receipt, as one line (D401).
+ *
+ * `lastRun` is `/api/ai/me/spend`'s `last_run`: the caller's most recent row
+ * in `ai_usage_logs`, on ANY surface, so the caller labels it account-wide.
+ * `name` is the display name for its model, if the rail has one.
+ *
+ * The token half says exactly what the log can support:
+ *   - both counts            "812 in / 144 out"
+ *   - a prompt count only    "300 in / out not recorded" (a streamed call)
+ *   - neither                "tokens not recorded"
+ *   - a cached answer        "cached, no model called"
+ *   - a refusal              "refused, nothing run"
+ * and never "0 in / 0 out", which would read as a very small run. The Worker
+ * nulls every zero it cannot vouch for; a response from before that change
+ * carries no token fields at all and lands on "tokens not recorded".
+ *
+ * Returns null for no run, so the caller decides what an absence looks like.
+ */
+export function lastRunReceipt(lastRun, name) {
+  if (!lastRun || typeof lastRun !== 'object') return null;
+  const model = name || String(lastRun.model || '').split('/').pop() || 'Unknown model';
+  const isCount = (v) => typeof v === 'number' && Number.isFinite(v) && v > 0;
+  let tokens;
+  if (lastRun.refusal) tokens = 'refused, nothing run';
+  else if (lastRun.cached) tokens = 'cached, no model called';
+  else if (isCount(lastRun.prompt_tokens) && isCount(lastRun.completion_tokens)) {
+    tokens = `${lastRun.prompt_tokens.toLocaleString('en-US')} in / ${lastRun.completion_tokens.toLocaleString('en-US')} out`;
+  } else if (isCount(lastRun.prompt_tokens)) {
+    tokens = `${lastRun.prompt_tokens.toLocaleString('en-US')} in / out not recorded`;
+  } else tokens = 'tokens not recorded';
+  const cost = typeof lastRun.cost_usd === 'number' && Number.isFinite(lastRun.cost_usd)
+    ? formatCost(lastRun.cost_usd)
+    : 'cost not recorded';
+  const parts = [model, tokens, cost];
+  if (lastRun.fallback_used && !lastRun.cached && !lastRun.refusal) parts.push('a smaller model answered');
+  return parts.join(' · ');
+}
+
+/**
+ * "This page this month" as one sentence, from `by_surface` (D404).
+ *
+ * `unattributed` is the month's runs with no recorded page. They are said
+ * rather than left out whenever this page shows none, because some of them
+ * may be this page's own runs from before migration 319 — so "nothing from
+ * this page" alone would be a claim the log cannot make.
+ */
+export function pageSpendLine(bySurface, pagePath) {
+  const rows = Array.isArray(bySurface) ? bySurface : [];
+  const mine = rows.find((r) => r && r.surface === pagePath && pagePath);
+  const unattributed = rows.find((r) => r && r.surface == null);
+  if (mine && mine.calls > 0) {
+    return `This page this month: ${formatCost(mine.spend_usd)} over ${mine.calls} run${mine.calls === 1 ? '' : 's'}.`;
+  }
+  if (unattributed && unattributed.calls > 0) {
+    const n = unattributed.calls;
+    return `No runs recorded from this page this month. ${n} run${n === 1 ? '' : 's'} this month carr${n === 1 ? 'ies' : 'y'} no page, either from before pages were recorded or from features that do not record one.`;
+  }
+  return 'No runs from this page this month.';
+}

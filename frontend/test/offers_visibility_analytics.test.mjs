@@ -33,7 +33,7 @@ import { codeOnly } from './_codeOnly.mjs';
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const read = (p) => codeOnly(raw(p));
 
-const CANVAS = raw('design/incoming/Pages · Partner Offers.dc.html');
+const CANVAS = raw('design/canvases/integrated/Pages · Partner Offers.dc.html');
 const zoneRaw = raw('frontend/src/pages/partner/offers/VisibilityZone.jsx');
 const zone = read('frontend/src/pages/partner/offers/VisibilityZone.jsx');
 const filters = read('frontend/src/workspaces/partnerZoneFilters.js');
@@ -253,8 +253,15 @@ test('Export runs; the two ops with no setting to change stay prose', () => {
   // draws the same row — disabled, and saying so itself.
   assert.match(zone, /const rowActions = partnerZoneActions\('offers\/visibility', \{ view: \{ header: \[/,
     'the export no longer describes the columns it would write');
-  assert.match(zone, /<UnlinkedZone title="Visibility" actions=\{rowActions\} \/>/,
+  // It used to check `<UnlinkedZone title="Visibility" actions={rowActions} />`
+  // — the card that stood INSTEAD of the zone. The row goes to the toolbar the
+  // live branch already uses, and the gate is a line above the body.
+  assert.match(zone, /actions=\{rowActions\}/,
     'the gate branch no longer draws the same header row as the live one');
+  assert.match(zone, /notice=\{unlinked \? <NoPartnerProfile \/> : null\}/,
+    'the gate stopped saying why the zone is empty');
+  assert.match(zone, /filters=\{unlinked \? \[\] :/,
+    'a filter chip is drawn over rows this account cannot read');
 });
 
 test('the AI band is the artboard’s, on its own allow-listed surface', () => {

@@ -1,17 +1,23 @@
 import { count, summary, title, top } from './format.js';
-import { NETWORK_ORG_COPY } from '../noStoreCopy.js';
+import { NETWORK_ORG_COPY, ORG_BACKED } from '../noStoreCopy.js';
 
 /*
  * `/network` — Partner Operator Canvas P6 and Advisor Canvas V5. One board,
  * two licences, because the zones and the stores are the same three.
  *
  * A FACTORY OF ROLE, and the role decides exactly one thing: whether
- * Organizations has a store. `ORG_BACKED` in `NetworkWorkspace` is
- * `{founder, investor}` — an advisor is 403'd from `/api/contacts` and an
- * operator's NetworkPage has no organizations tab — so for these two licences
- * the section reads the shared no-store copy instead of a table. That is the
- * same set the zone body and the rail already consult, so the three cannot
- * disagree.
+ * Organizations has a store. `ORG_BACKED` is imported from `noStoreCopy.js`,
+ * beside the copy it decides between.
+ *
+ * IT USED TO BE A SECOND COPY HERE, AND IT DRIFTED. This file declared
+ * `{founder, investor}` while `NetworkWorkspace` declared
+ * `{founder, investor, partner}`, and the sentence that stood here claimed the
+ * two were "the same set the zone body and the rail already consult". They were
+ * not, so the partner `/network` root printed "Organizations reads nothing on
+ * this licence" over a zone that has grouped real rows since migration 224 —
+ * telling a reader a working feature does not exist. Nothing compared the two
+ * sets; `advisor_network_zones.test.mjs` now does, which is why this is one
+ * import rather than a second literal and a promise about it.
  *
  * THE STALENESS GRADE IS THE CANVAS LINE THIS BOARD WILL NOT PRINT. P6 and V5
  * both subtitle the book with a count of relationships that have gone quiet,
@@ -28,7 +34,6 @@ import { NETWORK_ORG_COPY } from '../noStoreCopy.js';
  * does too.
  */
 export default function networkBoard(role, api) {
-  const ORG_BACKED = new Set(['founder', 'investor']);
   const orgHasStore = ORG_BACKED.has(role);
   return {
     sources: {

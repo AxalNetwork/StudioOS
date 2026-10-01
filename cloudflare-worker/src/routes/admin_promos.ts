@@ -9,7 +9,9 @@ import {
   getPromoById,
   setPromoActiveMirror,
   normalizeCode,
+  readProductIds,
 } from '../services/promos';
+import { refusalBody } from '../util/refusal';
 
 // Task #9 — Promo Code admin CRUD. Mounted at `/api/admin/promos` BEFORE the
 // catch-all `/api/admin` in index.ts so the nested routes resolve here (same
@@ -58,9 +60,18 @@ function stripeErr(e: unknown) {
   }
   const m = /^stripe_error:(\d+):([\s\S]*)$/.exec(msg);
   const upstream = m ? Number(m[1]) : 502;
-  const detail = m ? m[2] : msg;
   const status: 400 | 502 = upstream >= 400 && upstream < 500 ? 400 : 502;
-  return { body: { error: 'Stripe request failed', code: 'stripe_error', upstream_status: upstream, detail }, status };
+  // D278 — Stripe's JSON is the admin's to read on `upstream`, never `detail`.
+  return {
+    body: refusalBody({
+      code: 'stripe_error',
+      message: 'Stripe did not accept the request. Nothing changed; the upstream field says why.',
+      raw: m ? m[2] : msg,
+      audience: 'admin',
+      extra: { code: 'stripe_error', upstream_status: upstream },
+    }),
+    status,
+  };
 }
 
 async function audit(
@@ -159,10 +170,17 @@ adminPromos.post('/', async (c) => {
     couponForm.duration_in_months = String(months);
   }
 
-  // Product allow-list.
-  const productIds = Array.isArray(body.product_ids)
-    ? (body.product_ids as unknown[]).filter((x): x is string => typeof x === 'string')
-    : [];
+  // Product allow-list. Absent means every product. Present but not a
+  // JSON array of strings is refused — dropping the bad entries used to
+  // store [] and apply the code to every product.
+  let productIds: string[] = [];
+  if (body.product_ids !== undefined) {
+    const parsed = readProductIds(JSON.stringify(body.product_ids));
+    if (!parsed.ok) {
+      return c.json({ error: 'product_ids must be an array of product id strings', code: 'invalid_product_ids' }, 400);
+    }
+    productIds = parsed.ids;
+  }
   for (const pid of productIds) {
     if (!PRODUCT_RE.test(pid)) {
       return c.json({ error: `invalid product id: ${pid}`, code: 'invalid_product' }, 400);

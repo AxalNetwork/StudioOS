@@ -22,6 +22,8 @@
 /**
  * @param {object} opts
  * @param {string[]} opts.prevFiles   asset filenames present BEFORE the build (backed up)
+ * @param {string[]} [opts.seedFiles] what the no-ledger synthetic seed holds
+ *                                    (defaults to prevFiles; see below)
  * @param {string[]} opts.newFiles    asset filenames the fresh build produced
  * @param {Array<{ts:string,files:string[]}>} [opts.ledgerBuilds] prior ledger, newest-first
  * @param {number} [opts.retainBuilds] how many builds' assets to keep (default 3)
@@ -35,6 +37,7 @@
  */
 export function planAssetRetention({
   prevFiles = [],
+  seedFiles = null,
   newFiles = [],
   ledgerBuilds = [],
   retainBuilds = 3,
@@ -47,12 +50,30 @@ export function planAssetRetention({
         .map((b) => ({ ts: String(b.ts ?? ''), files: uniq(b.files) }))
     : [];
 
-  // First run with this system (no ledger yet): seed the currently-deployed
-  // assets as a synthetic prior build so they are not dropped on the first
-  // retention build — otherwise clients still holding the previous shell
-  // would break immediately.
-  if (builds.length === 0 && prevFiles.length > 0) {
-    builds.push({ ts: 'pre-retention', files: uniq(prevFiles) });
+  // No ledger yet (a fresh clone, and CI on EVERY run): seed a synthetic prior
+  // build so the assets a client on the previous shell still asks for are not
+  // dropped on the first retention build.
+  //
+  // WHAT IT SEEDS IS THE FIX. This used `prevFiles` — everything on disk — and
+  // `.gitignore` recorded the trade in its own words: "with no ledger it seeds
+  // the committed `docs/assets` as a synthetic prior build … That is the safe
+  // direction (it prunes less, never more)." Pruning less, never more, is
+  // precisely how the committed set became a high-water mark that only grows:
+  // CI has no ledger, so every deploy re-seeded the whole accumulated tree as
+  // one build worth keeping. Measured on `main`: 964 committed assets against a
+  // clean build's 597.
+  //
+  // `seedFiles` is the PREVIOUS GENERATION instead — the transitive closure of
+  // the previous `index.html` over the chunk graph (`lib/assetGeneration.mjs`),
+  // derivable from `docs/` alone with no ledger. It keeps exactly what a client
+  // holding that shell can ask for and drops generations older than it, which
+  // no reachable shell references. The no-ledger window becomes two builds
+  // rather than unbounded. It defaults to `prevFiles` so a caller that cannot
+  // compute a generation gets the old, over-broad behaviour rather than an
+  // under-broad one.
+  const seed = Array.isArray(seedFiles) && seedFiles.length > 0 ? seedFiles : prevFiles;
+  if (builds.length === 0 && seed.length > 0) {
+    builds.push({ ts: 'pre-retention', files: uniq(seed) });
   }
 
   // A rebuild that produces the SAME file set as the newest entry REPLACES it
@@ -86,6 +107,17 @@ export function planAssetRetention({
   const keep = new Set();
   for (const b of trimmed) for (const f of b.files) keep.add(f);
 
+  // AN EXPLICIT SEED IS KEPT WHATEVER THE LEDGER SAYS (task 333, D252). With a
+  // ledger the seed above never runs, so a ledger whose newest entries are
+  // other rebuilds pushed the generation production is serving out of the
+  // window: the seed was computed, then dropped. It joins the kept set after
+  // the trim. Only an explicitly passed, non-empty seed does: the prevFiles
+  // fallback is the whole tree on disk, and keeping that on every build is
+  // D183's high-water mark again.
+  if (Array.isArray(seedFiles) && seedFiles.length > 0) {
+    for (const f of seedFiles) keep.add(f);
+  }
+
   const newSet = new Set(newFiles);
   const prevSet = new Set(prevFiles);
 
@@ -95,4 +127,29 @@ export function planAssetRetention({
   const missing = [...keep].filter((f) => !newSet.has(f) && !prevSet.has(f));
 
   return { nextLedger: { builds: trimmed }, keep: [...keep], restore, missing };
+}
+
+/**
+ * The flag the production deploy passes to seed the WHOLE committed
+ * `docs/assets` rather than the previous generation (task 351, D252).
+ *
+ * The deploy rebuilds `docs/` from source, and the generation production is
+ * serving is the one the LAST deploy uploaded, which is not necessarily the
+ * one the committed shells describe (`docs/` is committed by hand). Seeding
+ * the committed tree keeps every generation still committed; the deploy never
+ * commits its build back, so this cannot grow `docs/assets` (D183).
+ *
+ * It is a flag the workflow passes, never `CI`: every CI job and the PR
+ * preview set `CI`, and none of them uploads to production.
+ */
+export const SEED_COMMITTED_TREE_FLAG = '--seed-committed-tree';
+
+/**
+ * @param {object} opts
+ * @param {string[]} opts.argv            the build script's arguments
+ * @param {string[]} opts.prevGeneration  the previous generation's assets
+ * @returns {string[] | null} the seed; null means "fall back to prevFiles"
+ */
+export function seedFilesFor({ argv = [], prevGeneration = [] } = {}) {
+  return argv.includes(SEED_COMMITTED_TREE_FLAG) ? null : prevGeneration;
 }

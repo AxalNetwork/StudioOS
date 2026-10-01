@@ -28,6 +28,15 @@ const DIR = 'cloudflare-worker/sql/migrations';
 // perfectly legal in a migration. Requiring the keyword to start a statement —
 // at the beginning of a line, after optional whitespace — separates the two
 // without needing a SQL parser.
+//
+// D156 — THAT CARVE-OUT WAS WRITTEN FOR `BEGIN` AND NOT FOR ITS MATCHING `END`,
+// so a migration carrying a trigger was refused by the `ROLLBACK / END` rule on
+// the line that CLOSES the body the comment above says is legal. The statement
+// was half-exempt: legal to open, illegal to close. Migration 269 is the first
+// migration in the repo to install a trigger and is what found it. The fix is
+// `stripTriggerBodies` below, which excises `CREATE TRIGGER … END;` spans before
+// the scan — strictly stronger than exempting the keyword, because outside a
+// trigger `END;` stays refused, which is the thing that failed the deploy.
 const BANNED = [
   [/^\s*BEGIN\s*(TRANSACTION|DEFERRED|IMMEDIATE|EXCLUSIVE)?\s*;/im, 'BEGIN'],
   [/^\s*COMMIT\s*(TRANSACTION)?\s*;/im, 'COMMIT'],
@@ -54,6 +63,15 @@ const stripComments = (sql) => sql
   .replace(/^\s*--.*$/gm, '');
 
 /**
+ * Excise `CREATE TRIGGER … END;` spans, so a trigger body's own `BEGIN`/`END`
+ * cannot read as a transaction. Non-greedy to the FIRST `END;`: a body may
+ * contain `CASE … END`, which carries no semicolon, and SQLite trigger bodies
+ * do not nest. `sql/historical/lp_investors_seal.sql` and migration 269 are the
+ * two shapes this has to admit.
+ */
+const stripTriggerBodies = (sql) => sql.replace(/CREATE\s+TRIGGER[\s\S]*?\bEND\s*;/gi, ' ');
+
+/**
  * The labels one migration's SQL trips, comments already stripped.
  *
  * EXPORTED SO THE CARVE-OUT CAN BE TESTED. The `defer_foreign_keys` exception
@@ -65,7 +83,7 @@ const stripComments = (sql) => sql
  * pragmas D1 does not honour and asserts each is still refused.
  */
 export function bannedIn(sql) {
-  const body = stripComments(sql);
+  const body = stripTriggerBodies(stripComments(sql));
   return BANNED.filter(([pattern]) => pattern.test(body)).map(([, label]) => label);
 }
 

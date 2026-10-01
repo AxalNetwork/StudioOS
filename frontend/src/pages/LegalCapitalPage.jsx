@@ -289,7 +289,7 @@ function SpinoutTab({ dealId, canEdit, deal }) {
         <div className="flex items-center gap-3 mb-3"><Rocket size={24} /><h2 className="text-xl font-bold">Subsidiary Spin-Out</h2></div>
         <p className="text-sm opacity-90 mb-3">Step-by-step wizard: IP transfer → AI-recommended equity → Stripe Atlas → Independent. Or use the one-click bundle below.</p>
         {canEdit && (
-          <button onClick={() => setShowWizard(true)} className="bg-white text-violet-700 hover:bg-violet-50 text-sm font-bold px-4 py-2 rounded-lg flex items-center gap-2 dark:bg-gray-900">
+          <button onClick={() => setShowWizard(true)} className="bg-white text-violet-700 hover:bg-violet-50 dark:hover:bg-violet-900/30 text-sm font-bold px-4 py-2 rounded-lg flex items-center gap-2 dark:bg-gray-900">
             <Rocket size={14} /> Launch Spin-Out Wizard
           </button>
         )}

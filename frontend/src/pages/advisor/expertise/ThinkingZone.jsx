@@ -4,6 +4,8 @@ import { Card, Pill } from '../../../ui';
 import { api } from '../../../lib/api';
 import { NothingYet, StatedLimit, Unrecorded, ZoneBody, ZoneHeading } from './kit';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
+import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 
 /**
  * Expertise · Thinking — what you have published, and how far it reached.
@@ -33,6 +35,7 @@ import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
  */
 export default function ThinkingZone() {
   const [state, setState] = useState({ loading: true, error: '', payload: null });
+  const [view, setView] = useState('all');
 
   const load = useCallback(async () => {
     setState((c) => ({ ...c, loading: true, error: '' }));
@@ -46,6 +49,13 @@ export default function ThinkingZone() {
 
   const items = state.payload?.items || [];
   const counts = state.payload?.counts || null;
+  // D392 — the chips are the pill's own two states: published, and anything
+  // not yet published (which the shelf already labels "Draft").
+  const THINKING_VIEWS = {
+    published: (a) => a.status === 'published',
+    draft: (a) => a.status !== 'published',
+  };
+  const shown = THINKING_VIEWS[view] ? items.filter(THINKING_VIEWS[view]) : items;
 
   return (
     <div className="space-y-4">
@@ -54,8 +64,13 @@ export default function ThinkingZone() {
         blurb="What you have written, and how many people opened it."
       />
 
+      <ZoneToolbar
+        className="mb-3"
+        role="advisor"
+        filters={advisorZoneFilters('expertise/thinking', { value: view, onChange: setView })}
+        actions={advisorZoneActions('expertise/thinking', { view: { header: ['Title', 'Subtitle', 'Sector', 'Status', 'Published', 'Words', 'Read minutes', 'Views'], rows: shown, cells: (a) => [a.title, a.subtitle, a.sector, a.status, a.published_at, a.word_count, a.read_minutes, a.views] } })}
+      />
       <ZoneBody
-        actions={advisorZoneActions('expertise/thinking', { view: { header: ['Title', 'Subtitle', 'Sector', 'Status', 'Published', 'Words', 'Read minutes', 'Views'], rows: items, cells: (a) => [a.title, a.subtitle, a.sector, a.status, a.published_at, a.word_count, a.read_minutes, a.views] } })}
         loading={state.loading}
         error={state.error}
         onRetry={load}
@@ -78,11 +93,11 @@ export default function ThinkingZone() {
             { label: 'Talk reach', value: counts?.talk_reach ?? null, note: 'where a piece ran is not recorded' },
           ].map((t) => (
             <Card key={t.label} className="px-3 py-2.5">
-              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{t.label}</div>
+              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{t.label}</div>
               {t.value === null || t.value === undefined
                 ? <div className="mt-1.5"><Unrecorded /></div>
                 : <div className="mt-1 text-base font-extrabold tabular-nums tracking-tight">{t.value}</div>}
-              <div className="mt-1 text-[10px] leading-snug text-axal-ink-3">{t.note}</div>
+              <div className="mt-1 text-[10px] leading-snug text-axal-faint">{t.note}</div>
             </Card>
           ))}
         </div>
@@ -90,17 +105,20 @@ export default function ThinkingZone() {
         <Card className="p-4">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <span className="text-sm font-extrabold tracking-tight">Your shelf</span>
-            <span className="text-[11px] text-axal-ink-3">Newest first</span>
+            <span className="text-[11px] text-axal-faint">Newest first</span>
           </div>
-          <ul className="divide-y divide-axal-border-soft">
-            {items.map((a) => (
+          {shown.length === 0 && (
+            <p className="text-[12.5px] text-axal-muted">{`No piece is in this state. ${items.length} in total.`}</p>
+          )}
+          <ul className="divide-y divide-axal-hairline">
+            {shown.map((a) => (
               <li key={a.id} className="flex items-start justify-between gap-4 py-2.5">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <Pill tone={a.status === 'published' ? 'ok' : 'neutral'}>
                       {a.status === 'published' ? 'Published' : 'Draft'}
                     </Pill>
-                    {a.sector && <span className="text-[11px] text-axal-ink-3">{a.sector}</span>}
+                    {a.sector && <span className="text-[11px] text-axal-faint">{a.sector}</span>}
                   </div>
                   <div className="mt-1 text-[12.5px] font-semibold leading-snug">
                     {a.status === 'published' && a.slug
@@ -108,16 +126,23 @@ export default function ThinkingZone() {
                       : a.title}
                   </div>
                   {a.subtitle && (
-                    <div className="mt-0.5 truncate text-[11px] text-axal-ink-3">{a.subtitle}</div>
+                    <div className="mt-0.5 truncate text-[11px] text-axal-faint">{a.subtitle}</div>
                   )}
                 </div>
-                <div className="shrink-0 text-right text-[11px] tabular-nums text-axal-ink-3">
-                  {/* A draft has no views because nobody can open it — that is a
-                      real zero, not a missing number, so it is shown as one. */}
-                  <div className="font-semibold text-axal-ink-2">
-                    {a.status === 'published' ? `${a.views ?? 0} views` : '—'}
+                <div className="shrink-0 text-right text-[11px] tabular-nums text-axal-faint">
+                  {/* A draft has no views because nobody can open it, so it shows
+                      no view figure at all. A published piece whose counter did
+                      not come back is absent, never a typed zero (D392). */}
+                  <div className="font-semibold text-axal-muted">
+                    {a.status !== 'published'
+                      ? 'Not public yet'
+                      : (a.views === null || a.views === undefined ? <Unrecorded /> : `${a.views} views`)}
                   </div>
-                  <div>{a.read_minutes ? `${a.read_minutes} min read` : `${a.word_count || 0} words`}</div>
+                  <div>
+                    {a.read_minutes
+                      ? `${a.read_minutes} min read`
+                      : (a.word_count === null || a.word_count === undefined ? <Unrecorded /> : `${a.word_count} words`)}
+                  </div>
                   {a.published_at && <div>{String(a.published_at).slice(0, 10)}</div>}
                 </div>
               </li>

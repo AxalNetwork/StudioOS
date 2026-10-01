@@ -18,13 +18,14 @@
  * a live DB is swallowed and _ready still flips true.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 const GUILLAUME_WEBSITE = 'https://guillaumelauzier.com';
 
 export async function ensureAuthorWebsites(env: Env): Promise<void> {
-  if (_ready) return;
+  if (READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS author_websites (user_id INTEGER PRIMARY KEY REFERENCES users(id), website_url TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))",
@@ -47,7 +48,7 @@ export async function ensureAuthorWebsites(env: Env): Promise<void> {
         ORDER BY (lower(email) = 'gl@axal.vc') DESC
         LIMIT 1`,
     ).bind(GUILLAUME_WEBSITE).run();
-    _ready = true;
+    READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[authorWebsites] ensure failed:', (e as Error).message);
   }

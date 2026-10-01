@@ -68,7 +68,7 @@ test('investor Research implements I8 without fabricated diligence claims', () =
   assert.match(research, /sources\.map\(\(source\)/);
   assert.match(research, /source\.live[\s\S]{0,180}source\.paid/);
   assert.doesNotMatch(research, /Novacraft|74,000|DeepSeek|\$0\.0344|Founder-shared data room/);
-  assert.match(research, /no answer has been generated/i);
+  assert.match(research, /api\.research\.ask\(/, 'the question desk posts to /research/ask — the scoped service exists and the box is wired to it');
 });
 
 test('investor-owned deep links keep the investor workspace shell', () => {
@@ -82,21 +82,36 @@ test('investor-owned deep links keep the investor workspace shell', () => {
     routeBlock(app, '/deals/:dealId'),
     /investorWorkspace\('deals', <DealRoomPage \/>/,
   );
+  // Re-aimed by D372: /lp-portal retired into the LP workspace's My-commitment
+  // section. The old path is a redirect to that anchor, and the destination
+  // keeps the same investor shell the portal page had.
+  assert.match(routeBlock(app, '/lp-portal'), /<LpPortalRedirect \/>/);
+  assert.match(app, /function LpPortalRedirect\(\)[\s\S]{0,240}?pathname: '\/spinout-lab\/investor-workspace'[\s\S]{0,80}?'#my-commitment'/);
   assert.match(
-    routeBlock(app, '/lp-portal'),
-    /investorWorkspace\('axal-vc-fund', <LPPortalPage \/>/,
+    routeBlock(app, '/spinout-lab/investor-workspace'),
+    /investorWorkspace\('axal-vc-fund', null\)/,
   );
+  // D311 — the investor's rooms are read by grant under Research · Diligence,
+  // so the investor arm of /raise/data-room is a redirect there, still FIRST,
+  // still ahead of any founder shell. A bookmark lands on the list; it never
+  // renders the founder's room or its tab bar for an investor.
   const dataRoom = routeBlock(app, '/raise/data-room');
-  assert.match(dataRoom, /investorWorkspace\('deals'/);
   assert.match(
     dataRoom,
-    /effectiveRole === 'investor'\s*\?\s*investorWorkspace\('deals', <DataRoomPage user=\{user\} \/>\)/,
+    /effectiveRole === 'investor'\s*\?\s*<Navigate to="\/research\/diligence" replace \/>/,
     'the investor branch must be the first arm, ahead of any founder shell',
   );
+  assert.doesNotMatch(dataRoom, /investorWorkspace\('deals', <DataRoomPage/,
+    'the retired investor drawer is mounted again');
   assert.match(
     dataRoom,
     /founderWorkspace\('raise', <FounderWorkspaceTabs/,
-    'investor Data Room must not inherit the founder workspace tab bar',
+    'the founder arm keeps its own workspace tab bar',
+  );
+  // And the room the redirect's list links into keeps the investor shell.
+  assert.match(
+    routeBlock(app, '/research/diligence/:grantUid'),
+    /guard\(labRoles\(\['admin', 'investor'\]\), <DiligenceRoom /,
   );
 });
 
@@ -217,7 +232,7 @@ test('investor Deals exposes only canonical deal-room IDs and partial source fai
   assert.match(deals, /if \(dealsResult\.status === 'rejected'\)/);
   // A real Link, not an imperative navigate: it is middle-clickable and
   // copyable, which a button calling navigate() is not.
-  assert.match(deals, /<Link to="\/raise\/data-room"/);
+  assert.match(deals, /<Link to="\/research\/diligence"/);
 });
 
 test('only canonical investor deal routes replace their child with I3', () => {

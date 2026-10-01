@@ -2,9 +2,17 @@
  * Task #44 — Gamified Assessment: admin authoring routes (design §7.2).
  *
  * Mounted at /api/admin/assessment, BEFORE the catch-all /api/admin router
- * (same mount-before-catch-all precedence as admin_events / admin_news). Every
- * handler is requireAdmin and (in prod) sits behind the /api/admin/* Cf-Access
- * perimeter applied in index.ts.
+ * (same mount-before-catch-all precedence as admin_events / admin_articles).
+ * Two gates, and nothing in front of them: the 17 handlers that write a game,
+ * chapter, item, archetype or badge are `hqAuthor` (requireAdmin plus "not on
+ * a branch", D106), and the other 7 — the reads, including the session list
+ * (D446), preview and rescore — are plain `admin`. This header said every
+ * handler was requireAdmin and that was
+ * the whole gate from D106, which made it false, until D214 corrected it. It
+ * used to claim a `/api/admin/*` Cf-Access perimeter "applied in index.ts"
+ * too, which is the one file that records its removal — Task #33 took it out
+ * because the Access app is apex-only while the SPA uses a relative API base,
+ * so app.axal.vc/api/admin/* could not carry the assertion header.
  *
  * Surface: CRUD + version + publish/archive for games / chapters / items /
  * archetypes / badges; preview a game (plays without writing results);
@@ -13,7 +21,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin } from '../auth';
+import { requireAdmin, requireHqAuthoring } from '../auth';
 import {
   ensureAssessmentSchema,
   GAME_STATUSES,
@@ -41,6 +49,30 @@ adminAssessment.use('*', async (c, next) => {
 async function admin(c: any) {
   try {
     return await requireAdmin(c);
+  } catch (e) {
+    const msg = (e as Error)?.message;
+    return c.json({ error: msg || 'Admin required' }, msg === 'Unauthorized' ? 401 : 403);
+  }
+}
+
+/**
+ * D106 / D.9 — the same guard, plus "not on a branch".
+ *
+ * S4 SPLITS THIS SURFACE DOWN THE MIDDLE and the split is what this helper
+ * encodes: a branch owns its assessment RESULTS — runs, sessions, scores,
+ * rescoring — and HQ owns the QUESTIONS. Every route below that writes a
+ * game, chapter, item, archetype or badge is authoring, and uses this.
+ * `preview` and `sessions/:id/rescore` keep the plain `admin` helper: the
+ * first writes nothing, and the second recomputes a branch's own sessions
+ * against the questions it already holds.
+ *
+ * Shaped exactly like `admin` — returns a user or a Response the caller
+ * returns — so swapping one for the other at a call site is a one-word change
+ * and cannot half-apply.
+ */
+async function hqAuthor(c: any) {
+  try {
+    return await requireHqAuthoring(c);
   } catch (e) {
     const msg = (e as Error)?.message;
     return c.json({ error: msg || 'Admin required' }, msg === 'Unauthorized' ? 401 : 403);
@@ -107,7 +139,7 @@ adminAssessment.get('/games', async (c) => {
 });
 
 adminAssessment.post('/games', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const b = await c.req.json().catch(() => ({}));
   const slug = String(b?.slug || '').trim();
@@ -167,7 +199,7 @@ adminAssessment.get('/games/:slug', async (c) => {
 });
 
 adminAssessment.put('/games/:slug', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const game = await gameBySlug(c.env, c.req.param('slug'));
   if (!game) return c.json({ error: 'not found' }, 404);
@@ -213,17 +245,17 @@ async function setGameStatus(c: any, slug: string, status: string) {
   return c.json({ game: shapeGame(await gameBySlug(c.env, slug)) });
 }
 adminAssessment.post('/games/:slug/publish', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   return setGameStatus(c, c.req.param('slug'), 'published');
 });
 adminAssessment.post('/games/:slug/archive', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   return setGameStatus(c, c.req.param('slug'), 'archived');
 });
 adminAssessment.post('/games/:slug/version', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const game = await gameBySlug(c.env, c.req.param('slug'));
   if (!game) return c.json({ error: 'not found' }, 404);
@@ -237,7 +269,7 @@ adminAssessment.post('/games/:slug/version', async (c) => {
 
 // ── CHAPTERS ────────────────────────────────────────────────────────────────
 adminAssessment.post('/games/:slug/chapters', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const game = await gameBySlug(c.env, c.req.param('slug'));
   if (!game) return c.json({ error: 'not found' }, 404);
@@ -263,7 +295,7 @@ adminAssessment.post('/games/:slug/chapters', async (c) => {
 });
 
 adminAssessment.put('/chapters/:id', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const id = Number(c.req.param('id'));
   const b = await c.req.json().catch(() => ({}));
@@ -285,7 +317,7 @@ adminAssessment.put('/chapters/:id', async (c) => {
 });
 
 adminAssessment.delete('/chapters/:id', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const id = Number(c.req.param('id'));
   const itemCount = await c.env.DB.prepare(`SELECT COUNT(*) AS n FROM assessment_items WHERE chapter_id = ?`)
@@ -300,7 +332,7 @@ adminAssessment.delete('/chapters/:id', async (c) => {
 
 // ── ITEMS ──────────────────────────────────────────────────────────────────
 adminAssessment.post('/games/:slug/items', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const game = await gameBySlug(c.env, c.req.param('slug'));
   if (!game) return c.json({ error: 'not found' }, 404);
@@ -350,7 +382,7 @@ adminAssessment.post('/games/:slug/items', async (c) => {
 });
 
 adminAssessment.put('/items/:id', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const id = Number(c.req.param('id'));
   const b = await c.req.json().catch(() => ({}));
@@ -392,7 +424,7 @@ adminAssessment.put('/items/:id', async (c) => {
 });
 
 adminAssessment.delete('/items/:id', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const id = Number(c.req.param('id'));
   // Hard-delete only if never answered; otherwise soft-deactivate to preserve
@@ -412,7 +444,7 @@ adminAssessment.delete('/items/:id', async (c) => {
 
 // ── ARCHETYPES ───────────────────────────────────────────────────────────--
 adminAssessment.post('/games/:slug/archetypes', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const game = await gameBySlug(c.env, c.req.param('slug'));
   if (!game) return c.json({ error: 'not found' }, 404);
@@ -447,7 +479,7 @@ adminAssessment.post('/games/:slug/archetypes', async (c) => {
 });
 
 adminAssessment.put('/archetypes/:id', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const id = Number(c.req.param('id'));
   const b = await c.req.json().catch(() => ({}));
@@ -473,7 +505,7 @@ adminAssessment.put('/archetypes/:id', async (c) => {
 });
 
 adminAssessment.delete('/archetypes/:id', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   await c.env.DB.prepare(`DELETE FROM assessment_archetypes WHERE id = ?`).bind(Number(c.req.param('id'))).run();
   return c.json({ ok: true });
@@ -490,7 +522,7 @@ adminAssessment.get('/badges', async (c) => {
 });
 
 adminAssessment.post('/badges', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const b = await c.req.json().catch(() => ({}));
   const slug = String(b?.slug || '').trim();
@@ -523,7 +555,7 @@ adminAssessment.post('/badges', async (c) => {
 });
 
 adminAssessment.put('/badges/:slug', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   const slug = c.req.param('slug');
   const b = await c.req.json().catch(() => ({}));
@@ -558,7 +590,7 @@ adminAssessment.put('/badges/:slug', async (c) => {
 });
 
 adminAssessment.delete('/badges/:slug', async (c) => {
-  const u = await admin(c);
+  const u = await hqAuthor(c);
   if (u instanceof Response) return u;
   await c.env.DB.prepare(`DELETE FROM assessment_badges WHERE slug = ?`).bind(c.req.param('slug')).run();
   return c.json({ ok: true });
@@ -616,6 +648,128 @@ adminAssessment.post('/games/:slug/preview', async (c) => {
     skillVector: scored.skillVector,
   });
   return c.json({ preview: true, ...scored, archetype });
+});
+
+const SESSION_CAP = 200;
+
+function finiteOrNull(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function shapeSession(row: any) {
+  return {
+    public_id: row.public_id ?? null,
+    game_slug: row.game_slug ?? null,
+    game_version: finiteOrNull(row.game_version),
+    status: row.status ?? null,
+    started_at: row.started_at ?? null,
+    completed_at: row.completed_at ?? null,
+    user_name: row.user_name ?? null,
+    user_email: row.user_email ?? null,
+    archetype_label: row.archetype_label ?? null,
+  };
+}
+
+const SESSIONS_IN_CYCLE = `SELECT s.public_id, s.game_slug, s.game_version, s.status, s.started_at, s.completed_at,
+            u.name AS user_name, u.email AS user_email, r.archetype_label
+       FROM assessment_sessions s
+       LEFT JOIN users u ON u.id = s.user_id
+       LEFT JOIN assessment_results r ON r.session_id = s.id
+      WHERE datetime(s.started_at) >= datetime(?)
+        AND datetime(s.started_at) < datetime(?)
+      ORDER BY s.started_at DESC
+      LIMIT 201`;
+
+const SESSIONS_ALL = `SELECT s.public_id, s.game_slug, s.game_version, s.status, s.started_at, s.completed_at,
+            u.name AS user_name, u.email AS user_email, r.archetype_label
+       FROM assessment_sessions s
+       LEFT JOIN users u ON u.id = s.user_id
+       LEFT JOIN assessment_results r ON r.session_id = s.id
+      ORDER BY s.started_at DESC
+      LIMIT 201`;
+
+/**
+ * D446 — the list BranchPrograms was missing. `?cycle=` is a cohort cycle id.
+ * A session has no cycle column, so the filter keeps a run whose start falls
+ * inside that cycle's start and end. There is no twin of this filter on
+ * `routes/assessment.ts`.
+ */
+adminAssessment.get('/sessions', async (c) => {
+  const u = await admin(c);
+  if (u instanceof Response) return u;
+  const rawCycle = c.req.query('cycle');
+  const wantsCycle = typeof rawCycle === 'string' && rawCycle.trim() !== '';
+  let cycleId: number | null = null;
+  let windowStart: string | null = null;
+  let windowEnd: string | null = null;
+  if (wantsCycle) {
+    if (!/^[1-9][0-9]{0,8}$/.test(rawCycle.trim())) {
+      return c.json({ error: 'cycle_invalid', message: 'Name a cycle by its id. Nothing was listed.' }, 400);
+    }
+    cycleId = Number(rawCycle.trim());
+    let cycle: { id: number; start_at: string | null; end_at: string | null } | null = null;
+    try {
+      cycle = await c.env.DB.prepare(
+        'SELECT id, start_at, end_at FROM cohort_cycles WHERE id = ?',
+      ).bind(cycleId).first<{ id: number; start_at: string | null; end_at: string | null }>();
+    } catch (e) {
+      console.error('[admin-assessment] could not read cohort_cycles', (e as Error).message);
+      return c.json({
+        available: false,
+        reason: 'The cohort calendar could not be read, so runs cannot be limited to a cycle. This is not a claim that nobody has taken an assessment.',
+      });
+    }
+    if (!cycle) {
+      return c.json({
+        available: true,
+        filtered: false,
+        cycle_id: cycleId,
+        cycle_found: false,
+        items: [],
+        truncated: false,
+        reason: 'No cycle with that id is on this database, so no runs are listed against it.',
+      });
+    }
+    const start = typeof cycle.start_at === 'string' ? cycle.start_at.trim() : '';
+    const end = typeof cycle.end_at === 'string' ? cycle.end_at.trim() : '';
+    if (!start || !end) {
+      return c.json({
+        available: true,
+        filtered: false,
+        cycle_id: cycleId,
+        cycle_found: true,
+        filterable: false,
+        items: [],
+        truncated: false,
+        reason: 'This cycle has no start or no end, so a run cannot be kept inside it. The list is not the unfiltered population.',
+      });
+    }
+    windowStart = start;
+    windowEnd = end;
+  }
+  try {
+    const res = windowStart && windowEnd
+      ? await c.env.DB.prepare(SESSIONS_IN_CYCLE).bind(windowStart, windowEnd).all<any>()
+      : await c.env.DB.prepare(SESSIONS_ALL).all<any>();
+    const rows = res.results || [];
+    const truncated = rows.length > SESSION_CAP;
+    return c.json({
+      available: true,
+      filtered: Boolean(windowStart && windowEnd),
+      cycle_id: cycleId,
+      ...(wantsCycle ? { cycle_found: true, filterable: true } : {}),
+      items: rows.slice(0, SESSION_CAP).map(shapeSession),
+      truncated,
+    });
+  } catch (e) {
+    console.error('[admin-assessment] could not list sessions', (e as Error).message);
+    return c.json({
+      available: false,
+      reason: 'Assessment runs could not be read on this database. This is not a claim that nobody has taken one.',
+    });
+  }
 });
 
 // ── ANALYTICS ──────────────────────────────────────────────────────────────

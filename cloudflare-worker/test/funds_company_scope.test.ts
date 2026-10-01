@@ -328,10 +328,15 @@ test('neither LP scope takes a company at all', () => {
   }
 });
 
-test('the fund list and analytics stay platform-wide', () => {
-  // Not merely "a directory": api.fundsList() is read by
-  // SpinoutLabLpWorkspacePage, and Spin-Out Lab is out of bounds for this
-  // rollout. Narrowing these would change a page this work must not touch.
+test('the fund list and analytics are narrowed by role, never by company', () => {
+  // RE-AIMED IN D370. This read "stay platform-wide", and the list, the
+  // family analytics and the fund detail did answer every signed-in role with
+  // every fund on the platform — which D370 closed: an admin sees all, anyone
+  // else the funds they are GP of record for (and, for the list, LP of). What
+  // this still pins is the part that remains true: none of them is narrowed
+  // by the ACTIVE COMPANY. api.fundsList() is read by the Lab's GP statement
+  // tool (SpinoutLabLpWorkspacePage), and a company arm there would hide a
+  // GP's own fund behind the switcher.
   for (const route of ["funds.get('/', ", "funds.get('/analytics'", "funds.get('/:id', "]) {
     const start = routeSrc.indexOf(route);
     assert.ok(start > 0, `${route} not found`);

@@ -19,6 +19,7 @@
  * is not a rate limiter.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
 /**
  * Exported for the schema test, which runs these against a real SQLite
@@ -77,10 +78,10 @@ export const WORKFLOW_SCHEMA_DDL: readonly string[] = [
     ON shared_services_log(performed_by, action_type, created_at)`,
 ];
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 export async function ensureWorkflowSchema(env: Env): Promise<void> {
-  if (_ready) return;
+  if (READY.get(bindingKey(env))) return;
   for (const stmt of WORKFLOW_SCHEMA_DDL) {
     try {
       await env.DB.prepare(stmt).run();
@@ -90,10 +91,13 @@ export async function ensureWorkflowSchema(env: Env): Promise<void> {
       console.error('ensureWorkflowSchema:', e?.message);
     }
   }
-  _ready = true;
+  READY.set(bindingKey(env), true);
 }
 
-/** Test seam — the module-level cache would otherwise leak across cases. */
-export function __resetWorkflowSchemaCache(): void {
-  _ready = false;
-}
+// The test seam that used to sit here is gone. `__resetWorkflowSchemaCache()`
+// existed for one reason — its own docblock said so: "the module-level cache
+// would otherwise leak across cases". Keyed on the binding it does not leak,
+// because a case that hands over a fresh D1 stub gets a cache that has never
+// seen it. It had no caller anywhere in the worker or its tests, so keeping a
+// seam whose stated reason no longer holds would leave a false claim in the
+// file for the next reader to trust.

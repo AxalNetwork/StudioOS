@@ -7,6 +7,7 @@ import InfoStrip from '../components/InfoStrip';
 import {
   useFundAnalytics, fmtCents, fmtMultiple, Unrecorded,
 } from '../lib/fundAnalytics';
+import { titleCase as caseLabel } from '../lib/absence';
 
 /**
  * Fund Performance — /funds/performance, a tab of FundOpsWorkspace.
@@ -37,8 +38,7 @@ const STATUS_TONE = {
   wound_down: 'gray',
 };
 
-const titleCase = (s) =>
-  String(s || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || 'Unknown';
+const titleCase = (s) => caseLabel(s) || 'Unknown';
 
 export default function FundPerformancePage({ embedded = false }) {
   const { items, totals, unavailable, loading, error, reload } = useFundAnalytics();

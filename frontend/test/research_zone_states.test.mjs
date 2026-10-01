@@ -146,22 +146,27 @@ test('the recorded gap cannot drift from the filter table that found it', () => 
 
 test('the gap renders above the body, and the rail reports it too', () => {
   // Above, never instead. `{body}` has to survive: dropping it is how "record
-  // the gap" turns into "delete the feed", which for markets would take the
-  // largest store in the product off the screen.
+  // the gap" turns into "delete the zone", which would take a live store —
+  // for markets, the comparable readings — off the screen.
   assert.match(WORKSPACE, /const storeGap = !isRoot && slug \? RESEARCH_STORE_GAPS\[slug\] : null;/,
     'the per-zone gap lookup is gone');
-  // ANCHORED TO THE BRACE. `/storeGap && \(/` alone still matches
-  // `{false && storeGap && (`, so a guard that switches the whole block off
-  // passed this — found by mutation. Requiring `storeGap` to be the FIRST
+  // ANCHORED TO THE BRACE. `/gap && \(/` alone still matches
+  // `{false && gap && (`, so a guard that switches the whole block off
+  // passed this — found by mutation. Requiring `gap` to be the FIRST
   // operand after the brace is what makes a disabling conjunct fail.
-  assert.match(WORKSPACE, /\{storeGap && \(/, 'the gap is no longer rendered unconditionally');
-  assert.match(WORKSPACE, /eyebrow=\{storeGap\.eyebrow\}/,
+  // D392 — the rendered variable is `gap`: the looked-up entry narrowed to the
+  // licences it names (`roles`), so a canvas whose object the zone already
+  // holds is not told it is missing. The four properties below are unchanged.
+  assert.match(WORKSPACE, /const gap = storeGap && \(!storeGap\.roles \|\| storeGap\.roles\.includes\(role\)\) \? storeGap : null;/,
+    'the gap is no longer scoped to the licences its entry names');
+  assert.match(WORKSPACE, /\{gap && \(/, 'the gap is no longer rendered unconditionally');
+  assert.match(WORKSPACE, /eyebrow=\{gap\.eyebrow\}/,
     'the gap renders without its own eyebrow, so it claims the zone has no store at all');
   assert.match(WORKSPACE, /\{body\}/, 'the live body is no longer rendered beneath the gap');
   // The rail's stated stance is "which zones have a store behind them", so a
   // zone blocked on one belongs in its report. One object feeds both surfaces,
   // so the rail cannot be gentler than the page.
-  assert.match(WORKSPACE, /storeGap \? \[\[`No \$\{storeGap\.blocks\}`, storeGap\.why\]\] : \[\]/,
+  assert.match(WORKSPACE, /gap \? \[\[`No \$\{gap\.blocks\}`, gap\.why\]\] : \[\]/,
     'the rail no longer reports the zone as blocked on a store');
 });
 
@@ -195,9 +200,12 @@ test('which sources failed is tracked, not just that some did', () => {
     'the failed keys must reach state, not just the banner');
   assert.match(DESK, /const \[failedKeys, setFailedKeys\]/, 'and be held there');
   // A retry that succeeds must clear the flag, or the card lies in the other
-  // direction — permanently unavailable after one transient failure.
-  assert.match(DESK, /next\.delete\('documents'\)/,
-    'a later success must clear the failure it recovered from');
+  // direction — permanently unavailable after one transient failure. Every
+  // source now loads in the one batch (D421 moved the library into it), and a
+  // retry REPLACES the set rather than adding to it, which is what clears it.
+  assert.ok(!/setFailedKeys\(\(previous\) => new Set\(previous\)\.add/.test(DESK) || /next\.delete\(/.test(DESK),
+    'a failure is accumulated with nothing to clear it on a later success');
+  assert.match(DESK, /\}, \[retry\]\);/, 'the batch no longer re-runs on retry, so nothing can clear a failure');
 });
 
 test('an empty store reports zero rather than blaming the connection', () => {

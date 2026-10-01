@@ -140,6 +140,7 @@ partnerDelivery.get('/board', async (c) => {
 
     const engagements = await c.env.DB.prepare(
       `SELECT e.id, e.uid, e.status, e.price, e.delivered_at, e.cancelled_at,
+              e.invoiced_at, e.invoice_id,
               n.title AS need_title, f.name AS founder_name,
               r.id AS retainer_id, r.retained_hours
          FROM engagements e
@@ -213,6 +214,21 @@ partnerDelivery.get('/board', async (c) => {
       if (u.period === period) usageByRetainer.set(Number(u.retainer_id), u);
     }
 
+    // D394 — THE HOME'S "DUE THIS WEEK", counted from the milestones this
+    // handler already reads: open ones whose due date falls today or in the
+    // next six days. Compared as calendar dates (the column is a date the firm
+    // typed), in JS, so no SQL timestamp comparison is involved. A milestone
+    // with no due date is not due this week; it is undated, and not counted.
+    const today = new Date();
+    const dayIso = (d: Date) => d.toISOString().slice(0, 10);
+    const weekStart = dayIso(today);
+    const weekEnd = dayIso(new Date(today.getTime() + 6 * 86400000));
+    const dueThisWeek = (m: any) => {
+      if (m.completed_at || !m.due_at) return false;
+      const d = String(m.due_at).slice(0, 10);
+      return d >= weekStart && d <= weekEnd;
+    };
+
     const items = (engagements.results || []).map((e: any) => {
       const id = Number(e.id);
       // The most recently granted seat is the one the row is about. A seat
@@ -243,6 +259,15 @@ partnerDelivery.get('/board', async (c) => {
         client: e.founder_name ?? null,
         scope: e.need_title ?? null,
         price: e.price === null || e.price === undefined ? null : Number(e.price),
+        // D395 — THE LIFECYCLE THE BOARD NOW DRIVES. `/partner/operations/
+        // engagements` was the one canvas-less page that started, delivered,
+        // invoiced and cancelled an engagement; its successor is this board,
+        // so the row carries the dates the ledger under it prints. Each is the
+        // engagement's own column, null until that step happened.
+        delivered_at: e.delivered_at ?? null,
+        invoiced_at: e.invoiced_at ?? null,
+        invoice_id: e.invoice_id ?? null,
+        cancelled_at: e.cancelled_at ?? null,
         mode: seat ? 'embedded' : 'project',
         // What the founder granted, in their own words — `engagement_seats
         // .scope` is free text for exactly that reason.
@@ -251,6 +276,7 @@ partnerDelivery.get('/board', async (c) => {
         seat_revoked_at: seat?.revoked_at ?? null,
         milestone_count: ms.length,
         milestones_done: ms.filter((m: any) => m.completed_at).length,
+        milestones_due_7d: ms.filter(dueThisWeek).length,
         hours_this_period: seat ? hrs : null,
         // The cap an embedded row measures against is the retainer's retained
         // hours. No retainer means no cap, which the page states rather than
@@ -270,6 +296,7 @@ partnerDelivery.get('/board', async (c) => {
       project_value: money(live.filter((i: any) => i.mode === 'project')),
       embedded_monthly: money(live.filter((i: any) => i.mode === 'embedded')),
       needs_attention: live.filter((i: any) => i.health === 'at_risk' || i.health === 'blocked').length,
+      due_next_7_days: live.reduce((a: number, i: any) => a + i.milestones_due_7d, 0),
       revoked_seats: items.filter((i: any) => i.seat_revoked_at).length,
       // Same honesty the health read reports: an unrated row is not a healthy
       // one, and the strip must not read as a clean board when it is an empty

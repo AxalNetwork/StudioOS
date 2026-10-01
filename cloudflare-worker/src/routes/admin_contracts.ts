@@ -2,10 +2,11 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAdmin, requireFactor, requireStepUp } from '../auth';
+import { requireAdmin, requireFactor, requireStepUp, requireHqAuthoring } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { mintDownloadToken } from '../services/signedDownload';
 import { sendAgreementAssignedEmail } from '../services/email';
+import { fanOut } from '../services/branches';
 import {
   listTemplates as storeListTemplates,
   getTemplate as storeGetTemplate,
@@ -634,6 +635,60 @@ adminContracts.get('/stats', async (c) => {
   }
 });
 
+async function loadTemplateUsage(sql: ReturnType<typeof getSQL>) {
+  const contractTypes = Array.from(CONTRACT_DOC_TYPES);
+  const [docs, envs]: [any[], any[]] = await Promise.all([
+    sql.unsafe(
+      `SELECT template_name, doc_type, created_at FROM documents
+        WHERE LOWER(COALESCE(doc_type, '')) IN (${Array.from(CONTRACT_DOC_TYPES).map(() => '?').join(',')})`,
+      contractTypes,
+    ),
+    sql`SELECT document_type, created_at FROM esign_envelopes`,
+  ]);
+  const usage = new Map<string, number>();
+  const lastUsed = new Map<string, string>();
+  const bump = (key: string | null | undefined, when: string | null | undefined) => {
+    if (!key) return;
+    usage.set(key, (usage.get(key) || 0) + 1);
+    const prev = lastUsed.get(key);
+    if (when && (!prev || new Date(when) > new Date(prev))) lastUsed.set(key, when);
+  };
+  for (const d of docs) bump(d.template_name || d.doc_type, d.created_at);
+  for (const e of envs) bump(e.document_type, e.created_at);
+  return { usage, lastUsed };
+}
+
+function buildTemplateCatalog(usage: Map<string, number>, lastUsed: Map<string, string>) {
+  return Object.entries(TEMPLATES).map(([k, v]) => ({
+    key: k,
+    title: v.title,
+    doc_type: k,
+    layer: v.layer,
+    layer_label: TEMPLATE_LAYERS[v.layer]?.label || v.layer,
+    layer_description: TEMPLATE_LAYERS[v.layer]?.description || '',
+    party_roles: [...partyRolesFor(k)],
+    usage_count: usage.get(k) || 0,
+    last_used_at: lastUsed.get(k) || null,
+  }));
+}
+
+// GET /api/admin/contracts/doc-types — the code registry HQ · Contracts draws (D454).
+// What a contract may *be* lives in CONTRACT_DOC_TYPES + TEMPLATES + party roles;
+// usage is counted from documents + esign like the template catalog.
+adminContracts.get('/doc-types', async (c) => {
+  await requireAdmin(c);
+  const sql = getSQL(c.env);
+  try {
+    const { usage, lastUsed } = await loadTemplateUsage(sql);
+    const items = buildTemplateCatalog(usage, lastUsed);
+    items.sort((a, b) => a.layer.localeCompare(b.layer) || a.title.localeCompare(b.title));
+    const layers = Object.entries(TEMPLATE_LAYERS).map(([id, meta]) => ({ id, ...meta }));
+    return c.json({ layers, items, type_count: items.length });
+  } finally {
+    await sql.end();
+  }
+});
+
 // GET /api/admin/contracts/templates — catalog with usage counts.
 // Counts come from BOTH `documents.template_name|doc_type` and
 // `esign_envelopes.document_type` so usage isn't undercounted post-migration.
@@ -641,34 +696,8 @@ adminContracts.get('/templates', async (c) => {
   await requireAdmin(c);
   const sql = getSQL(c.env);
   try {
-    const [docs, envs]: [any[], any[]] = await Promise.all([
-      sql.unsafe(
-        `SELECT template_name, doc_type, created_at FROM documents
-          WHERE LOWER(COALESCE(doc_type, '')) IN (${Array.from(CONTRACT_DOC_TYPES).map(() => '?').join(',')})`,
-        Array.from(CONTRACT_DOC_TYPES),
-      ),
-      sql`SELECT document_type, created_at FROM esign_envelopes`,
-    ]);
-    const usage = new Map<string, number>();
-    const lastUsed = new Map<string, string>();
-    const bump = (key: string | null | undefined, when: string | null | undefined) => {
-      if (!key) return;
-      usage.set(key, (usage.get(key) || 0) + 1);
-      const prev = lastUsed.get(key);
-      if (when && (!prev || new Date(when) > new Date(prev))) lastUsed.set(key, when);
-    };
-    for (const d of docs) bump(d.template_name || d.doc_type, d.created_at);
-    for (const e of envs) bump(e.document_type, e.created_at);
-
-    const out = Object.entries(TEMPLATES).map(([k, v]) => ({
-      key: k,
-      title: v.title,
-      doc_type: k,
-      layer: v.layer,
-      layer_label: TEMPLATE_LAYERS[v.layer]?.label || v.layer,
-      usage_count: usage.get(k) || 0,
-      last_used_at: lastUsed.get(k) || null,
-    }));
+    const { usage, lastUsed } = await loadTemplateUsage(sql);
+    const out = buildTemplateCatalog(usage, lastUsed);
     out.sort((a, b) => (b.usage_count - a.usage_count) || a.title.localeCompare(b.title));
     return c.json(out);
   } finally {
@@ -1330,8 +1359,12 @@ adminContracts.get('/templates/store', async (c) => {
 });
 
 // POST /templates/store — create a new template (slug must be unique).
+//
+// D106 — HQ authors the master library; a branch reads the copy HQ pushed
+// (D.9). `requireHqAuthoring` is `requireAdmin` plus that refusal, so nothing
+// changes for an HQ admin.
 adminContracts.post('/templates/store', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireHqAuthoring(c);
   const body = await c.req.json<{ slug?: string; title?: string; category?: string; body_md?: string }>();
   try {
     const tpl = await storeCreateTemplate(
@@ -1344,6 +1377,61 @@ adminContracts.post('/templates/store', async (c) => {
     if (e instanceof TemplateError) return c.json({ error: e.message, code: e.code }, e.status);
     throw e;
   }
+});
+
+// POST /templates/publish — push the master library to every branch (D147).
+//
+// THE PUSH IS REPORTED, NEVER THROWN — D111's rule, and the same shape
+// `admin_escalations.ts` uses for an answer and `admin_licences.ts` for a
+// licence transition. HQ's library is HQ's whether or not a branch answered,
+// and a 502 for one unreachable branch would tell an operator that a push to
+// the other three did not happen.
+//
+// WHAT IT SENDS IS EXACTLY WHAT HQ'S OWN LIBRARY SHOWS. `storeListTemplates`
+// filters `is_active = 1`, so an archived template is absent from the push and
+// the branch withdraws it at the next one. No body travels: nothing on a branch
+// renders or instantiates one (migration 268 says why), so this is a catalogue.
+//
+// ZERO BRANCHES IS A REAL ANSWER. `fanOut` over an env with no `BRANCH_*`
+// binding returns `[]`, and this returns `branches: []` with `pushed: 0` — which
+// is true, and is what an operator sees today.
+adminContracts.post('/templates/publish', async (c) => {
+  const admin = await requireHqAuthoring(c);
+  const templates = await storeListTemplates(c.env);
+  const pushed_at = new Date().toISOString();
+  const payload = {
+    templates: templates.map((t) => ({
+      slug: t.slug, title: t.title, category: t.category, version: t.version,
+    })),
+    pushed_at,
+  };
+
+  const results = await fanOut<{ ok: true; stored: number; withdrawn: number }>(
+    c.env, 'publishTemplate', [payload],
+  );
+
+  return c.json({
+    ok: true,
+    pushed_at,
+    template_count: payload.templates.length,
+    pushed_by: admin.id,
+    // One row per branch in `services/branches.ts`'s THREE states, never two:
+    // `unreadable` is not a claim that the branch is down, and `not_deployed`
+    // must not share its colour.
+    branches: results.map((r) => ({
+      code: r.code,
+      status: r.status,
+      ...(r.data ? { stored: r.data.stored, withdrawn: r.data.withdrawn } : {}),
+      ...(r.reason ? { reason: r.reason } : {}),
+    })),
+    answered: results.filter((r) => r.status === 'ok').length,
+    total: results.length,
+    ...(results.length ? {} : {
+      branches_reason:
+        'No branch Worker is bound to HQ yet, so the library was not pushed anywhere. It will '
+        + 'reach a branch the first time one is provisioned and this is run again.',
+    }),
+  });
 });
 
 // GET /templates/store/:slug — single template (full body + merge fields).
@@ -1369,7 +1457,7 @@ adminContracts.get('/templates/store/:slug/versions', async (c) => {
 // PUT /templates/store/:slug — edit a template. The server snapshots the
 // prior row into history and bumps the version atomically.
 adminContracts.put('/templates/store/:slug', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireHqAuthoring(c);
   const slug = c.req.param('slug');
   const body = await c.req.json<{ title?: string; category?: string; body_md?: string }>();
   try {
@@ -1389,7 +1477,7 @@ adminContracts.put('/templates/store/:slug', async (c) => {
 // DELETE /templates/store/:slug — soft-delete (is_active = 0). Requires a
 // recent step-up factor, mirroring the other destructive contract actions.
 adminContracts.delete('/templates/store/:slug', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireHqAuthoring(c);
   await requireStepUp(c);
   const slug = c.req.param('slug');
   const ok = await storeSoftDeleteTemplate(c.env, slug, admin.id);

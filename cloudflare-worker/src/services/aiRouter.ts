@@ -24,6 +24,7 @@
  *     module is deployable today without provisioning a new namespace.
  */
 import type { Env } from '../types';
+import { branchOf } from '../util/branch';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,6 +50,8 @@ export type TaskClass =
   | 'transcribe'
   | 'validate_tag_pains'
   | 'validate_draft_hypotheses'
+  | 'market_sizing_inputs'
+  | 'competitor_scan'
   | 'research_ask';
 
 export type RefusalReason =
@@ -100,6 +103,24 @@ export interface RunOptions {
   // primary: reporting success under a model the caller did not ask for is
   // the class of lie this router exists to avoid.
   model?: string;
+  // The app path the run was asked from (`/validate/interviews`), written to
+  // `ai_usage_logs.surface` (migration 319, D404) so a page can show its own
+  // spend. Optional, and absent for every internal caller: NULL is "not
+  // recorded". Re-validated in `recordUsage` against SURFACE_RE, so a caller
+  // that forwards a request field cannot put anything else into the column.
+  surface?: string;
+}
+
+/**
+ * What a recorded surface may look like: an absolute app path of letters,
+ * digits, `/`, `_`, `.` and `-`, at most 160 characters. Anything else is
+ * recorded as NULL rather than trimmed into something that looks valid.
+ */
+export const SURFACE_RE = /^\/[A-Za-z0-9/_.-]{0,159}$/;
+export function normaliseSurface(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const path = value.trim().replace(/\/+$/, '') || (value.trim() === '/' ? '/' : '');
+  return SURFACE_RE.test(path) ? path : null;
 }
 
 export interface UsageMeta {
@@ -355,6 +376,49 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
     // hundredth of a cent, is not a trade worth putting on screen.
     alternates: [MID_LLAMA, SMALL_LLAMA],
   },
+  // The market page's sizing INPUTS — an addressable population, an ACV
+  // benchmark — each proposed with a citation or dropped. The first `sourced`
+  // fill, so it is the first task in this table whose output is refused when it
+  // arrives unsupported rather than merely scored.
+  //
+  // A SEPARATE CLASS FROM THE TWO ABOVE, for this table's stated reason:
+  // `/api/ai/me/spend` groups by task and the rail quotes the caller's observed
+  // average per task. A sizing run reads a project's sector and its own library;
+  // folding it in with a tagging run would misreport both.
+  //
+  // No 3b in the alternates, and the asymmetry is the same one
+  // `validate_draft_hypotheses` makes. A shallower model asked for a market
+  // figure does not return a worse-written figure, it returns one whose citation
+  // is likelier to be invented — and the refusal path then drops the run
+  // entirely, so the cheaper model is not cheaper, it is a wasted call.
+  //
+  // Not cached. A sizing proposal reads the project's current sector and the
+  // documents in its library, which is exactly what changes between two asks.
+  market_sizing_inputs: {
+    provider: 'workers-ai',
+    model: MID_LLAMA,
+    fallbackChain: [SMALL_LLAMA],
+    alternates: [MID_LLAMA, SMALL_LLAMA],
+  },
+  // Naming competitors a founder has not listed, each with a citation or dropped.
+  //
+  // ITS OWN CLASS FOR THIS TABLE'S STATED REASON — `/api/ai/me/spend` groups by
+  // task and the rail quotes the caller's observed average — and for a second one
+  // that is specific to it: a sizing run reads a sector and returns numbers, and
+  // this reads a sector and returns names of real companies. The failure modes
+  // differ (a wrong number is a wrong number; an invented company is a
+  // fabrication), so their averages should not be folded into one figure that
+  // describes neither.
+  //
+  // Same alternates as sizing, and the same reason a 3b is absent: a shallower
+  // model asked to name competitors returns ones whose citation is likelier to be
+  // invented, and the refusal path then drops the run — so it is not cheaper.
+  competitor_scan: {
+    provider: 'workers-ai',
+    model: MID_LLAMA,
+    fallbackChain: [SMALL_LLAMA],
+    alternates: [MID_LLAMA, SMALL_LLAMA],
+  },
   // Research · Ask — answering a question over the caller's own indexed
   // documents, with citations.
   //
@@ -465,15 +529,63 @@ async function bumpSpend(store: MinimalKV, key: string, delta: number, ttlSec: n
   return next;
 }
 
-async function killSwitchOn(store: MinimalKV): Promise<boolean> {
-  try {
-    const v = await store.get('ai_killswitch:org');
-    return v === '1' || v === 'true';
-  } catch { return false; }
+/**
+ * D242 — THE ORG TRIP IS PER MONTH, KEYED EXACTLY AS THE SPEND IT MEASURES.
+ *
+ * It was one key, `ai_killswitch:org`, written for 35 days. The spend it
+ * guards is counted per calendar month (`org:${monthKey()}`), so a trip on the
+ * 29th kept every AI call refused for about five weeks — through most of a
+ * month whose budget nobody had touched — and nothing in the product could
+ * clear it sooner. Keyed by the same `monthKey()`, the trip ends with the month
+ * it measured: on the 1st the readers ask for a key that has never been
+ * written.
+ *
+ * THE OLD KEY IS INERT, NOT DELETED. Nothing reads `ai_killswitch:org` any
+ * more; a copy left in KV expires on its own TTL. There is no runtime delete
+ * and no runtime clear of the new key either: D203 made the operator store
+ * kill-only, and a way to switch AI back on mid-month would be a second,
+ * unaudited one.
+ */
+function orgKillSwitchKey(month: string): string {
+  return `ai_killswitch:org:${month}`;
 }
 
+/**
+ * The organisation-wide budget trip, read as one of three answers.
+ *
+ * ONE READING OF THE KEY, TWO USES. The router gates on it and HQ Platform
+ * reports it (D202), and the two must agree about what "tripped" means — so
+ * the truthiness rule lives here once rather than in each reader.
+ */
+async function killSwitchState(store: MinimalKV): Promise<'on' | 'off' | 'unreadable'> {
+  try {
+    const v = await store.get(orgKillSwitchKey(monthKey()));
+    return v === '1' || v === 'true' ? 'on' : 'off';
+  } catch { return 'unreadable'; }
+}
+
+async function killSwitchOn(store: MinimalKV): Promise<boolean> {
+  // FAILS OPEN, deliberately and unchanged: a KV hiccup must not refuse every
+  // AI call on the platform. A reader that REPORTS rather than gates keeps the
+  // unreadable case — `aiOrgKillSwitchState` below.
+  return (await killSwitchState(store)) === 'on';
+}
+
+/**
+ * Whether the router is refusing AI calls platform-wide, for a reader that
+ * reports it. `no_store` is a deployment with neither AI_SPEND nor TOKENS
+ * bound, where the router cannot budget at all and so never trips.
+ */
+export async function aiOrgKillSwitchState(env: Env): Promise<'on' | 'off' | 'unreadable' | 'no_store'> {
+  const store = kv(env);
+  if (!store) return 'no_store';
+  return killSwitchState(store);
+}
+
+// The TTL outlasts any month, so a trip written on the 1st still stands on the
+// 31st; the month in the KEY, not the TTL, is what ends it.
 async function setKillSwitch(store: MinimalKV, ttlSec: number): Promise<void> {
-  try { await store.put('ai_killswitch:org', '1', { expirationTtl: ttlSec }); } catch {}
+  try { await store.put(orgKillSwitchKey(monthKey()), '1', { expirationTtl: ttlSec }); } catch {}
 }
 
 // ---------------------------------------------------------------------------
@@ -536,29 +648,37 @@ async function cacheKeyFor(opts: RunOptions, model: string): Promise<string | nu
 
 // ---------------------------------------------------------------------------
 // Schema bootstrap for ai_usage_logs (mirrors migration 040). Cheap, gated
-// behind a once-per-isolate flag so dev/SQLite is self-healing.
+// per D1 BINDING so dev/SQLite is self-healing and a second database in the
+// same isolate is not told the work is already done (#204).
+//
+// THE CAST IS SPELLED OUT HERE rather than taken from `util/schemaBootstrap`'s
+// `bindingKey`, and that is deliberate: `aiRouter.test.mjs` loads this file by
+// reading its bytes, stripping the single `import type` line and evaluating the
+// rest inside `new Function`. A value import would survive that strip and throw
+// `Cannot use import statement outside a module`. This module having no value
+// import is a property that test depends on, so it keeps its own cast.
 // ---------------------------------------------------------------------------
-let _logSchemaReady = false;
+let LOG_SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureLogSchema(env: Env): Promise<void> {
-  if (_logSchemaReady) return;
+  if (LOG_SCHEMA_READY.get(env.DB as unknown as object)) return;
   try {
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))",
+      "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), surface TEXT)",
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_user_created ON ai_usage_logs(user_id, created_at DESC)");
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_task_created ON ai_usage_logs(task, created_at DESC)");
-    _logSchemaReady = true;
+    LOG_SCHEMA_READY.set(env.DB as unknown as object, true);
   } catch (e) {
     console.warn('[aiRouter] log schema:', (e as Error).message);
   }
 }
 
-async function recordUsage(env: Env, userId: number | null, usage: UsageMeta, refusal: RefusalReason | null): Promise<void> {
+async function recordUsage(env: Env, userId: number | null, usage: UsageMeta, refusal: RefusalReason | null, surface?: string): Promise<void> {
   await ensureLogSchema(env);
   try {
     await env.DB.prepare(
-      `INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal, surface)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       userId,
       usage.task,
@@ -571,6 +691,7 @@ async function recordUsage(env: Env, userId: number | null, usage: UsageMeta, re
       usage.fallback_used ? 1 : 0,
       usage.cached ? 1 : 0,
       refusal,
+      normaliseSurface(surface),
     ).run();
   } catch (e) {
     console.warn('[aiRouter] recordUsage:', (e as Error).message);
@@ -591,11 +712,14 @@ interface ProviderResult {
   error?: string;
 }
 
+/** The slice of workers-types' `GatewayOptions` this router sends (D261). */
+type GatewayOption = { gateway: { id: string; metadata: Record<string, string> } };
+
 interface WorkersAIBinding {
   run(
     model: string,
     payload: unknown,
-    options?: { gateway?: { id: string; skipCache?: boolean; cacheTtl?: number } },
+    options?: { gateway?: { id: string; skipCache?: boolean; cacheTtl?: number; metadata?: Record<string, string> } },
   ): Promise<unknown>;
 }
 
@@ -606,11 +730,43 @@ interface WorkersAIBinding {
 // (call falls through to the un-gatewayed Workers AI path).
 // Task #19 (WS0): `onboarding_chat` is deliberately NOT in this list — it
 // must never depend on the advisor gateway, so it always runs un-gatewayed.
-function gatewayOptionFor(env: Env, task: TaskClass): { gateway: { id: string } } | undefined {
-  if (task !== 'advisor_turn' && task !== 'advisor_explain') return undefined;
-  const slug = (env as unknown as Record<string, string | undefined>).CF_AI_GATEWAY_SLUG_ADVISOR;
-  if (!slug || !slug.trim()) return undefined;
-  return { gateway: { id: slug.trim() } };
+//
+// D209 — the list and the slug are exported because HQ's topology page states
+// them, and a page holding its own copy of "which calls go through the gateway"
+// is a second place to update.
+//
+// D261 — THE OPTION NOW SAYS WHOSE CALL IT IS. It carries the gateway's custom
+// metadata (at most five entries; `cf.*` is reserved): the branch the Worker is
+// deployed for, or `hq`; the account as `<branch>:<user id>`, because a user id
+// is only unique within one database; and the task class. So the gateway's logs
+// can split this traffic by branch and by account. Only these two task classes
+// carry it, because only they are gatewayed; every other call reaches Workers AI
+// with no gateway and so with no metadata. `GATEWAY_METADATA_KEYS` is exported
+// for the topology page, and `topology_d209.test.ts` holds the two equal.
+export const GATEWAY_TASKS: readonly TaskClass[] = ['advisor_turn', 'advisor_explain'];
+
+/** The metadata keys a gatewayed call carries, in the order it sends them (D261). */
+export const GATEWAY_METADATA_KEYS = ['branch', 'account', 'task'] as const;
+
+export function advisorGatewaySlug(env: Env): string | null {
+  const slug = env.CF_AI_GATEWAY_SLUG_ADVISOR;
+  return slug && slug.trim() ? slug.trim() : null;
+}
+
+function gatewayOptionFor(env: Env, task: TaskClass, userId?: number | null): GatewayOption | undefined {
+  if (!GATEWAY_TASKS.includes(task)) return undefined;
+  const slug = advisorGatewaySlug(env);
+  if (!slug) return undefined;
+  const branch = branchOf(env) ?? 'hq';
+  const metadata: Record<string, string> = { branch };
+  // NO ACCOUNT FROM A ZERO. `bindAi` defaults `userId` to 0 for calls that have
+  // no person behind them; `hq:0` would read as an account and pool every such
+  // call under it. So the key is left out rather than invented.
+  if (typeof userId === 'number' && Number.isInteger(userId) && userId > 0) {
+    metadata.account = `${branch}:${userId}`;
+  }
+  metadata.task = task;
+  return { gateway: { id: slug, metadata } };
 }
 
 // True when this task would normally route through the advisor AI Gateway
@@ -631,7 +787,7 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
   if (!ai || typeof ai.run !== 'function') {
     return { ok: false, status: 0, error: 'AI binding not configured' };
   }
-  const gatewayOpt = bypassGateway ? undefined : gatewayOptionFor(env, opts.task);
+  const gatewayOpt = bypassGateway ? undefined : gatewayOptionFor(env, opts.task, opts.userId);
   try {
     if (ROUTE[opts.task]?.isAudio) {
       // `Array.from` on the bytes is what the binding expects, and it is also
@@ -740,7 +896,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
       prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
       fallback_used: false, cached: false, safety_score: null,
     };
-    await recordUsage(env, opts.userId, usage, 'misconfigured');
+    await recordUsage(env, opts.userId, usage, 'misconfigured', opts.surface);
     return { ok: false, refusal: 'misconfigured', error: `unknown task ${opts.task}`, usage };
   }
 
@@ -764,7 +920,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
       prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
       fallback_used: false, cached: false, safety_score: null,
     };
-    await recordUsage(env, opts.userId, usage, 'model_not_offered');
+    await recordUsage(env, opts.userId, usage, 'model_not_offered', opts.surface);
     return {
       ok: false,
       refusal: 'model_not_offered',
@@ -791,7 +947,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
             prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
             fallback_used: false, cached: true, safety_score: null,
           };
-          await recordUsage(env, opts.userId, usage, null);
+          await recordUsage(env, opts.userId, usage, null, opts.surface);
           return {
             ok: true,
             output: hit.output ?? '',
@@ -811,7 +967,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
         prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
         fallback_used: false, cached: false, safety_score: null,
       };
-      await recordUsage(env, opts.userId, usage, 'kill_switch');
+      await recordUsage(env, opts.userId, usage, 'kill_switch', opts.surface);
       return { ok: false, refusal: 'kill_switch', error: 'org-wide AI budget exhausted', usage };
     }
     const dayKey   = `user:${opts.userId}:${todayKey()}`;
@@ -828,7 +984,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
         prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
         fallback_used: false, cached: false, safety_score: null,
       };
-      await recordUsage(env, opts.userId, usage, 'budget_user_day');
+      await recordUsage(env, opts.userId, usage, 'budget_user_day', opts.surface);
       return { ok: false, refusal: 'budget_user_day', error: `daily cap ${caps.userDay} USD reached`, usage };
     }
     if (m >= caps.userMonth) {
@@ -837,7 +993,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
         prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
         fallback_used: false, cached: false, safety_score: null,
       };
-      await recordUsage(env, opts.userId, usage, 'budget_user_month');
+      await recordUsage(env, opts.userId, usage, 'budget_user_month', opts.surface);
       return { ok: false, refusal: 'budget_user_month', error: `monthly cap ${caps.userMonth} USD reached`, usage };
     }
     if (o >= caps.orgMonth) {
@@ -847,7 +1003,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
         prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
         fallback_used: false, cached: false, safety_score: null,
       };
-      await recordUsage(env, opts.userId, usage, 'budget_org_month');
+      await recordUsage(env, opts.userId, usage, 'budget_org_month', opts.surface);
       return { ok: false, refusal: 'budget_org_month', error: `org cap ${caps.orgMonth} USD reached`, usage };
     }
   }
@@ -942,7 +1098,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   };
 
   if (!attempt.ok) {
-    await recordUsage(env, opts.userId, usage, 'all_models_failed');
+    await recordUsage(env, opts.userId, usage, 'all_models_failed', opts.surface);
     return { ok: false, refusal: 'all_models_failed', error: lastError || 'provider failed', usage };
   }
 
@@ -987,7 +1143,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     }
   }
 
-  await recordUsage(env, opts.userId, usage, null);
+  await recordUsage(env, opts.userId, usage, null, opts.surface);
 
   return {
     ok: true,
@@ -1028,8 +1184,165 @@ export interface AiUsageReport {
   refusals: Array<{ refusal: string; count: number }>;
 }
 
-export async function loadAiUsageReport(env: Env, days = 7): Promise<AiUsageReport> {
+/**
+ * What the platform records about its own AI guardrails, in one place.
+ *
+ * WHY THIS IS A FUNCTION AND NOT INLINE (D152). The llama-guard rollup was
+ * written inside `loadAiUsageReport` and served only `/api/monitoring/ai-usage`,
+ * so HQ's Security page — which draws an "AI safety" zone and an H7 guardrail
+ * panel — had no way to read it and rendered a refusal instead. Giving
+ * `admin_security.ts` its own copy of this SQL is the drift this repo has
+ * consolidated eleven times (D127 one `GROUP BY role`, D128 one LIKE escaper,
+ * D130 one definition of open, D131 one count, D138 one definition of what
+ * freezes, D140 one zone formatter, D142 one freeze list, D144 one notification
+ * row, D149 one bps formatter, D151 one name for the branch). **Twelfth.**
+ *
+ * TWO STORES, BECAUSE THEY COUNT DIFFERENT THINGS AND BOTH ARE REAL.
+ *
+ *   · `ai_usage_logs.safety_score` (migration 040) is written by `recordUsage`
+ *     on EVERY router call, so `task = 'safety'` rows are every guard
+ *     EVALUATION and its verdict. That is the safe/unsafe rate.
+ *   · `advisor_turn_audit` (migration 043) is written by `writeTurnAudit` from
+ *     seventeen call sites in `routes/advisor.ts`, and records what the guard
+ *     caused: `refusal_reason = 'safety_block'` is a turn that was BLOCKED, and
+ *     `shadow_flagged = 1` is an output the screen FLAGGED. A verdict and a
+ *     consequence are not the same number, and reporting one as the other is
+ *     how a safety figure comes to mean nothing.
+ *
+ * EACH READ FAILS ON ITS OWN. `advisor_turn_audit` is lazily bootstrapped
+ * (`ensureAuditSchema`), so its absence is a state a caller can actually meet —
+ * and an absent table read as "zero hits" is the #204 defect this programme has
+ * fixed repeatedly. `evaluated` and `enforcement` therefore carry their own
+ * `available` flag rather than collapsing to zeros.
+ */
+export type GuardrailCounters = {
+  window_days: number;
+  since: string;
+  /**
+   * llama-guard verdicts over `ai_usage_logs` where task = 'safety'.
+   *
+   * `safe_rate` is **null when nothing was evaluated**, not 0. A rate over an
+   * empty denominator is undefined, and rendering it as 0 would put "0% safe"
+   * on a security page for a window in which the guard never ran — the worst
+   * direction for this particular figure to be wrong in. (`loadAiUsageReport`
+   * keeps its own zero-defaulted copy: `AiUsageTab` has shipped with that
+   * shape and changing what its tiles mean is not this function's business.)
+   */
+  verdicts:
+    | { available: true; evaluated: number; safe_count: number; unsafe_count: number; safe_rate: number | null }
+    | { available: false; reason: string };
+  /**
+   * What the guard CAUSED, over `advisor_turn_audit`.
+   *
+   * D158 — `rules` is WHICH RULE fired, which until migration 270 was computed
+   * on every guarded turn and thrown away. Three things about its shape are
+   * deliberate:
+   *
+   *   · `rules` and `states` are SEPARATE. `classifyInput` returns an S-code
+   *     when llama-guard names a violated category, and otherwise one of
+   *     `safe` / `empty` / `router_failed` / `error` — which are not rules that
+   *     fired, they are descriptions of the classification itself. Mixing them
+   *     would put "the router failed" in a list headed "what tripped the
+   *     guard", and a router failure is the guard NOT running.
+   *   · `unclassified` is its own number and is never folded into either. Every
+   *     row written before 270 has a null category, and reporting those as
+   *     `safe` would be a verdict nothing reached.
+   *   · The whole block still fails as one with the rest of `enforcement`: an
+   *     unreadable `advisor_turn_audit` is not a turn that fired no rules.
+   */
+  enforcement:
+    | {
+      available: true;
+      blocked: number;
+      flagged: number;
+      rules: Array<{ category: string; turns: number }>;
+      states: Array<{ category: string; turns: number }>;
+      unclassified: number;
+    }
+    | { available: false; reason: string };
+};
+
+export async function loadGuardrailCounters(env: Env, days = 7): Promise<GuardrailCounters> {
   await ensureLogSchema(env);
+  const win = Math.max(1, Math.min(90, Math.round(days)));
+  const since = new Date(Date.now() - win * 86400_000).toISOString().slice(0, 19).replace('T', ' ');
+
+  const safety = await env.DB.prepare(
+    `SELECT
+        SUM(CASE WHEN safety_score IS NOT NULL THEN 1 ELSE 0 END) AS evaluated,
+        SUM(CASE WHEN safety_score >= 0.5 THEN 1 ELSE 0 END) AS safe_count,
+        SUM(CASE WHEN safety_score IS NOT NULL AND safety_score < 0.5 THEN 1 ELSE 0 END) AS unsafe_count
+       FROM ai_usage_logs WHERE created_at >= ? AND task = 'safety'`,
+  ).bind(since).first<{ evaluated: number; safe_count: number; unsafe_count: number }>()
+    .catch(() => undefined);
+
+  // `blocked` keys on the documented refusal value, not on `safety_score < 0.5`:
+  // a low score is the guard's opinion, and a block is what the route did with
+  // it. `flagged` rides `idx_advisor_turn_audit_flagged(shadow_flagged, created_at DESC)`.
+  const enforcement = await env.DB.prepare(
+    `SELECT
+        SUM(CASE WHEN refusal_reason = 'safety_block' THEN 1 ELSE 0 END) AS blocked,
+        SUM(CASE WHEN shadow_flagged = 1 THEN 1 ELSE 0 END) AS flagged
+       FROM advisor_turn_audit WHERE created_at >= ?`,
+  ).bind(since).first<{ blocked: number; flagged: number }>()
+    .catch(() => undefined);
+
+  // D158 — the breakdown, riding `idx_advisor_turn_audit_category`. Rows with a
+  // null category are counted here rather than excluded, so `unclassified` is a
+  // figure the page can show rather than a silent difference between this total
+  // and `blocked`.
+  const byCategory = await env.DB.prepare(
+    `SELECT COALESCE(guardrail_category, '') AS category, COUNT(*) AS turns
+       FROM advisor_turn_audit
+      WHERE created_at >= ?
+      GROUP BY COALESCE(guardrail_category, '')
+      ORDER BY turns DESC, category ASC`,
+  ).bind(since).all<{ category: string; turns: number }>()
+    .catch(() => undefined);
+
+  // An S-code is a rule that fired; everything else `classifyInput` can return
+  // describes the classification instead. A literal test, not a built regex.
+  const isRule = (c: string) => /^s\d+$/.test(c);
+  const catRows = (byCategory?.results || []).map((r) => ({
+    category: String(r.category || ''),
+    turns: Number(r.turns || 0),
+  }));
+
+  const evaluated = Number(safety?.evaluated || 0);
+  return {
+    window_days: win,
+    since,
+    verdicts: safety === undefined
+      ? {
+        available: false,
+        reason: 'The guard-verdict rollup over `ai_usage_logs` did not complete, which is not the '
+          + 'same as no guarded call having run.',
+      }
+      : {
+        available: true,
+        evaluated,
+        safe_count: Number(safety?.safe_count || 0),
+        unsafe_count: Number(safety?.unsafe_count || 0),
+        safe_rate: evaluated > 0 ? Number(safety?.safe_count || 0) / evaluated : null,
+      },
+    enforcement: enforcement === undefined
+      ? {
+        available: false,
+        reason: '`advisor_turn_audit` could not be read on this database (migration 043). That is '
+          + 'not the same as no turn having been blocked or flagged.',
+      }
+      : {
+        available: true,
+        blocked: Number(enforcement?.blocked || 0),
+        flagged: Number(enforcement?.flagged || 0),
+        rules: catRows.filter((r) => isRule(r.category)),
+        states: catRows.filter((r) => r.category !== '' && !isRule(r.category)),
+        unclassified: catRows.find((r) => r.category === '')?.turns ?? 0,
+      },
+  };
+}
+
+export async function loadAiUsageReport(env: Env, days = 7): Promise<AiUsageReport> {
   const win = Math.max(1, Math.min(90, Math.round(days)));
   const since = new Date(Date.now() - win * 86400_000).toISOString().slice(0, 19).replace('T', ' ');
 
@@ -1110,13 +1423,14 @@ export async function loadAiUsageReport(env: Env, days = 7): Promise<AiUsageRepo
       ORDER BY total_cost DESC`,
   ).bind(since).all<{ model: string; calls: number; total_cost: number; fb: number }>().catch(() => ({ results: [] as Array<{ model: string; calls: number; total_cost: number; fb: number }> }));
 
-  const safety = await env.DB.prepare(
-    `SELECT
-        SUM(CASE WHEN safety_score IS NOT NULL THEN 1 ELSE 0 END) AS evaluated,
-        SUM(CASE WHEN safety_score >= 0.5 THEN 1 ELSE 0 END) AS safe_count,
-        SUM(CASE WHEN safety_score IS NOT NULL AND safety_score < 0.5 THEN 1 ELSE 0 END) AS unsafe_count
-       FROM ai_usage_logs WHERE created_at >= ? AND task = 'safety'`,
-  ).bind(since).first<{ evaluated: number; safe_count: number; unsafe_count: number }>().catch(() => null);
+  // D152 — ONE DEFINITION OF THE ROLLUP, and this is now its caller rather than
+  // a second copy of the SQL. `safety` keeps the shape this endpoint has always
+  // returned, including zeros when the read fails: `AiUsageTab` is a shipped
+  // page and changing what its tiles mean is not this PR's concern. The RICHER
+  // form, which distinguishes "nothing was evaluated" from "the read did not
+  // complete", is what the new HQ surface consumes.
+  const counters = await loadGuardrailCounters(env, win);
+  const safety = counters.verdicts.available ? counters.verdicts : null;
 
   const calls = Number(totals?.calls || 0);
   return {
@@ -1151,10 +1465,13 @@ export async function loadAiUsageReport(env: Env, days = 7): Promise<AiUsageRepo
   };
 }
 
-// Test-only export — lets the test harness reset the once-per-isolate
-// schema flag between scenarios.
+// Test-only export — drops what every binding has bootstrapped, so a scenario
+// that reuses one D1 stub still starts from a cold schema. Keyed per binding
+// (#204) this matters less than it did: a test handing over a FRESH stub now
+// gets a cold cache with no reset at all. It stays because the suites that
+// reuse a stub across cases still need it, not because the cache leaks.
 export function __resetForTest(): void {
-  _logSchemaReady = false;
+  LOG_SCHEMA_READY = new WeakMap<object, boolean>();
 }
 
 // Spec phrased the public entry point as `run(task, payload, opts)`.

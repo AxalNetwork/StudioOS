@@ -9,6 +9,7 @@
  * avoids a circular import between routes/settings and services/notify.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export type Theme = 'light' | 'dark' | 'system';
 export type Density = 'comfy' | 'compact';
@@ -21,6 +22,8 @@ export interface UserSettingsRow {
   timezone: string;
   locale: string;
   pronouns: string | null;
+  /** Illustration sex for the archetype sprite: 'm' | 'f' | 'both' | null. */
+  archetype_sex: string | null;
   profile_slug: string | null;
   visibility: Visibility;
   show_in_directory: number;
@@ -47,6 +50,7 @@ const DEFAULT_ROW = {
   timezone: 'UTC',
   locale: 'en',
   pronouns: null as string | null,
+  archetype_sex: null as string | null,
   profile_slug: null as string | null,
   visibility: 'network' as Visibility,
   show_in_directory: 1,
@@ -65,9 +69,9 @@ const DEFAULT_ROW = {
   dismissed_explainers: '[]',
 };
 
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 export async function ensureUserSettings(env: Env): Promise<void> {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   try {
     await env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS user_settings (
@@ -75,6 +79,7 @@ export async function ensureUserSettings(env: Env): Promise<void> {
         timezone TEXT DEFAULT 'UTC',
         locale TEXT DEFAULT 'en',
         pronouns TEXT,
+        archetype_sex TEXT,
         profile_slug TEXT UNIQUE,
         visibility TEXT DEFAULT 'network' CHECK (visibility IN ('public','network','private')),
         show_in_directory INTEGER DEFAULT 1,
@@ -111,7 +116,12 @@ export async function ensureUserSettings(env: Env): Promise<void> {
         `ALTER TABLE user_settings ADD COLUMN matching_opt_in INTEGER DEFAULT 0`,
       ).run();
     } catch {}
-    migrated = true;
+    try {
+      await env.DB.prepare(
+        `ALTER TABLE user_settings ADD COLUMN archetype_sex TEXT`,
+      ).run();
+    } catch {}
+    MIGRATED.set(bindingKey(env), true);
   } catch (e) {
     console.error('[user_settings] migration failed', e);
   }
@@ -133,6 +143,7 @@ export interface UserSettingsPatch {
   timezone?: string;
   locale?: string;
   pronouns?: string | null;
+  archetype_sex?: string | null;
   profile_slug?: string | null;
   visibility?: Visibility;
   show_in_directory?: boolean | number;
@@ -227,6 +238,22 @@ function buildUpdates(patch: UserSettingsPatch): Array<[string, unknown]> {
   if (patch.pronouns !== undefined) {
     const v = patch.pronouns == null ? null : String(patch.pronouns).slice(0, 32);
     push('pronouns', v && v.trim() ? v.trim() : null);
+  }
+  if (patch.archetype_sex !== undefined) {
+    if (patch.archetype_sex == null || patch.archetype_sex === '') {
+      push('archetype_sex', null);
+    } else {
+      const v = String(patch.archetype_sex).trim().toLowerCase();
+      const mapped = v === 'male' ? 'm' : v === 'female' ? 'f' : v;
+      if (!['m', 'f', 'both'].includes(mapped)) {
+        throw new SettingsValidationError(
+          'archetype_sex must be m, f, or both',
+          400,
+          'archetype_sex',
+        );
+      }
+      push('archetype_sex', mapped);
+    }
   }
   if (patch.profile_slug !== undefined) {
     if (patch.profile_slug == null || patch.profile_slug === '') {

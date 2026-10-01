@@ -15,7 +15,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin } from '../auth';
+import { requireAdmin, requireSuperAdmin, requireBranchNotSuspended } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import {
   ensureCohortTimingSchema,
@@ -196,7 +196,17 @@ r.post('/override', async (c) => {
 });
 
 r.get('/impersonation-audit', async (c) => {
-  await requireAdmin(c);
+  // D133 — SUPER ADMIN. This is `impersonation_sessions` joined to `users`
+  // TWICE, for the actor's name and the target's name and email: every admin's
+  // support-session history, readable by every other admin. It is the same
+  // query shape D132 raised on `/monitoring/analytics/{audit, audit/export.csv,
+  // exports/recent}` and it was missed there, one file over, because that pass
+  // went looking in `monitoring_analytics.ts` rather than for the join.
+  //
+  // The rule D132 wrote for its own file is the one being applied here: a route
+  // that reaches another admin's activity is a cross-admin read whatever it
+  // renders, and gating some of them is gating none of them.
+  await requireSuperAdmin(c);
   await ensureCohortTimingSchema(c.env);
   const rows = await c.env.DB.prepare(
     `SELECT i.*, a.name AS admin_name, t.name AS target_name, t.email AS target_email
@@ -251,12 +261,48 @@ r.get('/applications', async (c) => {
         ORDER BY CASE WHEN ca.status = 'pending' THEN 0 ELSE 1 END, ca.created_at DESC
         LIMIT 200`,
     ).bind(cy.id).all<Record<string, unknown>>();
+    // D383 — each applicant's answers, applicant-facing note and live
+    // interview, read separately so a database without migrations 315–316
+    // still lists its applicants (with those fields null) instead of failing.
+    const lifecycle = new Map<number, Record<string, unknown>>();
+    try {
+      const { parseStoredAnswers, parseStoredAsks } = await import('../services/applicationLifecycle');
+      const lc = await c.env.DB.prepare(
+        `SELECT ca.id AS applicant_id, a.answers_json, a.withdrawn_at, a.applicant_note,
+                a.applicant_asks_json, a.applicant_note_at
+           FROM cohort_applicants ca LEFT JOIN spinout_applications a ON a.id = ca.application_id
+          WHERE ca.cohort_cycle_id = ?`,
+      ).bind(cy.id).all<Record<string, unknown>>();
+      for (const row of lc.results || []) {
+        lifecycle.set(Number(row.applicant_id), {
+          answers: parseStoredAnswers(row.answers_json),
+          answers_recorded: typeof row.answers_json === 'string' && !!row.answers_json,
+          withdrawn_at: row.withdrawn_at ?? null,
+          applicant_note: row.applicant_note ?? null,
+          applicant_asks: parseStoredAsks(row.applicant_asks_json),
+          applicant_note_at: row.applicant_note_at ?? null,
+          interview: null,
+        });
+      }
+      const iv = await c.env.DB.prepare(
+        `SELECT ca.id AS applicant_id, i.id, i.scheduled_at, i.duration_min, i.location, i.note, i.status,
+                i.reschedule_requested_at, i.reschedule_reason
+           FROM spinout_application_interviews i
+           JOIN cohort_applicants ca ON ca.application_id = i.application_id
+          WHERE ca.cohort_cycle_id = ?
+          ORDER BY i.id ASC`,
+      ).bind(cy.id).all<Record<string, unknown>>();
+      for (const row of iv.results || []) {
+        const entry = lifecycle.get(Number(row.applicant_id));
+        if (entry) { const { applicant_id: _drop, ...rest } = row; entry.interview = rest; }
+      }
+    } catch { /* migrations 315–316 not applied here: lifecycle fields stay absent */ }
     out.push({
       ...cy,
       label: monthLabel(Number(cy.year), Number(cy.month)),
       applicant_counts: byStatus,
       meets_minimum: ((byStatus['approved'] ?? 0) + (byStatus['activated'] ?? 0)) >= settings.min,
-      applicants: applicants.results || [],
+      applicants: (applicants.results || []).map((a) => ({ ...a, ...(lifecycle.get(Number(a.id)) || {}) })),
     });
   }
   return c.json({ cycles: out, settings, server_time: new Date().toISOString() });
@@ -289,13 +335,22 @@ r.post('/applications/settings', async (c) => {
 
 r.post('/applications/:applicant_id/decide', async (c) => {
   const adminUser = await requireAdmin(c);
+  // D107 — a suspended branch's queues are frozen: 423, after the admin gate.
+  await requireBranchNotSuspended(c);
   const { ensureCohortAppSchema, logCycleEvent, notifyOnce, monthLabel } = await import('../services/cohortApplications');
   await ensureCohortAppSchema(c.env);
   const applicantId = parseInt(c.req.param('applicant_id'));
   if (!Number.isFinite(applicantId)) return c.json({ error: 'Invalid applicant id' }, 400);
-  const body = (await c.req.json().catch(() => ({}))) as { status?: unknown; reason?: unknown };
+  const body = (await c.req.json().catch(() => ({}))) as {
+    status?: unknown; reason?: unknown; applicant_note?: unknown; applicant_asks?: unknown;
+  };
   const status = (typeof body.status === 'string' ? body.status : '').trim().toLowerCase();
   const reason = (typeof body.reason === 'string' ? body.reason : '').trim().slice(0, 500);
+  // D383 — what the APPLICANT is told, written for them. Optional, and kept
+  // apart from `reason`, which is the admin's required note and never shown.
+  const applicantNote = (typeof body.applicant_note === 'string' ? body.applicant_note : '').trim().slice(0, 2000);
+  const { normaliseAsks } = await import('../services/applicationLifecycle');
+  const applicantAsks = normaliseAsks(body.applicant_asks);
   if (!['approved', 'rejected', 'waitlisted'].includes(status)) {
     return c.json({ error: "status must be 'approved', 'rejected' or 'waitlisted'" }, 400);
   }
@@ -306,12 +361,14 @@ r.post('/applications/:applicant_id/decide', async (c) => {
        LEFT JOIN spinout_applications sa ON sa.id = ca.application_id WHERE ca.id = ?`,
   ).bind(applicantId).first<Record<string, unknown>>();
   if (!row) return c.json({ error: 'Applicant not found' }, 404);
-  if (['activated', 'rolled_forward'].includes(String(row.status))) {
+  // D383 — a withdrawn applicant left the pool themselves; deciding them
+  // would put back an application its owner took out.
+  if (['activated', 'rolled_forward', 'withdrawn'].includes(String(row.status))) {
     return c.json({ error: `Applicant is already ${row.status}` }, 409);
   }
   await c.env.DB.prepare(
     `UPDATE cohort_applicants SET status = ?, decided_at = datetime('now'), decided_by = ?, decision_reason = ?
-      WHERE id = ? AND status NOT IN ('activated', 'rolled_forward')`,
+      WHERE id = ? AND status NOT IN ('activated', 'rolled_forward', 'withdrawn')`,
   ).bind(status, `admin:${adminUser.id}`, reason, applicantId).run();
   // Keep the legacy spinout_applications row in lockstep so /apply's
   // "one pending application" gate and the founder-side UI stay correct:
@@ -327,6 +384,22 @@ r.post('/applications/:applicant_id/decide', async (c) => {
     await c.env.DB.prepare(
       `UPDATE spinout_applications SET status = 'pending', decided_at = NULL WHERE id = ? AND status = 'refused'`,
     ).bind(appId).run();
+  }
+  // null when no note was sent; false when one was sent and did not save, so
+  // the console can say the applicant was not told rather than assume it.
+  let applicantNoteSaved: boolean | null = null;
+  if (applicantNote) {
+    applicantNoteSaved = false;
+    try {
+      await c.env.DB.prepare(
+        `UPDATE spinout_applications
+            SET applicant_note = ?, applicant_asks_json = ?, applicant_note_at = datetime('now')
+          WHERE id = ?`,
+      ).bind(applicantNote, applicantAsks.length ? JSON.stringify(applicantAsks) : null, appId).run();
+      applicantNoteSaved = true;
+    } catch (e) {
+      console.error('[admin-cohort/decide] applicant note write failed', (e as Error)?.message);
+    }
   }
   const label = monthLabel(Number(row.year), Number(row.month));
   const cycleId = Number(row.cohort_cycle_id);
@@ -407,7 +480,84 @@ r.post('/applications/:applicant_id/decide', async (c) => {
     `Applicant #${applicantId} (user_id=${userId}) ${status}: ${reason}`, `admin:${adminUser.id}`);
   await logActivity(c.env, adminUser.email, adminUser.id, `cohort_applicant_${status}`,
     `Admin ${adminUser.name} marked applicant #${applicantId} ${status} for ${label} (reason: ${reason})`);
-  return c.json({ ok: true, status, emailed });
+  return c.json({ ok: true, status, emailed, applicant_note_saved: applicantNoteSaved });
+});
+
+// D383 — the partner interview. Schedule (or re-schedule: a new row, the
+// previous one cancelled) and cancel. Frozen with the rest of the queue
+// (D107): an interview is a step in an admission, and a suspended branch's
+// admissions are closed.
+function refusal(c: any, status: number, code: string, message: string) {
+  return c.json({ error: code, message, detail: message }, status);
+}
+
+async function applicantForInterview(env: Env, applicantId: number) {
+  return env.DB.prepare(
+    `SELECT ca.id, ca.application_id, ca.user_id, ca.status FROM cohort_applicants ca WHERE ca.id = ?`,
+  ).bind(applicantId).first<{ id: number; application_id: number; user_id: number; status: string }>();
+}
+
+r.post('/applications/:applicant_id/interview', async (c) => {
+  const adminUser = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
+  const applicantId = parseInt(c.req.param('applicant_id'));
+  if (!Number.isFinite(applicantId)) return refusal(c, 400, 'invalid_applicant', 'That applicant id is not valid.');
+  const body = (await c.req.json().catch(() => ({}))) as {
+    scheduled_at?: unknown; duration_min?: unknown; location?: unknown; note?: unknown;
+  };
+  const when = typeof body.scheduled_at === 'string' ? new Date(body.scheduled_at) : null;
+  if (!when || Number.isNaN(when.getTime())) {
+    return refusal(c, 400, 'invalid_time', 'Give the interview a date and time.');
+  }
+  if (when.getTime() < Date.now()) {
+    return refusal(c, 400, 'time_in_past', 'An interview cannot be scheduled in the past.');
+  }
+  const duration = Number(body.duration_min ?? 30);
+  if (!Number.isInteger(duration) || duration < 10 || duration > 240) {
+    return refusal(c, 400, 'invalid_duration', 'An interview lasts between 10 and 240 minutes.');
+  }
+  const location = (typeof body.location === 'string' ? body.location : '').trim().slice(0, 500) || null;
+  const note = (typeof body.note === 'string' ? body.note : '').trim().slice(0, 2000) || null;
+  const applicant = await applicantForInterview(c.env, applicantId);
+  if (!applicant) return refusal(c, 404, 'applicant_not_found', 'That applicant does not exist.');
+  if (!['pending', 'waitlisted'].includes(applicant.status)) {
+    return refusal(c, 409, 'not_interviewable', `This applicant is ${applicant.status}; only an undecided application gets an interview.`);
+  }
+  // SQLite-comparable UTC text, like every other timestamp column here.
+  const at = when.toISOString().replace('T', ' ').slice(0, 19);
+  // One batch, so a failed insert cannot leave the old interview cancelled
+  // and no new one in its place.
+  const [, ins] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE spinout_application_interviews SET status = 'cancelled', updated_at = datetime('now')
+        WHERE application_id = ? AND status = 'scheduled'`,
+    ).bind(applicant.application_id),
+    c.env.DB.prepare(
+      `INSERT INTO spinout_application_interviews
+         (application_id, user_id, scheduled_at, duration_min, location, note, scheduled_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(applicant.application_id, applicant.user_id, at, duration, location, note, adminUser.id),
+  ]);
+  await logActivity(c.env, adminUser.email, adminUser.id, 'cohort_interview_scheduled',
+    `Admin ${adminUser.name} scheduled an interview for applicant #${applicantId} at ${at} UTC (${duration} min)`);
+  return c.json({ ok: true, interview_id: Number(ins.meta?.last_row_id ?? 0) || null, scheduled_at: at }, 201);
+});
+
+r.post('/applications/:applicant_id/interview/cancel', async (c) => {
+  const adminUser = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
+  const applicantId = parseInt(c.req.param('applicant_id'));
+  if (!Number.isFinite(applicantId)) return refusal(c, 400, 'invalid_applicant', 'That applicant id is not valid.');
+  const applicant = await applicantForInterview(c.env, applicantId);
+  if (!applicant) return refusal(c, 404, 'applicant_not_found', 'That applicant does not exist.');
+  const upd = await c.env.DB.prepare(
+    `UPDATE spinout_application_interviews SET status = 'cancelled', updated_at = datetime('now')
+      WHERE application_id = ? AND status = 'scheduled'`,
+  ).bind(applicant.application_id).run();
+  if ((upd.meta?.changes ?? 0) === 0) return refusal(c, 409, 'no_scheduled_interview', 'There is no scheduled interview to cancel.');
+  await logActivity(c.env, adminUser.email, adminUser.id, 'cohort_interview_cancelled',
+    `Admin ${adminUser.name} cancelled the interview for applicant #${applicantId}`);
+  return c.json({ ok: true });
 });
 
 r.post('/applications/cycles/:cycle_id/force-proceed', async (c) => {

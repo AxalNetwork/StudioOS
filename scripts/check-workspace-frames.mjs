@@ -241,6 +241,29 @@ for (const role of ROLES) {
       body = { items: [], published_count: 0, self_stated_count: 0 };
     } else if (p.includes('/partner/offers/fit-rules')) {
       body = { items: [], unstated_count: 0, enforcement: 'none', enforcement_note: null };
+    }
+    // The three investor Deals reads, for the reason the partner block above
+    // gives — and they are here because this check FOUND them. `/deals/screening`
+    // and `/deals/commit` reported "rendered nothing" against the bare `[]`, and
+    // the diagnosis is the same one written above: `[]` is TRUTHY, so
+    // `ScreeningZone`'s `deskReady` went true, `desk.scored` came back undefined,
+    // and the zone rendered neither its loading state nor its empty state nor an
+    // error — a shape the real API cannot produce. Stubbing the real envelopes
+    // makes the check prove the EMPTY state paints on these two as well.
+    else if (p.includes('/deals/screening')) {
+      body = {
+        scored: [], flags: [],
+        rubric: { available: true, dimensions: [], editable: false, editable_reason: '' },
+        red_flag_rules_available: false, red_flag_rules_reason: '',
+      };
+    } else if (p.includes('/deals/pass-analytics')) {
+      body = { total: 0, buckets: [], unrecorded: 0, unrecorded_note: null, reason: null, deals: [] };
+    } else if (p.includes('/ic/commit-room')) {
+      body = {
+        decisions: { available: true, total: 0, by_status: {}, rows: [] },
+        current: null,
+        room: { available: false, reason: '' },
+      };
     } else if (/\/(summary|overview|analytics|profile|me|progress|status)$/.test(p)) body = {};
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });
@@ -254,13 +277,20 @@ for (const role of ROLES) {
    * addition and the reason it is built from `bucketsFor` rather than
    * `allZoneRoutes`.
    *
-   * `zoneForPath` ends `|| bucket.zones[0]` (`shellConfig.js`), and `App.jsx`
-   * registers all eight `/research/*` paths for all five roles while
-   * `RESEARCH_ZONES` gives each role only four or five. So a licence at a
-   * `/research/*` path its own shell does not list silently gets the FIRST
-   * zone — a partner at `/research/companies` reads "Research ‹ Ask" under a
-   * `/companies` URL. That renders cleanly, holds the frame, and passes every
-   * check above it while showing the wrong zone.
+   * FIXED SINCE THIS WAS WRITTEN, AND THE NOTE STAYS AS THE REASON FOR THE
+   * PAIRING. It used to read: `zoneForPath` ends `|| bucket.zones[0]` and
+   * `App.jsx` registers all eight `/research/*` paths for all five roles while
+   * `RESEARCH_ZONES` gives each role only four or five, so a licence at a
+   * `/research/*` path its own shell does not list silently got the FIRST zone
+   * — a partner at `/research/companies` reading "Research ‹ Ask" under a
+   * `/companies` URL, rendering cleanly and passing every check above it.
+   *
+   * Both halves of that are now closed: the guards admit only roles whose shell
+   * has the zone, and `zoneForPath` answers null for an unmatched slug instead
+   * of a neighbour. `frontend/test/route_role_zone_contract.test.mjs` holds both
+   * and needs no browser, which matters — this check builds its list from
+   * `bucketsFor`, so it never navigates a role to a foreign path and therefore
+   * never could have caught the thing this paragraph described.
    *
    * Pairing each path with the label its own shell declares is what makes that
    * visible: the crumb and the h1 must name the zone that was asked for.

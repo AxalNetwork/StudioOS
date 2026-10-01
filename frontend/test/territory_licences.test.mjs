@@ -140,14 +140,30 @@ test('the page converts entered currency to cents and shows bps as a percentage'
   const s = read(PAGE);
   assert.match(s, /Math\.round\(Number\(f\.annual_fee\) \* 100\)/, 'entered units → integer cents');
   assert.ok(!/parseFloat\(/.test(s), 'no float parsing of money');
-  assert.match(s, /Number\(bps\) \/ 100/, 'bps → percent happens in exactly one place');
+  // D149 MOVED THE PROPERTY AND THIS ASSERTION FOLLOWED IT, INVERTED. It used
+  // to read `Number(bps) / 100` here under the comment "bps → percent happens
+  // in exactly one place" — which was true of this file and false of the tree:
+  // the same arithmetic was written SIX times, three of them in a different
+  // format. So the page must now NOT contain it, and the one-place property is
+  // asserted across all of `frontend/src` by `bps_single_definition.test.mjs`.
+  // A guard scoped to the file a helper happens to live in cannot see the copy
+  // in the next file, which is how six of them accumulated.
+  assert.match(s, /import \{ bpsPercent as pct \} from '\.\.\/\.\.\/lib\/bps'/);
+  assert.ok(
+    !/\/ 100\)\.toFixed\(/.test(s),
+    'bps → percent is lib/bps.js\'s, not a copy in this page',
+  );
 });
 
 /* ---------------------------------------------------------------- *
- * The five-step flow                                                *
+ * The six-step flow                                                 *
  * ---------------------------------------------------------------- */
 
 test('every step of the issue flow has an endpoint', () => {
+  // D110 — five became six. Contract and Deploy are the two the canvas draws
+  // and the flow stopped short of; "Activate" was never a tab (the button sits
+  // above them) and the fifth tab was really the history, which now has its
+  // own unnumbered one.
   const s = read(ROUTE);
   for (const [step, marker] of [
     ['Entity', "r.post('/'"],
@@ -155,11 +171,23 @@ test('every step of the issue flow has an endpoint', () => {
     ['Seats', "r.put('/:uid/seats'"],
     ['Terms', "r.patch('/:uid/terms'"],
     ['Activate', "r.post('/:uid/activate'"],
+    ['Contract', "r.post('/:uid/contract'"],
   ]) {
     assert.ok(s.includes(marker), `step ${step} has no endpoint (${marker})`);
   }
-  assert.match(read(PAGE), /const STEPS = \['Entity', 'Territory', 'Seats', 'Terms', 'Activate'\]/,
-    'the UI must name the same five steps');
+  // Deploy is the one step whose endpoint is NOT in the ledger, deliberately:
+  // deploying does not change a licence, it creates infrastructure, and
+  // folding a workflow_dispatch in beside the money writes would make every
+  // reader check which was which. It still has to exist, and be reachable.
+  const deployments = read('cloudflare-worker/src/routes/admin_deployments.ts');
+  assert.ok(deployments.includes("r.post('/licences/:uid/deploy'"), 'step Deploy has no endpoint');
+  assert.match(read('cloudflare-worker/src/index.ts'), /app\.route\('\/api\/admin', adminDeployments\)/);
+
+  assert.match(
+    read(PAGE),
+    /const STEPS = \['Entity', 'Territory', 'Seats', 'Terms', 'Contract', 'Deploy'\]/,
+    'the UI must name the same six steps',
+  );
 });
 
 test('activation lists what blocks it, and a pending signature does not', () => {
@@ -195,7 +223,10 @@ test('every mutation is admin-only and recorded', () => {
   // narrows — so the claim here is unchanged in kind and tighter in degree.
   // Matching either keeps the original property (no ungated mutation) as the
   // floor; the second assertion pins the ceiling for THIS file.
-  const gated = (s.match(/require(?:Super)?Admin\(c\)/g) || []).length;
+  // `requireSuperAdminWriteBar` is the stronger gate (TOTP, a fresh step-up,
+  // then `requireSuperAdmin`), and D262 moved terminate onto it; counting it is
+  // the same floor, not a looser one.
+  const gated = (s.match(/require(?:Super)?Admin(?:WriteBar)?\(c\)/g) || []).length;
   assert.ok(gated >= handlers.length, `every mutation must be gated (${gated} vs ${handlers.length})`);
   assert.doesNotMatch(s, /\brequireAdmin\b/,
     'a plain requireAdmin on the franchise console is a franchisee who can franchise');
@@ -207,6 +238,15 @@ test('every mutation is admin-only and recorded', () => {
 });
 
 test('the event log is append-only', () => {
+  // D156 MADE THIS A DATABASE CONSTRAINT, AND THIS ASSERTION STAYS ANYWAY.
+  // Migration 269 installs BEFORE UPDATE / BEFORE DELETE triggers on
+  // `licence_events`, so the property now holds against every writer rather
+  // than against the writers that happen to live in this one file — which is
+  // the whole point, because a scan of the source cannot see a write that is
+  // not in the source. What this keeps buying is the OTHER direction: a
+  // handler that reaches for an UPDATE fails here at review time, rather than
+  // shipping and raising ABORT in front of an operator. The database guard is
+  // in `cloudflare-worker/test/audit_immutability_d156.test.ts`.
   const s = read(ROUTE);
   assert.ok(!/UPDATE licence_events|DELETE FROM licence_events/.test(s),
     'a contract dispute is exactly when an overwritten history is useless');
@@ -225,6 +265,44 @@ test('the licence surface is in the recovery cool-off list', () => {
   const start = idx.indexOf('COOL_OFF_PREFIXES');
   const block = idx.slice(start, idx.indexOf('];', start));
   assert.ok(block.includes("'/api/admin/licences'"), 'a freshly-recovered admin must not issue licences');
+});
+
+test('D248: Extend is paused by the recovery cool-off, End is not, and each admin-over-admin write is decided', () => {
+  const idx = read('cloudflare-worker/src/index.ts');
+  const start = idx.indexOf('const COOL_OFF_ROUTES = [');
+  assert.ok(start > 0, 'the cool-off route list is gone');
+  const block = idx.slice(start, idx.indexOf('];', start));
+  for (const route of [
+    '/api/admin/impersonate-sessions/:id/extend',
+    '/api/admin/super-admins/:userId',
+    '/api/admin/users/:userId/toggle-active',
+    '/api/admin/users/:userId/role',
+    // D259 — the two acts HQ takes into a branch's database.
+    '/api/admin/branches/:code/support-session',
+    '/api/admin/branches/:code/accounts/:userId/move',
+    // D262 — unbinding a branch's administrator, and HQ's demote-admin.
+    '/api/admin/branches/:code/admins/:userId/unbind',
+    '/api/admin/users/:userId/demote-admin',
+  ]) assert.ok(block.includes(`'${route}'`), `${route} is not paused during the cool-off`);
+  // D262 decided these three stay open: none gives power over an administrator,
+  // money or another tenant.
+  for (const open of ['access-level', 'spinout-admit', 'spinout-applications']) {
+    assert.ok(!block.includes(open), `${open} was added to the cool-off; D262 decided it stays open`);
+  }
+  // Registered as the route itself, never with a wildcard: `${p}/*` on a
+  // parent would reach End.
+  assert.match(idx, /for \(const p of COOL_OFF_ROUTES\) app\.use\(p, recoveryCoolOff\);/);
+  // What must stay open: End (the safe direction), the holder list, every
+  // other /users route, and force re-auth. A PREFIX here would take them all.
+  const pStart = idx.indexOf('const COOL_OFF_PREFIXES = [');
+  const prefixes = idx.slice(pStart, idx.indexOf('];', pStart));
+  // D259 — `/api/admin/branches` joins them: a prefix there would pause the
+  // next HQ→branch route before anyone had decided it.
+  for (const parent of ['/api/admin/impersonate-sessions', '/api/admin/super-admins', '/api/admin/users', '/api/admin/security', '/api/admin/branches']) {
+    assert.ok(!prefixes.includes(`'${parent}'`), `${parent} is a cool-off PREFIX, which pauses every route under it`);
+  }
+  assert.ok(!block.includes('/end'), 'End is paused by the cool-off; ending a session is the safe direction');
+  assert.ok(!block.includes('/api/admin/security'), 'force re-auth is paused; it ends sessions and grants nothing');
 });
 
 test('it is mounted before the /api/admin catch-all', () => {
@@ -249,6 +327,14 @@ test('no subsidiary from the canvas is seeded', () => {
     assert.ok(!sources.includes(name), `${name} is a canvas placeholder and must not ship`);
   }
   assert.ok(!/INSERT INTO territory_licences/.test(read(SQL)), 'the migration seeds no rows');
+});
+
+test('a failed ledger read is unreadable, not an empty ledger', () => {
+  const code = codeOnly(read(PAGE));
+  assert.match(code, /const UNAVAILABLE = Symbol\('unavailable'\)/);
+  assert.match(code, /setData\(UNAVAILABLE\)/, 'a failed licences read must not become { items: [] }');
+  assert.match(code, /<Unreadable what="The licence ledger"/);
+  assert.match(code, /items\.length === 0 \?/, 'the empty state is gated on a successful read with zero rows');
 });
 
 test('the empty ledger explains itself', () => {

@@ -1,5 +1,6 @@
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
 // Epic 6 — per-feature paywall map. Each Pro feature has a stable key the
 // frontend matches on to render the right upsell copy. Keys are short and
@@ -73,7 +74,7 @@ export function requireMiPro(c: Context<{ Bindings: Env }>, user: User | null, f
   });
 }
 
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 /**
  * Idempotent schema bootstrap for MI Pro. The `users` table is at D1's hard
  * 100-column limit, so MI Pro subscription state CANNOT live as new columns on
@@ -84,7 +85,7 @@ let migrated = false;
  * re-run, so no per-statement try/catch is needed.
  */
 export async function ensureMiPaywallSchema(env: Env): Promise<void> {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS mi_pro_subscriptions (
        user_id INTEGER PRIMARY KEY,
@@ -104,5 +105,5 @@ export async function ensureMiPaywallSchema(env: Env): Promise<void> {
   for (const s of stmts) {
     await env.DB.prepare(s).run();
   }
-  migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }

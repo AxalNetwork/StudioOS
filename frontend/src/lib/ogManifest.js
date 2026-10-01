@@ -31,5 +31,5 @@ export const OG_MANIFEST = {
   "product-founders": "896964db",
   "product-investors": "9d41dfcb",
   "product-service-partners": "3902653e",
-  "spinout-lab": "59a05b30",
+  "spinout-lab": "4d4bcb9c",
 };

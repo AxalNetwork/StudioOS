@@ -42,7 +42,7 @@ export default function PitchPositioningPage({ embedded = false }) {
       if (list.length) setProjectId(String(list[0].id));
     }).catch((e) => {
       if (!alive) return;
-      reportError(e);
+      reportError('PitchPositioningPage:listProjects', e);
       setError('Could not load your startups. Please refresh and try again.');
     }).finally(() => { if (alive) setLoadingProjects(false); });
     return () => { alive = false; };
@@ -59,7 +59,7 @@ export default function PitchPositioningPage({ embedded = false }) {
       setCopiedKey(key);
       setTimeout(() => setCopiedKey((k) => (k === key ? '' : k)), 1600);
     } catch (e) {
-      reportError(e);
+      reportError('PitchPositioningPage:copy', e);
     }
   }
 
@@ -97,7 +97,7 @@ export default function PitchPositioningPage({ embedded = false }) {
         setAiUnavailable(true);
         setError('Positioning generation isn’t available in this preview environment.');
       } else {
-        reportError(e);
+        reportError('PitchPositioningPage:generate', e);
         setError(e?.message || 'The positioning generator failed. Please try again.');
       }
     } finally {

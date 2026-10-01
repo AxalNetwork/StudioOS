@@ -69,9 +69,10 @@ test('Home remains /studio and no Partner persona root was invented', () => {
 
 test('canonical Partner deep links are owned by the correct workspace', () => {
   const expectedMatches = {
-    Pipeline: ['/pipeline', '/needs', '/matches', '/partner/insights', '/partner/operations/engagements'],
+    // '/matches' left with the AI Matching Engine, which was deleted.
+    Pipeline: ['/pipeline', '/needs', '/partner/insights', '/partner/operations/engagements'],
     Delivery: ['/delivery', '/partner/operations/overview', '/partner/operations/portfolio', '/partner/operations/performance'],
-    Offers: ['/offers', '/services', '/perks', '/comarketing', '/partner/office-hours', '/partner/operations/capabilities'],
+    Offers: ['/offers', '/services', '/perks', '/comarketing', '/partner/operations/capabilities'],
     Network: ['/network', '/relationships', '/contacts'],
     Research: ['/research', '/signals', '/market-intel'],
   };
@@ -93,18 +94,23 @@ test('collapsed Pipeline and Offers sections remain reachable from Partner tabs'
   );
   for (const path of [
     '/needs',
-    '/matches',
     '/partner/insights',
     '/services',
     '/perks',
     '/comarketing',
-    '/partner/office-hours',
   ]) {
     assert.ok(bars.includes(`to: '${path}'`), `${path} is in no Partner tab set`);
     const line = routeLine(path);
     assert.ok(line, `no route for ${path}`);
+    if (path === '/perks') {
+      assert.ok(line.includes('Navigate replace to="/offers/perk-deals"'),
+        '/perks must redirect partners to the dedicated perk-deals zone');
+      continue;
+    }
     assert.ok(line.includes('PartnerWorkspaceTabs'), `${path} does not mount the Partner tab shell`);
   }
+  assert.doesNotMatch(bars, /label: 'Office hours'/,
+    'Office hours is unrelated to the Perks & Products Offers container');
 });
 
 test('Partner pages share amber identity and cyan provenance without recoloring other roles', () => {
@@ -123,11 +129,9 @@ test('Partner pages share amber identity and cyan provenance without recoloring 
 
 test('shared Network and Research pages only mount Partner chrome for Partner users', () => {
   const tabs = read('frontend/src/pages/partner/PartnerWorkspaceTabs.jsx');
-  const operations = read('frontend/src/pages/partner/operations/PartnerOperationsWorkspace.jsx');
   const network = read('frontend/src/pages/NetworkPage.jsx');
   const research = read('frontend/src/pages/MarketIntelPage.jsx');
   assert.match(tabs, /user\?\.role !== 'partner'/);
-  assert.match(operations, /user\?\.role !== 'partner'/);
   assert.match(network, /role === 'partner'/);
   assert.match(network, /workspace="network"/);
   assert.match(network, /role === 'advisor'/);

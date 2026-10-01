@@ -1,0 +1,43 @@
+-- 248_deck_share_revoked_at.sql — Task #196
+--
+-- A deck share link cannot be withdrawn.
+--
+-- WHAT THAT MEANS IN PRACTICE. A founder generates a link, sends it to an
+-- investor, and then the round changes, the deck is wrong, the recipient turns out
+-- to be a competitor, or the email goes to the wrong address. There is no control
+-- anywhere that stops the link working. `pitch_deck_share_tokens` has
+-- `expires_at`, `used_at`, `view_limit` and `view_count` — four ways for a link to
+-- run out on its own, and no way for its owner to end it. The Engagement panel
+-- LISTS the links and their view counts, so the founder can watch a link they
+-- cannot stop being used.
+--
+-- `captable_share_tokens` already solved this and the shape is copied from it,
+-- including the part that is easy to get wrong: **revoking is expiring, not
+-- deleting.** `routes/captable.ts` says why — *"Revoke by expiring rather than
+-- deleting, so the view history stays attributable to a link the owner can still
+-- see they created."* A DELETE here would orphan every `deck_share_views` row
+-- (`share_token_id` has no FK and would dangle) and take the impression history of
+-- the link with it, which is the evidence a founder most wants after discovering
+-- the link went somewhere it should not have.
+--
+-- ONE COLUMN AND NO INDEX. The redeem path already filters on `token_hash`, which
+-- is uniquely indexed, and reads `expires_at > datetime('now')` off that single
+-- row — so revoking by ALSO setting `expires_at` makes the existing claim query
+-- refuse a revoked link with no new predicate and no new index. `revoked_at` is
+-- what distinguishes "the owner ended this" from "it ran out", which the panel
+-- needs to say and the claim query does not.
+--
+-- THE CLAIM QUERY STILL GETS AN EXPLICIT CHECK ANYWAY. Relying only on
+-- `expires_at` would make the guarantee depend on two writes both landing, and a
+-- revoke that set `revoked_at` and failed to set `expires_at` would leave the link
+-- live while the panel reported it dead. `AND revoked_at IS NULL` costs nothing on
+-- a row already fetched by unique index and makes the refusal true by itself.
+--
+-- Apply with:
+--   wrangler d1 execute studioos-db --remote --env production \
+--     --file=cloudflare-worker/sql/migrations/248_deck_share_revoked_at.sql
+--
+-- No BEGIN/COMMIT: D1's HTTP API rejects transaction statements inside a
+-- migration file (migration 200 failed a production deploy that way).
+
+ALTER TABLE pitch_deck_share_tokens ADD COLUMN revoked_at TEXT;

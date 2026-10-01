@@ -16,7 +16,7 @@
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { runSchemaBootstrap } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 export type Tier = 'free' | 'growth' | 'studio';
 
@@ -120,10 +120,10 @@ export function requireTierForMutations(required: Exclude<Tier, 'free'>) {
   };
 }
 
-let _migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 /** Idempotent column bootstrap — mirrors ensureMiPaywallSchema. */
 export async function ensureTierSchema(env: Env): Promise<void> {
-  if (_migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     `ALTER TABLE users ADD COLUMN subscription_tier TEXT NOT NULL DEFAULT 'free'`,
     `ALTER TABLE users ADD COLUMN subscription_status TEXT NOT NULL DEFAULT 'active'`,
@@ -140,7 +140,7 @@ export async function ensureTierSchema(env: Env): Promise<void> {
   // rethrow that and take the whole router down with it. See
   // util/schemaBootstrap.ts.
   await runSchemaBootstrap(env, stmts);
-  _migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 /** Free-tier hard limits enforced server-side in route handlers. */

@@ -24,26 +24,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import capital from '../src/routes/capital.ts';
 import { makeD1 } from './_d1_sqlite.mjs';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+/** D371: the call header, the line columns and the sealed receipts, from the migration itself. */
+const MIGRATION_312 = readFileSync(resolve(HERE, '../sql/migrations/312_fund_call_ledger.sql'), 'utf8');
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef'; // >= 32 bytes
 
 const ADMIN_ID = 1;
 const OWNER_ID = 10; // investor whose LP owns call #1
 const OTHER_ID = 20; // a different investor (owns call #2)
-
-// LP records: lp #100 -> OWNER_ID, lp #200 -> OTHER_ID.
-const LPS = [
-  { id: 100, user_id: OWNER_ID },
-  { id: 200, user_id: OTHER_ID },
-];
-
-// Two pending capital calls, one per LP (distinct created_at for ordering).
-const CALLS = [
-  { id: 1, limited_partner_id: 100, project_id: null, amount: 500, status: 'pending', created_at: '2026-01-02' },
-  { id: 2, limited_partner_id: 200, project_id: null, amount: 700, status: 'pending', created_at: '2026-01-01' },
-];
 
 async function mintToken(userId: number, role: string): Promise<string> {
   // No `jti` so getCurrentUser skips the user_sessions revocation lookup.
@@ -74,14 +69,20 @@ async function mintToken(userId: number, role: string): Promise<string> {
  * `user_id = ?` predicate and reachable under the consolidated one.
  */
 const LEGACY_ID = 30;
+/** Fund I's general partner of record (D370), on the institutional tier. */
+const GP_ID = 40;
+/** An institutional-tier investor who is GP of nothing. */
+const STRANGER_GP_ID = 50;
 const LEGACY_EMAIL = 'legacy@lp.example';
 
 const SCHEMA = `
 CREATE TABLE users (
-  id INTEGER PRIMARY KEY, email TEXT, name TEXT, role TEXT, is_active INTEGER DEFAULT 1);
+  id INTEGER PRIMARY KEY, email TEXT, name TEXT, role TEXT, is_active INTEGER DEFAULT 1,
+  investor_tier TEXT, investor_subscription_status TEXT, last_active TEXT);
 CREATE TABLE vc_funds (
   id INTEGER PRIMARY KEY, name TEXT, status TEXT DEFAULT 'active',
   total_commitment REAL DEFAULT 0, deployed_capital REAL DEFAULT 0, lp_count INTEGER DEFAULT 0,
+  gp_user_id INTEGER, company_id INTEGER,
   created_at TEXT, updated_at TEXT);
 CREATE TABLE partners (id INTEGER PRIMARY KEY, name TEXT, status TEXT DEFAULT 'active');
 CREATE TABLE limited_partners (
@@ -96,6 +97,14 @@ CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, sector TEXT);
 CREATE TABLE notifications (
   id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, type TEXT, title TEXT,
   body TEXT, link TEXT, created_at TEXT);
+CREATE TABLE activity_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, action TEXT, details TEXT, actor TEXT,
+  action_type TEXT, entity_type TEXT, entity_id TEXT, ip_address TEXT, user_agent TEXT,
+  metadata TEXT, created_at TEXT DEFAULT (datetime('now')));
+CREATE TABLE activity_stats (
+  user_id INTEGER, stat_date TEXT, action_count INTEGER DEFAULT 0, updated_at TEXT,
+  UNIQUE (user_id, stat_date));
+${MIGRATION_312}
 `;
 
 function seedFor(user: any): string {
@@ -104,18 +113,21 @@ function seedFor(user: any): string {
     { id: OWNER_ID, email: 'owner@lp.example', role: 'investor' },
     { id: OTHER_ID, email: 'other@lp.example', role: 'investor' },
     { id: LEGACY_ID, email: LEGACY_EMAIL, role: 'investor' },
+    { id: GP_ID, email: 'gp@fund.example', role: 'investor', tier: 'institutional' },
+    { id: STRANGER_GP_ID, email: 'stranger@fund.example', role: 'investor', tier: 'institutional' },
   ];
   // The caller's own row must reflect the role the token claims, so auth
   // resolves the same actor the test intends.
   const users = rows
     .map((r) => {
       const role = user && user.id === r.id ? user.role : r.role;
-      return `(${r.id}, '${r.email}', 'U${r.id}', '${role}', 1)`;
+      const tier = (r as any).tier ? `'${(r as any).tier}'` : 'NULL';
+      return `(${r.id}, '${r.email}', 'U${r.id}', '${role}', 1, ${tier})`;
     })
     .join(', ');
   return `
-INSERT INTO users (id, email, name, role, is_active) VALUES ${users};
-INSERT INTO vc_funds (id, name) VALUES (1, 'Fund I');
+INSERT INTO users (id, email, name, role, is_active, investor_tier) VALUES ${users};
+INSERT INTO vc_funds (id, name, gp_user_id) VALUES (1, 'Fund I', ${GP_ID});
 INSERT INTO limited_partners (id, fund_id, user_id, name, email, commitment_amount, status, created_at)
   VALUES (100, 1, ${OWNER_ID}, 'Owner LP', 'owner@lp.example', 500, 'active', '2026-01-02'),
          (200, 1, ${OTHER_ID}, 'Other LP', 'other@lp.example', 700, 'active', '2026-01-01'),
@@ -193,13 +205,81 @@ test('pay: an investor cannot pay a call that is not theirs (404, not mutated)',
   assert.notEqual(body.status, 'paid');
 });
 
-test('pay: an investor can pay a call that belongs to their own LP (200)', async () => {
+// RE-AIMED IN D370. This was "an investor can pay a call that belongs to their
+// own LP (200)" — the LP recording their own payment, which moved
+// invested_amount and deployed_capital on their word alone. That is the
+// defect. The LP who owns the call is now told the GP records it, and
+// nothing moves.
+test('pay: the LP who owns a call cannot record it paid (403, nothing moves)', async () => {
   const token = await mintToken(OWNER_ID, 'investor');
   const env = makeEnv({ id: OWNER_ID, role: 'investor', is_active: 1 });
+  const res = await payCall(env, token, 1);
+  assert.equal(res.status, 403);
+  const body = (await res.json()) as any;
+  assert.equal(body.error, 'gp_records_payment');
+  assert.match(body.message, /general partner records a payment/);
+  const call = env.__db.prepare('SELECT status FROM capital_calls WHERE id = 1').get();
+  assert.equal(call.status, 'pending');
+  const lp = env.__db.prepare('SELECT invested_amount FROM limited_partners WHERE id = 100').get();
+  assert.equal(lp.invested_amount, 0);
+  const fund = env.__db.prepare('SELECT deployed_capital FROM vc_funds WHERE id = 1').get();
+  assert.equal(fund.deployed_capital, 0);
+});
+
+test('pay: the fund\'s GP of record records a payment (200)', async () => {
+  const token = await mintToken(GP_ID, 'investor');
+  const env = makeEnv({ id: GP_ID, role: 'investor', is_active: 1 });
   const res = await payCall(env, token, 1);
   assert.equal(res.status, 200);
   const body = (await res.json()) as any;
   assert.equal(body.status, 'paid');
+  assert.equal(env.__db.prepare('SELECT invested_amount FROM limited_partners WHERE id = 100').get().invested_amount, 500);
+});
+
+test('pay: an institutional investor who is GP of a different fund gets 404, and nothing moves', async () => {
+  const token = await mintToken(STRANGER_GP_ID, 'investor');
+  const env = makeEnv({ id: STRANGER_GP_ID, role: 'investor', is_active: 1 });
+  const res = await payCall(env, token, 1);
+  assert.equal(res.status, 404);
+  assert.equal(env.__db.prepare('SELECT status FROM capital_calls WHERE id = 1').get().status, 'pending');
+});
+
+test('pay: two concurrent presses credit the call once', async () => {
+  // The old handler read the status, then ran three separate unconditional
+  // UPDATEs. Two requests in flight both passed the read and both credited:
+  // 1000 invested on a 500 call. Now the credits and the flip are one
+  // conditional batch, so the second finds the call paid and moves nothing.
+  const token = await mintToken(GP_ID, 'investor');
+  const env = makeEnv({ id: GP_ID, role: 'investor', is_active: 1 });
+  const [a, b] = await Promise.all([payCall(env, token, 1), payCall(env, token, 1)]);
+  assert.deepEqual([a.status, b.status], [200, 200]);
+  const bodies = [await a.json(), await b.json()] as any[];
+  assert.equal(bodies.filter((x) => x.already_paid).length, 1, 'exactly one press is the one that recorded it');
+  const lp = env.__db.prepare('SELECT invested_amount FROM limited_partners WHERE id = 100').get();
+  assert.equal(lp.invested_amount, 500, 'the call is credited once, not twice');
+  const fund = env.__db.prepare('SELECT deployed_capital FROM vc_funds WHERE id = 1').get();
+  assert.equal(fund.deployed_capital, 500);
+});
+
+test('pay: a second press on a paid call moves nothing', async () => {
+  const token = await mintToken(GP_ID, 'investor');
+  const env = makeEnv({ id: GP_ID, role: 'investor', is_active: 1 });
+  await payCall(env, token, 1);
+  const again = (await (await payCall(env, token, 1)).json()) as any;
+  assert.equal(again.already_paid, true);
+  assert.equal(env.__db.prepare('SELECT invested_amount FROM limited_partners WHERE id = 100').get().invested_amount, 500);
+});
+
+test('calls list: the GP of record sees every call on their fund, with its fund id', async () => {
+  const token = await mintToken(GP_ID, 'investor');
+  const env = makeEnv({ id: GP_ID, role: 'investor', is_active: 1 });
+  const body = (await (await listCalls(env, token)).json()) as any[];
+  assert.deepEqual(body.map((c) => c.id).sort(), [1, 2, 3]);
+  assert.ok(body.every((c) => c.fund_id === 1), 'each call carries the fund it belongs to');
+  // …and a GP of nothing sees none of them.
+  const t2 = await mintToken(STRANGER_GP_ID, 'investor');
+  const e2 = makeEnv({ id: STRANGER_GP_ID, role: 'investor', is_active: 1 });
+  assert.deepEqual(await (await listCalls(e2, t2)).json(), []);
 });
 
 test('pay: an admin can pay any capital call (200)', async () => {
@@ -456,8 +536,9 @@ test('paying a capital call really marks it paid and moves the money', async () 
   // The old stub swallowed every UPDATE as a no-op, so this route's `NOW()` —
   // not a SQLite function, and D1 is SQLite — threw in production while the
   // test suite stayed green. Assert the writes, not just the status code.
-  const token = await mintToken(OWNER_ID, 'investor');
-  const env = makeEnv({ id: OWNER_ID, role: 'investor', is_active: 1 });
+  // (D370: recorded by the fund's GP of record now, not by the LP.)
+  const token = await mintToken(GP_ID, 'investor');
+  const env = makeEnv({ id: GP_ID, role: 'investor', is_active: 1 });
   const res = await payCall(env, token, 1);
   assert.equal(res.status, 200);
   const call = env.__db.prepare('SELECT status, paid_date FROM capital_calls WHERE id = 1').get();

@@ -18,6 +18,8 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { bindingKey } from '../util/schemaBootstrap';
+import { refuse } from '../util/refusal';
 
 const notifications = new Hono<{ Bindings: Env }>();
 
@@ -44,12 +46,37 @@ async function verifyUnsubscribeToken(env: Env, token: string): Promise<{ userId
   } catch { return null; }
 }
 
+/**
+ * D189 — THIS RECORDED NOTHING, AND THE LAZY ALTER IS WHY.
+ *
+ * It used to run `ALTER TABLE users ADD COLUMN marketing_unsubscribed_at`
+ * inside `catch { /* idempotent *\/ }` and then UPDATE that column, on the
+ * stated theory that "migration 053 may not have landed on dev/preview yet"
+ * and the ALTER would self-heal it. Neither half held. `users` is at D1's
+ * hard 100-column cap — 100 in production and on a fresh build, measured
+ * 2026-09-22 — and SQLite checks the column-count limit in `sqlite3AddColumn()`
+ * BEFORE the duplicate-name check, so on a full table the ALTER fails whatever
+ * the column's state. Its catch swallowed that; the UPDATE on the next line
+ * then failed too, swallowed by the outer catch. So an unsubscribe from
+ * marketing email succeeded from the reader's point of view and stored
+ * nothing, which is compliance-adjacent rather than cosmetic.
+ *
+ * It was invisible locally because node:sqlite has no column cap: the ALTER
+ * succeeds on a fresh local build and the whole path works. Local succeeds,
+ * production fails.
+ *
+ * Migration 277 gives the fact a side table. No lazy ALTER replaces it — a
+ * bootstrap that cannot fail usefully is the thing that hid this for a year.
+ * The outer catch stays: an unsubscribe is best-effort by design, and the
+ * caller answers the same page either way.
+ */
 async function applyMarketingUnsub(env: Env, userId: number): Promise<void> {
   try {
-    // Lazy ALTER — migration 053 may not have landed on dev/preview yet.
-    try { await env.DB.prepare(`ALTER TABLE users ADD COLUMN marketing_unsubscribed_at TIMESTAMP`).run(); } catch { /* idempotent */ }
     await env.DB.prepare(
-      `UPDATE users SET marketing_unsubscribed_at = CURRENT_TIMESTAMP WHERE id = ? AND marketing_unsubscribed_at IS NULL`,
+      `INSERT INTO user_marketing_prefs (user_id, unsubscribed_at, updated_at)
+       VALUES (?, CURRENT_TIMESTAMP, datetime('now'))
+       ON CONFLICT(user_id) DO UPDATE SET unsubscribed_at = COALESCE(user_marketing_prefs.unsubscribed_at, CURRENT_TIMESTAMP),
+                                          updated_at      = datetime('now')`,
     ).bind(userId).run();
   } catch (e) { console.warn('[notifications] marketing unsub failed', e); }
 }
@@ -73,9 +100,9 @@ async function unsubscribeHandler(c: any) {
 notifications.get('/unsubscribe', unsubscribeHandler);
 notifications.post('/unsubscribe', unsubscribeHandler);
 
-let inboxMigrated = false;
+const INBOX_MIGRATED = new WeakMap<object, boolean>();
 async function ensureInbox(env: Env): Promise<boolean> {
-  if (inboxMigrated) return true;
+  if (INBOX_MIGRATED.get(bindingKey(env))) return true;
   try {
     await env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS notifications_inbox (
@@ -95,7 +122,7 @@ async function ensureInbox(env: Env): Promise<boolean> {
       `CREATE INDEX IF NOT EXISTS idx_inbox_user_unread
          ON notifications_inbox(user_id, read_at, created_at)`,
     ).run();
-    inboxMigrated = true;
+    INBOX_MIGRATED.set(bindingKey(env), true);
     return true;
   } catch (e) {
     console.error('[notifications_inbox] migration failed', e);
@@ -129,7 +156,15 @@ function dto(r: any) {
 notifications.get('/', async (c) => {
   const user = await requireAuth(c);
   if (!user) return c.json({ error: 'Unauthorized' }, 401);
-  if (!(await ensureInbox(c.env))) return c.json({ notifications: [] });
+  // D332 — a table-setup failure is not an empty inbox. `ensureInbox` returning
+  // false meant the bell always said "all caught up" whether nothing was
+  // there or nothing could be READ, and the two are opposite claims.
+  if (!(await ensureInbox(c.env))) {
+    return refuse(c, 503, {
+      code: 'notifications_unreadable',
+      message: 'Your notifications could not be read right now. Try again in a moment.',
+    });
+  }
   const limitRaw = parseInt(c.req.query('limit') || '50', 10);
   const limit = Math.max(1, Math.min(Number.isFinite(limitRaw) ? limitRaw : 50, 200));
   // Task #2 (IB) — spec supports `?unread=true` and `?category=`.
@@ -149,7 +184,13 @@ notifications.get('/', async (c) => {
 notifications.get('/unread-count', async (c) => {
   const user = await requireAuth(c);
   if (!user) return c.json({ error: 'Unauthorized' }, 401);
-  if (!(await ensureInbox(c.env))) return c.json({ count: 0 });
+  // D332 — see the list handler above: a failed read is not zero unread.
+  if (!(await ensureInbox(c.env))) {
+    return refuse(c, 503, {
+      code: 'notifications_unreadable',
+      message: 'Your unread count could not be read right now. Try again in a moment.',
+    });
+  }
   const r: any = await c.env.DB.prepare(
     `SELECT COUNT(*) AS c FROM notifications_inbox WHERE user_id = ? AND read_at IS NULL`,
   ).bind(user.id).first();
@@ -159,7 +200,14 @@ notifications.get('/unread-count', async (c) => {
 notifications.post('/mark-read', async (c) => {
   const user = await requireAuth(c);
   if (!user) return c.json({ error: 'Unauthorized' }, 401);
-  if (!(await ensureInbox(c.env))) return c.json({ updated: 0 });
+  // D332 — a table-setup failure means nothing was marked, not that
+  // everything already was; the two must not read the same on screen.
+  if (!(await ensureInbox(c.env))) {
+    return refuse(c, 503, {
+      code: 'notifications_unreadable',
+      message: 'Your notifications could not be updated right now. Try again in a moment.',
+    });
+  }
   const body: any = await c.req.json().catch(() => ({}));
   const now = new Date().toISOString();
   if (body?.all) {
@@ -209,7 +257,7 @@ notifications.put('/prefs', async (c) => {
     ).bind(j, user.id).run();
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: e?.message || 'Failed to save' }, 500);
+    return refuse(c, 500, { code: 'save_failed', message: 'Your notification settings could not be saved. Nothing changed; try again in a moment.', raw: e });
   }
 });
 

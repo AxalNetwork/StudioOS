@@ -8,9 +8,16 @@
  * graduates/winners only when the user has opted in via
  * `user_promotion_consent` (the linter enforces this on send).
  *
- * Counter-table reads are wrapped in try/catch because the prod D1 has a
- * mix of applied/pending migrations (see replit.md). Missing tables
- * degrade to zero counts, never to a 500.
+ * task 434 / D301 — `safeCount` used to collapse both "genuinely zero" and
+ * "the table doesn't exist" into the same `0`, so five of these queries
+ * (advisor_sessions, introductions, matches, partner_office_hours,
+ * refer_earn_payouts — none of which any migration ever created) posted a
+ * confident zero every single week. `safeCount` now distinguishes a real
+ * count from an unreadable one, and every query here reads a store that
+ * actually exists. See D301 for the full account, including the one
+ * `datetime()` window predicate (D162's blind spot: a bare string
+ * comparison against an ISO bind drops every row from the window's first
+ * day, because ' ' < 'T' and the stored timestamp has no 'T').
  */
 import type { Env } from '../types';
 import { escapeMd2 } from './telegramClient';
@@ -24,14 +31,19 @@ interface AggInput {
   periodEnd: string;
 }
 
-async function safeCount(env: Env, sql: string, ...binds: unknown[]): Promise<number> {
+/** Every count query in this file shares this one window predicate. */
+const WINDOW = `datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)`;
+
+type Count = { ok: true; n: number } | { ok: false; reason: string };
+
+async function safeCount(env: Env, sql: string, ...binds: unknown[]): Promise<Count> {
   try {
     const r = await env.DB.prepare(sql)
       .bind(...binds)
       .first<{ n: number }>();
-    return Number(r?.n ?? 0);
-  } catch {
-    return 0;
+    return { ok: true, n: Number(r?.n ?? 0) };
+  } catch (e) {
+    return { ok: false, reason: (e as Error)?.message || 'read failed' };
   }
 }
 
@@ -41,23 +53,23 @@ interface DraftPayload {
   title: string;
   body_md: string;          // already MarkdownV2-escaped
   payload: Record<string, unknown>;
+  /** false only when every figure line this draft could carry has no store behind it. */
+  drafted: boolean;
+  reason?: string;
 }
 
 /** Build draft for the public @axalvc channel — anonymised aggregate only. */
 async function buildPublicDraft(env: Env, w: AggInput): Promise<DraftPayload> {
   const graduates = await safeCount(
-    env,
-    `SELECT COUNT(*) AS n FROM projects WHERE created_at >= ? AND created_at <= ?`,
-    w.periodStart, w.periodEnd,
+    env, `SELECT COUNT(*) AS n FROM projects WHERE ${WINDOW}`, w.periodStart, w.periodEnd,
   );
   const partnerDeals = await safeCount(
-    env,
-    `SELECT COUNT(*) AS n FROM partner_deals WHERE created_at >= ? AND created_at <= ?`,
-    w.periodStart, w.periodEnd,
+    env, `SELECT COUNT(*) AS n FROM partner_deals WHERE ${WINDOW}`, w.periodStart, w.periodEnd,
   );
-  // k-anonymity gate.
-  const safeGrads = graduates >= K_MIN ? graduates : null;
-  const safeDeals = partnerDeals >= K_MIN ? partnerDeals : null;
+  // k-anonymity gate — only over a SUCCESSFUL read; a failed read is never
+  // treated as "below k" and must never let "Quiet week" print.
+  const safeGrads = graduates.ok && graduates.n >= K_MIN ? graduates.n : null;
+  const safeDeals = partnerDeals.ok && partnerDeals.n >= K_MIN ? partnerDeals.n : null;
 
   const lines: string[] = [
     `*Axal weekly pulse*`,
@@ -66,7 +78,9 @@ async function buildPublicDraft(env: Env, w: AggInput): Promise<DraftPayload> {
   ];
   if (safeGrads) lines.push(`• ${safeGrads} new ventures in motion`);
   if (safeDeals) lines.push(`• ${safeDeals} partner introductions made`);
-  if (!safeGrads && !safeDeals) {
+  if (!graduates.ok) lines.push(`• New ventures — Unreadable\\.`);
+  if (!partnerDeals.ok) lines.push(`• Partner introductions — Unreadable\\.`);
+  if (graduates.ok && partnerDeals.ok && !safeGrads && !safeDeals) {
     lines.push(`• Quiet week — building heads-down\\.`);
   }
   lines.push(``);
@@ -77,32 +91,36 @@ async function buildPublicDraft(env: Env, w: AggInput): Promise<DraftPayload> {
     kind: 'weekly_pulse',
     title: 'Weekly pulse',
     body_md: lines.join('\n'),
-    payload: { graduates, partner_deals: partnerDeals, k_min: K_MIN, period_days: w.periodDays },
+    payload: {
+      graduates: graduates.ok ? graduates.n : null,
+      partner_deals: partnerDeals.ok ? partnerDeals.n : null,
+      k_min: K_MIN,
+      period_days: w.periodDays,
+    },
+    drafted: true,
   };
 }
 
 async function buildFoundersDraft(env: Env, w: AggInput): Promise<DraftPayload> {
-  const advisorSessions = await safeCount(
+  // "sessions booked" reads advisor_bookings — the store that actually
+  // exists — excluding cancelled (a no_show was still booked).
+  const sessions = await safeCount(
     env,
-    `SELECT COUNT(*) AS n FROM advisor_sessions WHERE created_at >= ? AND created_at <= ?`,
+    `SELECT COUNT(*) AS n FROM advisor_bookings WHERE ${WINDOW} AND status != 'cancelled'`,
     w.periodStart, w.periodEnd,
   );
+  // "intros opened" is rewritten to what investor_introductions actually
+  // records: an investor asking to be introduced to a founder.
   const intros = await safeCount(
-    env,
-    `SELECT COUNT(*) AS n FROM introductions WHERE created_at >= ? AND created_at <= ?`,
-    w.periodStart, w.periodEnd,
-  );
-  const matches = await safeCount(
-    env,
-    `SELECT COUNT(*) AS n FROM matches WHERE created_at >= ? AND created_at <= ?`,
-    w.periodStart, w.periodEnd,
+    env, `SELECT COUNT(*) AS n FROM investor_introductions WHERE ${WINDOW}`, w.periodStart, w.periodEnd,
   );
   const lines: string[] = [
     `*Founders digest — last ${w.periodDays}d*`,
     ``,
-    `• ${advisorSessions} advisor sessions booked`,
-    `• ${intros} deal\\-room intros opened`,
-    `• ${matches} new founder↔partner matches`,
+    sessions.ok ? `• ${sessions.n} advisor sessions booked` : `• Advisor sessions booked — Unreadable\\.`,
+    intros.ok
+      ? `• ${intros.n} introductions requested by investors`
+      : `• Investor\\-requested introductions — Unreadable\\.`,
     ``,
     `Open the studio dashboard for personal next steps\\.`,
   ];
@@ -111,26 +129,27 @@ async function buildFoundersDraft(env: Env, w: AggInput): Promise<DraftPayload> 
     kind: 'founders_digest',
     title: 'Founders digest',
     body_md: lines.join('\n'),
-    payload: { advisor_sessions: advisorSessions, intros, matches, period_days: w.periodDays },
+    payload: {
+      advisor_sessions: sessions.ok ? sessions.n : null,
+      investor_introductions: intros.ok ? intros.n : null,
+      period_days: w.periodDays,
+    },
+    drafted: true,
   };
 }
 
 async function buildInvestorsDraft(env: Env, w: AggInput): Promise<DraftPayload> {
   const newDeals = await safeCount(
-    env,
-    `SELECT COUNT(*) AS n FROM deals WHERE created_at >= ? AND created_at <= ?`,
-    w.periodStart, w.periodEnd,
+    env, `SELECT COUNT(*) AS n FROM deals WHERE ${WINDOW}`, w.periodStart, w.periodEnd,
   );
   const portfolioUpdates = await safeCount(
-    env,
-    `SELECT COUNT(*) AS n FROM portfolio_updates WHERE created_at >= ? AND created_at <= ?`,
-    w.periodStart, w.periodEnd,
+    env, `SELECT COUNT(*) AS n FROM portfolio_updates WHERE ${WINDOW}`, w.periodStart, w.periodEnd,
   );
   const lines: string[] = [
     `*Investor brief — last ${w.periodDays}d*`,
     ``,
-    `• ${newDeals} new deals in pipeline`,
-    `• ${portfolioUpdates} portfolio updates`,
+    newDeals.ok ? `• ${newDeals.n} new deals in pipeline` : `• New deals in pipeline — Unreadable\\.`,
+    portfolioUpdates.ok ? `• ${portfolioUpdates.n} portfolio updates` : `• Portfolio updates — Unreadable\\.`,
     ``,
     `Sign in to view the full deal flow\\.`,
   ];
@@ -139,26 +158,28 @@ async function buildInvestorsDraft(env: Env, w: AggInput): Promise<DraftPayload>
     kind: 'investor_brief',
     title: 'Investor brief',
     body_md: lines.join('\n'),
-    payload: { new_deals: newDeals, portfolio_updates: portfolioUpdates, period_days: w.periodDays },
+    payload: {
+      new_deals: newDeals.ok ? newDeals.n : null,
+      portfolio_updates: portfolioUpdates.ok ? portfolioUpdates.n : null,
+      period_days: w.periodDays,
+    },
+    drafted: true,
   };
 }
 
 async function buildAdvisorsDraft(env: Env, w: AggInput): Promise<DraftPayload> {
-  const newMatches = await safeCount(
+  // "sessions booked" is the same real store as the founders draft.
+  const sessions = await safeCount(
     env,
-    `SELECT COUNT(*) AS n FROM advisor_sessions WHERE created_at >= ? AND created_at <= ?`,
+    `SELECT COUNT(*) AS n FROM advisor_bookings WHERE ${WINDOW} AND status != 'cancelled'`,
     w.periodStart, w.periodEnd,
   );
-  const requests = await safeCount(
-    env,
-    `SELECT COUNT(*) AS n FROM partner_office_hours WHERE created_at >= ? AND created_at <= ?`,
-    w.periodStart, w.periodEnd,
-  );
+  // "office-hours requests" had no store (partner_office_hours never
+  // existed) and is dropped rather than rewritten — nothing else measures it.
   const lines: string[] = [
     `*Advisors brief — last ${w.periodDays}d*`,
     ``,
-    `• ${newMatches} sessions booked`,
-    `• ${requests} office\\-hours requests`,
+    sessions.ok ? `• ${sessions.n} sessions booked` : `• Sessions booked — Unreadable\\.`,
     ``,
     `Thank you for the time you give\\.`,
   ];
@@ -167,26 +188,21 @@ async function buildAdvisorsDraft(env: Env, w: AggInput): Promise<DraftPayload> 
     kind: 'advisors_brief',
     title: 'Advisors brief',
     body_md: lines.join('\n'),
-    payload: { sessions: newMatches, requests, period_days: w.periodDays },
+    payload: { sessions: sessions.ok ? sessions.n : null, period_days: w.periodDays },
+    drafted: true,
   };
 }
 
 async function buildPartnersDraft(env: Env, w: AggInput): Promise<DraftPayload> {
   const partnerDeals = await safeCount(
-    env,
-    `SELECT COUNT(*) AS n FROM partner_deals WHERE created_at >= ? AND created_at <= ?`,
-    w.periodStart, w.periodEnd,
+    env, `SELECT COUNT(*) AS n FROM partner_deals WHERE ${WINDOW}`, w.periodStart, w.periodEnd,
   );
-  const rewards = await safeCount(
-    env,
-    `SELECT COUNT(*) AS n FROM refer_earn_payouts WHERE created_at >= ? AND created_at <= ?`,
-    w.periodStart, w.periodEnd,
-  );
+  // "sourcing rewards posted" had no store (refer_earn_payouts never
+  // existed) and is dropped: the refer-and-earn feature has no payout ledger.
   const lines: string[] = [
     `*Operating partners — last ${w.periodDays}d*`,
     ``,
-    `• ${partnerDeals} new partner deals`,
-    `• ${rewards} sourcing rewards posted`,
+    partnerDeals.ok ? `• ${partnerDeals.n} new partner deals` : `• New partner deals — Unreadable\\.`,
     ``,
     `Open the partner desk for active demand\\.`,
   ];
@@ -195,7 +211,8 @@ async function buildPartnersDraft(env: Env, w: AggInput): Promise<DraftPayload> 
     kind: 'partners_brief',
     title: 'Operating partners brief',
     body_md: lines.join('\n'),
-    payload: { partner_deals: partnerDeals, rewards, period_days: w.periodDays },
+    payload: { partner_deals: partnerDeals.ok ? partnerDeals.n : null, period_days: w.periodDays },
+    drafted: true,
   };
 }
 
@@ -212,6 +229,7 @@ async function buildAlumniDraft(_env: Env, w: AggInput): Promise<DraftPayload> {
     title: 'Alumni roundup',
     body_md: lines.join('\n'),
     payload: { period_days: w.periodDays },
+    drafted: true,
   };
 }
 
@@ -248,8 +266,10 @@ export async function previewAll(env: Env, periodDays: number): Promise<DraftPay
 
 /**
  * Run the aggregator and persist one DRAFT post per active audience that
- * has a channel mapped (chat_id present + enabled=1). Skips audiences
- * with no enabled channel so we never leave orphan drafts.
+ * has a channel mapped (chat_id present + enabled=1) AND whose draft has at
+ * least one measured figure. Skips audiences with no enabled channel, and
+ * skips a draft with `drafted: false`, so we never leave orphan drafts or
+ * post a brief with nothing to say.
  */
 export async function runAggregator(
   env: Env,
@@ -277,6 +297,7 @@ export async function runAggregator(
     const ch = byAudience.get(a);
     if (!ch) continue;
     const draft = await BUILDERS[a](env, { periodDays, periodStart, periodEnd });
+    if (!draft.drafted) continue;
     const ins = await env.DB.prepare(
       `INSERT INTO telegram_posts
          (channel_id, audience, status, title, body_md, source, source_kind, created_by)

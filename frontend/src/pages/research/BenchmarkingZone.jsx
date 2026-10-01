@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, Pill } from '../../ui';
 import { api } from '../../lib/api';
 import {
@@ -129,7 +130,13 @@ export default function BenchmarkingZone({ zoneActions, zoneFilters, role = 'fou
             {visible.map((b) => (
               <li key={b.uid} className="py-3">
                 <div className="flex flex-wrap items-baseline gap-2">
-                  <strong className="text-[13px]">{b.metric}</strong>
+                  {/* D314 — each benchmark opens on its own page. */}
+                  <Link
+                    to={`/research/benchmarking/${encodeURIComponent(b.uid)}`}
+                    className="text-[13px] font-bold text-indigo-700 hover:underline dark:text-indigo-300"
+                  >
+                    {b.metric}
+                  </Link>
                   <span className="text-[12px] tabular-nums">
                     {b.our_value || <Unrecorded>Ours not recorded</Unrecorded>}
                   </span>

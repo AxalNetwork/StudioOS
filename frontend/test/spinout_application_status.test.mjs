@@ -19,16 +19,22 @@
  *   • refused  → status sits ABOVE a still-live CTA, because the insert only
  *                blocks a second *pending* row, so re-applying genuinely works
  *
- * `parseSqliteUtc` is React-free and imported for real. The rendering paths
- * are asserted at source level — the frontend has no React test runner, the
- * same constraint the other frontend/test/*.mjs suites work under.
+ * `parseSqliteUtc` is React-free and evaluated from its source. Since D384 the
+ * status card is RENDERED (react-dom/server) from the same `applicant` shape
+ * `/state` returns; the page's gate around it is still read at source level.
  *
- * Run with:  node --test frontend/test/spinout_application_status.test.mjs
+ * Run with:  node --import ./frontend/test/_deck-loader.mjs --test frontend/test/spinout_application_status.test.mjs
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
+import { renderedText } from './_renderedText.mjs';
+import { ApplicationStatusCard } from '../src/components/spinout/ApplicationStatus.jsx';
+import { applicantFromLegacy } from '../src/lib/applicationLifecycle.js';
 
 const PAGE = readFileSync(
   fileURLToPath(new URL('../src/pages/SpinoutLabPage.jsx', import.meta.url)),
@@ -105,6 +111,13 @@ test('every timestamp on the page goes through the one parser', () => {
   assert.deepEqual(LIB.match(re) || [], [], 'a raw SQLite parse bypassing parseSqliteUtc reappeared in lib/spinoutLab.js');
 });
 
+/** The card as `/spinout-lab` renders it, from a legacy row plus any D383 fields. */
+const card = (application, company = null, extra = {}) => renderToStaticMarkup(
+  React.createElement(MemoryRouter, null, React.createElement(ApplicationStatusCard, {
+    applicant: { ...applicantFromLegacy(application), ...extra }, company,
+  })),
+);
+
 // ---------------------------------------------------------------------------
 // Pending vs refused — the asymmetry.
 // ---------------------------------------------------------------------------
@@ -118,21 +131,20 @@ test('a pending application replaces the apply CTA', () => {
 });
 
 test('a refused application still gets the apply CTA', () => {
-  // The component renders for both statuses, but only pending suppresses the
+  // The card renders for pending and refused, but only pending suppresses the
   // CTA — so refused necessarily falls through to it.
-  const gate = PAGE.slice(PAGE.indexOf('<ApplicationStatusSection'));
-  assert.match(gate.slice(0, 400), /<ApplyCtaSection/, 'refused founders may re-apply');
-  assert.match(
-    PAGE,
-    /if \(status !== 'pending' && status !== 'refused'\) return null/,
-    'only these two statuses render — accepted founders are on the workspace path',
-  );
+  const gate = PAGE.slice(PAGE.indexOf('<ApplicationStatusCard'));
+  assert.match(gate.slice(0, 600), /<ApplyCtaSection/, 'refused founders may re-apply');
+  assert.equal(card({ status: 'accepted' }), '', 'an accepted founder is on the workspace path, not shown a status card');
+  assert.equal(card({ status: 'withdrawn' }), '', 'a withdrawn application is not shown as in review');
+  assert.match(card({ status: 'refused', decided_at: '2026-08-06 10:30:00' }), /data-status="refused"/);
 });
-
-test('the status section reads the application off state, not a second fetch', () => {
-  assert.match(PAGE, /<ApplicationStatusSection application=\{state\?\.application\}/);
+test('the status card reads the applicant off state, not a second fetch', () => {
+  // D384: the card and the full screen on /spinout-lab/apply read the same
+  // `applicant` block, falling back to the legacy row before migration 315.
+  assert.match(PAGE, /<ApplicationStatusCard\s+applicant=\{state\?\.applicant \?\? applicantFromLegacy\(state\?\.application\)\}/);
+  assert.doesNotMatch(PAGE, /function ApplicationStatusSection/, 'the retired status block came back beside the card');
 });
-
 test('an investor never sees a cohort application status', () => {
   // POST /spinout-lab/apply hard-403s investors; the LP route is the fund.
   assert.match(
@@ -146,24 +158,28 @@ test('an investor never sees a cohort application status', () => {
 // Content contract — what a waiting founder is actually told.
 // ---------------------------------------------------------------------------
 
-test('a pending founder is told not to re-apply', () => {
-  assert.match(PAGE, /you’ll get an email either way — you don’t need to apply again/);
+test('a pending founder is told not to re-apply, and where to see the application', () => {
+  const html = card({ status: 'pending', created_at: '2026-08-06 10:30:00' }, 'Northwind');
+  const text = renderedText(html);
+  assert.match(text, /You don’t need to apply again/);
+  assert.match(text, /for Northwind/);
+  assert.match(html, /href="\/spinout-lab\/apply"/);
 });
-
-test('a refused founder is given the capacity reason, not a bare rejection', () => {
-  assert.match(PAGE, /capped at 8 companies/);
+test('a refused founder is pointed at the note written for them, never an internal reason', () => {
+  // The generic capacity sentence is retired (D384): the decline now carries
+  // the note an admin writes for the applicant, printed on the full screen.
+  const withNote = renderedText(card({ status: 'refused' }, null, { note: { text: 'x', asks: [], at: null } }));
+  assert.match(withNote, /The team wrote you a note/);
+  const without = renderedText(card({ status: 'refused' }));
+  assert.doesNotMatch(without, /wrote you a note/);
+  assert.doesNotMatch(PAGE, /capped at \d/);
 });
-
 test('the status block is addressable for e2e and analytics', () => {
-  assert.match(PAGE, /data-testid="application-status"/);
-  assert.match(PAGE, /data-status=\{status\}/);
+  assert.match(card({ status: 'pending' }), /data-testid="application-status"/);
+  assert.match(card({ status: 'pending' }), /data-status="pending"/);
 });
-
 test('missing optional fields degrade instead of rendering "undefined"', () => {
-  // company_name, created_at, decided_at and cohort are each independently
-  // nullable on the row — every one is behind its own guard.
-  assert.match(PAGE, /application\.company_name \?/, 'company name guarded');
-  assert.match(PAGE, /submitted \?/, 'submitted date guarded');
-  assert.match(PAGE, /decided \?/, 'decided date guarded');
-  assert.match(PAGE, /application\.cohort \?/, 'cohort guarded');
+  const text = renderedText(card({ status: 'pending', company_name: null, created_at: null, cohort: null }));
+  assert.doesNotMatch(text, /undefined|null|Invalid Date/);
+  assert.doesNotMatch(text, / for \./, 'an absent company name left a dangling "for"');
 });

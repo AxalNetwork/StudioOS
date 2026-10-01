@@ -34,8 +34,12 @@ export default class SafeMount extends React.Component {
     try {
       reportError(`safe-mount:${this.props.name || 'unnamed'}`, error);
       if (typeof console !== 'undefined' && info?.componentStack) {
-        // eslint-disable-next-line no-console
-        console.error(info.componentStack);
+        // The stack is an ARGUMENT, never the format string. `console.error`
+        // reads its first argument as a format string, so a `%s` anywhere in a
+        // component stack would consume the next one and forge the line — the
+        // same finding Semgrep raised on `decks/Thumbnail.tsx`. It also names
+        // the boundary now, matching its two siblings.
+        console.error('[SafeMount]', info.componentStack);
       }
     } catch { /* never let the boundary itself throw */ }
   }

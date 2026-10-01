@@ -15,7 +15,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { run, ROUTE, __resetForTest } from '../src/services/aiRouter.ts';
+import { run, ROUTE, __resetForTest, bindAi, GATEWAY_TASKS, GATEWAY_METADATA_KEYS } from '../src/services/aiRouter.ts';
 import type { Env } from '../src/types.ts';
 
 // --- minimal in-memory stubs --------------------------------------------------
@@ -59,14 +59,16 @@ function makeDB() {
 }
 
 // Workers AI stub that records whether each call carried a gateway option and
-// lets the test script the raw response shape per call.
+// lets the test script the raw response shape per call. D261: it also keeps the
+// options object as sent, so a test can read the gateway metadata itself.
+type GatewayOpt = { gateway?: { id: string; metadata?: Record<string, unknown> } };
 function makeAI(handler: (model: string, payload: unknown, gatewayed: boolean, n: number) => unknown) {
-  const calls: Array<{ model: string; gatewayed: boolean }> = [];
+  const calls: Array<{ model: string; gatewayed: boolean; options: GatewayOpt | undefined }> = [];
   return {
     calls,
-    async run(model: string, payload: unknown, options?: { gateway?: { id: string } }) {
+    async run(model: string, payload: unknown, options?: GatewayOpt) {
       const gatewayed = !!(options && options.gateway && options.gateway.id);
-      calls.push({ model, gatewayed });
+      calls.push({ model, gatewayed, options });
       return handler(model, payload, gatewayed, calls.length);
     },
   };
@@ -157,4 +159,91 @@ test('advisor_turn still bypasses a broken gateway by retrying un-gatewayed (sam
   assert.equal(ai.calls[0].gatewayed, true);
   assert.equal(ai.calls[1].gatewayed, false);
   assert.equal(ai.calls[0].model, ai.calls[1].model);
+});
+
+// -----------------------------------------------------------------------------
+// D261 — the gateway learns whose call it is.
+// -----------------------------------------------------------------------------
+const SLUG = { CF_AI_GATEWAY_SLUG_ADVISOR: 'advisor-ongoing' };
+const FR = { ...SLUG, BRANCH_CODE: 'fr' };
+const ok = () => ({ response: 'answer', usage: { prompt_tokens: 3, completion_tokens: 2 } });
+const ask = [{ role: 'user' as const, content: 'hi' }];
+
+/** Every metadata object a gatewayed call carried, for the shape checks. */
+function metadataOf(ai: ReturnType<typeof makeAI>) {
+  return ai.calls.filter((c) => c.gatewayed).map((c) => c.options!.gateway!.metadata);
+}
+
+test('D261: on a branch, a gatewayed call names the branch, the account as branch:user and the task', async () => {
+  __resetForTest();
+  const ai = makeAI(ok);
+  const r = await run(envWith(ai, makeKV(), makeDB(), FR), { task: 'advisor_explain', userId: 42, messages: ask });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(ai.calls.length, 1);
+  assert.equal(ai.calls[0].options?.gateway?.id, 'advisor-ongoing');
+  assert.deepEqual(ai.calls[0].options?.gateway?.metadata, { branch: 'fr', account: 'fr:42', task: 'advisor_explain' });
+});
+
+test('D261: on HQ the branch is hq, and the account is scoped to it', async () => {
+  __resetForTest();
+  const ai = makeAI(ok);
+  await run(envWith(ai, makeKV(), makeDB(), SLUG), { task: 'advisor_turn', userId: 42, messages: ask });
+  assert.deepEqual(ai.calls[0].options?.gateway?.metadata, { branch: 'hq', account: 'hq:42', task: 'advisor_turn' });
+});
+
+test('D261: a call with user id 0 (bindAi\'s default) carries no account key, never "hq:0"', async () => {
+  __resetForTest();
+  const ai = makeAI(ok);
+  await bindAi(envWith(ai, makeKV(), makeDB(), SLUG))('advisor_explain', { messages: ask });
+  const md = ai.calls[0].options?.gateway?.metadata as Record<string, unknown>;
+  assert.deepEqual(md, { branch: 'hq', task: 'advisor_explain' });
+  assert.ok(!('account' in md), 'an account key was built from the default 0');
+});
+
+test('D261: the bypass retry after a gateway failure still carries no gateway option at all', async () => {
+  __resetForTest();
+  const ai = makeAI((_m, _p, gatewayed) => {
+    if (gatewayed) throw new Error('1015 authenticated gateway token required');
+    return ok();
+  });
+  const r = await run(envWith(ai, makeKV(), makeDB(), FR), { task: 'advisor_turn', userId: 7, messages: ask });
+  assert.equal(r.ok, true);
+  assert.equal(ai.calls.length, 2);
+  assert.deepEqual(ai.calls[0].options?.gateway?.metadata, { branch: 'fr', account: 'fr:7', task: 'advisor_turn' });
+  assert.equal(ai.calls[1].options, undefined, 'the un-gatewayed retry sent an options object');
+});
+
+test('D261: onboarding_chat is unchanged — no gateway option and so no metadata, on a branch with a slug set', async () => {
+  __resetForTest();
+  const ai = makeAI(ok);
+  await run(envWith(ai, makeKV(), makeDB(), FR), { task: 'onboarding_chat', userId: 42, messages: ask });
+  assert.equal(ai.calls.length, 1);
+  assert.equal(ai.calls[0].options, undefined);
+});
+
+test('D261: with no slug set, a gatewayed task class sends no option, so no metadata', async () => {
+  __resetForTest();
+  const ai = makeAI(ok);
+  await run(envWith(ai, makeKV(), makeDB(), { BRANCH_CODE: 'fr' }), { task: 'advisor_explain', userId: 42, messages: ask });
+  assert.equal(ai.calls[0].options, undefined);
+});
+
+test('D261: every gatewayed call carries at most five keys, none reserved (cf.*), in the exported order', async () => {
+  __resetForTest();
+  const ai = makeAI(ok);
+  for (const task of GATEWAY_TASKS) {
+    for (const [extra, userId] of [[FR, 42], [SLUG, 42], [SLUG, 0]] as const) {
+      await run(envWith(ai, makeKV(), makeDB(), extra), { task, userId, messages: ask });
+    }
+  }
+  const all = metadataOf(ai);
+  assert.equal(all.length, GATEWAY_TASKS.length * 3, 'every gatewayed call was recorded');
+  for (const md of all) {
+    const keys = Object.keys(md ?? {});
+    assert.ok(keys.length > 0 && keys.length <= 5, `metadata has ${keys.length} keys`);
+    assert.ok(keys.every((k) => !k.startsWith('cf.')), `a reserved key was sent: ${keys}`);
+    assert.deepEqual(keys, GATEWAY_METADATA_KEYS.filter((k) => keys.includes(k)), 'keys out of the exported order');
+    assert.ok(keys.every((k) => (GATEWAY_METADATA_KEYS as readonly string[]).includes(k)), `an undeclared key was sent: ${keys}`);
+    for (const v of Object.values(md ?? {})) assert.equal(typeof v, 'string');
+  }
 });

@@ -16,6 +16,7 @@
  * rounding cannot drift across several partials.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export interface ClawbackResult {
   // 'reversed'         — commission reduced (partial) or fully reversed.
@@ -29,22 +30,22 @@ export interface ClawbackResult {
   detail?: string;
 }
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 /**
  * Dev/preview only — production owns this column via migration. Mirrors the
  * production-no-DDL rule established for the apex cutover.
  */
 async function ensureClawbackColumns(env: Env): Promise<void> {
-  if (_ready) return;
-  if (env.ENVIRONMENT === 'production') { _ready = true; return; }
+  if (READY.get(bindingKey(env))) return;
+  if (env.ENVIRONMENT === 'production') { READY.set(bindingKey(env), true); return; }
   for (const stmt of [
     `ALTER TABLE commissions ADD COLUMN reversed_amount_cents INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE commissions ADD COLUMN reversed_at TIMESTAMP`,
   ]) {
     try { await env.DB.prepare(stmt).run(); } catch { /* already present */ }
   }
-  _ready = true;
+  READY.set(bindingKey(env), true);
 }
 
 export async function clawbackReferralCommissionForRefund(

@@ -1,5 +1,5 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { Card, Skeleton } from '../ui';
 import { accentLinkClass, zonePath } from './shellConfig';
 import NoStoreYet from './NoStoreYet';
@@ -49,12 +49,16 @@ import useBucketSources from './useBucketSources';
  * at all, so the two are mutually exclusive by construction, not by review.
  * `bucket_board.test.mjs` fails the build if a registry declares both.
  *
- * NO UNDECLARED TOKENS. `axal-ink-2`, `axal-ink-3`, `axal-surface-2`,
- * `axal-border` and `axal-border-soft` are used ~410 times across `pages/` and
- * `workspaces/` and are declared in no `@theme` block, so they emit nothing.
- * The canvas values map onto tokens that DO exist — `.card` #ececf1 is
- * `axal-hairline`, `.td` #f4f3f7 is `axal-ground` — and everything else uses
- * Tailwind's greys with a dark counterpart, as `ZoneActions.jsx` settled.
+ * TAILWIND GREYS, AND THE REASON HAS CHANGED. `axal-ink-2`, `axal-ink-3`,
+ * `axal-surface-2`, `axal-border` and `axal-border-soft` were used ~400 times while declared in no `@theme` block, so they emitted no
+ * CSS at all. All 575 such utilities have since been consolidated onto the
+ * declared neutrals — `axal-muted`, `-faint`, `-ground`, `-hairline` — and those
+ * spellings no longer appear in the tree. The greys here stay: the `index.css`
+ * auto-skin now pairs both vocabularies, so neither is the safer one and
+ * rewriting these would be churn. The canvas
+ * values always mapped onto tokens that DO exist — `.card` #ececf1 is
+ * `axal-hairline`, `.td` #f4f3f7 is `axal-ground` — which is what made the
+ * consolidation a rename rather than a restyle.
  */
 
 const SECTION = 'scroll-mt-24';
@@ -62,6 +66,16 @@ const SECTION = 'scroll-mt-24';
 export default function BucketBoard({ bucket, role = 'founder', board, className = '' }) {
   const sources = board?.sources || EMPTY;
   const byKey = useBucketSources(sources);
+  // BACK TO THE ZONE YOU LEFT (D403). A zone page's crumb links to
+  // `/prefix#<section anchor>`, and React Router does not scroll to a hash on
+  // its own. Every section renders its `id` from the first paint (a skeleton
+  // while its source loads), so the element exists when this runs.
+  const { hash } = useLocation();
+  useEffect(() => {
+    const id = decodeURIComponent(String(hash || '').replace(/^#/, ''));
+    if (!id || typeof document === 'undefined') return;
+    document.getElementById(id)?.scrollIntoView({ block: 'start' });
+  }, [hash]);
   if (!bucket?.zones?.length || !board?.sections?.length) return null;
   const zoneBySlug = new Map(bucket.zones.map((z) => [z.slug, z]));
 
@@ -171,6 +185,8 @@ function Head({ title, to, sub }) {
 function Body({ section, payload, to }) {
   const rows = section.rows ? section.rows(payload) || [] : [];
   const note = section.footnote ? section.footnote(payload) : null;
+  const n = section.total ? section.total(payload) : null;
+  const more = Number.isInteger(n) && n > rows.length ? n : null;
   if (!rows.length) {
     return (
       <>
@@ -206,7 +222,17 @@ function Body({ section, payload, to }) {
       </div>
       {note && <Note>{note}</Note>}
       <p className="mt-3 text-[11px]">
-        <Link to={to} className="font-semibold text-gray-600 underline dark:text-gray-300">Open {section.title || 'the zone'}</Link>
+        {/* "View more · N" (the Detail Layer canvases' footer), and ONLY where
+            the section declares a sourced `total` larger than what it shows
+            (D403). No total, or one the read cannot vouch for, keeps the plain
+            link: a number here is a claim about how many rows the zone holds. */}
+        {more !== null ? (
+          <Link to={to} className="font-semibold text-gray-600 underline dark:text-gray-300" data-testid={`link-view-more-${section.slug}`}>
+            {`View more · ${more}`}
+          </Link>
+        ) : (
+          <Link to={to} className="font-semibold text-gray-600 underline dark:text-gray-300">Open {section.title || 'the zone'}</Link>
+        )}
       </p>
     </>
   );

@@ -1,5 +1,5 @@
 /**
- * `/calendar` — `design/incoming/Calendar.dc.html`, boards C1–C6, element by
+ * `/calendar` — `design/canvases/integrated/Calendar.dc.html`, boards C1–C6, element by
  * element, plus the two rules the canvas exists to enforce.
  *
  * WHAT THE CANVAS ASKED FOR THAT WAS NOT THERE:
@@ -45,7 +45,7 @@ import { escapeRe } from './_escapeRe.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 
-const CANVAS = raw('design/incoming/Calendar.dc.html');
+const CANVAS = raw('design/canvases/integrated/Calendar.dc.html');
 const pageRaw = raw('frontend/src/pages/CalendarPage.jsx');
 const page = codeOnly(pageRaw);
 const css = raw('frontend/src/pages/calendarPage.css');
@@ -59,15 +59,14 @@ const route = raw('cloudflare-worker/src/routes/calendar.ts');
  * before, and a slice that runs to the end of the file will happily "find" a
  * string that belongs to a different board.
  */
-const TEMPLATE = CANVAS.slice(CANVAS.indexOf('<sc-for list="{{ boards }}"'), CANVAS.indexOf('<script type="text/x-dc" data-dc-script=""'));
-// nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
-// -- `CANVAS` is a design file read off disk by `readFileSync` in a Node test.
-// It is sliced into strings and matched with regexes; nothing here renders,
-// reaches a DOM, or takes external input, so the XSS the rule describes has
-// nowhere to happen. The literal is a SEARCH TERM for the end of the canvas's
-// data block, which is the tightest bound available and the one this file's
-// header insists every slice must have.
-const SCRIPT = CANVAS.slice(CANVAS.lastIndexOf('class Component extends DCLogic'), CANVAS.lastIndexOf('</script>'));
+const TEMPLATE = CANVAS.slice(
+  CANVAS.indexOf('<sc-for list="{{ boards }}"'),
+  CANVAS.indexOf('type="text/x-dc" data-dc-script=""'),
+);
+const SCRIPT = CANVAS.slice(
+  CANVAS.lastIndexOf('class Component extends DCLogic'),
+  CANVAS.lastIndexOf('</body>'),
+);
 const KINDS_BLOCK = SCRIPT.slice(SCRIPT.indexOf('══ FIVE KINDS'), SCRIPT.indexOf('const dotFor'));
 const BOARDS = SCRIPT.slice(SCRIPT.indexOf('return { boards: ['), SCRIPT.length);
 
@@ -270,7 +269,10 @@ test('nothing absent renders as a dash or a plausible zero', () => {
   // Every "Not recorded" on the rail is followed by the reason it is missing.
   const spec = page.match(/const SPEC = \{([\s\S]*?)\n  \};/)?.[1] || '';
   const states = [...spec.matchAll(/^ {4}(\w+): \{/gm)].map((m) => m[1]);
-  assert.deepEqual(states, ['reading', 'unconfigured', 'off', 'connected', 'failed'],
+  // D332 — 'unreadable' joined the set: a failed STATUS READ (the request
+  // itself never came back) is a different claim from 'unconfigured' (the
+  // server answered that this deployment has no OAuth credentials at all).
+  assert.deepEqual(states, ['reading', 'unreadable', 'unconfigured', 'off', 'connected', 'failed'],
     'the provider states changed without this guard');
   assert.equal([...spec.matchAll(/whyNoSync: /g)].length, states.length,
     'a provider state can show "Not recorded" with no reason beside it');

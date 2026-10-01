@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Cpu, Database, RefreshCw, Play, Trash2, AlertTriangle, Activity } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { api } from '../lib/api';
+import { DlqLine } from './DepthCount';
 
 const POLL_MS = 10000;
 
@@ -122,11 +123,11 @@ export default function InfrastructureTab() {
           <Play size={13} /> Drain queue now
         </button>
         <button onClick={load} disabled={busy}
-          className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 text-gray-900 rounded-lg flex items-center gap-1.5 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">
+          className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 rounded-lg flex items-center gap-1.5 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">
           <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> Refresh
         </button>
         <button onClick={runCleanup} disabled={busy}
-          className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 rounded-lg flex items-center gap-1.5 ml-auto dark:bg-gray-900 dark:border-gray-700">
+          className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg flex items-center gap-1.5 ml-auto dark:bg-gray-900 dark:border-gray-700">
           <Trash2 size={13} /> Cleanup old jobs
         </button>
       </div>
@@ -136,7 +137,7 @@ export default function InfrastructureTab() {
         <MiniCard label="Pending" value={byStatus.pending} icon={Database} accent="gray" />
         <MiniCard label="Processing" value={byStatus.processing} icon={Cpu} accent="blue" sub={`In flight: ${metrics?.in_flight ?? 0}`} />
         <MiniCard label="Completed" value={byStatus.completed} icon={Activity} accent="emerald" sub="all-time" />
-        <MiniCard label="Failed" value={byStatus.failed} icon={AlertTriangle} accent="red" sub={`DLQ 7d: ${queue?.dlq_7d ?? 0}`} />
+        <MiniCard label="Failed" value={byStatus.failed} icon={AlertTriangle} accent="red" sub={<DlqLine queue={queue} />} />
         <MiniCard label="Active Startups" value={metrics?.projects_active ?? 0} accent="violet" sub={`AI calls 5m: ${metrics?.ai_calls_5m ?? 0}`} />
       </div>
 

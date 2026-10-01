@@ -6,7 +6,7 @@ import {
   // own composition now, and `FitTile` below carries the artboard's note under
   // each figure and can draw an absence as a chip rather than an em dash.
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  Section, Field, SaveNote, UnlinkedZone, isNoPartnerProfile,
+  Section, Field, SaveNote, NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, moneyCents, dollarsToCents,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -122,7 +122,7 @@ function RuleForm({ initial, onSubmit, onCancel, busy, submitLabel }) {
   }
 
   return (
-    <div className="rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+    <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
       <div className="grid gap-3 md:grid-cols-2">
         <Field label="Kind">
           <select className={inputClass} value={kind} onChange={(e) => setKind(e.target.value)}>
@@ -200,7 +200,7 @@ function RuleRow({ rule, onSave, onDelete, busy, note }) {
             {!rule.is_active && <Pill tone="neutral">Not in use</Pill>}
           </div>
           {rule.statement ? (
-            <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-ink-2">
+            <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
               {rule.statement}
             </p>
           ) : (
@@ -212,8 +212,8 @@ function RuleRow({ rule, onSave, onDelete, busy, note }) {
             </p>
           )}
           {rule.referred_to && (
-            <p className="mt-1 text-[12px] text-axal-ink-3">
-              Refer instead to <span className="font-semibold text-axal-ink-2">{rule.referred_to}</span>
+            <p className="mt-1 text-[12px] text-axal-faint">
+              Refer instead to <span className="font-semibold text-axal-muted">{rule.referred_to}</span>
             </p>
           )}
         </div>
@@ -268,12 +268,12 @@ function PassReasons({ rules, onClose }) {
           <h3 className="text-sm font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Pass reasons</h3>
           <button type="button" className={ghostButtonClass} onClick={onClose}>Close</button>
         </div>
-        <p className="mt-2 text-[11.5px] leading-relaxed text-axal-ink-2">
+        <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">
           The sentence each exclusion would be passed with, assembled from what you wrote.
           Nothing sends these — a pass is still yours to make and yours to word.
         </p>
         {rules.length === 0 ? (
-          <p className="mt-3 text-[12.5px] leading-relaxed text-axal-ink-2">
+          <p className="mt-3 text-[12.5px] leading-relaxed text-axal-muted">
             No exclusion is written yet, so a pass has nothing to quote. That is the silence
             this zone exists to replace.
           </p>
@@ -294,7 +294,7 @@ function PassReasons({ rules, onClose }) {
                   </div>
                   {text ? (
                     <>
-                      <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">{text}</p>
+                      <p className="mt-2 text-[12.5px] leading-relaxed text-axal-muted">{text}</p>
                       <button
                         type="button" className={`${ghostButtonClass} mt-2`}
                         onClick={() => {
@@ -404,25 +404,41 @@ export default function PartnerAudienceFitZone() {
   };
   const rowActions = partnerZoneActions('offers/audience-fit', { handlers, view: { header: ['Profile or exclusion', 'Kind', 'Signal', 'Why', 'Referred to', 'In use'], rows: visible, cells: (r) => [r.kind === 'budget_floor' && r.floor_cents != null ? moneyCents(r.floor_cents) : r.value, r.kind, r.signal, r.statement, r.referred_to, r.is_active] } });
 
-  if (isNoPartnerProfile(state.error)) {
-    return <UnlinkedZone title="Audience fit" actions={rowActions} />;
-  }
+  // NOT AN EARLY RETURN ANY MORE. This was
+  //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
+  // which drew a card INSTEAD of the zone — on twelve zones, so an admin
+  // reading this workspace saw twelve copies of one card and never a page.
+  // `ZoneBody` takes the line as a `notice` above its states, and the zone
+  // renders underneath in its own empty state, which is also the state that
+  // says what this zone holds. The gate itself is untouched: the read still
+  // 400s, so `isEmpty` is forced rather than inferred from rows that never
+  // arrived, and `error` is cleared so the shared "This did not load" card —
+  // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
+  const unlinked = isNoPartnerProfile(state.error);
 
   return (
     <>
       {/* Hoisted out of `ZoneBody`, and the export takes `visible`: a file that
           did not match the chip on screen would be its own small untruth. */}
+      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
+          An action states what the zone DOES and an export over nothing
+          loaded renders disabled and says so; a filter chip is a claim about
+          ROWS, and a selectable `Published` over a store this account cannot
+          read is the "an empty set reads as an answer" failure
+          `zoneFilterBuilder.js` exists to prevent, reached from a new
+          direction. `profile_zone_actions.test.mjs` asserts both halves. */}
       <ZoneToolbar
         className="mb-3"
         role="partner"
-        filters={partnerZoneFilters('offers/audience-fit', { value: view, onChange: setView })}
+        filters={unlinked ? [] : partnerZoneFilters('offers/audience-fit', { value: view, onChange: setView })}
         actions={rowActions}
       />
       <ZoneBody
         loading={state.loading}
-        error={state.error}
+        error={unlinked ? null : state.error}
         onRetry={load}
-        isEmpty={items.length === 0}
+        notice={unlinked ? <NoPartnerProfile /> : null}
+        isEmpty={unlinked || (items.length === 0)}
         empty={(
           <NothingYet
             title="No fit rule is recorded yet"
@@ -583,7 +599,7 @@ export default function PartnerAudienceFitZone() {
                 empty list under a selected chip reads as "you have written no
                 rules", which is the silence this zone exists to replace. */}
             {items.length > 0 && visible.length === 0 && (
-              <p className="mb-3 text-[12px] text-axal-ink-2">
+              <p className="mb-3 text-[12px] text-axal-muted">
                 No profile is graded {SIGNAL_LABEL[view]?.toLowerCase() || view}.{' '}
                 {items.length} rule{items.length === 1 ? '' : 's'} recorded in total,{' '}
                 {profiles.length} of them profiles.

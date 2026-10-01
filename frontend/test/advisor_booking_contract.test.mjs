@@ -139,6 +139,123 @@ test('the two callers that were broken now go through the shared adapter', () =>
   assert.doesNotMatch(opps, /const slotStart = /, 'the private adapters must not come back');
 });
 
+/** One route handler's source, so a key can be pinned to its audience. */
+function handlerBody(method, path) {
+  const start = worker.indexOf(`advisors.${method}('${path}',`);
+  assert.ok(start > -1, `${method.toUpperCase()} ${path} must exist in routes/advisors.ts`);
+  const end = worker.indexOf('\nadvisors.', start + 1);
+  return worker.slice(start, end === -1 ? worker.length : end);
+}
+
+test("migration 205's money reaches the advisor's own list and stops there", () => {
+  // THE SAME CLASS OF BUG THIS FILE WAS WRITTEN FOR, one layer down.
+  // `bookingDto` is a whitelist, so `amount_cents` and `billing_state` were
+  // selected by `GET /me/bookings` and dropped on the way out — a valid
+  // property access on an object that simply lacks the key, which nothing
+  // else can catch. SessionsZone then showed "Not recorded" over stored
+  // prices and its editor overwrote them with a blank.
+  const money = dtoKeys('advisorMoney');
+  const shared = dtoKeys('bookingDto');
+  for (const k of ['amount_cents', 'billing_state']) {
+    assert.ok(money.has(k), `advisorMoney must emit ${k} — SessionsZone reads it off every row`);
+    // The other direction, and it is a disclosure rather than a display bug:
+    // three of bookingDto's call sites answer the founder or either party,
+    // and migration 205 calls billing_state the advisor's own bookkeeping.
+    // Putting it back in the shared DTO tells a client their advisor wrote
+    // the session off.
+    assert.ok(!shared.has(k), `${k} is back in the shared bookingDto — that is the client's copy too`);
+  }
+  assert.match(handlerBody('get', '/me/bookings'), /advisorMoney\(/,
+    "the advisor's own list must carry it");
+  assert.doesNotMatch(handlerBody('get', '/bookings/me'), /advisorMoney\(/,
+    'the founder list must not');
+  const transition = worker.slice(worker.indexOf('async function transition('));
+  assert.doesNotMatch(transition.slice(0, transition.indexOf('\n}')), /advisorMoney\(/,
+    'nor a lifecycle move, which answers whichever side made it');
+});
+
+test('no Practice page gates on a booking status the worker cannot write', () => {
+  // The `'requested'` bug at the top of this file, generalised. Every status
+  // a page compares against `b.status` has to be one the worker actually
+  // writes, or the branch is dead and the page silently renders nothing.
+  const written = new Set(['pending']);           // the INSERT default
+  for (const m of worker.matchAll(/nextStatus: '([a-z_]+)'/g)) written.add(m[1]);
+  assert.deepEqual([...written].sort(),
+    ['cancelled', 'completed', 'confirmed', 'no_show', 'pending'],
+    'the vocabulary moved — every page that names a status needs re-reading');
+
+  for (const f of readdirSync(resolve(process.cwd(), 'frontend/src/pages/advisor/practice'))) {
+    if (!f.endsWith('.jsx')) continue;
+    const src = codeOnly(read(`frontend/src/pages/advisor/practice/${f}`));
+    for (const m of src.matchAll(/\[([^\]]*)\]\.includes\(b\.status\)|b\.status === '([a-z_]+)'/g)) {
+      for (const lit of (m[1] ?? m[2] ?? '').matchAll(/'([a-z_]+)'/g)) {
+        assert.ok(written.has(lit[1]), `${f} gates on status '${lit[1]}', which nothing writes`);
+      }
+      if (m[2]) assert.ok(written.has(m[2]), `${f} gates on status '${m[2]}', which nothing writes`);
+    }
+  }
+});
+
+test('Sessions does not tell an advisor about a BOOKING STATUS called "held"', () => {
+  // ORIGINALLY this banned the word outright: the page said `held` three times
+  // — in its docblock, its empty state and the note under the list ("Only
+  // confirmed and held sessions are listed") — and there is no such booking
+  // status. The filter is completed|confirmed, and it drops `pending` without
+  // saying so, which is the one that sentence should have named.
+  //
+  // A BARE BAN IS NOW WRONG, and loosening it would be the wrong repair.
+  // Migration 240 gave a SLOT a `payment_state`, one of whose values is
+  // `held_unpaid` — a slot booked while the payout account was unverified, so
+  // nothing was charged. That is a real state of a real column, and the page
+  // has to be able to name it. What must stay banned is the original claim:
+  // `held` used as a status a BOOKING can be in.
+  //
+  // So this got narrower, not weaker, in three parts: the claim shapes stay
+  // banned, the corrected sentence stays required, and the surviving word is
+  // tied back to the migration that defines it — if 240's CHECK ever drops
+  // `held_unpaid`, the page's word loses its backing and this fails.
+  //
+  // `codeOnly`, because the comment in the page explaining the distinction
+  // names both — the self-matching trap this helper exists for.
+  const src = codeOnly(read('frontend/src/pages/advisor/practice/SessionsZone.jsx'));
+
+  // 1. The claim, in the shapes it could take. Each is `held` inside one
+  //    sentence with the vocabulary of a booking's lifecycle.
+  for (const banned of [
+    /\bheld\b[^.]{0,60}\bstatus(es)?\b/i,
+    /\bstatus(es)?\b[^.]{0,60}\bheld\b/i,
+    /\bheld\b[^.]{0,60}\b(booking|session)s?\s+(are|is)\s+listed\b/i,
+    /\b(booking|session)s?\s+(are|is)\s+listed[^.]{0,60}\bheld\b/i,
+    /b\.status\s*===\s*'held'/,
+  ]) {
+    assert.doesNotMatch(src, banned,
+      'a status the API cannot produce is not a thing to tell an advisor about');
+  }
+
+  // 2. The sentence that replaced it still says the true thing.
+  assert.match(src, /Only confirmed and completed sessions are listed/);
+
+  // 3. The word that survives is the schema's, not prose. Asserted against the
+  //    migration rather than against a copy of the value kept here, so the two
+  //    cannot drift apart — and against the one module that reads the column,
+  //    so the page's `kind === 'held'` is reached from `payment_state` and not
+  //    from anything on a booking.
+  //    Read out of the CHECK CONSTRAINT, not out of the file. The looser form
+  //    — `payment_state` within 200 characters of `'held_unpaid'` — was
+  //    satisfied by the migration's own COMMENT explaining the value, so
+  //    deleting the value from the constraint left this green. The
+  //    self-matching trap `codeOnly` exists for, arriving this time through
+  //    the SOURCE file's comment rather than the test's.
+  const m240 = read('cloudflare-worker/sql/migrations/240_advisor_sessions_config.sql');
+  const check = m240.match(/CHECK\s*\(\s*payment_state\s+IN\s*\(([^)]*)\)/);
+  assert.ok(check, 'migration 240 no longer constrains payment_state at all');
+  assert.match(check[1], /'held_unpaid'/,
+    "the page says 'held' about a slot; migration 240 must still admit that state");
+  const grid = codeOnly(read('frontend/src/pages/advisor/practice/sessionGrid.js'));
+  assert.match(grid, /payment_state === 'held_unpaid'/,
+    "'held' must be derived from the slot column, not asserted as a booking status");
+});
+
 test('a failed availability read is not rendered as an empty schedule', () => {
   const page = codeOnly(read('frontend/src/pages/AdvisorsPage.jsx'));
   // `.catch(() => setSlots([]))` rendered "No open slots — check back later",

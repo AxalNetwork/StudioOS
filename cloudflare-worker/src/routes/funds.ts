@@ -19,8 +19,15 @@ import { Distributions } from '../models/distributions';
 import { logActivity } from './partnernet';
 import { clampLimit } from '../util/pagination';
 import { ensureFundGpColumns } from '../services/fundGpSchema';
-import { lpMembershipScope, lpSelfScope } from '../services/tenancyScope';
+import { lpMembershipScope, lpSelfScope, fundGpScope, NO_ROWS } from '../services/tenancyScope';
+import { refuse } from '../util/refusal';
 import { claimLpRowsByEmail } from '../services/lpClaim';
+import { userMeetsInvestorTier } from '../middleware/requireInvestorTier';
+import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
+import { splitCall } from '../services/fundCallSplit';
+import {
+  issueFundCall, recordReceipt, readLine, readFundCalls, readFundLedger,
+} from '../services/fundCallLedger';
 import {
   rollUpFundRow, totalFundRollups, FUND_METRIC_UNAVAILABLE,
   type FundRollup, type FundRollupRow,
@@ -42,12 +49,61 @@ const parseJson = <T,>(raw: unknown, fallback: T): T => {
 };
 
 
+/**
+ * The funds a caller may see in a list or a rollup (D370).
+ *
+ * The list, the family analytics and the syndication queue answered EVERY
+ * signed-in role with every fund on the platform — `SELECT *`, so a founder
+ * could read each fund's size, deployed capital and GP email. Now: an admin
+ * sees all of them; anyone else sees the funds they are general partner of
+ * record for, and (for the list only) the funds they hold an LP position in.
+ * Both arms are the shared predicates every other fund surface already uses,
+ * so this adds no third definition of "your fund". The GP arm carries no
+ * company clause here: a list is a read of funds the caller already runs,
+ * and the operating gate (`requireFundGp`) still scopes every write.
+ */
+function visibleFundsScope(user: any, opts: { includeLp: boolean }): { sql: string; binds: Array<string | number> } {
+  const gp = fundGpScope(user, null, 'f');
+  if (!opts.includeLp) return gp;
+  const lp = lpMembershipScope(user, 'lpv');
+  return {
+    sql: `(${gp.sql} OR EXISTS (SELECT 1 FROM limited_partners lpv WHERE lpv.fund_id = f.id AND ${lp.sql}))`,
+    binds: [...gp.binds, ...lp.binds],
+  };
+}
+
 // ---------- vc_funds CRUD ----------
 funds.get('/', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   const status = c.req.query('status') || undefined;
-  const list = await Funds.list(c.env, status);
-  return c.json({ ok: true, items: list.results || [] });
+  if (user.role === 'admin') {
+    const list = await Funds.list(c.env, status);
+    // An admin operates every fund through `requireFundGp`'s bypass.
+    return c.json({ ok: true, items: (list.results || []).map((f: any) => ({ ...f, can_manage: true })) });
+  }
+  await claimLpRowsByEmail(c.env, Number(user.id), (user as any).email);
+  const scope = visibleFundsScope(user, { includeLp: true });
+  const where = [scope.sql];
+  const binds = [...scope.binds];
+  if (status) { where.push('f.status = ?'); binds.push(status); }
+  // `can_manage` (D371): whether `requireFundGp` would let this caller operate
+  // the fund — the institutional tier, then the same GP-and-active-company
+  // predicate the gate runs. The list carries LP-only funds too, and the fund
+  // pages used to open `items[0]`, which 404'd whenever that was one of them.
+  const tierOk = userMeetsInvestorTier(user as any, 'institutional');
+  const companyId = tierOk
+    ? await resolveActiveCompany(c.env, user as any, c.req.header(ACTIVE_COMPANY_HEADER))
+    : null;
+  if (companyId !== null) await ensureFundGpColumns(c.env);
+  const manage = tierOk ? fundGpScope(user as any, companyId, 'f') : NO_ROWS;
+  const rows = await c.env.DB.prepare(
+    `SELECT f.*, CASE WHEN ${manage.sql} THEN 1 ELSE 0 END AS can_manage
+       FROM vc_funds f WHERE ${where.join(' AND ')} ORDER BY f.created_at DESC`,
+  ).bind(...manage.binds, ...binds).all();
+  return c.json({
+    ok: true,
+    items: (rows.results || []).map((f: any) => ({ ...f, can_manage: Number(f.can_manage) === 1 })),
+  });
 });
 
 funds.get('/lp-portal', async (c) => {
@@ -74,12 +130,30 @@ funds.get('/lp-portal', async (c) => {
   // Self-view, so lpSelfScope and not lpMembershipScope: an admin's own
   // portal must show their own positions, not the sum of everyone's.
   const callScope = lpSelfScope(user as any);
-  const calls = await c.env.DB.prepare(
-    `SELECT cc.* FROM capital_calls cc
-       JOIN limited_partners lp ON lp.id = cc.limited_partner_id
-      WHERE ${callScope.sql}
-      ORDER BY cc.created_at DESC LIMIT 50`
-  ).bind(...callScope.binds).all().catch(() => ({ results: [] }));
+  // D372: each line carries what the ledger (D371) knows about it — the cents
+  // it owes, the cents received against it, the call's number and its fund —
+  // so the My-commitment card can say called, due and uncalled without
+  // guessing. A failed read is `capital_calls_recorded: false`, never an empty
+  // list: "no calls" is a claim about the LP's money.
+  let calls: any[] = [];
+  let callsRecorded = true;
+  try {
+    calls = (await c.env.DB.prepare(
+      `SELECT cc.*, lp.fund_id AS fund_id, f.name AS fund_name, fc.call_number AS call_number,
+              COALESCE(cc.amount_cents, CAST(ROUND(cc.amount * 100) AS INTEGER)) AS owed_cents,
+              COALESCE((SELECT SUM(r.amount_cents) FROM capital_call_receipts r WHERE r.capital_call_id = cc.id), 0)
+                AS received_cents
+         FROM capital_calls cc
+         JOIN limited_partners lp ON lp.id = cc.limited_partner_id
+         JOIN vc_funds f ON f.id = lp.fund_id
+         LEFT JOIN fund_capital_calls fc ON fc.id = cc.fund_call_id
+        WHERE ${callScope.sql}
+        ORDER BY cc.created_at DESC LIMIT 200`
+    ).bind(...callScope.binds).all()).results || [];
+  } catch (e) {
+    console.error('[funds] lp-portal calls unreadable', e);
+    callsRecorded = false;
+  }
 
   // Performance per-LP-row: TVPI = (returns + distributions) / invested ; DPI = distributions / invested
   const perfByLp = lpRows.map((lp: any) => {
@@ -87,8 +161,10 @@ funds.get('/lp-portal', async (c) => {
     const distSumDollars = lpDists.reduce((s: number, d: any) => s + Number(d.amount_cents || 0) / 100, 0);
     const invested = Number(lp.invested_amount || 0);
     const returns = Number(lp.returns || 0);
-    const tvpi = invested > 0 ? (invested + returns + distSumDollars) / invested : 0;
-    const dpi = invested > 0 ? (returns + distSumDollars) / invested : 0;
+    // Nothing paid in, no multiple: null, not 0 (D372). A TVPI of 0.00× says
+    // the money was lost; with no paid-in capital there is no ratio at all.
+    const tvpi = invested > 0 ? Number(((invested + returns + distSumDollars) / invested).toFixed(3)) : null;
+    const dpi = invested > 0 ? Number(((returns + distSumDollars) / invested).toFixed(3)) : null;
     return {
       lp_id: lp.id,
       fund_id: lp.fund_id,
@@ -98,9 +174,10 @@ funds.get('/lp-portal', async (c) => {
       invested_amount: invested,
       returns: returns,
       distributions_dollars: distSumDollars,
-      tvpi: Number(tvpi.toFixed(3)),
-      dpi: Number(dpi.toFixed(3)),
+      tvpi,
+      dpi,
       lpa_signed: !!lp.lpa_signed,
+      lpa_signed_at: lp.lpa_signed_at ?? null,
       commitment_date: lp.commitment_date ?? null,
     };
   });
@@ -108,7 +185,8 @@ funds.get('/lp-portal', async (c) => {
   return c.json({
     ok: true,
     lp_holdings: lpRows,
-    capital_calls: calls.results || [],
+    capital_calls: calls,
+    capital_calls_recorded: callsRecorded,
     distributions: distRows,
     performance: perfByLp,
     // The signer and the firms an LP-facing document names, per fund the caller
@@ -170,6 +248,11 @@ function fundFacts(rows: any[]) {
         title: r.gp_title ?? null,
         email: r.gp_email ?? null,
         entity: r.gp_entity ?? null,
+        // D372: the GP of record's platform account, which "Message the GP"
+        // starts a thread with (`POST /api/messages` takes an account email).
+        // `email` above is the fiduciary address as printed on the LPA, which
+        // may not be an account at all. Only the LP's own funds reach here.
+        contact_email: r.gp_account_email ?? null,
       },
       providers: {
         fund_admin: r.fund_admin ?? null,
@@ -185,7 +268,13 @@ function fundFacts(rows: any[]) {
 
 funds.get('/syndication', async (c) => {
   // Lightweight co-invest opportunities: open marketplace listings + pending capital calls.
-  await requireAuth(c);
+  const user = await requireAuth(c);
+  // D370: investors, partners and admins — the roles a co-invest listing is
+  // for. The pending CALLS carry fund money in their payloads, so they are
+  // narrowed further below to the funds the caller is GP of record for.
+  if (!['admin', 'investor', 'partner'].includes(String(user.role))) {
+    return refuse(c, 403, { code: 'investor_access_required', message: 'Co-invest listings are for investors, partners and the platform team.' });
+  }
   // T17 — clamp ?limit=N (default 20, max 50) for both lists.
   const limit = clampLimit(c.req.query('limit'), 20, 50);
   const listings = await c.env.DB.prepare(
@@ -196,14 +285,19 @@ funds.get('/syndication', async (c) => {
       WHERE l.status = 'open' AND l.shares > 0
       ORDER BY l.created_at DESC LIMIT ?`
   ).bind(limit).all().catch(() => ({ results: [] }));
+  const gp = fundGpScope(user as any, null, 'f');
   const pendingCalls = await c.env.DB.prepare(
     // `queue_jobs` has no fund_id column — `Jobs.enqueue` puts it in the
     // payload. Naming it directly threw, and the catch below made this list
     // permanently empty, so no pending capital call ever surfaced here.
+    //
+    // D370: only calls on funds the caller runs (every call, for an admin —
+    // `fundGpScope` is unscoped for them). A queued call names its amount.
     `SELECT id, json_extract(payload, '$.fund_id') AS fund_id, payload, created_at FROM queue_jobs
       WHERE job_type IN ('capital_call', 'capital_call_notice') AND status IN ('pending','processing')
+        AND json_extract(payload, '$.fund_id') IN (SELECT f.id FROM vc_funds f WHERE ${gp.sql})
       ORDER BY created_at DESC LIMIT ?`
-  ).bind(limit).all().catch(() => ({ results: [] }));
+  ).bind(...gp.binds, limit).all().catch(() => ({ results: [] }));
   return c.json({
     ok: true,
     co_invest_listings: listings.results || [],
@@ -238,16 +332,22 @@ const FUND_ROLLUP_SQL = (where: string) =>
 
 // The two sums are independent, so they are correlated subqueries rather than
 // joins, which would multiply one fund's rows by the other's row count.
-async function rollUpFunds(env: Env, fundId?: number): Promise<FundRollup[]> {
-  const stmt = env.DB.prepare(FUND_ROLLUP_SQL(fundId ? 'WHERE f.id = ?' : ''));
-  const rows = await (fundId ? stmt.bind(fundId) : stmt).all<FundRollupRow>();
+async function rollUpFunds(env: Env, fundId?: number, scope?: { sql: string; binds: Array<string | number> }): Promise<FundRollup[]> {
+  const where: string[] = [];
+  const binds: Array<string | number> = [];
+  if (fundId) { where.push('f.id = ?'); binds.push(fundId); }
+  if (scope) { where.push(scope.sql); binds.push(...scope.binds); }
+  const stmt = env.DB.prepare(FUND_ROLLUP_SQL(where.length ? `WHERE ${where.join(' AND ')}` : ''));
+  const rows = await (binds.length ? stmt.bind(...binds) : stmt).all<FundRollupRow>();
   return (rows.results || []).map(rollUpFundRow);
 }
 
 // Family rollup. Registered before /:id so `analytics` is not read as an id.
 funds.get('/analytics', async (c) => {
-  await requireAuth(c);
-  const items = await rollUpFunds(c.env);
+  // D370: the family rollup is the funds the caller runs (all of them, for an
+  // admin). An LP's view of a fund is their own position, on /lp-portal.
+  const user = await requireAuth(c);
+  const items = await rollUpFunds(c.env, undefined, visibleFundsScope(user, { includeLp: false }));
   return c.json({
     ok: true,
     items,
@@ -257,9 +357,11 @@ funds.get('/analytics', async (c) => {
 });
 
 funds.get('/:id/analytics', async (c) => {
-  await requireAuth(c);
   const fundId = parseInt(c.req.param('id'), 10);
   if (!fundId) return c.json({ error: 'invalid fund id' }, 400);
+  // D370: the fund's GP of record, or an admin — the same gate as every GP
+  // control. It was any signed-in role.
+  await requireFundGp(c, fundId);
   const [fund] = await rollUpFunds(c.env, fundId);
   if (!fund) return c.json({ error: 'Fund not found' }, 404);
   return c.json({ ok: true, fund, unavailable: FUND_METRIC_UNAVAILABLE });
@@ -267,8 +369,11 @@ funds.get('/:id/analytics', async (c) => {
 
 // /funds/:id MUST come AFTER all /funds/<word> handlers above.
 funds.get('/:id', async (c) => {
-  await requireAuth(c);
+  // D370: the fund's GP of record, or an admin. This returned the whole row —
+  // size, deployed capital, the GP's email — plus the LP totals to any
+  // signed-in role. An LP's own view of the fund is /lp-portal.
   const id = parseInt(c.req.param('id'), 10);
+  await requireFundGp(c, id);
   const f = await Funds.getById(c.env, id);
   if (!f) return c.json({ error: 'not found' }, 404);
   // Compute LP count + invested totals at read time — denormalized lp_count
@@ -294,12 +399,35 @@ funds.get('/:id', async (c) => {
   });
 });
 
+/**
+ * May this caller read THIS fund's LPA body?
+ *
+ * ONE definition, read by the metadata route and by the download route below.
+ * Two copies of an entitlement check is how a download route ends up more
+ * permissive than the screen that links to it — and the download is the half
+ * that hands over the text.
+ *
+ * Admin, or an LP of this fund on the same predicate every other LP surface
+ * uses, so a legacy LP is not refused the agreement they signed. The claim is
+ * scoped to this fund: the read that justifies the write was about this fund
+ * alone.
+ */
+async function mayReadLpa(env: Env, user: any, fundId: number): Promise<boolean> {
+  if (user?.role === 'admin') return true;
+  await claimLpRowsByEmail(env, Number(user?.id), user?.email, fundId);
+  const scope = lpMembershipScope(user);
+  const isLP = await env.DB.prepare(
+    `SELECT 1 AS yes FROM limited_partners lp WHERE lp.fund_id = ? AND ${scope.sql} LIMIT 1`
+  ).bind(fundId, ...scope.binds).first<{ yes: number }>();
+  return !!isLP;
+}
+
 funds.get('/:id/lpa', async (c) => {
   // Security #8 — storage cleanup:
-  // The LPA body is NEVER inlined in the JSON response, regardless of
-  // viewer role. Admins/LPs of this fund get `file_key` so the body can
-  // be fetched via a separate download path; non-LPs get metadata only
-  // (no `file_key`) so they can't even attempt a download.
+  // The LPA body is NEVER inlined in this JSON response, whatever the viewer's
+  // role. An admin or an LP of this fund learns that a body EXISTS and fetches
+  // it from `/:id/lpa/download`, which re-checks the same entitlement; a
+  // non-LP gets metadata only.
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'), 10);
   const f = await Funds.getById(c.env, id);
@@ -309,38 +437,92 @@ funds.get('/:id/lpa', async (c) => {
   ).bind(f.lpa_doc_id).first();
   if (!doc) return c.json({ error: 'doc not found' }, 404);
 
-  // Strip the inline body for everyone. `file_sha256` is admin-only
-  // legal-proof material; admins keep it.
-  const { content: _content, file_sha256, ...rest } = doc;
-  let safeDoc: any = { ...rest };
-  if (user.role === 'admin') {
-    safeDoc.file_sha256 = file_sha256;
+  // The inline body comes off for everyone, before any branch below.
+  const { content, ...rest } = doc;
+  const safeDoc: any = { ...rest };
+
+  if (!(await mayReadLpa(c.env, user, id))) {
+    // Non-LP, non-admin: metadata only, minus the one column on this table
+    // that points AT a body.
+    //
+    // D174 — WHAT THIS USED TO DESTRUCTURE, AND WHY IT WAS THEATRE. It read
+    // `const { file_key, file_size, file_content_type, ...meta }`, under a
+    // comment saying it dropped the first of those so a non-LP could not
+    // attempt a download. Measured against production: `legal_documents` has
+    // twelve columns and not one of those three is among them, and nothing
+    // has ever written them — so it removed nothing, and the comment
+    // described a defence that never had anything to defend. `file_url` is
+    // the column that does exist, and it is the one worth withholding.
+    const { file_url, ...meta } = safeDoc;
+    return c.json({ ok: true, doc: meta, redacted: true });
   }
 
-  if (user.role !== 'admin') {
-    // The LPA is the fund's constitutional document; an LP is entitled to read
-    // their own. Same predicate as everywhere else, so a legacy LP is not
-    // refused the agreement they signed. Claim scoped to this fund — the read
-    // that justifies the write was about this fund alone.
-    await claimLpRowsByEmail(c.env, Number(user.id), user.email, id);
-    const scope = lpMembershipScope(user as any);
-    const isLP = await c.env.DB.prepare(
-      `SELECT 1 AS yes FROM limited_partners lp WHERE lp.fund_id = ? AND ${scope.sql} LIMIT 1`
-    ).bind(id, ...scope.binds).first<{ yes: number }>();
-    if (!isLP) {
-      // Non-LP, non-admin: drop `file_key` so they cannot attempt a
-      // download; return non-sensitive metadata only.
-      const { file_key, file_size, file_content_type, ...meta } = safeDoc;
-      return c.json({ ok: true, doc: meta, redacted: true });
-    }
+  // Admin or LP.
+  //
+  // D174 — WHY THIS REPORTS A BODY RATHER THAN MINTING A LINK, and it is a
+  // correction to this route's own TODO as much as to its output. The TODO
+  // said to port the FastAPI contract-minting flow into the worker so the
+  // LPADrawer's `Download LPA` button would have a `content_url` to hit. That
+  // port HAD shipped — the signed-download minter is used by dd, research,
+  // jobs, admin_contracts and data_room — and minting here still could not
+  // have worked: that minter binds an R2 object key, and an LPA is not in R2.
+  // Its body is `legal_documents.content`, inline text written by the
+  // `lpa_generation` queue job. So the TODO named a mechanism that was never
+  // going to fit this document, and following it would have shipped a mint
+  // whose guard is false on every row that exists.
+  //
+  // The button is served the way this repo already serves an authenticated
+  // download — `api.downloadDataRoom`'s shape, whose own comment gives the
+  // reason: a plain `<a>` click cannot set the session's header, so the SPA
+  // fetches the blob and clicks it client-side. That re-checks entitlement on
+  // every hit, where a signed token in a URL is replayable for its window.
+  //
+  // WHAT THE DRAWER SHOWED BEFORE ANY OF THIS. No `content_url` was ever sent
+  // to anyone, so `FundsPage.jsx` fell to its `content_url`-absent branch for
+  // EVERY reader and told an LP who had just passed the check above — and
+  // every admin — "you are not an LP of this fund". A false claim about
+  // entitlement, shown to exactly the two audiences who have it.
+  const hasBody = typeof content === 'string' && content.trim().length > 0;
+  return c.json({ ok: true, doc: safeDoc, content_available: hasBody });
+});
+
+funds.get('/:id/lpa/download', async (c) => {
+  // The body, for a reader `mayReadLpa` allows — the one place it leaves the
+  // database. It is never inlined in the metadata response above, so a drawer
+  // that merely opens has not handed over the agreement.
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'), 10);
+  const f = await Funds.getById(c.env, id);
+  if (!f?.lpa_doc_id) return c.json({ error: 'No LPA on file yet' }, 404);
+  if (!(await mayReadLpa(c.env, user, id))) {
+    return c.json({ error: 'You are not an LP of this fund.', code: 'lpa_not_entitled' }, 403);
   }
-  // Admin or LP: return metadata + file_key. Frontend should issue a
-  // download via a short-lived signed URL endpoint (TODO: port the
-  // FastAPI `/api/files/contracts/{token}` minting flow into the worker
-  // so the LPADrawer's `Download LPA` button has a `content_url` to
-  // hit). Until then, this response is correct-by-default — no body
-  // leaks via JSON.
-  return c.json({ ok: true, doc: safeDoc });
+  const row = await c.env.DB.prepare(
+    `SELECT content, version FROM legal_documents WHERE id = ?`
+  ).bind(f.lpa_doc_id).first<{ content: string | null; version: number | null }>();
+  const body = typeof row?.content === 'string' ? row.content : '';
+  if (!body.trim()) {
+    // Deliberately a different answer from the 403 above: "we have nothing to
+    // give you" and "you may not have it" are different facts about one click,
+    // and collapsing them is the defect D174 exists to correct.
+    return c.json({ error: 'No LPA body is stored for this fund.', code: 'lpa_no_body' }, 404);
+  }
+  // Recorded because this is the fund's constitutional document leaving the
+  // store. Best-effort by construction — `logActivity` swallows its own
+  // failures, and a download must not fail because its audit row did.
+  await logActivity(c.env, Number(user.id), 'fund_lpa_downloaded', {
+    entityType: 'vc_fund', entityId: id, metadata: { doc_id: f.lpa_doc_id },
+  });
+  // Built from two integers and never from stored text: a filename carrying a
+  // quote or a newline would rewrite the response headers.
+  const filename = `lpa-fund-${id}-v${Number(row?.version) || 1}.txt`;
+  return new Response(body, {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Cache-Control': 'no-store',
+    },
+  });
 });
 
 funds.post('/', async (c) => {
@@ -381,6 +563,19 @@ funds.post('/', async (c) => {
     (f as any).gp_user_id = creator.id;
     (f as any).company_id = companyId;
   }
+  // NO GP OF RECORD, NO LPA (D370, the Fabric canvas's F10 rule). The LPA is
+  // the document a GP signs as fiduciary; generating one for a fund with no
+  // GP of record puts an agreement with nobody's name behind it into the LP
+  // record. An admin-created fund has none until a GP is named, so its LPA
+  // waits — the response says so, and regenerate-lpa is the door once named.
+  if (!(f as any).gp_user_id) {
+    return c.json({
+      ok: true,
+      fund: f,
+      lpa_status: 'blocked_no_gp',
+      lpa_reason: 'No LPA is drafted until the fund has a general partner of record.',
+    }, 201);
+  }
   // Auto-generate LPA via job queue (non-blocking).
   await enqueueJob(c.env, 'lpa_generation', { fund_id: f.id });
   return c.json({ ok: true, fund: f, lpa_status: 'enqueued' }, 201);
@@ -396,7 +591,13 @@ funds.patch('/:id', async (c) => {
 
 funds.post('/:id/regenerate-lpa', async (c) => {
   const id = parseInt(c.req.param('id'), 10);
-  await requireFundGp(c, id);
+  const { fund } = await requireFundGp(c, id);
+  if (!fund?.gp_user_id) {
+    return refuse(c, 409, {
+      code: 'no_gp_of_record',
+      message: 'Name the fund\'s general partner of record before an LPA is drafted.',
+    });
+  }
   // Clear any prior LPA doc reference so the worker re-generates.
   await c.env.DB.prepare(`UPDATE vc_funds SET lpa_doc_id = NULL WHERE id = ?`).bind(id).run();
   const job = await Jobs.enqueue(c.env, 'lpa_generation', { fund_id: id });
@@ -566,8 +767,9 @@ funds.get('/:id/lp-report/:lpId', async (c) => {
   const distSumDollars = dists.reduce((s: number, d: any) => s + Number(d.amount_cents || 0) / 100, 0);
   const invested = Number(lp.invested_amount || 0);
   const returns = Number(lp.returns || 0);
-  const tvpi = invested > 0 ? (invested + returns + distSumDollars) / invested : 0;
-  const dpi = invested > 0 ? (returns + distSumDollars) / invested : 0;
+  // Null with nothing paid in, as the LP's own portal says (D372).
+  const tvpi = invested > 0 ? Number(((invested + returns + distSumDollars) / invested).toFixed(3)) : null;
+  const dpi = invested > 0 ? Number(((returns + distSumDollars) / invested).toFixed(3)) : null;
 
   return c.json({
     ok: true,
@@ -583,8 +785,8 @@ funds.get('/:id/lp-report/:lpId', async (c) => {
       invested_amount: invested,
       returns,
       distributions_dollars: distSumDollars,
-      tvpi: Number(tvpi.toFixed(3)),
-      dpi: Number(dpi.toFixed(3)),
+      tvpi,
+      dpi,
       lpa_signed: !!lp.lpa_signed,
       commitment_date: lp.commitment_date ?? null,
     }],
@@ -595,13 +797,23 @@ funds.get('/:id/lp-report/:lpId', async (c) => {
 
 funds.post('/:id/lps', async (c) => {
   const fundId = parseInt(c.req.param('id'), 10);
-  await requireFundGp(c, fundId);
+  const { user } = await requireFundGp(c, fundId);
   const body = await c.req.json();
   const lp = await LPs.create(c.env, { ...body, fund_id: fundId });
   if (!lp) return c.json({ error: 'create failed' }, 500);
   // First-call automation: enqueue a notice immediately if amount provided.
+  // Task #197 — `call_uid` identifies THIS call, so the job's ledger rows are
+  // idempotent across retries without two presses colliding. See
+  // `_capital_call_writes.ts` for why it cannot come from the job id.
   if (body?.first_call_cents && body.first_call_cents > 0) {
-    await Jobs.enqueue(c.env, 'capital_call_notice', { fund_id: fundId, amount_cents: body.first_call_cents });
+    await Jobs.enqueue(c.env, 'capital_call_notice', {
+      fund_id: fundId,
+      amount_cents: body.first_call_cents,
+      call_uid: crypto.randomUUID(),
+      due_date: body?.first_call_due_date || null,
+      // D371: the call header records who issued it.
+      issued_by: Number(user.id),
+    });
   }
   return c.json({ ok: true, lp }, 201);
 });
@@ -624,17 +836,214 @@ funds.post('/lps/:lpId/sign-lpa', async (c) => {
   return c.json({ ok: true, lp: updated });
 });
 
-// ---------- Capital call (event-driven → enqueue notices) ----------
+// ---------- Capital calls: issue, preview, receipts, ledger (D371) ----------
+
+/** A real calendar date written YYYY-MM-DD, or null. */
+function isoDate(raw: unknown): string | null {
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(`${s}T00:00:00Z`);
+  return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === s ? s : null;
+}
+
+const todayUtc = () => new Date().toISOString().slice(0, 10);
+
+/** The amount a request names, in cents: `amount_cents`, or `amount` in dollars. */
+function requestCents(body: { amount_cents?: unknown; amount?: unknown }): number | null {
+  const cents = body.amount_cents != null
+    ? Number(body.amount_cents)
+    : Math.round(Number(body.amount ?? NaN) * 100);
+  return Number.isSafeInteger(cents) && cents > 0 ? cents : null;
+}
+
+const BAD_AMOUNT = {
+  code: 'invalid_amount',
+  message: 'A capital call needs an amount above zero, in whole cents.',
+};
+
+/**
+ * Issue a call: the header, one line per billed LP and the notices, written
+ * now rather than queued. The route used to enqueue `capital_call_notice` and
+ * answer before anything existed, so the page a GP issued from could not show
+ * the call it had just made. The job still exists — an LP's first call is
+ * enqueued from `POST /:id/lps` — and runs the same `issueFundCall`.
+ *
+ * `due_date` is passed through and NEVER DEFAULTED (task 197): a deadline an LP
+ * acts on is one the GP typed. It must be a real date when given.
+ */
 funds.post('/:id/capital-call', async (c) => {
   const fundId = parseInt(c.req.param('id'), 10);
-  await requireFundGp(c, fundId);
-  const body = await c.req.json<{ amount_cents?: number; amount?: number; note?: string }>();
-  const amountCents = Math.round(body.amount_cents ?? Number(body.amount ?? 0) * 100);
-  if (!amountCents || amountCents <= 0) return c.json({ error: 'amount/amount_cents must be > 0' }, 400);
-  const job = await Jobs.enqueue(c.env, 'capital_call_notice', {
-    fund_id: fundId, amount_cents: amountCents, note: body.note,
+  const { user } = await requireFundGp(c, fundId);
+  const body = await c.req.json<{
+    amount_cents?: number; amount?: number; note?: string; purpose?: string; due_date?: string;
+  }>().catch(() => ({} as any));
+  const amountCents = requestCents(body);
+  if (amountCents === null) return refuse(c, 400, BAD_AMOUNT);
+  const rawDue = typeof body.due_date === 'string' ? body.due_date.trim() : '';
+  const dueDate = rawDue ? isoDate(rawDue) : null;
+  if (rawDue && !dueDate) {
+    return refuse(c, 400, { code: 'invalid_due_date', message: 'The due date must be a real date, written YYYY-MM-DD.' });
+  }
+  const purposeRaw = String(body.purpose ?? body.note ?? '').trim();
+  const purpose = purposeRaw ? purposeRaw.slice(0, 500) : null;
+
+  const issued = await issueFundCall(c.env, {
+    fundId, amountCents, callUid: crypto.randomUUID(), dueDate, purpose, issuedBy: Number(user.id),
   });
-  return c.json({ ok: true, enqueued_job: job });
+  if (!issued.call) {
+    return refuse(c, 409, {
+      code: 'no_billable_lps',
+      message: 'This fund has no committed or active LP with a commitment, so a call would bill nobody. Add an LP first.',
+    });
+  }
+  await logActivity(c.env, Number(user.id), 'capital_call_issued', {
+    entityType: 'fund', entityId: fundId,
+    metadata: { call_number: issued.call.call_number, amount_cents: amountCents, lines: issued.written.length },
+  }).catch(() => {});
+  return c.json({ ok: true, call: issued.call, lines_written: issued.written.length, due_date: dueDate }, 201);
+});
+
+/**
+ * What a call of this amount would ask each LP for, before it is issued. The
+ * same `splitCall` the issue runs, over the same billed LPs, so the preview
+ * and the ledger cannot disagree about a line.
+ */
+funds.post('/:id/capital-calls/preview', async (c) => {
+  const fundId = parseInt(c.req.param('id'), 10);
+  await requireFundGp(c, fundId);
+  const body = await c.req.json<{ amount_cents?: number; amount?: number }>().catch(() => ({} as any));
+  const amountCents = requestCents(body);
+  if (amountCents === null) return refuse(c, 400, BAD_AMOUNT);
+  const lps = (await c.env.DB.prepare(
+    `SELECT lp.id, lp.commitment_amount, lp.user_id,
+            COALESCE(u.name, lp.name) AS name, COALESCE(u.email, lp.email) AS email,
+            u.kyc_status AS kyc_status
+       FROM limited_partners lp
+       LEFT JOIN users u ON u.id = lp.user_id
+      WHERE lp.fund_id = ? AND lp.status IN ('committed', 'active')
+      ORDER BY lp.id`,
+  ).bind(fundId).all<any>()).results || [];
+  const split = splitCall(amountCents, lps);
+  const byId = new Map(lps.map((lp: any) => [Number(lp.id), lp]));
+  const next = await c.env.DB.prepare(
+    `SELECT COALESCE(MAX(call_number), 0) + 1 AS n FROM fund_capital_calls WHERE fund_id = ?`,
+  ).bind(fundId).first<{ n: number }>();
+  const who = (id: number) => {
+    const lp: any = byId.get(id) || {};
+    return {
+      lp_id: id, name: lp.name ?? null, email: lp.email ?? null, has_account: lp.user_id != null,
+      kyc_status: lp.user_id != null ? (lp.kyc_status ?? null) : null,
+    };
+  };
+  return c.json({
+    ok: true,
+    amount_cents: amountCents,
+    next_call_number: Number(next?.n ?? 1),
+    total_commitment_cents: split.totalCommitmentCents,
+    residual_cents: split.residualCents,
+    residual_lp_id: split.residualLpId,
+    lines: split.lines.map((l) => ({
+      ...who(l.lpId), commitment_cents: l.commitmentCents, share_cents: l.shareCents, residual: l.residual,
+    })),
+    excluded: split.excluded.map((x) => ({ ...who(x.lpId), reason: x.reason })),
+  });
+});
+
+/** Every call on the fund, each with its LP lines, and the fund's call totals. */
+funds.get('/:id/capital-calls', async (c) => {
+  const fundId = parseInt(c.req.param('id'), 10);
+  const { fund } = await requireFundGp(c, fundId);
+  try {
+    const ledger = await readFundCalls(c.env, fundId, todayUtc());
+    return c.json({ ok: true, fund: { id: fund.id, name: fund.name }, today: todayUtc(), ...ledger });
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'call_ledger_unreadable',
+      message: "This fund's call ledger could not be read. Nothing here says the fund has no calls; try again.",
+      raw: e,
+    });
+  }
+});
+
+/**
+ * The fund's capital ledger — calls issued and receipts recorded, newest
+ * first. `?lp=<id>` narrows it to one LP's history, and that LP must be on
+ * this fund.
+ */
+funds.get('/:id/ledger', async (c) => {
+  const fundId = parseInt(c.req.param('id'), 10);
+  await requireFundGp(c, fundId);
+  const lpRaw = c.req.query('lp');
+  let lpId: number | null = null;
+  if (lpRaw != null && lpRaw !== '') {
+    lpId = /^\d+$/.test(lpRaw) ? Number(lpRaw) : NaN;
+    const onFund = Number.isSafeInteger(lpId) && await c.env.DB.prepare(
+      `SELECT 1 AS yes FROM limited_partners WHERE id = ? AND fund_id = ?`,
+    ).bind(lpId, fundId).first();
+    if (!onFund) return refuse(c, 404, { code: 'lp_not_on_fund', message: 'That LP is not on this fund.' });
+  }
+  try {
+    const ledger = await readFundLedger(c.env, fundId, lpId);
+    return c.json({ ok: true, lp_id: lpId, ...ledger });
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'ledger_unreadable',
+      message: "This fund's ledger could not be read. Nothing here says no money has moved; try again.",
+      raw: e,
+    });
+  }
+});
+
+/**
+ * The GP records a wire against one LP's line: how much, the date it landed,
+ * its reference. Append-only (migration 312); the line is paid once its
+ * receipts reach what it owes. The line must be on this fund — a line id from
+ * another fund is the same 404 as one that does not exist.
+ */
+funds.post('/:id/capital-calls/lines/:lineId/receipts', async (c) => {
+  const fundId = parseInt(c.req.param('id'), 10);
+  const lineId = parseInt(c.req.param('lineId'), 10);
+  const { user } = await requireFundGp(c, fundId);
+  const notFound = () => refuse(c, 404, { code: 'call_line_not_found', message: 'That call line is not on this fund.' });
+  if (!Number.isSafeInteger(lineId) || lineId <= 0) return notFound();
+  const line = await readLine(c.env, lineId);
+  if (!line || Number(line.fund_id) !== fundId) return notFound();
+
+  const body = await c.req.json<{ amount_cents?: number; received_on?: string; reference?: string }>()
+    .catch(() => ({} as any));
+  const cents = Number(body.amount_cents);
+  if (!Number.isSafeInteger(cents) || cents <= 0) {
+    return refuse(c, 400, { code: 'invalid_amount', message: 'A receipt is an amount above zero, in whole cents.' });
+  }
+  const receivedOn = isoDate(body.received_on);
+  const latest = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  if (!receivedOn || receivedOn > latest) {
+    return refuse(c, 400, {
+      code: 'invalid_received_on',
+      message: 'The date the wire landed must be a real date, written YYYY-MM-DD, and not in the future.',
+    });
+  }
+  const reference = String(body.reference ?? '').trim().slice(0, 120) || null;
+
+  const outcome = await recordReceipt(c.env, {
+    lineId, amount: cents, receivedOn, reference, source: 'receipt', recordedBy: Number(user.id),
+  });
+  if (outcome.kind === 'not_found') return notFound();
+  if (outcome.kind === 'already_paid') {
+    return refuse(c, 409, { code: 'line_already_paid', message: 'This line is already paid in full; nothing was recorded.' });
+  }
+  if (outcome.kind === 'exceeds_outstanding') {
+    return refuse(c, 409, {
+      code: 'receipt_exceeds_outstanding',
+      message: 'That is more than this line still owes, so nothing was recorded. Record the amount outstanding, or less.',
+      extra: { outstanding_cents: outcome.outstandingCents },
+    });
+  }
+  await logActivity(c.env, Number(user.id), 'capital_call_receipt_recorded', {
+    entityType: 'capital_call', entityId: lineId,
+    metadata: { fund_id: fundId, amount_cents: cents, received_on: receivedOn, paid: outcome.paid },
+  }).catch(() => {});
+  return c.json({ ok: true, receipt: outcome.receipt, line: outcome.line, paid: outcome.paid }, 201);
 });
 
 // ---------- Distributions ----------

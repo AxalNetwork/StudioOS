@@ -7,10 +7,11 @@ import {
 import { useAuth } from '../hooks/useAuthSync';
 import { hasTier } from '../sidebarConfig';
 import { openPaywall } from '../components/PaywallModal';
+import { Unrecorded } from '../ui';
 import IncorporatePage from './IncorporatePage';
 import CofounderAgreementPage from './CofounderAgreementPage';
 import CompliancePage from './CompliancePage';
-import Section83bPage from './Section83bPage';
+import SpinoutLab83bPage from './SpinoutLab83bPage';
 
 // RAISE Workspaces (Task #1) — Legal Engine workspace.
 //
@@ -71,22 +72,20 @@ const CARDS = [
     icon: FileSignature,
     summary: '83(b) and equivalents — the deadlines that bite if you miss them.',
     requiredTier: 'studio',
-    Component: Section83bPage,
+    // D361: the Lab's 83(b) tracker, embedded. It replaced Section83bPage,
+    // which is deleted; the card's Studio gate is unchanged.
+    Component: SpinoutLab83bPage,
   },
 ];
 
-// Generic 3-state status pill. TODO: derive real state per card from backend
-// data (incorporation order status, agreement/tracker existence, open
-// compliance events). Placeholder defaults to "Not set up" for now.
-function StatusPill({ state = 'not_set_up' }) {
-  const cfg = {
-    not_set_up: { label: 'Not set up', cls: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' },
-    in_progress: { label: 'In progress', cls: 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300' },
-    complete: { label: 'Complete', cls: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300' },
-  }[state] || { label: state, cls: 'bg-gray-100 text-gray-600' };
+// Each card's status. The hub reads no tool's state, so it states none: the
+// fixed "Not set up" pill it used to draw was a claim about four stores it
+// never read, shown even to a founder with a filed election (D361). The state
+// lives on each tool's own page, one click away.
+function StatusPill() {
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${cfg.cls}`}>
-      {cfg.label}
+    <span className="text-[11px]" data-testid="legal-card-status">
+      <Unrecorded reason="Open the card for its status; this hub does not read each tool's records." />
     </span>
   );
 }
@@ -161,7 +160,7 @@ export default function LegalEnginePage() {
                   <Icon size={20} />
                 </span>
                 <div className="flex items-center gap-2">
-                  <StatusPill state="not_set_up" />
+                  <StatusPill />
                   {locked ? <Lock size={14} className="text-gray-400" /> : <ChevronRight size={16} className="text-gray-300 group-hover:text-violet-500" />}
                 </div>
               </div>

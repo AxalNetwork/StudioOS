@@ -60,10 +60,12 @@ import RadarChart from '../components/scoring/RadarChart';
 import TrajectoryChart from '../components/scoring/TrajectoryChart';
 import DimensionRow from '../components/scoring/DimensionRow';
 import WeakPointList from '../components/scoring/WeakPointList';
+import { reportError, reportWarn } from '../lib/log';
 import BenchmarkBars from '../components/scoring/BenchmarkBars';
 import DimensionDrawer from '../components/scoring/DimensionDrawer';
 import ExportReportModal from '../components/scoring/ExportReportModal';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 
 // Worker-only endpoints: ONLY a 404 means "not in this environment" (the dev
 // FastAPI lacks /api/radar and /api/assessment). Same convention as
@@ -177,7 +179,7 @@ export default function SpinoutLabScoringPage() {
         }
         setStatus('ready');
       } catch (e) {
-        console.error('[spinout-scoring]', e);
+        reportError('spinout-scoring:load', e);
         if (!dead) setStatus('error');
       }
     })();
@@ -221,7 +223,7 @@ export default function SpinoutLabScoringPage() {
       await navigator.clipboard.writeText(window.location.href);
       setCopied('ok');
     } catch (err) {
-      console.warn('[spinout-scoring:copy]', err);
+      reportWarn('spinout-scoring:copy', err);
       setCopied('fail');
     }
     window.setTimeout(() => setCopied(''), 2000);
@@ -248,7 +250,7 @@ export default function SpinoutLabScoringPage() {
       await exportScoringReportPdf(vm.exportMeta);
       setExportOpen(false);
     } catch (err) {
-      console.error('[spinout-scoring:pdf]', err);
+      reportError('spinout-scoring:pdf', err);
       setExportError('PDF generation failed — try again.');
     } finally {
       setGenerating(false);
@@ -279,7 +281,23 @@ export default function SpinoutLabScoringPage() {
       // milestones are user-scoped, so only the project's own founder marks
       // it (same ownership guard as the roadmap OKR milestone).
       const owns = !!(user?.founder_id && project?.founder_id && user.founder_id === project.founder_id);
-      if (owns) await markMilestone(user, 'scoring_run_completed');
+      // WRAPPED FOR THE SAME REASON DiscoveryPage WRAPS ITS OWN, and with the
+      // same shape. `markMilestone` is already best-effort — every await inside
+      // it sits in its own try and its catch calls `reportError`, so today its
+      // promise cannot reject. This defends the CONTRACT, not a live bug: the
+      // two calls below sit after `api.scoreStartup` has already succeeded, so
+      // a future throw would jump to the catch at the bottom and tell a person
+      // their successful scoring run failed, leaving the form open over a
+      // result that was saved.
+      //
+      // Nothing is logged here on purpose. `markMilestone` reports its own
+      // failures through `reportError`; a second line would double-log the one
+      // event and put the raw console call back on a page that has too many.
+      if (owns) {
+        try {
+          await markMilestone(user, 'scoring_run_completed');
+        } catch { /* best-effort; the hook reports its own failures */ }
+      }
       // If the post-run refresh fails, keep the history we already have
       // rather than wiping it to a fake empty state.
       const scores = await api.getScores(project.id, { includeSandbox: true }).catch(() => null);
@@ -290,12 +308,17 @@ export default function SpinoutLabScoringPage() {
         // the fresh snapshot.
         const fresh = scores[0];
         if (fresh && owns && buildDimensions(fresh).filter((d) => d.pct >= 70).length >= 5) {
-          await markMilestone(user, 'scoring_confidence_70');
+          // Same guard as above, and this one strands more: the snapshot is
+          // already in state by here, so a throw would paint a red error line
+          // over a history that had just refreshed correctly.
+          try {
+            await markMilestone(user, 'scoring_confidence_70');
+          } catch { /* best-effort; the hook reports its own failures */ }
         }
       }
       setFormOpen(false);
     } catch (err) {
-      console.error('[spinout-scoring:run]', err);
+      reportError('spinout-scoring:run', err);
       setRunError(err?.data?.detail || err?.message || 'Scoring run failed.');
     } finally {
       setRunning(false);
@@ -340,7 +363,7 @@ export default function SpinoutLabScoringPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6 space-y-4" data-testid="page-spinout-scoring">
+    <LabPageShell width="full" spaceY="space-y-4" testId="page-spinout-scoring">
       {/* Canonical Lab header. The teal diligence-phase stripe (design L34) is
           kept via ruleClassName; its -mx-4 -mt-6 bleed is dropped because the
           rule now sits inside the header block.
@@ -694,6 +717,6 @@ export default function SpinoutLabScoringPage() {
         onCancel={() => setExportOpen(false)}
         onGenerate={generatePdf}
       />
-    </div>
+    </LabPageShell>
   );
 }

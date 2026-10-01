@@ -3,6 +3,9 @@
  */
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
+import { ADMIN_FROZEN, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, branchSuspendedBody, stepUpRefusalBody } from '../util/authErrors';
+import { BRANCH_SUSPENDED } from '../util/branch';
+import { refusalBody } from '../util/refusal';
 
 export function role(u: { role: string }): string {
   return (u.role || '').toLowerCase();
@@ -78,13 +81,24 @@ export function normaliseTags(value: unknown): string {
   return '[]';
 }
 
-/** Map auth-helper Errors to JSON responses. Use inside `try {...} catch (e) { return mapError(c, e); }`. */
+/**
+ * Map a thrown Error to a JSON response. Use inside
+ * `try {...} catch (e) { return mapError(c, e); }` — every route file that
+ * calls it relies on the pass-through below for the sentences it throws.
+ *
+ * THE STATUSES IT CAN RETURN: whatever a thrown `Response` carries; 423 for
+ * the admin freeze and the branch suspension; 403 for step-up and the
+ * permission refusals in `AUTH_ERROR_STATUSES`, 401 for the authentication
+ * ones there; 500 for a schema mismatch or any other D1/SQLite failure; and
+ * 400 for everything else, including a UNIQUE / FOREIGN KEY / NOT NULL / CHECK
+ * constraint failure, answered in our own words (D278).
+ */
 export function mapError(c: Context<{ Bindings: Env }>, e: any) {
   // A THROWN `Response` IS THE ANSWER, not something to describe.
   //
-  // Every status this function can produce is 400, 401 or 403 — it reads a
-  // message and picks one. A helper that needs any OTHER status has nowhere to
-  // put it, and 404 is the one that matters: an ownership check must answer
+  // Apart from a thrown Response, every status this function produces is one
+  // it picks from the message. A helper that needs any OTHER status has
+  // nowhere to put it, and 404 is the one that matters: an ownership check must answer
   // "not found" rather than "forbidden", because 403 confirms to a non-owner
   // that the row exists. `requireOwnEngagement` and `requireOwnQuote` in
   // `_partner_workspace_helpers.ts` therefore throw the Response itself.
@@ -96,10 +110,74 @@ export function mapError(c: Context<{ Bindings: Env }>, e: any) {
   if (e instanceof Response) return e;
 
   const msg = String(e?.message || e || 'Error');
-  const status =
-    msg === 'Unauthorized' ? 401 :
-    msg === 'Forbidden' || msg === 'Admin required' || msg === 'KYC required' ? 403 :
-    400;
+
+  // A SCHEMA ERROR IS A BUG, NOT A REFUSAL, and the caller must not be handed
+  // the query's internals. Every other message this function maps is a sentence
+  // somebody wrote for a person to read; "no such column" is SQLite talking to
+  // us. It reached a customer: `/pipeline/leads` queried a column
+  // `service_offerings` has never had, and because the frontend promotes
+  // `detail` to the thrown `Error.message` and the zone renders that verbatim,
+  // a partner's screen read `D1_ERROR: no such column: partner_id at offset 62:
+  // SQLITE_ERROR`.
+  //
+  // DELIBERATELY NARROW — only the two shapes that mean "the code and the
+  // schema disagree". A UNIQUE or FOREIGN KEY constraint failure is a real
+  // answer about the caller's data, routes translate those into their own
+  // wording, and swallowing them here would hide a refusal rather than a bug.
+  // 500 rather than 400 because nothing about the request was wrong.
+  if (/no such column|no such table/i.test(msg)) {
+    console.error('[mapError] schema mismatch — the code and D1 disagree:', msg);
+    return c.json({ detail: 'Something went wrong loading this. The failure has been logged.' }, 500);
+  }
+
+  // D278 — A CONSTRAINT FAILURE IS STILL A REFUSAL, BUT NOT IN SQLITE'S WORDS.
+  // The reasoning above stands: a UNIQUE or FOREIGN KEY failure is a real
+  // answer about the caller's data, so it stays a 400. What changes is the
+  // text: "D1_ERROR: UNIQUE constraint failed: users.email: SQLITE_CONSTRAINT"
+  // names a table and a column and reached the page verbatim once D258 made
+  // `message`/`detail` the sentence the page prints. The raw text goes to the
+  // log; the caller reads which kind of conflict it was.
+  const constraint = /\b(UNIQUE|FOREIGN KEY|NOT NULL|CHECK) constraint failed/i.exec(msg);
+  if (constraint) {
+    const kind = constraint[1].toUpperCase();
+    return c.json(refusalBody({
+      code: kind === 'UNIQUE' ? 'already_exists' : kind === 'FOREIGN KEY' ? 'related_record_missing' : 'invalid_record',
+      message: kind === 'UNIQUE'
+        ? 'That already exists, so nothing was saved.'
+        : kind === 'FOREIGN KEY'
+          ? 'That refers to a record that does not exist (or is still referred to elsewhere), so nothing was saved.'
+          : 'A required value was missing or not allowed, so nothing was saved.',
+      raw: msg,
+    }), 400);
+  }
+  // Any other D1 or SQLite failure is ours, not the caller's: 500, logged.
+  // TWO TESTS, NOT ONE ALTERNATION: a message that STARTS with `D1_ERROR`, or
+  // one that CONTAINS `SQLITE_` anywhere (`Error: SQLITE_BUSY: …` does not
+  // start with it). The single anchored group CodeQL's autofix proposed on
+  // #814 dropped the second case (D278 follow-up).
+  if (/^D1_ERROR/.test(msg) || /SQLITE_/.test(msg)) {
+    return c.json(refusalBody({
+      code: 'storage_error',
+      message: 'Something went wrong saving or loading this. The failure has been logged.',
+      raw: msg,
+    }), 500);
+  }
+
+  // D110 — THE SHARED TABLE, not a second copy of it. This ternary used to
+  // list four sentences of its own and did not know 'Super admin required',
+  // so every route in `admin_licences.ts` — which catches its own throws, so
+  // `app.onError` never sees them — answered a permission refusal with **400
+  // Bad Request**. The SPA cannot tell a refusal from a malformed request at
+  // 400, and the gate that worked reported the wrong thing.
+  // D134 — the step-up refusal carries a body, not only a status. Its remedy is
+  // "type a fresh TOTP code and retry", and the SPA finds that out from `code`;
+  // a bare `{detail: 'step_up_required'}` would be the right number and still a
+  // dead end. Same object as `app.onError` builds, from the same function.
+  if (msg === ADMIN_FROZEN) return c.json(adminFrozenBody(e), 423);
+  if (msg === BRANCH_SUSPENDED) return c.json(branchSuspendedBody(e), 423);
+  if (msg === STEP_UP_REQUIRED) return c.json(stepUpRefusalBody(e), 403);
+
+  const status = AUTH_ERROR_STATUSES[msg] ?? 400;
   return c.json({ detail: msg }, status as any);
 }
 

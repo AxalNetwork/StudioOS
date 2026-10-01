@@ -28,7 +28,6 @@ from backend.app.api.routes import (
     legal,
     liquidity,
     market_intel,
-    matches,
     monitoring,
     partners,
     partnernet,
@@ -469,7 +468,6 @@ app.include_router(tickets.router, prefix="/api")
 app.include_router(deals.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(market_intel.router, prefix="/api")
-app.include_router(matches.router, prefix="/api")
 app.include_router(_investor_signals.router, prefix="/api")
 # Founder Signals (/signals page) — dev parity for the Worker's /api/signals.
 # Registered because the page's very first request (GET /api/signals/filters)

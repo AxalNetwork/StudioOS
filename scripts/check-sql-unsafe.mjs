@@ -76,7 +76,18 @@ for (const file of walk(SRC)) {
   const rel = path.relative(ROOT, file);
   const lineOf = (idx) => src.slice(0, idx).split('\n').length;
 
+  // A COMMENT LINE CANNOT BE SQL, and this guard's own subject matter must not
+  // trip it. Prose that discusses `sql.unsafe()` — a docblock explaining why a
+  // route does NOT use it, say — matched here and was reported as a
+  // non-literal argument, which is the guard accusing documentation. The fix
+  // is the one `check-timestamp-comparisons.mjs` already carries for the same
+  // reason; without it the workaround is to reword the comment, and a rule
+  // people route around stops being a rule.
+  const isComment = (line) => /^\s*(?:\/\/|\/\*|\*)/.test(line);
+  const lines = src.split('\n');
+
   for (const m of src.matchAll(/\.unsafe\(\s*/g)) {
+    if (isComment(lines[lineOf(m.index) - 1] ?? '')) continue;
     const start = m.index + m[0].length;
     const ch = src[start];
     if (ch === '`') {

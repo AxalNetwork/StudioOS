@@ -23,8 +23,9 @@ import { fileURLToPath } from 'node:url';
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 const code = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-const STRIP = read('../src/components/VentureNextStep.jsx');
-const DASH = read('../src/pages/Dashboard.jsx');
+// D323 retired the VentureNextStep strip with the old "Welcome back" page.
+// Its successor is the founder Studio home's "Venture next step" card.
+const HOME = read('../src/pages/founder/FounderStudioHome.jsx');
 const EXPLORING = read('../src/pages/ExploringDashboard.jsx');
 const API = read('../src/lib/api.js');
 const GOOGLE = read('../../cloudflare-worker/src/routes/auth_google.ts');
@@ -32,46 +33,37 @@ const AUTH = read('../../cloudflare-worker/src/routes/auth.ts');
 
 /* ───────────────────────── /studio entry point ────────────────────────── */
 
-test('venture progress renders BEFORE the personal-profile section', () => {
-  const src = code(DASH);
-  const strip = src.indexOf('<VentureNextStep');
-  const profile = src.indexOf('<ProfileFitSection');
-  assert.notEqual(strip, -1, 'the strip must be mounted');
-  assert.notEqual(profile, -1);
-  assert.ok(strip < profile, 'a founder\'s front door must lead with the venture, not the person');
+test('the founder home leads its modules with the venture next step', () => {
+  // Canvas 69dc42f3 S1 draws the profile band above the modules, and the live
+  // home follows it; what stays first is the venture card among the modules.
+  const src = code(HOME);
+  const firstCard = src.match(/<StudioCard\s+title="([^"]+)"/);
+  assert.ok(firstCard, 'the home draws its cards');
+  assert.equal(firstCard[1], 'Venture next step');
 });
 
-test('the strip links to the Studio dashboard', () => {
-  // Command Center was removed; /studio is where the founder's stage and
-  // next-best-action now live, and it is their role-default landing path.
-  assert.match(code(STRIP), /to="\/studio"/);
-});
-
-test('it does not link at the Operations console or a dead Command Center tab', () => {
-  const src = code(STRIP);
+test('the venture card does not link at the Operations console or a dead Command Center tab', () => {
+  const src = code(HOME);
   assert.doesNotMatch(src, /tab=studio-ops/);
   assert.doesNotMatch(src, /\/studio-ops/);
   assert.doesNotMatch(src, /command-center/, 'the removed page must not be linked');
 });
 
 test('the next action comes from the same endpoint LifecycleModule uses', () => {
-  // Two sources would let the strip and the lifecycle rail tell a founder
-  // two different next steps.
-  const src = code(STRIP);
+  // Two sources would let the card and the lifecycle rail tell a founder two
+  // different next steps.
+  const src = code(HOME);
   assert.match(src, /api\.getLifecycle\(/);
-  assert.match(src, /checklist\.find\(\(i\) => !i\.done\)/);
+  assert.match(src, /checklist\?\.find\(\(item\) => !item\.done\)/);
 });
 
-test('the strip renders nothing when there is no venture data', () => {
-  // An empty "no next step" card on the front door implies the venture is
-  // finished — worse than the profile section it sits above.
-  const src = code(STRIP);
-  assert.match(src, /if \(!state\) return null;/);
-  assert.match(src, /if \(!project\?\.id\) return;/);
-});
-
-test('a failed fetch stays silent rather than banner-ing the dashboard', () => {
-  assert.match(code(STRIP), /reportError\('VentureNextStep:load'/);
+test('with no venture the card says so, and a failed read says it failed', () => {
+  // The retired strip rendered nothing in both cases. D321 made the home say
+  // which: an absent project prompts for one, and a failed read is Unreadable.
+  const src = code(HOME);
+  const card = src.slice(src.indexOf('title="Venture next step"'), src.indexOf('</StudioCard>'));
+  assert.match(card, /empty=\{!project\}/);
+  assert.match(card, /error=\{failures\.projects \|\| failures\.lifecycle\}/);
 });
 
 /* ──────────────────── admission-funnel lane parity ────────────────────── */

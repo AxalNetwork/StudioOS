@@ -7,7 +7,7 @@ import {
   // own composition now, and `CapTile` can draw an absence as the shared
   // `NotRecorded` chip rather than as an em dash a reader reads as zero.
   Section, Field, SaveNote,
-  UnlinkedZone, isNoPartnerProfile,
+  NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -178,23 +178,39 @@ export default function PartnerCapacityZone() {
 
   const rowActions = partnerZoneActions('delivery/capacity', { view: { header: ['Person', 'Seats held', 'Project h', 'Seat h', 'Internal h', 'Total'], rows: visible, cells: (p) => [p.name, p.live_seats, p.project_hours, p.seat_hours, p.internal_hours, p.total_hours] } });
 
-  if (isNoPartnerProfile(state.error)) {
-    return <UnlinkedZone title="Capacity" actions={rowActions} />;
-  }
+  // NOT AN EARLY RETURN ANY MORE. This was
+  //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
+  // which drew a card INSTEAD of the zone — on twelve zones, so an admin
+  // reading this workspace saw twelve copies of one card and never a page.
+  // `ZoneBody` takes the line as a `notice` above its states, and the zone
+  // renders underneath in its own empty state, which is also the state that
+  // says what this zone holds. The gate itself is untouched: the read still
+  // 400s, so `isEmpty` is forced rather than inferred from rows that never
+  // arrived, and `error` is cleared so the shared "This did not load" card —
+  // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
+  const unlinked = isNoPartnerProfile(state.error);
 
   return (
     <>
+      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
+          An action states what the zone DOES and an export over nothing
+          loaded renders disabled and says so; a filter chip is a claim about
+          ROWS, and a selectable `Published` over a store this account cannot
+          read is the "an empty set reads as an answer" failure
+          `zoneFilterBuilder.js` exists to prevent, reached from a new
+          direction. `profile_zone_actions.test.mjs` asserts both halves. */}
       <ZoneToolbar
         className="mb-3"
         role="partner"
-        filters={partnerZoneFilters('delivery/capacity', { value: view, onChange: setView })}
+        filters={unlinked ? [] : partnerZoneFilters('delivery/capacity', { value: view, onChange: setView })}
         actions={rowActions}
       />
       <ZoneBody
         loading={state.loading}
-        error={state.error}
+        error={unlinked ? null : state.error}
         onRetry={load}
-        isEmpty={people.length === 0 && seats.length === 0}
+        notice={unlinked ? <NoPartnerProfile /> : null}
+        isEmpty={unlinked || (people.length === 0 && seats.length === 0)}
         empty={(
           <NothingYet
             title="No seat granted and no hours logged"
@@ -321,7 +337,7 @@ export default function PartnerCapacityZone() {
           />
 
           {visible.length === 0 && people.length > 0 && (
-            <p className="text-[12px] text-axal-ink-2">
+            <p className="text-[12px] text-axal-muted">
               Nobody is in this state. {people.length} on the roster for {d?.period}.
             </p>
           )}
@@ -337,7 +353,7 @@ export default function PartnerCapacityZone() {
           />
 
           {granting && (
-            <div className="rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+            <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
               <div className="grid gap-3 md:grid-cols-3">
                 <Field label="Engagement">
                   <select className={inputClass} value={grant.engagement_id}
@@ -381,7 +397,7 @@ export default function PartnerCapacityZone() {
                 Record the seat
               </button>
               {roster.length === 0 && (
-                <p className="mt-2 text-[11.5px] leading-relaxed text-axal-ink-3">
+                <p className="mt-2 text-[11.5px] leading-relaxed text-axal-faint">
                   No one is attached to this firm yet, so there is nobody to hold a
                   seat. That is an account link an admin makes, not something this
                   page can do.
@@ -441,7 +457,7 @@ export default function PartnerCapacityZone() {
                 </button>
               </div>
             </div>
-            <p className="mt-2 text-[11.5px] leading-relaxed text-axal-ink-2">
+            <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">
               {d?.cap_hours == null
                 ? d?.cap_note
                 : `Firm default: ${d.cap_hours} h a week${d.cap_note ? ` — ${d.cap_note}` : ''}. A person with their own number overrides it.`}
@@ -539,20 +555,20 @@ export default function PartnerCapacityZone() {
 
           <Section title="Seats inside client systems">
             {seats.length === 0 ? (
-              <p className="text-[12.5px] text-axal-ink-2">No seat has been recorded.</p>
+              <p className="text-[12.5px] text-axal-muted">No seat has been recorded.</p>
             ) : (
               <div>
                 {seats.map((s) => (
                   <div key={s.id} className="flex flex-wrap items-center gap-2 border-t border-axal-hairline py-2 first:border-t-0 text-[12.5px]">
-                    <span className={s.revoked_at ? 'text-axal-ink-3 line-through' : 'font-semibold'}>
+                    <span className={s.revoked_at ? 'text-axal-faint line-through' : 'font-semibold'}>
                       {s.holder_name || <NotRecorded>Unnamed</NotRecorded>}
                     </span>
-                    <span className="text-axal-ink-3">at</span>
-                    <span className={s.revoked_at ? 'text-axal-ink-3 line-through' : ''}>
+                    <span className="text-axal-faint">at</span>
+                    <span className={s.revoked_at ? 'text-axal-faint line-through' : ''}>
                       {s.founder_name || s.need_title || s.engagement_uid}
                     </span>
                     {s.scope && <Pill tone="neutral">{s.scope}</Pill>}
-                    <span className="text-[11px] text-axal-ink-3">
+                    <span className="text-[11px] text-axal-faint">
                       granted {formatDay(s.granted_at)}
                       {s.days_held != null && ` · ${s.days_held}d`}
                     </span>

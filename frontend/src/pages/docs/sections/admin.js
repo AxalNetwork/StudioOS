@@ -102,21 +102,32 @@ export default {
     },
     {
       id: 'feature-flags',
-      title: 'Feature flags & rollout',
+      title: 'Feature flags and platform switches',
+      // D202 — this article used to describe a flags console (per-cohort and
+      // per-role scopes, saved cohorts, "off for new sessions") that has never
+      // existed. It now says what does.
+      //
+      // D203 — and it said there was no operator switch at all, which stopped
+      // being true when HQ · Platform → Switches shipped. It moves with the
+      // store, in the same change, rather than a PR later.
       overview:
-        "Feature flags let admins switch new modules on per-cohort, per-role, or globally. Use them to canary-release new features, A/B test pricing, or gate experimental tools to internal-only users.",
+        "There is no feature-flag console that stages a module to one cohort, one role or one territory. What the platform has is switches: a handful set when it is deployed — question reranking off, session charging, Stripe Tax, the Cloudflare queue, live market sources and live diligence connectors — one the AI router throws by itself when the monthly AI budget runs out, and one the Super Admin can also throw from the product: Eadwyn off. Your own settings are yours alone and switch nothing for anyone else.",
       howto: [
-        'Open Admin Console → Settings → Feature flags.',
-        'Pick a flag and set its scope (off / cohort / role / on).',
-        'Cohorts are picked from the Users list; you can save reusable cohorts.',
+        'The Super Admin sees every switch, read-only, under HQ → Platform → Feature flags: whether it is on, what set it, and what is true while it is on.',
+        'To switch Eadwyn off without a deployment, open HQ → Platform → Switches, give a reason, confirm, and throw it. Releasing it works the same way. Both are recorded in the audit log with who did it and why.',
+        'A throw takes effect at once on the instance that recorded it and on every other instance within 30 seconds. From then on, every conversation with Eadwyn on HQ answers with a notice that it is unavailable.',
+        'Changing any other switch is an engineering change — a Worker variable, then a deployment. Nothing in the product changes one.',
+        'The AI budget trip clears when its key expires. Nothing in the product clears it sooner.',
       ],
       tips: [
-        'Roll out to a 5% cohort first; monitor errors and audit before expanding.',
-        'Document each flag in the description field — future admins will thank you.',
+        'Each switch is read the way the code that obeys it reads it, so what HQ → Platform shows is what the platform is doing.',
+        'A switch shown as unreadable means its store did not answer; it is not a claim the switch is off. For Eadwyn off, an unreadable store fails open: Eadwyn keeps answering, and only a deployment can switch it off until the store answers again.',
+        'A switch thrown from Switches can only switch something off. Releasing it never lifts the deployment\'s own switch: if the deployment holds Eadwyn off, it stays off until the deployment changes.',
       ],
       pitfalls: [
-        'Toggling a flag off mid-flow can leave users with broken state — prefer "off for new sessions" where available.',
-        'Flags are not a substitute for proper migration; some changes need data backfill before the flag flips.',
+        'Every switch is deployment-wide. There is no per-cohort, per-role or per-territory setting, so there is nothing to canary — plan a risky change as its own deployment.',
+        'A switch thrown from Switches reaches HQ\'s own deployment only. A branch runs on its own database, so its Eadwyn keeps answering; pushing a switch to the branches is not built.',
+        'A market source is live only when its setting is exactly "live". "1" or "on" leaves it serving sample data.',
       ],
       related: [
         { label: 'Audit log', href: '#admin/audit' },
@@ -141,13 +152,13 @@ export default {
         'Use the type field deliberately — "demo_day" is what gates the Demo Day Presenter badge and steers founder/investor event suggestions.',
       ],
       pitfalls: [
-        'Adding a new top-level app route for events needs both wrangler route blocks updated and a fresh deploy — see the apex-routing notes.',
+        'A new events page needs no routing change in wrangler.toml: the Worker answers every page path from the app shell, and a path-scoped route there would take those URLs away from it. Add the route to the app and deploy.',
         'Event-participation badges live in migration 112; if you stand up a fresh prod D1, apply it (and redeploy) or the badges silently never appear.',
         'Suggestions are an enhancement layer — an empty list usually means too few assessed members, not a bug.',
       ],
       related: [
         { label: 'Assessment & archetypes ops', href: '#admin/assessment-ops' },
-        { label: 'Feature flags & rollout', href: '#admin/feature-flags' },
+        { label: 'Feature flags and platform switches', href: '#admin/feature-flags' },
       ],
     },
     {

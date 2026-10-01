@@ -16,6 +16,7 @@
  */
 import type { Env } from '../types';
 import { getSQL } from '../db';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export async function getTaxonomyVersion(env: Env): Promise<string> {
   const sql = getSQL(env);
@@ -36,12 +37,12 @@ export async function getTaxonomyVersion(env: Env): Promise<string> {
   }
 }
 
-let _columnsReady = false;
+const COLUMNS_READY = new WeakMap<object, boolean>();
 /** Idempotently add the taxonomy_version stamp column to the user write tables. */
 export async function ensureTaxonomyVersionColumns(env: Env): Promise<void> {
-  if (_columnsReady) return;
+  if (COLUMNS_READY.get(bindingKey(env))) return;
   for (const table of ['user_skills', 'user_values']) {
     try { await env.DB.prepare(`ALTER TABLE ${table} ADD COLUMN taxonomy_version TEXT`).run(); } catch { /* exists */ }
   }
-  _columnsReady = true;
+  COLUMNS_READY.set(bindingKey(env), true);
 }

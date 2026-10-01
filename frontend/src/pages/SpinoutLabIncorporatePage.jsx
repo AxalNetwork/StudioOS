@@ -19,6 +19,25 @@
 //
 // Persistence: every mutation saves incorporation_meta through the project
 // update route (serialized promise chain, same pattern as Use of Funds).
+//
+// Money integrity (D362):
+//   - The price is the catalog's, read from GET /legal/incorporation/quote —
+//     the same resolveIncorporationPrice POST /incorporation/order charges.
+//     Amounts stay integer cents until the one line that formats them. The
+//     hard-coded $1,200 service + $110 state + $100 expedite package is gone:
+//     no catalog held it. The catalog carries one price for the package, so
+//     its itemisation reads "Not recorded" rather than an invented split.
+//   - Paid is the server's order and nothing else (paid / packet_processing
+//     / packet_ready from GET /legal/incorporate/orders). The page no longer
+//     writes `paid` / `paid_at` into incorporation_meta, which any browser
+//     could set; after Stripe confirms, it re-reads the orders.
+//   - The jurisdiction is the one on the founder's Lab application. Delaware
+//     is formable. Wyoming has no Worker jurisdiction and no catalog SKU, so
+//     for a Wyoming applicant the page stops at that line and says so.
+//   - `incorporation_completed` (which issues the graduation certificate) is
+//     still recorded at payment, now only once the server confirms the order.
+//     Whether it should wait for state approval is an owner decision, named on
+//     screen; the timing is not changed here.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -31,6 +50,10 @@ import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import AxalCheckout from '../components/AxalCheckout';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
+import { reportError } from '../lib/log';
+import { Unreadable, Unrecorded } from '../ui';
+import { PAID_STATUSES, fmtCents, formationJurisdiction } from '../lib/incorporationPricing';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -73,9 +96,11 @@ const DEEP_TECH = /\b(ai|ml|machine learning|deep[- ]?tech|robotic|biotech|quant
 const UNI_IP = /\buniversit|institute of technology|\btu \w|research (lab|institute)|tech[- ]transfer|\bTTO\b|\bPhD\b|\bETH\b|\bMIT\b|spin[- ]?out from/i;
 
 // Compute the recommendation from real project + team data. Exported for tests.
+// `memberCount` is null when the team read failed: the founder count is then
+// not stated at all, rather than stated as "1 founder" (D360).
 export function recommendEntity(project, memberCount) {
   const equity = Number(project?.funding_needed) > 0;
-  const founders = Math.max(1, 1 + (memberCount || 0));
+  const founders = memberCount == null || !Number.isFinite(Number(memberCount)) ? null : Math.max(1, 1 + Number(memberCount));
   const text = [project?.name, project?.description, project?.sector, project?.problem_statement, project?.solution, project?.why_now, project?.growth_signals]
     .filter(Boolean).join(' ');
   const deepTech = DEEP_TECH.test(text);
@@ -84,7 +109,7 @@ export function recommendEntity(project, memberCount) {
   const confidence = equity && project?.sector ? 'High' : 'Medium';
   const factors = [
     equity ? 'Equity-financed' : 'Bootstrap-leaning',
-    `${founders} founder${founders === 1 ? '' : 's'}`,
+    founders === null ? 'Team size unreadable' : `${founders} founder${founders === 1 ? '' : 's'}`,
     ...(deepTech ? ['Deep-tech IP'] : []),
     ...(equity ? ['Raising a SAFE round'] : []),
     'US-based',
@@ -99,12 +124,9 @@ const PHASES = ['deciding', 'paying', 'reviewing', 'filing', 'waiting', 'complet
 const PHASE_LABELS = { deciding: 'Deciding', paying: 'Paying', reviewing: 'Reviewing', filing: 'Filing', waiting: 'Waiting', completed: 'Completed' };
 const LC_LABELS = ['Decide', 'Pay', 'Review docs', 'File', 'Await approval', 'Complete'];
 
-const PKG = { service: 1200, state: 110, expedite: 100 };
-const PKG_TOTAL = PKG.service + PKG.state;
-
 const DOCS = [
   { key: 'coi', name: 'Certificate of Incorporation', autogen: 'Auto-generated', source: 'Entity + founders', initial: 'ready' },
-  { key: 'bylaws', name: 'Bylaws', autogen: 'Auto-generated', source: 'Standard DE template', initial: 'ready' },
+  { key: 'bylaws', name: 'Bylaws', autogen: 'Auto-generated', source: 'Standard template for the state of formation', initial: 'ready' },
   { key: 'incorporator', name: 'Incorporator statement', autogen: 'Auto-generated', source: 'Incorporator action', initial: 'ready' },
   { key: 'board', name: 'Initial board consent', autogen: 'Needs founder input', source: 'Board = founders', initial: 'review' },
   { key: 'ip', name: 'Founder IP assignment', autogen: 'Linked · Startups', source: 'Founder + entity', initial: 'sign' },
@@ -129,7 +151,7 @@ const UNI_PILL = {
   todo: ['To do', 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'],
 };
 
-const fmt = (n) => `$${Number(n).toLocaleString()}`;
+const fmt = (n) => `$${Number(n).toLocaleString()}`; // whole-dollar project figures only, never a price
 
 // ---------------------------------------------------------------------------
 // Page
@@ -140,7 +162,10 @@ export default function SpinoutLabIncorporatePage() {
   const [state, setState] = useState(null);
   const [user, setUser] = useState(null);
   const [project, setProject] = useState(null);
-  const [memberCount, setMemberCount] = useState(0);
+  const [memberCount, setMemberCount] = useState(null); // null = not read
+  const [projectsUnread, setProjectsUnread] = useState(false);
+  // A failed orders read must not offer "Pay": an order may already be paid.
+  const [ordersUnread, setOrdersUnread] = useState(false);
   const [order, setOrder] = useState(null); // matched real incorporation order
 
   const [meta, setMeta] = useState({});
@@ -152,6 +177,12 @@ export default function SpinoutLabIncorporatePage() {
   const [payBusy, setPayBusy] = useState(false);
   const [payError, setPayError] = useState('');
   const [checkout, setCheckout] = useState(null); // {client_secret, amount_cents, currency, incorporation_id}
+  // D362 — the catalog quote for the jurisdiction: { status: 'loading' |
+  // 'ok' | 'failed' | 'none', q }. 'none' = nothing formable to quote.
+  const [quote, setQuote] = useState({ status: 'loading', q: null });
+  // Stripe said the payment succeeded but the server has not recorded the
+  // order yet (the webhook can lag). Paid is never claimed until it has.
+  const [awaitingServer, setAwaitingServer] = useState(false);
 
   const projectRef = useRef(null);
   const userRef = useRef(null);
@@ -164,11 +195,13 @@ export default function SpinoutLabIncorporatePage() {
     (async () => {
       try {
         const [st, me, projects] = await Promise.all([
-          spinoutLab.state(), api.getMe(), api.listProjects().catch(() => []),
+          spinoutLab.state(), api.getMe(),
+          api.listProjects().catch((e) => { reportError('spinout-inc:projects', e); return null; }),
         ]);
         if (dead) return;
         setState(st); setUser(me); userRef.current = me;
-        const proj = pickLabProject(projects, me);
+        setProjectsUnread(projects === null);
+        const proj = projects === null ? null : pickLabProject(projects, me);
         setProject(proj || null); projectRef.current = proj || null;
         if (proj) {
           let initial = {};
@@ -176,24 +209,46 @@ export default function SpinoutLabIncorporatePage() {
           metaRef.current = initial;
           setMeta(initial);
           const [members, orders] = await Promise.all([
-            api.listProjectMembers(proj.id).catch(() => null),
-            api.legalIncorporationOrders().catch(() => null),
+            api.listProjectMembers(proj.id).catch((e) => { reportError('spinout-inc:members', e); return null; }),
+            api.legalIncorporationOrders().catch((e) => { reportError('spinout-inc:orders', e); return null; }),
           ]);
           if (dead) return;
-          const list = Array.isArray(members?.members) ? members.members : (Array.isArray(members) ? members : []);
-          setMemberCount(list.filter((m) => (m.status || 'active') === 'active').length);
+          // A failed read stays null — never an empty team, never "no order".
+          if (members !== null) {
+            const list = Array.isArray(members?.members) ? members.members : (Array.isArray(members) ? members : []);
+            setMemberCount(list.filter((m) => (m.status || 'active') === 'active').length);
+          }
+          setOrdersUnread(orders === null);
           const ords = Array.isArray(orders?.orders) ? orders.orders : (Array.isArray(orders) ? orders : []);
-          const mine = ords.find((o) => Number(o.project_id) === Number(proj.id) && ['paid', 'packet_processing', 'packet_ready'].includes(o.status));
+          const mine = ords.find((o) => Number(o.project_id) === Number(proj.id) && PAID_STATUSES.includes(o.status));
           if (mine) setOrder(mine);
         }
         setStatus('ready');
       } catch (e) {
-        console.error('[spinout-inc]', e);
+        reportError('spinout-inc:load', e);
         if (!dead) setStatus('error');
       }
     })();
     return () => { dead = true; };
   }, []);
+
+  // D362 — the catalog quote for the jurisdiction the application chose and
+  // the entity selected. Re-read when either changes; nothing formable → none.
+  const quoteJurisdiction = status === 'ready'
+    ? formationJurisdiction(state?.application?.jurisdiction,
+      (meta.entity && ENTITIES[meta.entity] ? meta.entity : recommendEntity(project, memberCount).rec)).jurisdictionId
+    : null;
+  const loadQuote = useCallback(async (jid) => {
+    if (!jid) { setQuote({ status: 'none', q: null }); return; }
+    setQuote({ status: 'loading', q: null });
+    try {
+      setQuote({ status: 'ok', q: await api.legalIncorporationQuote(jid) });
+    } catch (e) {
+      reportError('spinout-inc:quote', e);
+      setQuote({ status: 'failed', q: null });
+    }
+  }, []);
+  useEffect(() => { if (status === 'ready') loadQuote(quoteJurisdiction); }, [status, quoteJurisdiction, loadQuote]);
 
   const canEdit = !!(user && project && Number(user.founder_id) === Number(project.founder_id));
 
@@ -213,7 +268,7 @@ export default function SpinoutLabIncorporatePage() {
         setSaveState('saved'); setSaveError('');
       } catch (e) {
         if (seq !== saveSeqRef.current) return;
-        console.error('[spinout-inc:save]', e);
+        reportError('spinout-inc:save', e);
         const detail = e?.data?.detail?.error || e?.data?.error || e?.message || 'Could not save.';
         setSaveState('error');
         setSaveError(typeof detail === 'string' ? detail : 'Could not save.');
@@ -229,8 +284,13 @@ export default function SpinoutLabIncorporatePage() {
   const selected = meta.entity && ENTITIES[meta.entity] ? meta.entity : rec.rec;
   const hasOverride = selected !== rec.rec;
 
-  const paid = Boolean(meta.paid) || Boolean(order);
-  const paidAt = meta.paid_at || order?.paid_at || null;
+  // Paid is the server's order, never a flag this page wrote (D362).
+  const paid = Boolean(order);
+  const paidAt = order?.paid_at || null;
+  const juris = formationJurisdiction(state?.application?.jurisdiction, selected);
+  const priceCents = quote.status === 'ok' && Number.isInteger(quote.q?.amount_cents) ? quote.q.amount_cents : null;
+  const priceLabel = priceCents === null ? null : fmtCents(priceCents, quote.q?.currency);
+  const agentOffer = quote.status === 'ok' ? quote.q?.registered_agent || null : null;
 
   const docStatus = (key, initial) => {
     if (!paid) return 'locked';
@@ -240,12 +300,12 @@ export default function SpinoutLabIncorporatePage() {
   const docs = DOCS.map((d) => ({ ...d, status: docStatus(d.key, d.initial) }));
   const docsAllDone = paid && docs.every((d) => ['ready', 'done'].includes(d.status));
 
-  const orderStatus = order?.status || (meta.paid ? 'paid' : null);
+  const orderStatus = order?.status || null;
   // Filing progress index: how many vertical steps are DONE.
   const filingDone = !paid ? 0 : orderStatus === 'packet_ready' ? 2 : orderStatus === 'packet_processing' ? 1 : docsAllDone ? 1 : 0;
   const filingSteps = [
     ['Documents prepared', 'Formation package generated and reviewed', 'Ready'],
-    ['Submitted to Delaware', 'Filed with Secretary of State', 'Est. same day'],
+    [`Submitted to ${juris.state}`, 'Filed with Secretary of State', 'Est. same day'],
     ['Processing', 'State review of Certificate', '1–3 business days'],
     ['Formation approved', 'Certificate stamped and returned', 'Est. 1 week'],
     ['EIN issued', 'IRS SS-4 processed after approval', 'After approval'],
@@ -271,13 +331,30 @@ export default function SpinoutLabIncorporatePage() {
   const legalName = `${project?.name || 'Your company'}${entitySuffix}`;
 
   // ---- actions ----
-  const onPaid = async (incorporationId) => {
-    setCheckout(null); setPayBusy(false);
-    // Merge against the LATEST meta (ref), not the closure snapshot — the
-    // user may have edited entity/docs while the payment was in flight.
-    const cur = metaRef.current || {};
-    await saveMeta({ ...cur, paid: true, paid_at: new Date().toISOString(), order_id: incorporationId ?? cur.order_id ?? null });
-    markMilestone(userRef.current, 'incorporation_completed');
+  // After Stripe (or the dev path) reports success, ask the SERVER whether the
+  // order is paid. Only a server order row flips the page to paid and records
+  // the milestone; a lagging webhook leaves "awaiting confirmation" (D362).
+  const refreshOrder = async () => {
+    const proj = projectRef.current;
+    if (!proj) return null;
+    const orders = await api.legalIncorporationOrders();
+    const ords = Array.isArray(orders?.orders) ? orders.orders : (Array.isArray(orders) ? orders : []);
+    return ords.find((o) => Number(o.project_id) === Number(proj.id) && PAID_STATUSES.includes(o.status)) || null;
+  };
+  const onPaid = async () => {
+    setCheckout(null); setPayBusy(false); setPayError('');
+    try {
+      const mine = await refreshOrder();
+      if (mine) {
+        setOrder(mine); setAwaitingServer(false);
+        markMilestone(userRef.current, 'incorporation_completed');
+      } else {
+        setAwaitingServer(true);
+      }
+    } catch (e) {
+      reportError('spinout-inc:refresh-order', e);
+      setAwaitingServer(true);
+    }
   };
 
   const pay = async () => {
@@ -290,7 +367,8 @@ export default function SpinoutLabIncorporatePage() {
       // row, then simulate the paid webhook via dev-complete.
       // Jurisdiction catalog ids are entity-typed (us_de_ccorp / us_de_llc);
       // a PBC files as a Delaware corporation.
-      const jurisdictionId = selected === 'llc' ? 'us_de_llc' : 'us_de_ccorp';
+      const jurisdictionId = juris.jurisdictionId;
+      if (!jurisdictionId || priceCents === null) throw new Error('This formation has no catalog price, so it cannot be ordered.');
       const body = { project_id: project.id, jurisdiction_id: jurisdictionId, company_name: project.name };
       let res;
       try {
@@ -300,7 +378,7 @@ export default function SpinoutLabIncorporatePage() {
         const co = await api.legalIncorporateCheckout(body);
         if (co?.dev && co?.incorporation_id) {
           await api.legalIncorporateDevComplete(co.incorporation_id);
-          await onPaid(co.incorporation_id);
+          await onPaid();
           return;
         }
         if (co?.url) { window.location.assign(co.url); return; }
@@ -309,10 +387,10 @@ export default function SpinoutLabIncorporatePage() {
       if (res?.client_secret) {
         setCheckout(res); setPayBusy(false);
       } else {
-        await onPaid(res?.incorporation_id);
+        await onPaid();
       }
     } catch (e) {
-      console.error('[spinout-inc:pay]', e);
+      reportError('spinout-inc:pay', e);
       const detail = e?.data?.detail?.error || e?.data?.detail || e?.data?.error || e?.message || 'Payment could not be started.';
       setPayError(typeof detail === 'string' ? detail : 'Payment could not be started.');
       setPayBusy(false);
@@ -347,9 +425,11 @@ export default function SpinoutLabIncorporatePage() {
 
   const exportSummary = () => {
     const blob = new Blob([JSON.stringify({
-      legal_entity: legalName, entity_type: ENTITIES[selected].name, state: 'Delaware',
+      legal_entity: legalName, entity_type: ENTITIES[selected].name, state: juris.state,
       recommended: ENTITIES[rec.rec].name, overridden: hasOverride, override_reason: meta.override_reason || null,
-      payment: paid ? { status: 'paid', paid_at: paidAt } : { status: 'awaiting_payment', total_usd: PKG_TOTAL },
+      payment: paid
+        ? { status: 'paid', paid_at: paidAt, amount_cents: order?.amount_cents ?? null, currency: order?.currency ?? null }
+        : { status: 'awaiting_payment', quoted_cents: priceCents, currency: quote.q?.currency ?? null },
       documents: docs.map((d) => ({ name: d.name, status: DOC_PILL[d.status][0] })),
       filing: filingSteps.map((f) => ({ step: f.title, done: f.done, current: f.current })),
       university_ip: rec.uniIp ? UNI_STEPS.map((s) => ({ step: s.title, status: uniIpState[s.key] || 'todo' })) : null,
@@ -397,6 +477,17 @@ export default function SpinoutLabIncorporatePage() {
       </div>
     );
   }
+  if (projectsUnread) {
+    return (
+      <div className="max-w-xl mx-auto mt-16" data-testid="inc-projects-unreadable">
+        <Unreadable
+          what="Your startup record"
+          claim="This is not a claim that you have no startup — reload before you create one."
+          onRetry={() => window.location.reload()}
+        />
+      </div>
+    );
+  }
   if (!project) {
     return (
       <div className="max-w-xl mx-auto mt-16 text-center" data-testid="inc-no-project">
@@ -429,7 +520,7 @@ export default function SpinoutLabIncorporatePage() {
   const dim = paid ? '' : 'opacity-60';
 
   return (
-    <div className="max-w-[1200px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-incorporate">
+    <LabPageShell width="full" testId="page-spinout-incorporate">
       {/* Header */}
       <LabPageHeader
         icon={Landmark}
@@ -507,31 +598,68 @@ export default function SpinoutLabIncorporatePage() {
             <div className={LBL}>One-time incorporation package</div>
             <span className={`text-[10.5px] font-semibold rounded-full px-2.5 py-0.5 ${paid ? DOC_PILL.done[1] : UNI_PILL.progress[1]}`} data-testid="pay-status">{paid ? 'Paid' : 'Awaiting payment'}</span>
           </div>
-          <div className="flex items-baseline gap-2 mt-2">
-            <span className="text-[32px] font-bold font-mono text-gray-900 dark:text-gray-50">{fmt(PKG_TOTAL)}</span>
-            <span className="text-[12px] text-gray-400">one-time · USD</span>
+          {/* D362 — the catalog's price (the one the order route charges), or
+              the honest reason there is none. Never a hard-coded package. */}
+          <div className="flex items-baseline gap-2 mt-2" data-testid="price-total">
+            {paid && Number.isInteger(order?.amount_cents) ? (
+              <span className="text-[32px] font-bold font-mono text-gray-900 dark:text-gray-50">{fmtCents(order.amount_cents, order.currency)}</span>
+            ) : priceLabel ? (
+              <span className="text-[32px] font-bold font-mono text-gray-900 dark:text-gray-50">{priceLabel}</span>
+            ) : quote.status === 'failed' ? (
+              <Unreadable what="The incorporation price" claim="Payment is not offered until it reads." onRetry={() => loadQuote(juris.jurisdictionId)} />
+            ) : quote.status === 'loading' ? (
+              <Loader2 size={16} className="animate-spin text-gray-400" />
+            ) : (
+              <span className="text-[14px]" data-testid="price-unrecorded">
+                <Unrecorded reason={juris.reason || quote.q?.message || 'No catalog price for this jurisdiction.'} />
+              </span>
+            )}
+            {(priceLabel || paid) && <span className="text-[12px] text-gray-400">one-time · {juris.state}{paid ? ' · charged' : ''}</span>}
           </div>
-          <div className="text-[11.5px] text-gray-500 dark:text-gray-400 mb-3">{fmt(PKG.service)} service + {fmt(PKG.state)} state filing · agent included</div>
+          <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-3" data-testid="jurisdiction-source">
+            {juris.fromApplication ? `${juris.state} — from your Lab application.` : `${juris.state} — your application records no jurisdiction, and Delaware is the one this page forms.`}
+          </div>
           <div className="flex flex-col gap-1.5 border-t border-gray-100 dark:border-gray-800 pt-3 flex-1 text-[12px]">
-            <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-300">Formation package (Axal service)</span><span className="font-mono font-semibold text-gray-900 dark:text-gray-100">{fmt(PKG.service)}</span></div>
-            <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-300">Delaware state filing fee</span><span className="font-mono font-semibold text-gray-900 dark:text-gray-100">{fmt(PKG.state)}</span></div>
-            <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-300">Registered agent · year 1</span><span className="font-mono font-semibold text-emerald-600">Included</span></div>
-            <div className="flex justify-between text-gray-400"><span>Expedited 24h processing (add-on)</span><span className="font-mono">+{fmt(PKG.expedite)}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-gray-600 dark:text-gray-300">Service and state filing split</span><Unrecorded reason="The catalog carries one price for the formation package, not its parts." /></div>
+            <div className="flex justify-between gap-3" data-testid="price-agent">
+              <span className="text-gray-600 dark:text-gray-300">Registered agent</span>
+              {agentOffer && Number.isInteger(agentOffer.amount_cents)
+                ? <span className="font-mono font-semibold text-gray-900 dark:text-gray-100">{fmtCents(agentOffer.amount_cents, agentOffer.currency)}{agentOffer.interval ? ` / ${agentOffer.interval}` : ''} · optional</span>
+                : <Unrecorded reason="No registered-agent subscription is configured in the catalog." />}
+            </div>
+            <div className="flex justify-between gap-3"><span className="text-gray-600 dark:text-gray-300">Expedited processing</span><Unrecorded reason="No expedite add-on exists in the catalog." /></div>
           </div>
           {paid ? (
             <div className="flex items-center gap-2 mt-4 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5 dark:bg-emerald-900/30 dark:border-emerald-800" data-testid="paid-box">
               <Check size={15} className="flex-none text-emerald-600" />
               <span className="text-[12px] text-emerald-800 dark:text-emerald-300">Paid {paidAt ? new Date(paidAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''} · workflow unlocked</span>
             </div>
+          ) : awaitingServer ? (
+            <div className="mt-4 text-[12px] text-amber-700 dark:text-amber-300" data-testid="awaiting-server">
+              Payment submitted. Waiting for the server to record the order before this shows as paid.{' '}
+              <button type="button" onClick={onPaid} className="underline font-semibold">Check again</button>
+            </div>
+          ) : ordersUnread ? (
+            <div className="mt-4" data-testid="orders-unreadable">
+              <Unreadable
+                what="Your incorporation orders"
+                claim="Payment is not offered until they read, because one may already be paid."
+                onRetry={() => window.location.reload()}
+              />
+            </div>
           ) : (
             <>
-              <button type="button" disabled={!canEdit || payBusy} onClick={pay} data-testid="button-pay" className="mt-4 text-[13.5px] font-semibold text-white bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-xl py-3 inline-flex items-center justify-center gap-2">
-                {payBusy && <Loader2 size={14} className="animate-spin" />} Pay {fmt(PKG_TOTAL)} &amp; unlock filing
+              <button type="button" disabled={!canEdit || payBusy || priceCents === null || !juris.jurisdictionId} onClick={pay} data-testid="button-pay" className="mt-4 text-[13.5px] font-semibold text-white bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-xl py-3 inline-flex items-center justify-center gap-2">
+                {payBusy && <Loader2 size={14} className="animate-spin" />} {priceLabel ? `Pay ${priceLabel} & unlock filing` : 'Payment unavailable'}
               </button>
               {payError && <div className="text-[11px] text-rose-600 text-center mt-2" data-testid="pay-error">{payError}</div>}
               <div className="text-[10.5px] text-gray-400 text-center mt-2">Payment unlocks document generation and filing. Not legal advice.</div>
             </>
           )}
+          {/* The open owner decision (D362): named, not decided here. */}
+          <p className="text-[10.5px] text-gray-400 mt-3 leading-relaxed" data-testid="milestone-decision">
+            Graduation's formation milestone is recorded when the server confirms payment. Whether it should wait for state approval instead is an owner decision not yet made.
+          </p>
         </div>
       </div>
 
@@ -625,7 +753,7 @@ export default function SpinoutLabIncorporatePage() {
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button" disabled={d.status === 'locked'} onClick={() => docAction(d)} data-testid={`doc-action-${d.key}`}
-                        className={`text-[11.5px] font-semibold rounded-lg px-3 py-1.5 ${d.status === 'locked' ? 'text-gray-400 bg-gray-100 dark:bg-gray-800 cursor-default' : 'text-violet-700 bg-violet-50 border border-violet-200 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800'}`}
+                        className={`text-[11.5px] font-semibold rounded-lg px-3 py-1.5 ${d.status === 'locked' ? 'text-gray-400 bg-gray-100 dark:bg-gray-800 cursor-default' : 'text-violet-700 bg-violet-50 border border-violet-200 hover:bg-violet-100 dark:hover:bg-violet-900/40 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800'}`}
                       >{btn}</button>
                     </td>
                   </tr>
@@ -637,7 +765,11 @@ export default function SpinoutLabIncorporatePage() {
         <div className="grid gap-3.5 md:grid-cols-2 mt-4">
           <div className="rounded-xl border border-gray-100 dark:border-gray-800 p-4">
             <div className="flex items-center gap-2 mb-1.5"><Shield size={15} className="text-violet-600" /><span className="text-[12.5px] font-bold text-gray-900 dark:text-gray-100">Registered agent</span></div>
-            <div className="text-[12px] text-gray-600 dark:text-gray-300 leading-relaxed">Included — Axal-managed agent in Delaware. $0 year 1, then $99/yr. Connected to filing readiness.</div>
+            <div className="text-[12px] text-gray-600 dark:text-gray-300 leading-relaxed" data-testid="agent-note">
+              {agentOffer && Number.isInteger(agentOffer.amount_cents)
+                ? `${agentOffer.product_name || 'Registered agent'} in ${juris.state}: ${fmtCents(agentOffer.amount_cents, agentOffer.currency)}${agentOffer.interval ? ` per ${agentOffer.interval}` : ''}, an optional subscription.`
+                : <Unrecorded reason="No registered-agent subscription is configured in the catalog, so none is offered or priced here." />}
+            </div>
           </div>
           <div className="rounded-xl border border-gray-100 dark:border-gray-800 p-4">
             <div className="flex items-center gap-2 mb-1.5"><FileText size={15} className="text-violet-600" /><span className="text-[12.5px] font-bold text-gray-900 dark:text-gray-100">EIN application</span></div>
@@ -722,13 +854,13 @@ export default function SpinoutLabIncorporatePage() {
         <div className="fixed inset-0 z-[70] bg-gray-900/50 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-6" onClick={() => setCheckout(null)} data-testid="checkout-modal">
           <div className="w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <div className="text-[14px] font-bold text-gray-900 dark:text-gray-50">Pay {fmt((checkout.amount_cents || PKG_TOTAL * 100) / 100)} · one-time incorporation</div>
+              <div className="text-[14px] font-bold text-gray-900 dark:text-gray-50">Pay {fmtCents(checkout.amount_cents, checkout.currency) || 'the invoice amount'} · one-time incorporation</div>
               <button type="button" onClick={() => setCheckout(null)} className="w-8 h-8 rounded-lg border border-gray-200 dark:border-gray-700 inline-flex items-center justify-center text-gray-500"><X size={14} /></button>
             </div>
             <AxalCheckout
               clientSecret={checkout.client_secret}
-              submitLabel={`Pay ${fmt((checkout.amount_cents || PKG_TOTAL * 100) / 100)}`}
-              onSuccess={() => onPaid(checkout.incorporation_id)}
+              submitLabel={`Pay ${fmtCents(checkout.amount_cents, checkout.currency) || ''}`.trim()}
+              onSuccess={() => onPaid()}
             />
           </div>
         </div>
@@ -743,8 +875,8 @@ export default function SpinoutLabIncorporatePage() {
               <button type="button" onClick={() => setDocModal(null)} data-testid="doc-modal-close" className="w-8 h-8 rounded-lg border border-gray-200 dark:border-gray-700 inline-flex items-center justify-center text-gray-500"><X size={14} /></button>
             </div>
             <div className="p-5 text-[12.5px] text-gray-600 dark:text-gray-300 leading-relaxed space-y-3">
-              <p><b>{legalName}</b> · {ENTITIES[selected].name} · State of Delaware.</p>
-              <p>Prefilled from your Spin-Out data: {rec.founders} founder{rec.founders === 1 ? '' : 's'}, sector {project.sector || '—'}{project.funding_needed ? `, raising ${fmt(project.funding_needed)}` : ''}. The executed version is assembled into your filing packet after state submission.</p>
+              <p><b>{legalName}</b> · {ENTITIES[selected].name} · State of {juris.state}.</p>
+              <p>Prefilled from your Spin-Out data: {rec.founders === null ? 'team size unreadable' : `${rec.founders} founder${rec.founders === 1 ? '' : 's'}`}, sector {project.sector || '—'}{project.funding_needed ? `, raising ${fmt(project.funding_needed)}` : ''}. The executed version is assembled into your filing packet after state submission.</p>
               <p className="text-[11px] text-gray-400">Source: {DOCS.find((d) => d.key === docModal)?.source}. Not legal advice.</p>
             </div>
           </div>
@@ -763,11 +895,11 @@ export default function SpinoutLabIncorporatePage() {
               <div className="rounded-xl px-7 py-6 text-white mb-4" style={{ background: '#0d0d12' }}>
                 <div className="text-[11px] font-bold uppercase tracking-wide text-violet-400">Legal entity</div>
                 <div className="text-[24px] font-extrabold mt-1" data-testid="investor-entity-name">{legalName}</div>
-                <div className="text-[13px] text-violet-100/70 mt-0.5">{ENTITIES[selected].name} · State of Delaware</div>
+                <div className="text-[13px] text-violet-100/70 mt-0.5">{ENTITIES[selected].name} · State of {juris.state}</div>
                 <div className="flex flex-wrap gap-6 mt-4">
                   <div><div className="text-[11px] text-gray-400">Status</div><div className="text-[14px] font-mono font-semibold mt-0.5">{paid ? (filingDone >= 2 ? 'Filed' : 'Filing') : 'Pre-formation'}</div></div>
                   <div><div className="text-[11px] text-gray-400">EIN</div><div className="text-[14px] font-mono font-semibold mt-0.5">{paid ? 'Pending' : '—'}</div></div>
-                  <div><div className="text-[11px] text-gray-400">Registered agent</div><div className="text-[14px] font-mono font-semibold mt-0.5">Axal (DE)</div></div>
+                  <div><div className="text-[11px] text-gray-400">Registered agent</div><div className="text-[14px] font-mono font-semibold mt-0.5">Not recorded</div></div>
                 </div>
               </div>
               <div className="text-[11.5px] text-gray-400 leading-relaxed">
@@ -777,6 +909,6 @@ export default function SpinoutLabIncorporatePage() {
           </div>
         </div>
       )}
-    </div>
+    </LabPageShell>
   );
 }

@@ -12,10 +12,23 @@
     <span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e">Worker AI · {{ page }}</span>
     <span style="font-size:11px;color:#615c6e">›</span>
   </div>
+  <!-- Scope chip sits at the top, because it is the first thing an answer depends on. HQ picks
+       "All branches" or one branch; a branch's chip is its own name and cannot be changed. -->
+  <div style="display:flex;align-items:center;gap:7px;margin-top:9px">
+    <span style="{{ scopeChipStyle }}">{{ scopeChip }}</span>
+    <span style="font-size:10px;color:#615c6e">{{ scopeHint }}</span>
+  </div>
+  <sc-if value="{{ declineCard }}">
+    <div style="border:1px solid #e2e1e8;background:#fbfbfc;border-radius:9px;padding:10px 11px;margin-top:10px">
+      <div style="font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#615c6e">Declined</div>
+      <div style="font-size:11px;color:#3f3a49;line-height:1.5;margin-top:4px"><em>"{{ declineQ }}"</em></div>
+      <div style="font-size:10.5px;color:#615c6e;line-height:1.5;margin-top:6px">{{ declineCard }}</div>
+    </div>
+  </sc-if>
 
   <div style="border:1px solid {{ edge }};background:{{ tint }};border-radius:9px;padding:10px 11px;margin-top:13px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-      <span style="font-size:12px;font-weight:800;color:{{ deep }}">Personal Advisor</span>
+      <span style="font-size:12px;font-weight:800;color:{{ deep }}">Eadwyn</span>
       <span style="width:24px;height:14px;border-radius:999px;background:{{ fill }};position:relative;flex:none"><span style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:#fff"></span></span>
     </div>
     <div style="font-size:10.5px;color:{{ deep }};margin-top:4px;line-height:1.45">{{ modeNote }}</div>
@@ -55,10 +68,7 @@
     </sc-if>
   </div>
 
-  <div style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;padding-top:13px;border-top:1px solid #f2f1f5">
-    <span style="{{ scopeChipStyle }}">{{ scopeChip }}</span>
-  </div>
-  <div style="font-size:10px;color:#615c6e;margin-top:8px;line-height:1.5">{{ scopeNote }}</div>
+  <div style="font-size:10px;color:#615c6e;margin-top:14px;padding-top:13px;border-top:1px solid #f2f1f5;line-height:1.5">{{ scopeNote }}</div>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;tier&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;subsidiary&quot;,&quot;super&quot;],&quot;default&quot;:&quot;subsidiary&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;page&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Home&quot;,&quot;Approvals&quot;,&quot;Accounts&quot;,&quot;Insights&quot;,&quot;Licenses&quot;,&quot;Revenue&quot;,&quot;Governance&quot;],&quot;default&quot;:&quot;Home&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
@@ -88,6 +98,26 @@ class Component extends DCLogic {
                    why:'Semantic search across a member table without leaving the tenant.',
                    price:'$0.012 / M in', tin:9400, tout:0, pin:0.012, pout:0,
                    op:'Find lapsed seats', note:'Licensed but unused for 60 days.', spend:0.30 },
+      // Four subsidiary zones that previously had no entry and silently inherited the Home
+      // digest offer — so five artboards advertised "compose the operating digest" for a page
+      // that no longer exists. An unmapped page inheriting a neighbour's job is worse than a
+      // missing offer, because the reader cannot tell it is a fallback.
+      Programs:  { name:'Granite 4.0 H Micro', id:'@cf/ibm-granite/granite-4.0-h-micro',
+                   why:'Cheap enough to re-read every cohort record whenever a date moves.',
+                   price:'$0.017 / M in · $0.112 / M out', tin:4100, tout:610, pin:0.017, pout:0.112,
+                   op:'Summarise cohort progress', note:'Where each venture sits against its gate.', spend:0.70 },
+      Community: { name:'Llama 3.1 8B Fast', id:'@cf/meta/llama-3.1-8b-instruct-fp8-fast',
+                   why:'Fast and cheap, which suits moderation volume over deliberation.',
+                   price:'$0.045 / M in · $0.384 / M out', tin:5600, tout:820, pin:0.045, pout:0.384,
+                   op:'Draft an event announcement', note:'From the record; a person sends it.', spend:0.50 },
+      Contracts: { name:'DeepSeek V4 Pro', id:'@cf/deepseek-ai/deepseek-v4-pro-0813',
+                   why:'Strongest reasoning, which is what clause differences deserve.',
+                   price:'$1.320 / M in · $3.960 / M out', tin:18600, tout:1480, pin:1.320, pout:3.960,
+                   op:'Diff against the HQ master', note:'Your instance versus the template version.', spend:4.20 },
+      Settings:  { name:'BGE-M3', id:'@cf/baai/bge-m3',
+                   why:'Retrieval over your own configuration, never another tenant\u2019s.',
+                   price:'$0.012 / M in', tin:2400, tout:0, pin:0.012, pout:0,
+                   op:'Find unset territory fields', note:'What HQ expects that is still blank.', spend:0.20 },
       Insights:  { name:'Mistral Small 3.1 24B', id:'@cf/mistralai/mistral-small-3.1-24b-instruct',
                    why:'Narrative where the reader is deciding something.',
                    price:'$0.351 / M in · $0.555 / M out', tin:8600, tout:1180, pin:0.351, pout:0.555,
@@ -121,7 +151,14 @@ class Component extends DCLogic {
       margin: sup ? '$' + (p.spend * MARGIN).toFixed(2) : null,
       marginNote: sup ? 'Axal VC\u2019s cut of this page\u2019s consumption at the ' + Math.round(MARGIN * 100)
         + '% split. Subsidiaries see their spend; only HQ sees what it earned.' : null,
-      scopeChip: sup ? 'Cross-tenant' : 'Axal VC France only',
+      // scope prop: HQ may narrow to one branch (the viewing-as overlay passes it); a branch
+      // never has a choice, so its chip is its own name with no caret.
+      scopeChip: sup ? ('Scope · ' + (this.props.scope || 'All branches') + ' ▾') : 'Axal VC France',
+      scopeHint: sup ? (this.props.scope ? 'one RPC read · records' : 'one RPC read per branch · aggregates from studioos_metrics') : 'this branch\u2019s D1 only',
+      declineQ: this.props.decline ? 'How does DACH\u2019s approval backlog compare to ours?' : null,
+      declineCard: this.props.decline
+        ? 'There is no cross-branch read behind this rail. The only binding on this worker is HQ → studioos; there is none to studioos-dach, and the Analytics Engine SQL API is HQ-only. Benchmarks in Insights show the anonymised median HQ pushed, as of its timestamp.'
+        : null,
       scopeChipStyle: sup
         ? 'display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#881337;background:#fff5f7;border:1px solid #fbcfe0;border-radius:4px;padding:3px 7px'
         : 'display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#334155;background:#f6f8fa;border:1px solid #cbd5e1;border-radius:4px;padding:3px 7px',

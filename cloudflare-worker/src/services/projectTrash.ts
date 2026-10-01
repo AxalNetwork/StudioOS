@@ -38,6 +38,19 @@ const CHILD_TABLES = [
 ];
 
 export async function hardDeleteProject(env: Env, projectId: number): Promise<void> {
+  // A capital-call line with a recorded receipt stays, detached from the
+  // project, for the reason activity_logs does below (D371). Receipts are
+  // append-only and reference their line, so deleting the line would fail on
+  // that foreign key — swallowed by the loop — and the line's own
+  // `project_id` would then fail the final DELETE, leaving the project in the
+  // trash for ever. Money that arrived outlives the project it was called for.
+  try {
+    await env.DB.prepare(
+      `UPDATE capital_calls SET project_id = NULL
+        WHERE project_id = ?
+          AND EXISTS (SELECT 1 FROM capital_call_receipts r WHERE r.capital_call_id = capital_calls.id)`,
+    ).bind(projectId).run();
+  } catch { /* no receipts table on this install — nothing to keep */ }
   for (const t of CHILD_TABLES) {
     try { await env.DB.prepare(`DELETE FROM ${t} WHERE project_id = ?`).bind(projectId).run(); }
     catch { /* table absent or different shape — fine */ }

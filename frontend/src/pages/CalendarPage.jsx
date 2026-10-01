@@ -306,12 +306,17 @@ export default function CalendarPage() {
   }, [window_.from, window_.to]);
 
   const loadGoogle = useCallback(async () => {
+    // D332 — a failed STATUS READ used to set `available: false`, the exact
+    // shape `providerState` reads as "this server has no OAuth credentials
+    // configured" — a claim about the DEPLOYMENT, not about this one request
+    // failing. `unreadable: true` is a fetch failure; `available: false` is
+    // now only ever the server's own, successfully-read answer.
     try { setGoogle(await api.googleCalStatus()); }
-    catch (e) { setGoogle({ available: false, connected: false, error: e.message }); }
+    catch (e) { setGoogle({ unreadable: true, connected: false, error: e.message }); }
   }, []);
   const loadMicrosoft = useCallback(async () => {
     try { setMicrosoft(await api.microsoftCalStatus()); }
-    catch (e) { setMicrosoft({ available: false, connected: false, error: e.message }); }
+    catch (e) { setMicrosoft({ unreadable: true, connected: false, error: e.message }); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -648,12 +653,12 @@ export default function CalendarPage() {
             <ProviderCard
               name="Google Calendar" state={gState} status={google} result={googleResult}
               busy={syncBusy} envVars="GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET"
-              onConnect={connectGoogle} onSync={runSync} onDisconnect={disconnectGoogle}
+              onConnect={connectGoogle} onSync={runSync} onDisconnect={disconnectGoogle} onRetry={loadGoogle}
             />
             <ProviderCard
               name="Microsoft Outlook" state={mState} status={microsoft} result={microsoftResult}
               busy={msSyncBusy} envVars="MICROSOFT_CLIENT_ID / MICROSOFT_CLIENT_SECRET"
-              onConnect={connectMicrosoft} onSync={runMsSync} onDisconnect={disconnectMicrosoft}
+              onConnect={connectMicrosoft} onSync={runMsSync} onDisconnect={disconnectMicrosoft} onRetry={loadMicrosoft}
             />
           </div>
 
@@ -855,13 +860,18 @@ function EventRow({ ev, myEmail, role, canPush, pushRemedy, onChanged }) {
  */
 function providerState(status, result) {
   if (!status) return 'reading';
+  // D332 — checked before `unconfigured`: a request that never reached the
+  // server (or that the server itself refused to answer) says nothing about
+  // whether OAuth credentials are configured, and must not be read as if it
+  // did.
+  if (status.unreadable) return 'unreadable';
   if (status.available === false || status.configured === false) return 'unconfigured';
   if (!status.connected) return 'off';
   if (result?.kind === 'error') return 'failed';
   return 'connected';
 }
 
-function ProviderCard({ name, state, status, result, busy, envVars, onConnect, onSync, onDisconnect }) {
+function ProviderCard({ name, state, status, result, busy, envVars, onConnect, onSync, onDisconnect, onRetry }) {
   const last = status?.last_synced_at ? new Date(status.last_synced_at) : null;
   const lastText = last && !Number.isNaN(last.getTime()) ? last.toLocaleString() : null;
   const account = status?.google_email || status?.microsoft_email || null;
@@ -874,6 +884,12 @@ function ProviderCard({ name, state, status, result, busy, envVars, onConnect, o
       whyNoSync: 'The connection has not been read back yet.',
       why: 'This card fills in as soon as the server answers.',
       actions: [],
+    },
+    unreadable: {
+      pill: 'Unreadable', tone: 'cal-nr-warn',
+      whyNoSync: 'The connection status could not be read, so there is no last-sync time to show.',
+      why: `${name}'s connection status could not be read. This says nothing about whether it is configured — try again.`,
+      actions: [['Retry', 'cal-btn-o', onRetry]],
     },
     unconfigured: {
       pill: 'Not configured', tone: '',

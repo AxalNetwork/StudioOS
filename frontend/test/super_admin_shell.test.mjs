@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { shellRoleFor, isSuperAdminUser, HQ_VIEW_KEY } from '../src/lib/shellRole.js';
+import { previewOptionsFor } from '../src/lib/previewShells.js';
 import { codeOnly } from './_codeOnly.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -66,6 +67,8 @@ test('all eleven rows are present, in canvas order', () => {
   assert.ok(licences, 'the franchise console must be reachable from the HQ shell');
   assert.equal(rows.find((r) => r.label === 'Team')?.to, '/admin/accounts',
     'Team is the cross-tenant accounts table, not the public team-page editor');
+  assert.equal(rows.find((r) => r.label === 'Support')?.to, '/admin/hq-support',
+    'Support is the three-queue HQ page, not the shared Help Center');
 });
 
 test('the shell is chosen on the flag and the HQ toggle, never on the role alone', () => {
@@ -97,9 +100,14 @@ test('the sidebar receives the shell role, so the HQ group opens on first visit'
   assert.match(APP_CODE, /<SidebarNav groups=\{sidebarGroups\} role=\{shellRole \|\| 'founder'\}/);
 });
 
-test('the mode bar says Super Admin Mode only on the flag, and the View-as list leads with it', () => {
+test('the mode bar says Super Admin Mode only on the flag, and the Preview shell list leads with HQ for the holder alone', () => {
   assert.match(APP_CODE, /superAdmin \? 'Super Admin Mode' : 'Admin Mode'/);
-  assert.match(APP_CODE, /\['super_admin', 'Super Admin'\]/, 'the HQ entry is offered only to a holder');
+  // D288 — the HQ entry is offered only to a holder. Until D288 this pinned
+  // the literal `['super_admin', 'Super Admin']` option; the list now lives in
+  // lib/previewShells.js, so the property is read off it.
+  assert.deepEqual(previewOptionsFor(true)[0].key, 'hq', 'the holder\'s list does not lead with HQ');
+  assert.ok(!previewOptionsFor(false).some((o) => o.key === 'hq'), 'the HQ entry is offered to an admin without the elevation');
+  assert.match(APP_CODE, /previewOptionsFor\(superAdmin\)/, 'the switcher no longer reads the list by the elevation');
   assert.match(APP_CODE, /onViewModeChange\('admin', \{ hq: true \}\)/, 'choosing Super Admin browses as admin with the HQ shell');
   assert.match(APP_CODE, /onViewModeChange\('admin', \{ hq: false \}\)/, 'choosing Admin browses as admin with the plain shell');
 });
@@ -115,7 +123,7 @@ test("'super_admin' names a shell, never a permission", () => {
 });
 
 test('the HQ-only routes render the notice for an admin without the elevation', () => {
-  for (const path of ['/admin/licences', '/admin/contracts', '/admin/accounts', '/hq', '/admin/security']) {
+  for (const path of ['/admin/licences', '/admin/contracts', '/admin/accounts', '/hq', '/admin/security', '/admin/hq-support']) {
     const line = APP.split('\n').find((l) => l.includes(`path="${path}"`));
     assert.ok(line, `${path} must be registered`);
     assert.match(line, /hqOnly\(/, `${path} must be wrapped in hqOnly — the server 403s a plain admin on every call there`);
@@ -131,10 +139,26 @@ test('the plain admin shell no longer offers HQ\'s ledger', () => {
   assert.ok(adminRows.find((r) => r.to === '/admin/my-licence'), 'My Licence stays for a subsidiary admin');
 });
 
-test('a super admin keeps every admin destination', () => {
-  // The elevation adds a power; it must not remove the product.
-  assert.ok(adminRows.length > rows.length,
-    'the HQ shell is a lens over the admin product, not a replacement for it');
+test('a super admin keeps every admin destination, whether HQ view is on or off', () => {
+  // The elevation adds a power; it must not remove the product. Until D286
+  // this compared row COUNTS ("the HQ shell is a lens over the admin product,
+  // not a replacement for it"), which S20's eight-row Admin shell fails while
+  // the property still holds. The property: with HQ view off the holder gets
+  // the plain Admin shell exactly, and with it on, every Admin row still
+  // points at a route that admits an admin — nothing is registered only for
+  // the elevation, and nothing the plain shell offers is taken away.
+  const holder = { role: 'admin', is_super_admin: 1 };
+  assert.equal(shellRoleFor('admin', holder, false), 'admin', 'HQ view off is the plain Admin shell');
+  assert.equal(shellRoleFor('admin', holder, true), 'super_admin');
+  assert.ok(adminRows.length > 0, 'the Admin shell has rows');
+  for (const r of adminRows) {
+    const path = r.to.split('?')[0];
+    const line = APP.split('\n').find((l) => l.includes(`path="${path}"`));
+    assert.ok(line, `${r.label} → ${r.to} is not registered`);
+    // `/studio` wraps its list in `labRoles(...)`; the admission is still the literal.
+    assert.match(line, /guard\((?:labRoles\()?\[[^\]]*'admin'/, `${r.to} does not admit an admin`);
+    assert.doesNotMatch(line, /hqOnly\(/, `${r.to} is an Admin row wrapped in hqOnly — the elevation took a destination`);
+  }
 });
 
 test('the HQ toggle is per browser and dies with the session', () => {

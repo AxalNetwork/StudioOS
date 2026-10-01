@@ -6,7 +6,7 @@ import {
   // own composition now, and `VisTile` below is the tile that can render `Not
   // recorded` as a chip rather than as an em dash a reader reads as zero.
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  Section, Field, SaveNote, NotComputable, UnlinkedZone,
+  Section, Field, SaveNote, NotComputable, NoPartnerProfile,
   isNoPartnerProfile, inputClass, buttonClass, ghostButtonClass, moneyDollars,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -68,9 +68,9 @@ function SurfaceRow({ row, onSave, onDelete, busy, note }) {
             <Pill tone={row.is_active ? 'info' : 'neutral'}>{KIND_LABEL[row.kind] || row.kind}</Pill>
             {!row.is_active && <Pill tone="neutral">Retired</Pill>}
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-axal-ink-2">
+          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-axal-muted">
             <span className="tabular-nums">
-              <strong className="text-axal-ink-1">{row.engagement_count}</strong>{' '}
+              <strong className="text-axal-ink">{row.engagement_count}</strong>{' '}
               engagement{row.engagement_count === 1 ? '' : 's'}
             </span>
             <span className="tabular-nums">{moneyDollars(row.won_value)} won</span>
@@ -85,7 +85,7 @@ function SurfaceRow({ row, onSave, onDelete, busy, note }) {
       </div>
 
       {edit && (
-        <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+        <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
           <div className="grid gap-3 md:grid-cols-3">
             <Field label="Name">
               <input className={inputClass} value={draft.name || ''} maxLength={160}
@@ -129,7 +129,7 @@ function AttributionRow({ row, surfaces, onSet, onClear, busy }) {
     <tr className="border-t border-axal-hairline align-top">
       <td className="py-2 pr-3">
         <div className="font-semibold">{row.need_title || <Unrecorded>Untitled</Unrecorded>}</div>
-        <div className="text-[11px] text-axal-ink-3">
+        <div className="text-[11px] text-axal-faint">
           {row.founder_name || row.engagement_uid} · {row.status}
         </div>
       </td>
@@ -233,9 +233,17 @@ export default function PartnerVisibilityZone() {
   // which is what makes a header row over an unreadable store honest.
   const rowActions = partnerZoneActions('offers/visibility', { view: { header: ['Service', 'Kind', 'Price', 'Active', 'Engagements', 'Won value'], rows: visible, cells: (r) => [r.name, r.kind, r.price, r.is_active, r.engagement_count, r.won_value] } });
 
-  if (isNoPartnerProfile(state.error)) {
-    return <UnlinkedZone title="Visibility" actions={rowActions} />;
-  }
+  // NOT AN EARLY RETURN ANY MORE. This was
+  //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
+  // which drew a card INSTEAD of the zone — on twelve zones, so an admin
+  // reading this workspace saw twelve copies of one card and never a page.
+  // `ZoneBody` takes the line as a `notice` above its states, and the zone
+  // renders underneath in its own empty state, which is also the state that
+  // says what this zone holds. The gate itself is untouched: the read still
+  // 400s, so `isEmpty` is forced rather than inferred from rows that never
+  // arrived, and `error` is cleared so the shared "This did not load" card —
+  // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
+  const unlinked = isNoPartnerProfile(state.error);
 
   return (
     <>
@@ -251,17 +259,25 @@ export default function PartnerVisibilityZone() {
           COUNT(es.id) DESC, s.name`) and the heading below already claims.
           A state whose value can never change would be a control that looks
           selectable and selects nothing. */}
+      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
+          An action states what the zone DOES and an export over nothing
+          loaded renders disabled and says so; a filter chip is a claim about
+          ROWS, and a selectable `Published` over a store this account cannot
+          read is the "an empty set reads as an answer" failure
+          `zoneFilterBuilder.js` exists to prevent, reached from a new
+          direction. `profile_zone_actions.test.mjs` asserts both halves. */}
       <ZoneToolbar
         className="mb-3"
         role="partner"
-        filters={partnerZoneFilters('offers/visibility', { value: view })}
+        filters={unlinked ? [] : partnerZoneFilters('offers/visibility', { value: view })}
         actions={rowActions}
       />
       <ZoneBody
         loading={state.loading}
-        error={state.error}
+        error={unlinked ? null : state.error}
         onRetry={load}
-        isEmpty={items.length === 0}
+        notice={unlinked ? <NoPartnerProfile /> : null}
+        isEmpty={unlinked || (items.length === 0)}
         empty={(
           <NothingYet
             title="No surface is recorded yet"
@@ -367,9 +383,9 @@ export default function PartnerVisibilityZone() {
           />
 
           {d?.unattributed_note && (
-            <p className="text-[12.5px] leading-relaxed text-axal-ink-2">
+            <p className="text-[12.5px] leading-relaxed text-axal-muted">
               {d.unattributed_note}{' '}
-              <span className="text-axal-ink-3">
+              <span className="text-axal-faint">
                 They are not shared out across the surfaces below — a count that
                 guessed would make the largest row the least true.
               </span>
@@ -377,7 +393,7 @@ export default function PartnerVisibilityZone() {
           )}
 
           {adding && (
-            <div className="rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+            <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
               <div className="grid gap-3 md:grid-cols-3">
                 <Field label="Name" hint="What a person would call it — “Axal directory”, “Acme referral”.">
                   <input className={inputClass} value={newSurface.name} maxLength={160}
@@ -442,14 +458,14 @@ export default function PartnerVisibilityZone() {
 
           <Section title="Where each engagement came from">
             {attribution.length === 0 ? (
-              <p className="text-[12.5px] leading-relaxed text-axal-ink-2">
+              <p className="text-[12.5px] leading-relaxed text-axal-muted">
                 No engagement yet. Win work and it appears here to be attributed —
                 until it is, it counts toward no surface.
               </p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-[12.5px]">
-                  <thead className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+                  <thead className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
                     <tr>
                       <th className="pb-1 pr-3">Engagement</th>
                       <th className="pb-1 pr-3">Value</th>
@@ -506,7 +522,7 @@ export default function PartnerVisibilityZone() {
             </p>
           </StatedLimit>
 
-          <p className="text-[12px] text-axal-ink-3">
+          <p className="text-[12px] text-axal-faint">
             Passing on a lead with a named reason lives on{' '}
             <Link to="/offers/audience-fit" className="text-amber-700 underline">Audience fit</Link>.
           </p>

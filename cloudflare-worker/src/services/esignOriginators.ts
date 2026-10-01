@@ -134,6 +134,21 @@ export function mayOriginate(role: string | null | undefined, docType: string): 
 }
 
 /**
+ * The name a person reads for a doc type this registry offers, or null.
+ * createAndSendEnvelope titled template-backed envelopes with the raw doc type,
+ * so the signing email, the PDF and the status view all said
+ * `founder_nda_v1` (D411). A doc type outside the registry keeps its own
+ * string, which is what the operator flows have always sent.
+ */
+export function originatorName(docType: string): string | null {
+  for (const list of Object.values(ORIGINATOR_TEMPLATES)) {
+    const t = list.find((x) => x.doc_type === docType);
+    if (t) return t.name;
+  }
+  return null;
+}
+
+/**
  * Every doc type this registry names, for the test that checks each one
  * actually resolves to a wired template.
  *
@@ -145,3 +160,70 @@ export function mayOriginate(role: string | null | undefined, docType: string): 
 export function allOriginatorDocTypes(): string[] {
   return [...new Set(Object.values(ORIGINATOR_TEMPLATES).flat().map((t) => t.doc_type))];
 }
+
+/**
+ * WHAT THE CANVAS DRAWS THAT THIS PAGE CANNOT SEND, per role, each with the
+ * reason the page prints (D411). The canvas offers these by name; leaving them
+ * out silently would read as "the platform has never heard of a SAFE". Each
+ * one is absent for the same underlying reason — no body is registered for it
+ * in `services/legalTemplates.ts`, so an envelope for it could not be rendered
+ * — and the Co-founder Agreement is the exception with a better answer: its
+ * own drafting flow, which the page links to instead.
+ *
+ * The reason is served, not written into the page, so the page prints exactly
+ * what the Worker knows and the two cannot drift.
+ */
+export interface NotOfferedTemplate {
+  name: string;
+  tag: string;
+  reason: string;
+  /** Where the job is done instead, when somewhere does it. */
+  instead?: { path: string; label: string };
+}
+
+const NO_BODY = 'Not wired to the signing engine: no template body is registered for it, so an envelope could not be rendered.';
+
+export const NOT_OFFERED: Record<string, ReadonlyArray<NotOfferedTemplate>> = {
+  founder: [
+    { name: 'SAFE', tag: 'Financing', reason: NO_BODY },
+    { name: 'Term Sheet', tag: 'Financing', reason: NO_BODY },
+    {
+      name: 'Co-founder Agreement', tag: 'Formation',
+      reason: 'Drafted in its own flow, which collects the split, vesting and IP terms before it drafts anything.',
+      instead: { path: '/incorporate/cofounder-agreement', label: 'Open the Co-founder Agreement' },
+    },
+  ],
+  partner: [
+    { name: 'White-Label Service Agreement', tag: 'Delivery', reason: NO_BODY },
+  ],
+  advisor: [
+    { name: 'Advisory Agreement', tag: 'Equity', reason: NO_BODY },
+    { name: 'Advisory Retainer', tag: 'Cash terms', reason: NO_BODY },
+  ],
+  investor: [],
+};
+
+/** Same shape as `templatesFor`: an admin sees the union, deduped by name. */
+export function notOfferedFor(role: string | null | undefined): NotOfferedTemplate[] {
+  if (role === 'admin') {
+    const seen = new Set<string>();
+    return Object.values(NOT_OFFERED).flat().filter((t) => (seen.has(t.name) ? false : (seen.add(t.name), true)));
+  }
+  return [...(NOT_OFFERED[String(role || '')] ?? [])];
+}
+
+/**
+ * What the canvas draws around a send that no store holds, with the sentence
+ * the page prints for each (D411). Served with the template and the envelope
+ * so the page never writes its own reason for an absence.
+ */
+export const SEND_ABSENCES = {
+  prefill: 'Nothing is pre-filled from a deal record, quote or match: this page does not read those stores yet, so every field starts empty.',
+  pre_send_checks: 'No pre-send checks are recorded for this template: there is no store of rules to check a document against.',
+  ordered_signers: 'One signer per envelope, and you do not sign it yourself: envelopes have no signing order or sender signature yet.',
+} as const;
+
+export const ENVELOPE_ABSENCES = {
+  signer_ip: 'Signer IP addresses are held in the audit record but not shown here: whether the other party may see them is an open decision for the platform owner.',
+  data_room: 'Not filed to a data room: nothing writes an executed agreement into one yet. Download the PDF below.',
+} as const;

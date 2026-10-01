@@ -74,14 +74,24 @@ regexes = [
   # param. The "token" is the EU's published export-version marker
   # (base64 of "token-2017"), not a credential — we pin both the literal
   # value and the URL so the rule doesn't re-trigger on URL edits.
+  # Spin-Out Lab graduation credential references (`AXL-SOL-C4-260731-0117`):
+  # derived from cohort, date and account by `credentialRefFor`
+  # (routes/spinout_certificates.ts), printed on every certificate and on its
+  # public verification page. A reference, not a secret — the public page is
+  # keyed on the separate 128-bit `public_token`, which this does not match.
+  # Pinned to the exact shape so nothing looser rides on it (D382).
+  '''\bAXL-SOL-(C\d+|X)-\d{6}-\d{4}\b''',
   '''dG9rZW4tMjAxNw''',
   '''webgate\.ec\.europa\.eu/fsd/fsf/public/files/jsonFullSanctionsList[^'"\s]+''',
 ]
 # Historical leak commits already exposed in public git history. Listed here
 # so CI doesn't fail forever on findings nobody can change without rewriting
 # history. ACTIONS REQUIRED OUTSIDE THIS FILE:
-#   - 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 (commit c45afb1) → REVOKE on
-#     github.com → Settings → Developer settings → Personal access tokens.
+#   - the GitHub OAuth token (`gho_…`, commit c45afb1; secret-scanning alert 1)
+#     → REVOKE it. A `gho_` token is issued to an OAuth app, so it is revoked
+#     under github.com → Settings → Applications → Authorized OAuth Apps, not
+#     Personal access tokens. Its value is deliberately NOT written here: this
+#     comment used to carry it in full, which kept it in the current tree.
 #   - JWT_SECRET values in commits 64fed2c / 885de6e / af864bf → ROTATE the
 #     current secret and move it from `.replit` into Replit Secrets so it
 #     stops being committed going forward.

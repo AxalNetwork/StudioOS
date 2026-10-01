@@ -1,0 +1,65 @@
+# Copilot coding agent — environment setup.
+#
+# GitHub runs the job named `copilot-setup-steps` in this file before every
+# Copilot coding-agent session, and reads the file ONLY from the default
+# branch: a change here reaches Copilot after it merges, never from a PR. A job
+# with any other name is ignored by Copilot.
+#
+# THE STEPS ARE ci.yml's — the job that runs `npm run test:drift` (keyed
+# `gate`; the job keyed `drift` is the api ↔ worker check and installs
+# nothing). Same action pins, same node, the same three installs in the same
+# order, so a Copilot session starts on exactly the dependency tree the suite
+# CI enforces. frontend/test/copilot_setup_steps.test.mjs reads both files and
+# fails when they drift apart: a pin changed in one file alone, the node
+# version, or an install dropped or reordered.
+#
+# Two deliberate differences from that job, neither of which CI depends on:
+#   - `fetch-depth: 0`, because a guard that diffs against origin/main needs
+#     history a shallow clone does not have;
+#   - no `npm run test:drift` step: this job prepares an environment, it is
+#     not a gate.
+#
+# GitHub honours only some keys on this job — runs-on, permissions, steps,
+# timeout-minutes (at most 59), container, services, snapshot — so nothing
+# here relies on a job-level `env:` or `defaults:`.
+#
+# Not set, on purpose: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD. Measured on
+# @playwright/test 1.63: neither playwright nor playwright-core declares an
+# install script, and no package in the three dependency trees runs one, so
+# `npm ci` downloads no browser and the variable would change nothing.
+name: Copilot setup steps
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+permissions:
+  contents: read
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Copilot is given its own token for its own work; these steps only read.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: '22'
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Install worker deps
+        working-directory: cloudflare-worker
+        run: npm ci
+      - name: Install root deps
+        run: npm ci || npm install --no-audit --no-fund

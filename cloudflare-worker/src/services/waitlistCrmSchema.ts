@@ -30,7 +30,7 @@ export async function ensureWaitlistCrmColumns(env: Env): Promise<void> {
       try {
         await env.DB.prepare(sql).run();
       } catch (e) {
-        console.warn(`[waitlistCrmSchema] ALTER ${col} failed (likely already applied)`, e);
+        console.warn('[waitlistCrmSchema] ALTER column failed (likely already applied)', col, e);
       }
     }
     try {

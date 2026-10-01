@@ -7,6 +7,7 @@ import {
   Save, ExternalLink, ChevronRight, Search, AlertCircle, Check,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { recordedRelevance } from '../pages/research/companyCandidateRead';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
 
 // Competitor Analysis — in-house, Cloudflare-native competitive intelligence.
@@ -47,7 +48,7 @@ function emptyInputs() {
   };
 }
 
-function download(filename, text, mime) {
+export function download(filename, text, mime) {
   const blob = new Blob([text], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -59,7 +60,7 @@ function download(filename, text, mime) {
   URL.revokeObjectURL(url);
 }
 
-async function fetchMarkdown(url) {
+export async function fetchMarkdown(url) {
   const token = localStorage.getItem('token');
   const res = await fetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -127,7 +128,7 @@ const COMPANIES_STRIP_LICENCES = new Set(['founder']);
  */
 const READ_FAILED = Symbol('competitors.list failed');
 
-export default function CompetitorAnalysis({ project = null, embedded = false, chromeless = false, zoneActions, zoneFilters, role = 'founder' }) {
+export default function CompetitorAnalysis({ project = null, embedded = false, chromeless = false, zoneActions, zoneFilters, role = 'founder', linkToDossier = false }) {
   // Page furniture only. Never gate data or controls on this.
   const bare = embedded || chromeless;
   const navigate = useNavigate();
@@ -220,6 +221,23 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, projectId]);
 
+  // Public directory handoff: a company profile can open this workspace with
+  // the sourced company name and website already in view. This remains a
+  // custom analysis until the user explicitly runs it; the query never writes
+  // a saved analysis by itself.
+  useEffect(() => {
+    if (embedded) return;
+    const market = searchParams.get('market');
+    const website = searchParams.get('website');
+    if (!market) return;
+    setMode('custom');
+    setInputs((prev) => ({
+      ...prev,
+      market: market.slice(0, 200),
+      known_competitors: website ? `Official website: ${website}` : prev.known_competitors,
+    }));
+  }, [embedded, searchParams]);
+
   const setInput = (k, v) => setInputs((prev) => ({ ...prev, [k]: v }));
 
   function scrollToResults() {
@@ -250,6 +268,12 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
       if (mode === 'startup' && projectId) { payload.project_id = projectId; payload.mode = 'startup'; }
       else payload.mode = 'custom';
       const full = await api.competitors.analyze(payload);
+      // D313 — in the Research zone a finished run opens on its own page, the
+      // same place the saved list links; elsewhere it opens in place.
+      if (linkToDossier && full?.id) {
+        navigate(`/research/companies/${encodeURIComponent(full.id)}`);
+        return;
+      }
       setAnalysis(full);
       setDirty(false);
       // A successful run clears a failed read: the list just answered.
@@ -558,6 +582,7 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
           manual={manual}
           setManual={setManual}
           onAddManual={onAddManual}
+          linkToDossier={linkToDossier}
         />
       )}
 
@@ -612,18 +637,33 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
           <div className="font-semibold text-gray-900 dark:text-gray-100 mb-3">Saved analyses</div>
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
             {visibleSaved.map((a) => (
-              <button key={a.id} onClick={() => loadAnalysis(a.id)} className="w-full flex items-center justify-between py-2.5 text-left group">
-                <div className="min-w-0">
-                  <div className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{a.title || 'Untitled'}</div>
-                  <div className="text-xs text-gray-400 dark:text-gray-500">{a.mode} · {new Date(a.updated_at + 'Z').toLocaleDateString()}{a.edited ? ' · edited' : ''}</div>
-                </div>
-                <ChevronRight size={16} className="text-gray-300 dark:text-gray-600 group-hover:text-violet-500" />
-              </button>
+              linkToDossier ? (
+                // D313 — the Research zone links each saved analysis to its page.
+                <Link key={a.id} to={`/research/companies/${encodeURIComponent(a.id)}`} className="w-full flex items-center justify-between py-2.5 text-left group">
+                  <SavedRow a={a} />
+                </Link>
+              ) : (
+                <button key={a.id} onClick={() => loadAnalysis(a.id)} className="w-full flex items-center justify-between py-2.5 text-left group">
+                  <SavedRow a={a} />
+                </button>
+              )
             ))}
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+function SavedRow({ a }) {
+  return (
+    <>
+      <div className="min-w-0">
+        <div className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{a.title || 'Untitled'}</div>
+        <div className="text-xs text-gray-400 dark:text-gray-500">{a.mode} · {new Date(a.updated_at + 'Z').toLocaleDateString()}{a.edited ? ' · edited' : ''}</div>
+      </div>
+      <ChevronRight size={16} className="text-gray-300 dark:text-gray-600 group-hover:text-violet-500" />
+    </>
   );
 }
 
@@ -653,6 +693,7 @@ function AnalysisResults(props) {
     analysis, dirty, savingEdits, analyzing, onSave, onRerun, onRefresh,
     onRemoveCandidate, updateCandidate, updateOutput, setTitle,
     showManual, setShowManual, manual, setManual, onAddManual,
+    linkToDossier,
   } = props;
   const out = analysis.output || {};
   const candidates = analysis.candidates || [];
@@ -725,7 +766,7 @@ function AnalysisResults(props) {
         )}
         <div className="space-y-3">
           {candidates.map((c) => (
-            <CandidateCard key={c.id} c={c} sources={sourcesByCandidate[c.id] || []} onRemove={() => onRemoveCandidate(c.id)} onUpdate={(patch) => updateCandidate(c.id, patch)} />
+            <CandidateCard key={c.id} c={c} sources={sourcesByCandidate[c.id] || []} onRemove={() => onRemoveCandidate(c.id)} onUpdate={(patch) => updateCandidate(c.id, patch)} dossierHref={linkToDossier && analysis?.id ? `/research/companies/${encodeURIComponent(analysis.id)}/${encodeURIComponent(c.id)}` : null} />
           ))}
           {!candidates.length && <p className="text-sm text-gray-500 dark:text-gray-400">No competitors yet. Add one manually or re-run.</p>}
         </div>
@@ -802,7 +843,7 @@ function AnalysisResults(props) {
       <Section title="Suggested wedge">
         <textarea value={out.wedge || ''} onChange={(e) => updateOutput({ wedge: e.target.value })} rows={2} className={INPUT} />
       </Section>
-      <Section title="Recommended next actions">
+      <Section title="Next steps the run listed">
         <EditableList items={out.next_actions || []} onChange={(next_actions) => updateOutput({ next_actions })} placeholder="Add an action…" />
       </Section>
       <Section title="Notes">
@@ -812,7 +853,7 @@ function AnalysisResults(props) {
   );
 }
 
-function CandidateCard({ c, sources, onRemove, onUpdate }) {
+function CandidateCard({ c, sources, onRemove, onUpdate, dossierHref }) {
   const details = c.details || {};
   return (
     <div className="rounded-lg border border-gray-200 dark:border-gray-800 p-3">
@@ -828,7 +869,12 @@ function CandidateCard({ c, sources, onRemove, onUpdate }) {
               <option value="direct">direct</option>
               <option value="adjacent">adjacent</option>
             </select>
-            <Badge tone="violet">relevance {Math.round(c.relevance_score)}</Badge>
+            {recordedRelevance(c) == null
+              ? <Badge>relevance not recorded</Badge>
+              : <Badge tone="violet">relevance {recordedRelevance(c)}</Badge>}
+            {dossierHref && (
+              <Link to={dossierHref} className="text-[11px] font-semibold text-violet-700 underline dark:text-violet-300">Open</Link>
+            )}
             {c.origin && <Badge>{c.origin}</Badge>}
           </div>
           {c.url && (

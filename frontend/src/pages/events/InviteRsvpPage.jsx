@@ -157,12 +157,12 @@ export default function InviteRsvpPage() {
         setStatus({ state: 'needs_auth', error: '' });
         return;
       }
-      const raw = err?.message || '';
-      const msg = raw === 'invite_required'
+      // D258 — the refusal's code is `err.code`; `err.message` is its sentence.
+      const msg = err?.code === 'invite_required'
         ? 'This invitation is tied to a specific email. Please sign in with the address it was sent to.'
-        : raw === 'full'
+        : err?.code === 'full'
           ? 'This event is now full, so payment can\'t be completed.'
-          : (raw || 'Something went wrong starting payment. Please try again.');
+          : (err?.message || 'Something went wrong starting payment. Please try again.');
       setStatus({ state: 'error', error: msg });
     }
   };
@@ -192,10 +192,9 @@ export default function InviteRsvpPage() {
       }
       setStatus({ state: 'sent', error: '', result: res });
     } catch (err) {
-      const raw = err?.message || '';
-      const msg = raw === 'turnstile_failed'
+      const msg = err?.code === 'turnstile_failed'
         ? 'Verification failed — please complete the challenge again.'
-        : (raw || 'Something went wrong. Please try again.');
+        : (err?.message || 'Something went wrong. Please try again.');
       setStatus({ state: 'error', error: msg });
       if (TURNSTILE_SITE_KEY && turnstileWidgetId.current !== null) {
         try { window.turnstile.reset(turnstileWidgetId.current); } catch {}

@@ -113,7 +113,7 @@ export default function AdvisorCohortAssignments() {
     <div className="space-y-4">
       <div className="max-w-3xl">
         <h1 className="text-lg font-extrabold tracking-tight">Advisor cohort access</h1>
-        <p className="mt-1.5 text-[12.5px] leading-relaxed text-axal-ink-2">
+        <p className="mt-1.5 text-[12.5px] leading-relaxed text-axal-muted">
           An assignment lets one advisor read the names and email addresses of the founders in one
           Spin-Out Lab cohort. It changes nothing in the Lab, and it is the only way an advisor
           gets that access.
@@ -124,7 +124,7 @@ export default function AdvisorCohortAssignments() {
         <h2 className="text-sm font-extrabold tracking-tight">Assign an advisor</h2>
         <form onSubmit={assign} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="block">
-            <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Advisor</span>
+            <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Advisor</span>
             <select className={`${inputClass} mt-1 w-full`} value={draft.advisor_user_id}
               onChange={(e) => setDraft({ ...draft, advisor_user_id: e.target.value })}>
               <option value="">Choose…</option>
@@ -137,7 +137,7 @@ export default function AdvisorCohortAssignments() {
             {advisors.error && <span className="mt-1 block text-[11px] text-red-700 dark:text-red-300">{advisors.error}</span>}
           </label>
           <label className="block">
-            <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Cohort</span>
+            <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Cohort</span>
             <select className={`${inputClass} mt-1 w-full`} value={draft.cohort_cycle_id}
               onChange={(e) => setDraft({ ...draft, cohort_cycle_id: e.target.value })}>
               <option value="">Choose…</option>
@@ -148,7 +148,7 @@ export default function AdvisorCohortAssignments() {
             {cycles.error && <span className="mt-1 block text-[11px] text-red-700 dark:text-red-300">{cycles.error}</span>}
           </label>
           <label className="block">
-            <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Note</span>
+            <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Note</span>
             <input className={`${inputClass} mt-1 w-full`} value={draft.note}
               onChange={(e) => setDraft({ ...draft, note: e.target.value })}
               placeholder="Why, for the record" />
@@ -178,17 +178,17 @@ export default function AdvisorCohortAssignments() {
       </div>
 
       {rows.loading ? (
-        <p className="text-[12.5px] text-axal-ink-3">Loading…</p>
+        <p className="text-[12.5px] text-axal-faint">Loading…</p>
       ) : rows.error ? (
         <Card variant="dashed" padding="lg">
-          <p className="text-[12.5px] leading-relaxed text-axal-ink-2">
+          <p className="text-[12.5px] leading-relaxed text-axal-muted">
             {rows.error} Nothing is listed rather than an empty list, because an empty list here
             would say nobody has access — which is not something this page can currently know.
           </p>
         </Card>
       ) : visible.length === 0 ? (
         <Card variant="dashed" padding="lg">
-          <p className="text-[12.5px] leading-relaxed text-axal-ink-2">
+          <p className="text-[12.5px] leading-relaxed text-axal-muted">
             {showEnded
               ? 'No advisor has ever been assigned a cohort.'
               : 'No advisor currently has access to a cohort’s founders.'}
@@ -200,7 +200,7 @@ export default function AdvisorCohortAssignments() {
             <thead>
               <tr className="border-b border-axal-hairline text-left dark:border-gray-700">
                 {['Advisor', 'Cohort', 'Assigned', 'State', ''].map((h) => (
-                  <th key={h} className="px-4 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{h}</th>
+                  <th key={h} className="px-4 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -212,10 +212,10 @@ export default function AdvisorCohortAssignments() {
                   <tr key={r.id} className="border-b border-axal-hairline/60 last:border-0 dark:border-gray-800">
                     <td className="px-4 py-2.5">
                       <div className="font-semibold">{r.advisor_name || `User #${r.advisor_user_id}`}</div>
-                      <div className="text-[11px] text-axal-ink-3">{r.advisor_email || '—'}</div>
+                      <div className="text-[11px] text-axal-faint">{r.advisor_email || '—'}</div>
                     </td>
                     <td className="px-4 py-2.5">{cycle ? cycleLabel(cycle) : `Cycle #${r.cohort_cycle_id}`}</td>
-                    <td className="px-4 py-2.5 text-axal-ink-3">{String(r.assigned_at || '').slice(0, 10)}</td>
+                    <td className="px-4 py-2.5 text-axal-faint">{String(r.assigned_at || '').slice(0, 10)}</td>
                     <td className="px-4 py-2.5">
                       {r.is_active ? <Pill tone="ok">Active</Pill> : <Pill tone="neutral">Ended</Pill>}
                       {/* The row outlives the access. The worker refuses this
@@ -244,7 +244,7 @@ export default function AdvisorCohortAssignments() {
         </Card>
       )}
 
-      <p className="text-[11px] leading-relaxed text-axal-ink-3">
+      <p className="text-[11px] leading-relaxed text-axal-faint">
         Ending access keeps the row. A record that vanished could not answer who could see a
         cohort’s founders, and when — which is the question it exists for.
       </p>

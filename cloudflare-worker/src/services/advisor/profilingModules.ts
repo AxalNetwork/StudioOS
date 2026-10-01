@@ -54,7 +54,7 @@ export interface ProfilingModuleSpec {
 /**
  * The four modules, in render order. Floors are deliberately modest — the whole
  * point is a conversational profile, not a survey. Reaching every floor lands a
- * user around ~20 answered questions total across the four modules, enough to
+ * user around ~23 answered questions total across the four modules, enough to
  * draw a real radar, a values wheel, classify an archetype, and compute a
  * calibrated Axal Fit — without a 200-question slog.
  */
@@ -76,8 +76,8 @@ export const PROFILING_MODULES: Record<ProfilingSectionKey, ProfilingModuleSpec>
   archetype: {
     key: 'archetype',
     label: PROFILING_SECTION_LABELS.archetype,
-    floor: 3,
-    targetCoverage: 3, // ≥3 of the 4 trait axes → a confident classification
+    floor: 6,
+    targetCoverage: 4, // all 4 trait axes, then extra probes average in
     rationale: 'Enough trait signal to classify the user into a role archetype.',
   },
   axal_fit: {

@@ -8,6 +8,7 @@ import { buildZip } from '../util/zip';
 import { isPassReason, passReasonLabel, PASS_REASON_KEYS, PASS_REASON_UNRECORDED } from '../services/dealPassTaxonomy';
 import { buildPassBreakdown, buildStageFunnel, DEAL_METRIC_UNAVAILABLE } from '../services/dealAnalytics';
 import { ensureDealPassSchema, recordStageEvent, stageRecordingStartedAt } from '../services/dealStageHistory';
+import { newUid, nowIso } from './_t13t14t15_helpers';
 
 const deals = new Hono<{ Bindings: Env }>();
 
@@ -434,7 +435,10 @@ deals.post('/', async (c) => {
     await sql.end();
     return c.json({ error: 'Forbidden' }, 403);
   }
-  const [deal] = await sql`INSERT INTO deals (project_id, partner_id, status, notes, amount, stage_changed_at) VALUES (${data.project_id}, ${data.partner_id || null}, ${data.status || 'applied'}, ${data.notes || null}, ${data.amount || null}, datetime('now')) RETURNING *`;
+  // D463 — where the deal came from. Free text: the source taxonomy is the
+  // owner's call, and a CHECK written before it would enshrine a guess.
+  const source = data.source != null ? String(data.source).trim().slice(0, 120) || null : null;
+  const [deal] = await sql`INSERT INTO deals (project_id, partner_id, status, notes, amount, stage_changed_at, source) VALUES (${data.project_id}, ${data.partner_id || null}, ${data.status || 'applied'}, ${data.notes || null}, ${data.amount || null}, datetime('now'), ${source}) RETURNING *`;
   // Task #127 — the deal's arrival is its first stage entry. Without this the
   // funnel can measure conversion OUT of the first stage but never has a
   // cohort that entered it, so the first column reads 0 forever.
@@ -471,18 +475,21 @@ deals.post('/draft', async (c) => {
     }, 400);
   }
   const status = PIPELINE.includes(data.status) ? data.status : 'applied';
+  // D463 — the source is recorded at draft. Free text: the taxonomy is the
+  // owner's call (which sources exist, and which count as the Lab).
+  const source = data.source != null ? String(data.source).trim().slice(0, 120) || null : null;
   const [deal] = await sql`
     INSERT INTO deals (
       project_id, partner_id, lead_partner_id, status, notes, description, website,
       amount, target_raise, minimum_check, valuation_cap, carry_pct, management_fee_pct,
-      instrument, spv_jurisdiction, closing_deadline, capital_committed, stage_changed_at
+      instrument, spv_jurisdiction, closing_deadline, capital_committed, stage_changed_at, source
     ) VALUES (
       ${data.project_id}, ${data.partner_id || null}, ${data.lead_partner_id || null}, ${status},
       ${data.notes || null}, ${data.description || null}, ${data.website || null},
       ${data.amount ?? null}, ${data.target_raise ?? null}, ${data.minimum_check ?? null},
       ${data.valuation_cap ?? null}, ${data.carry_pct ?? null}, ${data.management_fee_pct ?? null},
       ${data.instrument || null}, ${data.spv_jurisdiction || null}, ${data.closing_deadline || null},
-      0, datetime('now')
+      0, datetime('now'), ${source}
     ) RETURNING *`;
   await recordStageEvent(sql, {
     dealId: Number((deal as any)?.id),
@@ -532,6 +539,43 @@ deals.get('/invitations/mine', async (c) => {
     ORDER BY di.created_at DESC`;
   await sql.end();
   return c.json(rows);
+});
+
+// D462 — every recorded transfer this caller may read, in one list. The
+// Closing zone's Wires view reads it rather than N per-deal calls. An
+// investor sees the transfers on deals they were invited to or committed to
+// (the same predicate as scope=mine); a partner or admin sees what was
+// recorded. Registered before `/:id` so the literal is not read as an id.
+deals.get('/transfers', async (c) => {
+  const user = await requireAuth(c);
+  if (!isPrivilegedRole(user.role as string)) return c.json({ detail: 'Forbidden' }, 403);
+  const sql = getSQL(c.env);
+  // The column list is written out in both branches rather than interpolated:
+  // this file's `sql` tag binds every ${} as a VALUE, so a column list must
+  // never travel through it.
+  const rows = String(user.role) === 'investor'
+    ? await sql`
+      SELECT t.uid, t.deal_id, t.amount_cents, t.reference, t.phone_verified, t.note,
+             t.recorded_by, t.recorded_at, u.name AS recorded_by_name, p.name AS project_name
+        FROM deal_transfers t
+        LEFT JOIN users u ON u.id = t.recorded_by
+        LEFT JOIN deals d ON d.id = t.deal_id
+        LEFT JOIN projects p ON p.id = d.project_id
+       WHERE t.deal_id IN (
+         SELECT deal_id FROM deal_invitations WHERE investor_user_id = ${user.id}
+         UNION SELECT deal_id FROM commitments WHERE investor_user_id = ${user.id}
+       )
+       ORDER BY t.recorded_at DESC LIMIT 500`
+    : await sql`
+      SELECT t.uid, t.deal_id, t.amount_cents, t.reference, t.phone_verified, t.note,
+             t.recorded_by, t.recorded_at, u.name AS recorded_by_name, p.name AS project_name
+        FROM deal_transfers t
+        LEFT JOIN users u ON u.id = t.recorded_by
+        LEFT JOIN deals d ON d.id = t.deal_id
+        LEFT JOIN projects p ON p.id = d.project_id
+       ORDER BY t.recorded_at DESC LIMIT 500`;
+  await sql.end();
+  return c.json({ items: rows });
 });
 
 deals.get('/:id', async (c) => {
@@ -597,6 +641,25 @@ deals.put('/:id', async (c) => {
   if (data.partner_id !== undefined) await sql`UPDATE deals SET partner_id = ${data.partner_id}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
   if (data.notes !== undefined) await sql`UPDATE deals SET notes = ${data.notes}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
   if (data.amount !== undefined) await sql`UPDATE deals SET amount = ${data.amount}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  // D463 — the terms are editable after the draft, by the same operator the
+  // draft admitted. A deal's terms change in negotiation; a store that only
+  // writes them at birth freezes the first answer as the permanent one. Each
+  // field is written only when the key is present, so a partial edit cannot
+  // blank a term it did not send.
+  if (data.lead_partner_id !== undefined) await sql`UPDATE deals SET lead_partner_id = ${data.lead_partner_id || null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.target_raise !== undefined) await sql`UPDATE deals SET target_raise = ${data.target_raise ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.minimum_check !== undefined) await sql`UPDATE deals SET minimum_check = ${data.minimum_check ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.valuation_cap !== undefined) await sql`UPDATE deals SET valuation_cap = ${data.valuation_cap ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.carry_pct !== undefined) await sql`UPDATE deals SET carry_pct = ${data.carry_pct ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.management_fee_pct !== undefined) await sql`UPDATE deals SET management_fee_pct = ${data.management_fee_pct ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.instrument !== undefined) await sql`UPDATE deals SET instrument = ${data.instrument ? String(data.instrument).slice(0, 120) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.spv_jurisdiction !== undefined) await sql`UPDATE deals SET spv_jurisdiction = ${data.spv_jurisdiction ? String(data.spv_jurisdiction).slice(0, 120) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.closing_deadline !== undefined) await sql`UPDATE deals SET closing_deadline = ${data.closing_deadline ? String(data.closing_deadline).slice(0, 40) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.website !== undefined) await sql`UPDATE deals SET website = ${data.website ? String(data.website).slice(0, 300) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.description !== undefined) await sql`UPDATE deals SET description = ${data.description ? String(data.description).slice(0, 20000) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  // The source is free text for the same reason it is at draft: the taxonomy
+  // is the owner's call.
+  if (data.source !== undefined) await sql`UPDATE deals SET source = ${data.source ? String(data.source).trim().slice(0, 120) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
 
   const [updated] = await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, lp.name as lead_partner_name FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users lp ON lp.id = d.lead_partner_id WHERE d.id = ${id}`;
 
@@ -960,6 +1023,237 @@ deals.get('/:id/activity', async (c) => {
   await sql.end();
   events.sort((a, b) => (normTs(b.at) || 0) - (normTs(a.at) || 0));
   return c.json(events);
+});
+
+// ---------------------------------------------------------------------------
+// D462 — the Closing stage's money and paper (migration 335).
+//
+// TRANSFERS. A transfer OUT to a company, recorded — the platform records the
+// movement of money and does not move it. Money is integer cents. An OPEN IC
+// condition on the deal (migration 334) refuses the write: that refusal is
+// the whole reason the conditions store exists, and lifting it is marking the
+// condition met or waived in the commit room, never an override here.
+//
+// THE CLOSING CHECKLIST. One per deal, applied from a `legal_templates` row
+// (the SAFE, stock-purchase and subscription agreements are the closing
+// paper). THE DEFAULT ITEM SET IS THE OWNER'S CALL: applying a template
+// creates the checklist and items are added by hand until the owner names
+// the defaults — the zone says so on screen rather than seeding a list
+// nobody signed off.
+// ---------------------------------------------------------------------------
+
+/** The open-condition count on a deal — the wire's gate. */
+async function openConditionsForDeal(env: any, dealId: number): Promise<number> {
+  const row = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM ic_conditions cond
+       JOIN ic_decisions d ON d.id = cond.ic_decision_id
+      WHERE d.deal_id = ? AND cond.status = 'open'`
+  ).bind(dealId).first().catch(() => null);
+  return Number(row?.n) || 0;
+}
+
+deals.get('/:id/transfers', async (c) => {
+  const id = parseInt(c.req.param('id'));
+  const ctx = await loadDealForRead(c, id);
+  if (ctx.error) return ctx.error;
+  const { sql } = ctx;
+  const rows = await sql`
+    SELECT t.uid, t.deal_id, t.amount_cents, t.reference, t.phone_verified, t.note,
+           t.recorded_by, t.recorded_at, u.name AS recorded_by_name
+      FROM deal_transfers t LEFT JOIN users u ON u.id = t.recorded_by
+     WHERE t.deal_id = ${id} ORDER BY t.recorded_at DESC`;
+  await sql.end();
+  return c.json({ items: rows });
+});
+
+deals.post('/:id/transfers', async (c) => {
+  // Recording a transfer is an operator's act (partner/admin), like every
+  // other deal mutation; the deal's investors read it.
+  const user = await requireRole(c, 'partner');
+  const id = parseInt(c.req.param('id'));
+  const data = await c.req.json().catch(() => ({} as any));
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT id FROM deals WHERE id = ${id}`;
+  if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
+
+  // THE GATE. An open condition refuses the transfer — a condition that lived
+  // only in the minutes is a condition nobody enforces, and this is where it
+  // is enforced.
+  const open = await openConditionsForDeal(c.env, id);
+  if (open > 0) {
+    await sql.end();
+    return c.json({
+      error: 'open_conditions_block_transfer',
+      message: `${open} open IC condition${open === 1 ? '' : 's'} on this deal. Resolve ${open === 1 ? 'it' : 'them'} in the commit room before recording a transfer.`,
+      open_conditions: open,
+    }, 409);
+  }
+
+  const amountCents = typeof data?.amount_cents === 'number' ? data.amount_cents : Number.NaN;
+  if (!Number.isInteger(amountCents) || amountCents <= 0) {
+    await sql.end();
+    return c.json({
+      error: 'transfer_amount_invalid',
+      message: 'Record the amount in integer cents — the platform stores money as cents, never a float.',
+    }, 400);
+  }
+  const reference = data?.reference != null ? String(data.reference).trim().slice(0, 200) || null : null;
+  const note = data?.note != null ? String(data.note).trim().slice(0, 2000) || null : null;
+  const phoneVerified = data?.phone_verified === true ? 1 : 0;
+  const uid = newUid();
+  const ins = await c.env.DB.prepare(
+    `INSERT INTO deal_transfers (uid, deal_id, amount_cents, reference, phone_verified, note, recorded_by, recorded_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(uid, id, amountCents, reference, phoneVerified, note, user.id, nowIso()).run();
+  await sql.end();
+  const row = await c.env.DB.prepare(
+    `SELECT t.*, u.name AS recorded_by_name FROM deal_transfers t LEFT JOIN users u ON u.id = t.recorded_by WHERE t.id = ?`
+  ).bind((ins as any).meta?.last_row_id).first<any>();
+  return c.json({ item: row }, 201);
+});
+
+/** The checklist a deal's closing runs on, with its items — or null. */
+async function closingChecklistForDeal(env: any, dealId: number): Promise<any> {
+  const list = await env.DB.prepare(
+    'SELECT * FROM deal_closing_checklists WHERE deal_id = ?'
+  ).bind(dealId).first();
+  if (!list) return null;
+  const items = await env.DB.prepare(
+    `SELECT i.uid, i.label, i.state, i.note, i.sort, i.done_at, i.done_by, u.name AS done_by_name
+       FROM deal_closing_checklist_items i LEFT JOIN users u ON u.id = i.done_by
+      WHERE i.checklist_id = ? ORDER BY i.sort ASC, i.id ASC`
+  ).bind(list.id).all();
+  return { ...list, items: items.results || [] };
+}
+
+deals.get('/:id/closing-checklist', async (c) => {
+  const id = parseInt(c.req.param('id'));
+  const ctx = await loadDealForRead(c, id);
+  if (ctx.error) return ctx.error;
+  const { sql } = ctx;
+  const list = await closingChecklistForDeal(c.env, id);
+  await sql.end();
+  // Absent is a state with a name, not a 404: the zone renders the
+  // apply-template action over it.
+  return c.json({ checklist: list });
+});
+
+// The closing paper the canvas names. Validated against legal_templates at
+// apply time, so a retired template stops applying rather than erroring.
+const CLOSING_TEMPLATE_SLUGS = new Set(['safe', 'spa', 'subscription']);
+
+deals.post('/:id/closing-checklist/apply', async (c) => {
+  const user = await requireRole(c, 'partner');
+  const id = parseInt(c.req.param('id'));
+  const data = await c.req.json().catch(() => ({} as any));
+  const slug = String(data?.template_slug || '');
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT id FROM deals WHERE id = ${id}`;
+  if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
+  if (!CLOSING_TEMPLATE_SLUGS.has(slug)) {
+    await sql.end();
+    return c.json({
+      error: 'closing_template_unknown',
+      message: 'A closing checklist applies one of the closing templates: the SAFE, the stock purchase agreement, or the subscription agreement.',
+    }, 400);
+  }
+  const template = await c.env.DB.prepare(
+    'SELECT slug, title, is_active FROM legal_templates WHERE slug = ?'
+  ).bind(slug).first<any>();
+  if (!template || !template.is_active) {
+    await sql.end();
+    return c.json({
+      error: 'closing_template_inactive',
+      message: 'That template is not active in the legal library.',
+    }, 400);
+  }
+  const existing = await c.env.DB.prepare(
+    'SELECT uid FROM deal_closing_checklists WHERE deal_id = ?'
+  ).bind(id).first<any>();
+  if (existing) {
+    await sql.end();
+    return c.json({
+      error: 'closing_checklist_exists',
+      message: 'This deal already has a closing checklist. Add items to it rather than applying a second template.',
+    }, 409);
+  }
+  // No default items are seeded: the default set is the owner's call, and the
+  // zone says so beside the empty checklist rather than inventing one.
+  await c.env.DB.prepare(
+    'INSERT INTO deal_closing_checklists (uid, deal_id, template_slug, applied_by, applied_at) VALUES (?, ?, ?, ?, ?)'
+  ).bind(newUid(), id, slug, user.id, nowIso()).run();
+  await sql.end();
+  return c.json({ checklist: await closingChecklistForDeal(c.env, id) }, 201);
+});
+
+deals.post('/:id/closing-checklist/items', async (c) => {
+  await requireRole(c, 'partner');
+  const id = parseInt(c.req.param('id'));
+  const data = await c.req.json().catch(() => ({} as any));
+  const label = data?.label != null ? String(data.label).trim().slice(0, 300) : '';
+  if (!label) {
+    return c.json({
+      error: 'checklist_item_label_required',
+      message: 'A checklist item is the thing counsel checks — name it.',
+    }, 400);
+  }
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT id FROM deals WHERE id = ${id}`;
+  if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
+  const list = await c.env.DB.prepare('SELECT id FROM deal_closing_checklists WHERE deal_id = ?').bind(id).first<any>();
+  if (!list) {
+    await sql.end();
+    return c.json({
+      error: 'closing_checklist_missing',
+      message: 'Apply a closing template first — the checklist it creates is what items attach to.',
+    }, 400);
+  }
+  const sort = await c.env.DB.prepare(
+    'SELECT COALESCE(MAX(sort), 0) + 1 AS next FROM deal_closing_checklist_items WHERE checklist_id = ?'
+  ).bind(list.id).first<{ next: number }>();
+  await c.env.DB.prepare(
+    'INSERT INTO deal_closing_checklist_items (uid, checklist_id, label, state, sort, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(newUid(), list.id, label, 'pending', sort?.next || 1, nowIso()).run();
+  await sql.end();
+  return c.json({ checklist: await closingChecklistForDeal(c.env, id) }, 201);
+});
+
+deals.patch('/:id/closing-checklist/items/:itemUid', async (c) => {
+  const user = await requireRole(c, 'partner');
+  const id = parseInt(c.req.param('id'));
+  const itemUid = c.req.param('itemUid');
+  const data = await c.req.json().catch(() => ({} as any));
+  const state = String(data?.state || '');
+  if (!['pending', 'done', 'blocked', 'skipped'].includes(state)) {
+    return c.json({
+      error: 'checklist_item_state_invalid',
+      message: 'A checklist item is pending, done, blocked or skipped.',
+    }, 400);
+  }
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT id FROM deals WHERE id = ${id}`;
+  if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
+  const item = await c.env.DB.prepare(
+    `SELECT i.id, i.checklist_id FROM deal_closing_checklist_items i
+       JOIN deal_closing_checklists l ON l.id = i.checklist_id
+      WHERE i.uid = ? AND l.deal_id = ?`
+  ).bind(itemUid, id).first<any>();
+  if (!item) { await sql.end(); return c.json({ error: 'Item not found' }, 404); }
+  const note = data?.note !== undefined ? (data.note != null ? String(data.note).slice(0, 2000) : null) : undefined;
+  const done = state === 'done';
+  // Two static statements rather than a conditional fragment: every value is
+  // bound, and the query text never carries an interpolation.
+  if (note !== undefined) {
+    await c.env.DB.prepare(
+      'UPDATE deal_closing_checklist_items SET state = ?, done_by = ?, done_at = ?, note = ? WHERE id = ?'
+    ).bind(state, done ? user.id : null, done ? nowIso() : null, note, item.id).run();
+  } else {
+    await c.env.DB.prepare(
+      'UPDATE deal_closing_checklist_items SET state = ?, done_by = ?, done_at = ? WHERE id = ?'
+    ).bind(state, done ? user.id : null, done ? nowIso() : null, item.id).run();
+  }
+  await sql.end();
+  return c.json({ checklist: await closingChecklistForDeal(c.env, id) });
 });
 
 // ---------------------------------------------------------------------------

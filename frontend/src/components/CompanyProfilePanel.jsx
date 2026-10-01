@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { safeExternalUrl } from '../lib/url';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
-import { Building2, Plus, Save, X, Search, UserPlus, Trash2, Loader2, Globe, Users, ChevronRight } from 'lucide-react';
+import { Building2, Plus, Save, X, Search, Trash2, Loader2, Globe, Users, ChevronRight } from 'lucide-react';
 
 import { api } from '../lib/api';
 
@@ -79,7 +79,6 @@ function CreateCompanyForm({ onCreated }) {
 // ---------------------------------------------------------------------------
 function CompanyDetail({ company, onChange, canEdit }) {
   const [editing, setEditing] = useState(false);
-  const [showAdd, setShowAdd] = useState(false);
 
   return (
     <div className="space-y-4">
@@ -126,10 +125,14 @@ function CompanyDetail({ company, onChange, canEdit }) {
             <Users size={16} className="text-gray-500" />
             <h3 className="text-sm font-semibold text-black">Team members ({company.member_count || 0})</h3>
           </div>
+          {/* D434 — the direct "Add team member" is retired. It joined an
+              existing account to the company WITHOUT asking them and 404'd
+              anyone without an account; Company Settings sends a real
+              invitation the invitee accepts, so that is where adding lives. */}
           {canEdit && (
-            <button onClick={() => setShowAdd(true)} className="text-xs inline-flex items-center gap-1 bg-violet-600 hover:bg-violet-700 text-white px-2.5 py-1.5 rounded-lg">
-              <UserPlus size={12}/> Add member
-            </button>
+            <a href="/company-settings" className="text-xs inline-flex items-center gap-1 text-violet-700 hover:underline dark:text-violet-300">
+              Invite from Company Settings →
+            </a>
           )}
         </div>
         <div className="divide-y divide-gray-100">
@@ -160,9 +163,6 @@ function CompanyDetail({ company, onChange, canEdit }) {
       {editing && (
         <CompanyFormModal initial={company} onClose={() => setEditing(false)}
           onSaved={() => { setEditing(false); onChange(); }} />
-      )}
-      {showAdd && (
-        <AddMemberModal companyUid={company.uid} onClose={() => setShowAdd(false)} onAdded={() => { setShowAdd(false); onChange(); }} />
       )}
     </div>
   );
@@ -334,39 +334,6 @@ function CompanyFormModal({ initial, onClose, onSaved }) {
           <button type="submit" disabled={busy} className="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg inline-flex items-center gap-1.5 disabled:opacity-50">
             {busy ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>}
             {isEdit ? 'Save' : 'Create'}
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-function AddMemberModal({ companyUid, onClose, onAdded }) {
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState('Member');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-
-  async function submit(e) {
-    e.preventDefault();
-    setBusy(true); setErr('');
-    try {
-      await api.addCompanyMember(companyUid, { email: email.trim(), role_in_company: role });
-      onAdded();
-    } catch (e) { setErr(e.message); }
-    finally { setBusy(false); }
-  }
-  return (
-    <Modal onClose={onClose} title="Add team member">
-      <form onSubmit={submit} className="space-y-3">
-        <Input label="User email *" value={email} onChange={setEmail} placeholder="founder@example.com"/>
-        <Select label="Role" value={role} onChange={setRole} options={['Founder', 'Admin', 'Advisor', 'Member']}/>
-        {err && <div className="text-sm text-red-600">{err}</div>}
-        <div className="text-xs text-gray-500">User must already have a StudioOS account.</div>
-        <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300">Cancel</button>
-          <button type="submit" disabled={busy || !email.trim()} className="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg inline-flex items-center gap-1.5 disabled:opacity-50">
-            {busy ? <Loader2 size={14} className="animate-spin"/> : <UserPlus size={14}/>} Add
           </button>
         </div>
       </form>

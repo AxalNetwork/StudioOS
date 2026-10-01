@@ -27,10 +27,12 @@
 
 import type { MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
+import { authCookieName, csrfCookieName } from '../util/branch';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-const AUTH_COOKIE = 'studioos_auth';
-const CSRF_COOKIE = 'studioos_csrf';
+// The cookie names are per Worker: `studioos_auth` / `studioos_csrf` on HQ,
+// `studioos_auth_<code>` / `studioos_csrf_<code>` on a branch (D104). HQ's
+// pair reaches a branch host too, and must satisfy nothing there.
 const CSRF_HEADER = 'X-CSRF-Token';
 
 // Task #2 (IB) — RFC 8058 one-click List-Unsubscribe MUST work without a
@@ -67,10 +69,10 @@ export function csrfMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
     if (authHeader && authHeader.startsWith('Bearer ')) return next();
 
     const cookieHeader = c.req.header('Cookie') || '';
-    const authCookie = readCookie(cookieHeader, AUTH_COOKIE);
+    const authCookie = readCookie(cookieHeader, authCookieName(c.env));
     if (!authCookie) return next();
 
-    const csrfCookie = readCookie(cookieHeader, CSRF_COOKIE);
+    const csrfCookie = readCookie(cookieHeader, csrfCookieName(c.env));
     const csrfHeader = c.req.header(CSRF_HEADER);
 
     if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {

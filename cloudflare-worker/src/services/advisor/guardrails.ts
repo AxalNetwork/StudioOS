@@ -16,7 +16,8 @@
  *                           users.advisor_shadow_flag on heuristic triggers.
  *   L6 audit              — writeTurnAudit() inserts one
  *                           advisor_turn_audit row per turn.
- *   L7 kill switch        — checkKillSwitch() honours ADVISOR_DISABLED env
+ *   L7 kill switch        — checkKillSwitch() honours the whole Eadwyn kill
+ *                           (the deploy variables and HQ's operator switch, D203)
  *                           + users.advisor_locked column.
  *
  * The route layer wires these in: /start + /answer + /explain call
@@ -26,6 +27,8 @@
  */
 import type { Env, User } from '../../types';
 import * as aiRouter from '../aiRouter';
+import { bindingKey } from '../../util/schemaBootstrap';
+import { advisorKillState, ADVISOR_DISABLED_MESSAGE } from './rollout';
 
 // ---------------------------------------------------------------------------
 // L4 — canonical refusal bank. Embedded in the system prompt so the model
@@ -43,8 +46,6 @@ export const REFUSAL = {
     "I can't repeat raw database rows, secrets, or other users' data. The relevant page has CSV/PDF exports if you need to download something.",
   locked:
     "Your advisor session has been temporarily disabled while we review unusual activity. Please reach out via Settings → Support if this is unexpected.",
-  disabled:
-    "The advisor is temporarily offline for maintenance. The rest of StudioOS is unaffected — use the side nav to navigate as normal.",
   shadow:
     "I'm running in a limited mode right now and can't take new requests. Try again in a few minutes, or contact support if this persists.",
 } as const;
@@ -486,18 +487,52 @@ export interface TurnAudit {
   sanitisationActions: string[];
   refusalReason: string | null;
   shadowFlagged: boolean;
+  /**
+   * D158 — the S-code `classifyInput` returned, naming WHICH RULE fired, or one
+   * of `empty` / `safe` / `router_failed` / `error`. Null where the turn was
+   * never classified.
+   *
+   * REQUIRED, NOT OPTIONAL, AND THAT IS THE POINT. There are seventeen
+   * `writeTurnAudit` call sites in `routes/advisor.ts`; seven of them have a
+   * `safety` result in scope and the rest do not. Making the field optional
+   * would let an eighteenth be added with the category silently missing, and a
+   * test would have to go looking for it. Required, the typechecker refuses the
+   * call — the guard is the compiler, which cannot be forgotten to run.
+   *
+   * The rule the sites follow, asserted in `advisor_guardrail_category_d158`:
+   * THE CATEGORY TRAVELS WITH THE SCORE. Every site binding
+   * `safetyScore: safety.score` binds `guardrailCategory: safety.category`;
+   * every site binding a null score binds a null category.
+   */
+  guardrailCategory: string | null;
 }
 
-let _auditSchemaReady = false;
+const AUDIT_SCHEMA_READY = new WeakMap<object, boolean>();
 export async function ensureAuditSchema(env: Env): Promise<void> {
-  if (_auditSchemaReady) return;
+  if (AUDIT_SCHEMA_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS advisor_turn_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, conversation_id INTEGER, model TEXT, prompt_hash TEXT NOT NULL, tool_calls_json TEXT, ai_spend_usd REAL NOT NULL DEFAULT 0, safety_score REAL, sanitisation_actions_json TEXT, refusal_reason TEXT, shadow_flagged INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')))",
+      "CREATE TABLE IF NOT EXISTS advisor_turn_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, conversation_id INTEGER, model TEXT, prompt_hash TEXT NOT NULL, tool_calls_json TEXT, ai_spend_usd REAL NOT NULL DEFAULT 0, safety_score REAL, sanitisation_actions_json TEXT, refusal_reason TEXT, shadow_flagged INTEGER NOT NULL DEFAULT 0, guardrail_category TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))",
     );
+    // D158 — AND THE ADD COLUMN, BECAUSE THE CREATE ABOVE CANNOT DO IT.
+    // `CREATE TABLE IF NOT EXISTS` is a no-op against a database that already
+    // has this table, so migration 270's column would be missing wherever the
+    // bootstrap ran first and the migration had not. That is the
+    // `metrics_snapshots` collision (#183, #202): one table, two definitions,
+    // and which shape you get depends on the order. The PRAGMA guard is copied
+    // from `ensureGuardrailColumns` below rather than invented.
+    try {
+      const cols = await env.DB.prepare(`PRAGMA table_info(advisor_turn_audit)`).all<{ name: string }>();
+      const have = new Set((cols.results || []).map((r) => r.name));
+      if (!have.has('guardrail_category')) {
+        try { await env.DB.exec(`ALTER TABLE advisor_turn_audit ADD COLUMN guardrail_category TEXT`); }
+        catch (e) { void e; }
+      }
+    } catch (e) { void e; }
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_advisor_turn_audit_user    ON advisor_turn_audit(user_id, created_at DESC)");
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_advisor_turn_audit_flagged ON advisor_turn_audit(shadow_flagged, created_at DESC)");
-    _auditSchemaReady = true;
+    await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_advisor_turn_audit_category ON advisor_turn_audit(guardrail_category, created_at DESC)");
+    AUDIT_SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[advisor.guardrails] audit schema:', (e as Error).message);
   }
@@ -508,8 +543,8 @@ export async function writeTurnAudit(env: Env, a: TurnAudit): Promise<void> {
   try {
     await env.DB.prepare(
       `INSERT INTO advisor_turn_audit
-         (user_id, conversation_id, model, prompt_hash, tool_calls_json, ai_spend_usd, safety_score, sanitisation_actions_json, refusal_reason, shadow_flagged)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (user_id, conversation_id, model, prompt_hash, tool_calls_json, ai_spend_usd, safety_score, sanitisation_actions_json, refusal_reason, shadow_flagged, guardrail_category)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       a.userId,
       a.conversationId,
@@ -521,6 +556,11 @@ export async function writeTurnAudit(env: Env, a: TurnAudit): Promise<void> {
       JSON.stringify(a.sanitisationActions || []),
       a.refusalReason,
       a.shadowFlagged ? 1 : 0,
+      // Null, never a default. A turn that was never classified has no
+      // category, and writing `safe` for one would be a verdict nothing
+      // reached — the claim D158 exists to stop being unrecoverable, told
+      // backwards.
+      a.guardrailCategory || null,
     ).run();
   } catch (e) {
     console.warn('[advisor.guardrails] writeTurnAudit:', (e as Error).message);
@@ -528,13 +568,14 @@ export async function writeTurnAudit(env: Env, a: TurnAudit): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// L7 — kill switch. ADVISOR_DISABLED env + users.advisor_locked column.
+// L7 — kill switch. The Eadwyn kill (rollout.ts advisorKillState: the deploy
+// variables OR HQ's operator switch) + users.advisor_locked column.
 // Also surfaces users.advisor_shadow_flag (does not hard-block; route layer
 // renders the templated REFUSAL.shadow reply instead).
 // ---------------------------------------------------------------------------
-let _userColsReady = false;
+const USER_COLS_READY = new WeakMap<object, boolean>();
 export async function ensureGuardrailColumns(env: Env): Promise<void> {
-  if (_userColsReady) return;
+  if (USER_COLS_READY.get(bindingKey(env))) return;
   try {
     const ucols = await env.DB.prepare(`PRAGMA table_info(users)`).all<{ name: string }>();
     const uhave = new Set((ucols.results || []).map((r) => r.name));
@@ -556,7 +597,7 @@ export async function ensureGuardrailColumns(env: Env): Promise<void> {
       try { await env.DB.exec(`ALTER TABLE advisor_messages ADD COLUMN sanitisation_actions_json TEXT`); }
       catch (e) { void e; }
     }
-    _userColsReady = true;
+    USER_COLS_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[advisor.guardrails] ensureGuardrailColumns:', (e as Error).message);
   }
@@ -565,7 +606,7 @@ export async function ensureGuardrailColumns(env: Env): Promise<void> {
 export interface KillSwitchResult {
   blocked: boolean;
   shadow: boolean;
-  reason?: 'env_disabled' | 'user_locked' | 'user_shadow';
+  reason?: 'disabled' | 'user_locked' | 'user_shadow';
   message?: string;
 }
 
@@ -574,10 +615,20 @@ export async function checkKillSwitch(env: Env, user: User): Promise<KillSwitchR
   // advisor. Logical OR (NOT precedence by presence) so a stale
   // `ADVISOR_V2_DISABLED=0` can't silently override an operator's
   // `ADVISOR_DISABLED=1` during incident response.
-  const e = env as unknown as { ADVISOR_DISABLED?: string; ADVISOR_V2_DISABLED?: string };
-  const truthy = (v: string | undefined) => v === '1' || v === 'true';
-  if (truthy(e.ADVISOR_V2_DISABLED) || truthy(e.ADVISOR_DISABLED)) {
-    return { blocked: true, shadow: false, reason: 'env_disabled', message: REFUSAL.disabled };
+  //
+  // D202 — THE RULE IS rollout.ts's, NOT A COPY OF IT. This used to restate
+  // the two-variable OR inline, so the route's 503 and this refusal were two
+  // readings of one switch that happened to agree. HQ Platform now reports the
+  // switch through the same function, and a third copy would be the one that
+  // drifts.
+  //
+  // D203 — and it is the WHOLE switch now, both halves. Asking only the deploy
+  // half here would let a caller that reaches this gate without the route's
+  // own check serve Eadwyn while an operator had switched it off. The message
+  // is the route's own, in Eadwyn's voice: the old one said "the advisor" was
+  // "offline for maintenance", which an operator's kill is not.
+  if ((await advisorKillState(env)).off) {
+    return { blocked: true, shadow: false, reason: 'disabled', message: ADVISOR_DISABLED_MESSAGE };
   }
   await ensureGuardrailColumns(env);
   try {

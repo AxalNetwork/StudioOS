@@ -1,10 +1,25 @@
 /**
  * Task #1 — Admin /api/admin/articles review queue.
  *
- * Mirrors `admin_news.ts` but routed under /api/admin/articles. MUST be
- * mounted BEFORE the catch-all /api/admin in index.ts. Sits inside the
- * existing `/api/admin/*` Cf-Access perimeter; per-route admin gating
- * via requireAdmin.
+ * THE ONLY admin review queue over `articles`. MUST be mounted BEFORE the
+ * catch-all /api/admin in index.ts.
+ *
+ * It used to say it mirrored `admin_news.ts`, and two things about that were
+ * wrong by the time D166 read them:
+ *
+ *   1. That router was not a mirror, it was a LOOSER one. Its publish handler
+ *      accepted `in_review` as well as `approved`, so the approval gate two
+ *      screens down — "No skipping straight from in_review → published, even
+ *      by an admin" — could be walked around by calling the other path. D166
+ *      retired it; `/api/admin/news` now 404s.
+ *   2. There is NO Cf-Access perimeter in front of /api/admin. Task #33
+ *      removed it (see index.ts, above the /api/admin mounts): the Access app
+ *      is configured on the apex while the SPA uses a relative API base, so
+ *      app.axal.vc/api/admin/* could not carry the Cf-Access-Jwt-Assertion
+ *      header and every legitimate admin got a fail-closed 403.
+ *
+ * So `requireAdmin` per route is not the inner half of a perimeter — it is
+ * the whole gate, which is exactly why (1) mattered.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';

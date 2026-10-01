@@ -84,6 +84,11 @@ async function loadCron({ notifyStub, emailStub }) {
   const prelude = `
     const hashEmail = async (s) => s;
     const INVESTOR_QUOTAS = { free: { dealroom_max: 1 }, professional: { dealroom_max: 5 }, institutional: { dealroom_max: 1_000_000 } };
+    // #204 — the schema-readiness latch is a WeakMap keyed on the D1 binding,
+    // and \`bindingKey\` comes from util/schemaBootstrap, whose import the strip
+    // above removes. The real one IS this one line; stubbing it keeps the cache
+    // genuinely per-binding inside the test rather than switching it off.
+    const bindingKey = (env) => env.DB;
   `;
 
   const wrapped = `

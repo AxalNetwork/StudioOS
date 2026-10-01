@@ -26,9 +26,18 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Landmark, Lock, Check, Clock, ShieldCheck, FileText,
-  AlertCircle, MessageSquare, RefreshCw, FileDown, Loader2,
+  AlertCircle, RefreshCw, FileDown, Loader2,
 } from 'lucide-react';
 import { WorkspaceHeader } from '../components/WorkspaceTabs';
+// WITHOUT THIS IMPORT THE CALL BELOW STILL RESOLVES, TO THE WRONG FUNCTION.
+// `reportError` is a Web API global (`window.reportError`), so an unimported
+// call is not a ReferenceError and `no-undef` — the repo's only ESLint rule —
+// cannot flag it. It silently invoked the browser's one-argument "report an
+// exception" API instead, which reported the SCOPE STRING as an uncaught
+// error and discarded the real one, so a failed LP application reached
+// neither the ring buffer nor the beacon. `check-frontend-logging.mjs` now
+// requires this import wherever the name is called.
+import { reportError } from '../lib/log';
 import { useAuth } from '../hooks/useAuthSync';
 import { api, spinoutLab } from '../lib/api';
 import {
@@ -39,6 +48,8 @@ import {
 import {
   selectHolding, quarterOf, lastClosedQuarter, fmtDate,
 } from '../lib/quarterlyReportViewModel';
+import { onboardingStatus } from '../lib/lpCommitmentModel';
+import { MyCommitment, MessageGp } from './SpinoutLabLpCommitment';
 
 /* ---------------------------------------------------------------- primitives */
 
@@ -197,6 +208,9 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   const [briefBusy, setBriefBusy] = useState(false);
   const [briefErr, setBriefErr] = useState('');
   const [reportBusy, setReportBusy] = useState('');
+  // The caller's KYC record from Trust (D372). `loaded: false` is "could not
+  // read", which the onboarding table says rather than guessing a status.
+  const [kyc, setKyc] = useState({ loaded: false, status: null });
   const [reportErr, setReportErr] = useState('');
 
   const load = async () => {
@@ -207,11 +221,15 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
     // the viewer's standing, and vice versa. Metrics failure degrades to the
     // operator-maintained model below — with its provenance caption, so the
     // page never claims live telemetry it does not have.
-    const [portalRes, metricsRes, appRes] = await Promise.allSettled([
+    const [portalRes, metricsRes, appRes, kycRes] = await Promise.allSettled([
       api.fundsLpPortal(),
       spinoutLab.fundMetrics(),
       spinoutLab.lpApplication(),
+      api.kycStatus(),
     ]);
+    setKyc(kycRes.status === 'fulfilled'
+      ? { loaded: true, status: kycRes.value?.kyc_status ?? null }
+      : { loaded: false, status: null });
     if (portalRes.status === 'fulfilled') {
       setPortal(portalRes.value);
     } else {
@@ -551,8 +569,9 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
             ))}
           </dl>
           <p className="mt-3 text-[10.5px] leading-relaxed text-gray-400 dark:text-gray-500">
-            Committed = countersigned subscription. Soft-circled amounts are indications, not
-            commitments.{' '}
+            Committed = commitments the general partner has recorded on the fund's register; no
+            subscription-document store exists, so it does not say a subscription was countersigned.
+            Soft-circled amounts are indications, not commitments.{' '}
             {liveFund
               ? 'Figures are computed live from the fund’s limited-partner records.'
               : 'Fund-level figures are operator-maintained, not live telemetry.'}
@@ -657,7 +676,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
             </div>
             <div className="mt-0.5 text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400">
               {derived.applicationStatus === 'approved'
-                ? 'The fund team is preparing your subscription documents. Reporting and participation activate once your commitment is countersigned.'
+                ? 'The fund team is preparing your subscription documents. Reporting and participation activate once the general partner records your commitment on the fund’s register.'
                 : 'Fund team review typically completes within five business days. On acceptance you proceed to KYC/AML and subscription documents.'}
             </div>
             {application?.review_note && (
@@ -667,6 +686,13 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
             )}
           </div>
         </div>
+      )}
+
+      {/* I5 · My commitment (D372) — the LP's own position, and where
+          /lp-portal lands. Drawn for anyone with a holding, and when the read
+          failed, so a failure is never mistaken for "no commitment". */}
+      {(derived.holdings > 0 || (!portal && !!err)) && (
+        <MyCommitment portal={portal} failed={!portal && !!err} onReload={load} />
       )}
 
       {/* underwriting */}
@@ -830,12 +856,12 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
                 handled directly by the GP.
               </p>
               <div className="mt-3 flex gap-2">
-                <Link to="/help" className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300">
-                  <MessageSquare size={13} /> Message the GP
-                </Link>
-                <Link to="/lp-portal" className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300">
-                  <FileText size={13} /> My LP Portal
-                </Link>
+                <MessageGp portal={portal} />
+                {derived.holdings > 0 && (
+                  <a href="#my-commitment" className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    <FileText size={13} /> My commitment
+                  </a>
+                )}
               </div>
             </div>
           </div>
@@ -916,8 +942,14 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
             </thead>
             <tbody>
               {ONBOARDING.map(([name, note, collect, time], i) => {
-                const done = ({ visitor: 0, pending: 1, approved: 2, committed: 5, voting: 5 })[state] ?? 0;
-                const status = i < done ? ['green', 'Complete'] : i === done ? ['amber', 'In progress'] : ['gray', 'Not started'];
+                // D372: each row's status is read from a record — Trust's KYC,
+                // the application's self-certification, the LPA flag on the
+                // caller's holdings — or says there is none. It was inferred
+                // from the access ladder, which marked KYC complete for anyone
+                // with a commitment.
+                const status = onboardingStatus(name, {
+                  kyc, application, applicationLoaded, holdings: portal?.lp_holdings || [],
+                });
                 return (
                   <tr key={name} className="border-b border-gray-100 dark:border-gray-800 last:border-b-0">
                     <td className="px-4 py-3">
@@ -934,8 +966,11 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
           </table>
         </div>
         <p className="mt-2.5 text-[11px] text-gray-400 dark:text-gray-500">
-          No capital moves before subscription documents are countersigned. Verification is handled
-          by Parallel Markets; the fund does not store identity documents directly.
+          The fund’s policy is that no capital moves before subscription documents are countersigned;
+          the platform keeps no subscription-document record, so this table cannot show yours. Identity
+          verification is submitted in Trust: your ID document is kept in the platform’s private
+          document store and reviewed by the fund team. Accreditation is self-certified on your
+          application and is not verified here.
         </p>
       </div>
 

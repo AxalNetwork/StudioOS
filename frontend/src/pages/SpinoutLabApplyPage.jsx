@@ -1,290 +1,486 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Check, Loader2, ArrowLeft } from "lucide-react";
+import { Check, Loader2, ArrowLeft, Lock } from "lucide-react";
 import { useAuth } from "../hooks/useAuthSync";
 import { spinoutLab } from "../lib/api";
-import { labJurisdiction, resolveOpenCohort } from "../lib/spinoutLab";
+import { resolveOpenCohort, useCohortPlaces, placesLabel } from "../lib/spinoutLab";
+import {
+  APPLY_STEPS, ORIGIN_OPTIONS, TTO_OPTIONS, IP_OPTIONS, CONFIDENTIAL_NOTE, FIELD_LABEL,
+  emptyBasics, emptyAnswers, missingOnStep, missingBasics, missingAnswers, answersPayload,
+  draftBody, fromDraft, consequenceFor, phaseOf, applicantFromLegacy, whenOf,
+} from "../lib/applicationLifecycle";
+import { ApplicationStatusScreen } from "../components/spinout/ApplicationStatus";
+import LabPageShell from "../components/spinout/LabPageShell";
+import { Unreadable } from "../ui";
 
-// Apply to the open cohort — signed-in application form (reference design:
-// Spin-Out Lab.dc.html APPLY VIEW). The heading used to read "Apply to Cohort
-// 4" here, which is the artboard's sample label rather than a cohort: the page
-// asks `resolveOpenCohort()` and renders whatever is open. That same sample
-// number, read as fact, is what anchored the calendar five months early and
-// put "Apply to Cohort 6" on the first cohort ever offered.
-// No contact fields: the account is the
-// applicant, shown in the "Signed in" card. Submit → POST /spinout-lab/apply
-// → confirmation card + confirmation email (production Worker).
+// Apply to the open cohort, and see where the application stands (D384) —
+// the Apply & Status canvas (design/canvases/out-of-scope/Apply and
+// Status.dc.html): P1 the five-step application, P2 the status screen. It
+// replaces the one-page form from the older Spin-Out Lab.dc.html APPLY VIEW
+// and its "Application received" card; the status the founder sees now lives
+// here, on one screen, rather than in a separate block on /spinout-lab.
+//
+// The heading never types a cohort number: it reads the window `/state`
+// returns (`resolveOpenCohort()` as the fallback) — a typed sample label is
+// what once put "Apply to Cohort 6" on the first cohort ever offered.
+// No contact fields: the account is the applicant.
 
 const STAGES = ["Idea / pre-formation", "Prototype in progress", "Early revenue"];
 const JURIS = [
-  { key: "de", label: "Delaware C-Corp — Delaware, USA", entity: "Delaware C-Corp" },
-  { key: "wy", label: "Wyoming C-Corp — Wyoming, USA", entity: "Wyoming C-Corp" },
-];
-const APPLY_STEPS = [
-  { n: 1, title: "Application review", body: "A program manager reviews within 5 business days." },
-  { n: 2, title: "Founder interview", body: "A 30-minute call to align on scope and readiness." },
-  { n: 3, title: "Cohort onboarding", body: "Accepted founders start at the Validate gate on day one." },
+  { key: "de", label: "Delaware C-Corp — Delaware, USA" },
+  { key: "wy", label: "Wyoming C-Corp — Wyoming, USA" },
 ];
 
-function initialsOf(name, email) {
-  const src = (name || email || "?").trim();
-  const parts = src.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return src.slice(0, 2).toUpperCase();
+// The admin journey preview (Task #106) renders this page read-only: no
+// fetch, no redirect, and Submit simulates the status screen locally.
+const PREVIEW_APPLICANT = {
+  application_id: null, status: "pending", submitted_at: null, decided_at: null, withdrawn_at: null,
+  answers: null, answers_recorded: true, pool: null, note: null, interview: null, reapply: null,
+};
+
+const input = "w-full h-[42px] px-3 border border-gray-200 dark:border-gray-700 rounded-[10px] text-[14px] bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 outline-none focus:border-violet-400 focus:ring-[3px] focus:ring-violet-500/15";
+const area = "w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-[10px] text-[14px] bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 outline-none resize-y focus:border-violet-400 focus:ring-[3px] focus:ring-violet-500/15";
+const labelCls = "text-[12.5px] font-semibold text-gray-700 dark:text-gray-300 mb-1.5";
+
+function Field({ label, hint, children }) {
+  return (
+    <label className="block">
+      <div className={labelCls}>{label}</div>
+      {children}
+      {hint ? <div className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{hint}</div> : null}
+    </label>
+  );
 }
 
-// Task #106 — `previewMode` ('form' | 'submitted') powers the read-only
-// admin journey preview: no state fetch, no admitted redirect, and submit
-// simulates the confirmation locally instead of POSTing an application.
-// Founders always render with previewMode = null, so nothing changes for
-// the real apply flow.
+function Choice({ on, name, note, badge, onClick, testId }) {
+  return (
+    <button type="button" onClick={onClick} data-testid={testId} aria-pressed={on}
+      className={`w-full text-left flex items-start gap-3 px-4 py-3.5 rounded-xl border transition-colors ${on
+        ? "border-violet-500 bg-violet-50 dark:bg-violet-500/10"
+        : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 hover:bg-gray-50 dark:hover:bg-gray-800"}`}>
+      <span className={`mt-0.5 w-5 h-5 flex-none rounded-full border-[1.5px] flex items-center justify-center ${on ? "border-violet-600" : "border-gray-300 dark:border-gray-600"}`}>
+        {on ? <span className="w-2.5 h-2.5 rounded-full bg-violet-600" /> : null}
+      </span>
+      <span className="min-w-0">
+        <span className={`block text-[14px] ${on ? "font-bold" : "font-semibold"} text-gray-900 dark:text-gray-100`}>
+          {name}{badge ? <span className="ml-2 text-[10.5px] font-bold tracking-[.06em] text-violet-700 dark:text-violet-300">{badge}</span> : null}
+        </span>
+        {note ? <span className="block mt-0.5 text-[12.5px] text-gray-500 dark:text-gray-400">{note}</span> : null}
+      </span>
+    </button>
+  );
+}
+
+/** The five steps. Exported so the tests render each one. */
+export function ApplyStep({ step, basics, answers, setBasics, setAnswers }) {
+  const b = (k) => (v) => setBasics((prev) => ({ ...prev, [k]: v }));
+  const a = (k) => (v) => setAnswers((prev) => ({ ...prev, [k]: v }));
+  const toggleIp = (key) => setAnswers((prev) => ({
+    ...prev, ip: prev.ip.includes(key) ? prev.ip.filter((x) => x !== key) : [...prev.ip, key],
+  }));
+
+  if (step === 1) {
+    return (
+      <div className="flex flex-col gap-[18px]" data-testid="apply-step-1">
+        <Field label="Company or working name">
+          <input type="text" value={basics.company} onChange={(e) => b("company")(e.target.value)} placeholder="e.g. Northwind Labs" data-testid="apply-company" className={input} />
+        </Field>
+        <Field label="What you are building">
+          <textarea rows={4} value={basics.idea} onChange={(e) => b("idea")(e.target.value)} placeholder="What are you building, who is it for, and why now?" data-testid="apply-idea" className={area} />
+        </Field>
+        <div>
+          <div className={labelCls}>Are you already incorporated?</div>
+          <div className="flex gap-2">
+            {[{ v: "no", label: "Not yet" }, { v: "yes", label: "Already incorporated" }].map((o) => (
+              <button key={o.v} type="button" onClick={() => b("incorporated")(o.v)} aria-pressed={basics.incorporated === o.v}
+                className={`flex-1 h-[40px] rounded-[10px] text-[13.5px] font-semibold border ${basics.incorporated === o.v
+                  ? "bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-300 dark:border-violet-500/40"
+                  : "bg-white dark:bg-gray-950 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700"}`}>
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex gap-3.5 flex-wrap">
+          <label className="flex-[1_1_200px] min-w-0 block">
+            <div className={labelCls}>Current stage</div>
+            <select value={basics.stage || STAGES[0]} onChange={(e) => b("stage")(e.target.value)} className={input}>
+              {STAGES.map((s) => <option key={s}>{s}</option>)}
+            </select>
+          </label>
+          <label className="flex-[1_1_200px] min-w-0 block">
+            <div className={labelCls}>{basics.incorporated === "yes" ? "Current jurisdiction" : "Preferred jurisdiction"}</div>
+            <select value={basics.jurisKey} onChange={(e) => b("jurisKey")(e.target.value)} className={input}>
+              {JURIS.map((j) => <option key={j.key} value={j.key}>{j.label}</option>)}
+            </select>
+          </label>
+        </div>
+      </div>
+    );
+  }
+  if (step === 2) {
+    const ttoChoices = TTO_OPTIONS.filter((t) => t.key !== "not_applicable" || answers.origin === "corporate");
+    return (
+      <div className="flex flex-col gap-[18px]" data-testid="apply-step-2">
+        <p className="m-0 text-[13.5px] text-gray-600 dark:text-gray-300">
+          Two questions about where the venture comes from. They are read first by the reviewer and are not scored: a university spin-out and an independent build need opposite first steps.
+        </p>
+        <div>
+          <div className={labelCls}>Origin</div>
+          <div className="flex flex-col gap-2">
+            {ORIGIN_OPTIONS.map((o) => (
+              <Choice key={o.key} on={answers.origin === o.key} name={o.name} note={o.note} onClick={() => a("origin")(o.key)} testId={`origin-${o.key}`} />
+            ))}
+          </div>
+        </div>
+        {answers.origin && answers.origin !== "independent" ? (
+          <>
+            <div className="flex gap-3.5 flex-wrap">
+              <div className="flex-[1_1_200px] min-w-0">
+                <Field label={answers.origin === "university" ? "Institution" : "Employer"}>
+                  <input type="text" value={answers.institution} onChange={(e) => a("institution")(e.target.value)} className={input} data-testid="apply-institution" />
+                </Field>
+              </div>
+              <div className="flex-[1_1_200px] min-w-0">
+                <Field label={answers.origin === "university" ? "Research group" : "Team or division"} hint="Optional">
+                  <input type="text" value={answers.research_group} onChange={(e) => a("research_group")(e.target.value)} className={input} />
+                </Field>
+              </div>
+            </div>
+            <div>
+              <div className={labelCls}>Tech-transfer status</div>
+              <div className="flex flex-col gap-2">
+                {ttoChoices.map((t) => (
+                  <Choice key={t.key} on={answers.tto_status === t.key} name={t.name} note={t.note}
+                    badge={answers.tto_status === t.key ? "YOUR ANSWER" : null}
+                    onClick={() => a("tto_status")(t.key)} testId={`tto-${t.key}`} />
+                ))}
+              </div>
+            </div>
+          </>
+        ) : null}
+        <div>
+          <div className={labelCls}>IP assignment state</div>
+          <div className="flex flex-wrap gap-2">
+            {IP_OPTIONS.map((c) => {
+              const on = answers.ip.includes(c.key);
+              return (
+                <button key={c.key} type="button" onClick={() => toggleIp(c.key)} aria-pressed={on} data-testid={`ip-${c.key}`}
+                  className={`text-[13px] px-4 py-2 rounded-full border ${on
+                    ? "font-bold border-violet-500 bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300"
+                    : "font-semibold border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 text-gray-600 dark:text-gray-300"}`}>
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (step === 3) {
+    return (
+      <div className="flex flex-col gap-[18px]" data-testid="apply-step-3">
+        <Field label="How many people are on the team?" hint="Founders and anyone working on it now, 1 to 50.">
+          <input type="number" min={1} max={50} value={answers.team_size} onChange={(e) => a("team_size")(e.target.value)} className={`${input} max-w-[160px]`} data-testid="apply-team-size" />
+        </Field>
+        <Field label="Who does what" hint="Optional. Names are not needed; roles are.">
+          <textarea rows={3} value={answers.team_roles} onChange={(e) => a("team_roles")(e.target.value)} className={area} />
+        </Field>
+        <div>
+          <div className={labelCls}>Does someone on the team own the commercial side?</div>
+          <div className="flex gap-2">
+            {[{ v: true, label: "Yes" }, { v: false, label: "Not yet" }].map((o) => (
+              <button key={String(o.v)} type="button" onClick={() => a("commercial_lead")(o.v)} aria-pressed={answers.commercial_lead === o.v}
+                className={`flex-1 h-[40px] rounded-[10px] text-[13.5px] font-semibold border ${answers.commercial_lead === o.v
+                  ? "bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-300 dark:border-violet-500/40"
+                  : "bg-white dark:bg-gray-950 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700"}`}>
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (step === 4) {
+    return (
+      <div className="flex flex-col gap-[18px]" data-testid="apply-step-4">
+        <Field label="Traction so far" hint="Optional. Customer conversations, pilots, letters of intent, revenue. Leave it blank if there is none yet.">
+          <textarea rows={5} value={answers.traction} onChange={(e) => a("traction")(e.target.value)} className={area} />
+        </Field>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-[18px]" data-testid="apply-step-5">
+      <Field label="Why Axal VC, and why now?">
+        <textarea rows={5} value={answers.why_axal} onChange={(e) => a("why_axal")(e.target.value)} className={area} data-testid="apply-why" />
+      </Field>
+    </div>
+  );
+}
+
 export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmitted = null }) {
   const isPreview = previewMode != null;
   const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(!isPreview);
+  const [loadError, setLoadError] = useState(false);
+  const [applicant, setApplicant] = useState(previewMode === "submitted" ? PREVIEW_APPLICANT : null);
+  const [company, setCompany] = useState(null);
+  const [appWindow, setAppWindow] = useState(null);
+  const [showForm, setShowForm] = useState(previewMode !== "submitted");
+
+  const [basics, setBasics] = useState(emptyBasics);
+  const [answers, setAnswers] = useState(emptyAnswers);
+  const [step, setStep] = useState(1);
+  const [savedAt, setSavedAt] = useState(null);
+  const [draftNote, setDraftNote] = useState("");
+  const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(previewMode === "submitted");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const [company, setCompany] = useState("");
-  const [idea, setIdea] = useState("");
-  const [incorporated, setIncorporated] = useState("no");
-  const [stage, setStage] = useState(STAGES[0]);
-  const [jurisKey, setJurisKey] = useState("de");
-  // Task #5 — real application window from the server (which cohort a new
-  // application lands in + its DST-correct close deadline). Null until the
-  // /state fetch resolves; preview mode keeps the static copy.
-  const [appWindow, setAppWindow] = useState(null);
-  // Client-side fallback when state hasn't loaded yet (mirrors Worker math).
+  const places = useCohortPlaces();
   const fallbackCohort = useMemo(() => {
-    try { const c = resolveOpenCohort(); return `Cohort ${c.cohortNum}`; } catch { return 'Next Cohort'; }
+    try { const c = resolveOpenCohort(); return `Cohort ${c.cohortNum}`; } catch { return "Next Cohort"; }
+  }, []);
+  const cohortName = appWindow?.label ? `${appWindow.label} Cohort` : fallbackCohort;
+
+  const adopt = useCallback((s) => {
+    const next = s?.applicant ?? applicantFromLegacy(s?.application);
+    setApplicant(next);
+    setCompany(s?.application?.company_name || null);
+    const phase = phaseOf(next);
+    setShowForm(phase === "none");
+    return phase;
   }, []);
 
-  useEffect(() => {
-    if (isPreview) return undefined; // preview renders simulated state only
-    let alive = true;
-    (async () => {
-      try {
-        const s = await spinoutLab.state();
-        if (!alive) return;
-        if (s?.admitted) { navigate("/spinout-lab", { replace: true }); return; }
-        if (s?.application?.status === "pending") setSubmitted(true);
-        if (s?.application_window) setAppWindow(s.application_window);
-      } catch { /* fresh form */ }
-      if (alive) setLoading(false);
-    })();
-    return () => { alive = false; };
-  }, [navigate, isPreview]);
+  const load = useCallback(async () => {
+    setLoadError(false);
+    try {
+      const s = await spinoutLab.state();
+      if (s?.admitted) { navigate("/spinout-lab", { replace: true }); return; }
+      if (s?.application_window) setAppWindow(s.application_window);
+      const phase = adopt(s);
+      if (phase === "none" || phase === "withdrawn" || phase === "declined") {
+        try {
+          const d = fromDraft((await spinoutLab.applyDraft())?.draft);
+          if (d) { setBasics(d.basics); setAnswers(d.answers); setStep(d.step); setSavedAt(d.updatedAt); }
+        } catch (e) {
+          setDraftNote(e?.message || "Your saved draft could not be read. Nothing was lost; reload to try again.");
+        }
+      }
+    } catch {
+      setLoadError(true);
+    }
+    setLoading(false);
+  }, [adopt, navigate]);
 
-  const juris = JURIS.find((j) => j.key === jurisKey) || JURIS[0];
-  const jurisLabel = incorporated === "yes" ? "Current jurisdiction" : "Preferred jurisdiction";
-  const outcomes = [
-    `${juris.entity} incorporated`,
-    "Vesting cap table on Carta",
-    `${labJurisdiction(juris.key).filingName} handled`,
-    "12-slide venture pitch deck",
-  ];
+  useEffect(() => { if (!isPreview) load(); }, [isPreview, load]);
 
-  const submit = async (e) => {
-    e.preventDefault();
+  const saveDraft = async () => {
+    if (isPreview) return;
+    setSaving(true); setDraftNote("");
+    try {
+      const r = await spinoutLab.saveApplyDraft(draftBody(basics, answers, step));
+      setSavedAt(r?.updated_at || null);
+      setDraftNote("Draft saved.");
+    } catch (e) {
+      setDraftNote(e?.message || "Your draft was not saved. Your answers are still on this page; try again.");
+    } finally { setSaving(false); }
+  };
+
+  const go = (n) => { setError(""); setStep(n); };
+  const next = () => {
+    const missing = missingOnStep(step, basics, answers);
+    if (missing.length) { setError(`Still needed: ${missing.map((k) => FIELD_LABEL[k]).join(", ")}.`); return; }
+    go(step + 1);
+  };
+
+  const submit = async () => {
     setError("");
-    if (!company.trim()) { setError("Company / working name is required."); return; }
-    if (!idea.trim()) { setError("Please describe your idea or project."); return; }
+    const missing = [...missingBasics(basics), ...missingAnswers(answers)];
+    if (missing.length) { setError(`Still needed: ${missing.map((k) => FIELD_LABEL[k]).join(", ")}.`); return; }
     if (isPreview) {
-      // Preview mode is read-only — nothing is submitted or emailed.
-      setSubmitted(true);
+      setApplicant(PREVIEW_APPLICANT); setShowForm(false);
       if (onPreviewSubmitted) onPreviewSubmitted();
       return;
     }
     setSubmitting(true);
     try {
+      const juris = JURIS.find((j) => j.key === basics.jurisKey) || JURIS[0];
       await spinoutLab.apply({
-        company_name: company.trim(),
-        idea: idea.trim(),
-        incorporated,
-        stage,
+        company_name: basics.company.trim(),
+        idea: basics.idea.trim(),
+        incorporated: basics.incorporated,
+        stage: basics.stage || STAGES[0],
         jurisdiction: juris.label,
-        cohort: appWindow?.label ? `${appWindow.label} Cohort` : fallbackCohort,
+        cohort: cohortName,
         ...(appWindow ? { target_cycle: { year: appWindow.year, month: appWindow.month } } : {}),
+        answers: answersPayload(answers),
       });
-      setSubmitted(true);
+      setBasics(emptyBasics()); setAnswers(emptyAnswers()); setStep(1); setSavedAt(null);
+      adopt(await spinoutLab.state());
     } catch (err) {
-      setError(err?.message || "Failed to submit application.");
+      setError(err?.message || "Your application was not submitted. Your answers are still on this page; try again.");
     } finally { setSubmitting(false); }
+  };
+
+  const withdraw = async () => {
+    setBusy(true); setError("");
+    try {
+      const r = await spinoutLab.withdrawApplication();
+      setApplicant(r?.applicant ?? { ...applicant, status: "withdrawn" });
+    } catch (e) {
+      setError(e?.message || "Your application could not be withdrawn just now. Try again in a moment.");
+    } finally { setBusy(false); }
+  };
+
+  const reschedule = async (reason) => {
+    setBusy(true); setError("");
+    try {
+      const r = await spinoutLab.requestInterviewReschedule(reason);
+      if (r?.applicant) setApplicant(r.applicant);
+      return true;
+    } catch (e) {
+      setError(e?.message || "Your request was not sent. Try again.");
+      return false;
+    } finally { setBusy(false); }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-32 text-gray-400">
-        <Loader2 className="animate-spin" size={22} />
-      </div>
+      <LabPageShell width="apply" spaceY="" className="py-16" testId="spinout-apply-page">
+        <div className="flex items-center justify-center text-gray-400"><Loader2 className="animate-spin" size={22} /></div>
+      </LabPageShell>
     );
   }
 
+  const consequence = consequenceFor(answers);
+  const current = APPLY_STEPS[step - 1];
+  const nextStep = APPLY_STEPS[step];
+
   return (
-    <div className="max-w-[1080px] mx-auto" data-testid="spinout-apply-page">
-      <Link
-        to="/spinout-lab"
-        className="inline-flex items-center gap-2 h-[34px] px-3 rounded-[9px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 text-[13px] font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors mb-5"
-      >
+    <LabPageShell width="apply" spaceY="" testId="spinout-apply-page">
+      <Link to="/spinout-lab"
+        className="inline-flex items-center gap-2 h-[34px] px-3 rounded-[9px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 text-[13px] font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors mb-5">
         <ArrowLeft size={14} aria-hidden="true" /> Back to Spin-Out Lab
       </Link>
 
-      <div className="flex flex-wrap gap-6 items-start">
-        {/* FORM / CONFIRMATION */}
-        <div className="flex-[1_1_460px] min-w-[320px]">
-          {!submitted ? (
-            <form onSubmit={submit} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[20px] p-8 shadow-sm">
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-[11.5px] font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400 mb-4">
-                <span className="w-[7px] h-[7px] rounded-full bg-emerald-500"></span>
-                {appWindow?.label ? `${appWindow.label} Cohort` : fallbackCohort} · Applications Open
-              </span>
-              <h1 className="m-0 text-[26px] font-extrabold tracking-[-.02em] text-gray-900 dark:text-gray-100">Apply to the {appWindow?.label ? `${appWindow.label} cohort` : "next cohort"}</h1>
-              <p className="tabular-nums mt-2 mb-5 text-[14px] text-gray-500 dark:text-gray-400">
-                {appWindow?.closes_at
-                  ? `Applications close ${new Date(appWindow.closes_at).toLocaleString(undefined, { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" })}. The cohort starts ${new Date(appWindow.starts_at).toLocaleDateString(undefined, { month: "long", day: "numeric" })}.`
-                  : "Applications close August 1, 2026. 8 spots available."}
-              </p>
+      {loadError ? (
+        <Unreadable what="Your application" claim="This is not a statement that you have no application." onRetry={() => { setLoading(true); load(); }} />
+      ) : !showForm && applicant ? (
+        <ApplicationStatusScreen
+          applicant={applicant}
+          company={company}
+          onWithdraw={isPreview ? null : withdraw}
+          onReschedule={reschedule}
+          onApplyAgain={isPreview ? null : () => { setError(""); setShowForm(true); }}
+          busy={busy}
+          error={error}
+        />
+      ) : (
+        <div className="flex flex-wrap gap-6 items-start">
+          {/* STEP RAIL */}
+          <nav aria-label="Application steps" className="flex-[0_1_220px] min-w-[200px]" data-testid="apply-rail">
+            <div className="text-[12px] font-bold uppercase tracking-[.08em] text-gray-500 dark:text-gray-400 mb-3">Application</div>
+            <ol className="flex flex-col gap-3">
+              {APPLY_STEPS.map((s) => {
+                const done = s.n < step, on = s.n === step;
+                return (
+                  <li key={s.n}>
+                    <button type="button" onClick={() => (s.n < step ? go(s.n) : null)} aria-current={on ? "step" : undefined}
+                      className="flex items-start gap-3 text-left" disabled={s.n > step}>
+                      <span className={`w-6 h-6 flex-none rounded-full border-[1.5px] flex items-center justify-center font-mono text-[11px] font-bold ${done
+                        ? "bg-violet-600 border-violet-600 text-white" : on
+                          ? "bg-violet-50 border-violet-600 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
+                          : "bg-white border-gray-200 text-gray-500 dark:bg-gray-900 dark:border-gray-700"}`}>
+                        {done ? <Check size={12} aria-hidden="true" /> : s.n}
+                      </span>
+                      <span>
+                        <span className={`block text-[13px] ${on ? "font-bold text-gray-900 dark:text-gray-50" : "font-semibold text-gray-600 dark:text-gray-300"}`}>{s.name}</span>
+                        {s.note ? <span className="block text-[11.5px] text-gray-500 dark:text-gray-400">{s.note}</span> : null}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+            <div className="mt-5 flex gap-2 text-[12px] text-gray-500 dark:text-gray-400">
+              <Lock size={14} className="flex-none mt-0.5" aria-hidden="true" />
+              <p className="m-0" data-testid="apply-confidential">{CONFIDENTIAL_NOTE}</p>
+            </div>
+          </nav>
 
-              {/* Signed-in account */}
-              <div className="flex items-center gap-3 bg-violet-50/50 dark:bg-violet-500/5 border border-violet-100 dark:border-violet-500/20 rounded-xl px-3.5 py-3 mb-5">
-                <div className="w-[38px] h-[38px] flex-none rounded-full bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300 font-bold text-[13px] flex items-center justify-center">{initialsOf(user?.name, user?.email)}</div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13.5px] font-bold text-gray-800 dark:text-gray-100 truncate">{user?.name || "Founder"}</div>
-                  <div className="text-[12px] text-gray-500 dark:text-gray-400 truncate">{user?.email}</div>
-                </div>
-                <span className="text-[11px] font-semibold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/50 border border-violet-100 dark:border-violet-800/50 rounded-full px-2.5 py-1">Signed in</span>
+          {/* STEP */}
+          <div className="flex-[1_1_440px] min-w-[300px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[20px] p-8 shadow-sm">
+            <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-[11.5px] font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400 mb-4">
+              <span className="w-[7px] h-[7px] rounded-full bg-emerald-500"></span>
+              {cohortName} · Applications Open
+            </span>
+            <p className="tabular-nums mt-0 mb-4 text-[13px] text-gray-500 dark:text-gray-400">
+              {appWindow?.closes_at
+                ? `Applications close ${new Date(appWindow.closes_at).toLocaleString(undefined, { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" })}.`
+                : "Applications close seven days before the cohort starts, at 23:59 Delaware time."}
+              {places.status === "ok" ? ` ${placesLabel(places.places)} in each cohort.` : null}
+            </p>
+            {places.status === "error" ? (
+              <div className="-mt-2 mb-4">
+                <Unreadable what="The number of places in a cohort" claim="This is not a statement that the cohort is full." onRetry={places.retry} />
               </div>
+            ) : null}
+            <div className="text-[12px] font-mono text-gray-500 dark:text-gray-400">Step {step} of {APPLY_STEPS.length}</div>
+            <h1 className="mt-1 mb-5 text-[24px] font-extrabold tracking-[-.02em] text-gray-900 dark:text-gray-100" data-testid="apply-step-title">{current.name}</h1>
+            {step === 1 ? (
+              <div className="text-[12.5px] text-gray-500 dark:text-gray-400 mb-4">Applying as {user?.name || user?.email || "your account"}.</div>
+            ) : null}
 
-              <div className="flex flex-col gap-[18px]">
-                <label className="block">
-                  <div className="text-[12.5px] font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Company / working name</div>
-                  <input
-                    type="text"
-                    value={company}
-                    onChange={(e) => setCompany(e.target.value)}
-                    placeholder="e.g. Northwind Labs"
-                    data-testid="apply-company"
-                    className="w-full h-[42px] px-3 border border-gray-200 dark:border-gray-700 rounded-[10px] text-[14px] bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 outline-none focus:border-violet-400 focus:ring-[3px] focus:ring-violet-500/15"
-                  />
-                </label>
-                <label className="block">
-                  <div className="text-[12.5px] font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Describe your idea or project</div>
-                  <textarea
-                    rows={4}
-                    value={idea}
-                    onChange={(e) => setIdea(e.target.value)}
-                    placeholder="What are you building, who is it for, and why now?"
-                    data-testid="apply-idea"
-                    className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-[10px] text-[14px] bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 outline-none resize-y focus:border-violet-400 focus:ring-[3px] focus:ring-violet-500/15"
-                  />
-                </label>
+            <ApplyStep step={step} basics={basics} answers={answers} setBasics={setBasics} setAnswers={setAnswers} />
 
-                <div>
-                  <div className="text-[12.5px] font-semibold text-gray-700 dark:text-gray-300 mb-2">Are you already incorporated?</div>
-                  <div className="flex gap-2">
-                    {[{ v: "no", label: "Not yet" }, { v: "yes", label: "Already incorporated" }].map((o) => (
-                      <button
-                        key={o.v}
-                        type="button"
-                        onClick={() => setIncorporated(o.v)}
-                        className={`flex-1 h-[40px] rounded-[10px] text-[13.5px] font-semibold transition-all border ${
-                          incorporated === o.v
-                            ? "bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-300 dark:border-violet-500/40"
-                            : "bg-white dark:bg-gray-950 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
-                        }`}
-                      >
-                        {o.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+            {error ? <div role="alert" className="mt-4 text-[13px] text-red-600 dark:text-red-400 font-medium" data-testid="apply-error">{error}</div> : null}
 
-                <div className="flex gap-3.5 flex-wrap">
-                  <label className="flex-[1_1_200px] min-w-0 block">
-                    <div className="text-[12.5px] font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Current stage</div>
-                    <select
-                      value={stage}
-                      onChange={(e) => setStage(e.target.value)}
-                      className="w-full h-[42px] px-3 border border-gray-200 dark:border-gray-700 rounded-[10px] text-[14px] bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 outline-none focus:border-violet-400"
-                    >
-                      {STAGES.map((s) => <option key={s}>{s}</option>)}
-                    </select>
-                  </label>
-                  <label className="flex-[1_1_200px] min-w-0 block">
-                    <div className="text-[12.5px] font-semibold text-gray-700 dark:text-gray-300 mb-1.5">{jurisLabel}</div>
-                    <select
-                      value={jurisKey}
-                      onChange={(e) => setJurisKey(e.target.value)}
-                      className="w-full h-[42px] px-3 border border-gray-200 dark:border-gray-700 rounded-[10px] text-[14px] bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 outline-none focus:border-violet-400"
-                    >
-                      {JURIS.map((j) => <option key={j.key} value={j.key}>{j.label}</option>)}
-                    </select>
-                  </label>
-                </div>
-
-                {error && <div className="text-[13px] text-red-600 dark:text-red-400 font-medium">{error}</div>}
-
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  data-testid="apply-submit"
-                  className="w-full h-[46px] rounded-[11px] bg-violet-600 hover:bg-violet-700 text-white text-[14.5px] font-bold flex items-center justify-center gap-2 shadow-sm shadow-violet-500/30 transition-colors disabled:opacity-60"
-                >
-                  {submitting ? <Loader2 className="animate-spin" size={16} /> : <>Submit Application <span className="text-[16px]" aria-hidden="true">→</span></>}
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              {step > 1 ? (
+                <button type="button" onClick={() => go(step - 1)} className="h-[42px] px-4 rounded-[11px] border border-gray-200 dark:border-gray-700 text-[14px] font-semibold text-gray-700 dark:text-gray-200">Back</button>
+              ) : null}
+              {nextStep ? (
+                <button type="button" onClick={next} data-testid="apply-continue"
+                  className="h-[42px] px-5 rounded-[11px] bg-violet-600 hover:bg-violet-700 text-white text-[14px] font-bold">
+                  Continue to {nextStep.name}
                 </button>
-                <p className="m-0 text-center text-[12.5px] text-gray-400">No equity taken by Axal VC. Acceptance is selective.</p>
-              </div>
-            </form>
-          ) : (
-            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[20px] px-8 py-10 shadow-sm text-center" data-testid="apply-received">
-              <div className="w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto mb-[18px]">
-                <Check size={28} aria-hidden="true" />
-              </div>
-              <h1 className="m-0 text-[24px] font-extrabold tracking-[-.02em] text-gray-900 dark:text-gray-100">Application received</h1>
-              <p className="mt-2.5 mb-[22px] mx-auto text-[14px] text-gray-500 dark:text-gray-400 max-w-[380px] leading-normal">
-                Your {appWindow?.label ? `${appWindow.label} cohort` : fallbackCohort} application is in review. A program manager will respond within 5 business days. Selected founders begin with the Validate gate. We've also sent a confirmation to your email.
+              ) : (
+                <button type="button" onClick={submit} disabled={submitting} data-testid="apply-submit"
+                  className="h-[42px] px-5 rounded-[11px] bg-violet-600 hover:bg-violet-700 text-white text-[14px] font-bold flex items-center gap-2 disabled:opacity-60">
+                  {submitting ? <Loader2 className="animate-spin" size={16} /> : "Submit application"}
+                </button>
+              )}
+              {!isPreview ? (
+                <button type="button" onClick={saveDraft} disabled={saving} data-testid="apply-save-draft"
+                  className="ml-auto h-[42px] px-4 rounded-[11px] text-[13.5px] font-semibold text-violet-700 dark:text-violet-300 disabled:opacity-60">
+                  {saving ? <Loader2 className="animate-spin" size={14} /> : "Save draft"}
+                </button>
+              ) : null}
+            </div>
+            {draftNote || savedAt ? (
+              <p className="mt-2 mb-0 text-[12px] text-gray-500 dark:text-gray-400" data-testid="apply-draft-note">
+                {draftNote || `Draft saved ${whenOf(savedAt) || ""}`.trim()}
               </p>
-              <Link
-                to="/spinout-lab"
-                className="inline-flex items-center h-[42px] px-5 rounded-[11px] bg-violet-600 hover:bg-violet-700 text-white text-[14px] font-bold transition-colors"
-              >
-                Back to Spin-Out Lab
-              </Link>
-            </div>
-          )}
-        </div>
+            ) : null}
+            <p className="mt-4 mb-0 text-[12.5px] text-gray-400">No equity taken by Axal VC. Acceptance is selective.</p>
+          </div>
 
-        {/* SIDE PANEL */}
-        <div className="flex-[1_1_300px] min-w-[280px] flex flex-col gap-4">
-          <div className="rounded-[18px] p-6 text-white" style={{ background: "linear-gradient(140deg,#241f45,#3b1d6e)" }}>
-            <div className="tabular-nums text-[40px] font-black tracking-[-.03em] text-transparent bg-clip-text" style={{ backgroundImage: "linear-gradient(90deg,#fff,#c4b5fd)", WebkitBackgroundClip: "text" }}>28 days</div>
-            <p className="mt-1.5 mb-[18px] text-[13.5px] text-[#cbc4e8]">Idea to {juris.entity}, funded and venture-ready.</p>
-            <div className="flex flex-col gap-2.5">
-              {outcomes.map((o) => (
-                <div key={o} className="flex items-center gap-2 text-[13px] text-[#ede9fe]">
-                  <Check size={15} className="flex-none text-[#a78bfa]" aria-hidden="true" /> {o}
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[18px] p-[22px]">
-            <div className="text-[14px] font-bold text-gray-800 dark:text-gray-100 mb-3.5">What happens next</div>
-            <div className="flex flex-col gap-3.5">
-              {APPLY_STEPS.map((s) => (
-                <div key={s.n} className="flex gap-3">
-                  <div className="tabular-nums w-6 h-6 flex-none rounded-[7px] bg-violet-50 dark:bg-violet-900/50 text-violet-700 dark:text-violet-300 font-extrabold text-[12px] flex items-center justify-center">{s.n}</div>
-                  <div>
-                    <div className="text-[13px] font-semibold text-gray-800 dark:text-gray-100">{s.title}</div>
-                    <div className="text-[12px] text-gray-500 dark:text-gray-400 leading-snug mt-0.5">{s.body}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          {/* WHAT YOUR ANSWER CHANGES — step 2 only, as the canvas draws it */}
+          {step === 2 ? (
+            <aside className="flex-[1_1_260px] min-w-[240px] rounded-[18px] border border-violet-100 dark:border-violet-500/20 bg-violet-50/50 dark:bg-violet-500/5 p-6" data-testid="apply-consequence">
+              <div className="text-[13px] font-bold text-gray-800 dark:text-gray-100">What your answer is used for</div>
+              <p className="mt-2 mb-0 text-[13.5px] leading-relaxed text-gray-700 dark:text-gray-200">{consequence.text}</p>
+              <p className="mt-3 mb-0 text-[12px] text-gray-500 dark:text-gray-400">{consequence.foot}</p>
+            </aside>
+          ) : null}
         </div>
-      </div>
-    </div>
+      )}
+    </LabPageShell>
   );
 }

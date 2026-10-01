@@ -13,6 +13,7 @@
  */
 import type { Env } from '../types';
 import { stripTrailingSlashes } from './url';
+import { branchOf } from './branch';
 
 const DEFAULT_RP_ID = 'axal.vc';
 
@@ -44,10 +45,13 @@ export function expectedOrigins(env: Env): string[] {
   add((env as any).PUBLIC_BASE_URL);
   add((env as any).APP_URL);
   add((env as any).OAUTH_CALLBACK_BASE_URL);
-  // Always include the canonical pair so a partial env config never locks
-  // out one of the two hosts the SPA can be served from.
-  out.add('https://axal.vc');
-  out.add('https://app.axal.vc');
+  // On HQ, always include the canonical pair so a partial env config never
+  // locks out one of the two hosts the SPA can be served from. A branch
+  // Worker serves one host and must not accept ceremonies from HQ's (D104).
+  if (!branchOf(env)) {
+    out.add('https://axal.vc');
+    out.add('https://app.axal.vc');
+  }
   for (const o of String((env as any).WEBAUTHN_ORIGINS || '').split(',')) {
     const t = o.trim();
     if (t) add(t);

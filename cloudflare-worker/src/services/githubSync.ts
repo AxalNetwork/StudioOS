@@ -204,6 +204,17 @@ export async function ensureTicketSyncSchema(env: Env): Promise<void> {
     // Stale-event guard: the issue's updated_at as of the last applied
     // inbound event; older deliveries are dropped instead of reverting state.
     `ALTER TABLE tickets ADD COLUMN github_updated_at TEXT`,
+    // Migration 273. THESE THREE MUST STAY IN STEP WITH THAT FILE — a column
+    // that exists in one definition and not the other gives a database whose
+    // shape depends on which ran first, which is the metrics_snapshots
+    // collision (#183, #202) all over again.
+    //
+    // Every column above records a mirror that SUCCEEDED. These record that
+    // one was attempted and what came back, so a failure outlives the one
+    // HTTP response it used to live in and a retry has something to select.
+    `ALTER TABLE tickets ADD COLUMN github_sync_status TEXT`,
+    `ALTER TABLE tickets ADD COLUMN github_sync_error TEXT`,
+    `ALTER TABLE tickets ADD COLUMN github_sync_attempted_at TEXT`,
   ];
   for (const stmt of alters) {
     try { await db.prepare(stmt).run(); } catch { /* column exists */ }
@@ -218,6 +229,12 @@ export async function ensureTicketSyncSchema(env: Env): Promise<void> {
       payload_hash TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`).run();
+  } catch { /* ignore */ }
+  try {
+    // Migration 273's index. Same stay-in-step rule as the columns above.
+    await db.prepare(
+      `CREATE INDEX IF NOT EXISTS idx_tickets_sync_status ON tickets(github_sync_status, created_at DESC)`,
+    ).run();
   } catch { /* ignore */ }
 }
 
@@ -271,6 +288,29 @@ export function githubConfigured(env: Env): boolean {
   return !!(env.GITHUB_ACCESS_TOKEN && env.GITHUB_REPO_OWNER && env.GITHUB_REPO_NAME);
 }
 
+/**
+ * D213 — what the mirror would write to, by the mirror's own rule.
+ *
+ * THE REPO IS NAMED ONLY WHEN BOTH HALVES ARE SET, because that is what
+ * `githubConfigured` requires before `ghFetch` will run. The GitHub console
+ * (`routes/admin_github.ts`) shows a default repository when the variables are
+ * unset, for display; the mirror never falls back to it, so a summary of the
+ * mirror must not either.
+ *
+ * NOTHING ELSE ABOUT THE TOKEN LEAVES HERE. Whether it is set is a boolean; no
+ * prefix, no suffix, no length. The console's `token_preview` used to show
+ * eight characters of it; D223 removed that, so neither surface does now.
+ */
+export function githubMirrorTarget(env: Env): { token_set: boolean; repo: string | null; configured: boolean } {
+  const owner = env.GITHUB_REPO_OWNER;
+  const name = env.GITHUB_REPO_NAME;
+  return {
+    token_set: !!env.GITHUB_ACCESS_TOKEN,
+    repo: owner && name ? `${owner}/${name}` : null,
+    configured: githubConfigured(env),
+  };
+}
+
 export interface GhResult { ok: boolean; status: number; data: any; error?: string }
 
 async function ghFetch(env: Env, path: string, init: RequestInit = {}): Promise<GhResult> {
@@ -306,6 +346,35 @@ async function ghFetch(env: Env, path: string, init: RequestInit = {}): Promise<
     }
   }
   return { ok: false, status: 0, data: null, error: 'unreachable' };
+}
+
+/**
+ * Dispatch a `workflow_dispatch` workflow (D110).
+ *
+ * WHY THIS NEEDS A SCOPE THE TICKET SYNC DOES NOT. Every other call in this
+ * file works on Issues, which `GITHUB_ACCESS_TOKEN` can already do. Triggering
+ * a workflow needs **`actions: write`** — a strictly larger grant, and the
+ * reason D.11 lists this token separately rather than treating the ticket
+ * sync's presence as proof the button will work. A token with only the Issues
+ * scope answers 403 here, which is a different failure from "not configured"
+ * and the caller reports it as one.
+ *
+ * A SUCCESSFUL DISPATCH RETURNS 204 AND NO BODY, and it returns 204 whether
+ * the workflow then succeeds, fails or is never scheduled. So this answers
+ * "the request was accepted", never "the branch was provisioned" — which is
+ * exactly why `licence_deployments.status` starts at `requested` and moves
+ * only when the run itself says so.
+ */
+export async function dispatchWorkflow(
+  env: Env,
+  workflowFile: string,
+  ref: string,
+  inputs: Record<string, string>,
+): Promise<GhResult> {
+  return ghFetch(env, `/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`, {
+    method: 'POST',
+    body: JSON.stringify({ ref, inputs }),
+  });
 }
 
 export async function createIssue(env: Env, args: { title: string; body: string; labels: string[] }): Promise<GhResult> {

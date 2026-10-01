@@ -46,11 +46,47 @@ def is_suppressed(result):
     """True when the scanner marked this result as suppressed in-source.
 
     SARIF 2.1.0 §3.27.23: an empty `suppressions` array means "known NOT to be
-    suppressed", and the property being absent means "no information". Only a
-    non-empty array is an actual suppression, so the emptiness check matters.
+    suppressed", and the property being absent means "no information". Only
+    entries with kind `inSource` represent inline suppression (`nosemgrep`).
     """
     suppressions = result.get("suppressions")
-    return isinstance(suppressions, list) and len(suppressions) > 0
+    if not isinstance(suppressions, list):
+        return False
+    return any(
+        isinstance(s, dict) and s.get("kind") == "inSource"
+        for s in suppressions
+    )
+
+
+def report_notifications(sarif):
+    """Print what semgrep reported ABOUT THE RUN, as opposed to the code.
+
+    GitHub's tool status page reads `invocations[].toolExecutionNotifications`
+    and shows "Semgrep is reporting errors" for any at level `error`. Those
+    never reach the job log: the console prints only "Parsed lines: ~99.9%"
+    and a green step. So they are counted and listed here, one line each,
+    and left in the payload untouched — this reports them, it does not hide
+    them.
+    """
+    notes = []
+    for run in sarif.get("runs", []):
+        for inv in run.get("invocations") or []:
+            notes.extend(inv.get("toolExecutionNotifications") or [])
+    by_level = {}
+    for n in notes:
+        by_level[n.get("level", "none")] = by_level.get(n.get("level", "none"), 0) + 1
+    summary = ", ".join(f"{k}: {v}" for k, v in sorted(by_level.items())) or "none"
+    print(f"[strip-suppressed-sarif] tool notifications — {summary}")
+    for n in notes:
+        where = ""
+        for loc in n.get("locations") or []:
+            uri = loc.get("physicalLocation", {}).get("artifactLocation", {}).get("uri")
+            if uri:
+                where = f" {uri}"
+                break
+        rule = (n.get("descriptor") or {}).get("id") or ""
+        text = " ".join(str((n.get("message") or {}).get("text", "")).split())[:200]
+        print(f"  [{n.get('level', 'none')}] {rule}{where}: {text}")
 
 
 def main(argv):
@@ -81,6 +117,8 @@ def main(argv):
 
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(sarif, fh)
+
+    report_notifications(sarif)
 
     print(
         f"[strip-suppressed-sarif] removed {removed} nosemgrep-suppressed "

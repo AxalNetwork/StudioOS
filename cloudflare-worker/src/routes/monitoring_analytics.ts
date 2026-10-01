@@ -1,6 +1,25 @@
 /**
  * Task #3 — Admin analytics endpoints, mounted at /api/monitoring/analytics.
- * Every route is admin-only via requireAdmin.
+ *
+ * Most routes are admin-only via `requireAdmin`. **Three are not**: `/audit`,
+ * `/audit/export.csv` and `/exports/recent` require the SUPER ADMIN (D132),
+ * because they read `admin_audit_log` joined to `users` — other admins'
+ * activity, by name and email. One super admin supervises many subsidiary
+ * admins; a subsidiary admin manages their own territory's members and never a
+ * peer's record.
+ *
+ * THE THREE ARE ONE QUERY IN THREE SHAPES, which is why they move together and
+ * why the count above is worth reading before adding a fourth: a route that
+ * reaches `admin_audit_log a LEFT JOIN users u` is a cross-admin read whatever
+ * it renders, and gating some of them is gating none of them. Keep new routes
+ * here on `requireAdmin` unless they cross that line too.
+ *
+ * `/audit/mine` (D157) is the first route to take that rule up on its own
+ * terms: it reads this same table on `requireAdmin` and does NOT cross the
+ * line, because it carries no join to `users` and binds `admin_user_id` from
+ * the session. So the count above stays THREE. The test is the join and the
+ * subject, never the table name — which is also why a fourth super-admin route
+ * is not what a self-scoped read needs.
  *
  * Routes:
  *   GET  /overview?from=&to=
@@ -10,7 +29,8 @@
  *   GET  /financial?from=&to=
  *   GET  /technical?from=&to=
  *   POST /export                        body { report, format, from, to, filters }
- *   GET  /audit?limit=&offset=          (Recent Exports panel)
+ *   GET  /audit?limit=&offset=          (Recent Exports panel, SUPER ADMIN)
+ *   GET  /audit/mine?limit=&offset=     (the caller's OWN actions, admin — D157)
  *   GET  /download/:token               (HMAC-gated R2 fetch)
  *
  * Storage key: `analytics-exports/<admin_id>/<isoTs>-<rand>.<ext>`
@@ -19,16 +39,20 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAdmin } from '../auth';
+import { requireAdmin, requireSuperAdmin } from '../auth';
+import { ensureAdminAuditLogTable } from './admin';
 import {
   parseRange, BadRangeError, loadOverview, loadCohorts, loadUsers, loadUser,
-  loadFinancial, loadTechnical,
+  loadFinancial, loadTechnical, loadTrafficByBranch,
   reportToCsv, reportToHtml,
   signDownloadToken, verifyDownloadToken,
   planAuditToCsv, type PlanAuditRow,
   backfillSnapshots,
 } from '../services/analyticsReports';
 import { ensureSubscriptionPlansSchema, listPlansFull, updatePlan, createPlan, deletePlan, PlanCreateError } from '../services/subscriptionPlans';
+import { bindingKey } from '../util/schemaBootstrap';
+import { refuse } from '../util/refusal';
+import { mapError } from './_t13t14t15_helpers';
 
 type AppCtx = Context<{ Bindings: Env }>;
 type ExportReport = 'overview' | 'users' | 'financial' | 'technical' | 'management';
@@ -54,16 +78,26 @@ const clampInt = (raw: string | undefined | null, def: number, min: number, max:
 };
 
 // ---------- ensure schema (idempotent) ----------
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   try {
-    await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS admin_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER NOT NULL REFERENCES users(id), action TEXT NOT NULL, report_type TEXT, format TEXT, filters_json TEXT, storage_key TEXT, download_url TEXT, exported_at TEXT NOT NULL DEFAULT (datetime('now')))",
-    );
-    await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_admin_audit_user_ts ON admin_audit_log(admin_user_id, exported_at DESC)");
-    await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_admin_audit_action_ts ON admin_audit_log(action, exported_at DESC)");
-    _schemaReady = true;
+    // ONE DEFINITION, AND THIS FILE IS NOT IT (D192). This bootstrap used to
+    // declare `admin_audit_log` for itself, nine columns wide — without
+    // `viewed_user_id`, `conversation_id`, `viewed_at` or `actor`, four columns
+    // this very router's `/audit` read names. It was the only module in the
+    // worker with its own CREATE for that table: `routes/admin.ts`'s
+    // `ensureAdminAuditLogTable` has declared the full shape all along, adds
+    // the four PRAGMA-guarded, and NINE modules already await it. The comment
+    // on `/audit/mine` below already credits that helper with creating the
+    // index this bootstrap was creating, which is how long the two have
+    // disagreed in one file.
+    //
+    // Deleted rather than widened: a second CREATE kept in step by hand is the
+    // defect, not the fix. `idx_admin_audit_action_ts` moved into the helper in
+    // the same commit, so nothing is lost and the other nine callers gain it.
+    await ensureAdminAuditLogTable(env);
+    SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[analytics] ensureSchema failed:', (e as Error).message);
   }
@@ -145,7 +179,25 @@ r.get('/financial', async (c) => {
 r.get('/technical', async (c) => {
   await requireAdmin(c);
   const p = tryParseRange(c); if ('err' in p) return p.err;
+  // D161 — DELIBERATELY NOT BRANCH-SPLIT, and `requireAdmin` is why. A plain
+  // admin is a branch admin on this platform, and what this returns is a
+  // platform-wide AGGREGATE with no branch attribution, which they may
+  // defensibly see. `loadTrafficByBranch` below is the split, and it is super
+  // admin only. Adding a `?branch=` here would hand every branch admin every
+  // other branch's traffic — the isolation the branch programme exists for.
   return c.json(await loadTechnical(c.env, p.range));
+});
+
+// D161 — traffic by branch. SUPER ADMIN, for the reason stated on `/technical`
+// above and in `loadTrafficByBranch`'s own header: this is the one read that
+// attributes traffic to a named branch, and one super admin supervises many
+// subsidiary admins while a subsidiary admin supervises no peer. It sits in
+// this file rather than `admin_hq.ts` because the query, the range parsing and
+// the Analytics Engine credentials all already live here.
+r.get('/traffic-by-branch', async (c) => {
+  await requireSuperAdmin(c);
+  const p = tryParseRange(c); if ('err' in p) return p.err;
+  return c.json(await loadTrafficByBranch(c.env, p.range));
 });
 
 // Task #13 — server-composed Management view: a single fetch returns
@@ -219,7 +271,14 @@ function buildAuditWhere(opts: {
 // no extra filters. Defers entirely to the same handler logic by
 // pre-seeding query defaults so we never duplicate the audit SQL.
 r.get('/exports/recent', async (c) => {
-  await requireAdmin(c);
+  // D132 — SUPER ADMIN, because this reads OTHER ADMINS' activity. The rows are
+  // `admin_audit_log a LEFT JOIN users u ON u.id = a.admin_user_id`, so a plain
+  // admin was reading every other admin's export history by name and email.
+  // One super admin supervises many subsidiary admins; a subsidiary admin
+  // supervises their own territory's members and no peer. The super-admin-only
+  // equivalents already existed in `admin_security.ts` — this pair was a second
+  // door onto the same data with a weaker gate.
+  await requireSuperAdmin(c);
   await ensureSchema(c.env);
   const sql = getSQL(c.env);
   // Spec default for /exports/recent is the last 20 entries; /audit uses 25.
@@ -254,7 +313,9 @@ r.get('/exports/recent', async (c) => {
 });
 
 r.get('/audit', async (c) => {
-  await requireAdmin(c);
+  // D132 — super admin, for the reason given on `/exports/recent` above: this
+  // is the richer view of the same cross-admin join.
+  await requireSuperAdmin(c);
   await ensureSchema(c.env);
   const sql = getSQL(c.env);
   const limit = clampInt(c.req.query('limit'), 25, 1, 100);
@@ -315,7 +376,13 @@ r.get('/audit', async (c) => {
 // 'subscription_plan_update'. Hard-capped at 10k rows so a single bad request
 // can't pull the whole table; finance reviews are batched by date elsewhere.
 r.get('/audit/export.csv', async (c) => {
-  const admin = await requireAdmin(c);
+  // D132 — super admin, and THIS is the one the plan for D132 missed. It runs
+  // the identical `admin_audit_log a LEFT JOIN users u` as `/audit` and hands
+  // back up to 10,000 rows of it as a downloadable file, names and emails
+  // included. Gating `/audit` and leaving this one would have closed the front
+  // door of a room with two, which is the exact shape of the defect D132 is
+  // here to fix. Found by reading the file rather than the plan.
+  const admin = await requireSuperAdmin(c);
   await ensureSchema(c.env);
   const sql = getSQL(c.env);
   const planIdRaw = (c.req.query('plan_id') || '').toString().trim();
@@ -374,6 +441,69 @@ r.get('/audit/export.csv', async (c) => {
   });
 });
 
+/**
+ * D157 — an admin reads the log of THEIR OWN privileged actions.
+ *
+ * D132 raised `/audit`, `/audit/export.csv` and `/exports/recent` to the super
+ * admin, correctly: each reads `admin_audit_log a LEFT JOIN users u`, so a
+ * plain admin was reading every other admin's activity by name and email. But
+ * that CLOSED a question rather than narrowing it — "what have I done" is not
+ * "what has my peer done", and after D132 an administrator could not see their
+ * own record at all. This is the narrowing, on the D111 pattern D154 used
+ * again: keep the refusal that was right, and answer the part of the question
+ * that never needed refusing.
+ *
+ * IT DOES NOT CROSS THE LINE THIS FILE'S OWN HEADER DRAWS, and that is why the
+ * gate is `requireAdmin`. The header's test is the JOIN — "a route that reaches
+ * `admin_audit_log a LEFT JOIN users u` is a cross-admin read whatever it
+ * renders". There is no join here, because the caller is the only subject and
+ * there is no other person's name to render. The subject is not read from the
+ * request either: `admin_user_id` is bound from the session and the query
+ * string is not consulted, so there is no parameter to get wrong. That is the
+ * structural form of D132's rule rather than a validated form of it.
+ *
+ * NO ACTION FILTER, on `admin_security.ts`'s precedent rather than `/audit`'s.
+ * `/audit` admits two of the many actions written to this table; HQ's own feed
+ * deliberately admits all of them, and `hq_security.test.mjs` pins that ("the
+ * audit zone reads every action, not the two the monitoring read allows").
+ * An administrator's own record is the same kind of thing: showing them two of
+ * their actions and silently dropping the rest would be a feed that is wrong
+ * about the one subject it has.
+ *
+ * It rides `idx_admin_audit_user_ts(admin_user_id, exported_at DESC)`, created
+ * by `ensureAdminAuditLogTable` and until now unused on its leading column —
+ * both existing reads pass `adminUserId: null`. The index was built for exactly
+ * this query and had no caller.
+ */
+r.get('/audit/mine', async (c) => {
+  const adminUser = await requireAdmin(c);
+  await ensureSchema(c.env);
+  const sql = getSQL(c.env);
+  const limit = clampInt(c.req.query('limit'), 25, 1, 100);
+  const offset = clampInt(c.req.query('offset'), 0, 0, 100000);
+  const items = await sql`
+    SELECT a.id, a.action, a.report_type, a.format, a.filters_json,
+           a.viewed_user_id, a.exported_at
+      FROM admin_audit_log a
+     WHERE a.admin_user_id = ${adminUser.id}
+     ORDER BY a.exported_at DESC, a.id DESC
+     LIMIT ${limit} OFFSET ${offset}`;
+  const totalRow = await sql`
+    SELECT COUNT(*) AS c FROM admin_audit_log a WHERE a.admin_user_id = ${adminUser.id}`;
+  await sql.end();
+  return c.json({
+    items,
+    total: Number(totalRow[0]?.c ?? 0),
+    limit,
+    offset,
+    // The scope is echoed so the page can STATE it rather than imply it. A feed
+    // of privileged actions that does not say whose it is invites being read as
+    // the platform's.
+    scope: { admin_user_id: adminUser.id, all_actions: true },
+  });
+});
+
+
 // ---------- plan catalog (Task #13) ----------
 r.get('/plans', async (c) => {
   await requireAdmin(c);
@@ -402,7 +532,7 @@ r.post('/plans', async (c) => {
   } catch (e) {
     if (e instanceof PlanCreateError) return c.json({ detail: e.message }, e.status as 400 | 409 | 500);
     console.warn('[analytics] createPlan unexpected error:', (e as Error).message);
-    return c.json({ detail: (e as Error).message || 'Create failed' }, 500);
+    return refuse(c, 500, { code: 'plan_create_failed', message: 'The plan could not be created. Nothing was saved; try again in a moment.', raw: e });
   }
   await ensureSchema(c.env);
   try {
@@ -459,7 +589,9 @@ r.patch('/plans/:planId', async (c) => {
   }
   let updated;
   try { updated = await updatePlan(c.env, planId, patch); }
-  catch (e) { return c.json({ detail: (e as Error).message }, 400); }
+  // D278 — updatePlan throws our validation sentences; mapError passes those
+  // through and keeps a storage failure's text out of the body.
+  catch (e) { return mapError(c, e); }
   if (!updated) return c.json({ detail: 'Plan not found' }, 404);
   await ensureSchema(c.env);
   try {
@@ -485,7 +617,7 @@ r.delete('/plans/:planId', async (c) => {
   } catch (e) {
     if (e instanceof PlanCreateError) return c.json({ detail: e.message }, e.status as 400 | 409 | 500);
     console.warn('[analytics] deletePlan unexpected error:', (e as Error).message);
-    return c.json({ detail: (e as Error).message || 'Delete failed' }, 500);
+    return refuse(c, 500, { code: 'plan_delete_failed', message: 'The plan could not be deleted. Nothing changed; try again in a moment.', raw: e });
   }
   if (!deleted) return c.json({ detail: 'Plan not found' }, 404);
   await ensureSchema(c.env);

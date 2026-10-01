@@ -10,6 +10,10 @@ import { requireAuth } from '../auth';
 import {
   isAdmin, isFounder, mapError, nowIso, newUid, requirePartnerProfile,
 } from './_t13t14t15_helpers';
+import { refuse } from '../util/refusal';
+import {
+  listItems, addItem, updateItem, deleteItem, myItems, rateBooking, ratingSummary,
+} from '../services/partnerBookingFollowups';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -40,8 +44,14 @@ function slotDto(s: SlotRow, taken = 0): any {
 // the slot and pass those three through so the founder-facing page can render
 // the session time, the countdown and the Join link. Detail/transition paths
 // still pass a bare BookingRow — the fields are optional and simply absent.
+//
+// D355: the two list endpoints also LEFT JOIN the founder's rating
+// (partner_booking_ratings, migration 361), so each party sees it on the
+// session it belongs to — the partner on their own sessions, comment included.
+// No rating is `null`, never 0.
 type BookingWithSlotRow = BookingRow & {
   starts_at?: string | null; ends_at?: string | null; meeting_url?: string | null;
+  rating?: number | null; rating_comment?: string | null;
 };
 function bookingDto(b: BookingWithSlotRow): any {
   return { ...b, is_cancelled: undefined };
@@ -238,14 +248,16 @@ r.get('/me/bookings', async (c) => {
     const partner = await requirePartnerProfile(c.env, user);
     const status = c.req.query('status');
     const sql = status
-      ? `SELECT b.*, s.starts_at, s.ends_at, s.meeting_url
+      ? `SELECT b.*, s.starts_at, s.ends_at, s.meeting_url, rt.rating, rt.comment AS rating_comment
            FROM partner_bookings b
            LEFT JOIN partner_office_hour_slots s ON s.id = b.slot_id
+           LEFT JOIN partner_booking_ratings rt ON rt.booking_id = b.id
           WHERE b.partner_id = ? AND b.status = ?
           ORDER BY b.created_at DESC LIMIT 200`
-      : `SELECT b.*, s.starts_at, s.ends_at, s.meeting_url
+      : `SELECT b.*, s.starts_at, s.ends_at, s.meeting_url, rt.rating, rt.comment AS rating_comment
            FROM partner_bookings b
            LEFT JOIN partner_office_hour_slots s ON s.id = b.slot_id
+           LEFT JOIN partner_booking_ratings rt ON rt.booking_id = b.id
           WHERE b.partner_id = ?
           ORDER BY b.created_at DESC LIMIT 200`;
     const rows = status
@@ -260,14 +272,16 @@ r.get('/bookings/me', async (c) => {
     const user = await requireAuth(c);
     const status = c.req.query('status');
     const sql = status
-      ? `SELECT b.*, s.starts_at, s.ends_at, s.meeting_url
+      ? `SELECT b.*, s.starts_at, s.ends_at, s.meeting_url, rt.rating, rt.comment AS rating_comment
            FROM partner_bookings b
            LEFT JOIN partner_office_hour_slots s ON s.id = b.slot_id
+           LEFT JOIN partner_booking_ratings rt ON rt.booking_id = b.id
           WHERE b.founder_user_id = ? AND b.status = ?
           ORDER BY b.created_at DESC LIMIT 200`
-      : `SELECT b.*, s.starts_at, s.ends_at, s.meeting_url
+      : `SELECT b.*, s.starts_at, s.ends_at, s.meeting_url, rt.rating, rt.comment AS rating_comment
            FROM partner_bookings b
            LEFT JOIN partner_office_hour_slots s ON s.id = b.slot_id
+           LEFT JOIN partner_booking_ratings rt ON rt.booking_id = b.id
           WHERE b.founder_user_id = ?
           ORDER BY b.created_at DESC LIMIT 200`;
     const rows = status
@@ -325,6 +339,103 @@ r.post('/bookings/:id/no-show', async (c) => {
   const body = await c.req.json().catch(() => ({} as any));
   return transition(c, Number(c.req.param('id')),
     { allowed: ['pending', 'confirmed'], nextStatus: 'no_show', whoCan: 'partner', reason: body.reason || null });
+});
+
+// D355 — what a session left behind: action items and the founder's rating.
+// The rules live in services/partnerBookingFollowups.ts; these routes pass
+// the SESSION user and relay the service's refusals. A caller who is not a
+// party to the booking gets the same 404 as a booking that does not exist.
+type Out = { refused: { status: number; code: string; message: string } } | Record<string, unknown>;
+function relay(c: Context<{ Bindings: Env }>, out: Out) {
+  if ('refused' in out && out.refused) {
+    const f = out.refused as { status: number; code: string; message: string };
+    return refuse(c, f.status, { code: f.code, message: f.message });
+  }
+  return c.json(out);
+}
+
+r.get('/bookings/:id{[0-9]+}/action-items', async (c) => {
+  const user = await requireAuth(c);
+  try {
+    return relay(c, await listItems(c.env, Number(c.req.param('id')), user));
+  } catch (e) {
+    return refuse(c, 503, { code: 'action_items_unreadable', message: 'The action items could not be read. Try again in a moment.', raw: e });
+  }
+});
+
+r.post('/bookings/:id{[0-9]+}/action-items', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  try {
+    return relay(c, await addItem(c.env, {
+      bookingId: Number(c.req.param('id')),
+      user,
+      title: body?.title,
+      linkedTool: body?.linked_tool,
+      dueDate: body?.due_date,
+    }));
+  } catch (e) {
+    return refuse(c, 503, { code: 'action_item_not_saved', message: 'The action item was not saved. Try again in a moment.', raw: e });
+  }
+});
+
+r.get('/action-items/me', async (c) => {
+  const user = await requireAuth(c);
+  try {
+    return c.json(await myItems(c.env, user));
+  } catch (e) {
+    return refuse(c, 503, { code: 'action_items_unreadable', message: 'Your action items could not be read. Try again in a moment.', raw: e });
+  }
+});
+
+r.patch('/action-items/:itemId{[0-9]+}', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  try {
+    const patch: Record<string, unknown> = {};
+    for (const k of ['title', 'linked_tool', 'due_date', 'done']) {
+      if (body && Object.prototype.hasOwnProperty.call(body, k)) patch[k] = (body as Record<string, unknown>)[k];
+    }
+    return relay(c, await updateItem(c.env, { itemId: Number(c.req.param('itemId')), user, patch }));
+  } catch (e) {
+    return refuse(c, 503, { code: 'action_item_not_saved', message: 'The action item was not saved. Try again in a moment.', raw: e });
+  }
+});
+
+r.delete('/action-items/:itemId{[0-9]+}', async (c) => {
+  const user = await requireAuth(c);
+  try {
+    return relay(c, await deleteItem(c.env, Number(c.req.param('itemId')), user));
+  } catch (e) {
+    return refuse(c, 503, { code: 'action_item_not_deleted', message: 'The action item was not deleted. Try again in a moment.', raw: e });
+  }
+});
+
+r.put('/bookings/:id{[0-9]+}/rating', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  try {
+    return relay(c, await rateBooking(c.env, {
+      bookingId: Number(c.req.param('id')),
+      user,
+      rating: body?.rating,
+      comment: body?.comment,
+    }));
+  } catch (e) {
+    return refuse(c, 503, { code: 'rating_not_saved', message: 'Your rating was not saved. Try again in a moment.', raw: e });
+  }
+});
+
+// Every rated partner's average and count. Averages are about partners, not
+// about any one founder, so any signed-in account may read them; a partner
+// with no ratings is absent from `items`, never 0.
+r.get('/ratings/summary', async (c) => {
+  await requireAuth(c);
+  try {
+    return c.json(await ratingSummary(c.env));
+  } catch (e) {
+    return refuse(c, 503, { code: 'ratings_unreadable', message: 'The ratings could not be read. Try again in a moment.', raw: e });
+  }
 });
 
 // Task #1 (AG) — spec-contract alias. POST /:uid/book maps the partner uid +

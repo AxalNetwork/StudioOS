@@ -13,6 +13,7 @@ import {
   ShieldAlert, Link2, Wifi, Undo2, Clock,
 } from 'lucide-react';
 import { adminX as api } from '../../lib/api';
+import { toLocalInput, scheduledNote } from '../../lib/scheduledPost';
 import { useToast } from '../../components/useToast';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 
@@ -483,12 +484,15 @@ function PostsTab({ posts, accounts, onReload, toast, mode }) {
       setOverrideFor(null);
       onReload();
     } catch (e) {
-      if (e?.status === 422 || /pii_linter_blocked/.test(e?.message || '')) {
-        const findings = e?.data?.findings || e?.body?.findings || [];
+      // D258 — the refusal's code travels on `e.code` and the body on
+      // `e.data`. The linter's `e.message` is its sentence now, so a match on
+      // the code through the message could never fire; nothing sets `e.body`.
+      if (e?.status === 422 || e?.code === 'pii_linter_blocked') {
+        const findings = e?.data?.findings || [];
         setOverrideFor({ id, findings });
         return;
       }
-      if (e?.status === 429 || /daily_cap_reached/.test(e?.message || '')) {
+      if (e?.status === 429 || e?.code === 'daily_cap_reached') {
         toast('Daily send cap reached for this account', 'error');
         onReload();
         return;
@@ -568,9 +572,9 @@ function PostsTab({ posts, accounts, onReload, toast, mode }) {
                   {!p.thread_continuation_of && ['draft', 'approved', 'scheduled', 'failed'].includes(p.status) && (
                     <button
                       onClick={async () => {
-                        const def = p.scheduled_for
-                          ? new Date(p.scheduled_for).toISOString().slice(0, 16)
-                          : new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16);
+                        // D250 — the prompt says local time, so the default is local
+                        // too; it used to pre-fill the UTC clock.
+                        const def = toLocalInput(p.scheduled_for || new Date(Date.now() + 60 * 60 * 1000).toISOString());
                         const v = window.prompt('Schedule for (YYYY-MM-DDTHH:MM, local time):', def);
                         if (!v) return;
                         const iso = new Date(v).toISOString();
@@ -586,6 +590,12 @@ function PostsTab({ posts, accounts, onReload, toast, mode }) {
                     >
                       <Clock size={12} /> {p.status === 'scheduled' ? 'Reschedule' : 'Schedule'}
                     </button>
+                  )}
+                  {/* D250 — when the scheduler will actually send it. */}
+                  {p.status === 'scheduled' && scheduledNote(p.scheduled_for) && (
+                    <span className="basis-full text-xs text-gray-500" data-testid="x-scheduled-note">
+                      {scheduledNote(p.scheduled_for)}
+                    </span>
                   )}
                   {p.status !== 'sent' && p.status !== 'sending' && (
                     <button onClick={() => startEdit(p)} className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded flex items-center gap-1">
@@ -719,14 +729,29 @@ function AggregatorTab({ accounts, onReload, toast }) {
             <div className="flex items-center gap-2 text-sm mb-2">
               <span className="px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-200 text-xs">{d.audience}</span>
               <span className="text-gray-500">{d.kind}</span>
+              {d.drafted === false && (
+                <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                  no draft made
+                </span>
+              )}
               {d.thread.length > 1 && <span className="text-xs text-amber-600">thread × {d.thread.length}</span>}
               {d.needs_media && <span className="text-xs text-purple-600">+media suggested</span>}
             </div>
-            <div className="space-y-2">
-              {d.thread.map((t, j) => (
-                <pre key={j} className="whitespace-pre-wrap text-sm font-mono p-2 bg-gray-50 dark:bg-gray-800 rounded text-gray-800 dark:text-gray-200">{t}</pre>
-              ))}
-            </div>
+            {/* D330 — a preview whose only figure had no replacement (D301) sets
+                `drafted: false` and a reason, and persists nothing on Run. The
+                thread is empty in that case, so this says why rather than
+                rendering a blank card. */}
+            {d.drafted === false ? (
+              <div className="text-sm text-gray-500 dark:text-gray-400" data-testid="x-aggregator-not-drafted-reason">
+                No draft was made: {d.reason || 'no reason was given'}.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {d.thread.map((t, j) => (
+                  <pre key={j} className="whitespace-pre-wrap text-sm font-mono p-2 bg-gray-50 dark:bg-gray-800 rounded text-gray-800 dark:text-gray-200">{t}</pre>
+                ))}
+              </div>
+            )}
           </div>
         ))}
         {drafts.length === 0 && <div className="text-sm text-gray-500 dark:text-gray-400">Click Preview to see audience-by-audience drafts.</div>}
@@ -771,7 +796,17 @@ export default function AdminX() {
   );
 }
 
-function AdminXFull() { // codeql[js/unused-local-variable] -- deliberately unreferenced while the feature is paused; see the re-enable plan in the comment above the default export. Preserved verbatim, not dead code.
+// D164 armed `no-unused-vars`, which used to require the directive below —
+// placed on the line IMMEDIATELY before the declaration, since an
+// explanation wedged between the two would silently target the comment
+// instead, which is how an inert directive happens. The `void AdminXFull;`
+// reference after the function's closing brace now satisfies the rule on its
+// own, so the directive is no longer load-bearing: deleting it would not
+// break `npm run lint:undef` today. It stays only because
+// `reportUnusedDisableDirectives` is off in eslint.config.mjs, so a directive
+// nothing needs any more costs nothing either.
+// eslint-disable-next-line no-unused-vars -- paused feature, preserved verbatim
+function AdminXFull() { // paused feature implementation retained for quick re-enable.
   const [tab, setTab] = useState('accounts');
   const [accounts, setAccounts] = useState([]);
   const [configOk, setConfigOk] = useState(true);
@@ -859,3 +894,6 @@ function AdminXFull() { // codeql[js/unused-local-variable] -- deliberately unre
     </div>
   );
 }
+
+// Intentionally retained while feature is paused; explicit reference avoids unused-function findings.
+void AdminXFull;

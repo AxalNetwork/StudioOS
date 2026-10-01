@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { safeReadJSON } from './lib/storage';
+import { reportError } from './lib/log';
 import { preserveReloadGuards } from './lib/reloadGuard';
 import { consumePendingNextOnce, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
 import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
@@ -10,6 +11,7 @@ import { ActiveCompanyContext } from './contexts/ActiveCompanyContext';
 // ViewModeContext lives in its own module so App.jsx exports only React
 // components — mixing component + hook exports breaks Vite Fast Refresh.
 import ViewModeContext from './contexts/ViewModeContext';
+import ViewAsBranchContext from './contexts/ViewAsBranchContext';
 // Single source of truth for "which role is this session browsing as". The
 // shell picks the sidebar from it and the router picks route elements from it;
 // when those two disagree the nav offers one thing and the route serves another.
@@ -22,11 +24,24 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 import {
   Menu,
   Shield,
-  ChevronDown, Eye, ArrowLeft, Sparkles,
-  Gift
+  ChevronDown, Eye, Sparkles,
+  Gift, Mail, Globe
 } from 'lucide-react';
-import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED } from './sidebarConfig';
+import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES, ONBOARDING_CANVAS_PATHS } from './sidebarConfig';
 import PaywallModal from './components/PaywallModal';
+import AdminFrozenBar from './components/AdminFrozenBar';
+import BranchSuspendedBar from './components/BranchSuspendedBar';
+import HqSupportSessionBar from './components/HqSupportSessionBar';
+import HqViewingAsBar from './components/HqViewingAsBar';
+import BranchNotDeployedBar from './components/BranchNotDeployedBar';
+import ImpersonationBar from './components/ImpersonationBar';
+import useBranchDeployment from './hooks/useBranchDeployment';
+import WorkspacesLauncher from './components/WorkspacesLauncher';
+import HqSubNavStrip, { StripLink } from './components/HqSubNavStrip';
+import { ADMIN_SHELLS, MESSAGES_ROLES } from './lib/paletteIndex';
+import { stripFor } from './lib/hqStrips';
+import { clearSupportSession } from './lib/supportSession';
+import { readStoredReason, clearStoredReason } from './lib/impersonationBar';
 import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
 // renders synchronously on first paint. It marks itself a no-auth-redirect
@@ -34,6 +49,7 @@ import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // returns, racing the flag and still bouncing logged-out visitors to /login.
 import NotFoundPage from './pages/NotFoundPage';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+const ArchetypeCardPage = lazy(() => import('./pages/ArchetypeCardPage'));
 const ScoringPage = lazy(() => import('./pages/ScoringPage'));
 
 // The four workspace shells, rebuilt from the design canvases. The IA itself
@@ -42,6 +58,17 @@ const ScoringPage = lazy(() => import('./pages/ScoringPage'));
 // router does not open.
 const FounderValidateWorkspace = lazy(() => import('./workspaces/founder/FounderValidateWorkspace'));
 const ResearchWorkspace = lazy(() => import('./workspaces/ResearchWorkspace'));
+const FundDossier = lazy(() => import('./pages/research/FundDossier'));
+const FundCatalogProfile = lazy(() => import('./pages/research/FundCatalogProfile'));
+const CompanyCandidate = lazy(() => import('./pages/research/CompanyCandidate'));
+const CompanyAnalysis = lazy(() => import('./pages/research/CompanyAnalysis'));
+const CompanyProfile = lazy(() => import('./pages/research/CompanyProfile'));
+const BenchmarkDetail = lazy(() => import('./pages/research/BenchmarkDetail'));
+const MarketReading = lazy(() => import('./pages/research/MarketReading'));
+const MarketSectorProfile = lazy(() => import('./pages/research/MarketSectorProfile'));
+const GtmIntelligence = lazy(() => import('./pages/research/GtmIntelligence'));
+const DiligenceRoom = lazy(() => import('./pages/research/DiligenceRoom'));
+const DiligenceFile = lazy(() => import('./pages/research/DiligenceFile'));
 const InvestorDealsRoutes = lazy(() => import('./workspaces/investor/InvestorDealsRoutes'));
 const AdvisorBucketRoutes = lazy(() => import('./workspaces/advisor/AdvisorBucketRoutes'));
 const PartnerBucketRoutes = lazy(() => import('./workspaces/partner/PartnerBucketRoutes'));
@@ -67,7 +94,6 @@ const CapitalPage = lazy(() => import('./pages/CapitalPage'));
 const TicketsPage = lazy(() => import('./pages/TicketsPage'));
 const DealsPage = lazy(() => import('./pages/DealsPage'));
 const DealRoomPage = lazy(() => import('./pages/DealRoomPage'));
-const PartnerPortal = lazy(() => import('./pages/PartnerPortal'));
 const PartnerDealPortal = lazy(() => import('./pages/PartnerDealPortal'));
 const PartnerOnboardPage = lazy(() => import('./pages/PartnerOnboardPage'));
 const AdminPartnerInvitations = lazy(() => import('./pages/admin/PartnerInvitations'));
@@ -79,11 +105,20 @@ const AdminTeam = lazy(() => import('./pages/admin/AdminTeam'));
 // Task #9 — 'exploring' holding-state surfaces.
 const ExploringDashboard = lazy(() => import('./pages/ExploringDashboard'));
 const AdminExploring = lazy(() => import('./pages/admin/AdminExploring'));
+// D286 — the five landings of the Admin shell on accounts HQ holds directly
+// (canvas S20). Under /admin/held/ so none can collide with an HQ console:
+// /admin/accounts is HQ's Team, and the HQ consoles are flat /admin/<noun>.
+const HeldAccounts = lazy(() => import('./pages/admin/HeldAccounts'));
+const HeldApprovals = lazy(() => import('./pages/admin/HeldApprovals'));
+const HeldPrograms = lazy(() => import('./pages/admin/HeldPrograms'));
+const HeldCommunity = lazy(() => import('./pages/admin/HeldCommunity'));
+const HeldInsights = lazy(() => import('./pages/admin/HeldInsights'));
 const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications'));
 const AdminLicences = lazy(() => import('./pages/admin/AdminLicences'));
 const AdminNetworkProfiles = lazy(() => import('./pages/admin/AdminNetworkProfiles'));
 // Task #102 — Spin-Out Lab admin dashboard (applications + participants).
 const AdminSpinoutLab = lazy(() => import('./pages/admin/AdminSpinoutLab'));
+const SpinoutModerationPage = lazy(() => import('./pages/admin/SpinoutModerationPage'));
 const AdminSpinoutJourneyPreview = lazy(() => import('./pages/admin/AdminSpinoutJourneyPreview'));
 const AdminTelegram = lazy(() => import('./pages/admin/AdminTelegram'));
 const AdminX = lazy(() => import('./pages/admin/AdminX'));
@@ -148,11 +183,16 @@ const SpinoutLabCofounderMatchPage = lazy(() => import('./pages/SpinoutLabCofoun
 const SpinoutLabCertificatePage = lazy(() => import('./pages/SpinoutLabCertificatePage'));
 const SpinoutLabApplyPage = lazy(() => import('./pages/SpinoutLabApplyPage'));
 const SpinoutLabBriefPage = lazy(() => import('./pages/SpinoutLabBriefPage'));
-const RegisterPage = lazy(() => import('./pages/RegisterPage'));
-const LoginPage = lazy(() => import('./pages/LoginPage'));
-const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
+// Auth surfaces are imported eagerly — not lazy — so /login never depends on a
+// second hashed chunk that can 404 after a deploy. That missing chunk was the
+// stale-deploy case behind Safari's "This webpage was reloaded because a problem
+// occurred" banner: logout and session expiry hard-navigate here, the lazy
+// import fails, and three independent reload recoveries stack on top of each other.
+import RegisterPage from './pages/RegisterPage';
+import LoginPage from './pages/LoginPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
 const NetworkIntroReviewPage = lazy(() => import('./pages/NetworkIntroReviewPage'));
-const RecoverPage = lazy(() => import('./pages/RecoverPage'));
+import RecoverPage from './pages/RecoverPage';
 const ESignPage = lazy(() => import('./pages/ESignPage'));
 // Send for signature — the non-admin origination page. POST /legal/esign/send
 // stopped being admin-only in task #156; this is the UI that finally matches.
@@ -160,6 +200,19 @@ const SendForSignaturePage = lazy(() => import('./pages/legal/SendForSignaturePa
 // The subsidiary administrator's read of their own territory licence.
 // Migration 190 made "which licence is this admin's?" answerable at all.
 const MyLicencePage = lazy(() => import('./pages/subsidiary/MyLicencePage'));
+const BranchSettings = lazy(() => import('./pages/branch/BranchSettings'));
+const BranchApprovals = lazy(() => import('./pages/branch/BranchApprovals'));
+// The frame every /branch/* route below renders in, and the branch tier's one
+// Worker AI rail mount (D126). `BranchZone` is NOT lazily imported here: every
+// branch page wraps ITSELF in it — see the notes on the branch routes below —
+// so a second binding in this file had no route to serve and was removed.
+const BranchAccounts = lazy(() => import('./pages/branch/BranchAccounts'));
+const BranchHome = lazy(() => import('./pages/branch/BranchHome'));
+const BranchPrograms = lazy(() => import('./pages/branch/BranchPrograms'));
+const BranchCommunity = lazy(() => import('./pages/branch/BranchCommunity'));
+const BranchContracts = lazy(() => import('./pages/branch/BranchContracts'));
+const BranchInsights = lazy(() => import('./pages/branch/BranchInsights'));
+const BranchAnalytics = lazy(() => import('./pages/branch/BranchAnalytics'));
 // The Super Admin's HQ-only surfaces (migrations 199/207). `hqOnly` below
 // renders the notice for an admin without the elevation.
 const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'));
@@ -169,7 +222,12 @@ const HqHomePage = lazy(() => import('./pages/hq/HqHomePage'));
 const HqRevenuePage = lazy(() => import('./pages/hq/RevenuePage'));
 const HqContentPage = lazy(() => import('./pages/hq/ContentPage'));
 const HqPlatformPage = lazy(() => import('./pages/hq/PlatformPage'));
+const HqPlatformSwitchesPage = lazy(() => import('./pages/hq/PlatformSwitchesPage'));
+const HqPlatformTopologyPage = lazy(() => import('./pages/hq/PlatformTopologyPage'));
+const HqAnalyticsPage = lazy(() => import('./pages/hq/HqAnalyticsPage'));
 const HqSecurityPage = lazy(() => import('./pages/hq/SecurityPage'));
+const HqSupportPage = lazy(() => import('./pages/hq/HqSupportPage'));
+const HqFundsPage = lazy(() => import('./pages/hq/HqFundsPage'));
 const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
 const AdvisorsPage = lazy(() => import('./pages/AdvisorsPage'));
@@ -188,21 +246,26 @@ const JobEditorPage = lazy(() => import('./pages/jobs/JobEditorPage'));
 const JobManagePage = lazy(() => import('./pages/jobs/JobManagePage'));
 const MyApplicationsPage = lazy(() => import('./pages/jobs/MyApplicationsPage'));
 const CofounderPage = lazy(() => import('./pages/CofounderPage'));
-// Team Building — founder workspace consolidating Advisor, Co-Founder
-// and Jobs into one tabbed page at /build/team.
-const TeamBuildingPage = lazy(() => import('./pages/TeamBuildingPage'));
-// Task #20 — /skills and /values are consolidated into the advisor flow.
-// The underlying SkillsProfilePage/ValuesAssessmentPage files are kept intact on
-// disk (data stores), but their routes now redirect to /studio.
+// Team (D435) — the founder's roster, advisors, hiring and coverage at
+// /build/team?mode=workspace. It replaced TeamBuildingPage, whose Advisor /
+// Co-Founder / Jobs tabs were the discovery surfaces; those open inside the
+// Advisors and Hiring tabs here, so the founder redirects below still land.
+const FounderTeamPage = lazy(() => import('./pages/founder/FounderTeamPage'));
+// Task #20 — /skills and /values are consolidated into the advisor flow, and
+// their routes redirect to /studio, where the profile band draws both. The two
+// pages were imported by nothing and were deleted in D323.
 const AdminBestFitPage = lazy(() => import('./pages/admin/AdminBestFitPage'));
+// D358 — aggregates of how profiles move over time (counts only).
+const AdminProfilingTrends = lazy(() => import('./pages/admin/AdminProfilingTrends'));
 const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage'));
 const RiskMatrixPage = lazy(() => import('./pages/RiskMatrixPage'));
 const WatchlistJournalPage = lazy(() => import('./pages/WatchlistJournalPage'));
-const MatchesPage = lazy(() => import('./pages/MatchesPage'));
 const NetworkEffectsPage = lazy(() => import('./pages/NetworkEffectsPage'));
 const NetworkPage = lazy(() => import('./pages/NetworkPage'));
 const LegalCapitalPage = lazy(() => import('./pages/LegalCapitalPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
+const SupportRedeemPage = lazy(() => import('./pages/SupportRedeemPage'));
+const JoinBranchPage = lazy(() => import('./pages/JoinBranchPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 const TeamPage = lazy(() => import('./pages/TeamPage'));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
@@ -235,16 +298,23 @@ const FundOpsWorkspace = lazy(() => import('./pages/FundOpsWorkspace'));
 const PortfolioWorkspace = lazy(() => import('./pages/PortfolioWorkspace'));
 const PipelineWorkspace = lazy(() => import('./pages/PipelineWorkspace'));
 const FundModelingWorkspace = lazy(() => import('./pages/FundModelingWorkspace'));
-const LPPortalPage = lazy(() => import('./pages/LPPortalPage'));
 const InvestorPricingPage = lazy(() => import('./pages/InvestorPricingPage'));
 const ICDecisionsPage = lazy(() => import('./pages/ICDecisionsPage'));
 const ICDecisionPage = lazy(() => import('./pages/ICDecisionPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const HelpCenterPage = lazy(() => import('./pages/HelpCenterPage'));
+// D144 — `/inbox`, the address `services/notify.ts` has been putting in mail
+// since before any route answered it.
+const InboxPage = lazy(() => import('./pages/InboxPage'));
 const OnboardingPersonaPage = lazy(() => import('./pages/OnboardingPersonaPage'));
 const AcademyLessonPage = lazy(() => import('./pages/AcademyLessonPage'));
 const OnboardingFounderPage = lazy(() => import('./pages/OnboardingFounderPage'));
 const ChooseLicencePage = lazy(() => import('./pages/ChooseLicencePage'));
+// Task #178 — rendered in place by RequireAuth rather than routed to, so it
+// blocks every path without an exemption list and so Decline can use the app's
+// own `onLogout`. Lazy like its sibling: it is a once-per-account screen and
+// does not belong in the entry chunk.
+const AcceptTermsPage = lazy(() => import('./pages/AcceptTermsPage'));
 // Template landing pages — audience-specific conversion surfaces.
 const FounderHomePage = lazy(() => import('./pages/templates/FounderHomePage'));
 const CustomerDiscoveryHomePage = lazy(() => import('./pages/templates/CustomerDiscoveryHomePage'));
@@ -313,7 +383,6 @@ const EmailChangeRevokePage = lazy(() => import('./pages/EmailChangeRevokePage')
 const AdvisorAdvisoryWorkspace = lazy(() => import('./pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
 // Partner Operations shell — tabbed workspace (Overview, Capabilities, Portfolio,
 // Engagements, Performance).
-const PartnerOperationsWorkspace = lazy(() => import('./pages/partner/operations/PartnerOperationsWorkspace'));
 // Authenticated-shell widgets — lazy so they leave the entry chunk. They only
 // ever render inside ProtectedLayout (logged-in users), so a logged-out visitor
 // hitting the landing page never downloads them. Each render site below is
@@ -326,7 +395,12 @@ const StepUpModal = lazy(() => import('./components/StepUpModal'));
 const InstallPrompt = lazy(() => import('./components/InstallPrompt'));
 const KeyboardShortcutsOverlay = lazy(() => import('./components/KeyboardShortcutsOverlay'));
 import useInactivityTimeout from './hooks/useInactivityTimeout';
-import { shellRoleFor, isSuperAdminUser, readHqView, writeHqView, clearHqView } from './lib/shellRole';
+import { ONBOARDING_COMPLETE_EVENT, ONBOARDING_LICENCE_CHOSEN_EVENT, TERMS_ACCEPTED_EVENT } from './lib/onboarding';
+import { shellRoleFor, branchOfUser, isSuperAdminUser, readHqView, writeHqView, clearHqView } from './lib/shellRole';
+import {
+  PREVIEW_SHELLS, PREVIEW_TRIGGER, PREVIEW_HEADER, PREVIEW_FOOTER,
+  previewOptionsFor, selectedPreviewKey, homePreviewKey, previewChip, previewNote,
+} from './lib/previewShells';
 
 // Phase B · Prompt 5 — sidebar groups now live in `frontend/src/sidebarConfig.js`.
 
@@ -374,6 +448,44 @@ const ROLE_DEFAULT_PATH = {
 function DashboardRedirect() {
   const loc = useLocation();
   return <Navigate to={{ pathname: '/studio', search: loc.search, hash: loc.hash }} replace />;
+}
+
+// /partner-portal was the LP/capital-call cockpit. Investors were already sent
+// to Studio; the page stayed mounted for admin and partner bookmarks and for
+// the admin More item. Studio is the home for every licence, and deals,
+// capital, and the firm profile each have their own route. Old bookmarks keep
+// their query string and hash.
+function PartnerPortalRedirect() {
+  const loc = useLocation();
+  return <Navigate to={{ pathname: '/studio', search: loc.search, hash: loc.hash }} replace />;
+}
+
+// D371 — /funds/capital-calls was Fund Ops' Capital Calls tab: a read-only
+// list (the studio-wide ledger for an admin, the caller's own LP calls for an
+// investor). The Calls zone at /funds/calls is the fund's call ledger with
+// writes: numbered calls, each LP's line, receipts and the wire trail, for
+// any fund the caller operates. The tab accepted no query string of its own;
+// whatever a bookmark carries travels anyway.
+function FundCapitalCallsRedirect() {
+  const loc = useLocation();
+  return <Navigate to={{ pathname: '/funds/calls', search: loc.search, hash: loc.hash }} replace />;
+}
+
+// D372 — /lp-portal was "My LP Portal": the LP's own commitments, capital
+// calls, distributions, TVPI/DPI and LPA signing. The My-commitment section of
+// the LP workspace does every one of those jobs, so the old page redirects to
+// that section. A bookmark's own query string travels; its hash, if it had
+// one, wins over the section anchor.
+function LpPortalRedirect() {
+  const loc = useLocation();
+  return <Navigate to={{ pathname: '/spinout-lab/investor-workspace', search: loc.search, hash: loc.hash || '#my-commitment' }} replace />;
+}
+
+// D372 — /funds/lp-workspace rendered the same LP workspace as a Fund Ops tab,
+// embedded. It is one route now.
+function FundLpWorkspaceRedirect() {
+  const loc = useLocation();
+  return <Navigate to={{ pathname: '/spinout-lab/investor-workspace', search: loc.search, hash: loc.hash }} replace />;
 }
 
 // Legacy /refer redirects to the standalone /referrals page, preserving ?tab=.
@@ -600,20 +712,21 @@ function UserDropdown({ user, onLogout }) {
 }
 
 
-function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, impersonatedUser, superAdmin = false, hqView = true, supportLeftMs = null, onExtendImpersonation }) {
+function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmin = false, hqView = true }) {
   const [open, setOpen] = useState(false);
-  // "Super Admin" is a VIEW of the admin role, not a role: choosing it browses
-  // as admin with the HQ shell, choosing "Admin" browses as admin with the
-  // plain shell — exactly what a subsidiary admin sees, without impersonating
-  // anyone. The entry is offered only to a holder.
+  // D288 / H38 — "View as" is Preview shell. "HQ" is a VIEW of the admin
+  // role, not a role: choosing it browses as admin with the HQ shell,
+  // choosing "HQ's own accounts" browses as admin with the plain shell —
+  // exactly what an HQ-held admin sees, without impersonating anyone. HQ is
+  // offered only to a holder. The words are `lib/previewShells.js`'s.
   const hq = superAdmin && viewMode === 'admin' && hqView;
-  const viewOptions = [
-    ...(superAdmin ? [['super_admin', 'Super Admin']] : []),
-    ...Object.entries(ROLE_LABELS),
-  ];
-  const isActiveOption = (key) => (key === 'super_admin' ? hq : viewMode === key && !hq);
+  const previewOptions = previewOptionsFor(superAdmin);
+  const selectedKey = selectedPreviewKey(viewMode, hq);
+  const selected = PREVIEW_SHELLS.find((o) => o.key === selectedKey) || null;
+  const home = PREVIEW_SHELLS.find((o) => o.key === homePreviewKey(superAdmin));
+  const previewing = selected && home && selected.key !== home.key;
   const choose = (key) => {
-    if (key === 'super_admin') onViewModeChange('admin', { hq: true });
+    if (key === 'hq') onViewModeChange('admin', { hq: true });
     else if (key === 'admin') onViewModeChange('admin', { hq: false });
     else onViewModeChange(key);
   };
@@ -624,38 +737,22 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImp
       <span className="font-medium opacity-90">{superAdmin ? 'Super Admin Mode' : 'Admin Mode'}</span>
 
       {isImpersonating ? (
-        <div className="ml-2 flex items-center gap-2 bg-amber-500/20 px-3 py-1.5 rounded-lg">
-          <Eye size={13} />
-          {/* The canvas's words. "Impersonating" describes what the system
-              is doing; "support session" describes why, and why it ends. */}
-          <span>Viewing as {impersonatedUser?.name} — support session</span>
-          {supportLeftMs !== null && (
-            <span
-              className="tabular-nums font-semibold"
-              title="A support session is thirty minutes. It hands itself back when the timer runs out."
-            >
-              {String(Math.floor(supportLeftMs / 60000)).padStart(2, '0')}
-              :{String(Math.floor((supportLeftMs % 60000) / 1000)).padStart(2, '0')} left
-            </span>
-          )}
-          {onExtendImpersonation && (
-            <button
-              type="button"
-              onClick={onExtendImpersonation}
-              className="rounded-md bg-white/20 px-2 py-0.5 text-xs font-medium hover:bg-white/30"
-            >
-              Extend
-            </button>
-          )}
-        </div>
+        /* D290 / H25 — the support session's own chrome is `ImpersonationBar`,
+           mounted above this bar: who, as whom, why, the limit, the clock,
+           Extend and End session. Nothing about the session is drawn twice;
+           this bar only says why the picker is not offered. */
+        <span className="ml-2 text-xs opacity-80" data-testid="portal-switcher-support-note">
+          Support session in progress — the bar above says who, as whom, why and for how long.
+        </span>
       ) : (
         <div className="ml-2 relative">
           <button
             onClick={() => setOpen(!open)}
+            data-testid="preview-shell-trigger"
             className="flex items-center gap-2 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg transition-colors"
           >
             <Eye size={13} />
-            <span>View as: {hq ? 'Super Admin' : ROLE_LABELS[viewMode]}</span>
+            <span>{PREVIEW_TRIGGER}</span>
             <ChevronDown size={13} />
           </button>
           {open && (
@@ -666,43 +763,55 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImp
                 className="fixed inset-0 z-50 cursor-default bg-transparent"
                 onClick={() => setOpen(false)}
               />
-              <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-gray-200 py-1 min-w-[160px] z-50">
-                {/* Task #14 — 'exploring' is offered in View-as (it was filtered
-                    out in v1) so admins can preview the holding-state experience
-                    end-to-end: /exploring dashboard, the lean exploring sidebar,
-                    and RoleGuard bounces on non-exploring routes. Per-user
-                    review still lives at /admin/exploring. */}
-                {viewOptions.map(([key, label]) => (
+              <div
+                className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-gray-200 py-1 min-w-[280px] z-50"
+                data-testid="preview-shell-menu"
+              >
+                <div className="px-4 pt-1.5 pb-2 text-[10.5px] font-extrabold uppercase tracking-[.08em] text-gray-500">
+                  {PREVIEW_HEADER}
+                </div>
+                {/* Task #14 — 'exploring' stays offered (it was filtered out in
+                    v1) so admins can preview the holding-state experience
+                    end-to-end. H38 omits it; D288 keeps it, last. */}
+                {previewOptions.map((o) => (
                   <button
-                    key={key}
-                    onClick={() => { choose(key); setOpen(false); }}
+                    key={o.key}
+                    onClick={() => { choose(o.key); setOpen(false); }}
+                    data-preview-shell={o.key}
                     className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${
-                      isActiveOption(key) ? 'text-violet-700 font-medium bg-violet-50' : 'text-gray-700'
+                      selectedKey === o.key ? 'text-violet-700 font-medium bg-violet-50' : 'text-gray-700'
                     }`}
                   >
-                    {label}
+                    <span className="block">{o.label}</span>
+                    <span className="block text-[11px] text-gray-500">{o.what}</span>
                   </button>
                 ))}
+                <div className="mt-1 border-t border-gray-100 px-4 pt-2 pb-1.5 text-[11px] leading-snug text-gray-500">
+                  {PREVIEW_FOOTER}
+                </div>
               </div>
             </>
           )}
         </div>
       )}
 
-      {isImpersonating && (
-        <div className="ml-auto flex items-center gap-3">
-          <span className="text-xs opacity-75">
-            Logged in as {realUser?.name}
-          </span>
+      {/* H38's strip: while a shell other than the viewer's own is previewed,
+          the chip, the sentence about whose name the writes carry — "the
+          Super Admin" to the holder, "you" to anyone else — and the way back. */}
+      {!isImpersonating && previewing && (
+        <div className="ml-2 flex flex-wrap items-center gap-2 text-xs" data-testid="preview-shell-strip">
+          <span className="rounded-full bg-white/20 px-2 py-0.5 font-semibold">{previewChip(selected.label)}</span>
+          <span className="opacity-90">{previewNote(superAdmin)}</span>
           <button
-            onClick={onExitImpersonation}
-            className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-colors text-xs font-medium"
+            type="button"
+            onClick={() => choose(home.key)}
+            className="rounded-md bg-white/20 px-2 py-0.5 font-medium hover:bg-white/30"
           >
-            <ArrowLeft size={12} />
-            Exit Impersonation
+            Back to {home.label}
           </button>
         </div>
       )}
+
     </div>
   );
 }
@@ -719,8 +828,17 @@ const FULL_BLEED_BY_ROLE = {
   partner: PARTNER_FULL_BLEED,
 };
 
-function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, primaryPersonaId, hqView = true, supportLeftMs = null, onExtendImpersonation }) {
+function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, primaryPersonaId, hqView = true, supportLeftMs = null, onExtendImpersonation, supportReason = null }) {
   const location = useLocation();
+  // ONE TYPE FACE FOR THE SIGNED-IN PRODUCT: the investor Fund page's
+  // (--font-app, index.css). The class sits on <html> so portals mounted on
+  // <body> get it too, and comes off on the way back to the public site,
+  // which keeps its own face. A layout effect, so the first paint is already
+  // in the right face.
+  useLayoutEffect(() => {
+    document.documentElement.classList.add('app-type');
+    return () => document.documentElement.classList.remove('app-type');
+  }, []);
   // Active-company context state — owned here so descendants (CompanySwitcher,
   // CompanySettingsPage, etc.) share the same reference without prop drilling.
   const [activeCompany, setActiveCompany] = useState(null);
@@ -732,6 +850,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // switcher confirms this id against the caller's memberships once they load
   // and corrects it if it is stale.
   const [savedCompanyId] = useState(() => initActiveCompanyId());
+  // D153 / H12 — the view-as scope. See the provider below.
+  const [viewAsBranch, setViewAsBranch] = useState(null);
   const [companyList, setCompanyList] = useState([]);
 
   // Task #31 — Honor the user's "Sidebar default" appearance preference on
@@ -806,6 +926,11 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // and a holder is the only one allowed to impersonate a holder).
   const superAdmin = isSuperAdminUser(realUser || user);
   const shellRole = shellRoleFor(activeRole, user, hqView);
+  // D107. `user`, not `realUser`: the branch is a property of the deployment
+  // this SPA is served from, so it is the same fact for every session on it —
+  // and during an HQ support session the badge must keep naming the branch the
+  // support session is being run ON, which is the one the copy comes from.
+  const branchFact = branchOfUser(user) ? user.branch : null;
   // ONE RULE, FOUR LICENCES. This read two lists and named two roles, so the
   // other two got whatever the fallback happened to be: advisor routes were
   // full width but padded, and partner routes were padded AND centred at
@@ -820,21 +945,39 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // licence — including `/research/*`, which was carved out of both lists
   // precisely because the shell had no padding of its own.
   const fullBleedSurface = (FULL_BLEED_BY_ROLE[activeRole] || []).includes(location.pathname)
-    || SHARED_FULL_BLEED.includes(location.pathname);
+    || SHARED_FULL_BLEED.includes(location.pathname)
+    // The Lab's tool routes, by prefix rather than by twenty-three entries.
+    // This is where `/spinout-lab/` is tested, and the only place: it used to
+    // be typed on the width flag below AND on the padding flag under it, which
+    // is two tests of one fact that could be changed apart.
+    || SHARED_FULL_BLEED_PREFIXES.some((prefix) => location.pathname.startsWith(prefix));
   const fullWidthSurface = fullBleedSurface
     // Advisor's blanket clause stays, and only this clause is still blanket:
     // it also covers the advisor pages OUTSIDE any workspace, which have been
     // full width since the advisor shell shipped. Narrowing it to the derived
     // list would silently re-centre those, which is a separate decision from
     // this one.
-    || activeRole === 'advisor'
-    // `/spinout-lab` itself is no longer hand-typed here: it went into
-    // SHARED_FULL_BLEED, and fullBleedSurface above already implies full
-    // width. The sub-routes stay — the Lab's tool pages are full width but
-    // keep the shell's padding.
-    || location.pathname.startsWith('/spinout-lab/');
+    || activeRole === 'advisor';
   const flushSurface = fullBleedSurface;
+  // The three role wizards paint their own background across this column.
+  // Padding and the footer are the gaps around it; both have to go, or the
+  // landscape stops short of the sidebar and the bottom of the body.
+  const onboardingCanvas = ONBOARDING_CANVAS_PATHS.includes(location.pathname);
   const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user, hqView);
+  // D285 / H36 — which sub-navigation strip this location sits under, in the
+  // HQ shell only. The strips are written below as LITERAL links rather than
+  // mapped from `HQ_STRIPS`, because the reachability guard reads navigation
+  // syntax and a `.map` over data is not a door it can see; the guard holds
+  // this markup equal to that list.
+  const hqStrip = shellRole === 'super_admin' ? stripFor(location.pathname, location.search) : null;
+  // D287 / S21 — read only where the strip could apply: the plain Admin
+  // shell off a branch, the person's own session. The hook memoises one read
+  // per user; the strip above the top bar and the badge inside it both draw
+  // from this one model.
+  const notDeployed = useBranchDeployment(
+    !branchFact && shellRole === 'admin' && activeRole === 'admin' && !isImpersonating,
+    user?.id,
+  );
 
   // Auto-logout after 20 minutes of inactivity, with a 60-second warning modal.
   // Tracks mouse/keyboard/scroll/touch on `window`. Disabled when no user is
@@ -853,24 +996,75 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     [activeRole, isAdmin, isImpersonating, shellRole],
   );
 
+  // D153 / H12 — the view-as scope, held in the SHELL rather than on a page,
+  // for the reason the frozen bar is: it changes what the chrome says, and a
+  // page that owned it would drop it the moment the operator navigated.
+  //
+  // IT PERSISTS NOTHING — no localStorage, no sessionStorage, no URL — on
+  // `AdminFrozenBar`'s stated rule: a mode the viewer must not be able to
+  // forget they are in must not survive into a session that did not enter it.
+  // That is also why `clearSession` needs no line for it, unlike the support
+  // payload it does purge: there is no key to remove, and signing out unmounts
+  // this layout, which IS the purge. A stored scope would need one; this is
+  // the reason it is not stored.
+  const viewAsBranchContextValue = useMemo(
+    () => ({ branch: viewAsBranch, setBranch: setViewAsBranch }),
+    [viewAsBranch],
+  );
+
   return (
     <ActiveCompanyContext.Provider value={{ company: activeCompany, setCompany: setActiveCompany, companies: companyList, setCompanies: setCompanyList }}>
     <ViewModeContext.Provider value={viewModeContextValue}>
+    <ViewAsBranchContext.Provider value={viewAsBranchContextValue}>
       <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
+        {/* D142 / S13 — ABOVE `PortalSwitcher`, and the order is the point.
+            `isImpersonating` is `!!realUser`, which an HQ support session never
+            sets (the operator is a row in HQ's database this deployment cannot
+            read). So supporting a branch ADMIN mounted the ordinary purple
+            "Admin Mode" bar with a working View-as picker — an HQ-driven
+            session dressed as the admin's own — and supporting anyone else
+            rendered nothing at all. This renders first, so that bar can never
+            be the only chrome on a session the viewer did not start. It draws
+            nothing when there is no live support session. */}
+        <SafeMount name="HqSupportSessionBar"><HqSupportSessionBar /></SafeMount>
+        {/* D153 / H12 — ABOVE `PortalSwitcher`, for D142's reason one tier up:
+            the ordinary admin chrome must never be the only frame on a view
+            the operator is not in by default. It draws nothing outside the
+            overlay. */}
+        <SafeMount name="HqViewingAsBar"><HqViewingAsBar /></SafeMount>
+        {/* D290 / H25 — ABOVE `PortalSwitcher`, for D142's reason on the
+            operator's own side: the ordinary admin chrome must never be the
+            only frame on a session the operator is not in by default. Global
+            chrome, so it frames every route the session can reach — until
+            D290 the strip lived inside `PortalSwitcher` and said neither who
+            nor why. Who · As · Why · Limit, the shell's clock, Extend and End
+            session. It draws nothing when nobody is being impersonated. */}
+        <SafeMount name="ImpersonationBar">
+          <ImpersonationBar
+            operator={isImpersonating ? realUser : null}
+            target={isImpersonating ? user : null}
+            reason={supportReason}
+            holder={superAdmin}
+            leftMs={supportLeftMs}
+            onExtend={onExtendImpersonation}
+            onExit={onExitImpersonation}
+          />
+        </SafeMount>
         {isAdmin && (
           <PortalSwitcher
             viewMode={viewMode}
             onViewModeChange={onViewModeChange}
             isImpersonating={isImpersonating}
-            onExitImpersonation={onExitImpersonation}
-            realUser={realUser}
-            impersonatedUser={isImpersonating ? user : null}
             superAdmin={superAdmin}
             hqView={hqView}
-            supportLeftMs={supportLeftMs}
-            onExtendImpersonation={onExtendImpersonation}
           />
         )}
+
+        {/* D287 / S21 — ABOVE THE TOP BAR: the fact of a licence
+            administrator's account whose branch is not deployed yet. It
+            cannot be dismissed and stores nothing; it draws nothing for
+            everyone else, and nothing once the branch is live. */}
+        <SafeMount name="BranchNotDeployedBar"><BranchNotDeployedBar strip={notDeployed} /></SafeMount>
 
         {/* ── Carta-style global top header ─────────────────────────────── */}
         <header className="z-40 h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 shrink-0">
@@ -883,7 +1077,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               <Menu size={18} />
             </button>
             <div className="flex items-center gap-2.5 dark:rounded-lg dark:bg-white/95 dark:px-2 dark:py-1">
-              <AxalLogo size="sm" />
+              {/* onLight: this island is white in dark mode. Default AxalLogo
+                  ink is dark:text-gray-100 and would disappear on it. */}
+              <AxalLogo size="sm" onLight />
             </div>
           </div>
           <div className="ml-auto flex items-center gap-2">
@@ -906,11 +1102,91 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 ? <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-900 dark:bg-rose-950/50 dark:text-rose-200">HQ</span>
                 : <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${ROLE_COLORS.admin}`}>Admin View</span>
             )}
+            {/* D107 — the territory badge, in the slot the HQ chip occupies and
+                at the same weight, because both answer the same question: whose
+                data am I looking at. On HQ that question has a switcher behind
+                it; on a branch it has one answer and no control, which is the
+                tenancy wall stated in the chrome rather than on each page.
+
+                It renders from `/me.branch` only. A branch is a property of the
+                DEPLOYMENT (D106), so there is nothing here for a user to be
+                wrong about and nothing to fall back to when the key is absent:
+                HQ and the dev FastAPI both show no badge, which is correct. */}
+            {branchFact && (
+              <span
+                data-testid="territory-badge"
+                className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200"
+              >
+                {branchFact.name || branchFact.code}
+                {(branchFact.territories || []).length > 0 && ` · ${(branchFact.territories || []).join(' · ')}`}
+                {' · BRANCH'}
+                {/* D142 — `/me.branch` has carried `status` and `as_of` since
+                    D106 and the badge read NEITHER, so a suspended branch's
+                    badge was byte-identical to an active one. The word only
+                    appears when the state is not active: a badge that said
+                    "ACTIVE" on every branch would be noise, and the one state
+                    worth interrupting someone over is the one that changes what
+                    they can do. */}
+                {branchFact.status && branchFact.status !== 'active'
+                  && ` · ${String(branchFact.status).toUpperCase()}`}
+              </span>
+            )}
+            {/* D286 / S20 — the same slot, the same question, for the plain
+                Admin shell off a branch: whose data am I looking at. HQ's own
+                — the accounts HQ holds on axal.vc — because no branch is
+                deployed. The scope chip reads "HQ-held · axal.vc" and the
+                badge "HQ-HELD", each as the artboard draws it (D282's tension
+                1: the changelog's wording is the chip's, the badge's is the
+                badge's). Not for the holder in HQ view, whose chip says HQ. */}
+            {!branchFact && shellRole === 'admin' && activeRole === 'admin' && !isImpersonating && (
+              notDeployed
+                /* D287 / S21 — the same slot for a licence administrator whose
+                   branch is not deployed: "{brand} · on axal.vc" and the badge
+                   "BRANCH · NOT DEPLOYED", as the artboard draws them. */
+                ? (
+                  <span
+                    data-testid="branch-not-deployed-badge"
+                    className="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-semibold text-slate-700 dark:text-slate-300"
+                  >
+                    <Globe size={12} aria-hidden="true" />
+                    {notDeployed.brand || 'This licence'} · on axal.vc
+                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200">BRANCH · NOT DEPLOYED</span>
+                  </span>
+                )
+                : (
+                  <span
+                    data-testid="hq-held-badge"
+                    className="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-semibold text-slate-700 dark:text-slate-300"
+                  >
+                    <Globe size={12} aria-hidden="true" />
+                    HQ-held · axal.vc
+                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200">HQ-HELD</span>
+                  </span>
+                )
+            )}
             {(activeRole === 'founder' || activeRole === 'admin') && (
               <Suspense fallback={<span className="inline-block h-8 w-8" />}>
                 <FounderWellbeingMenu />
               </Suspense>
             )}
+            {/* D284 — Messages left the sidebar rows for the top bar. It is
+                offered to exactly the roles the /messages route admits, on
+                every shell those roles get. */}
+            {MESSAGES_ROLES.includes(activeRole) && (
+              <Link
+                to="/messages"
+                data-testid="messages-door"
+                className="hidden sm:inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors whitespace-nowrap"
+              >
+                <Mail size={14} />
+                Messages
+              </Link>
+            )}
+            {/* S23 · H37 — the 29 working pages, one launcher on the HQ and
+                Admin shells. Not on the branch shell: S7–S19 draw none, and
+                the pages are the studio's own working surfaces, not a
+                branch's consoles. */}
+            {ADMIN_SHELLS.includes(shellRole) && <WorkspacesLauncher />}
             <Suspense fallback={<span className="inline-block w-8 h-8" />}>
               <NotificationBell userId={user?.id} />
             </Suspense>
@@ -940,14 +1216,36 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
           )}
 
-          {/* A COLUMN, so the footer sits at the bottom of a short page.
-              This was `flex-1 overflow-y-auto` with no direction, so the
-              footer rendered immediately under the content and every page
-              whose body ended early — the Validate zones, Research · Library,
-              the investor Network zones — left several hundred pixels of bare
-              grey beneath it. `flex-col` plus `flex-1` on the content pushes
-              the footer down without pinning it over a long page. */}
-          <main className="flex flex-1 flex-col overflow-y-auto bg-gray-50 dark:bg-gray-950">
+          {/* A COLUMN, so the footer stays at the bottom on short pages while
+              still following long page content inside the scroll container. */}
+          <main
+            {...(onboardingCanvas ? { 'data-onboarding-canvas': '' } : {})}
+            className={`flex flex-1 flex-col overflow-y-auto ${onboardingCanvas ? '' : 'bg-gray-50 dark:bg-gray-950'}`}
+          >
+            {hqStrip === 'Platform' && (
+              <HqSubNavStrip label="Platform">
+                <StripLink to="/admin/platform">Overview</StripLink>
+                <StripLink to="/admin/platform/switches">Switches</StripLink>
+                <StripLink to="/admin/platform/topology">Topology</StripLink>
+                <StripLink to="/admin?tab=integration-keys">Integration keys</StripLink>
+                <StripLink to="/admin?tab=github">GitHub Sync</StripLink>
+                <StripLink to="/admin?tab=payments">Payments</StripLink>
+                <StripLink to="/admin?tab=promos">Promo codes</StripLink>
+                <StripLink to="/monitoring">Monitoring</StripLink>
+                <StripLink to="/admin/telegram">Telegram</StripLink>
+              </HqSubNavStrip>
+            )}
+            {hqStrip === 'Content' && (
+              <HqSubNavStrip label="Content">
+                <StripLink to="/admin/content">Overview</StripLink>
+                <StripLink to="/admin/articles">Content queue</StripLink>
+                <StripLink to="/admin/publications">Publications</StripLink>
+                <StripLink to="/admin/assessment">Assessment Studio</StripLink>
+                <StripLink to="/admin?tab=personas">Personas</StripLink>
+                <StripLink to="/admin?tab=network-profiles">Advisors &amp; Partners</StripLink>
+                <StripLink to="/admin/team">Public team page</StripLink>
+              </HqSubNavStrip>
+            )}
             {/* Keyed on the active company so a switch REMOUNTS every page
                 below the sidebar. Pages do not read the company from context —
                 it rides in the X-Company-Id header on each request — so
@@ -956,10 +1254,11 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 happened to refetch. `savedCompanyId` is the id restored before
                 first render, so a reload that lands on the same company does
                 not remount once the switcher confirms it. */}
-            <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main data-density-target className={`flex-1 ${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}`}>
+            <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main data-density-target className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}${onboardingCanvas ? ' flex w-full min-h-full flex-1 flex-col' : ''}`}>
               {children}
             </div>
-            <footer className="border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6 py-4">
+            {!onboardingCanvas && (
+            <footer className="mt-auto shrink-0 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6 py-4">
               <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-gray-400 dark:text-gray-500">
                 <span>
                   © Copyright {new Date().getFullYear()}, Axal VC Management LLC. Axal VC Holdings LLC. All rights reserved.
@@ -970,6 +1269,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 </div>
               </div>
             </footer>
+            )}
           </main>
         </div>
       </div>
@@ -985,12 +1285,13 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         <InstallPrompt />
         <StepUpModal />
       </Suspense>
+    </ViewAsBranchContext.Provider>
     </ViewModeContext.Provider>
     </ActiveCompanyContext.Provider>
   );
 }
 
-function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, hqView = true, supportLeftMs = null, onExtendImpersonation }) {
+function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, hqView = true, supportLeftMs = null, onExtendImpersonation, supportReason = null }) {
   const location = useLocation();
   const { oauthBootstrapping } = useAuth();
   const [kycStatus, setKycStatus] = useState(user?.kyc_status || null);
@@ -1005,6 +1306,18 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   const [onboardingFlow, setOnboardingFlow] = useState(null);
   const [onboardingComplete, setOnboardingComplete] = useState(true);
   const [onboardingLoaded, setOnboardingLoaded] = useState(false);
+  // Task #178 — does this account still owe an acceptance of the terms?
+  // FALSE IS THE ONLY SAFE INITIAL VALUE, and it covers three cases at once: the
+  // moment before /me answers (so no interstitial flashes over a page that is
+  // loading), a /me that errored, and the dev FastAPI, whose response has no
+  // such key at all. Absent must read as "do not gate" in every one of them —
+  // the inverse would lock a Replit session out of its own product.
+  const [termsPending, setTermsPending] = useState(false);
+  // Set when the licence picker announces a choice, so an in-flight
+  // progress read — started before the click, answering `flow: 'licence'` —
+  // cannot put the gate back after the click has already moved the account on.
+  const licenceChosen = useRef(false);
+  const progressUserId = useRef(null);
 
   // Task #1 — invite/deep-link continuity. RegisterPage persisted a validated
   // `?next=` path (localStorage `gvpn:next`) before the email/OAuth
@@ -1025,6 +1338,13 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
 
   useEffect(() => {
     if (!user) return;
+    // A different account must not inherit the previous one's choice. The
+    // same account re-running this effect (StrictMode) must not wipe a
+    // choice that already landed, or the late progress read wins again.
+    if (progressUserId.current !== user.id) {
+      progressUserId.current = user.id;
+      licenceChosen.current = false;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -1033,20 +1353,34 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
         setKycStatus(me.kyc_status || 'not_started');
         setAccessLevel(me.access_level || null);
         setServerRole(me.role || null);
-        setSuggestedRole(me.suggested_role || null);
+        // A /me that left before Continue must not put the suggested role or
+        // the terms gate back. The licence request already recorded both, and
+        // the picker has told this shell. Applying the stale answer here is
+        // how the next screen becomes the terms interstitial, or the licence
+        // picker, after a click that succeeded.
+        if (!licenceChosen.current) {
+          setSuggestedRole(me.suggested_role || null);
+          // `=== true`, not truthy. The key is absent on the dev FastAPI's /me and
+          // on any older worker, and `undefined` must land on "do not gate"
+          // rather than on whatever a loose check would make of it.
+          setTermsPending(me.terms_acceptance_pending === true);
+        }
         const stored = safeReadJSON('user', {});
+        const suggestedRole = licenceChosen.current
+          ? (stored.suggested_role || null)
+          : (me.suggested_role || null);
         if (
           stored.kyc_status !== me.kyc_status ||
           stored.access_level !== me.access_level ||
           stored.role !== me.role ||
-          stored.suggested_role !== me.suggested_role
+          stored.suggested_role !== suggestedRole
         ) {
           localStorage.setItem('user', JSON.stringify({
             ...stored,
             role: me.role,
             kyc_status: me.kyc_status,
             access_level: me.access_level || null,
-            suggested_role: me.suggested_role || null,
+            suggested_role: suggestedRole,
           }));
         }
       } catch {}
@@ -1061,13 +1395,13 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
       // unfinished users back to the right /onboarding/<role> step.
       try {
         const p = await api.onboardingGetProgress();
-        if (cancelled) return;
+        if (cancelled || licenceChosen.current) return;
         setOnboardingFlow(p?.flow || null);
         setOnboardingComplete(!!p?.completed_at);
         setOnboardingLoaded(true);
       } catch {
         // Endpoint missing or transient error — don't block login.
-        if (!cancelled) {
+        if (!cancelled && !licenceChosen.current) {
           setOnboardingComplete(true);
           setOnboardingLoaded(true);
         }
@@ -1075,6 +1409,54 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     })();
     return () => { cancelled = true; };
   }, [user?.id]);
+
+  // The effect above is keyed on `[user?.id]`, so it reads onboarding
+  // progress once per session and never re-reads. That is fine until a
+  // wizard FINISHES mid-session: the shell still holds completed=false, and
+  // the wizard-resume gate below then bounces the user off wherever they
+  // just landed and back into a wizard chosen from their role — an investor
+  // who had just finished was being sent to the founder wizard. The wizard
+  // announces its own completion; listening is cheaper and more reliable
+  // than re-fetching a fact we have already been told.
+  useEffect(() => {
+    const done = () => { setOnboardingComplete(true); setOnboardingLoaded(true); };
+    window.addEventListener(ONBOARDING_COMPLETE_EVENT, done);
+    return () => window.removeEventListener(ONBOARDING_COMPLETE_EVENT, done);
+  }, []);
+
+  // Choosing a licence is the same shape of fact as finishing a wizard: the
+  // server has already moved on, and this shell will not ask it again until
+  // the next full load. Without this listener the licence gate still holds
+  // `flow === 'licence'` and returns the navigation to `/onboarding`, so
+  // Continue appears to do nothing until a refresh.
+  useEffect(() => {
+    const chosen = (e) => {
+      const licence = e?.detail?.licence;
+      if (licence !== 'founder' && licence !== 'investor' && licence !== 'advisor' && licence !== 'partner') return;
+      licenceChosen.current = true;
+      setOnboardingLoaded(true);
+      setOnboardingFlow(licence);
+      // The server marks only the advisor row complete. The other three open
+      // a wizard, and reporting them complete would skip it.
+      setOnboardingComplete(licence === 'advisor');
+      setSuggestedRole(licence);
+      // The same request recorded the terms. Retire the interstitial here as
+      // well as on TERMS_ACCEPTED_EVENT, so one of the two events is enough.
+      setTermsPending(false);
+    };
+    window.addEventListener(ONBOARDING_LICENCE_CHOSEN_EVENT, chosen);
+    return () => window.removeEventListener(ONBOARDING_LICENCE_CHOSEN_EVENT, chosen);
+  }, []);
+
+  // Task #178 — the same shape, one gate along, for the same reason. The effect
+  // that reads `terms_acceptance_pending` is keyed on `[user?.id]`, so accepting
+  // would not change this shell's belief and the interstitial would re-render
+  // itself over the page the reader was on their way to.
+  useEffect(() => {
+    const accepted = () => setTermsPending(false);
+    window.addEventListener(TERMS_ACCEPTED_EVENT, accepted);
+    return () => window.removeEventListener(TERMS_ACCEPTED_EVENT, accepted);
+  }, []);
 
   // Post-OAuth bootstrap in flight. The Google callback set the session
   // cookie entirely server-side and 302'd us to a protected route;
@@ -1124,7 +1506,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
 
   // Auth v2 — licence picker gate (A2). Fresh signups must choose a licence
   // before entering a role wizard or the exploring holding state.
-  const onLicencePath = location.pathname === '/onboarding/licence';
+  const onLicencePath = location.pathname === '/onboarding';
   if (
     onboardingLoaded &&
     onboardingFlow === 'licence' &&
@@ -1136,7 +1518,43 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     !isImpersonating &&
     accessLevel !== 'limited'
   ) {
-    return <Navigate to="/onboarding/licence" replace />;
+    return <Navigate to="/onboarding" replace />;
+  }
+
+  // Task #178 — terms re-acceptance, for every account the licence gate above
+  // will never reach.
+  //
+  // PR #549 made that consent real, but only fresh Auth-v2 signups pass through
+  // the gate that collects it. Admins, impersonated sessions, `limited`
+  // accounts, the legacy `flow='chat'` rows and EVERY account older than #549
+  // still have `tos_v1` and `privacy_v1` sitting `pending` — satisfiable since
+  // #549, satisfied by nothing.
+  //
+  // IT RENDERS IN PLACE RATHER THAN NAVIGATING, which is the one structural
+  // difference from the two gates above and is deliberate twice over. It blocks
+  // every path including `/onboarding/*` with no exemption list to keep in step
+  // with the KYC gate's below; and `onLogout` is in scope here, so Decline runs
+  // the app's own session teardown instead of a second copy of it. The reader
+  // keeps their URL, so accepting drops them exactly where they were going.
+  //
+  // `licenceGateOwnsConsent` IS WHY NOBODY IS ASKED TWICE. A fresh signup mid
+  // licence flow will accept at the licence screen — `onboardingChooseLicence`
+  // records it — so this stands down for them. Stated as a fact about the
+  // account rather than as a path test, because a path test would have to name
+  // every screen that flow can be on.
+  const licenceGateOwnsConsent = onboardingLoaded
+    && onboardingFlow === 'licence'
+    && !onboardingComplete;
+  if (
+    termsPending &&
+    !licenceGateOwnsConsent &&
+    !atPendingNext &&
+    chatGateRole !== 'admin' &&
+    realUser?.role !== 'admin' &&
+    !isImpersonating &&
+    accessLevel !== 'limited'
+  ) {
+    return <AcceptTermsPage email={user.email} onDecline={onLogout} />;
   }
 
   // Phase 0.2 / Task #23 — wizard resume gate.
@@ -1150,7 +1568,13 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   };
   const wizardRole = (serverRole === 'exploring' ? (suggestedRole || user?.suggested_role) : (serverRole || user.role));
   const myWizard = WIZARD_FOR_LICENCE[wizardRole] || null;
-  const onWizardPath = location.pathname.startsWith('/onboarding/');
+  // The bare `/onboarding` has to count. Before the licence picker moved
+  // there it sat at `/onboarding/licence`, which this prefix matched for
+  // free; `'/onboarding'.startsWith('/onboarding/')` is false, so leaving
+  // the prefix alone would let THIS gate bounce a user straight back off
+  // the licence picker the gate above just sent them to.
+  const onWizardPath = location.pathname === '/onboarding'
+    || location.pathname.startsWith('/onboarding/');
   const needsWizard = !onboardingComplete && (
     onboardingFlow === null ||
     onboardingFlow === user.role ||
@@ -1220,6 +1644,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
       hqView={hqView}
       supportLeftMs={supportLeftMs}
       onExtendImpersonation={onExtendImpersonation}
+      supportReason={supportReason}
     >
       {children}
     </ProtectedLayout>
@@ -1317,7 +1742,11 @@ function AppInner() {
   // after the impersonation state commits — from an ancestor effect that
   // runs AFTER RoleGuard's — makes our destination win deterministically.
   const pendingImpersonationPathRef = useRef(null);
-  const handleImpersonate = (token, impersonatedUser, targetPath) => {
+  // D290 — `reason` is the text the worker STORED, as its response echoed it
+  // (null when its write failed). `beginSupportSession` passes it; a caller
+  // that passes nothing gets the copy `api.adminImpersonate` kept, which is
+  // the same echo. Nothing here reads the typed text back from a dialog.
+  const handleImpersonate = (token, impersonatedUser, targetPath, reason) => {
     const currentUser = safeReadJSON('user');
     const currentToken = localStorage.getItem('token');
     localStorage.setItem('realUser', JSON.stringify(currentUser));
@@ -1331,6 +1760,7 @@ function AppInner() {
     // `api.adminImpersonate` has just written this; lifting it into state is
     // what starts the banner's countdown.
     try { setImpersonationExpiresAt(localStorage.getItem('impersonationExpiresAt')); } catch { /* storage unavailable */ }
+    setImpersonationReason(typeof reason === 'string' && reason.trim() ? reason : readStoredReason());
     pendingImpersonationPathRef.current =
       targetPath || ROLE_DEFAULT_PATH[impersonatedUser.role] || '/studio';
     // T20 — bypass the 5-min /me throttle so the impersonated session is
@@ -1370,6 +1800,10 @@ function AppInner() {
     () => { try { return localStorage.getItem('impersonationExpiresAt'); } catch { return null; } },
   );
   const [impersonationLeftMs, setImpersonationLeftMs] = useState(null);
+  // D290 — the stored reason, beside the stored expiry, so a reload mid-session
+  // still draws H25's Why. Null reads "Not recorded" in the bar; it is never
+  // initialised from a literal.
+  const [impersonationReason, setImpersonationReason] = useState(() => readStoredReason());
 
   useEffect(() => {
     if (!isImpersonating || !impersonationExpiresAt) { setImpersonationLeftMs(null); return undefined; }
@@ -1411,6 +1845,10 @@ function AppInner() {
       }
       localStorage.removeItem('impersonationExpiresAt');
     } catch { /* storage unavailable */ }
+    // D290 — the reason goes with the session it explained: on End session
+    // here, and on the thirty-minute hand-back, which comes through here.
+    clearStoredReason();
+    setImpersonationReason(null);
     localStorage.removeItem('realUser');
     localStorage.removeItem('realToken');
     setUser(origUser);
@@ -1463,6 +1901,18 @@ function AppInner() {
     localStorage.removeItem('realUser');
     localStorage.removeItem('realToken');
     localStorage.removeItem('viewMode');
+    // D142 — the HQ support-session payload, which this did not clear. It was
+    // written by `SupportRedeemPage`, read by nothing, and removed by nothing,
+    // so it outlived both the thirty-minute session and sign-out on that
+    // browser: the next ordinary session on the same machine would have been
+    // told HQ was inside the account. `lib/supportSession.js` owns the key so
+    // the purge and the reader cannot be renamed apart.
+    clearSupportSession();
+    // D290 — and the operator's own stored reason, which would otherwise
+    // outlive sign-out on this browser and be drawn on the next session
+    // that impersonates from it.
+    clearStoredReason();
+    setImpersonationReason(null);
     clearHqView();
     // The active company is a per-BROWSER memory (localStorage), not a
     // per-account one. Left in place, the next account to sign in on this
@@ -1571,6 +2021,7 @@ function AppInner() {
     user, onLogout: logout, viewMode, onViewModeChange: handleViewModeChange, hqView,
     isImpersonating, onExitImpersonation: exitImpersonation, realUser, onImpersonate: handleImpersonate,
     supportLeftMs: impersonationLeftMs, onExtendImpersonation: extendImpersonation,
+    supportReason: impersonationReason,
   };
 
   const guard = (roles, component) => (
@@ -1641,8 +2092,16 @@ function AppInner() {
   // and landing on Studio with no explanation reads as a broken link, and was
   // reported as one. The notice says which boundary was hit and how to cross it.
   const advisorRolePreview = user?.role === 'admin' && !isImpersonating && effectiveRole === 'advisor';
+  // The notice sits ABOVE the workspace rather than instead of it — the same
+  // change `AdvisorBucketRoutes` makes for its eighteen zone routes, and for
+  // the same reason: a card that replaces the body states the boundary once per
+  // route and shows the product on none of them. `AdvisorAdvisoryWorkspace`
+  // scopes on the signed-in advisor, so a preview reader sees its frame over no
+  // rows, with the line above saying why.
   const advisorPrivateWorkspace = (component) => (
-    advisorRolePreview ? <AdvisorPreviewNotice /> : component
+    advisorRolePreview
+      ? <><AdvisorPreviewNotice />{component}</>
+      : component
   );
   // The HQ-only surfaces, same shape as the advisor notice: a stated boundary
   // inside the shell, not a bounce. Keyed on the browsed identity's elevation
@@ -1679,6 +2138,20 @@ function AppInner() {
   const signalsHasNonProjectQuery = [...signalsParams.keys()].some((key) => key !== 'project_id');
   const founderResearchLanding = effectiveRole === 'founder'
     && (signalsMode === 'landing' || (!signalsHasNonProjectQuery && signalsMode !== 'workspace'));
+  // D422. THREE FOUNDER MOUNTS THAT WERE A SECOND URL FOR A DESK. Bare
+  // `/execution`, `/build/discovery` and `/signals` rendered, for a founder, the
+  // very desk `/build`, `/validate` and `/research` render — so each desk had
+  // two addresses and the sidebar had to match both. They redirect now, query
+  // string and all. The EDITORS behind them stay: `?mode=workspace` (and
+  // Discovery's `?tab=`, and every Signals deep link) still opens ExecutionPage,
+  // DiscoveryPage and SignalsPage, because no canvas zone yet carries their
+  // writes — creating a task or an objective, editing or deleting an
+  // interview, curating a pain group, the signals feed itself.
+  const founderDiscoveryEditor = effectiveRole === 'founder'
+    && (new URLSearchParams(location.search).get('mode') === 'workspace'
+      || ['leads', 'interviews', 'insights'].includes(new URLSearchParams(location.search).get('tab')));
+  const founderExecutionEditor = effectiveRole === 'founder'
+    && new URLSearchParams(location.search).get('mode') === 'workspace';
 
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-500 dark:text-gray-400">Loading…</div>}>
@@ -1723,11 +2196,11 @@ function AppInner() {
           investor journey (fund overview, terms, tiers, underwriting data,
           reporting archive, allocation, and the apply / request-access flow).
           First-class route under /spinout-lab so the journey stays in one
-          namespace: /spinout-lab → /spinout-lab/investor-workspace. The same
-          component is also a Fund Ops tab at /funds/lp-workspace (embedded
-          there, standalone here) — one component behind both routes, so the
-          two surfaces cannot drift. Role-gated like the Fund Ops route: this
-          content is for investors and admins only. */}
+          namespace: /spinout-lab → /spinout-lab/investor-workspace. It was
+          also a Fund Ops tab at /funds/lp-workspace, and /lp-portal was a
+          second page for the same LP's own position; D372 retired both into
+          this one route (redirects below). Role-gated like the Fund Ops
+          route: this content is for investors and admins only. */}
       <Route path="/spinout-lab/investor-workspace" element={guard(['admin', 'investor'], investorWorkspace('axal-vc-fund', null))} />
       {/* Lab tool page — the founder's company record (design: workspace tool
           pages). labRoles admits the active lab member's own role; admins can
@@ -1746,9 +2219,15 @@ function AppInner() {
       <Route path="/spinout-lab/captable" element={guard(labRoles(['admin']), <SpinoutLabCapTablePage />)} />
       <Route path="/spinout-lab/pitch-deck" element={guard(labRoles(['admin']), <SpinoutLabPitchDeckPage />)} />
       {/* New Brand & Landing Pages tool (design: Brand & Landing Page.dc) —
-          replaces /build/brand as the founders' entry point, so it keeps the
-          same roles as the old route (any founder, plus active lab members). */}
-      <Route path="/spinout-lab/brand" element={guard(labRoles(['admin', 'founder']), founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><SpinoutLabBrandPage /></FounderWorkspaceTabs>))} />
+          the founders' entry point for brand work. It does NOT replace
+          /build/brand: layout and media editing still live there and the Lab
+          page links to it (D360). It keeps the same roles as the old route
+          (any founder, plus active lab members).
+          A SPIN-OUT LAB PAGE, NOT A GROW PAGE. It used to be wrapped in
+          founderWorkspace('grow', …) and the Grow tab bar, so the Lab tool
+          wore Grow's header, tabs and seam. Grow's Brand page is /grow/brand;
+          the two are separate pages and neither dresses as the other. */}
+      <Route path="/spinout-lab/brand" element={guard(labRoles(['admin', 'founder']), <SpinoutLabBrandPage />)} />
       <Route path="/spinout-lab/cofounder-agreement" element={guard(labRoles(['admin']), <SpinoutLabCofounderAgreementPage />)} />
       {/* Co-founder Match tool page (design: Co-founder Match.dc) — the Lab
           decision console; /cofounder stays the full browse/connections/NDA
@@ -1818,11 +2297,19 @@ function AppInner() {
       {/* Spin-Out Lab members (role `exploring`, lab-active) build their skills +
           values profile in Studio too — the lab Profiling page reads from it. */}
       <Route path="/studio" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <Dashboard activeRole={effectiveRole} authUser={user} />)} />
+      <Route path="/studio/archetype" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ArchetypeCardPage activeRole={effectiveRole} />)} />
       {/* Task #9 — holding-state dashboard for chat-onboarded users awaiting admin role review. */}
       <Route path="/exploring" element={guard(['admin', 'exploring'], <ExploringDashboard />)} />
       <Route path="/dashboard" element={<DashboardRedirect />} />
       <Route path="/onboarding/chat" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'pending', 'exploring'], <OnboardingChatPage />)} />
-      <Route path="/onboarding/licence" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'pending', 'exploring'], <ChooseLicencePage />)} />
+      <Route path="/onboarding" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'pending', 'exploring'], <ChooseLicencePage />)} />
+      {/* The licence picker answers "which adventure", not "which licence",
+          so it lives at /onboarding. The old path stays as a redirect rather
+          than a second mount: a welcome email, an OAuth callback or a
+          bookmark sent before the rename must not 404, and two live mounts
+          of the same page would let the gate and the links disagree about
+          which one is canonical. */}
+      <Route path="/onboarding/licence" element={<Navigate to="/onboarding" replace />} />
       <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner', 'investor'], <OnboardingPersonaPage />)} />
       <Route path="/onboarding/founder" element={guard(['admin', 'founder', 'exploring'], <OnboardingFounderPage />)} />
       <Route path="/onboarding/investor" element={guard(['admin', 'investor', 'exploring'], <OnboardingInvestorPage />)} />
@@ -1832,9 +2319,25 @@ function AppInner() {
           routes now live inside the Pitch workspace; redirect to the right tab. */}
       <Route path="/build/deck" element={<Navigate to="/raise/pitch" replace />} />
       <Route path="/build/deck-reviewer" element={<Navigate to="/raise/pitch/review" replace />} />
-      <Route path="/build/competitors" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('research', <CompetitorAnalysisPage />))} />
+      {/* D313 — a founder's saved analysis is `/research/companies/:id` now, and the list is
+          `/research/companies`, so for everyone that route admits this redirects there, `?id=`
+          included. Partner and investor are not admitted by it and no canvas-built page does
+          this job for them, so for them the page stays. */}
+      <Route path="/build/competitors" element={guard(['admin', 'founder', 'partner', 'investor'],
+        effectiveRole === 'partner' || effectiveRole === 'investor'
+          ? founderWorkspace('research', <CompetitorAnalysisPage />)
+          : <Navigate
+              to={new URLSearchParams(location.search).get('id')
+                ? `/research/companies/${encodeURIComponent(new URLSearchParams(location.search).get('id'))}`
+                : '/research/companies'}
+              replace
+            />)} />
       <Route path="/build/financials" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('raise', <FinancialsPage />))} />
-      <Route path="/build/discovery" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), effectiveRole === 'founder' ? <FounderValidatePage /> : <DiscoveryPage />)} />
+      <Route path="/build/discovery" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), effectiveRole !== 'founder'
+        ? <DiscoveryPage />
+        : founderDiscoveryEditor
+          ? founderWorkspace('validate', <DiscoveryPage initialTab="interviews" workspaceMode />)
+          : <Navigate to={`/validate${location.search}`} replace />)} />
 
       {/* ── Validate · the four evidence stages ──────────────────────────────
           Interviews and Pain map read the SAME records Discovery writes; the
@@ -1874,22 +2377,33 @@ function AppInner() {
             : <Navigate to="/research/ask" replace />} />
       <Route path="/research/ask" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/markets" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/funds" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/markets/sector/:slug" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <MarketSectorProfile role={researchRole} />)} />
+      <Route path="/research/markets/:uid" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <MarketReading role={researchRole} />)} />
+      <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/gtm" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <GtmIntelligence />)} />
+      <Route path="/research/companies/company/:uid" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyProfile role={researchRole} />)} />
+      <Route path="/research/companies/:id" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyAnalysis role={researchRole} />)} />
+      <Route path="/research/companies/:analysisId/:candidateId" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyCandidate role={researchRole} />)} />
+      <Route path="/research/funds" element={guard(labRoles(['admin', 'founder']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/funds/catalog/:id" element={guard(labRoles(['admin', 'founder']), <FundCatalogProfile role={researchRole} />)} />
+      <Route path="/research/funds/:uid" element={guard(labRoles(['admin', 'founder']), <FundDossier role={researchRole} />)} />
       <Route path="/research/library" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/diligence" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/benchmarking" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/client-prep" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/diligence" element={guard(labRoles(['admin', 'investor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/diligence/:grantUid" element={guard(labRoles(['admin', 'investor']), <DiligenceRoom role={researchRole} />)} />
+      <Route path="/research/diligence/:grantUid/files/:fileUid" element={guard(labRoles(['admin', 'investor']), <DiligenceFile role={researchRole} />)} />
+      <Route path="/research/benchmarking" element={guard(labRoles(['admin', 'investor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/benchmarking/:uid" element={guard(labRoles(['admin', 'investor']), <BenchmarkDetail role={researchRole} />)} />
+      <Route path="/research/client-prep" element={guard(labRoles(['admin', 'advisor', 'partner']), <ResearchWorkspace role={researchRole} user={user} />)} />
       {/* Legacy Customer Discovery folds into the unified Discovery workspace. */}
       <Route path="/customer-discovery" element={<Navigate to="/build/discovery" replace />} />
-      <Route path="/build/roadmap" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <FounderBuildRoadmap />)} />
+      <Route path="/build/roadmap" element={guard(labRoles(['admin', 'founder']), <FounderBuildRoadmap />)} />
       <Route path="/build/cadence" element={guard(labRoles(['admin', 'founder']), <FounderBuildCadence />)} />
       <Route path="/build/kpi" element={guard(labRoles(['admin', 'founder']), <FounderBuildKpi />)} />
       <Route path="/build/metrics" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('build', <FounderWorkspaceTabs set="build" user={user}><MetricsPage /></FounderWorkspaceTabs>))} />
       {/* Signals — founder decision engine over public-market evidence. Shared
           by Founder + Advisor modes (mode changes ordering + copy only). */}
       <Route path="/signals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], founderResearchLanding
-        ? <FounderResearchDesk />
+        ? <Navigate to={`/research${location.search}`} replace />
         : founderWorkspace('research', <FounderWorkspaceTabs set="research" user={user}><SignalsPage user={user} /></FounderWorkspaceTabs>))} />
       <Route path="/build/captable" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), founderWorkspace('raise', <CapTablePage />))} />
       {/* documentation/architecture/DECISIONS.md D11 — /marketplace was a partner-provider directory with
@@ -1934,8 +2448,53 @@ function AppInner() {
       {/* Territory licence ledger (migration 187). Admin only — it carries the
           fee, the revenue share and an exclusive grant over whole countries. */}
       <Route path="/admin/licences" element={guard(['admin'], hqOnly(<AdminLicences />))} />
+      <Route path="/admin/funds" element={guard(['admin'], hqOnly(<HqFundsPage />))} />
       {/* A subsidiary admin reads their OWN licence; /admin/licences is HQ's ledger of every one. */}
       <Route path="/admin/my-licence" element={guard(['admin'], <MyLicencePage />)} />
+      {/* D286 — S20's five landings. `guard(['admin'])` and never `hqOnly`:
+          this is the plain admin's own shell. Each carries its consoles as
+          literal links, which is how the reachability walk reaches them. */}
+      <Route path="/admin/held/accounts" element={guard(['admin'], <HeldAccounts />)} />
+      <Route path="/admin/held/approvals" element={guard(['admin'], <HeldApprovals />)} />
+      <Route path="/admin/held/programs" element={guard(['admin'], <HeldPrograms />)} />
+      <Route path="/admin/held/community" element={guard(['admin'], <HeldCommunity />)} />
+      <Route path="/admin/held/insights" element={guard(['admin'], <HeldInsights />)} />
+      {/* D107 — the eight subsidiary rows (Admin · Subsidiary S0–S6). Each one
+          has a route so no sidebar row can 404; the ones whose artboards are
+          not built state what they will show and which PR builds them.
+
+          `guard(['admin'])` and NOT a branch check. The shell arm is a
+          sidebar, never a permission (lib/shellRole.js), and the tenancy wall
+          is not a client-side route test: on a branch these pages read the
+          branch's own database because that is the only database bound to the
+          Worker serving them, and on HQ they carry no data at all. A second,
+          weaker copy of the wall in the router would be the thing that looks
+          like the guarantee without being it. */}
+      <Route path="/branch" element={guard(['admin'], <BranchHome user={user} />)} />
+      {/* D129 — LIVE, and it wraps ITSELF in BranchZone because its rail
+          coverage is what it loaded. The notice this replaces said seats used
+          "is not a number that can be shown today", which D127 made false: a
+          branch counts its own seats from `users.role`. S8's seat LEDGER still
+          does not ship, and the page says so in the rail's unavailable list
+          rather than in a notice standing in for the whole screen. */}
+      <Route path="/branch/accounts" element={guard(['admin'], <BranchAccounts user={user} />)} />
+      {/* D112 — the outbound HALF of S3 is live: the To-HQ lane and HQ's
+          answers. The local board is the eleven lanes (D215), on the same page. */}
+      {/* Approvals wraps ITSELF in BranchZone, unlike the seven above, and the
+          asymmetry is the point: it loads live escalations, so only the page
+          knows what its rail can report. A zone with nothing loaded takes the
+          frame from its route here; a zone with data owns it, exactly as every
+          workspace page passes its own `rail` to WorkspaceShell. Each of these
+          seven loses its wrapper on the day PR 12 or PR 14 gives it a page. */}
+      <Route path="/branch/approvals" element={guard(['admin'], <BranchApprovals user={user} />)} />
+      <Route path="/branch/programs" element={guard(['admin'], <BranchPrograms user={user} />)} />
+      <Route path="/branch/community" element={guard(['admin'], <BranchCommunity user={user} />)} />
+      <Route path="/branch/contracts" element={guard(['admin'], <BranchContracts user={user} />)} />
+      <Route path="/branch/insights" element={guard(['admin'], <BranchInsights user={user} />)} />
+      {/* D210 — S15, reached from Insights by a literal link and lit under its
+          row. Not suspension-gated: a frozen branch still reads where it stands. */}
+      <Route path="/branch/insights/analytics" element={guard(['admin'], <BranchAnalytics user={user} />)} />
+      <Route path="/branch/settings" element={guard(['admin'], <BranchSettings user={user} />)} />
       {/* The HQ shell's Contracts and Team rows. Both frame panels the Admin
           Console already has (Legal templates; the Users table) for the
           franchisor, with the holder console above the accounts. */}
@@ -1944,24 +2503,36 @@ function AppInner() {
       {/* HQ · Home (canvas H1). The whole business on one screen; every
           per-subsidiary figure says Not recorded until accounts carry a licence. */}
       <Route path="/hq" element={guard(['admin'], hqOnly(<HqHomePage />))} />
+      {/* D210 — H15. Not a sidebar row: its artboard lights Home, and it is
+          reached from Home's Accounts tile by a literal link. */}
+      <Route path="/admin/analytics" element={guard(['admin'], hqOnly(<HqAnalyticsPage />))} />
       {/* HQ · Security (canvas Y2, decision A4). Four zones read their stores;
           four say what is not recorded. Force re-auth is the one write. */}
       <Route path="/admin/revenue" element={guard(['admin'], hqOnly(<HqRevenuePage />))} />
       <Route path="/admin/content" element={guard(['admin'], hqOnly(<HqContentPage />))} />
       <Route path="/admin/platform" element={guard(['admin'], hqOnly(<HqPlatformPage />))} />
+      {/* D203 — the operator switches. Not a sidebar row: the HQ group is eleven
+          rows by design, and this page is reached from Platform's Feature flags
+          zone by a literal link, which the reachability walk counts. */}
+      <Route path="/admin/platform/switches" element={guard(['admin'], hqOnly(<HqPlatformSwitchesPage />))} />
+      <Route path="/admin/platform/topology" element={guard(['admin'], hqOnly(<HqPlatformTopologyPage />))} />
+      <Route path="/admin/hq-support" element={guard(['admin'], hqOnly(<HqSupportPage />))} />
       <Route path="/admin/security" element={guard(['admin'], hqOnly(<HqSecurityPage />))} />
       <Route path="/admin/network-profiles" element={guard(['admin'], <AdminNetworkProfiles />)} />
       {/* Task #102 — standalone Spin-Out Lab admin dashboard (same component
           as the AdminPage 'lab-applications' tab). */}
       <Route path="/admin/spinout-lab" element={guard(['admin'], <AdminSpinoutLab standalone onImpersonate={handleImpersonate} />)} />
+      {/* D442 — the console the approvals board links to. Not a tab of AdminPage. */}
+      <Route path="/admin/spinout-moderation" element={guard(['admin'], <SpinoutModerationPage />)} />
       {/* Task #106 — read-only admin preview of the new-founder Spin-Out Lab
           journey (simulated client-side state; no impersonation, no writes). */}
       <Route path="/admin/spinout-lab/preview" element={guard(['admin'], <AdminSpinoutJourneyPreview />)} />
-      <Route path="/admin/telegram" element={guard(['admin'], <AdminTelegram />)} />
-      <Route path="/admin/x" element={guard(['admin'], <AdminX />)} />
+      <Route path="/admin/telegram" element={guard(['admin'], hqOnly(<AdminTelegram />))} />
+      <Route path="/admin/x" element={guard(['admin'], hqOnly(<AdminX />))} />
       <Route path="/admin/assessment" element={guard(['admin'], <AdminAssessment />)} />
       {/* Task #20 — Admin Best-Fit console (consultation queue + full report). */}
       <Route path="/admin/best-fit" element={guard(['admin'], <AdminBestFitPage />)} />
+      <Route path="/admin/profiling-trends" element={guard(['admin'], <AdminProfilingTrends />)} />
       {/* Task #3 — News & Articles admin queues merged into one Content Queue. Legacy routes redirect. */}
       <Route path="/admin/news" element={<Navigate to="/admin/articles" replace />} />
       <Route path="/news" element={<Navigate to="/articles/draft" replace />} />
@@ -2022,7 +2593,9 @@ function AppInner() {
       <Route path="/build" element={founderBuildLanding
         ? guard(['admin', 'founder'], <FounderBuildDesk />)
         : <Navigate to="/build/this-week" replace />} />
-      <Route path="/execution" element={guard(['admin', 'founder'], effectiveRole === 'founder' ? <FounderBuildDesk /> : founderWorkspace('build', <FounderWorkspaceTabs set="build" user={user}><ExecutionPage /></FounderWorkspaceTabs>))} />
+      <Route path="/execution" element={guard(['admin', 'founder'], effectiveRole === 'founder' && !founderExecutionEditor
+        ? <Navigate to={`/build${location.search}`} replace />
+        : founderWorkspace('build', <FounderWorkspaceTabs set="build" user={user}><ExecutionPage /></FounderWorkspaceTabs>))} />
       <Route path="/build/this-week" element={guard(['admin', 'founder'], <FounderBuildThisWeek />)} />
       <Route path="/build/board" element={guard(['admin', 'founder'], <FounderBuildBoard />)} />
       <Route path="/execution/board" element={guard(['admin', 'founder'], founderWorkspace('build', <ExecutionPage />))} />
@@ -2045,10 +2618,12 @@ function AppInner() {
           : <FounderRaiseCapital />)} />
       <Route path="/raise/capital/model" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapitalWorkspacePage />))} />
       <Route path="/raise/capital/cap-table" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapitalWorkspacePage />))} />
-      {/* Founders manage their room; investors see what was shared with them. One route, role-branched inside the page, so there is no second root. */}
+      {/* Founders manage their room here. An investor's rooms are read by grant under Research ·
+          Diligence (D311): the investor branch is a redirect there, so a bookmark still lands, and the
+          guard keeps admitting investor so the redirect can run. */}
       <Route path="/raise/data-room" element={guard(['admin', 'founder', 'investor'],
         effectiveRole === 'investor'
-          ? investorWorkspace('deals', <DataRoomPage user={user} />)
+          ? <Navigate to="/research/diligence" replace />
           : new URLSearchParams(location.search).get('mode') === 'workspace'
             ? founderWorkspace('raise', <FounderWorkspaceTabs set="raise" user={user}><DataRoomPage user={user} /></FounderWorkspaceTabs>)
             : <FounderRaiseDataRoom />)} />
@@ -2064,7 +2639,10 @@ function AppInner() {
       {/* Same explicit list. The partner and admin tabs inside the page are
           gated on the role again there — a role that cannot submit a listing
           simply does not see the tab. */}
-      <Route path="/perks" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], effectiveRole === 'founder' ? founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><PerksPage user={user} /></FounderWorkspaceTabs>) : <PartnerWorkspaceTabs set="offers" user={user}><PerksPage user={user} /></PartnerWorkspaceTabs>)} />
+      {/* D413 — the standalone /perks page owns its own Marketplace, My perks
+          and admin Review queue tabs. The partner-side Submit and Performance
+          surface lives separately at /offers/perk-deals. */}
+      <Route path="/perks" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], effectiveRole === 'partner' ? <Navigate replace to="/offers/perk-deals" /> : <PerksPage user={user} />)} />
       <Route path="/raise/capital/pipeline" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapitalWorkspacePage />))} />
        <Route path="/raise/legal" element={guard(['admin', 'founder'], <FounderRaiseLegal />)} />
       <Route path="/raise/legal-engine" element={guard(['admin', 'founder', 'partner'], founderWorkspace('raise', <FounderWorkspaceTabs set="raise" user={user}><LegalEnginePage /></FounderWorkspaceTabs>))} />
@@ -2080,7 +2658,11 @@ function AppInner() {
       <Route path="/spinout-lab/compliance" element={guard(labRoles(['admin']), <SpinoutLabCompliancePage />)} />
       {/* 83(b) moved into the Lab (Week 4 deliverable). Old Incorporate
           path kept as a redirect so existing links and bookmarks survive. */}
-      <Route path="/incorporate/83b" element={<Navigate to="/spinout-lab/83b" replace />} />
+      {/* D361: the tracker lives at /spinout-lab/83b for Lab members and admins
+          (its guard), and inside the Studio-gated Legal Engine card for every
+          other founder. Sending those founders to the Lab route only reached a
+          refusal, so the old path now lands each on the one they can open. */}
+      <Route path="/incorporate/83b" element={<Navigate to={user?.spinout_lab_active === 1 || user?.role === 'admin' ? '/spinout-lab/83b' : '/raise/legal-engine/equity'} replace />} />
       <Route path="/compliance" element={guard(labRoles(['admin', 'founder', 'partner']), <CompliancePage />)} />
       <Route path="/wellbeing" element={guard(['admin', 'founder'], <WellbeingPage />)} />
       <Route path="/wellbeing/expert-dashboard" element={guard(['admin', 'founder', 'partner', 'advisor'], <ExpertEditorPage />)} />
@@ -2124,6 +2706,9 @@ function AppInner() {
         `/tickets`, `/tickets/<id>`, `/help/<id>`, `/docs`, `/docs/admin/*`.
       */}
       <Route path="/help" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <HelpCenterPage />)} />
+      {/* Every role, `exploring` included: an application decision is a
+          notification, and the person waiting on one holds no other role. */}
+      <Route path="/inbox" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <InboxPage />)} />
       <Route path="/help/tickets" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
       <Route path="/help/tickets/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
       <Route path="/help/admin/*" element={<AdminDocsPathGuard />} />
@@ -2145,7 +2730,19 @@ function AppInner() {
       {/* One-time cart checkout + post-checkout confirmation (auth-protected). */}
       <Route path="/checkout" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutPage />)} />
       <Route path="/checkout/confirmation" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutConfirmationPage />)} />
-      <Route path="/deals" element={guard(['admin', 'partner', 'investor'], investorWorkspace('deals', <DealsPage />))} />
+      {/* THE BUCKET ROOT GOES TO THE BUCKET ROUTER, which is what its four zone
+          routes below already do. It used to go to `InvestorWorkspacePage`,
+          whose `ownsDealsRoute` branch renders `InvestorDealsWorkspace` — the
+          page ID1–ID4 emptied, one panel at a time, until its own comment read
+          "All four decision panels are gone". So `/deals` drew a heading, a
+          pill row and nothing. `InvestorDealsRoutes` answers the root with the
+          bucket board, the same overview every partner and advisor root has.
+
+          The non-investor arm is untouched: `investorWorkspace` returned the
+          bare component for any other effective role, and a partner reading
+          /deals still gets `DealsPage` exactly as before. */}
+      <Route path="/deals" element={guard(['admin', 'partner', 'investor'],
+        effectiveRole === 'investor' ? <InvestorDealsRoutes /> : <DealsPage />)} />
 
       {/* ── Deals · the four stages, as four routes ──────────────────────────
           The zone slugs are InvestorDealsWorkspace's own anchor ids with the
@@ -2154,7 +2751,7 @@ function AppInner() {
           workspace still renders all four sections and the route scrolls to
           one. Splitting it into four pages is a content decision, not a
           routing one. */}
-      <Route path="/deals/pipeline" element={guard(['admin', 'partner', 'investor'], <InvestorDealsRoutes />)} />
+      <Route path="/deals/pipeline" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/screening" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/commit" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/closing" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
@@ -2163,12 +2760,14 @@ function AppInner() {
         ? <InvestorResearchWorkspace />
         : investorWorkspace('research', <FounderWorkspaceTabs set="research" user={user}><MarketIntelPage /></FounderWorkspaceTabs>))} />
       <Route path="/advisory" element={guard(['admin', 'founder'], <FounderWorkspaceTabs set="validate" user={user}><AdvisoryPage /></FounderWorkspaceTabs>)} />
-      {/* Team Building consolidation (Build › Team). Founders reach Advisor/
-          Advisor, Co-Founder and Jobs through the unified /build/team
-          workspace; the legacy standalone routes stay live for every other
-          role but redirect a founder into the matching tab so old deep links
-          keep resolving. */}
-      <Route path="/build/team" element={guard(['admin', 'founder'], founderGrowLanding ? <FounderGrowDesk /> : founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><TeamBuildingPage /></FounderWorkspaceTabs>))} />
+      {/* Team (Grow › Talent). Founders reach the advisor directory,
+          Co-founder Match and their roles through the Team workspace at
+          /build/team?mode=workspace; the legacy standalone routes stay live
+          for every other role but redirect a founder into the tab that owns
+          that job. The redirects carry `mode=workspace` because a bare
+          /build/team is the Grow desk for a founder (founderGrowLanding), so
+          `?tab=` alone never reached a tab (D435). */}
+      <Route path="/build/team" element={guard(['admin', 'founder'], founderGrowLanding ? <FounderGrowDesk /> : founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><FounderTeamPage /></FounderWorkspaceTabs>))} />
       <Route path="/grow" element={founderGrowLanding
         ? guard(['admin', 'founder'], <FounderGrowDesk />)
         : <Navigate to="/grow/focus" replace />} />
@@ -2182,7 +2781,7 @@ function AppInner() {
       <Route path="/build/command-center" element={guard(labRoles(['admin', 'founder']), <Navigate to="/studio" replace />)} />
       {/* Task #74 — back-compat redirect from the pre-rename /mentors path. */}
       <Route path="/mentors" element={<Navigate to="/advisors" replace />} />
-      <Route path="/advisors" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), user?.role === 'founder' ? <Navigate to="/build/team?tab=advisor" replace /> : <AdvisorsPage />)} />
+      <Route path="/advisors" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), user?.role === 'founder' ? <Navigate to="/build/team?mode=workspace&tab=advisor" replace /> : <AdvisorsPage />)} />
       {/* /office-hours is RETIRED (task #124's freeze lifted; UNRESOLVED_ITEMS
           U4 resolved). It coupled the storefront to booking and was broken at
           both jobs: it read five keys the DTOs never emitted, so every slot
@@ -2203,12 +2802,12 @@ function AppInner() {
       <Route path="/events/new" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventEditorPage />)} />
       <Route path="/events/:id/edit" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventEditorPage />)} />
       <Route path="/events/:id/manage" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventManagePage />)} />
-      <Route path="/my/jobs" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], user?.role === 'founder' ? <Navigate to="/build/team?tab=jobs" replace /> : <MyJobsPage />)} />
+      <Route path="/my/jobs" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], user?.role === 'founder' ? <Navigate to="/build/team?mode=workspace&tab=jobs" replace /> : <MyJobsPage />)} />
       <Route path="/my/applications" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <MyApplicationsPage />)} />
       <Route path="/jobs/new" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <JobEditorPage />)} />
       <Route path="/jobs/:id/edit" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <JobEditorPage />)} />
       <Route path="/jobs/:id/manage" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <JobManagePage />)} />
-      <Route path="/cofounder" element={guard(labRoles(['admin', 'founder']), user?.role === 'founder' ? <Navigate to="/build/team?tab=cofounder" replace /> : <CofounderPage />)} />
+      <Route path="/cofounder" element={guard(labRoles(['admin', 'founder']), user?.role === 'founder' ? <Navigate to="/build/team?mode=workspace&tab=cofounder" replace /> : <CofounderPage />)} />
       {/* Task #20 — Consolidated profile/advisor flow. The advisor conversation
           now builds the skill + values profile; the legacy /skills and /values
           routes redirect here (underlying data stores kept intact). */}
@@ -2240,18 +2839,19 @@ function AppInner() {
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
       <Route path="/liquidity" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('raise', <FounderWorkspaceTabs set="raise" user={user}><LiquidityPage currentUser={user} /></FounderWorkspaceTabs>))} />
       <Route path="/funds" element={guard(['admin', 'investor'], effectiveRole === 'investor' ? <InvestorFundLanding fundUnlocked={hasInvestorTier(user, 'institutional')} /> : <FundOpsWorkspace />)} />
-      <Route path="/funds/capital-calls" element={guard(['admin', 'investor'], investorFundWorkspace(<FundOpsWorkspace />))} />
-      <Route path="/lp-portal" element={guard(['admin', 'investor'], investorWorkspace('axal-vc-fund', <LPPortalPage />))} />
-      {/* Spin-Out Fund I LP participation workspace — a Fund Ops tab, so it
-          renders inside the same investor shell as the other fund surfaces. */}
-      <Route path="/funds/lp-workspace" element={guard(['admin', 'investor'], investorFundWorkspace(<FundOpsWorkspace />))} />
+      <Route path="/funds/capital-calls" element={<FundCapitalCallsRedirect />} />
+      <Route path="/lp-portal" element={<LpPortalRedirect />} />
+      <Route path="/funds/lp-workspace" element={<FundLpWorkspaceRedirect />} />
       <Route path="/portfolio/reserves" element={guard(['admin', 'investor'], <FundModelingWorkspace />)} />
       <Route path="/portfolio/waterfall" element={guard(['admin', 'investor'], <FundModelingWorkspace />)} />
       {/* Task #18 — investor-lifecycle features ported from PR #119. */}
       <Route path="/ic" element={guard(['admin', 'partner', 'investor'], <ICDecisionsPage />)} />
       <Route path="/ic/:uid" element={guard(['admin', 'partner', 'investor'], <ICDecisionPage />)} />
       <Route path="/lp-reports" element={guard(['admin', 'investor'], investorFundWorkspace(<FundOpsWorkspace />))} />
-      <Route path="/portfolio/updates" element={guard(['admin', 'partner', 'investor', 'founder'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
+      {/* D463 — the guard stays ['admin','investor']: this is a zone route of
+          the portfolio shell, and the founder's shell has no such zone. The
+          founder's composer is the Investor update card on /build/metrics. */}
+      <Route path="/portfolio/updates" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/portfolio/positions" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       {/* Advisor sections shell — three tabbed workspaces (Network, Advisory,
           Research) scoped to the advisor (and admin) roles. Each tab deep-links
@@ -2274,13 +2874,17 @@ function AppInner() {
       <Route path="/advisor/network/organizations" element={<Navigate to="/network" replace />} />
 
       {/* ── Advisor · Practice, Cohorts, Expertise ───────────────────────────
-          Three of Practice's five zones mount the live /advisor/advisory
-          workspace; Sessions and Earnings have no store and say so. Cohorts is
-          entirely new and reads Spin-Out Lab data read-only — it owns no Lab
-          route and writes nothing back. Expertise mounts the live workspace
-          that /office-hours already serves. The legacy /advisor/advisory/* and
-          /office-hours routes stay: Clients and Contracts are working tabs the
-          canvas has no zone for. */}
+          ONE of Practice's five zones still mounts the live /advisor/advisory
+          workspace — Delivery, until canvas PR3 lands. Opportunities (PR1),
+          Engagements (PR2), Sessions and Earnings all have their own pages over
+          real stores; the clause here that said "Sessions and Earnings have no
+          store and say so" was stale from migration 205 onward and is gone.
+          Cohorts is entirely new and reads Spin-Out Lab data read-only — it owns
+          no Lab route and writes nothing back. Expertise mounts the live
+          workspace that /office-hours already serves. The legacy
+          /advisor/advisory/* routes stay for Clients and Contracts, which are
+          working tabs the canvas has no zone for; the three it DOES have zones
+          for redirect as each artboard lands. */}
       <Route path="/practice" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/practice/opportunities" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/practice/engagements" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
@@ -2315,11 +2919,26 @@ function AppInner() {
       <Route path="/expertise/thinking" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/expertise/visibility" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
 
-      <Route path="/advisor/advisory" element={<Navigate to="/advisor/advisory/opportunities" replace />} />
-      <Route path="/advisor/advisory/opportunities" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(<AdvisorAdvisoryWorkspace />))} />
+      {/* THE LEGACY WORKSPACE'S DEFAULT TAB IS NOW `clients`, because
+          `opportunities` is a redirect below and a default that redirects makes
+          /advisor/advisory a two-hop bounce. Clients is the first tab the canvas
+          has no zone for, which is what this route now exists to serve. */}
+      <Route path="/advisor/advisory" element={<Navigate to="/advisor/advisory/clients" replace />} />
+      {/* THREE REDIRECTS, ONE PER ARTBOARD THAT HAS LANDED, and that is now every
+          tab the canvas has a zone for. The opportunities one was owed by PR1 and
+          missed — the zone shipped, the legacy inbox stayed reachable at its old
+          URL, and two pages answered the same question with different
+          instruments. The delivery one is owed by PR3 for the same reason and is
+          not a deletion: the review loop that tab uniquely carried is a section
+          of the new page, so the redirect loses no capability.
+
+          CLIENTS AND CONTRACTS ARE THE WHOLE REMAINING WORKSPACE. Neither has an
+          artboard, which is a gap in the canvas rather than permission to drop a
+          working tab, so both keep their URL and stay linked from Opportunities. */}
+      <Route path="/advisor/advisory/opportunities" element={<Navigate to="/practice/opportunities" replace />} />
+      <Route path="/advisor/advisory/engagements" element={<Navigate to="/practice/engagements" replace />} />
+      <Route path="/advisor/advisory/delivery" element={<Navigate to="/practice/delivery" replace />} />
       <Route path="/advisor/advisory/clients" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(<AdvisorAdvisoryWorkspace />))} />
-      <Route path="/advisor/advisory/engagements" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(<AdvisorAdvisoryWorkspace />))} />
-      <Route path="/advisor/advisory/delivery" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(<AdvisorAdvisoryWorkspace />))} />
       <Route path="/advisor/advisory/contracts" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(<AdvisorAdvisoryWorkspace />))} />
       {/* documentation/architecture/DECISIONS.md D12 — the Research row is /market-intel and nothing else.
           D8 redirected the market tab; D9 withdrew the funds tab; D12 withdrew
@@ -2337,13 +2956,18 @@ function AppInner() {
           documents had `files.ts` — a single signed-download endpoint, not a
           library.
 
-          `/advisor/research` now lands on the one research surface that is
-          real. The four withdrawn tabs are removed rather than redirected
-          there: /market-intel has no company, document or news data either,
-          so pointing "Companies" at it would swap a blank surface for a
-          misleading one. They return when a data source is licensed. */}
-      <Route path="/advisor/research" element={<Navigate to="/signals" replace />} />
-      <Route path="/advisor/research/market" element={<Navigate to="/signals" replace />} />
+          The four withdrawn tabs are removed rather than redirected: a
+          surface with no company, document or news data would swap a blank
+          page for a misleading one. They return when a data source is licensed.
+
+          D392 — the section root and the market tab land on the advisor's
+          Research bucket, not /signals. /signals was the one live surface when
+          these were repointed; the canvas-built bucket (/research, five live
+          zones) is now the advisor's research home, and /research/markets is
+          the comparable-readings zone the Advisor Research canvas's AR3 draws.
+          Both guards admit 'advisor'. The sector feed keeps its own route. */}
+      <Route path="/advisor/research" element={<Navigate to="/research" replace />} />
+      <Route path="/advisor/research/market" element={<Navigate to="/research/markets" replace />} />
 
       {/* ── Partner · Pipeline, Delivery, Offers ─────────────────────────────
           Nine of these fifteen zones already have a live surface, spread over
@@ -2356,9 +2980,10 @@ function AppInner() {
           bucketForPath is role-scoped, so each licence resolves to its own
           bucket. Check both lists before adding a sixth slug to either.
 
-          The legacy /partner/operations/*, /needs, /services, /perks and
-          /partner/insights routes all stay mounted — retiring that prefix is an
-          open decision, not this migration's to take. */}
+          The legacy /needs, /services, /perks and /partner/insights routes
+          stay mounted. /partner/operations/* retired in D395: each of its
+          addresses is a redirect below, to the canvas-built page that took
+          its job. */}
       <Route path="/pipeline/leads" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
       <Route path="/pipeline/proposals" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
       <Route path="/pipeline/negotiations" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
@@ -2381,18 +3006,36 @@ function AppInner() {
           Investor and founder keep the page they had; partner gets the shell. */}
       <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], effectiveRole === 'partner' ? <PartnerBucketRoutes /> : investorWorkspace('deals', <PipelineWorkspace />))} />
 
-      <Route path="/partner/operations" element={<Navigate to="/partner/operations/overview" replace />} />
-      <Route path="/partner/operations/overview" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
-      <Route path="/partner/operations/capabilities" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
-      <Route path="/partner/operations/portfolio" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
-      <Route path="/partner/operations/engagements" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
-      <Route path="/partner/operations/performance" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
-      {/* Task #5 — investor lifecycle sections now live. Pipeline stages render
-          the tabbed PipelineWorkspace; portfolio/funds analytics render as tabs
-          within their existing workspaces. Investor-scoped (admin can view). */}
-      <Route path="/pipeline/screening" element={guard(['admin', 'investor'], investorWorkspace('deals', <PipelineWorkspace />))} />
-      <Route path="/pipeline/commit" element={guard(['admin', 'investor'], investorWorkspace('deals', <PipelineWorkspace />))} />
-      <Route path="/pipeline/transactions" element={guard(['admin', 'investor'], investorWorkspace('deals', <PipelineWorkspace />))} />
+      {/* D395 — /partner/operations/* RETIRED. Each tab's job has a
+          canvas-built home, and each address lands on it. No guard here: the
+          destination guards itself, so an unentitled visitor is refused there
+          rather than at a URL that no longer has a page (the D118 shape).
+          None of the retired pages read a query string, so none is carried.
+            root, overview → /company-settings (the firm profile card, D390)
+            capabilities   → /offers/catalog (the service catalogue writes)
+            portfolio      → /delivery/health (founder reviews, D390)
+            engagements    → /pipeline/proposals (withdraw; the lifecycle and
+                              invoice ledger are on /delivery/board)
+            performance    → /pipeline/analytics (the same quotesAnalytics read) */}
+      <Route path="/partner/operations" element={<Navigate to="/company-settings" replace />} />
+      <Route path="/partner/operations/overview" element={<Navigate to="/company-settings" replace />} />
+      <Route path="/partner/operations/capabilities" element={<Navigate to="/offers/catalog" replace />} />
+      <Route path="/partner/operations/portfolio" element={<Navigate to="/delivery/health" replace />} />
+      <Route path="/partner/operations/engagements" element={<Navigate to="/pipeline/proposals" replace />} />
+      <Route path="/partner/operations/performance" element={<Navigate to="/pipeline/analytics" replace />} />
+      {/* D118/D119 — the three investor Deals sub-paths retire to `/deals/*`,
+          which is now their equal: #586 ported the search and the counted
+          chips they had and the zones did not. The destination guards itself,
+          so these carry no guard of their own — an unentitled visitor is
+          refused there rather than at a URL that no longer has a page.
+
+          `/pipeline` (the ROOT, above) deliberately does NOT redirect. It is
+          role-forked — partner gets PartnerBucketRoutes, investor and founder
+          keep PipelineWorkspace — so an unconditional redirect would take the
+          founder's board and the partner's bucket root with it. */}
+      <Route path="/pipeline/screening" element={<Navigate to="/deals/screening" replace />} />
+      <Route path="/pipeline/commit" element={<Navigate to="/deals/commit" replace />} />
+      <Route path="/pipeline/transactions" element={<Navigate to="/deals/closing" replace />} />
       <Route path="/portfolio/performance" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/portfolio/growth" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/portfolio/value-add" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
@@ -2433,15 +3076,27 @@ function AppInner() {
           names advisors as referrers. Network · Relationships reads these rows,
           so leaving the page unreachable made that section permanently empty
           with no way to fill it. */}
-      <Route path="/referrals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], partnerPrivateWorkspace(<ReferralsPage />))} />
-      <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferRedirect />)} />
+      {/* NOT wrapped in `partnerPrivateWorkspace`. That wrapper bounces an admin
+          previewing Partner to /studio, and it was doing so over a page the comment
+          above correctly describes as having no role branch at all: every endpoint
+          is `requireAuth` scoped to `referrer_user_id`, so the rows an admin sees
+          are their own, exactly as in the plain Admin view where the wrapper never
+          fired. There is no partner-private boundary here to state, so there is
+          nothing for a notice to say either — the wrapper was not this route's to
+          carry.
+
+          /refer and /payouts are ALIASES of this route: they exist only to arrive
+          here, so all three carry the same role list. Both omitted advisor while
+          this one admitted it, so an advisor following a /refer link bounced off a
+          page /referrals would have shown them. */}
+      <Route path="/referrals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ReferralsPage />)} />
+      <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ReferRedirect />)} />
       <Route path="/company-settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Suspense fallback={null}><CompanySettingsPage /></Suspense>)} />
       {/* Integrations now lives inside Settings; /integrations redirects there
           (preserving any ?query= so OAuth-return states still show). Available
           to every authenticated profile, matching the all-roles Settings tab. */}
       <Route path="/integrations" element={authOnly(<IntegrationsRedirect />)} />
-      <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <Navigate to="/referrals" replace />)} />
-      <Route path="/matches" element={guard(['admin', 'partner', 'investor'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="pipeline" user={user}><MatchesPage /></PartnerWorkspaceTabs>))} />
+      <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Navigate to="/referrals" replace />)} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><NetworkEffectsPage /></FounderWorkspaceTabs>))} />
       {/* /pipeline lives with the Partner bucket routes above — the partner
           canvas claims the prefix root as its Pipeline overview, and the
@@ -2472,13 +3127,11 @@ function AppInner() {
       <Route path="/network/organizations" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <NetworkWorkspace role={networkRole} />)} />
       <Route path="/relationships" element={<Navigate to="/network?tab=relationships" replace />} />
       <Route path="/legal-capital" element={guard(['admin', 'founder', 'partner', 'investor'], <LegalCapitalPage />)} />
-      {/* Task #17 — the investor sidebar no longer surfaces "Investor Portal"
-          (redundant with Studio). Investors hitting the old bookmark are
-          redirected to /studio; admin/partner keep the LP/capital-call surface. */}
-      <Route path="/partner-portal" element={guard(['admin', 'partner', 'investor'], partnerPrivateWorkspace(user?.role === 'investor' ? <Navigate to="/studio" replace /> : <PartnerPortal />))} />
-      {/* Task #9 (X-2) — Deal-specific Partner Portal (referral code,
-          granted tiers, redemption count). Distinct from the legacy
-          /partner-portal which keeps the LP/capital-call surface. */}
+      {/* Retired LP/capital-call cockpit. Bookmarks for admin, partner, and
+          investor land on Studio. /partners/portal below is a different page. */}
+      <Route path="/partner-portal" element={guard(['admin', 'partner', 'investor'], <PartnerPortalRedirect />)} />
+      {/* Task #9 (X-2) — Deal-specific partner page (referral code,
+          granted tiers, redemption count). */}
       <Route path="/partners/portal" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerDealPortal />))} />
       {/* Task #2 (DD) — Direct-URL guard for admin docs. Non-admins
           (or anonymous visitors) hitting /docs/admin/* see a Not Found
@@ -2486,10 +3139,12 @@ function AppInner() {
           redirected into the hash-anchored docs surface. */}
       <Route path="/docs/admin/*" element={<AdminDocsPathGuard />} />
       <Route path="/docs" element={<DocsRedirect />} />
-      {/* Task #17 — investor "Profile" nav lands on the self-profile surface
-          (the Settings profile section rendered at its own path so the sidebar
-          item highlights independently of Settings). */}
-      <Route path="/profile" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
+      {/* Task #17 mounted SettingsPage a second time at /profile so an investor
+          "Profile" nav row could highlight independently of Settings. That row
+          is gone; the exploring sidebar's "My Profile" now points at /account
+          itself. D433 retires the duplicate on D304's shape: a redirect, never
+          a 404, with the query and hash carried through. */}
+      <Route path="/profile" element={<SettingsRedirect />} />
       <Route path="/account" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/settings" element={<SettingsRedirect />} />
 
@@ -2525,6 +3180,30 @@ function AppInner() {
           WITH the firm-side ask: a token nobody can answer is not a consent
           mechanism, it is a column that never gets set. */}
       <Route path="/attest/partner/:token" element={<PartnerAttestConsentPage />} />
+
+      {/* D120 — the branch landing for an HQ support session.
+
+          `/support/session`, NOT `/support`, AND THE DIFFERENCE IS THE WHOLE
+          ROUTE. `/support` is already taken: `SupportRedirect` at :2287 sends
+          it to /help, preserving `?topic=`. Registering a second `/support`
+          here would have been dead code — React Router takes the first match,
+          so the hand-off link would have redirected to the help centre and
+          dropped its code, on every branch, with CI green. Caught by
+          support_handoff_page.test.mjs before it shipped. The help shortcut is
+          untouched.
+
+          OUTSIDE RequireAuth by necessity, not by preference: the HQ operator
+          arriving here holds no session on this host and cannot, since HQ's JWT
+          is signed with a different secret (D.4). Wrapping it would redirect
+          them to /login to sign in as a branch account they do not have. The
+          page itself grants nothing — the one-time code does, and only through
+          POST /api/auth/support/redeem on the branch. `isPublicPath` lists the
+          same path for the same reason. */}
+      <Route path="/support/session" element={<SupportRedeemPage />} />
+      {/* D441 — a move onto this branch. The invitee has no account here
+          yet, so the route is not behind the sign-in gate. /invite/:token
+          stays the events RSVP page. */}
+      <Route path="/join/:token" element={<JoinBranchPage />} />
 
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/contact" element={<ContactPage />} />
@@ -2617,7 +3296,13 @@ class AppErrorBoundary extends React.Component {
   }
   componentDidCatch(error, info) {
     try {
-      // eslint-disable-next-line no-console
+      // This is the crash class lib/log.js's own header says it was built for
+      // — "a production-only failure left no trace anywhere" — and it was the
+      // one boundary that never reported. The other three (TopLevelErrorBoundary,
+      // RouteErrorBoundary, SafeMount) have always paired the two calls: the
+      // beacon carries a redacted entry, and the console line adds
+      // `info.componentStack`, which toEntry has no field for.
+      reportError('AppErrorBoundary:top-level-crash', error);
       console.error('[AppErrorBoundary] top-level crash:', error, info?.componentStack);
     } catch { /* ignore */ }
   }
@@ -2656,6 +3341,16 @@ export default function App() {
             whole app is gone". */}
         <SafeMount name="SpinoutLabListener"><GlobalSpinoutLabListenerMount /></SafeMount>
         <SafeMount name="GlobalPaywallMount"><GlobalPaywallMount /></SafeMount>
+        {/* D136 — mounted here for the same reason the paywall is: the
+            compliance freeze refuses writes on every admin surface, so the
+            thing that explains the refusal cannot live on one page. It renders
+            nothing until a 423 arrives. */}
+        <SafeMount name="AdminFrozenBar"><AdminFrozenBar /></SafeMount>
+        {/* D142 — the branch twin, mounted for the same reason: the suspension
+            refuses writes across the whole branch shell, so the thing that
+            explains the refusal cannot live on one page. Renders nothing until
+            a 423 carrying `code: 'branch_suspended'` arrives. */}
+        <SafeMount name="BranchSuspendedBar"><BranchSuspendedBar /></SafeMount>
         <SafeMount name="CookieConsent"><CookieConsent /></SafeMount>
       </SettingsProvider>
     </AuthProvider>

@@ -33,7 +33,11 @@ function clip(value, max) {
 // This runs on the CLIENT so both the local ring buffer and the network beacon
 // are already clean; the Worker never sees the raw values. Best-effort and
 // deliberately over-eager (telemetry legibility < privacy). Never throws.
-function redact(value) {
+// Exported so the things that depend on its exact behaviour can use the real
+// function rather than a second copy that drifts: `check-frontend-logging.mjs`
+// asserts no scope literal is mangled by it, and the beacon test asserts it
+// strips what it claims to.
+export function redact(value) {
   if (value == null) return value;
   let s = String(value);
   try {
@@ -57,10 +61,27 @@ function redact(value) {
 // Build a sanitized, serializable entry. Only ever reads known-safe fields —
 // deliberately NOT the user object, tokens, cookies, or the full URL (query
 // strings can carry magic-link / oauth params). `pathname` only.
+//
+// `scope` IS REDACTED TOO, AND IT IS THE ONE FIELD THAT LOOKS LIKE IT NEED NOT
+// BE. A scope is a developer-authored literal, so in the correct call there is
+// nothing in it to redact — which is exactly why it went unredacted for so
+// long. But the arguments are easy to swap, and when they are, the error's own
+// text lands here: `String(new TypeError('… a@b.com …'))` becomes the scope.
+// The Worker's sink states outright that "the client already redacts
+// secrets/PII from the free-form fields" (cloudflare-worker/src/index.ts:478)
+// and then writes `scope` verbatim into a deployment log line, so an
+// unredacted scope is a leak into `wrangler tail`. `check-frontend-logging.mjs`
+// stops the swap at build time; this stops the consequence if one ever slips.
+//
+// The cost is real and is guarded rather than hoped away: `redact` rewrites
+// `key:value` for a list of sensitive key names, so a scope of `auth:refresh`
+// would become `auth:[redacted]` and support would lose the one string they
+// search by. All 203 literal scopes in the tree today pass through unchanged,
+// and the guard asserts that for every new one.
 function toEntry(scope, err, level) {
   const isErrObj = err && typeof err === 'object';
   return {
-    scope: clip(scope, 200) || 'unknown',
+    scope: clip(redact(scope), 200) || 'unknown',
     level,
     name: isErrObj ? clip(err.name, 100) : undefined,
     message: clip(redact(isErrObj ? (err.message ?? String(err)) : err), MSG_MAX),

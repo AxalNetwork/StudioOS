@@ -90,14 +90,33 @@ test('every Practice zone is served — none is left claiming a store that exist
     .map((r) => r.slice('/practice/'.length));
   assert.deepEqual(zones, ['opportunities', 'engagements', 'delivery', 'sessions', 'earnings']);
 
-  // Three come from the legacy Advisory workspace, two from their own pages.
-  // Together that must be all five: Practice has no unbacked zone left.
+  // ALL FIVE COME FROM THEIR OWN PAGE NOW, AND NONE FROM THE LEGACY WORKSPACE.
+  // That is what `fromWorkspace` being empty asserts, and the assertion is the
+  // point: the legacy five-tab workspace no longer serves a single Practice
+  // zone, so no advisor can reach two pages that answer the same question with
+  // different instruments.
+  //
+  // `opportunities` MOVED on canvas PR1, `engagements` on PR2 and `delivery` on
+  // PR3. All three rendered the legacy workspace `embedded`: a pending-request
+  // queue, a flat list of BOOKINGS keyed on `advisor_bookings.status`, and a
+  // post-session review loop. All three were honest and none was its artboard —
+  // PR1 asks for a decision LOG over every request that ever arrived, PR2 for a
+  // CONTRACT board with renewal cycles that nothing could store until migration
+  // 238, PR3 for a collection of WORK PRODUCTS with a version trail and an open
+  // receipt that nothing could store until 239.
+  //
+  // THE `LIVE` BLOCK IS STILL READ RATHER THAN ASSUMED GONE. It keeps its
+  // `/practice` key with an empty Set — the mechanism is the generic escape
+  // hatch for a bucket served by a workspace of its own — so this slice still
+  // has something to find, and finding nothing in it is the assertion.
   const live = bucketRoutes.slice(bucketRoutes.indexOf('const LIVE = {'),
     bucketRoutes.indexOf('const ZONE = {'));
+  assert.ok(live.length > 0 && live.length < 3000, 'the LIVE slice must not run away');
   const fromWorkspace = zones.filter((z) => live.includes(`'${z}'`));
   const fromOwnPage = dispatchMap()['/practice'] || [];
-  assert.deepEqual(fromWorkspace, ['opportunities', 'engagements', 'delivery']);
-  assert.deepEqual(fromOwnPage, ['sessions', 'earnings']);
+  assert.deepEqual(fromWorkspace, []);
+  assert.deepEqual(fromOwnPage.slice().sort(),
+    ['delivery', 'earnings', 'engagements', 'opportunities', 'sessions']);
   assert.deepEqual([...fromWorkspace, ...fromOwnPage].sort(), [...zones].sort());
 
   // And the copy that said they had "no store at all" is gone. It was true
@@ -186,42 +205,6 @@ test('a failed read is not rendered as an empty store', () => {
     assert.match(src, /catch \(e\) \{/, `${page} must catch its own read failure`);
   }
 });
-
-/**
- * Every `<ZoneBody …>` opening tag under pages/advisor, as raw source. The
- * tag spans several lines at most call sites, so this balances angle brackets
- * at brace depth 0 rather than reading a line.
- */
-function zoneBodyTags(code) {
-  const tags = [];
-  let at = code.indexOf('<ZoneBody');
-  while (at !== -1) {
-    let depth = 0;
-    let end = at;
-    for (let i = at; i < code.length; i += 1) {
-      const ch = code[i];
-      if (ch === '{') depth += 1;
-      else if (ch === '}') depth -= 1;
-      else if (ch === '>' && depth === 0) { end = i; break; }
-    }
-    tags.push(code.slice(at, end + 1));
-    at = code.indexOf('<ZoneBody', end + 1);
-  }
-  return tags;
-}
-
-/** The `loading={…}` expression of one tag, brace-balanced. */
-function loadingExpr(tag) {
-  const key = 'loading={';
-  const at = tag.indexOf(key);
-  if (at === -1) return null;
-  let depth = 1;
-  for (let i = at + key.length; i < tag.length; i += 1) {
-    if (tag[i] === '{') depth += 1;
-    else if (tag[i] === '}') { depth -= 1; if (depth === 0) return tag.slice(at + key.length, i); }
-  }
-  return null;
-}
 
 test('no zone holds `loading` true past its own error', () => {
   // THE BUG THIS PINS SHUT, which shipped and was reported from production as

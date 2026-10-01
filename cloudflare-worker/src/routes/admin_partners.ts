@@ -17,7 +17,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAdmin } from '../auth';
-import { hashEmail } from '../util/hashEmail';
+import { logAdminAction } from '../services/adminAudit';
 import { sendPartnerInvitationEmail } from '../services/email';
 import { ALL_PARTNER_DEAL_TYPES, type PartnerDealType } from '../services/partnerDeals';
 import { ensurePartnerDirectoryColumns } from '../services/partnerDirectorySchema';
@@ -27,6 +27,7 @@ import { ensurePartnerDirectoryColumns } from '../services/partnerDirectorySchem
 // the user's actual tier even if the free cap shifts later.
 import { INVESTOR_QUOTAS } from '../middleware/requireInvestorTier';
 import { clampLimit } from '../util/pagination';
+import { likeNeedleLower } from '../util/likeSearch';
 
 const admin_partners = new Hono<{ Bindings: Env }>();
 
@@ -40,22 +41,6 @@ function genInviteToken(): string {
 
 function appUrl(env: Env): string {
   return env.APP_URL || 'https://axal.vc';
-}
-
-async function logAdminAction(
-  env: Env, adminId: number, adminEmail: string, action: string, details: Record<string, unknown>,
-): Promise<void> {
-  try {
-    const actorHash = await hashEmail(adminEmail);
-    await env.DB.prepare(
-      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
-    ).bind(action, JSON.stringify(details), actorHash, adminId).run();
-  } catch (e) { console.warn('[admin_partners] activity log failed', e); }
-  try {
-    await env.DB.prepare(
-      `INSERT INTO admin_audit_log (admin_user_id, action, filters_json) VALUES (?, ?, ?)`,
-    ).bind(adminId, action, JSON.stringify(details)).run();
-  } catch (e) { /* admin_audit_log may not exist in some envs */ }
 }
 
 // ---------- Invitations ----------
@@ -452,7 +437,9 @@ admin_partners.get('/directory', async (c) => {
   const params: unknown[] = [];
   let where = `1=1`;
   if (q) {
-    const like = `%${q.replace(/[%_]/g, (m) => `\\${m}`)}%`;
+    // `1`, not the helper's default: this search accepts a single character
+    // today and D128 is a de-duplication, not a behaviour change.
+    const like = likeNeedleLower(q, 1)!;
     where += ` AND (lower(name) LIKE ? ESCAPE '\\' OR lower(coalesce(company,'')) LIKE ? ESCAPE '\\' OR lower(email) LIKE ? ESCAPE '\\')`;
     params.push(like, like, like);
   }
@@ -608,8 +595,13 @@ admin_partners.post('/links', async (c) => {
   await c.env.DB.prepare('UPDATE users SET partner_id = ? WHERE id = ?')
     .bind(firmId, userId).run();
 
+  // D159 — `target_user_id`, not `user_id`: the shared logAdminAction reads
+  // that key to fill `admin_audit_log.viewed_user_id`, which is what HQ's
+  // governance feed joins its Target column from. This was the one call site
+  // of five that named the key differently, so attaching a person to a firm
+  // would have been recorded with no subject. A guard now pins the spelling.
   await logAdminAction(c.env, admin.id, admin.email, 'partner_firm_link_set', {
-    user_id: userId,
+    target_user_id: userId,
     from: user.partner_id ?? null,
     to: firmId,
     firm_name: firm?.name ?? null,

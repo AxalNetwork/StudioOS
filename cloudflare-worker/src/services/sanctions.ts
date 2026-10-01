@@ -13,6 +13,7 @@
  * positive + negative cases without touching KV / D1 / network.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
 // ---------------------------------------------------------------------------
 // Schema bootstrap (defensive — same lazy pattern as services/trust.ts)
@@ -23,21 +24,21 @@ import type { Env } from '../types';
 // that never touch the sanctions service. Exporting it as a standalone
 // helper lets the routes call it directly. D1's ALTER ADD COLUMN has no
 // IF NOT EXISTS, so we swallow duplicate-column errors.
-let pairwiseColumnsReady = false;
+const PAIRWISE_COLUMNS_READY = new WeakMap<object, boolean>();
 export async function ensurePairwiseNdaColumns(env: Env): Promise<void> {
-  if (pairwiseColumnsReady) return;
+  if (PAIRWISE_COLUMNS_READY.get(bindingKey(env))) return;
   const stmts = [
     `ALTER TABLE pairwise_ndas ADD COLUMN signers_json TEXT NOT NULL DEFAULT '[]'`,
     `ALTER TABLE pairwise_ndas ADD COLUMN voided_at TIMESTAMP`,
     `ALTER TABLE pairwise_ndas ADD COLUMN voided_reason TEXT`,
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
-  pairwiseColumnsReady = true;
+  PAIRWISE_COLUMNS_READY.set(bindingKey(env), true);
 }
 
-let sanctionsSchemaReady = false;
+const SANCTIONS_SCHEMA_READY = new WeakMap<object, boolean>();
 export async function ensureSanctionsSchema(env: Env): Promise<void> {
-  if (sanctionsSchemaReady) return;
+  if (SANCTIONS_SCHEMA_READY.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS sanctions_screenings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,7 +61,7 @@ export async function ensureSanctionsSchema(env: Env): Promise<void> {
   // Sanctions screening flows also benefit from the pairwise columns being
   // present (admin sees both views in one session), so chain the helper.
   await ensurePairwiseNdaColumns(env);
-  sanctionsSchemaReady = true;
+  SANCTIONS_SCHEMA_READY.set(bindingKey(env), true);
 }
 
 // ---------------------------------------------------------------------------
@@ -423,4 +424,64 @@ export async function listScreenings(
        LIMIT ?`,
   ).bind(...binds, limit).all();
   return (rows?.results || []) as any[];
+}
+
+// ---------------------------------------------------------------------------
+// D200 — the figures HQ's Security page draws for the Sanctions card.
+//
+// The page used to answer `sanctions: absent('No sanctions screening runs on
+// the platform; KYC status is the only trust fact recorded.')` — false on
+// both clauses: `screenUser` above is a real screen (OFAC, EU and UK HMT
+// lists, one row per run), reachable from POST /api/trust/sanctions/screen
+// and rendered on the Trust Center's Sanctions tab. What is true is that
+// nothing SCHEDULES it, so a count of zero is a measured zero, not an absent
+// store — and the sentence below says which.
+//
+// DELIBERATELY NOT `ensureSanctionsSchema` FIRST. A read that bootstraps the
+// table it reads cannot tell "no run has happened" from "the table did not
+// exist until this read created it" — and creating a store as a side effect
+// of a Security page load is the wrong direction. A missing table answers
+// `available: false` with the reason, which is the honest state.
+// ---------------------------------------------------------------------------
+export const SANCTIONS_SCREENING_HOW =
+  'Screening runs on request from the Trust Center Sanctions tab, one row per run against the OFAC, EU and UK '
+  + 'HMT lists. Nothing schedules it, so a count of zero is a measured zero.';
+
+export type ScreeningSummary =
+  | {
+      available: true;
+      runs_total: number;
+      last_run_at: string | null;
+      hits_total: number;
+      unreviewed_hits: number;
+      path: '/trust';
+      how: string;
+    }
+  | { available: false; reason: string };
+
+export async function screeningSummary(env: Env): Promise<ScreeningSummary> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS runs_total,
+              MAX(run_at) AS last_run_at,
+              COALESCE(SUM(CASE WHEN hit = 1 THEN 1 ELSE 0 END), 0) AS hits_total,
+              COALESCE(SUM(CASE WHEN hit = 1 AND reviewed_at IS NULL THEN 1 ELSE 0 END), 0) AS unreviewed_hits
+         FROM sanctions_screenings`,
+    ).first<{ runs_total: number; last_run_at: string | null; hits_total: number; unreviewed_hits: number }>();
+    if (!row) return { available: false, reason: 'The sanctions_screenings table answered no row.' };
+    return {
+      available: true,
+      runs_total: Number(row.runs_total ?? 0),
+      last_run_at: row.last_run_at ?? null,
+      hits_total: Number(row.hits_total ?? 0),
+      unreviewed_hits: Number(row.unreviewed_hits ?? 0),
+      path: '/trust',
+      how: SANCTIONS_SCREENING_HOW,
+    };
+  } catch (e) {
+    return {
+      available: false,
+      reason: `The sanctions_screenings table could not be read (${e instanceof Error ? e.message : String(e)}).`,
+    };
+  }
 }

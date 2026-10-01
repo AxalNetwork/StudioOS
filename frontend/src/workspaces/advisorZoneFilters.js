@@ -6,9 +6,9 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  * THE ADVISOR LICENCE SERVES EIGHT ZONES THAT CARRY A `filters:` ARRAY —
  * `/network/{relationships,introductions,organizations}` and
  * `/research/{ask,client-prep,markets,companies,library}`. All five Research
- * zones are here and so is `network/relationships`; `network/introductions` is
- * listed in `profile_zone_filters.test.mjs`'s `excluded` set with the reason it
- * is not yet, and `network/organizations` never will be (below). The table
+ * zones are here, and so are `network/relationships` and
+ * `network/introductions`; `network/organizations` never will be (below). The
+ * four Expertise zones with a body joined on D392. The table
  * fills one surface at a time, and the guard is what keeps that honest: an
  * exclusion cannot grow by accident and a stale one cannot linger.
  *
@@ -70,18 +70,13 @@ const NO_INTERACTION_DATE =
 const EVERY_ROW_IS_YOURS =
   'every relationship here is already one of yours; the list loads only rows you are a party to, so this would select all of them';
 
-// `/network/introductions`. `Gated` IS RELABELLED because the canvas's word
-// means the double opt-in and this page can only see one side of it: the
-// counterpart's consent is a separate `intro_propositions` row owned by
-// `target_user_id`, which the response never returns. What `status = 'pending'`
-// actually means is that YOU have not answered, so the chip says that.
-//
-// `Made` is the same asymmetry, and the zone's own docblock already argues it:
-// `accepted` means you accepted and "cannot distinguish 'waiting on them' from
-// 'you are already connected'". No `connected` value exists — the CHECK on
-// `status` would reject one.
-const NO_CONNECTED_STATE =
-  'accepting is recorded per side, so this page knows that you accepted and not whether they did; no connected state exists to mark an introduction as made';
+// `/network/introductions`. FOUR LIVE CHIPS, the partner panel's four (D392).
+// `Gated` was relabelled `Awaiting you` and `Made` was prose, both on the
+// premise that the response carried only this side's consent. It carries both
+// (`counterpart_status`), so `Gated` is the canvas's double opt-in again —
+// Requested or One side — and `Made` is `intro_terms.made_at`, which the zone
+// lets an advisor record once both sides have agreed. `Lapsed` has no chip and
+// is reachable through `All`, for the reason the partner row gives.
 
 export const ADVISOR_ZONE_FILTERS = {
   // ── Network ──────────────────────────────────────────────────────────────
@@ -95,14 +90,14 @@ export const ADVISOR_ZONE_FILTERS = {
     { canvas: 'Mine', unbuilt: EVERY_ROW_IS_YOURS },
     {
       canvas: 'From the Lab',
-      unbuilt: 'nothing marks a relationship as sourced from the Lab; a referral records a name and an organisation as free text, with no link back to an account',
+      unbuilt: 'nothing marks a relationship as sourced from the Lab; a referral records a name and an organisation as free text, with no link back to an account', hover: 'Nothing marks a relationship as sourced from the Lab; a referral records free text only.',
     },
   ],
 
   'network/introductions': [
     { canvas: 'All', key: 'all' },
-    { canvas: 'Gated', key: 'pending', label: 'Awaiting you' },
-    { canvas: 'Made', unbuilt: NO_CONNECTED_STATE },
+    { canvas: 'Gated', key: 'gated' },
+    { canvas: 'Made', key: 'made' },
     { canvas: 'Declined', key: 'declined' },
   ],
 
@@ -186,7 +181,7 @@ export const ADVISOR_ZONE_FILTERS = {
     { canvas: 'Prospects', unbuilt: NO_COMPANY_ON_AN_ANALYSIS },
     {
       canvas: 'Researching',
-      unbuilt: 'the only state an analysis carries is the state of its own run (draft, running, complete or error), which says nothing about your standing with a company',
+      unbuilt: 'the only state an analysis carries is the state of its own run (draft, running, complete or error), which says nothing about your standing with a company', hover: 'An analysis records the state of its own run, which says nothing about your standing.',
     },
   ],
   // ALL FOUR RUN. `kind` carries the artboard's own axis, and `index_state`
@@ -203,6 +198,153 @@ export const ADVISOR_ZONE_FILTERS = {
   // indexed once and later failed a re-index keeps its old count: the failure
   // path updates the state and leaves the number alone. Filtering on the number
   // would silently drop exactly the documents this chip is for.
+  // ── Expertise (D392) ─────────────────────────────────────────────────────
+  // Four of the five artboards, sixteen chips, twelve live. Every live chip
+  // reads a column the zone already loads; the four that are not name what is
+  // missing. `expertise/visibility` has no row: its page is the gap card
+  // ("Nothing counts profile views"), and four controls above a sentence
+  // explaining why there is nothing to count would be a filter over nothing.
+  //
+  // `Match-critical` IS NOT A JUDGEMENT. It is the fields the completeness
+  // meter already counts as "what every match surface reads" — the page's
+  // `MATCH_FIELDS`, which both the meter and the chip read, so they cannot
+  // disagree. `Gaps
+  // only` is those and the rest, empty in the SAVED record, so typing into a
+  // field does not make it vanish mid-edit.
+  'expertise/profile': [
+    { canvas: 'All fields', key: 'all' },
+    { canvas: 'Gaps only', key: 'gaps' },
+    { canvas: 'Match-critical', key: 'match' },
+    { canvas: 'Public preview', unbuilt: 'no public advisor profile page exists; the preview beside the form is what a founder is shown today', hover: 'No public advisor profile page exists to preview.' },
+  ],
+  // `kind` is a CHECKed column since migration 203, and the form writes it.
+  'expertise/services': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Fixed', key: 'fixed' },
+    { canvas: 'Package', key: 'package' },
+    { canvas: 'Retainer', key: 'retainer' },
+  ],
+  // The three states the stats strip above the list already counts:
+  // `attested` is the worker's (a named person answered through their own
+  // link), awaiting is an open request with no answer, self-stated is the rest.
+  'expertise/proof': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Attested', key: 'attested' },
+    { canvas: 'Awaiting consent', key: 'awaiting' },
+    { canvas: 'Self-stated', key: 'self' },
+  ],
+  // `articles.status` is draft or published. Nothing classifies a piece as an
+  // essay rather than a note or a post — there is no kind column on articles.
+  'expertise/thinking': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Published', key: 'published' },
+    { canvas: 'Drafts', key: 'draft' },
+    { canvas: 'Essays', unbuilt: 'an article records no kind, so nothing tells an essay from any other piece', hover: 'Articles carry no kind, so an essay cannot be told apart.' },
+  ],
+
+  // ── Practice ─────────────────────────────────────────────────────────────
+  //
+  // ALL FIVE RUN, AND TWO OF THEM ARE DERIVED RATHER THAN STORED. `status` on
+  // `advisor_bookings` is pending|confirmed|completed|cancelled|no_show, so
+  // Accepted and Declined read a column — but `Expired` does not exist as a
+  // status anywhere. A request still `pending` after its SLOT HAS STARTED is
+  // one the advisor never answered, and that is the artboard's sharpest point:
+  // "a decline preserves the referral, silence spends it". Two stored facts,
+  // one honest state.
+  //
+  // `Declined` EXCLUDES TWO CANCELLATIONS THE WORKER WRITES ITSELF —
+  // 'slot_cancelled' and 'capacity_race' (`routes/advisors.ts`). Neither is an
+  // answer to a request, and counting them would make the accept rate beside
+  // the chips wrong.
+  'practice/opportunities': [
+    { canvas: 'Awaiting decision', key: 'awaiting' },
+    { canvas: 'Accepted', key: 'accepted' },
+    { canvas: 'Declined', key: 'declined' },
+    { canvas: 'Expired', key: 'expired' },
+    { canvas: 'All time', key: 'all' },
+  ],
+
+  // ALL FIVE RUN, AND ONE OF THEM REORDERS RATHER THAN NARROWS. Migration 238
+  // stores `lane` with five values, so Signed, Renewal due and Ended each read
+  // a column directly — `Signed` covers both signed lanes, because
+  // `renewal_due` is a state inside Signed on the canvas's own board and a chip
+  // that excluded it would hide the contracts most in need of attention.
+  //
+  // `By client` IS A SORT, and saying so matters. Every other chip in these four
+  // tables narrows a set; this one orders the board, the renewal history and the
+  // scope cards by client name and drops nothing. A chip called "By client" that
+  // filtered rows out would be lying about what it did — and this file's own
+  // docblock is about exactly that failure mode, a chip whose empty result reads
+  // as an answer.
+  'practice/engagements': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Signed', key: 'signed' },
+    { canvas: 'Renewal due', key: 'renewal_due' },
+    { canvas: 'Ended', key: 'ended' },
+    { canvas: 'By client', key: 'by_client' },
+  ],
+
+  // ALL FIVE RUN, AND ONE OF THEM ONLY RUNS BECAUSE THE STORE RESOLVED THE
+  // CANVAS'S OWN INCONSISTENCY. `Draft` is drawn as a chip and defined as a
+  // pill, but no row in the artboard's fixture carries that state — its draft
+  // row is `state:'Not started'` with `version:'v2 draft'`, two names for one
+  // thing. Clicking the chip as drawn would have returned nothing, which is the
+  // exact failure this file's docblock is about: an empty set reading as an
+  // answer. Migration 239 makes it a real state — a work product whose latest
+  // version has never been sent — so `Draft` is `not_started` and the chip
+  // narrows honestly.
+  //
+  // `Unopened` and `Opened` read the derived state, which comes from whether
+  // `opened_at` exists — and that column is written by the FOUNDER side, never
+  // by an advisor route (D72). These two chips are the only place in four
+  // profiles where a filter reads a fact the signed-in user cannot author.
+  //
+  // `By client` reorders rather than narrows, as on Engagements.
+  'practice/delivery': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Unopened', key: 'unopened' },
+    { canvas: 'Opened', key: 'opened' },
+    { canvas: 'Draft', key: 'draft' },
+    { canvas: 'By client', key: 'by_client' },
+  ],
+
+  // TWO OF THESE CHANGE THE WINDOW AND TWO NARROW IT, which is unusual enough
+  // to say out loud. `Two weeks` and `Month` ask the server for a different
+  // span — the grid is what came back, and filtering a fortnight down to "a
+  // month" would show FEWER slots under the wider name. `Past sessions` and
+  // `Unpaid held` narrow what is already loaded.
+  //
+  // `Unpaid held` earns its place rather than duplicating a tile: the tile
+  // counts them, this shows them. Otherwise every held slot is one amber card
+  // somewhere in a fortnight, and the artboard's own gate note is about
+  // exactly the case where a reader needs to find them all at once.
+  'practice/sessions': [
+    { canvas: 'Two weeks', key: 'two_weeks' },
+    { canvas: 'Month', key: 'month' },
+    { canvas: 'Past sessions', key: 'past' },
+    { canvas: 'Unpaid held', key: 'unpaid_held' },
+  ],
+
+  // D4 (`design/canvases/backlog/Detail Layer Canvas II.dc.html`), which is
+  // what PR5 in the Practice canvas points at: "drawn in full as D4".
+  //
+  // THE FIRST TWO ARE A DYNAMIC GROUP, and that is the whole reason this entry
+  // is not four static chips. D4's fixture draws "Q3 2026" and "Q2 2026",
+  // which are the right two CHIPS and the wrong two LABELS: written down, the
+  // page names one quarter for ever and is wrong from January. The page
+  // supplies today's two quarters, exactly as `grow/customers` supplies its
+  // own sources.
+  'practice/earnings': [
+    {
+      canvas: ['Q3 2026', 'Q2 2026'],
+      dynamic: 'quarters',
+      label: 'One chip per quarter',
+      unbuilt: 'the two quarter chips are named from the reader’s own calendar, so a page that supplies none draws none',
+    },
+    { canvas: 'Year to date', key: 'ytd' },
+    { canvas: 'All time', key: 'all' },
+  ],
+
   'research/library': [
     { canvas: 'All', key: 'all' },
     { canvas: 'Session docs', key: 'client', label: 'About a client' },

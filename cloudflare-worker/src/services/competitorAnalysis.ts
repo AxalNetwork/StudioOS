@@ -290,7 +290,7 @@ async function enrichWithCrawl(
         id: uid(),
         candidate_id: cand.id,
         url: page.url,
-        kind: classifyPage(page.url),
+        kind: sourceKind(page.url),
         title: page.title || cand.name,
         status: page.status,
         fetched_at: page.fetched_at,
@@ -322,7 +322,8 @@ async function enrichWithCrawl(
   }
 }
 
-function classifyPage(url: string): string {
+/** Kind of one public page, from its URL. A homepage is the fallback, not a guess at the company. */
+export function sourceKind(url: string): string {
   const p = url.toLowerCase();
   if (/pric|plan/.test(p)) return 'pricing';
   if (/feature|product/.test(p)) return 'features';
@@ -330,6 +331,47 @@ function classifyPage(url: string): string {
   if (/blog|news|press/.test(p)) return 'news';
   if (/career|job/.test(p)) return 'careers';
   return 'homepage';
+}
+
+/**
+ * Sources and signals for one candidate's own site.
+ *
+ * `enrichWithCrawl` also writes headings and pricing hints onto `details`,
+ * and it recomputes relevance. This page does not: a fetched pricing page is
+ * a source, and a price nobody typed stays unrecorded. The score stays the
+ * one the scan already stored — a crawl of a page is not a new measurement,
+ * and a blank score must not become 0 because a GET happened. The saved
+ * fields are written back onto the same object so a caller that persists the
+ * candidate afterwards cannot accidentally keep the crawl's edits.
+ */
+export async function collectCandidateCrawl(
+  env: Env,
+  userId: number,
+  analysisId: string,
+  cand: Candidate,
+  depth: 'quick' | 'deep',
+): Promise<{ sources: SourceRecord[]; signals: SignalRecord[] }> {
+  const saved = {
+    details: {
+      ...cand.details,
+      features: cand.details.features ? [...cand.details.features] : undefined,
+      pricing: cand.details.pricing ? [...cand.details.pricing] : undefined,
+    },
+    relevance_score: cand.relevance_score,
+    scores: { ...cand.scores },
+    summary: cand.summary,
+  };
+  const sources: SourceRecord[] = [];
+  const signals: SignalRecord[] = [];
+  try {
+    await enrichWithCrawl(env, userId, analysisId, cand, depth, sources, signals);
+    return { sources, signals };
+  } finally {
+    cand.details = saved.details;
+    cand.relevance_score = saved.relevance_score;
+    cand.scores = saved.scores;
+    cand.summary = saved.summary;
+  }
 }
 
 async function distillPositioning(env: Env, userId: number, name: string, text: string): Promise<string> {

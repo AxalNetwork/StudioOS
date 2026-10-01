@@ -378,8 +378,14 @@ test('an unreadable spend figure hides the meter instead of drawing an empty bar
   // read. A 0% bar drawn from it asserts a spend the platform cannot vouch for.
   const src = scan(read('frontend/src/ui/AssistRail.jsx'));
   assert.match(src, /const spendKnown = typeof spent === 'number' && Number\.isFinite\(spent\)/);
-  assert.match(src, /\{spendKnown && \(/, 'the bar is conditional on a known figure');
-  assert.match(src, /\{spendKnown && meter\.over/, 'and so is the over-cap warning');
+  // RE-AIMED IN D400. The gate moved from `spendKnown` onto `meter`, which is
+  // now null unless the figure AND the cap are known — a cap the response did
+  // not carry used to be `?? 0`. The property is unchanged: no known figure,
+  // no meter, so no bar and no over-cap warning.
+  assert.match(src, /const meter = spendKnown && capKnown \? spendMeter\(spent, config\.planCap\) : null;/,
+    'the meter is computed from an unknown figure');
+  assert.match(src, /\{meter && \(/, 'the bar is conditional on a known figure');
+  assert.match(src, /\{meter\?\.over && /, 'and so is the over-cap warning');
 });
 
 test('the estimate is the caller’s own observed average, not a model', () => {
@@ -599,8 +605,12 @@ test('each mount wraps its own page, once, inside the exported component', () =>
   // The mounts were applied by script across six files. A wrap that landed in
   // a later helper function would still build — Vite transpiles rather than
   // type-checks — and would render nothing while looking correct in a diff.
-  const PAGES = ['AdvisoryPage', 'SpinoutLabAdvisorsPage', 'BrandBuilderPage',
-    'SpinoutLabBrandPage', 'SpinoutLabMarketPage', 'DeckReviewerPage'];
+  // The three Spin-Out Lab pages left this list with D317: the Lab carries no
+  // Eadwyn rail (workspace_frame_contract asserts that). The brand tool's
+  // "Brand builder" card stays on BrandBuilderPage.
+  const PAGES = ['AdvisoryPage', 'BrandBuilderPage', 'DeckReviewerPage'];
+  assert.doesNotMatch(read('frontend/src/pages/SpinoutLabBrandPage.jsx'), /<AssistLayout\b/,
+    'the Spin-Out Lab brand page mounts an assist rail again');
   for (const name of PAGES) {
     const lines = read(`frontend/src/pages/${name}.jsx`).split('\n');
     const start = lines.findIndex((l) => l.startsWith('export default function'));

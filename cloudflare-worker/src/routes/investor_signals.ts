@@ -23,6 +23,7 @@ import {
 } from '../services/matchingVectors';
 import { isAdmin, isFounder, mapError } from './_t13t14t15_helpers';
 import { filterOptedInUserIds } from '../services/matchingConsent';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export const investorProfile = new Hono<{ Bindings: Env }>();
 export const investorSignals = new Hono<{ Bindings: Env }>();
@@ -48,9 +49,9 @@ const STOP_WORDS = new Set([
   'who','what','when','where','why','how',
 ]);
 
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   try {
     await env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS investor_profiles (
@@ -112,7 +113,7 @@ async function ensureSchema(env: Env): Promise<void> {
     await env.DB.prepare(
       `CREATE INDEX IF NOT EXISTS idx_investor_signals_snapshots_computed_at ON investor_signals_snapshots(computed_at DESC)`,
     ).run();
-    migrated = true;
+    MIGRATED.set(bindingKey(env), true);
   } catch (e) {
     console.error('[investor_signals] migration failed', e);
   }

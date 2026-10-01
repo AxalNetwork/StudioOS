@@ -1,11 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Banknote, FileText, RefreshCw, Plus, X, AlertTriangle, CheckCircle2,
-  PieChart as PieIcon, TrendingUp, Wallet, Send, ScrollText,
+  Banknote, FileText, RefreshCw, Plus, X, AlertTriangle, Send, ScrollText,
 } from 'lucide-react';
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line,
-} from 'recharts';
 import { api } from '../lib/api';
 import { useEscapeClose } from '../components/useEscapeClose';
 
@@ -109,13 +105,16 @@ function CapitalCallModal({ fund, onClose }) {
   useEscapeClose(() => onClose());
   const [amountM, setAmountM] = useState('');
   const [note, setNote] = useState('');
+  // D371: the due date the worker always accepted and this form never sent.
+  // Blank stays blank — a deadline an LP acts on is never defaulted.
+  const [dueDate, setDueDate] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true); setErr('');
     try {
-      await api.fundsCapitalCallV2(fund.id, Math.round(Number(amountM || 0) * 1_000_000 * 100), note);
+      await api.fundsCapitalCallV2(fund.id, Math.round(Number(amountM || 0) * 1_000_000 * 100), note, dueDate || null);
       onClose(true);
     } catch (e) { setErr(e.message); }
     finally { setBusy(false); }
@@ -131,6 +130,7 @@ function CapitalCallModal({ fund, onClose }) {
         </div>
         {err && <div className="bg-red-50 text-red-700 text-xs rounded px-2 py-1 mb-2">{err}</div>}
         <Field label="Amount ($M)" type="number" step="0.01" value={amountM} onChange={setAmountM} required />
+        <div className="mt-3"><Field label="Due date (optional)" type="date" value={dueDate} onChange={setDueDate} /></div>
         <div className="mt-3"><Field label="Note (optional)" value={note} onChange={setNote} /></div>
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={() => onClose()} className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg dark:border-gray-700">Cancel</button>
@@ -193,17 +193,43 @@ function DistributionModal({ fund, onClose }) {
   );
 }
 
-function LPADrawer({ fundId, onClose }) {
+// Exported for the LP workspace's My-commitment card (D372), which took over
+// the LP's "view LPA" from the retired LPPortalView.
+export function LPADrawer({ fundId, onClose }) {
   useEscapeClose(onClose);
-  const [doc, setDoc] = useState(null);
+  // D174 — THE WHOLE RESPONSE IS KEPT, not just `r.doc`. `content_available`
+  // and `redacted` are SIBLINGS of `doc` in the payload (see routes/funds.ts),
+  // so `setDoc(r.doc)` threw both away. That was the second, independent
+  // reason `Download LPA` could never render: even once the server started
+  // reporting a body, this would have dropped the report before the JSX
+  // could read it.
+  const [res, setRes] = useState(null);
   const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [dlErr, setDlErr] = useState('');
   useEffect(() => {
     let cancelled = false;
     api.fundsLpa(fundId)
-      .then(r => { if (!cancelled) setDoc(r.doc); })
+      .then(r => { if (!cancelled) setRes(r); })
       .catch(e => { if (!cancelled) setErr(e.message); });
     return () => { cancelled = true; };
   }, [fundId]);
+  const doc = res?.doc;
+  // The click, its busy flag and its own error line. `res.content_available`
+  // says a body exists; only this call gets it, and only for a reader the
+  // server allows on that hit.
+  const download = async () => {
+    if (busy) return;
+    setBusy(true);
+    setDlErr('');
+    try {
+      await api.downloadFundLpa(fundId);
+    } catch (e) {
+      setDlErr(e?.message || 'The LPA could not be downloaded. Reload and try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex justify-end" onClick={onClose}>
       <div className="bg-white w-full max-w-2xl h-full overflow-y-auto p-6 dark:bg-gray-900" onClick={e => e.stopPropagation()}>
@@ -215,21 +241,39 @@ function LPADrawer({ fundId, onClose }) {
         {!doc ? <div className="text-xs text-gray-400 py-8 text-center">Loading…</div> : (
           <>
             <div className="text-xs text-gray-500 mb-3">v{doc.version} · {doc.status} · {doc.created_at && new Date(doc.created_at + 'Z').toLocaleString()}</div>
-            {/* Security #8: LPA body is not embedded in JSON. Backend
-                returns a short-lived signed URL (~5 min) — click to
-                download. Server-side ACL still gates the download by
-                LP membership of this fund. */}
-            {doc.content_url
-              ? (
-                <a
-                  href={doc.content_url}
-                  className="inline-flex items-center gap-2 px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-medium transition-colors"
-                  rel="noopener noreferrer"
+            {/* Security #8: the LPA body is never embedded in this JSON. The
+                server reports only whether one exists; `Download LPA` fetches
+                it from `/funds/:id/lpa/download`, which re-checks LP
+                membership of this fund on that hit.
+
+                D174 — THREE STATES, NOT TWO. This was `content_url ? button :
+                "you are not an LP"`, and the backend never sent a
+                `content_url` to anyone, so the second branch was what every
+                reader got — including an LP the server had just authorised,
+                and every admin. Not being an LP is now claimed only when the
+                server says so with `redacted`; a record with no stored body
+                gets its own sentence, because "we have nothing to give you"
+                and "you are not entitled to it" are different facts. */}
+            {res.content_available ? (
+              <>
+                <button
+                  type="button"
+                  onClick={download}
+                  disabled={busy}
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white rounded-lg text-xs font-medium transition-colors"
                 >
-                  Download LPA
-                </a>
-              )
-              : <div className="text-xs text-gray-400">Content redacted (you are not an LP of this fund).</div>}
+                  {busy ? 'Preparing…' : 'Download LPA'}
+                </button>
+                {/* A download that failed must say so. Clearing the spinner is
+                    teardown, not an outcome — the D116 lesson, and the whole
+                    reason this drawer is being corrected. */}
+                {dlErr && <div className="text-xs text-red-600 mt-2 dark:text-red-400">{dlErr}</div>}
+              </>
+            ) : res.redacted ? (
+              <div className="text-xs text-gray-400">Content redacted (you are not an LP of this fund).</div>
+            ) : (
+              <div className="text-xs text-gray-400">No LPA body is stored against this record yet, so there is nothing to download.</div>
+            )}
           </>
         )}
       </div>
@@ -287,7 +331,7 @@ export function AdminFundsView() {
             <Plus size={13} /> New fund
           </button>
           <button onClick={load} disabled={busy}
-            className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 text-gray-900 rounded-lg flex items-center gap-1.5 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">
+            className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 rounded-lg flex items-center gap-1.5 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">
             <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> Refresh
           </button>
         </div>
@@ -395,168 +439,6 @@ export function AdminFundsView() {
       {showCC && <CapitalCallModal fund={showCC} onClose={(refresh) => { setShowCC(null); if (refresh) load(); }} />}
       {showDist && <DistributionModal fund={showDist} onClose={(refresh) => { setShowDist(null); if (refresh) load(); }} />}
       {showLpa && <LPADrawer fundId={showLpa} onClose={() => setShowLpa(null)} />}
-    </div>
-  );
-}
-
-// ----- LP Portal view -----
-export function LPPortalView() {
-  const [data, setData] = useState(null);
-  const [err, setErr] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [showLpa, setShowLpa] = useState(null);
-
-  const load = async () => {
-    setBusy(true); setErr('');
-    try { setData(await api.fundsLpPortal()); }
-    catch (e) { setErr(e.message); }
-    finally { setBusy(false); }
-  };
-  useEffect(() => { load(); }, []);
-
-  const sign = async (lpId) => {
-    try { await api.fundsSignLpa(lpId); load(); }
-    catch (e) { setErr(e.message); }
-  };
-
-  const totals = useMemo(() => {
-    const commit = (data?.lp_holdings || []).reduce((s, lp) => s + Number(lp.commitment_amount || 0), 0);
-    const invested = (data?.lp_holdings || []).reduce((s, lp) => s + Number(lp.invested_amount || 0), 0);
-    const distCents = (data?.distributions || []).reduce((s, d) => s + Number(d.amount_cents || 0), 0);
-    return { commit, invested, distCents };
-  }, [data]);
-
-  const perfChart = useMemo(() =>
-    (data?.performance || []).map(p => ({ name: p.fund_name, TVPI: p.tvpi, DPI: p.dpi })),
-    [data]);
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">My LP Portal</div>
-        <button onClick={load} disabled={busy} className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 text-gray-900 rounded-lg flex items-center gap-1.5 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">
-          <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> Refresh
-        </button>
-      </div>
-      {err && <div className="bg-red-50 text-red-700 text-sm rounded px-3 py-2">{err}</div>}
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card icon={Wallet} accent="violet" label="Commitment" value={fmtDollars(totals.commit)} sub="Across funds" />
-        <Card icon={TrendingUp} accent="emerald" label="Invested" value={fmtDollars(totals.invested)} sub="Drawn so far" />
-        <Card icon={Banknote} accent="emerald" label="Distributions" value={fmtCents(totals.distCents)} sub={`${(data?.distributions || []).length} payouts`} />
-        <Card icon={PieIcon} accent="blue" label="Funds" value={data?.lp_holdings?.length ?? 0} sub="Active positions" />
-      </div>
-
-      <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
-        <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">My commitments</div>
-        {!data?.lp_holdings?.length ? <div className="text-xs text-gray-400 text-center py-6">No LP positions on file.</div> : (
-          <table className="w-full text-xs">
-            <thead className="text-gray-500"><tr>
-              <th className="text-left py-1 font-medium">Fund</th>
-              <th className="text-right font-medium">Commitment</th>
-              <th className="text-right font-medium">Invested</th>
-              <th className="text-right font-medium">Returns</th>
-              <th className="text-left font-medium">Status</th>
-              <th className="text-left font-medium">LPA</th>
-              <th></th>
-            </tr></thead>
-            <tbody>
-              {data.lp_holdings.map(lp => (
-                <tr key={lp.id} className="border-t border-gray-100">
-                  <td className="py-1.5 text-gray-900 dark:text-gray-100">{lp.fund_name}</td>
-                  <td className="text-right">{fmtDollars(lp.commitment_amount)}</td>
-                  <td className="text-right">{fmtDollars(lp.invested_amount)}</td>
-                  <td className="text-right text-emerald-700">{fmtDollars(lp.returns)}</td>
-                  <td><StatusPill status={lp.status} /></td>
-                  <td>{lp.lpa_signed ? <span className="text-emerald-700 inline-flex items-center gap-1"><CheckCircle2 size={11} /> signed</span> : <span className="text-amber-700">pending</span>}</td>
-                  <td className="text-right">
-                    <div className="flex gap-2 justify-end">
-                      <button onClick={() => setShowLpa(lp.fund_id)} className="text-violet-600 hover:underline">view LPA</button>
-                      {!lp.lpa_signed && <button onClick={() => sign(lp.id)} className="text-emerald-600 hover:underline">sign</button>}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
-          <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Performance (TVPI / DPI)</div>
-          {perfChart.length === 0
-            ? <div className="text-xs text-gray-400 text-center py-6">No data yet.</div>
-            : (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={perfChart}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Bar dataKey="TVPI" fill="#7c3aed" />
-                  <Bar dataKey="DPI" fill="#10b981" />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-        </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
-          <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Distributions over time</div>
-          {!data?.distributions?.length
-            ? <div className="text-xs text-gray-400 text-center py-6">None yet.</div>
-            : (
-              <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={(data.distributions || []).slice().reverse().map(d => ({
-                  date: (d.distributed_at || d.created_at)?.slice(0, 10),
-                  amount: Number(d.amount_cents || 0) / 100,
-                }))}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="amount" stroke="#7c3aed" />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-        </div>
-      </div>
-
-      <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
-        <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Capital calls</div>
-        {!data?.capital_calls?.length ? <div className="text-xs text-gray-400 text-center py-4">No calls yet.</div> : (
-          <table className="w-full text-xs">
-            <thead className="text-gray-500"><tr>
-              <th className="text-left py-1 font-medium">Date</th>
-              <th className="text-right font-medium">Amount</th>
-              <th className="text-left font-medium">Status</th>
-            </tr></thead>
-            <tbody>
-              {data.capital_calls.map(cc => (
-                <tr key={cc.id} className="border-t border-gray-100">
-                  <td className="py-1 text-gray-500">{cc.created_at?.slice(0, 10)}</td>
-                  <td className="text-right">{fmtDollars(cc.amount)}</td>
-                  <td><StatusPill status={cc.status} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {showLpa && <LPADrawer fundId={showLpa} onClose={() => setShowLpa(null)} />}
-    </div>
-  );
-}
-
-function Card({ icon: Icon, label, value, sub, accent }) {
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-gray-500 uppercase tracking-wider font-medium">{label}</span>
-        {Icon && <Icon size={14} className={`text-${accent}-600`} />}
-      </div>
-      <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</div>
-      {sub && <div className="text-[11px] text-gray-500 mt-1">{sub}</div>}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { TrendingUp, Users, Store, Layers, Plus, Loader2, Sparkles, X, Save, Search, Send, Brain, Star, ChevronDown, Building2 } from 'lucide-react';
 import { api } from '../lib/api';
+import { bpsPercent } from '../lib/bps';
 import CompanyProfilePanel from '../components/CompanyProfilePanel';
 
 export default function NetworkEffectsPage() {
@@ -140,7 +141,11 @@ function LevelCard({ level, count, mult }) {
     <div className="bg-gradient-to-br from-violet-50 to-white border border-violet-200 rounded-xl p-4">
       <div className="text-xs uppercase tracking-wide text-violet-600 font-semibold">Level {level}</div>
       <div className="text-3xl font-bold text-gray-900 mt-1 dark:text-gray-100">{count}</div>
-      <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">{(mult / 100).toFixed(0)}% commission multiplier</div>
+      {/* D149: one bps formatter. This copy was `toFixed(0)`, which ROUNDS a
+          rate — 150 bps would have read "2%". Latent rather than live:
+          `COMPOUNDING_BPS` is [10000, 5000, 2500], so every value it has ever
+          held is a whole percent and no string changes here. */}
+      <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">{bpsPercent(mult)} commission multiplier</div>
     </div>
   );
 }
@@ -352,7 +357,7 @@ function Marketplace() {
       <div className="flex gap-1 mb-4">
         {[{id:'search', label:'Search Operators'}, {id:'me', label:'My Profile'}, {id:'match', label:'AI Match'}].map(t => (
           <button key={t.id} onClick={() => setTab2(t.id)}
-            className={`px-3 py-1.5 text-xs font-medium rounded ${tab2 === t.id ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200'}`}>{t.label}</button>
+            className={`px-3 py-1.5 text-xs font-medium rounded ${tab2 === t.id ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>{t.label}</button>
         ))}
       </div>
       {tab2 === 'search' && <MarketplaceSearch />}

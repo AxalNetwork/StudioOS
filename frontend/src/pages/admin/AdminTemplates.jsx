@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FileText, X, Plus, Save, Trash2, History, Loader2, AlertTriangle, RefreshCw, Eye, Download } from 'lucide-react';
+import { FileText, X, Plus, Save, Trash2, History, Loader2, AlertTriangle, RefreshCw, Eye, Download, Send } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { useEscapeClose } from '../../components/useEscapeClose';
@@ -48,6 +48,12 @@ export default function AdminTemplates({ onOpenUsage }) {
   const [err, setErr] = useState('');
   const [unavailable, setUnavailable] = useState(false);
   const [editing, setEditing] = useState(null); // { slug } | { isNew:true } | null
+  // D147 — the push to every branch. `undefined` means "not pushed in this
+  // session", which is a different thing from a push that reached nobody, and
+  // the two render differently below.
+  const [publishing, setPublishing] = useState(false);
+  const [publishResult, setPublishResult] = useState(null);
+  const [publishErr, setPublishErr] = useState('');
 
   const reload = async () => {
     setLoading(true);
@@ -77,6 +83,27 @@ export default function AdminTemplates({ onOpenUsage }) {
 
   const onSaved = () => { setEditing(null); reload(); };
 
+  // THE PUSH IS THE WHOLE LIBRARY, AND IT IS REPORTED PER BRANCH. A failure to
+  // reach one branch is not a failure of the push — HQ's library is HQ's
+  // either way — so nothing here throws the operator back to an error page
+  // (D111's rule, the same shape an escalation answer and a licence transition
+  // already use).
+  const publish = async () => {
+    if (publishing) return;
+    setPublishing(true);
+    setPublishErr('');
+    try {
+      setPublishResult(await api.adminTemplatesPublish());
+    } catch (e) {
+      // The library is untouched: this only failed to SEND. Saying which is the
+      // difference between "retry" and "check what you just saved".
+      setPublishErr(e.message || 'The library could not be sent. Nothing in it changed.');
+      reportError('AdminTemplates:publish', e);
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
@@ -86,6 +113,15 @@ export default function AdminTemplates({ onOpenUsage }) {
         <div className="flex items-center gap-2">
           <button onClick={reload} className="text-xs text-gray-500 hover:text-violet-600 flex items-center gap-1">
             <RefreshCw size={12} /> Refresh
+          </button>
+          <button
+            type="button"
+            onClick={publish}
+            disabled={unavailable || publishing || !items.length}
+            data-testid="template-publish"
+            title="Send this library to every branch Worker bound to HQ"
+            className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:border-violet-400 disabled:opacity-50 font-medium flex items-center gap-1 dark:border-gray-800 dark:text-gray-200">
+            <Send size={12} /> {publishing ? 'Publishing…' : 'Publish to branches'}
           </button>
           <button
             onClick={() => setEditing({ isNew: true })}
@@ -98,6 +134,45 @@ export default function AdminTemplates({ onOpenUsage }) {
       </div>
 
       {err && <div className="bg-red-50 border border-red-200 text-red-700 text-xs p-2 rounded mb-3">{err}</div>}
+
+      {publishErr && (
+        <div
+          data-testid="template-publish-error"
+          className="bg-red-50 border border-red-200 text-red-700 text-xs p-2 rounded mb-3 dark:bg-red-950/40 dark:border-red-900 dark:text-red-300">
+          {publishErr}
+        </div>
+      )}
+
+      {publishResult && (
+        <div
+          data-testid="template-publish-result"
+          className="bg-gray-50 border border-gray-200 text-xs p-3 rounded-lg mb-3 dark:bg-gray-900 dark:border-gray-800">
+          <div className="font-semibold text-gray-900 dark:text-gray-100">
+            {publishResult.template_count} template{publishResult.template_count === 1 ? '' : 's'} sent
+            {' · '}
+            {publishResult.answered} of {publishResult.total} branch{publishResult.total === 1 ? '' : 'es'} answered
+          </div>
+          {/* ZERO BRANCHES IS AN ANSWER, NOT AN ERROR, and the server supplies
+              the sentence so the page and the fan-out cannot drift apart. */}
+          {publishResult.branches_reason && (
+            <p className="text-gray-600 mt-1 dark:text-gray-400">{publishResult.branches_reason}</p>
+          )}
+          {!!(publishResult.branches || []).length && (
+            <ul className="mt-2 space-y-1">
+              {publishResult.branches.map((b) => (
+                <li key={b.code} className="flex items-start gap-2">
+                  <span className="font-mono uppercase text-gray-900 dark:text-gray-100">{b.code}</span>
+                  <span className="text-gray-600 dark:text-gray-400">
+                    {b.status === 'ok'
+                      ? `stored ${b.stored}${b.withdrawn ? `, withdrew ${b.withdrawn}` : ''}`
+                      : (b.reason || b.status)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {unavailable && (
         <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs p-3 rounded-lg mb-3 flex items-start gap-2">

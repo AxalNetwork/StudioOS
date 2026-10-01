@@ -164,12 +164,22 @@ onboard.post('/:token/profile', async (c) => {
       : '{}',
   };
 
+  // D187 — `email` IS THE PRIMARY KEY AND IT USED TO BE OMITTED. Every column
+  // this statement names was absent from the table until migration 275 (see
+  // its header: partner_profiles was declared three times in two shapes and
+  // production carried the email-keyed one), so this upsert threw on every
+  // call. It is keyed on `email` rather than `invitation_id` because that is
+  // the table's own key — an invitation's recipient_email is fixed, so the two
+  // identify the same row, and conflicting on the PK also folds into a profile
+  // the onboarding chat or the advisor may already have created for this
+  // address instead of inserting a second, key-less row beside it.
   await c.env.DB.prepare(
     `INSERT INTO partner_profiles
-       (invitation_id, full_name, organization, role_title, expertise, sectors, geography,
+       (email, invitation_id, full_name, organization, role_title, expertise, sectors, geography,
         capacity_per_month, capital_capacity_usd, motivation, prior_deals, linkedin_url, raw_chat_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(invitation_id) DO UPDATE SET
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(email) DO UPDATE SET
+       invitation_id = excluded.invitation_id,
        full_name = excluded.full_name,
        organization = excluded.organization,
        role_title = excluded.role_title,
@@ -184,7 +194,8 @@ onboard.post('/:token/profile', async (c) => {
        raw_chat_json = excluded.raw_chat_json,
        updated_at = CURRENT_TIMESTAMP`,
   ).bind(
-    gate.inv.id, fields.full_name, fields.organization, fields.role_title, fields.expertise,
+    gate.inv.recipient_email, gate.inv.id,
+    fields.full_name, fields.organization, fields.role_title, fields.expertise,
     fields.sectors, fields.geography, fields.capacity_per_month, fields.capital_capacity_usd,
     fields.motivation, fields.prior_deals, fields.linkedin_url, fields.raw_chat_json,
   ).run();

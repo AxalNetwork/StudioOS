@@ -12,7 +12,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin } from '../auth';
+import { requireAdmin, requireBranchNotSuspended } from '../auth';
 import { ensureCirclesSchema } from '../services/circlesSchema';
 import { parseCircleBody, shapeCircle, slugify, uniqueCircleSlug } from '../services/circlesCommon';
 
@@ -116,6 +116,10 @@ adminCircles.get('/:id', async (c) => {
 adminCircles.post('/', async (c) => {
   const a = await admin(c);
   if (a instanceof Response) return a;
+  // D142 — a suspended branch cannot put anything NEW under the brand. The
+  // gate is after the admin check, so an anonymous caller still gets 401
+  // rather than learning the licence state.
+  await requireBranchNotSuspended(c);
   const body = await c.req.json().catch(() => ({} as any));
   const parsed = parseCircleBody(body || {});
   if (!parsed.ok) return c.json({ error: parsed.error }, 400);
@@ -143,6 +147,10 @@ adminCircles.post('/', async (c) => {
 adminCircles.patch('/:id', async (c) => {
   const a = await admin(c);
   if (a instanceof Response) return a;
+  // D142 — a suspended branch cannot put anything NEW under the brand. The
+  // gate is after the admin check, so an anonymous caller still gets 401
+  // rather than learning the licence state.
+  await requireBranchNotSuspended(c);
   const id = intParam(c.req.param('id'));
   if (!id) return c.json({ error: 'not_found' }, 404);
   const existing = await loadCircle(c.env, id);
@@ -174,6 +182,10 @@ adminCircles.patch('/:id', async (c) => {
 adminCircles.post('/:id/publish', async (c) => {
   const a = await admin(c);
   if (a instanceof Response) return a;
+  // D142 — a suspended branch cannot put anything NEW under the brand. The
+  // gate is after the admin check, so an anonymous caller still gets 401
+  // rather than learning the licence state.
+  await requireBranchNotSuspended(c);
   const id = intParam(c.req.param('id'));
   if (!id) return c.json({ error: 'not_found' }, 404);
   if (!(await loadCircle(c.env, id))) return c.json({ error: 'not_found' }, 404);
@@ -198,6 +210,10 @@ adminCircles.post('/:id/unpublish', async (c) => {
 adminCircles.post('/:id/feature', async (c) => {
   const a = await admin(c);
   if (a instanceof Response) return a;
+  // D142 — a suspended branch cannot put anything NEW under the brand. The
+  // gate is after the admin check, so an anonymous caller still gets 401
+  // rather than learning the licence state.
+  await requireBranchNotSuspended(c);
   const id = intParam(c.req.param('id'));
   if (!id) return c.json({ error: 'not_found' }, 404);
   if (!(await loadCircle(c.env, id))) return c.json({ error: 'not_found' }, 404);

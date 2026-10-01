@@ -11,6 +11,7 @@ import {
   Layers, Boxes, Merge, FileText, Newspaper, LineChart, Landmark,
   Building2, Briefcase, HelpCircle, MessagesSquare, GitBranch,
 } from 'lucide-react';
+import { titleCase } from './absence';
 
 export const SIGNAL_TYPE_META = {
   emerging_niche_demand: { label: 'Emerging niche demand', icon: Sparkles },
@@ -108,9 +109,7 @@ export function toneChip(tone) {
 }
 
 export function prettify(s) {
-  return String(s || '')
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return titleCase(s);
 }
 
 /** Relative "x days ago" from an ISO timestamp. */

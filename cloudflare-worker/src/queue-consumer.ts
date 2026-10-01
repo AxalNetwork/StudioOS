@@ -195,7 +195,7 @@ export async function queueConsumer(
       await recordResult(env, body.idempotency_key, { status: 'completed', at: new Date().toISOString() });
       await meter(env, body.job_type, 'completed', Date.now() - t0);
     } catch (e: any) {
-      console.error(`[queue-consumer] job=${body.job_type} attempt=${message.attempts} failed:`, e?.message || e);
+      console.error('[queue-consumer] job failed', { job: body.job_type, attempt: message.attempts }, e?.message || e);
       // Release the idempotency claim so a CF retry actually re-runs the
       // handler instead of being dedup-skipped. Without this, the very
       // first attempt would consume the only allowed execution slot.

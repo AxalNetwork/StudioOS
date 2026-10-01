@@ -61,12 +61,26 @@ import {
   hashToken, generateToken,
 } from '../auth';
 import { hashEmail } from '../util/hashEmail';
+import { clientIp } from '../util/clientIp';
+import { recordSecurityEvent } from '../services/securityEvents';
 import { hasTotpConfigured } from '../services/authTotp';
 import { hasSmsConfigured, loadSms, markSmsUsed } from '../services/authSms';
 import { isGcipConfigured, sendVerificationCode, signInWithPhoneNumber } from '../services/gcip';
 import { send as sendEmail } from '../services/email/send';
 import { stripTrailingSlashes } from '../util/url';
 import { notify } from '../services/notify';
+import { withDeadline } from '../util/deadline';
+import { refuse } from '../util/refusal';
+import { gcipSentence } from '../services/gcip';
+
+// A stall is an outage, and this limiter fails closed on an outage. Both KV
+// calls carry a deadline because KV takes no AbortSignal: without one the catch
+// below — correct, deliberate, and the whole point of the audit-M1 posture —
+// simply never runs, and the request hangs instead of being denied. Denying in
+// two seconds is the declared policy arriving on time; hanging for thirty is the
+// policy not arriving at all.
+const RATE_KV_DEADLINE_MS = 2_000;
+
 
 const recover = new Hono<{ Bindings: Env }>();
 
@@ -82,9 +96,15 @@ function inHours(h: number): string { return new Date(Date.now() + h * 3600 * 10
 function inMin(m: number): string { return new Date(Date.now() + m * 60 * 1000).toISOString(); }
 function inDays(d: number): string { return new Date(Date.now() + d * 86400 * 1000).toISOString(); }
 
-function clientIp(c: any): string {
-  return (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '')
-    .split(',')[0].trim().slice(0, 64) || 'unknown';
+/**
+ * D200 — a refused recovery step is recorded in security_events (kind
+ * `recovery`, one factor per layer), subject hashed and network bucketed. It
+ * never throws, so the refusal it sits beside answers exactly what it did
+ * before; a successful recovery is NOT recorded here — the ticket
+ * transition and activity_logs already hold it.
+ */
+function recoveryRefusal(c: any, factor: string, detail: string, subject?: { email?: string; userId?: number }) {
+  return recordSecurityEvent(c.env, { kind: 'recovery', factor, outcome: 'refused', detail, ip: clientIp(c.req.raw), ...subject });
 }
 
 async function rate(env: Env, key: string, max: number, windowSec: number): Promise<boolean> {
@@ -92,9 +112,12 @@ async function rate(env: Env, key: string, max: number, windowSec: number): Prom
     const now = Math.floor(Date.now() / 1000);
     const slot = Math.floor(now / windowSec);
     const k = `rl:${key}:${slot}`;
-    const cur = parseInt((await env.RATE_LIMITS.get(k)) || '0', 10);
+    const cur = parseInt((await withDeadline(env.RATE_LIMITS.get(k), RATE_KV_DEADLINE_MS, 'rate-get')) || '0', 10);
     if (cur >= max) return false;
-    await env.RATE_LIMITS.put(k, String(cur + 1), { expirationTtl: windowSec + 5 });
+    await withDeadline(
+      env.RATE_LIMITS.put(k, String(cur + 1), { expirationTtl: windowSec + 5 }),
+      RATE_KV_DEADLINE_MS, 'rate-put',
+    );
     return true;
   } catch (e) {
     // Fail-CLOSED on KV outage (audit M1): account-recovery throttles must deny
@@ -212,7 +235,7 @@ async function createTicket(
      VALUES (?, ?, 'open', ?, ?, ?, ?)`,
   ).bind(
     userId, layer,
-    clientIp(c),
+    clientIp(c.req.raw),
     (c.req.header('user-agent') || '').slice(0, 500),
     JSON.stringify(stateWithLookup),
     inHours(TICKET_TTL_HOURS),
@@ -260,10 +283,25 @@ async function transitionTicket(
   }
 }
 
+/**
+ * D189 — THE `assurance` PARAMETER WAS REMOVED BECAUSE NOTHING READ IT.
+ *
+ * It was declared `'full' | 'email_only'` and appeared nowhere in the body:
+ * the round-4 review recorded below made the step-up deadline unconditional,
+ * which left the argument vestigial, and `noUnusedParameters` is off for the
+ * worker (deliberately — it flags positional handler parameters) so nothing
+ * flagged it. Each caller's real assurance level is the literal in its own
+ * response body, which is where it was always decided.
+ *
+ * It is removed rather than kept as documentation because it was actively
+ * misleading: it made this function look like it branched on assurance, and a
+ * mutation written against that belief changed the argument at a call site,
+ * changed no behaviour, and correctly proved nothing. An argument no reader
+ * reads is the producer-with-no-reader shape, one scope smaller.
+ */
 async function setCoolOffAndAssurance(
   env: Env,
   userId: number,
-  assurance: 'full' | 'email_only',
 ) {
   const coolOff = inHours(RECOVERY_COOL_OFF_HOURS);
   // Task #50 (round-4 review fix) — EVERY recovery layer sets a step-up
@@ -275,9 +313,29 @@ async function setCoolOffAndAssurance(
   // sessions still ride out the full 7 days before the relock fires;
   // email_only sessions get the same 7-day window before relock.
   const stepUp = inDays(STEP_UP_DEADLINE_DAYS);
+  // D189 — THIS USED TO BE AN UPDATE ON `users` AND IT THREW ON EVERY CALL.
+  // 060_auth_recovery.sql:53,57 declared `recovery_cooling_off_until` and
+  // `recovery_step_up_due_at` as columns on `users`, and neither could ever
+  // land: `users` is at D1's hard 100-column cap (100 in production and on a
+  // fresh build, measured 2026-09-22), and 060 is below BASELINE_CUTOFF so a
+  // bootstrap MARKED it applied without running it. An UPDATE naming a
+  // missing column throws — unlike the `SELECT *` in getCurrentUser, which is
+  // why every READ of these two was silently undefined while this WRITE was a
+  // 500. All four callers below are a bare `await`, so account recovery
+  // returned a 500 on every layer that mints a session. Migration 277 moves
+  // the fact to `user_recovery_state`.
+  //
+  // THE WRITE STAYS UNGUARDED, deliberately. Now that the store exists a
+  // failure here means the cool-off was not recorded, and a recovery session
+  // that silently skips its own 24-hour cool-off is worse than a 500 — the
+  // caller is about to mint full assurance on the strength of it.
   await env.DB.prepare(
-    `UPDATE users SET recovery_cooling_off_until = ?, recovery_step_up_due_at = ? WHERE id = ?`,
-  ).bind(coolOff, stepUp, userId).run();
+    `INSERT INTO user_recovery_state (user_id, cooling_off_until, step_up_due_at, updated_at)
+     VALUES (?, ?, ?, datetime('now'))
+     ON CONFLICT(user_id) DO UPDATE SET cooling_off_until = excluded.cooling_off_until,
+                                        step_up_due_at    = excluded.step_up_due_at,
+                                        updated_at        = datetime('now')`,
+  ).bind(userId, coolOff, stepUp).run();
 }
 
 async function mintRecoverySession(
@@ -289,7 +347,7 @@ async function mintRecoverySession(
   const jti = crypto.randomUUID();
   const jwtToken = await createJWT(c.env, user.id, user.email, user.role, undefined, jti);
   const ua = (c.req.header('user-agent') || '').slice(0, 500);
-  const ip = clientIp(c);
+  const ip = clientIp(c.req.raw);
   try {
     await c.env.DB.prepare(
       `INSERT INTO user_sessions (user_id, jti, user_agent, ip, factor, assurance_level)
@@ -309,7 +367,7 @@ async function mintRecoverySession(
  * SAME shape with everything false so a probe can't differentiate.
  */
 recover.post('/start', async (c) => {
-  if (!(await rate(c.env, `recover-start-ip:${clientIp(c)}`, 30, 60))) {
+  if (!(await rate(c.env, `recover-start-ip:${clientIp(c.req.raw)}`, 30, 60))) {
     return c.json({ error: 'Too many requests' }, 429);
   }
   const body = await readJson(c);
@@ -319,6 +377,7 @@ recover.post('/start', async (c) => {
     return c.json({ error: 'Too many requests' }, 429);
   }
 
+  const smsAvailable = await isGcipConfigured(c.env);
   const shape = {
     backup_code: false,
     passkey: false,
@@ -327,7 +386,7 @@ recover.post('/start', async (c) => {
     trusted_contact: false,
     kyc_reverify: false,         // exposed only when vendor wired
     admin_manual: true,          // always available
-    sms_available: isGcipConfigured(c.env),
+    sms_available: smsAvailable,
   };
 
   const user = await findUserByEmail(c.env, email);
@@ -352,7 +411,7 @@ recover.post('/start', async (c) => {
     ).bind(user.id).first();
     const trustedContact = Number(tc?.n || 0) >= 2;
     shape.backup_code = hasCodes && totp;
-    shape.sms = sms_ && isGcipConfigured(c.env);
+    shape.sms = sms_ && smsAvailable;
     shape.trusted_contact = trustedContact;
   } catch (e) { console.error('[recover] /start scan failed', e); }
   return c.json(shape);
@@ -361,7 +420,7 @@ recover.post('/start', async (c) => {
 // ─────────────────────────────────────────────── Layer 1a — backup code
 
 recover.post('/backup-code', async (c) => {
-  if (!(await rate(c.env, `recover-bc-ip:${clientIp(c)}`, 10, 300))) {
+  if (!(await rate(c.env, `recover-bc-ip:${clientIp(c.req.raw)}`, 10, 300))) {
     return c.json({ error: 'Too many requests' }, 429);
   }
   const body = await readJson(c);
@@ -374,13 +433,14 @@ recover.post('/backup-code', async (c) => {
 
   const user = await findUserByEmail(c.env, email);
   if (!user || !user.email_verified || !user.is_active) {
+    await recoveryRefusal(c, 'backup_code', 'invalid_code', { email });
     return c.json({ error: 'invalid_code' }, 401);
   }
 
   // Reuse the existing tryConsumeRecoveryCode helper. We inline a copy
   // here to avoid a circular import with routes/auth.ts.
   const normalized = code.replace(/[\s-]/g, '').toUpperCase();
-  if (normalized.length !== 12) return c.json({ error: 'invalid_code' }, 401);
+  if (normalized.length !== 12) { await recoveryRefusal(c, 'backup_code', 'invalid_code', { email, userId: Number(user.id) }); return c.json({ error: 'invalid_code' }, 401); }
   const formatted = `${normalized.slice(0, 4)}-${normalized.slice(4, 8)}-${normalized.slice(8, 12)}`;
   const candidateHash = await hashToken(formatted);
   const sql = getSQL(c.env);
@@ -401,16 +461,16 @@ recover.post('/backup-code', async (c) => {
     }
   } finally { try { await sql.end(); } catch {} }
 
-  if (!consumed) return c.json({ error: 'invalid_code' }, 401);
+  if (!consumed) { await recoveryRefusal(c, 'backup_code', 'invalid_code', { email, userId: Number(user.id) }); return c.json({ error: 'invalid_code' }, 401); }
 
   // Layer 1a is FULL ASSURANCE and ALSO applies the 24h cool-off
   // (per Task #50 acceptance criteria: cool-off after ANY recovery
   // that reaches sensitive surfaces). Step-up is NOT required because
   // the user still holds TOTP. We emit the all-channel alert + ticket
   // so unexpected backup-code use is loud.
-  await setCoolOffAndAssurance(c.env, user.id, 'full');
+  await setCoolOffAndAssurance(c.env, user.id);
   const { id: ticketId } = await createTicket(c.env, user.id, 'backup_code',
-    { ip: clientIp(c), ua: (c.req.header('user-agent') || '').slice(0, 200) }, c);
+    { ip: clientIp(c.req.raw), ua: (c.req.header('user-agent') || '').slice(0, 200) }, c);
   await transitionTicket(c.env, ticketId, user,
     { status: 'resolved', assurance: 'full', resolved: true },
     { template: 'auth_recovery_resolved' });
@@ -432,8 +492,8 @@ recover.post('/backup-code', async (c) => {
 // ─────────────────────────────────────────────── Layer 2c — SMS
 
 recover.post('/sms/start', async (c) => {
-  if (!isGcipConfigured(c.env)) return c.json({ error: 'sms_unavailable' }, 503);
-  if (!(await rate(c.env, `recover-sms-ip:${clientIp(c)}`, 10, 60))) {
+  if (!(await isGcipConfigured(c.env))) return c.json({ error: 'sms_unavailable' }, 503);
+  if (!(await rate(c.env, `recover-sms-ip:${clientIp(c.req.raw)}`, 10, 60))) {
     return c.json({ error: 'Too many requests' }, 429);
   }
   const body = await readJson(c);
@@ -463,22 +523,22 @@ recover.post('/sms/start', async (c) => {
 
   const r = await sendVerificationCode(c.env, sms_.phone, body?.recaptcha_token || null);
   if (!r.ok) {
-    return c.json({ error: r.code, message: r.message }, r.code === 'recaptcha_required' ? 412 : 502);
+    return refuse(c, r.code === 'recaptcha_required' ? 412 : 502, { code: r.code, message: gcipSentence(r.code), raw: r.message });
   }
   const { id: ticketId, lookup_token } = await createTicket(c.env, user.id, 'sms', { sms_last4: sms_.last4 }, c);
   // Bind the GCIP session to the ticket so /sms/verify can atomically
   // resolve THIS ticket (no orphaned `open` rows in activity).
-  await c.env.RATE_LIMITS.put(
+  await withDeadline(c.env.RATE_LIMITS.put(
     `recover-sms-session:${r.sessionInfo}`,
     JSON.stringify({ user_id: user.id, email, ts: Date.now(), ticket_id: ticketId }),
     { expirationTtl: 600 },
-  );
+  ), RATE_KV_DEADLINE_MS, 'stash-put');
   await notifyAllChannels(c.env, user, 'auth_recovery_started', { ticket_id: String(ticketId) });
   return c.json({ session_info: r.sessionInfo, last4: sms_.last4, ticket_id: ticketId, lookup_token });
 });
 
 recover.post('/sms/verify', async (c) => {
-  if (!isGcipConfigured(c.env)) return c.json({ error: 'sms_unavailable' }, 503);
+  if (!(await isGcipConfigured(c.env))) return c.json({ error: 'sms_unavailable' }, 503);
   const body = await readJson(c);
   const email = String(body?.email || '').toLowerCase().trim();
   const sessionInfo = String(body?.session_info || '');
@@ -487,29 +547,32 @@ recover.post('/sms/verify', async (c) => {
   if (!(await rate(c.env, `recover-sms-verify:${email}`, 5, 300))) {
     return c.json({ error: 'Too many attempts' }, 429);
   }
-  const stashed = await c.env.RATE_LIMITS.get(`recover-sms-session:${sessionInfo}`);
-  if (!stashed) return c.json({ error: 'session_expired' }, 410);
+  const stashed = await withDeadline(c.env.RATE_LIMITS.get(`recover-sms-session:${sessionInfo}`), RATE_KV_DEADLINE_MS, 'stash-get');
+  if (!stashed) { await recoveryRefusal(c, 'sms', 'session_expired', { email }); return c.json({ error: 'session_expired' }, 410); }
   let bound: { user_id: number; email: string; ticket_id?: number };
   try { bound = JSON.parse(stashed); } catch { return c.json({ error: 'session_corrupted' }, 500); }
-  if (bound.email !== email) return c.json({ error: 'session_email_mismatch' }, 401);
+  if (bound.email !== email) { await recoveryRefusal(c, 'sms', 'session_email_mismatch', { email }); return c.json({ error: 'session_email_mismatch' }, 401); }
 
   const v = await signInWithPhoneNumber(c.env, sessionInfo, code);
-  if (!v.ok) return c.json({ error: v.code, message: v.message }, v.code === 'invalid_code' ? 401 : 502);
+  if (!v.ok) {
+    if (v.code === 'invalid_code') await recoveryRefusal(c, 'sms', 'invalid_code', { email, userId: bound.user_id });
+    return refuse(c, v.code === 'invalid_code' ? 401 : 502, { code: v.code, message: gcipSentence(v.code), raw: v.message });
+  }
 
   const sql = getSQL(c.env);
   const users = await sql`SELECT * FROM users WHERE id = ${bound.user_id}`;
   await sql.end();
-  if (!users.length) return c.json({ error: 'Account not found' }, 401);
+  if (!users.length) { await recoveryRefusal(c, 'sms', 'account_not_found', { email, userId: bound.user_id }); return c.json({ error: 'Account not found' }, 401); }
   const user = users[0];
 
   const stored = await loadSms(c.env, user.id);
-  if (!stored || stored.phone !== v.phoneNumber) return c.json({ error: 'phone_mismatch' }, 401);
-  await c.env.RATE_LIMITS.delete(`recover-sms-session:${sessionInfo}`);
+  if (!stored || stored.phone !== v.phoneNumber) { await recoveryRefusal(c, 'sms', 'phone_mismatch', { email, userId: Number(user.id) }); return c.json({ error: 'phone_mismatch' }, 401); }
+  await withDeadline(c.env.RATE_LIMITS.delete(`recover-sms-session:${sessionInfo}`), RATE_KV_DEADLINE_MS, 'stash-delete');
 
   // SMS-based recovery is full-assurance (the factor was bound at
   // enrolment) but applies the 24h cool-off since the user clearly
   // doesn't hold the canonical TOTP secret anymore.
-  await setCoolOffAndAssurance(c.env, user.id, 'full');
+  await setCoolOffAndAssurance(c.env, user.id);
   await markSmsUsed(c.env, user.id);
   // Resolve the exact ticket bound at /sms/start (Task #50 review fix:
   // no more stale open rows in the activity feed).
@@ -536,7 +599,7 @@ recover.post('/sms/verify', async (c) => {
 // ─────────────────────────────────────────────── Layer 2d — email magic
 
 recover.post('/email/start', async (c) => {
-  if (!(await rate(c.env, `recover-email-ip:${clientIp(c)}`, 5, 300))) {
+  if (!(await rate(c.env, `recover-email-ip:${clientIp(c.req.raw)}`, 5, 300))) {
     return c.json({ error: 'Too many requests' }, 429);
   }
   const body = await readJson(c);
@@ -571,29 +634,30 @@ recover.get('/email/verify', async (c) => {
   const token = String(c.req.query('token') || '');
   const ticketId = Number(c.req.query('ticket') || 0);
   if (!token || !ticketId) return c.json({ error: 'invalid_link' }, 400);
-  if (!(await rate(c.env, `recover-email-verify-ip:${clientIp(c)}`, 10, 300))) {
+  if (!(await rate(c.env, `recover-email-verify-ip:${clientIp(c.req.raw)}`, 10, 300))) {
     return c.json({ error: 'Too many requests' }, 429);
   }
   const tokenHash = await hashToken(token);
   const row: any = await c.env.DB.prepare(
     `SELECT * FROM auth_recovery_tickets WHERE id = ? AND layer = 'email_magic' AND status = 'open'`,
   ).bind(ticketId).first();
-  if (!row) return c.json({ error: 'invalid_or_used' }, 400);
+  if (!row) { await recoveryRefusal(c, 'email', 'invalid_or_used'); return c.json({ error: 'invalid_or_used' }, 400); }
   let state: any = {};
   try { state = JSON.parse(row.state_json || '{}'); } catch {}
-  if (state.token_hash !== tokenHash) return c.json({ error: 'invalid_or_used' }, 400);
+  if (state.token_hash !== tokenHash) { await recoveryRefusal(c, 'email', 'invalid_or_used', { userId: Number(row.user_id) }); return c.json({ error: 'invalid_or_used' }, 400); }
   if (state.expires_at && new Date(state.expires_at) < new Date()) {
     await c.env.DB.prepare(`UPDATE auth_recovery_tickets SET status='expired' WHERE id = ?`).bind(ticketId).run();
+    await recoveryRefusal(c, 'email', 'expired', { userId: Number(row.user_id) });
     return c.json({ error: 'expired' }, 400);
   }
 
   const sql = getSQL(c.env);
   const users = await sql`SELECT * FROM users WHERE id = ${row.user_id}`;
   await sql.end();
-  if (!users.length) return c.json({ error: 'Account not found' }, 401);
+  if (!users.length) { await recoveryRefusal(c, 'email', 'account_not_found', { userId: Number(row.user_id) }); return c.json({ error: 'Account not found' }, 401); }
   const user = users[0];
 
-  await setCoolOffAndAssurance(c.env, user.id, 'email_only');
+  await setCoolOffAndAssurance(c.env, user.id);
   await transitionTicket(c.env, ticketId, user,
     { status: 'resolved', assurance: 'email_only', resolved: true },
     { template: 'auth_recovery_resolved' });
@@ -615,7 +679,7 @@ recover.get('/email/verify', async (c) => {
 // ─────────────────────────────────── Layer 3f — trusted-contact 2-of-2
 
 recover.post('/trusted-contact/start', async (c) => {
-  if (!(await rate(c.env, `recover-tc-ip:${clientIp(c)}`, 10, 300))) {
+  if (!(await rate(c.env, `recover-tc-ip:${clientIp(c.req.raw)}`, 10, 300))) {
     return c.json({ error: 'Too many requests' }, 429);
   }
   const body = await readJson(c);
@@ -669,11 +733,14 @@ recover.post('/trusted-contact/attest', async (c) => {
         .find(s => s.startsWith('studioos_auth='))?.slice('studioos_auth='.length);
     if (token) jti = (await decodeJWT(c.env, token))?.jti as string | undefined;
   } catch {}
-  if (!jti) return c.json({ error: 'must_be_totp_session' }, 403);
+  const attestRefusal = (detail: string) =>
+    recoveryRefusal(c, 'trusted_contact', detail, { email: String(contact.email), userId: Number(contact.id) });
+  if (!jti) { await attestRefusal('must_be_totp_session'); return c.json({ error: 'must_be_totp_session' }, 403); }
   const sess: any = await c.env.DB.prepare(
     `SELECT factor FROM user_sessions WHERE jti = ? AND user_id = ?`,
   ).bind(jti, contact.id).first();
   if (!sess || sess.factor !== 'totp') {
+    await attestRefusal('must_be_totp_session');
     return c.json({ error: 'must_be_totp_session', message: 'Sign in with your authenticator to attest a recovery.' }, 403);
   }
 
@@ -681,7 +748,7 @@ recover.post('/trusted-contact/attest', async (c) => {
     `SELECT * FROM auth_recovery_tickets WHERE id = ? AND layer = 'trusted_contact' AND status IN ('open','awaiting_contacts')`,
   ).bind(ticketId).first();
   if (!ticket) return c.json({ error: 'ticket_not_open' }, 400);
-  if (Number(ticket.user_id) === Number(contact.id)) return c.json({ error: 'cannot_attest_self' }, 403);
+  if (Number(ticket.user_id) === Number(contact.id)) { await attestRefusal('cannot_attest_self'); return c.json({ error: 'cannot_attest_self' }, 403); }
 
   let state: any = {};
   try { state = JSON.parse(ticket.state_json || '{}'); } catch {}
@@ -689,7 +756,7 @@ recover.post('/trusted-contact/attest', async (c) => {
     Number(r.user_id) === Number(contact.id) ||
     String(r.email || '').toLowerCase() === String(contact.email).toLowerCase(),
   );
-  if (!eligible) return c.json({ error: 'not_a_trusted_contact' }, 403);
+  if (!eligible) { await attestRefusal('not_a_trusted_contact'); return c.json({ error: 'not_a_trusted_contact' }, 403); }
 
   const atts: number[] = Array.isArray(state.attestations) ? state.attestations : [];
   if (atts.includes(contact.id)) {
@@ -749,24 +816,26 @@ recover.post('/claim', async (c) => {
   const row: any = await c.env.DB.prepare(
     `SELECT * FROM auth_recovery_tickets WHERE id = ?`,
   ).bind(ticketId).first();
-  if (!row) return c.json({ error: 'invalid_or_used' }, 400);
+  if (!row) { await recoveryRefusal(c, 'claim', 'invalid_or_used'); return c.json({ error: 'invalid_or_used' }, 400); }
   let state: any = {};
   try { state = JSON.parse(row.state_json || '{}'); } catch {}
-  if (state.claim_token_hash !== tokenHash) return c.json({ error: 'invalid_or_used' }, 400);
+  if (state.claim_token_hash !== tokenHash) { await recoveryRefusal(c, 'claim', 'invalid_or_used', { userId: Number(row.user_id) }); return c.json({ error: 'invalid_or_used' }, 400); }
   if (state.claim_expires_at && new Date(state.claim_expires_at) < new Date()) {
+    await recoveryRefusal(c, 'claim', 'expired', { userId: Number(row.user_id) });
     return c.json({ error: 'expired' }, 400);
   }
   if (row.status === 'resolved' && row.resolved_at) {
+    await recoveryRefusal(c, 'claim', 'already_used', { userId: Number(row.user_id) });
     return c.json({ error: 'already_used' }, 400);
   }
 
   const sql = getSQL(c.env);
   const users = await sql`SELECT * FROM users WHERE id = ${row.user_id}`;
   await sql.end();
-  if (!users.length) return c.json({ error: 'Account not found' }, 401);
+  if (!users.length) { await recoveryRefusal(c, 'claim', 'account_not_found', { userId: Number(row.user_id) }); return c.json({ error: 'Account not found' }, 401); }
   const user = users[0];
 
-  await setCoolOffAndAssurance(c.env, user.id, 'full');
+  await setCoolOffAndAssurance(c.env, user.id);
   await transitionTicket(c.env, ticketId, user,
     { status: 'resolved', assurance: 'full', resolved: true },
     { template: 'auth_recovery_resolved' });
@@ -802,7 +871,7 @@ recover.post('/kyc/start', async (c) => {
 // ─────────────────────────────────────── Layer 4 — admin manual (multi-sig)
 
 recover.post('/admin/escalate', async (c) => {
-  if (!(await rate(c.env, `recover-admin-ip:${clientIp(c)}`, 5, 3600))) {
+  if (!(await rate(c.env, `recover-admin-ip:${clientIp(c.req.raw)}`, 5, 3600))) {
     return c.json({ error: 'Too many requests' }, 429);
   }
   const body = await readJson(c);
@@ -934,7 +1003,7 @@ recover.post('/admin/deny', async (c) => {
 });
 
 recover.get('/ticket/:id', async (c) => {
-  if (!(await rate(c.env, `recover-ticket-ip:${clientIp(c)}`, 60, 300))) {
+  if (!(await rate(c.env, `recover-ticket-ip:${clientIp(c.req.raw)}`, 60, 300))) {
     return c.json({ error: 'Too many requests' }, 429);
   }
   const id = Number(c.req.param('id') || 0);

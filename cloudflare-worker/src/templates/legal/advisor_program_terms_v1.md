@@ -3,6 +3,16 @@
      service leg) ship — the take-rate and payout sections below describe
      functionality the platform does not yet execute. Do not publish or
      send while payments remain off-platform. -->
+<!-- {{advisor_program.take_rate}} in §3.2 has ONE source and it is not a
+     number to type here: `platform_settings.advisor_take_rate_bps`, seeded
+     1500 (15%) by migration 241 and changed only through
+     PUT /api/admin/platform/take-rate. Render it from there when this
+     document is published, so the terms and the ledger cannot state
+     different rates. D75. -->
+<!-- Advisory charging is OFF: services/advisorMoney.ts::settlementMode()
+     answers 'none' until ADVISOR_CHARGING_ENABLED is set. §3.2's "charged at
+     booking" is therefore still ahead of the product, which is what keeps
+     this document dormant. -->
 
 # Advisor Program Terms
 

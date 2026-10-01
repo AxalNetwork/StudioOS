@@ -9,8 +9,9 @@
  *   1. IT BRANCHES. Off writes no proposal and spends nothing; on offers the
  *      two things Validate can actually fill in.
  *   2. IT APPEARS ONLY WHERE IT BRANCHES. Forty-seven pages mount this rail
- *      and one of them has proposals. A switch on the other forty-six would be
- *      exactly the dead control D17 refused, one page over.
+ *      and five of them have proposals — the Validate zones and four founder
+ *      desks (D424). A switch on the others would be exactly the dead control
+ *      D17 refused, one page over.
  *
  * And the money rule, which is the one worth failing loudly: every run spends
  * the founder's own budget against their own cap, so the mode is OFF until
@@ -29,7 +30,7 @@ import { codeOnly } from './_codeOnly.mjs';
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const RAIL = 'frontend/src/ui/WorkerRail.jsx';
 const HOOK = 'frontend/src/hooks/useAssistMode.js';
-const BAND = 'frontend/src/workspaces/founder/ValidateProposals.jsx';
+const BAND = 'frontend/src/workspaces/FillProposals.jsx';
 const PAGE = 'frontend/src/workspaces/founder/FounderValidateWorkspace.jsx';
 const CFG = 'frontend/src/ui/eadwynConfig.js';
 
@@ -61,18 +62,142 @@ test('the rail draws the switch only where flipping it does something', () => {
   assert.match(rail, /fills = false,/, 'the rail must default to no switch');
   assert.match(rail, /surface\.mode\?\.kind === 'choice' && fills/,
     'the switch must require BOTH a choice-declaring surface and a host that has work');
-  // Exactly one host passes it today.
-  const hosts = ['frontend/src/workspaces/founder/FounderValidateWorkspace.jsx'];
-  for (const h of hosts) assert.match(read(h), /\bfills\b/, `${h} should opt in`);
+  // The hosts that have proposal bands. The four desks joined in D424: their
+  // bands had been gated on the mode since they were mounted, and no rail on
+  // those desks drew a switch, so none of them could be reached.
+  const hosts = [
+    'frontend/src/workspaces/founder/FounderValidateWorkspace.jsx',
+    ...Object.values(DESKS).filter((d) => d.bands.length).map((d) => d.file),
+  ];
+  for (const h of hosts) {
+    assert.match(codeOnly(read(h)), /<WorkerRail[^>]*?\n\s*fills\n/,
+      `${h} has proposal bands and its rail draws no switch for them`);
+  }
 });
+
+/**
+ * Every founder desk: its file, the draft surfaces its bands run, and the
+ * clause in its `desks` sentence that promises each one (D424). A desk with no
+ * bands has an empty list and must not draw a switch.
+ *
+ * `route` is where the capability lives: Validate's bands post to
+ * founder_validate.ts, and every other desk's bands run a `DRAFT_SURFACES`
+ * entry in research.ts.
+ */
+const DESKS = {
+  Validate: {
+    file: 'frontend/src/pages/founder/FounderValidatePage.jsx',
+    bands: [
+      [/transcrib\w*\s+recording/i, /founderValidate\.post\('\/interviews\/:id\/transcribe'/, 'transcription', null],
+      [/tags?\s+logged\s+phrases/i, /kind === 'pain_tag'/, 'pain tagging', 'kind="pain_tag"'],
+      [/drafts?\s+hypothesis/i, /insertHypothesis/, 'hypothesis drafting', 'kind="hypothesis"'],
+    ],
+  },
+  Build: {
+    file: 'frontend/src/pages/founder/FounderBuildDesk.jsx',
+    bands: [
+      [/monday plan/i, 'build/this-week'],
+      [/roadmap ordering/i, 'build/roadmap'],
+      [/annotates the metric/i, 'build/kpi'],
+    ],
+  },
+  Raise: {
+    file: 'frontend/src/pages/founder/FounderRaiseDesk.jsx',
+    bands: [
+      [/round back/i, 'raise/capital'],
+      [/clauses/i, 'raise/legal'],
+      [/data room/i, 'raise/data-room'],
+      [/order of payment/i, 'raise/liquidity'],
+    ],
+  },
+  Grow: {
+    file: 'frontend/src/pages/founder/FounderGrowDesk.jsx',
+    bands: [
+      [/ranks applicants/i, 'grow/talent'],
+      [/outreach sequence/i, 'grow/customers'],
+    ],
+  },
+  Network: { file: 'frontend/src/pages/founder/FounderNetworkDesk.jsx', bands: [] },
+  Research: { file: 'frontend/src/pages/founder/FounderResearchDesk.jsx', bands: [] },
+};
+
+/** `desks: { Name: { fills|none: '…' } }` out of the config, as text. */
+function deskCopy() {
+  const cfg = codeOnly(read(CFG));
+  const at = cfg.indexOf('desks: {');
+  assert.ok(at > 0, 'the workspace surface declares no per-desk copy');
+  const block = cfg.slice(at, cfg.indexOf('\n    },', at));
+  return Object.fromEntries([...block.matchAll(/^ {6}(\w+): \{ (fills|none): '([^']+)' \},$/gm)]
+    .map(([, name, kind, text]) => [name, { kind, text }]));
+}
 
 test('a proposal band renders nothing while the mode is off', () => {
   const band = codeOnly(read(BAND));
-  assert.match(band, /if \(!enabled \|\| !copy\) return null;/,
+  // `!spec` where this used to read `!copy`: the band's words now come from the
+  // server's registry on the list response rather than from a local map, so the
+  // same early return also covers a kind the server does not offer — a heading
+  // for a capability that may not exist is the rail's own failure mode, one
+  // surface over.
+  assert.match(band, /if \(!enabled \|\| !spec\) return null;/,
     'the band must render nothing when the mode is off');
   // And it must not have fetched on the way to rendering nothing.
   assert.match(band, /if \(!projectId \|\| !enabled\) \{ setItems\(\[\]\); return; \}/,
     'the band reads proposals even with the mode off');
+  // The local COPY map is gone, not shadowed. Two places for one fact is what
+  // `services/fills/registry.ts` was built to stop, and a leftover map here would
+  // be the half that drifts.
+  assert.doesNotMatch(band, /const COPY = \{/,
+    'the band kept its own copy map, so a new kind has to be added twice');
+});
+
+test('Edit the claim exists, and only where the value may be rewritten', () => {
+  // The canvas has drawn accept / edit / discard since this band was designed and
+  // only two of the three were ever built; the third lived in a header comment
+  // describing an artboard. Accepting a value a founder would have corrected
+  // teaches them to discard and retype, which is the same work with the
+  // proposal's provenance thrown away.
+  const band = codeOnly(read(BAND));
+  assert.match(band, /data-testid=\{`action-edit-\$\{p\.id\}`\}/,
+    'the Edit control is missing again');
+  assert.match(band, /data-testid=\{`edit-field-\$\{p\.id\}`\}/, 'there is nothing to type into');
+
+  // GATED ON THE SERVER'S ANSWER, not on the kind. A `pain_tag`'s phrase is the
+  // project's own logged string and the accept route refuses an edit to it, so an
+  // ungated control would be a button that always fails.
+  assert.match(band, /\{spec\.editable && \(/,
+    'the Edit control is drawn for kinds whose value cannot be edited');
+
+  // AN UNCHANGED EDIT IS A PLAIN ACCEPT. `fill_provenance` derives `edited` by
+  // comparing the two values, so sending the untouched original would mark every
+  // accept corrected and the column would stop meaning anything.
+  assert.match(band, /next === readable\(p\.kind, p\.payload\)\.trim\(\) \? undefined : next/,
+    'an unchanged edit is sent as an edit');
+  const api = read('frontend/src/lib/api.js');
+  assert.match(api, /acceptValidateProposal: \(id, body\) =>/);
+  assert.match(api, /\.\.\.\(body \? \{ body: JSON\.stringify\(body\) \} : \{\}\)/,
+    'the accept call always sends a body, so an unedited accept looks edited');
+});
+
+test('a sourced proposal shows its source, quote included', () => {
+  // A citation that names a document and nothing else asks a reader to trust the
+  // label. The quote is what lets them judge whether the source says what the fill
+  // claims it says — which is the only check available to them.
+  const band = codeOnly(read(BAND));
+  assert.match(band, /function Citation\(\{ citation \}\)/);
+  assert.match(band, /if \(!citation\) return null;/,
+    'a restatement, which has no citation by design, renders an empty source line');
+  assert.match(band, /citation\.quote \?/, 'the quote is not shown');
+  assert.match(band, /<Citation citation=\{p\.citation\} \/>/, 'nothing renders the citation');
+  // And the server sends it.
+  const route = read('cloudflare-worker/src/routes/founder_validate.ts');
+  const at = route.indexOf("founderValidate.get('/proposals/:projectId'");
+  assert.ok(at > 0, 'the proposals list route is gone');
+  const body = route.slice(at, route.indexOf('\n});', at));
+  assert.match(body, /citation: \(\(\) => \{/, 'the list no longer returns the citation');
+  assert.match(body, /kinds: Object\.fromEntries\(Object\.values\(FILL_KINDS\)/,
+    'the band has no source for its own copy');
+  assert.match(body, /editable: k\.editableField != null/,
+    'the list does not say which kinds may be edited');
 });
 
 test('nothing proposes on mount — a visit must not spend anything', () => {
@@ -135,7 +260,27 @@ test('the two claims the page can no longer make are gone', () => {
     'the page promises the founder names every theme; the prompt must say so too');
 });
 
-test('the mode note promises nothing the worker cannot do', () => {
+test('the mode card promises only what is true on every desk that draws it', () => {
+  // The card reads ONE surface on every host (D424), so its sentence may name
+  // no desk's capability: a Validate list here promised transcription on the
+  // Raise desk the moment Raise drew the switch. What each desk does is its
+  // own sentence, checked below.
+  const cfg = codeOnly(read(CFG));
+  const at = cfg.indexOf('mode: {');
+  assert.ok(at > 0, 'the workspace surface no longer declares a mode');
+  const note = /note: '([^']+)'/.exec(cfg.slice(at, at + 1200))?.[1];
+  assert.ok(note, 'the mode declares no note');
+  for (const { bands } of Object.values(DESKS)) {
+    for (const [inNote] of bands) {
+      assert.doesNotMatch(note, inNote, `the shared card promises one desk's capability: ${inNote}`);
+    }
+  }
+  assert.match(note, /only when you press/, 'the card must say nothing runs until a press');
+  assert.match(note, /accept, edit or discard/,
+    'the mode note must say a proposal is never applied on its own');
+});
+
+test('each desk promises exactly the bands it mounts, and nothing else', () => {
   // This began as "transcription is named as absent", because at the time the
   // product had two of the canvas's three capabilities and the third had
   // nowhere to write a transcript. Migration 215 gave it one — so the old
@@ -143,40 +288,60 @@ test('the mode note promises nothing the worker cannot do', () => {
   // means it was pinning a schedule rather than an invariant.
   //
   // The invariant underneath it is the one that mattered all along: every verb
-  // in that sentence is a promise, and a promise with no route behind it is the
-  // same class of thing as a button posting to an endpoint that does not exist.
-  const cfg = codeOnly(read(CFG));
-  const at = cfg.indexOf('mode: {');
-  assert.ok(at > 0, 'the workspace surface no longer declares a mode');
-  const note = /note: '([^']+)'/.exec(cfg.slice(at, at + 1200))?.[1];
-  assert.ok(note, 'the mode declares no note');
+  // in a desk's sentence is a promise, and a promise with no route behind it is
+  // the same class of thing as a button posting to an endpoint that does not
+  // exist. So each sentence is checked CLAUSE BY CLAUSE against a closed set —
+  // a first version matched only the verbs it knew, and a mutation appending
+  // "and drafts your investor update" sailed through. And the other direction
+  // (D424): a band the desk mounts that its sentence does not name is a
+  // capability the switch turns on without saying so.
+  const copy = deskCopy();
+  const validateRoutes = read('cloudflare-worker/src/routes/founder_validate.ts');
+  const research = read('cloudflare-worker/src/routes/research.ts');
+  assert.deepEqual(Object.keys(copy).sort(), Object.keys(DESKS).sort(),
+    'the per-desk copy and the six founder desks disagree');
 
-  const routes = read('cloudflare-worker/src/routes/founder_validate.ts');
+  for (const [name, desk] of Object.entries(DESKS)) {
+    const page = codeOnly(read(desk.file));
+    const entry = copy[name];
+    // The rail's `note` IS this desk's sentence — read from the config under
+    // the desk's own name, never another desk's and never retyped.
+    assert.match(page, new RegExp(`note=\\{ASSIST_SURFACES\\.workspace\\.desks\\.${name}\\.${entry.kind}\\}`),
+      `${name}'s rail does not print its own sentence`);
+    assert.match(page, new RegExp(`<WorkerRail[\\s\\S]*?workspace="${name}"`), `${name}'s rail names another workspace`);
 
-  // Each capability is a verb AND its object, and the note is checked CLAUSE BY
-  // CLAUSE against the closed set. A first version matched only the verbs and
-  // only the ones it knew, so a mutation appending "and drafts your investor
-  // update" sailed through: it matched /drafts/, and an unrecognised promise
-  // was invisible to a test that only looked for recognised ones. The whole
-  // point of this test is the promise nothing backs, which is the promise
-  // nobody thought to list.
-  const CAPABILITIES = [
-    [/transcrib\w*\s+recording/i, /founderValidate\.post\('\/interviews\/:id\/transcribe'/, 'transcription'],
-    [/tags?\s+logged\s+phrases/i, /kind === 'pain_tag'/, 'pain tagging'],
-    [/drafts?\s+hypothesis/i, /insertHypothesis/, 'hypothesis drafting'],
-  ];
-  // The first sentence is the list of promises; the second says what happens to
-  // a proposal and is checked separately below.
-  const clauses = note.split('.')[0].split(/,|\band\b/).map((c) => c.trim()).filter(Boolean);
-  assert.ok(clauses.length >= 2, `the note has ${clauses.length} clause(s) — has it been rewritten?`);
-  for (const clause of clauses) {
-    const hit = CAPABILITIES.find(([inNote]) => inNote.test(clause));
-    assert.ok(hit, `the mode note promises "${clause}", which is not a capability this workspace has`);
-    assert.match(routes, hit[1], `the mode note promises ${hit[2]} and no route does it`);
+    if (!desk.bands.length) {
+      assert.equal(entry.kind, 'none', `${name} has no band, so it must say why there is no switch`);
+      assert.doesNotMatch(page, /<ZoneDraft|<FillProposals/, `${name} mounts a band its copy says it does not have`);
+      assert.doesNotMatch(page, /<WorkerRail[^>]*?\n\s*fills\n/, `${name} draws a switch that changes nothing (D17)`);
+      continue;
+    }
+    assert.equal(entry.kind, 'fills', `${name} has bands, so its sentence must say what the switch does`);
+    const clauses = entry.text.split('.')[0].split(/,|\band\b/).map((c) => c.trim()).filter(Boolean);
+    assert.ok(clauses.length >= desk.bands.length,
+      `${name}'s sentence has ${clauses.length} clause(s) for ${desk.bands.length} band(s)`);
+    for (const clause of clauses) {
+      const hit = desk.bands.find(([inNote]) => inNote.test(clause));
+      assert.ok(hit, `${name} promises "${clause}", which is not a band on that desk`);
+    }
+    for (const band of desk.bands) {
+      const [inNote, target] = band;
+      assert.ok(clauses.some((c) => inNote.test(c)), `${name} mounts ${target} and its sentence does not say so`);
+      if (target instanceof RegExp) {
+        // Validate: the route must exist, and the band (where it is one on
+        // this desk) must be mounted with that kind.
+        assert.match(validateRoutes, target, `${name} promises ${band[2]} and no route does it`);
+        if (band[3]) assert.ok(page.includes(band[3]), `${name} promises ${band[2]} and mounts no band for it`);
+      } else {
+        assert.ok(page.includes(`surface="${target}"`), `${name} promises ${target} and mounts no band for it`);
+        assert.ok(research.includes(`\n  '${target}': {`), `${name}'s ${target} band has no DRAFT_SURFACES entry`);
+      }
+    }
+    // Every draft band the desk mounts is one the sentence accounts for.
+    for (const [, surf] of page.matchAll(/surface="([^"]+)"/g)) {
+      assert.ok(desk.bands.some(([, t]) => t === surf), `${name} mounts ${surf} and its sentence does not name it`);
+    }
   }
-
-  assert.match(note, /accept, edit or discard/,
-    'the mode note must say a proposal is never applied on its own');
 });
 
 test('the rail still names a real gap, and not a closed one', () => {

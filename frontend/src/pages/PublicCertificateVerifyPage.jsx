@@ -125,7 +125,7 @@ export default function PublicCertificateVerifyPage() {
 
         <p className="text-center text-[12px] text-gray-400 dark:text-gray-500 mt-5">
           <Link to="/spinout-lab" className="font-semibold text-violet-700 dark:text-violet-300">Axal VC Spin-Out Lab</Link>
-          {' '}— a 28-day program taking founders from idea to incorporated.
+          {' '}— four weeks of execution, four gates that open on evidence, one cohort a month.
         </p>
       </div>
     </div>

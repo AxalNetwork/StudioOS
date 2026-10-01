@@ -13,7 +13,6 @@ registry.
 | `canvasTransactional.ts` | Canvas templates M1–M5 renderers (workspace invite, signature, capital call, digest, spin-out decision). |
 | `personaInvites.ts` | Set A/B copy for the four persona invitations — content only, no HTML. |
 | `personaInviteRender.ts` | Renders broadcast or GP personal persona invites through `inviteChrome`. |
-| `personaInviteSend.ts` | `sendPersonaInvite()` — wires `renderInvite` to Gmail delivery. |
 
 Registry layout and the 42+ named templates live in `cloudflare-worker/src/templates/email/`.
 Legacy inline senders remain in `cloudflare-worker/src/services/email.ts` at the

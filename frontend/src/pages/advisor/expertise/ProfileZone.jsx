@@ -6,6 +6,8 @@ import {
   buttonClass, inputClass,
 } from './kit';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
+import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 
 /**
  * Expertise · Profile — what the market finds when it finds you.
@@ -34,6 +36,40 @@ const LIST_HINT = 'Comma separated. Leave blank to leave unrecorded.';
 const splitList = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
 const joinList = (v) => (Array.isArray(v) ? v.join(', ') : '');
 
+/**
+ * The fields a match surface reads — the meter's list, and the `Match-critical`
+ * chip's (D392). One list, so the chip cannot select fields the meter does not
+ * count or miss one it does.
+ */
+export const MATCH_FIELDS = [
+  ['Positioning statement', 'headline'],
+  ['Sectors', 'sectors'],
+  ['Stages', 'stages'],
+  ['Languages', 'languages'],
+  ['Geography', 'country'],
+  ['Availability window', 'availability_note'],
+  ['Headshot', 'headshot_url'],
+];
+const MATCH_KEYS = MATCH_FIELDS.map(([, key]) => key);
+const ALL_KEYS = ['display_name', 'headline', 'bio', 'expertise', 'sectors', 'stages', 'languages', 'country', 'timezone', 'availability_note', 'headshot_url', 'linkedin_url'];
+
+/** Is this field answered in the SAVED record? An empty list is not an answer here. */
+export function filled(profile, key) {
+  const v = profile?.[key];
+  if (Array.isArray(v)) return v.length > 0;
+  return v !== null && v !== undefined && String(v).trim() !== '';
+}
+
+/**
+ * Which form fields a chip shows. `gaps` reads the saved record, not the draft,
+ * so a field does not disappear while someone is typing into it.
+ */
+export function fieldShown(view, key, profile) {
+  if (view === 'match') return MATCH_KEYS.includes(key);
+  if (view === 'gaps') return !filled(profile, key);
+  return true;
+}
+
 /** Canvas-aligned completeness: which fields a match surface reads, and which are missing. */
 function profileCompleteness(profile) {
   if (!profile) return { pct: 0, gaps: [], complete: 0, total: 0 };
@@ -43,15 +79,7 @@ function profileCompleteness(profile) {
   // 79-character headline was told to go and write a "match one-liner" that is
   // the box they had already filled. A meter that names a gap the advisor
   // cannot close is worse than a shorter meter.
-  const fields = [
-    ['Positioning statement', profile.headline],
-    ['Sectors', profile.sectors?.length ? profile.sectors : null],
-    ['Stages', profile.stages?.length ? profile.stages : null],
-    ['Languages', profile.languages?.length ? profile.languages : null],
-    ['Geography', profile.country],
-    ['Availability window', profile.availability_note],
-    ['Headshot', profile.headshot_url],
-  ];
+  const fields = MATCH_FIELDS.map(([label, key]) => [label, filled(profile, key) ? profile[key] : null]);
   const complete = fields.filter(([, v]) => v != null && v !== '').length;
   const gaps = fields.filter(([, v]) => v == null || v === '').map(([k]) => k.toLowerCase());
   return { pct: Math.round((complete / fields.length) * 100), gaps, complete, total: fields.length };
@@ -93,6 +121,7 @@ export default function ProfileZone() {
   // all times. The guard stays as it is: it is no longer load-bearing for the
   // deref, but it still keeps the skeleton up until the first read lands.
   const [draft, setDraft] = useState(EMPTY_DRAFT);
+  const [view, setView] = useState('all');
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState(null);
 
@@ -177,8 +206,14 @@ export default function ProfileZone() {
     // unconditionally. Dropping the guard entirely would leave that
     // resting on React batching the two setState calls in `load`, which it
     // does today and need not tomorrow.
-    <ZoneBody
+    <>
+    <ZoneToolbar
+      className="mb-3"
+      role="advisor"
+      filters={advisorZoneFilters('expertise/profile', { value: view, onChange: setView })}
       actions={advisorZoneActions('expertise/profile', { view: { header: ['Display name', 'Headline', 'Bio', 'Expertise', 'Sectors', 'Stages', 'Country', 'Timezone', 'Languages', 'LinkedIn', 'Availability'], rows: draft ? [draft] : [], cells: (d) => [d.display_name, d.headline, d.bio, d.expertise, d.sectors, d.stages, d.country, d.timezone, d.languages, d.linkedin_url, d.availability_note] } })}
+    />
+    <ZoneBody
       loading={state.loading || (!draft && !state.error)}
       error={state.error}
       onRetry={load}
@@ -189,7 +224,7 @@ export default function ProfileZone() {
           {/* Canvas completeness meter — computed from the fields, not asserted. */}
           <Card padding="lg">
             <div className="flex flex-wrap items-baseline justify-between gap-3">
-              <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+              <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
                 Profile completeness · what every match surface reads
               </span>
               <span className="text-[13px] font-extrabold text-emerald-700 tabular-nums">
@@ -211,7 +246,7 @@ export default function ProfileZone() {
                 ))}
               </div>
             )}
-            <p className="mt-2 text-[11px] leading-relaxed text-axal-ink-3">
+            <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
               The meter counts only fields a match surface actually reads. Availability window is the costly gap: without it, a founder browsing the cohort surface cannot tell whether this practice takes new work this month.
             </p>
           </Card>
@@ -222,47 +257,74 @@ export default function ProfileZone() {
               blurb="What a founder reads before deciding whether to book you. Every field is yours to state; nothing here is inferred, scored or written for you."
             />
             <form onSubmit={save} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Name">
-                <input className={inputClass} value={draft.display_name} onChange={set('display_name')} />
-              </Field>
-              <Field label="Headline" hint="One line. e.g. “ex-Stripe payments PM”.">
-                <input className={inputClass} value={draft.headline} onChange={set('headline')} />
-              </Field>
-              <div className="sm:col-span-2">
-                <Field label="Bio">
-                  <textarea rows={4} className={inputClass} value={draft.bio} onChange={set('bio')} />
+              {fieldShown(view, 'display_name', state.profile) && (
+                <Field label="Name">
+                  <input className={inputClass} value={draft.display_name} onChange={set('display_name')} />
                 </Field>
-              </div>
-              <Field label="Expertise" hint={LIST_HINT}>
-                <input className={inputClass} value={draft.expertise} onChange={set('expertise')} />
-              </Field>
-              <Field label="Sectors" hint={LIST_HINT}>
-                <input className={inputClass} value={draft.sectors} onChange={set('sectors')} />
-              </Field>
-              <Field label="Stages" hint={LIST_HINT}>
-                <input className={inputClass} value={draft.stages} onChange={set('stages')} placeholder="pre-seed, seed" />
-              </Field>
-              <Field label="Languages" hint={LIST_HINT}>
-                <input className={inputClass} value={draft.languages} onChange={set('languages')} placeholder="English, French" />
-              </Field>
-              <Field label="Country">
-                <input className={inputClass} value={draft.country} onChange={set('country')} />
-              </Field>
-              <Field label="Time zone" hint="IANA name, e.g. America/Toronto.">
-                <input className={inputClass} value={draft.timezone} onChange={set('timezone')} />
-              </Field>
-              <div className="sm:col-span-2">
-                <Field label="Availability" hint="In your own words. This is a note, not a calendar — your bookable slots live under Practice.">
-                  <input className={inputClass} value={draft.availability_note} onChange={set('availability_note')}
-                    placeholder="Two mornings a week, usually Tuesday and Thursday" />
+              )}
+              {fieldShown(view, 'headline', state.profile) && (
+                <Field label="Headline" hint="One line. e.g. “ex-Stripe payments PM”.">
+                  <input className={inputClass} value={draft.headline} onChange={set('headline')} />
                 </Field>
-              </div>
-              <Field label="Headshot URL">
-                <input className={inputClass} value={draft.headshot_url} onChange={set('headshot_url')} />
-              </Field>
-              <Field label="LinkedIn">
-                <input className={inputClass} value={draft.linkedin_url} onChange={set('linkedin_url')} />
-              </Field>
+              )}
+              {fieldShown(view, 'bio', state.profile) && (
+                <div className="sm:col-span-2">
+                  <Field label="Bio">
+                    <textarea rows={4} className={inputClass} value={draft.bio} onChange={set('bio')} />
+                  </Field>
+                </div>
+              )}
+              {fieldShown(view, 'expertise', state.profile) && (
+                <Field label="Expertise" hint={LIST_HINT}>
+                  <input className={inputClass} value={draft.expertise} onChange={set('expertise')} />
+                </Field>
+              )}
+              {fieldShown(view, 'sectors', state.profile) && (
+                <Field label="Sectors" hint={LIST_HINT}>
+                  <input className={inputClass} value={draft.sectors} onChange={set('sectors')} />
+                </Field>
+              )}
+              {fieldShown(view, 'stages', state.profile) && (
+                <Field label="Stages" hint={LIST_HINT}>
+                  <input className={inputClass} value={draft.stages} onChange={set('stages')} placeholder="pre-seed, seed" />
+                </Field>
+              )}
+              {fieldShown(view, 'languages', state.profile) && (
+                <Field label="Languages" hint={LIST_HINT}>
+                  <input className={inputClass} value={draft.languages} onChange={set('languages')} placeholder="English, French" />
+                </Field>
+              )}
+              {fieldShown(view, 'country', state.profile) && (
+                <Field label="Country">
+                  <input className={inputClass} value={draft.country} onChange={set('country')} />
+                </Field>
+              )}
+              {fieldShown(view, 'timezone', state.profile) && (
+                <Field label="Time zone" hint="IANA name, e.g. America/Toronto.">
+                  <input className={inputClass} value={draft.timezone} onChange={set('timezone')} />
+                </Field>
+              )}
+              {fieldShown(view, 'availability_note', state.profile) && (
+                <div className="sm:col-span-2">
+                  <Field label="Availability" hint="In your own words. This is a note, not a calendar — your bookable slots live under Practice.">
+                    <input className={inputClass} value={draft.availability_note} onChange={set('availability_note')}
+                      placeholder="Two mornings a week, usually Tuesday and Thursday" />
+                  </Field>
+                </div>
+              )}
+              {fieldShown(view, 'headshot_url', state.profile) && (
+                <Field label="Headshot URL">
+                  <input className={inputClass} value={draft.headshot_url} onChange={set('headshot_url')} />
+                </Field>
+              )}
+              {fieldShown(view, 'linkedin_url', state.profile) && (
+                <Field label="LinkedIn">
+                  <input className={inputClass} value={draft.linkedin_url} onChange={set('linkedin_url')} />
+                </Field>
+              )}
+              {view === 'gaps' && ALL_KEYS.every((k) => filled(state.profile, k)) && (
+                <p className="sm:col-span-2 text-[12px] text-axal-muted">No field is empty in your saved profile.</p>
+              )}
               <div className="sm:col-span-2">
                 <button type="submit" className={buttonClass} disabled={saving}>
                   {saving ? 'Saving…' : 'Save profile'}
@@ -274,18 +336,18 @@ export default function ProfileZone() {
         </div>
 
         <Card variant="sunken" padding="lg">
-          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             As a founder sees it
           </div>
           <div className="mt-3 flex items-start gap-3">
             {state.profile?.headshot_url
               ? <img src={state.profile.headshot_url} alt="" className="h-12 w-12 rounded-full object-cover" />
-              : <div className="grid h-12 w-12 place-items-center rounded-full bg-axal-ground text-[10px] text-axal-ink-3 dark:bg-gray-800">No photo</div>}
+              : <div className="grid h-12 w-12 place-items-center rounded-full bg-axal-ground text-[10px] text-axal-faint dark:bg-gray-800">No photo</div>}
             <div className="min-w-0">
               <div className="truncate text-[13px] font-extrabold">
                 {state.profile?.display_name || <Unrecorded>Unnamed</Unrecorded>}
               </div>
-              <div className="text-[11.5px] text-axal-ink-2">
+              <div className="text-[11.5px] text-axal-muted">
                 {state.profile?.headline || <Unrecorded />}
               </div>
             </div>
@@ -297,7 +359,7 @@ export default function ProfileZone() {
               ['Languages', state.profile?.languages],
             ].map(([label, value]) => (
               <div key={label} className="flex gap-2">
-                <dt className="w-20 shrink-0 text-axal-ink-3">{label}</dt>
+                <dt className="w-20 shrink-0 text-axal-faint">{label}</dt>
                 <dd className="min-w-0">
                   {/* null is "never answered"; [] is "answered, and none". The
                       preview says which, because the difference is the whole
@@ -314,17 +376,18 @@ export default function ProfileZone() {
               ['Availability', state.profile?.availability_note],
             ].map(([label, value]) => (
               <div key={label} className="flex gap-2">
-                <dt className="w-20 shrink-0 text-axal-ink-3">{label}</dt>
+                <dt className="w-20 shrink-0 text-axal-faint">{label}</dt>
                 <dd className="min-w-0">{value || <Unrecorded />}</dd>
               </div>
             ))}
           </dl>
-          <p className="mt-4 text-[11px] leading-relaxed text-axal-ink-3">
+          <p className="mt-4 text-[11px] leading-relaxed text-axal-faint">
             This preview reads the saved record, not the form. What you see here is what a founder
             would see now.
           </p>
         </Card>
       </div>
     </ZoneBody>
+    </>
   );
 }

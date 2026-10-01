@@ -22,6 +22,35 @@ const t = (e: EmailTemplate): EmailTemplate => e;
 
 export const TEMPLATES: Record<string, EmailTemplate> = {
 
+  // ──────────────────────────────────────────────────── COMPLIANCE (D135)
+  // The ladder's first rung, and the only email on it: HQ has asked a
+  // subsidiary administrator for something and set a deadline. The freeze that
+  // follows a missed deadline is announced through `notify()`'s in-app channel
+  // rather than a second template, because by then the person is already
+  // looking at a 423 and what they need is the route back, not more mail.
+  //
+  // `severity: 'warning'` and NOT 'critical': the deadline is days out when this
+  // is sent, and a critical notice bypasses quiet hours — which would mean
+  // waking a licensee at 3am about a fee due in a fortnight.
+  //
+  // vars: name, subject, kind_label, respond_by, body, licence_url
+  compliance_notice_issued: t({
+    key: 'compliance_notice_issued', category: 'compliance', severity: 'warning',
+    replyTo: 'support@axal.vc',
+    subject: 'Action needed on your Axal licence — {{subject}}',
+    text: `Hi {{name}},\n\nAxal VC HQ has issued a notice on your territory licence.\n\nSubject: {{subject}}\nAbout: {{kind_label}}\nPlease respond by: {{respond_by}}\n\n{{body}}\n\nRespond here:\n{{licence_url}}\n\nIf the deadline passes without a response, your administrator account is frozen: you keep full read access and your account stops being able to make changes until the notice is answered. Answering it is what lifts the freeze.`,
+    html: `<p>Hi {{name}},</p>
+<p>Axal VC HQ has issued a notice on your territory licence.</p>
+<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:14px;padding:18px 20px;margin:0 0 20px;">
+  <p style="margin:0 0 6px;font-size:15px;font-weight:600;color:#92400e;">{{subject}}</p>
+  <p style="margin:0 0 4px;color:#92400e;font-size:13px;">About: {{kind_label}}</p>
+  <p style="margin:0;color:#92400e;font-size:13px;">Please respond by <strong>{{respond_by}}</strong>.</p>
+</div>
+<p style="white-space:pre-wrap;">{{body}}</p>
+<p><a href="{{{licence_url}}}" style="display:inline-block;background:#111;color:#fff;padding:11px 18px;border-radius:8px;text-decoration:none;font-weight:600;">Respond to this notice</a></p>
+<p style="color:#6b7280;font-size:13px;">If the deadline passes without a response, your administrator account is frozen: you keep full read access and your account stops being able to make changes until the notice is answered. Answering it is what lifts the freeze.</p>`,
+  }),
+
   // ────────────────────────────────────────────────────────── AUTH
   // vars: name, verify_url
   auth_verify_email: t({

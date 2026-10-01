@@ -7,6 +7,8 @@ import {
   buttonClass, dollarsToCents, ghostButtonClass, inputClass, money,
 } from './kit';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
+import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 
 /**
  * Expertise · Services — what you sell, and what you charge for it.
@@ -41,6 +43,8 @@ export default function ServicesZone() {
   const [draft, setDraft] = useState(BLANK);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
+  // D392 — the canvas's chips over `kind`, the column the form above writes.
+  const [view, setView] = useState('all');
 
   const load = useCallback(async () => {
     setState((c) => ({ ...c, loading: true, error: '' }));
@@ -136,6 +140,8 @@ export default function ServicesZone() {
     ? state.items.reduce((a, b) => ((unitsFor(b) ?? 0) > (unitsFor(a) ?? 0) ? b : a), state.items[0])
     : null;
 
+  const shown = view === 'all' ? state.items : state.items.filter((r) => r.kind === view);
+
   const empty = (
     <NothingYet
       title="No services recorded yet"
@@ -163,9 +169,9 @@ export default function ServicesZone() {
             { label: 'Unpriced', value: String(unpriced.length), note: unpriced.length ? 'scope settled, price is not' : 'all priced' },
           ].map((s) => (
             <Card key={s.label} padding="md">
-              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{s.label}</div>
+              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{s.label}</div>
               <div className="mt-1 text-[15px] font-extrabold tabular-nums">{s.value}</div>
-              <div className="mt-0.5 text-[10px] text-axal-ink-3">{s.note}</div>
+              <div className="mt-0.5 text-[10px] text-axal-faint">{s.note}</div>
             </Card>
           ))}
         </div>
@@ -213,11 +219,19 @@ export default function ServicesZone() {
         </form>
       </Card>
 
+      <ZoneToolbar
+        className="mb-3"
+        role="advisor"
+        filters={advisorZoneFilters('expertise/services', { value: view, onChange: setView })}
+        actions={advisorZoneActions('expertise/services', { view: { header: ['Service', 'Kind', 'Active', 'Price (cents)', 'Units sold'], rows: shown, cells: (r) => [r.title, r.kind, r.is_active, r.price_cents, r.units_sold] } })}
+      />
       <ZoneBody loading={state.loading} error={state.error} onRetry={load}
-        actions={advisorZoneActions('expertise/services', { view: { header: ['Service', 'Active', 'Price (cents)', 'Units sold'], rows: state.items, cells: (r) => [r.title, r.is_active, r.price_cents, r.units_sold] } })}
         isEmpty={state.items.length === 0} empty={empty}>
+        {shown.length === 0 && (
+          <p className="text-[12.5px] text-axal-muted">{`No ${view} service is listed. ${state.items.length} in total.`}</p>
+        )}
         <div className="space-y-3">
-          {state.items.map((row) => (
+          {shown.map((row) => (
             <Card key={row.id} padding="md">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -227,10 +241,10 @@ export default function ServicesZone() {
                     {!row.is_active && <Pill tone="warn">Hidden</Pill>}
                   </div>
                   {row.duration_note && (
-                    <div className="mt-0.5 text-[11.5px] text-axal-ink-3">{row.duration_note}</div>
+                    <div className="mt-0.5 text-[11.5px] text-axal-faint">{row.duration_note}</div>
                   )}
                   {row.scope && (
-                    <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-ink-2">{row.scope}</p>
+                    <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-muted">{row.scope}</p>
                   )}
                 </div>
                 <div className="text-right">
@@ -250,7 +264,7 @@ export default function ServicesZone() {
               </div>
             </Card>
           ))}
-          <p className="text-[11px] leading-relaxed text-axal-ink-3">
+          <p className="text-[11px] leading-relaxed text-axal-faint">
             How many times each service has been delivered is not shown. Nothing in the product links
             a booking to a service — a booking records a free-text topic — so a count here would be a
             guess wearing the shape of a number.

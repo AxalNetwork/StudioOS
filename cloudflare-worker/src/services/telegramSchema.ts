@@ -5,11 +5,12 @@
  * replit.md pending-migrations gotcha).
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 export async function ensureTelegramSchema(env: Env): Promise<void> {
-  if (_ready) return;
+  if (READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS telegram_channels (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT NOT NULL UNIQUE, label TEXT NOT NULL, chat_id TEXT, audience TEXT NOT NULL, is_invite_only INTEGER NOT NULL DEFAULT 1, enabled INTEGER NOT NULL DEFAULT 1, last_test_at TEXT, last_error TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))",
@@ -69,7 +70,18 @@ export async function ensureTelegramSchema(env: Env): Promise<void> {
         "('axal-partners', 'Axal Operating Partners', 'partners', 1)," +
         "('axal-alumni', 'Axal Alumni', 'alumni', 1)",
     );
-    _ready = true;
+    // D250 — who scheduled the post (migration 290). Same PRAGMA pattern as
+    // the signature column: a safety net for the declared column, not its
+    // only declaration (D235).
+    try {
+      const cols = await env.DB.prepare("PRAGMA table_info('telegram_posts')").all<{ name: string }>();
+      if (!(cols.results || []).some((c) => String(c.name) === 'scheduled_by')) {
+        await env.DB.exec("ALTER TABLE telegram_posts ADD COLUMN scheduled_by INTEGER REFERENCES users(id)");
+      }
+    } catch (e) {
+      console.warn('[telegramSchema] scheduled_by column ensure failed:', (e as Error).message);
+    }
+    READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[telegramSchema] ensure failed:', (e as Error).message);
   }

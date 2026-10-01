@@ -31,8 +31,13 @@
  *                        "Anything investor-facing passes Llama Guard first"
  *                        is a claim about a pipeline that does not exist
  *   the generated cover  no image generation ships
- *   the waterfall        no liquidation preference, participation right or
- *                        exit model is stored for a company anywhere
+ *
+ * ONE OF THOSE WAS WRONG. "The waterfall: no exit model is stored" stood here
+ * while the project's cap-table scenario carried `result.waterfall` whenever
+ * it modelled an exit value, and `/raise/liquidity` rendered it. The desk now
+ * draws its two headline figures from that scenario (D420), and says the
+ * preference terms are the simulator's stated assumptions, not a clause read
+ * from a signed document.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -133,7 +138,7 @@ test('what the artboard asks for and nothing records is named, not drawn', () =>
   assert.match(page, /No blocker is recorded against a round, so none is counted\./);
   assert.match(page, /no content review runs anywhere in this build, so no artifact carries a screened mark/);
   assert.match(page, /Cover imagery is not generated here/);
-  assert.match(page, /no liquidation preference, participation right or exit model is recorded for this company, so there is no waterfall to draw/);
+  assert.match(page, /models no exit value, so there is no waterfall to draw and this desk does not invent one\./);
   // AND THE MARKS THEMSELVES ARE ABSENT, not merely disclaimed.
   assert.doesNotMatch(page, /Screened before share|>Screened<|shield/i,
     'a screened mark is drawn over a review that does not run');
@@ -164,8 +169,16 @@ test('the four proposal bands are mounted, off by default, and allow-listed', ()
   // plain body text.
   assert.match(page, /surface="raise\/legal"\n\s*scopeKey=\{scope\}\n\s*accent="violet"\n\s*tone="warn"/);
   assert.equal((page.match(/tone="warn"/g) || []).length, 1, 'the warn tone spread beyond the clause read');
-  // "Not legal advice" is the artboard's own footnote and is not optional.
-  assert.match(page, /foot="Not legal advice\. Counsel is on the Team page\."/);
+  // The artboard's footnote says the clause read is not a lawyer's, and where
+  // one is — and that half is not optional. Its wording was "Not legal
+  // advice", which names what Eadwyn produced as a kind of advice; the voice
+  // rule forbids that about the assistant's output (D424), so the property is
+  // pinned rather than the artboard's sentence: the read disclaims counsel's
+  // review, sends the reader to counsel, and never calls itself advice.
+  const legalFoot = /surface="raise\/legal"[\s\S]*?foot="([^"]+)"/.exec(page)?.[1] || '';
+  assert.match(legalFoot, /not counsel's review/, 'the clause read no longer says it is not a lawyer\'s');
+  assert.match(legalFoot, /Counsel is on the Team page\./, 'the clause read no longer says where counsel is');
+  assert.doesNotMatch(legalFoot, /\badvice\b/i, 'the clause read calls what Eadwyn wrote advice');
 });
 
 test('every Raise draft surface scopes to a project the caller owns', () => {
@@ -191,4 +204,34 @@ test('A4 never turns canvas fixtures into product data or claims', () => {
   // The dilution figures are the fixture's arithmetic on the fixture's cap
   // table, and none of them belongs on a page.
   assert.doesNotMatch(page, /89\.5%|66\.1%|7\.4 points|16\.0/);
+});
+
+test('the liquidity card draws the waterfall the cap-table scenario already carries', () => {
+  // D420. A4 draws "to founders" against "to preference" at an exit. The
+  // project's canonical scenario carries `result.waterfall` whenever it models
+  // an exit value (`services/captable.ts`), and `/raise/liquidity` renders it.
+  const simulator = raw('cloudflare-worker/src/services/captable.ts');
+  assert.match(simulator, /if \(exit != null && roundsOut\.length\) wf = waterfall\(roundsOut, Number\(exit\)\);/,
+    'the simulator stopped writing a waterfall when an exit is modelled');
+  assert.match(simulator, /preference_paid: bankersRound\(prefPaid, 2\)/, 'the waterfall stopped totalling preference');
+  assert.match(page, /capTable: api\.getCapTableByProject\(projectId\),/, 'the desk does not read the cap-table scenario');
+  const card = page.slice(page.indexOf('function ExitWaterfall'), page.indexOf('function roundLabel'));
+  assert.match(card, /const waterfall = scenario\?\.result\?\.waterfall;/);
+  // FOUNDERS ARE THE `founder` ROWS — not every common holder, which would
+  // count the option pool and converted preferred as the founders' take.
+  assert.match(card, /rows\.filter\(\(row\) => clean\(row\.type\) === 'founder'\)/,
+    'the founders’ figure is not the founder rows alone');
+  assert.match(card, /const preference = Number\(waterfall\.totals\?\.preference_paid\);/);
+  // TWO ABSENCES, SAID APART: no scenario at all, and a scenario with no exit.
+  assert.match(card, /The stored cap-table scenario models no exit value/);
+  assert.match(card, /No cap-table scenario is recorded for this company/);
+  // AND AN UNREADABLE SCENARIO IS NEITHER.
+  assert.match(page, /errors\.capTable \? <Unavailable \/> : <ExitWaterfall scenario=\{scenario\} \/>/,
+    'a failed cap-table read renders as "no scenario"');
+  // THE TERMS ARE THE MODEL'S, and the card says so rather than presenting the
+  // simulator's 1× non-participating assumption as the founder's term sheet.
+  assert.match(card, /asList\(waterfall\.assumptions\)\.join\(' '\)/, 'the simulator’s assumptions are not shown');
+  assert.match(card, /No preference clause is read from a signed document\./);
+  assert.match(css, /(^|\n)\.raise-waterfall\{/, 'the waterfall has no light-mode style');
+  assert.match(css, /\.dark \.raise-waterfall\{/, 'the waterfall has no dark-mode style');
 });

@@ -179,3 +179,53 @@ test('demo_day_app — empty render shows the sample fallback + holds 12 frames'
   assert.doesNotThrow(() => render(Deck_demo_day_app, DEMODAY_SAMPLE));
   assert.equal(countFrames(render(Deck_demo_day_app, DEMODAY_SAMPLE)), 12, 'sample render should emit 12 slide frames');
 });
+
+// ── #201: what a type-check found, pinned by what actually renders ──
+//
+// A green `tsc --noEmit` is not evidence that a deck draws the right thing —
+// it is evidence that nothing contradicts the types. These two assert the
+// output, so reverting either fix fails here as well as in the compiler.
+
+test('minimal_seed — the JOURNEY timeline draws achievements, not blanks', () => {
+  // `TimelineDots` is handed two different shapes by two callers in this file:
+  // `milestones` is `{date,label}` — the shape it was written for — and
+  // `achievements` is `{year,event}`. A component that read only the first would
+  // draw its dots over three EMPTY columns on the JOURNEY strip: no year, no
+  // caption, nothing to say so.
+  //
+  // #206 MOVED THIS TEST HERE, AND THAT IS THE POINT OF IT. #201 found the
+  // missing case in `minimal_seed_app.tsx` and pinned it there — but that file
+  // was a stale fork the registry never reached, and `minimal_seed.tsx`, the one
+  // `templates/index.ts` actually ships, had already made the same fix
+  // (`minimal_seed.tsx:523` widens the prop, `:534` normalises `date || year`).
+  // So the assertion was guarding the copy nobody could see while the shipping
+  // template carried the behaviour untested. The fork is deleted; the test now
+  // reads the deck a founder opens.
+  const html = render(Deck_minimal_seed, MINIMAL_SAMPLE);
+  for (const a of MINIMAL_SAMPLE.achievements) {
+    assert.ok(html.includes(a.year.toUpperCase()), `achievement year "${a.year}" is missing from the render`);
+    assert.ok(html.includes(a.event), `achievement caption "${a.event}" is missing from the render`);
+  }
+  // And the other caller must keep working — widening a prop type is exactly the
+  // change that can silently drop the case it already handled.
+  for (const m of MINIMAL_SAMPLE.milestones) {
+    assert.ok(html.includes(m.date.toUpperCase()), `milestone date "${m.date}" is missing from the render`);
+    assert.ok(html.includes(m.label), `milestone label "${m.label}" is missing from the render`);
+  }
+});
+
+test('series_a_growth_app — customer logos never render the string "undefined"', () => {
+  // #201 predicted this one renders `undefined` because it reads `.initials`
+  // off a fallback that carries only `name`. It does not: the read is
+  // `l.initials || safeUpper(l.name).slice(0, 6)`, so the fallback was always
+  // covered and the diagnostic was type-only. Asserted rather than argued,
+  // because "it already falls back" is the kind of claim that stops being true.
+  const empty = render(Deck_series_a_growth_app, {});
+  const populated = render(Deck_series_a_growth_app, SERIES_A_SAMPLE);
+  for (const [label, html] of [['empty', empty], ['sample', populated]]) {
+    assert.ok(!html.includes('>undefined<'), `series_a_growth_app ${label} render emitted a literal "undefined"`);
+  }
+  // The twelve-name fallback is what a project with no logos gets; at least the
+  // first of them has to survive to the page.
+  assert.ok(empty.includes('ACME'), 'the customer-logo fallback did not render');
+});

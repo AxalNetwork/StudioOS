@@ -7,6 +7,7 @@
  */
 import type { Env } from '../../types';
 import type { DeckMethodId } from './methods';
+import { bindingKey } from '../../util/schemaBootstrap';
 
 type Stage =
   | 'idea' | 'pre_seed' | 'seed' | 'series_a' | 'series_b'
@@ -49,9 +50,9 @@ const SECTOR_OVERRIDES: Array<{ sectorPattern: RegExp; stage: Stage; method: Dec
   { sectorPattern: /(deeptech|biotech|hardware|robotics)/i, stage: 'series_b', method: 'series_b_diligence' },
 ];
 
-let _ovSchemaReady = false;
+const OV_SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureOverrideSchema(env: Env): Promise<void> {
-  if (_ovSchemaReady) return;
+  if (OV_SCHEMA_READY.get(bindingKey(env))) return;
   try {
     await env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS deck_recommendation_overrides (
@@ -65,7 +66,7 @@ async function ensureOverrideSchema(env: Env): Promise<void> {
        )`,
     ).run();
   } catch (e: any) { console.error('deck_recommendation_overrides:', e?.message); }
-  _ovSchemaReady = true;
+  OV_SCHEMA_READY.set(bindingKey(env), true);
 }
 
 export type DeckRecommendation = {

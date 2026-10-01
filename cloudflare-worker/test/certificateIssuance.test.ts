@@ -44,6 +44,7 @@ type Scenario = {
   insertChanges?: number;
   backfillRows?: Array<{ user_id: number }>;
   throwOn?: string;
+  revokedSameId?: { id: number } | null;
 };
 
 function fakeEnv(s: Scenario) {
@@ -53,6 +54,7 @@ function fakeEnv(s: Scenario) {
       return { first: s.existingCert ?? null };
     }
     if (sql.includes('JOIN spinout_lab_milestones m')) return { first: s.facts ?? null };
+    if (sql.includes("WHERE credential_id = ? AND status <> 'issued'")) return { first: s.revokedSameId ?? null };
     if (sql.includes('INSERT OR IGNORE INTO spinout_certificates')) {
       return { run: { meta: { changes: s.insertChanges ?? 1 } } };
     }
@@ -126,10 +128,31 @@ test('the company falls back to the application when there is no project', async
 test('issued_by_user_id is NULL — nobody issued this by hand', async () => {
   // Writing a real admin id would misattribute an automatic action to a
   // person in the audit trail.
+  // D382 made the column a bound value so the admin tab's Issue can pass its
+  // admin; the automatic path still binds nothing.
   const { env, calls } = fakeEnv({ facts: GRADUATE });
   await issueOnGraduation(env, 117);
   const ins = calls.find((c) => c.sql.includes('INSERT OR IGNORE'))!;
-  assert.match(ins.sql, /issued_by_user_id\)\s*VALUES \(\?, \?, \?, \?, \?, \?, \?, \?, \?, NULL\)/);
+  assert.match(ins.sql, /issued_by_user_id\)/);
+  assert.equal(ins.binds.length, 10);
+  assert.equal(ins.binds[9], null);
+});
+
+test('an admin-issued credential records the admin (D382)', async () => {
+  const { env, calls } = fakeEnv({ facts: GRADUATE });
+  assert.equal(await issueOnGraduation(env, 117, 42), 'issued');
+  const ins = calls.find((c) => c.sql.includes('INSERT OR IGNORE'))!;
+  assert.equal(ins.binds[9], 42);
+});
+
+test('a revoked credential holding the same id blocks issuance instead of reporting already_issued (D382)', async () => {
+  // Before D382 the INSERT OR IGNORE swallowed the UNIQUE conflict and the
+  // outcome read already_issued for a graduate who holds no live credential.
+  const { env, calls } = fakeEnv({ facts: GRADUATE, revokedSameId: { id: 3 } });
+  assert.equal(await issueOnGraduation(env, 117), 'reissue_blocked');
+  assert.ok(!calls.some((c) => c.sql.includes('INSERT OR IGNORE')), 'an insert was attempted over a revoked id');
+  const probe = calls.find((c) => c.sql.includes("WHERE credential_id = ? AND status <> 'issued'"));
+  assert.deepEqual(probe?.binds, ['AXL-SOL-C4-260731-0117']);
 });
 
 // ---------------------------------------------------------------------------

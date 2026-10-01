@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useActiveCompany } from '../contexts/ActiveCompanyContext';
-import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
+import PartnerFirmProfileCard from './partner/PartnerFirmProfileCard';
+import { api, setActiveCompanyId } from '../lib/api';
+import { bpsPercent } from '../lib/bps';
 import { safeReadJSON } from '../lib/storage';
+import { Lock } from 'lucide-react';
 
 // ---------- Who may edit -----------------------------------------------------
 //
@@ -19,6 +23,16 @@ import { safeReadJSON } from '../lib/storage';
 // asserts this list against the worker's, because two copies of an
 // authorisation rule drift.
 const EDIT_ROLES = ['Owner', 'Admin', 'Founder'];
+
+/**
+ * D431 — what a refused reader of a member's carry sees. Canvas T4's words:
+ * economics are locked when the viewer is neither the member nor a partner,
+ * "visible as a locked section, because a hidden one teaches people the wrong
+ * shape of the org". The server omits the field for such a reader; the page
+ * draws the lock and says who can see through it.
+ */
+const CARRY_LOCKED_LABEL = 'Economics · locked';
+const CARRY_LOCKED_NOTE = 'Visible to the member and to an Owner, Admin or Founder only. You see that carry exists and not what it is.';
 
 /**
  * The caller's own membership row, and what it lets them do.
@@ -149,27 +163,132 @@ function useFlash() {
 
 // ---------- Page -------------------------------------------------------------
 
+/**
+ * D395 — THE FIRM'S PARTNER PROFILE, for partner sign-ins only, ABOVE the
+ * no-company gate. `/partner/operations/overview` was the only place a service
+ * partner could edit the firm's name, company and specialisation, switch
+ * founder introductions, and read the partner agreement; it retired into this
+ * page (the owner's decision: Firm Settings, with the card widened, D390).
+ * The card edits the `partners` row, keyed by the sign-in's partner id and not
+ * by any company membership, so a partner with no company still reaches it —
+ * which is why it sits outside the `if (!activeCompany)` return rather than
+ * below it. The card names its own store; this page only decides who sees it.
+ */
+export function FirmProfileMount({ role }) {
+  if (role !== 'partner') return null;
+  return (
+    <div className="max-w-3xl px-6 pt-6 mx-auto" data-testid="firm-profile-mount">
+      <PartnerFirmProfileCard />
+    </div>
+  );
+}
+
 export default function CompanySettingsPage() {
   const { company: activeCompany } = useActiveCompany();
+  const { user } = useAuth();
   const [toast, flash] = useFlash();
 
   if (!activeCompany) {
-    return <CompanyOnRamp flash={flash} toast={toast} />;
+    return (
+      <>
+        <FirmProfileMount role={user?.role} />
+        <CompanyOnRamp flash={flash} toast={toast} />
+      </>
+    );
   }
 
   return (
+    <>
+    <FirmProfileMount role={user?.role} />
     <div className="max-w-3xl p-6 mx-auto space-y-6" data-testid="company-settings-page">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">Company Settings</h1>
-        <p className="text-gray-600 dark:text-gray-400">
-          Profile and details for{' '}
-          <span className="font-medium">{activeCompany.company_name}</span>.
-        </p>
-      </div>
+      <CompanyHeader company={activeCompany} />
 
       {toast && <Toast toast={toast} />}
 
       <CompanyProfileCard uid={activeCompany.uid} flash={flash} />
+    </div>
+    </>
+  );
+}
+
+// ---------- Header chrome (D434) ---------------------------------------------
+//
+// The canvas's header: initials, the name with its stage chip, a binding line
+// saying which company is being edited and since when, the reader's role as a
+// pill, and a scope line with the way to the switcher. Everything here comes
+// from the memberships row the switcher already selected (`company_name`,
+// `stage`, `created_at`, `my_role`, `is_primary_admin`) — no second read, so
+// the header cannot disagree with the sidebar about which company this is.
+// The canvas's "Owner view / CTO view" toggle is demo scaffolding and is not
+// drawn: the role is whatever the membership says.
+function initialsOf(name) {
+  return String(name || '').replace(/\s+/g, ' ').trim().split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+}
+function createdOn(iso) {
+  if (!iso) return null;
+  const d = new Date(String(iso).includes('T') ? iso : String(iso).replace(' ', 'T') + 'Z');
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+/**
+ * The sidebar's switcher is the one control that changes which company every
+ * page reads. "Switch company" here does not duplicate it — it takes the
+ * reader to it and opens it. The switcher marks its trigger with
+ * `data-company-switcher`; when the sidebar is not mounted (a narrow layout
+ * with the rail closed) there is nothing to jump to, and the button says so.
+ */
+function jumpToSwitcher() {
+  const el = typeof document === 'undefined' ? null : document.querySelector('[data-company-switcher]');
+  if (!el) return false;
+  el.scrollIntoView({ block: 'center' });
+  if (typeof el.focus === 'function') el.focus();
+  if (typeof el.click === 'function') el.click();
+  return true;
+}
+function CompanyHeader({ company }) {
+  const [jumpFailed, setJumpFailed] = useState(false);
+  const name = company.company_name || 'Unnamed company';
+  const created = createdOn(company.created_at);
+  const role = company.is_primary_admin
+    ? 'Primary admin'
+    : (company.my_role ? String(company.my_role) : null);
+  return (
+    <div data-testid="company-header">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-start gap-4 min-w-0">
+          <div className="w-14 h-14 rounded-xl bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 flex items-center justify-center text-lg font-extrabold flex-none" aria-hidden="true">
+            {initialsOf(name)}
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Company Settings</h1>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate" data-testid="company-header-name">{name}</span>
+              {company.stage ? (
+                <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300" data-testid="company-header-stage">
+                  {company.stage}
+                </span>
+              ) : (
+                <span className="text-[11px] italic text-gray-500 dark:text-gray-400" data-testid="company-header-stage">Stage not recorded</span>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400" data-testid="company-header-binding">
+              You are editing {name}{created ? ` · created ${created}` : ' · creation date not recorded'}
+            </p>
+          </div>
+        </div>
+        <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700 dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300 whitespace-nowrap" data-testid="company-header-role">
+          {role ? `Your role: ${role}` : 'Your role: not recorded'}
+        </span>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-300" data-testid="company-header-scope">
+        <span className="flex-1 min-w-[200px]">
+          This sidebar is scoped to {name}. Everything you change here affects this company only — your other companies are untouched.
+        </span>
+        <button type="button" onClick={() => setJumpFailed(!jumpToSwitcher())}
+          className="text-violet-700 dark:text-violet-300 font-medium hover:underline whitespace-nowrap">
+          Switch company ↑
+        </button>
+        {jumpFailed && <span className="basis-full text-[11px] text-gray-500 dark:text-gray-400">The switcher is in the sidebar, which is not open on this screen.</span>}
+      </div>
     </div>
   );
 }
@@ -178,10 +297,12 @@ export default function CompanySettingsPage() {
 //
 // Wave 2. This was a dead-end sentence ("Create or join a company to manage its
 // settings here") with no way to do either, while POST /company/create has been
-// live the whole time. Joining is deliberately NOT a self-serve button: the
-// backend has no join-request or invitation-accept endpoint — membership is
-// created by someone who can already edit the company adding you. Saying so is
-// the honest version; a button that cannot work is not.
+// live the whole time. Joining is still NOT a self-serve button, and the reason
+// has moved: there is no join-REQUEST endpoint, but there is an invitation
+// (task #121 — POST /company/:uid/invitations, accepted by the invitee at
+// /company/invitations/accept). So the way in is an invitation someone inside
+// sends to this account's email, and the copy says exactly that (D434 fixed
+// the earlier sentence here, which still said no accept endpoint existed).
 
 function CompanyOnRamp({ flash, toast }) {
   const { setCompany } = useActiveCompany();
@@ -243,8 +364,10 @@ function CompanyOnRamp({ flash, toast }) {
       <Card title="Join an existing company">
         <p className="text-sm text-gray-600 dark:text-gray-400">
           Membership is granted from the other side: ask an owner, admin or founder
-          of that company to add you by the email address on this account. There is
-          no self-serve join request yet, so nothing here would reach them.
+          of that company to invite the email address on this account under Members
+          &amp; access. The invitation arrives by email and you accept it yourself —
+          nothing changes until you do. There is no self-serve join request yet, so
+          nothing here would reach them.
         </p>
       </Card>
 
@@ -276,8 +399,9 @@ function CompanyOnRamp({ flash, toast }) {
 const UNLOCKS = [
   {
     title: 'A team, with real roles',
-    body: 'Add co-founders and hires by the email on their account, set who may edit what, and record title, '
-      + 'authority and carry per person — three separate axes, not one free-text field.',
+    body: 'Invite co-founders and hires by email — they accept a link, nobody is joined without asking — '
+      + 'set who may edit what, and record title, authority and carry per person: three separate axes, '
+      + 'not one free-text field.',
   },
   {
     title: 'Metrics that feed matching',
@@ -435,7 +559,11 @@ function CompanyProfileCard({ uid, flash }) {
           <Field label="International presence" hint="e.g. US, EU, APAC" status={fieldStatus.international_presence}>
             {text('international_presence')}
           </Field>
-          <Field label="Logo URL" status={fieldStatus.logo_url}>
+          {/* The canvas draws "Upload image". There is no image store for a
+              company logo — the column is `logo_url`, a link to an image you
+              host — so the field says that instead of drawing an upload that
+              would have nowhere to put the file. */}
+          <Field label="Logo URL" hint="Upload is not available: there is no image store for company logos yet, so paste a link to an image you host." status={fieldStatus.logo_url}>
             {text('logo_url', { placeholder: 'https://…' })}
           </Field>
           <div className="sm:col-span-2">
@@ -488,6 +616,8 @@ function CompanyProfileCard({ uid, flash }) {
       </Card>
 
       <MembersCard uid={uid} row={row} setRow={setRow} flash={flash} rights={rights} />
+
+      <WorkspaceCard row={row} flash={flash} />
 
       <DangerZoneCard uid={uid} row={row} rights={rights} flash={flash} />
 
@@ -561,6 +691,77 @@ function BoundaryNote() {
 // meanwhile. Building the endpoint is a separate change — it is deletion
 // across the cap table, the raise, the data room and the metrics, and it
 // deserves its own decision rather than arriving as UI polish.
+
+// ---------- Workspace (D434) -------------------------------------------------
+//
+// The canvas's fourth card: what the active company scopes, how to make
+// another, and how many this account holds. "Create another company" is the
+// same write the switcher makes (POST /company/create, then select it), kept
+// to one writer's rules: append to the context list, persist the id, select.
+// The count is the context's list — the one the switcher loaded — and when
+// that list is empty on a page that has an active company, the read failed,
+// which is said rather than counted as one.
+function WorkspaceCard({ row, flash }) {
+  const { companies, setCompanies, setCompany } = useActiveCompany();
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const short = row?.company_name || 'this company';
+  const count = Array.isArray(companies) ? companies.length : 0;
+
+  const create = async () => {
+    const company_name = name.trim();
+    if (!company_name) { flash('Enter a company name', 'error'); return; }
+    setBusy(true);
+    try {
+      const created = await api.createCompany({ company_name });
+      setCompanies([...(companies || []), created]);
+      setActiveCompanyId(created.id);
+      setCompany(created);
+      setName(''); setCreating(false);
+      flash(`${created.company_name || company_name} created — you are now working in it`);
+    } catch (e) {
+      flash(e?.message || 'Could not create the company', 'error');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Card
+      title="Workspace"
+      description="Every tool in the sidebar reads from whichever company is selected at the top. Settings is the only administrative page — the rest stay workspaces."
+    >
+      <div className="flex flex-wrap items-center gap-2" data-testid="workspace-card">
+        <button type="button" onClick={() => setCreating((v) => !v)} disabled={busy}
+          className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-violet-400">
+          {creating ? 'Cancel' : 'Create another company'}
+        </button>
+        <button type="button" onClick={() => { if (!jumpToSwitcher()) flash('The switcher is in the sidebar, which is not open on this screen', 'error'); }}
+          className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-violet-400">
+          Jump to the switcher
+        </button>
+        <span className="text-[11px] text-gray-500 dark:text-gray-400" data-testid="workspace-count">
+          {count > 0
+            ? `You have ${count} ${count === 1 ? 'company' : 'companies'} on this account.`
+            : 'The number of companies on this account could not be read.'}
+        </span>
+      </div>
+      {creating && (
+        <div className="mt-3 flex flex-col sm:flex-row gap-2" data-testid="workspace-create">
+          <input value={name} onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') create(); }}
+            placeholder="Company name" disabled={busy} className={inputCls} />
+          <button type="button" onClick={create} disabled={busy}
+            className="px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 whitespace-nowrap">
+            {busy ? 'Creating…' : 'Create and switch'}
+          </button>
+        </div>
+      )}
+      <p className="mt-3 text-[11px] text-gray-500 dark:text-gray-400">
+        Switching companies re-scopes the whole shell; {short} keeps its own members, settings and data.
+      </p>
+    </Card>
+  );
+}
 
 function DangerZoneCard({ uid, row, rights, flash }) {
   const { setCompany } = useActiveCompany();
@@ -719,6 +920,12 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
   // this render: the server keeps a hash, so once the page reloads nobody can
   // reproduce it and the answer is Resend.
   const [handoff, setHandoff] = useState(null);
+  // D434 — removal is two steps. The row being removed (user id) or the
+  // invitation being revoked (uid) holds the inline confirmation open; the
+  // consequence is printed there, because "Remove" alone does not say what
+  // the person loses.
+  const [removing, setRemoving] = useState(null);
+  const [revoking, setRevoking] = useState(null);
 
   useEffect(() => {
     let off = false;
@@ -739,6 +946,11 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
 
   const members = row.members || [];
   const primaryAdmins = members.filter((m) => m.is_primary_admin).length;
+  const companyShort = row.company_name || 'this company';
+  const pendingInvites = invites.state === 'ready' ? invites.items.filter((i) => i.status === 'pending').length : 0;
+  const removeConsequence = () => `They immediately lose access to every workspace scoped to ${companyShort} — `
+    + 'cap table, raise, data room, metrics. Anything they contributed stays with the company. '
+    + 'Adding them back means a new invitation.';
 
   const run = async (fn, okMsg) => {
     setBusy(true);
@@ -800,7 +1012,11 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
   return (
     <Card
       title={`Members & access (${members.length})`}
-      description="Who can see and edit this company. Owners, Admins and Founders can manage members."
+      description={`${members.length} ${members.length === 1 ? 'member' : 'members'}`
+        + (pendingInvites ? ` · ${pendingInvites} ${pendingInvites === 1 ? 'invitation' : 'invitations'} pending` : '')
+        + (rights.canEdit
+          ? ' · you can invite, change roles and remove people.'
+          : ' · only Owner, Admin and Founder roles can change this list.')}
     >
       {/*
         THE RULE, SPELLED OUT. `role_in_company` is free text, and the three
@@ -906,25 +1122,54 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
                   ))}
                 </select>
 
-                <input
-                  type="number"
-                  min="0"
-                  max="10000"
-                  step="1"
-                  defaultValue={m.carry_bps ?? ''}
-                  placeholder="carry bps"
-                  onBlur={(e) => {
-                    const raw = e.target.value.trim();
-                    const next = raw === '' ? null : Number(raw);
-                    if (next === (m.carry_bps ?? null)) return;
-                    run(() => api.updateCompanyMember(uid, m.user_id, { carry_bps: next }),
-                        next === null ? 'Carry cleared' : `Carry set to ${(next / 100).toFixed(2)}%`);
-                  }}
-                  disabled={busy || !canChange}
-                  aria-label={`Carry in basis points for ${m.name || m.email}`}
-                  title="Basis points — 150 is 1.5%. Stored as a whole number, never a float."
-                  className="w-24 border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 tabular-nums"
-                />
+                {/* D431 — economics are served only to the member and to an
+                    editor, and the server says so by OMITTING the field, never
+                    by sending null (null is "not recorded"). So the row branches
+                    on whether the key arrived: an editor gets the input, the
+                    member gets their own figure read-only, and everyone else
+                    gets a locked chip — visible as locked, as canvas T4 asks,
+                    because a hidden section teaches the wrong shape of the org. */}
+                {!Object.prototype.hasOwnProperty.call(m, 'carry_bps') ? (
+                  <span
+                    data-testid="carry-locked"
+                    title={CARRY_LOCKED_NOTE}
+                    className="inline-flex items-center gap-1 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 px-2 py-1 text-[11px] text-gray-500 dark:text-gray-400"
+                  >
+                    <Lock size={11} aria-hidden="true" />
+                    {CARRY_LOCKED_LABEL}
+                  </span>
+                ) : canChange ? (
+                  <input
+                    type="number"
+                    min="0"
+                    max="10000"
+                    step="1"
+                    defaultValue={m.carry_bps ?? ''}
+                    placeholder="carry bps"
+                    onBlur={(e) => {
+                      const raw = e.target.value.trim();
+                      const next = raw === '' ? null : Number(raw);
+                      if (next === (m.carry_bps ?? null)) return;
+                      run(() => api.updateCompanyMember(uid, m.user_id, { carry_bps: next }),
+                          // D149: one bps formatter. This one did not trim, so
+                          // a carry of 150 read "1.50%" where every other rate on
+                          // the platform reads "1.5%".
+                          next === null ? 'Carry cleared' : `Carry set to ${bpsPercent(next)}`);
+                    }}
+                    disabled={busy}
+                    aria-label={`Carry in basis points for ${m.name || m.email}`}
+                    title="Basis points — 150 is 1.5%. Stored as a whole number, never a float."
+                    className="w-24 border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 tabular-nums"
+                  />
+                ) : (
+                  <span
+                    data-testid="carry-readonly"
+                    className="text-[11px] text-gray-600 dark:text-gray-300 tabular-nums"
+                    title="Your carry, as recorded. Only an Owner, Admin or Founder can change it."
+                  >
+                    Carry {m.carry_bps === null || m.carry_bps === undefined ? '— not recorded' : bpsPercent(m.carry_bps)}
+                  </span>
+                )}
               </>
             )}
 
@@ -942,10 +1187,7 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
             )}
 
             <button
-              onClick={() => run(
-                async () => { await api.removeCompanyMember(uid, m.user_id); return api.getCompany(uid); },
-                `${m.name || m.email} removed`,
-              )}
+              onClick={() => setRemoving(removing === m.user_id ? null : m.user_id)}
               disabled={busy || !canRemove}
               title={!rights.canEdit
                 ? 'Only the primary admin, or an Owner, Admin or Founder, can remove a member'
@@ -956,6 +1198,32 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
             >
               Remove
             </button>
+            {removing === m.user_id && (
+              <div className="basis-full rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/30" data-testid={`remove-confirm-${m.user_id}`} role="alertdialog">
+                <p className="text-sm font-semibold text-red-800 dark:text-red-200">
+                  Remove {m.name || m.email} from {companyShort}?
+                </p>
+                <p className="mt-1 text-xs text-red-900/80 dark:text-red-200/80">
+                  {isYou ? 'This is your own access — use Leave company below instead.' : removeConsequence()}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {!isYou && (
+                    <button type="button" disabled={busy}
+                      onClick={() => run(
+                        async () => { await api.removeCompanyMember(uid, m.user_id); setRemoving(null); return api.getCompany(uid); },
+                        `${m.name || m.email} removed`,
+                      )}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 disabled:opacity-50">
+                      {busy ? 'Removing…' : 'Yes, remove'}
+                    </button>
+                  )}
+                  <button type="button" onClick={() => setRemoving(null)} disabled={busy}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300">
+                    Keep them
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           );
         })}
@@ -1076,16 +1344,32 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
                             Resend
                           </button>
                           <button
-                            onClick={() => inviteAction(
-                              () => api.revokeCompanyInvitation(uid, i.uid),
-                              `Invitation to ${i.email} revoked`, i.email,
-                            )}
+                            onClick={() => setRevoking(revoking === i.uid ? null : i.uid)}
                             disabled={busy}
                             className="text-xs px-2 py-1 rounded-lg border border-gray-300 text-gray-600 hover:border-red-400 hover:text-red-600 dark:border-gray-600 dark:text-gray-300 disabled:opacity-50"
                           >
                             Revoke
                           </button>
                         </>
+                      )}
+                      {revoking === i.uid && (
+                        <div className="basis-full rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30" data-testid={`revoke-confirm-${i.uid}`} role="alertdialog">
+                          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">Cancel the invitation to {i.email}?</p>
+                          <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-200/80">
+                            They never had access, so nothing they own is affected. The link they were sent stops working.
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button type="button" disabled={busy}
+                              onClick={() => { setRevoking(null); inviteAction(() => api.revokeCompanyInvitation(uid, i.uid), `Invitation to ${i.email} revoked`, i.email); }}
+                              className="text-xs px-3 py-1.5 rounded-lg bg-amber-600 text-white font-medium hover:bg-amber-700 disabled:opacity-50">
+                              Yes, revoke
+                            </button>
+                            <button type="button" onClick={() => setRevoking(null)} disabled={busy}
+                              className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300">
+                              Keep it
+                            </button>
+                          </div>
+                        </div>
                       )}
                     </div>
                   ))}

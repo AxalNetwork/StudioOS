@@ -215,7 +215,7 @@ test('the catalogue reports whether any allowance exists at all', () => {
 
 test('the page says "not configured" rather than "not enough" when nothing was ever granted', () => {
   const s = read(PAGE);
-  assert.match(s, /!data\.allowance_configured/, 'the page must branch on it');
+  assert.match(s, /!catalog\.allowance_configured/, 'the page must branch on it');
   assert.match(s, /No perk-credit allowance is set up/i, 'and say the true thing');
 });
 

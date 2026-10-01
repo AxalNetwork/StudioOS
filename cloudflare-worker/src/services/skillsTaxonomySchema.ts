@@ -17,8 +17,9 @@
  * Cached per isolate (no re-execution on every hot request).
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 /**
  * Canonical 8-axis radar set. Single source of truth for the radar/spider
@@ -54,7 +55,7 @@ export const VALUE_FAMILIES = ['schwartz', 'founder'] as const;
 export type ValueFamily = typeof VALUE_FAMILIES[number];
 
 export async function ensureSkillsTaxonomySchema(env: Env): Promise<void> {
-  if (_ready) return;
+  if (READY.get(bindingKey(env))) return;
   try {
     await env.DB.batch([
       env.DB.prepare(`CREATE TABLE IF NOT EXISTS skill_categories (
@@ -112,7 +113,7 @@ export async function ensureSkillsTaxonomySchema(env: Env): Promise<void> {
       env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_user_values_user
         ON user_values (user_id, updated_at)`),
     ]);
-    _ready = true;
+    READY.set(bindingKey(env), true);
   } catch (err) {
      
     console.warn('[skillsTaxonomySchema] ensure failed', err);

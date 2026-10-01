@@ -14,6 +14,11 @@
  *                                     active cofounder_connections row), else
  *                                     403 not_connected.
  *   GET    /me/aggregate             the caller's blended self+peer scores.
+ *   GET    /me/evidence              the caller's skill evidence from their
+ *                                     own platform activity, per radar axis:
+ *                                     §5.2 state, level (the self-rating),
+ *                                     evidence weight, recent events and
+ *                                     provenance lines (D318). Own only.
  *   GET    /users/:userId/aggregate  another user's blended scores — self,
  *                                     admin, or a connected peer only (403).
  *
@@ -28,6 +33,7 @@ import { getSQL } from '../db';
 import { ensureSkillsTaxonomySchema } from '../services/skillsTaxonomySchema';
 import { ensureSkillProfileSchema, computeBlendedSkills } from '../services/skillProfileSchema';
 import { ensureTaxonomyVersionColumns, getTaxonomyVersion } from '../services/taxonomyVersion';
+import { evidenceReport } from '../services/skillEvidence';
 
 const skills = new Hono<{ Bindings: Env }>();
 
@@ -307,6 +313,18 @@ skills.get('/me/aggregate', async (c) => {
   const user = await requireAuth(c);
   const items = await computeBlendedSkills(c.env, user.id);
   return c.json({ user_id: user.id, skills: items });
+});
+
+// ---------------------------------------------------------------------------
+// GET /me/evidence — what the caller's own platform activity says about each
+// radar axis (D318). Computed on read from the caller's own rows only: there
+// is no user parameter, so no one reads another person's evidence here. An
+// axis with nothing behind it comes back `evidence: null`, never 0.
+// ---------------------------------------------------------------------------
+skills.get('/me/evidence', async (c) => {
+  const user = await requireAuth(c);
+  const report = await evidenceReport(c.env, user.id);
+  return c.json({ user_id: user.id, ...report });
 });
 
 // ---------------------------------------------------------------------------

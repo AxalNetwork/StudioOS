@@ -46,7 +46,8 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
-import { requireAuth } from '../auth';
+import { requireAdmin, requireAuth } from '../auth';
+import { ADMIN_BANK } from '../services/advisor/banks/admin';
 import {
   ROLE_DETECTOR,
   bankFor,
@@ -74,6 +75,8 @@ import { explorerBankForTrack } from '../services/advisor/banks/explorer';
 // answer lands (the raw score is persisted to field_sources below).
 import { recomputeUserFit } from '../services/axalFit';
 import { recomputeUserArchetype } from '../services/archetypeScoring';
+import { evaluateUser, reaskOverlay } from '../services/profileEvolution';
+import { normalizeFitAnswer } from '../services/advisor/banks/fitShared';
 import { computeProfilingCompletion, applyAdaptiveProfiling } from '../services/advisor/profilingModules';
 import { routeAnswer, recordFieldSource, type WriteResult } from '../services/advisor/writeRouter';
 import { hashEmail } from '../util/hashEmail';
@@ -101,7 +104,7 @@ import {
 import { run as aiRouterRun, audioMinutesFromBytes } from '../services/aiRouter';
 // Advisor kill switch (Task #5 staged rollout retired in Task #7 — only
 // ADVISOR_V2_DISABLED / ADVISOR_DISABLED env flags remain).
-import { isAdvisorDisabled, ADVISOR_DISABLED_MESSAGE } from '../services/advisor/rollout';
+import { advisorKillState, ADVISOR_DISABLED_MESSAGE } from '../services/advisor/rollout';
 import { pickNextQuestion } from '../services/advisor/rerank';
 import {
   nextTurn as smNextTurn,
@@ -112,6 +115,7 @@ import {
 } from '../services/advisor/stateMachine';
 import { enqueueJob } from '../services/queue';
 import { notifyAdvisorPageFill, notifyAdvisorProgress } from '../services/realtime';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const advisor = new Hono<{ Bindings: Env }>();
 
@@ -161,9 +165,9 @@ const EXPLAIN_MAX_TOKENS = 512;
 // Schema. Mirrors sql/migrations/029_advisor.sql; idempotent so an
 // uninitialised dev D1 still works.
 // ---------------------------------------------------------------------------
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS advisor_conversations (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, user_id INTEGER NOT NULL, persona TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'active', current_question_id TEXT, total_questions INTEGER NOT NULL DEFAULT 0, answered_count INTEGER NOT NULL DEFAULT 0, skipped_count INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))"
@@ -174,9 +178,16 @@ async function ensureSchema(env: Env): Promise<void> {
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_advisor_msg_conv ON advisor_messages(conversation_id, id)");
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS advisor_answers (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id INTEGER NOT NULL REFERENCES advisor_conversations(id) ON DELETE CASCADE, user_id INTEGER NOT NULL, question_id TEXT NOT NULL, raw_value TEXT, saved_to_table TEXT, saved_to_column TEXT, saved_to_id TEXT, saved_status TEXT NOT NULL, saved_error TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(conversation_id, question_id))"
+      "CREATE TABLE IF NOT EXISTS advisor_answers (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id INTEGER NOT NULL REFERENCES advisor_conversations(id) ON DELETE CASCADE, user_id INTEGER NOT NULL, question_id TEXT NOT NULL, raw_value TEXT, saved_to_table TEXT, saved_to_column TEXT, saved_to_id TEXT, saved_status TEXT NOT NULL, saved_error TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), answered_at TEXT, UNIQUE(conversation_id, question_id))"
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_advisor_answers_user_q ON advisor_answers(user_id, question_id)");
+    // D357 — migration 363's answered_at, for a table that predates it. The
+    // column is declared by the migration; this is the safety net only.
+    const answerCols = await env.DB.prepare(`PRAGMA table_info(advisor_answers)`).all<{ name: string }>();
+    if (!(answerCols.results || []).some((r) => r.name === 'answered_at')) {
+      try { await env.DB.exec(`ALTER TABLE advisor_answers ADD COLUMN answered_at TEXT`); }
+      catch (e) { /* duplicate-column race; ignore */ void e; }
+    }
     // Task #3 (AS) — field_sources audit table for the per-page
     // <AdvisorFilledBanner> + sparkle attribution icons. Mirrors
     // sql/migrations/042_advisor_field_sources.sql so a dev D1
@@ -185,7 +196,18 @@ async function ensureSchema(env: Env): Promise<void> {
       "CREATE TABLE IF NOT EXISTS field_sources (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, question_id TEXT NOT NULL, page_target TEXT, saved_to_table TEXT, saved_to_column TEXT, saved_to_id TEXT, source TEXT NOT NULL DEFAULT 'advisor', evidence_text TEXT, filled_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(user_id, question_id))"
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_field_sources_user_page ON field_sources(user_id, page_target)");
-    _schemaReady = true;
+    // THE `advisor_messages` CREATE ABOVE IS SEVEN COLUMNS AND THIS FILE
+    // WRITES NINE (D192). `safety_score` and `sanitisation_actions_json` are
+    // declared by `services/advisor/guardrails.ts`, and on a database where
+    // THIS bootstrap ran first they do not exist — at which point the turn
+    // INSERT below does not fail loudly, it RETRIES in a legacy five-column
+    // form and succeeds. So every turn's safety score and sanitisation record
+    // is dropped and the write still reports success: the worst of the three
+    // pairs this decision repairs, because nothing anywhere says it happened.
+    // The owner is awaited rather than the CREATE widened, for the reason the
+    // guard exists — a second declaration of those two columns is the defect.
+    await ensureGuardrailColumns(env);
+    SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.error('[advisor] schema:', (e as Error).message);
   }
@@ -211,9 +233,9 @@ function personaFor(user: User): Persona {
 // running the migration. Idempotent: PRAGMA table_info short-circuits
 // when the column is already present (production case).
 // ---------------------------------------------------------------------------
-let _userColsReady = false;
+const USER_COLS_READY = new WeakMap<object, boolean>();
 async function ensureAdvisorWeekColumn(env: Env): Promise<void> {
-  if (_userColsReady) return;
+  if (USER_COLS_READY.get(bindingKey(env))) return;
   try {
     const cols = await env.DB.prepare(`PRAGMA table_info(users)`).all<{ name: string }>();
     const have = new Set((cols.results || []).map((r) => r.name));
@@ -221,7 +243,7 @@ async function ensureAdvisorWeekColumn(env: Env): Promise<void> {
       try { await env.DB.exec(`ALTER TABLE users ADD COLUMN spinout_lab_week INTEGER`); }
       catch (e) { /* duplicate-column race; ignore */ void e; }
     }
-    _userColsReady = true;
+    USER_COLS_READY.set(bindingKey(env), true);
   } catch (e) {
     console.error('[advisor] ensureAdvisorWeekColumn:', (e as Error).message);
   }
@@ -530,6 +552,15 @@ async function syncBankTotal(env: Env, conv: ConversationRow, bankLen: number, p
   conv.persona = persona;
 }
 
+/**
+ * THE LEDGER'S "ANSWERED" PREDICATE, written once. A question counts as
+ * answered when its reply was captured: 'saved' (mapped to a field) or 'noop'
+ * (a free-form reply with no structured column). 'skipped' is not an answer.
+ * refreshCounts, /answered, /progress and /admin-posture all read this string,
+ * so none of them can drift into a second definition of the same word.
+ */
+const CAPTURED_SQL = "saved_status IN ('saved', 'noop')";
+
 async function refreshCounts(env: Env, conversationId: number, currentQid: string | null): Promise<void> {
   try {
     // Task #57 — "answered" means the user actually provided a reply that was
@@ -540,7 +571,7 @@ async function refreshCounts(env: Env, conversationId: number, currentQid: strin
     // 'needs_evidence' / 'invalid' (no committed answer yet).
     const counts = await env.DB.prepare(
       `SELECT
-         SUM(CASE WHEN saved_status IN ('saved', 'noop') THEN 1 ELSE 0 END) AS answered,
+         SUM(CASE WHEN ${CAPTURED_SQL} THEN 1 ELSE 0 END) AS answered,
          SUM(CASE WHEN saved_status = 'skipped'          THEN 1 ELSE 0 END) AS skipped
        FROM advisor_answers WHERE conversation_id = ?`,
     ).bind(conversationId).first<{ answered: number | null; skipped: number | null }>();
@@ -560,6 +591,20 @@ async function refreshCounts(env: Env, conversationId: number, currentQid: strin
 }
 
 // ---------------------------------------------------------------------------
+// D203 — THE KILL CHECK EVERY DOOR MAKES, written once. It asks
+// `advisorKillState`, the predicate HQ Platform reports the switch through, so
+// the console and the refusal cannot disagree. The deploy variables are read
+// first and, when they switch Eadwyn off, nothing touches D1; otherwise the
+// operator store is asked through its thirty-second reading and fails open.
+// Four copies of this 503 used to sit in this file, each asking only the deploy
+// half — which is why an operator's switch needs them to be one.
+// ---------------------------------------------------------------------------
+async function refuseWhenKilled(c: Context<{ Bindings: Env }>): Promise<Response | null> {
+  if (!(await advisorKillState(c.env)).off) return null;
+  return c.json({ error: ADVISOR_DISABLED_MESSAGE, status: 'unavailable', reason: 'disabled' }, 503);
+}
+
+// ---------------------------------------------------------------------------
 // Shared advisor gate — runs the Task #5 staged-rollout decision FIRST
 // (before any D1 schema probe) and the Task #4 (AW) kill-switch /
 // per-user lock SECOND. Returns null when the request may proceed,
@@ -573,9 +618,8 @@ async function refreshCounts(env: Env, conversationId: number, currentQid: strin
 // `ADVISOR_V2_DISABLED=1` actually shuts every door, not just three.
 // ---------------------------------------------------------------------------
 async function applyAdvisorGate(c: Context<{ Bindings: Env }>, user: User): Promise<Response | null> {
-  if (isAdvisorDisabled(c.env)) {
-    return c.json({ error: ADVISOR_DISABLED_MESSAGE, status: 'unavailable', reason: 'disabled' }, 503);
-  }
+  const killed = await refuseWhenKilled(c);
+  if (killed) return killed;
   await ensureGuardrailColumns(c.env);
   const ks = await checkKillSwitch(c.env, user);
   if (ks.blocked) {
@@ -590,10 +634,10 @@ async function applyAdvisorGate(c: Context<{ Bindings: Env }>, user: User): Prom
 advisor.post('/start', async (c) => {
   const user = await advisorUser(c);
   // Kill switch runs FIRST, before any D1 schema probe / column-ensure
-  // call, so a disabled advisor short-circuits without touching the DB.
-  if (isAdvisorDisabled(c.env)) {
-    return c.json({ error: ADVISOR_DISABLED_MESSAGE, status: 'unavailable', reason: 'disabled' }, 503);
-  }
+  // call. A deploy kill short-circuits without touching the DB at all; an
+  // operator's kill costs one cached read of platform_switches (D203).
+  const killedStart = await refuseWhenKilled(c);
+  if (killedStart) return killedStart;
   await ensureSchema(c.env);
   await ensureAdvisorWeekColumn(c.env);
   // Task #4 (AW) L7 — kill switch (env + per-user advisor_locked).
@@ -603,7 +647,7 @@ advisor.post('/start', async (c) => {
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId: null, model: null,
       promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
-      safetyScore: null, sanitisationActions: [],
+      safetyScore: null, sanitisationActions: [], guardrailCategory: null,
       refusalReason: ks.reason || 'kill_switch', shadowFlagged: false,
     });
     return c.json({ error: ks.message, status: 'refused', reason: ks.reason }, 423);
@@ -615,7 +659,7 @@ advisor.post('/start', async (c) => {
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId: null, model: null,
       promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
-      safetyScore: null, sanitisationActions: [],
+      safetyScore: null, sanitisationActions: [], guardrailCategory: null,
       refusalReason: 'shadow_flag', shadowFlagged: true,
     });
     return c.json({ error: ks.message, status: 'refused', reason: 'shadow_flag' }, 423);
@@ -649,10 +693,13 @@ advisor.post('/start', async (c) => {
   // Task #46 — adaptive candidate pool: drop fit questions from already-
   // confident modules and gap-fill-order the rest before ranking. Keep the
   // pinned question so the poll/refresh idempotence above still holds.
-  const rankBank = applyAdaptiveProfiling(bank, answered, {
+  // D358 — once no unanswered profiling question is left, answers six
+  // months old come back with their re-ask wording (reaskOverlay).
+  const reask = await reaskOverlay(c.env, user.id, bank, answered, { keepId: conv.current_question_id });
+  const rankBank = applyAdaptiveProfiling(reask.bank, answered, {
     keepIds: conv.current_question_id ? new Set([conv.current_question_id]) : undefined,
   });
-  const next = await pickNextQuestion(c.env, user.id, conv.id, rankBank, answered, {
+  const next = await pickNextQuestion(c.env, user.id, conv.id, rankBank, reask.answered, {
     pinnedId: conv.current_question_id,
   });
 
@@ -796,10 +843,10 @@ interface AnswerEnvelope {
 }
 advisor.post('/answer', async (c) => {
   const user = await advisorUser(c);
-  // Kill switch (Task #5 → Task #7) runs FIRST, before any D1 work.
-  if (isAdvisorDisabled(c.env)) {
-    return c.json({ error: ADVISOR_DISABLED_MESSAGE, status: 'unavailable', reason: 'disabled' }, 503);
-  }
+  // Kill switch (Task #5 → Task #7 → D203) runs FIRST, before any schema
+  // work: the deploy half with no database, then the operator store.
+  const killed = await refuseWhenKilled(c);
+  if (killed) return killed;
   await ensureSchema(c.env);
   await ensureGuardrailColumns(c.env);
   // Task #4 (AW) L7 — per-user kill switch (advisor_locked).
@@ -808,7 +855,7 @@ advisor.post('/answer', async (c) => {
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId: null, model: null,
       promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
-      safetyScore: null, sanitisationActions: [],
+      safetyScore: null, sanitisationActions: [], guardrailCategory: null,
       refusalReason: ks.reason || 'kill_switch', shadowFlagged: false,
     });
     return c.json({ error: ks.message, status: 'refused', reason: ks.reason }, 423);
@@ -820,7 +867,7 @@ advisor.post('/answer', async (c) => {
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId: null, model: null,
       promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
-      safetyScore: null, sanitisationActions: [],
+      safetyScore: null, sanitisationActions: [], guardrailCategory: null,
       refusalReason: 'shadow_flag', shadowFlagged: true,
     });
     return c.json({ error: ks.message, status: 'refused', reason: 'shadow_flag' }, 423);
@@ -855,7 +902,7 @@ advisor.post('/answer', async (c) => {
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId: conv.id, model: null,
       promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
-      safetyScore: null, sanitisationActions: [],
+      safetyScore: null, sanitisationActions: [], guardrailCategory: null,
       refusalReason: 'destructive', shadowFlagged: false,
     });
     return c.json({
@@ -879,7 +926,7 @@ advisor.post('/answer', async (c) => {
       userId: user.id, conversationId: conv.id,
       model: '@cf/meta/llama-guard-3-8b',
       promptHash: await promptHash(), toolCalls: [],
-      aiSpendUsd: 0, safetyScore: safety.score,
+      aiSpendUsd: 0, safetyScore: safety.score, guardrailCategory: safety.category,
       sanitisationActions: [], refusalReason: 'safety_block',
       shadowFlagged: false,
     });
@@ -948,7 +995,7 @@ advisor.post('/answer', async (c) => {
       userId: user.id, conversationId: conv.id, model: null,
       promptHash: await promptHash(),
       toolCalls: [{ name: 'writeAnswer', gate_result: toolGate.reason }],
-      aiSpendUsd: 0, safetyScore: safety.score,
+      aiSpendUsd: 0, safetyScore: safety.score, guardrailCategory: safety.category,
       sanitisationActions: [], refusalReason: `gate_${toolGate.reason}`,
       shadowFlagged: false,
     });
@@ -974,7 +1021,11 @@ advisor.post('/answer', async (c) => {
   // red-flag scores from field_sources.evidence_text, so for fit.* questions we
   // persist the RAW 0..5 score there (not the free-text citation). Non-fit
   // questions keep the verbatim evidence-gate citation.
-  const fieldEvidence = FIT_ID_RE.test(q.id) ? valueStr : evidenceStr;
+  // D357 — a pick-one stores its option KEY, whether the chat sent the key or
+  // the label it showed; routeAnswer has already refused anything else. Every
+  // other fit answer (reverse-keyed scales included) is stored as given.
+  const ledgerValue = FIT_ID_RE.test(q.id) ? (normalizeFitAnswer(q, valueStr) ?? valueStr) : valueStr;
+  const fieldEvidence = FIT_ID_RE.test(q.id) ? ledgerValue : evidenceStr;
 
   // Surface evidence-gate / schema-invalid as 4xx so the frontend
   // can run optimistic-rollback + inline retry instead of treating
@@ -1009,17 +1060,18 @@ advisor.post('/answer', async (c) => {
     const stmts: D1PreparedStatement[] = [];
     stmts.push(c.env.DB.prepare(
       `INSERT INTO advisor_answers
-         (conversation_id, user_id, question_id, raw_value, saved_to_table, saved_to_column, saved_to_id, saved_status, saved_error)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (conversation_id, user_id, question_id, raw_value, saved_to_table, saved_to_column, saved_to_id, saved_status, saved_error, answered_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
        ON CONFLICT(conversation_id, question_id) DO UPDATE SET
          raw_value = excluded.raw_value,
          saved_to_table = excluded.saved_to_table,
          saved_to_column = excluded.saved_to_column,
          saved_to_id = excluded.saved_to_id,
          saved_status = excluded.saved_status,
-         saved_error = excluded.saved_error`,
+         saved_error = excluded.saved_error,
+         answered_at = excluded.answered_at`,
     ).bind(
-      conv.id, user.id, q.id, valueStr,
+      conv.id, user.id, q.id, ledgerValue,
       result.saved_to?.table || null,
       result.saved_to?.column || null,
       result.saved_to?.id != null ? String(result.saved_to.id) : null,
@@ -1068,7 +1120,7 @@ advisor.post('/answer', async (c) => {
     // bare advisor_answers write so the conversation history is
     // still persisted.
     console.warn('[advisor] post-answer batch failed', (e as Error).message);
-    await recordAnswer(c.env, conv, user, q.id, valueStr, result);
+    await recordAnswer(c.env, conv, user, q.id, ledgerValue, result);
     if (result.status === 'saved') {
       await recordFieldSource(
         c.env, user.id, q.id, q.page_target || null,
@@ -1094,6 +1146,17 @@ advisor.post('/answer', async (c) => {
       await recomputeUserArchetype(c.env, user.id);
     } catch (e) {
       console.warn('[advisor] recomputeUserArchetype failed', (e as Error).message);
+    }
+    // D357 — Profiling v2: recompute the person's profile from the answer
+    // ledger and append a snapshot if it changed materially. v1 above keeps
+    // feeding the card until Session 15 moves it. D358 — through
+    // evaluateUser, which also records a displayed-archetype change once
+    // (with its in-app notification) and stamps the evaluation for the
+    // nightly run.
+    try {
+      await evaluateUser(c.env, user.id, 'answer');
+    } catch (e) {
+      console.warn('[advisor] profile evaluation failed', (e as Error).message);
     }
   }
 
@@ -1160,11 +1223,14 @@ advisor.post('/answer', async (c) => {
   // (and any hydrated) ids are honoured even before the cross-conv
   // read inside nextTurn sees them.
   // Task #46 — trim confident-module fit questions from the ranker's pool.
-  const rankBank = applyAdaptiveProfiling(bank, answered);
+  // D358 — plus re-askable profiling questions, after every unanswered one.
+  const reask = await reaskOverlay(c.env, liveUser.id, bank, answered);
+  const rankBank = applyAdaptiveProfiling(reask.bank, answered);
   const turn = await smNextTurn(c.env, liveUser.id, rankBank, {
     week: gate.week,
     completedMilestones: gate.completedMilestones,
-    extraAnswered: answered,
+    extraAnswered: reask.answered,
+    reaskable: reask.reask,
   });
   const next = turn.next_question;
   await syncBankTotal(c.env, conv, bank.length, personaFor(liveUser));
@@ -1198,7 +1264,7 @@ advisor.post('/answer', async (c) => {
     userId: user.id, conversationId: conv.id, model: null,
     promptHash: await promptHash(),
     toolCalls: [{ name: 'writeAnswer', status: result.status }],
-    aiSpendUsd: 0, safetyScore: safety.score,
+    aiSpendUsd: 0, safetyScore: safety.score, guardrailCategory: safety.category,
     sanitisationActions: [], refusalReason: null,
     shadowFlagged: false,
   });
@@ -1406,11 +1472,14 @@ advisor.post('/skip', async (c) => {
   // skipped question is already in `answered` — extraAnswered is a
   // belt-and-braces guard against same-isolate read lag.
   // Task #46 — trim confident-module fit questions from the ranker's pool.
-  const rankBank = applyAdaptiveProfiling(bank, answered);
+  // D358 — plus re-askable profiling questions, after every unanswered one.
+  const reask = await reaskOverlay(c.env, user.id, bank, answered);
+  const rankBank = applyAdaptiveProfiling(reask.bank, answered);
   const turn = await smNextTurn(c.env, user.id, rankBank, {
     week: gate.week,
     completedMilestones: gate.completedMilestones,
-    extraAnswered: answered,
+    extraAnswered: reask.answered,
+    reaskable: reask.reask,
   });
   const next = turn.next_question;
   await syncBankTotal(c.env, conv, bank.length, personaFor(user));
@@ -1518,7 +1587,7 @@ advisor.get('/answered', async (c) => {
       `SELECT question_id, saved_to_table, saved_to_column, saved_to_id,
               saved_status, created_at
          FROM advisor_answers
-        WHERE conversation_id = ? AND saved_status IN ('saved', 'noop')
+        WHERE conversation_id = ? AND ${CAPTURED_SQL}
         ORDER BY created_at DESC, id DESC
         -- advisor_answers has UNIQUE(conversation_id, question_id), so a single
         -- conversation can hold at most one row per bank question (~210 total);
@@ -1552,6 +1621,129 @@ advisor.get('/answered', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /admin-posture  —  D246, Studio's "Operating posture" strip.
+//
+// For each ADMIN_BANK question: its section, a short label, and a state read
+// from the ledger — `recorded` (the CAPTURED_SQL predicate /answered and
+// /progress use), `skipped`, or `not_recorded`. A recorded answer carries its
+// value, read from the store the write router put it in:
+//   - admin.preferences.digest_freq  → user_settings.digest_frequency
+//   - every other admin.* id         → user_advisor_extras.extras_json[id]
+//
+// A COLUMN DEFAULT IS NEVER AN ANSWER. user_settings.digest_frequency defaults
+// to 'weekly' and user_settings.timezone to 'UTC'; neither is read unless the
+// ledger says the question was answered, and the timezone answer lands in
+// extras, so user_settings.timezone is never read here at all.
+//
+// `bank_size` is ADMIN_BANK.length and `recorded` is counted from the ledger —
+// never from how many values happen to be on screen. Only the caller's own
+// rows are read: no user id is taken from the request.
+// ---------------------------------------------------------------------------
+const POSTURE_LABELS: Record<string, string> = {
+  'admin.preferences.digest_freq': 'Digest',
+  'admin.preferences.alert_channel': 'Alert channel',
+  'admin.preferences.timezone': 'Timezone',
+  'admin.oversight.review_cadence': 'Review cadence',
+  'admin.oversight.portfolio_focus': 'Metrics named',
+  'admin.oversight.risk_tolerance': 'Risk tolerance',
+  'admin.oversight.escalation_threshold': 'Escalation condition',
+  'admin.operations.intake_priority': 'Intake priority',
+  'admin.operations.onboarding_sla': 'Onboarding turnaround',
+  'admin.governance.data_retention_pref': 'Inactive record retention',
+  'admin.governance.access_review_cadence': 'Access-review cadence',
+};
+
+export type PostureField = {
+  id: string;
+  section: string;
+  label: string;
+  state: 'recorded' | 'skipped' | 'not_recorded';
+  value: string | null;
+  value_reason?: string;
+};
+
+export async function readAdminPosture(env: Env, userId: number): Promise<Record<string, unknown>> {
+  const bank = ADMIN_BANK;
+  const bank_size = bank.length;
+  try {
+    const conv = await env.DB.prepare(
+      'SELECT id FROM advisor_conversations WHERE user_id = ? ORDER BY id DESC LIMIT 1',
+    ).bind(userId).first<{ id: number }>();
+    const ids = new Set(bank.map((q) => q.id));
+    const status = new Map<string, 'recorded' | 'skipped'>();
+    if (conv) {
+      // UNIQUE(conversation_id, question_id) holds one row per question, so
+      // this is at most one row per bank question the caller was asked.
+      const rows = await env.DB.prepare(
+        `SELECT question_id,
+                CASE WHEN ${CAPTURED_SQL} THEN 'recorded'
+                     WHEN saved_status = 'skipped' THEN 'skipped' END AS state
+           FROM advisor_answers
+          WHERE conversation_id = ?`,
+      ).bind(conv.id).all<{ question_id: string; state: 'recorded' | 'skipped' | null }>();
+      for (const r of rows.results || []) {
+        if (ids.has(r.question_id) && r.state) status.set(r.question_id, r.state);
+      }
+    }
+    // Read even when nothing is answered: a missing store is reported as
+    // unreadable, not as eleven empty rows.
+    const extrasRow = await env.DB.prepare(
+      'SELECT extras_json FROM user_advisor_extras WHERE user_id = ?',
+    ).bind(userId).first<{ extras_json: string | null }>();
+    let extras: Record<string, unknown> = {};
+    if (extrasRow?.extras_json) {
+      try {
+        const parsed = JSON.parse(extrasRow.extras_json);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) extras = parsed;
+      } catch { /* malformed sidecar: values read as absent below */ }
+    }
+    let digest: string | null = null;
+    if (status.get('admin.preferences.digest_freq') === 'recorded') {
+      const row = await env.DB.prepare(
+        'SELECT digest_frequency FROM user_settings WHERE user_id = ?',
+      ).bind(userId).first<{ digest_frequency: string | null }>();
+      digest = row?.digest_frequency ?? null;
+    }
+    const fields: PostureField[] = bank.map((q) => {
+      const state = status.get(q.id) || 'not_recorded';
+      const field: PostureField = {
+        id: q.id,
+        section: q.section || '',
+        label: POSTURE_LABELS[q.id] || q.prompt,
+        state,
+        value: null,
+      };
+      if (state === 'recorded') {
+        const raw = q.id === 'admin.preferences.digest_freq' ? digest : extras[q.id];
+        const text = typeof raw === 'string' ? raw.trim() : raw == null ? '' : String(raw);
+        if (text) field.value = text;
+        else field.value_reason = 'The chat recorded a reply, but its store holds no value for it.';
+      }
+      return field;
+    });
+    return {
+      available: true,
+      bank_size,
+      recorded: fields.filter((f) => f.state === 'recorded').length,
+      fields,
+    };
+  } catch (e) {
+    console.error('[advisor] /admin-posture:', (e as Error).message);
+    return {
+      available: false,
+      bank_size,
+      reason: 'The posture answers could not be read, so this is not a claim that none are recorded.',
+    };
+  }
+}
+
+advisor.get('/admin-posture', async (c) => {
+  const user = await requireAdmin(c);
+  await ensureSchema(c.env);
+  return c.json(await readAdminPosture(c.env, user.id));
+});
+
+// ---------------------------------------------------------------------------
 // GET /next-question?focus=SECTION  —  return the next visible
 // question pinned to a section (BUILD/CAPITAL/LEGAL/NETWORK or any
 // persona-defined section). Used by the per-page progress rail's
@@ -1579,10 +1771,12 @@ advisor.get('/next-question', async (c) => {
   // so the helper's "pinnedId must be in bank" check handles this).
   // Task #46 — adaptive candidate pool (skip confident modules, gap-fill
   // first). Preserve the pinned question so a poll/refresh stays idempotent.
-  const rankBank = applyAdaptiveProfiling(bank, answered, {
+  // D358 — plus re-askable profiling questions, after every unanswered one.
+  const reask = await reaskOverlay(c.env, user.id, bank, answered, { keepId: conv.current_question_id });
+  const rankBank = applyAdaptiveProfiling(reask.bank, answered, {
     keepIds: conv.current_question_id ? new Set([conv.current_question_id]) : undefined,
   });
-  const next = await pickNextQuestion(c.env, user.id, conv.id, rankBank, answered, {
+  const next = await pickNextQuestion(c.env, user.id, conv.id, rankBank, reask.answered, {
     pinnedId: conv.current_question_id,
   });
   return c.json({
@@ -1633,7 +1827,7 @@ advisor.get('/progress', async (c) => {
   const capturedSet: Set<string> = new Set();
   if (conv) {
     const rows = await c.env.DB.prepare(
-      `SELECT question_id FROM advisor_answers WHERE conversation_id = ? AND saved_status IN ('saved', 'noop')`,
+      `SELECT question_id FROM advisor_answers WHERE conversation_id = ? AND ${CAPTURED_SQL}`,
     ).bind(conv.id).all<{ question_id: string }>();
     for (const r of (rows.results || [])) capturedSet.add(r.question_id);
   }
@@ -1853,10 +2047,10 @@ function sseEvent(event: string, data: unknown): string {
 
 advisor.post('/explain', async (c) => {
   const user = await advisorUser(c);
-  // Kill switch (Task #5 → Task #7) runs FIRST, before any D1 work.
-  if (isAdvisorDisabled(c.env)) {
-    return c.json({ error: ADVISOR_DISABLED_MESSAGE, status: 'unavailable', reason: 'disabled' }, 503);
-  }
+  // Kill switch (Task #5 → Task #7 → D203) runs FIRST, before any schema
+  // work: the deploy half with no database, then the operator store.
+  const killed = await refuseWhenKilled(c);
+  if (killed) return killed;
   await ensureSchema(c.env);
   await ensureGuardrailColumns(c.env);
   // Task #4 (AW) L7 — per-user kill switch (advisor_locked).
@@ -1865,7 +2059,7 @@ advisor.post('/explain', async (c) => {
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId: null, model: null,
       promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
-      safetyScore: null, sanitisationActions: [],
+      safetyScore: null, sanitisationActions: [], guardrailCategory: null,
       refusalReason: ks.reason || 'kill_switch', shadowFlagged: false,
     });
     return c.json({ error: ks.message, status: 'refused', reason: ks.reason }, 423);
@@ -1883,7 +2077,7 @@ advisor.post('/explain', async (c) => {
       userId: user.id, conversationId: null,
       model: '@cf/meta/llama-guard-3-8b',
       promptHash: await promptHash(), toolCalls: [],
-      aiSpendUsd: 0, safetyScore: safety.score,
+      aiSpendUsd: 0, safetyScore: safety.score, guardrailCategory: safety.category,
       sanitisationActions: [], refusalReason: 'safety_block',
       shadowFlagged: false,
     });
@@ -1964,7 +2158,7 @@ advisor.post('/explain', async (c) => {
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId, model: null,
       promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
-      safetyScore: safety.score, sanitisationActions: [],
+      safetyScore: safety.score, sanitisationActions: [], guardrailCategory: safety.category,
       refusalReason: 'shadow_flag', shadowFlagged: true,
     });
     if (conversationId) {
@@ -2005,7 +2199,7 @@ advisor.post('/explain', async (c) => {
       model: ai.usage?.model || null,
       promptHash: await promptHash(), toolCalls: [],
       aiSpendUsd: ai.usage?.est_cost_usd || 0,
-      safetyScore: safety.score,
+      safetyScore: safety.score, guardrailCategory: safety.category,
       sanitisationActions: [],
       refusalReason: ai.refusal || 'upstream_error',
       shadowFlagged: false,
@@ -2066,7 +2260,7 @@ advisor.post('/explain', async (c) => {
           model: modelUsed,
           promptHash: await promptHash(), toolCalls: [],
           aiSpendUsd: usage?.est_cost_usd || 0,
-          safetyScore: safety.score,
+          safetyScore: safety.score, guardrailCategory: safety.category,
           sanitisationActions: [
             ...(leaked ? ['verbatim_leak_stripped'] : []),
           ],
@@ -2177,7 +2371,7 @@ advisor.post('/tool', async (c) => {
         userId: user.id, conversationId: conv.id, model: null,
         promptHash: await promptHash(),
         toolCalls: [{ name, gate_result: gateResult.reason }],
-        aiSpendUsd: 0, safetyScore: null,
+        aiSpendUsd: 0, safetyScore: null, guardrailCategory: null,
         sanitisationActions: [], refusalReason: `gate_${gateResult.reason}`,
         shadowFlagged: false,
       });
@@ -2199,7 +2393,7 @@ advisor.post('/tool', async (c) => {
         userId: user.id, conversationId: conv.id, model: null,
         promptHash: await promptHash(),
         toolCalls: [{ name, error: (e as Error).message }],
-        aiSpendUsd: 0, safetyScore: null,
+        aiSpendUsd: 0, safetyScore: null, guardrailCategory: null,
         sanitisationActions: [], refusalReason: 'tool_error',
         shadowFlagged: false,
       });
@@ -2232,7 +2426,7 @@ advisor.post('/tool', async (c) => {
     userId: user.id, conversationId: conv.id, model: null,
     promptHash: await promptHash(),
     toolCalls: [{ name: effectiveTool, requested: name, route: envelope.cta?.route, degraded: degradedToPaywall }],
-    aiSpendUsd: 0, safetyScore: null,
+    aiSpendUsd: 0, safetyScore: null, guardrailCategory: null,
     sanitisationActions: [], refusalReason: null,
     shadowFlagged: false,
   });
@@ -2399,7 +2593,7 @@ advisor.post('/tool/auto', async (c) => {
       route: envelope.cta?.route, degraded: degradedToPaywall,
       via: 'tool_auto',
     }],
-    aiSpendUsd: 0, safetyScore: null,
+    aiSpendUsd: 0, safetyScore: null, guardrailCategory: null,
     sanitisationActions: [], refusalReason: llmRefusal,
     shadowFlagged: false,
   });
@@ -2460,12 +2654,15 @@ advisor.post('/turn', async (c) => {
   const focus = (c.req.query('focus') || '').trim() || null;
   const { user, visible, deferred, answered, gate, focusPage } = await buildVisibleBank(c, focus);
   // Task #46 — adaptive candidate pool: skip already-confident modules.
-  const rankVisible = applyAdaptiveProfiling(visible, answered);
+  // D358 — plus re-askable profiling questions, after every unanswered one.
+  const reask = await reaskOverlay(c.env, user.id, visible, answered);
+  const rankVisible = applyAdaptiveProfiling(reask.bank, answered);
   const result = await smNextTurn(c.env, user.id, rankVisible, {
     focusPage,
     week: gate.week,
     completedMilestones: gate.completedMilestones,
-    extraAnswered: answered,
+    extraAnswered: reask.answered,
+    reaskable: reask.reask,
     // Task #12 (BLOCK-ADV-07) — when the persona bank is exhausted,
     // /turn surfaces a dynamic `dyn.reflect.N` reflection instead of
     // an empty turn. /answer + /skip deliberately omit persona so they
@@ -2508,8 +2705,10 @@ advisor.get('/queue', async (c) => {
   // matches what /turn will actually ask (must use mergedAnswered, not the
   // request-scoped `answered`, so already-answered ids across conversations
   // count toward module confidence here too).
-  const rankVisible = applyAdaptiveProfiling(visible, mergedAnswered);
-  const result = pickNext(rankVisible, mergedAnswered, {
+  // D358 — the same re-ask overlay /turn applies, so the peek matches.
+  const reask = await reaskOverlay(c.env, user.id, visible, mergedAnswered);
+  const rankVisible = applyAdaptiveProfiling(reask.bank, mergedAnswered);
+  const result = pickNext(rankVisible, reask.answered, {
     focusPage,
     week: gate.week,
     completedMilestones: gate.completedMilestones,

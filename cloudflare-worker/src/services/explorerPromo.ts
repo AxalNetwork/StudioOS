@@ -22,6 +22,7 @@
  */
 import type { Env } from '../types';
 import { writeFeatureUnlock } from './featureUnlocks';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export interface ExplorerPromoRow {
   id: number;
@@ -64,11 +65,11 @@ const TRACK_LICENSES: Record<string, { feature_key: string; label: string }> = {
 const UNLOCK_DAYS = 30;
 const CODE_TTL_DAYS = 90;
 
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 
 /** Idempotent bootstrap — mirrors migration 149_explorer_promo_codes.sql. */
 export async function ensureExplorerPromoSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       'CREATE TABLE IF NOT EXISTS explorer_promo_codes (' +
@@ -84,7 +85,7 @@ export async function ensureExplorerPromoSchema(env: Env): Promise<void> {
         'redeemed_at TEXT' +
         ')',
     );
-    _schemaReady = true;
+    SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[explorerPromo] ensure schema failed:', (e as Error).message);
   }

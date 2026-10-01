@@ -54,12 +54,18 @@ const GP_CONTROLS = [
   "funds.get('/:id/lp-report/:lpId'",
   "funds.post('/:id/lps'",
   "funds.post('/:id/capital-call'",
+  // D371: the call ledger's reads, the preview and the GP's receipt.
+  "funds.post('/:id/capital-calls/preview'",
+  "funds.get('/:id/capital-calls'",
+  "funds.get('/:id/ledger'",
+  "funds.post('/:id/capital-calls/lines/:lineId/receipts'",
   "funds.post('/distributions/execute'",
   "funds.post('/distributions/:id/mark-paid'",
 ];
 
 const MONEY_MOVEMENT = [
   "funds.post('/:id/capital-call'",
+  "funds.post('/:id/capital-calls/lines/:lineId/receipts'",
   "funds.post('/distributions/execute'",
   "funds.post('/distributions/:id/mark-paid'",
 ];

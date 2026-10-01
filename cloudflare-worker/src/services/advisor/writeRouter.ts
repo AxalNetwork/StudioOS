@@ -20,6 +20,9 @@ import type { Env } from '../../types';
 import type { User } from '../../types';
 import { questionById, mapRoleAnswer, DYNAMIC_ID_RE, FIT_ID_RE } from './questionBank.ts';
 import { ensureTaxonomyVersionColumns, getTaxonomyVersion } from '../taxonomyVersion.ts';
+import { parseArchetypeSex } from '../archetypePresentation.ts';
+import { normalizeFitAnswer } from './banks/fitShared.ts';
+import { upsertUserSettings } from '../userSettings.ts';
 
 export type WriteStatus = 'saved' | 'skipped' | 'paywalled' | 'failed' | 'noop' | 'needs_evidence' | 'invalid';
 
@@ -202,76 +205,102 @@ function parseList(s: string): string[] {
 }
 
 /**
- * Task #3 (AS) — resolve (or lazy-create) the partner_profiles row
- * owned by `user`. Mirrors ensureAdvisorRow's defensive pattern:
- *   1. Look up by user_id (claimed-invitation case).
- *   2. Look up by email match against partner_invitations.recipient_email
- *      and bind the user_id (admin invited the partner directly).
- *   3. Otherwise synthesise an admin-side invitation stub +
- *      partner_profiles row so advisor answers have somewhere to land.
- * The advisor never creates real `partner_invitations.token` rows
- * that can be redeemed externally — synthesised stubs are flagged
- * `status='advisor_stub'` so admin lists can filter them out.
+ * Task #3 (AS) — resolve (or lazy-create) the partner_profiles row owned by
+ * `user`, and hand back the key every partner write below binds on.
+ *
+ * D187 — THIS FUNCTION KEYED ON A COLUMN THAT DOES NOT EXIST, AND THAT IS WHY
+ * EVERY PARTNER ANSWER WAS REFUSED. Its first statement used to be
+ * `SELECT id, invitation_id FROM partner_profiles WHERE user_id = ?`. Neither
+ * column is on the table any environment has: `partner_profiles` was declared
+ * three times in two shapes and production carries the `email TEXT PRIMARY
+ * KEY` one (migration 275's header has the whole story). So the statement
+ * threw, the catch below swallowed it, this returned null, and the caller
+ * answered every one of the six partner questions with
+ *
+ *     "Partner profile not bound yet — accept your invitation from the
+ *      Partner Portal first."
+ *
+ * to 26 of 51 accounts — while production held ZERO partner_invitations, so
+ * the instruction could not be followed even in principle.
+ *
+ * The key is now `email`, which IS the table's primary key, with `user_id` as
+ * the preferred lookup so a row already bound to this user wins:
+ *   1. by user_id — the bound case;
+ *   2. by email — bind user_id if the row is unclaimed, and REFUSE if it is
+ *      owned by somebody else (that guard is unchanged and load-bearing: the
+ *      advisor must never reassign a profile);
+ *   3. otherwise insert one keyed on email.
+ *
+ * NO INVITATION STUB. The old step 3 minted a fake `partner_invitations` row
+ * flagged 'advisor_stub' purely because shape 1 declared
+ * `invitation_id NOT NULL UNIQUE`. On an email-keyed row an invitation is not
+ * required for an answer to land, so the advisor stops writing invitation rows
+ * as a side effect of a chat message — which it never should have done.
+ *
+ * AND THAT STUB COULD NEVER HAVE SUCCEEDED ANYWHERE, which is a second and
+ * independent reason this function returned null. `partner_invitations`
+ * declares `expires_at TIMESTAMP NOT NULL` with no default (migration
+ * 028_partner_deals.sql:20, mirrored verbatim in schema_baseline.sql), and the
+ * stub bound four columns — recipient_email, token, status, invited_by_user_id
+ * — omitting it. So the INSERT raised a NOT NULL constraint failure on every
+ * environment, its own `.catch(() => null)` swallowed the error, `invId` came
+ * back 0, and `if (!invId) return null` fired. Step 1 would have had to throw
+ * AND step 2 miss for step 3 to be reached, which is exactly what happened —
+ * so repairing only the schema collision would have moved the same silent null
+ * three hundred lines down rather than fixing it. Found by aiming a mutation at
+ * this deletion: the mutation restored the stub verbatim and ESCAPED, because
+ * the restored stub wrote no row either. The guard was right and the mutation
+ * was wrong, which is why a mutation is aimed before it is trusted.
  */
-async function ensurePartnerProfile(env: Env, user: User): Promise<{ id: number; invitation_id: number } | null> {
+async function ensurePartnerProfile(
+  env: Env,
+  user: User,
+): Promise<{ email: string; invitation_id: number | null } | null> {
   try {
-    // (1) Already-claimed profile.
+    // (1) Already bound to this user.
     const claimed = await env.DB.prepare(
-      `SELECT id, invitation_id FROM partner_profiles WHERE user_id = ? LIMIT 1`,
-    ).bind(user.id).first<{ id: number; invitation_id: number }>();
-    if (claimed?.id) return { id: Number(claimed.id), invitation_id: Number(claimed.invitation_id) };
-
-    // (2) Bind by email.
-    const inv = await env.DB.prepare(
-      `SELECT id FROM partner_invitations WHERE LOWER(recipient_email) = LOWER(?) LIMIT 1`,
-    ).bind(user.email).first<{ id: number }>().catch(() => null);
-    if (inv?.id) {
-      // Bind user to existing invitation; create profile if missing.
-      const existing = await env.DB.prepare(
-        `SELECT id, user_id FROM partner_profiles WHERE invitation_id = ?`,
-      ).bind(inv.id).first<{ id: number; user_id: number | null }>().catch(() => null);
-      if (existing?.id) {
-        // Access-control guard: only bind user_id when it's NULL or
-        // already this user. Refuse to silently rebind a profile
-        // currently owned by someone else (e.g. duplicate emails or
-        // a prior partner who claimed the invitation) — the advisor
-        // should never reassign profile ownership.
-        const currentOwner = existing.user_id == null ? null : Number(existing.user_id);
-        if (currentOwner != null && currentOwner !== user.id) {
-          return null;
-        }
-        if (currentOwner == null) {
-          await env.DB.prepare(
-            `UPDATE partner_profiles SET user_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id IS NULL`,
-          ).bind(user.id, existing.id).run();
-        }
-        return { id: Number(existing.id), invitation_id: Number(inv.id) };
-      }
-      const r = await env.DB.prepare(
-        `INSERT INTO partner_profiles (invitation_id, user_id, full_name)
-           VALUES (?, ?, ?)`,
-      ).bind(inv.id, user.id, user.name || user.email).run();
-      const newId = Number((r as { meta?: { last_row_id?: number } }).meta?.last_row_id || 0);
-      if (newId) return { id: newId, invitation_id: Number(inv.id) };
+      `SELECT email, invitation_id FROM partner_profiles WHERE user_id = ? LIMIT 1`,
+    ).bind(user.id).first<{ email: string; invitation_id: number | null }>();
+    if (claimed?.email) {
+      return {
+        email: String(claimed.email),
+        invitation_id: claimed.invitation_id == null ? null : Number(claimed.invitation_id),
+      };
     }
 
-    // (3) Stub invitation + profile so advisor writes have a target.
-    const bytes = new Uint8Array(16);
-    crypto.getRandomValues(bytes);
-    const token = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-    const invIns = await env.DB.prepare(
-      `INSERT INTO partner_invitations (recipient_email, token, status, invited_by_user_id)
-         VALUES (?, ?, 'advisor_stub', ?)`,
-    ).bind(user.email, token, user.id).run().catch(() => null);
-    const invId = Number((invIns as { meta?: { last_row_id?: number } } | null)?.meta?.last_row_id || 0);
-    if (!invId) return null;
-    const profIns = await env.DB.prepare(
-      `INSERT INTO partner_profiles (invitation_id, user_id, full_name)
-         VALUES (?, ?, ?)`,
-    ).bind(invId, user.id, user.name || user.email).run();
-    const profId = Number((profIns as { meta?: { last_row_id?: number } }).meta?.last_row_id || 0);
-    if (!profId) return null;
-    return { id: profId, invitation_id: invId };
+    // (2) A row already exists under this address — bind it, or refuse.
+    const byEmail = await env.DB.prepare(
+      `SELECT email, user_id, invitation_id FROM partner_profiles WHERE LOWER(email) = LOWER(?) LIMIT 1`,
+    ).bind(user.email).first<{ email: string; user_id: number | null; invitation_id: number | null }>()
+      .catch(() => null);
+    if (byEmail?.email) {
+      // Access-control guard, unchanged from the original: only bind user_id
+      // when it is NULL or already this user. Refuse to silently rebind a
+      // profile currently owned by someone else (duplicate addresses, or a
+      // prior partner who claimed it) — the advisor never reassigns ownership.
+      const currentOwner = byEmail.user_id == null ? null : Number(byEmail.user_id);
+      if (currentOwner != null && currentOwner !== user.id) return null;
+      if (currentOwner == null) {
+        await env.DB.prepare(
+          `UPDATE partner_profiles SET user_id = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE LOWER(email) = LOWER(?) AND user_id IS NULL`,
+        ).bind(user.id, user.email).run();
+      }
+      return {
+        email: String(byEmail.email),
+        invitation_id: byEmail.invitation_id == null ? null : Number(byEmail.invitation_id),
+      };
+    }
+
+    // (3) Nothing yet — create the row the answers will land in.
+    await env.DB.prepare(
+      `INSERT INTO partner_profiles (email, user_id, full_name)
+         VALUES (?, ?, ?)
+       ON CONFLICT(email) DO UPDATE SET
+         user_id = COALESCE(partner_profiles.user_id, excluded.user_id),
+         updated_at = CURRENT_TIMESTAMP`,
+    ).bind(user.email, user.id, user.name || user.email).run();
+    return { email: user.email, invitation_id: null };
   } catch (e) {
     console.error('[advisor] ensurePartnerProfile:', (e as Error).message);
     return null;
@@ -310,16 +339,27 @@ async function mergeProjectExtras(
   }
 }
 
-/** Same shape as mergeProjectExtras but for cross-project (users) extras. */
+/**
+ * Same shape as mergeProjectExtras but for cross-project extras — and it reads
+ * a SIDE TABLE rather than a column on `users`.
+ *
+ * `042_advisor_field_sources.sql` declares `users.advisor_extras_json` and that
+ * ALTER can never succeed: D1 caps a table at 100 columns and `users` is at
+ * exactly 100 (measured against production, 2026-09-21). So this read was
+ * against a column no database has ever had, its `.catch(() => null)` swallowed
+ * the error, and every cross-project answer was silently discarded.
+ * `276_advisor_field_sources_remainder.sql` creates `user_advisor_extras` and
+ * this reads it. D188.
+ */
 async function mergeUserExtras(env: Env, userId: number, key: string, value: string): Promise<boolean> {
   try {
     const row = await env.DB.prepare(
-      `SELECT advisor_extras_json FROM users WHERE id = ?`,
-    ).bind(userId).first<{ advisor_extras_json: string | null }>().catch(() => null);
+      `SELECT extras_json FROM user_advisor_extras WHERE user_id = ?`,
+    ).bind(userId).first<{ extras_json: string | null }>().catch(() => null);
     let extras: Record<string, string> = {};
-    if (row?.advisor_extras_json) {
+    if (row?.extras_json) {
       try {
-        const parsed = JSON.parse(row.advisor_extras_json);
+        const parsed = JSON.parse(row.extras_json);
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
           extras = parsed as Record<string, string>;
         }
@@ -327,8 +367,11 @@ async function mergeUserExtras(env: Env, userId: number, key: string, value: str
     }
     extras[key] = value;
     await env.DB.prepare(
-      `UPDATE users SET advisor_extras_json = ? WHERE id = ?`,
-    ).bind(JSON.stringify(extras), userId).run();
+      `INSERT INTO user_advisor_extras (user_id, extras_json, updated_at)
+       VALUES (?, ?, datetime('now'))
+       ON CONFLICT(user_id) DO UPDATE SET extras_json = excluded.extras_json,
+                                          updated_at  = datetime('now')`,
+    ).bind(userId, JSON.stringify(extras)).run();
     return true;
   } catch {
     return false;
@@ -383,7 +426,7 @@ export async function recordFieldSource(
 // upserts (discovery interviews + roadmap OKRs). Scoped via
 // `WHERE col LIKE 'advisor:%'` so they never collide with
 // user-typed values in the same column. Created once per isolate.
-let _slotIndexesReady = false;
+const SLOT_INDEXES_READY = new WeakMap<object, boolean>();
 // ---------------------------------------------------------------------------
 // Spin-Out milestone helper (Task #2 AR).
 //
@@ -406,6 +449,7 @@ let _slotIndexesReady = false;
 // file doesn't drag Hono / auth / db into non-route consumers (e.g.
 // the advisor scenario test under --experimental-strip-types).
 import { MILESTONES, weekMet as canonicalWeekMet } from '../spinoutLabCatalog.ts';
+import { bindingKey } from '../../util/schemaBootstrap';
 
 function weekForMilestoneKey(key: string): number | null {
   for (const w of MILESTONES) {
@@ -448,7 +492,7 @@ async function recordSpinoutMilestoneAndAdvance(
 }
 
 async function ensureAdvisorSlotIndexes(env: Env): Promise<void> {
-  if (_slotIndexesReady) return;
+  if (SLOT_INDEXES_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       "CREATE UNIQUE INDEX IF NOT EXISTS uniq_discovery_advisor_slot ON discovery_interviews(project_id, interviewee_role) WHERE interviewee_role LIKE 'advisor:%'",
@@ -456,7 +500,7 @@ async function ensureAdvisorSlotIndexes(env: Env): Promise<void> {
     await env.DB.exec(
       "CREATE UNIQUE INDEX IF NOT EXISTS uniq_roadmap_okrs_advisor_slot ON roadmap_okrs(project_id, quarter) WHERE quarter LIKE 'advisor:%'",
     );
-    _slotIndexesReady = true;
+    SLOT_INDEXES_READY.set(bindingKey(env), true);
   } catch (e) {
     console.error('[advisor] slot indexes:', (e as Error).message);
   }
@@ -503,7 +547,9 @@ async function resolveValueDimensionId(env: Env, slug: string): Promise<number |
  *   - `skill_axis` → user_skills  (self_level = raw, representative skill, raw>0)
  *   - `value_dim`  → user_values  (raw 0..5 → -2..+2, confidence-blended)
  * `rubric_category` / `red_flag` carry no structured write (computeFit reads
- * them from field_sources). Returns `invalid` for a non-integer-0..5 answer.
+ * them from field_sources). `archetype_presentation` is a select (man / woman /
+ * both) written to user_settings.archetype_sex. Returns `invalid` for a
+ * non-integer-0..5 scale answer or an unrecognised illustration choice.
  */
 async function routeFitAnswer(
   env: Env,
@@ -514,6 +560,49 @@ async function routeFitAnswer(
   const m = q.measures;
   if (!m) return { status: 'noop' };
 
+  // Illustration sex is a select (man / woman / both), not a 0–5 scale.
+  if (m.archetype_presentation) {
+    const sex = parseArchetypeSex(value);
+    if (!sex) {
+      return {
+        status: 'invalid',
+        error: 'schema_validation_failed',
+        hint: 'Please choose "A man", "A woman", or "Show both for now".',
+        evidence_kind: 'free_text',
+        field: q.id,
+        open_url: q.page_target || undefined,
+      };
+    }
+    try {
+      await upsertUserSettings(env, user.id, { archetype_sex: sex });
+    } catch (e) {
+      return { status: 'failed', error: (e as Error).message };
+    }
+    return { status: 'saved', saved_to: { table: 'user_settings', column: 'archetype_sex', id: user.id, page_url: '/settings' } };
+  }
+
+  // D357 — a situational pick-one. Only one of the item's declared option keys
+  // (or its exact label, which the chat sends) is accepted; the route stores
+  // the KEY in the ledger. It feeds archetype traits only, so there is no
+  // structured write: the answer lives in advisor_answers + field_sources.
+  if (q.choices) {
+    if (normalizeFitAnswer(q, value) === null) {
+      return {
+        status: 'invalid',
+        error: 'schema_validation_failed',
+        hint: `Please pick one of: ${q.choices.map((c) => `"${c.label}"`).join(', ')}.`,
+        evidence_kind: 'free_text',
+        field: q.id,
+        open_url: q.page_target || undefined,
+      };
+    }
+    return { status: 'saved', saved_to: { table: 'field_sources', column: 'evidence_text', id: user.id } };
+  }
+
+  // A reverse-keyed scale (D357) is validated like any scale and stored as
+  // given; it is inverted only when the trait is scored. assertFitRow keeps
+  // reverse keys on archetype-trait rows, so no structured write below ever
+  // sees one.
   const n = Number(value);
   if (!Number.isInteger(n) || n < 0 || n > 5) {
     return {
@@ -659,7 +748,7 @@ export async function routeAnswer(
   evidence?: string | null,
 ): Promise<WriteResult> {
   // Task #12 (BLOCK-ADV-07) — dynamic reflection answers persist to the
-  // user's advisor_extras_json sidecar (no typed column). Handled BEFORE
+  // user_advisor_extras sidecar (no typed column). Handled BEFORE
   // the bank lookup so a strict-regex dyn id never trips the unknown-id
   // failure below.
   if (DYNAMIC_ID_RE.test(questionId)) {
@@ -667,7 +756,7 @@ export async function routeAnswer(
     if (!dynValue) return { status: 'skipped' };
     const ok = await mergeUserExtras(env, user.id, questionId, dynValue);
     return ok
-      ? { status: 'saved', saved_to: { table: 'users', column: 'advisor_extras_json', id: user.id } }
+      ? { status: 'saved', saved_to: { table: 'user_advisor_extras', column: 'extras_json', id: user.id } }
       : { status: 'noop' };
   }
 
@@ -915,8 +1004,17 @@ export async function routeAnswer(
         // ensureSchema) so this works on dev/SQLite without a prior
         // brand-page open.
         await env.DB.exec(
-          // Lockstep with brand.ts ensureSchema / migration 144: multi-page
-          // sites — project_id is NOT unique; page_slug is unique per project.
+          // NOT lockstep with brand.ts / migration 144, and the claim that it
+          // was is corrected rather than deleted (D192): this CREATE is
+          // sixteen columns and those two are forty-eight. It stays narrow on
+          // purpose — the only columns this branch reads or writes are
+          // `tagline` and `theme_color`, both of which it declares — and a
+          // database it reached first is healed by
+          // `ensureLandingPageBrandKitColumns`, which `routes/brand.ts`'s own
+          // bootstrap awaits before any wide read. What it must never become is
+          // a hand-maintained copy of the full shape.
+          // Multi-page sites: project_id is NOT unique; page_slug is unique
+          // per project.
           "CREATE TABLE IF NOT EXISTS landing_pages (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, slug TEXT NOT NULL UNIQUE, page_slug TEXT NOT NULL DEFAULT 'home', name TEXT NOT NULL, tagline TEXT, headline TEXT, subheadline TEXT, cta_text TEXT DEFAULT 'Join the waitlist', logo_url TEXT, logo_svg TEXT, theme_color TEXT DEFAULT '#7c3aed', published INTEGER DEFAULT 0, views_count INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))",
         );
         const proj = await env.DB.prepare(`SELECT name FROM projects WHERE id = ?`).bind(ctx.project_id).first<{ name: string }>();
@@ -1171,12 +1269,12 @@ export async function routeAnswer(
       };
     } catch (e) {
       // Column may not be migrated yet on legacy dev DBs — fall back
-      // to users.advisor_extras_json so the value isn't lost.
+      // to the user_advisor_extras sidecar so the value isn't lost.
       const ok = await mergeUserExtras(env, user.id, questionId, value);
       if (ok) {
         return {
           status: 'saved',
-          saved_to: { table: 'users', column: 'advisor_extras_json', id: user.id, page_url: '/investor-profile' },
+          saved_to: { table: 'user_advisor_extras', column: 'extras_json', id: user.id, page_url: '/investor-profile' },
           hint: 'Saved as a chat note (column not yet migrated).',
         };
       }
@@ -1222,12 +1320,12 @@ export async function routeAnswer(
       };
     } catch (e) {
       // Column may not be migrated yet on legacy dev DBs — fall back
-      // to users.advisor_extras_json sidecar.
+      // to the user_advisor_extras sidecar.
       const ok = await mergeUserExtras(env, user.id, questionId, value);
       if (ok) {
         return {
           status: 'saved',
-          saved_to: { table: 'users', column: 'advisor_extras_json', id: user.id, page_url: '/advisors/me' },
+          saved_to: { table: 'user_advisor_extras', column: 'extras_json', id: user.id, page_url: '/advisors/me' },
           hint: 'Saved as a chat note (column not yet migrated).',
         };
       }
@@ -1242,26 +1340,27 @@ export async function routeAnswer(
       return { status: 'failed', error: 'partner questions require partner role' };
     }
     // Special case: partner.profile.focus is cross-deal so it lives
-    // on users.advisor_extras_json instead of a single partner_profile.
+    // on the user_advisor_extras sidecar instead of a single partner_profile.
     if (questionId === 'partner.profile.focus') {
       const okFocus = await mergeUserExtras(env, user.id, questionId, value);
       if (okFocus) {
         return {
           status: 'saved',
-          saved_to: { table: 'users', column: 'advisor_extras_json', id: user.id, page_url: '/partner-portal' },
+          saved_to: { table: 'user_advisor_extras', column: 'extras_json', id: user.id, page_url: '/studio' },
         };
       }
       // Fallback: stash on partner_profiles.raw_chat_json so the
-      // answer isn't lost on a dev DB without users.advisor_extras_json.
+      // answer isn't lost on a dev DB without user_advisor_extras.
       const profile = await ensurePartnerProfile(env, user);
       if (profile) {
         try {
           await env.DB.prepare(
-            `UPDATE partner_profiles SET raw_chat_json = json_set(COALESCE(raw_chat_json,'{}'), '$.' || ?, ?) WHERE id = ?`,
-          ).bind('partner_profile_focus', value, profile.id).run();
+            `UPDATE partner_profiles SET raw_chat_json = json_set(COALESCE(raw_chat_json,'{}'), '$.' || ?, ?)
+              WHERE LOWER(email) = LOWER(?)`,
+          ).bind('partner_profile_focus', value, profile.email).run();
           return {
             status: 'saved',
-            saved_to: { table: 'partner_profiles', column: 'raw_chat_json', id: profile.id, page_url: '/partner-portal' },
+            saved_to: { table: 'partner_profiles', column: 'raw_chat_json', id: profile.email, page_url: '/studio' },
             hint: 'Saved as a chat note (column not yet migrated).',
           };
         } catch { /* fall through */ }
@@ -1270,7 +1369,16 @@ export async function routeAnswer(
     }
     const profile = await ensurePartnerProfile(env, user);
     if (!profile) {
-      return { status: 'noop', hint: 'Partner profile not bound yet — accept your invitation from the Partner Portal first.' };
+      // D187 — THIS SENTENCE USED TO BE THE ANSWER TO EVERY PARTNER QUESTION,
+      // and it was false twice over: the row was never looked up on a column
+      // the table has, and production held no invitations to accept. It now
+      // fires only where it is true — the row exists and belongs to another
+      // account, which is the one case ensurePartnerProfile refuses — or the
+      // write itself failed, which is not the reader's fault to explain away.
+      return {
+        status: 'noop',
+        hint: 'This answer was not saved: a partner profile already exists under your address and belongs to another account. An admin can unbind it from the Partner Portal.',
+      };
     }
     const partnerMap: Record<string, string> = {
       'partner.firm.name':         'organization',
@@ -1284,22 +1392,24 @@ export async function routeAnswer(
     if (!pcol) return { status: 'noop' };
     try {
       await env.DB.prepare(
-        `UPDATE partner_profiles SET ${pcol} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      ).bind(value, profile.id).run();
+        `UPDATE partner_profiles SET ${pcol} = ?, updated_at = CURRENT_TIMESTAMP WHERE LOWER(email) = LOWER(?)`,
+      ).bind(value, profile.email).run();
       return {
         status: 'saved',
-        saved_to: { table: 'partner_profiles', column: pcol, id: profile.id, page_url: '/partner-portal' },
+        saved_to: { table: 'partner_profiles', column: pcol, id: profile.email, page_url: '/studio' },
       };
     } catch (e) {
       // Column may not be migrated on legacy dev — fall back to
-      // raw_chat_json so the value isn't lost.
+      // raw_chat_json so the value isn't lost. After migration 275 this arm
+      // is a genuine legacy path rather than the one every write took.
       try {
         await env.DB.prepare(
-          `UPDATE partner_profiles SET raw_chat_json = json_set(COALESCE(raw_chat_json,'{}'), '$.' || ?, ?) WHERE id = ?`,
-        ).bind(questionId.replace(/[^a-zA-Z0-9_]/g, '_'), value, profile.id).run();
+          `UPDATE partner_profiles SET raw_chat_json = json_set(COALESCE(raw_chat_json,'{}'), '$.' || ?, ?)
+            WHERE LOWER(email) = LOWER(?)`,
+        ).bind(questionId.replace(/[^a-zA-Z0-9_]/g, '_'), value, profile.email).run();
         return {
           status: 'saved',
-          saved_to: { table: 'partner_profiles', column: 'raw_chat_json', id: profile.id, page_url: '/partner-portal' },
+          saved_to: { table: 'partner_profiles', column: 'raw_chat_json', id: profile.email, page_url: '/studio' },
           hint: 'Saved as a chat note (column not yet migrated).',
         };
       } catch {
@@ -1420,7 +1530,7 @@ export async function routeAnswer(
     // (Acknowledged by the `^admin\.` pattern in no_write_allowlist.json.)
     const ok = await mergeUserExtras(env, user.id, questionId, value);
     return ok
-      ? { status: 'saved', saved_to: { table: 'users', column: 'advisor_extras_json', id: user.id } }
+      ? { status: 'saved', saved_to: { table: 'user_advisor_extras', column: 'extras_json', id: user.id } }
       : { status: 'noop' };
   }
 
@@ -1606,11 +1716,11 @@ export async function hydrateAlreadyAnswered(env: Env, user: User): Promise<Set<
     } catch { /* partner_profiles missing on dev */ }
     try {
       const u = await env.DB.prepare(
-        `SELECT advisor_extras_json FROM users WHERE id = ?`,
-      ).bind(user.id).first<{ advisor_extras_json: string | null }>().catch(() => null);
-      if (u?.advisor_extras_json) {
+        `SELECT extras_json FROM user_advisor_extras WHERE user_id = ?`,
+      ).bind(user.id).first<{ extras_json: string | null }>().catch(() => null);
+      if (u?.extras_json) {
         try {
-          const parsed = JSON.parse(u.advisor_extras_json) as Record<string, unknown>;
+          const parsed = JSON.parse(u.extras_json) as Record<string, unknown>;
           if (parsed && typeof parsed === 'object') {
             for (const k of Object.keys(parsed)) {
               if (k.startsWith('partner.') && parsed[k]) answered.add(k);
@@ -1618,7 +1728,7 @@ export async function hydrateAlreadyAnswered(env: Env, user: User): Promise<Set<
           }
         } catch { /* malformed — ignore */ }
       }
-    } catch { /* users.advisor_extras_json not migrated */ }
+    } catch { /* user_advisor_extras not migrated */ }
   }
 
   return answered;

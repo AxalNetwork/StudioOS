@@ -100,16 +100,16 @@ test('the completeness meter counts each profile field once', () => {
   // "Match one-liner", the same value re-tested for length — so one field was
   // worth 2 of 8 and a 79-character headline produced a gap the advisor could
   // not close by filling any box on the page.
-  const block = profile.slice(profile.indexOf('const fields = ['), profile.indexOf('const complete ='));
+  // D392 moved the list to `MATCH_FIELDS`, keyed, so the `Match-critical` chip
+  // and the meter read one list. Each entry is `['Label', 'field_key']`, and
+  // the key is what it scores.
+  const block = profile.slice(profile.indexOf('export const MATCH_FIELDS = ['), profile.indexOf('];', profile.indexOf('export const MATCH_FIELDS = [')));
   assert.ok(block.length > 0, 'the field list must be findable');
-  // One entry per line, and the FIRST field each entry reads is the one it
-  // scores. A single entry may legitimately name its field twice —
-  // `profile.sectors?.length ? profile.sectors : null` is a presence test, not
-  // a second row — so the check is across entries, not across occurrences.
   const scored = block.split('\n')
     .filter((l) => /^\s*\['/.test(l))
-    .map((l) => (l.match(/profile\.([a-z_]+)/) || [])[1])
+    .map((l) => (l.match(/^\s*\['[^']*', '([a-z_]+)'\]/) || [])[1])
     .filter(Boolean);
+  assert.match(profile, /const fields = MATCH_FIELDS\.map\(/, 'the meter no longer scores the MATCH_FIELDS list');
   assert.ok(scored.length >= 5, `only ${scored.length} scored fields parsed — the shape changed`);
   const dupes = scored.filter((f, i) => scored.indexOf(f) !== i);
   assert.deepEqual([...new Set(dupes)], [],
@@ -131,7 +131,7 @@ test('the completeness meter counts each profile field once', () => {
  * different copy, this fails and the table is what has to move.
  */
 const CANVAS = readFileSync(
-  resolve(process.cwd(), 'design/incoming/Pages · Advisor Expertise.dc.html'), 'utf8');
+  resolve(process.cwd(), 'design/canvases/integrated/Pages · Advisor Expertise.dc.html'), 'utf8');
 const ROUTES = readFileSync(
   resolve(process.cwd(), 'frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx'), 'utf8');
 

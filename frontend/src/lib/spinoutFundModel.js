@@ -33,6 +33,37 @@ const POSITIONS = [
   { company: 'Halyard Security', sector: 'Cybersecurity', cohort: 'C1', initial: 175, held: 195, status: 'Early' },
 ];
 
+/**
+ * THE TWO DATES THE FUND SCHEDULED, AND WHAT A PAST ONE SAYS (D372).
+ *
+ * These were display strings — first close "Sep 15, 2026", demo day "Aug 21,
+ * 2026" — and the status line read "raising toward first close". Once a date
+ * passes, printing it as ahead of the reader is a claim about the future the
+ * fund never updated, and nothing on the platform records whether the close
+ * happened. So each is a date, and a date in the past says so rather than
+ * being printed as though it were still ahead.
+ */
+export const FUND_SCHEDULE = { firstClose: '2026-09-15', demoDay: '2026-08-21' };
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** `2026-09-15` → `Sep 15, 2026`. */
+export function formatScheduleDate(iso) {
+  const [y, m, d] = String(iso).split('-').map(Number);
+  return `${MONTHS[m - 1]} ${d}, ${y}`;
+}
+
+/** True when `iso` is before `today` (both calendar dates, UTC). */
+export function schedulePassed(iso, today = new Date().toISOString().slice(0, 10)) {
+  return String(iso) < String(today);
+}
+
+/** The label a scheduled date carries: the date, and whether it has passed unrecorded. */
+export function scheduledLabel(iso, today) {
+  const date = formatScheduleDate(iso);
+  return schedulePassed(iso, today) ? `${date} (date passed; outcome not recorded)` : date;
+}
+
 export const FUND = {
   target: 20,
   hardCap: 25,
@@ -44,13 +75,15 @@ export const FUND = {
   allocThresholdK: 250,
   medianTicketK: 150,
   reservePolicy: 0.40, // ceiling on commitments; follow-ons are the only draw
-  firstClose: 'Sep 15, 2026',
+  firstClose: scheduledLabel(FUND_SCHEDULE.firstClose),
   minCloseM: 5,
-  demoDay: 'Aug 21, 2026',
+  demoDay: scheduledLabel(FUND_SCHEDULE.demoDay),
   // The fields below feed the workspace hero and "Key terms" grid, and the fund
   // brief's masthead and "Fund structure" block (through fundTerms()), so a
   // change here reaches every surface and every brief downloaded afterwards.
-  status: 'Open · raising toward first close',
+  status: schedulePassed(FUND_SCHEDULE.firstClose)
+    ? 'Open · the first-close date has passed; whether the fund closed is not recorded here'
+    : 'Open · raising toward first close',
   stage: 'Pre-seed',
   vintage: 2026,
   domicile: 'Delaware LP',
@@ -174,7 +207,7 @@ export const PROCESS_STEPS = [
   ['02', 'Applied', 'Type, size, preferences'],
   ['03', 'Under review', 'Within 5 business days'],
   ['04', 'Accepted', 'Capacity-limited'],
-  ['05', 'KYC / AML', 'Parallel Markets'],
+  ['05', 'KYC / AML', 'Trust · reviewed by the fund team'],
   ['06', 'Soft commit', 'Indication of size'],
   ['07', 'Legal docs', 'Subscription + LPA'],
   ['08', 'Funded', 'Capital call schedule'],

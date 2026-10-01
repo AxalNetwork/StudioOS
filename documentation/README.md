@@ -16,7 +16,7 @@ nothing here is served.
 | --- | --- |
 | `architecture/` | How the system is actually put together, and the decisions behind it. Start with `architecture/CODEBASE_MAP.md`. |
 | `audits/` | Point-in-time findings. Each one is true *as of its date* and is not maintained afterwards. |
-| `operations/` | Runbooks. [`DEPLOY.md`](operations/DEPLOY.md) to ship production; [`INCIDENT_RESPONSE.md`](operations/INCIDENT_RESPONSE.md) when something is on fire. |
+| `operations/` | Runbooks. [`DEPLOY.md`](operations/DEPLOY.md) to ship production; [`D1_RECOVERY.md`](operations/D1_RECOVERY.md) when the data is wrong and a rollback will not help; [`INCIDENT_RESPONSE.md`](operations/INCIDENT_RESPONSE.md) when something is on fire. |
 | `product/` | Positioning and feature notes. |
 
 ## The five that answer most questions
@@ -31,6 +31,7 @@ nothing here is served.
 | Why was this routed that way with nobody asked? | [architecture/ASSUMPTIONS_LOG.md](architecture/ASSUMPTIONS_LOG.md) |
 | Who serves the frontend, and how did it get that way? | [architecture/PRODUCTION.md](architecture/PRODUCTION.md) for today — the Worker, on both `axal.vc` and `app.axal.vc`. [architecture/CLOUDFLARE-CUTOVER.md](architecture/CLOUDFLARE-CUTOVER.md) and [architecture/CLOUDFLARE-PAGES-MIGRATION.md](architecture/CLOUDFLARE-PAGES-MIGRATION.md) are the superseded 2026-08 records of how the apex left GitHub Pages, sat on Cloudflare Pages for one day, and came to the Worker. |
 | Why is it built this way and not the obvious way? | [architecture/DECISIONS.md](architecture/DECISIONS.md) |
+| How do archetype, skills and values profiling work, and how do they change over time? | [architecture/PROFILING_V2.md](architecture/PROFILING_V2.md) — the Profiling v2 spec (D356) that Sessions 7–15 build against. |
 | What will bite me? | [architecture/GOTCHAS.md](architecture/GOTCHAS.md) |
 | How do I deploy to production? | [operations/DEPLOY.md](operations/DEPLOY.md) |
 
@@ -57,7 +58,9 @@ An audit is a **snapshot, not a spec**. `audits/BETA_READINESS_AUDIT_2026-05-20.
 describes the platform on 20 May 2026 and was correct then. Do not treat a
 finding in an audit as a live bug without re-checking it against the code —
 several have been fixed since, and the audit files are not updated when they
-are. `audits/PLATFORM-DELIVERY-AUDIT.md` is the most recent full sweep.
+are. `audits/PLATFORM-DELIVERY-AUDIT.md` is the most recent canvas-by-canvas
+sweep. `audits/SCALE_1000_DAU_AUDIT_2026-09-18.md` is the load plan for the
+first 1,000 daily users.
 
 ## Files deliberately left at the repo root
 

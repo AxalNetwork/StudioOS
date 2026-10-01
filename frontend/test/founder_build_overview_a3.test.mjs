@@ -21,10 +21,14 @@
  * AND WHAT THE ARTBOARD ASKS FOR THAT THIS PRODUCT CANNOT DO. A key result
  * records `text/current/target/unit` and nothing else, so the artboard's owner
  * column and its On track / At risk / Done pill have nothing behind them;
- * `mvp_tasks.status` has no review state; and no cadence store exists at all.
- * Each is drawn as an absence with its reason rather than filled in (D56/D68) —
+ * and `mvp_tasks.status` has no review state. Each is drawn as an absence with its reason rather than filled in (D56/D68) —
  * and the count beside "commitments" says `risk not recorded` rather than
  * quietly reporting zero at risk.
+ *
+ * THE CADENCE CARD WAS THE THIRD, AND IT WAS WRONG. It said "no cadence store"
+ * while migration 250 and `/api/founder/cadence` served `/build/cadence` beside
+ * it. It reads the rituals now (D420); only the retro draft stays unbuilt, and
+ * the card says so.
  *
  * EVERY FIGURE IS STILL THE READER'S OWN. The artboard's `4 commitments · 1 at
  * risk`, its `$21,412` and its `Amara` are its fixture's; the page prints none
@@ -271,4 +275,33 @@ test('A3 never turns canvas fixtures into product data or claims', () => {
   assert.doesNotMatch(page, /On track|At risk['"]/);
   assert.match(page, /An owner and an at-risk state are not recorded against a key result/);
   assert.match(page, /risk not recorded/, 'the commitment count silently reports zero at risk');
+});
+
+test('the cadence card reads the rituals the cadence page files', () => {
+  // D420. The card used to say there was no cadence store.
+  assert.ok(!/no cadence store/i.test(page), 'the cadence card still denies a store that exists');
+  assert.match(page, /api\.getCadence\(projectId\)\.catch\(\(\) => null\)/, 'the desk does not read the cadence store');
+  assert.match(raw('cloudflare-worker/src/index.ts'), /app\.route\('\/api\/founder\/cadence', founderCadence\);/,
+    'the cadence route the desk reads is not mounted');
+  const card = page.slice(page.indexOf('function Cadence('), page.indexOf('function cadenceLabel'));
+  // THREE ABSENCES, KEPT APART: unreadable, store not ready, nothing scheduled.
+  assert.match(card, /if \(cadence === null\) return <Unreadable /, 'a failed read renders as "nothing scheduled"');
+  assert.match(card, /if \(cadence\.store_ready === false\)/, 'a store the server could not ready reads as an empty one');
+  assert.match(card, /No ritual is scheduled yet/);
+  // A PAUSED RITUAL IS NOT ON THE WEEK.
+  assert.match(card, /ritual\.active !== 0 && ritual\.active !== false/, 'paused rituals are listed as running');
+  // ONE SCHEDULE PHRASE, shared with the cadence page, so "every other Friday"
+  // cannot be spelled two ways about one row.
+  assert.match(page, /import \{ kindLabel, scheduleLabel \} from '\.\.\/\.\.\/lib\/cadence';/);
+  assert.match(read('frontend/src/lib/cadence.js'), /export function scheduleLabel\(ritual\)/);
+  assert.match(read('frontend/src/pages/founder/FounderBuildCadence.jsx'), /import \{[^}]*\bscheduleLabel\b[^}]*\} from '\.\.\/\.\.\/lib\/cadence';/,
+    'the cadence page grew its own schedule phrase again');
+  // ADHERENCE IS THE SERVER'S, and null is said, never printed as 0%.
+  assert.match(card, /adherence == null \? 'No run has been logged as done or missed/);
+  // THE RETRO DRAFT IS NAMED AS UNBUILT rather than drawn as a dead button.
+  assert.match(card, /no retro draft surface exists yet, so none is drawn/);
+  assert.ok(!raw('cloudflare-worker/src/routes/research.ts').includes("'build/cadence': {") || /<ZoneDraft\s+surface="build\/cadence"/.test(page),
+    'a cadence draft surface now exists — mount it and drop the sentence that says it does not');
+  assert.match(css, /(^|\})\.cadence-row\{/, 'the ritual rows have no light-mode style');
+  assert.match(css, /\.dark \.cadence-row\{/, 'the ritual rows have no dark-mode style');
 });

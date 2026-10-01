@@ -16,6 +16,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { ensureTelegramSchema } from '../services/telegramSchema';
+import { refuse } from '../util/refusal';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -136,7 +137,7 @@ r.post('/join-request', async (c) => {
     await c.env.DB.prepare(
       `DELETE FROM telegram_join_requests WHERE user_id = ? AND channel_slug = ? AND day_bucket = ?`,
     ).bind(user.id, channel.slug, dayBucket).run().catch(() => {});
-    return c.json({ error: 'slack_post_failed', message: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'slack_post_failed', message: 'The join request could not be sent. Try again in a moment.', raw: e, audience: 'member' });
   }
 
   return c.json({

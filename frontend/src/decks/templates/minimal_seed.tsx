@@ -113,7 +113,7 @@ const Editable: React.FC<{
   placeholder?: string;
   className?: string;
   style?: React.CSSProperties;
-  as?: keyof JSX.IntrinsicElements;
+  as?: keyof React.JSX.IntrinsicElements;
 }> = ({ value, path, editable, onEdit, placeholder, className, style, as = 'div' }) => {
   const Tag: any = as;
   return (

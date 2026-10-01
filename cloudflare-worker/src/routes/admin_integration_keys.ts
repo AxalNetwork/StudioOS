@@ -7,17 +7,34 @@
  *                              → pushes BOTH as Cloudflare Worker secrets
  *                                via the CF API, deletes the encrypted DB row
  *  POST   /:provider/rotate  → push a fresh client_secret as a Worker secret
+ *                              (wherever the key lives — D227: the console
+ *                              offers rotate and remove for a key held as a
+ *                              Worker secret too, which is where a save puts it)
  *  POST   /:provider/test    → dry-run probe against the provider
  *  DELETE /:provider         → delete both Worker secrets + cascade-disconnect
  *
- * Every route gates on `requireAdmin`. Writes are logged to both
- * `activity_logs` (hashed actor, T22.1) and `admin_audit_log` for the
- * Cloudflare-secret push / rotate / delete actions.
+ * D223 — WHO MAY WRITE. PUT, rotate and DELETE write (or delete) Worker
+ * secrets on production's own `studioos` script, so they sit behind
+ * `requireSuperAdminWriteBar` (a TOTP session, a recent step-up, the holder):
+ * the same bar as the deploy dispatch those secrets sit beside. Before D223
+ * they were `requireAdmin`, so every admin, a branch's included, could
+ * overwrite a provider's OAuth pair.
+ *
+ * THE READS STAY `requireAdmin`, deliberately. `GET /` returns where each key
+ * lives, the client-id preview (the public half of the pair) and a count of
+ * connected users; `POST /:provider/test` exercises the configured pair
+ * against the provider and changes nothing. Neither returns a secret or moves
+ * one, and an admin triaging "Slack won't connect" needs both.
+ *
+ * Every write is audited ONCE through `logAdminAction` (D159's single
+ * definition): one `activity_logs` row and one `admin_audit_log` row per
+ * request, with the action names and the `provider` / `outcome` keys that
+ * `readProviderKeyLastSet` (D213) matches.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin } from '../auth';
-import { hashEmail } from '../util/hashEmail';
+import { requireAdmin, requireSuperAdminWriteBar } from '../auth';
+import { logAdminAction } from '../services/adminAudit';
 import {
   MANAGED_PROVIDERS,
   PROVIDER_ENV_VARS,
@@ -26,10 +43,12 @@ import {
   deleteOauthCredsAndDisconnect,
   deleteOauthCredsRowOnly,
   listProviderKeyStatus,
+  keyHeldAsWorkerSecret,
   _clearOauthCredsCache,
 } from '../services/providerOauthKeys';
 import { testOauthCreds } from '../services/providerOauthTest';
 import { setSecret, deleteSecret, type CfSecretResult } from '../services/cloudflareSecrets';
+import { refusalBody } from '../util/refusal';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -37,64 +56,28 @@ function isManaged(k: string): k is ManagedProviderKey {
   return (MANAGED_PROVIDERS as readonly string[]).includes(k);
 }
 
-async function logActivity(
+/**
+ * The one audit write per request, through D159's `logAdminAction`.
+ *
+ * It replaced two hand-written INSERTs (an `activity_logs` row under one
+ * action name and an `admin_audit_log` row under another), which is the drift
+ * D159 consolidated. The details keep the keys D213's "last set" read matches:
+ * `provider` and `outcome`, with `'failed'` for a refusal so a write Cloudflare
+ * refused is never dated as a set.
+ */
+async function audit(
   env: Env,
-  adminUserId: number,
-  adminEmail: string | null,
-  action: string,
-  details: Record<string, unknown>,
+  actor: { id: number; email: string },
+  opts: { action: string; provider: ManagedProviderKey; envVars: string[]; outcome: 'ok' | 'failed'; cfStatus?: number; cfCode?: string; extra?: Record<string, unknown> },
 ): Promise<void> {
-  try {
-    const actor = adminEmail ? await hashEmail(adminEmail) : null;
-    await env.DB.prepare(
-      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
-    ).bind(action, JSON.stringify(details), actor, adminUserId).run();
-  } catch (e) {
-    console.warn('[admin_integration_keys] activity log failed', e);
-  }
-}
-
-// admin_audit_log writer. Mirrors the shape used by routes/admin_telegram.ts
-// (`telegram_pii_override`) — same `report_type` convention, same actor
-// column tolerance for the legacy schema without `actor`.
-let _auditHasActor: boolean | null = null;
-async function auditHasActor(env: Env): Promise<boolean> {
-  if (_auditHasActor !== null) return _auditHasActor;
-  try {
-    const r = await env.DB.prepare("PRAGMA table_info('admin_audit_log')").all<{ name: string }>();
-    _auditHasActor = (r.results || []).some((c) => String(c.name) === 'actor');
-  } catch {
-    _auditHasActor = false;
-  }
-  return _auditHasActor;
-}
-async function writeAudit(
-  env: Env,
-  opts: { adminId: number; adminEmail: string | null; action: string; provider: ManagedProviderKey; envVars: string[]; outcome: 'ok' | 'failed'; cfStatus?: number; cfCode?: string; extra?: Record<string, unknown> },
-): Promise<void> {
-  try {
-    const filters = JSON.stringify({
-      provider: opts.provider,
-      env_vars: opts.envVars,
-      outcome: opts.outcome,
-      cf_status: opts.cfStatus ?? null,
-      cf_code: opts.cfCode ?? null,
-      ...(opts.extra || {}),
-    });
-    const reportType = 'integration_keys';
-    if (await auditHasActor(env)) {
-      const actor = opts.adminEmail ? await hashEmail(opts.adminEmail) : null;
-      await env.DB.prepare(
-        `INSERT INTO admin_audit_log (admin_user_id, action, report_type, filters_json, actor) VALUES (?, ?, ?, ?, ?)`,
-      ).bind(opts.adminId, opts.action, reportType, filters, actor).run();
-    } else {
-      await env.DB.prepare(
-        `INSERT INTO admin_audit_log (admin_user_id, action, report_type, filters_json) VALUES (?, ?, ?, ?)`,
-      ).bind(opts.adminId, opts.action, reportType, filters).run();
-    }
-  } catch (e) {
-    console.warn('[admin_integration_keys] audit write failed', (e as Error).message);
-  }
+  await logAdminAction(env, actor.id, actor.email, opts.action, {
+    provider: opts.provider,
+    env_vars: opts.envVars,
+    outcome: opts.outcome,
+    cf_status: opts.cfStatus ?? null,
+    cf_code: opts.cfCode ?? null,
+    ...(opts.extra || {}),
+  });
 }
 
 /** Map a CF helper failure into a structured 502 JSON body. */
@@ -104,17 +87,38 @@ function cfErrorJson(c: any, res: CfSecretResult, fallback = 'cf_api_failed') {
   // 502 for upstream API failures so the frontend distinguishes from 4xx
   // input validation errors.
   const httpStatus = code === 'cloudflare_api_token_missing' ? 503 : 502;
-  return c.json({ error: code, detail: res.error || null, cf_status: res.status }, httpStatus);
+  // D278 — Cloudflare's text is the admin's to read on `upstream`.
+  return c.json(refusalBody({
+    code,
+    message: code === 'cloudflare_api_token_missing'
+      ? 'The Cloudflare API token is not set, so keys cannot be changed from here.'
+      : 'Cloudflare did not accept the change. Nothing changed; the upstream field says why.',
+    raw: res.error || null,
+    audience: 'admin',
+    extra: { cf_status: res.status },
+  }), httpStatus);
 }
 
+// D227 — each key carries `state` (env | db | unset | unreadable) and the
+// payload carries `db_readable`, so a table that did not answer reads as
+// "unknown" on the console rather than as "not configured". `providers` keeps
+// its name and every field it had.
 r.get('/', async (c) => {
   await requireAdmin(c);
   const status = await listProviderKeyStatus(c.env);
-  return c.json({ providers: status });
+  return c.json({
+    providers: status.items,
+    db_readable: status.db_readable,
+    ...(status.db_readable ? {} : {
+      unreadable_reason:
+        'The table that holds database-kept keys could not be read, so for any provider without a Worker '
+        + 'secret it is unknown whether a key is kept there.',
+    }),
+  });
 });
 
 r.put('/:provider', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
   const provider = c.req.param('provider');
   if (!isManaged(provider)) {
     return c.json({ error: 'unknown_provider', allowed: MANAGED_PROVIDERS }, 400);
@@ -136,8 +140,8 @@ r.put('/:provider', async (c) => {
   // Push the client_id first. On failure we haven't touched anything yet.
   const idRes = await setSecret(c.env, envMap.id, clientId);
   if (!idRes.ok) {
-    await writeAudit(c.env, {
-      adminId: admin.id, adminEmail: admin.email, action: 'integration_key_cf_secret_push',
+    await audit(c.env, admin, {
+      action: 'integration_key_cf_secret_push',
       provider, envVars, outcome: 'failed', cfStatus: idRes.status, cfCode: idRes.code,
     });
     return cfErrorJson(c, idRes);
@@ -149,8 +153,8 @@ r.put('/:provider', async (c) => {
   const secretRes = await setSecret(c.env, envMap.secret, clientSecret);
   if (!secretRes.ok) {
     const rollback = await deleteSecret(c.env, envMap.id);
-    await writeAudit(c.env, {
-      adminId: admin.id, adminEmail: admin.email, action: 'integration_key_cf_secret_push',
+    await audit(c.env, admin, {
+      action: 'integration_key_cf_secret_push',
       provider, envVars, outcome: 'failed', cfStatus: secretRes.status, cfCode: secretRes.code,
       extra: { rollback_ok: rollback.ok, rollback_status: rollback.status },
     });
@@ -164,11 +168,10 @@ r.put('/:provider', async (c) => {
   await deleteOauthCredsRowOnly(c.env, provider);
   _clearOauthCredsCache();
 
-  await writeAudit(c.env, {
-    adminId: admin.id, adminEmail: admin.email, action: 'integration_key_cf_secret_push',
+  await audit(c.env, admin, {
+    action: 'integration_key_cf_secret_push',
     provider, envVars, outcome: 'ok', cfStatus: secretRes.status,
   });
-  await logActivity(c.env, admin.id, admin.email, 'integration_keys_set', { provider, env_vars: envVars });
   // `source: 'env'` is the cosmetic post-promote state — the next
   // /api/admin/integration-keys GET will reflect the live env binding
   // (CF Worker isolates pick up new secrets on next boot; existing
@@ -181,7 +184,7 @@ r.put('/:provider', async (c) => {
 // secret (the client_id is left untouched — providers issue new
 // secrets against the same client app). Also drops any stale DB row.
 r.post('/:provider/rotate', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
   const provider = c.req.param('provider');
   if (!isManaged(provider)) {
     return c.json({ error: 'unknown_provider', allowed: MANAGED_PROVIDERS }, 400);
@@ -200,31 +203,43 @@ r.post('/:provider/rotate', async (c) => {
 
   const res = await setSecret(c.env, envMap.secret, clientSecret);
   if (!res.ok) {
-    await writeAudit(c.env, {
-      adminId: admin.id, adminEmail: admin.email, action: 'integration_key_cf_secret_rotate',
-      provider, envVars, outcome: 'failed', cfStatus: res.status, cfCode: res.code,
-    });
     // If a legacy DB row exists, keep the old rotate path as a fallback
     // so admins aren't locked out when CF API is unreachable. This
     // mirrors the spec's "Existing rows already in `provider_oauth_keys`
     // keep working until an admin re-saves them" requirement.
-    if (res.code === 'cloudflare_api_token_missing') {
+    //
+    // ONE AUDIT ROW WHICHEVER WAY IT ENDS (D223): the fallback's success is
+    // the outcome of this request, so it is recorded once, as a rotate that
+    // landed in the table, rather than as a Cloudflare refusal followed by a
+    // second row saying it worked after all.
+    //
+    // NOT FOR A KEY HELD AS A WORKER SECRET (D227). The Worker secret wins over
+    // any row (`loadOauthCreds`), so rotating a row under it would answer "ok"
+    // and change nothing a user's connection reads.
+    if (res.code === 'cloudflare_api_token_missing' && !keyHeldAsWorkerSecret(c.env, provider)) {
       try {
         const rotated = await rotateOauthSecret(c.env, provider, clientSecret, admin.id);
-        await logActivity(c.env, admin.id, admin.email, 'integration_keys_rotated', { provider, fallback: 'db' });
+        await audit(c.env, admin, {
+          action: 'integration_key_cf_secret_rotate',
+          provider, envVars, outcome: 'ok', cfStatus: res.status, cfCode: res.code,
+          extra: { fallback: 'db' },
+        });
         return c.json({ ok: true, provider, source: 'db', ...rotated });
       } catch { /* fall through to the CF error */ }
     }
+    await audit(c.env, admin, {
+      action: 'integration_key_cf_secret_rotate',
+      provider, envVars, outcome: 'failed', cfStatus: res.status, cfCode: res.code,
+    });
     return cfErrorJson(c, res);
   }
 
   await deleteOauthCredsRowOnly(c.env, provider);
   _clearOauthCredsCache();
-  await writeAudit(c.env, {
-    adminId: admin.id, adminEmail: admin.email, action: 'integration_key_cf_secret_rotate',
+  await audit(c.env, admin, {
+    action: 'integration_key_cf_secret_rotate',
     provider, envVars, outcome: 'ok', cfStatus: res.status,
   });
-  await logActivity(c.env, admin.id, admin.email, 'integration_keys_rotated', { provider, env_vars: envVars });
   return c.json({ ok: true, provider, source: 'env', rotated_at: new Date().toISOString() });
 });
 
@@ -239,16 +254,18 @@ r.post('/:provider/test', async (c) => {
   try {
     result = await testOauthCreds(c.env, provider);
   } catch (e: any) {
-    return c.json({ error: e?.message || 'test_failed' }, 500);
+    return c.json(refusalBody({ code: 'test_failed', message: 'The key could not be tested. Try again in a moment.', raw: e, audience: 'admin' }), 500);
   }
-  await logActivity(c.env, admin.id, admin.email, 'integration_keys_tested', {
+  // A probe with production's credentials is a privileged act even though it
+  // writes nothing, so it is recorded — through the same helper as the writes.
+  await logAdminAction(c.env, admin.id, admin.email, 'integration_keys_tested', {
     provider, ok: result.ok, reachable: result.reachable, http_status: result.http_status ?? null,
   });
   return c.json({ provider, ...result });
 });
 
 r.delete('/:provider', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
   const provider = c.req.param('provider');
   if (!isManaged(provider)) {
     return c.json({ error: 'unknown_provider', allowed: MANAGED_PROVIDERS }, 400);
@@ -271,8 +288,8 @@ r.delete('/:provider', async (c) => {
   // still live.
   if (!cfOk && cfId.code !== 'cloudflare_api_token_missing') {
     const worst = !cfId.ok ? cfId : cfSecret!;
-    await writeAudit(c.env, {
-      adminId: admin.id, adminEmail: admin.email, action: 'integration_key_cf_secret_delete',
+    await audit(c.env, admin, {
+      action: 'integration_key_cf_secret_delete',
       provider, envVars, outcome: 'failed', cfStatus: worst.status, cfCode: worst.code,
       extra: { id_ok: cfId.ok, secret_ok: cfSecret!.ok },
     });
@@ -283,19 +300,16 @@ r.delete('/:provider', async (c) => {
   try {
     result = await deleteOauthCredsAndDisconnect(c.env, provider);
   } catch (e: any) {
-    return c.json({ error: e?.message || 'delete_failed' }, 500);
+    return c.json(refusalBody({ code: 'delete_failed', message: 'The key could not be deleted. Nothing changed; try again in a moment.', raw: e, audience: 'admin' }), 500);
   }
 
-  await writeAudit(c.env, {
-    adminId: admin.id, adminEmail: admin.email, action: 'integration_key_cf_secret_delete',
+  await audit(c.env, admin, {
+    action: 'integration_key_cf_secret_delete',
     provider, envVars,
     outcome: cfId.code === 'cloudflare_api_token_missing' ? 'failed' : 'ok',
     cfStatus: cfSecret.status,
     cfCode: cfId.code === 'cloudflare_api_token_missing' ? cfId.code : undefined,
     extra: { disconnected_users: result.disconnected_users, removed_keys: result.removed_keys },
-  });
-  await logActivity(c.env, admin.id, admin.email, 'integration_keys_deleted', {
-    provider, env_vars: envVars, disconnected_users: result.disconnected_users,
   });
   return c.json({ ok: true, provider, ...result, cf_token_missing: cfId.code === 'cloudflare_api_token_missing' });
 });

@@ -35,6 +35,7 @@ import { pickLabProject } from './SpinoutLabStartupPage';
 import { buildCertificateViewModel, certificateFilename } from '../lib/graduationCertificate';
 import { exportCertificatePdf } from '../lib/graduationCertificatePdf';
 import LabPageHeader from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -162,7 +163,7 @@ export default function SpinoutLabCertificatePage() {
   const { cert } = vm;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6" data-testid="page-spinout-certificate">
+    <LabPageShell width="full" spaceY="" testId="page-spinout-certificate">
       {/* Header — the shared Lab header. The single merged "Unlocked · Wk 4"
           chip is the week chip (there is no separate status chip on this
           page), and Wk 4 stays the literal it has always been. */}
@@ -503,13 +504,14 @@ export default function SpinoutLabCertificatePage() {
               </p>
               <span className="inline-block text-[12.5px] font-bold text-white bg-violet-600 px-4 py-2.5 rounded-lg">Open dashboard</span>
               <p className="text-[11.5px] text-gray-400 dark:text-gray-500 mt-5 pt-4 border-t border-gray-200 dark:border-gray-700 leading-relaxed">
-                This is the real <span className="font-mono text-[11px]">spinout_graduated</span> template that sends on graduation.
-                The design's richer copy — and attaching the certificate PDF — would be a change to that template, not to this page.
+                This is the real <span className="font-mono text-[11px]">spinout_graduated</span> template as it is registered.
+                Nothing sends it yet — no code path calls it when a founder graduates — so whether it reached you is not recorded.
+                The design's richer copy, and attaching the certificate PDF, would be a change to that template, not to this page.
               </p>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </LabPageShell>
   );
 }

@@ -522,6 +522,7 @@ marketIntel.delete('/watchlist/:id', async (c) => {
 // counter-party id is hashed.
 // =============================================================================
 import { ensureExtractorSchema } from '../services/market_intel/extractor_schema';
+import { refuse } from '../util/refusal';
 
 marketIntel.use('/at1/*', async (c, next) => { await ensureExtractorSchema(c.env); await next(); });
 marketIntel.use('/sentiment',     async (c, next) => { await ensureExtractorSchema(c.env); await next(); });
@@ -805,7 +806,7 @@ marketIntel.post('/admin/reduce', async (c) => {
     await Jobs.enqueue(c.env, 'mi_reduce', { triggered_by: user.id, source: 'admin_refresh' });
     return c.json({ ok: true, enqueued: 'mi_reduce' });
   } catch (e) {
-    return c.json({ error: 'enqueue_failed', detail: (e as Error).message }, 500);
+    return refuse(c, 500, { code: 'enqueue_failed', message: 'The refresh could not be queued. Try again in a moment.', raw: e, audience: 'member' });
   }
 });
 
@@ -837,7 +838,7 @@ async function disclosedIdentities(env: Env, viewerId: number, targetUserIds: nu
       `SELECT party_a_user_id AS a, party_b_user_id AS b
          FROM pairwise_ndas
          WHERE status='active'
-           AND (valid_until IS NULL OR valid_until > datetime('now'))
+           AND (valid_until IS NULL OR datetime(valid_until) > datetime('now'))
            AND ((party_a_user_id = ? AND party_b_user_id IN (${placeholders}))
              OR (party_b_user_id = ? AND party_a_user_id IN (${placeholders})))`,
     ).bind(viewerId, ...targetUserIds, viewerId, ...targetUserIds)
@@ -1027,13 +1028,22 @@ async function buildPersonasPayload(env: Env): Promise<PlatformPersonasPayload> 
 
   // 5. Activity composite — events-per-active-user per role + top feature.
   const activity_composite = await safe(async () => {
+    // D160 — BOTH SIDES WRAPPED IN datetime(), and the reason is measured.
+    // `cutoff` is a raw ISO string (`2026-08-19T12:44:00.000Z`) while
+    // `activity_logs.created_at` and `users.created_at` are
+    // `DEFAULT (datetime('now'))` — `2026-08-19 12:44:00`. A lexical TEXT
+    // compare hits index 10 first: ' ' (0x20) against 'T' (0x54), so EVERY
+    // row dated on the cutoff's own date sorts below it and is dropped, while
+    // later dates pass. The window silently returned one day short at its
+    // leading edge. The Citations query 650 lines above already documents this
+    // and already wraps both sides; these three did not.
     const cutoff = new Date(Date.now() - 30 * 86_400_000).toISOString();
     const events = (await env.DB.prepare(
       `SELECT u.role AS role,
               COUNT(*) AS events,
               COUNT(DISTINCT a.user_id) AS active_users
          FROM activity_logs a JOIN users u ON u.id = a.user_id
-        WHERE a.created_at >= ? AND u.is_active = 1
+        WHERE datetime(a.created_at) >= datetime(?) AND u.is_active = 1
         GROUP BY u.role`,
     ).bind(cutoff).all<{ role: string; events: number; active_users: number }>()).results || [];
     const rows = events.filter((r) => Number(r.active_users || 0) >= PERSONAS_KMIN).map((r) => ({
@@ -1044,7 +1054,7 @@ async function buildPersonasPayload(env: Env): Promise<PlatformPersonasPayload> 
     const top = (await env.DB.prepare(
       `SELECT u.role AS role, a.action AS action, COUNT(DISTINCT a.user_id) AS n
          FROM activity_logs a JOIN users u ON u.id = a.user_id
-        WHERE a.created_at >= ? AND u.is_active = 1
+        WHERE datetime(a.created_at) >= datetime(?) AND u.is_active = 1
         GROUP BY u.role, a.action`,
     ).bind(cutoff).all<{ role: string; action: string; n: number }>()).results || [];
     const byRole = new Map<string, { role: string; action: string; n: number }>();
@@ -1100,13 +1110,22 @@ async function buildPersonasPayload(env: Env): Promise<PlatformPersonasPayload> 
 
   // 7. New signups trend — weekly counts by role over last 12 weeks.
   const signups_trend = await safe(async () => {
+    // D160 — BOTH SIDES WRAPPED IN datetime(), and the reason is measured.
+    // `cutoff` is a raw ISO string (`2026-08-19T12:44:00.000Z`) while
+    // `activity_logs.created_at` and `users.created_at` are
+    // `DEFAULT (datetime('now'))` — `2026-08-19 12:44:00`. A lexical TEXT
+    // compare hits index 10 first: ' ' (0x20) against 'T' (0x54), so EVERY
+    // row dated on the cutoff's own date sorts below it and is dropped, while
+    // later dates pass. The window silently returned one day short at its
+    // leading edge. The Citations query 650 lines above already documents this
+    // and already wraps both sides; these three did not.
     const cutoff = new Date(Date.now() - 12 * 7 * 86_400_000).toISOString();
     const rows = (await env.DB.prepare(
       `SELECT strftime('%Y-%W', created_at) AS week,
               role,
               COUNT(*) AS n
          FROM users
-        WHERE created_at >= ?
+        WHERE datetime(created_at) >= datetime(?)
         GROUP BY week, role
         ORDER BY week ASC`,
     ).bind(cutoff).all<{ week: string; role: string; n: number }>()).results || [];
@@ -1426,65 +1445,6 @@ function renderPersonasPdf(payload: PlatformPersonasPayload): Uint8Array {
   body += xref;
   body += `trailer\n<< /Size ${totalObjs + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
   return enc.encode(body);
-}
-
-/**
- * Weekly digest for Studio / Institutional callers (Task #4 CF). Sends
- * one in-app + email notification per eligible user with a link back to
- * the Platform Personas tab. Idempotent: KV marker `personas:digest:<iso-week>`
- * blocks duplicate sends in the same ISO week.
- */
-export async function sendPlatformPersonasDigest(env: Env): Promise<{ scanned: number; sent: number; skipped: boolean }> {
-  const now = new Date();
-  const isoWeek = (() => {
-    // YYYY-Www — Monday-anchored.
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    const day = d.getUTCDay() || 7;
-    d.setUTCDate(d.getUTCDate() + 4 - day);
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86_400_000) + 1) / 7);
-    return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
-  })();
-  const markerKey = `personas:digest:${isoWeek}`;
-  try {
-    const existing = await env.RATE_LIMITS.get(markerKey);
-    if (existing) return { scanned: 0, sent: 0, skipped: true };
-  } catch { /* best-effort */ }
-  const { notify } = await import('../services/notify');
-  let scanned = 0; let sent = 0;
-  try {
-    const rows = (await env.DB.prepare(
-      `SELECT id, COALESCE(LOWER(subscription_tier),'free') AS tier, role
-         FROM users
-        WHERE is_active = 1
-          AND (
-            LOWER(COALESCE(subscription_tier,'')) IN ('studio','institutional')
-            OR LOWER(role) IN ('admin','partner','advisor')
-          )`,
-    ).all<{ id: number; tier: string; role: string }>()).results || [];
-    scanned = rows.length;
-    for (const r of rows) {
-      try {
-        await notify(env, {
-          userId: Number(r.id),
-          type: 'mi_personas_weekly_digest',
-          title: 'Platform Personas — weekly snapshot',
-          body: 'New anonymised composition charts (k≥5 per cell) are ready in Market Intelligence.',
-          link: '/market-intel?tab=platform_personas',
-          channels: ['in_app', 'email'],
-          category: 'product',
-          payload: { iso_week: isoWeek },
-        });
-        sent += 1;
-      } catch (e) {
-        console.warn('[personas digest] notify failed', { user: r.id, err: String(e) });
-      }
-    }
-    try { await env.RATE_LIMITS.put(markerKey, String(now.toISOString()), { expirationTtl: 14 * 86400 }); } catch { /* best-effort */ }
-  } catch (e) {
-    console.error('[personas digest] sweep failed', e);
-  }
-  return { scanned, sent, skipped: false };
 }
 
 export { MARKET_PULSE, STUDIO_BENCHMARKS };

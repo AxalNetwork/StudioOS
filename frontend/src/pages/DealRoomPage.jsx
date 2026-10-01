@@ -4,6 +4,7 @@ import { reportError } from '../lib/log';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
+import { Unreadable } from '../ui';
 import {
   ArrowLeft, Download, FileText, Loader2, X, DollarSign, Send, Check,
   Users, Clock, ThumbsUp, ThumbsDown,
@@ -179,7 +180,15 @@ function OverviewTab({ deal }) {
 
 function DocumentsTab({ dealId }) {
   const [docs, setDocs] = useState(null);
-  useEffect(() => { api.dealDocuments(dealId).then(setDocs).catch(() => setDocs([])); }, [dealId]);
+  const [failed, setFailed] = useState(false);
+  const load = () => {
+    setFailed(false);
+    api.dealDocuments(dealId).then(setDocs).catch(() => setFailed(true));
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [dealId]);
+  // A failed read is unreadable, never an empty list: "No documents yet" was
+  // the catch branch, and it asserted something the page cannot know.
+  if (failed) return <Unreadable what="The documents" claim="That is not a claim that no documents exist." onRetry={load} />;
   return (
     <div>
       <div className="flex justify-end mb-3">
@@ -211,7 +220,13 @@ function DocumentsTab({ dealId }) {
 
 function CommitmentsTab({ dealId }) {
   const [items, setItems] = useState(null);
-  useEffect(() => { api.dealCommitments(dealId).then(setItems).catch(() => setItems([])); }, [dealId]);
+  const [failed, setFailed] = useState(false);
+  const load = () => {
+    setFailed(false);
+    api.dealCommitments(dealId).then(setItems).catch(() => setFailed(true));
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [dealId]);
+  if (failed) return <Unreadable what="The commitments" claim="That is not a claim that none is recorded." onRetry={load} />;
   if (items == null) return <div className="text-center text-gray-500 py-8"><Loader2 className="animate-spin inline" size={16} /></div>;
   if (items.length === 0) return <div className="text-center text-gray-500 py-8">No commitments recorded yet</div>;
   return (
@@ -234,7 +249,13 @@ function CommitmentsTab({ dealId }) {
 
 function ActivityTab({ dealId }) {
   const [events, setEvents] = useState(null);
-  useEffect(() => { api.dealActivity(dealId).then(setEvents).catch(() => setEvents([])); }, [dealId]);
+  const [failed, setFailed] = useState(false);
+  const load = () => {
+    setFailed(false);
+    api.dealActivity(dealId).then(setEvents).catch(() => setFailed(true));
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [dealId]);
+  if (failed) return <Unreadable what="The activity" claim="That is not a claim that nothing happened." onRetry={load} />;
   if (events == null) return <div className="text-center text-gray-500 py-8"><Loader2 className="animate-spin inline" size={16} /></div>;
   if (events.length === 0) return <div className="text-center text-gray-500 py-8">No activity yet</div>;
   return (

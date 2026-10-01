@@ -321,9 +321,10 @@ function roadmap(pres, data, notes, ICON) {
 }
 
 /* ---- SLIDE 7 helpers — profile photos + circular avatars ---------------- *
- * Mirrors the in-app `Avatar` (templates/axal_spinout_demoday_app.tsx): show a
- * circular profile photo when one is available, else fall back to the initials
- * monogram. Photos are normalised to embeddable raster data URLs UP FRONT so a
+ * Show a circular profile photo when one is available, else fall back to the
+ * initials monogram. (This used to cite an `Avatar` component in
+ * templates/axal_spinout_demoday_app.tsx; that component was unreferenced and
+ * was deleted, so the behaviour is described here rather than pointed at.) Photos are normalised to embeddable raster data URLs UP FRONT so a
  * slow / CORS-blocked / non-image URL degrades to initials instead of breaking
  * the whole export (pptxgenjs would otherwise throw at write() time on a bad
  * `path`). SVG/unknown sources are rejected — PowerPoint can't embed them. */

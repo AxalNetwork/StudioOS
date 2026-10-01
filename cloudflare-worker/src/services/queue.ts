@@ -40,7 +40,7 @@ export interface EnqueueResult {
   idempotency_key: string;
 }
 
-function cfQueueEnabled(env: Env): boolean {
+export function cfQueueEnabled(env: Env): boolean {
   return env.USE_CF_QUEUE === 'true' && !!env.JOB_QUEUE;
 }
 

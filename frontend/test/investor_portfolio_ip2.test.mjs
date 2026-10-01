@@ -262,28 +262,39 @@ test('the three ops reasons are each true about their own object', () => {
 
   // EDIT RULES stays unbuilt, and now for the right reason: the set exists and
   // has no writer, rather than not existing.
-  assert.match(row, /\{ label: 'Edit rules', unbuilt: '[^']*KPI set companies are held to is stored firm-wide and read-only here[^']*' \}/,
+  // The needles stop at the closing quote rather than the closing brace: an
+  // entry may now carry a `hover:` after its `unbuilt:` — the short line a
+  // reader sees on the disabled control, where `unbuilt` is the engineering
+  // reason kept in the table. What is asserted is the reason's content, which
+  // is what this test has always been about.
+  assert.match(row, /\{ label: 'Edit rules', unbuilt: '[^']*KPI set companies are held to is stored firm-wide and read-only here[^']*'/,
     'the Edit rules reason no longer names the set that is actually stored');
   assert.ok(!/'no reminder rules are stored'/.test(row), 'the reason that described a different object is back');
   // And it is genuinely unwritable: no route anywhere writes the table.
   const writers = [POSITIONS, UPDATES, RESEARCH].filter((src) => /INSERT INTO portfolio_kpi_definitions|UPDATE portfolio_kpi_definitions/.test(src));
   assert.equal(writers.length, 0, 'a write path for the KPI set now exists and Edit rules should be built');
 
-  // CHASE stays unbuilt, with the narrower reason. The old one claimed this
-  // route never reaches mail; it does, on a different trigger to a different
-  // recipient.
-  assert.match(row, /\{ label: 'Chase all overdue', unbuilt: '[^']*only outbound on this desk fires when an update arrives[^']*' \}/,
-    'the chase reason no longer describes the outbound that does exist');
-  assert.ok(!/'nothing on this desk sends mail'/.test(row), 'the reason that was too broad by one call is back');
+  // CHASE IS LIVE NOW (D464, migration 337). The old reasons were right when
+  // written — the only outbound on this desk fired when an update ARRIVED —
+  // and the chase is the other direction: the page hands the route its own
+  // overdue set, the route re-checks tenancy per id, logs one row per company
+  // and notifies the founder. What is pinned is the wiring, not the reason.
+  assert.match(row, /\{ label: 'Chase all overdue', kind: 'handler', handler: 'chaseOverdue' \}/,
+    'the chase is not the page-performed op D464 made it');
+  const PORTFOLIO = read('cloudflare-worker/src/routes/portfolio.ts');
+  assert.match(PORTFOLIO, /portfolio_update_chases/, 'the chase log store is gone');
+  assert.match(PORTFOLIO, /type: 'portfolio_update_chase'/, 'the founder notification is gone');
+  assert.match(API, /portfolioChase: \(projectIds\) =>/, 'api.js lost the chase write');
+  // The page chases its own overdue set and nothing else.
+  assert.match(P, /api\.portfolioChase\(overdueRows\.map\(\(row\) => row\.project_id\)\)/,
+    'Chase all overdue must hand the route the page’s own overdue set');
+  // The founder-side fan-out is untouched by any of this.
   assert.match(UPDATES, /async function notifyProjectFollowers/, 'the follower fan-out the reason describes is gone');
   assert.match(UPDATES, /if \(f\.uid === update\.author_user_id\) continue;/, 'the fan-out no longer excludes the author');
-  // Two call sites, both on a founder-side write. Not one an investor invokes.
-  assert.equal((UPDATES.match(/notifyProjectFollowers\(c\.env/g) || []).length, 2,
-    'the outbound call sites changed — the chase reason describes a shape that no longer holds');
 
   // No unbuilt reason may carry a path. Precise endpoints belong in route
   // docblocks, where they are maintained; in a button they rot silently.
-  for (const reason of row.match(/unbuilt: '([^']*)'/g) || []) {
+  for (const reason of row.match(/(?:unbuilt|hover): '([^']*)'/g) || []) {
     assert.ok(!/(^|\s)\/[a-z]/.test(reason), `an ops reason carries a path: ${reason}`);
   }
 });

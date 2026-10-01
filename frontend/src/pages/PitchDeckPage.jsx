@@ -1,15 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import PageExplainer from '../components/PageExplainer';
-import { reportError } from '../lib/log';
+import { reportError, reportWarn } from '../lib/log';
 import {
   Sparkles, Loader2, Plus, Trash2, Share2, Download,
   History, RotateCcw, ChevronLeft, ChevronRight, Lock, Wand2,
   LayoutGrid, FileText, FileCode2, Settings, X, Check,
-  GripVertical, Eye, Clock,
+  GripVertical, Eye, Clock, Ban,
 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, refusalError } from '../lib/api';
 import { deckReadinessState } from '../lib/deckReadiness';
+import { deckShareState } from '../lib/deckShares';
 import { downloadDeckPdf } from '../lib/deckPdf.jsx';
 import { useAuth } from '../hooks/useAuthSync';
 import { useSpinoutDeckFields } from '../hooks/useSpinoutDeckFields';
@@ -146,7 +147,7 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
           const rec = await api.deckRecommend(projectId);
           setRecommendation(rec);
         } catch { setRecommendation(null); }
-      } catch (e) { setError(e.message || 'Failed to load decks'); reportError(e); }
+      } catch (e) { setError(e.message || 'Failed to load decks'); reportError('PitchDeckPage:loadDecks', e); }
     })();
   }, [projectId]);
 
@@ -185,7 +186,7 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
     } catch (err) {
       // Don't silently swallow — log so a corrupted slides blob is visible
       // in the console rather than appearing as an empty deck.
-      console.error('PitchDeckPage: failed to parse deck.slides', err);
+      reportError('PitchDeckPage:parseSlides', err);
       return [];
     }
   }, [deck]);
@@ -254,7 +255,7 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
           programDay: Number.isFinite(r?.program_day) ? r.program_day : null,
         });
       })
-      .catch((e) => { if (alive) { setDeckPreview(null); if (e?.status !== 402) reportError(e); } })
+      .catch((e) => { if (alive) { setDeckPreview(null); if (e?.status !== 402) reportError('PitchDeckPage:deckPreview', e); } })
       .finally(() => { if (alive) setPreviewLoading(false); });
     return () => { alive = false; };
   }, [isSpinoutDeck, projectId, deckDataReload]);
@@ -361,7 +362,7 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
       if (e.status === 402) {
         addToast('That template is on the Growth plan — upgrade to unlock.', 'info');
       } else {
-        setError(e.message || 'Failed to apply method'); reportError(e);
+        setError(e.message || 'Failed to apply method'); reportError('PitchDeckPage:applyMethod', e);
       }
     } finally { setBusy(false); }
   };
@@ -381,13 +382,15 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
       setTemplateCoverage(Array.isArray(r?.coverage) ? r.coverage : null);
       addToast(`Refilled from project (${r?.coverage_pct ?? 0}% covered)`, 'success');
     } catch (e) {
-      if (e.status === 409 || /no_method_id/i.test(e.message || '')) {
+      // D258 — the refusal's code travels on `e.code`, compared whole. The
+      // 409 disjunct stays: no_method_id is the route's only 409.
+      if (e?.status === 409 || e?.code === 'no_method_id') {
         addToast('Pick a template first — then refill.', 'info');
         setPickerOpen(true);
       } else if (e.status === 402) {
         addToast('That template is on the Growth plan — upgrade to unlock.', 'info');
       } else {
-        setError(e.message || 'Refill failed'); reportError(e);
+        setError(e.message || 'Refill failed'); reportError('PitchDeckPage:refill', e);
       }
     } finally { setBusy(false); }
   };
@@ -446,8 +449,10 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
           addToast(`Server ${format.toUpperCase()} export unavailable in this environment.`, 'error');
           return;
         }
-        const err = await r.json().catch(() => ({}));
-        throw new Error(err.error || `Export failed (${r.status})`);
+        // D258 — one definition of how a refusal becomes a sentence and a
+        // code. This used to put the body's `error` first, so a failed
+        // render read `pptx_render_failed` rather than what went wrong.
+        throw await refusalError(r, `Export failed (${r.status})`);
       }
       const blob = await r.blob();
       // Task #2 — PNG cover was removed; only pdf + pptx remain.
@@ -461,7 +466,7 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
       if (e?.status === 402) {
         addToast('The Spin-Out deck is part of the Growth plan. Upgrade to unlock.', 'error');
       } else {
-        setError(e.message || 'Export failed'); reportError(e);
+        setError(e.message || 'Export failed'); reportError('PitchDeckPage:export', e);
       }
     } finally { setExporting(''); }
   };
@@ -495,6 +500,31 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
       .catch(() => { if (alive) setEngagement(null); });
     return () => { alive = false; };
   }, [deck?.id]);
+
+  // Task #196 — withdraw a share link. THE PANEL IS WHERE THIS BELONGS: it is
+  // already the only place a founder can see the links they have minted, and it
+  // has been listing view counts for links it could not stop being used.
+  //
+  // The refresh is awaited rather than fired and forgotten, because the row the
+  // founder is looking at is the one that has to change. A toast saying "link
+  // withdrawn" over a row still reading "active" would be the page contradicting
+  // itself about the one fact the founder came here to check.
+  const [revoking, setRevoking] = useState(null);
+  const onRevokeShare = async (shareId) => {
+    if (!deck?.id || !shareId) return;
+    setRevoking(shareId);
+    try {
+      await api.deckRevokeShare(deck.id, shareId);
+      const fresh = await api.deckEngagement(deck.id).catch(() => null);
+      if (fresh) setEngagement(fresh);
+      addToast('Share link withdrawn. It no longer opens.', 'success');
+    } catch (e) {
+      // Loud, because the founder acted to stop something reaching someone. A
+      // swallowed failure here leaves them believing a live link is dead.
+      setError(e.message || 'Could not withdraw that share link — it may still open.');
+      reportError('PitchDeckPage:revokeShare', e);
+    } finally { setRevoking(null); }
+  };
 
   const onRestore = async (id) => {
     try {
@@ -920,7 +950,7 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
 
               {/* Task #53 — Engagement panel: shows aggregate views,
                   read-time, and a recent-impressions list (hashed). */}
-              <EngagementPanel data={engagement} />
+              <EngagementPanel data={engagement} onRevoke={onRevokeShare} revoking={revoking} />
 
               <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-3" data-card>
                 <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-2 flex items-center gap-1">
@@ -1257,8 +1287,10 @@ function loadTemplates() {
           const tplType = typeof ns?.TEMPLATES;
           const tplKeyCount = ns?.TEMPLATES && typeof ns.TEMPLATES === 'object' ? Object.keys(ns.TEMPLATES).length : 0;
           const diag = `ns_keys=[${namespaceKeys.join(',') || '∅'}] inner=[${innerKeys.join(',') || '—'}] TEMPLATE_LIST(type=${tlType},isArray=${tlIsArr},len=${tlLen}) TEMPLATES(type=${tplType},keys=${tplKeyCount})`;
-          // eslint-disable-next-line no-console
-          console.warn('[decks/templates] dynamic import resolved with no templates', { namespaceKeys, innerKeys, tlType, tlIsArr, tlLen, tplType, tplKeyCount });
+          // `diag` above is the same facts as the object this used to log,
+          // already flattened to one line — and unlike the object it survives
+          // `toEntry`, which has no field for free-form context.
+          reportWarn('decks/templates:empty-registry', diag);
           const err = new Error(`templates_module_empty (${diag})`);
           err.diag = diag;
           const recovering = recoverFromStaleTemplatesChunk();
@@ -1270,7 +1302,7 @@ function loadTemplates() {
       .catch((err) => {
         // Reset so a transient failure (e.g. network blip) can retry next open.
         _templatesPromise = null;
-        reportError(err);
+        reportError('PitchDeckPage:loadTemplates', err);
         // A module-eval throw (e.g. a top-level ReferenceError baked
         // into a stale chunk) lands here, not in the empty-registry
         // branch above. Same recovery path: if we're still serving
@@ -1296,7 +1328,7 @@ function loadThumbnailModule() {
   if (!_thumbnailModulePromise) {
     _thumbnailModulePromise = import('../decks/Thumbnail').catch((err) => {
       _thumbnailModulePromise = null;
-      reportError(err);
+      reportError('PitchDeckPage:loadThumbnailModule', err);
       return null;
     });
   }
@@ -1716,7 +1748,22 @@ function fmtReadTime(seconds) {
   return `${h}h ${m % 60}m`;
 }
 
-function EngagementPanel({ data }) {
+/**
+ * Task #196 — FOUR STATES, NOT TWO. The panel used to render
+ * `exhausted ? 'gone' : 'active'`, which called an EXPIRED link active — a small
+ * lie while nothing could be done about it, and an unusable one now: withdrawing
+ * sets `expires_at` as well as `revoked_at`, so under the old pair a link the
+ * founder had just ended read "active" and the withdraw looked like it had
+ * failed. `deckShareState` is the rule; this is only what each state looks like.
+ */
+const SHARE_TONE = {
+  revoked: 'text-rose-600 dark:text-rose-400',
+  exhausted: 'text-amber-600 dark:text-amber-400',
+  expired: 'text-gray-400 dark:text-slate-500',
+  live: 'text-emerald-600 dark:text-emerald-400',
+};
+
+function EngagementPanel({ data, onRevoke, revoking }) {
   if (!data) {
     return (
       <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-3" data-card>
@@ -1776,14 +1823,37 @@ function EngagementPanel({ data }) {
         <div className="mb-3">
           <div className="text-[10px] uppercase text-gray-400 mb-1">Share links</div>
           <div className="space-y-1 max-h-32 overflow-y-auto">
-            {shares.slice(0, 5).map((s) => (
-              <div key={s.id} className="flex items-center justify-between text-[11px] text-gray-500 dark:text-slate-400">
-                <span>{s.view_count}/{s.view_limit} used</span>
-                <span className={s.exhausted ? 'text-amber-600' : 'text-emerald-600'}>
-                  {s.exhausted ? 'gone' : 'active'}
-                </span>
-              </div>
-            ))}
+            {/* Task #196 — a withdrawn link STAYS ON THE LIST, marked. Hiding it
+                would take the view history of the link with it, which is the
+                evidence a founder most wants after discovering it went somewhere
+                it should not have. Withdraw is offered only on a link that still
+                opens: on a dead one it would change nothing the founder can see,
+                which is how a control teaches people not to trust it. */}
+            {shares.slice(0, 5).map((s) => {
+              const st = deckShareState(s);
+              return (
+                <div key={s.id} className="flex items-center justify-between gap-2 text-[11px] text-gray-500 dark:text-slate-400">
+                  <span>{s.view_count}/{s.view_limit} used</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className={SHARE_TONE[st.key]}>{st.label}</span>
+                    {st.live && typeof onRevoke === 'function' && (
+                      <button
+                        type="button"
+                        onClick={() => onRevoke(s.id)}
+                        disabled={revoking === s.id}
+                        className="px-1.5 py-0.5 rounded border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-50 inline-flex items-center gap-1"
+                        title="Stop this link opening. The views it already collected are kept."
+                      >
+                        {revoking === s.id
+                          ? <Loader2 className="w-3 h-3 animate-spin" />
+                          : <Ban className="w-3 h-3" />}
+                        Withdraw
+                      </button>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

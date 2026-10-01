@@ -7,6 +7,7 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
 import { ZoneBody, NothingYet, StatedLimit } from '../../advisor/expertise/kit';
+import { SearchInput } from '../../advisor/network/kit';
 import { PASS_TAXONOMY, passReasonRevisit } from '../../../lib/dealFlow';
 
 /**
@@ -77,6 +78,7 @@ export default function InvestorScreeningZone() {
   const [desk, setDesk] = useState(null);
   const [passes, setPasses] = useState(null);
   const [view, setView] = useState('scored');
+  const [query, setQuery] = useState('');
 
   const load = useCallback(() => {
     setDesk(null);
@@ -118,6 +120,24 @@ export default function InvestorScreeningZone() {
     return scoredRows;
   }, [view, scoredRows, flagRows, passesReady, passes]);
 
+  /**
+   * SEARCH IS OFFERED ON TWO OF THE FOUR VIEWS, AND THAT IS THE POINT.
+   *
+   * `Scored` and `Red flags` are lists of DEALS and each row names a company,
+   * so a company search narrows something a reader can see. `Rubric` is the six
+   * dimensions and `Pass reasons` is the five-entry taxonomy — neither is a
+   * per-deal list, and a search box over them would either match nothing or
+   * filter a vocabulary, which is not what the reader typing a company name is
+   * asking for. A control that cannot act is worse than an absent one: it reads
+   * as a failed search rather than a view without one.
+   */
+  const searchable = view === 'scored' || view === 'flags';
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!searchable || !q) return rows;
+    return rows.filter((r) => String(r.company || '').toLowerCase().includes(q));
+  }, [rows, query, searchable]);
+
   const rowActions = investorZoneActions('deals/screening', {
     view: {
       header: ['Company', 'Tier', 'Score', 'Review', 'Scored'],
@@ -140,9 +160,21 @@ export default function InvestorScreeningZone() {
       <ZoneToolbar
         className="mb-3"
         role="investor"
-        filters={investorZoneFilters('deals/screening', { value: view, onChange: setView })}
+        filters={investorZoneFilters('deals/screening', {
+          value: view,
+          onChange: setView,
+          // Only the two per-deal views carry a figure. `rubric` and `passes`
+          // are a dimension list and a taxonomy, so the builder drops their
+          // `{n}` rather than printing a count of the wrong thing.
+          counts: { scored: scoredRows.length, flags: flagRows.length },
+        })}
         actions={rowActions}
       />
+      {searchable && (
+        <div className="mb-3 flex" data-testid="screening-search">
+          <SearchInput value={query} onChange={setQuery} placeholder="Search company" />
+        </div>
+      )}
       <ZoneBody
         loading={desk === null && passes === null}
         error={bothFailed ? 'Neither the score history nor the pass record could be read.' : ''}
@@ -222,7 +254,7 @@ export default function InvestorScreeningZone() {
                 : 'Latest official snapshot per deal · sandbox excluded'}
               cols="1.2fr .8fr .7fr .9fr 1fr"
               head={['Company', 'Tier', 'Score', 'Review', 'Scored']}
-              rows={rows.map((r) => ({
+              rows={visible.map((r) => ({
                 key: r.deal_id,
                 cells: [
                   {

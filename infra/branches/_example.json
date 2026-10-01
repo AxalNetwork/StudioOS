@@ -1,0 +1,20 @@
+{
+  "code": "example",
+  "licence_uid": "lic_example_not_a_real_licence",
+  "name": "Axal VC Example",
+  "hostname": "example.axal.vc",
+  "territory": ["FR", "BE", "LU"],
+  "residency": {
+    "d1_jurisdiction": "eu",
+    "location_hint": "weur",
+    "do_jurisdiction": "eu",
+    "r2_jurisdiction": "eu"
+  },
+  "ids": {
+    "d1": "00000000-0000-4000-8000-000000000001",
+    "kv_tokens": "00000000000000000000000000000002",
+    "kv_rate_limits": "00000000000000000000000000000003"
+  },
+  "status": "example",
+  "created_at": "2026-09-15T00:00:00Z"
+}

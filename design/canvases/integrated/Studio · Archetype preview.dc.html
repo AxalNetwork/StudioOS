@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+
+
+
+
+
+<script src="./support.js"></script>
+</head>
+<body>
+
+<x-dc>
+<helmet data-dc-atomics="">
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeeec;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}
+    .ab{padding:40px 46px 32px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px;flex-wrap:wrap}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:rgba(24,24,27,.6);max-width:1040px;margin:0 0 18px}
+    .row{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+    .mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .pf-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa}
+    .col{width:400px;flex:none}
+    .pf{border-radius:16px;padding:22px;box-shadow:0 1px 2px rgba(24,24,27,.03);box-sizing:border-box}
+    .hit{display:block;text-decoration:none;color:inherit;cursor:pointer;transition:transform .12s,box-shadow .12s,border-color .12s}
+    .hit:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(24,24,27,.07)}
+    .hit:active{transform:translateY(0);box-shadow:inset 0 1px 3px rgba(24,24,27,.07)}
+    .hit:focus-visible{outline:2px solid #7c3aed;outline-offset:3px}
+    .tile{background:#f8f7fb;border:1px solid #ece8f5;border-radius:16px;aspect-ratio:1;display:flex;align-items:flex-end;justify-content:center;overflow:hidden}
+    .spr{width:100%;height:100%;object-fit:contain;object-position:bottom center;image-rendering:pixelated}
+    .cap{font-size:11px;color:rgba(24,24,27,.58);line-height:1.5;margin-top:9px;width:400px}
+    .body{font-size:12.5px;line-height:1.5}
+    .prev{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#a1a1aa;border:1px solid #ececf1;border-radius:99px;padding:2px 8px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .spin{width:20px;height:20px;border-radius:50%;border:2px solid #ececf1;border-top-color:#7c3aed;animation:spin .9s linear infinite}
+  </style>
+</helmet>
+
+<section class="ab" id="s1">
+  <div class="ab-hd"><a class="ab-id" href="#s1">S1 – S13</a><span class="ab-nm">Archetype preview — the third card in Profile &amp; Fit</span><span class="mono" style="font-size:11px;color:#615c6e">/studio · 400px column</span></div>
+  <div class="ab-sub">One clickable preview of the primary archetype, using the RPG sprites. It teases the full page and stops there: no strengths, no blind spots, no complements, no confidence well — those live on /studio/archetype. The whole card is a single hit target with the affordance inside it, so the sprite is never its own click.</div>
+  <div class="row">
+    <sc-for list="{{ cards }}" as="c" hint-placeholder-count="13">
+      <div class="col">
+        <div class="mono" style="font-size:10px;font-weight:700;color:#615c6e;margin-bottom:8px">{{ c.id }} · {{ c.state }}</div>
+
+        <sc-if value="{{ c.live }}">
+          <a href="#full" class="pf hit" role="link" style="{{ c.card }}" aria-label="{{ c.aria }}">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <span class="pf-lbl">{{ c.title }}</span>
+              <span class="prev" style="{{ c.prevStyle }}">Preview</span>
+            </div>
+            <sc-if value="{{ c.sprites }}">
+              <div style="display:grid;grid-template-columns:{{ c.cols }};gap:8px;margin:14px auto 0;max-width:{{ c.tileMax }}">
+                <sc-for list="{{ c.sprites }}" as="s" hint-placeholder-count="1">
+                  <div class="tile" style="{{ c.tileStyle }}">{{ s.img }}</div>
+                </sc-for>
+              </div>
+            </sc-if>
+            <div class="pf-lbl" style="color:{{ c.violet }};margin-top:16px">Primary archetype</div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:5px">
+              <span style="font-size:18px;font-weight:800;letter-spacing:-.02em;color:{{ c.ink }}">{{ c.name }}</span>
+              <span class="mono" style="font-size:12px;font-weight:700;color:{{ c.violet }}">{{ c.conf }}</span>
+            </div>
+            <div class="pf-lbl" style="color:{{ c.green }};margin-top:14px">Core approach</div>
+            <div class="body" style="margin-top:3px;color:{{ c.ink }}">{{ c.tagline }}</div>
+            <div class="pf-lbl" style="color:{{ c.amber }};margin-top:12px">Description</div>
+            <div class="body" style="margin-top:3px;color:{{ c.muted }}">{{ c.desc }}</div>
+            <div style="font-size:12.5px;font-weight:600;color:{{ c.violet }};margin-top:16px">View full card →</div>
+          </a>
+        </sc-if>
+
+        <sc-if value="{{ c.empty }}">
+          <div class="pf" style="{{ c.card }}" aria-disabled="true">
+            <span class="pf-lbl">{{ c.title }}</span>
+            <div style="border:1.5px dashed #ececf1;border-radius:16px;padding:40px 22px;text-align:center;margin-top:14px">
+              <div class="pf-lbl" style="color:#7c3aed">Primary archetype</div>
+              <div class="body" style="color:#a1a1aa;margin-top:9px;max-width:270px;margin-left:auto;margin-right:auto">Answer a few archetype questions in the advisor to reveal your archetype.</div>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ c.loading }}">
+          <div class="pf" style="{{ c.card }}" aria-busy="true">
+            <span class="pf-lbl">{{ c.title }}</span>
+            <div style="display:flex;align-items:center;justify-content:center;padding:86px 0"><span class="spin"></span></div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ c.error }}">
+          <div class="pf" style="{{ c.card }}">
+            <span class="pf-lbl">{{ c.title }}</span>
+            <div style="display:flex;gap:9px;align-items:flex-start;background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:12px 14px;margin-top:14px"><span style="color:#b91c1c;font-weight:800;flex:none">!</span><span class="body" style="color:#b91c1c">Could not load your archetype. Retry.</span></div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ c.locked }}">
+          <div class="pf" style="{{ c.card }};cursor:not-allowed" aria-disabled="true">
+            <span class="pf-lbl">{{ c.title }}</span>
+            <div class="tile" style="margin-top:14px;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#a1a1aa;padding:0 22px;text-align:center">
+              <span style="width:22px;height:22px;display:block" dangerouslySetInnerHTML="{{ lockIcon }}"></span>
+              <span class="body" style="color:#a1a1aa">Your archetype is part of the Studio plan. Your answers are kept.</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <div class="cap">{{ c.note }}</div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section class="ab" id="s14">
+  <div class="ab-hd"><a class="ab-id" href="#s14">S14</a><span class="ab-nm">In situ — Profile &amp; Fit, three columns at 1280</span><span class="mono" style="font-size:11px;color:#615c6e">grid-cols-3 · gap 14px</span></div>
+  <div class="ab-sub">Skills and Values are neighbours, drawn only far enough to show the band they share. The archetype card is the third and the only one of the three that is a link.</div>
+  <div style="width:1280px;min-width:1280px;background:#fafafa;border:1px solid #e5e7eb;border-radius:12px;padding:24px;box-sizing:border-box">
+    <div class="pf-lbl" style="margin-bottom:12px">Profile &amp; Fit</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:start">
+      <div class="pf" style="background:#fff;border:1px solid #ececf1">
+        <span class="pf-lbl">Skills</span>
+        <div style="position:relative;width:100%;aspect-ratio:1.35;margin-top:12px">
+          <svg viewBox="0 0 260 192" width="100%" height="100%">
+            <sc-for list="{{ rings }}" as="r" hint-placeholder-count="3"><polygon points="{{ r }}" fill="none" stroke="#ececf1" stroke-width="1"></polygon></sc-for>
+            <polygon points="{{ skillPoly }}" fill="rgba(124,58,237,.14)" stroke="#7c3aed" stroke-width="2"></polygon>
+          </svg>
+        </div>
+        <div class="body" style="color:#a1a1aa;margin-top:8px">Product · Engineering · GTM lead</div>
+      </div>
+      <div class="pf" style="background:#fff;border:1px solid #ececf1">
+        <span class="pf-lbl">Values</span>
+        <div style="display:grid;gap:13px;margin-top:14px">
+          <sc-for list="{{ values }}" as="v" hint-placeholder-count="5">
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:#a1a1aa"><span>{{ v.l }}</span><span>{{ v.r }}</span></div>
+              <div style="height:6px;background:#ececf1;border-radius:99px;position:relative;margin-top:6px"><span style="position:absolute;top:-3px;left:{{ v.pos }}%;width:12px;height:12px;border-radius:50%;background:#7c3aed;border:2px solid #fff;transform:translateX(-50%)"></span></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <a href="#s1" class="pf hit" role="link" style="background:#fff;border:1px solid #ececf1" aria-label="Founder archetype: The Missionary, 82% confidence. View full card">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="pf-lbl">Founder archetype</span><span class="prev">Preview</span></div>
+        <div style="max-width:180px;margin:14px auto 0"><div class="tile">{{ heroImg }}</div></div>
+        <div class="pf-lbl" style="color:#7c3aed;margin-top:16px">Primary archetype</div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:5px"><span style="font-size:18px;font-weight:800;letter-spacing:-.02em">The Missionary</span><span class="mono" style="font-size:12px;font-weight:700;color:#7c3aed">82%</span></div>
+        <div class="pf-lbl" style="color:#15803d;margin-top:14px">Core approach</div>
+        <div class="body" style="margin-top:3px">Mission first, built to last.</div>
+        <div class="pf-lbl" style="color:#b45309;margin-top:12px">Description</div>
+        <div class="body" style="margin-top:3px;color:#52525b">Anchored to the why. Bias to durable, sustainable building and craft over raw speed.</div>
+        <div style="font-size:12.5px;font-weight:600;color:#7c3aed;margin-top:16px">View full card →</div>
+      </a>
+    </div>
+  </div>
+  <div class="cap" style="width:1280px">The three cards run to different heights and are top-aligned — the archetype card is the tallest because the sprite tile is square, and forcing the row to match would crop it.</div>
+</section>
+
+<section class="ab" id="s15">
+  <div class="ab-hd"><a class="ab-id" href="#s15">S15</a><span class="ab-nm">Mobile 390 — stacked, sprite still capped at 180px</span><span class="mono" style="font-size:11px;color:#615c6e">/studio</span></div>
+  <div class="ab-sub">The tile is centred and capped rather than stretched full-bleed: a 358px-wide sprite would dominate the card and push the copy below the fold for no gain in legibility.</div>
+  <div style="width:390px;min-width:390px;background:#f7f7f8;border-radius:34px;box-shadow:0 4px 22px rgba(24,24,27,.16),0 0 0 9px #1a1a1c;overflow:hidden;padding:0 0 22px">
+    <div style="height:44px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 6px;font-size:11px;font-weight:700;background:#fff"><span class="mono">9:41</span><span style="font-size:10px;letter-spacing:.06em">▮▮▮ ◗</span></div>
+    <div style="padding:14px 16px 0;display:grid;gap:12px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between"><span style="font-size:19px;font-weight:800;letter-spacing:-.024em">Profile &amp; Fit</span><span class="mono" style="font-size:10.5px;color:#615c6e">Studio</span></div>
+      <div class="pf" style="background:#fff;border:1px solid #ececf1;padding:14px 16px;display:flex;justify-content:space-between;align-items:center"><div><span class="pf-lbl">Skills</span><div class="body" style="margin-top:3px">Product · GTM · Design lead</div></div><span style="color:#c9c6d2">›</span></div>
+      <a href="#s1" class="pf hit" role="link" style="background:#fff;border:1px solid #ececf1;padding:18px" aria-label="Founder archetype: The Missionary, 82% confidence. View full card">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="pf-lbl">Founder archetype</span><span class="prev">Preview</span></div>
+        <div style="max-width:180px;margin:14px auto 0"><div class="tile">{{ heroImg }}</div></div>
+        <div class="pf-lbl" style="color:#7c3aed;margin-top:16px">Primary archetype</div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:5px"><span style="font-size:18px;font-weight:800;letter-spacing:-.02em">The Missionary</span><span class="mono" style="font-size:12px;font-weight:700;color:#7c3aed">82%</span></div>
+        <div class="pf-lbl" style="color:#15803d;margin-top:14px">Core approach</div>
+        <div class="body" style="margin-top:3px">Mission first, built to last.</div>
+        <div class="pf-lbl" style="color:#b45309;margin-top:12px">Description</div>
+        <div class="body" style="margin-top:3px;color:#52525b">Anchored to the why. Bias to durable, sustainable building and craft over raw speed.</div>
+        <div style="font-size:12.5px;font-weight:600;color:#7c3aed;margin-top:16px">View full card →</div>
+      </a>
+      <div class="pf" style="background:#fff;border:1px solid #ececf1;padding:14px 16px;display:flex;justify-content:space-between;align-items:center"><div><span class="pf-lbl">Values</span><div class="body" style="margin-top:3px">Leans mission · leans speed</div></div><span style="color:#c9c6d2">›</span></div>
+    </div>
+  </div>
+  <div class="cap" style="width:390px">Same card, same single hit target. Skills and Values collapse to rows above and below it.</div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    // ══ RPG SPRITES. Square pixel art, a different asset class from the 21:9 cinematic
+    // banners on /studio/archetype — these arrive hash-suffixed, so the map is explicit rather
+    // than built from the slug. A slug absent here has no sprite on disk; its tile is omitted
+    // entirely, which is why no state can render an empty well or a broken-image icon. ══
+    const SPRITE = {
+      fo_missionary_m:'uploads/fo_missionary-d9e17f41.png', fo_missionary_f:'uploads/fo_missionary_f-26b8b41c.png',
+      fo_rocketeer_m:'uploads/fo_rocketeer-cfd6d799.png',   fo_rocketeer_f:'uploads/fo_rocketeer_f-ba5004c7.png',
+      fo_architect_m:'uploads/fo_architect-0833efcb.png',   fo_architect_f:'uploads/fo_architect_f-b3da09cc.png',
+      fo_maverick_m:'uploads/fo_maverick-8329785d.png',     fo_maverick_f:'uploads/fo_maverick_f-340ba7eb.png',
+      inv_thesis_backer_m:'uploads/inv_thesis_backer-da920185.png',
+      inv_thesis_backer_f:'uploads/inv_thesis_backer_f-514de349.png',
+      inv_network_amplifier_m:'uploads/inv_network_amplifier-ee7ff19f.png',
+      inv_network_amplifier_f:'uploads/inv_network_amplifier_f-0a8c2524.png',
+      inv_hands_on_partner_m:'uploads/inv_hands_on_partner-a6aa371c.png',
+      inv_hands_on_partner_f:'uploads/inv_hands_on_partner_f-e4b1d1b6.png',
+      inv_disciplined_allocator_m:'uploads/inv_disciplined_allocator-8c8182c6.png',
+      inv_disciplined_allocator_f:'uploads/inv_disciplined_allocator_f-004f8c14.png',
+      pt_strategic_connector_m:'uploads/pt_strategic_connector-60c83527.png',
+      pt_strategic_connector_f:'uploads/pt_strategic_connector_f-d8ad7c2c.png',
+      pt_embedded_operator_m:'uploads/pt_embedded_operator-633bdd3a.png',
+      pt_embedded_operator_f:'uploads/pt_embedded_operator_f-36ba5d4f.png',
+      pt_growth_catalyst_m:'uploads/pt_growth_catalyst-f46813cc.png',
+      pt_growth_catalyst_f:'uploads/pt_growth_catalyst_f-5e42bbde.png',
+      pt_systems_builder_m:'uploads/pt_systems_builder-35a52aaa.png',
+      pt_systems_builder_f:'uploads/pt_systems_builder_f-dfba8adc.png',
+      mt_sage_guide_m:'uploads/mt_sage_guide-a0fc84a4.png',
+      mt_sage_guide_f:'uploads/mt_sage_guide_f-0cafd9b1.png',
+      mt_hands_on_coach_m:'uploads/mt_hands_on_coach-633bdd3a.png',
+      mt_hands_on_coach_f:'uploads/mt_hands_on_coach_f-e0360853.png',
+      mt_accountability_anchor_m:'uploads/mt_accountability_anchor-77c8a9d4.png',
+      mt_accountability_anchor_f:'uploads/mt_accountability_anchor_f-ee075b4d.png',
+      mt_craft_master_m:'uploads/mt_craft_master-9ed91589.png',
+      mt_craft_master_f:'uploads/mt_craft_master_f-22896aa2.png'
+    };
+    // Published bundle: sprites registered in <head> arrive as blob URLs on window.__resources,
+    // keyed spr-{slug}-{sex}; anything not registered keeps its project path.
+    const RES = (typeof window !== 'undefined' && window.__resources) || {};
+    Object.keys(SPRITE).forEach(k => { const id = 'spr-' + k.replace(/_/g, '-'); if (RES[id]) SPRITE[k] = RES[id]; });
+
+    const A = {
+      fo_missionary:{ licence:'Founder', name:'The Missionary', accent:'#0ea5e9', tagline:'Mission first, built to last.',
+        desc:'Anchored to the why. Bias to durable, sustainable building and craft over raw speed.' },
+      fo_rocketeer:{ licence:'Founder', name:'The Rocketeer', accent:'#f97316', tagline:'Fast, bold, built to break out.',
+        desc:'High speed, high risk, hyper-growth. Comfortable raising big and moving first.' },
+      fo_architect:{ licence:'Founder', name:'The Architect', accent:'#8b5cf6', tagline:'Craft, structure, and durable systems.',
+        desc:'Quality-first and risk-aware, with a preference for process, structure, and deep technical foundations.' },
+      fo_maverick:{ licence:'Founder', name:'The Maverick', accent:'#eab308', tagline:'Independent, instinctive, unafraid.',
+        desc:'High autonomy and risk appetite with a fast, instinct-led style. Thrives without a playbook.' },
+      // Only the Missionary has a separate description in the locked copy; for the rest the
+      // tagline is the one product sentence, so it carries both rows rather than being padded
+      // with a second line nobody wrote.
+      inv_thesis_backer:{ licence:'Investor', name:'Thesis-Driven Backer', accent:'#0ea5e9', tagline:'Conviction before the crowd.' },
+      inv_network_amplifier:{ licence:'Investor', name:'Network Amplifier', accent:'#8b5cf6', tagline:'Opens doors, compounds relationships.' },
+      inv_hands_on_partner:{ licence:'Investor', name:'Hands-On Partner', accent:'#f97316', tagline:'Rolls up sleeves beside the founder.' },
+      inv_disciplined_allocator:{ licence:'Investor', name:'Disciplined Allocator', accent:'#10b981', tagline:'Rigorous, patient, process-led.' },
+      pt_strategic_connector:{ licence:'Partner/Operator', name:'Strategic Connector', accent:'#0ea5e9', tagline:'Aligns the right people to the plan.' },
+      pt_embedded_operator:{ licence:'Partner/Operator', name:'Embedded Operator', accent:'#f97316', tagline:'In the trenches, delivering.' },
+      pt_growth_catalyst:{ licence:'Partner/Operator', name:'Growth Catalyst', accent:'#8b5cf6', tagline:'Turns momentum into scale.' },
+      pt_systems_builder:{ licence:'Partner/Operator', name:'Systems Builder', accent:'#10b981', tagline:'Puts durable machinery in place.' },
+      mt_sage_guide:{ licence:'Advisor', name:'Sage Guide', accent:'#0ea5e9', tagline:'Wisdom and perspective when it counts.' },
+      mt_hands_on_coach:{ licence:'Advisor', name:'Hands-On Coach', accent:'#f97316', tagline:'Beside you, session by session.' },
+      mt_accountability_anchor:{ licence:'Advisor', name:'Accountability Anchor', accent:'#10b981', tagline:'Keeps commitments honest.' },
+      mt_craft_master:{ licence:'Advisor', name:'Craft Master', accent:'#8b5cf6', tagline:'Deep expertise, generously shared.' }
+    };
+    Object.keys(A).forEach(k => { if (!A[k].desc) A[k].desc = A[k].tagline; });
+    const TITLE = { Founder:'Founder archetype', Investor:'Investor archetype',
+      'Partner/Operator':'Partner/Operator archetype', Advisor:'Advisor archetype' };
+
+    // sex=both wants woman then man; a slot with no file on disk is dropped rather than drawn
+    // empty, so "both" with one sprite supplied degrades to a single centred tile.
+    // `absent` lets a state demonstrate the missing-file rule while every real sprite is on
+    // disk — the filter below is the rule itself, so what the demo exercises is production code.
+    const spritesFor = (slug, sex, absent) => {
+      const gone = absent || [];
+      const want = sex === 'both' ? ['f','m'] : [sex];
+      return want.map(x => ({ x, src: gone.indexOf(x) > -1 ? null : SPRITE[slug + '_' + x] }))
+        .filter(s => !!s.src)
+        .map(s => { const alt = A[slug].name + ', ' + (s.x === 'f' ? 'woman' : 'man'); return { src:s.src, alt, img: React.createElement('img', { className:'spr', src:s.src, alt }) }; });
+    };
+    // Sized from the card, not typed: 400 − 2×22 padding − 2×1 border = 354 content box; a
+    // two-up pair is (354 − 8 gap) / 2 each. A larger literal would silently shrink both tiles.
+    const CARD_W = 400, PAD = 22, BORDER = 1, GAP = 8;
+    const CONTENT_W = CARD_W - 2 * PAD - 2 * BORDER;
+    const pairW = Math.floor((CONTENT_W - GAP) / 2);
+
+    // Every label colour is a theme token, including green and amber. The brief's #15803d and
+    // #b45309 clear 4.5:1 on white but only reach 3.5:1 on the dark card at 11px, so dark
+    // lifts them the same way it lifts violet — same labels, still legible.
+    const LIGHT = { card:'background:#fff;border:1px solid #ececf1', ink:'#18181b', muted:'#52525b',
+      violet:'#7c3aed', green:'#15803d', amber:'#b45309', tile:'', prev:'' };
+    // Dark mode keeps the tile light — a pale sprite on gray-800 loses its outline entirely.
+    const DARK = { card:'background:#111827;border:1px solid #374151', ink:'#f4f4f5', muted:'#9ca3af',
+      violet:'#c4b5fd', green:'#4ade80', amber:'#fbbf24',
+      tile:'background:#ece8f5;border-color:#d4cce8', prev:'color:#9ca3af;border-color:#374151' };
+
+    const card = (id, state, slug, sex, conf, t, extra, note, absent) => {
+      const a = A[slug], sp = spritesFor(slug, sex, absent);
+      return Object.assign({
+        id, state, live:true, title:TITLE[a.licence], name:a.name, tagline:a.tagline, desc:a.desc,
+        conf: conf === null ? 'N/A' : conf + '%',
+        sprites: sp.length ? sp : null,
+        cols: sp.length === 2 ? '1fr 1fr' : '1fr',
+        // A pair fills the content box; a single tile caps at 180 and centres on the margins.
+        tileMax: sp.length === 2 ? CONTENT_W + 'px' : '180px',
+        tileStyle: t.tile, card: t.card, ink: t.ink, muted: t.muted, violet: t.violet,
+        green: t.green, amber: t.amber, prevStyle: t.prev,
+        aria: TITLE[a.licence] + ': ' + a.name + (conf === null ? '' : ', ' + conf + '% confidence') + '. View full card',
+        note
+      }, extra || {});
+    };
+
+    const cards = [
+      card('S1','default · sex = f','fo_missionary','f',82,LIGHT,{},'Resting. Header label, sprite tile, then the four copy rows and the affordance — all inside one link, so a click anywhere opens the full card.'),
+      card('S2','hover','fo_missionary','f',82,LIGHT,
+        { card:'background:#fff;border:1px solid #0ea5e9;transform:translateY(-2px);box-shadow:0 6px 18px rgba(24,24,27,.07)' },
+        'Hover: the hairline takes the archetype accent and the card lifts 2px. The sprite tile is unchanged — it is artwork, not a button.'),
+      card('S3','focus-visible','fo_missionary','f',82,LIGHT,
+        { card:'background:#fff;border:1px solid #ececf1;outline:2px solid #7c3aed;outline-offset:3px' },
+        'Keyboard focus: a 2px violet ring on the card itself. Enter or Space opens it; there is no second focusable child to tab past.'),
+      card('S4','sex = m','fo_missionary','m',82,LIGHT,{},'Same archetype, the man\u2019s sprite. Sex comes from Settings, not from a field on the user.'),
+      card('S5','sex = both','fo_missionary','both',82,LIGHT,{},'Two-up at ' + pairW + 'px each, woman left — derived from the 354px content box, not typed.'),
+      card('S6','Investor · woman','inv_thesis_backer','f',64,LIGHT,{},'Investor licence: only the header title changes, and the tagline carries the description row because that archetype has one product sentence, not two.'),
+      card('S7','Advisor · man · confidence N/A','mt_sage_guide','m',null,LIGHT,{},'Unknown confidence reads N/A, never a placeholder number. Advisor licence, so the header says Advisor archetype.'),
+      card('S8','Partner · sex = both','pt_embedded_operator','both',null,LIGHT,{},'Partner licence, both sprites at ' + pairW + 'px each — the pair is sized to the content box rather than to a typed width, so neither tile is quietly squeezed.'),
+      card('S8b','sex = both · one file absent','pt_embedded_operator','both',null,LIGHT,{},
+        'The same request with the man\u2019s file off disk: the slot is dropped, the remaining tile centres at 180px, and nothing renders an empty well or a broken-image icon. Every sprite in this set is present, so this state is forced here to exercise the rule the card relies on.', ['m']),
+      { id:'S9', state:'empty', empty:true, title:'Founder archetype', card:LIGHT.card, note:'Nothing scored yet: a dashed well, one sentence, no sprite, not clickable. The archetype comes from the advisor conversation, so the copy points there.' },
+      { id:'S10', state:'loading', loading:true, title:'Founder archetype', card:LIGHT.card, note:'Spinner only. No skeleton sprite — a grey square where art will be reads as a broken asset.' },
+      { id:'S11', state:'error', error:true, title:'Founder archetype', card:LIGHT.card, note:'Compact red note inside the normal card, with a retry. Not a modal, not a full-card takeover.' },
+      { id:'S12', state:'locked', locked:true, title:'Advisor archetype', card:LIGHT.card, note:'Paywall: lock, one line, not clickable. It says the answers are kept, because the fear at a paywall is that they are not.' },
+      card('S13','dark mode of S1','fo_missionary','f',82,DARK,{},'Dark card, dark hairline — but the sprite tile stays #ece8f5, because a pale pixel sprite on gray-800 loses its outline. The green and amber labels lift with the theme for the same reason violet does: at 11px the light-mode hexes drop to 3.5:1 on this card.')
+    ];
+
+    // ── S14 neighbours: enough Skills and Values to show the band, not a second design.
+    const AX = 8, CX = 130, CY = 96, R = 62;
+    const pt = (i, r) => { const a = i * 2 * Math.PI / AX - Math.PI / 2;
+      return (CX + r * Math.cos(a)).toFixed(1) + ',' + (CY + r * Math.sin(a)).toFixed(1); };
+    const ring = (r) => Array.from({ length:AX }, (_, i) => pt(i, r)).join(' ');
+    const SK = [4.5,3.8,3.0,3.4,2.6,2.2,1.8,2.9];
+
+    return {
+      cards,
+      heroSprite: SPRITE.fo_missionary_f,
+      heroImg: React.createElement('img', { className:'spr', src: SPRITE.fo_missionary_f, alt:'The Missionary, woman' }),
+      rings:[ring(R * .33), ring(R * .66), ring(R)],
+      skillPoly: SK.map((v, i) => pt(i, R * v / 5)).join(' '),
+      values:[{ l:'Mission', r:'Profit', pos:'22' }, { l:'Speed', r:'Quality', pos:'18' },
+        { l:'Risk-seeking', r:'Risk-averse', pos:'38' }, { l:'Hyper-growth', r:'Sustainable', pos:'30' },
+        { l:'Autonomy', r:'Structure', pos:'24' }],
+      lockIcon: this.ic('<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>')
+    };
+  }
+}
+</script>
+</body></html>

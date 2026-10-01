@@ -127,7 +127,7 @@ export default function SpinoutWizard({ deal, onClose, onComplete }) {
                 <button onClick={init} disabled={busy} className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center gap-2">
                   {busy ? <Loader2 className="animate-spin" size={14} /> : <Rocket size={14} />} Initialize
                 </button>
-                <button onClick={iterate} disabled={busy} className="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm px-4 py-2 rounded-lg dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300">Continue / Iterate (skip spin-out)</button>
+                <button onClick={iterate} disabled={busy} className="bg-white border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 text-sm px-4 py-2 rounded-lg dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300">Continue / Iterate (skip spin-out)</button>
               </div>
             </div>
           ) : (

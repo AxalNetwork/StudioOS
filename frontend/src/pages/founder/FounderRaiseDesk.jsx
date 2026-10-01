@@ -5,6 +5,8 @@ import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import useAssistMode from '../../hooks/useAssistMode';
+import useAiSpend from '../../hooks/useAiSpend';
+import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import { zonePillClass } from './deskZoneNav';
 import './founderRaiseDesk.css';
 
@@ -57,6 +59,8 @@ export default function FounderRaiseDesk() {
   const [errors, setErrors] = useState({});
   const [reload, setReload] = useState(0);
   const [fillsOn] = useAssistMode('Raise');
+  // The cost before a run (D424), read only while the four bands are drawn.
+  const ai = useAiSpend({ enabled: fillsOn && Boolean(projectId) });
 
   useEffect(() => {
     let alive = true;
@@ -88,6 +92,9 @@ export default function FounderRaiseDesk() {
       prospects: api.raiseProspects(projectId),
       legal: api.listDocuments(projectId),
       deck: api.deckListVersions(projectId),
+      // The waterfall A4's liquidity card draws. `/raise/liquidity` has read it
+      // off this same scenario since it was built; this desk said none existed.
+      capTable: api.getCapTableByProject(projectId),
       room: project?.uid ? api.dataRoom(project.uid) : Promise.reject(new Error('Project room identifier is unavailable.')),
     };
     Promise.allSettled(Object.entries(calls).map(async ([key, request]) => [key, await request])).then((results) => {
@@ -111,6 +118,7 @@ export default function FounderRaiseDesk() {
     const room = records.room || {};
     return {
       prospects, docs, versions, room,
+      scenario: records.capTable?.scenario || null,
       roundInfo: records.round || { round: null, raised: 0, committed_count: 0 },
       progress: records.round?.progress || null,
       inPlay: prospects.filter((row) => RAISE_STAGES_IN_PLAY.includes(clean(row.stage))).length,
@@ -124,18 +132,22 @@ export default function FounderRaiseDesk() {
       <div className="raise-main">
         <header className="raise-hero">
           <div className="raise-heading"><div><h1>Get capital, stay legal</h1><p>The highest-stakes page in the product. Its model menu leads with quality, because a wrong answer here costs more than tokens.</p></div>
-            {projects.length > 1 && <select data-testid="select-raise-project" value={projectId || ''} onChange={(event) => setProjectId(Number(event.target.value))}>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
           </div>
           <nav className="raise-anchors" aria-label="Raise desk sections">{SECTIONS.map(([label, slug]) => <NavLink data-testid={`link-raise-anchor-${slug}`} to={`/raise/${slug}${query}`} key={label} className={zonePillClass}>{label}</NavLink>)}</nav>
         </header>
         {(projectError || Object.keys(errors).length > 0) && <div className="raise-error" data-testid="status-raise-partial"><AlertCircle size={16} /><span>{projectError || 'Some selected-project records are unavailable.'}</span><button data-testid="button-retry-raise" type="button" onClick={() => setReload((value) => value + 1)}>Retry</button></div>}
-        <RaiseSections loading={loading} project={project} data={data} errors={errors} query={query} state={state} projectId={projectId} fillsOn={fillsOn} />
+        <RaiseSections loading={loading} project={project} data={data} errors={errors} query={query} state={state} projectId={projectId} fillsOn={fillsOn} ai={ai} />
       </div>
       <WorkerRail
         workspace="Raise"
         className="raise-rail"
         stance="Manual raise view"
-        note="This surface reads selected-project records only. It does not generate, score, or change fundraising materials."
+        // The switch the four bands waited for (D424) — gated on this mode
+        // since they were mounted, with no rail on Raise to turn it on. The
+        // note it replaces said the desk generates nothing, above four bands
+        // that draft. Nothing here scores or changes a document either way.
+        fills
+        note={ASSIST_SURFACES.workspace.desks.Raise.fills}
         coverage={[
           `${data.prospects.length} prospect${data.prospects.length === 1 ? '' : 's'} · ${data.docs.length} legal doc${data.docs.length === 1 ? '' : 's'}`,
           `${data.versions.length} deck version${data.versions.length === 1 ? '' : 's'} · ${asList(data.room, 'files').length} data-room file${asList(data.room, 'files').length === 1 ? '' : 's'}`,
@@ -146,13 +158,13 @@ export default function FounderRaiseDesk() {
   </main>;
 }
 
-function RaiseSections({ loading, project, data, errors, query, state, projectId, fillsOn }) {
+function RaiseSections({ loading, project, data, errors, query, state, projectId, fillsOn, ai }) {
   // `prospects` is deliberately not destructured here. The status card counted
   // every stored prospect before A4; it now reads `inPlay`, which is the same
   // list narrowed to the three stages that are actually in play, and the full
   // count survives where it belongs — the rail's coverage line, off `data`.
   // CodeQL raised the leftover binding (alert 6054).
-  const { roundInfo, progress, docs, versions, room, inPlay } = data;
+  const { roundInfo, progress, docs, versions, room, inPlay, scenario } = data;
   const round = roundInfo.round;
   const target = round?.target_amount;
   const files = asList(room, 'files'); const folders = asList(room, 'folders'); const grants = asList(room, 'grants');
@@ -195,6 +207,7 @@ function RaiseSections({ loading, project, data, errors, query, state, projectId
           empty="Nothing proposed yet. Eadwyn will read your round and cap-table scenario back in plain language, and show every step of the arithmetic."
           nothingToDraft="No round and no cap-table scenario are recorded for this startup yet."
           foot="Shown step by step, because you will be asked to defend this number."
+          ai={ai}
         /> : null}
         <DeskLink testid="link-open-capital" to={`/raise/capital${query}`} state={state}>Open capital planner</DeskLink></>}</section>
       <section className="raise-card" id="raise-legal"><Head icon={Scale} title="Legal engine" meta={loading ? 'Reading documents' : termSheetLabel(docs)} />{loading ? <Skeleton rows={3} /> : errors.legal ? <Unavailable /> : <><div className="legal-list">{docs.slice(0, 4).map((doc, index) => <div key={doc.id || index}><FileText size={14} /><span>{clean(doc.title || doc.name || doc.doc_type) || 'Untitled document'}</span><small>{status(doc.status)}</small></div>)}{!docs.length && <Empty icon={FileText} title="No legal documents are recorded." body="Stored legal documents appear here." />}</div>
@@ -208,7 +221,11 @@ function RaiseSections({ loading, project, data, errors, query, state, projectId
           accept="Keep this reading"
           empty="Nothing proposed yet. Eadwyn will read the documents you have stored and name the clauses worth looking at again, quoting each one."
           nothingToDraft="No stored legal document has any text to read."
-          foot="Not legal advice. Counsel is on the Team page."
+          // A reading of your own documents, and the footnote says what it is
+          // rather than what it is not: "Not legal advice" named Eadwyn's
+          // output as a kind of advice, which the voice rule forbids (D424).
+          foot="A reading of your documents, not counsel's review. Counsel is on the Team page."
+          ai={ai}
         /> : null}
         <DeskLink testid="link-open-legal" to={`/raise/legal${query}`} state={state}>Open legal collection</DeskLink></>}</section>
     </div>
@@ -223,13 +240,15 @@ function RaiseSections({ loading, project, data, errors, query, state, projectId
         empty="Nothing proposed yet. Eadwyn will read what this room holds, what sits behind NDA, and what the investors with access have actually opened."
         nothingToDraft="This room holds no folders and no files yet."
         foot="Read from the room itself, never from a generic diligence checklist."
+        ai={ai}
       /> : null}
       <div className="artifact-grid">{[...folders.map((item) => ({ ...item, kind: 'Folder' })), ...files.map((item) => ({ ...item, kind: 'File' }))].slice(0, 8).map((item, index) => <article key={item.uid || index}><span>{item.kind}</span><strong>{clean(item.name) || 'Unnamed artifact'}</strong><small>{artifactState(item, access)}</small></article>)}{!files.length && !folders.length && <Empty icon={Folder} title="No artifacts are recorded in this room." body="This workspace does not create placeholders." />}</div>
       <p className="source-note">Nothing is screened before it is shared: no content review runs anywhere in this build, so no artifact carries a screened mark.</p>
       <DeskLink testid="link-open-data-room" to={`/raise/data-room${query}`} state={state}>Open data room</DeskLink></>}</section>
     <section className="raise-card" id="raise-pitch"><Head icon={Sparkles} title="Pitch" meta={loading ? 'Reading versions' : deckLabel(current, versions)} />{loading ? <Skeleton rows={2} /> : errors.deck ? <Unavailable /> : <><div className="deck-list">{versions.slice(0, 4).map((deck, index) => <div key={deck.id || index}><strong>{clean(deck.name || deck.title) || `Version ${deck.version ?? index + 1}`}</strong><span>{slideCount(deck)}</span><small>{status(deck.status || deck.updated_at || deck.created_at)}</small></div>)}{!versions.length && <Empty icon={Sparkles} title="No deck version is recorded." body="Create or edit a deck in the detailed workspace." />}</div><p className="source-note">Cover imagery is not generated here, and nothing investor-facing passes a content review before it is shared — neither exists in this build.</p><DeskLink testid="link-open-pitch-workspace" to={`/raise/pitch${query}`} state={state}>Open pitch</DeskLink></>}</section>
     <section className="raise-card exits" id="raise-liquidity"><Head icon={Landmark} title="Liquidity & exits" meta="Nothing live — modelled, not marketed" />
-      <p>No secondary is open, and none should be at seed. This zone exists so the waterfall is understood <em>before</em> terms are signed rather than after — but no liquidation preference, participation right or exit model is recorded for this company, so there is no waterfall to draw and this desk does not invent one.</p>
+      <p>No secondary is open, and none should be at seed. This zone exists so the waterfall is understood <em>before</em> terms are signed rather than after.</p>
+      {loading ? <Skeleton rows={2} /> : errors.capTable ? <Unavailable /> : <ExitWaterfall scenario={scenario} />}
       {bandOn ? <ZoneDraft
         surface="raise/liquidity"
         scopeKey={scope}
@@ -240,11 +259,45 @@ function RaiseSections({ loading, project, data, errors, query, state, projectId
         empty="Nothing proposed yet. Eadwyn will explain who is paid what and in what order from your cap table and round — and name every term the answer needs that nothing here records."
         nothingToDraft="No cap-table scenario is recorded, so there is no ownership to pay out."
         foot="No preference term is stored, so none is assumed."
+        ai={ai}
       /> : null}
       <DeskLink testid="link-open-liquidity" to={`/raise/liquidity${query}`} state={state}>Open liquidity</DeskLink></section>
   </div>;
 }
 
+/**
+ * A4's waterfall, from the project's canonical cap-table scenario.
+ *
+ * `result.waterfall` is written by the cap-table simulator whenever the
+ * scenario carries an exit value (`services/captable.ts`), and `/raise/liquidity`
+ * renders it in full. The desk draws its two headline figures — what the
+ * founders take and what preference takes — and the SIMULATOR'S OWN
+ * ASSUMPTIONS beside them, because those are modelling terms (1× non-
+ * participating), not a term sheet: nothing here reads the preference clause
+ * out of a signed document, and the sentence under the bar says so.
+ */
+function ExitWaterfall({ scenario }) {
+  const waterfall = scenario?.result?.waterfall;
+  if (!waterfall) {
+    return <p className="source-note" data-testid="text-raise-no-waterfall">{scenario
+      ? 'The stored cap-table scenario models no exit value, so there is no waterfall to draw and this desk does not invent one.'
+      : 'No cap-table scenario is recorded for this company, so there is no waterfall to draw and this desk does not invent one.'}</p>;
+  }
+  const rows = asList(waterfall.rows);
+  const exit = Number(waterfall.exit_value);
+  const founders = rows.filter((row) => clean(row.type) === 'founder').reduce((sum, row) => sum + (Number(row.payout) || 0), 0);
+  const preference = Number(waterfall.totals?.preference_paid);
+  const share = (value) => (exit > 0 && Number.isFinite(value) ? Math.max(0, Math.min(100, value / exit * 100)) : 0);
+  return <div className="raise-waterfall" data-testid="chart-raise-waterfall">
+    <div className="raise-waterfall-head"><strong>Exit at {money(exit)}</strong><span>{rows.length} holder{rows.length === 1 ? '' : 's'} paid</span></div>
+    <div className="raise-progress"><i className="is-committed" style={{ width: `${share(founders)}%` }} /><i className="is-soft" style={{ width: `${share(preference)}%` }} /></div>
+    <div className="raise-legend">
+      <span className="is-committed">{money(founders)} to founders</span>
+      <span className="is-soft">{Number.isFinite(preference) ? money(preference) : 'Not recorded'} to preference</span>
+    </div>
+    <p className="source-note">Modelled in {clean(scenario.name) || 'the cap-table scenario'}: {asList(waterfall.assumptions).join(' ') || 'assumptions not recorded.'} No preference clause is read from a signed document.</p>
+  </div>;
+}
 /** A4's eyebrow: the round's own name and how long it has been open. */
 function roundLabel(round) {
   if (!round) return 'No round recorded';

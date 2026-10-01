@@ -82,65 +82,63 @@ test('the zone draws the artboard’s instrument, column for column', () => {
   assert.match(Z, /title="Vote ledger"/);
 });
 
-test('no surface renders a recusal, because the column has no such value', () => {
-  // THE STORE, FIRST — so this test fails if the vocabulary ever grows a
-  // recusal and these guards become wrong rather than merely unnecessary.
+test('a recusal renders as itself, declaration beside it, out of the tally', () => {
+  // THE STORE, FIRST. D461 grew the vocabulary: `ic_votes.vote` carries no
+  // CHECK, so `recused` is enforced at the endpoint — and the declaration is
+  // the price of the value, because a recusal with no conflict written down
+  // is an unattributed change to the denominator.
   const vote = handler("r.post('/:uid/vote'");
-  assert.match(vote, /\['yes', 'no', 'abstain'\]\.includes\(vote\)/,
+  assert.match(vote, /\['yes', 'no', 'abstain', 'recused'\]\.includes\(vote\)/,
     'the accepted vote vocabulary changed — re-check every recusal claim below');
+  assert.match(vote, /if \(vote === 'recused' && !rationale\?\.trim\(\)\)/,
+    'the rationale requirement must stay scoped to a recusal and nothing else');
+  assert.match(vote, /recusal_requires_declaration/,
+    'a recusal without its declaration is no longer refused with a code');
 
-  // The artboard asks for it in three places; none of the three is honoured.
+  // The artboard asks for it and the page renders it: the vote pill IS the
+  // stored value, with nothing between the column and the screen — the same
+  // property as before the build, now covering the fourth value.
   const board = id3();
   assert.match(board, /recused/i, 'the artboard changed and this guard is now checking nothing');
-  // The page may DISCUSS recusal — it must, to say why there is none — but it
-  // must never map a vote onto one. So the check is on the vote rendering, not
-  // on the word: no tone table and no cell may turn a stored vote into it.
-  // THE POSITIVE FORM, because the negative one let a ternary through. Asserting
-  // that no cell says `pill: 'Recused'` does not catch
-  // `pill: v.vote === 'abstain' ? 'Recused' : v.vote`, which is exactly the
-  // mutation a well-meaning edit would make. So: the vote pill IS the stored
-  // value, with nothing between the column and the screen.
   assert.match(Z, /pill: v\.vote, pillTone: VOTE_TONE\[v\.vote\]/,
     'the vote pill is no longer the stored value verbatim');
-  // And no surface mints the word at all — page, route or AI instruction may
-  // only ever say it is NOT recorded.
-  assert.ok(!/'[Rr]ecused'|"[Rr]ecused"/.test(Z), 'the zone produces a recused label from code');
-  assert.ok(!/VOTE_TONE\s*=\s*\{[^}]*recus/i.test(Z), 'the vote tone table carries a recusal');
-  // And the value map covers exactly the three the column accepts.
   const tone = /const VOTE_TONE = \{([^}]*)\}/.exec(Z);
   assert.ok(tone, 'the vote tone table is gone');
   assert.deepEqual(
     tone[1].split(',').map((s) => s.split(':')[0].trim()).filter(Boolean).sort(),
-    ['abstain', 'no', 'yes'],
+    ['abstain', 'no', 'recused', 'yes'],
     'the vote tone table no longer matches the column’s vocabulary',
   );
-  // The worker states the gap rather than omitting it.
+  // The tally excludes the recusal and says so beside it.
+  assert.match(Z, /recused \(out of the tally\)/, 'the tally text must name the exclusion');
+  // The worker counts it from the record rather than stating a gap.
   const room = handler("r.get('/commit-room'");
-  assert.match(room, /recusal: \{\s*available: false/, 'the route stopped reporting the recusal gap');
-  // And the AI band is forbidden from writing one, which is the surface most
-  // likely to reach for it: every IC memo it has ever read says "recused".
+  assert.match(room, /recusal: \{\s*available: true/, 'the route stopped reporting the recusal count');
+  // And the AI band is still forbidden from inventing one, which is the
+  // surface most likely to reach for it: every IC memo it has ever read says
+  // "recused". (The instruction is Session 2's file; it changes there.)
   const at = RESEARCH.indexOf("'deals/commit': {");
   assert.ok(at >= 0, 'the surface is not allow-listed, so the band 400s');
   const surface = RESEARCH.slice(at, RESEARCH.indexOf('\n  },', at));
   assert.match(surface, /Never describe any vote as recused and never reduce the denominator/);
 });
 
-test('the three other absent stores are stated, not drawn', () => {
+test('conditions and minutes are stores now; quorum is the one still stated, not drawn', () => {
   const room = handler("r.get('/commit-room'");
-  for (const key of ['conditions', 'minutes', 'quorum']) {
-    assert.match(room, new RegExp(`${key}: \\{\\s*available: false`), `the route stopped reporting ${key}`);
-  }
-  // The two chips the artboard draws over stores that do not exist are
-  // `unbuilt` rather than keys — a chip with a key would narrow to nothing and
-  // read as "no conditions" instead of "conditions are not recorded".
+  // The three D461 built report from the record…
+  assert.match(room, /recusal: \{\s*available: true/, 'the route stopped serving the recusal count');
+  assert.match(room, /conditions: \{\s*available: true/, 'the route stopped serving the conditions');
+  // …minutes rides the linked meeting, so its availability is data — what is
+  // pinned is the write route and the payload carrying the block.
+  assert.match(IC, /r\.patch\('\/meetings\/:uid\/minutes'/, 'the minutes write route is gone');
+  assert.match(room, /minutes,/, 'the commit-room payload dropped the minutes block');
+  // …and the one that was not built is still stated rather than drawn.
+  assert.match(room, /quorum: \{\s*available: false/, 'quorum is served without a store — re-check');
+  // The chips are live keys now: a chip narrows the record the page loaded.
   const at = FILTERS.indexOf("'deals/commit': [");
   assert.ok(at >= 0, 'the commit filter row is gone');
   const rowsrc = FILTERS.slice(at, FILTERS.indexOf('],', at));
-  for (const canvas of ['Conditions', 'Minutes']) {
-    const line = new RegExp(`canvas: '${canvas}', unbuilt:`);
-    assert.match(rowsrc, line, `${canvas} is offered as a live filter over a store that does not exist`);
-  }
-  for (const canvas of ['This deal', 'All decisions']) {
+  for (const canvas of ['This deal', 'All decisions', 'Conditions', 'Minutes']) {
     assert.match(rowsrc, new RegExp(`canvas: '${canvas}', key:`), `${canvas} narrows nothing`);
   }
   // And the artboard's four labels are all four of them, in its order.
@@ -164,8 +162,10 @@ test('a vote IS opened and closed, so the ops row says the narrower true thing',
   assert.match(put, /status = 'decided'/, 'setting a decision no longer closes the vote');
   assert.match(put, /decidedAt = decidedAt \|\| nowIso\(\)/, 'closing no longer stamps a time');
 
-  // So the reason must not claim the capability is absent. `served by the API`
-  // is the file's own idiom for this, four rows down on the LP form.
+  // SO THE ROW IS A HANDLER NOW, not a better-worded refusal. The reason said
+  // the capability was served and only a screen was missing; task #195 added
+  // the screen, so what this must assert is that the op is PERFORMED and that
+  // the page performing it is the one that reads the decision.
   const at = ACTIONS.indexOf("'deals/commit': [");
   const rowsrc = ACTIONS.slice(at, ACTIONS.indexOf('],', at));
   // ON THE REASON STRINGS, NOT ON THE FILE. The table QUOTES the old claim in
@@ -175,10 +175,42 @@ test('a vote IS opened and closed, so the ops row says the narrower true thing',
   const reasons = [...ACTIONS.matchAll(/unbuilt: '([^']*)'/g)].map((m) => m[1]);
   for (const reason of reasons) {
     assert.doesNotMatch(reason, /no vote is opened here/, 'the false reason is back');
+    assert.doesNotMatch(reason, /closing a vote is served by the API/,
+      'the op is a handler now, so a reason saying only the screen is missing is stale');
   }
-  assert.match(rowsrc, /Close vote', unbuilt: 'closing a vote is served by the API/);
-  assert.match(ACTIONS, /adding an LP is served by the API; no screen offers the form yet/,
-    'the idiom this row was matched to is gone, so the pair no longer reads as one convention');
+  assert.match(rowsrc, /\{ label: 'Close vote', kind: 'handler', handler: 'closeVote' \}/,
+    'Close vote is not the page-performed op it became');
+
+  // AND THE PAGE SUPPLIES IT CONDITIONALLY, which is the half that keeps it
+  // honest. `PUT /:uid` admits the decision's author and an admin and refuses a
+  // colleague with a 403, so the page must decide before the click rather than
+  // let the refusal be the explanation. Three states, each with its own reason:
+  // no decision open, already decided, and not the caller's to close.
+  const zone = read('frontend/src/pages/investor/deals/CommitZone.jsx');
+  assert.match(zone, /handlers: \{ closeVote, addCondition, exportMinutes \}/,
+    'the page declares no handler for an op the table names');
+  assert.match(zone, /api\.icUpdate\(closing, \{ decision \}\)/, 'nothing records the decision');
+  assert.match(zone, /current\.status === 'decided'/,
+    'a closed decision can be closed again, and the route would take the second answer');
+  assert.match(zone, /Number\(current\.created_by\) === Number\(user\.id\)/,
+    'the author check is gone, so the control is offered to colleagues the route refuses');
+  // `created_by` has to reach the page for that check to be possible at all.
+  assert.match(read('cloudflare-worker/src/routes/ic.ts'), /created_by: d\.created_by \?\? null,/,
+    'the commit-room summary stopped carrying created_by, so the author check reads undefined');
+  // ONLY THE THREE OUTCOMES THE STORE ADMITS, and read off the array the page
+  // maps rather than off the testids — those are built by a template, so the
+  // literal `button-close-vote-invest` never appears in the source. Asserting
+  // the rendered string would have been checking for something that does not
+  // exist until the browser runs.
+  assert.match(zone, /\['invest', 'pass', 'defer'\]\.map\(\(decision\)/,
+    'the outcome list is not the three the route accepts');
+  assert.match(zone, /data-testid=\{`button-close-vote-\$\{decision\}`\}/,
+    'the outcome buttons carry no stable testid');
+  // A free field would let any string through, and `PUT /:uid` coerces an
+  // unrecognised decision to null — closing nothing while looking like a save.
+  assert.doesNotMatch(zone, /name="decision"/, 'the outcome became a free field');
+  assert.match(ACTIONS, /\{ label: 'Add LP', kind: 'handler', handler: 'addLp' \}/,
+    'the row this one was matched to is gone, so the pair no longer reads as one convention');
   // The guard in `profile_zone_actions` forbids a path in an unbuilt reason
   // because nothing checks it. Held here too, so a later edit cannot quietly
   // reintroduce one in this row alone.
@@ -193,8 +225,10 @@ test('the rationale tile checks the artboard’s claim instead of repeating it',
   // written rather than assert a rule that is not enforced.
   assert.match(id3(), /Rationale required/, 'the artboard changed its claim');
   const vote = handler("r.post('/:uid/vote'");
-  assert.ok(!/rationale.*required|required.*rationale/i.test(vote),
-    'the vote endpoint now requires a rationale — the tile’s premise changed');
+  // The requirement is scoped to a recusal (its declaration), so a yes, no or
+  // abstain still lands without one — which is what the tile reports.
+  assert.match(vote, /vote === 'recused' && !rationale\?\.trim\(\)/,
+    'the only required rationale is the recusal’s declaration — the tile’s premise changed otherwise');
   const room = handler("r.get('/commit-room'");
   assert.match(room, /enforced: false/, 'the route stopped saying the requirement is unenforced');
   assert.match(Z, /label="Rationales"/);
@@ -226,13 +260,14 @@ test('none of the artboard’s fixture partners or figures reaches the page', ()
   assert.doesNotMatch(Z, /\|\|\s*0\b(?!\s*\})/, 'an absent figure falls back to 0 outside a tally');
 });
 
-test('the strip counts four recorded things, and the attendee tile is labelled honestly', () => {
-  // The artboard's fourth tile is `Conditions`, over a store that does not
-  // exist; D56 forbids a "Not recorded" tile for a gap the PRODUCT never
-  // built, so the tile counts the roster the schema DOES carry.
+test('the strip counts five recorded things, and the attendee tile is labelled honestly', () => {
+  // The artboard's fourth tile is `Conditions` — over a store that exists now
+  // (migration 334), so the tile is drawn and counts the OPEN ones: a met or
+  // waived condition no longer blocks anything.
   const board = id3();
   assert.match(board, /label:'Conditions'/, 'the artboard changed its fourth tile');
-  assert.ok(!/label="Conditions"/.test(Z), 'the zone draws a tile it has no store for');
+  assert.ok(/label="Conditions"/.test(Z), 'the zone dropped the Conditions tile the store now serves');
+  assert.match(Z, /String\(openConditions\.length\)/, 'the Conditions tile must count the open ones');
   for (const label of ['Decisions', 'Votes cast', 'Rationales', 'In the room']) {
     assert.ok(Z.includes(`label="${label}"`), `the strip lost its ${label} tile`);
   }
@@ -290,6 +325,8 @@ test('the zone is mounted on its own route and the workspace no longer draws it'
   // Registered ahead of `/:uid`, or the literal is read as a uid and 404s.
   assert.ok(IC.indexOf("r.get('/commit-room'") < IC.indexOf("r.get('/:uid'"),
     'commit-room is registered after /:uid, so it is unreachable');
+  assert.ok(IC.indexOf("r.get('/conditions'") < IC.indexOf("r.get('/:uid'"),
+    'conditions is registered after /:uid, so the list is read as a uid and 404s');
   // Two files mounting one zone row is two chip rows and two export buttons.
   assert.ok(!WORKSPACE.includes("investorZoneActions('deals/commit'"),
     'the workspace still mounts the commit ops row');

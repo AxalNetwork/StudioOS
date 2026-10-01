@@ -4,8 +4,14 @@
 // file uploaded to attached_assets). The design's fabricated content
 // (invented partner personas, ratings, "Partner prep sent", fake session
 // summaries) is intentionally NOT reproduced. Mapping to REAL surfaces only:
-//   - Partner directory: GET /partners (real partner network — role tags
-//     derived from each partner's marketplace categories/specialization).
+//   - Host directory (D377): GET /spinout-lab/hosts/directory — ONLY the
+//     investors, advisors and partners who applied to host Spin-Out Lab
+//     office hours and whom an admin approved. It used to be GET /partners,
+//     every partner profile on the platform. An approved partner profile is
+//     booked through partner slots; an approved advisor through advisor
+//     slots (the advisor booking route keeps its own tier gate). Role tags:
+//     the capacity they were approved as, and for a Partner the role derived
+//     from their own specialization.
 //   - Booking: real partner office-hour slots
 //     (GET /partner-office-hours/partners/:uid/slots +
 //      POST /partner-office-hours/slots/:id/book) via the design's booking
@@ -20,9 +26,15 @@
 //     scoring data, clearly labelled auto-generated; it can be edited in
 //     place (local overrides — "Reset to generated" restores), attached to
 //     a booking (goes into the booking's real `questions` field) or copied.
-//   - Action items · execution handoff: the current week's real milestone
-//     checklist (read-only — items complete by doing the work in the linked
-//     tool, not by ticking a box here).
+//   - Action items · execution handoff: the open action items from the
+//     founder's own sessions (D355, GET /partner-office-hours/action-items/me
+//     — both parties add and tick them on the session), then the current
+//     week's real milestone checklist (read-only — milestones complete by
+//     doing the work in the linked tool, not by ticking a box here).
+//   - Ratings (D355): the founder rates a completed session from its history
+//     row; each directory card shows the partner's average from the first
+//     rating, always with the count (GET /partner-office-hours/ratings/
+//     summary). A partner nobody has rated says so; a failed read says that.
 //   - Partner booking guidance ("When to book X", "Best for stage", "One
 //     session gets you", "Bring to the session"): REAL partner-authored
 //     content only. It lives in the `oh_*` columns on `partners` (D1
@@ -32,8 +44,7 @@
 //     so plainly — this page NEVER synthesises guidance prose, defaults or
 //     role-derived guesses about a real named person, and none of the
 //     design's invented persona copy is reproduced.
-//   - Omitted (no backend): partner ratings, "Resend to partner",
-//     rescheduling. Share / Export / Preview-as-investor render as disabled
+//   - Omitted (no backend): "Resend to partner", rescheduling. Share / Export / Preview-as-investor render as disabled
 //     quick actions with the reason in their tooltip.
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -49,6 +60,10 @@ import { useToast } from '../components/useToast';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import { initialsOf, buildGaps } from './SpinoutLabAdvisorsPage';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
+import { SessionActionItems, SessionRating } from '../components/officehours/SessionFollowups';
+import { Unrecorded, Unreadable } from '../ui';
+import { ratingBadge, formatRating, toolLink, sortItems, ownerLabel } from '../lib/sessionFollowups';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
 const LBL = 'text-[10.5px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -71,6 +86,7 @@ const ROLE_STYLE = {
   Lawyer: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
   Operator: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
   Investor: 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
+  Advisor: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
   Finance: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
   Partner: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
 };
@@ -89,11 +105,29 @@ function RoleTag({ role }) {
 export const FILTERS = [
   ['recommended', 'Recommended'],
   ['Investor', 'Investors'],
+  ['Advisor', 'Advisors'],
   ['Lawyer', 'Lawyers'],
   ['Operator', 'Operators'],
   ['all', 'All'],
 ];
-const filterRoleOf = (role) => (role === 'Lawyer' || role === 'Investor' ? role : 'Operator');
+const filterRoleOf = (role) => (role === 'Lawyer' || role === 'Investor' || role === 'Advisor' ? role : 'Operator');
+
+/**
+ * D377 — one directory entry from the approved-hosts read. A partner keeps its
+ * `partners.id` as `id`, because partner bookings, ratings and action items key
+ * on it; an advisor gets an id of its own so the two id spaces never collide.
+ */
+export function hostEntry(h) {
+  const kind = h?.kind === 'advisor' ? 'advisor' : 'partner';
+  return { ...h, kind, id: kind === 'partner' ? h.host_id : `advisor-${h.host_id}` };
+}
+
+/** The tag a host carries: the capacity an admin approved them as. */
+export function hostRole(h) {
+  if (h?.capacity === 'investor') return 'Investor';
+  if (h?.capacity === 'advisor') return 'Advisor';
+  return roleOfPartner(h);
+}
 // Per-filter directory note (design L286). The recommended note is dynamic
 // (needs the current week) and built at render.
 //
@@ -104,10 +138,11 @@ const filterRoleOf = (role) => (role === 'Lawyer' || role === 'Investor' ? role 
 // carries neither — so a growth-stage fund or an IP attorney would be
 // described inaccurately. Nothing here claims anything about a real person.
 const DIR_NOTE = {
-  Investor: 'Investors in the Axal network.',
-  Lawyer: 'Legal partners in the Axal network.',
-  Operator: 'Service partners in the Axal network — GTM, hiring, ops, product, and finance.',
-  all: 'Every partner in the Axal network.',
+  Investor: 'Investors approved to host Spin-Out Lab office hours.',
+  Advisor: 'Advisors approved to host Spin-Out Lab office hours.',
+  Lawyer: 'Legal partners approved to host Spin-Out Lab office hours.',
+  Operator: 'Service partners approved to host Spin-Out Lab office hours — GTM, hiring, ops, product, and finance.',
+  all: 'Everyone approved to host Spin-Out Lab office hours.',
 };
 
 // Rec-card tint per partner type (design recBg / recBorder L266-267).
@@ -255,6 +290,41 @@ const MILESTONE_LABELS = {
   incorporation_completed: 'Complete incorporation',
 };
 
+// D355 — the directory badge. Shown from the first rating, always with its
+// count; a partner nobody has rated says so, and a failed read says that.
+function PartnerRating({ read, partnerId }) {
+  if (read == null) return null;
+  const badge = ratingBadge(read, partnerId);
+  if (badge.state === 'failed') return <div className="text-[11px] text-gray-400" data-testid={`partner-rating-${partnerId}`}>Ratings could not be read</div>;
+  if (badge.state === 'none') return <div className="text-[11px]" data-testid={`partner-rating-${partnerId}`}><Unrecorded reason="No founder has rated a session with this partner yet.">No ratings yet</Unrecorded></div>;
+  return <div className="text-[11px] font-semibold text-amber-600 dark:text-amber-400" data-testid={`partner-rating-${partnerId}`}>{formatRating(badge)}</div>;
+}
+
+// D355 — open action items across the founder's own sessions.
+function MySessionItems({ read, onRetry }) {
+  if (read == null) return <div className="text-[11.5px] text-gray-400"><Loader2 className="w-3 h-3 inline animate-spin" /> Loading…</div>;
+  if (read.state === 'failed') return <Unreadable what="Your session action items" claim="Nothing is shown in their place." onRetry={onRetry} />;
+  const open = sortItems(read.data?.items).filter((it) => !it.done);
+  if (!open.length) return <div className="text-[11.5px] text-gray-500 dark:text-gray-400" data-testid="my-session-items-empty">No open items from your sessions.</div>;
+  return (
+    <ul className="space-y-1.5" data-testid="my-session-items">
+      {open.map((it) => {
+        const link = toolLink(it.linked_tool);
+        return (
+          <li key={it.id} className="text-[12.5px] text-gray-800 dark:text-gray-200">
+            {it.title}
+            <div className="text-[10.5px] text-gray-400 flex flex-wrap gap-x-2">
+              <span>{ownerLabel(it)}</span>
+              {it.due_date && <span>Due {it.due_date}</span>}
+              {link && <Link to={link.to} className="font-semibold text-teal-700 dark:text-teal-300">→ {link.label}</Link>}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export default function SpinoutLabOfficeHoursPage() {
   const { toast, showToast } = useToast(3500);
 
@@ -267,6 +337,10 @@ export default function SpinoutLabOfficeHoursPage() {
   const [partners, setPartners] = useState(null); // [] | {failed}
   const [bookings, setBookings] = useState(null); // {items} | {failed}
   const [snapshot, setSnapshot] = useState(null);
+  // D355 reads. `{ state: 'ok', data } | { state: 'failed' }`; null = not yet.
+  const [ratings, setRatings] = useState(null);
+  const [myItems, setMyItems] = useState(null);
+  const [openItemsFor, setOpenItemsFor] = useState(() => new Set());
 
   const [filter, setFilter] = useState('recommended');
   const [historyQ, setHistoryQ] = useState('');
@@ -294,7 +368,8 @@ export default function SpinoutLabOfficeHoursPage() {
           spinoutLab.state().catch(() => null),
           api.getMe(),
           api.listProjects().catch(() => []),
-          api.listPartners().catch(() => ({ failed: true })),
+          api.labHostDirectory().then((r) => (Array.isArray(r?.items) ? r.items.map(hostEntry) : { failed: true }))
+            .catch(() => ({ failed: true })),
           api.listMyPartnerRequests().catch(() => ({ failed: true })),
         ]);
         if (dead) return;
@@ -302,6 +377,10 @@ export default function SpinoutLabOfficeHoursPage() {
         setUser(me || null);
         setPartners(Array.isArray(dir) ? dir : { failed: true });
         setBookings(mine?.failed ? { failed: true } : { items: (Array.isArray(mine?.items) ? mine.items : []).map(normBooking) });
+        api.partnerRatingSummary()
+          .then((data) => { if (!dead) setRatings({ state: 'ok', data }); })
+          .catch(() => { if (!dead) setRatings({ state: 'failed' }); });
+        loadMyItems();
         const proj = pickLabProject(projects, me);
         setProject(proj || null);
         if (proj) {
@@ -316,6 +395,15 @@ export default function SpinoutLabOfficeHoursPage() {
     })();
     return () => { dead = true; };
   }, []);
+
+  const loadMyItems = () => api.listMyBookingActionItems()
+    .then((data) => setMyItems({ state: 'ok', data }))
+    .catch(() => setMyItems({ state: 'failed' }));
+  const toggleItems = (id) => setOpenItemsFor((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   const refreshBookings = async () => {
     const mine = await api.listMyPartnerRequests().catch(() => null);
@@ -384,7 +472,7 @@ export default function SpinoutLabOfficeHoursPage() {
   // ---- Partner directory + filters ----
   const dirItems = useMemo(() => (Array.isArray(partners) ? partners : [])
     .filter((p) => p.status !== 'inactive')
-    .map((p) => ({ ...p, role: roleOfPartner(p) })), [partners]);
+    .map((p) => ({ ...p, role: hostRole(p) })), [partners]);
   const recommendedRoles = useMemo(() => new Set(helpCards.map((c) => c.role)), [helpCards]);
   // Exact role first, then the directory's folded bucket (Finance/Partner sit
   // under Operator) — so "Book now" resolves to a real partner or to null,
@@ -473,7 +561,10 @@ export default function SpinoutLabOfficeHoursPage() {
     setDrawerFor(partner); setSlots('loading'); setSlotId(null);
     setObjective(''); setOutcome(''); setAttachBrief(true); setBookError('');
     try {
-      const res = await api.listPartnerSlots(partner.uid, true);
+      // An approved advisor is booked on their own advisor calendar.
+      const res = partner.kind === 'advisor'
+        ? await api.listAdvisorSlots(partner.uid, true)
+        : await api.listPartnerSlots(partner.uid, true);
       if (seq !== drawerSeq.current) return;
       const items = (Array.isArray(res?.items) ? res.items : []).map(normSlot).filter((s) => s.open && s.remaining > 0);
       setSlots({ items });
@@ -494,18 +585,26 @@ export default function SpinoutLabOfficeHoursPage() {
         attachBrief && briefText ? `— Pre-session brief —\n${briefText}` : null,
       ].filter(Boolean).join('\n\n');
       const questions = composed ? composed.slice(0, 2000) : null;
-      await api.bookPartnerSlot(slotId, {
-        topic: objective,
-        questions,           // dev FastAPI field
-        notes: questions,    // production Worker reads `notes` (extra field is ignored by FastAPI)
-        project_id: project?.id ?? null,
-      });
+      const advisor = drawerFor?.kind === 'advisor';
+      if (advisor) {
+        // The advisor booking route: its Growth-tier gate still applies, and
+        // its refusal is what the drawer prints.
+        await api.bookAdvisorSlot(slotId, { topic: objective, notes: questions });
+      } else {
+        await api.bookPartnerSlot(slotId, {
+          topic: objective,
+          questions,           // dev FastAPI field
+          notes: questions,    // production Worker reads `notes` (extra field is ignored by FastAPI)
+          project_id: project?.id ?? null,
+        });
+      }
       setDrawerFor(null);
       // Only claim the brief travelled when it actually did (the checkbox is
       // opt-out and the brief can be empty).
-      showToast(attachBrief && briefText
-        ? 'Session requested — the partner will confirm and your brief travels with the booking.'
-        : 'Session requested — the partner will confirm.');
+      const who = advisor ? 'advisor' : 'partner';
+      showToast(`${attachBrief && briefText
+        ? `Session requested — the ${who} will confirm and your brief travels with the booking.`
+        : `Session requested — the ${who} will confirm.`}${advisor ? ' It is listed with your advisor sessions on Advisors.' : ''}`);
       // W3 deliverable — a real partner session was requested.
       markMilestone(user, 'office_hours_booked');
       await refreshBookings();
@@ -518,7 +617,7 @@ export default function SpinoutLabOfficeHoursPage() {
   const bookTopMatch = (role) => {
     const target = matchForRole(role);
     if (target) openDrawer(target);
-    else showToast('No partner in the network matches this yet.', 'error');
+    else showToast('No approved host matches this yet.', 'error');
   };
 
   // Partner-authored guidance for the partner whose drawer is open (if any).
@@ -573,7 +672,7 @@ export default function SpinoutLabOfficeHoursPage() {
     : { text: 'Questions missing', cls: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' });
 
   return (
-    <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-6" data-testid="spinout-office-hours-page">
+    <LabPageShell width="full" spaceY="" testId="spinout-office-hours-page">
       {/* Header. The design's 3px teal accent rule (Office Hours.dc.html L30)
           survives as the shared header's top rule, recoloured teal. */}
       <LabPageHeader
@@ -613,10 +712,10 @@ export default function SpinoutLabOfficeHoursPage() {
       />
 
       {/* Disambiguation against Advisors — the reciprocal of the note on
-          /spinout-lab/advisors. This page books PARTNER ORGANISATIONS and
-          fires an OPTIONAL milestone; the advisor surface books an individual
-          matched to your skill gaps and is what satisfies Week 3's REQUIRED
-          one. A founder booking here to "do Week 3" would come up short. */}
+          /spinout-lab/advisors. This page books the APPROVED HOSTS (D377):
+          partner organisations, and advisors an admin approved to host here.
+          The advisor surface ranks individuals against your skill gaps and is
+          the one this page points at for Week 3's REQUIRED milestone. */}
       <p className="mb-4 text-[12.5px] text-gray-500 dark:text-gray-400" data-testid="xlink-advisors">
         Need a 1:1 with an advisor matched to your skill gaps — the booking that completes Week 3?{' '}
         <Link to="/spinout-lab/advisors" className="font-semibold text-teal-700 dark:text-teal-400 hover:underline">
@@ -628,7 +727,7 @@ export default function SpinoutLabOfficeHoursPage() {
         <div className={`${CARD} p-4 mb-5 flex items-center gap-3`} data-testid="banner-locked">
           <Lock className="w-4 h-4 text-gray-400" />
           <div className="text-[12.5px] text-gray-600 dark:text-gray-300">
-            Office Hours is a Week 3 tool. You can browse the partner network now; booking unlocks with Week 3.
+            Office Hours is a Week 3 tool. You can browse the approved hosts now; booking unlocks with Week 3.
           </div>
         </div>
       )}
@@ -688,7 +787,7 @@ export default function SpinoutLabOfficeHoursPage() {
                       type="button"
                       className={`${BTN} bg-teal-600 hover:bg-teal-700 text-white disabled:opacity-50 shrink-0`}
                       disabled={!unlocked || !match}
-                      title={!unlocked ? 'Office Hours unlocks in Week 3' : !match ? 'No partner in the network matches this yet' : undefined}
+                      title={!unlocked ? 'Office Hours unlocks in Week 3' : !match ? 'No approved host matches this yet' : undefined}
                       onClick={() => bookTopMatch(c.role)}
                       data-testid={`button-book-help-${c.id}`}
                     >
@@ -756,7 +855,7 @@ export default function SpinoutLabOfficeHoursPage() {
       <div className="grid lg:grid-cols-[1fr_340px] gap-6 items-start mb-6">
         <div className={`${CARD} p-5`} data-testid="partner-directory">
           <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
-            <div className={LBL}>Partner directory · Book a session</div>
+            <div className={LBL}>Approved hosts · Book a session</div>
             <div className="flex gap-1.5 flex-wrap" data-testid="directory-filters">
               {FILTERS.map(([key, label]) => (
                 <button
@@ -771,9 +870,12 @@ export default function SpinoutLabOfficeHoursPage() {
           </div>
           <div className="text-[11.5px] text-gray-400 mb-3">{dirNote}</div>
           {partners?.failed ? (
-            <div className="text-[12.5px] text-gray-500">Couldn't load the partner network.</div>
+            <div className="text-[12.5px] text-gray-500">Couldn't load the approved hosts.</div>
           ) : dirItems.length === 0 ? (
-            <div className="text-[12.5px] text-gray-500 dark:text-gray-400">No partners in the network yet.</div>
+            <div className="text-[12.5px] text-gray-500 dark:text-gray-400" data-testid="directory-empty">
+              No one is approved to host Spin-Out Lab office hours yet. Investors, advisors and partners apply from their
+              own office-hours page, and an admin approves them.
+            </div>
           ) : (
             <div className="grid sm:grid-cols-2 gap-3" data-testid="partner-grid">
               {visiblePartners.map((p) => {
@@ -803,6 +905,7 @@ export default function SpinoutLabOfficeHoursPage() {
                         <div className="min-w-0">
                           <div className="text-[13px] font-bold text-gray-900 dark:text-gray-100 truncate">{p.name}</div>
                           <div className="text-[11.5px] text-gray-500">{p.headline || p.specialization || p.company || '—'}</div>
+                          {p.kind === 'partner' && <PartnerRating read={ratings} partnerId={p.id} />}
                         </div>
                       </div>
                       <RoleTag role={p.role} />
@@ -827,7 +930,7 @@ export default function SpinoutLabOfficeHoursPage() {
                           Matches your open item: {recTitleByRole.get(p.role) || 'a gap or blocker this week'}
                         </div>
                         <div className="text-[10.5px] text-teal-700/70 dark:text-teal-300/60 mt-0.5">
-                          Matched on their {p.role} tag — every {p.role.toLowerCase()} in the network is shown here.
+                          Matched on their {p.role} tag — every approved {p.role.toLowerCase()} is shown here.
                         </div>
                       </div>
                     )}
@@ -908,7 +1011,9 @@ export default function SpinoutLabOfficeHoursPage() {
 
           <div className={`${CARD} p-5`} data-testid="action-items">
             <div className={`${LBL} mb-1`}>Action items · Execution handoff</div>
-            <div className="text-[11px] text-gray-400 mb-3">This week's milestone checklist — items complete when you do the work in the linked tool.</div>
+            <div className="text-[11px] text-gray-400 mb-2">From your sessions — added by you or your partner, ticked on the session below.</div>
+            <MySessionItems read={myItems} onRetry={loadMyItems} />
+            <div className="text-[11px] text-gray-400 mt-3 mb-2 pt-3 border-t border-gray-100 dark:border-gray-800">This week's milestone checklist — items complete when you do the work in the linked tool.</div>
             {actionItems.map((it) => (
               <div key={it.key} className="flex items-start gap-2 py-1.5" data-testid={`action-${it.key}`}>
                 <span className={`mt-0.5 w-4 h-4 rounded grid place-items-center border ${it.done ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300 dark:border-gray-600'}`}>
@@ -980,6 +1085,13 @@ export default function SpinoutLabOfficeHoursPage() {
               <div className="text-[12.5px] text-gray-700 dark:text-gray-300 mt-0.5 font-semibold">{b.topic}</div>
               {b.questions && <div className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2 whitespace-pre-line">{b.questions}</div>}
               <div className="text-[11px] text-gray-400 mt-1">{historyStatusOf(b)}</div>
+              <SessionRating booking={b} viewerSide="founder" onRated={refreshBookings} />
+              {b.status !== 'cancelled' && (
+                <button type="button" onClick={() => toggleItems(b.id)} className="mt-1.5 text-[11.5px] font-semibold text-teal-700 dark:text-teal-300" data-testid={`button-session-actions-${b.id}`}>
+                  {openItemsFor.has(b.id) ? 'Hide action items' : 'Action items'}
+                </button>
+              )}
+              {openItemsFor.has(b.id) && <SessionActionItems booking={b} onChange={loadMyItems} />}
             </div>
           );
         })}
@@ -1168,6 +1280,6 @@ export default function SpinoutLabOfficeHoursPage() {
           {toast.msg}
         </div>
       )}
-    </div>
+    </LabPageShell>
   );
 }

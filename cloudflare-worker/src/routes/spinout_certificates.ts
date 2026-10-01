@@ -22,16 +22,18 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { bindingKey } from '../util/schemaBootstrap';
+import { logAdminAction } from '../services/adminAudit';
 
 const app = new Hono<{ Bindings: Env }>();
 
-let _migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureTables(env: Env) {
-  if (_migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   // Certificate persistence is applied by migration in production. Public
   // verification must never create its registry and indexes on a cold request.
   if (env.ENVIRONMENT === 'production') {
-    _migrated = true;
+    MIGRATED.set(bindingKey(env), true);
     return;
   }
   const stmts = [
@@ -65,7 +67,7 @@ async function ensureTables(env: Env) {
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch { /* already applied */ }
   }
-  _migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 /** Owner/admin view: everything except other people's rows. */
@@ -96,9 +98,37 @@ app.post('/certificates', async (c) => {
 
   const body = await c.req.json().catch(() => ({} as any));
   const userId = Number(body.user_id);
+  if (!Number.isFinite(userId) || userId <= 0) return c.json({ detail: 'user_id is required' }, 400);
+
+  // THE ADMIN TAB'S ISSUE (D382). With only `user_id`, the credential is built
+  // by the same path graduation uses — the snapshot comes from the graduate's
+  // own records, never from what an admin typed — and attributed to the admin.
+  if (body.public_name == null && body.conferred_at == null) {
+    const { issueOnGraduation } = await import('../services/certificateIssuance');
+    const outcome = await issueOnGraduation(c.env, userId, user.id);
+    const refusals: Record<string, [number, string]> = {
+      not_graduated: [409, 'This founder has no incorporation_completed milestone, so there is no graduation to certify.'],
+      insufficient_data: [422, 'The graduate’s record has no name or no conferral date, so the certificate would be blank. Fill the record in, then issue.'],
+      reissue_blocked: [409, 'This graduate’s credential was revoked. Its id is derived from the cohort, the date and the account, so reissuing it would collide; reissue waits on a credential-id change.'],
+      error: [500, 'The certificate could not be written. Nothing was issued; try again.'],
+    };
+    if (refusals[outcome]) {
+      const [status, message] = refusals[outcome];
+      return c.json({ error: outcome, message, detail: message }, status as 409 | 422 | 500);
+    }
+    const row = await c.env.DB
+      .prepare(`SELECT ${OWNER_COLS} FROM spinout_certificates WHERE user_id = ? AND status = 'issued'`)
+      .bind(userId).first<any>();
+    if (outcome === 'issued') {
+      await logAdminAction(c.env, user.id, user.email, 'spinout_certificate_issued', {
+        target_user_id: userId, certificate_id: row?.id ?? null, credential_id: row?.credential_id ?? null,
+      });
+    }
+    return c.json({ certificate: row, outcome, already_issued: outcome === 'already_issued' }, outcome === 'issued' ? 201 : 200);
+  }
+
   const conferredAt = String(body.conferred_at || '').slice(0, 10);
   const name = String(body.public_name || '').trim();
-  if (!Number.isFinite(userId) || userId <= 0) return c.json({ detail: 'user_id is required' }, 400);
   if (!conferredAt) return c.json({ detail: 'conferred_at is required' }, 400);
   if (!name) return c.json({ detail: 'public_name is required' }, 400);
 
@@ -109,6 +139,16 @@ app.post('/certificates', async (c) => {
     .prepare(`SELECT ${OWNER_COLS} FROM spinout_certificates WHERE user_id = ? AND status = 'issued'`)
     .bind(userId).first<any>();
   if (existing) return c.json({ certificate: existing, already_issued: true });
+
+  // The same collision the automatic path now refuses (D382): a revoked row
+  // holds this id, and the UNIQUE index would throw on the INSERT below.
+  const taken = await c.env.DB
+    .prepare(`SELECT id FROM spinout_certificates WHERE credential_id = ?`)
+    .bind(credentialId).first<{ id: number }>();
+  if (taken) {
+    const message = 'A revoked credential already holds this id, so it cannot be issued again on the same date.';
+    return c.json({ error: 'reissue_blocked', message, detail: message }, 409);
+  }
 
   await c.env.DB.prepare(
     `INSERT INTO spinout_certificates
@@ -126,6 +166,9 @@ app.post('/certificates', async (c) => {
   const row = await c.env.DB
     .prepare(`SELECT ${OWNER_COLS} FROM spinout_certificates WHERE credential_id = ?`)
     .bind(credentialId).first<any>();
+  await logAdminAction(c.env, user.id, user.email, 'spinout_certificate_issued', {
+    target_user_id: userId, certificate_id: row?.id ?? null, credential_id: credentialId, manual: true,
+  });
   return c.json({ certificate: row }, 201);
 });
 
@@ -133,10 +176,45 @@ app.get('/certificates', async (c) => {
   const user = await requireAuth(c);
   if (user.role !== 'admin') return c.json({ detail: 'Forbidden' }, 403);
   await ensureTables(c.env);
+  // Who issued each row, for the admin tab's activity log (D382). NULL means
+  // the automatic graduation path, which is recorded that way on purpose.
+  // `sc.*`: the owner columns plus issued_by_user_id and the row timestamps,
+  // all of which an admin may see; the join adds only the issuer's name.
   const rows = await c.env.DB
-    .prepare(`SELECT ${OWNER_COLS} FROM spinout_certificates ORDER BY issued_at DESC LIMIT 500`)
+    .prepare(`SELECT sc.*, u.name AS issued_by_name
+                FROM spinout_certificates sc
+                LEFT JOIN users u ON u.id = sc.issued_by_user_id
+               ORDER BY sc.issued_at DESC LIMIT 500`)
     .all<any>();
-  return c.json({ certificates: rows.results || [] });
+
+  // Graduates the registry has no row for at all: `incorporation_completed` on
+  // record, no certificate issued or revoked. The same definition of
+  // "graduated" the automatic path and the backfill use. A failed read is
+  // reported as unavailable, never as an empty queue.
+  let awaiting: Array<{ user_id: number; name: string | null; conferred_at: string | null }> | null = null;
+  let eligibleTotal: number | null = null;
+  const unavailable: Record<string, string> = {};
+  try {
+    const a = await c.env.DB.prepare(
+      `SELECT m.user_id, u.name, MIN(m.completed_at) AS conferred_at
+         FROM spinout_lab_milestones m
+         JOIN users u ON u.id = m.user_id
+         LEFT JOIN spinout_certificates sc ON sc.user_id = m.user_id
+        WHERE m.milestone_key = 'incorporation_completed' AND sc.id IS NULL
+        GROUP BY m.user_id, u.name
+        ORDER BY conferred_at DESC
+        LIMIT 500`,
+    ).all<{ user_id: number; name: string | null; conferred_at: string | null }>();
+    awaiting = a.results || [];
+    const t = await c.env.DB.prepare(
+      `SELECT COUNT(DISTINCT user_id) AS n FROM spinout_lab_milestones WHERE milestone_key = 'incorporation_completed'`,
+    ).first<{ n: number }>();
+    eligibleTotal = Number(t?.n ?? 0);
+  } catch (e) {
+    console.error('[certificates] awaiting read failed', (e as Error)?.message);
+    unavailable.awaiting = 'The graduate list could not be read, so who is still waiting for a certificate is unknown.';
+  }
+  return c.json({ certificates: rows.results || [], awaiting, eligible_total: eligibleTotal, unavailable });
 });
 
 app.post('/certificates/:id/revoke', async (c) => {
@@ -146,6 +224,16 @@ app.post('/certificates/:id/revoke', async (c) => {
   const id = Number(c.req.param('id'));
   const body = await c.req.json().catch(() => ({} as any));
   const reason = String(body.reason || '').trim() || null;
+  // A revocation is shown on the public verification page and is permanent
+  // for that credential id (a same-date reissue collides, D382), so it carries
+  // its reason — the activity log and a later reader need one.
+  if (!reason) {
+    const message = 'A reason is required to revoke a credential.';
+    return c.json({ error: 'reason_required', message, detail: message }, 400);
+  }
+  const before = await c.env.DB
+    .prepare(`SELECT status FROM spinout_certificates WHERE id = ?`)
+    .bind(id).first<{ status: string }>();
   await c.env.DB.prepare(
     `UPDATE spinout_certificates
         SET status = 'revoked', revoked_at = datetime('now'),
@@ -156,6 +244,11 @@ app.post('/certificates/:id/revoke', async (c) => {
     .prepare(`SELECT ${OWNER_COLS} FROM spinout_certificates WHERE id = ?`)
     .bind(id).first<any>();
   if (!row) return c.json({ detail: 'Not found' }, 404);
+  if (before?.status === 'issued') {
+    await logAdminAction(c.env, user.id, user.email, 'spinout_certificate_revoked', {
+      target_user_id: row.user_id, certificate_id: id, credential_id: row.credential_id, reason,
+    });
+  }
   return c.json({ certificate: row });
 });
 

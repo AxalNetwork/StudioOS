@@ -17,12 +17,14 @@
  *   - CLOUDFLARE_API_TOKEN     — scoped to `Workers Scripts: Edit`
  *   - CLOUDFLARE_ACCOUNT_ID    — 32-hex account UUID (reused from analytics)
  *   - CF_WORKER_SCRIPT_NAME    — defaults to 'studioos' (the prod script name)
+ *                                on HQ; REQUIRED on a branch, see resolveConfig
  *
  * Never logs token values. Returns a structured result the caller maps
  * to a stable error code (`cloudflare_api_token_missing`,
  * `cf_api_forbidden`, `cf_api_failed`) for the UI toast.
  */
 import type { Env } from '../types';
+import { branchOf } from '../util/branch';
 
 export interface CfSecretResult {
   ok: boolean;
@@ -39,9 +41,36 @@ function resolveConfig(env: Env): { token: string; accountId: string; script: st
   const e = env as unknown as Record<string, string | undefined>;
   const token = e.CLOUDFLARE_API_TOKEN;
   const accountId = e.CLOUDFLARE_ACCOUNT_ID;
-  const script = e.CF_WORKER_SCRIPT_NAME || 'studioos';
-  if (!token || !accountId) return { missing: true };
+  // D106 — THE `|| 'studioos'` FALLBACK IS GONE ON A BRANCH, and this is the
+  // one leak on the list whose consequence is a write rather than a read. A
+  // branch admin entering their own Google client secret on Integration Keys
+  // calls this; with the fallback, an unset `CF_WORKER_SCRIPT_NAME` would
+  // PUT that secret onto HQ's script — overwriting production's credential
+  // with a subsidiary's, from a screen that reported success.
+  //
+  // HQ keeps the fallback because HQ is the script the fallback names, and
+  // `wrangler.toml` has never had to set the var for the behaviour to be
+  // right. A branch config always sets it (the generator writes
+  // `CF_WORKER_SCRIPT_NAME = "studioos-<code>"`), so an unset value on a
+  // branch means the config is not the generated one, and guessing is
+  // exactly the wrong response to that.
+  const onBranch = branchOf(env) !== null;
+  const script = e.CF_WORKER_SCRIPT_NAME || (onBranch ? '' : 'studioos');
+  if (!token || !accountId || !script) return { missing: true };
   return { token, accountId, script };
+}
+
+/**
+ * D209 — the script a secret write from this Worker would land on, or `null`
+ * when this Worker cannot write one (no token, no account id, or a branch with
+ * no script name). Read by the topology page, which states that three screens
+ * write Worker secrets through the Cloudflare API; asking `resolveConfig`
+ * rather than re-deriving the script is what keeps the page from naming a
+ * target the write would not use. Never returns a credential.
+ */
+export function secretWriteTarget(env: Env): string | null {
+  const cfg = resolveConfig(env);
+  return 'missing' in cfg ? null : cfg.script;
 }
 
 function classifyError(status: number, body: string): CfSecretResult {
@@ -87,8 +116,28 @@ export async function setSecret(env: Env, name: string, value: string): Promise<
     // Network / fetch failure — never includes a token value.
     return { ok: false, status: 0, code: 'cf_api_failed', error: `network: ${String(e?.message || e).slice(0, 200)}` };
   }
-  if (res.ok) return { ok: true, status: res.status };
   const body = await res.text().catch(() => '');
+  if (res.ok) {
+    // A 200 IS NOT A WRITE. The Cloudflare v4 API answers HTTP 200 with
+    // `{"success": false, "errors": [...]}` for a whole class of refusals,
+    // so checking `res.ok` alone reports a green "saved" toast for a secret
+    // that was never written — and the admin then spends their time
+    // debugging the feature instead of the credential. Parse the envelope
+    // and believe `success`, not the status line.
+    //
+    // A body that will not parse is treated as a PASS on purpose: the write
+    // is far more likely to have landed than not, and failing closed on an
+    // unparseable-but-2xx response would refuse working saves.
+    try {
+      const parsed = JSON.parse(body) as { success?: boolean; errors?: Array<{ code?: number; message?: string }> };
+      if (parsed && parsed.success === false) {
+        const first = Array.isArray(parsed.errors) ? parsed.errors[0] : null;
+        const detail = first?.message ? String(first.message).slice(0, 200) : 'the API reported success:false with no message';
+        return { ok: false, status: res.status, code: 'cf_api_failed', error: `cloudflare refused the write: ${detail}` };
+      }
+    } catch { /* unparseable 2xx — see above */ }
+    return { ok: true, status: res.status };
+  }
   return classifyError(res.status, body);
 }
 

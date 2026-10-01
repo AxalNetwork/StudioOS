@@ -1,9 +1,10 @@
 /**
  * Task #2 (AU) — Admin Publication Exports.
  *
- * Mounted at /api/admin/publications. All endpoints admin-only via
- * requireAdmin, except the public read at /api/admin/publications/public/:slug
- * and the HMAC-gated download at /api/admin/publications/download/:token.
+ * Mounted at /api/admin/publications. Every endpoint here is admin-only via
+ * requireAdmin. The public read and the HMAC-gated download are NOT here:
+ * they are /api/market-intel-public/publications/:slug and
+ * /api/market-intel-public/publications/download/:token (see the NOTE below).
  *
  * Endpoints:
  *   POST /draft               { title, subtitle?, audience, section, filters? }
@@ -12,8 +13,6 @@
  *   PUT  /:id                 patch { title?, subtitle?, audience?, summary_text? }
  *   POST /:id/render          { format: 'pdf'|'csv'|'png' } → R2 + 24h signed URL
  *   POST /:id/publish         flips to status='published' + sets published_at
- *   GET  /public/:slug        public read (no auth, status='published' only)
- *   GET  /download/:token     HMAC-gated R2 fetch (24h)
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -26,14 +25,16 @@ import {
   signPublicationToken,
   uniqueSlug, periodLabel, K_MIN,
 } from '../services/publications';
+import { bindingKey } from '../util/schemaBootstrap';
+import { refusalBody } from '../util/refusal';
 
 type AppCtx = Context<{ Bindings: Env }>;
 const r = new Hono<{ Bindings: Env }>();
 
 // ---------- ensure schema (idempotent self-healing) ----------
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   // Only create the new admin_publications table — admin_audit_log is
   // owned by an earlier migration and must NOT be mutated from a request
   // path. The audit-write helper handles a missing actor column by
@@ -44,7 +45,7 @@ async function ensureSchema(env: Env): Promise<void> {
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_admin_publications_slug ON admin_publications(slug)");
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_admin_publications_status_created ON admin_publications(status, created_at DESC)");
-    _schemaReady = true;
+    SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[admin_publications] ensureSchema failed:', (e as Error).message);
   }
@@ -351,19 +352,23 @@ r.post('/:id{[0-9]+}/render', async (c: AppCtx) => {
       });
       if (!res.ok) {
         const txt = await res.text().catch(() => '');
-        return c.json({
-          error: 'browser_rendering_failed',
-          status: res.status,
-          message: txt.slice(0, 240),
-        }, 502);
+        return c.json(refusalBody({
+          code: 'browser_rendering_failed',
+          message: 'The page could not be rendered. Try again in a moment.',
+          raw: txt,
+          audience: 'admin',
+          extra: { status: res.status },
+        }), 502);
       }
       bytes = await res.arrayBuffer();
       contentType = format === 'png' ? 'image/png' : 'application/pdf';
     } catch (e) {
-      return c.json({
-        error: 'browser_rendering_failed',
-        message: (e as Error).message,
-      }, 502);
+      return c.json(refusalBody({
+        code: 'browser_rendering_failed',
+        message: 'The page could not be rendered. Try again in a moment.',
+        raw: e,
+        audience: 'admin',
+      }), 502);
     }
   }
 
@@ -451,8 +456,8 @@ r.post('/:id{[0-9]+}/publish', async (c: AppCtx) => {
 
 // NOTE: the public read endpoint and the HMAC-gated download endpoint
 // both live under /api/market-intel-public (see
-// routes/market_intel_public.ts) so they sit OUTSIDE the /api/admin/*
-// CF Access perimeter applied in index.ts. The public read serves
+// routes/market_intel_public.ts) so they sit outside /api/admin and the
+// requireAdmin gate its handlers run. The public read serves
 // /insights/public/:slug for anonymous visitors; the download endpoint
 // must also be reachable by anyone holding the 24h HMAC token (the
 // token IS the authorisation), e.g. an LP receiving a render link by

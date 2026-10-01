@@ -1,13 +1,21 @@
 /**
- * HQ · Revenue — canvas H5, and the four figures it draws that do not exist.
+ * HQ · Revenue — canvas H5, and the figures it draws that do not exist.
  *
  * WHAT THIS FILE IS FOR. A revenue page fails silently. Nobody notices a
  * wrong number the way they notice a blank screen, and the wrong number
  * here is the easy one to produce: `?? 0` on a figure with no source turns
  * "nobody can say what subscriptions earned" into "subscriptions earned
- * nothing". Of the five zones the artboard draws, two have a store, one has
- * half a store, and two have none — so most of what follows asserts that a
- * figure is ABSENT and its reason is on the screen.
+ * nothing".
+ *
+ * THE COUNT MOVED IN D111 AND THE ASSERTIONS MOVED WITH IT. Two of the five
+ * zones — statements and the promo ceiling — used to carry a stated refusal
+ * and now carry a store (migration 260). The two assertions that pinned those
+ * refusals were RE-POINTED rather than deleted, because the property they were
+ * really holding is unchanged: a figure without a source says so. What changed
+ * is which figures those are. The one that is still absent inside the promo
+ * zone is the ISSUED amount when a branch has not reported it, and a null
+ * there rendering as 0 would report the whole ceiling as available — the same
+ * failure one level down.
  *
  * The zone titles are read OFF THE ARTBOARD rather than retyped, so the page
  * cannot drift from the design without this failing.
@@ -17,6 +25,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { bpsPercent } from '../src/lib/bps.js';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = raw('frontend/src/pages/hq/RevenuePage.jsx');
@@ -53,14 +62,20 @@ test('every zone the artboard draws is on the page', () => {
   assert.match(PAGE, /Stream/, 'the stream table lost its header');
 });
 
-test('the four figures with no source render absent, each with its own reason', () => {
+test('the figures with no source render absent, each with its own reason', () => {
   // A blanket apology is not an explanation. Each absent figure carries the
   // server's reason for THAT figure, so the page can be read without
   // knowing the schema.
   assert.match(SRC, /data\.subscriptions_reason/, 'the subscriptions row does not say why it is blank');
-  assert.match(SRC, /data\.statements_reason/, 'the statements zone does not say why it is blank');
-  assert.match(SRC, /promos\.budget_reason/, 'the promo zone does not say why there is no budget');
-  assert.match(SRC, /data\.derived_metrics_reason/, 'the per-subsidiary zone does not cite U1');
+  assert.match(SRC, /data\.token_pl_per_subsidiary_reason/, 'the token P&L zone names why spend is not split');
+  assert.match(SRC, /Revenue per subsidiary/, 'the revenue-per-subsidiary zone is drawn');
+  // Still shown, and still true, but narrower than it was: what cannot be
+  // derived is a branch's SPEND, because a code names no subsidiary.
+  assert.match(SRC, /promos\.budget_reason/, 'the promo zone no longer says what it cannot derive');
+  // THE RETIRED REFUSAL MUST BE GONE, not merely unused. A page still reading
+  // `statements_reason` would render `undefined` beside a working ledger.
+  assert.doesNotMatch(SRC, /statements_reason/, 'the page still renders the retired statements refusal');
+  assert.doesNotMatch(ROUTE, /statements_reason/, 'the summary endpoint still ships the retired refusal');
 });
 
 test('no absent figure is defaulted to a number', () => {
@@ -72,9 +87,10 @@ test('no absent figure is defaulted to a number', () => {
   // And never a dash standing in for a value: a dash is indistinguishable
   // from a real value someone chose to draw.
   assert.doesNotMatch(SRC, /value=\{['"][—–-]['"]\}/, 'an em-dash is standing in for a missing figure');
-  // The three Stats that must stay permanently blank are written as `null`,
-  // which is what makes them render <Unrecorded/> rather than anything else.
-  for (const label of ['Margin', 'Owed by subsidiaries', 'Budget left']) {
+  // ONE STAT LEFT THAT MUST STAY PERMANENTLY BLANK. The other two acquired a
+  // store in D111 and their assertions moved to the two tests below; margin
+  // did not, because what tokens were billed at is still recorded nowhere.
+  for (const label of ['Margin']) {
     const at = SRC.indexOf(`label="${label}"`);
     assert.ok(at >= 0, `the ${label} stat is gone`);
     // Bounded to this element's own `/>`. A character-count window runs into
@@ -86,6 +102,86 @@ test('no absent figure is defaulted to a number', () => {
     assert.match(SRC.slice(at, end), /value=\{null\}/,
       `the ${label} stat acquired a value — there is no source for one`);
   }
+});
+
+test('the statement ledger is read from its own endpoint, with its own failure', () => {
+  // The disputes precedent, applied to the second zone that now has writes
+  // behind it: a slow or failed ledger costs this zone and not the page.
+  assert.match(SRC, /api\.statements\(\)/, 'the statements zone does not read the ledger');
+  assert.match(SRC, /const \[statements, setStatements\] = useState/, 'the ledger shares the summary\'s state');
+  assert.match(SRC, /onRetry=\{loadStatements\}/, 'an unreadable ledger cannot be retried on its own');
+  assert.match(SRC, /This is not a claim that nothing is owed\./,
+    'an unreadable ledger is indistinguishable from an empty one');
+  // And the summary must still not fetch it — the reason it is a pointer.
+  assert.match(ROUTE, /statements_endpoint/, 'the summary no longer points at where statements live');
+  assert.doesNotMatch(ROUTE, /FROM subsidiary_statements/,
+    'the ledger was folded into the endpoint whose contract is that it stores nothing');
+});
+
+test('an owed figure is never one number across currencies, and an incomplete one says so', () => {
+  // The same refusal the stream table makes, one zone down. `totals_by_currency`
+  // is keyed BY currency, so rendering it is per-currency by construction; a
+  // page that reduced it to a single figure is what this catches.
+  assert.match(SRC, /totals_by_currency/, 'the owed totals are gone');
+  assert.match(SRC, /Object\.entries\(ledger\.totals_by_currency\)/,
+    'the owed total is not rendered one line per currency');
+  assert.doesNotMatch(SRC, /owed_total|total_owed/, 'a single cross-currency owed figure appeared');
+  assert.match(PAGE, /not summed across them/, 'the page does not tell the reader owed is per currency');
+  // A FLOOR IS NOT A TOTAL, said on the row that carries the figure.
+  assert.match(SRC, /!s\.complete/, 'an incomplete statement renders identically to a complete one');
+  assert.match(PAGE, /floor, not a total/, 'the page does not say an incomplete owed figure is a floor');
+});
+
+/* ── H10 · the rate the owed figure was computed from (D149) ────────── */
+
+test('an owed figure renders beside the rate it was derived from', () => {
+  // WHY THIS IS A DEFECT AND NOT A MISSING NICETY. `owed` is `gross × revenue
+  // share`, computed server-side by `drawStatement`, and the row rendered it as
+  // a bare number — so an operator disputing a statement had no way to check it
+  // without opening the licence. The canvas draws the rate in the column header
+  // (`× {{ h10SharePct }} owed`) for exactly that reason.
+  //
+  // AND THE RATE WAS ALREADY ON THE PAYLOAD. `admin_statements.ts` declares
+  // `revenue_share_bps` on the row and writes it, because the statement records
+  // the rate it was drawn at rather than the rate the licence carries today —
+  // which is the whole point of copying it onto the row. So this renders a
+  // field the page already fetched and threw away.
+  assert.match(SRC, /bpsPercent\(s\.revenue_share_bps\)/);
+  assert.match(SRC, /owed \{money\(s\.owed_cents, s\.currency\)\}/);
+  const STATEMENTS = raw('cloudflare-worker/src/routes/admin_statements.ts');
+  assert.match(STATEMENTS, /revenue_share_bps/, 'the rate must be on the row the page reads');
+});
+
+test('a statement with no rate recorded prints no rate, never 0%', () => {
+  // The clause DROPS rather than defaulting — `zoneFilterBuilder`'s rule for
+  // counts, one surface over. "× 0%" beside an owed figure says HQ is owed
+  // nothing, which is a claim about money that nothing measured; the D141 trap
+  // and the reason `bpsPercent` returns null.
+  assert.match(SRC, /\{bpsPercent\(s\.revenue_share_bps\) && /);
+  assert.ok(
+    !/revenue_share_bps \|\| 0/.test(SRC),
+    'an absent rate is absent, not zero',
+  );
+  // Proven against the helper rather than described, in both directions.
+  assert.equal(bpsPercent(null), null);
+  assert.equal(bpsPercent(3500), '35%');
+});
+
+test('an unreported issued figure renders Unrecorded, never a zero or a full ceiling', () => {
+  // The one absent figure INSIDE a zone that now has a store, and the only
+  // wrong number this zone can produce: "the branch has issued nothing" and
+  // "the branch has not told us" are different, and a zero would report the
+  // whole ceiling as still available.
+  assert.match(SRC, /api\.promoCeilings\(\)/, 'the ceilings are not read');
+  const at = SRC.indexOf('x.issued_available');
+  assert.ok(at > 0, 'nothing distinguishes an unreported issued figure from a reported one');
+  // Bounded to the two cells that render it, so the assertion cannot be
+  // satisfied by an `issued_available` used somewhere else on the page.
+  const cells = SRC.slice(at, at + 260);
+  assert.match(cells, /<Unrecorded \/>/, 'an unreported issued figure renders as something other than Unrecorded');
+  assert.match(cells, /remaining_cents/, 'remaining is not gated on whether issued was reported');
+  assert.match(PAGE, /not the same as having issued nothing/,
+    'the page does not tell the reader what an absent issued figure means');
 });
 
 test('the two currencies are never added together', () => {
@@ -129,7 +225,16 @@ test('the page is wired: api method, route, and a super-admin gate', () => {
 
 test('an unreadable summary says so without claiming the business earned nothing', () => {
   assert.match(SRC, /const UNAVAILABLE = Symbol\('unavailable'\)/, 'the failed-read state is gone');
-  const at = SRC.indexOf('data === UNAVAILABLE');
+  // ANCHOR ON THE RENDER BRANCH, NOT ON THE COMPARISON. This read
+  // `SRC.indexOf('data === UNAVAILABLE')` — the first occurrence anywhere in
+  // the file — on the assumption that the only thing testing that symbol was
+  // the JSX. It stopped being true the moment the page's AI rail grew a
+  // `coverageNote` that says the same thing in words (D126): the slice landed
+  // on a ternary two hundred lines above the markup and the assertion failed
+  // against correct code. `{data === UNAVAILABLE && (` names the branch that
+  // RENDERS, which is what this test is a rule about — the same fix
+  // `research_stores_scoping.test.ts` records making for `touching(...)[0]`.
+  const at = SRC.indexOf('{data === UNAVAILABLE && (');
   assert.ok(at >= 0, 'nothing renders when the summary cannot be read');
   const branch = SRC.slice(at, at + 420);
   assert.match(branch, /<Unreadable/, 'a failed read renders something other than Unreadable');

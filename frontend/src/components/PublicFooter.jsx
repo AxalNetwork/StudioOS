@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Send } from 'lucide-react';
 import { openCookiePreferences } from '../lib/cookieConsent';
+import { OWNERSHIP_NOTICE } from '../lib/legalNotice';
 import { PRODUCT_FOOTER_LINKS } from '../data/productPages';
 import AxalLogo from './AxalLogo';
 
@@ -142,8 +143,7 @@ export default function PublicFooter() {
         <div className="border-t border-gray-200 pt-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-xs text-gray-500">
-              © 2026 Axal VC. Platform operated by Axal VC Management LLC.
-              Brand and platform IP owned by Axal VC Holdings LLC. All rights reserved.
+              {OWNERSHIP_NOTICE}
             </p>
             <p className="text-xs text-gray-500 max-w-md text-right">
               <strong>Disclosure:</strong> Investment in startups involves a high degree of risk and may result in the loss of your entire investment.

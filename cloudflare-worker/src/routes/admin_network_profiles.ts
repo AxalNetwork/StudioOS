@@ -11,7 +11,10 @@
  *   PUT    /:id                 — partial update (name, kind, role,
  *                                 bio, linkedin_url, skills,
  *                                 display_order, is_active)
- *   DELETE /:id                 — hard delete (also removes R2 photo)
+ *   DELETE /:id                 — archive: sets is_active = 0 and keeps
+ *                                 the row and its R2 photo, so re-activating
+ *                                 is lossless (the handler below says why;
+ *                                 this line said "hard delete" until D214)
  *   POST   /:id/photo           — upload square photo (data URI body)
  *   POST   /reorder             — { order: [id, ...] }
  *
@@ -25,6 +28,7 @@ import { requireAdmin } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import {
   ensureNetworkProfilesSchema,
+  NETWORK_KIND_DEFAULT,
   NETWORK_KINDS,
   SKILL_CATALOG,
   type NetworkKind,
@@ -158,7 +162,23 @@ r.post('/', async (c) => {
 
   const name = String(body.name || '').trim().slice(0, 200);
   if (!name) return c.json({ error: 'name_required' }, 400);
-  const kind = sanitizeKind(body.kind) || 'mentor';
+  // D229 — this used to silently rewrite an unknown kind to 'mentor'
+  // (`sanitizeKind(body.kind) || 'mentor'`), so a typo or a client sending a
+  // retired value read back as if the operator had chosen 'mentor'. PUT
+  // already refused the same case with 400 invalid_kind (below); POST now
+  // matches it: an explicitly-given, unrecognized kind is refused, not
+  // rewritten. Only a genuinely OMITTED kind gets a default, and that
+  // default is 'advisor' — the canonical value the role was renamed to
+  // (NETWORK_KIND_DEFAULT, networkProfilesSchema.ts) — not the retired
+  // 'mentor'.
+  let kind: NetworkKind;
+  if (body.kind === undefined || body.kind === null || String(body.kind).trim() === '') {
+    kind = NETWORK_KIND_DEFAULT;
+  } else {
+    const k = sanitizeKind(body.kind);
+    if (!k) return c.json({ error: 'invalid_kind', allowed: NETWORK_KINDS }, 400);
+    kind = k;
+  }
   const role = String(body.role || '').trim().slice(0, 200) || null;
   const company = String(body.company || '').trim().slice(0, 200) || null;
   const bio = String(body.bio || '').trim().slice(0, 2000) || null;

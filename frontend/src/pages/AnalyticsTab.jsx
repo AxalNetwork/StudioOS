@@ -2,12 +2,13 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   BarChart3, Users as UsersIcon, DollarSign, Cpu, ClipboardList,
   Download, FileText, RefreshCw, EyeOff, Eye, AlertTriangle, ChevronRight,
-  ArrowUp, ArrowDown, Check, X as XIcon, Pencil, Plus, Trash2,
+  ArrowUp, ArrowDown, Check, X as XIcon, Pencil, Plus, Trash2, Lock,
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts';
 import { api } from '../lib/api';
+import { TechnicalDepthRow } from './DepthCount';
 
 const SUB_TABS = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
@@ -43,7 +44,35 @@ function rangeFromUrl() {
 // — `tab` and `status` are surfaced in the headline so admins can tell
 // at a glance which surface failed and whether it's a 4xx (their
 // permissions) vs a 5xx (transient infra).
-function RetryCard({ tab, status, message, onRetry }) {
+/**
+ * A refusal is not a failure, and D132 is what made the difference visible.
+ *
+ * `/audit`, `/audit/export.csv` and `/exports/recent` read other admins'
+ * activity by name and email, so they moved to the super admin. Every other
+ * admin now gets a 403 there — which is the POLICY WORKING, and rendering it
+ * as `Couldn't load recent exports (403)` in a red alarm card with a Retry
+ * button would say the opposite three times over: that something broke, that
+ * it might be transient, and that pressing a button could help.
+ *
+ * So a 403 renders as a stated refusal in the server's own words, neutral,
+ * with no retry. One component, because the alternative is each caller
+ * inventing its own sentence for the same server rule — the duplication this
+ * repo has now consolidated six times.
+ */
+export function Refusal({ message }) {
+  return (
+    <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 flex items-start gap-2 dark:bg-gray-900 dark:border-gray-800 dark:text-gray-300">
+      <Lock size={14} className="mt-0.5 shrink-0 text-gray-400" />
+      <div className="flex-1 min-w-0 break-words">
+        {message || 'This is not yours to read.'}
+      </div>
+    </div>
+  );
+}
+
+export function RetryCard({ tab, status, message, onRetry }) {
+  // 403 is a decision, not an outage. See `Refusal` above.
+  if (status === 403) return <Refusal message={message} />;
   const headline = tab
     ? `Couldn't load ${tab}${status ? ` (${status})` : ''}`
     : (message || 'Failed to load.');
@@ -56,7 +85,7 @@ function RetryCard({ tab, status, message, onRetry }) {
         {onRetry && (
           <button
             onClick={onRetry}
-            className="mt-1.5 text-xs px-2 py-1 rounded border border-red-300 bg-white hover:bg-red-50 text-red-700 inline-flex items-center gap-1 dark:bg-gray-900"
+            className="mt-1.5 text-xs px-2 py-1 rounded border border-red-300 bg-white hover:bg-red-50 dark:hover:bg-red-900/30 text-red-700 inline-flex items-center gap-1 dark:bg-gray-900"
           >
             <RefreshCw size={11} /> Retry
           </button>
@@ -124,14 +153,14 @@ function ExportButtons({ onExport, busy }) {
       <button
         onClick={() => onExport('csv')}
         disabled={busy}
-        className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 inline-flex items-center gap-1.5 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+        className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 inline-flex items-center gap-1.5 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
       >
         <Download size={13} /> Export CSV
       </button>
       <button
         onClick={() => onExport('pdf')}
         disabled={busy}
-        className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 inline-flex items-center gap-1.5 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+        className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 inline-flex items-center gap-1.5 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
       >
         <FileText size={13} /> Export PDF
       </button>
@@ -951,6 +980,10 @@ function PlanAuditHistory({ refreshKey }) {
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [err, setErr] = useState('');
+  // D132 — the status, not only the message. `/audit` and `/audit/export.csv`
+  // are super-admin-only now, so a plain admin's 403 here is the rule working
+  // and must not be painted as a failure. `Refusal` is what says so.
+  const [errStatus, setErrStatus] = useState(null);
   const [planOptions, setPlanOptions] = useState([]);
   const [planFilter, setPlanFilter] = useState('');
   const [adminFilter, setAdminFilter] = useState('');
@@ -975,7 +1008,7 @@ function PlanAuditHistory({ refreshKey }) {
     }
     setDateErr('');
     let alive = true;
-    setItems(null); setErr(''); setHasMore(false); setTotal(0);
+    setItems(null); setErr(''); setErrStatus(null); setHasMore(false); setTotal(0);
     const opts = {};
     if (planFilter) opts.plan_id = planFilter;
     if (adminFilter) {
@@ -991,7 +1024,7 @@ function PlanAuditHistory({ refreshKey }) {
         setTotal(Number(r.total || 0));
         setHasMore(!!r.has_more);
       })
-      .catch(e => { if (alive) setErr(e?.message || 'Failed to load'); });
+      .catch(e => { if (alive) { setErr(e?.message || 'Failed to load'); setErrStatus(e?.status || null); } });
     return () => { alive = false; };
   }, [refreshKey, planFilter, adminFilter, fromDate, toDate]);
 
@@ -1013,6 +1046,7 @@ function PlanAuditHistory({ refreshKey }) {
       setHasMore(!!r.has_more);
     } catch (e) {
       setErr(e?.message || 'Failed to load more');
+      setErrStatus(e?.status || null);
     } finally {
       setLoadingMore(false);
     }
@@ -1036,9 +1070,10 @@ function PlanAuditHistory({ refreshKey }) {
   // logs the export to admin_audit_log so finance has a who/when trail.
   const [exporting, setExporting] = useState(false);
   const [exportErr, setExportErr] = useState('');
+  const [exportErrStatus, setExportErrStatus] = useState(null);
   const exportCsv = async () => {
     if (exporting) return;
-    setExporting(true); setExportErr('');
+    setExporting(true); setExportErr(''); setExportErrStatus(null);
     try {
       const opts = {};
       if (planFilter) opts.plan_id = planFilter;
@@ -1051,6 +1086,7 @@ function PlanAuditHistory({ refreshKey }) {
       await api.analyticsAuditExportCsv(opts);
     } catch (e) {
       setExportErr(e?.message || 'Export failed');
+      setExportErrStatus(e?.status || null);
     } finally {
       setExporting(false);
     }
@@ -1123,7 +1159,7 @@ function PlanAuditHistory({ refreshKey }) {
           </div>
           <button
             type="submit"
-            className="text-xs px-2 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900"
+            className="text-xs px-2 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50 dark:hover:bg-gray-800 dark:border-gray-700 dark:bg-gray-900"
           >
             Apply
           </button>
@@ -1163,7 +1199,7 @@ function PlanAuditHistory({ refreshKey }) {
             onClick={exportCsv}
             disabled={exporting || (items !== null && items.length === 0 && !hasFilters)}
             title={hasFilters ? 'Export rows matching current filters' : 'Export all plan changes'}
-            className="text-xs px-2 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50 disabled:opacity-50 inline-flex items-center gap-1 dark:border-gray-700 dark:bg-gray-900"
+            className="text-xs px-2 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 inline-flex items-center gap-1 dark:border-gray-700 dark:bg-gray-900"
           >
             {exporting
               ? <><RefreshCw size={11} className="animate-spin" /> Exporting…</>
@@ -1172,8 +1208,12 @@ function PlanAuditHistory({ refreshKey }) {
         </div>
       </div>
       {dateErr && <div className="text-xs text-red-600 mb-2"><AlertTriangle size={11} className="inline mr-1" />{dateErr}</div>}
-      {exportErr && <div className="text-xs text-red-600 mb-2"><AlertTriangle size={11} className="inline mr-1" />{exportErr}</div>}
-      {err && <div className="text-xs text-red-600 mb-2"><AlertTriangle size={11} className="inline mr-1" />{err}</div>}
+      {exportErr && (exportErrStatus === 403
+        ? <div className="mb-2"><Refusal message={exportErr} /></div>
+        : <div className="text-xs text-red-600 mb-2"><AlertTriangle size={11} className="inline mr-1" />{exportErr}</div>)}
+      {err && (errStatus === 403
+        ? <div className="mb-2"><Refusal message={err} /></div>
+        : <div className="text-xs text-red-600 mb-2"><AlertTriangle size={11} className="inline mr-1" />{err}</div>)}
       {items === null ? (
         <div className="text-xs text-gray-400 text-center py-3"><RefreshCw size={11} className="inline animate-spin mr-1" /> Loading…</div>
       ) : items.length === 0 ? (
@@ -1203,7 +1243,7 @@ function PlanAuditHistory({ refreshKey }) {
             type="button"
             onClick={loadMore}
             disabled={loadingMore}
-            className="text-xs px-3 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900"
+            className="text-xs px-3 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900"
           >
             {loadingMore ? <><RefreshCw size={11} className="inline animate-spin mr-1" /> Loading…</> : `Load more (${total - items.length} remaining)`}
           </button>
@@ -1391,8 +1431,7 @@ function TechnicalView({ data, onExport, busy }) {
       <div className="flex items-center justify-end"><ExportButtons onExport={onExport} busy={busy} /></div>
       {isEmpty && <EmptyPill />}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Stat label="Queue depth" value={data.queue_depth} />
-        <Stat label="DLQ" value={data.dlq_count} />
+        <TechnicalDepthRow data={data} />
         <Stat label="Routes tracked" value={data.by_route.length} />
         <Stat label="Top errors" value={data.top_errors.length} />
       </div>

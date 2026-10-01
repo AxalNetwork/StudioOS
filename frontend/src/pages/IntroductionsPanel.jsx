@@ -5,6 +5,7 @@ import {
   Wallet, Gift, Package, History, ChevronDown, ChevronUp, Handshake, Scale,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { bpsPercent } from '../lib/bps';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
 import ZoneDraft from '../workspaces/ZoneDraft';
 import { Eyebrow, Instrument } from '../workspaces/canvasKit';
@@ -31,8 +32,14 @@ const ROLE_LABEL = {
   advisor: 'Advisor', admin: 'Axal Team',
 };
 
-// Persona ids → entity-type labels (mirrors cloudflare-worker/src/personas.ts,
-// same local-fallback pattern as lib/personas.js).
+// Persona ids → SHORT entity-type labels for this panel's entity filter and
+// chips. D254 — this deliberately does NOT mirror the canonical labels in
+// cloudflare-worker/src/personas.ts: 5 of the 12 are shortened here (e.g.
+// 'gp_external' is 'VC / GP', not 'GP — External Fund'), and founder_new /
+// founder_existing are merged into one 'Founder' filter option on purpose —
+// a product call, not drift, recorded in D254. The key set is pinned to the
+// canonical 12 ids by frontend/test/persona_sources_agree.test.mjs, so a
+// 13th persona fails loudly here instead of rendering unlabelled.
 const PERSONA_LABEL = {
   lp_individual: 'LP — Individual', lp_institutional: 'LP — Institutional',
   gp_external: 'VC / GP', angel_scout: 'Angel / Scout', corporate_vc: 'Corporate VC',
@@ -264,7 +271,11 @@ function standing(state, theirName) {
   return `Asked. Cannot advance until ${theirName} answers.`;
 }
 
-const feePct = (bps) => `${(bps / 100).toFixed(bps % 100 ? 2 : 0)}%`;
+// D149: the arithmetic is `lib/bps.js`'s. This copy carried a SECOND trim rule
+// — `toFixed(bps % 100 ? 2 : 0)` — which agreed with the others on a whole
+// percent and disagreed on a fraction: 3550 read "35.50%" here and "35.5%"
+// everywhere else. The absent copy stays local, as D117 split it.
+const feePct = (bps) => bpsPercent(bps) ?? 'no rate recorded';
 
 /**
  * `zoneActions` is the same render prop `RelationshipsPanel` takes, called with
@@ -726,7 +737,7 @@ function StepRow() {
  * only thing missing was returning the counterpart's. Gathering what is already
  * recorded into one chronological view invents nothing.
  */
-function ConsentLog({ rows, onClose }) {
+export function ConsentLog({ rows, onClose }) {
   const events = rows.flatMap((p) => {
     const name = p.target?.name || 'Member';
     const out = [];

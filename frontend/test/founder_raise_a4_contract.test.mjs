@@ -56,7 +56,7 @@ test('A4 Raise desk uses selected-project source records and preserves the pitch
   // at all, because no preference term is stored anywhere.
   assert.match(desk, /No blocker is recorded against a round, so none is counted\./,
     'the status card counts blockers nothing records');
-  assert.match(desk, /no liquidation preference, participation right or exit model is recorded for this company/,
+  assert.match(desk, /so there is no waterfall to draw and this desk does not invent one/,
     'the liquidity zone no longer says why it draws no waterfall');
   assert.match(desk, /no content review runs anywhere in this build/,
     'the desk no longer says that nothing is screened before it is shared');

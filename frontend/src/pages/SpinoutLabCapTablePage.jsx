@@ -13,10 +13,25 @@
 //   - Carta: /captable/live is Worker-only and user-scoped; the chip renders
 //     only from a real response (hidden in dev). There is no push-to-Carta
 //     backend, so no "Push to Carta" button.
-//   - Omitted (no backend): vesting schedules/progress bars (vesting terms
-//     live only inside the generated Co-founder Agreement — linked instead),
-//     accelerator what-if, share/copy-link/investor-preview, pitch-deck
-//     export. CSV export is real and kept.
+//   - Vesting: GET /captable/equity-plan (D364) shows the Carta-synced option
+//     pools and grants, per account, as Carta reported them. Without Carta
+//     there is no store — the terms live inside the generated Co-founder
+//     Agreement, linked instead.
+//   - Share (D364): the Worker's audience-scoped links (POST
+//     /captable/scenarios/:uid/share), with what each audience sees stated
+//     before minting and the named holders' consent confirmed for an investor
+//     or full link (components/spinout/CapTableShareModal.jsx).
+//   - Omitted (no backend): accelerator what-if, pitch-deck export. The investor
+//     preview IS built — a read-only client-side view over the saved
+//     scenario result — and CSV export is real and kept.
+//   - Honest reads (D360): a scenario read that FAILED is not an empty cap
+//     table. Before D360 the failure normalized to empty inputs, and the first
+//     edit plus Save would have overwritten the project's one canonical
+//     scenario with that partial data. Now the page says the scenario is
+//     unreadable, offers a reload, and every edit and save path is closed
+//     (`canEdit` requires a readable scenario and `save` refuses on its own).
+//     A failed tracker read badges each founder "83(b) unreadable" rather than
+//     "No 83(b) tracker".
 //
 // Scenario writes are Growth-tier on the Worker (deliberate monetization
 // gate, Task #6) — api.js turns the 402 into the standard upgrade modal, so
@@ -26,18 +41,26 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   PieChart, Loader2, Lock, AlertTriangle, FileText, Plus, X,
-  Download, ExternalLink, CheckCircle2, Clock, Eye,
+  Download, ExternalLink, CheckCircle2, Clock, Eye, Share2,
 } from 'lucide-react';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
 import { api, spinoutLab } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
+import { reportError } from '../lib/log';
+import { Unreadable } from '../ui';
+import CapTableShareModal from '../components/spinout/CapTableShareModal';
+import EquityPlanCard from '../components/spinout/EquityPlanCard';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 const INPUT = 'w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 py-1.5 text-[12.5px] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500/40';
 
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+/** Sum of the values that are numbers. A missing value adds nothing rather
+ *  than being coerced into a zero that then reads as a recorded figure. */
+const sumKnown = (values) => values.map(num).filter((v) => v !== null).reduce((a, v) => a + v, 0);
 const fmtShares = (v) => (num(v) === null ? '—' : Number(v).toLocaleString());
 export const fmtMoney = (v) => {
   const n = num(v);
@@ -86,8 +109,8 @@ export function groupLedger(ledger) {
   for (const row of ledger || []) {
     const meta = TYPE_META[row.type] || TYPE_META.founder;
     acc[meta.group] = acc[meta.group] || { group: meta.group, pct: 0, shares: 0, dot: meta.dot };
-    acc[meta.group].pct += Number(row.pct) || 0;
-    acc[meta.group].shares += Number(row.shares) || 0;
+    acc[meta.group].pct += sumKnown([row.pct]);
+    acc[meta.group].shares += sumKnown([row.shares]);
   }
   return Object.values(acc);
 }
@@ -125,8 +148,14 @@ export default function SpinoutLabCapTablePage() {
   const [filter, setFilter] = useState('all');
   const [addModal, setAddModal] = useState(null); // {kind:'founder'|'safe'|'round', form:{}}
   const [investorPreview, setInvestorPreview] = useState(false); // client-side read-only view
+  const [shareOpen, setShareOpen] = useState(false);
+  // Carta option pools + vesting: null = absent (dev 404) or not loaded.
+  const [equityPlan, setEquityPlan] = useState({ plan: null, failed: false });
+  // Which reads failed. `scenario` closes every write path: saving over a
+  // scenario the page could not read would replace it with whatever was typed.
+  const [unread, setUnread] = useState({ projects: false, scenario: false, trackers: false });
 
-  const canEdit = !!(user && project && Number(user.founder_id) === Number(project.founder_id));
+  const canEdit = !!(user && project && !unread.scenario && Number(user.founder_id) === Number(project.founder_id));
 
   useEffect(() => {
     let dead = false;
@@ -135,20 +164,24 @@ export default function SpinoutLabCapTablePage() {
         const [st, me, projects] = await Promise.all([
           spinoutLab.state().catch(() => null),
           api.getMe(),
-          api.listProjects().catch(() => []),
+          api.listProjects().catch((e) => { reportError('spinout-captable:projects', e); return null; }),
         ]);
         if (dead) return;
         setState(st);
         setUser(me);
-        const proj = pickLabProject(projects, me);
+        const proj = projects === null ? null : pickLabProject(projects, me);
         setProject(proj || null);
         if (proj) {
-          const [capRes, tRes, liveRes] = await Promise.allSettled([
+          const [capRes, tRes, liveRes, planRes] = await Promise.allSettled([
             api.getCapTableByProject(proj.id),
             api.legal83bList(proj.id),
             api.liveCapTable(), // Worker-only; 404 in dev → chip hidden
+            api.getEquityPlan(), // Worker-only; 404 in dev → card hidden
           ]);
           if (dead) return;
+          if (capRes.status === 'rejected') reportError('spinout-captable:scenario', capRes.reason);
+          if (tRes.status === 'rejected') reportError('spinout-captable:trackers', tRes.reason);
+          setUnread({ projects: false, scenario: capRes.status === 'rejected', trackers: tRes.status === 'rejected' });
           const s = capRes.status === 'fulfilled' ? capRes.value?.scenario : null;
           setScenario(s || null);
           const norm = normalizeInputs(s?.inputs);
@@ -157,15 +190,29 @@ export default function SpinoutLabCapTablePage() {
           setResult(s?.result || null);
           setTrackers(tRes.status === 'fulfilled' ? (tRes.value?.trackers || []) : []);
           setCarta(liveRes.status === 'fulfilled' ? liveRes.value : null);
+          applyEquityPlan(planRes);
+        } else if (projects === null) {
+          setUnread({ projects: true, scenario: false, trackers: false });
         }
         if (!dead) setStatus('ready');
       } catch (e) {
-        console.error('[spinout-captable]', e);
+        reportError('spinout-captable:load', e);
         if (!dead) setStatus('error');
       }
     })();
     return () => { dead = true; };
   }, []);
+
+  function applyEquityPlan(res) {
+    if (res.status === 'fulfilled') { setEquityPlan({ plan: res.value || null, failed: false }); return; }
+    if (res.reason?.status === 404) { setEquityPlan({ plan: null, failed: false }); return; }
+    reportError('spinout-captable:equity-plan', res.reason);
+    setEquityPlan({ plan: null, failed: true });
+  }
+  const reloadEquityPlan = async () => {
+    const [res] = await Promise.allSettled([api.getEquityPlan()]);
+    applyEquityPlan(res);
+  };
 
   const markDirty = (next) => { inputsRef.current = next; setInputs(next); setDirty(true); };
 
@@ -178,7 +225,7 @@ export default function SpinoutLabCapTablePage() {
       setResult(r);
       setPreviewing(true);
     } catch (e) {
-      console.error('[spinout-captable:preview]', e);
+      reportError('spinout-captable:preview', e);
       setError(e?.data?.detail?.errors?.join('; ') || e?.data?.detail || e?.message || 'Preview failed.');
     } finally {
       setBusy('');
@@ -187,6 +234,11 @@ export default function SpinoutLabCapTablePage() {
 
   const save = async () => {
     if (busy) return;
+    // Belt and braces with canEdit: never upsert over a scenario we could not read.
+    if (unread.scenario) {
+      setError('The saved cap table could not be read, so saving is blocked — reload the page first.');
+      return;
+    }
     setBusy('save');
     setError('');
     const snapshot = inputsRef.current;
@@ -200,7 +252,7 @@ export default function SpinoutLabCapTablePage() {
       setResult(saved.result || null);
       // W4 deliverables — founder stock is real once founders hold shares in
       // the saved scenario; the table is "locked" once a round is modeled.
-      if ((snapshot.founders || []).some((f) => (Number(f.shares) || 0) > 0)) {
+      if ((snapshot.founders || []).some((f) => num(f.shares) > 0)) {
         markMilestone(user, 'founder_stock_issued');
       }
       if ((snapshot.rounds || []).length > 0) markMilestone(user, 'captable_locked');
@@ -215,7 +267,7 @@ export default function SpinoutLabCapTablePage() {
       // else: the user kept editing during the save; keep their newer inputs
       // and the "unsaved changes" banner so nothing is silently lost.
     } catch (e) {
-      console.error('[spinout-captable:save]', e);
+      reportError('spinout-captable:save', e);
       // 402 (Growth tier, prod) opens the global upgrade modal via api.js.
       if (e?.status !== 402) {
         setError(e?.data?.detail?.errors?.join('; ') || e?.data?.detail || e?.message || 'Could not save the cap table.');
@@ -235,9 +287,9 @@ export default function SpinoutLabCapTablePage() {
   }, [result]);
   const visibleLedger = filter === 'all' ? ledger : ledger.filter((r) => r.type === filter);
   const composition = useMemo(() => groupLedger(ledger), [ledger]);
-  const totalShares = useMemo(() => ledger.reduce((a, r) => a + (Number(r.shares) || 0), 0), [ledger]);
+  const totalShares = useMemo(() => sumKnown(ledger.map((r) => r.shares)), [ledger]);
   const poolRow = ledger.find((r) => r.type === 'option_pool');
-  const safesTotal = useMemo(() => (inputs.safes || []).reduce((a, s) => a + (Number(s.amount) || 0), 0), [inputs.safes]);
+  const safesTotal = useMemo(() => sumKnown((inputs.safes || []).map((s) => s.amount)), [inputs.safes]);
   const blendedCap = useMemo(() => {
     const withCap = (inputs.safes || []).filter((s) => num(s.cap) > 0 && num(s.amount) > 0);
     if (!withCap.length) return null;
@@ -335,6 +387,17 @@ export default function SpinoutLabCapTablePage() {
       </div>
     );
   }
+  if (unread.projects) {
+    return (
+      <div className="max-w-xl mx-auto mt-16" data-testid="captable-projects-unreadable">
+        <Unreadable
+          what="Your startup record"
+          claim="This is not a claim that you have no startup — reload before you create one."
+          onRetry={() => window.location.reload()}
+        />
+      </div>
+    );
+  }
   if (!project) {
     return (
       <div className="max-w-xl mx-auto mt-16 text-center" data-testid="captable-no-project">
@@ -352,7 +415,7 @@ export default function SpinoutLabCapTablePage() {
   const week = num(user?.spinout_lab_week) || state?.week || 4;
 
   return (
-    <div className="max-w-[1200px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-captable">
+    <LabPageShell width="full" testId="page-spinout-captable">
       {/* Header — canonical Lab header. The Carta chip rides in `titleExtra`
           (inert, still only rendered from a real /captable/live response); the
           two A-row actions ride in `actions`, ahead of the week pill. */}
@@ -379,6 +442,18 @@ export default function SpinoutLabCapTablePage() {
                 className={labBtn('ghost')}
               >
                 <Eye size={LAB_ICON_SIZE} /> Preview as investor
+              </button>
+            )}
+            {/* Sharing hands the table to an outsider: the Worker requires
+                scenario WRITE access, so the button follows canEdit. */}
+            {scenario && canEdit && (
+              <button
+                type="button"
+                onClick={() => setShareOpen(true)}
+                data-testid="button-share-captable"
+                className={labBtn('ghost')}
+              >
+                <Share2 size={LAB_ICON_SIZE} /> Share
               </button>
             )}
             {scenario && (
@@ -412,8 +487,21 @@ export default function SpinoutLabCapTablePage() {
           )}
         </div>
       )}
+      {unread.scenario && (
+        <div className={`${CARD} !p-3`} data-testid="captable-scenario-unreadable">
+          <Unreadable
+            what="Your saved cap table"
+            claim="This is not a claim that none exists. Editing and saving are off until it reads, so nothing overwrites it."
+            onRetry={() => window.location.reload()}
+          />
+        </div>
+      )}
       {error && <div className="text-[12px] text-rose-600 dark:text-rose-400" data-testid="text-error">{String(error)}</div>}
 
+      {/* An unreadable scenario renders no ledger, founders or SAFEs at all:
+          each of their empty states ("No founders on the cap table yet") would
+          be a claim about data the page never saw. */}
+      {!unread.scenario && (
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start">
         {/* Left column */}
         <div className="space-y-4">
@@ -530,7 +618,11 @@ export default function SpinoutLabCapTablePage() {
                         <div className="text-[12.5px] font-bold text-gray-900 dark:text-gray-50 truncate">{f.name || '—'}</div>
                         <div className="text-[10.5px] text-gray-400">{fmtShares(f.shares)} shares{row ? ` · ${fmtPct(row.pct)} FD` : ''}</div>
                       </div>
-                      {tracker ? (
+                      {unread.trackers ? (
+                        <span className="text-[10px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-300" title="The 83(b) trackers could not be read. Reload to try again." data-testid={`badge-83b-${i}`}>
+                          83(b) unreadable
+                        </span>
+                      ) : tracker ? (
                         tracker.mailed_at || tracker.status === 'mailed' || tracker.status === 'confirmed' ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" data-testid={`badge-83b-${i}`}>
                             <CheckCircle2 size={10} /> 83(b) filed
@@ -758,8 +850,15 @@ export default function SpinoutLabCapTablePage() {
               10–15% is the investor-normal range. Changing it re-computes founder dilution when you preview or save.
             </p>
           </div>
+
+          <EquityPlanCard plan={equityPlan.plan} failed={equityPlan.failed} onRetry={reloadEquityPlan} />
         </div>
       </div>
+      )}
+
+      {shareOpen && scenario && (
+        <CapTableShareModal scenarioUid={scenario.uid} onClose={() => setShareOpen(false)} />
+      )}
 
       {/* Add modal */}
       {addModal && (
@@ -896,6 +995,6 @@ export default function SpinoutLabCapTablePage() {
           </div>
         </div>
       )}
-    </div>
+    </LabPageShell>
   );
 }

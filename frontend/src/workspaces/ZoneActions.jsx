@@ -25,12 +25,15 @@ import { Link } from 'react-router-dom';
  * export, and promoting "New hypothesis" to a filled button would invent a
  * distinction the canvases deliberately do not draw. Hence one variant here.
  *
- * NO UNDECLARED TOKENS. `axal-ink-2`, `axal-ink-3`, `axal-surface-2` and
- * `axal-border-soft` are used ~400 times across `pages/` and `workspaces/` and
- * are declared nowhere — they emit no CSS. The declared set is in
- * `src/index.css`'s `@theme` block. This component uses Tailwind's own greys
- * instead, which `scripts/check-dark-mode.mjs` also knows how to require a
- * dark counterpart for.
+ * TAILWIND GREYS, AND THE REASON HAS CHANGED. `axal-ink-2`, `axal-ink-3`,
+ * `axal-surface-2` and `axal-border-soft` were used ~400 times while declared in no `@theme` block, so they emitted no
+ * CSS at all. All 575 such utilities have since been consolidated onto the
+ * declared neutrals — `axal-muted`, `-faint`, `-ground`, `-hairline` — and those
+ * spellings no longer appear in the tree. The greys here stay: the `index.css`
+ * auto-skin now pairs both vocabularies, so neither is the safer one and
+ * rewriting these would be churn. `scripts/check-dark-mode.mjs`
+ * knows how to require a dark counterpart for the greys, which is why they were
+ * the safe choice at the time.
  *
  * AN ACTION THAT CANNOT RUN IS NOT DRAWN AT ALL. This repo has shipped the
  * other thing — Trust Center's KYB form posted to a route the worker never
@@ -47,10 +50,22 @@ import { Link } from 'react-router-dom';
  * control's own label was not. The reason now lives in the action table, which
  * is where the person who can build the op reads it.
  *
- * `disabled` IS THE ONE THING THAT STILL RENDERS WITHOUT RUNNING, and it is a
- * different claim: `Export` over rows that have not loaded YET is a real
- * control in a transient state, not an unbuilt one. It keeps the canvas's label
- * and comes alive when the page has rows.
+ * `disabled` NOW CARRIES TWO CLAIMS, AND THEY ARE SAID DIFFERENTLY ON PURPOSE.
+ *
+ *   an EXPORT with no rows — built, wired and correct, waiting on data, and it
+ *     comes alive while the reader watches. The state is in the LABEL
+ *     (`Export · nothing yet`) because the eight reports that produced that
+ *     suffix were about a grey button whose only explanation was a `title`
+ *     nobody hovered.
+ *   an UNBUILT op — nothing performs it and nothing will until a store exists.
+ *     The label stays the artboard's and the reason is on HOVER.
+ *
+ * The paragraph above records why unbuilt ops once rendered nothing at all.
+ * That fixed the essays and produced the opposite report: 170 canvas controls
+ * invisible across four profiles, every one read as a missing feature. Drawing
+ * them disabled with an opt-in tooltip is the third position, taken as the
+ * user's decision of 2026-09-13 after the trade-off was put to them. Nothing is
+ * printed beside the control; the row is the artboard's row.
  */
 
 const GHOST =
@@ -66,8 +81,8 @@ const GHOST =
  *   onClick?: () => void,
  *   to?: string,
  *   busy?: boolean,
- *   disabled?: boolean,   // a real control the page cannot run yet, e.g. an
- *                         // export before its rows have loaded
+ *   disabled?: boolean,   // an export before its rows have loaded, or an op
+ *                         // with no store behind it; `title` says which
  *   title?: string,
  *   testid?: string,
  * }>} items

@@ -84,7 +84,7 @@ export default function ReferralReview() {
             className={`rounded-full px-3 py-1 text-xs font-semibold ${
               filter === s
                 ? 'bg-violet-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700 dark:bg-gray-800 dark:text-gray-300'
             }`}
           >
             {s ? LABELS[s] : 'All'}

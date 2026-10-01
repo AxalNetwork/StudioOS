@@ -12,6 +12,16 @@
 // user's normal navigation and is never replaced by lab-specific links.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { LAB_PAGE_PAD, LAB_PAGE_PAD_LOOSE } from '../components/spinout/labStyles';
+import { api } from '../lib/api';
+import { reportError } from '../lib/log';
+import { useAuth } from '../hooks/useAuthSync';
+import { pickLabProject } from './SpinoutLabStartupPage';
+import { Unrecorded, Unreadable } from '../ui';
+import {
+  EADWYN_WEEK_REASON, fmtMarket, recordDay, parseUtc, interviewRows, derivationParts,
+  labStanding, deliverablePct,
+} from '../lib/labWeekSummary';
 import {
   ArrowRight,
   Award,
@@ -88,10 +98,10 @@ export const TOOL_INFO = {
   'use-of-funds': { label: 'Use of Funds', to: '/spinout-lab/use-of-funds', desc: 'Allocation & budget plan', icon: PieChart },
   // Lab-facing partner session booking (design: Office Hours tool page);
   // /office-hours stays the advisor-side ops console.
-  'office-hours': { label: 'Office Hours', to: '/spinout-lab/office-hours', desc: 'Investors, lawyers & operators', icon: CalendarCheck },
+  'office-hours': { label: 'Office Hours', to: '/spinout-lab/office-hours', desc: 'Approved investors, advisors & partners', icon: CalendarCheck },
   'cofounder-match': { label: 'Co-founder Match', to: '/spinout-lab/cofounder-match', desc: 'Co-founder sourcing', icon: Users },
   incorporate: { label: 'Incorporate', to: '/spinout-lab/incorporate', desc: 'Entity formation', icon: Landmark },
-  captable: { label: 'Cap Table', to: '/spinout-lab/captable', desc: 'Founder stock & vesting', icon: PieChart },
+  captable: { label: 'Cap Table', to: '/spinout-lab/captable', desc: 'Founder stock & dilution', icon: PieChart },
   'section-83b': { label: '83(b) Election', to: '/spinout-lab/83b', desc: 'File within 30 days of your stock grant', icon: FileText },
   'cofounder-agreement': { label: 'Co-founder Agreement', to: '/spinout-lab/cofounder-agreement', desc: 'Signed founder terms', icon: FileSignature },
   // The credential itself, not a deliverable: it is CONFERRED by finishing
@@ -228,7 +238,7 @@ export const WEEK_DEFS = [
       { label: 'File incorporation docs and receive EIN', keys: ['ein_received'], tool: 'incorporate' },
       { label: 'Issue founder stock with vesting', keys: ['founder_stock_issued'], tool: 'captable' },
       { label: 'File 83(b) election', keys: ['section83b_filed'], tool: 'section-83b' },
-      { label: 'Sign co-founder agreement (or solo declaration)', keys: ['cofounder_agreement_signed'], tool: 'cofounder-agreement' },
+      { label: 'Sign co-founder agreement', keys: ['cofounder_agreement_signed'], tool: 'cofounder-agreement' },
       { label: 'Lock the fundraise ask', keys: ['fundraise_ask_locked'], tool: 'capital' },
       { label: 'Fill in Use of Funds', keys: ['use_of_funds_filled'], tool: 'use-of-funds' },
       // Warm intros & the data room live on the Capital raise workspace —
@@ -381,13 +391,193 @@ function CohortDeadlineBanner({ timing, serverTime }) {
   );
 }
 
-export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false }) {
+const SUM_LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2';
+
+/**
+ * The Week 1 summary's record (canvas: "Week 1 Summary" — startup record,
+ * TAM / SAM, the assistant row, interviews logged). Every value is read: the
+ * founder's Lab project, its saved market assumptions and its interviews.
+ * Mounted only when the summary is opened, so a founder who never expands it
+ * costs no reads. `fixture` is the admin journey preview's sample, labelled
+ * as such on screen; with it nothing is fetched.
+ */
+export function WeekOneRecord({ startedAt, fixture = null }) {
+  const { user } = useAuth();
+  const [read, setRead] = useState(() => (fixture
+    ? { status: 'ok', project: fixture.project, interviews: { status: 'ok', rows: fixture.interviews }, assumptions: { status: 'ok', value: fixture.assumptions } }
+    : { status: 'loading' }));
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    if (fixture) return undefined;
+    let alive = true;
+    setRead({ status: 'loading' });
+    (async () => {
+      let project;
+      try {
+        project = pickLabProject(await api.listProjects(), user);
+      } catch (e) {
+        reportError('SpinoutLabWorkspace:week1-project', e);
+        if (alive) setRead({ status: 'error' });
+        return;
+      }
+      if (!project) {
+        if (alive) setRead({ status: 'ok', project: null });
+        return;
+      }
+      const [ivs, asm] = await Promise.allSettled([
+        api.listInterviews(project.id),
+        api.getMarketAssumptions(project.id),
+      ]);
+      if (ivs.status === 'rejected') reportError('SpinoutLabWorkspace:week1-interviews', ivs.reason);
+      if (asm.status === 'rejected') reportError('SpinoutLabWorkspace:week1-assumptions', asm.reason);
+      if (!alive) return;
+      setRead({
+        status: 'ok',
+        project,
+        interviews: ivs.status === 'fulfilled'
+          ? { status: 'ok', rows: interviewRows(ivs.value?.interviews) }
+          : { status: 'error' },
+        assumptions: asm.status === 'fulfilled'
+          ? { status: 'ok', value: asm.value }
+          : { status: 'error' },
+      });
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attempt, user?.id, fixture]);
+
+  const retry = () => setAttempt((a) => a + 1);
+
+  if (read.status === 'loading') {
+    return <p className="mt-4 text-[12.5px] text-gray-400 dark:text-gray-500" data-testid="week1-record-loading">Reading your Week 1 record…</p>;
+  }
+  if (read.status === 'error') {
+    return (
+      <div className="mt-4" data-testid="week1-record-error">
+        <Unreadable what="Your startup record" claim="This is not a statement that you have none." onRetry={retry} />
+      </div>
+    );
+  }
+
+  const { project } = read;
+  const created = parseUtc(project?.created_at);
+  const day = recordDay(project?.created_at, startedAt);
+  const tam = fmtMarket(project?.tam);
+  const sam = fmtMarket(project?.sam);
+  const derived = read.assumptions?.status === 'ok' ? derivationParts(read.assumptions.value) : null;
+  const rows = read.interviews?.status === 'ok' ? read.interviews.rows : [];
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-4" data-testid="week1-record">
+      <div>
+        {fixture && (
+          <p className="mb-3 text-[11px] font-semibold text-amber-700 dark:text-amber-300" data-testid="week1-record-sample">
+            Sample data — the admin preview reads no founder's record.
+          </p>
+        )}
+        <div className={SUM_LBL}>Startup record</div>
+        {project ? (
+          <div className="flex items-center gap-3" data-testid="week1-startup-record">
+            <div className="w-9 h-9 rounded-lg bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 font-extrabold text-[12px] flex items-center justify-center">
+              {String(project.name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('') || '?'}
+            </div>
+            <div>
+              <div className="text-[13.5px] font-bold text-gray-900 dark:text-gray-50">{project.name}</div>
+              <div className="text-[11.5px] text-gray-500 dark:text-gray-400">
+                {day != null
+                  ? `Startup record created · Day ${day}`
+                  : created
+                    ? `Startup record created ${created.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}`
+                    : <Unrecorded reason="The record carries no creation date." />}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-[12.5px]" data-testid="week1-startup-record-none">
+            <Unrecorded reason="No startup record is on file for this account.">No startup record on file</Unrecorded>
+          </p>
+        )}
+
+        <div className={`${SUM_LBL} mt-5`}>TAM / SAM</div>
+        <div className="flex gap-2.5" data-testid="week1-market">
+          {[['TAM', tam], ['SAM', sam]].map(([k, v]) => (
+            <div key={k} className="flex-1 bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-700 rounded-xl px-3.5 py-2.5">
+              <div className="text-[17px] font-bold text-gray-900 dark:text-gray-50 tabular-nums">
+                {v ?? <Unrecorded reason={`No ${k} is saved on the startup record yet — Market Intel's Recalculate writes it.`}>Not sized</Unrecorded>}
+              </div>
+              <div className="text-[11px] text-gray-400 dark:text-gray-500">{k}</div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-2 text-[11.5px] text-gray-500 dark:text-gray-400 leading-relaxed" data-testid="week1-market-basis">
+          {read.assumptions?.status === 'error' ? (
+            <Unreadable what="The assumptions behind this sizing" claim="This is not a statement that none were saved." onRetry={retry} />
+          ) : (
+            <>
+              {derived ? <>Derived from your assumptions: {derived.join(' · ')}. </> : <><Unrecorded reason="No market assumptions are saved on the record.">Assumptions not recorded</Unrecorded>. </>}
+              Cited sources: <Unrecorded reason="Market Intel stores the figures and the assumptions behind them, not a citation against either." />
+            </>
+          )}
+        </div>
+
+        <div className={`${SUM_LBL} mt-5`}>Eadwyn · Week 1 questions</div>
+        <p className="text-[12.5px]" data-testid="week1-eadwyn">
+          <Unrecorded reason={EADWYN_WEEK_REASON} />
+          <span className="block mt-1 text-[11.5px] text-gray-500 dark:text-gray-400">{EADWYN_WEEK_REASON}</span>
+        </p>
+      </div>
+
+      <div data-testid="week1-interviews">
+        <div className={SUM_LBL}>
+          Interviews logged{project && read.interviews?.status === 'ok' ? ` · ${rows.length}` : ''}
+        </div>
+        {!project ? (
+          <p className="text-[12.5px]"><Unrecorded reason="Interviews are logged against the startup record, and there is none.">No interviews</Unrecorded></p>
+        ) : read.interviews?.status === 'error' ? (
+          <Unreadable what="Your interviews" claim="This is not a statement that none were logged." onRetry={retry} />
+        ) : rows.length === 0 ? (
+          <p className="text-[12.5px] text-gray-500 dark:text-gray-400">No interviews logged yet.</p>
+        ) : (
+          <div className="border border-gray-100 dark:border-gray-800 rounded-xl overflow-hidden">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-gray-800/60 text-left text-[10.5px] uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                  <th className="px-3 py-2 font-bold">Name</th>
+                  <th className="px-3 py-2 font-bold">Date</th>
+                  <th className="px-3 py-2 font-bold">Key insight</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={r.id ?? i} className="border-t border-gray-100 dark:border-gray-800 text-gray-700 dark:text-gray-200">
+                    <td className="px-3 py-2 font-semibold">{r.name ?? <Unrecorded />}</td>
+                    <td className="px-3 py-2 tabular-nums whitespace-nowrap">{r.date ?? <Unrecorded reason="No interview date was logged." />}</td>
+                    <td className="px-3 py-2">{r.insight ?? <Unrecorded reason="No pain was logged for this interview.">No pain logged</Unrecorded>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false, week1Fixture = null }) {
   const navigate = useNavigate();
-  const graduated = Boolean(state?.is_incorporated);
+  const done = useMemo(() => milestoneKeySet(state?.milestones), [state?.milestones]);
+  // `is_incorporated` is set by finishing week 4 AND by the /exit escape hatch;
+  // only the first records `incorporation_completed` (D381, lib/labWeekSummary).
+  const standing = labStanding(state, done);
+  const graduated = standing === 'graduated';
+  const exited = standing === 'exited';
+  // Past the programme either way: no countdown, no live week.
+  const finished = graduated || exited;
   const currentWeek = graduated ? 4 : Math.min(4, Math.max(1, Number(state?.week) || 1));
   const daysRemaining = Math.max(0, Number(state?.days_remaining) || 0);
   const dayNum = Math.min(SPRINT_DAYS, Math.max(1, SPRINT_DAYS - daysRemaining + 1));
-  const done = useMemo(() => milestoneKeySet(state?.milestones), [state?.milestones]);
   const unlockedFeatures = useMemo(() => new Set(state?.unlocked_features || []), [state?.unlocked_features]);
   const startedLabel = formatStartDate(state?.started_at);
   const cohort = state?.cohort || null;
@@ -425,6 +615,9 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
 
   const weekStatus = (num) => {
     if (graduated || num < currentWeek) return 'done';
+    // An exited founder's current week was left, not finished, and nothing
+    // after it opened.
+    if (exited) return num === currentWeek ? 'left' : 'locked';
     if (num === currentWeek) return 'active';
     return previewAllUnlocked ? 'unlocked' : 'locked';
   };
@@ -441,8 +634,6 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
   const selectedStatus = weekStatus(selectedDef.num);
   const selectedCounts = countDeliverables(selectedDef, (d) => chipDone(selectedDef.num, d.keys));
   const deliverablesDone = selectedCounts.done;
-  // Preview mode mirrors the design's "All weeks unlocked" ring at 100%.
-  const progressPct = graduated || previewAllUnlocked ? 100 : Math.min(100, Math.round((dayNum / SPRINT_DAYS) * 100));
 
   const openTool = (key) => {
     const tool = TOOL_INFO[key];
@@ -469,9 +660,14 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
   const totalToolsUnlocked = weekStats.reduce((n, s) => n + s.tUnlocked, 0);
   const totalDeliverables = weekStats.reduce((n, s) => n + s.dTotal, 0);
   const totalDeliverablesDone = weekStats.reduce((n, s) => n + s.dDone, 0);
+  // The header ring is the canvas's "22% · 4 of 18 deliverables": the share of
+  // counted deliverables done, beside the count it is the share of. It used to
+  // be days elapsed (and 100% in preview), a different number under the same
+  // ring; the day count stays in the week chip and the segmented bar.
+  const progressPct = deliverablePct(totalDeliverablesDone, totalDeliverables);
 
   const completedWeeks = weekStats.filter((s) => s.status === 'done');
-  const upcomingWeeks = graduated ? [] : weekStats.filter((s) => s.def.num > currentWeek);
+  const upcomingWeeks = finished ? [] : weekStats.filter((s) => s.def.num > currentWeek);
   const upcomingNums = upcomingWeeks.map((s) => s.def.num);
   const upcomingTitle =
     upcomingNums.length === 1
@@ -498,10 +694,11 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
     active: { label: 'Active', cls: 'bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300' },
     unlocked: { label: 'Unlocked', cls: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' },
     locked: { label: 'Locked', cls: 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500' },
+    left: { label: 'Left', cls: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300' },
   };
 
   return (
-    <div className="px-4 sm:px-6 py-6 pb-24" data-testid="spinout-workspace">
+    <div className={`w-full ${LAB_PAGE_PAD} ${LAB_PAGE_PAD_LOOSE}`} data-testid="spinout-workspace">
       {/* ---- Program header (sticky, like the design's page header) ---- */}
       <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 bg-gray-50/90 dark:bg-gray-950/90 backdrop-blur border-b border-gray-200 dark:border-gray-800 pb-4 mb-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -512,7 +709,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
               </div>
               <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Spin-Out Lab</h1>
               <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-md px-2 py-0.5">
-                {graduated ? 'Graduated' : 'Accepted'}
+                {graduated ? 'Graduated' : exited ? 'Exited' : 'Accepted'}
               </span>
             </div>
             {(cohort || startedLabel) && (
@@ -520,7 +717,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
                 {[cohort, startedLabel ? `Started ${startedLabel}` : null].filter(Boolean).join(' · ')}
               </span>
             )}
-            {!graduated && (
+            {!finished && (
               <span className="inline-flex items-center gap-2 text-xs font-bold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border border-violet-100 dark:border-violet-800 rounded-lg px-2.5 py-1.5" data-testid="workspace-week-chip">
                 <span className="w-1.5 h-1.5 rounded-full bg-violet-600 dark:bg-violet-400 animate-pulse" />
                 Week {currentWeek} of 4 · Day {dayNum}
@@ -538,24 +735,26 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
               style={{ background: `conic-gradient(#7c3aed 0% ${progressPct}%, #e5e7eb ${progressPct}% 100%)` }}
               aria-hidden
             >
-              <div className="w-9 h-9 rounded-full bg-white dark:bg-gray-950 flex items-center justify-center text-[10px] font-extrabold text-violet-700 dark:text-violet-300">
+              <div className="w-9 h-9 rounded-full bg-white dark:bg-gray-950 flex items-center justify-center text-[10px] font-extrabold text-violet-700 dark:text-violet-300" data-testid="workspace-ring">
                 {progressPct}%
               </div>
             </div>
             <div className="leading-tight">
+              <div className="text-sm font-bold text-gray-900 dark:text-gray-50" data-testid="workspace-header-deliverables">
+                {totalDeliverablesDone} of {totalDeliverables} deliverables
+              </div>
               {previewAllUnlocked ? (
-                <div className="text-sm font-bold text-gray-900 dark:text-gray-50" data-testid="preview-all-weeks-badge">
-                  All weeks unlocked · {daysRemaining} days remaining
+                <div className="text-xs text-gray-500 dark:text-gray-400" data-testid="preview-all-weeks-badge">
+                  {daysRemaining} days remaining · all weeks unlocked
                 </div>
               ) : (
-                <>
-                  <div className="text-sm font-bold text-gray-900 dark:text-gray-50">
-                    {graduated ? 'Program complete' : `Week ${currentWeek} of 4`}
-                  </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400" data-testid="workspace-days-remaining">
-                    {graduated ? 'Incorporated' : `${daysRemaining} days remaining`}
-                  </div>
-                </>
+                <div className="text-xs text-gray-500 dark:text-gray-400" data-testid="workspace-days-remaining">
+                  {graduated
+                    ? 'Graduated · incorporated'
+                    : exited
+                      ? `Left the programme in Week ${currentWeek}`
+                      : `Week ${currentWeek} of 4 · ${daysRemaining} days remaining`}
+                </div>
               )}
             </div>
           </div>
@@ -584,7 +783,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
       </div>
 
       {/* ---- Cohort deadline banner (server-synced countdown) ---- */}
-      {!graduated && !previewAllUnlocked && (
+      {!finished && !previewAllUnlocked && (
         <CohortDeadlineBanner timing={state?.cohort_timing} serverTime={state?.server_time} />
       )}
 
@@ -713,6 +912,11 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
                       <Lock size={10} /> Locked
                     </span>
                   )}
+                  {st === 'left' && (
+                    <span className="inline-flex items-center gap-1 flex-none text-[10.5px] font-bold rounded-full px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+                      Left
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs leading-snug text-gray-500 dark:text-gray-400 mb-3 line-clamp-2">{w.summary}</p>
                 <div className="flex flex-wrap gap-1.5 mb-2.5">
@@ -786,7 +990,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
               </h2>
               <p className="mt-1.5 mb-4 text-sm text-gray-500 dark:text-gray-400 max-w-lg">{selectedDef.summary}</p>
               <div className="flex flex-wrap gap-2">
-                {selectedDef.num === currentWeek && !graduated && (
+                {selectedDef.num === currentWeek && !finished && (
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5">
                     <Rocket size={13} className="text-violet-600 dark:text-violet-400" /> Day {dayNum} of {selectedDef.num * 7}
                   </span>
@@ -908,7 +1112,9 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
             const heading =
               w.num < currentWeek || graduated
                 ? `Active — carried from Week ${w.num}`
-                : w.num === currentWeek
+                : w.num === currentWeek && exited
+                  ? `Left in Week ${w.num}`
+                  : w.num === currentWeek
                   ? `Active — Week ${w.num} unlocks`
                   : st === 'unlocked'
                     ? `Unlocked — Week ${w.num}`
@@ -1061,7 +1267,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
           {[
             { label: 'Total tools unlocked', value: `${totalToolsUnlocked} of ${totalTools}`, testid: 'workspace-kpi-tools' },
             { label: 'Deliverables completed', value: `${totalDeliverablesDone} of ${totalDeliverables}`, testid: 'workspace-kpi-deliverables' },
-            { label: 'Days remaining', value: `${graduated ? 0 : daysRemaining}`, testid: 'workspace-kpi-days' },
+            { label: 'Days remaining', value: `${finished ? 0 : daysRemaining}`, testid: 'workspace-kpi-days' },
           ].map((k) => (
             <div key={k.label} data-testid={k.testid} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl px-4.5 py-4 shadow-sm">
               <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1.5">{k.label}</div>
@@ -1101,6 +1307,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
                   </button>
                   {open && (
                     <div className="px-5 pb-5 pt-1 border-t border-gray-100 dark:border-gray-800">
+                      {s.def.num === 1 && <WeekOneRecord startedAt={state?.started_at} fixture={week1Fixture} />}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-4">
                         <div>
                           <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Deliverables</div>

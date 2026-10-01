@@ -78,7 +78,7 @@ export default function OutcomesZone() {
         <>
           {cohort.length > 0 && (
             <Card padding="none" className="overflow-x-auto">
-              <div className="border-b border-axal-hairline px-4 py-2.5 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3 dark:border-gray-700">
+              <div className="border-b border-axal-hairline px-4 py-2.5 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint dark:border-gray-700">
                 In the program now — {cohort.length}
               </div>
               <table className="w-full text-[12.5px]">
@@ -86,9 +86,9 @@ export default function OutcomesZone() {
                   {cohort.map((c, i) => (
                     <tr key={`${c.name}-${i}`} className="border-b border-axal-hairline/60 last:border-0 dark:border-gray-800">
                       <td className="px-4 py-2.5 font-semibold">{c.name || <Unrecorded />}</td>
-                      <td className="px-4 py-2.5 text-axal-ink-2">{c.sector || <Unrecorded />}</td>
-                      <td className="px-4 py-2.5 text-axal-ink-3">{c.cohort || <Unrecorded />}</td>
-                      <td className="px-4 py-2.5 tabular-nums text-axal-ink-3">
+                      <td className="px-4 py-2.5 text-axal-muted">{c.sector || <Unrecorded />}</td>
+                      <td className="px-4 py-2.5 text-axal-faint">{c.cohort || <Unrecorded />}</td>
+                      <td className="px-4 py-2.5 tabular-nums text-axal-faint">
                         {c.week ? `Week ${c.week}` : <Unrecorded />}
                       </td>
                       <td className="px-4 py-2.5">
@@ -103,7 +103,7 @@ export default function OutcomesZone() {
 
           {graduates.length > 0 && (
             <Card padding="none" className="mt-3 overflow-x-auto">
-              <div className="border-b border-axal-hairline px-4 py-2.5 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3 dark:border-gray-700">
+              <div className="border-b border-axal-hairline px-4 py-2.5 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint dark:border-gray-700">
                 Graduated — {graduates.length}
               </div>
               <table className="w-full text-[12.5px]">
@@ -111,8 +111,8 @@ export default function OutcomesZone() {
                   {graduates.map((g, i) => (
                     <tr key={`${g.uid || g.name}-${i}`} className="border-b border-axal-hairline/60 last:border-0 dark:border-gray-800">
                       <td className="px-4 py-2.5 font-semibold">{g.name || <Unrecorded />}</td>
-                      <td className="px-4 py-2.5 text-axal-ink-2">{g.sector || <Unrecorded />}</td>
-                      <td className="px-4 py-2.5 text-axal-ink-3">{g.cohort || <Unrecorded />}</td>
+                      <td className="px-4 py-2.5 text-axal-muted">{g.sector || <Unrecorded />}</td>
+                      <td className="px-4 py-2.5 text-axal-faint">{g.cohort || <Unrecorded />}</td>
                       <td className="px-4 py-2.5 tabular-nums">
                         {/* An unraised or unrecorded round is absent, not $0. */}
                         {money(g.raised) ?? <Unrecorded />}

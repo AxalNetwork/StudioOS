@@ -5,6 +5,7 @@ import ErrorState from '../components/ErrorState';
 import Skeleton from '../components/Skeleton';
 import InfoStrip from '../components/InfoStrip';
 import { api } from '../lib/api';
+import { titleCase as caseLabel } from '../lib/absence';
 
 /**
  * Portfolio Growth — /portfolio/growth, a tab of PortfolioWorkspace.
@@ -44,8 +45,7 @@ const STATUS_TONE = {
   declined: 'gray',
 };
 
-const titleCase = (s) =>
-  String(s || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || 'Unknown';
+const titleCase = (s) => caseLabel(s) || 'Unknown';
 
 export default function PortfolioGrowthPage({ embedded = false }) {
   const [intros, setIntros] = useState({ rows: null, loading: true, error: null });

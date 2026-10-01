@@ -6,6 +6,7 @@ import { WorkerRail } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorPortfolioCanvas.css';
+import { titleCase } from '../../lib/absence';
 
 const money = (value) => {
   if (value == null) return '—';
@@ -16,7 +17,7 @@ const money = (value) => {
 };
 const multiple = (value) => (value == null ? '—' : `${Number(value).toFixed(2)}x`);
 const ownership = (value) => (value == null ? '—' : `${Number(value).toFixed(1)}%`);
-const label = (value) => String(value || 'Unknown').replaceAll('_', ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+const label = (value) => titleCase(value) || 'Unknown';
 
 function Skeleton() {
   return <div className="i4-skeleton" aria-busy="true"><i /><i /><i /><i /><i /></div>;
@@ -93,7 +94,6 @@ export default function InvestorPortfolioCanvas() {
     <main className="i4-portfolio" data-testid="investor-portfolio-canvas">
       <header className="i4-heading">
         <div>
-          <div className="i4-eyebrow">Investor &amp; LP / Portfolio</div>
           <h1>Know how my investments are doing</h1>
           <p>Your direct book — positions, founder-maintained records, and the work around each investment.</p>
         </div>

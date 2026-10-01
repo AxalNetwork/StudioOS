@@ -37,7 +37,16 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  *
  * WHY EACH ENTRY NEEDED A LOOK AT THE STORE, NOT A GUESS. The rule in
  * `zoneFilterBuilder.js` — a filter that cannot run is prose, never a chip —
- * only helps if the live/prose split is true. Every `key` below was checked
+ * only helps if the live/prose split is true.
+ *
+ * (THAT RULE HAS MOVED SINCE, and this paragraph would otherwise disagree with
+ * the builder it describes: #180 changed `unbuilt` from contributing NO chip to
+ * contributing a `disabled` one carrying its reason as a hover title. Inert
+ * rather than invisible, which is better and is still not an answer — so
+ * everything below about checking the store before writing a `key` stands
+ * unchanged. What changed is only how loudly a refusal shows.)
+ *
+ * Every `key` below was checked
  * against the predicate the page can actually write over the records its own
  * `api.*` calls return, and every `note` says what is missing rather than that
  * something is missing. Three of these were shipped the other way round and
@@ -70,12 +79,31 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
 // Reasons that cover several filters in the same zone are named once, so the
 // grouped rendering in ZoneToolbar collapses them into a single sentence and a
 // reworded copy cannot drift from its twin.
-const NO_WEEK_STAMP =
-  'a key result carries no week, so there is no earlier week to open';
-const NO_CADENCE_STORE =
-  'no ritual schedule or review archive is stored for this startup';
-const NO_LIQUIDITY_LEDGER =
-  'no restriction, tender or liquidity-event ledger is connected';
+// `NO_WEEK_STAMP` stood here — "a key result carries no week, so there is no
+// earlier week to open" — and covered two of `build/this-week`'s labels. Migration
+// 252 records the column moves those weeks are derived from, so it is gone for the
+// same reason `NO_CADENCE_STORE` and `NO_SESSION_RECORD` are: a reason that
+// survives its own fix will be cited again. Three of these have now gone the same
+// way in this file, which is the pattern working rather than a coincidence.
+// `NO_CADENCE_STORE` stood here — "no ritual schedule or review archive is
+// stored for this startup" — and covered all four of `build/cadence`'s labels.
+// Migration 250 stored all three of those things, and removing the constant is
+// the point: a reason that survives its own fix is a reason that will be cited
+// again. This is the second one to go the same way (`NO_SESSION_RECORD`, below,
+// went when migration 221 landed), which is the pattern working.
+// `NO_LIQUIDITY_LEDGER` STOOD HERE — "no restriction, tender or liquidity-event
+// ledger is connected" — over `Restrictions`, `Tender` and `History`. It was FALSE
+// for two of the three, and the file's own note about `NO_SESSION_RECORD` two
+// paragraphs down had already recorded the shape of that mistake: one sentence
+// covering several different absences stops being true one absence at a time, and
+// nothing notices.
+//
+// `liquidity_events`, `secondary_listings` and `secondary_rofr_notices` all exist,
+// `routes/liquidity.ts` is mounted at `/api/liquidity`, and nine `api.liquidity*`
+// methods reach it. `GET /liquidity/my-portfolio` is `requireAuth` ONLY — a founder
+// may call it — and it returns both `my_listings` and `exit_history`. So the ledger
+// was connected the whole time; only `Tender` had nothing behind it, and it now
+// says so in its own words.
 // `NO_SESSION_RECORD` stood here — "no session history is stored, so no past
 // question, kept answer or discarded one exists to look through" — and covered
 // all four of Ask's labels. Migration 221 stored the history, and removing the
@@ -124,16 +152,15 @@ const NO_GROUP_TO_AGE =
 // fourth kind of reason this table has needed. See the zone's entry below.
 const CATEGORY_IS_PER_COMPETITOR =
   'each competitor inside an analysis is filed as direct or adjacent, but this row narrows the saved analyses, and an analysis carries no relation of its own';
-// `/validate/verdict`. Both time-travel labels share one absence, and it is not
-// a missing column. `validation_decisions` DOES carry `decided_at` and
-// `superseded_at`, the route returns the full history, and the POST supersedes
-// rather than overwrites — a real ledger. What no store holds is the thing these
-// two labels name: a per-claim verdict is recomputed from the evidence on every
-// request (`verdictFor`), never written down, so there is no state of the board
-// as of last week to return to. Snapshotting it is a change to the model, not a
-// predicate this row can carry.
-const NO_VERDICT_SNAPSHOT =
-  'a claim’s verdict is recomputed from its evidence on every request and never stored, so no earlier state of the board exists to compare against';
+// `NO_VERDICT_SNAPSHOT` stood here — "a claim's verdict is recomputed from its
+// evidence on every request and never stored, so no earlier state of the board
+// exists to compare against" — and covered both of `validate/verdict`'s
+// time-travel labels. It said the right thing and it said one more: that
+// snapshotting the verdict "is a change to the model, not a predicate this row
+// can carry". Migration 255 made that change, so the constant goes, for the same
+// reason `NO_WEEK_STAMP`, `NO_CADENCE_STORE` and `NO_SESSION_RECORD` went before
+// it: a reason that survives its own fix will be cited again by the next chip.
+// Four have now gone the same way in this file, which is the pattern working.
 
 export const FOUNDER_ZONE_FILTERS = {
   // ── Validate ─────────────────────────────────────────────────────────────
@@ -150,25 +177,64 @@ export const FOUNDER_ZONE_FILTERS = {
     { canvas: 'Strong fit', key: 'strong' },
     { canvas: 'Not ICP', key: 'not-icp' },
   ],
-  // ALL FOUR ARE PROSE, AND THE FIRST TWO ARE THE INTERESTING ONES. This zone
-  // reads `api.painGroups`, whose `PainGroupsView` gives each theme a list of
-  // `{ phrase_norm, display_phrase }` — the PHRASES, never the interviews behind
-  // them. So no mention can be attributed to a conversation, and with no
-  // conversation there is no `icp_fit` to narrow by and no `interview_date` to
-  // order by. `ICP only` and `All interviews` are two views of an attribution
-  // the payload does not carry, and one of them is the whole page.
+  // ALL FOUR ARE LIVE NOW, AND THREE OF THEM WERE ONE COLUMN LIST APART.
   //
-  // THE PAGE COULD COMPUTE IT AND MUST NOT. `listInterviews` does return
-  // `icp_fit` and `pains` per interview, so a client-side regroup is reachable —
-  // and it would re-implement the server's normalisation and alias mapping to
-  // produce a second frequency for the same theme. This workspace's own header
-  // is explicit that both zones read one endpoint so they "cannot disagree";
-  // a chip that quietly forks the number is a worse answer than no chip.
+  // What this row used to say is worth keeping, because it was true and it was
+  // the right refusal at the time: this zone reads `api.painGroups`, whose
+  // `PainGroupsView` gave each theme a list of `{ phrase_norm, display_phrase }`
+  // — the PHRASES, never the interviews behind them. With no conversation
+  // behind a mention there was no `icp_fit` to narrow by and no
+  // `interview_date` to order by, so `ICP only`, `All interviews` and `By
+  // recency` all failed on one missing link.
+  //
+  // The link was not missing from the DATABASE. `discovery_interviews` has
+  // carried `icp_fit` since migration 161 and `interview_date` since the
+  // baseline; `getPainGroupsView` simply selected neither. It selects both now
+  // and `analyzePains` attributes them on the same first-sight branch that
+  // counts a theme's interviews, so `icp_count`, `fit_unrecorded_count` and
+  // `last_mention_at` cannot disagree with `count` about which conversations are
+  // behind a theme. No migration; the reason was about a query, not a store.
+  //
+  // THE PAGE STILL MUST NOT COMPUTE IT. `listInterviews` returns `icp_fit` and
+  // `pains` per interview, so a client-side regroup remains reachable — and it
+  // would re-implement the server's normalisation and alias mapping to produce a
+  // second frequency for the same theme. This workspace's own header is explicit
+  // that both zones read one endpoint so they "cannot disagree"; the attribution
+  // is therefore computed where the grouping is, and the page only reads it.
   'validate/pain-map': [
-    { canvas: 'ICP only', unbuilt: 'a theme carries its phrases and not the interviews they came from, so no mention can be traced to a conversation whose ICP fit is recorded' },
-    { canvas: 'All interviews', unbuilt: 'the same missing attribution seen from the other side — with no per-mention interview there is no subset for this to be the whole of, and it would match every theme on the page' },
-    { canvas: 'Need-to-have', unbuilt: 'no mention carries a severity: `interview_pain_severities` exists with no reader and no writer anywhere in the worker, so nothing separates a need from a nice-to-have' },
-    { canvas: 'By recency', unbuilt: 'a pain theme carries no date — the grouped view has no interview behind a phrase, and `loadEvidenceBase` does not select `interview_date` either' },
+    // `icp_count > 0`, where ICP is `isIcp` — strong or partial — imported by
+    // the service from the helper that owns the rule, so this chip and the
+    // hypothesis verdict cannot drift apart about who counts as a customer.
+    { canvas: 'ICP only', key: 'icp' },
+    // THE CLEARED STATE, NAMED. The old reason called this "the same missing
+    // attribution from the other side… it would match every theme on the page",
+    // and matching every theme is exactly this chip's job now that `ICP only`
+    // exists to be the other half of the pair — the same role `All` plays in
+    // this zone's three sibling rows. It is not a no-op; it is the way back.
+    { canvas: 'All interviews', key: 'all' },
+    // LIVE. The reason this carried was "no mention carries a severity:
+    // `interview_pain_severities` exists with no reader and no writer anywhere
+    // in the worker" — a table migration 211 shipped with the right shape and
+    // nothing on either end of it, which migration 215's own header names as
+    // the example of a column that comes to exist and is never read. It has
+    // both now: `PUT /founder/validate/interviews/:id/pain-severity` writes it
+    // and `getPainGroupsView` reads it back as `need_count` per theme.
+    //
+    // The page narrows on `need_count > 0`, which is a claim about INTERVIEWS
+    // and not about the founder's opinion: a theme is need-to-have here because
+    // somebody they interviewed was recorded saying so. `nice_count` is kept
+    // separate rather than inverted, because the same pain is a must-have for
+    // one segment and optional for another, and that split is the judgement
+    // this page exists to support.
+    { canvas: 'Need-to-have', key: 'need' },
+    // A SORT, NOT A SUBSET, WHICH IS WHY IT IS THE ONE CHIP HERE THAT HIDES
+    // NOTHING. The date is the latest `interview_date` among the interviews
+    // mentioning the theme — "somebody said this to us recently" — and never a
+    // date of the theme's own, which a founder renaming a group months later
+    // would move without anyone saying anything new. Themes whose interviews
+    // carry no date sort last rather than being dropped: a missing date is not
+    // a reason to hide a pain people named.
+    { canvas: 'By recency', key: 'recency' },
   ],
   // `Blocking the verdict` is the one label here the board already answers in
   // prose: `buildBoard` computes `_note` for every claim whose verdict is null
@@ -177,32 +243,87 @@ export const FOUNDER_ZONE_FILTERS = {
   'validate/hypotheses': [
     { canvas: 'All', key: 'all' },
     { canvas: 'Blocking the verdict', key: 'blocking' },
-    { canvas: 'Recently moved', unbuilt: 'the board selects id, code, claim, sort_order and retired_at — no `updated_at` reaches the page, and nothing records a claim moving between lanes' },
+    // LIVE AS OF MIGRATION 255, and `updated_at` was never the answer. The old
+    // reason was right that nothing recorded a claim moving between lanes, and
+    // right to refuse the obvious substitute: `hypotheses.updated_at` moves when
+    // the CLAIM TEXT is edited, so a "recently moved" built on it would have
+    // reported typo fixes as evidence changing. `hypothesis_verdict_history`
+    // records the lane beside the verdict, which is what a question about the
+    // board's columns actually needs.
+    { canvas: 'Recently moved', key: 'moved' },
     { canvas: 'Retired', key: 'retired' },
   ],
+  // ALL FOUR ARE LIVE AS OF MIGRATION 255, and two of them are time travel
+  // rather than filters: `As of last week` shows the verdict that was in force
+  // then, not today's under an earlier heading.
+  //
+  // NOTHING IS BACKFILLED, and the page says so rather than letting the gap read
+  // as an answer. A claim with no observation that far back is left OUT of `As
+  // of last week`, and the zone prints `verdict_history_since` — the same seam
+  // `/build/this-week` carries for `okr_column_moves`, handled the same way.
   'validate/verdict': [
     { canvas: 'Current', key: 'current' },
-    { canvas: 'As of last week', unbuilt: NO_VERDICT_SNAPSHOT },
-    { canvas: 'Changed this month', unbuilt: NO_VERDICT_SNAPSHOT },
+    { canvas: 'As of last week', key: 'lastweek' },
+    { canvas: 'Changed this month', key: 'changed' },
     { canvas: 'Retired claims', key: 'retired' },
   ],
   // ── Build ────────────────────────────────────────────────────────────────
   // Reads the Now column of the stored roadmap. Nothing stamps a key result
   // with a week, and nothing records one moving between weeks, which is why the
   // page's own footnote already refuses to report a completion rate.
+  // ALL FOUR ARE LIVE AS OF MIGRATION 252. `okr_column_moves` logs every roadmap
+  // column change with the Monday of the week it happened in, and
+  // `GET /progress/roadmap/:id/weeks` derives the three windows from it —
+  // `services/okrWeeks.ts` holds the arithmetic.
+  //
+  // `This week` NEVER NEEDED THE HISTORY, which is why it alone was live: it is the
+  // current `kanban_status`. The other three each needed a fact `roadmap_okrs`
+  // does not have — `updated_at` moves when a TITLE is edited, so it cannot say
+  // when an objective was committed.
+  //
+  // THE LOG IS NOT BACKFILLED, and the page says so rather than letting the gap
+  // read as an answer: an objective already in Now has no logged move, so it is
+  // under `This week` and not under `Last 4`. The route returns `history_since`
+  // and the zone prints it.
   'build/this-week': [
     { canvas: 'This week', key: 'now', label: 'This week' },
-    { canvas: 'Last 4', unbuilt: NO_WEEK_STAMP },
-    { canvas: 'All 14', label: 'All weeks', unbuilt: NO_WEEK_STAMP },
-    { canvas: 'Carried only', unbuilt: 'nothing records a commitment moving from one week to the next' },
+    { canvas: 'Last 4', key: 'recent', label: 'Last 4 weeks' },
+    { canvas: 'All 14', key: 'all', label: 'All {n} weeks' },
+    { canvas: 'Carried only', key: 'carried' },
   ],
   // Cards are pipeline tasks with a stored `status` and `updated_at`. They
   // carry no lane and no assignee this page can compare against the reader, so
   // the canvas's two sample lanes and its "Mine" are stated, not drawn.
+  // ALL FOUR SLOTS ARE LIVE, AND THE TWO REASONS WERE WRONG IN DIFFERENT WAYS.
+  //
+  // `Mine` said "a card records an owner name, which is not the same as the account
+  // reading it". `mvp_tasks.assigned_to` is an INTEGER USER ID and `useAuth().user.id`
+  // is the reader's — so this chip needed no store at all and was refused for months
+  // on a premise nobody re-checked. That is the #193 class of finding, not a gap.
+  //
+  // `Engineering` and `GTM` said "a card carries a stage, not a lane, and no lane is
+  // stored". That WAS true, and migration 253 fixes it: `mvp_tasks.lane` plus
+  // `project_lanes`, which is also what gives `Configure lanes` something to edit.
+  //
+  // THE LANE GROUP IS DYNAMIC, so the chips carry the venture's OWN lane names. The
+  // canvas draws two and fills them with sample names; printing "Engineering" at a
+  // venture that has never had an engineering lane is the thing `withCount` and the
+  // `dynamic` group both exist to refuse. With no lane configured the group draws
+  // nothing and the row is three chips.
   'build/board': [
-    { canvas: 'All lanes', key: 'all', label: 'All cards' },
-    { canvas: ['Engineering', 'GTM'], label: 'Engineering and GTM', unbuilt: 'a card carries a stage, not a lane, and no lane is stored' },
-    { canvas: 'Mine', unbuilt: 'a card records an owner name, which is not the same as the account reading it' },
+    { canvas: 'All lanes', key: 'all', label: 'All {n} cards' },
+    // THE REASON STAYS ON A DYNAMIC GROUP, and the guard is right to demand it:
+    // `zoneFilterBuilder` draws NOTHING for a group the page supplies no names for,
+    // so this sentence is the only explanation a developer gets for an empty slot —
+    // and "the page forgot to pass them" and "the venture has none" are different
+    // problems with the same appearance.
+    {
+      canvas: ['Engineering', 'GTM'],
+      dynamic: 'lanes',
+      unbuilt: 'no lane is configured on this venture yet, and none is invented — the group draws one chip per stored lane once there is one',
+      hover: 'Add a lane in Configure lanes and it gets its own chip here.',
+    },
+    { canvas: 'Mine', key: 'mine' },
     { canvas: 'Stale > 7d', key: 'stale' },
   ],
   // Objectives carry a quarter, a kanban column and a dependency field. No
@@ -210,16 +331,33 @@ export const FOUNDER_ZONE_FILTERS = {
   'build/roadmap': [
     { canvas: 'Timeline', key: 'timeline' },
     { canvas: 'Board', key: 'board' },
+    // `Dependencies` WAS THE WORST KIND OF LIVE CHIP and is the reason migration
+    // 254 exists. It drew, it selected, and it could never show a row: the page
+    // filtered on `item.dependency || item.dependencies || item.blocks`, and
+    // `roadmap_okrs` has none of those columns while `OKR_SELECT` returns none of
+    // them either. A founder choosing it saw an empty table under "items naming a
+    // dependency" and read that as "you have none". An `unbuilt` reason at least
+    // explains itself; this explained nothing, and no guard here could see it —
+    // they count refusals, and this was not one.
     { canvas: 'Dependencies', key: 'dependencies' },
-    { canvas: 'Scenarios', unbuilt: 'no roadmap scenario is stored' },
+    { canvas: 'Scenarios', key: 'scenarios' },
   ],
-  // Nothing at all backs this zone: the page loads the project list and no
-  // second source. All four filters share the one reason.
+  // ALL FOUR ARE LIVE AS OF MIGRATION 250. Rituals, the runs that archive them
+  // and their templates are stored per project (`routes/founder_cadence.ts`), so
+  // every chip here is a predicate over rows — `lib/cadence.js`'s `CADENCE_VIEWS`
+  // holds them, and the worker exports the same map so the CSV and the chips
+  // cannot disagree about what `retros` selects.
+  //
+  // THE ROW MIXES TWO AXES AND THAT IS THE CANVAS'S CHOICE. `Plans` and `Retros`
+  // narrow on the ritual's KIND; `Skipped` narrows on the run's STATE. So a
+  // missed retro appears under both, and the counts do not sum to the total.
+  // Said out loud here because the alternative is a reader deciding the numbers
+  // are broken.
   'build/cadence': [
-    { canvas: 'All rituals', unbuilt: NO_CADENCE_STORE },
-    { canvas: 'Plans', unbuilt: NO_CADENCE_STORE },
-    { canvas: 'Retros', unbuilt: NO_CADENCE_STORE },
-    { canvas: 'Skipped', unbuilt: NO_CADENCE_STORE },
+    { canvas: 'All rituals', key: 'all' },
+    { canvas: 'Plans', key: 'plans' },
+    { canvas: 'Retros', key: 'retros' },
+    { canvas: 'Skipped', key: 'skipped' },
   ],
   // Metric snapshots are dated and their fields are individually nullable, so
   // every one of these four is a predicate over stored values.
@@ -238,7 +376,13 @@ export const FOUNDER_ZONE_FILTERS = {
     { canvas: 'Overview', key: 'overview' },
     { canvas: 'Blockers', key: 'blockers' },
     { canvas: 'Investors', key: 'investors' },
-    { canvas: 'Timeline', unbuilt: 'the assembled rows carry a state but no date, so they cannot be put in order' },
+    // THE REFUSAL WAS ABOUT THIS PAGE'S OWN MAPPER, NOT ABOUT THE DATA. It read
+    // "the assembled rows carry a state but no date, so they cannot be put in
+    // order" — true of the rows, and a fact about the twenty lines that build
+    // them. Both sources carry `created_at` and `updated_at`, and both routes
+    // `SELECT *`, so every date was already on the page and was being dropped on
+    // the way into the row. Same shape as `/build/board`'s `Mine`.
+    { canvas: 'Timeline', key: 'timeline' },
   ],
   // Deck versions are stored and engagement is returned per version. A deck has
   // versions rather than narrative variants, and a share link is minted and
@@ -246,7 +390,12 @@ export const FOUNDER_ZONE_FILTERS = {
   'raise/pitch': [
     { canvas: 'Versions', key: 'versions' },
     { canvas: 'Variants', unbuilt: 'a deck stores versions; no narrative variant is a separate record' },
-    { canvas: 'Shares', unbuilt: 'share links are held by the deck builder and are not returned to this page' },
+    // ALSO FALSE, and by a wider margin: `GET /decks/:id/engagement` returns a
+    // `shares` array — id, created, expires, view_limit, view_count, exhausted and
+    // (since #196) `revoked_at` — and this page already calls that endpoint and
+    // already reads that array to build the Analytics table. The links were never
+    // "held by the deck builder"; they were on screen in a different shape.
+    { canvas: 'Shares', key: 'shares' },
     { canvas: 'Analytics', key: 'analytics' },
   ],
   // The one zone where the canvas asks for five views and the store has all
@@ -277,20 +426,32 @@ export const FOUNDER_ZONE_FILTERS = {
   // ledger this product has never had, which is also why all four stats on this
   // page read Unavailable rather than zero.
   'raise/liquidity': [
-    { canvas: 'Restrictions', unbuilt: NO_LIQUIDITY_LEDGER },
+    { canvas: 'Restrictions', key: 'restrictions' },
     { canvas: 'Waterfall', key: 'waterfall' },
-    { canvas: 'Tender', unbuilt: NO_LIQUIDITY_LEDGER },
-    { canvas: 'History', unbuilt: NO_LIQUIDITY_LEDGER },
+    // THE ONE OF THE THREE THAT WAS GENUINELY ABSENT, and it needed its own
+    // sentence to say so. A tender is the COMPANY offering to buy its own shares
+    // back; `secondary_listings` is one holder offering to sell theirs. No table,
+    // route or field expresses the first, and calling a seller's listing a tender
+    // would misname the party doing the buying.
+    {
+      canvas: 'Tender',
+      unbuilt: 'a tender is the company offering to buy shares back, and only holder-side listings are stored — nothing records an offer made by the company',
+      hover: 'Only holder-side listings are stored — no company buy-back is recorded.',
+    },
+    { canvas: 'History', key: 'history' },
   ],
 
   // ── Grow ─────────────────────────────────────────────────────────────────
-  // Metric snapshots are dated, so the two period views run. Experiments and
-  // targets are the zone's stated gaps and its rail says so already.
+  // Metric snapshots are dated, so the two period views run. `Targets` runs now
+  // too: `metric_targets` shipped in migration 173 and had no reader and no
+  // writer anywhere until task #194 gave it both, so the chip's old reason —
+  // "no metric target is stored" — was true of every account and true forever.
+  // Experiments remains the zone's one stated gap.
   'grow/focus': [
     { canvas: 'August', key: 'latest', label: 'Latest month' },
     { canvas: 'Last 6 mo', key: 'six-months' },
     { canvas: 'Experiments', unbuilt: 'no experiment log is connected, so no effect on the metric is claimed' },
-    { canvas: 'Targets', unbuilt: 'no metric target is stored' },
+    { canvas: 'Targets', key: 'targets', label: 'Targets {n}' },
   ],
   // Roles linked to this startup become their own chips — the canvas's two are
   // sample names. An application's stored status is what "shortlisted" reads.
@@ -310,7 +471,12 @@ export const FOUNDER_ZONE_FILTERS = {
       label: 'One chip per segment',
       unbuilt: 'no market segment is stored on a customer record',
     },
-    { canvas: 'Stalled', unbuilt: 'no activity timeline is stored, so no account can be called stalled' },
+    // "NO ACTIVITY TIMELINE IS STORED" WAS FALSE. `waitlist_signups` carries four
+    // activity stamps — `created_at`, `invited_at`, `followed_up_at`,
+    // `promoted_at` — and `WAITLIST_SELECT` returns every one; the route's own
+    // comment calls them "independent activity marks". Stalled is the newest of
+    // them being old, which is arithmetic over data the page already receives.
+    { canvas: 'Stalled', key: 'stalled' },
   ],
   'grow/partnerships': [
     { canvas: 'All', key: 'all' },
@@ -322,7 +488,12 @@ export const FOUNDER_ZONE_FILTERS = {
   // are the Network relationship book's, and nothing joins the two records.
   'grow/capital-match': [
     { canvas: 'Best fit', key: 'all', label: 'All prospects' },
-    { canvas: 'Warm path only', unbuilt: 'nothing joins a prospect to a relationship in the network book' },
+    // "NOTHING JOINS A PROSPECT TO A RELATIONSHIP" WAS FALSE, and the join even has
+    // its own migration: 128_contact_promotion.sql adds `raise_prospects.contact_id`
+    // and indexes it as `idx_raise_prospects_contact`. `contacts` IS the network
+    // book. A prospect carrying a contact id is one reached through somebody the
+    // founder already knows — which is exactly what this chip asks for.
+    { canvas: 'Warm path only', key: 'warm' },
     { canvas: 'Right stage', dynamic: 'stages', label: 'One chip per stage', unbuilt: 'no prospect records a stage yet' },
     { canvas: 'Passed', key: 'passed' },
   ],
@@ -479,7 +650,7 @@ export const FOUNDER_ZONE_FILTERS = {
     { canvas: 'Adjacent', unbuilt: CATEGORY_IS_PER_COMPETITOR },
     {
       canvas: 'Comparables',
-      unbuilt: 'no competitor can be filed as a comparable: the form offers direct or adjacent, and every writer coerces anything else to direct',
+      unbuilt: 'no competitor can be filed as a comparable: the form offers direct or adjacent, and every writer coerces anything else to direct', hover: 'A competitor is filed as direct or adjacent; nothing can be filed as a comparable.',
     },
   ],
   // `All` is the only one of the five this licence can run. Two fail on the

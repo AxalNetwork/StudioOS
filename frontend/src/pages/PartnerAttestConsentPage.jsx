@@ -76,7 +76,7 @@ export default function PartnerAttestConsentPage() {
           <h1 className="text-lg font-extrabold tracking-tight">
             {done === 'given' ? 'Thank you — that is recorded' : 'Recorded — nothing will be published'}
           </h1>
-          <p className="mt-3 text-[13px] leading-relaxed text-axal-ink-2">
+          <p className="mt-3 text-[13px] leading-relaxed text-axal-muted">
             {done === 'given'
               ? 'The firm can now show this as work they did for you. If you change '
                 + 'your mind, tell them and they can record the withdrawal — the '
@@ -84,7 +84,7 @@ export default function PartnerAttestConsentPage() {
               : 'Your answer is on the record, so the firm cannot simply ask again '
                 + 'as though nothing happened. Nothing about this will be shown.'}
           </p>
-          <p className="mt-3 text-[12px] text-axal-ink-3">
+          <p className="mt-3 text-[12px] text-axal-faint">
             You can close this page. There is nothing to sign up for.
           </p>
         </Card>
@@ -95,26 +95,26 @@ export default function PartnerAttestConsentPage() {
   return (
     <div className="mx-auto max-w-xl px-4 py-16">
       <Card padding="lg">
-        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
           A firm has asked for your confirmation
         </div>
         <h1 className="mt-2 text-lg font-extrabold tracking-tight">
           May they show this work publicly?
         </h1>
-        <p className="mt-3 text-[13px] leading-relaxed text-axal-ink-2">
+        <p className="mt-3 text-[13px] leading-relaxed text-axal-muted">
           A firm you worked with would like to publish an account of it. They will
           have described what they want to show when they sent you this link —
           this page deliberately does not repeat it, because a link that carried
           their unpublished write-up would disclose it to anyone who got hold of
           the link.
         </p>
-        <p className="mt-3 text-[13px] leading-relaxed text-axal-ink-2">
+        <p className="mt-3 text-[13px] leading-relaxed text-axal-muted">
           If what they described is not accurate, or you simply would rather they
           did not, decline. Your answer is recorded either way, so they cannot
           re-ask as though it had not been given.
         </p>
 
-        <div className="mt-5 rounded-lg border border-axal-hairline bg-axal-surface-2 p-3 dark:border-gray-700">
+        <div className="mt-5 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
           <label className="flex items-start gap-2.5 text-[13px] leading-relaxed">
             <input
               type="checkbox"
@@ -149,7 +149,7 @@ export default function PartnerAttestConsentPage() {
           </button>
         </div>
 
-        <p className="mt-4 text-[12px] leading-relaxed text-axal-ink-3">
+        <p className="mt-4 text-[12px] leading-relaxed text-axal-faint">
           The tick is required for “yes” and not for “no”: agreeing is an act and
           declining is not, so only one of them needs a box confirming you meant
           it. You do not need an account here for either.

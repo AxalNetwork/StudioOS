@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { api } from '../lib/api';
+import { api, refusalError } from '../lib/api';
 import { EXPLAINERS } from '../lib/explainers';
 import { useToast } from '../components/useToast';
 import {
@@ -10,8 +10,11 @@ import {
   Sun, Moon, ChevronDown, Check, Ban, Scale, Loader2, Activity,
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
+import { useAuth } from '../hooks/useAuthSync';
 import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
+import { verdictFor, outstandingCounts, scoreLine } from '../lib/trustCenter';
+import { Unreadable, Unrecorded } from '../ui';
 // Task #6 (IF) — Onboarding tab (checklist + tour re-run + reset).
 import OnboardingSettingsTab from '../components/OnboardingSettingsTab';
 // Task #4 — Axal-branded embedded checkout (Stripe Elements, no redirect).
@@ -25,30 +28,64 @@ import AuthorCard from '../components/AuthorCard';
 // Task #11 — shared first-time optional TOTP enrolment wizard (also used on
 // the email-verification page).
 import TotpEnrollment from '../components/TotpEnrollment';
+import { appOrigin } from '../lib/branchHost';
+import { toUtcInstant } from '../lib/notices';
+import DsrOutcomeNotice from '../components/DsrOutcomeNotice';
 
-// Task #4 (Y-2) — small reusable trust score on the profile surface so
-// the user can see their compliance posture without bouncing to the
-// dedicated Trust Center page. Falls back silently if the call fails.
-function ProfileTrustBadge() {
-  const [score, setScore] = useState(null);
-  const [missing, setMissing] = useState([]);
+// D433 — THE COMPLIANCE BRIDGE. The Account canvas puts a trust-score strip
+// above every pane: the write side of Trust Center, on the page whose data the
+// score is computed from. Task #4's `ProfileTrustBadge` drew the same score as
+// a 36px ring inside the Profile card and RENDERED NOTHING on a failed read,
+// which told a reader with a failed /trust/me that they had no score at all.
+// The strip has three states, and the failed one says so with a retry.
+//
+// The number and the verdict are Trust Center's own: `computeTrustScore` over
+// the same obligation rows, `verdictFor` for the word beside the ring,
+// `outstandingCounts` and `scoreLine` for the sentence. Two surfaces, one
+// formula — the parity test on the worker's copy covers this one too.
+function ComplianceBridge() {
+  const [state, setState] = useState({ phase: 'loading', obligations: [], message: null });
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let cancelled = false;
+    setState((s) => (s.phase === 'failed' ? { ...s, phase: 'loading' } : s));
     api.trustMe()
-      .then(m => {
-        if (cancelled) return;
-        const obs = m?.obligations || [];
-        setScore(computeTrustScore(obs));
-        setMissing(obs.filter(o => o.required && o.status !== 'satisfied' && o.status !== 'waived').map(o => o.obligation_key));
-      })
-      .catch(() => {});
+      .then((m) => { if (!cancelled) setState({ phase: 'ready', obligations: m?.obligations || [], message: null }); })
+      .catch((e) => { if (!cancelled) setState({ phase: 'failed', obligations: [], message: e?.message || null }); });
     return () => { cancelled = true; };
-  }, []);
-  if (score == null) return null;
+  }, [attempt]);
+
+  if (state.phase === 'loading') return null;
+  if (state.phase === 'failed') {
+    return (
+      <div data-testid="compliance-bridge-unreadable" className="mb-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-5 py-4">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Trust score</div>
+        <Unreadable what="Your trust score" claim={state.message || ''} onRetry={() => setAttempt((n) => n + 1)} />
+      </div>
+    );
+  }
+  const obs = state.obligations;
+  const score = computeTrustScore(obs);
+  const required = obs.filter((o) => o.required);
+  const missing = required
+    .filter((o) => o.status !== 'satisfied' && o.status !== 'waived')
+    .map((o) => o.obligation_key);
+  const line = scoreLine(outstandingCounts(required));
   return (
-    <a href="/trust" className="no-underline" title="View your Trust Center">
-      <TrustScoreBadge size="sm" score={score} missing={missing} label="Trust" />
-    </a>
+    <div data-testid="compliance-bridge" className="mb-6 flex flex-wrap items-center gap-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-5 py-4">
+      {/* The ring only: the strip prints its own "Trust score" label beside the verdict. */}
+      <TrustScoreBadge size="md" score={score} missing={missing} label={false} />
+      <div className="min-w-0">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Trust score</div>
+        <div className="text-sm font-extrabold text-gray-900 dark:text-gray-100" data-testid="compliance-verdict">{verdictFor(score)}</div>
+      </div>
+      <div className="flex-1 min-w-[200px] text-sm text-gray-700 dark:text-gray-300" data-testid="compliance-line">
+        {line}{' '}Trust Center reports on the data held here.
+      </div>
+      <Link to="/trust" className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-violet-400 whitespace-nowrap">
+        Open Trust Center →
+      </Link>
+    </div>
   );
 }
 
@@ -128,7 +165,7 @@ const PARTNER_NOTIFICATION_EVENTS = [
   { key: 'partner_high_score_deal', label: 'New deal scores above your threshold' },
   { key: 'partner_pipeline_activity', label: 'Founder activity on watched deals' },
   { key: 'partner_capital_call_due', label: 'Capital call due in 7 days' },
-  { key: 'partner_match_recommendation', label: 'AI match recommendation' },
+  { key: 'partner_match_recommendation', label: 'New partner match' },
   { key: 'partner_kyc_block', label: 'A founder you backed is blocked on KYC' },
 ];
 
@@ -349,6 +386,7 @@ export default function SettingsPage() {
         </div>
       )}
 
+      <ComplianceBridge />
       <ProfileCompletionBanner onJump={() => setActive('profile')} />
 
       <div className="grid lg:grid-cols-[200px_1fr] gap-6">
@@ -375,7 +413,8 @@ export default function SettingsPage() {
             <>
               <ProfileTabs data={data} onSaved={(d) => setData(prev => ({ ...prev, ...d }))} flash={flash} patch={patch} />
               <EmailSection data={data} flash={flash} reload={() => api.getSettings().then(setData)} />
-              <YourCompaniesSection />
+              <YourCompaniesSection flash={flash} />
+              <RolesAccessCard data={data} onJump={() => setActive('billing')} />
               <DocumentsAgreementsSection />
               <AccountDeletionCard data={data} flash={flash} reload={() => api.getSettings().then(setData)} />
             </>
@@ -388,7 +427,7 @@ export default function SettingsPage() {
               <InvestorMyThesisCard flash={flash} role={data?.role} />
               <InvestorThesisEditorCard flash={flash} role={data?.role} />
               <MarketIntelContributionCard flash={flash} />
-              <PrivacySection data={data} patch={patch} flash={flash} reload={() => api.getSettings().then(setData)} hideAccountDelete />
+              <PrivacySection data={data} patch={patch} flash={flash} />
             </>
           )}
           {safeActive === 'notifications' && (
@@ -567,16 +606,26 @@ function CompletionRing({ pct, hint }) {
 // not blocking.
 function ProfileCompletionBanner({ onJump }) {
   const [row, setRow] = useState(null);
+  // D433 — a failed read used to be silent, which drew exactly what a complete
+  // profile draws: nothing. Held apart from `row` so the two cannot be confused.
+  const [failed, setFailed] = useState(null);
   useEffect(() => {
     let cancelled = false;
     const load = () => api.getIdentitySettings()
-      .then(r => { if (!cancelled) setRow(r); })
-      .catch(() => { /* silent */ });
+      .then(r => { if (!cancelled) { setRow(r); setFailed(null); } })
+      .catch((e) => { if (!cancelled) setFailed(e?.message || ''); });
     load();
     const onSaved = () => load();
     window.addEventListener('axal:profile_saved', onSaved);
     return () => { cancelled = true; window.removeEventListener('axal:profile_saved', onSaved); };
   }, []);
+  if (failed !== null && !row) {
+    return (
+      <div data-testid="profile-completion-unreadable" className="mb-6">
+        <Unreadable what="Your profile completeness" claim={failed} onRetry={() => window.dispatchEvent(new Event('axal:profile_saved'))} />
+      </div>
+    );
+  }
   if (!row) return null;
   const pct = Number(row.profile_completion_pct || 0);
   if (pct >= 100) return null;
@@ -1110,7 +1159,6 @@ function ProfileSection({ data, onSaved, flash, patch }) {
                 <User size={36} className="text-gray-400" />
               )}
             </div>
-            <ProfileTrustBadge />
             <button onClick={() => fileRef.current?.click()} disabled={busy}
               className="text-xs text-violet-700 hover:text-violet-800 flex items-center gap-1 disabled:opacity-50">
               <Camera size={12} /> {busy ? 'Uploading…' : 'Change'}
@@ -1177,7 +1225,7 @@ function ProfileSection({ data, onSaved, flash, patch }) {
         {data.id ? (
           <div className="mt-4 flex flex-wrap items-center gap-4">
             <a
-              href={`https://axal.vc/authors/${data.id}`}
+              href={`${appOrigin()}/authors/${data.id}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm text-violet-700 dark:text-violet-400 hover:underline"
@@ -1188,7 +1236,7 @@ function ProfileSection({ data, onSaved, flash, patch }) {
               type="button"
               onClick={() => {
                 try {
-                  navigator.clipboard.writeText(`https://axal.vc/authors/${data.id}`);
+                  navigator.clipboard.writeText(`${appOrigin()}/authors/${data.id}`);
                   flash('Link copied!');
                 } catch { flash('Could not copy'); }
               }}
@@ -1587,9 +1635,90 @@ function JurisdictionsSection({ data, patch }) {
 // Read-only ON PURPOSE. The integration rule is that company context changes
 // through `CompanySwitcher` and nowhere else, so this pane reports what you
 // belong to and sends you to the switcher; it does not become a second one.
-function YourCompaniesSection() {
+// D433 — the KYB pill and the entity fields the Account canvas draws per
+// company. The pill comes from GET /trust/companies/kyb (migration 220, one
+// `company_kyb_records` row per company), matched to the memberships list by
+// company id. "Save entity" writes POST /trust/companies/kyb for THAT row's
+// company — the client names it by overriding the X-Company-Id header for the
+// one call, and the worker still verifies membership before writing.
+//
+// TWO READS, TWO FAILURE STATES. Memberships and KYB come from different
+// routes; a failed KYB read must not blank the company list, and must not
+// read as "no record" either — it says "Unreadable" on the rows it could not
+// answer for, with a retry.
+const KYB_STATUS_LABEL = {
+  in_review: 'In review',
+  verified: 'Verified',
+  rejected: 'Rejected',
+  not_started: 'Not started',
+};
+function kybStatusLabel(status) {
+  if (!status) return 'Not started';
+  return KYB_STATUS_LABEL[status] || String(status).replace(/_/g, ' ');
+}
+function kybTone(status) {
+  if (status === 'verified') return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800';
+  if (status === 'in_review') return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800';
+  if (status === 'rejected') return 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800';
+  return 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700';
+}
+
+const COMPANY_ENTITY_FIELDS = [
+  ['entity_name', 'Legal entity name'],
+  ['entity_type', 'Entity type'],
+  ['jurisdiction', 'Country of incorporation'],
+  ['registration_number', 'Registration ID'],
+  ['registered_address', 'Registered address'],
+];
+
+function CompanyEntityEditor({ company, kyb, onSaved, flash }) {
+  const [form, setForm] = useState(() => Object.fromEntries(
+    COMPANY_ENTITY_FIELDS.map(([k]) => [k, kyb?.[k] || '']),
+  ));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function save() {
+    setBusy(true); setErr(null);
+    try {
+      const res = await api.companyKybStart(form, company.id);
+      onSaved(res?.kyb || null);
+      flash?.('Entity saved — verification is in review.');
+    } catch (e) {
+      setErr(e?.message || 'Could not save this entity');
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="mt-3 rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-3" data-testid={`company-entity-editor-${company.id}`}>
+      <div className="grid sm:grid-cols-2 gap-3">
+        {COMPANY_ENTITY_FIELDS.map(([k, label]) => (
+          <Field key={k} label={label}>
+            <input value={form[k]} onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))} className={inputCls} />
+          </Field>
+        ))}
+      </div>
+      {err && <p className="text-sm text-red-600 dark:text-red-400">{err}</p>}
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[11px] text-gray-500 dark:text-gray-400">
+          Saving puts this company&apos;s verification in review. No registry match runs yet — there is no provider on this platform.
+        </p>
+        <button type="button" onClick={save} disabled={busy}
+          className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg text-xs font-medium whitespace-nowrap">
+          {busy ? 'Saving…' : 'Save entity'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function YourCompaniesSection({ flash }) {
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState(null);
+  // 'loading' → 'ready' | 'failed'. Kept apart from the memberships read.
+  const [kyb, setKyb] = useState({ phase: 'loading', byCompany: {}, message: null });
+  const [kybAttempt, setKybAttempt] = useState(0);
+  const [editing, setEditing] = useState(null); // company id with the editor open
 
   useEffect(() => {
     let cancelled = false;
@@ -1601,10 +1730,26 @@ function YourCompaniesSection() {
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    setKyb((k) => (k.phase === 'failed' ? { ...k, phase: 'loading' } : k));
+    api.companyKybList()
+      .then((r) => {
+        if (cancelled) return;
+        const byCompany = {};
+        for (const it of r?.items || []) byCompany[String(it.company_id)] = it.kyb || null;
+        setKyb({ phase: 'ready', byCompany, message: null });
+      })
+      .catch((e) => { if (!cancelled) setKyb({ phase: 'failed', byCompany: {}, message: e?.message || null }); });
+    return () => { cancelled = true; };
+  }, [kybAttempt]);
+
+  const companyId = (c) => c.id ?? c.company_id;
+
   return (
     <Card
       title="Your companies"
-      description="Every company this account belongs to, and your role in each."
+      description="Every company this account belongs to, your role in each, and each company's own entity record."
     >
       {err && <p className="text-sm text-red-600 dark:text-red-400">{err}</p>}
       {!err && rows === null && <p className="text-sm text-gray-500">Loading…</p>}
@@ -1617,37 +1762,127 @@ function YourCompaniesSection() {
       )}
       {!err && rows && rows.length > 0 && (
         <>
+          {kyb.phase === 'failed' && (
+            <div className="mb-3" data-testid="company-kyb-unreadable">
+              <Unreadable what="Each company’s entity record" claim={kyb.message || ''} onRetry={() => setKybAttempt((n) => n + 1)} />
+            </div>
+          )}
           <div className="rounded-lg border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800">
-            {rows.map((c) => (
-              <div key={c.uid || c.company_id || c.id} className="flex items-center gap-3 p-3">
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                    {c.company_name || c.name || 'Unnamed company'}
-                    {c.is_primary_admin && (
-                      <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
-                        Primary admin
+            {rows.map((c) => {
+              const id = companyId(c);
+              const record = kyb.phase === 'ready' ? (kyb.byCompany[String(id)] ?? null) : undefined;
+              const open = editing !== null && String(editing) === String(id);
+              return (
+                <div key={c.uid || id} className="p-3" data-testid={`company-row-${id}`}>
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                        {c.company_name || c.name || 'Unnamed company'}
+                        {c.is_primary_admin && (
+                          <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+                            Primary admin
+                          </span>
+                        )}
+                      </div>
+                      {c.my_role && (
+                        <div className="text-xs text-gray-500 dark:text-gray-400">{c.my_role}</div>
+                      )}
+                    </div>
+                    {/* The pill: a record, no record, or a read that failed. The
+                        last is not "Not started" — that would tell a company in
+                        review it never began. */}
+                    {record === undefined ? (
+                      kyb.phase === 'failed'
+                        ? <span className="text-[11px] text-red-700 dark:text-red-300" data-testid="company-kyb-pill">KYB · Unreadable</span>
+                        : <span className="text-[11px] text-gray-400" data-testid="company-kyb-pill">KYB · …</span>
+                    ) : (
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${kybTone(record?.status)}`} data-testid="company-kyb-pill">
+                        KYB · {kybStatusLabel(record?.status)}
                       </span>
                     )}
+                    <button type="button" onClick={() => setEditing(open ? null : id)}
+                      className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-violet-400 whitespace-nowrap"
+                      data-testid={`company-entity-toggle-${id}`}>
+                      {open ? 'Close' : 'Entity'}
+                    </button>
+                    <Link
+                      to="/company-settings"
+                      className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-violet-400 whitespace-nowrap"
+                    >
+                      Manage
+                    </Link>
                   </div>
-                  {c.my_role && (
-                    <div className="text-xs text-gray-500 dark:text-gray-400">{c.my_role}</div>
+                  {open && (
+                    <CompanyEntityEditor
+                      company={{ id }}
+                      kyb={record || null}
+                      flash={flash}
+                      onSaved={(k) => setKyb((prev) => ({ ...prev, byCompany: { ...prev.byCompany, [String(id)]: k } }))}
+                    />
                   )}
                 </div>
-                <Link
-                  to="/company-settings"
-                  className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-violet-400 whitespace-nowrap"
-                >
-                  Manage
-                </Link>
-              </div>
-            ))}
+              );
+            })}
           </div>
           <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2">
             To work in a different company, switch it in the sidebar — that is the
-            one control that repoints the whole workspace.
+            one control that repoints the whole workspace. Each company&apos;s entity is
+            separate from your account&apos;s own entity under Profile → Corporate: that one
+            is who signs your contracts, these are who the workspaces belong to.
           </p>
         </>
       )}
+    </Card>
+  );
+}
+
+// D433 — ROLES & ACCESS, built up to the line the stores draw. The canvas
+// draws multiple roles per account, a plan per role and delegates. This
+// platform records ONE role per account (`users.role`) and has no delegate
+// store; both are said here rather than drawn as an empty list a reader would
+// take for "none".
+const ROLE_LABEL = {
+  founder: 'Founder', investor: 'Investor / LP', partner: 'Service partner',
+  advisor: 'Advisor', admin: 'Admin', exploring: 'Exploring',
+};
+function RolesAccessCard({ data, onJump }) {
+  const role = String(data?.role || '').toLowerCase();
+  return (
+    <Card title="Roles & access" description="What this account is, and who can act for it.">
+      <div className="space-y-3" data-testid="roles-access-card">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Your role</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Decides which obligations apply to you and which parts of the platform you see.</div>
+          </div>
+          <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300" data-testid="roles-access-role">
+            {ROLE_LABEL[role] || role || 'Not recorded'}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Additional roles</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400" data-testid="roles-additional">
+              <Unrecorded reason="one role per account">Not recorded</Unrecorded> — one role per account; the platform has no store for a second role yet.
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Delegates</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400" data-testid="roles-delegates">
+              <Unrecorded reason="no delegate store yet">Not recorded</Unrecorded> — no delegate store yet; nobody can act on this account’s behalf.
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Plan</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Licences and invoices live under Billing.</div>
+          </div>
+          <button type="button" onClick={onJump} className="text-xs text-violet-700 dark:text-violet-300 hover:underline">Open Billing →</button>
+        </div>
+      </div>
     </Card>
   );
 }
@@ -1888,6 +2123,8 @@ function PasskeyPanel({ flash }) {
 // SMS as a backup 2FA factor (Google Cloud Identity Platform). Phone numbers
 // at rest server-side; the UI only ever sees the last 4 digits.
 function SmsPanel({ data, flash }) {
+  const { role: liveRole } = useAuth();
+  const isAdmin = String(liveRole || '').toLowerCase() === 'admin';
   const [status, setStatus] = useState(null);
   const [step, setStep] = useState('idle');           // idle | enroll | verify
   const [country, setCountry] = useState('US');
@@ -1952,10 +2189,22 @@ function SmsPanel({ data, flash }) {
   if (!status.sms_available) {
     return (
       <Card title="SMS as a backup factor" description="SMS verification is not enabled on this server yet.">
-        <div className="text-xs text-gray-500 dark:text-gray-400">
-          An administrator needs to provision Google Cloud Identity Platform credentials
-          (<span className="font-mono">GCIP_API_KEY</span>) to turn this on. Once enabled, you'll
-          be able to add a phone number here as a backup factor for account recovery.
+        <div className="text-xs text-gray-500 dark:text-gray-400 space-y-2">
+          <p>
+            An administrator needs to add Google Cloud Identity Platform credentials
+            under Admin → Integration Keys → Google Identity (SMS). That stores the
+            Web API key (<span className="font-mono">GCIP_API_KEY</span>) so you can
+            add a phone number here as a backup factor for account recovery.
+          </p>
+          {isAdmin && (
+            <a
+              href="/admin?tab=integration-keys"
+              data-testid="sms-admin-keys-link"
+              className="inline-flex text-violet-700 hover:underline font-medium"
+            >
+              Open Integration Keys
+            </a>
+          )}
         </div>
       </Card>
     );
@@ -2046,8 +2295,11 @@ function TrustedContactsPanel({ flash }) {
     setErr('');
     try {
       const r = await fetch('/api/auth/recover/trusted-contacts', { credentials: 'include' });
+      // D258 — `r.ok` first: a refusal is read by `refusalError`, which takes
+      // the body's sentence ahead of its code. Parsing first threw a JSON error
+      // on any non-JSON answer, and `j.error` printed the code.
+      if (!r.ok) throw await refusalError(r, 'Failed to load');
       const j = await r.json();
-      if (!r.ok) throw new Error(j?.error || 'Failed to load');
       setContacts(j.contacts || []);
     } catch (e) { setErr(e?.message || 'Failed to load'); }
   };
@@ -2061,8 +2313,7 @@ function TrustedContactsPanel({ flash }) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ contact_email: email.trim(), display_name: name.trim() || null }),
       });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j?.error || 'Failed');
+      if (!r.ok) throw await refusalError(r, 'Failed to add');
       setEmail(''); setName('');
       flash && flash('Trusted contact added.');
       await load();
@@ -2076,7 +2327,7 @@ function TrustedContactsPanel({ flash }) {
       const r = await fetch(`/api/auth/recover/trusted-contacts/${id}`, {
         method: 'DELETE', credentials: 'include',
       });
-      if (!r.ok) throw new Error('Failed to remove');
+      if (!r.ok) throw await refusalError(r, 'Failed to remove');
       flash && flash('Removed.');
       await load();
     } catch (e) { setErr(e?.message || 'Failed to remove'); }
@@ -2138,8 +2389,8 @@ function RecoveryActivityPanel() {
     (async () => {
       try {
         const r = await fetch('/api/auth/recover/activity', { credentials: 'include' });
+        if (!r.ok) throw await refusalError(r, 'Failed to load');
         const j = await r.json();
-        if (!r.ok) throw new Error(j?.error || 'Failed');
         setRows(j.activity || []);
       } catch (e) { setErr(e?.message || 'Failed to load'); }
     })();
@@ -2300,6 +2551,79 @@ function ConnectedAccountsPanel({ flash }) {
   );
 }
 
+// D433 — SIGN-IN & FACTORS AS STATUS ROWS, the canvas's shape: each row is a
+// status with a date, and its flow lives in the panel below it. Two rows are
+// honest absences rather than statuses: there is no password credential on
+// this platform (sign-in is a magic link, Google or a passkey, with an
+// authenticator code for step-up), and a passkey's or SMS row's own panel
+// already reads its own store — a second fetch here would only let them
+// disagree.
+function factorDate(iso) {
+  if (!iso) return null;
+  const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z');
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString();
+}
+function SignInFactorsCard({ data, remaining }) {
+  const paired = factorDate(data.totp_paired_at);
+  const rows = [
+    {
+      key: 'password',
+      label: 'Password',
+      status: null,
+      reason: 'this platform issues no password credential; sign-in is by magic link, Google or passkey, with an authenticator code for sensitive actions',
+    },
+    {
+      key: 'totp',
+      label: 'Authenticator app (TOTP)',
+      status: data.totp_configured ? 'Configured' : 'Not configured',
+      tone: data.totp_configured ? 'ok' : 'warn',
+      meta: data.totp_configured
+        ? (paired ? `Paired ${paired} · required for sensitive actions` : 'Paired — date not recorded for this enrolment · required for sensitive actions')
+        : 'Set one up below — the strongest everyday protection for your account.',
+    },
+    {
+      key: 'recovery',
+      label: 'Recovery codes',
+      status: remaining > 0 ? `${remaining} remaining` : 'None generated',
+      tone: remaining > 0 ? 'ok' : 'warn',
+      meta: remaining > 0
+        ? 'Each code signs you in once if you lose your authenticator.'
+        : 'No codes generated — you could be locked out if you lose your authenticator.',
+    },
+    {
+      key: 'email',
+      label: 'Email address',
+      status: data.email_verified ? 'Verified' : 'Unverified',
+      tone: data.email_verified ? 'ok' : 'warn',
+      meta: data.email || '',
+    },
+  ];
+  const toneCls = (t) => (t === 'ok'
+    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800'
+    : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800');
+  return (
+    <Card title="Sign-in & factors" description="Summarised as status rows — each opens its own flow below rather than sitting as a permanent form.">
+      <div className="divide-y divide-gray-100 dark:divide-gray-800" data-testid="signin-factors">
+        {rows.map((r) => (
+          <div key={r.key} className="flex items-center justify-between gap-3 py-2.5" data-testid={`factor-${r.key}`}>
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{r.label}</div>
+              {r.status === null
+                ? <div className="text-xs text-gray-500 dark:text-gray-400"><Unrecorded reason={r.reason}>Not recorded</Unrecorded> — {r.reason}.</div>
+                : <div className="text-xs text-gray-500 dark:text-gray-400">{r.meta}</div>}
+            </div>
+            {r.status !== null && (
+              <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${toneCls(r.tone)}`}>
+                {r.status}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function AuthSection({ data, flash, reload }) {
   const [code, setCode] = useState('');
   const [qrPayload, setQrPayload] = useState(null);
@@ -2413,6 +2737,7 @@ function AuthSection({ data, flash, reload }) {
 
   return (
     <>
+      <SignInFactorsCard data={data} remaining={remaining} />
       <ConnectedAccountsPanel flash={flash} />
       <Card title="Two-factor authentication"
         description={data.totp_configured
@@ -2760,7 +3085,7 @@ const PUBLIC_PROFILE_DEFAULTS = {
   advisor:   { name: true, bio: true, headshot: true, socials: false },
 };
 
-function PrivacySection({ data, patch, flash, reload, hideAccountDelete }) {
+function PrivacySection({ data, patch, flash }) {
   const role = (data.role || 'founder').toLowerCase();
   const defaults = PUBLIC_PROFILE_DEFAULTS[role] || PUBLIC_PROFILE_DEFAULTS.admin;
   const saved = data.privacy_prefs?.public_profile || {};
@@ -2769,8 +3094,6 @@ function PrivacySection({ data, patch, flash, reload, hideAccountDelete }) {
     ...PUBLIC_PROFILE_FIELDS_COMMON,
     ...(PUBLIC_PROFILE_FIELDS_BY_ROLE[role] || []),
   ];
-  const [exporting, setExporting] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const setVisible = (key, value) => {
@@ -2791,53 +3114,6 @@ function PrivacySection({ data, patch, flash, reload, hideAccountDelete }) {
     }
   };
 
-  const exportData = async () => {
-    setExporting(true);
-    try {
-      const blob = await api.exportMyData();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `axal-data-export-${data.uid || data.id}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      flash('Export downloaded');
-    } catch (e) {
-      flash(e.message || 'Export failed', 'error');
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const requestDelete = async () => {
-    if (!window.confirm('Submit an account deletion request? Our team will reach out within 7 days to confirm.')) return;
-    setDeleting(true);
-    try {
-      const res = await api.requestAccountDeletion();
-      flash(res.message || 'Deletion request submitted');
-      reload();
-    } catch (e) {
-      flash(e.message || 'Failed to submit request', 'error');
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const cancelDelete = async () => {
-    setDeleting(true);
-    try {
-      await api.cancelAccountDeletion();
-      flash('Deletion request cancelled');
-      reload();
-    } catch (e) {
-      flash(e.message || 'Failed to cancel', 'error');
-    } finally {
-      setDeleting(false);
-    }
-  };
-
   return (
     <>
       <Card title="Public profile" description="Anyone with the link below can view this page. Choose what's visible per field.">
@@ -2847,7 +3123,7 @@ function PrivacySection({ data, patch, flash, reload, hideAccountDelete }) {
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <a href={publicUrl} target="_blank" rel="noreferrer noopener"
                  className="font-mono text-sm text-violet-900 hover:underline break-all">{publicUrl}</a>
-              <button onClick={copyPublicUrl} className="ml-auto rounded-md border border-violet-300 bg-white dark:bg-gray-900 px-2 py-1 text-xs text-violet-700 hover:bg-violet-100">
+              <button onClick={copyPublicUrl} className="ml-auto rounded-md border border-violet-300 bg-white dark:bg-gray-900 px-2 py-1 text-xs text-violet-700 hover:bg-violet-100 dark:hover:bg-violet-900/40">
                 {copied ? 'Copied' : 'Copy'}
               </button>
             </div>
@@ -2868,28 +3144,6 @@ function PrivacySection({ data, patch, flash, reload, hideAccountDelete }) {
         </p>
       </Card>
 
-      {!hideAccountDelete && (
-        <Card title="Your data" description="Download everything we know about you, or request deletion.">
-          <div className="flex flex-wrap gap-3">
-            <button onClick={exportData} disabled={exporting}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 hover:border-gray-400 text-gray-800 dark:text-gray-200 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
-              <Download size={14} /> {exporting ? 'Preparing…' : 'Download my data'}
-            </button>
-            {data.deletion_requested_at ? (
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-amber-700">Deletion requested {new Date(data.deletion_requested_at).toLocaleDateString()}</span>
-                <button onClick={cancelDelete} disabled={deleting}
-                  className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancel request</button>
-              </div>
-            ) : (
-              <button onClick={requestDelete} disabled={deleting}
-                className="px-4 py-2 border border-red-200 hover:border-red-400 text-red-700 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
-                <Trash2 size={14} /> Request account deletion
-              </button>
-            )}
-          </div>
-        </Card>
-      )}
     </>
   );
 }
@@ -3270,7 +3524,7 @@ function ProfileExtrasCard({ flash }) {
   const tzOptions = COMMON_TIMEZONES.includes(tz) ? COMMON_TIMEZONES : [tz, ...COMMON_TIMEZONES];
 
   return (
-    <Card title="Profile details" description="Locale, timezone, pronouns, and your public profile URL.">
+    <Card title="Profile details" description="Locale, timezone, pronouns, archetype character, and your public profile URL.">
       <div className="grid sm:grid-cols-2 gap-3">
         <Field label="Timezone" hint="Used for digests and quiet hours.">
           <select value={tz} onChange={e => save({ timezone: e.target.value })} disabled={busy} className={inputCls}>
@@ -3290,6 +3544,15 @@ function ProfileExtrasCard({ flash }) {
             onChange={e => setRow({ ...row, pronouns: e.target.value })}
             onBlur={() => save({ pronouns: row.pronouns || null })}
             placeholder="they/them" className={inputCls} />
+        </Field>
+        <Field label="Archetype character"
+          hint="Chooses the man or woman pixel-art on your Profile & Fit card. The advisor also asks this.">
+          <select value={row.archetype_sex || ''} onChange={e => save({ archetype_sex: e.target.value || null })} disabled={busy} className={inputCls}>
+            <option value="">Choose…</option>
+            <option value="m">Man</option>
+            <option value="f">Woman</option>
+            <option value="both">Show both</option>
+          </select>
         </Field>
         <Field label="Public profile slug"
           hint="2–40 lowercase letters, numbers, or hyphens. Becomes /u/<slug>.">
@@ -3353,7 +3616,7 @@ function AccountDeletionCard({ data, flash, reload }) {
         </button>
         {data.deletion_requested_at ? (
           <div className="flex items-center gap-3">
-            <span className="text-xs text-amber-700">Deletion requested {new Date(data.deletion_requested_at).toLocaleDateString()}</span>
+            <span className="text-xs text-amber-700">Deletion requested {new Date(toUtcInstant(data.deletion_requested_at)).toLocaleDateString()}</span>
             <button onClick={cancelDelete} disabled={deleting}
               className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancel request</button>
           </div>
@@ -3364,6 +3627,15 @@ function AccountDeletionCard({ data, flash, reload }) {
           </button>
         )}
       </div>
+      {/*
+        D169 — ONLY WHILE NOTHING IS OPEN, which is the whole point: the amber
+        line above IS the current state when a request is live, and the closed
+        row behind it is then a PREVIOUS ask. Rendering both would put a stale
+        denial beside a request the subject has just filed again — asking twice
+        after a refusal opens a new row and leaves the old outcome in place, so
+        this is reachable rather than theoretical.
+      */}
+      {!data.deletion_requested_at && <DsrOutcomeNotice outcome={data.dsr_outcome} />}
     </Card>
   );
 }
@@ -4051,16 +4323,22 @@ function MarketIntelContributionCard({ flash }) {
 function IntegrationsTab() {
   // Task — the full Integrations marketplace now lives here (embedded), so it
   // supersedes the old thin "Connected accounts" summary. We still fetch the
-  // integration settings, but ONLY for the server-flag-gated API-keys card;
-  // the marketplace owns its own connected-account state. Best-effort: a failed
-  // settings fetch just hides the optional API-keys card, it never blanks the tab.
-  const [apiKeysEnabled, setApiKeysEnabled] = useState(false);
+  // integration settings for the API-keys card's server flag; the marketplace
+  // owns its own connected-account state.
+  //
+  // D433 — THE API-KEYS CARD IS DRAWN, AND SAYS WHAT IT LACKS. The canvas
+  // draws scoped tokens with Create and Revoke; the platform has no key store,
+  // and the worker's `api_keys_enabled` is hard-coded false until the API tier
+  // ships (T20). The card used to hide behind that flag, and had it flipped it
+  // would have printed "No keys yet." over a store that does not exist. It now
+  // reads "Not recorded" with the reason, in either state of the flag.
+  const [flag, setFlag] = useState({ phase: 'loading', enabled: false });
 
   useEffect(() => {
     let cancelled = false;
     api.getIntegrationSettings()
-      .then((r) => { if (!cancelled) setApiKeysEnabled(!!r?.api_keys_enabled); })
-      .catch(() => { if (!cancelled) setApiKeysEnabled(false); });
+      .then((r) => { if (!cancelled) setFlag({ phase: 'ready', enabled: !!r?.api_keys_enabled }); })
+      .catch(() => { if (!cancelled) setFlag({ phase: 'failed', enabled: false }); });
     return () => { cancelled = true; };
   }, []);
 
@@ -4069,12 +4347,16 @@ function IntegrationsTab() {
       <Suspense fallback={<div className="text-gray-500 dark:text-gray-400 py-8 text-center">Loading…</div>}>
         <IntegrationsPage embedded />
       </Suspense>
-      {apiKeysEnabled && (
-        <Card title="API keys"
-          description="Personal access tokens for programmatic access. Each key is shown exactly once.">
-          <div className="text-sm text-gray-500 dark:text-gray-400">No keys yet.</div>
-        </Card>
-      )}
+      <Card title="API keys"
+        description="Scoped tokens for programmatic access.">
+        <div data-testid="api-keys-card" className="text-sm text-gray-500 dark:text-gray-400">
+          <Unrecorded reason="no key store yet">Not recorded</Unrecorded>
+          {' — '}
+          {flag.enabled
+            ? 'the API tier is switched on for this account but no key store exists yet, so no key can be created or listed.'
+            : 'no key store yet; the API tier (T20) has not shipped, and its flag is off for this account.'}
+        </div>
+      </Card>
     </>
   );
 }

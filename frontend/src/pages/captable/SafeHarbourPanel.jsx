@@ -215,11 +215,11 @@ export default function SafeHarbourPanel({ projectId }) {
       {/* ---------- record ---------- */}
       <div className="flex flex-wrap gap-2">
         <button onClick={() => setAddingValuation((v) => !v)}
-          className="px-3 py-1.5 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700">
+          className="px-3 py-1.5 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700">
           <Plus size={12} /> Record a valuation
         </button>
         <button onClick={() => setAddingEvent((v) => !v)}
-          className="px-3 py-1.5 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700">
+          className="px-3 py-1.5 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700">
           <Plus size={12} /> Record a material event
         </button>
       </div>

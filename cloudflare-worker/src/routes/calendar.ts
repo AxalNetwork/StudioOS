@@ -28,6 +28,8 @@ import {
 } from '../services/calendar';
 export { preflightOAuthSecrets };
 import { encryptString } from '../services/cryptoBox';
+import { bindingKey } from '../util/schemaBootstrap';
+import { refuse } from '../util/refusal';
 
 const calendar = new Hono<{ Bindings: Env }>();
 
@@ -43,7 +45,7 @@ function safe(label: string, friendly: string, handler: (c: any) => Promise<any>
     } catch (e: any) {
       const msg = e?.message || '';
       if (msg === 'Unauthorized' || msg === 'Forbidden') throw e;
-      console.error(`[CAL:${label}]`, msg, e?.stack || '');
+      console.error('[CAL]', label, msg, e?.stack || '');
       return c.json({ error: friendly }, 500);
     }
   };
@@ -96,9 +98,9 @@ async function verifyState(env: Env, raw: string): Promise<string | null> {
 // throws and `safe()` returns the generic "Could not start Google OAuth"
 // string. Bootstrap the calendar shape once per isolate so the OAuth
 // start handler is self-healing.
-let _calendarOauthStateReady = false;
+const CALENDAR_OAUTH_STATE_READY = new WeakMap<object, boolean>();
 async function ensureCalendarOauthStateTable(env: Env): Promise<void> {
-  if (_calendarOauthStateReady) return;
+  if (CALENDAR_OAUTH_STATE_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       'CREATE TABLE IF NOT EXISTS oauth_state_tokens (' +
@@ -114,7 +116,7 @@ async function ensureCalendarOauthStateTable(env: Env): Promise<void> {
     try {
       await env.DB.exec("ALTER TABLE oauth_state_tokens ADD COLUMN expires_at TEXT NOT NULL DEFAULT ''");
     } catch { /* column already exists */ }
-    _calendarOauthStateReady = true;
+    CALENDAR_OAUTH_STATE_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[CAL:ensureOauthStateTable]', (e as Error).message);
   }
@@ -125,8 +127,20 @@ async function persistState(env: Env, nonce: string, userId: number, provider: '
   const sql = getSQL(env);
   const expires = new Date(Date.now() + STATE_TTL_SECONDS * 1000).toISOString();
   // Opportunistic sweep — keeps the table from growing unbounded.
+  //
+  // `AND expires_at != ''` IS LOAD-BEARING AND IT IS NOT AN OPTIMISATION.
+  // `oauth_state_tokens` has two definitions and this file's is the one that
+  // lost: `integrations/oauth.ts` created the table first, so production holds
+  // its shape plus the `expires_at TEXT NOT NULL DEFAULT ''` the bootstrap
+  // above ALTERs in. That provider's INSERT names five columns and not
+  // `expires_at`, so every Salesforce, Carta, DocuSign, HubSpot and LinkedIn
+  // handshake sits in this table with `expires_at = ''` — and `'' < <any ISO
+  // stamp>` is TRUE in SQLite, so without this clause the sweep deleted every
+  // in-flight integration OAuth state each time a calendar connect started.
+  // `services/fundSheets.ts:192` already carries the same clause for the same
+  // reason; this is the copy that was missing. See D191.
   const nowIso = new Date().toISOString();
-  await sql`DELETE FROM oauth_state_tokens WHERE expires_at < ${nowIso}`;
+  await sql`DELETE FROM oauth_state_tokens WHERE expires_at < ${nowIso} AND expires_at != ''`;
   await sql`
     INSERT INTO oauth_state_tokens (state, user_id, provider, expires_at)
     VALUES (${nonce}, ${userId}, ${provider}, ${expires})
@@ -715,7 +729,8 @@ export async function buildGoogleOAuthStartResponse(
       body: {
         error: {
           code: 'oauth_state_error',
-          message: `Could not start Google OAuth: ${e?.message || 'unknown error'}`,
+          // D278 — our state store failed, not Google: the text is logged above.
+          message: 'Could not start connecting Google Calendar. Nothing was saved; try again in a moment.',
         },
       },
     };
@@ -752,7 +767,8 @@ export async function buildMicrosoftOAuthStartResponse(
       body: {
         error: {
           code: 'oauth_state_error',
-          message: `Could not start Outlook OAuth: ${e?.message || 'unknown error'}`,
+          // D278 — our state store failed, not Outlook: the text is logged above.
+          message: 'Could not start connecting Outlook Calendar. Nothing was saved; try again in a moment.',
         },
       },
     };
@@ -1043,7 +1059,7 @@ calendar.post('/google/sync', safe('g_sync', 'Google sync failed', async (c) => 
     return c.json(await syncUserToGoogle(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString()));
   } catch (e: any) {
     if (e?.message === 'not_connected') return c.json({ detail: 'Connect a Google account first' }, 409);
-    return c.json({ detail: `Google sync failed: ${e?.message || e}` }, 502);
+    return refuse(c, 502, { code: 'google_sync_failed', message: 'The Google calendar sync did not complete. Check the connection and try again.', raw: e, audience: 'owner' });
   }
 }));
 
@@ -1164,7 +1180,7 @@ calendar.post('/microsoft/sync', safe('m_sync', 'Microsoft sync failed', async (
     return c.json(await syncUserToMicrosoft(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString()));
   } catch (e: any) {
     if (e?.message === 'not_connected') return c.json({ detail: 'Connect a Microsoft account first' }, 409);
-    return c.json({ detail: `Microsoft sync failed: ${e?.message || e}` }, 502);
+    return refuse(c, 502, { code: 'microsoft_sync_failed', message: 'The Microsoft calendar sync did not complete. Check the connection and try again.', raw: e, audience: 'owner' });
   }
 }));
 

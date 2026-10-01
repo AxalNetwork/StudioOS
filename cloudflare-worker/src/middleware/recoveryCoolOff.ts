@@ -1,7 +1,7 @@
 /**
  * Task #50 — 24h cool-off middleware.
  *
- * Blocks sensitive routes while users.recovery_cooling_off_until is in
+ * Blocks sensitive routes while user_recovery_state.cooling_off_until is in
  * the future. Applied to billing / contracts / capital / DD / KYC
  * re-submission / impersonation prefixes in index.ts so the gate is
  * declarative and lives in one place.

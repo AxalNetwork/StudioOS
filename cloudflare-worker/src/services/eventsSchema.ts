@@ -9,8 +9,9 @@
  * pattern used by services/notify.ts and the telegram/news schemas).
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
-let _ready = false;
+const READY = new WeakMap<object, boolean>();
 
 const STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS events (
@@ -141,11 +142,11 @@ const STATEMENTS: string[] = [
 ];
 
 export async function ensureEventsSchema(env: Env): Promise<boolean> {
-  if (_ready) return true;
+  if (READY.get(bindingKey(env))) return true;
   // Production migrations own this schema. Running 19 DDL statements from a
   // cold request can contend with unrelated reads and exhaust the edge budget.
   if (env.ENVIRONMENT === 'production') {
-    _ready = true;
+    READY.set(bindingKey(env), true);
     return true;
   }
   try {
@@ -158,7 +159,7 @@ export async function ensureEventsSchema(env: Env): Promise<boolean> {
         console.warn('[eventsSchema] statement failed (continuing)', (e as Error).message);
       }
     }
-    _ready = true;
+    READY.set(bindingKey(env), true);
     return true;
   } catch (e) {
     console.error('[eventsSchema] bootstrap failed', e);

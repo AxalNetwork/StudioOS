@@ -685,10 +685,18 @@ async function directEvents(env: Env, userId: number, isAdmin: boolean,
                             fromIso: string, toIso: string,
                             kind: string): Promise<CalendarEvent[]> {
   try {
-    const where = isAdmin
+    // D331 (wave 8, item 3) — `expert_booking` is owner-only even for an
+    // admin. This is a wellbeing booking, and the admin branch below exists
+    // for kinds an admin legitimately reviews platform-wide (ic_meeting,
+    // partner_office_hour); an admin's own calendar has no business showing
+    // every founder's expert session. Widened to owner-only here rather than
+    // in a per-kind allowlist at the call site, so a future direct-write kind
+    // is scoped by default and must opt INTO the admin-wide read, not out.
+    const ownerOnly = isAdmin && kind !== 'expert_booking';
+    const where = ownerOnly
       ? "source <> 'calendly' AND kind = ? AND start_at >= ? AND start_at <= ?"
       : "source <> 'calendly' AND kind = ? AND user_id = ? AND start_at >= ? AND start_at <= ?";
-    const stmt = isAdmin
+    const stmt = ownerOnly
       ? env.DB.prepare(`SELECT * FROM calendar_events WHERE ${where}`).bind(kind, fromIso, toIso)
       : env.DB.prepare(`SELECT * FROM calendar_events WHERE ${where}`).bind(kind, userId, fromIso, toIso);
     const res = await stmt.all<{

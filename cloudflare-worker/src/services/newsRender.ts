@@ -13,6 +13,14 @@
  * - `wordsAndMinutes(md)` returns the word count + read-time estimate.
  *
  * - `snapshotRevision()` writes a row to `article_revisions`.
+ *
+ * - `bustArticleEdgeCache()` is the ONLY cache buster. D166 deleted its
+ *   news-shaped twin, `bustEdgeCache`, whose two callers both lived in the
+ *   retired `admin_news.ts`. Nothing was lost with it: Task #3 had already
+ *   made this function a strict superset, busting the deprecated `/api/news*`
+ *   keys alongside the `/api/articles*` ones. An exported function with no
+ *   caller is invisible to `noUnusedLocals`, so it would have survived every
+ *   guard in the repo.
  */
 import type { Env } from '../types';
 
@@ -173,19 +181,6 @@ export async function snapshotRevision(
     ).bind(articleId, rev, row.title, row.subtitle, row.body_markdown, row.status, savedBy, reason).run();
   } catch (e) {
     console.warn('[newsRender] snapshot failed:', (e as Error).message);
-  }
-}
-
-export async function bustEdgeCache(env: Env, slug: string, id: number): Promise<void> {
-  try {
-    const cache = (caches as any).default;
-    if (!cache) return;
-    const base = env.APP_URL || 'https://axal.vc';
-    await cache.delete(new Request(`${base}/api/news`));
-    await cache.delete(new Request(`${base}/api/news/${slug}`));
-    await cache.delete(new Request(`${base}/api/news/cover/${id}`));
-  } catch (e) {
-    console.warn('[newsRender] cache bust failed:', (e as Error).message);
   }
 }
 

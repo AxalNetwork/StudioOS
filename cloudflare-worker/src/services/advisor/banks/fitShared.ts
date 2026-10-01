@@ -1,8 +1,9 @@
 /**
  * Task #19 — Best-Fit. Shared builder for the conversational fit banks.
  *
- * Each fit bank delivers behavioral 0–5 `scale` questions, one per turn, inside
- * the Personal Advisor (human tone, "no wrong answers"). Question ids follow
+ * Each fit bank delivers behavioral 0–5 `scale` questions (plus one select for
+ * illustration sex), one per turn, inside the Personal Advisor (human tone, "no
+ * wrong answers"). Question ids follow
  * `fit.<FitPersona>.<key>`; `fitMeasuresIndex()` parses the persona from that
  * prefix (NOT from `Question.persona`) so the coach bank can ride inside the
  * advisor conversation. Each question is tagged with a `measures` map consumed by
@@ -17,7 +18,8 @@
  * don't need manifest coverage. Importance is `low` so they trail the persona's
  * onboarding questions without disturbing the existing ranking / anti-repeat.
  */
-import type { Question, FitMeasures, FitPersona } from '../questionBank.ts';
+import type { Question, FitMeasures, FitPersona, Importance, ValidateKind, FitChoice, FitRetirement } from '../questionBank.ts';
+import { ARCHETYPE_PRESENTATION_OPTIONS } from '../../archetypePresentation.ts';
 
 const SCALE_HINT = 'No wrong answers — rate 0 (not at all) to 5 (completely).';
 
@@ -26,6 +28,104 @@ export interface FitRowSpec {
   prompt: string;
   hint?: string;
   measures: FitMeasures;
+  /** 'choice' is a situational pick-one (D357); it is delivered to the chat as a `select`. */
+  input_kind?: Question['input_kind'] | 'choice';
+  options?: string[];
+  validate?: ValidateKind;
+  importance?: Importance;
+  // ---- Profiling v2 (D357, PROFILING_V2.md §3.1) ----
+  /** Reverse-keyed scale: scored as 5 − value. Only on an `archetype_trait` row. */
+  reverse?: boolean;
+  /** Pick-one options with per-trait loadings. Required when input_kind = 'choice'. */
+  choices?: FitChoice[];
+  /** Wording used when an aged answer is re-asked. */
+  reask_prompt?: string;
+  retired?: FitRetirement;
+}
+
+const TRAIT_KEYS = ['builder', 'visionary', 'connector', 'operator'] as const;
+const CHOICE_KEY_RE = /^[a-z0-9_]{1,24}$/;
+
+/**
+ * Hold a v2 row to the spec's shape before it can reach a bank. A bank that
+ * breaks a rule fails at module load — in every test and in the build — never
+ * at scoring time on a real answer.
+ */
+export function assertFitRow(persona: FitPersona, r: FitRowSpec): void {
+  const where = `fit.${persona}.${r.key}`;
+  const m = r.measures || {};
+  if (r.reverse) {
+    if (!m.archetype_trait || r.input_kind === 'choice') throw new Error(`${where}: reverse-keyed rows must be archetype_trait scales`);
+    if (m.skill_axis || m.value_dim || m.axal_value || m.rubric_category || m.red_flag) {
+      throw new Error(`${where}: a reverse-keyed row measures one trait and nothing else`);
+    }
+  }
+  const isChoice = r.input_kind === 'choice' || !!r.choices || !!m.archetype_choice;
+  if (!isChoice) return;
+  if (r.input_kind !== 'choice' || !m.archetype_choice) throw new Error(`${where}: a pick-one needs input_kind 'choice' and measures.archetype_choice`);
+  if (m.archetype_trait || m.skill_axis || m.value_dim || m.axal_value || m.rubric_category || m.red_flag) {
+    throw new Error(`${where}: a pick-one feeds archetype traits only`);
+  }
+  const choices = r.choices || [];
+  if (choices.length < 2) throw new Error(`${where}: a pick-one needs at least two options`);
+  const keys = new Set<string>();
+  const labels = new Set<string>();
+  for (const c of choices) {
+    if (!CHOICE_KEY_RE.test(c.key)) throw new Error(`${where}: option key "${c.key}" must match ${CHOICE_KEY_RE}`);
+    if (keys.has(c.key)) throw new Error(`${where}: duplicate option key "${c.key}"`);
+    keys.add(c.key);
+    const label = String(c.label || '').trim().toLowerCase();
+    if (!label || labels.has(label)) throw new Error(`${where}: option labels must be present and distinct`);
+    labels.add(label);
+    const traits = Object.keys(c.loadings || {});
+    if (traits.length < 1 || traits.length > 2) throw new Error(`${where}: option "${c.key}" must load one or two traits`);
+    for (const t of traits) {
+      if (!(TRAIT_KEYS as readonly string[]).includes(t)) throw new Error(`${where}: option "${c.key}" loads unknown trait "${t}"`);
+      const v = (c.loadings as Record<string, number>)[t];
+      if (!Number.isFinite(v) || v < 0 || v > 5) throw new Error(`${where}: option "${c.key}" loading for ${t} must be 0..5`);
+    }
+  }
+}
+
+/**
+ * The option key a pick-one answer stores. Accepts the key itself or the exact
+ * label (the chat sends the label it showed), case-insensitively; anything
+ * else is null and the answer is refused. A non-choice question returns the
+ * trimmed value unchanged.
+ */
+export function normalizeFitAnswer(q: Pick<Question, 'choices'>, raw: string): string | null {
+  const v = String(raw ?? '').trim();
+  if (!q.choices) return v;
+  const lower = v.toLowerCase();
+  const hit = q.choices.find((c) => c.key === v || c.label.trim().toLowerCase() === lower);
+  return hit ? hit.key : null;
+}
+
+/** Declare a situational pick-one (PROFILING_V2.md §3.2). */
+export function pickOne(spec: { key: string; prompt: string; hint?: string; choices: FitChoice[]; reask_prompt?: string; retired?: FitRetirement }): FitRowSpec {
+  return {
+    key: spec.key,
+    prompt: spec.prompt,
+    hint: spec.hint ?? 'Pick the one closest to what you would actually do.',
+    input_kind: 'choice',
+    choices: spec.choices,
+    measures: { archetype_choice: true },
+    reask_prompt: spec.reask_prompt,
+    retired: spec.retired,
+  };
+}
+
+/** Declare a reverse-keyed trait probe: a 5 here pulls the trait DOWN. */
+export function reverseKeyed(spec: { key: string; prompt: string; hint?: string; trait: (typeof TRAIT_KEYS)[number]; reask_prompt?: string; retired?: FitRetirement }): FitRowSpec {
+  return {
+    key: spec.key,
+    prompt: spec.prompt,
+    hint: spec.hint,
+    measures: { archetype_trait: spec.trait },
+    reverse: true,
+    reask_prompt: spec.reask_prompt,
+    retired: spec.retired,
+  };
 }
 
 /**
@@ -35,32 +135,46 @@ export interface FitRowSpec {
  */
 export function buildFitBank(persona: FitPersona, rows: FitRowSpec[]): Question[] {
   const qPersona: Question['persona'] = persona === 'coach' ? 'advisor' : persona;
-  return rows.map((r) => ({
-    id: `fit.${persona}.${r.key}`,
-    persona: qPersona,
-    section: 'FIT',
-    prompt: r.prompt,
-    hint: r.hint ?? SCALE_HINT,
-    input_kind: 'scale',
-    validate: 'scale',
-    importance: 'low',
-    skip_allowed: true,
-    page_target: '/dashboard',
-    doc_anchor: 'getting-started/personas',
-    measures: r.measures,
-  }));
+  return rows.map((r) => {
+    assertFitRow(persona, r);
+    const isChoice = r.input_kind === 'choice';
+    const q: Question = {
+      id: `fit.${persona}.${r.key}`,
+      persona: qPersona,
+      section: 'FIT',
+      prompt: r.prompt,
+      hint: r.hint ?? SCALE_HINT,
+      // A pick-one reaches the chat as a plain select over its labels; the
+      // route stores the option KEY (normalizeFitAnswer).
+      input_kind: isChoice ? 'select' : ((r.input_kind as Question['input_kind'] | undefined) ?? 'scale'),
+      options: isChoice ? r.choices!.map((c) => c.label) : r.options,
+      validate: r.validate ?? (isChoice || r.input_kind === 'select' ? 'select' : 'scale'),
+      importance: r.importance ?? 'low',
+      skip_allowed: true,
+      page_target: '/dashboard',
+      doc_anchor: 'getting-started/personas',
+      measures: r.measures,
+    };
+    if (r.reverse) q.reverse = true;
+    if (isChoice) q.choices = r.choices;
+    if (r.reask_prompt) q.reask_prompt = r.reask_prompt;
+    if (r.retired) q.retired = r.retired;
+    return q;
+  });
 }
 
 /**
- * Task #45 — Archetype trait probes, asked of every persona. Four generic
- * behavioural leanings (builder / visionary / connector / operator) that the
- * nearest-centroid classifier in services/archetypeScoring.ts maps to a
- * role-specific archetype. Kept generic so every bank shares one compact,
- * diagnostic set — the archetype module only needs 3 of the 4 answered to
- * classify confidently, so this is deliberately small, not a survey.
+ * Task #45 — Archetype trait probes, asked of every persona. Five angles on
+ * each of the four behavioural leanings (builder / visionary / connector /
+ * operator) that the nearest-centroid classifier in services/archetypeScoring.ts
+ * maps to a role-specific archetype. Extra probes per axis average together, so
+ * a single noisy self-rating cannot swing the classification. Adaptive
+ * selection still stops once the module floor is met — this is headroom, not a
+ * forced survey.
  */
 export function archetypeTraitRows(): FitRowSpec[] {
   return [
+    // ---- builder (5) ------------------------------------------------------
     {
       key: 'arch_builder',
       prompt: 'How much do you gravitate to hands-on making — building the thing yourself rather than directing from above?',
@@ -68,11 +182,61 @@ export function archetypeTraitRows(): FitRowSpec[] {
       measures: { archetype_trait: 'builder' },
     },
     {
+      key: 'arch_builder_fix',
+      prompt: 'When something is broken, how often do you fix it yourself before handing it off?',
+      hint: '0 = I assign it immediately, 5 = I get my hands on it first.',
+      measures: { archetype_trait: 'builder' },
+    },
+    {
+      key: 'arch_builder_craft',
+      prompt: 'How much of your credibility comes from having made the thing with your own hands?',
+      hint: '0 = my credibility is direction and judgment, 5 = it is craft I have personally done.',
+      measures: { archetype_trait: 'builder' },
+    },
+    {
+      key: 'arch_builder_ship',
+      prompt: 'In a typical week, how often do you personally ship something tangible — a prototype, a page, a model, a close?',
+      hint: '0 = almost never, 5 = that is a normal week for me.',
+      measures: { archetype_trait: 'builder' },
+    },
+    {
+      key: 'arch_builder_first',
+      prompt: 'When a first version is needed, how likely are you to build it yourself rather than specify it for someone else?',
+      hint: '0 = I write the spec and hand it off, 5 = I make the first version.',
+      measures: { archetype_trait: 'builder' },
+    },
+    // ---- visionary (5) ----------------------------------------------------
+    {
       key: 'arch_visionary',
       prompt: 'How much of your energy goes to the long-range picture and narrative versus the immediate task in front of you?',
       hint: '0 = focused on the next task, 5 = focused on the long-range vision.',
       measures: { archetype_trait: 'visionary' },
     },
+    {
+      key: 'arch_visionary_pull',
+      prompt: 'How strongly do you pull people toward a future that is not fully specified yet?',
+      hint: '0 = I wait until the plan is concrete, 5 = I recruit to a picture that is still forming.',
+      measures: { archetype_trait: 'visionary' },
+    },
+    {
+      key: 'arch_visionary_bet',
+      prompt: 'How often do you choose the bigger story over the safer next step?',
+      hint: '0 = I take the safer increment, 5 = I bet on the larger narrative.',
+      measures: { archetype_trait: 'visionary' },
+    },
+    {
+      key: 'arch_visionary_horizon',
+      prompt: 'How far out do you naturally plan — years and categories, or this week’s list?',
+      hint: '0 = this week’s list, 5 = years and categories.',
+      measures: { archetype_trait: 'visionary' },
+    },
+    {
+      key: 'arch_visionary_story',
+      prompt: 'How much of your influence comes from the story you tell about where this is going?',
+      hint: '0 = influence comes from the work itself, 5 = the story is a core instrument.',
+      measures: { archetype_trait: 'visionary' },
+    },
+    // ---- connector (5) ----------------------------------------------------
     {
       key: 'arch_connector',
       prompt: 'How central are people and relationships to how you create value — do you win mostly through your network?',
@@ -80,11 +244,373 @@ export function archetypeTraitRows(): FitRowSpec[] {
       measures: { archetype_trait: 'connector' },
     },
     {
+      key: 'arch_connector_doors',
+      prompt: 'How naturally do you open doors, make introductions, and bring the right people together?',
+      hint: '0 = that is not how I work, 5 = that is a core move of mine.',
+      measures: { archetype_trait: 'connector' },
+    },
+    {
+      key: 'arch_connector_first_call',
+      prompt: 'When you are stuck, how often is your first move to call someone rather than sit with the problem alone?',
+      hint: '0 = I sit with it myself, 5 = I reach for a person first.',
+      measures: { archetype_trait: 'connector' },
+    },
+    {
+      key: 'arch_connector_rooms',
+      prompt: 'How energized are you by rooms of people versus deep solo work?',
+      hint: '0 = solo work is where I come alive, 5 = rooms of people are where I come alive.',
+      measures: { archetype_trait: 'connector' },
+    },
+    {
+      key: 'arch_connector_trust',
+      prompt: 'How quickly do you turn a new relationship into a working alliance?',
+      hint: '0 = slowly, if at all, 5 = that is a native move.',
+      measures: { archetype_trait: 'connector' },
+    },
+    // ---- operator (5) -----------------------------------------------------
+    {
       key: 'arch_operator',
       prompt: 'How much do you rely on process, systems, and discipline rather than improvising as you go?',
       hint: '0 = I improvise, 5 = I run on process and systems.',
       measures: { archetype_trait: 'operator' },
     },
+    {
+      key: 'arch_operator_cadence',
+      prompt: 'How much do you insist on cadence, checklists, and clear owners so the work runs without heroics?',
+      hint: '0 = I am fine with heroics, 5 = I install cadence so heroics are rare.',
+      measures: { archetype_trait: 'operator' },
+    },
+    {
+      key: 'arch_operator_gap',
+      prompt: 'How strongly do you feel the need to install a process when one is missing?',
+      hint: '0 = missing process does not bother me, 5 = I cannot leave a gap un-systemed.',
+      measures: { archetype_trait: 'operator' },
+    },
+    {
+      key: 'arch_operator_owners',
+      prompt: 'How strongly do you assign a named owner and a next date before a task feels real?',
+      hint: '0 = informal is fine, 5 = it is not real until someone owns it and a date exists.',
+      measures: { archetype_trait: 'operator' },
+    },
+    {
+      key: 'arch_operator_repeat',
+      prompt: 'How quickly do you turn a one-off win into a repeatable playbook?',
+      hint: '0 = I will reinvent it next time, 5 = I write it down before I forget.',
+      measures: { archetype_trait: 'operator' },
+    },
+  ];
+}
+
+/**
+ * Illustration sex for the archetype sprite. Select, not a 0–5 scale — the
+ * write-router stores `m` / `f` / `both` on user_settings.archetype_sex.
+ * Counted in the Archetype profiling module so it is asked with the trait
+ * probes, but it does not load a trait axis.
+ */
+export function archetypePresentationRow(): FitRowSpec {
+  return {
+    key: 'arch_illustration',
+    prompt: 'Your archetype is drawn as a pixel-art character. Should we draw you as a man or a woman?',
+    hint: 'This only chooses the illustration — you can change it any time in Settings → Profile details.',
+    input_kind: 'select',
+    options: [...ARCHETYPE_PRESENTATION_OPTIONS],
+    validate: 'select',
+    measures: { archetype_presentation: true },
+  };
+}
+
+/**
+ * Role-flavoured situational probes — two per distinctive lean of that
+ * persona's four archetypes. Still tagged with a single shared trait so they
+ * average into the same centroid space as the generic probes.
+ */
+export function archetypePersonaRows(persona: FitPersona): FitRowSpec[] {
+  switch (persona) {
+    case 'founder':
+      return [
+        {
+          key: 'arch_fo_independent',
+          prompt: 'How independently do you make the call even when the room disagrees?',
+          hint: '0 = I wait for consensus, 5 = I will take the unpopular call.',
+          measures: { archetype_trait: 'builder' },
+        },
+        {
+          key: 'arch_fo_playbook',
+          prompt: 'How much do you prefer inventing the path over following a known playbook?',
+          hint: '0 = I want a proven playbook, 5 = I would rather invent the path.',
+          measures: { archetype_trait: 'builder' },
+        },
+        {
+          key: 'arch_fo_breakout',
+          prompt: 'How willing are you to move faster than the process can keep up, if it gets you a breakout?',
+          hint: '0 = process first, 5 = breakout first.',
+          measures: { archetype_trait: 'visionary' },
+        },
+        {
+          key: 'arch_fo_raise',
+          prompt: 'How comfortable are you raising big and moving first, even before the system is ready?',
+          hint: '0 = foundations first, 5 = raise and move first.',
+          measures: { archetype_trait: 'visionary' },
+        },
+        {
+          key: 'arch_fo_mission_pull',
+          prompt: 'How much do you convert people by making them feel the mission, not just the product?',
+          hint: '0 = the product does the converting, 5 = the mission does.',
+          measures: { archetype_trait: 'connector' },
+        },
+        {
+          key: 'arch_fo_conviction',
+          prompt: 'How tightly do you hold the mission when a faster commercial path appears?',
+          hint: '0 = I take the commercial path, 5 = the mission holds.',
+          measures: { archetype_trait: 'connector' },
+        },
+        {
+          key: 'arch_fo_systems',
+          prompt: 'How much of your week is spent installing systems that still work when you are not in the room?',
+          hint: '0 = almost none, 5 = that is a large part of how I build.',
+          measures: { archetype_trait: 'operator' },
+        },
+        {
+          key: 'arch_fo_quality',
+          prompt: 'How unwilling are you to ship below your quality bar, even if waiting costs a window?',
+          hint: '0 = ship and iterate, 5 = the bar holds even if we wait.',
+          measures: { archetype_trait: 'operator' },
+        },
+      ];
+    case 'investor':
+      return [
+        {
+          key: 'arch_inv_sleeves',
+          prompt: 'How often do you roll up your sleeves beside a founder rather than staying at board altitude?',
+          hint: '0 = board altitude, 5 = in the work with them.',
+          measures: { archetype_trait: 'builder' },
+        },
+        {
+          key: 'arch_inv_product',
+          prompt: 'How often are you in the product, GTM, or hiring work with a founder after the cheque?',
+          hint: '0 = rarely, 5 = that is a normal week.',
+          measures: { archetype_trait: 'builder' },
+        },
+        {
+          key: 'arch_inv_thesis',
+          prompt: 'How much do you invest from a written thesis rather than from who is in the room?',
+          hint: '0 = relationships lead, 5 = the thesis leads.',
+          measures: { archetype_trait: 'visionary' },
+        },
+        {
+          key: 'arch_inv_lead',
+          prompt: 'How often do you lead a round on conviction before the crowd agrees?',
+          hint: '0 = I wait for consensus, 5 = I lead before the crowd.',
+          measures: { archetype_trait: 'visionary' },
+        },
+        {
+          key: 'arch_inv_doors',
+          prompt: 'How much of your value after the cheque is opening doors and compounding relationships?',
+          hint: '0 = the cheque is the value, 5 = the network is the value.',
+          measures: { archetype_trait: 'connector' },
+        },
+        {
+          key: 'arch_inv_reputation',
+          prompt: 'How much of a founder’s reason to take your cheque is the rooms and reputation you bring?',
+          hint: '0 = not the reason, 5 = that is a primary reason.',
+          measures: { archetype_trait: 'connector' },
+        },
+        {
+          key: 'arch_inv_process',
+          prompt: 'How strictly do you stick to allocation process even when a deal is exciting?',
+          hint: '0 = excitement can override process, 5 = process holds.',
+          measures: { archetype_trait: 'operator' },
+        },
+        {
+          key: 'arch_inv_diligence',
+          prompt: 'How much of your edge is repeatable diligence rather than access or instinct?',
+          hint: '0 = access and instinct, 5 = repeatable diligence.',
+          measures: { archetype_trait: 'operator' },
+        },
+      ];
+    case 'partner':
+      return [
+        {
+          key: 'arch_pt_trenches',
+          prompt: 'How much of your work happens in the trenches, delivering, not just talking?',
+          hint: '0 = I advise, 5 = I deliver beside them.',
+          measures: { archetype_trait: 'builder' },
+        },
+        {
+          key: 'arch_pt_hours',
+          prompt: 'How much of your value is hours of doing, not frameworks?',
+          hint: '0 = frameworks, 5 = hours of doing.',
+          measures: { archetype_trait: 'builder' },
+        },
+        {
+          key: 'arch_pt_momentum',
+          prompt: 'How much do you turn early momentum into a growth motion rather than a one-off win?',
+          hint: '0 = I land the win, 5 = I install the motion.',
+          measures: { archetype_trait: 'visionary' },
+        },
+        {
+          key: 'arch_pt_scale',
+          prompt: 'How strongly do you push a company from traction into a growth motion?',
+          hint: '0 = I wait until they ask, 5 = I push when traction is real.',
+          measures: { archetype_trait: 'visionary' },
+        },
+        {
+          key: 'arch_pt_people',
+          prompt: 'How much of your impact is lining up the right people to a plan?',
+          hint: '0 = I do the work myself, 5 = I align the right people.',
+          measures: { archetype_trait: 'connector' },
+        },
+        {
+          key: 'arch_pt_broker',
+          prompt: 'How much of your week is brokering alignment across organizations?',
+          hint: '0 = almost none, 5 = that is the core of the week.',
+          measures: { archetype_trait: 'connector' },
+        },
+        {
+          key: 'arch_pt_machinery',
+          prompt: 'How much of what you leave behind is durable machinery, not a one-off win?',
+          hint: '0 = a win for this week, 5 = machinery that outlasts the engagement.',
+          measures: { archetype_trait: 'operator' },
+        },
+        {
+          key: 'arch_pt_process_leave',
+          prompt: 'How much do you refuse to leave until a process exists that does not need you?',
+          hint: '0 = I leave when the win lands, 5 = I leave when the system runs.',
+          measures: { archetype_trait: 'operator' },
+        },
+      ];
+    case 'advisor':
+      return [
+        {
+          key: 'arch_mt_craft',
+          prompt: 'How much of what you share is deep craft you have personally mastered?',
+          hint: '0 = I mostly hold space and ask, 5 = I teach a craft I have done.',
+          measures: { archetype_trait: 'builder' },
+          reask_prompt: 'Is what you share still mostly craft you have personally mastered?',
+        },
+        {
+          key: 'arch_mt_demo',
+          prompt: 'How often do you teach by demonstrating the craft in the work, not by telling?',
+          hint: '0 = I tell, 5 = I demonstrate in the work.',
+          measures: { archetype_trait: 'builder' },
+          reask_prompt: 'Do you still teach by demonstrating in the work rather than telling?',
+        },
+        {
+          key: 'arch_mt_perspective',
+          prompt: 'How much of your value is perspective and judgment at the hard moments, not hours of doing?',
+          hint: '0 = I do the hours, 5 = I bring judgment when it counts.',
+          measures: { archetype_trait: 'visionary' },
+          reask_prompt: 'Is your value still mostly judgment at the hard moments?',
+        },
+        {
+          key: 'arch_mt_altitude',
+          prompt: 'How often is your best move a high-altitude reframe rather than a tactic for this week?',
+          hint: '0 = this week’s tactic, 5 = a reframe of the decade.',
+          measures: { archetype_trait: 'visionary' },
+          reask_prompt: 'Is your best move still a high-altitude reframe?',
+        },
+        {
+          key: 'arch_mt_beside',
+          prompt: 'How much do you coach session by session, beside the person, rather than from a distance?',
+          hint: '0 = at a distance, 5 = beside them, session by session.',
+          measures: { archetype_trait: 'connector' },
+          reask_prompt: 'Do you still work beside the person, session by session?',
+        },
+        {
+          key: 'arch_mt_relationship',
+          prompt: 'How much of the work is the relationship itself, rebuilt every session?',
+          hint: '0 = the work is the advice, 5 = the work is the relationship.',
+          measures: { archetype_trait: 'connector' },
+          reask_prompt: 'Is the relationship itself still most of the work?',
+        },
+        {
+          key: 'arch_mt_honest',
+          prompt: 'How firmly do you keep commitments honest even when it strains the relationship?',
+          hint: '0 = I protect the relationship first, 5 = honesty holds even when it is hard.',
+          measures: { archetype_trait: 'operator' },
+          reask_prompt: 'Do you still keep commitments honest when it strains the relationship?',
+        },
+        {
+          key: 'arch_mt_cadence',
+          prompt: 'How strictly do you run a cadence of commitments the person can see and inspect?',
+          hint: '0 = informal follow-up, 5 = a visible cadence with owners and dates.',
+          measures: { archetype_trait: 'operator' },
+          reask_prompt: 'Do you still run a visible cadence of commitments?',
+        },
+      ];
+    // Session 12 — the coach's own role probes (PROFILING_V2.md §2.4). Coach
+    // shares the advisor archetype set, so these lean the same four ways,
+    // worded for someone whose work is the coaching relationship itself.
+    case 'coach':
+      return [
+        {
+          key: 'arch_co_skill_drill',
+          prompt: 'How often do you have the person practise a specific skill with you in the session, rather than talk about it?',
+          hint: '0 = we talk it through, 5 = we practise it together.',
+          measures: { archetype_trait: 'builder' },
+          reask_prompt: 'Do you still have people practise the skill with you in the session?',
+        },
+        {
+          key: 'arch_co_own_practice',
+          prompt: 'How much of your coaching draws on work you still do yourself, not only on coaching others?',
+          hint: '0 = it draws on coaching alone, 5 = it draws on work I still do.',
+          measures: { archetype_trait: 'builder' },
+          reask_prompt: 'Does your coaching still draw on work you do yourself?',
+        },
+        {
+          key: 'arch_co_meaning',
+          prompt: 'How often do you help the person reconnect a hard week to what they are ultimately trying to build?',
+          hint: '0 = rarely, we stay with the week, 5 = that is a core move of mine.',
+          measures: { archetype_trait: 'visionary' },
+          reask_prompt: 'Do you still reconnect hard weeks to what the person is ultimately building?',
+        },
+        {
+          key: 'arch_co_possibility',
+          prompt: 'How much do you stretch the person’s sense of what they could become, beyond the goal they came in with?',
+          hint: '0 = I coach to the goal they bring, 5 = I stretch it on purpose.',
+          measures: { archetype_trait: 'visionary' },
+          reask_prompt: 'Do you still stretch people beyond the goal they came in with?',
+        },
+        {
+          key: 'arch_co_rapport',
+          prompt: 'How much effort do you put into the relationship itself — checking in, remembering what matters to them, being reachable?',
+          hint: '0 = the sessions are the relationship, 5 = I invest in it all the time.',
+          measures: { archetype_trait: 'connector' },
+          reask_prompt: 'Do you still invest in the relationship between sessions as much?',
+        },
+        {
+          key: 'arch_co_bring_people',
+          prompt: 'How often do you bring other people into someone’s growth — a peer, a mentor, a group?',
+          hint: '0 = it stays between the two of us, 5 = I often bring others in.',
+          measures: { archetype_trait: 'connector' },
+          reask_prompt: 'Do you still bring other people into someone’s growth as often?',
+        },
+        {
+          key: 'arch_co_written_goals',
+          prompt: 'How consistently do the people you coach have written goals that you review together on a set rhythm?',
+          hint: '0 = goals stay informal, 5 = always written and reviewed on a rhythm.',
+          measures: { archetype_trait: 'operator' },
+          reask_prompt: 'Do the people you coach still have written goals you review on a rhythm?',
+        },
+        {
+          key: 'arch_co_follow_up',
+          prompt: 'How reliably do you follow up on exactly what the person said they would do by the next session?',
+          hint: '0 = I let them raise it, 5 = I always follow up on it.',
+          measures: { archetype_trait: 'operator' },
+          reask_prompt: 'Do you still follow up on exactly what the person committed to?',
+        },
+      ];
+    default:
+      return [];
+  }
+}
+
+/** Every archetype-module row for a persona (traits + illustration + role probes). */
+export function archetypeModuleRows(persona: FitPersona): FitRowSpec[] {
+  return [
+    ...archetypeTraitRows(),
+    ...archetypePersonaRows(persona),
+    archetypePresentationRow(),
   ];
 }
 

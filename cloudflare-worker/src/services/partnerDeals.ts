@@ -17,6 +17,7 @@ import { hashEmail } from '../util/hashEmail';
 // activate/redeem grant paths still import dynamically because they
 // also need ensureInvestorPaywallSchema in the same await.
 import { INVESTOR_QUOTAS } from '../middleware/requireInvestorTier';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export type PartnerDealType =
   | 'equity_partnership'
@@ -444,8 +445,8 @@ export async function activatePartnerDealOnSignature(
       title: `Welcome to the Axal partner network`,
       // Task #10 — point signers at the magic-link path: these accounts have
       // no TOTP enrolled, so "sign in with your authenticator" is a dead end.
-      body: `Your ${deal.deal_type.replace(/_/g, ' ')} agreement is live. Your one-time referral code is ${referralCode || '(pending)'} — share it to grant network access for ${termMonths} months. To open your Partner Portal, choose "Email me a sign-in link" on the sign-in page — no password or authenticator needed.`,
-      link: '/partner-portal',
+      body: `Your ${deal.deal_type.replace(/_/g, ' ')} agreement is live. Your one-time referral code is ${referralCode || '(pending)'} — share it to grant network access for ${termMonths} months. To open Studio, choose "Email me a sign-in link" on the sign-in page — no password or authenticator needed.`,
+      link: '/studio',
       channels: ['in_app', 'email'],
     });
   } catch (e) { console.warn('[partnerDeals] notify failed', e); }
@@ -683,9 +684,9 @@ interface RevshareDueRow {
   referral_code: string | null;
 }
 
-let revshareNotifSchemaReady = false;
+const REVSHARE_NOTIF_SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureRevshareNotifSchema(env: Env): Promise<boolean> {
-  if (revshareNotifSchemaReady) return true;
+  if (REVSHARE_NOTIF_SCHEMA_READY.get(bindingKey(env))) return true;
   try {
     await env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS partner_revshare_window_notifications (
@@ -700,7 +701,7 @@ async function ensureRevshareNotifSchema(env: Env): Promise<boolean> {
       `CREATE INDEX IF NOT EXISTS idx_prwn_redemption
          ON partner_revshare_window_notifications(redemption_id)`,
     ).run();
-    revshareNotifSchemaReady = true;
+    REVSHARE_NOTIF_SCHEMA_READY.set(bindingKey(env), true);
     return true;
   } catch (e) {
     console.error('[partnerDeals] revshare notif schema migration failed', e);

@@ -7,13 +7,13 @@
   --rf-accent: #6d28d9;
   --rf-green: #15803d;
   --rf-amber: #b45309;
-  font-family: Inter, system-ui, sans-serif;
+  font-family:var(--font-app);
   color: #18181b;
   -webkit-font-smoothing: antialiased;
 }
 
 .rf-mono {
-  font-family: 'Roboto Mono', ui-monospace, monospace;
+  font-family:var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 

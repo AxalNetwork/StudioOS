@@ -2,7 +2,7 @@
  * Task #68 — Public Job Board: public routes. No auth.
  *
  * Mounted at /api/public (alongside events_public) so it sits OUTSIDE the auth
- * layer and the /api/admin CF-Access perimeter. Read endpoints are open; the
+ * layer and the admin routers' gates. Read endpoints are open; the
  * apply endpoint is Turnstile-gated exactly like routes/contact.ts + events
  * (fails OPEN in dev/preview, closed in prod when the secret is set) and is
  * additionally throttled per-IP (best-effort KV) and de-duped by a UNIQUE
@@ -20,6 +20,7 @@ import { ensureJobBoardSchema } from '../services/jobBoardSchema';
 import { shapeJobPosting, safeHttpUrl, buildPublicJobFeedWhere } from '../services/jobBoardCommon';
 import { putResumeFromDataUri } from '../services/r2';
 import { notify } from '../services/notify';
+import { refuse } from '../util/refusal';
 
 const jobsPublic = new Hono<{ Bindings: Env }>();
 
@@ -131,7 +132,7 @@ jobsPublic.post('/jobs/:slug/apply', async (c) => {
       resumeKey = meta.file_key;
       resumeName = body.resume_name ? String(body.resume_name).slice(0, 255) : `${slug}.pdf`;
     } catch (e) {
-      return c.json({ error: 'resume_rejected', message: (e as Error).message }, 400);
+      return refuse(c, 400, { code: 'resume_rejected', message: 'The résumé could not be read. Upload a PDF of 5 MB or less and try again.', raw: e, audience: 'member' });
     }
   }
 

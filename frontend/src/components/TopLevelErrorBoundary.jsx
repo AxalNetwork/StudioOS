@@ -29,7 +29,6 @@ export default class TopLevelErrorBoundary extends React.Component {
     try {
       reportError('top-level-boundary', error);
       if (typeof console !== 'undefined' && info?.componentStack) {
-        // eslint-disable-next-line no-console
         console.error('[TopLevelErrorBoundary]', error, info.componentStack);
       }
     } catch { /* never let the boundary itself throw */ }

@@ -145,11 +145,11 @@ export default function GuidanceZone() {
             },
           ].map((t) => (
             <Card key={t.label} className="px-3 py-2.5">
-              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{t.label}</div>
+              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{t.label}</div>
               {t.value === null || t.value === undefined
                 ? <div className="mt-1.5"><Unrecorded /></div>
                 : <div className="mt-1 text-base font-extrabold tabular-nums tracking-tight">{t.value}</div>}
-              <div className="mt-1 text-[10px] leading-snug text-axal-ink-3">{t.note}</div>
+              <div className="mt-1 text-[10px] leading-snug text-axal-faint">{t.note}</div>
             </Card>
           ))}
         </div>
@@ -163,7 +163,7 @@ export default function GuidanceZone() {
             part worth rendering, so it is rendered on its own. */}
         {payload?.oldest_open_hours != null && (
           <Card className="p-4">
-            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
               Longest open question
             </div>
             <div className="mt-1 text-sm font-bold">{payload.oldest_open_hours} hours</div>
@@ -171,7 +171,7 @@ export default function GuidanceZone() {
         )}
 
         <Card className="p-4">
-          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             Post guidance to this batch
           </div>
           <div className="mt-2.5 space-y-2.5">
@@ -195,7 +195,7 @@ export default function GuidanceZone() {
               <button type="button" disabled={busy || !draft.trim()} onClick={post} className={buttonClass}>
                 Post to the batch
               </button>
-              {note && <span className="text-[12px] text-axal-ink-2">{note}</span>}
+              {note && <span className="text-[12px] text-axal-muted">{note}</span>}
             </div>
           </div>
         </Card>
@@ -203,9 +203,9 @@ export default function GuidanceZone() {
         <Card className="p-4">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <span className="text-sm font-extrabold tracking-tight">This batch</span>
-            <span className="text-[11px] text-axal-ink-3">Newest first</span>
+            <span className="text-[11px] text-axal-faint">Newest first</span>
           </div>
-          <ul className="divide-y divide-axal-border-soft">
+          <ul className="divide-y divide-axal-hairline">
             {live.map((gd) => (
               <li key={gd.uid} className="py-3">
                 <div className="flex flex-wrap items-center gap-2">
@@ -213,17 +213,17 @@ export default function GuidanceZone() {
                     {gd.kind === 'question' ? (gd.answer ? 'Answered' : 'Open question') : 'Posted'}
                   </Pill>
                   {gd.week_number != null && (
-                    <span className="text-[11px] text-axal-ink-3">Week {gd.week_number}</span>
+                    <span className="text-[11px] text-axal-faint">Week {gd.week_number}</span>
                   )}
-                  <span className="text-[11px] text-axal-ink-3">{String(gd.posted_at || '').slice(0, 10)}</span>
+                  <span className="text-[11px] text-axal-faint">{String(gd.posted_at || '').slice(0, 10)}</span>
                 </div>
                 <p className="mt-1.5 text-[12.5px] leading-relaxed">{gd.body}</p>
                 {gd.answer && (
-                  <p className="mt-1.5 border-l-2 border-axal-border-soft pl-2.5 text-[12.5px] leading-relaxed text-axal-ink-2">
+                  <p className="mt-1.5 border-l-2 border-axal-hairline pl-2.5 text-[12.5px] leading-relaxed text-axal-muted">
                     {gd.answer}
                   </p>
                 )}
-                <div className="mt-1.5 text-[11px] text-axal-ink-3">
+                <div className="mt-1.5 text-[11px] text-axal-faint">
                   {/* WHO acted, not how many. A count answers the wrong
                       question for an advisor with twelve founders. */}
                   {gd.acted_by.length
@@ -232,7 +232,7 @@ export default function GuidanceZone() {
                 </div>
                 <button
                   type="button" disabled={busy} onClick={() => retire(gd.uid)}
-                  className="mt-2 text-[11px] text-axal-ink-3 underline hover:text-axal-ink-2"
+                  className="mt-2 text-[11px] text-axal-faint underline hover:text-axal-muted"
                 >
                   Retire
                 </button>

@@ -7,7 +7,9 @@
  * canvas's entries are shipped as CARDS inside the `account` section rather
  * than as nav rows of their own.
  *
- *   canvas "Roles & access"  → <YourCompaniesSection />
+ *   canvas "Roles & access"  → <RolesAccessCard /> (D433; it used to be mapped to
+ *                              <YourCompaniesSection />, which is the canvas's
+ *                              "Legal entity" companies list, not its roles pane)
  *   canvas "Documents"       → <DocumentsAgreementsSection />
  *   canvas "Profile"         → ProfileTabs, sub-tab 'personal'
  *   canvas "Identity & tax"  → ProfileTabs, sub-tab 'verification'
@@ -28,17 +30,17 @@
  *                ProfileTabs' `corporate` sub-tab, the tab the comment above
  *                ENTITY_TYPE_OPTIONS has named since Task #16.
  *
- *   PER-COMPANY  the card the canvas draws on Company Settings. Still not
- *                built, and still not for want of trying: `company_profiles`
- *                has no entity_id, jurisdiction or registered address, and
- *                `entities` carries no owner column at all (its link is
- *                `projects.entity_id`, which is why GET /legal/entities
- *                scopes through projects). Building it would mean a pane
- *                reading "Not recorded" for every field on every company.
+ *   PER-COMPANY  `company_kyb_records` — one row per company (migration 220,
+ *                task #108), written by POST /trust/companies/kyb. This file
+ *                used to say it was unbuildable because `company_profiles`
+ *                had no entity columns; the store was built BESIDE
+ *                company_profiles rather than on it, and D433 draws it on the
+ *                Account page's "Your companies" rows: a KYB pill per company
+ *                and "Save entity" for that company's fields.
  *
  * The two are not interchangeable and must not drift into each other: the
  * account's entity is who signs YOUR contracts, the company's is who the
- * workspace belongs to. The tests below pin each to its own page.
+ * workspace belongs to. The tests below pin each to its own store.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -83,7 +85,7 @@ test('the four cards folded into the account pane are all still rendered', () =>
     settings.indexOf("safeActive === 'account' && ("),
     settings.indexOf("safeActive === 'security-privacy'"),
   );
-  for (const card of ['<ProfileTabs', '<EmailSection', '<YourCompaniesSection', '<DocumentsAgreementsSection']) {
+  for (const card of ['<ProfileTabs', '<EmailSection', '<YourCompaniesSection', '<RolesAccessCard', '<DocumentsAgreementsSection']) {
     assert.ok(pane.includes(card), `${card} left the account pane`);
   }
 });
@@ -104,22 +106,35 @@ test('Documents lists the caller’s own envelopes, scoped by the server', () =>
   assert.match(settings, /scoped server-side by/);
 });
 
-test('the COMPANY-scoped Legal entity card stays absent, and the blocker is the missing link', () => {
-  // The per-account record is built (see the corporate sub-tab tests below);
-  // this one is not, and not silently: it needs a company → entity link that
-  // does not exist. If any of these three facts changes, this test should fail
-  // so the card can be reconsidered.
-  assert.doesNotMatch(company, /Legal entity/i, 'if this shipped, delete this test');
+test('the COMPANY-scoped entity writes company_kyb_records, and the account entity stays its own row', () => {
+  // D433. This test used to hold that the per-company card was unbuildable
+  // because `company_profiles` carries no entity columns. It still carries
+  // none — the store is `company_kyb_records`, beside it (migration 220) —
+  // and the card is drawn on the Account page. What is still worth pinning
+  // is the SPLIT: the company's entity goes through the company route, the
+  // account's through the legal-entity route, and neither writes the other's
+  // table.
+  const companies = settings.slice(
+    settings.indexOf('function CompanyEntityEditor'),
+    settings.indexOf('function RolesAccessCard'),
+  );
+  assert.ok(companies.length > 500, 'could not read the company rows');
+  assert.match(companies, /api\.companyKybStart\(form, company\.id\)/, 'the company entity saves through the company route, naming its company');
+  assert.match(companies, /api\.companyKybList\(\)/, 'the pill reads the company store');
+  assert.doesNotMatch(codeOnly(companies), /api\.(get|update)LegalEntity|api\.(get|update)CorporateProfile/,
+    'the company rows must not touch the account entity route');
 
+  const migration = read('cloudflare-worker/sql/migrations/220_company_kyb.sql');
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS company_kyb_records/);
+  assert.match(migration, /UNIQUE \(company_id\)/, 'one record per company');
   const schema = read('cloudflare-worker/sql/historical/t13_t14_t15.sql');
   const profiles = schema.slice(
     schema.indexOf('CREATE TABLE IF NOT EXISTS company_profiles'),
     schema.indexOf(');', schema.indexOf('CREATE TABLE IF NOT EXISTS company_profiles')),
   );
-  assert.ok(profiles.length > 100, 'could not read company_profiles');
   for (const col of ['entity_id', 'jurisdiction', 'registered_address']) {
     assert.ok(!profiles.includes(col),
-      `company_profiles gained ${col} — the Legal entity card is now buildable`);
+      `company_profiles gained ${col} — the entity now has two stores on the company side; reconcile before drawing either`);
   }
 });
 

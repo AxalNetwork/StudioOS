@@ -7,8 +7,9 @@ import { WorkerRail } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorFundLanding.css';
+import { titleCase as caseLabel } from '../../lib/absence';
 
-const titleCase = (value) => String(value || 'unrecorded').replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+const titleCase = (value) => caseLabel(value) || 'Unrecorded';
 const dollarsToCents = (value) => Math.round((Number(value) || 0) * 100);
 const callDollars = (call) => call?.amount_cents != null ? Number(call.amount_cents) / 100 : Number(call?.amount);
 const date = (value) => value ? String(value).slice(0, 10) : 'Unrecorded';
@@ -58,12 +59,13 @@ function FundDetail({ fund }) {
     Promise.all([
       settle(api.fundsLpsList(fund.id).then((r) => r?.items || [])
         .catch(() => api.fundsLpPortal().then((r) => (r?.lps || r?.items || []).filter((lp) => String(lp.fund_id) === String(fund.id))))),
-      settle(api.capitalCalls().then((r) => {
-        // `api.capitalCalls` already swallows its own failure into `[]`
-        // (lib/api.js), so an unreadable ledger cannot be told from an empty
-        // one here. A non-array reply is the one signal left.
-        if (!Array.isArray(r) && !Array.isArray(r?.items)) throw new Error('unreadable');
-        return (Array.isArray(r) ? r : r.items).filter((call) => String(call.fund_id) === String(fund.id));
+      settle(api.listCapitalCalls().then((r) => {
+        // D370: the live ledger (capital.ts GET /calls), which now answers the
+        // GP of record with every call on their fund and names each call's
+        // `fund_id`. This read `api.capitalCalls`, whose /legalcap route threw
+        // on every call, so the fund's calls always read as none.
+        if (!Array.isArray(r)) throw new Error('unreadable');
+        return r.filter((call) => String(call.fund_id) === String(fund.id));
       })),
       settle(api.fundsReportPeriods(fund.id).then((r) => r?.items || r?.periods || [])),
     ]).then(([lps, calls, periods]) => setDetail({ lps, calls, periods }));
@@ -102,7 +104,7 @@ function FundDetail({ fund }) {
 
         <section className="i6-card i6-movements" id="movements">
           <header><div><h2>Capital calls &amp; distributions</h2><span>Recorded notices and payment status</span></div><Link to="/funds/calls" data-testid="link-fund-calls"><ArrowUpRight size={15} /></Link></header>
-          <div className="i6-manual"><span>Schedule basis</span><p>Calls can be reviewed in the capital-call ledger. This overview does not draft or send notices.</p><Link to="/funds/capital-calls" data-testid="link-review-call-ledger">Open capital-call ledger</Link></div>
+          <div className="i6-manual"><span>Schedule basis</span><p>Each call's lines, receipts and wire trail are in the capital-call ledger, where a call is issued and a receipt recorded. This overview does not draft or send notices.</p><Link to="/funds/calls" data-testid="link-review-call-ledger">Open capital-call ledger</Link></div>
           {detail.calls === null ? <div className="i6-skeleton" /> : unread(detail.calls) ? <Unreadable what="The capital-call ledger" /> : detail.calls.length === 0 ? <p className="i6-empty">No capital call notices on record for this fund.</p> : <ul className="i6-call-list">
             {detail.calls.slice(0, 5).map((call) => <li key={call.id}><strong>{fmtCents(Math.round(callDollars(call) * 100))}</strong><span>{date(call.due_date || call.created_at)}</span><em className={`i6-${call.status === 'paid' ? 'ok' : 'alert'}`}>{titleCase(call.status || 'pending')}</em></li>)}
           </ul>}

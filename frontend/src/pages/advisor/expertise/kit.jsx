@@ -15,7 +15,7 @@ import ZoneActions from '../../../workspaces/ZoneActions';
 
 /** Absent renders as absent. Never a zero, never an em-dash pretending to be one. */
 export function Unrecorded({ children = 'Not recorded' }) {
-  return <span className="text-axal-ink-3 italic">{children}</span>;
+  return <span className="text-axal-faint italic">{children}</span>;
 }
 
 /**
@@ -53,7 +53,7 @@ export function ZoneHeading({ title, blurb, action }) {
     <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
       <div className="max-w-2xl">
         <h2 className="text-sm font-extrabold tracking-tight">{title}</h2>
-        {blurb && <p className="mt-1 text-[12px] leading-relaxed text-axal-ink-2">{blurb}</p>}
+        {blurb && <p className="mt-1 text-[12px] leading-relaxed text-axal-muted">{blurb}</p>}
       </div>
       {action}
     </div>
@@ -68,26 +68,38 @@ export function ZoneHeading({ title, blurb, action }) {
  * which asserts that nothing exists. Reading the error first means the page
  * can only ever claim a store is empty when it actually read the store.
  */
-export function ZoneBody({ loading, error, isEmpty, empty, onRetry, actions, children }) {
+export function ZoneBody({ loading, error, isEmpty, empty, onRetry, actions, notice, children }) {
   // `actions` renders ABOVE all four states, on purpose. A zone's header row is
   // as true while the store is loading, or failed, or empty, as it is when rows
   // are on screen — "no cadence is stored, so there is no set of reports to
   // draft" does not become false because the fetch is in flight. An export with
   // nothing loaded says so itself (see `zoneActionBuilder.js`), so the row can
   // sit here without ever offering a file that does not exist.
+  //
+  // `notice` IS THE SAME ARGUMENT ONE STEP FURTHER, and it exists because a
+  // whole class of state was being rendered as a REPLACEMENT for the zone
+  // rather than as a fact about it. The partner zones each answered "this
+  // account is not attached to a firm" by returning a card and nothing else, on
+  // twelve zones, which is how an admin walked a workspace and saw twelve
+  // copies of one card instead of twelve pages. A condition that explains why a
+  // store is unreadable is a line ABOUT the zone; it is not the zone.
+  //
+  // Deliberately generic: this component serves four licences and knows nothing
+  // about firms or advisors. The caller decides what the line says and when.
   const row = actions?.length ? <ZoneActions className="mb-3" items={actions} /> : null;
-  const wrap = (body) => (row ? <>{row}{body}</> : body);
+  const head = (row || notice) ? <>{row}{notice}</> : null;
+  const wrap = (body) => (head ? <>{head}{body}</> : body);
   if (loading) {
     return wrap(<div className="space-y-3" aria-busy="true"><Skeleton className="h-9" /><Skeleton className="h-28" /></div>);
   }
   if (error) {
     return wrap(
       <Card variant="dashed" padding="lg">
-        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
           Source unavailable
         </div>
         <h3 className="mt-2 text-sm font-extrabold tracking-tight">This did not load</h3>
-        <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-ink-2">
+        <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-muted">
           {error} Nothing is shown rather than an empty list, because an empty list here would
           say you have no records — and that is not something this page can currently know.
         </p>
@@ -109,7 +121,7 @@ export function NothingYet({ title, body, action }) {
   return (
     <Card variant="dashed" padding="lg">
       <h3 className="text-sm font-extrabold tracking-tight">{title}</h3>
-      <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-ink-2">{body}</p>
+      <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-muted">{body}</p>
       {action && <div className="mt-3">{action}</div>}
     </Card>
   );
@@ -127,7 +139,7 @@ export function NothingYet({ title, body, action }) {
 export function StatedLimit({ title, children }) {
   return (
     <Card variant="sunken" padding="md" className="mt-3">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
         {title}
       </div>
       {/*
@@ -144,7 +156,7 @@ export function StatedLimit({ title, children }) {
         less than its canvas asked for usually has more than one thing to say,
         and "never pass a paragraph" is a rule the next author will not know.
       */}
-      <div className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-ink-2">{children}</div>
+      <div className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-muted">{children}</div>
     </Card>
   );
 }
@@ -152,9 +164,9 @@ export function StatedLimit({ title, children }) {
 export function Field({ label, hint, children }) {
   return (
     <label className="block">
-      <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{label}</span>
+      <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</span>
       {children}
-      {hint && <span className="mt-1 block text-[11px] leading-relaxed text-axal-ink-3">{hint}</span>}
+      {hint && <span className="mt-1 block text-[11px] leading-relaxed text-axal-faint">{hint}</span>}
     </label>
   );
 }

@@ -23,6 +23,7 @@
  */
 import type { Env } from '../types';
 import { fitMeasuresIndex, type FitPersona } from './advisor/questionBank.ts';
+import { bindingKey } from '../util/schemaBootstrap';
 
 // ---------------------------------------------------------------------------
 // The 4 shared trait axes. Every archetype centroid is a point in this 0..5
@@ -285,11 +286,11 @@ export interface ArchetypeResult extends ArchetypeClassification {
   computed_at: string;
 }
 
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 
 /** Self-healing bootstrap — mirrors ensureAxalFitSchema. */
 export async function ensureArchetypeSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS profile_archetypes (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, persona TEXT NOT NULL, archetype_slug TEXT NOT NULL, archetype_label TEXT NOT NULL, traits_json TEXT, confidence REAL NOT NULL DEFAULT 0, distance REAL NOT NULL DEFAULT 0, narrative TEXT, computed_at TEXT NOT NULL DEFAULT (datetime('now')))",
@@ -297,20 +298,20 @@ export async function ensureArchetypeSchema(env: Env): Promise<void> {
     await env.DB.exec(
       "CREATE INDEX IF NOT EXISTS idx_profile_archetypes_latest ON profile_archetypes (user_id, persona, computed_at)",
     );
-    _schemaReady = true;
+    SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[archetypeScoring] ensure schema failed:', (e as Error).message);
   }
 }
 
 /** The archetype-trait question ids for a persona and the trait each loads. */
-function traitQuestionsFor(persona: FitPersona): { question_id: string; trait: ArchetypeTrait }[] {
-  const out: { question_id: string; trait: ArchetypeTrait }[] = [];
+function traitQuestionsFor(persona: FitPersona): { question_id: string; trait: ArchetypeTrait; reverse?: boolean }[] {
+  const out: { question_id: string; trait: ArchetypeTrait; reverse?: boolean }[] = [];
   for (const e of fitMeasuresIndex()) {
     if (e.persona !== persona) continue;
     const trait = e.measures.archetype_trait;
     if (trait && (ARCHETYPE_TRAITS as readonly string[]).includes(trait)) {
-      out.push({ question_id: e.question_id, trait: trait as ArchetypeTrait });
+      out.push({ question_id: e.question_id, trait: trait as ArchetypeTrait, reverse: e.reverse === true });
     }
   }
   return out;
@@ -343,13 +344,17 @@ async function loadAnsweredScores(
 
 /** Mean each trait's answered 0..5 scores into a TraitScores vector. */
 function aggregateTraits(
-  entries: { question_id: string; trait: ArchetypeTrait }[],
+  entries: { question_id: string; trait: ArchetypeTrait; reverse?: boolean }[],
   answered: Map<string, number>,
 ): TraitScores {
   const sums: Partial<Record<ArchetypeTrait, { sum: number; count: number }>> = {};
   for (const e of entries) {
-    const score = answered.get(e.question_id);
-    if (score == null) continue;
+    const raw = answered.get(e.question_id);
+    if (raw == null) continue;
+    // D357 — a reverse-keyed probe (Profiling v2) is scored 5 − answer here
+    // too, so v1's card never reads one backwards while Session 15 moves the
+    // page onto v2.
+    const score = e.reverse ? 5 - raw : raw;
     const acc = sums[e.trait] ?? (sums[e.trait] = { sum: 0, count: 0 });
     acc.sum += score;
     acc.count += 1;
@@ -489,4 +494,354 @@ export async function loadAllLatestArchetype(env: Env, userId: number): Promise<
     if (r) out.push(r);
   }
   return out.sort((a, b) => b.confidence - a.confidence);
+}
+
+// ===========================================================================
+// D357 — Profiling v2 scoring engine (documentation/architecture/
+// PROFILING_V2.md §2, §3, §7). Pure: no D1, no clock. The DB-aware side —
+// reading the ledger, snapshots, hysteresis state — is
+// services/profileHistory.ts.
+//
+// What differs from v1 above, all per the spec:
+//   * it reads a LEDGER of dated answers (latest per question at or before
+//     the evaluation time), not field_sources' single latest row;
+//   * each answer carries an ageing weight 0.5 ^ (age / 365 days);
+//   * a reverse-keyed scale scores 5 − answer, a pick-one contributes its
+//     chosen option's per-trait loadings;
+//   * it reports a secondary archetype (runner-up within 0.5) and a blend;
+//   * confidence also falls when a person's plain and reverse-keyed answers
+//     on one trait contradict each other — "5 to everything" is not a profile.
+// v1 (`classifyArchetype`, `computeArchetype`, `ARCHETYPES`) is unchanged
+// and keeps serving its callers until Session 15 moves the card page.
+// ===========================================================================
+
+/** Stamped on every snapshot. Bump it when a rule below changes. */
+export const ENGINE_VERSION = 'profiling-v2.1';
+
+/** PROFILING_V2.md §7.0, plus this engine's confidence settings (D357). */
+export const PROFILE_V2_PARAMS = {
+  half_life_days: 365,
+  reask_after_days: 182,
+  hysteresis_days: 14,
+  lead_margin: 0.25,
+  secondary_margin: 0.5,
+  /** confidence at or above this reads "confident". */
+  confident_at: 0.6,
+  /** a margin of this much (normalised distance) counts as full separation. */
+  separation_full_at: 1.0,
+} as const;
+
+const DAY_MS = 86_400_000;
+
+/**
+ * The v2 centroid set. It is v1's, unchanged: PROFILING_V2.md §2.2 proposed
+ * moving Systems Builder to (3, 2, 2, 5), and measured against the Session 6
+ * personas that move classifies a hands-on Systems Builder (builder 4.3,
+ * operator 4.6) as an Embedded Operator. D357 keeps the centroid; the close
+ * pair is reported as a blend and separated by situational items instead.
+ */
+export const ARCHETYPES_PROFILE_V2: Record<FitPersona, ArchetypeDefinition[]> = {
+  founder: FOUNDER_ARCHETYPES,
+  investor: INVESTOR_ARCHETYPES,
+  partner: PARTNER_ARCHETYPES,
+  advisor: ADVISOR_ARCHETYPES,
+  coach: ADVISOR_ARCHETYPES,
+};
+
+/** One answer in the ledger, as the person gave it. */
+export interface LedgerAnswer {
+  question_id: string;
+  /** The raw answer: '0'..'5' for a scale (reverse-keyed or not), an option key for a pick-one. */
+  value: string;
+  /** ISO-8601, or SQLite's 'YYYY-MM-DD HH:MM:SS' (UTC). */
+  answered_at: string;
+}
+
+/** What scoring needs to know about a fit question. */
+export interface ScoringItem {
+  question_id: string;
+  measures: import('./advisor/questionBank.ts').FitMeasures;
+  reverse?: boolean;
+  choices?: import('./advisor/questionBank.ts').FitChoice[];
+  /** Retired, with a replacement: stops counting once the replacement is answered (§3.2). */
+  replaced_by?: string;
+}
+
+/** The persona's fit items, from the real banks. Tests pass their own. */
+export function scoringItemsFor(persona: FitPersona): ScoringItem[] {
+  return fitMeasuresIndex()
+    .filter((e) => e.persona === persona)
+    .map((e) => ({ question_id: e.question_id, measures: e.measures, reverse: e.reverse, choices: e.choices, replaced_by: e.replaced_by }));
+}
+
+/** Milliseconds since the epoch for a ledger timestamp; NaN when unreadable. */
+export function answerTimeMs(at: string): number {
+  const s = String(at ?? '').trim();
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s)) return Date.parse(`${s.replace(' ', 'T')}Z`);
+  return Date.parse(s);
+}
+
+/** The last millisecond of a UTC day 'YYYY-MM-DD' — the nightly evaluation point. */
+export function endOfDayMs(day: string): number {
+  return Date.parse(`${day}T23:59:59.999Z`);
+}
+
+export function dayOf(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/** §7.2: an answer's weight halves every half_life_days. Never 0, never above 1. */
+export function ageWeight(ageDays: number): number {
+  if (!(ageDays > 0)) return 1;
+  return 0.5 ** (ageDays / PROFILE_V2_PARAMS.half_life_days);
+}
+
+/**
+ * §7.1: the latest answer to each question at or before `atMs`. Answers at
+ * the same instant keep ledger order (the later row wins), so the result is a
+ * pure function of the ledger as given.
+ */
+export function latestAnswers(ledger: readonly LedgerAnswer[], atMs: number): Map<string, LedgerAnswer> {
+  const out = new Map<string, LedgerAnswer>();
+  const best = new Map<string, number>();
+  for (const a of ledger) {
+    const t = answerTimeMs(a.answered_at);
+    if (!Number.isFinite(t) || t > atMs) continue;
+    const prev = best.get(a.question_id);
+    if (prev === undefined || t >= prev) {
+      best.set(a.question_id, t);
+      out.set(a.question_id, a);
+    }
+  }
+  return out;
+}
+
+export interface TraitScoringV2 {
+  /** Age-weighted mean per trait; a trait nobody answered is absent, never 0. */
+  traits: TraitScores;
+  /** 0..1 — 1 unless plain and reverse-keyed answers on a trait disagree. */
+  consistency: number;
+  /** Answers that contributed. */
+  answers_used: number;
+}
+
+/** Parse a 0..5 whole-number scale answer; null when it is not one. */
+function scaleValue(raw: string): number | null {
+  const n = Number(String(raw ?? '').trim());
+  return Number.isInteger(n) && n >= 0 && n <= 5 ? n : null;
+}
+
+/**
+ * Combine trait probes, reverse-keyed scales and pick-one loadings into one
+ * trait vector at `atMs` (PROFILING_V2.md §2.5, §3.2, §7.2).
+ */
+export function scoreTraitsV2(
+  items: readonly ScoringItem[],
+  latest: Map<string, LedgerAnswer>,
+  atMs: number,
+): TraitScoringV2 {
+  const acc: Partial<Record<ArchetypeTrait, { sum: number; w: number }>> = {};
+  const plain: Partial<Record<ArchetypeTrait, { sum: number; w: number }>> = {};
+  const reversed: Partial<Record<ArchetypeTrait, { sum: number; w: number }>> = {};
+  const add = (bucket: typeof acc, t: ArchetypeTrait, v: number, w: number) => {
+    const b = bucket[t] ?? (bucket[t] = { sum: 0, w: 0 });
+    b.sum += v * w;
+    b.w += w;
+  };
+  let used = 0;
+  for (const item of items) {
+    const a = latest.get(item.question_id);
+    if (!a) continue;
+    // A retired question keeps counting as it ages, until the person has
+    // answered the question that replaced it (PROFILING_V2.md §3.2).
+    if (item.replaced_by && latest.has(item.replaced_by)) continue;
+    const t = answerTimeMs(a.answered_at);
+    if (!Number.isFinite(t)) continue;
+    const w = ageWeight((atMs - t) / DAY_MS);
+    const trait = item.measures.archetype_trait as ArchetypeTrait | undefined;
+    if (trait && (ARCHETYPE_TRAITS as readonly string[]).includes(trait)) {
+      const v = scaleValue(a.value);
+      if (v === null) continue;
+      const scored = item.reverse ? 5 - v : v;
+      add(acc, trait, scored, w);
+      add(item.reverse ? reversed : plain, trait, scored, w);
+      used += 1;
+    } else if (item.measures.archetype_choice && item.choices) {
+      const choice = item.choices.find((c) => c.key === a.value);
+      if (!choice) continue;
+      let loaded = false;
+      for (const [k, l] of Object.entries(choice.loadings)) {
+        if (!(ARCHETYPE_TRAITS as readonly string[]).includes(k) || !Number.isFinite(l)) continue;
+        add(acc, k as ArchetypeTrait, clamp(l as number, 0, 5), w);
+        loaded = true;
+      }
+      if (loaded) used += 1;
+    }
+  }
+  const traits: TraitScores = {};
+  for (const t of ARCHETYPE_TRAITS) {
+    const b = acc[t];
+    if (b && b.w > 0) traits[t] = b.sum / b.w;
+  }
+  const checks: number[] = [];
+  for (const t of ARCHETYPE_TRAITS) {
+    const p = plain[t];
+    const r = reversed[t];
+    if (p && r && p.w > 0 && r.w > 0) checks.push(1 - Math.abs(p.sum / p.w - r.sum / r.w) / 5);
+  }
+  const consistency = checks.length ? checks.reduce((x, y) => x + y, 0) / checks.length : 1;
+  return { traits, consistency: clamp(consistency, 0, 1), answers_used: used };
+}
+
+export interface ClassificationV2 {
+  persona: FitPersona;
+  primary: string;
+  primary_label: string;
+  /** Runner-up within secondary_margin, else null. */
+  secondary: string | null;
+  /** True when a secondary is reported (the spec's blend rule). */
+  blend: boolean;
+  /** runner-up distance − winner distance (normalised). */
+  margin: number;
+  confidence: number;
+  confident: boolean;
+  consistency: number;
+  traits_covered: number;
+  /** Rounded to 2 dp, keys in ARCHETYPE_TRAITS order. */
+  traits: TraitScores;
+  /** Normalised distance to every archetype of the persona, by slug — unrounded; round when storing. */
+  distances: Record<string, number>;
+}
+
+/**
+ * Nearest centroid over the answered traits (normalised Euclidean, missing
+ * traits skipped — absence is never 0), ties by set order. Confidence is
+ * coverage × consistency × (0.4 + 0.6 × separation).
+ */
+export function classifyProfileV2(persona: FitPersona, scoring: TraitScoringV2): ClassificationV2 | null {
+  const defs = ARCHETYPES_PROFILE_V2[persona] ?? [];
+  const answered = ARCHETYPE_TRAITS.filter((t) => Number.isFinite(scoring.traits[t] as number));
+  if (!defs.length || !answered.length) return null;
+  const ranked = defs
+    .map((def, order) => {
+      let sumSq = 0;
+      for (const t of answered) {
+        const d = clamp(scoring.traits[t] as number, 0, 5) - def.centroid[t];
+        sumSq += d * d;
+      }
+      return { def, order, distance: Math.sqrt(sumSq / answered.length) };
+    })
+    .sort((a, b) => a.distance - b.distance || a.order - b.order);
+  const winner = ranked[0];
+  const runner = ranked[1] ?? null;
+  const margin = runner ? runner.distance - winner.distance : 0;
+  const secondary = runner && margin < PROFILE_V2_PARAMS.secondary_margin ? runner.def.slug : null;
+  const coverage = answered.length / ARCHETYPE_TRAITS.length;
+  const separation = clamp(margin / PROFILE_V2_PARAMS.separation_full_at, 0, 1);
+  const confidence = round2(clamp(coverage * scoring.consistency * (0.4 + 0.6 * separation), 0, 1));
+  const traits: TraitScores = {};
+  for (const t of answered) traits[t] = round2(clamp(scoring.traits[t] as number, 0, 5));
+  const distances: Record<string, number> = {};
+  for (const r of ranked) distances[r.def.slug] = r.distance;
+  return {
+    persona,
+    primary: winner.def.slug,
+    primary_label: winner.def.label,
+    secondary,
+    blend: secondary !== null,
+    margin: round2(margin),
+    confidence,
+    confident: confidence >= PROFILE_V2_PARAMS.confident_at,
+    consistency: round2(scoring.consistency),
+    traits_covered: answered.length,
+    traits,
+    distances,
+  };
+}
+
+/** Score and classify in one step at `atMs`. */
+export function classifyLedgerV2(
+  persona: FitPersona,
+  items: readonly ScoringItem[],
+  ledger: readonly LedgerAnswer[],
+  atMs: number,
+): ClassificationV2 | null {
+  return classifyProfileV2(persona, scoreTraitsV2(items, latestAnswers(ledger, atMs), atMs));
+}
+
+export interface DisplayState {
+  /** What the card shows (§7.5). */
+  displayed: string | null;
+  /** The nearest centroid on the evaluation day. */
+  computed: string | null;
+  /** A challenger that has not yet held for hysteresis_days, with the day it started winning. */
+  pending: { slug: string; since: string } | null;
+  /** The day the displayed archetype last changed (or was first set). */
+  displayed_since: string | null;
+  /** The classification on the evaluation day. */
+  classification: ClassificationV2 | null;
+}
+
+/**
+ * §7.5 — replay the daily evaluations from the first archetype answer to
+ * `asOfDay` (end of each UTC day) and return the displayed archetype. The
+ * first classification is displayed at once; a challenger replaces it on the
+ * first day it has been the computed winner for hysteresis_days consecutive
+ * days AND leads the displayed archetype by at least lead_margin that day.
+ * Replay is the definition, so the result depends on the ledger and the date
+ * only.
+ */
+export function replayDisplayed(
+  persona: FitPersona,
+  items: readonly ScoringItem[],
+  ledger: readonly LedgerAnswer[],
+  asOfDay: string,
+): DisplayState {
+  const ids = new Set(items.filter((i) => i.measures.archetype_trait || i.measures.archetype_choice).map((i) => i.question_id));
+  const relevant = ledger
+    .map((a, idx) => ({ a, idx, t: answerTimeMs(a.answered_at) }))
+    .filter((x) => ids.has(x.a.question_id) && Number.isFinite(x.t))
+    .sort((x, y) => x.t - y.t || x.idx - y.idx);
+  const empty: DisplayState = { displayed: null, computed: null, pending: null, displayed_since: null, classification: null };
+  if (!relevant.length) return empty;
+  const endMs = endOfDayMs(asOfDay);
+  let day = dayOf(relevant[0].t);
+  if (endOfDayMs(day) > endMs) return empty;
+
+  const latest = new Map<string, LedgerAnswer>();
+  let cursor = 0;
+  let displayed: string | null = null;
+  let displayedSince: string | null = null;
+  let streakSlug: string | null = null;
+  let streakStart: string | null = null;
+  let streak = 0;
+  let last: ClassificationV2 | null = null;
+  for (;;) {
+    const atMs = endOfDayMs(day);
+    while (cursor < relevant.length && relevant[cursor].t <= atMs) {
+      latest.set(relevant[cursor].a.question_id, relevant[cursor].a);
+      cursor += 1;
+    }
+    const c = classifyProfileV2(persona, scoreTraitsV2(items, latest, atMs));
+    last = c;
+    if (c) {
+      if (c.primary === streakSlug) streak += 1;
+      else { streakSlug = c.primary; streakStart = day; streak = 1; }
+      if (displayed === null) { displayed = c.primary; displayedSince = day; }
+      else if (
+        c.primary !== displayed
+        && streak >= PROFILE_V2_PARAMS.hysteresis_days
+        && (c.distances[displayed] - c.distances[c.primary]) >= PROFILE_V2_PARAMS.lead_margin
+      ) {
+        displayed = c.primary;
+        displayedSince = day;
+      }
+    }
+    if (atMs >= endMs) break;
+    day = dayOf(atMs + 1);
+  }
+  const pending = last && displayed && last.primary !== displayed && streakSlug === last.primary && streakStart
+    ? { slug: last.primary, since: streakStart }
+    : null;
+  return { displayed, computed: last?.primary ?? null, pending, displayed_since: displayedSince, classification: last };
 }

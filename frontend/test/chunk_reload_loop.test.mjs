@@ -69,8 +69,16 @@ test('the reload budget is a count, and it survives blocked storage', () => {
   // grown its own guard that did not work. Two implementations of "bounded
   // reload" is how one of them ends up missing a lesson the other paid for.
   assert.match(main, /MAX_CHUNK_RELOADS = \d+/, 'attempts must be bounded by a number');
-  assert.match(main, /if \(attempts >= MAX_CHUNK_RELOADS\) return;/,
-    'the bound must be checked before reloading');
+  // `return false` RATHER THAN A BARE `return`, and the difference is a
+  // contract: the `vite:preloadError` listener now gates preventDefault() on
+  // this function's return value, so the budget-spent path has to say so out
+  // loud. A bare `return` is accidentally falsy and would still behave, which
+  // is precisely why it is worth pinning — the next person tidying this line
+  // would otherwise have no signal that anything reads it.
+  assert.match(main, /if \(attempts >= MAX_CHUNK_RELOADS\) return false;/,
+    'the bound must be checked before reloading, and must report that it did not');
+  assert.match(main, /\n  return true;\n\}/,
+    'and the path that does start a reload must report that it did');
   assert.match(main, /readAttempts\(CHUNK_KEY, CHUNK_PARAM\)/,
     'the chunk recovery must read its budget through the shared guard');
   // sessionStorage throws in Safari Private Browsing, so it cannot be the only
@@ -153,10 +161,9 @@ test('a guard write that throws never falls through to a reload', () => {
   assert.doesNotMatch(main, /catch \{[^}]*\}\s*\n\s*window\.location\.reload\(\)/,
     'a reload must not sit directly after a swallowed storage failure');
 
-  // RouteErrorBoundary already had this right and is the reference: its reload
-  // is inside the try, so a blocked write falls through to the error card.
-  assert.match(boundary, /sessionStorage\.setItem\(RELOAD_GUARD_KEY[\s\S]{0,200}?window\.location\.reload\(\)/,
-    'the boundary must keep its reload inside the guarded block');
+  // RouteErrorBoundary uses the shared reload budget for automatic recovery.
+  assert.match(boundary, /reloadWithinBudget\(RELOAD_GUARD_KEY, RELOAD_GUARD_PARAM/,
+    'the boundary must reload through the shared budget');
 });
 
 test('the boot watchdog keeps at least one loop guard', () => {
@@ -169,6 +176,27 @@ test('the boot watchdog keeps at least one loop guard', () => {
     'the URL marker may only be stripped when sessionStorage is proven to work');
   assert.match(main, /_storageWorks && _u\.searchParams\.has\('__reboot'\)/,
     'the strip must be gated on that probe');
+});
+
+test('a trailing slash on /login is not a second document load', () => {
+  // `/login/` is where Safari shows "A problem repeatedly occurred". The
+  // prerendered `docs/login/index.html` makes the assets binding 307 between
+  // the slash form and the route. A full navigation back is the loop. The
+  // address bar is corrected with replaceState, which does not fetch.
+  assert.match(main, /_u\.pathname\.endsWith\('\/'\)/,
+    'the boot path must notice a trailing slash');
+  assert.match(main, /history\.replaceState\(null, '', _u\.pathname \+ _u\.search \+ _u\.hash\)/,
+    'the slash must be removed with replaceState');
+  const slash = main.slice(main.indexOf("_u.pathname.endsWith('/')"));
+  assert.doesNotMatch(slash.slice(0, 400), /location\.(replace|assign|href)/,
+    'stripping the slash must not navigate');
+
+  const toml = read('wrangler.toml');
+  const handling = toml.match(/html_handling = "([^"]+)"/g) || [];
+  assert.deepEqual(handling, [
+    'html_handling = "drop-trailing-slash"',
+    'html_handling = "drop-trailing-slash"',
+  ], 'both asset blocks must serve /login as 200, not 307 it to /login/');
 });
 
 /**
@@ -388,6 +416,34 @@ test('every automatic reload in index.html is bounded by a listed guard key', ()
   }
 });
 
+test('the service-worker killer awaits every unregister before touching caches', () => {
+  // THE RACE. `regs.forEach(r => r.unregister())` fires each unregister and
+  // moves on without waiting for any of them — so caches.keys() (and the
+  // reload it can lead to, through killOnce) could run while a registration
+  // was still mid-unregister. `unregister()` returns a Promise; the fix
+  // collects them and `Promise.all`s the batch before doing anything else,
+  // the same ordering the boot watchdog two blocks below already uses.
+  const html = read('frontend/index.html');
+  const blocks = inlineScriptBodies(html).map((b) => codeOnly(b));
+  const killer = blocks.find((b) => b.includes('KILL_KEY'));
+  assert.ok(killer, 'expected the dev service-worker killer script block');
+
+  const unregisterAt = killer.indexOf('.unregister()');
+  assert.ok(unregisterAt > -1, 'the killer must still call unregister()');
+  // The array-building `.map(r => ... r.unregister() ...)` comes first in
+  // source; the `Promise.all(` that awaits it is the FIRST one after that
+  // point. A second, later Promise.all wraps the cache deletes — this must
+  // find the unregister one, not that one.
+  const promiseAllAt = killer.indexOf('Promise.all(', unregisterAt);
+  assert.ok(promiseAllAt > unregisterAt,
+    'unregister() must be collected into an array and awaited via a Promise.all, ' +
+    'never fired with a bare forEach and left unwaited');
+
+  const cachesAt = killer.indexOf('caches.keys()');
+  assert.ok(cachesAt > promiseAllAt,
+    'caches.keys() must run inside the unregister Promise.all\'s .then(), never before it');
+});
+
 test('dev is detected once, and never from the host or the port', () => {
   const html = codeOnly(read('frontend/index.html'));
 
@@ -409,4 +465,142 @@ test('dev is detected once, and never from the host or the port', () => {
   // into the HTML it serves, and a built bundle never has it.
   assert.match(html, /querySelector\('script\[src="\/@vite\/client"\]'\)/,
     'dev detection must be the /@vite/client tag Vite injects');
+});
+
+// A SUPPRESSED RETHROW IS A RESOLVED IMPORT, and that is how #295 happened.
+//
+// Vite's preload helper is `baseModule().catch(handlePreloadError)`, and that
+// handler rethrows ONLY when the `vite:preloadError` event it dispatches was
+// not default-prevented. `main.jsx` called `preventDefault()` unconditionally
+// while the reload it paired with was budget-bounded, so once the budget was
+// spent the rethrow was still suppressed and no reload came: the failed
+// `import()` RESOLVED WITH `undefined`, React's lazy stored that as its payload
+// result, and the next render evaluated `_result.default` on it. Advisors on
+// /network and /expertise were shown a TypeError about React internals, and the
+// one message naming the chunk that had actually failed was discarded.
+//
+// Reproduced before the fix by blocking a single chunk: three fetch attempts,
+// two bounded reloads, then "Cannot read properties of undefined (reading
+// 'default')" — Chromium's wording for Safari's "undefined is not an object
+// (evaluating 'e._result.default')". After it, the same three attempts end on
+// "Failed to fetch dynamically imported module: .../AdvisorBucketRoutes-*.js".
+const preloadListener = () => {
+  const at = main.indexOf("addEventListener('vite:preloadError'");
+  assert.ok(at > 0, 'main.jsx must still listen for vite:preloadError');
+  const end = main.indexOf('\n});', at);
+  assert.ok(end > at, 'the vite:preloadError listener must close with a bare });');
+  return main.slice(at, end);
+};
+
+test('preventDefault on a preload error is gated on a reload actually starting', () => {
+  const body = preloadListener();
+  const guard = body.indexOf('if (reloadOnceForStaleChunk())');
+  assert.ok(
+    guard > 0,
+    'preventDefault() must be gated on reloadOnceForStaleChunk() returning true — '
+      + 'suppressing the rethrow with no reload under way leaves import() resolving undefined',
+  );
+  assert.match(
+    body.slice(guard),
+    /preventDefault/,
+    'the gated branch is where preventDefault() belongs',
+  );
+  assert.doesNotMatch(
+    body.slice(0, guard),
+    /preventDefault/,
+    'nothing may prevent the default before the budget has been consulted',
+  );
+});
+
+test('the failure that names the chunk reaches the error beacon', () => {
+  const body = preloadListener();
+  assert.match(
+    body,
+    /reportError\(\s*'main:vitePreloadError'/,
+    "Vite's own error is the only thing naming the chunk that failed; report it "
+      + 'before preventDefault() discards it',
+  );
+  assert.match(body, /\.payload/, 'report e.payload, not the event');
+  assert.match(main, /import \{ reportError \} from '\.\/lib\/log'/, 'and import it');
+});
+
+test('a default-prevented preload error resolves the import with undefined', async () => {
+  // The mechanism the two assertions above turn on, pinned rather than asserted
+  // in prose: this is the shipped helper's shape, read out of react-vendor.
+  const bus = new EventTarget();
+  const vitePreload = (baseModule) => {
+    const handlePreloadError = (err) => {
+      const ev = new Event('vite:preloadError', { cancelable: true });
+      ev.payload = err;
+      bus.dispatchEvent(ev);
+      if (!ev.defaultPrevented) throw err;
+    };
+    return Promise.resolve().then(() => baseModule().catch(handlePreloadError));
+  };
+  const failing = () => Promise.reject(new Error('Failed to fetch dynamically imported module'));
+
+  let prevent = true;
+  const listener = (e) => { if (prevent) e.preventDefault(); };
+  bus.addEventListener('vite:preloadError', listener);
+
+  const swallowed = await vitePreload(failing);
+  assert.equal(
+    swallowed, undefined,
+    'preventDefault() makes a FAILED import resolve with undefined — this is the '
+      + 'value React.lazy stores and then reads `.default` off',
+  );
+
+  prevent = false;
+  await assert.rejects(
+    vitePreload(failing), /Failed to fetch dynamically imported module/,
+    'and leaving the default alone is what lets the real error reach the boundary',
+  );
+});
+
+/**
+ * THE BUDGET BELONGS TO A BUILD (reloadGuard.recordAttempt). A tab kept open
+ * across a day of deploys spent its one recovery on the first stale chunk and
+ * then showed the `e._result.default` error card on every later deploy —
+ * reported on /company-settings. The loop bound must still hold on one build.
+ */
+test('an attempt spent on an older build does not spend this build\'s budget', async () => {
+  const { readAttempts: read, recordAttempt, currentBuild } = await import('../src/lib/reloadGuard.js');
+  const priorDoc = globalThis.document;
+  const onBuild = (src) => {
+    globalThis.document = { querySelector: () => (src ? { getAttribute: () => src } : null) };
+  };
+  try {
+    const storage = workingStorage();
+    withBrowser({ storage }, () => {
+      onBuild('/assets/index-AAA.js');
+      assert.equal(currentBuild(), '/assets/index-AAA.js');
+      recordAttempt('axal:chunk-reload-boundary', 1);
+      assert.equal(storage._map.get('axal:chunk-reload-boundary'), '1@/assets/index-AAA.js');
+      // The same build reads its own spent attempt: the loop stays bounded.
+      assert.equal(read('axal:chunk-reload-boundary', '__chunkBoundary'), 1);
+      // A newer build starts with its budget intact.
+      onBuild('/assets/index-BBB.js');
+      assert.equal(read('axal:chunk-reload-boundary', '__chunkBoundary'), 0,
+        'a budget spent on a build that is gone still blocked recovery');
+      // A count stored before this change (no build tag) still counts.
+      storage.setItem('axal:chunk-reload-attempts', '2');
+      assert.equal(read('axal:chunk-reload-attempts', '__chunk'), 2);
+      // No entry script to read (Node, the dev server): scoping stays off.
+      onBuild(null);
+      recordAttempt('axal:chunk-reload-boundary', 1);
+      assert.equal(storage._map.get('axal:chunk-reload-boundary'), '1');
+      assert.equal(read('axal:chunk-reload-boundary', '__chunkBoundary'), 1);
+    });
+  } finally {
+    globalThis.document = priorDoc;
+  }
+});
+
+test('both chunk recoveries write through the build-scoped recorder', () => {
+  const main = readFileSync(new URL('../src/main.jsx', import.meta.url), 'utf8');
+  const guard = readFileSync(new URL('../src/lib/reloadGuard.js', import.meta.url), 'utf8');
+  assert.match(main, /recordAttempt\(CHUNK_KEY, next\)/);
+  assert.doesNotMatch(main, /sessionStorage\.setItem\(CHUNK_KEY/);
+  const within = guard.slice(guard.indexOf('export function reloadWithinBudget'));
+  assert.match(within, /recordAttempt\(storageKey, next\)/);
 });

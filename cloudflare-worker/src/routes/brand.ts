@@ -22,16 +22,18 @@ import { ensureLandingPageBrandKitColumns } from '../services/landingPageSchema'
 import { renderLandingTemplate, TEMPLATE_REGISTRY, TEMPLATE_KEYS, TEMPLATE_SIGNATURE_PALETTES, sanitizeLandingContent, LANDING_CONTENT_SCHEMA, HONEYPOT_FIELD } from '../services/landingTemplates';
 import type { TemplateKey } from '../services/landingTemplates';
 import { requireAuth } from '../auth';
+import { recordCompositionFills } from '../services/fills/provenance';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { run as aiRouterRun } from '../services/aiRouter';
 import { ingestContact } from './contacts';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const brand = new Hono<{ Bindings: Env }>();
 
-let _migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
-  if (_migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     // Multi-page sites: project_id is deliberately NOT unique (one project can
     // own many pages); (project_id, page_slug) uniqueness is enforced by
@@ -95,7 +97,7 @@ async function ensureSchema(env: Env): Promise<void> {
   }
   // Brand-kit columns on pre-existing tables (CREATE above only covers fresh DBs).
   await ensureLandingPageBrandKitColumns(env);
-  _migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 function slugify(name: string): string {
@@ -223,7 +225,18 @@ async function aiTemplateContent(
   name: string,
   sector: string | null,
   description: string,
-): Promise<{ name: string; cta_text: string; headline: string; subheadline: string; tagline: string; content: Record<string, any> } | null> {
+): Promise<{
+  name: string; cta_text: string; headline: string; subheadline: string;
+  tagline: string; content: Record<string, any>;
+  /**
+   * The model that ACTUALLY RAN, from the router's own `usage`, not the one this
+   * code asked for. `brand_autofill` degrades to SMALL_LLAMA on a failure, and a
+   * provenance row naming the primary after the fallback answered would be a
+   * false receipt — which is the whole class of thing `fill_provenance` exists to
+   * stop, pointed at itself.
+   */
+  model: string | null;
+} | null> {
   try {
     const fields = LANDING_CONTENT_SCHEMA[key] || [];
     const fieldSpec = fields.map((f) => {
@@ -264,6 +277,7 @@ async function aiTemplateContent(
       subheadline,
       tagline,
       content,
+      model: res.usage?.model ?? null,
     };
   } catch {
     return null;
@@ -411,14 +425,69 @@ function parseContentJson(raw: unknown): Record<string, any> {
 
 const HEX_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 const FONT_PAIRING_IDS = new Set(['editorial', 'modern', 'humanist', 'classic']);
-const cleanHex = (v: unknown): string | null =>
+// EXPORTED FOR D198. `routes/admin_licences.ts` validates a white-label's
+// brand colours with this rather than declaring a second hex validator — the
+// rule `frontend/src/lib/README.md` states for the SPA and this file follows
+// here. Note what it admits: `#rgb` as well as `#rrggbb`, both lowercased.
+// Both are valid CSS, and normalising case is not coercion — an input that
+// matches neither returns null, and the caller REFUSES rather than defaulting.
+export const cleanHex = (v: unknown): string | null =>
   (typeof v === 'string' && HEX_RE.test(v.trim())) ? v.trim().toLowerCase() : null;
 const cleanFontPairing = (v: unknown): string | null =>
   (typeof v === 'string' && FONT_PAIRING_IDS.has(v.trim())) ? v.trim() : null;
 
-const ALLOWED_LOGO_MIME = new Set(['image/png', 'image/jpeg', 'image/svg+xml']);
-const LOGO_MAX_BYTES = 512 * 1024;
+export const ALLOWED_LOGO_MIME = new Set(['image/png', 'image/jpeg', 'image/svg+xml']);
+export const LOGO_MAX_BYTES = 512 * 1024;
 const LOGO_INLINE_MAX_BYTES = 200 * 1024;
+
+/**
+ * The multipart read, the MIME allowlist, the size cap and the SVG
+ * sanitisation, as ONE function — because D198 needs all four for a licence's
+ * brand mark and re-implementing them beside a second R2 write is how two
+ * upload paths come to disagree about what they accept.
+ *
+ * WHAT IT DELIBERATELY DOES NOT DO, and this is the whole reason it is a
+ * helper rather than a shared route: it does not gate and it does not choose a
+ * key. `/logo/upload` below is `requireAuth` — ANY authenticated user — and
+ * keys by the UPLOADER (`brand-logos/<user.id>/…`); D198's mark is on the
+ * super-admin write bar and keys by the LICENCE. Those are the two halves that
+ * must differ, so they stay at the call sites.
+ *
+ * Returns the bytes to store and the type to store them as, or a refusal
+ * carrying the code and status its caller should answer with.
+ */
+export async function readUploadedMark(
+  form: FormData,
+): Promise<
+  | { ok: true; bytes: Uint8Array; mime: string }
+  | { ok: false; error: string; status: 400 }
+> {
+  const file = form.get('file');
+  if (!file || typeof (file as unknown as { arrayBuffer?: unknown }).arrayBuffer !== 'function') {
+    return { ok: false, error: 'no_file', status: 400 };
+  }
+  const f = file as unknown as { name?: string; type?: string; arrayBuffer(): Promise<ArrayBuffer> };
+  const mime = String(f.type || '').trim();
+  if (!ALLOWED_LOGO_MIME.has(mime)) return { ok: false, error: 'invalid mime type', status: 400 };
+
+  const raw = new Uint8Array(await f.arrayBuffer());
+  if (raw.length === 0) return { ok: false, error: 'empty data', status: 400 };
+  if (raw.length > LOGO_MAX_BYTES) return { ok: false, error: 'file too large', status: 400 };
+
+  // Sanitise SVG BEFORE any storage path. For non-SVG uploads the raw bytes
+  // are kept as-is; for SVG the sanitised text replaces them, so stored bytes
+  // never carry a script payload.
+  if (mime === 'image/svg+xml') {
+    const svgSanitized = sanitizeSvg(new TextDecoder().decode(raw));
+    if (!svgSanitized) return { ok: false, error: 'svg failed sanitization', status: 400 };
+    return { ok: true, bytes: new TextEncoder().encode(svgSanitized), mime };
+  }
+  return { ok: true, bytes: raw, mime };
+}
+
+/** The file extension the allowlist's three types are stored under. */
+export const markExtension = (mime: string): string =>
+  mime === 'image/png' ? 'png' : mime === 'image/jpeg' ? 'jpg' : 'svg';
 
 // WCAG relative luminance for a hex color (sRGB, 8-bit).
 function luminance(hex: string): number {
@@ -870,28 +939,12 @@ brand.post('/logo/upload', async (c) => {
     return c.json({ error: 'expected_multipart' }, 400);
   }
   const form = await c.req.formData();
-  const file = form.get('file');
-  if (!file || typeof (file as unknown as { arrayBuffer?: unknown }).arrayBuffer !== 'function') {
-    return c.json({ error: 'no_file' }, 400);
-  }
-  const f = file as unknown as { name?: string; type?: string; arrayBuffer(): Promise<ArrayBuffer> };
-  const mime = String(f.type || '').trim();
-  if (!ALLOWED_LOGO_MIME.has(mime)) return c.json({ error: 'invalid mime type' }, 400);
-
-  const raw = new Uint8Array(await f.arrayBuffer());
-  if (raw.length === 0) return c.json({ error: 'empty data' }, 400);
-  if (raw.length > LOGO_MAX_BYTES) return c.json({ error: 'file too large' }, 400);
-
-  // Sanitise SVG before any storage path. For non-SVG uploads the raw bytes
-  // are kept as-is; for SVG we overwrite with the sanitised text so that
-  // stored bytes never carry a script payload.
-  let logoBytes: Uint8Array = raw;
-  if (mime === 'image/svg+xml') {
-    const text = new TextDecoder().decode(raw);
-    const svgSanitized = sanitizeSvg(text);
-    if (!svgSanitized) return c.json({ error: 'svg failed sanitization' }, 400);
-    logoBytes = new TextEncoder().encode(svgSanitized);
-  }
+  // D198 — THE FIRST CALLER OF THE SHARED HELPER. The four rules it applies
+  // (multipart read, MIME allowlist, 512 KB cap, SVG sanitisation) are
+  // unchanged from what this handler did inline; only their home moved.
+  const read = await readUploadedMark(form);
+  if (!read.ok) return c.json({ error: read.error }, read.status);
+  const { bytes: logoBytes, mime } = read;
 
   // Safe base64 without spreading potentially large Uint8Arrays (avoids
   // "Maximum call stack size exceeded" on engines with small argument limits).
@@ -906,7 +959,7 @@ brand.post('/logo/upload', async (c) => {
 
   const files = c.env.FILES;
   if (files) {
-    const key = `brand-logos/${user.id}/${crypto.randomUUID()}.${mime === 'image/png' ? 'png' : mime === 'image/jpeg' ? 'jpg' : 'svg'}`;
+    const key = `brand-logos/${user.id}/${crypto.randomUUID()}.${markExtension(mime)}`;
     try {
       await files.put(key, logoBytes, {
         httpMetadata: { contentType: mime },
@@ -1286,6 +1339,28 @@ brand.put('/landing/pages/:id', async (c) => {
     throw e;
   }
   const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE id = ?').bind(id).first<any>();
+
+  // WHAT EADWYN WROTE, KEPT RATHER THAN THROWN AWAY (task #199). The autofill
+  // route has always returned `ai_generated: true`, and the editor has always
+  // dropped it at the point of use — so a published headline Eadwyn drafted was
+  // indistinguishable from one the founder typed, on the same page that names the
+  // model in its rail. Nothing about the autofill mechanism changes: it still
+  // drafts into local state the founder edits freely, and Save is still the
+  // commit. This records, per field, what was proposed and what was saved.
+  //
+  // `row` is the authority on which columns exist, so a stale or invented column
+  // name from the client files nothing. Read AFTER the write, so `written` is what
+  // the page actually holds rather than what the request asked for.
+  await recordCompositionFills(c.env, {
+    table: 'landing_pages',
+    rowId: id,
+    proposals: (body?.ai_proposals && typeof body.ai_proposals === 'object') ? body.ai_proposals : {},
+    written: row || {},
+    model: body?.ai_model ? String(body.ai_model).slice(0, 120) : null,
+    task: 'brand_autofill',
+    decidedBy: Number(user.id),
+  });
+
   return c.json(rowToLanding(row));
 });
 

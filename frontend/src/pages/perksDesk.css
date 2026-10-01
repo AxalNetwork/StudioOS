@@ -1,0 +1,27 @@
+/* /perks draws the same canvas /raise does: one frame, listings in the
+   main column, the Worker rail as that frame's right edge. The shell is
+   flushed for this path (SHARED_FULL_BLEED), so the frame runs from the
+   sidebar to the viewport edge. */
+.perks-desk { min-height: 100%; background: #f3f2f5; color: #252331; }
+.perks-canvas {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--fwr-track, 270px);
+  background: #f8f7f9;
+  border-bottom: 1px solid #e6e2eb;
+  min-height: 100%;
+}
+.perks-main { min-width: 0; padding: 28px; }
+.perks-rail {
+  background: #fcfbfd;
+  border-left: 1px solid #e6e2eb;
+  padding: 21px 18px;
+}
+.dark .perks-desk { background: #201d27; color: #eee9f2; }
+.dark .perks-canvas { background: #282430; border-color: #403947; }
+.dark .perks-rail { background: #282430; border-color: #403947; }
+@media (max-width: 900px) {
+  .perks-canvas { display: block; }
+  .perks-main { padding: 20px; }
+  .perks-rail { border-left: 0; border-top: 1px solid #e6e2eb; }
+  .dark .perks-rail { border-color: #403947; }
+}

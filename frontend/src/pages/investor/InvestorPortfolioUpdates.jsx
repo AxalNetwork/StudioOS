@@ -10,9 +10,10 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
+import { titleCase } from '../../lib/absence';
 
 const money = (value) => value == null || !Number.isFinite(Number(value)) ? '—' : `$${Math.round(Number(value)).toLocaleString()}`;
-const title = (value, fallback = 'Not recorded') => String(value ?? '').trim().replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) || fallback;
+const title = (value, fallback = 'Not recorded') => titleCase(value) || fallback;
 const dateLabel = (value) => value ? new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -24,11 +25,17 @@ const kpiText = (update) => Object.entries(update?.kpis || {}).slice(0, 4).map((
 export default function InvestorPortfolioUpdates() {
   const [filter, setFilter] = useState('period');
   const [state, setState] = useState({ loading: true, error: '', positions: [], updates: [], compliance: null, health: null, unavailable: { positions: false, updates: false, compliance: false, health: false } });
+  // The chase log (migration 337): who was asked, when. `null` until read;
+  // 'error' is unreadable, which is not "nobody has been chased".
+  const [chases, setChases] = useState(null);
+  const [chasing, setChasing] = useState(false);
+  const [chaseNote, setChaseNote] = useState('');
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: '' }));
     try {
       const positionsResult = await api.positionsList();
-      const optional = await Promise.allSettled([api.portfolioUpdatesList(), api.positionsKpiCompliance(), api.portfolioHealthList({})]);
+      const optional = await Promise.allSettled([api.portfolioUpdatesList(), api.positionsKpiCompliance(), api.portfolioHealthList({}), api.portfolioChases()]);
+      setChases(optional[3].status === 'fulfilled' ? list(optional[3].value, 'items') : 'error');
       setState({
         loading: false, error: '',
         positions: list(positionsResult, 'items', 'positions'),
@@ -65,6 +72,59 @@ export default function InvestorPortfolioUpdates() {
   // the actual truth and is now stated in the zone header row instead of being
   // discovered by clicking. Both are prose there; neither reaches this filter.
   const visible = rows.filter((row) => (filter === 'overdue' ? row.current === false : true));
+  /**
+   * THE CHASE (D464). The overdue set is the page's own derivation — the same
+   * rows the Overdue chip shows — and the route re-checks the tenancy of each
+   * id it is handed. One row per chase lands in the log and the founder is
+   * notified; a repeat inside the hour answers the existing row.
+   */
+  const overdueRows = rows.filter((row) => row.current === false);
+  const lastChaseByProject = useMemo(() => {
+    const map = new Map();
+    (Array.isArray(chases) ? chases : []).forEach((chase) => {
+      const key = String(chase.project_id);
+      const current = map.get(key);
+      if (!current || new Date(chase.created_at) > new Date(current)) map.set(key, chase.created_at);
+    });
+    return map;
+  }, [chases]);
+  const chaseOne = useCallback(async (row) => {
+    setChasing(true); setChaseNote('');
+    try {
+      const r = await api.portfolioChase([row.project_id]);
+      const already = (r?.chased || []).some((c) => c.already);
+      setChaseNote(already
+        ? `${row.project?.name || 'That company'} was already asked inside the hour — the existing chase stands.`
+        : `${row.project?.name || 'The company'} has been asked. The founder is notified and the chase is logged.`);
+      load();
+    } catch (cause) {
+      setChaseNote(cause?.message || 'The chase could not be sent.');
+    } finally { setChasing(false); }
+  }, [load]);
+
+  const chaseOverdue = useMemo(() => {
+    if (state.unavailable.compliance || state.unavailable.positions) {
+      return { onClick: () => {}, disabled: true, title: 'The cadence record is unavailable, so which companies are overdue is unknown — chasing blind is not offered.' };
+    }
+    if (!overdueRows.length) {
+      return { onClick: () => {}, disabled: true, title: 'No company is overdue this period, so there is nobody to chase.' };
+    }
+    return {
+      onClick: async () => {
+        setChasing(true); setChaseNote('');
+        try {
+          const r = await api.portfolioChase(overdueRows.map((row) => row.project_id));
+          const n = (r?.chased || []).filter((c) => !c.already).length;
+          const already = (r?.chased || []).filter((c) => c.already).length;
+          setChaseNote(`${n} ${n === 1 ? 'company' : 'companies'} chased${already ? ` · ${already} already asked inside the hour` : ''}${r?.skipped?.length ? ` · ${r.skipped.length} skipped as outside your book` : ''}.`);
+          load();
+        } catch (cause) {
+          setChaseNote(cause?.message || 'The chase could not be sent.');
+        } finally { setChasing(false); }
+      },
+      busy: chasing,
+    };
+  }, [overdueRows.length, state.unavailable.compliance, state.unavailable.positions, chasing]);
   const complianceUnavailable = state.unavailable.compliance;
   const healthUnavailable = state.unavailable.health;
   /**
@@ -114,15 +174,16 @@ export default function InvestorPortfolioUpdates() {
       role="investor"
       className="mb-3"
       filters={investorZoneFilters('portfolio/updates', { value: filter, onChange: setFilter })}
-      actions={investorZoneActions('portfolio/updates', { view: { header: ['Company', 'Stage', 'Arrived', 'State', 'Update'], rows, cells: (r) => [r.project?.name, r.project?.stage, r.arrived, r.status, r.update?.title] } })}
+      actions={investorZoneActions('portfolio/updates', { handlers: { chaseOverdue }, view: { header: ['Company', 'Stage', 'Arrived', 'State', 'Update'], rows, cells: (r) => [r.project?.name, r.project?.stage, r.arrived, r.status, r.update?.title] } })}
     />
+    {chaseNote && <div className="i4-partial" data-testid="status-chase-note">{chaseNote}</div>}
     {state.error && <div className="i4-error" data-testid="status-investor-updates-error"><span>{String(state.error).toLowerCase() === 'not found' ? 'Portfolio update source unavailable in local development. No empty inbox claim is being made.' : state.error}</span><button type="button" onClick={load}>Retry</button></div>}
     {partial && !state.loading && <div className="i4-partial" data-testid="status-investor-updates-partial">Some portfolio sources are temporarily unavailable. Affected metrics and cells are labelled rather than treated as zero.</div>}
     {state.loading ? <Skeleton /> : <>
       <section className="i4-stats"><Stat label="Arrived" value={complianceUnavailable ? 'Unavailable' : `${arrived} of ${total}`} note={complianceUnavailable ? 'Cadence source unavailable' : `${rows.filter((row) => row.current === true && row.update).length} with a stored update`} /><Stat label="Never arrived" value={complianceUnavailable ? 'Unavailable' : neverArrived} note={complianceUnavailable ? 'Cadence source unavailable' : 'Current period not reported'} /><Stat label="Parse review" value="Unavailable" note="No parse-review state is stored" muted /><Stat label="Runway alerts" value={runwayAlerts} note={healthUnavailable ? 'Health source unavailable' : 'Below 6 months from health records'} /></section>
       {showingRules
         ? <RuleSet kpiSet={kpiSet} cadence={cadence} storedUpdates={storedUpdates} />
-        : <section className="i4-card i4-positions ip2-inbox"><div className="i4-section-head"><div><h2>Update inbox</h2><p>Cadence status and founder-submitted content</p></div><span>Source-preserved · no write</span></div><UpdateTable rows={visible} updatesUnavailable={state.unavailable.updates} complianceUnavailable={complianceUnavailable} /><p className="i4-seam-note"><span>Founder record</span> Submitted updates remain attributable to their source company. IP2 does not edit, parse, chase, or submit an update.</p></section>}
+        : <section className="i4-card i4-positions ip2-inbox"><div className="i4-section-head"><div><h2>Update inbox</h2><p>Cadence status and founder-submitted content</p></div><span>Source-preserved · the chase writes to the log, never to the update</span></div><UpdateTable rows={visible} updatesUnavailable={state.unavailable.updates} complianceUnavailable={complianceUnavailable} lastChaseByProject={lastChaseByProject} onChase={chaseOne} chasing={chasing} /><p className="i4-seam-note"><span>Founder record</span> Submitted updates remain attributable to their source company. IP2 does not edit, parse, or submit an update — the chase asks for one and is logged.</p></section>}
       {/* The artboard's band is "parse N updates … arriving as editable
           proposals". Half of that has somewhere to land and half does not, so
           half is mounted: the read names which asked-for figures are missing
@@ -143,10 +204,10 @@ export default function InvestorPortfolioUpdates() {
   </main><UpdatesRail rows={rows} unavailable={state.unavailable} /></div>;
 }
 
-function UpdateTable({ rows, updatesUnavailable, complianceUnavailable }) {
+function UpdateTable({ rows, updatesUnavailable, complianceUnavailable, lastChaseByProject, onChase, chasing }) {
   if (updatesUnavailable) return <div className="i4-empty"><AlertCircle size={16} />Portfolio update source unavailable. No empty-reporting claim is being made.</div>;
   if (!rows.length) return <div className="i4-empty"><Inbox size={16} />No accessible portfolio companies are recorded for this investor.</div>;
-  return <div className="i4-table-wrap"><table><thead><tr><th>Company</th><th>Arrived</th><th>State</th><th>What came in</th></tr></thead><tbody>{rows.map((row) => <tr key={row.project_id} data-testid={`row-investor-update-${row.project_id}`}><td><strong>{row.project?.name || `Startup ${row.project_id}`}</strong><small>{row.project?.stage || 'Stage not recorded'}</small></td><td>{row.arrived ? dateLabel(row.arrived) : '—'}{row.update && !row.current && !complianceUnavailable && <small>Last stored update: {dateLabel(row.update.submitted_at || row.update.updated_at)}</small>}</td><td><span className={`ip2-state is-${row.status.toLowerCase().replace(/\s+/g, '-')}`}>{row.status}</span></td><td>{row.update ? <><strong>{row.update.title || 'Untitled update'}</strong><small>{kpiText(row.update) || 'No KPI values recorded'}</small></> : <span className="ip2-muted">{complianceUnavailable ? 'Cadence status unavailable' : 'No current update recorded'}</span>}</td></tr>)}</tbody></table></div>;
+  return <div className="i4-table-wrap"><table><thead><tr><th>Company</th><th>Arrived</th><th>State</th><th>What came in</th><th>Chase</th></tr></thead><tbody>{rows.map((row) => <tr key={row.project_id} data-testid={`row-investor-update-${row.project_id}`}><td><strong>{row.project?.name || `Startup ${row.project_id}`}</strong><small>{row.project?.stage || 'Stage not recorded'}</small></td><td>{row.arrived ? dateLabel(row.arrived) : '—'}{row.update && !row.current && !complianceUnavailable && <small>Last stored update: {dateLabel(row.update.submitted_at || row.update.updated_at)}</small>}</td><td><span className={`ip2-state is-${row.status.toLowerCase().replace(/\s+/g, '-')}`}>{row.status}</span></td><td>{row.update ? <><strong>{row.update.title || 'Untitled update'}</strong><small>{kpiText(row.update) || 'No KPI values recorded'}</small></> : <span className="ip2-muted">{complianceUnavailable ? 'Cadence status unavailable' : 'No current update recorded'}</span>}</td><td>{row.current === false ? <><button type="button" onClick={() => onChase(row)} disabled={chasing} data-testid={`button-chase-${row.project_id}`} className="ip2-chase">Chase</button>{lastChaseByProject?.get(String(row.project_id)) && <small className="ip2-muted"> asked {dateLabel(lastChaseByProject.get(String(row.project_id)))}</small>}</> : null}</td></tr>)}</tbody></table></div>;
 }
 /**
  * The KPI rule set — what accessible companies are asked for, in the wording
@@ -227,14 +288,14 @@ function UpdatesRail({ rows, unavailable }) {
       role="investor"
       className="i4-rail"
       stance="Read-only update feed"
-      note="Source-preserved KPI values and narratives, shown without parsing, editing, chasing or submitting."
+      note="Source-preserved KPI values and narratives, shown without parsing, editing or submitting. The chase asks a silent company for its update and is logged."
       coverage={[
         unavailable.updates ? 'Update source unavailable' : `${rows.length} accessible company record${rows.length === 1 ? '' : 's'}`,
         unavailable.compliance ? 'Cadence compliance unavailable' : 'Reporting status read from cadence compliance',
       ]}
       unavailable={[
         ['Parse review', 'No parse-review or extraction-rule fields are returned by the source.'],
-        ['Outbound', 'Nothing is sent to a founder from this page.'],
+        ['Editing', 'No update is edited or submitted from this page — the chase asks for one and is logged.'],
       ]}
     />
   );

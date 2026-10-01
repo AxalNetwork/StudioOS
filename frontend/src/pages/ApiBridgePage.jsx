@@ -115,34 +115,6 @@ class StudioOSBridge {
   async getFounderData(userId) {
     return this._request("/private-data/founder/" + userId);
   }
-
-  // ---- Admin Impersonation ----
-
-  async viewAs(userId) {
-    const data = await this._request("/admin/impersonate/" + userId, {
-      method: "POST",
-    });
-    localStorage.setItem("studioos_real_token", this.token);
-    localStorage.setItem("studioos_real_user",
-      localStorage.getItem("studioos_user")
-    );
-    this.token = data.token;
-    localStorage.setItem("studioos_token", data.token);
-    localStorage.setItem("studioos_user", JSON.stringify(data.user));
-    return data;
-  }
-
-  exitImpersonation() {
-    const realToken = localStorage.getItem("studioos_real_token");
-    const realUser = localStorage.getItem("studioos_real_user");
-    if (realToken) {
-      this.token = realToken;
-      localStorage.setItem("studioos_token", realToken);
-      localStorage.setItem("studioos_user", realUser);
-      localStorage.removeItem("studioos_real_token");
-      localStorage.removeItem("studioos_real_user");
-    }
-  }
 }
 
 // Initialize the bridge
@@ -238,7 +210,6 @@ studioos:
     { method: 'GET', path: '/api/private-data/market/private-signals', auth: true, roles: 'Admin, Partner', desc: 'Private market signals with conviction status' },
     { method: 'GET', path: '/api/private-data/portfolio/metrics', auth: true, roles: 'All (role-filtered)', desc: 'Portfolio metrics filtered by user role' },
     { method: 'GET', path: '/api/private-data/founder/{user_id}', auth: true, roles: 'Admin, Self', desc: 'Founder-specific project & metrics data' },
-    { method: 'POST', path: '/api/admin/impersonate/{user_id}', auth: true, roles: 'Admin only', desc: '"View As" — get JWT scoped to another user' },
     { method: 'GET', path: '/api/admin/users', auth: true, roles: 'Admin only', desc: 'List all users with roles and status' },
   ];
 

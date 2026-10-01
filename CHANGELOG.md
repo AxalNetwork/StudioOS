@@ -4,6 +4,17 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Scale plan for the first 1,000 daily users
+
+`documentation/audits/SCALE_1000_DAU_AUDIT_2026-09-18.md` is a point-in-time
+load audit of the production Worker + D1 + SPA (commit `59f83ae82`) and the
+implementation brief for bringing the platform to ~1,000 DAU / ~200 peak tabs.
+
+It does not change runtime behaviour. Highest-priority findings: the global
+1,000 req/min rate-limit bucket, D1 writes from observability on the 30s
+notification poll, duplicate `getCurrentUser`, and request-path role-schema
+bootstrap. Do not treat it as a live bug list without re-checking the tree.
+
 ## Fresh D1 builds now have a strict production baseline
 
 `cloudflare-worker/sql/schema_baseline.sql` is now the only schema input for a

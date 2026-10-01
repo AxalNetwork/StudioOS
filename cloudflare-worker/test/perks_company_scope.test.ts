@@ -83,7 +83,8 @@ function freshDb() {
     CREATE TABLE user_company_links (
       id INTEGER PRIMARY KEY AUTOINCREMENT, company_id INTEGER NOT NULL, user_id INTEGER NOT NULL
     );
-    -- Verbatim from sql/migrations/186_perks.sql, plus 198's company_id.
+    -- Verbatim from sql/migrations/186_perks.sql, plus 198's company_id and
+    -- 322's value_cents and editorial_note.
     CREATE TABLE perks (
       id             INTEGER PRIMARY KEY AUTOINCREMENT,
       uid            TEXT UNIQUE NOT NULL,
@@ -116,7 +117,9 @@ function freshDb() {
       featured       INTEGER NOT NULL DEFAULT 0,
       created_at     TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
-      company_id     INTEGER
+      company_id     INTEGER,
+      value_cents    INTEGER CHECK (value_cents IS NULL OR value_cents >= 0),
+      editorial_note TEXT
     );
     CREATE TABLE perk_claims (
       id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -132,7 +135,14 @@ function freshDb() {
                    CHECK (status IN ('issued', 'redeemed', 'expired', 'revoked')),
       expires_at   TEXT,
       redeemed_at  TEXT,
-      created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      redeemed_by_user_id INTEGER
+    );
+    -- Migration 322. The catalogue derives a rating summary from it.
+    CREATE TABLE perk_ratings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, perk_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
+      stars INTEGER NOT NULL CHECK (stars BETWEEN 1 AND 5),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE TABLE perk_credit_ledger (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,

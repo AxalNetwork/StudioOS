@@ -5,6 +5,7 @@ import PublicNav from '../../components/PublicNav';
 import PublicFooter from '../../components/PublicFooter';
 import { publications } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import { titleCase } from '../../lib/absence';
 
 function formatDate(iso) {
   if (!iso) return '';
@@ -17,7 +18,7 @@ function formatDate(iso) {
 
 function sectionLabel(s) {
   if (!s) return '';
-  return s.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
+  return titleCase(s);
 }
 
 export default function InsightsPage() {

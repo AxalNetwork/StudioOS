@@ -13,7 +13,7 @@ import { hasTier } from '../../sidebarConfig';
  * WHY A WRAPPER AND NOT AN EDIT — the same reason it was one for Partner.
  * `PitchWorkspacePage`, `CapitalWorkspacePage` and `LegalEnginePage` each
  * render a tab bar, but only across their OWN sub-routes; nothing links Pitch
- * to Capital to Legal. `ExecutionPage`, `TeamBuildingPage`, `DiscoveryPage`,
+ * to Capital to Legal. `ExecutionPage`, `FounderTeamPage`, `DiscoveryPage`,
  * `FounderMarketplacePage` and the rest have no bar at all and take no
  * `embedded` prop. Wrapping at the route is additive: no page changes, and
  * reverting is deleting one element from App.jsx.
@@ -60,8 +60,14 @@ const SETS = {
   build: [
     { to: '/execution', label: 'Execution', icon: Briefcase,
       roles: ['admin', 'founder'] },
+    // FOUNDER-ONLY, BECAUSE THE PAGE IS. `FounderBuildRoadmap` takes no `role`
+    // and draws the founder "Build sections" nav, so a partner or investor
+    // admitted here got the founder's body and the founder's navigation. The
+    // route narrowed to match the shell (`route_role_zone_contract.test.mjs`);
+    // this row narrows with it, because a tab whose route bounces the viewer is
+    // worse than an absent one.
     { to: '/build/roadmap', label: 'Roadmap', icon: Map,
-      roles: ['admin', 'founder', 'partner', 'investor'] },
+      roles: ['admin', 'founder'] },
     { to: '/build/metrics', label: 'Metrics', icon: TrendingUp,
       roles: ['admin', 'founder', 'partner', 'investor'] },
   ],
@@ -86,7 +92,7 @@ const SETS = {
   grow: [
     { to: '/build/team', label: 'Talent', icon: Users,
       roles: ['admin', 'founder'] },
-    { to: '/spinout-lab/brand', label: 'Brand', icon: Sparkles,
+    { to: '/grow/brand', label: 'Brand', icon: Sparkles,
       roles: ['admin', 'founder'] },
     { to: '/comarketing', label: 'Launch', icon: Megaphone,
       roles: ['admin', 'partner', 'founder', 'investor'] },

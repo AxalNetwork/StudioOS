@@ -85,7 +85,7 @@ function RelationshipRow({ row, onSaved }) {
           <div className="text-[13px] font-extrabold tracking-tight">
             {person || <Unrecorded>Name not recorded</Unrecorded>}
           </div>
-          <div className="mt-0.5 text-[11.5px] text-axal-ink-3">
+          <div className="mt-0.5 text-[11.5px] text-axal-faint">
             {row.other?.name && row.other?.email ? row.other.email : null}
           </div>
         </div>
@@ -94,14 +94,14 @@ function RelationshipRow({ row, onSaved }) {
 
       <div className="mt-3 flex flex-wrap items-end gap-3">
         <label className="block">
-          <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">Type</span>
+          <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Type</span>
           <select className={inputClass} value={type} onChange={(e) => setType(e.target.value)}>
             <option value="">Untyped</option>
             {REL_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </label>
         <label className="block">
-          <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+          <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             Strength (0–100)
           </span>
           <input className={inputClass} type="number" min="0" max="100" value={strength}
@@ -122,14 +122,14 @@ function ReferralRow({ row }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-[13px] font-extrabold tracking-tight">{row.referred_name}</div>
-          <div className="mt-0.5 text-[11.5px] text-axal-ink-3">
+          <div className="mt-0.5 text-[11.5px] text-axal-faint">
             {row.referred_org || <Unrecorded>No organisation recorded</Unrecorded>}
           </div>
         </div>
         <Pill tone={IN_MOTION.has(row.status) ? 'ok' : 'neutral'}>{row.status_label || row.status}</Pill>
       </div>
       {(row.next_step || row.reward_label) && (
-        <div className="mt-2 space-y-1 text-[12px] leading-relaxed text-axal-ink-2">
+        <div className="mt-2 space-y-1 text-[12px] leading-relaxed text-axal-muted">
           {row.next_step && <p><span className="font-semibold">Next: </span>{row.next_step}</p>}
           {row.reward_label && <p><span className="font-semibold">Reward: </span>{row.reward_label}</p>}
         </div>
@@ -233,7 +233,7 @@ export default function RelationshipsZone({ role = 'advisor', zoneFilters = null
         {state.referrals == null ? (
           <Card variant="dashed" padding="lg">
             <h3 className="text-sm font-extrabold tracking-tight">The referral pipeline did not load</h3>
-            <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-ink-2">
+            <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-muted">
               The relationship book above read fine; this one did not. No count is shown rather than
               a zero, because a zero here would say you have referred nobody.
             </p>

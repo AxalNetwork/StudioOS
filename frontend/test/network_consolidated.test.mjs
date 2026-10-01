@@ -3,6 +3,8 @@ import test from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { duplicateApiMethods } from './_apiMethods.mjs';
+import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
+import { WORKSPACES } from '../src/lib/adminPlacement.js';
 
 const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
@@ -44,8 +46,17 @@ test('the dead network stack is gone but the shared kit survives', () => {
 test('every role links the working Network surface exactly once', () => {
   const sidebar = read('frontend/src/sidebarConfig.js');
   assert.doesNotMatch(sidebar, /'\/advisor\/network\//);
-  assert.equal((sidebar.match(/to: '\/network'/g) || []).length, 5,
-    'expected one /network row per role (admin + the four that were collapsed)');
+  // Re-aimed in D284 from "five `to: '/network'` literals" to the property
+  // that count stood for. The four collapsed roles each keep exactly one
+  // Network row; the admin's row left the sidebar with the other working
+  // pages and the admin reaches /network from the Workspaces launcher, once.
+  const rowsByRole = Object.entries(SIDEBAR_GROUPS)
+    .map(([role, groups]) => [role, groups.flatMap((g) => (g.items || []).filter((it) => it.to === '/network')).length])
+    .filter(([, n]) => n > 0);
+  assert.deepEqual(rowsByRole.sort(), [['advisor', 1], ['founder', 1], ['investor', 1], ['partner', 1]],
+    'expected one /network row for each of the four collapsed roles, and no other');
+  assert.equal(WORKSPACES.filter((w) => w.route === '/network').length, 1,
+    'the admin reaches /network from the launcher exactly once');
 });
 
 test('no api.js method is declared twice inside its object', () => {

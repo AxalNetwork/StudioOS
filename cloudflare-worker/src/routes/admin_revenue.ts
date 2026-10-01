@@ -24,7 +24,12 @@
  *                    margin cannot be derived, only the cost reported.
  *
  *   Token P&L by subsidiary   U1. Nothing ties inference spend to a licence.
- *   Statements and Stripe     No subsidiary-statement store exists at all.
+ *   Statements and Stripe     NOT HERE. Two stores exist (migration 260:
+ *                             `subsidiary_statements` and
+ *                             `subsidiary_usage_reports`), read by
+ *                             routes/admin_statements.ts on their own
+ *                             endpoint. D266 corrected this line, which said
+ *                             no store existed.
  *   Promo budget              `promo_codes` has discounts and redemption caps.
  *                             There is no budget or per-subsidiary allocation.
  *
@@ -46,7 +51,12 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
-import { DERIVED_UNAVAILABLE } from './licence';
+import {
+  REVENUE_PER_SUBSIDIARY_UNAVAILABLE,
+  TOKEN_PL_PER_SUBSIDIARY_UNAVAILABLE,
+} from './licence';
+import { subsidiaryUsageCoverage } from '../services/subsidiaryUsageCoverage';
+import { promoState } from '../services/promos';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -137,30 +147,58 @@ r.get('/summary', async (c) => {
   // draws: HQ allocating a spend ceiling per subsidiary does not exist.
   let promos: unknown;
   try {
-    const row = await env.DB.prepare(
-      `SELECT COUNT(*) AS codes, SUM(times_redeemed) AS redemptions
-         FROM promo_codes WHERE active = 1`,
-    ).first<{ codes: number; redemptions: number }>();
+    // D213 — "REDEEMABLE NOW" MEANS ACTIVE AND UNEXPIRED, by the one rule
+    // checkout and HQ · Platform also read (`promoState`). This used to count
+    // `WHERE active = 1`, so a code past its expiry — which checkout refuses —
+    // was counted as redeemable. A code at its cap is not redeemable either.
+    // The mirror's `times_redeemed` is the count here, a lower bound: Stripe
+    // counts subscription redemptions and nothing mirrors them.
+    const res = await env.DB.prepare(
+      `SELECT active, expires_at, max_redemptions, times_redeemed FROM promo_codes`,
+    ).all<{ active: number; expires_at: string | null; max_redemptions: number | null; times_redeemed: number }>();
+    const nowMs = Date.now();
+    let activeCodes = 0;
+    let redemptions = 0;
+    for (const row of res.results || []) {
+      const redeemed = Number(row.times_redeemed);
+      if (!Number.isFinite(redeemed)) throw new Error('times_redeemed unreadable');
+      if (promoState(row, redeemed, nowMs) !== 'active') continue;
+      activeCodes += 1;
+      redemptions += redeemed;
+    }
     promos = {
       available: true,
-      active_codes: Number(row?.codes) || 0,
-      redemptions: Number(row?.redemptions) || 0,
+      active_codes: activeCodes,
+      redemptions,
+      // A CEILING EXISTS NOW; A BUDGET COMPUTED FROM THIS TABLE STILL DOES
+      // NOT, and they are different claims. HQ sets a spend ceiling per
+      // licence per period (D111) and reads it from its own endpoint. What
+      // `promo_codes` cannot say is what any given branch has issued against
+      // one: a code carries a discount and an optional redemption cap and
+      // names no subsidiary, so the issued figure could only come from the
+      // branch — and nothing carries one to HQ today (D266), so it is never
+      // one this row derives.
       budget_available: false,
       budget_reason:
-        'There is no promotional budget in the product. `promo_codes` carries a discount and an '
-        + 'optional redemption cap per code; nothing allocates a spend ceiling, and nothing '
-        + 'attributes a code to a subsidiary, so neither "budget left" nor a per-subsidiary '
-        + 'split has a source.',
+        'A promotional ceiling is set per licence at HQ and read from /api/admin/promo-ceilings. '
+        + 'It is not derived here and could not be: `promo_codes` carries a discount and an '
+        + 'optional redemption cap per code and attributes none of them to a subsidiary, so what '
+        + 'a branch has issued against its ceiling could only come from the branch, and no branch '
+        + 'reports it to HQ yet.',
+      ceilings_endpoint: '/api/admin/promo-ceilings',
     };
   } catch {
     promos = { available: false, reason: 'The promotion codes table could not be read.' };
   }
+
+  const usageCoverage = await subsidiaryUsageCoverage(env, new Date());
 
   return c.json({
     quarter,
     licence_fees: licenceFees,
     token_cost: tokenCost,
     promos,
+    usage_coverage: usageCoverage,
 
     // Subscriptions. Not a read that failed — a figure the platform cannot
     // produce, which is a different thing and says so.
@@ -171,17 +209,19 @@ r.get('/summary', async (c) => {
       + 'from the Stripe API one customer at a time. A quarter figure would mean walking every '
       + 'customer in Stripe on page load.',
 
-    // Statements between HQ and each subsidiary.
-    statements_available: false,
-    statements_reason:
-      'No subsidiary statement store exists. `engagement_invoices` bills an engagement, not a '
-      + 'licensee, so what each subsidiary owes HQ this quarter has never been recorded.',
+    // Statements between HQ and each subsidiary. THE STORE EXISTS NOW
+    // (migration 260, D111) and is deliberately NOT fetched here, for the
+    // reason disputes are not: this endpoint's whole contract is that it
+    // reads and stores nothing, and a ledger with writes does not belong
+    // inside it. It is also its own read so that a slow or failed statements
+    // query costs that zone and not the four that read D1 perfectly well.
+    statements_endpoint: '/api/admin/statements',
 
     // Open disputes are real, and deliberately not fetched here.
     disputes_endpoint: '/api/admin/billing/disputes',
 
-    // Token P&L by subsidiary, and every other per-subsidiary figure.
-    ...DERIVED_UNAVAILABLE,
+    ...REVENUE_PER_SUBSIDIARY_UNAVAILABLE,
+    ...TOKEN_PL_PER_SUBSIDIARY_UNAVAILABLE,
   });
 });
 

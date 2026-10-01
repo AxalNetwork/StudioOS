@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { reportError } from '../lib/log';
 import { api } from '../lib/api';
 import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, XCircle, CheckCircle2, FileText, Send, Download, Ban, Search, RefreshCw, Sparkles, Loader2, ShieldAlert, KeyRound, Trash2, AlertTriangle, Heart, Eye, EyeOff, BadgeCheck, Ticket, Plus, CreditCard, Package, Zap, GitBranch as Github, Copy, FlaskConical } from 'lucide-react';
@@ -8,7 +8,22 @@ import { PERSONAS as PERSONA_TAXONOMY } from '../lib/personas';
 import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { useWebSocket } from '../hooks/useWebSocket';
+import { useAuth } from '../hooks/useAuthSync';
+import { Unrecorded, Unreadable } from '../ui';
+import { PromoProductScope } from './PromoProductScope';
+// D128 — the scope caption is fed from `/me.branch` through the same reader
+// the territory badge uses, so the two cannot disagree about which
+// deployment this is.
+import { branchOfUser } from '../lib/shellRole';
+// D223 — the elevation the secret-writing consoles gate on; its own line so
+// the `branchOfUser` import D128's test pins stays exactly as it was.
+import { isSuperAdminUser } from '../lib/shellRole';
+import { REFUND_REASON_MIN, refundReasonOk } from '../lib/refundReason';
+import { drawsAccountControls } from '../lib/accountControls';
 import TrustScoreBadge from '../components/TrustScoreBadge';
+import SecretWriteGate from '../components/SecretWriteGate';
+// D227 — Integration keys' actions and wording follow where a key lives.
+import { keyActionsFor, keyStateBadge, connectedUsersLine, removeConfirmText, SAVE_EFFECT } from '../lib/integrationKeys';
 // Task #1 — embedded as a tab inside Admin Console so admins land on
 // the network roster via /admin?tab=network-profiles. The standalone
 // /admin/network-profiles route stays wired for direct deep-links.
@@ -48,7 +63,7 @@ const ROLE_BADGES = {
   exploring: 'bg-sky-100 text-sky-700',
 };
 
-function RoleDropdown({ user, onRoleChange }) {
+function RoleDropdown({ user, onRoleChange, canOverride = false }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const menuRef = useRef(null);
@@ -135,22 +150,35 @@ function RoleDropdown({ user, onRoleChange }) {
         cost the card its corners or the table its horizontal scroll.
       */}
       {open && at && createPortal((
-        <ul
+        <div
           ref={menuRef}
-          role="listbox"
-          aria-label="Select role"
           style={{
             position: 'fixed', left: at.left, transform: 'translateX(-50%)',
             ...(at.top === undefined ? { bottom: at.bottom } : { top: at.top }),
-            maxHeight: at.maxHeight, overflowY: 'auto',
+            maxHeight: at.maxHeight,
           }}
-          className="z-50 min-w-[150px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg py-1"
+          className="z-50 flex min-w-[190px] flex-col overflow-hidden bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg"
         >
+          {/*
+            THE FOOTER IS OUTSIDE THE SCROLLING REGION, and that is the fix
+            rather than a nicety. `maxHeight` floors at 96px (see the sizing
+            above) while five options alone run to roughly 135px, so for a row
+            with little space the note below — the only thing that says why the
+            options are dead and where to go instead — scrolled out of sight.
+            #152 added that explanation and a short menu could hide it entirely.
+            Splitting the menu into a scrolling list and a pinned footer keeps
+            it visible at every height.
+          */}
+          <ul role="listbox" aria-label="Select role" className="min-h-0 flex-1 overflow-y-auto py-1">
           {OPTIONS.map(opt => {
             // Moving OUT of exploring requires a signed binding agreement
             // and must go through the Exploring Users queue — disable those
             // options here rather than let the user hit a 409 on click.
-            const disabled = isExploring && opt.value !== 'exploring';
+            // Leaving `exploring` needs a signed binding agreement. A super
+            // admin may override that with a reason; everyone else is blocked
+            // here rather than being allowed to click into a 409.
+            const disabled = isExploring && opt.value !== 'exploring' && !canOverride;
+            const isOverride = isExploring && opt.value !== 'exploring' && canOverride;
             return (
               <li
                 key={opt.value}
@@ -175,6 +203,11 @@ function RoleDropdown({ user, onRoleChange }) {
                   {user.role === opt.value && <Check size={11} />}
                 </span>
                 {opt.label}
+                {isOverride && (
+                  <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                    Override
+                  </span>
+                )}
               </li>
             );
           })}
@@ -191,10 +224,13 @@ function RoleDropdown({ user, onRoleChange }) {
             (admin_exploring.ts:259). What changes is that the reason and the
             way through are now on the screen.
           */}
+          </ul>
           {isExploring && (
-            <li role="presentation" className="mt-1 border-t border-gray-100 px-3 py-2 dark:border-gray-800">
+            <div className="shrink-0 border-t border-gray-100 px-3 py-2 dark:border-gray-800">
               <p className="text-[11px] leading-relaxed text-gray-600 dark:text-gray-400">
-                Leaving Exploring needs a signed binding agreement.
+                {canOverride
+                  ? 'Leaving Exploring normally needs a signed binding agreement. Choosing a role here overrides that — you will be asked why, and it is recorded.'
+                  : 'Leaving Exploring needs a signed binding agreement.'}
               </p>
               <Link
                 to="/admin/exploring"
@@ -203,9 +239,9 @@ function RoleDropdown({ user, onRoleChange }) {
               >
                 Assign from the Exploring queue →
               </Link>
-            </li>
+            </div>
           )}
-        </ul>
+        </div>
       ), document.body)}
     </div>
   );
@@ -226,6 +262,87 @@ function RoleDropdown({ user, onRoleChange }) {
  * IMPERSONATION_EXPIRY_MINUTES, enforced in the token rather than here.
  * Drawing them as pickers would invent options that do not exist.
  */
+/**
+ * The reason a super admin is skipping the binding agreement.
+ *
+ * Leaving `exploring` normally requires a signed binding agreement, checked in
+ * the UI and twice on the server. A super admin may override that, and this is
+ * where the override stops being silent: the reason typed here is written into
+ * the `role_changed` audit line, so the override is legible afterwards instead
+ * of indistinguishable from a routine assignment.
+ *
+ * Ten characters is the same bar the support-session dialog uses, for the same
+ * reason — "ok" is not an explanation anybody can act on later.
+ *
+ * D249 — the route also asks for your authenticator and a fresh step-up (the
+ * step-up prompt is request()'s), and tells the person: their own activity
+ * says the role was assigned by override, and why. The dialog says both.
+ */
+function RoleOverrideDialog({ target, nextRole, busy, onCancel, onConfirm }) {
+  const [reason, setReason] = useState('');
+  useEscapeClose(onCancel);
+  const tooShort = reason.trim().length < 10;
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-5 shadow-xl dark:border-gray-800 dark:bg-gray-900">
+        <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">Assign without a signed agreement</h3>
+        <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+          Override · recorded in Governance
+        </p>
+        <p className="mt-2 text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400">
+          <strong className="text-gray-800 dark:text-gray-200">{target.name || target.email}</strong> is in the
+          Exploring holding state. Normally their role is assigned from the Exploring queue, after they
+          sign the binding agreement. This skips that.
+        </p>
+        <p className="mt-2 text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400">
+          It asks for your authenticator and a fresh step-up. Their own activity will say the role was
+          assigned by override, and why.
+        </p>
+
+        <dl className="mt-4 space-y-2 rounded-lg border border-gray-200 p-3 text-[12px] dark:border-gray-700">
+          <div className="flex justify-between gap-3">
+            <dt className="text-gray-500 dark:text-gray-400">New role</dt>
+            <dd className="font-medium text-gray-800 dark:text-gray-200">{nextRole}</dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt className="text-gray-500 dark:text-gray-400">Binding agreement</dt>
+            <dd className="font-medium text-amber-700 dark:text-amber-300">Not required for this change</dd>
+          </div>
+        </dl>
+
+        <label htmlFor="role-override-reason" className="mt-4 block text-[12px] font-medium text-gray-700 dark:text-gray-300">
+          Reason · required
+        </label>
+        <textarea
+          id="role-override-reason"
+          rows={3}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Why is the agreement being skipped? e.g. Signed on paper, countersigned copy in Drive"
+          className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+        />
+        <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+          {tooShort
+            ? 'At least ten characters — this is the line someone reads in the audit later.'
+            : 'Stored on the role change and shown in Governance.'}
+        </p>
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" onClick={onCancel} disabled={busy}
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200">
+            Cancel
+          </button>
+          <button type="button" onClick={() => onConfirm(reason.trim())} disabled={busy || tooShort}
+            className="rounded-lg bg-amber-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50">
+            Override and assign
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SupportSessionDialog({ target, busy, onCancel, onBegin }) {
   const [reason, setReason] = useState('');
   useEscapeClose(onCancel);
@@ -343,8 +460,10 @@ const TRACK_BADGES = {
 
 // Task #15 — single ordered source for the Admin Console section nav. The
 // dropdown trigger and menu both render from this list instead of a hardcoded
-// row of 12 tab buttons. Pending counts are computed per-render in the page
-// and passed in via `badges` keyed by section value.
+// row of tab buttons — fourteen sections today, one per entry below (the
+// comment said twelve until D285; the list had grown twice). Pending counts
+// are computed per-render in the page and passed in via `badges` keyed by
+// section value.
 const ADMIN_SECTIONS = [
   { value: 'users', label: 'Users', Icon: Users },
   { value: 'profiles', label: 'Partner Profiles', Icon: Briefcase },
@@ -460,6 +579,23 @@ export default function AdminPage({ onImpersonate, section = null }) {
     const t = new URLSearchParams(window.location.search).get('tab');
     return t && ADMIN_SECTION_VALUES.has(t) ? t : 'users';
   });
+  const location = useLocation();
+  const navigate = useNavigate();
+  // D285 — the tab FOLLOWS the URL while the page is mounted, not only on the
+  // first render: the H36 strips link one `?tab=` after another without
+  // remounting this page. `section` still wins — a host that locked the
+  // console to one panel is not steered by the address bar.
+  useEffect(() => {
+    if (section) return;
+    const t = new URLSearchParams(location.search).get('tab');
+    if (t && ADMIN_SECTION_VALUES.has(t)) setTab(t);
+  }, [location.search, section]);
+  // …and a pick writes back to the URL with `replace`, so the address bar
+  // says which panel is open and Back does not step through every tab.
+  const pickTab = useCallback((value) => {
+    setTab(value);
+    if (!section) navigate({ search: `?tab=${value}` }, { replace: true });
+  }, [navigate, section]);
   const [users, setUsers] = useState([]);
   // Task #40 — batched trust-score map keyed by user_id, populated by a
   // single POST /api/trust/score/batch after each users-list refresh.
@@ -472,25 +608,71 @@ export default function AdminPage({ onImpersonate, section = null }) {
   const [kycRejectReason, setKycRejectReason] = useState('');
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  // D128 — the free-text account search, and the TOTALS the tiles read.
+  // `userQuery` is what the box holds; `userSearch` is what has actually been
+  // asked for, debounced. `totals` is null until the first envelope answers —
+  // never 0, because "not read yet" and "none" are different things and the
+  // tiles must not show a zero for the first.
+  const [userQuery, setUserQuery] = useState('');
+  const [userSearch, setUserSearch] = useState('');
+  const [totals, setTotals] = useState(null);
+  const [userPage, setUserPage] = useState({ showing: 0, limit: 0, searched: false });
   const [openProfile, setOpenProfile] = useState(null);
   const [openUser, setOpenUser] = useState(null);
 
   useEffect(() => { loadAll(); }, []);
   useEffect(() => { loadKyc(kycFilter); }, [kycFilter]);
+  // THE BOX IS GATED AT TWO CHARACTERS, matching the route's own refusal
+  // (`query_too_short`). The server is the control — a one-character query is
+  // refused there whatever the browser does — and this is what keeps a 400 off
+  // the screen while somebody is still typing the first letter.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const next = userQuery.trim();
+      setUserSearch(next.length >= 2 ? next : '');
+    }, 250);
+    return () => clearTimeout(t);
+  }, [userQuery]);
+  useEffect(() => { loadUsers(userSearch); }, [userSearch]);
+
+  // The users half on its own, so typing does not re-fetch profiles, the KYC
+  // queue and every trust score with each keystroke.
+  const loadUsers = async (q = '') => {
+    try {
+      const res = await api.adminListUsers({ envelope: 1, ...(q ? { q } : {}) });
+      const rows = res?.results || [];
+      setUsers(rows);
+      setTotals({ total: Number(res?.total) || 0, by_role: res?.by_role || {} });
+      setUserPage({
+        showing: Number(res?.showing) || rows.length,
+        limit: Number(res?.limit) || 0,
+        searched: Boolean(res?.searched),
+      });
+    } catch (e) {
+      reportError('AdminPage:loadUsers', e);
+    }
+  };
 
   const loadAll = async () => {
     setLoading(true);
     try {
       const [u, p] = await Promise.all([
-        api.adminListUsers(),
+        api.adminListUsers({ envelope: 1 }),
         api.adminListProfiles().catch(() => []),
       ]);
-      setUsers(u);
+      const rows = u?.results || [];
+      setUsers(rows);
+      setTotals({ total: Number(u?.total) || 0, by_role: u?.by_role || {} });
+      setUserPage({
+        showing: Number(u?.showing) || rows.length,
+        limit: Number(u?.limit) || 0,
+        searched: false,
+      });
       setProfiles(p);
       // Task #40 — fan-in trust scores in one call. Best-effort: if it
       // fails (network blip, 403 mid-role-change), each row's
       // UserTrustCell falls back to the per-user GET.
-      const ids = (u || []).map(row => row.id).filter(Boolean);
+      const ids = rows.map(row => row.id).filter(Boolean);
       if (ids.length > 0) {
         try {
           const res = await api.trustScoreBatch(ids);
@@ -548,12 +730,26 @@ export default function AdminPage({ onImpersonate, section = null }) {
     try {
       const res = await api.adminImpersonate(supportTarget.id, reason);
       setSupportTarget(null);
-      if (onImpersonate) onImpersonate(res.token, res.user);
+      // D290 — the reason as the worker stored it (null when its write
+      // failed), passed on for the H25 bar; the shell never reads the typed
+      // text back from this dialog.
+      if (onImpersonate) onImpersonate(res.token, res.user, null, res.reason ?? null);
     } catch (e) { alert(e.message || 'The support session could not be started'); }
     finally { setSupportBusy(false); }
   };
-  const handleToggleActive = async (userId) => {
-    try { await api.adminToggleActive(userId); loadAll(); } catch (e) { alert(e.message); }
+  // D247 — an administrator's account takes a typed reason, the way Demote
+  // asks for one on the licence's Administrators tab; anyone else's is one
+  // click, as before. The route also asks for a fresh step-up, which request()
+  // prompts for and retries.
+  const handleToggleActive = async (user) => {
+    let reason;
+    if (user.role === 'admin') {
+      reason = window.prompt(
+        `Why is this administrator account being ${user.is_active ? 'closed' : 're-opened'}? At least 10 characters, and it is recorded.`,
+      );
+      if (!reason) return;
+    }
+    try { await api.adminToggleActive(user.id, reason); loadAll(); } catch (e) { alert(e.message); }
   };
   const handleGrantFullAccess = async (user) => {
     const ok = window.confirm(
@@ -604,29 +800,71 @@ export default function AdminPage({ onImpersonate, section = null }) {
       loadAll();
     } catch (e) { alert(e.message || 'Failed to admit'); }
   };
+  // The pending binding-agreement override: {user, nextRole} while the reason
+  // dialog is open, null otherwise. Only a super admin can get here — the
+  // dropdown does not offer the options to anyone else, and the server refuses
+  // them regardless.
+  const [roleOverride, setRoleOverride] = useState(null);
+  const [roleOverrideBusy, setRoleOverrideBusy] = useState(false);
+  const { user: viewer } = useAuth();
+  const canOverrideRole = Number(viewer?.is_super_admin ?? 0) === 1;
+
+  const ROLE_LABELS = { admin: 'Admin', founder: 'Founder', partner: 'Partner', investor: 'Investor', advisor: 'Advisor', exploring: 'Exploring' };
+
   const handleRoleChange = async (user, newRole) => {
     if (newRole === user.role) return;
-    const labels = { admin: 'Admin', founder: 'Founder', partner: 'Partner', investor: 'Investor', advisor: 'Advisor', exploring: 'Exploring' };
+    // Leaving `exploring` skips a signed binding agreement, so it is not a
+    // yes/no confirm — it needs a reason that goes into the audit. Everything
+    // else keeps the plain confirm it has always had.
+    if (String(user.role).toLowerCase() === 'exploring' && newRole !== 'exploring') {
+      setRoleOverride({ user, nextRole: newRole });
+      return;
+    }
     const ok = window.confirm(
-      `Change ${user.name || user.email}'s role from ${labels[user.role] || user.role} ` +
-      `to ${labels[newRole] || newRole}?\n\nThis takes effect immediately and is logged in their activity history.`
+      `Change ${user.name || user.email}'s role from ${ROLE_LABELS[user.role] || user.role} ` +
+      `to ${ROLE_LABELS[newRole] || newRole}?\n\nThis takes effect immediately and is logged in their activity history.`
     );
     if (!ok) return;
     try { await api.adminUpdateRole(user.id, newRole); loadAll(); } catch (e) { alert(e.message); }
   };
 
-  const filtered = filter === 'all' ? users : users.filter(u => u.role === filter);
-  const counts = {
-    all: users.length,
-    admin: users.filter(u => u.role === 'admin').length,
-    founder: users.filter(u => u.role === 'founder').length,
-    partner: users.filter(u => u.role === 'partner').length,
-    investor: users.filter(u => u.role === 'investor').length,
-    advisor: users.filter(u => u.role === 'advisor').length,
-    // Task #9 follow-up — new signups land here pending admin review, so
-    // this is often the largest bucket now; surface it as its own filter.
-    exploring: users.filter(u => u.role === 'exploring').length,
+  const confirmRoleOverride = async (reason) => {
+    if (!roleOverride) return;
+    setRoleOverrideBusy(true);
+    try {
+      await api.adminUpdateRole(roleOverride.user.id, roleOverride.nextRole, reason);
+      setRoleOverride(null);
+      loadAll();
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setRoleOverrideBusy(false);
+    }
   };
+
+  const filtered = filter === 'all' ? users : users.filter(u => u.role === filter);
+  // THE TILES COUNT THE TABLE, NOT THE PAGE (D128). They used to read
+  // `users.filter(...).length` over whatever `/admin/users` returned — which
+  // defaults to the newest 100 rows — so past a hundred accounts the "All
+  // Users" tile showed 100 as though it were the total and every role tile
+  // counted one page. `null` while the read is in flight, because a zero there
+  // would be the same lie one beat earlier.
+  //
+  // Task #9 follow-up — new signups land in `exploring` pending admin review,
+  // so it is often the largest bucket; it keeps its own filter.
+  // S0 WALL RULE 2 — "search says what it searches". On a branch there is one
+  // territory and the caption names it. Off a branch the table is HQ's own
+  // database — the accounts HQ holds on axal.vc — and since D286 the caption
+  // says so (S20's wall rule 2, precedent BranchAccounts.jsx's resting label)
+  // rather than saying nothing: "all accounts" would be vague, and no caption
+  // left the question open on the one shell where every admin sits today.
+  const accountScope = branchOfUser(viewer)
+    ? `Searching ${viewer.branch.name || viewer.branch.code} accounts`
+    : 'Searching HQ-held accounts';
+  const ROLE_TILES = ['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'];
+  const counts = totals
+    ? { all: totals.total, ...Object.fromEntries(ROLE_TILES.map(r => [r, Number(totals.by_role?.[r]) || 0])) }
+    : null;
   const pendingProfiles = profiles.filter(p => p.admin_status === 'pending').length;
 
   if (loading) return <div className="text-gray-600 text-center py-20">Loading admin console...</div>;
@@ -639,11 +877,15 @@ export default function AdminPage({ onImpersonate, section = null }) {
             <Shield size={24} className="text-violet-600" />
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Admin Console</h1>
           </div>
-          <p className="text-gray-600 mb-6">Manage users, roles, and partner profiles</p>
+          <p className="text-gray-600 mb-6">
+            Manage users, roles, and partner profiles.{' '}
+            <Link to="/admin/trash" data-testid="admin-trash-door" className="text-violet-600 dark:text-violet-300 hover:underline">Trash</Link>
+            {' '}holds soft-deleted projects.
+          </p>
 
           <AdminSectionNav
             value={tab}
-            onChange={setTab}
+            onChange={pickTab}
             badges={{
               profiles: pendingProfiles,
               kyc: kycFilter === 'pending' ? kycQueue.length : 0,
@@ -669,17 +911,53 @@ export default function AdminPage({ onImpersonate, section = null }) {
 
       {tab === 'users' && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-            {Object.entries(counts).map(([role, count]) => (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3" data-testid="admin-user-tiles">
+            {Object.entries(counts || { all: null, admin: null, founder: null, partner: null, investor: null, advisor: null, exploring: null }).map(([role, count]) => (
               <button key={role} onClick={() => setFilter(role)}
                 className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                   filter === role ? 'bg-violet-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-700 hover:border-violet-300'
                 }`}>
-                <div className="text-lg font-bold">{count}</div>
+                <div className="text-lg font-bold">{count === null ? <Unrecorded /> : count}</div>
                 <div className="capitalize">{role === 'all' ? 'All Users' : role === 'exploring' ? 'Exploring' : `${role}s`}</div>
               </button>
             ))}
           </div>
+
+          {/* SEARCH, AND A CAPTION THAT SAYS WHAT IS ON SCREEN (D128).
+              Until this, the only way to find an account was to scroll the
+              newest hundred — the panel filtered by role and nothing else, on
+              both tiers. S0's second wall rule is that a search says WHAT it
+              searches, which is why the branch caption names the territory and
+              HQ's does not: on HQ there is no territory to name. */}
+          <div className="mb-6 flex flex-wrap items-center gap-3">
+            <label className="relative flex-1 min-w-[16rem]">
+              <span className="sr-only">Search accounts by name or email</span>
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="search"
+                value={userQuery}
+                onChange={(e) => setUserQuery(e.target.value)}
+                placeholder="Search by name or email"
+                data-testid="admin-user-search"
+                className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm dark:border-gray-800 dark:bg-gray-900"
+              />
+            </label>
+            {accountScope && (
+              <span className="text-[12px] text-gray-500 dark:text-gray-400" data-testid="admin-user-scope">
+                {accountScope}
+              </span>
+            )}
+          </div>
+
+          <p className="mb-3 text-[12px] text-gray-500 dark:text-gray-400" data-testid="admin-user-showing">
+            {userPage.searched
+              ? `${userPage.showing} ${userPage.showing === 1 ? 'account matches' : 'accounts match'} “${userSearch}”${userPage.limit && userPage.showing >= userPage.limit ? ` — the first ${userPage.limit}; narrow the search to see the rest` : ''}`
+              : counts === null
+                ? 'Reading the directory…'
+                : userPage.limit && counts.all > userPage.limit
+                  ? `Showing the newest ${userPage.showing} of ${counts.all} accounts. The tiles above count every account; this table is one page. Search to reach the rest.`
+                  : `Showing all ${counts.all} ${counts.all === 1 ? 'account' : 'accounts'}.`}
+          </p>
 
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
             {filtered.length === 0 ? (
@@ -708,19 +986,23 @@ export default function AdminPage({ onImpersonate, section = null }) {
                         <td className="px-4 py-3 text-gray-600">{u.email}</td>
                         <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                           {u.role === 'admin' ? (
-                            // Admin role is intentionally read-only in the UI. The PATCH
-                            // /users/:id/role endpoint also refuses to promote into or
-                            // demote out of `admin` — those changes must be made
-                            // directly against the Cloudflare D1 database via SQL.
+                            // Admin role is read-only in THIS picker, and the PATCH
+                            // /users/:id/role endpoint refuses to promote into or demote
+                            // out of `admin`. D221 — the tooltip used to say those changes
+                            // "can only be made via direct database SQL", which stopped
+                            // being true in D134: an administrator is opened through a
+                            // licence (POST /licences/:uid/admins) and demoted there by the
+                            // Super Admin (POST /users/:id/demote-admin), both on the
+                            // licence's Administrators tab.
                             <span
-                              title="Admin role can only be changed via direct database SQL (security policy)"
+                              title="An administrator is opened and demoted on the licence they hold (Licences → Administrators), by the Super Admin — not from this picker"
                               className={`inline-block text-xs font-semibold px-3 py-1 rounded-full ${ROLE_BADGES.admin || 'bg-violet-100 text-violet-700'}`}
                             >
                               Admin
                             </span>
                           ) : (
                             // Admin promotion intentionally not offered — see span branch above.
-                            <RoleDropdown user={u} onRoleChange={handleRoleChange} />
+                            <RoleDropdown user={u} onRoleChange={handleRoleChange} canOverride={canOverrideRole} />
                           )}
                         </td>
                         <td className="px-4 py-3 text-center">
@@ -793,17 +1075,26 @@ export default function AdminPage({ onImpersonate, section = null }) {
                                 Admit to Lab
                               </button>
                             )}
-                            <button onClick={() => handleImpersonate(u)}
-                              className="px-2.5 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium transition-colors flex items-center gap-1"
-                              title="Login as this user">
-                              <LogIn size={12} /> View As
-                            </button>
-                            <button onClick={() => handleToggleActive(u.id)}
-                              className={`px-2.5 py-1.5 text-xs rounded-lg font-medium transition-colors ${
-                                u.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'
-                              }`}>
-                              {u.is_active ? 'Disable' : 'Enable'}
-                            </button>
+                            {/* D221 — neither is drawn where the server can only
+                                refuse: an admin's row, unless the viewer holds the
+                                elevation (D132 on the toggle, D133 on impersonation),
+                                and the viewer's own row. `lib/accountControls.js`
+                                holds the one rule both controls follow. */}
+                            {drawsAccountControls(u, viewer) && (
+                              <>
+                                <button onClick={() => handleImpersonate(u)}
+                                  className="px-2.5 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium transition-colors flex items-center gap-1"
+                                  title="Login as this user">
+                                  <LogIn size={12} /> View As
+                                </button>
+                                <button onClick={() => handleToggleActive(u)}
+                                  className={`px-2.5 py-1.5 text-xs rounded-lg font-medium transition-colors ${
+                                    u.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'
+                                  }`}>
+                                  {u.is_active ? 'Disable' : 'Enable'}
+                                </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1007,7 +1298,7 @@ export default function AdminPage({ onImpersonate, section = null }) {
                             alert(`Failed to load document: ${e?.message || e}`);
                           }
                         }}
-                        className="inline-flex items-center gap-2 text-xs font-semibold text-axal-blue hover:text-axal-blue/80 underline"
+                        className="inline-flex items-center gap-2 text-xs font-semibold text-axal-violet hover:text-axal-violet/80 underline"
                       >
                         View ID Document &rarr;
                       </button>
@@ -1068,12 +1359,23 @@ export default function AdminPage({ onImpersonate, section = null }) {
           onBegin={beginSupportSession}
         />
       )}
+      {roleOverride && (
+        <RoleOverrideDialog
+          target={roleOverride.user}
+          nextRole={ROLE_LABELS[roleOverride.nextRole] || roleOverride.nextRole}
+          busy={roleOverrideBusy}
+          onCancel={() => setRoleOverride(null)}
+          onConfirm={confirmRoleOverride}
+        />
+      )}
       {openUser && (
         <UserDetailModal
           userRow={openUser}
           onClose={() => setOpenUser(null)}
-          onImpersonate={() => { handleImpersonate(openUser); setOpenUser(null); }}
-          onToggleActive={() => { handleToggleActive(openUser.id); setOpenUser(null); }}
+          // D221 — the drawer follows the row's rule: where the server can
+          // only refuse, it is handed no handler and draws no button.
+          onImpersonate={drawsAccountControls(openUser, viewer) ? () => { handleImpersonate(openUser); setOpenUser(null); } : null}
+          onToggleActive={drawsAccountControls(openUser, viewer) ? () => { handleToggleActive(openUser); setOpenUser(null); } : null}
         />
       )}
     </div>
@@ -1558,7 +1860,7 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
             <div className="space-y-3 text-sm">
               <Field label="KYC status" value={kyc.status || 'unknown'} />
               <Field label="Email verified" value={u.email_verified ? 'Yes' : 'No'} />
-              <Field label="TOTP enabled" value={kyc.totp_enabled ? 'Yes (required at login)' : 'No'} />
+              <TotpEnrolmentField kyc={kyc} />
               <Field label="ID document uploaded" value={kyc.id_uploaded ? 'Yes' : 'No'} />
               <div className="pt-2">
                 <button onClick={resend} disabled={resending || u.email_verified}
@@ -1613,14 +1915,20 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
 
         <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between dark:border-gray-800">
           <div className="flex gap-2">
-            <button onClick={onImpersonate}
-              className="px-3 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium flex items-center gap-1">
-              <LogIn size={12} /> View As
-            </button>
-            <button onClick={onToggleActive}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium ${u.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
-              {u.is_active ? 'Disable account' : 'Enable account'}
-            </button>
+            {/* D221 — absent, never disabled: a handler of null means the
+                server would refuse this viewer on this account. */}
+            {onImpersonate && (
+              <button onClick={onImpersonate}
+                className="px-3 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium flex items-center gap-1">
+                <LogIn size={12} /> View As
+              </button>
+            )}
+            {onToggleActive && (
+              <button onClick={onToggleActive}
+                className={`px-3 py-1.5 text-xs rounded-lg font-medium ${u.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
+                {u.is_active ? 'Disable account' : 'Enable account'}
+              </button>
+            )}
           </div>
           <button onClick={onClose} className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900">Close</button>
         </div>
@@ -1677,6 +1985,33 @@ function Field({ label, value, mono }) {
       <div className={`text-gray-900 ${mono ? 'font-mono text-xs' : ''} mt-0.5 break-all`}>{value || '—'}</div>
     </div>
   );
+}
+
+/**
+ * D236 — the drawer's authenticator line, in the three states the server
+ * sends. `true` and `false` are answers, read from the same definition sign-in
+ * uses. Anything else is not an answer: `null` means the read failed, and a
+ * payload without the field said nothing. Printing "No" for either would
+ * repeat the hard-coded placeholder this replaced, which told HQ that every
+ * account had no second factor.
+ *
+ * "Yes" does not claim the factor is required at every sign-in: a magic link
+ * still signs an enrolled account in, at a lower assurance, so the old
+ * "(required at login)" was never true for every route in.
+ */
+export function TotpEnrolmentField({ kyc }) {
+  const enrolled = kyc?.totp_enabled;
+  const value = enrolled === true
+    ? 'Yes — an authenticator app is enrolled'
+    : enrolled === false
+      ? 'No — no authenticator app is enrolled'
+      : (
+        <Unreadable
+          what="Authenticator enrolment"
+          claim={kyc?.totp_reason || 'The profile did not say whether an authenticator is enrolled.'}
+        />
+      );
+  return <Field label="TOTP enabled" value={value} />;
 }
 
 function Stat({ label, value }) {
@@ -3095,7 +3430,7 @@ function SignedDocLightbox({ uid, onClose, onChanged }) {
       try {
         const r = await api.adminGetForwardLog(doc.id);
         if (!cancelled) setForwards(r.forwards || []);
-      } catch (e) { if (!cancelled) reportError(e, 'forward-log'); }
+      } catch (e) { if (!cancelled) reportError('AdminPage:forward-log', e); }
     })();
     return () => { cancelled = true; };
   }, [doc]);
@@ -3291,6 +3626,7 @@ const PROVIDER_LABELS = {
   crunchbase: 'Crunchbase',
   affinity: 'Affinity',
   telegram: 'Telegram',
+  gcip: 'Google Identity (SMS)',
 };
 const PROVIDER_HINTS = {
   slack: 'Get Client ID + Client Secret from api.slack.com → your app → Basic Information.',
@@ -3304,6 +3640,7 @@ const PROVIDER_HINTS = {
   crunchbase: 'API key — paste a label (e.g. "default") into Client ID and the user_key into Secret. Provision the key at data.crunchbase.com.',
   affinity: 'API key — put your team subdomain (e.g. "acme") into Client ID and the Affinity API key into Secret. Generate at affinity.co → Settings → API.',
   telegram: 'Bot token — put the bot username (e.g. "axalvc_bot") into Client ID and the BotFather token into Secret. Get the token from @BotFather on Telegram.',
+  gcip: 'SMS backup 2FA — put the GCP project id into Client ID and the Identity Platform / Firebase Web API key into Secret. Enable Phone authentication on the project first. Google Cloud Console → APIs & Services → Credentials.',
 };
 const PROVIDER_ENV_NAMES = {
   slack: ['SLACK_CLIENT_ID', 'SLACK_CLIENT_SECRET'],
@@ -3317,6 +3654,7 @@ const PROVIDER_ENV_NAMES = {
   crunchbase: ['CRUNCHBASE_USER_KEY_ID', 'CRUNCHBASE_API_KEY'],
   affinity: ['AFFINITY_TEAM_DOMAIN', 'AFFINITY_API_KEY'],
   telegram: ['TELEGRAM_BOT_USERNAME', 'TELEGRAM_BOT_TOKEN'],
+  gcip: ['GCIP_PROJECT_ID', 'GCIP_API_KEY'],
 };
 
 // Admin-managed Service Provider Directory approval (Task #53).
@@ -3661,6 +3999,8 @@ function PaymentsPanel() {
 
   const [webhooks, setWebhooks] = useState(null);
   const [webhookBusy, setWebhookBusy] = useState(false);
+  // D223 — registering writes STRIPE_WEBHOOK_SECRET onto the production Worker.
+  const holdsSecretWrites = isSuperAdminUser(useAuth().user);
 
   const loadConfig = useCallback(async () => {
     try { setConfig(await api.adminStripeGetConfig()); } catch { /* unconfigured */ }
@@ -4197,13 +4537,15 @@ function PaymentsPanel() {
               {webhooks.endpoints?.length === 0 ? (
                 <div>
                   <p className="text-sm text-amber-600 dark:text-amber-400 mb-2">No webhook endpoints found in Stripe.</p>
-                  <button
-                    onClick={registerWebhook}
-                    disabled={webhookBusy}
-                    className="px-3 py-1.5 text-sm font-medium bg-violet-600 text-white rounded-md hover:bg-violet-700 disabled:opacity-50"
-                  >
-                    {webhookBusy ? 'Registering…' : 'Register Webhook'}
-                  </button>
+                  <SecretWriteGate holds={holdsSecretWrites} what="Registering a webhook" testid="stripe-webhook-holder-only">
+                    <button
+                      onClick={registerWebhook}
+                      disabled={webhookBusy}
+                      className="px-3 py-1.5 text-sm font-medium bg-violet-600 text-white rounded-md hover:bg-violet-700 disabled:opacity-50"
+                    >
+                      {webhookBusy ? 'Registering…' : 'Register Webhook'}
+                    </button>
+                  </SecretWriteGate>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -4246,18 +4588,20 @@ function PaymentsPanel() {
                       )}
                     </div>
                   ))}
-                  <div className="flex items-center gap-3 flex-wrap pt-1">
-                    <button
-                      onClick={registerWebhook}
-                      disabled={webhookBusy}
-                      className="px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
-                    >
-                      {webhookBusy ? 'Working…' : 'Register New Endpoint'}
-                    </button>
-                    <p className="text-[10px] text-gray-400 dark:text-gray-500">
-                      New registration automatically captures and stores the signing secret.
-                    </p>
-                  </div>
+                  <SecretWriteGate holds={holdsSecretWrites} what="Registering a new endpoint" testid="stripe-webhook-holder-only">
+                    <div className="flex items-center gap-3 flex-wrap pt-1">
+                      <button
+                        onClick={registerWebhook}
+                        disabled={webhookBusy}
+                        className="px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+                      >
+                        {webhookBusy ? 'Working…' : 'Register New Endpoint'}
+                      </button>
+                      <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                        New registration automatically captures and stores the signing secret.
+                      </p>
+                    </div>
+                  </SecretWriteGate>
                 </div>
               )}
             </div>
@@ -4278,7 +4622,7 @@ function BillingPanel() {
   const headerCls = 'px-4 py-3 border-b border-gray-200 flex items-center gap-2 flex-wrap dark:border-gray-800';
 
   // --- Refund state ---
-  const [refForm, setRefForm] = useState({ target: '', amount: '', reason: '', target_user_id: '', override: false });
+  const [refForm, setRefForm] = useState({ target: '', amount: '', reason: '', stripe_reason: '', target_user_id: '', override: false });
   const [refBusy, setRefBusy] = useState(false);
   const [refResult, setRefResult] = useState(null);
   const setRef = (k, v) => setRefForm((f) => ({ ...f, [k]: v }));
@@ -4288,13 +4632,15 @@ function BillingPanel() {
     if (refBusy) return;
     const target = refForm.target.trim();
     if (!target) { showToast({ kind: 'err', msg: 'Enter a PaymentIntent (pi_…) or Charge (ch_…) id' }); return; }
+    if (!refundReasonOk(refForm.reason)) { showToast({ kind: 'err', msg: `Write the reason for this refund (at least ${REFUND_REASON_MIN} characters)` }); return; }
     setRefBusy(true);
     setRefResult(null);
     try {
       const body = {};
       if (target.startsWith('ch_')) body.charge = target; else body.payment_intent = target;
       if (refForm.amount) body.amount = Math.round(Number(refForm.amount) * 100);
-      if (refForm.reason) body.reason = refForm.reason;
+      body.reason = refForm.reason.trim();
+      if (refForm.stripe_reason) body.stripe_reason = refForm.stripe_reason;
       if (refForm.target_user_id) body.target_user_id = Number(refForm.target_user_id);
       if (refForm.override) body.override_policy = true;
       const r = await api.adminBillingRefund(body);
@@ -4389,7 +4735,7 @@ function BillingPanel() {
         <div className={headerCls}>
           <RefreshCw size={16} className="text-gray-600" />
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Issue Refund</h3>
-          <span className="text-xs text-gray-500">Reverses the referral commission automatically</span>
+          <span className="text-xs text-gray-500">Reverses the referral commission automatically · HQ's super admin only, after a step-up</span>
         </div>
         <form onSubmit={issueRefund} className="p-4 grid gap-3 sm:grid-cols-2">
           <label className="text-xs text-gray-600 dark:text-gray-400 sm:col-span-2">
@@ -4400,9 +4746,16 @@ function BillingPanel() {
             Amount (leave blank for full)
             <input className={inputCls} type="number" step="0.01" min="0" placeholder="e.g. 49.00" value={refForm.amount} onChange={(e) => setRef('amount', e.target.value)} data-testid="refund-amount" />
           </label>
+          {/* D224 — the written reason is required, and the Stripe category is
+              separate from it: "duplicate" says what Stripe files the refund
+              under, not why HQ issued it. */}
+          <label className="text-xs text-gray-600 dark:text-gray-400 sm:col-span-2">
+            Reason (required, at least {REFUND_REASON_MIN} characters)
+            <textarea className={inputCls} rows={2} required minLength={REFUND_REASON_MIN} placeholder="Why this money goes back" value={refForm.reason} onChange={(e) => setRef('reason', e.target.value)} data-testid="refund-reason" />
+          </label>
           <label className="text-xs text-gray-600 dark:text-gray-400">
-            Reason
-            <select className={inputCls} value={refForm.reason} onChange={(e) => setRef('reason', e.target.value)}>
+            Stripe category (optional)
+            <select className={inputCls} value={refForm.stripe_reason} onChange={(e) => setRef('stripe_reason', e.target.value)}>
               <option value="">—</option>
               <option value="requested_by_customer">Requested by customer</option>
               <option value="duplicate">Duplicate</option>
@@ -4448,7 +4801,7 @@ function BillingPanel() {
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Disputes</h3>
           <div className="ml-auto">
             <button onClick={loadDisputes} disabled={dispLoading}
-              className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded-md text-gray-700 inline-flex items-center gap-1 dark:bg-gray-800 dark:text-gray-300" data-testid="disputes-refresh">
+              className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md text-gray-700 inline-flex items-center gap-1 dark:bg-gray-800 dark:text-gray-300" data-testid="disputes-refresh">
               {dispLoading ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />} Load disputes
             </button>
           </div>
@@ -4492,7 +4845,7 @@ function BillingPanel() {
                 ))}
                 <div className="flex items-center gap-2 pt-1">
                   <button onClick={() => submitEvidence(false)} disabled={evBusy}
-                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-800 text-xs rounded-md dark:bg-gray-800 dark:text-gray-200">Save draft</button>
+                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 text-gray-800 text-xs rounded-md dark:bg-gray-800 dark:text-gray-200">Save draft</button>
                   <button onClick={() => submitEvidence(true)} disabled={evBusy}
                     className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs rounded-md inline-flex items-center gap-1.5">
                     {evBusy ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Submit to Stripe
@@ -4686,7 +5039,7 @@ function PromoCodesPanel() {
         <span className="text-xs text-gray-500">{activeCount} active · {rows.length} total</span>
         <div className="ml-auto flex items-center gap-2">
           <button onClick={load}
-            className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded-md text-gray-700 inline-flex items-center gap-1 dark:bg-gray-800 dark:text-gray-300">
+            className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md text-gray-700 inline-flex items-center gap-1 dark:bg-gray-800 dark:text-gray-300">
             <RefreshCw size={11} /> Refresh
           </button>
           <button onClick={() => setShowCreate((v) => !v)}
@@ -4815,9 +5168,7 @@ function PromoCodesPanel() {
                     <td className="px-4 py-3 font-mono font-medium text-gray-900 dark:text-gray-100">{p.code}</td>
                     <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{discountLabel(p)}</td>
                     <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400 max-w-[18rem]">
-                      {(!p.product_ids || p.product_ids.length === 0)
-                        ? <span className="text-gray-400">All products</span>
-                        : p.product_ids.map(productName).join(', ')}
+                      <PromoProductScope promo={p} productName={productName} />
                     </td>
                     <td className="px-4 py-3 text-center text-gray-700 dark:text-gray-300">{p.times_redeemed ?? 0}{limit}</td>
                     <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400">
@@ -5058,6 +5409,31 @@ function WellbeingExpertsPanel() {
   );
 }
 
+/**
+ * D270 — the repository GitHub Sync files into, as the running Worker has it,
+ * with no control. `GITHUB_REPO_OWNER` and `GITHUB_REPO_NAME` are wrangler.toml
+ * [vars]: every deploy writes them back, so an input here could only ever show
+ * an edit the next deploy undoes. A value the Worker does not have reads
+ * "Not set", never a default the sync would not use.
+ */
+export function GithubRepoReadOnly({ cfg }) {
+  const val = (v) => (v ? <code className="text-[11px]">{v}</code> : <span className="text-gray-500 dark:text-gray-400">Not set</span>);
+  return (
+    <div className="my-3 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2" data-testid="github-sync-repo-readonly">
+      <div className="text-xs font-medium text-gray-700 dark:text-gray-300">
+        Repository · set at deploy time
+      </div>
+      <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs text-gray-600 dark:text-gray-400">
+        <dt>Owner</dt><dd data-testid="github-sync-repo-owner">{val(cfg?.repo_owner)}</dd>
+        <dt>Name</dt><dd data-testid="github-sync-repo-name">{val(cfg?.repo_name)}</dd>
+      </dl>
+      <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+        {cfg?.repo_note || 'GITHUB_REPO_OWNER and GITHUB_REPO_NAME are [vars] in wrangler.toml; change them there and deploy.'}
+      </p>
+    </div>
+  );
+}
+
 function GithubSyncPanel() {
   const [cfg, setCfg] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -5065,18 +5441,17 @@ function GithubSyncPanel() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [token, setToken] = useState('');
-  const [owner, setOwner] = useState('');
-  const [repo, setRepo] = useState('');
   const [revealedSecret, setRevealedSecret] = useState(null);
   const { toast, showToast } = useToast(3500);
+  // D223 — saving writes GITHUB_ACCESS_TOKEN (the branch-deploy dispatcher's
+  // token too) and its siblings onto the production Worker.
+  const holdsSecretWrites = isSuperAdminUser(useAuth().user);
 
   const refresh = async () => {
     setLoading(true);
     try {
       const c = await api.adminGetGithubConfig();
       setCfg(c);
-      setOwner(c.repo_owner || '');
-      setRepo(c.repo_name || '');
       setToken('');
     } catch (e) {
       reportError('AdminPage:githubConfigLoad', e);
@@ -5085,12 +5460,13 @@ function GithubSyncPanel() {
   };
   useEffect(() => { refresh(); /* eslint-disable-next-line */ }, []);
 
+  // D270 — Save writes the token and nothing else. The repository is a
+  // deploy-time setting (wrangler.toml [vars]) and is shown read-only below;
+  // sending it here used to push it as a secret the next deploy reverted.
   const onSave = async () => {
     setSaving(true);
     try {
-      const body = { repo_owner: owner.trim(), repo_name: repo.trim() };
-      if (token.trim()) body.token = token.trim();
-      const r = await api.adminSaveGithubConfig(body);
+      const r = await api.adminSaveGithubConfig({ token: token.trim() });
       if (r.webhook_secret) setRevealedSecret(r.webhook_secret);
       showToast({ kind: 'ok', msg: 'GitHub settings saved.' });
       setTestResult(null);
@@ -5100,11 +5476,15 @@ function GithubSyncPanel() {
     } finally { setSaving(false); }
   };
 
-  const onTest = async () => {
+  // `write` runs the only probe that settles whether the token may CREATE an
+  // issue. The read-only test cannot: a fine-grained PAT's Metadata: Read is
+  // automatic and unremovable, so reaching the repo proves nothing about
+  // Issues, and this panel used to call that "Connected".
+  const onTest = async (write = false) => {
     setTesting(true);
     setTestResult(null);
     try {
-      const r = await api.adminTestGithub();
+      const r = await api.adminTestGithub(write);
       setTestResult(r);
       showToast({ kind: r.ok ? 'ok' : 'err', msg: r.detail || (r.ok ? 'Connected.' : 'Connection failed.') });
     } catch (e) {
@@ -5166,45 +5546,56 @@ function GithubSyncPanel() {
         </p>
 
         <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-          GitHub token {cfg?.has_token && <span className="text-emerald-600">· configured{cfg?.token_preview ? ` (${cfg.token_preview})` : ''}</span>}
+          {/* D223 — whether a token is set, and nothing else about it. */}
+          GitHub token {cfg?.has_token
+            ? <span className="text-emerald-600">· configured</span>
+            : <span className="text-gray-500 dark:text-gray-400">· not set</span>}
         </label>
-        <input
-          type="password"
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          autoComplete="off"
-          placeholder={cfg?.has_token ? 'Leave blank to keep the current token' : 'Fine-grained PAT with Issues read/write'}
-          className={`${inputClass} mb-1`}
-        />
-        <p className="text-[11px] text-gray-500 mb-3">Needs <strong>Issues: Read and write</strong> on the target repo. Stored encrypted; never shown again after saving.</p>
-
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Repo owner</label>
-            <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder={cfg?.default_repo_owner} className={inputClass} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Repo name</label>
-            <input value={repo} onChange={(e) => setRepo(e.target.value)} placeholder={cfg?.default_repo_name} className={inputClass} />
-          </div>
-        </div>
+        <SecretWriteGate holds={holdsSecretWrites} what="Changing the token" testid="github-sync-holder-only">
+          <input
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            autoComplete="off"
+            placeholder={cfg?.has_token ? 'Leave blank to keep the current token' : 'Fine-grained PAT with Issues read/write'}
+            className={`${inputClass} mb-1`}
+          />
+          <p className="text-[11px] text-gray-500 mb-3">Needs <strong>Issues: Read and write</strong> on the target repo. Stored encrypted; never shown again after saving.</p>
+        </SecretWriteGate>
+        <GithubRepoReadOnly cfg={cfg} />
 
         <div className="flex gap-2 flex-wrap">
-          <button onClick={onSave} disabled={saving}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 inline-flex items-center gap-1.5">
-            {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Save
+          {holdsSecretWrites && (
+            <button onClick={onSave} disabled={saving || !token.trim()}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 inline-flex items-center gap-1.5">
+              {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Save
+            </button>
+          )}
+          <button onClick={() => onTest(false)} disabled={testing || !cfg?.has_token}
+            title={cfg?.has_token ? 'Reach the repo and read its issues — does NOT prove the token can create one' : 'Configure a token first'}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 inline-flex items-center gap-1.5">
+            {testing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Test read access
           </button>
-          <button onClick={onTest} disabled={testing || !cfg?.has_token}
-            title={cfg?.has_token ? 'Verify the token can reach the repo' : 'Configure a token first'}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 disabled:opacity-50 inline-flex items-center gap-1.5">
-            {testing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Test connection
+          <button onClick={() => onTest(true)} disabled={testing || !cfg?.has_token}
+            data-testid="github-write-test"
+            title={cfg?.has_token ? 'Create a real issue and close it — the only check that proves the mirror can work' : 'Configure a token first'}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 inline-flex items-center gap-1.5">
+            {testing ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Test issue creation
           </button>
         </div>
+        <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
+          Read access is not enough to mirror a ticket. A fine-grained token always carries
+          Metadata&nbsp;: Read, so reaching this repo proves nothing about creating issues —
+          only <strong>Test issue creation</strong> does, and it opens one real issue and closes it.
+        </p>
 
         {testResult && (
           <div className={`mt-3 text-xs px-3 py-2 rounded-lg border ${testResult.ok ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
             {testResult.ok ? <CheckCircle2 size={13} className="inline mr-1 -mt-0.5" /> : <XCircle size={13} className="inline mr-1 -mt-0.5" />}
             {testResult.detail}
+            {testResult.can_write === 'unproven' && (
+              <span className="block mt-1 opacity-80">Issue creation: not tested.</span>
+            )}
           </div>
         )}
       </div>
@@ -5220,7 +5611,7 @@ function GithubSyncPanel() {
         <div className="flex gap-2 mb-3">
           <input readOnly value={cfg?.webhook_url || ''} className={`${inputClass} font-mono text-xs`} />
           <button onClick={() => copy(cfg?.webhook_url || '', 'Payload URL')}
-            className="shrink-0 px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 inline-flex items-center gap-1.5">
+            className="shrink-0 px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 inline-flex items-center gap-1.5">
             <Copy size={12} /> Copy
           </button>
         </div>
@@ -5232,17 +5623,19 @@ function GithubSyncPanel() {
           <div className="flex gap-2 mb-2">
             <input readOnly value={revealedSecret} className={`${inputClass} font-mono text-xs`} />
             <button onClick={() => copy(revealedSecret, 'Secret')}
-              className="shrink-0 px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 inline-flex items-center gap-1.5">
+              className="shrink-0 px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 inline-flex items-center gap-1.5">
               <Copy size={12} /> Copy
             </button>
           </div>
         ) : (
-          <div className="flex gap-2 mb-2 flex-wrap">
-            <button onClick={onRotateSecret}
-              className="px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 inline-flex items-center gap-1.5">
-              <RefreshCw size={12} /> {cfg?.has_webhook_secret ? 'Rotate secret' : 'Generate secret'}
-            </button>
-          </div>
+          <SecretWriteGate holds={holdsSecretWrites} what={cfg?.has_webhook_secret ? 'Rotating the webhook secret' : 'Generating a webhook secret'} testid="github-webhook-holder-only">
+            <div className="flex gap-2 mb-2 flex-wrap">
+              <button onClick={onRotateSecret}
+                className="px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 inline-flex items-center gap-1.5">
+                <RefreshCw size={12} /> {cfg?.has_webhook_secret ? 'Rotate secret' : 'Generate secret'}
+              </button>
+            </div>
+          </SecretWriteGate>
         )}
         <p className="text-[11px] text-amber-700 dark:text-amber-300">
           The secret is shown only once — when generated or rotated. Copy it into GitHub immediately; if you lose it, rotate to get a new one (and update GitHub to match).
@@ -5258,6 +5651,8 @@ function IntegrationKeysPanel() {
   const [editing, setEditing] = useState(null);
   const [testing, setTesting] = useState(null); // Task #3 — provider_key currently being tested
   const { toast, showToast } = useToast(3500);
+  // D223 — save, rotate and remove each write Worker secrets on production.
+  const holdsSecretWrites = isSuperAdminUser(useAuth().user);
 
   // Task #3 — Dry-run probe of provider OAuth credentials.
   const onTest = async (provider) => {
@@ -5277,29 +5672,29 @@ function IntegrationKeysPanel() {
     } finally { setTesting(null); }
   };
 
+  // D227 — the worker says when the key table did not answer, and why.
+  const [unreadableReason, setUnreadableReason] = useState(null);
+
   const refresh = async () => {
     setLoading(true);
     try {
       const r = await api.adminListIntegrationKeys();
       setRows(r.providers || []);
+      setUnreadableReason(r.db_readable === false ? (r.unreadable_reason || 'The key table could not be read.') : null);
     } catch (e) {
-      reportError(e, { where: 'IntegrationKeysPanel.refresh' });
+      reportError('IntegrationKeysPanel:refresh', e);
       showToast({ kind: 'err', msg: e.message || 'Failed to load' });
     } finally { setLoading(false); }
   };
   useEffect(() => { refresh(); /* eslint-disable-next-line */ }, []);
 
+  // D227 — Remove works wherever the key lives: the worker deletes both Worker
+  // secrets through the Cloudflare API and any database row. It used to refuse
+  // an env-held key here and point at `wrangler secret delete`, which is where
+  // every key saved from this console ends up.
   const onDelete = async (provider) => {
     const row = rows.find(r => r.provider_key === provider);
-    if (row?.source === 'env') {
-      showToast({ kind: 'err', msg: 'This provider is configured via env vars — remove the secret with `wrangler secret delete` instead.' });
-      return;
-    }
-    const n = row?.active_integrations || 0;
-    const msg = n > 0
-      ? `Remove ${PROVIDER_LABELS[provider]} keys?\n\nThis will disconnect ${n} active user integration${n === 1 ? '' : 's'}. Affected users will need to reconnect once new keys are configured.`
-      : `Remove ${PROVIDER_LABELS[provider]} keys?`;
-    if (!confirm(msg)) return;
+    if (!confirm(removeConfirmText(PROVIDER_LABELS[provider] || provider, row?.active_integrations ?? null))) return;
     try {
       const r = await api.adminDeleteIntegrationKeys(provider);
       showToast({ kind: 'ok', msg: r.disconnected_users
@@ -5323,10 +5718,22 @@ function IntegrationKeysPanel() {
         <div className="text-sm text-amber-900 dark:text-amber-100">
           <div className="font-semibold mb-1">OAuth client credentials are sensitive.</div>
           <div className="text-amber-800 dark:text-amber-200">
-            Worker env vars always take precedence over keys configured here. Removing keys forcibly disconnects every active user integration for that provider — they'll need to reconnect once new keys are saved.
+            A save writes the pair as Worker secrets on the production Worker. A key still kept in the database, from before saves moved to Worker secrets, is used only while no Worker secret is set. Removing keys disconnects every active user integration for that provider — they'll need to reconnect once new keys are saved.
           </div>
         </div>
       </div>
+
+      {!holdsSecretWrites && (
+        <div className="mb-5">
+          <SecretWriteGate holds={false} what="Saving, rotating or removing a provider's keys" testid="integration-keys-holder-only" />
+        </div>
+      )}
+
+      {unreadableReason && (
+        <p className="mb-5 text-xs text-amber-800 dark:text-amber-300" data-testid="integration-keys-unreadable">
+          {unreadableReason} A provider without a Worker secret reads Unknown, and nothing is offered for it until the table answers.
+        </p>
+      )}
 
       {loading ? (
         <div className="flex items-center gap-2 text-gray-500 text-sm py-8 justify-center">
@@ -5337,11 +5744,11 @@ function IntegrationKeysPanel() {
           {rows.map((row) => {
             const label = PROVIDER_LABELS[row.provider_key] || row.provider_key;
             const envNames = PROVIDER_ENV_NAMES[row.provider_key] || [];
-            const sourceBadge = row.source === 'env'
-              ? { text: 'env vars', cls: 'bg-blue-100 text-blue-700' }
-              : row.source === 'db'
-                ? { text: 'admin-managed', cls: 'bg-emerald-100 text-emerald-700' }
-                : { text: 'not configured', cls: 'bg-gray-100 text-gray-700' };
+            // D227 — the worker's state, not `source`: `unreadable` is not
+            // `unconfigured`, and a key saved here lives in `env`.
+            const state = row.state;
+            const sourceBadge = keyStateBadge(state);
+            const actions = keyActionsFor(state);
             return (
               <div key={row.provider_key} data-card className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
                 <div className="flex items-start justify-between mb-3">
@@ -5351,7 +5758,7 @@ function IntegrationKeysPanel() {
                       <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${sourceBadge.cls}`}>{sourceBadge.text}</span>
                     </div>
                     <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      {row.active_integrations} active user integration{row.active_integrations === 1 ? '' : 's'}
+                      {connectedUsersLine(row.active_integrations)}
                     </div>
                   </div>
                 </div>
@@ -5360,27 +5767,42 @@ function IntegrationKeysPanel() {
                     Client ID: {row.client_id_preview}
                   </div>
                 )}
-                {row.source === 'db' && row.updated_at && (
+                {state === 'db' && row.updated_at && (
                   <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-3">
                     Last rotated {new Date(row.updated_at).toLocaleString()}
                   </div>
                 )}
-                {row.source === 'env' && (
+                {state === 'env' && (
                   <div className="text-[11px] text-blue-700 dark:text-blue-300 mb-3">
-                    Configured via worker secret{envNames.length === 2 ? 's' : ''}: <code>{envNames.join('</code> + <code>')}</code>. Admin UI cannot edit env-var configs.
+                    Held as Worker secret{envNames.length === 2 ? 's' : ''}{' '}
+                    {envNames.map((n, i) => <React.Fragment key={n}>{i > 0 && ' + '}<code>{n}</code></React.Fragment>)}.
+                    Rotate and Remove write them through the Cloudflare API.
                   </div>
                 )}
-                {row.source === 'unconfigured' && (
+                {state === 'unset' && (
                   <div className="text-xs text-gray-600 dark:text-gray-400 mb-3">{PROVIDER_HINTS[row.provider_key]}</div>
                 )}
+                {state === 'unreadable' && (
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mb-3" data-testid="integration-key-unknown">
+                    <Unrecorded reason={unreadableReason || 'The key table could not be read.'}>Unknown</Unrecorded>
+                    {' '}— no Worker secret is set, and the database could not be read to say whether a key is kept there.
+                  </div>
+                )}
                 <div className="flex gap-2 flex-wrap">
-                  <button
-                    onClick={() => setEditing({ provider: row.provider_key, mode: row.source === 'db' ? 'rotate' : 'configure' })}
-                    disabled={row.source === 'env'}
-                    title={row.source === 'env' ? 'Configured via env var — edit the worker secret instead' : ''}
-                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
-                    {row.source === 'db' ? 'Rotate keys' : 'Configure'}
-                  </button>
+                  {holdsSecretWrites && actions.configure && (
+                    <button
+                      onClick={() => setEditing({ provider: row.provider_key, mode: 'configure' })}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700">
+                      Configure
+                    </button>
+                  )}
+                  {holdsSecretWrites && actions.rotate && (
+                    <button
+                      onClick={() => setEditing({ provider: row.provider_key, mode: 'rotate' })}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700">
+                      Rotate secret
+                    </button>
+                  )}
                   {/* Task #3 — Test button: dry-runs a provider auth call. */}
                   <button
                     onClick={() => onTest(row.provider_key)}
@@ -5390,7 +5812,7 @@ function IntegrationKeysPanel() {
                     {testing === row.provider_key ? <Loader2 size={12} className="animate-spin" /> : null}
                     Test
                   </button>
-                  {row.source === 'db' && (
+                  {holdsSecretWrites && actions.remove && (
                     <button
                       onClick={() => onDelete(row.provider_key)}
                       className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-gray-700 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 inline-flex items-center gap-1.5">
@@ -5488,12 +5910,13 @@ function IntegrationKeysEditModal({ provider, mode = 'configure', onClose, onSav
           spellCheck={false}
           className="w-full px-3 py-2 mb-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-mono"
           placeholder="••••••••••••••••" />
-        <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-4">
-          Encrypted at rest. Only the secret hash is ever logged.
+        {/* D227 — what a save does now, not what the database store did. */}
+        <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-4" data-testid="integration-keys-save-effect">
+          {isRotate ? SAVE_EFFECT.rotate : SAVE_EFFECT.configure}
         </div>
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose}
-                  className="px-4 py-2 text-sm font-medium rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200">
+                  className="px-4 py-2 text-sm font-medium rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
             Cancel
           </button>
           <button type="submit" disabled={saving}
@@ -5520,14 +5943,27 @@ function PersonasPanel() {
   };
   useEffect(() => { load(); }, []);
 
-  const retag = async (userId, personaId) => {
+  const retag = async (userId, personaId, selectEl) => {
     if (!personaId) return;
+    // D255 — the row's own persona is what the select must fall back to,
+    // whether the operator cancels or the write fails; it is a live DOM
+    // reset (the select is uncontrolled — `defaultValue`, not `value`) so
+    // a cancelled or failed re-tag never leaves the row showing a persona
+    // nothing actually saved.
+    const restore = () => { if (selectEl) selectEl.value = ''; };
+    const row = rows.find((r) => r.user_id === userId);
+    const label = PERSONA_TAXONOMY.find((p) => p.id === personaId)?.label || personaId;
+    if (!confirm(`Re-tag ${row?.email || row?.name || `user ${userId}`} as ${label}?`)) {
+      restore();
+      return;
+    }
     setSavingId(userId);
     try {
       await api.retagPersonaAdmin(userId, personaId);
       await load();
     } catch (e) {
       alert(e.message || 'Re-tag failed');
+      restore();
     } finally { setSavingId(null); }
   };
 
@@ -5595,7 +6031,7 @@ function PersonasPanel() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <select disabled={savingId === r.user_id} defaultValue=""
-                      onChange={(e) => retag(r.user_id, e.target.value)}
+                      onChange={(e) => retag(r.user_id, e.target.value, e.target)}
                       className="text-xs px-2 py-1.5 border border-gray-200 rounded-md bg-white dark:border-gray-800 dark:bg-gray-900">
                       <option value="">{savingId === r.user_id ? 'Saving…' : 'Re-tag as…'}</option>
                       {PERSONA_TAXONOMY.map((p) => (

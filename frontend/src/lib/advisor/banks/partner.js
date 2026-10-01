@@ -5,13 +5,11 @@
  * (Task #9, X-2). To avoid double-prompting, the AC-1 write-router
  * intentionally NOOPs partner-bank answers — the chat client
  * (AC-3) renders the answer back as an ambient note and deep-links
- * to the Partner Portal so the binding partner_profiles row is
- * filled there with full validation.
+ * to Studio. The firm profile itself is edited on the partner
+ * operations overview.
  *
  * The single id the router does persist is `partner.profile.focus`,
- * which is the original AC-1 seed and lands as a noop note today;
- * AC-3 will surface it on the Partner Portal as a “quarterly focus”
- * banner.
+ * which is the original AC-1 seed and lands as a noop note today.
  */
 import { all, required, minChars, maxChars, csvNonEmpty, oneOf, nonNegativeNumber } from '../validators';
 
@@ -29,9 +27,9 @@ export const PARTNER_BANK = [
     id: 'partner.firm.name',
     label: 'Which firm or organization are you with?',
     type: 'short',
-    explainer: 'Used on your partner portal card and any deal-flow attribution.',
+    explainer: 'Used on your firm profile and any deal-flow attribution.',
     doc_anchor: 'network/partners',
-    page_target: '/partner-portal',
+    page_target: '/studio',
     validate: all(required, minChars(2), maxChars(140)),
   },
 
@@ -41,9 +39,9 @@ export const PARTNER_BANK = [
     label: 'Which role best describes your partnership with the studio?',
     type: 'select',
     options: ROLES,
-    explainer: 'Determines which Partner Portal tabs and tools are surfaced to you.',
+    explainer: 'Determines which partner tools are surfaced to you.',
     doc_anchor: 'network/partners',
-    page_target: '/partner-portal',
+    page_target: '/studio',
     validate: all(required, oneOf(ROLES)),
   },
 
@@ -54,7 +52,7 @@ export const PARTNER_BANK = [
     type: 'short',
     explainer: `Pick from: ${SERVICES.join(', ')}. Multiple OK.`,
     doc_anchor: 'network/partners',
-    page_target: '/partner-portal',
+    page_target: '/studio',
     validate: all(required, csvNonEmpty(1)),
   },
 
@@ -65,7 +63,7 @@ export const PARTNER_BANK = [
     type: 'long',
     explainer: 'Free-text — used by studio partners to route inbound to you.',
     doc_anchor: 'network/partners',
-    page_target: '/partner-portal',
+    page_target: '/studio',
     validate: all(required, minChars(15), maxChars(500)),
   },
 
@@ -76,7 +74,7 @@ export const PARTNER_BANK = [
     type: 'long',
     explainer: 'Optional but strongly recommended — keeps the deal-flow surface honest.',
     doc_anchor: 'network/partners',
-    page_target: '/partner-portal',
+    page_target: '/studio',
     validate: maxChars(800),
   },
 
@@ -87,7 +85,7 @@ export const PARTNER_BANK = [
     type: 'short',
     explainer: 'e.g. Inbound, Network, Accelerators, Conferences',
     doc_anchor: 'network/effects',
-    page_target: '/partner-portal',
+    page_target: '/studio',
     validate: all(required, csvNonEmpty(1)),
   },
 
@@ -96,9 +94,9 @@ export const PARTNER_BANK = [
     id: 'partner.profile.focus',
     label: 'What slice of the studio do you want to focus on this quarter?',
     type: 'long',
-    explainer: 'Shown as a quarterly-focus banner on the Partner Portal.',
+    explainer: 'A note on what you want to focus on this quarter.',
     doc_anchor: 'network/partners',
-    page_target: '/partner-portal',
+    page_target: '/studio',
     validate: maxChars(500),
   },
 
@@ -115,7 +113,7 @@ export const PARTNER_BANK = [
     type: 'short',
     explainer: 'Aggregated anonymously into the Marketplace Pulse rate-card medians (k≥5 suppression).',
     doc_anchor: 'network/partners',
-    page_target: '/partner-portal',
+    page_target: '/studio',
     validate: all(required, nonNegativeNumber),
   },
   {
@@ -124,7 +122,7 @@ export const PARTNER_BANK = [
     type: 'short',
     explainer: 'Used alongside hourly rates in the anonymised marketplace pulse.',
     doc_anchor: 'network/partners',
-    page_target: '/partner-portal',
+    page_target: '/studio',
     validate: nonNegativeNumber,
   },
   {
@@ -134,7 +132,7 @@ export const PARTNER_BANK = [
     options: COMP_MODELS,
     explainer: 'Aggregated into the comp-model distribution donut on Marketplace Pulse.',
     doc_anchor: 'network/partners',
-    page_target: '/partner-portal',
+    page_target: '/studio',
     validate: all(required, oneOf(COMP_MODELS)),
   },
 ];

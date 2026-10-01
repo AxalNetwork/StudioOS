@@ -52,6 +52,18 @@
   --color-axal-lavender: #f4f0fe;      /* violet tint — brand, stays on spec */
   --color-axal-amber: #fcd34d;         /* 32 */
   --color-axal-amber-deep: #92400e;    /* 67 */
+  --color-axal-lavender-edge: #ddd0fb; /* violet tint borders — spec */
+
+  /* Semantic — what a state MEANS, not which hue paints it (D424). The
+     System Sheet names these and the census confirms each; they are minted
+     where the proposal anatomy first needed them (the accepted mark, the
+     warning read, Eadwyn's mark on a claim), not all at once. Light values:
+     every call site pairs each one with its own `dark:` utility, because a
+     status colour is not a neutral and the dark skin does not flip it. */
+  --color-axal-positive: #047857;      /* cleared, accepted — spec */
+  --color-axal-destructive: #b91c1c;   /* failure, warning text — spec */
+  --color-axal-destructive-tint: #fef2f2; /* failure grounds — spec */
+  --color-axal-destructive-edge: #fecaca; /* error tint borders — 44 canvases */
 
   /* Neutrals — corpus majority (D2). Margin = majority vs spec. */
   --color-axal-ink: #18181b;           /* 80 vs 14 — spec was #241f38 */
@@ -68,6 +80,11 @@
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  /* The signed-in product's one type face — the investor Fund page's
+     (Space Grotesk for text, Roboto Mono for eyebrow labels). Applied to
+     every signed-in surface through `html.app-type` (ProtectedLayout sets
+     it); the public site keeps --font-sans. */
+  --font-app: 'Space Grotesk', 'Inter', system-ui, -apple-system, sans-serif;
 
   /* Radii — the spec scale, confirmed dominant across the corpus.
      99px and 999px tie in practice (50 vs 57); both render as a pill. */
@@ -140,6 +157,19 @@ body {
   margin: 0;
   background: var(--app-bg);
   color: var(--app-text);
+  /* D425 — the page tag asks for `viewport-fit=cover`, which lets content
+     reach under a phone's notch in landscape. These keep every page clear of
+     it on both sides; they are 0 on every screen without a notch. Horizontal
+     only, so no full-height container grows by an inset. */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Signed-in surfaces share one face (--font-app). Set on <html> rather than
+   on the shell element so portals — menus, modals, toasts mounted on <body>
+   — get it too. The public site never sets the class. */
+html.app-type body {
+  font-family: var(--font-app);
 }
 
 /* Force legible input text. We previously hardcoded white/black, which
@@ -265,6 +295,22 @@ select::-ms-expand { display: none; }
 [data-density="compact"] [data-app-main] { padding-top: 0.75rem; padding-bottom: 0.75rem; }
 [data-app-main].edge-to-edge-surface { padding: 0; }
 
+/* The role wizards (`/onboarding/founder|investor|partner`) are the body
+   under the sidebar and the header. The landscape has to live on the scroll
+   container: that box is already edge to edge, and `background-attachment:
+   scroll` (the initial value) keeps the image on the visible column while
+   the card scrolls. A background on the page itself stops at the page's
+   own height and leaves the shell's gray in the gap. */
+main[data-onboarding-canvas] {
+  background-color: #241f38;
+  background-image:
+    linear-gradient(104deg, rgba(36,31,56,.52) 0%, rgba(36,31,56,.28) 42%, rgba(36,31,56,.62) 100%),
+    url(/auth/login-background.webp);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
 /* Compact density also tightens the most common Tailwind vertical-rhythm
    helpers when used inside the page wrapper. This is intentionally
    tag-agnostic so dashboards and list pages benefit without per-component
@@ -342,27 +388,40 @@ select::-ms-expand { display: none; }
      • Light mode is byte-identical (rules only fire under `.dark`).
      • Public marketing pages (PublicLayout/GVPN palette) are NOT
        affected because they do not render under `[data-app-main]`.
-     • Components that already declared `dark:` variants keep working
-       because explicit utility classes still win the cascade order.
+     • Components that declare their OWN dark background keep it, but
+       only because each background rule below opts out of any element
+       whose class names a `dark:bg-` or `dark:hover:bg-` (D265). The
+       cascade alone would not do it — see the next comment.
 
    Per-page exceptions can opt out by adding `data-keep-light` on a
    wrapper — the `:not()` chain below skips any element inside such
    a wrapper.
    ------------------------------------------------------------------------ */
-/* Selectors are wrapped in `:where(...)` so they contribute ZERO
-   specificity. This guarantees that any explicit `dark:` Tailwind
-   utility (e.g. `dark:text-white`) — which carries one class worth
-   of specificity — always wins over the auto-skin. Opt out by
-   nesting the subtree under `[data-keep-light]` (the auto-skin
-   selector requires `:not([data-keep-light] *)`, so anything inside
-   is exempt). */
-:where(.dark [data-app-main] .bg-white:not([data-keep-light] *):not([data-keep-light])) {
+/* D265 — WHY THE OPT-OUTS EXIST. This block is UNLAYERED, and every
+   Tailwind 4 utility sits inside `@layer utilities`. For normal
+   declarations an unlayered rule beats every layered one WHATEVER ITS
+   SPECIFICITY, so the zero-specificity `:where(...)` below does NOT let an
+   explicit `dark:bg-gray-800` win: without an opt-out the skin paints over
+   it. The block must stay unlayered — moved into `@layer base` (or any layer
+   below utilities) the bare `.bg-white` utility would win instead and every
+   token the skin exists for would paint its light value in dark mode.
+
+   So each background rule skips an element whose class names a `dark:bg-`
+   (it chose its own dark background) or a `dark:hover:bg-` while hovered
+   (it chose its own dark hover), and each hover rule skips an element whose
+   class names a `dark:hover:bg-`. Text and border rules have no opt-out yet;
+   D265 files them. `frontend/test/dark_skin_d265.test.mjs` compiles this
+   file and holds all of it.
+
+   `[data-keep-light]` opts a subtree out entirely (the selector requires
+   `:not([data-keep-light] *)`). Nothing uses it today. */
+:where(.dark [data-app-main] .bg-white:not([data-keep-light] *):not([data-keep-light]):not([class*="dark:bg-"]):not([class*="dark:hover:bg-"]:hover)) {
   background-color: var(--app-surface);
 }
-:where(.dark [data-app-main] .bg-gray-50:not([data-keep-light] *):not([data-keep-light])) {
+:where(.dark [data-app-main] .bg-gray-50:not([data-keep-light] *):not([data-keep-light]):not([class*="dark:bg-"]):not([class*="dark:hover:bg-"]:hover)) {
   background-color: var(--app-surface-2);
 }
-:where(.dark [data-app-main] .bg-gray-100:not([data-keep-light] *):not([data-keep-light])) {
+:where(.dark [data-app-main] .bg-gray-100:not([data-keep-light] *):not([data-keep-light]):not([class*="dark:bg-"]):not([class*="dark:hover:bg-"]:hover)) {
   background-color: #1f2937;
 }
 :where(.dark [data-app-main] .text-gray-900:not([data-keep-light] *):not([data-keep-light])),
@@ -382,14 +441,57 @@ select::-ms-expand { display: none; }
 :where(.dark [data-app-main] .border-gray-300:not([data-keep-light] *):not([data-keep-light])) {
   border-color: var(--app-border);
 }
-:where(.dark [data-app-main] .divide-gray-100, .dark [data-app-main] .divide-gray-200) > :not([hidden]) ~ :not([hidden]) {
+:where(.dark [data-app-main] .divide-gray-100 > :not(:last-child), .dark [data-app-main] .divide-gray-200 > :not(:last-child)) {
   border-color: var(--app-border);
 }
-:where(.dark [data-app-main] .hover\:bg-gray-50:hover:not([data-keep-light] *):not([data-keep-light])) {
+:where(.dark [data-app-main] .hover\:bg-gray-50:hover:not([data-keep-light] *):not([data-keep-light]):not([class*="dark:hover:bg-"])) {
   background-color: #1f2937;
 }
-:where(.dark [data-app-main] .hover\:bg-gray-100:hover:not([data-keep-light] *):not([data-keep-light])) {
+:where(.dark [data-app-main] .hover\:bg-gray-100:hover:not([data-keep-light] *):not([data-keep-light]):not([class*="dark:hover:bg-"])) {
   background-color: #374151;
+}
+
+/* The axal NEUTRALS get the same treatment as the greys above, and until now
+   they did not — which is how two HQ pages shipped unreadable.
+
+   `--color-axal-ink` is #18181b. `pages/hq/AccountsPage.jsx` and
+   `ContractsPage.jsx` carry zero `dark:` classes and head themselves with a
+   bare `text-axal-ink`, so on a dark surface that was near-black text on
+   #111827. Every other HQ page has some `dark:` coverage; those two had none,
+   and `pages/hq/README.md` says "Dark mode is not optional".
+
+   THE GUARD COULD NOT SEE IT. `scripts/check-dark-mode.mjs` pairs only
+   `bg-white`, `text-gray-700|800|900` and `border-gray-200|300`, and the skin
+   above rewrites only those same Tailwind greys. A token-based neutral was
+   outside both, so a near-black heading on a dark ground passed every check.
+
+   FIXED HERE RATHER THAN IN NINETY-ODD FILES, because that is what this block
+   is for. `text-axal-ink` appears in 59 files under pages/ and components/,
+   `border-axal-hairline` in 38, `bg-axal-ground` in 9; requiring an explicit
+   `dark:` beside each would be churn in place of a fix, and the next file to
+   use the token would be wrong again. `frontend/test/ui_design_tokens.test.mjs`
+   asserts that every declared axal neutral has a counterpart here, so a new one
+   cannot arrive without one.
+
+   ONLY THE NEUTRALS. The brand violets are legible on either ground and D2
+   keeps them at their spec values deliberately; a "dark variant" of a brand
+   colour would be a second palette, not a skin. Each mapping mirrors the grey
+   rule for the same role, so the two systems cannot drift into two different
+   dark greys. */
+:where(.dark [data-app-main] .text-axal-ink:not([data-keep-light] *):not([data-keep-light])) {
+  color: var(--app-text);
+}
+:where(.dark [data-app-main] .text-axal-muted:not([data-keep-light] *):not([data-keep-light])) {
+  color: var(--app-text-muted);
+}
+:where(.dark [data-app-main] .text-axal-faint:not([data-keep-light] *):not([data-keep-light])) {
+  color: #94a3b8;
+}
+:where(.dark [data-app-main] .border-axal-hairline:not([data-keep-light] *):not([data-keep-light])) {
+  border-color: var(--app-border);
+}
+:where(.dark [data-app-main] .bg-axal-ground:not([data-keep-light] *):not([data-keep-light]):not([class*="dark:bg-"]):not([class*="dark:hover:bg-"]:hover)) {
+  background-color: var(--app-surface-2);
 }
 
 /* ---------------------------------------------------------------------------
@@ -564,4 +666,72 @@ details > summary .details-chevron {
     border-bottom: 1px dashed var(--app-border);
   }
   [data-table-cards] [data-table-card-row] > *:last-child { border-bottom: 0; }
+}
+
+/* Range inputs — Task #145.
+   `appearance-none` STRIPS the native widget, and with it everything
+   `accent-color` was doing. The onboarding sliders carried both: an
+   `accent-violet-600` that could no longer reach a thumb, over a track with
+   no filled portion, which is why the investor wizard's "What matters most
+   to you" step read as five empty pills and gave no clue what was selected.
+
+   Once the native widget is gone the fill and the thumb have to be drawn,
+   so: the fill is a hard-stop gradient at `--range-pct`, which React sets
+   from the value, and the thumb is styled per-engine because WebKit and
+   Gecko expose different pseudo-elements and a selector either engine
+   cannot parse invalidates the whole rule for BOTH. They stay in separate
+   blocks for that reason — do not merge them into one selector list.
+
+   #7c3aed is authV2.purple, written literally rather than as
+   var(--color-axal-violet): Tailwind v4 tree-shakes an @theme token that no
+   utility references, and a dropped token here would silently paint
+   nothing — which is the exact failure this rule exists to fix. */
+.axal-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    #7c3aed 0%,
+    #7c3aed var(--range-pct, 50%),
+    #e4e4e7 var(--range-pct, 50%),
+    #e4e4e7 100%
+  );
+  cursor: pointer;
+  outline-offset: 3px;
+}
+
+.axal-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #7c3aed;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(36, 31, 56, 0.35);
+  cursor: pointer;
+}
+
+.axal-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #7c3aed;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(36, 31, 56, 0.35);
+  cursor: pointer;
+}
+
+/* Firefox paints its own track under the gradient; keep it transparent so
+   the one fill above is the only thing the reader sees. */
+.axal-range::-moz-range-track {
+  background: transparent;
+  height: 8px;
+}
+
+.axal-range:focus-visible {
+  outline: 2px solid #6d28d9;
 }

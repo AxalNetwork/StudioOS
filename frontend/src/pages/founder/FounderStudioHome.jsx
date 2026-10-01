@@ -1,26 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight, BarChart3, CalendarDays, CircleDollarSign, FileStack, Landmark, MessageCircle, Network, RefreshCw, Route, Sparkles } from 'lucide-react';
-import { Link, useSearchParams } from 'react-router-dom';
-import PersonalAdvisor from '../../components/advisor/PersonalAdvisor';
+import { BarChart3, CalendarDays, CircleDollarSign, FileStack, Landmark, MessageCircle, Network, RefreshCw, Route, Sparkles } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
 import { api, spinoutLab } from '../../lib/api';
+import { CardStatus, CompactList, DeckRows, LabRows, MetricRow, RaiseProgress, StudioCard, deckSummary, labSummary, raisePercent } from './founderStudioCards';
 import { reportError } from '../../lib/log';
 import './founderStudioHome.css';
 
 const array = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
 const label = (value) => String(value || '').replace(/[_-]/g, ' ').trim() || 'Not recorded';
-const value = (item, keys) => keys.map((key) => item?.[key]).find((v) => v !== undefined && v !== null && v !== '') ?? null;
 const money = (number) => {
   const numeric = typeof number === 'number' || (typeof number === 'string' && number.trim() !== '') ? Number(number) : NaN;
   return Number.isFinite(numeric)
     ? new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(numeric)
-    : 'Not recorded';
+    : null;
 };
 const date = (input) => {
-  if (!input) return 'Not recorded';
+  if (!input) return null;
   const parsed = new Date(input);
   return Number.isNaN(parsed.getTime())
-    ? 'Not recorded'
+    ? null
     : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(parsed);
 };
 
@@ -71,6 +71,22 @@ export default function FounderStudioHome({ user }) {
             reportError(`FounderStudio:${key}`, result.reason);
           }
         });
+        // The newest deck version's slides and engagement are two further
+        // reads, keyed on that version's id, so they wait for the list.
+        const latestDeckId = array(next.deck, 'versions')[0]?.id;
+        if (latestDeckId) {
+          const deckCalls = [['deckDetail', api.deckGet(latestDeckId)], ['engagement', api.deckEngagement(latestDeckId)]];
+          const deckSettled = await Promise.allSettled(deckCalls.map(([, request]) => request));
+          if (!active) return;
+          deckSettled.forEach((result, index) => {
+            const key = deckCalls[index][0];
+            if (result.status === 'fulfilled') next[key] = result.value;
+            else {
+              nextFailures[key] = result.reason?.message || 'Source unavailable';
+              reportError(`FounderStudio:${key}`, result.reason);
+            }
+          });
+        }
         setRecords((previous) => ({ ...previous, ...next }));
         setFailures(nextFailures);
         setPartial(Object.keys(nextFailures).length > 0);
@@ -87,7 +103,7 @@ export default function FounderStudioHome({ user }) {
 
   const context = useMemo(() => ({
     lifecycle: records.lifecycle || null,
-    deck: array(records.deck, 'versions')[0] || array(records.deck, 'items')[0] || null,
+    deck: deckSummary({ versions: array(records.deck, 'versions'), detail: records.deckDetail, engagement: records.engagement }),
     financials: records.financials || null,
     raise: records.raise || null,
     bookings: array(records.bookings, 'items'),
@@ -101,17 +117,19 @@ export default function FounderStudioHome({ user }) {
   const financialComputed = context.financials?.computed || {};
   const activeRound = context.raise?.round || null;
   const first = user?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'Founder';
+  const lab = labSummary(context.lab);
+  const again = () => setRetry((n) => n + 1);
 
   return (
     <section className="fs-root" data-testid="founder-studio-home">
       <header className="fs-context">
-        <div><h2 data-testid="text-founder-studio-title">One company. One clear move.</h2><p>{project?.name || 'Your venture context'}{project?.stage ? ` · ${label(project.stage)}` : ''}</p></div>
-        <div className="fs-date"><span>{first}'s operating view</span><button type="button" data-testid="button-refresh-founder-studio" onClick={() => setRetry((n) => n + 1)}><RefreshCw size={13} />Refresh context</button></div>
+        <div className="fs-title"><h2 data-testid="text-founder-studio-title">Studio</h2><span className="fs-role" data-testid="badge-founder-studio-role">Founder</span><p>{project?.name ? `${project.name} — one company, one context` : `${first}'s venture context`}{project?.stage ? ` · ${label(project.stage)}` : ''}</p></div>
+        <div className="fs-date"><span data-testid="text-founder-studio-date">{new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }).format(new Date())}</span><button type="button" data-testid="button-refresh-founder-studio" onClick={() => setRetry((n) => n + 1)}><RefreshCw size={13} />Refresh context</button></div>
       </header>
       {partial && <div className="fs-partial" data-testid="status-founder-studio-partial">Some live sources are unavailable. Available operating records remain on screen.<button type="button" data-testid="button-retry-founder-studio" onClick={() => setRetry((n) => n + 1)}>Retry</button></div>}
 
       <div className="fs-advisor" data-testid="section-founder-advisor">
-        <PersonalAdvisor disablePersistedFullscreen onAvailabilityChange={setAdvisorAvailable} />
+        <StudioInterview persona="founder" disablePersistedFullscreen onAvailabilityChange={setAdvisorAvailable} />
         {advisorAvailable === false && <AdvisorUnavailable />}
       </div>
       <div className="fs-profile" data-testid="section-founder-profile"><ProfileFitSection compact /></div>
@@ -125,38 +143,40 @@ export default function FounderStudioHome({ user }) {
           wide
           loading={loading}
           error={failures.projects || failures.lifecycle}
+          claim="This is not a claim that no next step is recorded."
+          onRetry={again}
           empty={!project}
         >
           <MetricRow name="Lifecycle stage" result={context.lifecycle?.stage ? label(context.lifecycle.stage) : null} />
           <MetricRow name="Suggested next" accent result={nextAction?.label || null} />
         </StudioCard>
-        <StudioCard title="Pitch deck" icon={FileStack} to={project?.id ? `/raise/pitch?mode=workspace&project_id=${project.id}` : '/raise/pitch?mode=workspace'} action="Open Pitch Deck" loading={loading} error={failures.projects || failures.deck} empty={!project}>
-          <MetricRow name="Version" result={value(context.deck, ['version', 'version_name', 'title'])} />
-          <MetricRow name="Slides" result={value(context.deck, ['slide_count', 'slides_count'])} />
-          <MetricRow name="Last updated" result={context.deck?.updated_at ? date(context.deck.updated_at) : null} />
+        <StudioCard title="Pitch deck" icon={FileStack} to={project?.id ? `/raise/pitch?mode=workspace&project_id=${project.id}` : '/raise/pitch?mode=workspace'} action="Open Pitch Deck" loading={loading} error={failures.projects || failures.deck} claim="This is not a claim that no deck exists." onRetry={again} empty={!project}>
+          {context.deck
+            ? <DeckRows deck={context.deck} detailError={failures.deckDetail} engagementError={failures.engagement} onRetry={again} />
+            : <CardStatus>No deck version is saved for this company yet.</CardStatus>}
         </StudioCard>
-        <StudioCard title="Raise" icon={CircleDollarSign} to={`/raise/capital${projectQuery}`} action="Open Round Manager" loading={loading} error={failures.projects || failures.raise} empty={!project}>
+        <StudioCard title="Raise" icon={CircleDollarSign} to={`/raise/capital${projectQuery}`} action="Open Round Manager" loading={loading} error={failures.projects || failures.raise} claim="This is not a claim that nothing is committed." onRetry={again} empty={!project}>
           <MetricRow name="Target" result={money(activeRound?.target_amount)} />
           <MetricRow name="Committed" accent result={money(context.raise?.raised)} />
+          <RaiseProgress pct={raisePercent(context.raise?.raised, activeRound?.target_amount)} />
           <MetricRow name="Next close" result={activeRound?.close_date ? date(activeRound.close_date) : null} />
         </StudioCard>
-        <StudioCard title="Key metrics" icon={BarChart3} to={`/build/metrics${projectQuery}`} action="Open Metrics" loading={loading} error={failures.projects || failures.financials} empty={!project}>
+        <StudioCard title="Key metrics" icon={BarChart3} to={`/build/metrics${projectQuery}`} action="Open Metrics" loading={loading} error={failures.projects || failures.financials} claim="This is not a claim that no metrics are recorded." onRetry={again} empty={!project}>
           <MetricRow name="MRR" result={money(project?.mrr)} />
           <MetricRow name="Modelled burn / month" result={money(financialComputed.avg_monthly_burn)} />
           <MetricRow name="Modelled runway" result={financialComputed.runway_months != null ? `${financialComputed.runway_months} months` : null} />
         </StudioCard>
-        <StudioCard title="Office hours" icon={CalendarDays} to="/build/team?tab=advisor" action="Open Bookings" loading={loading} error={failures.bookings}>
+        <StudioCard title="Office hours" icon={CalendarDays} to="/build/team?mode=workspace&tab=advisor" action="Open Bookings" loading={loading} error={failures.bookings} claim="This is not a claim that nothing is booked." onRetry={again}>
           <CompactList items={context.bookings} empty="No advisory bookings recorded." render={(booking) => <><strong>{booking?.advisor_name || booking?.advisor?.name || booking?.topic || 'Advisory booking'}</strong><small>{booking.scheduled_start ? date(booking.scheduled_start) : label(booking.status)}</small></>} />
         </StudioCard>
-        <StudioCard title="Introductions in motion" icon={Network} to="/network?mode=workspace&tab=introductions" action="Open Network" loading={loading} error={failures.intros}>
+        <StudioCard title="Introductions in motion" icon={Network} to="/network?mode=workspace&tab=introductions" action="Open Network" loading={loading} error={failures.intros} claim="This is not a claim that no introduction is in motion." onRetry={again}>
           <CompactList items={context.intros} empty="No active introduction propositions." render={(intro) => <><strong>{intro?.target?.name || intro?.target_name || 'Target not recorded'}</strong><small>{label(intro.status)}</small></>} />
         </StudioCard>
-        {context.subsidiaries.length > 0 && <StudioCard title="Independent subsidiaries" icon={Landmark} to="/legal-capital" action="Open Entities" wide>
+        {(context.subsidiaries.length > 0 || failures.subsidiaries) && <StudioCard title="Independent subsidiaries" icon={Landmark} to="/legal-capital" action="Open Entities" wide error={failures.subsidiaries} claim="This is not a claim that no subsidiary is recorded." onRetry={again}>
           <CompactList items={context.subsidiaries} render={(sub) => <><strong>{sub.subsidiary_name || sub.name || 'Entity not recorded'}</strong><small>{[sub.jurisdiction, sub.status].filter(Boolean).join(' · ') || 'Not recorded'}</small></>} />
         </StudioCard>}
-        <StudioCard title="Spin-Out Lab" icon={Sparkles} to="/spinout-lab" action="Continue in the Lab" loading={loading} error={failures.lab}>
-          <MetricRow name={context.lab?.week ? `Week ${context.lab.week}` : 'Program'} accent result={context.lab?.active ? `${value(context.lab, ['completed_count', 'completed']) || 0} completed` : null} />
-          <MetricRow name="Current focus" result={value(context.lab, ['phase_label', 'current_phase', 'week_title'])} />
+        <StudioCard title="Spin-Out Lab" icon={Sparkles} to="/spinout-lab" action="Continue in the Lab" loading={loading} error={failures.lab} claim="This is not a claim that no milestone is complete." onRetry={again}>
+          <LabRows lab={lab} />
         </StudioCard>
       </div>
     </section>
@@ -177,35 +197,10 @@ function AdvisorUnavailable() {
         </div>
       </div>
       <div className="fs-advisor-unavailable-note">
-        <span>Live advisor</span>
+        <span>Live interview</span>
         <strong>Source unavailable</strong>
         <small>No answers or assessment data have been inferred.</small>
       </div>
     </section>
   );
 }
-
-function StudioCard({ title, icon: Icon, to, action, wide, loading, error, empty, children }) {
-  const slug = title.toLowerCase().replaceAll(' ', '-');
-  return (
-    <article className={`fs-card ${wide ? 'fs-wide' : ''}`} data-testid={`card-founder-${slug}`}>
-      <div className="fs-card-head">
-        <span><Icon size={15} />{title}</span>
-        <Link to={to} data-testid={`link-founder-${slug}`}>{action}<ArrowUpRight size={13} /></Link>
-      </div>
-      {loading ? <CardStatus kind="loading">Loading live records…</CardStatus> : (
-        <>
-          {error && <CardStatus kind="error">Live source unavailable.</CardStatus>}
-          {empty ? <CardStatus>Select or create a startup to populate this module.</CardStatus> : children}
-        </>
-      )}
-    </article>
-  );
-}
-
-function CardStatus({ kind = 'empty', children }) {
-  return <p className={`fs-card-status fs-card-status-${kind}`}>{children}</p>;
-}
-
-function MetricRow({ name, result, accent }) { return <div className="fs-metric"><span>{name}</span><b className={accent ? 'fs-accent' : ''} data-testid={`value-founder-${name.toLowerCase().replaceAll(' ', '-')}`}>{result ?? 'Not recorded'}</b></div>; }
-function CompactList({ items, empty, render }) { return <div className="fs-list">{items.length ? items.slice(0, 3).map((item, index) => <div className="fs-list-item" key={item?.id || item?.uid || index} data-testid={`row-founder-record-${item?.id || item?.uid || index}`}>{render(item)}</div>) : <p className="fs-empty">{empty || 'No records available.'}</p>}</div>; }

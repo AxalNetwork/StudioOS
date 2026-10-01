@@ -15,6 +15,8 @@
 //   node scripts/migrate-d1.mjs --local            # local dev D1 (miniflare)
 //   node scripts/migrate-d1.mjs --remote           # prod D1 (studioos-db)
 //   node scripts/migrate-d1.mjs --preview          # preview env D1
+//   node scripts/migrate-d1.mjs --branch fr        # one subsidiary's D1 (studioos-fr)
+//   node scripts/migrate-d1.mjs --branch fr --bootstrap  # build a freshly created branch DB
 //   node scripts/migrate-d1.mjs --remote --baseline  # one-time adoption (see below)
 //   node scripts/migrate-d1.mjs --local --bootstrap # build an empty DB from the baseline
 //   node scripts/migrate-d1.mjs --local --bootstrap --persist-to /tmp/d1-check
@@ -48,6 +50,7 @@
 // Wrangler needs Node 22+ (same as the manual `wrangler d1 execute` commands).
 
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -66,6 +69,7 @@ import {
   BASELINE_CUTOFF,
   bootstrapStateProblem,
 } from './lib/migrationPlan.mjs';
+import { resolveTarget, bootstrapRefusal, branchConfigPath } from './lib/migrationTargets.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WORKER_DIR = path.join(ROOT, 'cloudflare-worker');
@@ -83,23 +87,8 @@ const MODE_BOOTSTRAP = has('--bootstrap');
 const MODE_VERIFY_MARKED = has('--verify-marked');
 const ADOPT_LEGACY = has('--adopt-legacy-ledger');
 
-// Target selection. local = miniflare D1; remote = prod; preview = preview env.
-function resolveTarget() {
-  if (has('--local')) {
-    return { label: 'local', dbName: 'studioos-db', flags: ['--local'] };
-  }
-  if (has('--preview')) {
-    return {
-      label: 'preview',
-      dbName: 'studioos-db-preview',
-      flags: ['--env', 'preview', '--remote'],
-    };
-  }
-  if (has('--remote')) {
-    return { label: 'remote (prod)', dbName: 'studioos-db', flags: ['--remote'] };
-  }
-  return null;
-}
+// Target selection lives in lib/migrationTargets.mjs — local, preview,
+// production, and one branch database per subsidiary.
 
 function fail(msg) {
   console.error(`\u2716 [migrate-d1] ${msg}`);
@@ -115,8 +104,12 @@ function wrangler(target, opts) {
     'd1',
     'execute',
     target.dbName,
+    // The config that DECLARES this database: the repo's own for HQ, the
+    // generated `wrangler.branch.<code>.toml` for a branch. Naming HQ's while
+    // asking for a branch's database would make wrangler resolve a name its
+    // config has never seen.
     '--config',
-    '../wrangler.toml',
+    target.config,
     ...target.flags,
   ];
   if (opts.json) args.push('--json');
@@ -272,18 +265,29 @@ function main() {
     return;
   }
 
-  const target = resolveTarget();
+  let target;
+  try {
+    target = resolveTarget(argv);
+  } catch (error) {
+    fail(error.message);
+  }
   if (!target) {
     fail(
-      'no target selected. Pass one of --local | --remote | --preview ' +
+      'no target selected. Pass one of --local | --remote | --preview | --branch <code> ' +
         '(or --audit for an idempotency report).',
+    );
+  }
+  if (target.kind === 'branch' && !existsSync(path.join(ROOT, `wrangler.branch.${target.branch}.toml`))) {
+    fail(
+      `no generated config for branch ${target.branch}.\n` +
+      `  Run: node scripts/gen-branch-wrangler.mjs ${target.branch}\n` +
+      `  (${branchConfigPath(target.branch)} declares the database this would migrate.)`,
     );
   }
 
   if (MODE_BOOTSTRAP) {
-    if (has('--remote')) {
-      fail('--bootstrap is for an empty local/preview target and cannot be combined with --remote.');
-    }
+    const refusal = bootstrapRefusal(target);
+    if (refusal) fail(`cannot bootstrap ${target.label}: ${refusal}.`);
     if (MODE_BASELINE || MODE_DRY_RUN || MODE_VERIFY_MARKED || ADOPT_LEGACY) {
       fail('--bootstrap cannot be combined with --baseline, --dry-run, --verify-marked, or --adopt-legacy-ledger.');
     }

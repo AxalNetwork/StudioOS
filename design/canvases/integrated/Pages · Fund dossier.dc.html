@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeeec;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}
+    .ab{padding:40px 46px 32px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px;flex-wrap:wrap}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:rgba(24,24,27,.6);max-width:1040px;margin:0 0 18px}
+    .row{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+    .mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .eye{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+    .nm{font-size:13px;font-weight:800;letter-spacing:-.01em}
+    .body{font-size:12px;line-height:1.55}
+    .pill{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;line-height:1.5}
+    .nr{display:inline-flex;font-size:10px;font-weight:700;border-radius:4px;padding:2px 7px;white-space:nowrap}
+    .card{border-radius:14px;padding:16px 18px;box-sizing:border-box}
+    .sel{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;padding:6px 10px 6px 12px;border-radius:9px;cursor:pointer}
+    .inp{width:100%;box-sizing:border-box;border-radius:9px;padding:9px 12px;font-size:12.5px;font-family:inherit}
+    .btn{font-size:11.5px;font-weight:700;padding:7px 13px;border-radius:8px;cursor:pointer;white-space:nowrap}
+    .nav{display:flex;align-items:center;gap:9px;padding:7px 14px;font-size:12px;font-weight:600;border-radius:8px}
+    .zp{font-size:11px;font-weight:700;padding:5px 12px;border-radius:99px;white-space:nowrap}
+    .cap{font-size:11px;color:rgba(24,24,27,.58);line-height:1.5;margin-top:9px}
+    .ph{width:390px;min-width:390px;flex:none;border-radius:34px;box-shadow:0 4px 22px rgba(24,24,27,.16),0 0 0 9px #1a1a1c;overflow:hidden}
+  </style>
+</helmet>
+
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="4">
+  <section class="ab" id="{{ b.id }}">
+    <div class="ab-hd"><a class="ab-id" href="#{{ b.id }}">{{ b.badge }}</a><span class="ab-nm">{{ b.name }}</span><span class="mono" style="font-size:11px;color:#615c6e">/research/funds/{{ b.f.uid }}</span></div>
+    <div class="ab-sub">{{ b.blurb }}</div>
+
+    <!-- ══ DESKTOP 1280 ══ -->
+    <sc-if value="{{ b.desktop }}">
+      <div style="width:1280px;min-width:1280px;display:flex;border-radius:14px;overflow:hidden;box-shadow:0 2px 14px rgba(24,24,27,.08);background:{{ b.t.ground }}">
+        <div style="width:200px;flex:none;background:{{ b.t.card }};border-right:1px solid {{ b.t.hair }};padding:16px 10px">
+          <div style="display:flex;align-items:center;gap:8px;padding:4px 14px 16px"><img src="../assets/axal-dossier-mark.png" alt="Axal VC" width="16" height="16" style="display:block;object-fit:contain"><span style="font-size:12px;font-weight:800;letter-spacing:-.01em;color:{{ b.t.ink }}">StudioOS</span></div>
+          <sc-for list="{{ b.nav }}" as="n" hint-placeholder-count="9"><div class="nav" style="{{ n.style }}">{{ n.label }}</div></sc-for>
+        </div>
+        <div style="flex:1;min-width:0;padding:22px 30px 30px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:{{ b.t.muted }}"><span>Research</span><span>‹</span><span>Funds</span><span>‹</span><span style="color:{{ b.t.ink }};font-weight:700">{{ b.f.name }}</span></div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="pill" style="background:#fdf4ff;color:#86198f;border:1px solid #f5d0fe;letter-spacing:.05em">MATCH ENGINE</span>
+              <sc-if value="{{ b.scope }}"><span class="pill" style="background:{{ b.t.chipBg }};color:{{ b.t.ink }};border:1px solid {{ b.t.hair }}">{{ b.scope }}</span></sc-if>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:12px"><sc-for list="{{ b.zones }}" as="z" hint-placeholder-count="5"><span class="zp" style="{{ z.style }}">{{ z.t }}</span></sc-for></div>
+
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:16px">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap">
+              <div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><sc-for list="{{ b.pills }}" as="p" hint-placeholder-count="3"><span class="pill" style="{{ p.style }}">{{ p.t }}</span></sc-for></div>
+                <h1 style="margin:8px 0 0;font-size:24px;font-weight:800;letter-spacing:-.025em;color:{{ b.t.ink }}">{{ b.f.name }}</h1>
+                <div style="margin-top:6px">
+                  <sc-if value="{{ b.f.source_url }}"><a href="{{ b.f.source_url }}" style="font-size:12px;font-weight:600;color:#7c3aed;text-decoration:underline">Their site →</a><span class="mono" style="font-size:10px;color:{{ b.t.muted }};margin-left:8px">{{ b.f.source_url }} · placeholder</span></sc-if>
+                  <sc-if value="{{ b.noUrl }}"><span class="nr" style="{{ b.t.nr }}">Not recorded</span><span class="body" style="color:{{ b.t.muted }};margin-left:8px">no source URL on this row</span></sc-if>
+                </div>
+              </div>
+              <div>
+                <div class="eye" style="color:{{ b.t.muted }}">Your read</div>
+                <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+                  <sc-for list="{{ b.selects }}" as="s" hint-placeholder-count="3">
+                    <div><div class="eye" style="color:{{ b.t.muted }};font-size:9px;margin-bottom:4px">{{ s.k }}</div><span class="sel" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.t.ink }}">{{ s.v }}<span style="color:{{ b.t.muted }}">⌄</span></span></div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px">
+            <sc-for list="{{ b.tiles }}" as="tl" hint-placeholder-count="4">
+              <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};{{ tl.extra }}">
+                <div class="eye" style="color:{{ b.t.muted }}">{{ tl.k }}</div>
+                <sc-if value="{{ tl.nr }}"><div style="margin-top:8px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+                <sc-if value="{{ tl.v }}"><div class="mono" style="font-size:17px;font-weight:700;letter-spacing:-.02em;margin-top:6px;color:{{ tl.ink }}">{{ tl.v }}</div></sc-if>
+                <div class="body" style="color:{{ b.t.muted }};margin-top:4px">{{ tl.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div class="body" style="color:{{ b.t.muted }};margin-top:8px;padding:0 2px">{{ b.overlap }}</div>
+
+          <sc-if value="{{ b.passWarn }}">
+            <div style="display:flex;gap:9px;align-items:flex-start;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 13px;margin-top:12px"><span style="color:#b91c1c;font-weight:800;flex:none">!</span><span class="body" style="color:#b91c1c">Passed with no reason recorded — worth adding one before you rediscover them.</span></div>
+          </sc-if>
+
+          <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:12px;margin-top:12px">
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }}">
+              <div class="eye" style="color:{{ b.t.muted }}">Their thesis</div>
+              <sc-if value="{{ b.f.thesis }}"><div style="font-size:18px;line-height:1.45;font-style:italic;font-weight:500;color:{{ b.t.ink }};margin-top:10px">“{{ b.f.thesis }}”</div></sc-if>
+              <sc-if value="{{ b.noThesis }}"><div style="margin-top:10px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div><div class="body" style="color:{{ b.t.muted }};margin-top:6px">quoted in their words, not summarised</div></sc-if>
+            </div>
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }}">
+              <div style="display:flex;align-items:baseline;justify-content:space-between"><span class="eye" style="color:{{ b.t.muted }}">What the research says</span><span class="btn" style="background:#7c3aed;color:#fff">Save</span></div>
+              <div class="inp" style="margin-top:10px;min-height:88px;background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.noteInk }}">{{ b.noteText }}</div>
+              <sc-if value="{{ b.noNote }}"><div style="margin-top:8px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span><span class="body" style="color:{{ b.t.muted }};margin-left:8px">the reading that matters is yours to write</span></div></sc-if>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }}">
+              <div class="eye" style="color:{{ b.t.muted }}">Cheque range</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+                <div><div class="eye" style="color:{{ b.t.muted }};font-size:9px;margin-bottom:4px">Low (USD)</div><div class="inp mono" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.lowInk }}">{{ b.lowText }}</div></div>
+                <div><div class="eye" style="color:{{ b.t.muted }};font-size:9px;margin-bottom:4px">High (USD)</div><div class="inp mono" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.highInk }}">{{ b.highText }}</div></div>
+              </div>
+              <div class="body" style="color:{{ b.t.muted }};margin-top:8px">Stored as cents; the UI is dollars. A blank stays blank — it is never written as 0.</div>
+            </div>
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};{{ b.passCardStyle }}">
+              <div class="eye" style="color:{{ b.t.muted }}">Pass reason</div>
+              <sc-if value="{{ b.isPassed }}">
+                <div class="inp" style="margin-top:10px;min-height:56px;background:{{ b.t.chipBg }};border:1px solid {{ b.passBorder }};color:{{ b.passInk }}">{{ b.passText }}</div>
+              </sc-if>
+              <sc-if value="{{ b.notPassed }}"><div class="body" style="color:{{ b.t.muted }};margin-top:10px">Appears when the status is set to Passed. This fund is still live.</div></sc-if>
+            </div>
+          </div>
+
+          <div style="border:1px solid #ddd6fe;background:{{ b.t.draftBg }};border-radius:14px;padding:14px 18px;margin-top:12px">
+            <div style="display:flex;align-items:center;gap:9px"><span class="pill" style="background:#7c3aed;color:#fff;letter-spacing:.06em">ZONEDRAFT</span><span class="nm" style="color:{{ b.t.ink }}">Fund · approach note</span></div>
+            <div class="body" style="color:{{ b.t.ink }};margin-top:9px">{{ b.draft }}</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap">
+              <span class="btn" style="{{ b.draftBtn }}">Draft the note</span><span class="btn" style="{{ b.acceptBtn }}">Accept note</span><span class="btn" style="color:{{ b.t.muted }};padding:7px 6px">Discard</span>
+              <span class="body" style="color:{{ b.t.muted }};margin-left:auto">Accept writes your note. It does not email them.</span>
+            </div>
+          </div>
+
+          <div style="background:{{ b.t.sunk }};border:1px solid {{ b.t.hair }};border-radius:14px;padding:14px 18px;margin-top:12px">
+            <div class="eye" style="color:{{ b.t.muted }}">What this page will not do</div>
+            <div class="body" style="color:{{ b.t.body }};margin-top:6px">Nothing here scores a fund for you, ranks your list, or drafts an approach.</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ══ MOBILE 390 ══ -->
+    <sc-if value="{{ b.mobile }}">
+      <div class="ph" style="background:{{ b.t.ground }}">
+        <div style="height:44px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 6px;font-size:11px;font-weight:700;background:{{ b.t.card }};color:{{ b.t.ink }}"><span class="mono">9:41</span><span style="font-size:10px;letter-spacing:.06em">▮▮▮ ◗</span></div>
+        <div style="background:{{ b.t.card }};padding:4px 16px 12px;border-bottom:1px solid {{ b.t.hair }}">
+          <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:{{ b.t.muted }}"><span style="font-weight:700;color:#6d28d9">‹ Funds</span><span>·</span><span>Research</span></div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px"><sc-for list="{{ b.pills }}" as="p" hint-placeholder-count="3"><span class="pill" style="{{ p.style }}">{{ p.t }}</span></sc-for></div>
+          <h1 style="margin:6px 0 0;font-size:21px;font-weight:800;letter-spacing:-.024em;color:{{ b.t.ink }}">{{ b.f.name }}</h1>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:6px"><span class="pill" style="background:#fdf4ff;color:#86198f;border:1px solid #f5d0fe;letter-spacing:.05em">MATCH ENGINE</span><sc-if value="{{ b.scope }}"><span class="pill" style="background:{{ b.t.chipBg }};color:{{ b.t.ink }};border:1px solid {{ b.t.hair }}">{{ b.scope }}</span></sc-if></div>
+        </div>
+        <div style="padding:12px 14px 22px;display:grid;gap:10px">
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px">
+            <div class="eye" style="color:{{ b.t.muted }}">Your read</div>
+            <div style="display:grid;gap:7px;margin-top:8px"><sc-for list="{{ b.selects }}" as="s" hint-placeholder-count="3"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span class="eye" style="color:{{ b.t.muted }};font-size:9px">{{ s.k }}</span><span class="sel" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.t.ink }}">{{ s.v }}<span style="color:{{ b.t.muted }}">⌄</span></span></div></sc-for></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <sc-for list="{{ b.tiles }}" as="tl" hint-placeholder-count="4">
+              <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:11px 12px;{{ tl.extra }}">
+                <div class="eye" style="color:{{ b.t.muted }};font-size:9px">{{ tl.k }}</div>
+                <sc-if value="{{ tl.nr }}"><div style="margin-top:6px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+                <sc-if value="{{ tl.v }}"><div class="mono" style="font-size:14px;font-weight:700;letter-spacing:-.02em;margin-top:5px;color:{{ tl.ink }}">{{ tl.v }}</div></sc-if>
+                <div class="body" style="color:{{ b.t.muted }};margin-top:3px;font-size:10.5px">{{ tl.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div class="body" style="color:{{ b.t.muted }};font-size:11px;padding:0 2px">{{ b.overlap }}</div>
+          <sc-if value="{{ b.passWarn }}"><div style="display:flex;gap:8px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:9px 12px"><span style="color:#b91c1c;font-weight:800;flex:none">!</span><span class="body" style="color:#b91c1c;font-size:11px">Passed with no reason recorded — worth adding one before you rediscover them.</span></div></sc-if>
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px">
+            <div class="eye" style="color:{{ b.t.muted }}">Their thesis</div>
+            <sc-if value="{{ b.f.thesis }}"><div style="font-size:15px;line-height:1.45;font-style:italic;font-weight:500;color:{{ b.t.ink }};margin-top:8px">“{{ b.f.thesis }}”</div></sc-if>
+            <sc-if value="{{ b.noThesis }}"><div style="margin-top:8px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div><div class="body" style="color:{{ b.t.muted }};margin-top:5px;font-size:11px">quoted in their words, not summarised</div></sc-if>
+          </div>
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between"><span class="eye" style="color:{{ b.t.muted }}">What the research says</span><span class="btn" style="background:#7c3aed;color:#fff;padding:5px 11px">Save</span></div>
+            <div class="inp" style="margin-top:8px;min-height:70px;background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.noteInk }};font-size:12px">{{ b.noteText }}</div>
+            <sc-if value="{{ b.noNote }}"><div style="margin-top:7px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div><div class="body" style="color:{{ b.t.muted }};margin-top:4px;font-size:11px">the reading that matters is yours to write</div></sc-if>
+          </div>
+          <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px">
+            <div class="eye" style="color:{{ b.t.muted }}">Cheque range</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+              <div><div class="eye" style="color:{{ b.t.muted }};font-size:9px;margin-bottom:4px">Low (USD)</div><div class="inp mono" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.lowInk }};font-size:12px">{{ b.lowText }}</div></div>
+              <div><div class="eye" style="color:{{ b.t.muted }};font-size:9px;margin-bottom:4px">High (USD)</div><div class="inp mono" style="background:{{ b.t.chipBg }};border:1px solid {{ b.t.hair }};color:{{ b.highInk }};font-size:12px">{{ b.highText }}</div></div>
+            </div>
+            <div class="body" style="color:{{ b.t.muted }};margin-top:7px;font-size:11px">Stored as cents; the UI is dollars. A blank is never written as 0.</div>
+          </div>
+          <sc-if value="{{ b.isPassed }}">
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px;{{ b.passCardStyle }}">
+              <div class="eye" style="color:{{ b.t.muted }}">Pass reason</div>
+              <div class="inp" style="margin-top:8px;min-height:50px;background:{{ b.t.chipBg }};border:1px solid {{ b.passBorder }};color:{{ b.passInk }};font-size:12px">{{ b.passText }}</div>
+            </div>
+          </sc-if>
+          <div style="border:1px solid #ddd6fe;background:{{ b.t.draftBg }};border-radius:14px;padding:13px 15px">
+            <div style="display:flex;align-items:center;gap:8px"><span class="pill" style="background:#7c3aed;color:#fff;letter-spacing:.06em">ZONEDRAFT</span><span class="nm" style="color:{{ b.t.ink }}">Fund · approach note</span></div>
+            <div class="body" style="color:{{ b.t.ink }};margin-top:8px;font-size:11.5px">{{ b.draft }}</div>
+            <div style="display:flex;gap:7px;margin-top:10px;flex-wrap:wrap"><span class="btn" style="{{ b.draftBtn }}">Draft the note</span><span class="btn" style="{{ b.acceptBtn }}">Accept note</span><span class="btn" style="color:{{ b.t.muted }};padding:7px 6px">Discard</span></div>
+            <div class="body" style="color:{{ b.t.muted }};margin-top:7px;font-size:10.5px">Accept writes your note. It does not email them.</div>
+          </div>
+          <div style="background:{{ b.t.sunk }};border:1px solid {{ b.t.hair }};border-radius:14px;padding:13px 15px">
+            <div class="eye" style="color:{{ b.t.muted }}">What this page will not do</div>
+            <div class="body" style="color:{{ b.t.body }};margin-top:5px;font-size:11.5px">Nothing here scores a fund for you, ranks your list, or drafts an approach.</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+    <div class="cap" style="width:{{ b.capW }}">{{ b.cap }}</div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    // ══ Three independent axes. stage_fit, path and status are separate columns and stay
+    // separate in the UI — a fund can be right-stage, warm and still researching, and none of
+    // the three is inferred from another. NULL on each has its own words, never "wrong". ══
+    const STAGE = { right:'Right stage', wrong:'Wrong stage', null:'Stage not assessed' };
+    const PATH = { warm:'Warm path', cold:'No route in', null:'Route not recorded' };
+    const STATUS = { researching:'Researching', passed:'Passed' };
+
+    const usd = (cents) => '$' + Math.round(cents / 100).toLocaleString('en-US');
+    // Cheque display never invents an end: one known end shows alone, none shows Not recorded.
+    const cheque = (lo, hi) => {
+      if (lo == null && hi == null) return { nr:true, sub:'either end may be unknown' };
+      if (lo != null && hi != null) return { v: usd(lo) + '–' + usd(hi), sub:'their range, in their terms' };
+      if (lo != null) return { v: usd(lo) + ' and up', sub:'only the low end is recorded' };
+      return { v: 'up to ' + usd(hi), sub:'only the high end is recorded' };
+    };
+
+    const TONE = {
+      ok:'background:#ecfdf5;color:#047857;border:1px solid #a7f3d0',
+      warn:'background:#fffbeb;color:#92400e;border:1px solid #fde68a',
+      danger:'background:#fef2f2;color:#b91c1c;border:1px solid #fecaca',
+      neutral:'background:#f4f4f6;color:#52525b;border:1px solid #e4e4e8',
+      neutralDark:'background:#1f2937;color:#d1d5db;border:1px solid #374151'
+    };
+    const tone = (t, dark) => TONE[t === 'neutral' && dark ? 'neutralDark' : t];
+
+    const LIGHT = { ground:'#f4f3f7', card:'#fff', hair:'#ececf1', ink:'#18181b', body:'#3f3f46', muted:'#6b7280',
+      // #52525b, the neutral pill's ink: #6b7280 on this chip measured 4.40:1 at 10px.
+      chipBg:'#fafafa', sunk:'#f4f3f7', draftBg:'#f5f3ff', nr:'background:#f4f4f6;color:#52525b;border:1px solid #e4e4e8' };
+    // Night well #140c26 on the ground; cards gray-900. Every bg-white above has its dark pair.
+    const DARK = { ground:'#140c26', card:'#111827', hair:'#374151', ink:'#f4f4f5', body:'#d1d5db', muted:'#9ca3af',
+      chipBg:'#0b1220', sunk:'#0f0a1e', draftBg:'#1e1b4b', nr:'background:#1f2937;color:#9ca3af;border:1px solid #374151' };
+
+    const NAV = ['Studio','Validate','Build','Raise','Grow','Network','Research','Trust','Company Settings'];
+    const nav = (t) => NAV.map(l => ({ label:l, style: l === 'Research'
+      ? 'background:#f5f3ff;color:#6d28d9;font-weight:700;box-shadow:inset 2px 0 0 #7c3aed' + (t === DARK ? ';background:#1e1b4b;color:#c4b5fd' : '')
+      : 'color:' + t.muted }));
+    // Zone pills are a function of the theme like nav is — computed once at the root they
+    // carried light colours onto the dark board, where inactive grey fell to 3.9:1 and the
+    // active tint was the last light surface with no dark pair.
+    const ZONES = ['Ask','Markets','Companies','Funds','Library'];
+    const zones = (t) => ZONES.map(z => ({ t:z, style: z === 'Funds'
+      ? (t === DARK ? 'background:#1e1b4b;color:#c4b5fd;border:1px solid #4c1d95' : 'background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe')
+      : 'color:' + t.muted + ';border:1px solid transparent' }));
+
+    // ══ Two rows from research_funds. The sparse one is what most real rows look like. ══
+    const DENSE = { uid:'rf_01HZ', name:'Basepoint Capital', cheque_min_cents:50000000, cheque_max_cents:150000000,
+      stage_fit:'right', path:'warm', status:'researching', pass_reason:null,
+      thesis:'Pre-seed operators in climate software, cheque $500k–$1.5M, design partner in the first 90 days.',
+      note:'Last two leads had a design partner in the deck. Warm via the Spin-Out Lab demo day.',
+      source_url:'https://example.com' };
+    const SPARSE = { uid:'rf_01J2', name:'Halverton Ventures', cheque_min_cents:null, cheque_max_cents:null,
+      stage_fit:null, path:null, status:'researching', pass_reason:null, thesis:null, note:null, source_url:null };
+    const PASSED = Object.assign({}, DENSE, { uid:'rf_01J7', name:'Kelp Partners', status:'passed', pass_reason:null,
+      path:'cold', stage_fit:'wrong', note:null });
+
+    // The raise target is a fact about the active company, not this fund. When absent, the
+    // note says so; it never prints an overlap of 0 against nothing.
+    const RAISE = { company:'Novacraft Labs', target_cents:150000000 };
+    const overlapNote = (f, raise) => {
+      if (!raise) return 'No raise target on the active company, so there is no ask to compare.';
+      if (f.cheque_min_cents == null && f.cheque_max_cents == null)
+        return 'Your raise target is ' + usd(raise.target_cents) + '. Their cheque is not recorded, so there is nothing to compare it to yet.';
+      const lo = f.cheque_min_cents, hi = f.cheque_max_cents, t = raise.target_cents;
+      const inside = (lo == null || t >= lo) && (hi == null || t <= hi);
+      return 'Your raise target is ' + usd(t) + ' — ' + (inside ? 'inside' : 'outside') + ' the range they state. A note, not a score.';
+    };
+
+    const board = (id, badge, f, t, kind, raise, blurb, cap) => {
+      const dark = t === DARK;
+      const ch = cheque(f.cheque_min_cents, f.cheque_max_cents);
+      const isPassed = f.status === 'passed';
+      const passMissing = isPassed && !f.pass_reason;
+      const stageTone = f.stage_fit === 'right' ? 'ok' : (f.stage_fit === 'wrong' ? 'warn' : 'neutral');
+      const pathTone = f.path === 'warm' ? 'ok' : 'neutral';
+      const hasSource = !!(f.thesis || f.note);
+      const draft = !hasSource
+        ? 'Record a thesis or a note first — there is nothing to draft from.'
+        : 'Draft restates only what is on this page: ' + (f.thesis ? 'their thesis' : '') + (f.thesis && f.note ? ', ' : '') + (f.note ? 'your note' : '')
+          + ', ' + STAGE[f.stage_fit].toLowerCase() + ', ' + PATH[f.path].toLowerCase()
+          + '. It will not name a partner, cite an AUM, or assume an introduction.';
+      return {
+        id, badge, f, t, blurb, cap, desktop: kind === 'desktop', mobile: kind === 'mobile',
+        capW: kind === 'desktop' ? '1280px' : '390px',
+        name: f.name + ' · ' + (kind === 'desktop' ? '1280' : '390') + (dark ? ' · dark' : ''),
+        nav: nav(t), zones: zones(t), scope: raise ? raise.company : null,
+        pills: [ { t: STATUS[f.status], style: tone(isPassed ? 'danger' : 'neutral', dark) },
+                 { t: STAGE[f.stage_fit], style: tone(stageTone, dark) },
+                 { t: PATH[f.path], style: tone(pathTone, dark) } ],
+        selects: [ { k:'Stage', v: STAGE[f.stage_fit] }, { k:'Path', v: PATH[f.path] }, { k:'Status', v: STATUS[f.status] } ],
+        noUrl: !f.source_url,
+        tiles: [
+          Object.assign({ k:'Cheque', ink:t.ink }, ch),
+          { k:'Stage', v: STAGE[f.stage_fit], ink: f.stage_fit === 'right' ? '#047857' : (f.stage_fit === 'wrong' ? '#92400e' : t.muted), sub:'your read, not theirs' },
+          { k:'Path', v: PATH[f.path], ink: f.path === 'warm' ? '#047857' : t.muted, sub: f.path === 'warm' ? 'a route exists' : (f.path === 'cold' ? 'no route recorded in' : 'route not yet recorded') },
+          isPassed
+            ? (f.pass_reason ? { k:'Pass', v:'Passed', ink:'#b91c1c', sub:f.pass_reason } : { k:'Pass', v:'Passed', ink:'#b91c1c', sub:'no reason recorded', extra:'border-color:#fecaca' })
+            : { k:'Pass', v:'Live', ink:t.ink, sub:'still researching' }
+        ],
+        overlap: overlapNote(f, raise),
+        passWarn: passMissing, isPassed, notPassed: !isPassed,
+        passCardStyle: passMissing ? 'border-color:#fecaca' : '',
+        passBorder: passMissing ? '#fecaca' : t.hair,
+        passText: f.pass_reason || 'Passed with no reason recorded — worth adding one before you rediscover them.',
+        passInk: f.pass_reason ? t.ink : '#b91c1c',
+        noThesis: !f.thesis, noNote: !f.note,
+        noteText: f.note || 'Your read of this fund…', noteInk: f.note ? t.ink : t.muted,
+        lowText: f.cheque_min_cents != null ? usd(f.cheque_min_cents) : 'blank', lowInk: f.cheque_min_cents != null ? t.ink : t.muted,
+        highText: f.cheque_max_cents != null ? usd(f.cheque_max_cents) : 'blank', highInk: f.cheque_max_cents != null ? t.ink : t.muted,
+        draft,
+        draftBtn: hasSource ? 'background:#7c3aed;color:#fff' : 'background:#c4b5fd;color:#fff;cursor:not-allowed',
+        acceptBtn: 'border:1px solid ' + (dark ? '#4c1d95' : '#ddd6fe') + ';color:' + (dark ? '#c4b5fd' : '#6d28d9') + ';background:transparent'
+      };
+    };
+
+    const boards = [
+      board('d1','D1',DENSE,LIGHT,'desktop',RAISE,
+        'Dense row, light. Three pills over the h1 are the three axes side by side — Researching, Right stage, Warm path — and the three selects beneath edit them independently. The cheque overlap is one sentence, not a percentage.',
+        'Sample content, labelled as such: the source URL is example.com and says so. The draft band can only restate the thesis, the note and the two reads already on the page.'),
+      board('d2','D2',SPARSE,LIGHT,'desktop',null,
+        'Sparse row — the shape most real rows take. Name only. Every other field is a Not recorded chip with the reason beside it; the cheque inputs read blank rather than $0; there is no raise target on the active company, so the overlap note says there is nothing to compare.',
+        'The draft band is disabled with its reason: nothing to draft from. No Stage is not the same as Wrong stage, so the pill is neutral and the tile says "not assessed".'),
+      board('d3','D3',PASSED,LIGHT,'desktop',RAISE,
+        'Passed without a reason. The status pill is red, the Pass tile carries a red hairline, and the thin red-tinted row states the warning verbatim. The pass-reason field is visible and its empty state is that sentence, not a blank.',
+        'Wrong stage is amber, not red — a mismatch is a read, not a failure. No route in is neutral: the absence of a warm path is not a penalty.'),
+      board('d4','D4',DENSE,DARK,'desktop',RAISE,
+        'Dark mode of D1. Ground is the night well #140c26, cards gray-900, every white surface has its dark pair. Tone pills keep their hue; the neutral pill takes a dark variant so it does not glow.',
+        'Violet accents lift to #c4b5fd where they sit on dark; the MATCH ENGINE badge is unchanged, since it is an archetype colour and not a theme one.'),
+      board('m1','M1',DENSE,LIGHT,'mobile',RAISE,
+        'Mobile 390, dense. One stack: header with the three pills and the fund name, Your read as three stacked selects, tiles 2×2, thesis, note, cheque, pass reason (absent — still live), draft band, stated limit.',
+        'The back chevron goes to Funds. The fund name was the only hit target on the list; everything else on this page is this page.'),
+      board('m2','M2',SPARSE,LIGHT,'mobile',null,
+        'Mobile 390, sparse. The same stack with Not recorded in every slot it belongs in, and the overlap note explaining there is no raise target to compare against.',
+        'Cheque inputs read "blank" in muted ink so a founder can see the field is empty rather than holding a zero.')
+    ];
+
+    return { boards };
+  }
+}
+</script>
+</body></html>

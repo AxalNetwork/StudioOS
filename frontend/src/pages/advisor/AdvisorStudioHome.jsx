@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  CalendarDays, ChevronRight, CircleDollarSign, Clock3, ExternalLink, Eye,
+  CalendarDays, ChevronRight, CircleDollarSign, Clock3, Eye,
   RefreshCw, ShieldCheck, Sparkles, Store, Users,
 } from 'lucide-react';
 import { api } from '../../lib/api';
-import PersonalAdvisor from '../../components/advisor/PersonalAdvisor';
+import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
 import { AWAITING_DECISION, isBookableSlot, slotMinutes, slotView } from './advisory/kit';
 import './advisorStudioHome.css';
@@ -102,8 +102,6 @@ export default function AdvisorStudioHome({
   const [bookings, setBookings] = useState(loading);
   const [calendar, setCalendar] = useState(loading);
   const [payouts, setPayouts] = useState(loading);
-  const [assistantProgress, setAssistantProgress] = useState(loading);
-  const [assistantExpanded, setAssistantExpanded] = useState(false);
   const [advisorAssistantAvailable, setAdvisorAssistantAvailable] = useState(true);
 
   const load = useCallback(() => {
@@ -113,10 +111,9 @@ export default function AdvisorStudioHome({
       setBookings(unavailable('Client history is withheld in role preview.'));
       setCalendar(unavailable('Calendar is withheld in role preview.'));
       setPayouts(unavailable('Earnings are withheld in role preview.'));
-      setAssistantProgress(unavailable('Advisor interview is withheld in role preview.'));
       return;
     }
-    setAdvisor(loading); setSlots(loading); setBookings(loading); setCalendar(loading); setPayouts(loading); setAssistantProgress(loading);
+    setAdvisor(loading); setSlots(loading); setBookings(loading); setCalendar(loading); setPayouts(loading);
     api.getMyAdvisor()
       .then((profile) => {
         if (!profile?.uid) { setAdvisor(unavailable('Your advisor profile is not available yet.')); setSlots(unavailable('Publish an advisor profile to manage slots.')); return; }
@@ -127,7 +124,6 @@ export default function AdvisorStudioHome({
     api.listMyAdvisorBookings().then((r) => setBookings(ready(asItems(r)))).catch((e) => setBookings(failed(e)));
     api.listCalendarEvents().then((r) => setCalendar(ready(asItems(r)))).catch((e) => setCalendar(failed(e)));
     api.payoutsMe().then((r) => setPayouts(ready(r || {}))).catch((e) => setPayouts(failed(e)));
-    api.advisor.progress().then((r) => setAssistantProgress(ready(r || {}))).catch((e) => setAssistantProgress(failed(e)));
   }, [previewing]);
 
   useEffect(() => { load(); }, [load]);
@@ -173,8 +169,6 @@ export default function AdvisorStudioHome({
   }, [bookings]);
 
   const profile = advisor.state === 'ready' ? advisor.data : null;
-  const progress = assistantProgress.state === 'ready' ? assistantProgress.data : null;
-  const interviewComplete = Boolean(progress?.complete || (Number(progress?.total) > 0 && Number(progress?.percent) >= 100));
   const isDevPayoutShim = import.meta.env.DEV
     && payouts.state === 'ready'
     && Number(payouts.data?.balance_cents) === 0
@@ -207,32 +201,14 @@ export default function AdvisorStudioHome({
 
       <header className="advisor-studio__masthead">
         <div>
-          <div className="advisor-eyebrow">Advisor practice</div>
           <div className="advisor-studio__title"><h1>Studio</h1><Status tone="violet">Advisor</Status><span>Good to see you, {firstName(profile?.name || user?.name)}.</span></div>
         </div>
         <time>{new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date())}</time>
       </header>
 
-      <div className="advisor-evidence-strip">
-        <span>Intro call filter</span>{previewing ? <span className="advisor-disabled-link">Storefront withheld</span> : <Link to="/expertise/profile" data-testid="link-storefront-filter">Open storefront <ExternalLink size={12} /></Link>}
-        <span>Consent to show client outcomes</span>{previewing ? <span className="advisor-disabled-link">Clients withheld</span> : <Link to="/advisor/advisory/clients" data-testid="link-client-consent">Open clients <ExternalLink size={12} /></Link>}
-        <span>Session-note auto-send</span>{previewing ? <span className="advisor-disabled-link">Settings withheld</span> : <Link to="/account" data-testid="link-session-settings">Open settings <ExternalLink size={12} /></Link>}
-      </div>
-
       <section className="advisor-assistant-shell" data-testid="module-eadwyn">
         {previewing ? <div className="advisor-complete-row"><div className="advisor-assistant-mark"><Sparkles size={18} /></div><div><strong>Eadwyn</strong><span>Advisor interview is unavailable in role preview.</span></div><Status>Preview only</Status></div>
-          : interviewComplete && !assistantExpanded ? (
-            <div className="advisor-complete-row" data-testid="status-advisor-interview-complete">
-              <div className="advisor-assistant-mark"><Sparkles size={18} /></div>
-              <div>
-                <strong>Eadwyn</strong>
-                <span>Advisor · {progress?.answered || progress?.total}/{progress?.total} answered (100%) · interview complete</span>
-              </div>
-              <div className="advisor-complete-actions">
-                <button type="button" onClick={() => setAssistantExpanded(true)}>Resume <ChevronRight size={13} /></button>
-              </div>
-            </div>
-          ) : advisorAssistantAvailable ? <PersonalAdvisor disablePersistedFullscreen onAvailabilityChange={setAdvisorAssistantAvailable} /> : <StateNote text="Eadwyn is unavailable in this environment. Your practice data remains available below." />}
+          : advisorAssistantAvailable ? <StudioInterview persona="advisor" disablePersistedFullscreen onAvailabilityChange={setAdvisorAssistantAvailable} /> : <StateNote text="Eadwyn is unavailable in this environment. Your practice data remains available below." />}
       </section>
 
       {!previewing && <ProfileFitSection compact studio audience="advisor" className="advisor-fit-section" />}

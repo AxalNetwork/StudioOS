@@ -18,7 +18,7 @@
  * from what is logged and that both numbers it came from reach the row.
  *
  * THE CANVAS IS THE FIXTURE. Labels, notes, columns and windows are parsed out
- * of `design/incoming/Pages · Partner Network.dc.html` rather than retyped, so
+ * of `design/canvases/integrated/Pages · Partner Network.dc.html` rather than retyped, so
  * a canvas revision moves this guard rather than silently disagreeing with it.
  */
 import test from 'node:test';
@@ -31,7 +31,7 @@ import { codeOnly } from './_codeOnly.mjs';
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const read = (p) => codeOnly(raw(p));
 
-const CANVAS = raw('design/incoming/Pages · Partner Network.dc.html');
+const CANVAS = raw('design/canvases/integrated/Pages · Partner Network.dc.html');
 const pageRaw = raw('frontend/src/pages/RelationshipsPage.jsx');
 const page = read('frontend/src/pages/RelationshipsPage.jsx');
 const worker = raw('cloudflare-worker/src/routes/partnernet.ts');

@@ -34,12 +34,14 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth } from '../auth';
+import { hydrateSuperAdmin, isSuperAdmin, requireAuth, requireSuperAdmin } from '../auth';
 import { Jobs } from '../models/jobs';
 import { mintDownloadToken } from '../services/signedDownload';
 import { searchSemantic, deleteChunkedEntity, researchNamespace } from '../services/vectorize';
 import { run as runAI } from '../services/aiRouter';
 import { companyScope, esignEnvelopeScope } from '../services/tenancyScope';
+import { fundOverlapNote } from '../services/researchFundRead';
+import { catalogPriceCents, proposalName, readingIsStale } from '../services/marketReadingRead';
 import { scopedDecisions } from './ic';
 import { investorProjectIds } from './_investorProjectScope';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
@@ -52,8 +54,20 @@ import { perkLifecycle } from './perks';
 // migration (`progress.ts:1650`), so a reader that goes straight to SELECT can
 // hit a table that is one deploy behind the columns it names. Every consumer
 // calls this first; the KPI draft surface is a consumer.
-import { ensureMetricsSnapshotsSchema } from './progress';
+import { ensureProjectMetricsSchema } from './progress';
 import { todayIso } from './_t13t14t15_helpers';
+import {
+  googleSheetsOAuthAvailable, preflightSheetsOAuthSecrets, buildSheetsAuthUrl,
+  makeSheetsState, consumeSheetsState, exchangeSheetsCode, fetchSheetsUserinfo,
+  saveSheetsToken, loadSheetsToken, deleteSheetsToken, loadSheetLink, upsertSheetLink,
+  parseSpreadsheetRef, pullFundsToSheet, pushFundsFromSheet, fundsAppBase,
+  SUGGESTED_SHEET_URL,
+} from '../services/fundSheets';
+import { refuse } from '../util/refusal';
+// The data room's own gate, imported rather than retyped: the grant check, the
+// NDA check and the access log live in ONE place, and the D124 expiry tests
+// read their SQL from there.
+import { activeGrant, ndaActive, logAccess } from './data_room';
 
 const research = new Hono<{ Bindings: Env }>();
 
@@ -781,9 +795,9 @@ const readingDto = (r: ReadingRow) => ({
 research.get('/market-readings', async (c) => {
   const user = await requireAuth(c);
   const offerings = await c.env.DB.prepare(
-    `SELECT id, uid, title, price_usd FROM service_offerings
+    `SELECT id, uid, title, price_usd, price_cents FROM service_offerings
       WHERE owner_user_id = ? AND is_active = 1 ORDER BY created_at DESC LIMIT 200`
-  ).bind(user.id).all<{ id: number; uid: string; title: string; price_usd: number | null }>();
+  ).bind(user.id).all<{ id: number; uid: string; title: string; price_usd: number | null; price_cents: number | null }>();
   const readings = await c.env.DB.prepare(
     `SELECT * FROM research_market_readings WHERE owner_user_id = ? ORDER BY ran_at DESC LIMIT 500`
   ).bind(user.id).all<ReadingRow>();
@@ -811,8 +825,10 @@ research.get('/market-readings', async (c) => {
           comparable_count: null, ran_at: null, scope: null,
         }),
         // The catalog's own price, so the page can say when a service line is
-        // unpriced AND unread — the two halves of the same gap.
-        catalogued: o.price_usd != null,
+        // unpriced AND unread — the two halves of the same gap. Cents are
+        // canonical; a pre-227 row still has only dollars. Neither is folded
+        // into the comparable range.
+        catalogued: catalogPriceCents(o.price_cents, o.price_usd) != null,
       };
     }),
     ...loose.map((r) => ({ ...readingDto(r), catalogued: false })),
@@ -864,6 +880,69 @@ research.post('/market-readings', async (c) => {
     `SELECT * FROM research_market_readings WHERE uid = ? AND owner_user_id = ?`
   ).bind(uid, user.id).first<ReadingRow>();
   return c.json({ item: row ? readingDto(row) : null }, 201);
+});
+
+/**
+ * One reading, for `/research/markets/:uid`.
+ *
+ * THE LIST KEEPS THE NEWEST PER OFFERING. This read is the row itself, including
+ * an older run the list no longer shows. Catalog price comes back beside the
+ * range and is not added into it. Attachments carry the need's title when the
+ * quote has one, and null when it does not — a quote stores no title of its own.
+ */
+research.get('/market-readings/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const uid = c.req.param('uid');
+  const row = await c.env.DB.prepare(
+    `SELECT r.*, o.uid AS offering_uid, o.price_usd AS price_usd, o.price_cents AS price_cents
+       FROM research_market_readings r
+       LEFT JOIN service_offerings o ON o.id = r.offering_id AND o.owner_user_id = r.owner_user_id
+      WHERE r.uid = ? AND r.owner_user_id = ?`
+  ).bind(uid, user.id).first<ReadingRow & {
+    offering_uid: string | null; price_usd: number | null; price_cents: number | null;
+  }>();
+  if (!row) return c.json({ detail: 'not_found' }, 404);
+
+  const attached = await c.env.DB.prepare(
+    `SELECT a.uid AS uid, a.quote_id AS quote_id, a.created_at AS created_at, n.title AS need_title
+       FROM research_attachments a
+       JOIN quotes q ON q.id = a.quote_id
+       LEFT JOIN founder_needs n ON n.id = q.need_id
+      WHERE a.owner_user_id = ? AND a.kind = 'reading' AND a.ref_key = ?
+      ORDER BY a.id DESC LIMIT 50`
+  ).bind(user.id, uid).all<{ uid: string; quote_id: number; created_at: string; need_title: string | null }>();
+
+  // Proposals the caller can attach to: quotes their partner record owns.
+  // A licence with no partner profile has none, and an admin does not see
+  // every firm's quotes from this page.
+  const proposals = user.partner_id
+    ? await c.env.DB.prepare(
+      `SELECT q.id AS id, q.status AS status, n.title AS need_title
+         FROM quotes q
+         LEFT JOIN founder_needs n ON n.id = q.need_id
+        WHERE q.partner_id = ?
+        ORDER BY q.created_at DESC LIMIT 100`
+    ).bind(user.partner_id).all<{ id: number; status: string; need_title: string | null }>()
+    : { results: [] as { id: number; status: string; need_title: string | null }[] };
+
+  return c.json({
+    item: {
+      ...readingDto(row),
+      offering_uid: row.offering_uid ?? null,
+      catalog_price_cents: catalogPriceCents(row.price_cents, row.price_usd),
+    },
+    attachments: (attached.results || []).map((a) => ({
+      uid: a.uid,
+      quote_id: a.quote_id,
+      created_at: a.created_at,
+      proposal_name: proposalName(a.need_title),
+    })),
+    proposals: (proposals.results || []).map((q) => ({
+      id: q.id,
+      status: q.status,
+      proposal_name: proposalName(q.need_title),
+    })),
+  });
 });
 
 research.delete('/market-readings/:uid', async (c) => {
@@ -1025,10 +1104,26 @@ research.post('/attachments', async (c) => {
   // THE QUOTE MUST BE THE CALLER'S OWN. Attaching a market reading to somebody
   // else's proposal would put the firm's reasoning behind a number they did not
   // quote — and would tell them a figure exists that they cannot see.
+  //
+  // Ownership is `partner_id`. That is the column `POST /needs/:id/quotes`
+  // writes. `provider_user_id` is not a column on the live `quotes` table
+  // (schema_baseline plus the later ALTERs), so a predicate on it matches
+  // nothing and the insert never runs.
+  if (!user.partner_id) return c.json({ detail: 'not_found' }, 404);
   const quote = await c.env.DB.prepare(
-    `SELECT id FROM quotes WHERE id = ? AND provider_user_id = ?`
-  ).bind(quoteId, user.id).first<{ id: number }>();
+    `SELECT id FROM quotes WHERE id = ? AND partner_id = ?`
+  ).bind(quoteId, user.partner_id).first<{ id: number }>();
   if (!quote) return c.json({ detail: 'not_found' }, 404);
+
+  if (kind === 'reading') {
+    const reading = await c.env.DB.prepare(
+      `SELECT ran_at FROM research_market_readings WHERE uid = ? AND owner_user_id = ?`
+    ).bind(refKey, user.id).first<{ ran_at: string }>();
+    if (!reading) return c.json({ detail: 'not_found' }, 404);
+    // AGE IS A GATE. A stale reading is blocked from a proposal, not merely
+    // labelled. The page hides Attach; this is the same refusal if it is called.
+    if (readingIsStale(reading.ran_at)) return c.json({ detail: 'reading_stale' }, 409);
+  }
 
   const uid = newUid();
   await c.env.DB.prepare(
@@ -1161,6 +1256,13 @@ async function founderProject(
 const DRAFT_SURFACES: Record<string, {
   instruction: string;
   gather: (c: { env: Env }, userId: number, scope: string) => Promise<string[]>;
+  /**
+   * What Accept writes BESIDES stamping the draft, for a surface whose canvas
+   * says Accept writes somewhere ("Accept writes the note"). It runs before
+   * the stamp; a string it returns is a refusal code, and then nothing is
+   * written at all — neither the record nor `accepted_at`.
+   */
+  accept?: (c: { env: Env }, userId: number, scope: string, body: string) => Promise<string | null>;
 }> = {
   'research/ask': {
     instruction: [
@@ -1757,14 +1859,29 @@ const DRAFT_SURFACES: Record<string, {
               AND NOT EXISTS (SELECT 1 FROM partner_lead_passes lp WHERE lp.need_id = n.id AND lp.partner_id = ?)
             ORDER BY n.created_at DESC LIMIT 25`
         ).bind(me.partner_id, me.partner_id).all<any>(),
+        // THE SAME `service_offerings` MISTAKE THAT TOOK /pipeline/leads DOWN,
+        // twice in one string. The table keys on `owner_user_id REFERENCES
+        // users(id)` and has never had a `partner_id`, so `o.partner_id` was
+        // "no such column" both in the predicate and in the correlated count —
+        // which meant this gather, the one behind the "draft a proposal" action
+        // on that very page, failed the same way the list did.
+        //
+        // `e.partner_id` IS right: engagements key on `partners(id)`, so only
+        // the `= o.partner_id` half was broken. `firm_wins` counts the whole
+        // firm's engagements and is therefore the same number on every row, so
+        // it takes the bound partner id directly rather than correlating to a
+        // column the offerings table does not have. Offerings are reached the
+        // way migration 200 populated them (200_service_offerings_shape.sql:174):
+        // through `users.partner_id`, for the firm rather than one member.
         c.env.DB.prepare(
           `SELECT o.title, o.category,
                   (SELECT COUNT(*) FROM engagements e
                      JOIN quotes q ON q.id = e.quote_id
-                    WHERE e.partner_id = o.partner_id) AS firm_wins
+                    WHERE e.partner_id = ?) AS firm_wins
              FROM service_offerings o
-            WHERE o.partner_id = ? AND o.is_active = 1 LIMIT 25`
-        ).bind(me.partner_id).all<any>(),
+            WHERE o.owner_user_id IN (SELECT id FROM users WHERE partner_id = ?)
+              AND o.is_active = 1 LIMIT 25`
+        ).bind(me.partner_id, me.partner_id).all<any>(),
         c.env.DB.prepare(
           `SELECT kind, value, floor_cents, statement FROM partner_fit_rules
             WHERE partner_id = ? AND is_active = 1 LIMIT 50`
@@ -1980,6 +2097,73 @@ const DRAFT_SURFACES: Record<string, {
           + `; ${r.cap_hours == null ? 'NO CAP STATED for them' : `cap ${r.cap_hours} h`}`
           + `; ${r.client_hours} h on client work`
           + `; ${r.live_seats} live seat(s)${r.seat_scopes ? ` (${r.seat_scopes})` : ''}`;
+      });
+    },
+  },
+
+  // ── Session 11 · D394 ────────────────────────────────────────────────────
+  // THE PARTNER HOME'S OPERATING BRIEF (P2, "Where does the firm stand
+  // today?"). The artboard's band reads across the whole firm: what is due this
+  // week, what is at risk and why, who is over a stated cap, and what renews
+  // soon. It is one short passage the firm accepts, edits or discards — built
+  // for the P2 component, which is not mounted until the owner signs P2 off.
+  //
+  // VOICE. The artboard's sample reads like a verdict ("the engagement to
+  // watch", "one of the two has to move"). The instruction below asks for what
+  // the record shows and what falls due, and forbids telling the firm what to
+  // do: the brief states, the firm decides.
+  //
+  // SCOPED ON `users.partner_id` like every partner surface above: the caller's
+  // own firm, or nothing — and nothing is a 409, never a brief written from the
+  // model's own knowledge.
+  'home/brief': {
+    instruction: [
+      "Write today's operating brief for this firm in at most five sentences, from the lines below only.",
+      'Lead with what falls due in the next seven days and what is at risk, naming the client and the recorded reason for each.',
+      'Absent is not fine: an engagement with nothing recorded is unrated, an unassessed scope has not been cleared, and a missing capacity cap means nobody is over one. Say which; never fill it in.',
+      'State what the record shows. Do not tell the firm what to do, and add no fact, figure or name that is not in the lines.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT f.name AS client, n.title AS scope, r.renews_at AS renews_at,
+                h.scope_state AS scope_state,
+                (SELECT COUNT(*) FROM engagement_milestones m
+                  WHERE m.engagement_id = e.id AND m.completed_at IS NULL
+                    AND m.due_at IS NOT NULL AND m.due_at < date('now')) AS overdue,
+                (SELECT COUNT(*) FROM engagement_milestones m
+                  WHERE m.engagement_id = e.id AND m.completed_at IS NULL
+                    AND m.due_at IS NOT NULL AND m.due_at >= date('now')
+                    AND m.due_at <= date('now', '+6 days')) AS due_week,
+                (SELECT COUNT(*) FROM engagement_blockers b
+                  WHERE b.engagement_id = e.id AND b.cleared_at IS NULL) AS blockers,
+                (SELECT s.scope FROM engagement_seats s
+                  WHERE s.engagement_id = e.id AND s.revoked_at IS NULL
+                  ORDER BY s.granted_at DESC LIMIT 1) AS seat_scope
+           FROM engagements e
+           LEFT JOIN founder_needs n ON n.id = e.need_id
+           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN partner_retainers r ON r.engagement_id = e.id
+           LEFT JOIN partner_engagement_health h ON h.engagement_id = e.id
+          WHERE e.partner_id = ? AND e.cancelled_at IS NULL
+          ORDER BY e.created_at DESC LIMIT 100`
+      ).bind(me.partner_id).all<{
+        client: string | null; scope: string | null; renews_at: string | null; scope_state: string | null;
+        overdue: number; due_week: number; blockers: number; seat_scope: string | null;
+      }>();
+      return (rows.results || []).map((r) => {
+        const signals = [
+          r.due_week ? `${r.due_week} milestone(s) due in the next seven days` : '',
+          r.overdue ? `${r.overdue} milestone(s) past due` : '',
+          r.blockers ? `${r.blockers} open blocker(s)` : '',
+          r.scope_state === 'drift' ? 'scope recorded as drifting from the SOW' : '',
+        ].filter(Boolean);
+        return `${r.client || 'client not recorded'} — ${r.scope || 'scope not recorded'}; `
+          + `${r.seat_scope ? `embedded seat, scope as recorded by the firm: ${r.seat_scope}; ` : 'project; '}`
+          + `renews: ${r.renews_at ? String(r.renews_at).slice(0, 10) : 'no renewal date recorded'}; `
+          + `${signals.length ? signals.join('; ') : 'NOTHING RECORDED — unrated, not healthy'}`;
       });
     },
   },
@@ -2619,6 +2803,93 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  // ── ADVISOR SURFACES ────────────────────────────────────────────────────
+  //
+  // The first entry for this licence. Scope is the advisor's own row rather
+  // than a company or a project set: `advisors.user_id` is the caller, and a
+  // caller with no advisor row gets [] — never another advisor's inbox.
+
+  'practice/opportunities': {
+    // PR1's band: "Proposal · engagement", drafted from a waiting request
+    // against the advisor's own stored services.
+    //
+    // WHAT IT MAY AND MAY NOT DO. The gather carries two real things — the
+    // request as the founder wrote it, and the services this advisor actually
+    // defined, with the prices and scopes they actually set. Everything a set
+    // of terms needs is therefore on the page already, which is the only
+    // reason a draft here is grounded rather than invented.
+    //
+    // THE PRICE IS THE FAILURE MODE. Asked for terms, a model will name a
+    // number: the request's stated budget, a round figure, or something
+    // "market". Each would be the advisor's own price quoted back to a client
+    // by a machine that made it up. The instruction forbids any figure that is
+    // not one of the advisor's stored prices, and forbids inventing a scope
+    // line the service does not carry.
+    //
+    // AND IT IS A DRAFT, NOT A SEND. Accepting stamps the draft. Nothing here
+    // confirms a booking, writes a decline, or reaches the requester — the
+    // page says so beneath the band, and the label promises terms rather than
+    // an answer.
+    instruction: [
+      'Draft a set of engagement terms for one waiting request, using only the request and the advisor’s own stored services below.',
+      'NEVER invent a price. Use only a price the advisor has actually stored against a service; if none of their services carries a price, say the price is not set rather than proposing one. A budget the requester mentioned is what THEY said they would pay, never what this advisor charges — quote it as theirs if at all, and never as the fee.',
+      'Do not invent scope. The terms may only contain what the chosen service’s stored scope says plus what the request asked for; if the two do not meet, say which part is not covered rather than widening the service to fit.',
+      'Say which stored service the terms are built on, by name. If no service is defined, say that terms cannot be drafted from a template that does not exist.',
+      'This is a draft for the advisor to read. Do not write it as a message to the requester, do not promise a start date the slot does not carry, and do not state that anything has been accepted or sent.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
+        .bind(userId).first<{ id: number; role: string | null }>();
+      const role = String(me?.role || '');
+      if (role !== 'admin' && role !== 'advisor') return [];
+      // The caller's OWN advisor row. No row means no practice, which means an
+      // empty gather and a 409 — never a fallback to whichever advisor sorted
+      // first.
+      const advisor = await c.env.DB.prepare('SELECT id FROM advisors WHERE user_id = ?')
+        .bind(userId).first<{ id: number }>();
+      if (!advisor?.id) return [];
+      const [waiting, services] = await Promise.all([
+        c.env.DB.prepare(
+          `SELECT b.topic, b.notes, b.created_at, u.name AS requester,
+                  s.starts_at AS slot_starts_at
+             FROM advisor_bookings b
+             LEFT JOIN users u ON u.id = b.founder_user_id
+             LEFT JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+            WHERE b.advisor_id = ? AND b.status = 'pending'
+            ORDER BY COALESCE(s.starts_at, b.created_at) ASC
+            LIMIT 12`
+        ).bind(advisor.id).all<Record<string, unknown>>(),
+        c.env.DB.prepare(
+          `SELECT title, kind, duration_note, price_cents, currency, scope
+             FROM advisor_services
+            WHERE advisor_id = ? AND is_active = 1
+            ORDER BY created_at ASC LIMIT 12`
+        ).bind(advisor.id).all<Record<string, unknown>>().catch(() => ({ results: [] as Record<string, unknown>[] })),
+      ]);
+      const asks = (waiting.results || []) as Record<string, unknown>[];
+      // No waiting request is nothing to draft terms FOR. Services alone would
+      // produce a price list, which is not what the band offers.
+      if (!asks.length) return [];
+      const lines = asks.map((b) => (
+        `REQUEST: ${b.requester || 'requester not recorded'}`
+        + `; arrived ${String(b.created_at || 'not recorded').slice(0, 10)}`
+        + `; slot ${b.slot_starts_at ? String(b.slot_starts_at).slice(0, 16) : 'not recorded'}`
+        + `; asked for ${String(b.topic || '').replace(/\s+/g, ' ').slice(0, 300) || 'not recorded'}`
+        + `; notes ${String(b.notes || '').replace(/\s+/g, ' ').slice(0, 300) || 'none'}`
+      ));
+      const defs = ((services.results || []) as Record<string, unknown>[]).map((s) => (
+        `YOUR SERVICE: ${s.title || 'untitled'}`
+        + `; kind ${s.kind || 'not recorded'}`
+        // The price is spelled as unset rather than zeroed: 0 is a price an
+        // advisor may genuinely mean, and the instruction turns on this word.
+        + `; price ${s.price_cents == null ? 'NOT SET' : `${Number(s.price_cents) / 100} ${s.currency || 'USD'}`}`
+        + `; duration ${s.duration_note || 'not recorded'}`
+        + `; scope ${String(s.scope || '').replace(/\s+/g, ' ').slice(0, 400) || 'not recorded'}`
+      ));
+      return defs.length ? [...lines, ...defs] : [...lines, 'YOUR SERVICE: none is defined.'];
+    },
+  },
+
   // ── FOUNDER SURFACES ────────────────────────────────────────────────────
   //
   // The first non-partner entries in this table. Everything above scopes on
@@ -2736,10 +3007,10 @@ const DRAFT_SURFACES: Record<string, {
     gather: async (c, userId, scope) => {
       const pid = await founderProject(c, userId, scope);
       if (pid == null) return [];
-      await ensureMetricsSnapshotsSchema(c.env);
+      await ensureProjectMetricsSchema(c.env);
       const rows = await c.env.DB.prepare(
         `SELECT snapshot_date, mrr, paying_accounts, net_burn, cash_balance
-           FROM metrics_snapshots WHERE project_id = ?
+           FROM project_metrics WHERE project_id = ?
           ORDER BY snapshot_date DESC, id DESC LIMIT 2`
       ).bind(pid).all<{
         snapshot_date: string | null; mrr: number | null; paying_accounts: number | null;
@@ -3042,15 +3313,55 @@ const DRAFT_SURFACES: Record<string, {
       return lines;
     },
   },
+
+  // The investor's memo on ONE room (canvas b6a5f992, "Room · what is thin").
+  // The scope key is a grant uid, and the material comes from `roomMaterial`,
+  // which passes through the same held-grant gate as the room read: a uid the
+  // caller does not hold drafts nothing, and nothing behind an NDA the caller
+  // has not signed is named to the model — only counted.
+  'research/diligence': {
+    instruction: [
+      'Write a short private memo for the investor who holds access to the data room below.',
+      'Say what the founder has staged, and what is thin or absent for diligence, using only the facts listed.',
+      'Name a document only by the name given. Do not guess what any document says.',
+      'Anything behind an NDA is a count only. Do not name or guess it.',
+      'Do not tell the investor what to decide. Add no fact that is not below.',
+    ].join(' '),
+    gather: (c, userId, scope) => roomMaterial(c.env, userId, scope),
+  },
+
+  // The founder's pre-meeting brief on ONE researched fund (canvas c0834993,
+  // FS4d, "Proposal · pre-meeting brief"). The scope key is the fund uid and
+  // the material is that row alone, read owner-scoped. Accept writes the
+  // brief into the fund's note, after what the founder already wrote.
+  'research/funds': {
+    instruction: [
+      'Write a short pre-meeting brief for a founder about to meet the fund below.',
+      'Quote their thesis back in their own words if it is given. Use only the facts listed.',
+      'Turn every fact marked "not recorded" into a question to ask, not a fact to assert.',
+      'Do not name a partner, cite a fund size or an investment, or assume an introduction.',
+      'Do not score the fund or tell the founder what to decide.',
+    ].join(' '),
+    gather: (c, userId, scope) => fundMaterial(c.env, userId, scope),
+    accept: (c, userId, scope, body) => writeBriefIntoNote(c.env, userId, scope, body),
+  },
 };
 
 research.get('/drafts', async (c) => {
   const user = await requireAuth(c);
   const surface = String(c.req.query('surface') || '');
   if (!DRAFT_SURFACES[surface]) return c.json({ detail: 'unknown_surface' }, 400);
-  const rows = await c.env.DB.prepare(
-    `SELECT * FROM research_zone_drafts WHERE owner_user_id = ? AND surface = ? ORDER BY id DESC LIMIT 20`
-  ).bind(user.id, surface).all<ZoneDraftRow>();
+  // A page about ONE record (one room) asks for that record's drafts only, so
+  // a memo on one company's room never shows on another's. Pages that omit
+  // `scope_key` read the surface's newest drafts, as they always have.
+  const scopeKey = c.req.query('scope_key');
+  const rows = scopeKey !== undefined
+    ? await c.env.DB.prepare(
+        `SELECT * FROM research_zone_drafts WHERE owner_user_id = ? AND surface = ? AND scope_key = ? ORDER BY id DESC LIMIT 20`
+      ).bind(user.id, surface, scopeKey).all<ZoneDraftRow>()
+    : await c.env.DB.prepare(
+        `SELECT * FROM research_zone_drafts WHERE owner_user_id = ? AND surface = ? ORDER BY id DESC LIMIT 20`
+      ).bind(user.id, surface).all<ZoneDraftRow>();
   return c.json({ items: (rows.results || []).map(draftDto) });
 });
 
@@ -3117,6 +3428,19 @@ research.patch('/drafts/:uid', async (c) => {
   const edited = typeof body?.body === 'string' ? body.body.trim().slice(0, 8000) : null;
   if (edited !== null && !edited) return c.json({ detail: 'body_empty' }, 400);
 
+  // A surface whose Accept writes a record writes it FIRST, and a refusal
+  // leaves the draft unaccepted — never a stamped draft over a record that
+  // was not written.
+  const current = await c.env.DB.prepare(
+    `SELECT * FROM research_zone_drafts WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, user.id).first<ZoneDraftRow>();
+  if (!current) return c.json({ detail: 'not_found' }, 404);
+  const hook = DRAFT_SURFACES[current.surface]?.accept;
+  if (hook) {
+    const refused = await hook(c, user.id, current.scope_key || '', edited || current.body);
+    if (refused) return c.json({ error: refused, message: ACCEPT_REFUSALS[refused] || 'That could not be written.' }, 409);
+  }
+
   if (edited) {
     await c.env.DB.prepare(
       `UPDATE research_zone_drafts SET body = ?, accepted_at = datetime('now') WHERE uid = ? AND owner_user_id = ?`
@@ -3181,6 +3505,9 @@ const fundDto = (r: FundRow) => ({
   note: r.note,
   source_url: r.source_url,
   created_at: r.created_at,
+  // The dossier's "Last updated" tile. Every write to the row stamps it —
+  // PATCH, and a brief accepted into the note.
+  updated_at: r.updated_at,
 });
 
 const clampText = (v: unknown, max: number): string | null => {
@@ -3197,6 +3524,19 @@ const oneOf = (v: unknown, set: Set<string>): string | null => {
   return set.has(t) ? t : null;
 };
 
+// The raise this page is measured against belongs to the active company, not
+// to the fund and not to "whichever project this founder touched last".
+async function activeRaiseTargetCents(c: any, user: { id: number }): Promise<number | null> {
+  const companyId = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
+  const scope = companyScope(user, companyId, 'p');
+  const target = await c.env.DB.prepare(
+    `SELECT p.raise_target_usd FROM projects p
+      WHERE ${scope.sql} AND p.raise_target_usd IS NOT NULL
+      ORDER BY p.updated_at DESC LIMIT 1`
+  ).bind(...scope.binds).first().catch(() => null) as { raise_target_usd: number } | null;
+  return target?.raise_target_usd ? Math.round(Number(target.raise_target_usd) * 100) : null;
+}
+
 research.get('/funds', async (c) => {
   const user = await requireAuth(c);
   const rows = await c.env.DB.prepare(
@@ -3212,18 +3552,11 @@ research.get('/funds', async (c) => {
   // with two companies raising two different rounds would otherwise get
   // whichever project was touched last, and every fund on this page would be
   // measured against the wrong ask — one company's data on another company's
-  // screen, which is the rule `companyScope` exists to hold. It is also the
-  // only project read in this file, and `company_switcher.test.mjs` caught it
+  // screen, which is the rule `companyScope` exists to hold. `activeRaiseTargetCents`
+  // is that read, shared with the dossier so the list and the fund page cannot
+  // measure against different asks. `company_switcher.test.mjs` caught it
   // reading unscoped before this comment existed.
-  const companyId = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
-  const scope = companyScope(user, companyId, 'p');
-  const target = await c.env.DB.prepare(
-    `SELECT p.raise_target_usd FROM projects p
-      WHERE ${scope.sql} AND p.raise_target_usd IS NOT NULL
-      ORDER BY p.updated_at DESC LIMIT 1`
-  ).bind(...scope.binds).first<{ raise_target_usd: number }>().catch(() => null);
-
-  const askCents = target?.raise_target_usd ? Math.round(Number(target.raise_target_usd) * 100) : null;
+  const askCents = await activeRaiseTargetCents(c, user);
   const overlaps = askCents === null ? null : items.filter((f) => {
     if (f.cheque_min_cents === null && f.cheque_max_cents === null) return false;
     const lo = f.cheque_min_cents ?? 0;
@@ -3245,6 +3578,119 @@ research.get('/funds', async (c) => {
       ? 'No raise target is recorded on the active company\'s project, so there is no ask to compare a cheque range against. The count is absent rather than zero.'
       : null,
   });
+});
+
+// Public discovery catalog. These rows are source-backed identity metadata,
+// not a user's private company research and not financial/diligence claims.
+// The market directory uses Axal's sector taxonomy while the discovery
+// company directory stores Wikidata's free-form industry labels. Keep the
+// mapping explicit so a taxonomy card can produce an honest drill-down.
+const MARKET_SECTOR_ALIASES: Record<string, string[]> = {
+  ai: ['artificial intelligence', 'ai'],
+  'cloud-infrastructure': ['cloud infrastructure', 'cloud computing'],
+  biotech: ['biotechnology', 'biotech'],
+  cybersecurity: ['cybersecurity', 'computer security', 'information security'],
+  fintech: ['financial technology', 'financial services', 'fintech'],
+  autotech: ['automotive industry', 'automotive'],
+  telecommunications: ['telecommunications industry', 'telecommunications'],
+  software: ['software industry', 'software'],
+  'e-commerce': ['e-commerce', 'electronic commerce', 'online shopping'],
+  retail: ['retail'],
+  space: ['space industry', 'space'],
+  'media-content': ['media industry', 'mass media', 'news media'],
+  'food-and-beverage': ['food industry', 'food and beverage'],
+  energytech: ['energy industry', 'energy'],
+  hardware: ['hardware industry', 'hardware'],
+  robotics: ['robotics'],
+  pharmaceuticals: ['pharmaceutical industry', 'pharmaceuticals'],
+  'health-hospital-services': ['health care', 'healthcare', 'hospital'],
+};
+
+research.get('/company-directory', async (c) => {
+  await requireAuth(c);
+  const q = String(c.req.query('q') || '').trim().slice(0, 120);
+  const country = String(c.req.query('country') || '').trim().slice(0, 120);
+  const sectorKey = String(c.req.query('sector') || '').trim().slice(0, 120).toLowerCase();
+  const sectorLabel = sectorKey.replace(/-/g, ' ');
+  const sectorTerms = [...new Set(MARKET_SECTOR_ALIASES[sectorKey] || [sectorLabel])].filter(Boolean);
+  const sectorClause = sectorKey ? ` AND (${sectorTerms.map(() => `LOWER(COALESCE(sector, '')) LIKE ?`).join(' OR ')})` : '';
+  const sql = `SELECT uid, name, website, country, founded_year, sector, source_name,
+            source_url, source_license, as_of
+       FROM research_company_directory
+      WHERE (? = '' OR name LIKE '%' || ? || '%' OR website LIKE '%' || ? || '%')
+        AND (? = '' OR country = ?)
+        ${sectorClause}
+      ORDER BY name COLLATE NOCASE LIMIT 1000`;
+  const bindings = [q, q, q, country, country, ...sectorTerms.map((term) => `%${term.toLowerCase()}%`)];
+  const rows = await c.env.DB.prepare(sql).bind(...bindings).all();
+  return c.json({ items: rows.results || [], requested_sector: sectorKey || null, matched_terms: sectorKey ? sectorTerms : [], source: 'Wikidata', source_boundary: 'Discovery metadata only; taxonomy matches are normalized labels and do not equal the separate taxonomy company count.' });
+});
+
+research.get('/company-directory/:uid', async (c) => {
+  await requireAuth(c);
+  const row = await c.env.DB.prepare(
+    `SELECT uid, name, website, country, founded_year, sector, source_name,
+            source_url, source_license, as_of
+       FROM research_company_directory WHERE uid = ?`
+  ).bind(c.req.param('uid')).first();
+  if (!row) return c.json({ detail: 'Not found' }, 404);
+  return c.json({ item: row, source_boundary: 'Discovery metadata only; no funding, valuation, revenue, market-size, or diligence claims.' });
+});
+
+// Public EuroTech fund catalog. Spreadsheet observations are reported fund-size
+// snapshots only; they are not private-fund NAV, IRR, TVPI, or performance data.
+research.get('/fund-directory', async (c) => {
+  await requireAuth(c);
+  const q = String(c.req.query('q') || '').trim().slice(0, 120);
+  const hq = String(c.req.query('hq') || '').trim().slice(0, 120);
+  const rows = await c.env.DB.prepare(
+    `SELECT uid, name, website, linkedin, hq, fund_number, fund_size_cents,
+            fund_date, quarter, fund_year, sector_focus, notable_lps,
+            eif_flag, eifo_flag, source_name, source_url, as_of
+       FROM research_fund_directory
+      WHERE (? = '' OR name LIKE '%' || ? || '%' OR sector_focus LIKE '%' || ? || '%')
+        AND (? = '' OR hq = ?)
+      ORDER BY name COLLATE NOCASE LIMIT 2000`
+  ).bind(q, q, q, hq, hq).all();
+  return c.json({ items: rows.results || [], source: 'EuroTech VC Funds (public spreadsheet)', source_boundary: 'Reported fund-size snapshots and discovery metadata only; no NAV, IRR, TVPI, or performance is inferred.' });
+});
+
+research.get('/fund-directory/:uid', async (c) => {
+  await requireAuth(c);
+  const item = await c.env.DB.prepare(
+    `SELECT uid, name, website, linkedin, hq, fund_number, fund_size_cents,
+            fund_date, quarter, fund_year, sector_focus, notable_lps,
+            eif_flag, eifo_flag, source_name, source_url, as_of
+       FROM research_fund_directory WHERE uid = ?`
+  ).bind(c.req.param('uid')).first();
+  if (!item) return c.json({ detail: 'Not found' }, 404);
+  const reports = await c.env.DB.prepare(
+    `SELECT period, report_date, fund_size_cents, source_url
+       FROM research_fund_directory_reports WHERE fund_uid = ? ORDER BY period ASC`
+  ).bind(c.req.param('uid')).all();
+  return c.json({ item, reports: reports.results || [], source_boundary: 'Reported fund-size snapshots and discovery metadata only; no NAV, IRR, TVPI, or performance is inferred.' });
+});
+
+research.get('/market-directory', async (c) => {
+  await requireAuth(c);
+  const q = String(c.req.query('q') || '').trim().slice(0, 120);
+  const rows = await c.env.DB.prepare(
+    `SELECT slug, name, company_count, source_name, source_boundary, as_of
+       FROM research_market_directory
+      WHERE (? = '' OR name LIKE '%' || ? || '%')
+      ORDER BY name COLLATE NOCASE LIMIT 200`
+  ).bind(q, q).all();
+  return c.json({ items: rows.results || [], source_boundary: 'Counts are discovery-universe counts supplied by Axal, not TAM or valuation.' });
+});
+
+research.get('/market-directory/:slug', async (c) => {
+  await requireAuth(c);
+  const row = await c.env.DB.prepare(
+    `SELECT slug, name, company_count, source_name, source_boundary, as_of
+       FROM research_market_directory WHERE slug = ?`
+  ).bind(c.req.param('slug')).first();
+  if (!row) return c.json({ detail: 'Not found' }, 404);
+  return c.json({ item: row, source_boundary: 'Counts are discovery-universe counts supplied by Axal, not TAM or valuation.' });
 });
 
 research.post('/funds', async (c) => {
@@ -3271,6 +3717,161 @@ research.post('/funds', async (c) => {
     `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
   ).bind(uid, user.id).first<FundRow>();
   return c.json(fundDto(row as FundRow), 201);
+});
+
+// ---------------------------------------------------------------------------
+// Funds ↔ Google Sheets
+//
+// Dedicated Sheets OAuth (not calendar's token table, not calendar's scopes).
+// SUPER ADMIN ONLY — a founder's shortlist stays on Axal; they do not get a
+// Google copy of it. Sheet routes are registered BEFORE `/funds/:uid` so
+// "sheet" is never captured as a uid. Push never deletes. Pull overwrites
+// the sheet's data rows.
+// ---------------------------------------------------------------------------
+
+research.get('/funds/sheet/status', async (c) => {
+  const user = await requireSuperAdmin(c);
+  const configured = googleSheetsOAuthAvailable(c.env);
+  const missing = preflightSheetsOAuthSecrets(c.env);
+  const tok = configured ? await loadSheetsToken(c.env, user.id) : null;
+  const link = await loadSheetLink(c.env, user.id);
+  return c.json({
+    configured,
+    missing: configured ? [] : missing,
+    connected: configured ? !!tok : false,
+    google_email: tok?.google_email || null,
+    spreadsheet_id: link?.spreadsheet_id || null,
+    sheet_gid: link ? Number(link.sheet_gid) : null,
+    sheet_title: link?.sheet_title || null,
+    last_pulled_at: link?.last_pulled_at || null,
+    last_pushed_at: link?.last_pushed_at || null,
+    last_error: link?.last_error || null,
+    suggested_url: SUGGESTED_SHEET_URL,
+  });
+});
+
+research.post('/funds/sheet/connect', async (c) => {
+  const user = await requireSuperAdmin(c);
+  const missing = preflightSheetsOAuthSecrets(c.env);
+  if (missing.length > 0) {
+    return c.json({
+      error: {
+        code: 'oauth_config_missing',
+        message: `Google Sheets is not configured on this server. Missing: ${missing.join(', ')}.`,
+        missing,
+      },
+    }, 503);
+  }
+  const loginHint = user?.email ? String(user.email).toLowerCase().trim() : undefined;
+  const state = await makeSheetsState(c.env, user.id);
+  const url = buildSheetsAuthUrl(c.env, state, loginHint);
+  return c.json({ redirect_url: url, auth_url: url });
+});
+
+research.get('/funds/sheet/callback', async (c) => {
+  const dest = `${fundsAppBase(c.env)}/research/funds`;
+  const fail = (reason: string) => new Response(null, {
+    status: 302,
+    headers: { Location: `${dest}?sheets=error&reason=${encodeURIComponent(reason.slice(0, 80))}` },
+  });
+  try {
+    const url = new URL(c.req.url);
+    const code = url.searchParams.get('code');
+    const stateRaw = url.searchParams.get('state');
+    const error = url.searchParams.get('error');
+    if (error || !code || !stateRaw) return fail(error || 'invalid_state');
+    const userId = await consumeSheetsState(c.env, stateRaw);
+    if (!userId) return fail('invalid_state');
+    // The state names who started Connect. Connect is super-admin only, so a
+    // leftover or forged nonce for anyone else must not land a refresh token.
+    const row = await c.env.DB.prepare(
+      'SELECT id, role FROM users WHERE id = ?',
+    ).bind(userId).first<{ id: number; role: string }>();
+    if (!row) return fail('forbidden');
+    const actor = await hydrateSuperAdmin(c.env, row as any);
+    if (!isSuperAdmin(actor as any)) return fail('forbidden');
+    const tokens = await exchangeSheetsCode(c.env, code);
+    const refreshToken = tokens?.refresh_token;
+    if (!refreshToken) return fail('no_refresh_token');
+    const info = await fetchSheetsUserinfo(tokens.access_token || '');
+    await saveSheetsToken(c.env, { id: userId }, {
+      refreshToken,
+      scope: tokens.scope || '',
+      googleEmail: info.email || null,
+      googleSub: String(info.id || ''),
+    });
+    return new Response(null, {
+      status: 302,
+      headers: { Location: `${dest}?sheets=connected` },
+    });
+  } catch (e: any) {
+    const msg = String(e?.message || e);
+    console.error('[SHEETS:callback]', msg);
+    if (msg.startsWith('token_exchange_failed')) return fail('token_exchange');
+    if (msg.startsWith('cryptoBox:secret_missing')) return fail('secret_missing');
+    return fail('callback_failed');
+  }
+});
+
+research.delete('/funds/sheet', async (c) => {
+  const user = await requireSuperAdmin(c);
+  await deleteSheetsToken(c.env, user);
+  return c.json({ ok: true });
+});
+
+research.post('/funds/sheet/disconnect', async (c) => {
+  const user = await requireSuperAdmin(c);
+  await deleteSheetsToken(c.env, user);
+  return c.json({ ok: true });
+});
+
+research.patch('/funds/sheet/link', async (c) => {
+  const user = await requireSuperAdmin(c);
+  const body = await c.req.json<any>().catch(() => ({}));
+  const raw = String(body.url || body.spreadsheet_url || body.spreadsheet_id || '').trim();
+  const parsed = parseSpreadsheetRef(raw);
+  if ('error' in parsed) return c.json({ detail: parsed.error }, 400);
+  const existing = await loadSheetLink(c.env, user.id);
+  const gid = parsed.sheet_gid != null
+    ? parsed.sheet_gid
+    : (body.sheet_gid != null && Number.isFinite(Number(body.sheet_gid))
+      ? Math.trunc(Number(body.sheet_gid))
+      : (existing ? Number(existing.sheet_gid) : 0));
+  const link = await upsertSheetLink(c.env, user, parsed.spreadsheet_id, gid);
+  return c.json({
+    spreadsheet_id: link.spreadsheet_id,
+    sheet_gid: Number(link.sheet_gid),
+  });
+});
+
+research.post('/funds/sheet/pull', async (c) => {
+  const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) {
+    return c.json({ detail: 'Google Sheets is not configured on this server yet.' }, 503);
+  }
+  try {
+    return c.json(await pullFundsToSheet(c.env, user));
+  } catch (e: any) {
+    const msg = String(e?.message || e);
+    if (msg === 'not_connected') return c.json({ detail: 'Connect a Google account first' }, 409);
+    if (msg === 'no_spreadsheet') return c.json({ detail: 'Save a spreadsheet URL first' }, 409);
+    return refuse(c, 502, { code: 'sheet_write_failed', message: 'Could not write to the sheet. Check that the connected Google account can edit it and try again.', raw: msg, audience: 'owner' });
+  }
+});
+
+research.post('/funds/sheet/push', async (c) => {
+  const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) {
+    return c.json({ detail: 'Google Sheets is not configured on this server yet.' }, 503);
+  }
+  try {
+    return c.json(await pushFundsFromSheet(c.env, user));
+  } catch (e: any) {
+    const msg = String(e?.message || e);
+    if (msg === 'not_connected') return c.json({ detail: 'Connect a Google account first' }, 409);
+    if (msg === 'no_spreadsheet') return c.json({ detail: 'Save a spreadsheet URL first' }, 409);
+    return refuse(c, 502, { code: 'sheet_read_failed', message: 'Could not read the sheet. Check that the connected Google account can open it and try again.', raw: msg, audience: 'owner' });
+  }
 });
 
 research.patch('/funds/:uid', async (c) => {
@@ -3318,6 +3919,162 @@ research.delete('/funds/:uid', async (c) => {
   if (!res.meta?.changes) return c.json({ detail: 'Not found' }, 404);
   return c.json({ ok: true });
 });
+
+// Quarterly public reporting snapshots for a founder's fund dossier. A report
+// is not inferred from the fund directory: every metric remains nullable and
+// must carry a source URL when entered.
+research.get('/funds/:uid/reports', async (c) => {
+  const user = await requireAuth(c);
+  const fundUid = c.req.param('uid');
+  const fund = await c.env.DB.prepare(
+    `SELECT uid FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(fundUid, user.id).first();
+  if (!fund) return c.json({ detail: 'Not found' }, 404);
+  const rows = await c.env.DB.prepare(
+    `SELECT uid, period, report_date, fund_size_cents, nav_cents,
+            quarterly_return_bps, net_irr_bps, tvpi_bps,
+            source_url, report_url, notes, created_at, updated_at
+       FROM research_fund_reports
+      WHERE fund_uid = ? AND owner_user_id = ?
+      ORDER BY period ASC`
+  ).bind(fundUid, user.id).all();
+  return c.json({ items: rows.results || [] });
+});
+
+research.post('/funds/:uid/reports', async (c) => {
+  const user = await requireAuth(c);
+  const fundUid = c.req.param('uid');
+  const fund = await c.env.DB.prepare(
+    `SELECT uid FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(fundUid, user.id).first();
+  if (!fund) return c.json({ detail: 'Not found' }, 404);
+  const body = await c.req.json<any>().catch(() => ({}));
+  const period = String(body.period || '').trim();
+  if (!/^\d{4}-Q[1-4]$/.test(period)) return c.json({ detail: 'Period must use YYYY-Q1 through YYYY-Q4.' }, 400);
+  const sourceUrl = clampText(body.source_url, 500);
+  if (!sourceUrl) return c.json({ detail: 'A source URL is required for a quarterly report.' }, 400);
+  const uid = newUid();
+  const now = nowIso();
+  await c.env.DB.prepare(
+    `INSERT INTO research_fund_reports
+       (uid, fund_uid, owner_user_id, period, report_date, fund_size_cents,
+        nav_cents, quarterly_return_bps, net_irr_bps, tvpi_bps, source_url,
+        report_url, notes, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (fund_uid, owner_user_id, period) DO UPDATE SET
+       report_date = excluded.report_date,
+       fund_size_cents = excluded.fund_size_cents,
+       nav_cents = excluded.nav_cents,
+       quarterly_return_bps = excluded.quarterly_return_bps,
+       net_irr_bps = excluded.net_irr_bps,
+       tvpi_bps = excluded.tvpi_bps,
+       source_url = excluded.source_url,
+       report_url = excluded.report_url,
+       notes = excluded.notes,
+       updated_at = excluded.updated_at`
+  ).bind(
+    uid, fundUid, user.id, period, clampText(body.report_date, 30),
+    clampInt(body.fund_size_cents), clampInt(body.nav_cents),
+    clampInt(body.quarterly_return_bps), clampInt(body.net_irr_bps),
+    clampInt(body.tvpi_bps), sourceUrl, clampText(body.report_url, 500),
+    clampText(body.notes, 2000), now, now,
+  ).run();
+  const row = await c.env.DB.prepare(
+    `SELECT uid, period, report_date, fund_size_cents, nav_cents,
+            quarterly_return_bps, net_irr_bps, tvpi_bps,
+            source_url, report_url, notes, created_at, updated_at
+       FROM research_fund_reports
+      WHERE fund_uid = ? AND owner_user_id = ? AND period = ?`
+  ).bind(fundUid, user.id, period).first();
+  return c.json(row, 201);
+});
+
+research.delete('/funds/:uid/reports/:reportUid', async (c) => {
+  const user = await requireAuth(c);
+  const result = await c.env.DB.prepare(
+    `DELETE FROM research_fund_reports
+      WHERE uid = ? AND fund_uid = ? AND owner_user_id = ?`
+  ).bind(c.req.param('reportUid'), c.req.param('uid'), user.id).run();
+  if (!result.meta?.changes) return c.json({ detail: 'Not found' }, 404);
+  return c.json({ ok: true });
+});
+
+
+// Registered AFTER the sheet block. `research_stores_scoping.test.ts` slices
+// every sheet handler from `/funds/sheet/status` up to `patch('/funds/:uid'`
+// and requires each of them to be Super Admin. A founder route placed above
+// that line — the dossier GET, or the quarterly report routes — would be
+// counted as a sheet route and either fail the test or, if someone "fixed"
+// it by switching the read to requireSuperAdmin, hide a founder's own
+// dossier from them.
+research.get('/funds/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const row = await c.env.DB.prepare(
+    `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(c.req.param('uid'), user.id).first<FundRow>();
+  if (!row) return c.json({ detail: 'Not found' }, 404);
+  const askCents = await activeRaiseTargetCents(c, user);
+  return c.json({
+    ...fundDto(row),
+    raise_target_cents: askCents,
+    overlap_note: fundOverlapNote(row, askCents),
+  });
+});
+
+/** The longest note a fund row takes, the same cap PATCH applies. */
+const FUND_NOTE_MAX = 2000;
+
+const ACCEPT_REFUSALS: Record<string, string> = {
+  fund_not_found: 'This fund is not on your list any more, so the brief was not written into a note.',
+  note_full: 'Your note and this brief together are over 2,000 characters. Shorten one of them, then accept again.',
+};
+
+/**
+ * The facts a pre-meeting brief is drafted from: one fund row the caller owns.
+ * Empty — so the model is never reached — when the row is not theirs, or when
+ * it holds neither a thesis nor a note, because a brief over a name alone
+ * would be written from the model's own knowledge of the fund.
+ */
+async function fundMaterial(env: Env, userId: number, fundUid: string): Promise<string[]> {
+  if (!fundUid) return [];
+  const f = await env.DB.prepare(
+    `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(fundUid, userId).first<FundRow>();
+  if (!f || (!f.thesis && !f.note)) return [];
+  const usdOf = (cents: number | null) => (cents == null ? null : `$${Math.round(cents / 100).toLocaleString('en-US')}`);
+  const nr = 'not recorded';
+  return [
+    `Fund: ${f.name}`,
+    `Their thesis, in their words: ${f.thesis ? `"${f.thesis}"` : nr}`,
+    `The founder's research note: ${f.note || nr}`,
+    `Cheque range: ${usdOf(f.cheque_min_cents) ?? nr} to ${usdOf(f.cheque_max_cents) ?? nr}`,
+    `Stage fit (the founder's read): ${f.stage_fit || nr}`,
+    `Route in: ${f.path === 'warm' ? 'warm path' : f.path === 'cold' ? 'no route in' : nr}`,
+    `Status: ${f.status}${f.status === 'passed' ? `, reason: ${f.pass_reason || nr}` : ''}`,
+    `Source: ${f.source_url || nr}`,
+    `Partner who will be in the room: ${nr}`,
+    `Public fund size and what they have funded: ${nr}`,
+  ];
+}
+
+/**
+ * Accept on the brief: append it to the fund's note, after the founder's own
+ * words, and stamp the row. It never replaces the note, and it refuses rather
+ * than truncating either text to fit the column.
+ */
+async function writeBriefIntoNote(env: Env, userId: number, fundUid: string, brief: string): Promise<string | null> {
+  const f = await env.DB.prepare(
+    `SELECT note FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(fundUid, userId).first<{ note: string | null }>();
+  if (!f) return 'fund_not_found';
+  const text = brief.trim();
+  const next = f.note ? `${f.note.trim()}\n\nPre-meeting brief:\n${text}` : `Pre-meeting brief:\n${text}`;
+  if (next.length > FUND_NOTE_MAX) return 'note_full';
+  await env.DB.prepare(
+    `UPDATE research_funds SET note = ?, updated_at = ? WHERE uid = ? AND owner_user_id = ?`
+  ).bind(next, nowIso(), fundUid, userId).run();
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Benchmarks (migration 217)
@@ -3406,11 +4163,177 @@ research.post('/benchmarks', async (c) => {
 
 research.delete('/benchmarks/:uid', async (c) => {
   const user = await requireAuth(c);
-  const res = await c.env.DB.prepare(
-    `DELETE FROM research_benchmarks WHERE uid = ? AND owner_user_id = ?`
-  ).bind(c.req.param('uid'), user.id).run();
-  if (!res.meta?.changes) return c.json({ detail: 'Not found' }, 404);
+  // Its named constituents go with it (migration 303). D1 does not enforce the
+  // foreign key's cascade inside a batch, so the rows are removed by hand,
+  // owner-scoped, before the benchmark itself.
+  const row = await c.env.DB.prepare(
+    `SELECT id FROM research_benchmarks WHERE uid = ? AND owner_user_id = ?`
+  ).bind(c.req.param('uid'), user.id).first<{ id: number }>();
+  if (!row) return c.json({ detail: 'Not found' }, 404);
+  await c.env.DB.prepare(
+    `DELETE FROM research_benchmark_constituents WHERE benchmark_id = ? AND owner_user_id = ?`
+  ).bind(row.id, user.id).run();
+  await c.env.DB.prepare(
+    `DELETE FROM research_benchmarks WHERE id = ? AND owner_user_id = ?`
+  ).bind(row.id, user.id).run();
   return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// One benchmark (canvas f2eb2046) and its named constituents (migration 303)
+// ---------------------------------------------------------------------------
+//
+// EVERY READ AND WRITE IS OWNER-SCOPED, like the list. A benchmark uid that is
+// not the caller's answers exactly as one that does not exist.
+//
+// THE CHECK IS RE-VALIDATED ON EVERY EDIT. Migration 217 refuses a peer figure
+// without its source and sample size; PATCH merges the edit onto the stored row
+// and refuses the RESULT with a sentence before the schema would refuse it
+// with a constraint error. Clearing the peer figure is allowed — the row goes
+// back to tracked — unless constituents are named against it.
+//
+// A THIN BASE IS THIS ROW'S OWN n, not the list's minimum: the detail page's
+// banner reads the comparison in front of it.
+
+const BENCH_THIN_AT = 10;
+const BENCHMARK_NOT_FOUND = 'This benchmark is not on your list.';
+const PEER_BASE_REQUIRED = 'A peer figure needs its source and its sample size. A benchmark presented '
+  + 'without its base is arithmetic wearing a metric’s clothes.';
+
+interface ConstituentRow {
+  id: number; uid: string; benchmark_id: number; owner_user_id: number;
+  name: string; value: string | null; as_of: string | null; position: number; created_at: string;
+}
+
+const constituentDto = (r: ConstituentRow) => ({
+  uid: r.uid, name: r.name, value: r.value, as_of: r.as_of, created_at: r.created_at,
+});
+
+/** The caller's benchmark by uid, or null. */
+async function ownedBenchmark(env: Env, userId: number, uid: string): Promise<BenchRow | null> {
+  const row = await env.DB.prepare(
+    `SELECT * FROM research_benchmarks WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, userId).first<BenchRow>();
+  return row || null;
+}
+
+/** The detail read: the row, its constituents, and what the page says about them. */
+async function benchmarkDetail(env: Env, userId: number, row: BenchRow) {
+  const cons = await env.DB.prepare(
+    `SELECT * FROM research_benchmark_constituents
+      WHERE benchmark_id = ? AND owner_user_id = ?
+      ORDER BY position ASC, id ASC`
+  ).bind(row.id, userId).all<ConstituentRow>();
+  const constituents = (cons.results || []).map(constituentDto);
+  const item = { ...benchDto(row), updated_at: row.updated_at };
+  const n = item.is_comparison ? Number(row.peer_sample_size) : null;
+  return {
+    item,
+    constituents,
+    // Only a comparison has a sample to be thin, or a count to disagree with.
+    thin: n !== null && n < BENCH_THIN_AT,
+    sample_note: n !== null && n < BENCH_THIN_AT
+      ? `The smallest peer set behind this comparison is ${n}. A median over a set that size moves with one member and should not be presented as a market rate.`
+      : null,
+    count_mismatch: n !== null && constituents.length > 0 && constituents.length !== n,
+    mismatch_note: n !== null && constituents.length > 0 && constituents.length !== n
+      ? `${constituents.length} ${constituents.length === 1 ? 'constituent is' : 'constituents are'} named against a stored sample of ${n}.`
+      : null,
+  };
+}
+
+research.get('/benchmarks/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const row = await ownedBenchmark(c.env, user.id, c.req.param('uid'));
+  if (!row) return c.json({ error: 'benchmark_not_found', message: BENCHMARK_NOT_FOUND }, 404);
+  return c.json(await benchmarkDetail(c.env, user.id, row));
+});
+
+research.patch('/benchmarks/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const row = await ownedBenchmark(c.env, user.id, c.req.param('uid'));
+  if (!row) return c.json({ error: 'benchmark_not_found', message: BENCHMARK_NOT_FOUND }, 404);
+  const b = await c.req.json<any>().catch(() => ({}));
+  const has = (k: string) => Object.prototype.hasOwnProperty.call(b, k);
+  const next = {
+    metric: has('metric') ? clampText(b.metric, 200) : row.metric,
+    our_value: has('our_value') ? clampText(b.our_value, 100) : row.our_value,
+    peer_value: has('peer_value') ? clampText(b.peer_value, 100) : row.peer_value,
+    peer_source: has('peer_source') ? clampText(b.peer_source, 300) : row.peer_source,
+    peer_sample_size: has('peer_sample_size') ? clampInt(b.peer_sample_size) : row.peer_sample_size,
+    peer_as_of: has('peer_as_of') ? clampText(b.peer_as_of, 40) : row.peer_as_of,
+    reading: has('reading') ? clampText(b.reading, 2000) : row.reading,
+  };
+  if (!next.metric) return c.json({ error: 'metric_required', message: 'A benchmark needs a metric.' }, 400);
+  if (next.peer_sample_size !== null && next.peer_sample_size < 1) {
+    return c.json({ error: 'sample_size_invalid', message: 'A sample size is at least 1.' }, 400);
+  }
+  // The merged row, not the request, is what must satisfy migration 217.
+  if (next.peer_value && (!next.peer_source || next.peer_sample_size === null)) {
+    return c.json({ error: 'peer_base_required', message: PEER_BASE_REQUIRED }, 400);
+  }
+  if (!next.peer_value && row.peer_value) {
+    const named = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM research_benchmark_constituents WHERE benchmark_id = ? AND owner_user_id = ?`
+    ).bind(row.id, user.id).first<{ n: number }>();
+    if (Number(named?.n) > 0) {
+      return c.json({
+        error: 'constituents_exist',
+        message: 'Remove the named constituents before clearing the peer figure. They are members of a peer set this row would no longer have.',
+      }, 409);
+    }
+  }
+  await c.env.DB.prepare(
+    `UPDATE research_benchmarks
+        SET metric = ?, our_value = ?, peer_value = ?, peer_source = ?, peer_sample_size = ?,
+            peer_as_of = ?, reading = ?, updated_at = ?
+      WHERE id = ? AND owner_user_id = ?`
+  ).bind(
+    next.metric, next.our_value, next.peer_value, next.peer_source, next.peer_sample_size,
+    next.peer_as_of, next.reading, nowIso(), row.id, user.id,
+  ).run();
+  const fresh = await ownedBenchmark(c.env, user.id, row.uid);
+  return c.json(await benchmarkDetail(c.env, user.id, fresh as BenchRow));
+});
+
+research.post('/benchmarks/:uid/constituents', async (c) => {
+  const user = await requireAuth(c);
+  const row = await ownedBenchmark(c.env, user.id, c.req.param('uid'));
+  if (!row) return c.json({ error: 'benchmark_not_found', message: BENCHMARK_NOT_FOUND }, 404);
+  // A constituent is a member of a peer set. A tracked row has none to join.
+  if (!row.peer_value) {
+    return c.json({
+      error: 'not_a_comparison',
+      message: 'This benchmark is tracked, not compared. Enter a sourced peer figure before naming who it was measured over.',
+    }, 409);
+  }
+  const b = await c.req.json<any>().catch(() => ({}));
+  const name = clampText(b.name, 200);
+  if (!name) return c.json({ error: 'constituent_name_required', message: 'A constituent needs a name.' }, 400);
+  const last = await c.env.DB.prepare(
+    `SELECT MAX(position) AS p FROM research_benchmark_constituents WHERE benchmark_id = ? AND owner_user_id = ?`
+  ).bind(row.id, user.id).first<{ p: number | null }>();
+  await c.env.DB.prepare(
+    `INSERT INTO research_benchmark_constituents (uid, benchmark_id, owner_user_id, name, value, as_of, position, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    newUid(), row.id, user.id, name, clampText(b.value, 100), clampText(b.as_of, 40),
+    last?.p == null ? 0 : Number(last.p) + 1, nowIso(),
+  ).run();
+  return c.json(await benchmarkDetail(c.env, user.id, row), 201);
+});
+
+research.delete('/benchmarks/:uid/constituents/:cuid', async (c) => {
+  const user = await requireAuth(c);
+  const row = await ownedBenchmark(c.env, user.id, c.req.param('uid'));
+  if (!row) return c.json({ error: 'benchmark_not_found', message: BENCHMARK_NOT_FOUND }, 404);
+  const res = await c.env.DB.prepare(
+    `DELETE FROM research_benchmark_constituents WHERE uid = ? AND benchmark_id = ? AND owner_user_id = ?`
+  ).bind(c.req.param('cuid'), row.id, user.id).run();
+  if (!res.meta?.changes) {
+    return c.json({ error: 'constituent_not_found', message: 'That constituent is not on this benchmark.' }, 404);
+  }
+  return c.json(await benchmarkDetail(c.env, user.id, row));
 });
 
 // ---------------------------------------------------------------------------
@@ -3435,7 +4358,7 @@ research.delete('/benchmarks/:uid', async (c) => {
 research.get('/diligence', async (c) => {
   const user = await requireAuth(c);
   const rows = await c.env.DB.prepare(
-    `SELECT g.uid AS grant_uid, g.created_at, g.expires_at,
+    `SELECT g.uid AS grant_uid, g.created_at, g.expires_at, g.granted_by_user_id,
             p.uid AS project_uid, p.name AS project_name,
             (SELECT COUNT(*) FROM data_room_files f WHERE f.project_id = g.project_id) AS file_total,
             (SELECT COUNT(*) FROM data_room_files f
@@ -3445,23 +4368,42 @@ research.get('/diligence', async (c) => {
        FROM data_room_grants g
        JOIN projects p ON p.id = g.project_id
       WHERE g.investor_user_id = ? AND g.status = 'active'
-        AND (g.expires_at IS NULL OR g.expires_at > datetime('now'))
+        AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))
       ORDER BY g.created_at DESC LIMIT 200`
   ).bind(user.id, user.id).all<any>();
 
-  const items = (rows.results || []).map((r: any) => ({
-    grant_uid: r.grant_uid,
-    project_uid: r.project_uid,
-    project_name: r.project_name,
-    // Two numbers, never one ratio: what is absent from a room is diligence
-    // information too, and a percentage hides which rooms are thin.
-    file_open: Number(r.file_open || 0),
-    file_total: Number(r.file_total || 0),
-    withheld_behind_nda: Number(r.file_total || 0) - Number(r.file_open || 0),
-    last_opened_at: r.last_opened_at ?? null,
-    expires_at: r.expires_at ?? null,
-    created_at: r.created_at,
-  }));
+  // "Open to you" is what THIS investor may open, not what the founder marked
+  // `open`. An investor holding a live NDA with the founder who granted the
+  // room may open the `nda` files too — the download route already lets them —
+  // so counting only `visibility = 'open'` told a signed investor that files
+  // were behind an NDA they had already signed. One NDA check per granting
+  // founder, through the data room's own `ndaActive`, never a second copy of
+  // its predicate here.
+  const ndaByFounder = new Map<number, boolean>();
+  for (const r of rows.results || []) {
+    const founder = Number(r.granted_by_user_id);
+    if (!ndaByFounder.has(founder)) ndaByFounder.set(founder, await ndaActive(c.env, founder, user.id));
+  }
+
+  const items = (rows.results || []).map((r: any) => {
+    const total = Number(r.file_total);
+    const nda = ndaByFounder.get(Number(r.granted_by_user_id)) === true;
+    const open = nda ? total : Number(r.file_open);
+    return {
+      grant_uid: r.grant_uid,
+      project_uid: r.project_uid,
+      project_name: r.project_name,
+      nda_signed: nda,
+      // Two numbers, never one ratio: what is absent from a room is diligence
+      // information too, and a percentage hides which rooms are thin.
+      file_open: open,
+      file_total: total,
+      withheld_behind_nda: total - open,
+      last_opened_at: r.last_opened_at ?? null,
+      expires_at: r.expires_at ?? null,
+      created_at: r.created_at,
+    };
+  });
 
   return c.json({
     items,
@@ -3476,6 +4418,243 @@ research.get('/diligence', async (c) => {
     deal_stage: null,
     deal_stage_note: 'A data-room grant and a deal are separate records with no key between them, '
       + 'so no deal stage is attached to a room here. Opening the deal shows its own stage.',
+  });
+});
+
+// ---------------------------------------------------------------------------
+// One room, and one document in it — keyed by the GRANT, read by its holder.
+// ---------------------------------------------------------------------------
+//
+// The list above says which rooms are open to you; these two are the room and
+// the document pages behind it (canvases b6a5f992 and 96463a46). They read the
+// data room's own tables and pass through the data room's own gate —
+// `activeGrant`, `ndaActive` and `logAccess` from `data_room.ts` — so there is
+// one definition of "this investor may see this" in the worker, not two.
+//
+// KEYED BY GRANT UID, NOT PROJECT UID. The grant is the thing the investor
+// holds. A grant uid is resolved only against rows naming the caller as the
+// investor, and a uid they do not hold answers exactly like one that does not
+// exist: telling the two apart would tell an investor which rooms exist.
+//
+// OPENING THIS PAGE IS OPENING THE ROOM. The room read lists filenames, which
+// is what `GET /api/data-room/shared/:projectUid` logs as `open_room` and the
+// founder sees in their access log. Listing the same names from a second URL
+// without the same entry would be a quiet way into the room, so this read
+// logs `open_room` too. The document read logs nothing of its own: it shows
+// one name the room read already showed, and the download it offers goes
+// through the data room's own route, which logs `download`.
+//
+// WHAT THE ACTIVITY IS. Only the caller's own rows — the founder's view of
+// the same log shows investor emails, and nothing here reaches another
+// investor's. A row about an `nda` file keeps its time and action but loses
+// its name once the NDA that let the caller download it has lapsed: a name
+// the gate would withhold today is not re-served from the log.
+//
+// AND WHAT `download` MEANS. The log records a link being ISSUED, not used.
+// The link is single-use and short-lived (`signedDownload.ts`), but whether it
+// was followed is not joined here, so the response says "issued", never
+// "downloaded".
+
+const ROOM_NOT_OPEN = 'This room is not open to you. The grant may have been revoked or expired, or it was never yours.';
+const DOWNLOAD_NOTE = 'Each entry is a single-use link issued to you, valid for two minutes. '
+  + 'Whether the link was followed is not recorded here.';
+
+type HeldRoom = {
+  grant: { id: number; uid: string; project_id: number; granted_by_user_id: number;
+    expires_at: string | null; created_at: string };
+  project: { id: number; uid: string; name: string };
+  nda: boolean;
+};
+
+/**
+ * The room this grant opens for this caller, or null.
+ *
+ * The uid is looked up ONLY among the caller's own grants, and then the data
+ * room's `activeGrant` decides whether it is live — status and expiry are
+ * checked in one place. `data_room_grants` is UNIQUE on (project_id,
+ * investor_user_id), so the live grant it returns is this one; the uid check
+ * after it is belt and braces.
+ */
+async function heldRoom(env: Env, userId: number, grantUid: string): Promise<HeldRoom | null> {
+  const held = await env.DB.prepare(
+    `SELECT project_id FROM data_room_grants WHERE uid = ? AND investor_user_id = ?`
+  ).bind(grantUid, userId).first<{ project_id: number }>();
+  if (!held) return null;
+  const grant = await activeGrant(env, held.project_id, userId);
+  if (!grant || grant.uid !== grantUid) return null;
+  const project = await env.DB.prepare(
+    `SELECT id, uid, name FROM projects WHERE id = ?`
+  ).bind(grant.project_id).first<{ id: number; uid: string; name: string }>();
+  if (!project) return null;
+  return { grant, project, nda: await ndaActive(env, grant.granted_by_user_id, userId) };
+}
+
+/**
+ * The facts the room memo is drafted from, for a grant the caller holds.
+ *
+ * Empty when the grant is not the caller's or not live — the draft route turns
+ * that into `nothing_to_draft` and the model is never called. Only what the
+ * room read itself would show is listed: open files by name, withheld ones as
+ * a number.
+ */
+async function roomMaterial(env: Env, userId: number, grantUid: string): Promise<string[]> {
+  if (!grantUid) return [];
+  const room = await heldRoom(env, userId, grantUid);
+  if (!room) return [];
+  const pid = room.grant.project_id;
+  const files = await env.DB.prepare(
+    `SELECT name, content_type, size_bytes, visibility, created_at
+       FROM data_room_files WHERE project_id = ? ORDER BY name`
+  ).bind(pid).all<any>();
+  const all = files.results || [];
+  const open = all.filter((f: any) => f.visibility === 'open' || room.nda);
+  const lines = [
+    `Company: ${room.project.name}`,
+    `Room granted ${String(room.grant.created_at).slice(0, 10)}`
+      + (room.grant.expires_at ? `, access expires ${String(room.grant.expires_at).slice(0, 10)}` : ', no expiry set'),
+    `NDA with this founder: ${room.nda ? 'active' : 'none'}`,
+    `Documents in the room: ${all.length}. Open to this investor: ${open.length}. Behind an NDA, not named: ${all.length - open.length}.`,
+  ];
+  for (const f of open) {
+    lines.push(`Document: ${f.name} (${f.content_type || 'type not recorded'}, `
+      + `${f.size_bytes == null ? 'size not recorded' : `${f.size_bytes} bytes`}, staged ${String(f.created_at).slice(0, 10)})`);
+  }
+  return lines;
+}
+
+research.get('/diligence/:grantUid', async (c) => {
+  const user = await requireAuth(c);
+  const room = await heldRoom(c.env, user.id, c.req.param('grantUid'));
+  if (!room) return c.json({ error: 'room_not_found', message: ROOM_NOT_OPEN }, 404);
+  const pid = room.grant.project_id;
+
+  const files = await c.env.DB.prepare(
+    `SELECT id, uid, name, folder_id, content_type, size_bytes, visibility, created_at
+       FROM data_room_files WHERE project_id = ? ORDER BY name`
+  ).bind(pid).all<any>();
+  const folders = await c.env.DB.prepare(
+    `SELECT id, uid, name, visibility, display_order
+       FROM data_room_folders WHERE project_id = ? ORDER BY display_order, name`
+  ).bind(pid).all<any>();
+  // Read BEFORE this visit is logged, so "you last opened it" is the visit
+  // before this one rather than always "just now". Any action counts, as in
+  // the list's `last_opened_at`, so the two pages agree.
+  const activity = await c.env.DB.prepare(
+    `SELECT l.action, l.created_at, l.file_id
+       FROM data_room_access_log l
+      WHERE l.project_id = ? AND l.user_id = ?
+      ORDER BY l.created_at DESC, l.id DESC LIMIT 100`
+  ).bind(pid, user.id).all<any>();
+
+  const allFiles = files.results || [];
+  const visible = (v: string) => v === 'open' || room.nda;
+  const byId = new Map<number, any>(allFiles.map((f: any) => [Number(f.id), f]));
+  const folderUid = new Map<number, string>((folders.results || []).map((f: any) => [Number(f.id), f.uid]));
+  const acts = activity.results || [];
+
+  const lastDownload = new Map<number, string>();
+  for (const a of acts) {
+    if (a.action === 'download' && a.file_id != null && !lastDownload.has(Number(a.file_id))) {
+      lastDownload.set(Number(a.file_id), a.created_at);
+    }
+  }
+
+  const openFiles = allFiles.filter((f: any) => visible(f.visibility)).map((f: any) => ({
+    uid: f.uid,
+    name: f.name,
+    content_type: f.content_type ?? null,
+    size_bytes: f.size_bytes ?? null,
+    visibility: f.visibility,
+    folder_uid: f.folder_id == null ? null : folderUid.get(Number(f.folder_id)) ?? null,
+    created_at: f.created_at,
+    last_downloaded_at: lastDownload.get(Number(f.id)) ?? null,
+  }));
+  const withheld = allFiles.length - openFiles.length;
+
+  const yourActivity = acts.map((a: any) => {
+    const f = a.file_id == null ? null : byId.get(Number(a.file_id));
+    // A file deleted since, or one behind an NDA the caller no longer holds,
+    // keeps its line and loses its name.
+    const named = f && visible(f.visibility);
+    return {
+      action: a.action,
+      created_at: a.created_at,
+      file_uid: named ? f.uid : null,
+      file_name: named ? f.name : null,
+      file_withheld: !!(f && !named),
+      // The row's file is gone from the room (deleted since).
+      file_removed: a.file_id != null && !f,
+    };
+  });
+
+  await logAccess(c.env, pid, user.id, 'open_room', null);
+
+  return c.json({
+    grant: { uid: room.grant.uid, created_at: room.grant.created_at, expires_at: room.grant.expires_at ?? null },
+    project: { uid: room.project.uid, name: room.project.name },
+    nda_signed: room.nda,
+    file_total: allFiles.length,
+    file_open: openFiles.length,
+    // A count, never the names — the data room's own rule.
+    withheld_behind_nda: withheld,
+    last_opened_at: acts.length ? acts[0].created_at : null,
+    folders: (folders.results || []).filter((f: any) => visible(f.visibility))
+      .map((f: any) => ({ uid: f.uid, name: f.name, visibility: f.visibility })),
+    files: openFiles,
+    activity: yourActivity,
+    download_note: DOWNLOAD_NOTE,
+    // Same reason as the list: no key joins a grant to a deal.
+    deal_stage: null,
+    deal_stage_note: 'A data-room grant and a deal are separate records with no key between them, '
+      + 'so no deal stage is attached to a room here. Opening the deal shows its own stage.',
+  });
+});
+
+research.get('/diligence/:grantUid/files/:fileUid', async (c) => {
+  const user = await requireAuth(c);
+  const room = await heldRoom(c.env, user.id, c.req.param('grantUid'));
+  if (!room) return c.json({ error: 'room_not_found', message: ROOM_NOT_OPEN }, 404);
+  const pid = room.grant.project_id;
+
+  const file = await c.env.DB.prepare(
+    `SELECT id, uid, name, content_type, size_bytes, visibility, created_at
+       FROM data_room_files WHERE uid = ? AND project_id = ?`
+  ).bind(c.req.param('fileUid'), pid).first<any>();
+  const roomRef = { grant_uid: room.grant.uid, project_name: room.project.name };
+  if (!file) {
+    return c.json({ error: 'file_not_found', message: 'This document is not in the room. The founder may have removed it.', room: roomRef }, 404);
+  }
+  // Re-checked here, as the download route re-checks it: a uid captured while
+  // an NDA was live stops naming the file when it lapses. Nothing about the
+  // file travels — no name, size or type — only the room it sits in.
+  if (file.visibility === 'nda' && !room.nda) {
+    return c.json({
+      error: 'nda_required',
+      message: 'This document is behind an NDA you have not signed with this founder. Its name stays private until you do.',
+      room: roomRef,
+    }, 403);
+  }
+
+  const downloads = await c.env.DB.prepare(
+    `SELECT created_at FROM data_room_access_log
+      WHERE project_id = ? AND user_id = ? AND file_id = ? AND action = 'download'
+      ORDER BY created_at DESC, id DESC LIMIT 50`
+  ).bind(pid, user.id, file.id).all<{ created_at: string }>();
+  const mine = (downloads.results || []).map((d) => d.created_at);
+
+  return c.json({
+    room: { ...roomRef, project_uid: room.project.uid },
+    file: {
+      uid: file.uid,
+      name: file.name,
+      content_type: file.content_type ?? null,
+      size_bytes: file.size_bytes ?? null,
+      visibility: file.visibility,
+      created_at: file.created_at,
+    },
+    last_downloaded_at: mine[0] ?? null,
+    downloads: mine,
+    download_note: DOWNLOAD_NOTE,
   });
 });
 

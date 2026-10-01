@@ -22,7 +22,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin } from '../auth';
+import { requireAdmin, requireBranchNotSuspended } from '../auth';
 import { lpSelfScope } from '../services/tenancyScope';
 import {
   validateTransition, presentQueueRow, summarize, downstreamEffects,
@@ -146,6 +146,8 @@ adminLpApplications.get('/', async (c) => {
  */
 adminLpApplications.patch('/:id', async (c) => {
   const admin = await requireAdmin(c);
+  // D107 — a suspended branch's queues are frozen: 423, after the admin gate.
+  await requireBranchNotSuspended(c);
   const id = parseInt(c.req.param('id'), 10);
   if (!Number.isFinite(id) || id <= 0) {
     return c.json({ error: 'Invalid application id.' }, 400);

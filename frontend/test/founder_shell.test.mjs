@@ -6,7 +6,7 @@
  * three workspaces already tabbed across their whole subtrees. Founder has no
  * such thing: `PitchWorkspacePage`, `CapitalWorkspacePage` and
  * `LegalEnginePage` each tab only within themselves and nothing links one to
- * another, while `ExecutionPage`, `TeamBuildingPage`, `DiscoveryPage` and
+ * another, while `ExecutionPage`, `FounderTeamPage`, `DiscoveryPage` and
  * `FounderMarketplacePage` have no tab bar at all.
  *
  * So the audit came first. Searching every `to=`, `to:`, `navigate(` and
@@ -77,8 +77,18 @@ test('every destination the old nav reached still has a door', () => {
     '/comarketing',
     '/network-effects', '/liquidity', '/perks',
   ];
-  const doorless = BEFORE.filter((p) => !targets.includes(p) && !tabsTo(p));
-  assert.deepEqual(doorless, [], 'no nav row and no workspace tab — reachable only by typed URL');
+  // A Spin-Out Lab tool's door is the Lab: the `Spin-Out Lab` row opens the
+  // Lab workspace, whose tool card links the tool. `/spinout-lab/brand` is
+  // one — it stopped being a Grow tab when the Lab tool and Grow's own Brand
+  // page (`/grow/brand`) were separated, so it no longer dresses as Grow.
+  const labTools = codeOnly(read('frontend/src/pages/SpinoutLabWorkspace.jsx'));
+  const labDoor = (p) => p.startsWith('/spinout-lab/') && targets.includes('/spinout-lab')
+    && labTools.includes(`to: '${p}'`);
+  const doorless = BEFORE.filter((p) => !targets.includes(p) && !tabsTo(p) && !labDoor(p));
+  assert.deepEqual(doorless, [], 'no nav row, no workspace tab and no Lab tool card — reachable only by typed URL');
+  assert.ok(labDoor('/spinout-lab/brand') && !tabsTo('/spinout-lab/brand'),
+    'the Lab brand tool is reached from the Lab, and not from a Grow tab');
+  assert.ok(tabsTo('/grow/brand'), "Grow's Brand tab opens Grow's own Brand page");
 });
 
 test('the seven doorless destinations are exactly the ones the bar rescues', () => {
@@ -151,9 +161,19 @@ test('each row that owns sections is actually wrapped at its routes', () => {
   // which cannot fit the dashboard — the "Build doesn't fit full width and
   // height" report. Raise's and Grow's section pages never had it; Build's no
   // longer do either.
+  // `/build/discovery` left this table in D422: it stopped being A2's second
+  // address (a founder is redirected to `/validate`) and its editor mounts in
+  // `founderWorkspace('validate', …)`, which the shell branch below accepts.
+  // `/grow/brand` is Grow's own Brand page: it draws the Grow section row
+  // itself, so it renders directly, like the other `/grow/*` section pages.
   const OWN_LANDING = {
-    '/build/discovery': '<FounderValidatePage />',
     '/build/roadmap': '<FounderBuildRoadmap />',
+    '/grow/brand': '<FounderGrowBrand />',
+    // /perks is in the Grow bar and draws its own full-bleed canvas. The
+    // founderWorkspace frame would pad that canvas back into a card, so the
+    // route renders PerksPage directly. A partner is redirected before the
+    // page mounts.
+    '/perks': '<PerksPage ',
   };
 
   const rendersBar = new Set();
@@ -219,20 +239,29 @@ test('A7 owns the founder Research landing while workspace mode retains Signals'
   const line = app.split('\n').find((item) => item.includes('path="/signals"'));
   assert.ok(line?.includes('founderResearchLanding'), '/signals must defer ownership to A7');
   assert.match(app, /founderResearchLanding = effectiveRole === 'founder'/);
-  assert.match(app, /founderResearchLanding\s*\?\s*<FounderResearchDesk \/>/);
+  // D422: the landing is `/research`'s; bare `/signals` redirects there.
+  assert.match(line, /founderResearchLanding/);
+  assert.match(app, /founderResearchLanding\s*\?\s*<Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>/);
+  assert.match(app, /founderResearchLanding\s*\?\s*guard\([^)]*\), <FounderResearchDesk \/>\)/);
   assert.match(app, /FounderWorkspaceTabs set="research" user=\{user\}><SignalsPage user=\{user\} \/>/);
 });
 
 test('a founder never gets two tab bars on one page', () => {
-  // /perks and /comarketing already carried the Partner Offers bar. The fix is
-  // a branch, not a second bar stacked on the first.
-  for (const p of ['/perks', '/comarketing']) {
-    const line = app.split('\n').find((l) => l.includes(`path="${p}"`));
-    assert.match(line, /effectiveRole === 'founder'\s*\?\s*founderWorkspace\('grow', <FounderWorkspaceTabs/,
-      `${p} must serve founders the Grow bar INSTEAD of the Partner bar`);
-    assert.ok(line.includes('<PartnerWorkspaceTabs set="offers"'),
-      `${p} must still serve everyone else the Partner bar`);
-  }
+  // /comarketing already carried the Partner Offers bar. The fix is a branch,
+  // not a second bar stacked on the first.
+  const comarketing = app.split('\n').find((l) => l.includes('path="/comarketing"'));
+  assert.match(comarketing, /effectiveRole === 'founder'\s*\?\s*founderWorkspace\('grow', <FounderWorkspaceTabs/,
+    '/comarketing must serve founders the Grow bar INSTEAD of the Partner bar');
+  assert.ok(comarketing.includes('<PartnerWorkspaceTabs set="offers"'),
+    '/comarketing must still serve everyone else the Partner bar');
+
+  // /perks is that same Grow row's full-bleed canvas. It does not take the
+  // Offers bar, and it does not take the Grow frame either: the page is the
+  // surface. A partner never reaches it.
+  const perks = app.split('\n').find((l) => l.includes('path="/perks"'));
+  assert.match(perks, /<PerksPage user=\{user\} \/>/);
+  assert.ok(!perks.includes('PartnerWorkspaceTabs') && !perks.includes('FounderWorkspaceTabs'),
+    '/perks must not stack a second tab bar on the canvas');
 });
 
 test("liquidity's tier gate moved onto the tab rather than being dropped", () => {

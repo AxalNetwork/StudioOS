@@ -1,0 +1,37 @@
+/*
+ * The phone tab bar's safe areas and the room it takes (D425).
+ *
+ * `viewport-fit=cover` in index.html lets the page draw under the home
+ * indicator, so the bar and the More sheet pad themselves by the bottom inset.
+ *
+ * `--mobile-tabbar-h` is the bar's full height, inset included, set only while
+ * a bar is drawn (MobileTabBar puts `data-mobile-tabbar` on <html>) and only
+ * below 1024px, where the bar shows. The app's scroll container is <main>, and
+ * `[data-app-main]` is the content inside it, so padding that element keeps the
+ * last row of every page above the bar without touching the shell's markup.
+ * A floating button above the bar (the rail's, on the canvas's M5) sits at
+ * `calc(var(--mobile-tabbar-h) + 16px)`.
+ */
+/* Fixed elements ignore the body's side insets (index.css), so the bar and
+   the sheet carry their own. */
+.mtb {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+.mtb-sheet {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+@media (max-width: 1023.98px) {
+  :root[data-mobile-tabbar="on"] {
+    --mobile-tabbar-h: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+
+  :root[data-mobile-tabbar="on"] [data-app-main] {
+    padding-bottom: var(--mobile-tabbar-h);
+  }
+}

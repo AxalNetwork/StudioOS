@@ -378,6 +378,12 @@ const STATUS_LINE = {
   operational: { text: 'All systems operational', dot: 'bg-emerald-500' },
   degraded: { text: 'Some systems degraded', dot: 'bg-amber-500' },
   down: { text: 'Active outage', dot: 'bg-red-500' },
+  // D332 — a failed probe used to set `overall: 'unknown'` with no matching
+  // entry here, so `STATUS_LINE[overall]` was `undefined` and the whole line
+  // vanished — the opposite of "renders nothing rather than claiming either
+  // state" the comment above intends: silence reads as nothing to report,
+  // not as a failed read. This says which one happened.
+  unknown: { text: 'Status could not be read', dot: 'bg-gray-400' },
 };
 
 function StillStuck({ user, onOpenChat }) {

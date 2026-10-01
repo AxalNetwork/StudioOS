@@ -51,8 +51,32 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireSuperAdmin } from '../auth';
+import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
+import {
+  DEFAULT_RESPOND_DAYS, MAX_RESPOND_DAYS, MIN_RESPOND_DAYS, NOTICE_KINDS,
+  freezeHoldersForLicence, notifyLicenceAdmins,
+} from '../services/complianceLadder';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
+import { hashEmail } from '../util/hashEmail';
+import { ensureLegalTemplatesSchema, getTemplate, listTemplates } from '../services/legalTemplateStore';
+import { mergeValues, renderContract } from '../services/licenceContract';
+import { createAndSendEnvelope } from './esign';
+// D137 — every transition below now reaches the branch that runs under the
+// licence. `applyLicence` had no caller at all, so HQ's suspend changed four
+// columns here and nothing on the subsidiary.
+import { pushLicenceToBranch } from '../services/licencePush';
+// D262 — termination reaches the branch's own administrators too.
+import { branchByCode } from '../services/branches';
+import { mirrorBranchAction } from '../services/auditMirror';
+// D197 — the host register. HQ reads it onto every licence payload and may
+// detach; the tenant's own binds live in `routes/licence.ts`, deliberately not
+// behind an admin gate.
+import { domainPayload, type LicenceDomainRow } from '../services/licenceDomain';
+import { logAdminAction } from '../services/adminAudit';
+// D198 — the brand kit's upload rules and its hex validator are `brand.ts`'s,
+// reused rather than declared a second time. What is NOT shared is the gate
+// and the key; see the brand-kit block below.
+import { cleanHex, markExtension, readUploadedMark } from './brand';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -60,6 +84,10 @@ const SEAT_TYPES = ['founder', 'investor', 'advisor', 'partner'] as const;
 const ISO2 = /^[A-Z]{2}$/;
 /** Statuses that still hold territory. Terminated is the only one that does not. */
 const HOLDS_TERRITORY = ['draft', 'pending_activation', 'active', 'suspended'];
+/** The two kinds migration 279's CHECK admits. Named here so the handler and
+ *  the column cannot drift: a third value is refused by BOTH, and the refusal
+ *  the handler gives is the readable one. */
+const LICENCE_KINDS = ['subsidiary', 'white_label'];
 
 export type LicenceRow = {
   id: number; uid: string; licence_ref: string; entity_id: number | null;
@@ -69,6 +97,49 @@ export type LicenceRow = {
   revenue_share_bps: number | null; token_split_bps: number | null;
   starts_on: string | null; renews_on: string | null; suspended_at: string | null;
   terminated_at: string | null; status_note: string | null; created_at: string;
+  /** 'subsidiary' | 'white_label' — migration 279. `byUid` is SELECT *, so this
+   *  arrives without a query change; before 279 it was undefined on every row. */
+  kind: string;
+};
+
+/** D198 — migration 281's row. One per licence, white-label only. */
+export type LicenceBrandKitRow = {
+  id: number; licence_id: number;
+  mark_r2_key: string | null; mark_mime: string | null; mark_bytes: number | null;
+  primary_hex: string | null; accent_hex: string | null;
+  updated_by_user_id: number | null; created_at: string; updated_at: string;
+};
+
+/**
+ * What a brand kit looks like on the wire. THE R2 KEY NEVER CROSSES — the
+ * client gets a route to fetch the mark FROM, not the object's address in a
+ * bucket it cannot reach. `mark_url` is null when no mark has been uploaded,
+ * which is a different state from "no kit at all" (`brand_kit: null`) and from
+ * "the store could not be read" (`brand_kit_available: false`); all three
+ * render differently, which is the whole reason they are three fields.
+ */
+export function brandKitPayload(uid: string, row: LicenceBrandKitRow) {
+  return {
+    primary_hex: row.primary_hex,
+    accent_hex: row.accent_hex,
+    mark_url: row.mark_r2_key ? `/api/admin/licences/${encodeURIComponent(uid)}/brand/mark` : null,
+    mark_mime: row.mark_mime,
+    mark_bytes: row.mark_bytes,
+    updated_at: row.updated_at,
+  };
+}
+
+/** The sentence every reader of an unreadable kit store prints. Said once. */
+const KIT_UNREADABLE =
+  'The brand-kit store could not be read on this database (migration 281).';
+
+/** What each notice kind is called in the mail. The CHECK's four values are
+ *  machine words; this is the sentence the addressee reads. */
+const KIND_LABELS: Record<string, string> = {
+  renewal_terms: 'Renewal terms',
+  fees: 'Fees',
+  term_violation: 'A term of the agreement',
+  other: 'Your licence',
 };
 
 const str = (v: unknown, max = 500): string => String(v ?? '').trim().slice(0, max);
@@ -97,13 +168,54 @@ async function logEvent(
 }
 
 /**
- * Seats used, which is deliberately unknowable here.
+ * The licence's own state machine, which until D139 existed only in prose.
  *
- * The canvas shows "% utilised" against seats licensed. Computing it needs
- * every account to name the licence it belongs to, and no account does —
- * that is the scoping half this ledger does not build. Returning null makes
- * the UI say so; returning 0 would read as "nobody has signed up", which is a
- * different and false claim.
+ * Migration 187 wrote the semantics down and nothing enforced them:
+ *
+ *   active      — trading
+ *   suspended   — not trading, STILL HOLDS ITS TERRITORY
+ *   terminated  — over; territory released
+ *
+ * `reinstate` was the only transition that checked, and its refusal is the
+ * shape copied here. The other three accepted ANY status, so a **terminated**
+ * licence — one whose territory has been released and given to somebody else —
+ * could be suspended or renewed, and a renewal would push a date onto a licence
+ * that is over. Nothing has exercised it: production holds zero licences. It is
+ * latent, and it is cheap exactly while that is true.
+ *
+ * Re-suspending an already-suspended licence is refused too, and for a reason
+ * the ladder made real: the UPDATE would overwrite `suspended_at`, which is
+ * what HQ's Team table and the addressee's own page read as "frozen since".
+ * Silently restarting that clock is worse than refusing to.
+ */
+function transitionRefusal(
+  status: string | null | undefined, verb: 'suspend' | 'renew' | 'terminate',
+): string | null {
+  const now = String(status || '');
+  if (now === 'terminated') {
+    return `This licence is terminated — it is over and its territory has been released, so it cannot be ${verb === 'renew' ? 'renewed' : `${verb}d`}.`;
+  }
+  if (verb === 'suspend' && now === 'suspended') {
+    return 'This licence is already suspended. Suspending it again would restart the "suspended since" clock its administrators are measured against; reinstate it first, or edit the note on the licence.';
+  }
+  return null;
+}
+
+/**
+ * Seats used, which is deliberately unknowable HERE and knowable on a branch.
+ *
+ * The canvas shows "% utilised" against seats licensed. Computing it at HQ
+ * needs every account to name the licence it belongs to, and no account does
+ * (U1) — that is the scoping half this ledger does not build. Returning null
+ * makes the UI say so; returning 0 would read as "nobody has signed up",
+ * which is a different and false claim.
+ *
+ * A BRANCH CAN COUNT ITS OWN, AND THAT IS NOT AN INCONSISTENCY (D127). Every
+ * user in a branch's D1 *is* that branch's, so `rpc/branchOps.ts` counts
+ * active accounts whose role is one a licence sells a seat for. HQ has no
+ * equivalent question to ask of its own table. The two tiers answer
+ * differently because the tiers differ, not because one of them is behind —
+ * and `seats_used_available: false` below still says so on this side.
  */
 function seatsUsed(): null { return null; }
 
@@ -128,6 +240,47 @@ export async function hydrate(env: Env, rows: LicenceRow[]) {
       WHERE licence_id IN (${placeholders})`,
   ).bind(...ids).all<{ licence_id: number; seat_type: string; seats_licensed: number }>();
 
+  // D197 — THE HOST RIDES THE LICENCE PAYLOAD, exactly as D196's `kind` did:
+  // H31's strip needs no second fetch and no `api.js` read method. Its own
+  // try/catch, because a database without migration 280 has no register and
+  // "no host bound" is a different claim from "we could not look" — the strip
+  // renders each as its own state rather than one as the other.
+  const domains = new Map<number, LicenceDomainRow>();
+  let domainsReadable = true;
+  try {
+    const bound = await env.DB.prepare(
+      `SELECT id, licence_id, hostname, challenge_token, state,
+              txt_verified_at, cname_verified_at, last_checked_at, last_check_json,
+              is_primary, detached_at, detached_by_user_id, detach_reason,
+              created_by_user_id, created_at, updated_at
+         FROM licence_domains WHERE licence_id IN (${placeholders})`,
+    ).bind(...ids).all<LicenceDomainRow>();
+    for (const d of bound.results || []) domains.set(Number(d.licence_id), d);
+  } catch (e) {
+    console.warn('[licences] licence_domains unreadable', (e as Error).message);
+    domainsReadable = false;
+  }
+
+  // D198 — THE KIT RIDES THE SAME PAYLOAD, and for the same reason the host
+  // does: H26's step is a tab on a licence the console has already fetched, so
+  // a second `api.js` read method would buy nothing. Its own try/catch, D197's
+  // idiom one table over, because a database without migration 281 has no kit
+  // store and "this licence has no kit" is a different claim from "we could
+  // not look" — one is a fact about the licence, the other about the database.
+  const kits = new Map<number, LicenceBrandKitRow>();
+  let kitsReadable = true;
+  try {
+    const found = await env.DB.prepare(
+      `SELECT id, licence_id, mark_r2_key, mark_mime, mark_bytes, primary_hex, accent_hex,
+              updated_by_user_id, created_at, updated_at
+         FROM licence_brand_kits WHERE licence_id IN (${placeholders})`,
+    ).bind(...ids).all<LicenceBrandKitRow>();
+    for (const k of found.results || []) kits.set(Number(k.licence_id), k);
+  } catch (e) {
+    console.warn('[licences] licence_brand_kits unreadable', (e as Error).message);
+    kitsReadable = false;
+  }
+
   const byLicence = new Map<number, { territories: string[]; seats: Record<string, number> }>();
   for (const l of rows) byLicence.set(l.id, { territories: [], seats: {} });
   for (const t of terr.results || []) byLicence.get(t.licence_id)?.territories.push(t.country_code);
@@ -144,6 +297,14 @@ export async function hydrate(env: Env, rows: LicenceRow[]) {
       seats: e.seats,
       seats_licensed: licensed,
       seats_used: seatsUsed(),
+      domain: domainsReadable ? (domains.get(l.id) ? domainPayload(domains.get(l.id)!) : null) : null,
+      domain_available: domainsReadable,
+      domain_reason: domainsReadable
+        ? null
+        : 'The host register could not be read on this database (migration 280).',
+      brand_kit: kitsReadable && kits.get(l.id) ? brandKitPayload(l.uid, kits.get(l.id)!) : null,
+      brand_kit_available: kitsReadable,
+      brand_kit_reason: kitsReadable ? null : KIT_UNREADABLE,
     };
   });
 }
@@ -169,6 +330,41 @@ async function activationBlockers(env: Env, licence: LicenceRow): Promise<string
     out.push('Commercial terms are incomplete — the fee and the revenue share are both required.');
   }
   if (!licence.renews_on) out.push('No renewal date is set.');
+
+  // D198 — H26's step 6, in its own words: "Brand kit — REQUIRED TO ACTIVATE",
+  // and "Unique to this kind · an Axal subsidiary never sees this step". So
+  // this is ONE `if`, and it is gated on the kind rather than applied to every
+  // licence — which is also what makes it touch nothing that exists today:
+  // migration 279 defaulted every pre-existing row to `subsidiary` because the
+  // create path refused white-label outright, so no row can meet this
+  // condition yet.
+  //
+  // IT ASKS FOR THE COLOURS, NOT THE MARK. A white-label shell with no logo
+  // yet is survivable; one wearing Axal's palette is not, because a colour has
+  // no absent state on screen — it renders as SOMETHING, and that something
+  // would be Axal's.
+  if (licence.kind === 'white_label') {
+    let kit: { primary_hex: string | null; accent_hex: string | null } | null = null;
+    let readable = true;
+    try {
+      kit = await env.DB.prepare(
+        'SELECT primary_hex, accent_hex FROM licence_brand_kits WHERE licence_id = ?',
+      ).bind(licence.id).first<{ primary_hex: string | null; accent_hex: string | null }>();
+    } catch (e) {
+      console.warn('[licences] licence_brand_kits unreadable', (e as Error).message);
+      readable = false;
+    }
+    // FAILS CLOSED, and the reason is the same one the blocker list exists
+    // for: "we could not tell" is not "it is fine". An operator reads which
+    // thing is missing, and an unreadable store is a thing that is missing.
+    if (!readable) out.push(`${KIT_UNREADABLE} A white-label cannot be activated until it can.`);
+    else if (!kit || !kit.primary_hex || !kit.accent_hex) {
+      out.push(
+        'This is a white-label licence and its brand kit has no colours. A white-label shell with '
+        + 'no palette of its own renders Axal\'s, which is the one thing the kind exists to prevent.',
+      );
+    }
+  }
   return out;
 }
 
@@ -188,9 +384,9 @@ r.get('/', async (c) => {
       // Said once, at the top, rather than implied by a column of dashes.
       seats_used_available: false,
       seats_used_reason:
-        'Seats used needs every account to name the licence it belongs to. No account carries one '
-        + 'yet — this is the licence ledger, not the tenancy scope — so utilisation is not shown '
-        + 'rather than shown as zero.',
+        'This ledger does not attribute HQ accounts to a licence (U1), so a per-licence '
+        + 'utilisation figure here would invent scoping. Seats used on a deployed branch is read '
+        + 'on HQ Home from each branch\'s own database and on the branch console itself.',
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -224,21 +420,33 @@ r.post('/', async (c) => {
       .bind(ref).first<{ x: number }>();
     if (clash) return c.json({ error: `${ref} is already in use` }, 409);
 
+    // KIND IS STEP 1 (H26), AND IT IS REFUSED HERE RATHER THAN COERCED.
+    // Migration 279's CHECK would reject a third value anyway — as a 500 with
+    // SQLite's own wording. An operator who mistypes a kind deserves to be told
+    // which two exist, which is why the handler names them.
+    const kind = str(b?.kind, 20) || 'subsidiary';
+    if (!LICENCE_KINDS.includes(kind)) {
+      return c.json({ error: `kind must be one of ${LICENCE_KINDS.join(', ')}` }, 400);
+    }
+
     const uid = newUid();
     await c.env.DB.prepare(
       `INSERT INTO territory_licences (uid, licence_ref, entity_id, legal_entity_name,
                                        brand_name, registered_address, signatory_name,
-                                       signatory_title, status, created_by_user_id,
+                                       signatory_title, kind, status, created_by_user_id,
                                        created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?, 'draft', ?,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?, 'draft', ?,?,?)`,
     ).bind(
       uid, ref, intOrNull(b?.entity_id), legalName, brand,
       str(b?.registered_address) || null, str(b?.signatory_name, 200) || null,
-      str(b?.signatory_title, 200) || null, admin.id, nowIso(), nowIso(),
+      str(b?.signatory_title, 200) || null, kind, admin.id, nowIso(), nowIso(),
     ).run();
     const created = await byUid(c.env, uid);
-    if (created) await logEvent(c.env, created.id, 'created', admin.id, { licence_ref: ref });
-    return c.json({ uid, licence_ref: ref, status: 'draft' }, 201);
+    // The kind rides the audit row: `licence_events` is the licence's own
+    // record, and which kind it was issued as is not recoverable from the
+    // other fields.
+    if (created) await logEvent(c.env, created.id, 'created', admin.id, { licence_ref: ref, kind });
+    return c.json({ uid, licence_ref: ref, status: 'draft', kind }, 201);
   } catch (e) { return mapError(c, e); }
 });
 
@@ -301,7 +509,10 @@ r.put('/:uid/territories', async (c) => {
     // rather than double-recording it.
     await c.env.DB.batch(stmts);
     await logEvent(c.env, licence.id, 'territory_changed', admin.id, { countries: wanted });
-    return c.json({ ok: true, countries: wanted });
+    // D272 — this changes what the branch's copy holds, so it pushes like
+    // every status transition; a push that does not land is retried.
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, countries: wanted, pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -327,7 +538,10 @@ r.put('/:uid/seats', async (c) => {
         .bind(nowIso(), licence.id),
     ]);
     await logEvent(c.env, licence.id, 'seats_changed', admin.id, seats);
-    return c.json({ ok: true, seats });
+    // D272 — this changes what the branch's copy holds, so it pushes like
+    // every status transition; a push that does not land is retried.
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, seats, pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -365,7 +579,10 @@ r.patch('/:uid/terms', async (c) => {
       terms.token_split_bps, terms.starts_on, terms.renews_on, nowIso(), licence.id,
     ).run();
     await logEvent(c.env, licence.id, 'terms_changed', admin.id, terms);
-    return c.json({ ok: true, ...terms });
+    // D272 — this changes what the branch's copy holds, so it pushes like
+    // every status transition; a push that does not land is retried.
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, ...terms, pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -397,7 +614,8 @@ r.post('/:uid/activate', async (c) => {
       "UPDATE territory_licences SET status = 'active', status_note = NULL, suspended_at = NULL, updated_at = ? WHERE id = ?",
     ).bind(nowIso(), licence.id).run();
     await logEvent(c.env, licence.id, 'activated', admin.id);
-    return c.json({ ok: true, status: 'active' });
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, status: 'active', pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -406,6 +624,9 @@ r.post('/:uid/suspend', async (c) => {
     const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
+    // D139 — the state machine, on `reinstate`'s own 409 shape.
+    const refusal = transitionRefusal(licence.status, 'suspend');
+    if (refusal) return c.json({ error: 'bad_transition', message: refusal }, 409);
     const note = str(c.req.query('note') || (await c.req.json().catch(() => ({} as any)))?.note, 1000);
     if (!note) return c.json({ error: 'a suspension must record why' }, 400);
     // Territory rows are untouched on purpose: a suspended licence still holds
@@ -414,7 +635,21 @@ r.post('/:uid/suspend', async (c) => {
       "UPDATE territory_licences SET status = 'suspended', status_note = ?, suspended_at = ?, updated_at = ? WHERE id = ?",
     ).bind(note, nowIso(), nowIso(), licence.id).run();
     await logEvent(c.env, licence.id, 'suspended', admin.id, null, note);
-    return c.json({ ok: true, status: 'suspended', territory_released: false });
+    // D135 — THIS FILE HAD ZERO `notify()` CALLS. Suspending a licence changed
+    // four columns in HQ's ledger and told the holder nothing: they found out by
+    // hitting a 423. "First admins get notified" is the ladder's first sentence,
+    // so this is the missing half of the flow rather than an addition to it.
+    await notifyLicenceAdmins(c.env, licence.id, {
+      type: 'licence_suspended',
+      title: 'Your licence has been suspended by HQ',
+      body: `${note} Your territory is not released — suspension is not a lapse — and reading is unaffected.`,
+      payload: { licence_uid: licence.uid },
+    });
+    // REPORTED, NEVER THROWN. The suspension is recorded at HQ whatever the
+    // branch does; `pushed.ok === false` is a fact about the branch, and a 502
+    // here would ask an operator to re-suspend something already suspended.
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, status: 'suspended', territory_released: false, pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -430,7 +665,14 @@ r.post('/:uid/reinstate', async (c) => {
       "UPDATE territory_licences SET status = 'active', status_note = NULL, suspended_at = NULL, updated_at = ? WHERE id = ?",
     ).bind(nowIso(), licence.id).run();
     await logEvent(c.env, licence.id, 'reinstated', admin.id);
-    return c.json({ ok: true, status: 'active' });
+    await notifyLicenceAdmins(c.env, licence.id, {
+      type: 'licence_reinstated',
+      title: 'Your licence is active again',
+      body: 'HQ has reinstated it. Your account can make changes again.',
+      payload: { licence_uid: licence.uid },
+    });
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, status: 'active', pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -439,6 +681,9 @@ r.post('/:uid/renew', async (c) => {
     const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
+    // D139 — the state machine, on `reinstate`'s own 409 shape.
+    const refusal = transitionRefusal(licence.status, 'renew');
+    if (refusal) return c.json({ error: 'bad_transition', message: refusal }, 409);
     const b = await c.req.json().catch(() => ({} as any));
     // An explicit date wins. Otherwise push out by the term, from the CURRENT
     // renewal date rather than from today, so a late renewal does not silently
@@ -455,15 +700,221 @@ r.post('/:uid/renew', async (c) => {
       'UPDATE territory_licences SET renews_on = ?, updated_at = ? WHERE id = ?',
     ).bind(next, nowIso(), licence.id).run();
     await logEvent(c.env, licence.id, 'renewed', admin.id, { renews_on: next });
-    return c.json({ ok: true, renews_on: next });
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, renews_on: next, pushed });
   } catch (e) { return mapError(c, e); }
 });
 
+/**
+ * What a termination does to the people who administered the licence (D145).
+ *
+ * WHAT WAS LEFT BEHIND. Terminate released the territory, set the status and —
+ * since D139 — withdrew the licence's open compliance notices. It never touched
+ * `users.role`, `licence_admins` or `is_active`, so afterwards the licence's
+ * administrators still held `role = 'admin'` over a licence that no longer
+ * exists: an unscoped admin, which is exactly the state D134's door was built
+ * to make unreachable, arriving through the back.
+ *
+ * DEMOTE THEN DETACH, NEVER THE REVERSE, and that order is not a preference.
+ * `DELETE /:uid/admins/:userId` refuses while the account still holds the role
+ * precisely because detaching first leaves an admin bound to nothing. This
+ * composes the two in the order D134 already enforces between them.
+ *
+ * ONE FLOOR, NOT TWO. A `super_admins` holder is skipped: the elevation sits ON
+ * the admin role, so demoting its holder would leave it pointing at a
+ * non-admin — the same reason `POST /users/:userId/demote-admin` refuses that
+ * target. A "never demote the last active admin" floor was considered and NOT
+ * added, because `admin.ts` already retired its own for the reason that applies
+ * here unchanged: the caller has just passed `requireSuperAdmin`, is an active
+ * admin, and cannot be one of this licence's administrators being demoted — so
+ * at least one active admin always survives, by construction. A conjunct that
+ * cannot be false is not a guard.
+ *
+ * TRUST OBLIGATIONS FOLLOW THE ROLE; THE EXPLORING REVIEW DOES NOT. Re-seeding
+ * with `pruneStaleForRole` waives the admin-only obligations rather than
+ * deleting them, so the audit survives — the same call the demote route makes.
+ * `resetExploringReview` is deliberately NOT made: it is module-private to
+ * `routes/admin.ts`, and more to the point these accounts are being
+ * DEACTIVATED, so they are in no review queue to reset. Reactivating one is a
+ * deliberate act that goes through the role route and its own bookkeeping.
+ *
+ * REPORTED, NEVER THROWN — D139's shape, on D111's precedent. A recorded
+ * termination must not be undone by a failure in the cleanup after it, and a
+ * partial result is returned per account with its reason rather than collapsed
+ * into one boolean.
+ */
+export async function deprovisionLicenceAdmins(
+  env: Env,
+  licenceId: number,
+  actor: { id: number; name?: string | null; email: string },
+  note: string,
+): Promise<{
+  ok: boolean;
+  demoted: number;
+  detached: number;
+  deactivated: number;
+  skipped: { user_id: number; reason: string }[];
+  reason?: string;
+}> {
+  const out = { ok: true, demoted: 0, detached: 0, deactivated: 0, skipped: [] as { user_id: number; reason: string }[] };
+  let admins: { user_id: number; email: string; name: string | null; role: string }[] = [];
+  try {
+    const res = await env.DB.prepare(
+      `SELECT la.user_id, u.email, u.name, u.role
+         FROM licence_admins la JOIN users u ON u.id = la.user_id
+        WHERE la.licence_id = ?`,
+    ).bind(licenceId).all<{ user_id: number; email: string; name: string | null; role: string }>();
+    admins = res.results ?? [];
+  } catch (e) {
+    return {
+      ...out,
+      ok: false,
+      reason: 'The licence\'s administrators could not be read, so none were deprovisioned and any '
+        + 'of them may still hold the admin role. The termination itself is recorded: ' + (e as Error).message,
+    };
+  }
+  if (!admins.length) return out;
+
+  // The elevation holders, read once. Same lookup `routes/licence.ts` uses.
+  let holders: Set<number>;
+  try {
+    const res = await env.DB.prepare('SELECT user_id FROM super_admins').all<{ user_id: number }>();
+    holders = new Set((res.results || []).map((h) => Number(h.user_id)));
+  } catch (e) {
+    // UNREADABLE MEANS SKIP EVERYTHING, not demote everything. Failing closed
+    // here costs a manual cleanup; failing open could strip the elevation's
+    // holder of the role it sits on.
+    return {
+      ...out,
+      ok: false,
+      reason: 'The Super Admin holders could not be read, so no administrator was demoted — '
+        + 'demoting the holder would leave the elevation pointing at a non-admin. '
+        + 'The termination itself is recorded: ' + (e as Error).message,
+    };
+  }
+
+  for (const a of admins) {
+    if (holders.has(Number(a.user_id))) {
+      out.skipped.push({
+        user_id: a.user_id,
+        reason: 'Holds the Super Admin elevation, which sits on the admin role — revoke or transfer it first.',
+      });
+      continue;
+    }
+    try {
+      await env.DB.batch([
+        env.DB.prepare("UPDATE users SET role = 'exploring', is_active = 0 WHERE id = ?").bind(a.user_id),
+        env.DB.prepare('DELETE FROM licence_admins WHERE licence_id = ? AND user_id = ?').bind(licenceId, a.user_id),
+      ]);
+      out.demoted += 1;
+      out.detached += 1;
+      out.deactivated += 1;
+    } catch (e) {
+      out.ok = false;
+      out.skipped.push({ user_id: a.user_id, reason: `Could not be deprovisioned: ${(e as Error).message}` });
+      continue;
+    }
+    // Best-effort from here: the role is already revoked, and neither of these
+    // failing leaves the account holding a power it should not have.
+    try {
+      const { seedObligations } = await import('../services/trust');
+      await seedObligations(env, a.user_id, 'exploring', { pruneStaleForRole: true });
+    } catch (e) { console.error('[licence/terminate] trust re-seed failed', (e as Error).message); }
+    try {
+      const actorHash = await hashEmail(actor.email);
+      const targetHash = await hashEmail(a.email);
+      await env.DB.batch([
+        // `role_changed` / `your_role_changed`, not a new action name: both are
+        // already in admin_security.ts's audit allowlist and ActivityPage's
+        // label map, and a distinct action would be invisible in every reader.
+        env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?,?,?,?)')
+          .bind('role_changed',
+            `Super admin ${actor.name || actor.email} demoted ${a.name || a.email} from ${a.role} to exploring `
+            + `and deactivated the account: the licence they administered was terminated. Reason: ${note}`,
+            actorHash, actor.id),
+        env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?,?,?,?)')
+          .bind('your_role_changed',
+            `Your administrator role was removed and your account deactivated because the licence you `
+            + `administered was terminated. Reason: ${note}`,
+            targetHash, a.user_id),
+      ]);
+    } catch (e) { console.error('[licence/terminate] activity log failed', (e as Error).message); }
+  }
+  return out;
+}
+
+/**
+ * D262 — take the admin role off every administrator on the terminated
+ * licence's BRANCH, whose accounts live in the branch's database.
+ *
+ * `deprovisionLicenceAdmins` above reads HQ's `licence_admins JOIN users`, so
+ * it only ever reached accounts in HQ's own database. Termination pushes
+ * `terminated`, which the branch stores, and the freeze reacts only to
+ * `suspended` (D107), so a terminated branch's principal kept the admin role
+ * and every gated write. This asks the branch, with no target, to unbind every
+ * active administrator it holds (`unbindAdmin`).
+ *
+ * REPORTED, NEVER THROWN, D145's rule: a recorded termination must never be
+ * undone by the cleanup after it. Every failure — no deployment, no secret,
+ * no binding, a branch that refuses or does not answer — is a field with a
+ * reason the operator can act on.
+ */
+export async function unbindBranchAdmins(
+  env: Env,
+  code: string | null | undefined,
+  actorName: string,
+  note: string,
+): Promise<{ ok: boolean; code: string | null; unbound?: number; skipped?: { id: number; reason: string }[]; reason?: string }> {
+  if (!code) {
+    return { ok: false, code: null, reason: 'This licence has no branch deployment, so there is no branch administrator to unbind.' };
+  }
+  if (!env.HQ_RPC_SECRET) {
+    return {
+      ok: false, code,
+      reason: 'HQ_RPC_SECRET is not set on this Worker, so the branch cannot tell this call from any '
+        + `other; ${code}'s administrators still hold the role. Set it and unbind them from HQ · Team.`,
+    };
+  }
+  const binding = branchByCode(env, code);
+  if (!binding) {
+    mirrorBranchAction(env, 'admin_unbound', 'not_deployed', code);
+    return { ok: false, code, reason: `No branch Worker is bound for ${code}, so its administrators could not be reached.` };
+  }
+  try {
+    const res = await (binding.stub as any).unbindAdmin(env.HQ_RPC_SECRET, {
+      hq_actor_name: actorName,
+      reason: `Licence terminated: ${note}`,
+    });
+    mirrorBranchAction(env, 'admin_unbound', 'ok', code);
+    return {
+      ok: true, code,
+      unbound: Array.isArray(res?.unbound) ? res.unbound.length : 0,
+      skipped: Array.isArray(res?.skipped) ? res.skipped : [],
+    };
+  } catch (e) {
+    mirrorBranchAction(env, 'admin_unbound', 'failed', code);
+    return {
+      ok: false, code,
+      reason: `The termination is recorded, and ${code} did not unbind its administrators: `
+        + `${String((e as Error).message || e).replace(/^rpc: /, '').slice(0, 300)}. `
+        + 'Unbind them from HQ · Team.',
+    };
+  }
+}
+
 r.post('/:uid/terminate', async (c) => {
   try {
-    const admin = await requireSuperAdmin(c);
+    // D262 — THE WRITE BAR, where every other lifecycle move keeps the plain
+    // elevation. Terminate is the one that takes the admin role off accounts:
+    // HQ's since D145, and the branch's own since D262. Every other act that
+    // removes an admin role (demote-admin, DELETE /:uid/admins, the branch
+    // unbind) already asks for TOTP and a fresh step-up.
+    const admin = await requireSuperAdminWriteBar(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
+    // D139 — the state machine, on `reinstate`'s own 409 shape.
+    const refusal = transitionRefusal(licence.status, 'terminate');
+    if (refusal) return c.json({ error: 'bad_transition', message: refusal }, 409);
     const note = str((await c.req.json().catch(() => ({} as any)))?.note, 1000);
     if (!note) return c.json({ error: 'a termination must record why' }, 400);
     const released = await c.env.DB.prepare(
@@ -478,7 +929,73 @@ r.post('/:uid/terminate', async (c) => {
       ).bind(note, nowIso(), nowIso(), licence.id),
     ]);
     await logEvent(c.env, licence.id, 'terminated', admin.id, { released: codes }, note);
-    return c.json({ ok: true, status: 'terminated', released: codes });
+
+    // D139 — THE LADDER WOULD OTHERWISE GO ON FREEZING PEOPLE OVER A LICENCE
+    // THAT NO LONGER EXISTS. `auth.ts`'s compliance gate reads `admin_notices`
+    // by `user_id` and never consults the licence's status, so an `overdue` or
+    // `rejected` notice keeps an administrator's account frozen after HQ has
+    // terminated the very licence the notice is about — and answering it cannot
+    // help, because there is nothing left to comply with. Migration 264 already
+    // has the word for a notice HQ is no longer pressing: `withdrawn`.
+    //
+    // OUTSIDE THE BATCH, ON PURPOSE. A database that has not applied 264 has no
+    // `admin_notices` table and no notices to withdraw; putting this in the
+    // batch would make its absence fail the termination itself. So it is
+    // reported the way `pushed` is (the D111 precedent): the termination is
+    // recorded whatever happens here, and what happened here is its own field.
+    //
+    // `accepted` and `withdrawn` are left alone — they are already closed, and
+    // rewriting a closed row would lose which way it closed.
+    let noticesWithdrawn: { ok: boolean; count?: number; reason?: string };
+    try {
+      const res = await c.env.DB.prepare(
+        `UPDATE admin_notices
+            SET status = 'withdrawn', updated_at = ?
+          WHERE licence_id = ? AND status IN ('issued', 'overdue', 'responded', 'rejected')`,
+      ).bind(nowIso(), licence.id).run();
+      noticesWithdrawn = { ok: true, count: Number(res?.meta?.changes) || 0 };
+    } catch (e) {
+      noticesWithdrawn = {
+        ok: false,
+        reason: 'The compliance notices against this licence could not be withdrawn, so an '
+          + 'administrator frozen by one may still be frozen. The termination itself is recorded: '
+          + (e as Error).message,
+      };
+    }
+
+    // Told LAST, after the batch, because a notification about a termination
+    // that then failed to apply is worse than a late one. The administrators
+    // are still bound at this point — D134's detach is a separate act — so the
+    // lookup still finds them.
+    await notifyLicenceAdmins(c.env, licence.id, {
+      type: 'licence_terminated',
+      title: 'Your licence has been terminated',
+      body: `${note} ${codes.length ? `The ${codes.length === 1 ? 'territory' : `${codes.length} territories`} it held ${codes.length === 1 ? 'has' : 'have'} been released.` : ''}`.trim(),
+      payload: { licence_uid: licence.uid, released: codes },
+    });
+    // D145 — AFTER the notification, and that ordering is load-bearing. The
+    // comment above says the administrators are still bound at that point so
+    // the lookup finds them; deprovisioning first would send the "your licence
+    // has been terminated" mail to nobody. Reported as its own field, never
+    // thrown, exactly as `notices_withdrawn` above.
+    const adminsDeprovisioned = await deprovisionLicenceAdmins(
+      c.env, licence.id, { id: admin.id, name: (admin as any).name, email: admin.email }, note,
+    );
+    // Pushed AFTER the territory release, so the copy the branch receives
+    // reports the same empty territory the ledger now holds.
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    // D262 — AFTER the push, so the branch already holds `terminated` when its
+    // administrators lose the role. Its own field, never thrown.
+    const branchAdminsUnbound = await unbindBranchAdmins(
+      c.env, pushed?.code ?? null,
+      String((admin as { name?: string }).name || '').trim().slice(0, 200) || 'Axal VC HQ', note,
+    );
+    return c.json({
+      ok: true, status: 'terminated', released: codes, pushed,
+      notices_withdrawn: noticesWithdrawn,
+      admins_deprovisioned: adminsDeprovisioned,
+      branch_admins_unbound: branchAdminsUnbound,
+    });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -489,13 +1006,35 @@ r.post('/:uid/terminate', async (c) => {
 // HQ writes this; the holder reads it through GET /api/licence/mine. Assigning
 // an administrator is a contractual act, so it lands in licence_events like
 // every other one.
+//
+// D134 — THIS IS THE DOOR ADMIN ACCOUNTS ARE OPENED THROUGH, and until D134 it
+// was half a door. `POST` wrote the binding and left `users.role` alone, so the
+// only way to actually mint an admin was SQL against production —
+// `PATCH /api/admin/users/:userId/role` refuses `role === 'admin'` outright and
+// still does. The user's model is that one super admin opens, supervises, bans
+// and closes many subsidiary admins; "open" had no route at all.
+//
+// So the promotion happens HERE, bound to a licence in the same batch, and that
+// ordering is the point: an admin minted through this door is licence-bound by
+// construction and there is no path that produces an unscoped one. The reverse
+// is deliberately NOT symmetric — `DELETE` refuses while the account still
+// holds the role, because detaching first would leave exactly the unscoped
+// admin this door exists to make impossible. Demote, then detach; the demote is
+// `POST /api/admin/users/:userId/demote-admin`, and `GET` returns `u.role` so
+// the state between the two steps is on the screen rather than inferred.
 r.get('/:uid/admins', async (c) => {
   try {
     await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
+    // `u.role` and `u.is_active` are the two facts that make the row honest
+    // rather than a name: a binding survives a demotion and survives a
+    // deactivation, so a list that showed neither would render a closed
+    // account and a live one identically. The transient state between demote
+    // and detach is visible for the same reason.
     const rows = await c.env.DB.prepare(
-      `SELECT la.admin_role, la.created_at, u.id AS user_id, u.name, u.email
+      `SELECT la.admin_role, la.created_at, u.id AS user_id, u.name, u.email,
+              u.role, u.is_active
          FROM licence_admins la JOIN users u ON u.id = la.user_id
         WHERE la.licence_id = ? ORDER BY la.admin_role, u.email`,
     ).bind(licence.id).all<any>();
@@ -505,21 +1044,37 @@ r.get('/:uid/admins', async (c) => {
 
 r.post('/:uid/admins', async (c) => {
   try {
-    const admin = await requireSuperAdmin(c);
+    // D134 — THE WRITE BAR, not the plain elevation. Every other route in this
+    // file re-terms or suspends a licence; this one mints an administrator, and
+    // the thing it is closest to is impersonation, which has always wanted a
+    // TOTP-minted session and a recent step-up. A super-admin session left open
+    // on a desk should not be able to create a peer.
+    const admin = await requireSuperAdminWriteBar(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
     const b = await c.req.json().catch(() => ({} as any));
     const email = str(b?.email, 320).toLowerCase();
     const role = str(b?.admin_role, 20) || 'principal';
+    const reason = str(b?.reason, 500);
     if (!email) return c.json({ error: 'an email address is required' }, 400);
     if (role !== 'principal' && role !== 'delegate') {
       return c.json({ error: "admin_role must be 'principal' or 'delegate'" }, 400);
     }
+    // The same rule the impersonation reason carries, for the same reason:
+    // enforced server-side because a UI-only rule would be a convention rather
+    // than a control, and ten characters because this is the line somebody
+    // reads in the audit when they ask why an account has admin.
+    if (reason.length < 10) {
+      return c.json({
+        error: 'A reason of at least 10 characters is required — minting an administrator is the line someone reads in the audit later.',
+        code: 'reason_too_short',
+      }, 400);
+    }
     // Resolve to an existing account, like the data room does. Assigning a
     // licence to an address nobody holds would create an administrator who
     // cannot sign in.
-    const u = await c.env.DB.prepare('SELECT id, email FROM users WHERE LOWER(email) = ?')
-      .bind(email).first<{ id: number; email: string }>();
+    const u = await c.env.DB.prepare('SELECT id, email, role FROM users WHERE LOWER(email) = ?')
+      .bind(email).first<{ id: number; email: string; role: string }>();
     if (!u) return c.json({ error: 'no account with that address' }, 404);
 
     // licence_admins is UNIQUE on user_id alone — see migration 190. Report
@@ -533,32 +1088,992 @@ r.post('/:uid/admins', async (c) => {
       return c.json({ error: `that account already administers ${held.licence_ref}` }, 409);
     }
 
-    await c.env.DB.prepare(
-      `INSERT INTO licence_admins (licence_id, user_id, admin_role, granted_by_user_id)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(user_id) DO UPDATE SET admin_role = excluded.admin_role`,
-    ).bind(licence.id, u.id, role, admin.id).run();
+    // ONE BATCH, AND THE ORDER OF THE TWO WRITES DOES NOT MATTER — that they
+    // are one statement does. A binding without the role is an administrator
+    // who cannot administer; the role without a binding is the unscoped admin
+    // the whole door exists to prevent. Either alone is a state somebody would
+    // have to notice and repair by hand.
+    const previousRole = String(u.role || '');
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO licence_admins (licence_id, user_id, admin_role, granted_by_user_id)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET admin_role = excluded.admin_role`,
+      ).bind(licence.id, u.id, role, admin.id),
+      c.env.DB.prepare("UPDATE users SET role = 'admin' WHERE id = ?").bind(u.id),
+    ]);
     await logEvent(c.env, licence.id, 'terms_changed', admin.id,
-      { administrator_added: u.email, admin_role: role });
-    return c.json({ ok: true, user_id: u.id, admin_role: role });
+      { administrator_added: u.email, admin_role: role, promoted_from: previousRole }, reason);
+    // The account's OWN feed learns it too. `role_changed` / `your_role_changed`
+    // are the pair `routes/admin.ts` already writes and every audit reader
+    // already renders; a new action name would show up nowhere until three
+    // separate allowlists were swept, which is the failure that pair's own
+    // comment describes.
+    try {
+      const actorHash = await hashEmail(admin.email);
+      const targetHash = await hashEmail(u.email);
+      await c.env.DB.batch([
+        c.env.DB.prepare(
+          'INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?,?,?,?)',
+        ).bind('role_changed',
+          `Super admin ${admin.name} made ${u.email} an administrator of ${licence.licence_ref} (was ${previousRole || 'unrecorded'}). Reason: ${reason}`,
+          actorHash, admin.id),
+        c.env.DB.prepare(
+          'INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?,?,?,?)',
+        ).bind('your_role_changed',
+          `You were made an administrator of ${licence.licence_ref} by ${admin.name}`,
+          targetHash, u.id),
+      ]);
+    } catch (e) {
+      console.warn('[licences/admins] activity log failed', (e as Error).message);
+    }
+    return c.json({ ok: true, user_id: u.id, admin_role: role, role: 'admin', promoted_from: previousRole });
   } catch (e) { return mapError(c, e); }
 });
 
 r.delete('/:uid/admins/:userId{[0-9]+}', async (c) => {
   try {
-    const admin = await requireSuperAdmin(c);
+    // Same bar as the add, because the two are one power read from either end.
+    const admin = await requireSuperAdminWriteBar(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
     const userId = Number(c.req.param('userId'));
     const gone = await c.env.DB.prepare(
-      'SELECT u.email FROM licence_admins la JOIN users u ON u.id = la.user_id WHERE la.licence_id = ? AND la.user_id = ?',
-    ).bind(licence.id, userId).first<{ email: string }>();
+      'SELECT u.email, u.role FROM licence_admins la JOIN users u ON u.id = la.user_id WHERE la.licence_id = ? AND la.user_id = ?',
+    ).bind(licence.id, userId).first<{ email: string; role: string }>();
     if (!gone) return c.json({ error: 'not_found' }, 404);
+    // D134 — DETACH REFUSES WHILE THEY ARE STILL AN ADMIN, and this is the
+    // asymmetry that makes the add safe. `POST` above binds and promotes in one
+    // batch precisely so no admin exists without a licence behind them;
+    // unbinding first would produce exactly that account — role intact, nothing
+    // naming which territory it belongs to, and no screen that lists it.
+    //
+    // The refusal names the step rather than stating a policy, because the
+    // caller's next action is a single route away and a 409 that does not say
+    // which one is a dead end.
+    if (String(gone.role).toLowerCase() === 'admin') {
+      return c.json({
+        error: `${gone.email} still holds the admin role. Demote the account first `
+          + '(POST /api/admin/users/:userId/demote-admin) — detaching alone would leave an '
+          + 'administrator with no licence behind them.',
+        code: 'still_an_admin',
+      }, 409);
+    }
     await c.env.DB.prepare('DELETE FROM licence_admins WHERE licence_id = ? AND user_id = ?')
       .bind(licence.id, userId).run();
     await logEvent(c.env, licence.id, 'terms_changed', admin.id,
       { administrator_removed: gone.email });
     return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+/* ------------------------------------------------------------------ *
+ * The compliance ladder — HQ's half (D135)                             *
+ * ------------------------------------------------------------------ */
+
+// "First admins get notified; if admins do not act on notifications, admin
+// accounts are frozen until they act; and lastly if they don't comply admin
+// accounts are terminated." These three routes are the first and third of
+// those: HQ issues a notice with a deadline, and HQ reads the response and
+// accepts or rejects it. The middle rung — the freeze — belongs to a clock, in
+// `services/complianceLadder.ts`, because a rung a person has to remember to
+// climb is not a ladder.
+//
+// THE NOTICE IS NOT A LICENCE EVENT, and that is deliberate rather than an
+// omission. `licence_events`' CHECK admits nine values (migration 187) and
+// "notice issued" is not one of them; writing `terms_changed` instead would put
+// a false sentence in the one table a contract dispute reads. The notice row IS
+// the record. What DOES reach `licence_events` is the `suspended` the sweep
+// performs, which is a real transition and is in the CHECK.
+//
+// AND THE ADDRESSEE MUST ADMINISTER THIS LICENCE. A notice about a territory
+// sent to someone who does not hold it is a notice with no remedy behind it:
+// the freeze would land on an account whose licence is somebody else's.
+
+r.get('/:uid/notices', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    let items: any[] = [];
+    let readable = true;
+    try {
+      const res = await c.env.DB.prepare(
+        `SELECT n.uid, n.kind, n.subject, n.body, n.respond_by, n.status,
+                n.response, n.responded_at, n.review_note, n.reviewed_at,
+                n.froze_at, n.created_at,
+                u.id AS user_id, u.name, u.email
+           FROM admin_notices n JOIN users u ON u.id = n.user_id
+          WHERE n.licence_id = ?
+          ORDER BY n.id DESC`,
+      ).bind(licence.id).all<any>();
+      items = res.results || [];
+    } catch { readable = false; }
+    return c.json({
+      items: readable ? items : [],
+      // An unreadable table is NOT "no notices". A database that has not applied
+      // migration 264 must say so rather than render an empty list, which is a
+      // claim about the licence that nothing measured.
+      notices_available: readable,
+      ...(readable ? {} : {
+        notices_reason: 'The admin_notices table could not be read on this database (migration 264).',
+      }),
+      freeze_holders: readable ? await freezeHoldersForLicence(c.env, licence.id) : null,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+r.post('/:uid/notices', async (c) => {
+  try {
+    const admin = await requireSuperAdminWriteBar(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const b = await c.req.json().catch(() => ({} as any));
+    const kind = str(b?.kind, 32);
+    const subject = str(b?.subject, 200);
+    const body = str(b?.body, 5000);
+    const email = str(b?.email, 320).toLowerCase();
+    if (!(NOTICE_KINDS as readonly string[]).includes(kind)) {
+      return c.json({ error: `kind must be one of ${NOTICE_KINDS.join(', ')}`, code: 'bad_kind' }, 400);
+    }
+    if (subject.length < 3) return c.json({ error: 'a notice needs a subject' }, 400);
+    // The body IS the notice. A ten-character floor for the same reason every
+    // other reason field on this tier has one: it is what the addressee reads
+    // when deciding what to do, and what a tribunal reads afterwards.
+    if (body.length < 10) {
+      return c.json({
+        error: 'A notice body of at least 10 characters is required — it is what the addressee has to act on.',
+        code: 'body_too_short',
+      }, 400);
+    }
+    const days = Math.min(MAX_RESPOND_DAYS, Math.max(MIN_RESPOND_DAYS,
+      Number.isFinite(Number(b?.respond_days)) ? Math.trunc(Number(b.respond_days)) : DEFAULT_RESPOND_DAYS));
+
+    const target = await c.env.DB.prepare(
+      `SELECT u.id, u.email, u.name FROM licence_admins la JOIN users u ON u.id = la.user_id
+        WHERE la.licence_id = ? AND LOWER(u.email) = ?`,
+    ).bind(licence.id, email).first<{ id: number; email: string; name: string }>();
+    if (!target) {
+      return c.json({
+        error: `no administrator of ${licence.licence_ref} with that address — a notice has to reach someone who can act on it`,
+        code: 'not_an_administrator',
+      }, 404);
+    }
+
+    const uid = newUid();
+    try {
+      // `respond_by` is computed in SQL, never bound as an ISO string. The
+      // column is swept against `datetime('now')`, and an ISO value compared
+      // there is ALWAYS the greater one — a deadline that does not bite until
+      // the UTC date rolls over. One writer, one format.
+      await c.env.DB.prepare(
+        `INSERT INTO admin_notices
+           (uid, user_id, licence_id, kind, subject, body, issued_by_user_id, respond_by, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', ?), 'issued')`,
+      ).bind(uid, target.id, licence.id, kind, subject, body, admin.id, `+${days} days`).run();
+    } catch (e) {
+      const msg = String((e as Error).message || '');
+      if (/no such table/i.test(msg)) {
+        return c.json({
+          error: 'The admin_notices table does not exist on this database (migration 264 has not been applied).',
+          code: 'store_missing',
+        }, 503);
+      }
+      throw e;
+    }
+
+    const row = await c.env.DB.prepare(
+      'SELECT uid, respond_by, status FROM admin_notices WHERE uid = ?',
+    ).bind(uid).first<{ uid: string; respond_by: string; status: string }>();
+
+    // `send()` and NOT `notify()` here, and the difference is worth stating
+    // because the two look interchangeable and are not. `send()` renders a
+    // DESIGNED template, queues through JOB_QUEUE so a failure retries into the
+    // DLQ, writes `email_send_log`, and mirrors the message into the inbox with
+    // its category and CTA — six modules already use it. `notify()` has no
+    // template: it sends `[Axal] <title>` with the body as plain text. A notice
+    // is the one piece of mail on this ladder that is worth designing, so it
+    // goes through the path that can render one. The freeze that follows uses
+    // `notify()`, because by then the person is looking at a 423 and what they
+    // need is one sentence and the route back.
+    let delivered = false;
+    try {
+      const { send } = await import('../services/email/send');
+      const res = await send(c.env, 'compliance_notice_issued', target.email, {
+        name: target.name || target.email,
+        subject,
+        kind_label: KIND_LABELS[kind] ?? kind,
+        respond_by: String(row?.respond_by || ''),
+        body,
+        licence_url: `${String((c.env as any).APP_URL || 'https://axal.vc')}/admin/my-licence`,
+      }, { userId: target.id });
+      delivered = Boolean(res?.ok);
+    } catch (e) { console.warn('[compliance] notice mail failed', (e as Error).message); }
+
+    return c.json({
+      ok: true,
+      notice: { uid, status: row?.status ?? 'issued', respond_by: row?.respond_by ?? null },
+      // Whether the message actually left, reported rather than assumed — the
+      // `email_sent` argument migration 236 already made: a notice nobody was
+      // told about is a different thing from one that is merely unanswered, and
+      // the ladder's next rung freezes an account over the difference.
+      email_sent: delivered,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+r.post('/:uid/notices/:noticeUid/review', async (c) => {
+  try {
+    const admin = await requireSuperAdminWriteBar(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const b = await c.req.json().catch(() => ({} as any));
+    const decision = str(b?.decision, 16);
+    const note = str(b?.note, 1000);
+    if (decision !== 'accept' && decision !== 'reject') {
+      return c.json({ error: "decision must be 'accept' or 'reject'", code: 'bad_decision' }, 400);
+    }
+    const notice = await c.env.DB.prepare(
+      'SELECT id, uid, user_id, status FROM admin_notices WHERE uid = ? AND licence_id = ?',
+    ).bind(c.req.param('noticeUid'), licence.id).first<{ id: number; uid: string; user_id: number; status: string }>();
+    if (!notice) return c.json({ error: 'not_found' }, 404);
+    // A CLICK BY THE PERSON WHO OWES A FEE IS NOT EVIDENCE THE FEE WAS PAID —
+    // which is why HQ reviews and lifts, and why there is nothing to review
+    // until the addressee has actually said something.
+    if (notice.status !== 'responded') {
+      return c.json({
+        error: `this notice is ${notice.status}; there is nothing to review until the addressee has responded`,
+        code: 'not_responded',
+      }, 409);
+    }
+    const next = decision === 'accept' ? 'accepted' : 'rejected';
+    await c.env.DB.prepare(
+      `UPDATE admin_notices
+          SET status = ?, reviewed_by_user_id = ?, reviewed_at = datetime('now'),
+              review_note = ?, updated_at = datetime('now')
+        WHERE id = ?`,
+    ).bind(next, admin.id, note || null, notice.id).run();
+
+    // ACCEPTING LIFTS THE FREEZE ONLY WHEN IT WAS THE LAST THING HOLDING IT.
+    // Two outstanding notices and one accepted is still a frozen account; the
+    // count is what says which. Reinstatement reuses the licence's own state —
+    // there is no second flag to keep in step.
+    let reinstated = false;
+    const holders = await freezeHoldersForLicence(c.env, licence.id);
+    if (next === 'accepted' && holders === 0 && licence.status === 'suspended') {
+      await c.env.DB.prepare(
+        "UPDATE territory_licences SET status = 'active', status_note = NULL, suspended_at = NULL, updated_at = ? WHERE id = ? AND status = 'suspended'",
+      ).bind(nowIso(), licence.id).run();
+      await logEvent(c.env, licence.id, 'reinstated', admin.id, { notice_uid: notice.uid }, note || null);
+      reinstated = true;
+    }
+    // D272 — a reinstatement changes the copy's status, like the /reinstate
+    // route, which already pushes. A review that does not reinstate changes
+    // nothing the branch holds, so it pushes nothing.
+    const pushed = reinstated ? await pushLicenceToBranch(c.env, licence.id) : null;
+    await notifyLicenceAdmins(c.env, licence.id, {
+      type: next === 'accepted' ? 'compliance_accepted' : 'compliance_rejected',
+      title: next === 'accepted'
+        ? 'HQ accepted your response'
+        : 'HQ did not accept your response',
+      body: next === 'accepted'
+        ? (reinstated
+          ? 'Your licence is active again and your account can write.'
+          : `Accepted. ${holders} other notice${holders === 1 ? '' : 's'} still outstanding, so the freeze stays until those are answered.`)
+        : `Your account stays frozen.${note ? ` HQ's note: ${note}` : ''}`,
+      payload: { notice_uid: notice.uid, decision: next },
+    });
+    return c.json({ ok: true, status: next, freeze_holders: holders, reinstated, pushed });
+  } catch (e) { return mapError(c, e); }
+});
+
+/* ------------------------------------------------------------------ *
+ * H31 — the one thing HQ may do to a tenant's host (D197)              *
+ * ------------------------------------------------------------------ */
+
+// H31 IS EXPLICIT ABOUT WHAT IS *NOT* HERE: "There is no Approve, no Add
+// domain, and no DNS editor for HQ to complete on a tenant's behalf." The
+// records live in the tenant's own zone and only the tenant can publish them,
+// so a control HQ could not complete is a control HQ does not get. H26's own
+// changelog settles the tier question one level up — "An earlier draft made
+// Domain an HQ console. It is not: Super Admin stays on axal.vc and
+// app.axal.vc and binds nothing else."
+//
+// Detach is the exception, and it is an admin act rather than a setting: it
+// takes a host away from an operator, so it takes the super-admin write bar,
+// a typed reason, and an audit row through `logAdminAction` (D159). The
+// detached row KEEPS the hostname — see migration 280's header — so the
+// collision this resolved cannot be re-created by the next licence claiming it
+// a second later.
+const MIN_DETACH_REASON = 10;
+
+r.post('/:uid/domain/detach', async (c) => {
+  try {
+    const admin = await requireSuperAdminWriteBar(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const body = await c.req.json().catch(() => ({} as any));
+    const reason = str(body?.reason, 1000);
+    // ENFORCED SERVER-SIDE, not in the form. A UI-only rule is a convention;
+    // this is the sentence an operator reads months later asking why their
+    // host stopped being theirs, and it has to exist.
+    if (reason.length < MIN_DETACH_REASON) {
+      return c.json({
+        error: `A reason of at least ${MIN_DETACH_REASON} characters is required — it is what the `
+          + 'operator is told, and what the audit row carries.',
+        code: 'reason_too_short',
+      }, 400);
+    }
+
+    let row: LicenceDomainRow | null = null;
+    try {
+      row = await c.env.DB.prepare(
+        `SELECT id, licence_id, hostname, challenge_token, state,
+                txt_verified_at, cname_verified_at, last_checked_at, last_check_json,
+                is_primary, detached_at, detached_by_user_id, detach_reason,
+                created_by_user_id, created_at, updated_at
+           FROM licence_domains WHERE licence_id = ?`,
+      ).bind(licence.id).first<LicenceDomainRow>();
+    } catch (e) {
+      console.warn('[licences] licence_domains unreadable', (e as Error).message);
+      return c.json({
+        error: 'The host register could not be read on this database (migration 280).',
+        code: 'domain_store_unreadable',
+      }, 503);
+    }
+    if (!row) {
+      return c.json({
+        error: 'This licence has no custom host bound. HQ does not add one — the Admin binds it '
+          + 'in their own Settings.',
+        code: 'no_domain',
+      }, 404);
+    }
+    if (row.state === 'detached') {
+      return c.json({
+        error: `${row.hostname} is already detached.`,
+        code: 'already_detached',
+      }, 409);
+    }
+
+    await c.env.DB.prepare(
+      `UPDATE licence_domains
+          SET state = 'detached', detached_at = datetime('now'), detached_by_user_id = ?,
+              detach_reason = ?, is_primary = 0, updated_at = datetime('now')
+        WHERE id = ?`,
+    ).bind(admin.id, reason, row.id).run();
+
+    // THROUGH `logAdminAction`, WHICH IS D159'S WHOLE POINT, and NOT through
+    // `licence_events`: that table's CHECK admits ten values and widening it
+    // means the full rebuild migration 266 had to pay to add ONE. An HQ act
+    // against a tenant belongs in `admin_audit_log`, which has no CHECK.
+    //
+    // NO `target_user_id`, deliberately. The subject is a licence, not a
+    // person, and a licence may have several administrators — naming one of
+    // them would put the wrong face on the row. `targetUserIdOf` reads an
+    // absent key as no target, which is the honest render.
+    await logAdminAction(c.env, admin.id, admin.email, 'licence_domain_detached', {
+      licence_uid: licence.uid,
+      licence_ref: licence.licence_ref,
+      hostname: row.hostname,
+      previous_state: row.state,
+      reason,
+    });
+
+    // The operator learns it here rather than by noticing. Best-effort: a
+    // recorded detach must not be undone by a mail failure.
+    try {
+      await notifyLicenceAdmins(c.env, licence.id, {
+        type: 'licence_domain_detached',
+        title: `Super Admin detached ${row.hostname}`,
+        body: `${row.hostname} is no longer bound to your licence. ${reason}`,
+        payload: { hostname: row.hostname },
+      });
+    } catch (e) { console.warn('[licences] detach notice failed', (e as Error).message); }
+
+    const fresh = await c.env.DB.prepare(
+      `SELECT id, licence_id, hostname, challenge_token, state,
+              txt_verified_at, cname_verified_at, last_checked_at, last_check_json,
+              is_primary, detached_at, detached_by_user_id, detach_reason,
+              created_by_user_id, created_at, updated_at
+         FROM licence_domains WHERE id = ?`,
+    ).bind(row.id).first<LicenceDomainRow>();
+    return c.json({ ok: true, domain: fresh ? domainPayload(fresh) : null });
+  } catch (e) { return mapError(c, e); }
+});
+
+/* ------------------------------------------------------------------ *
+ * D198 — H26 step 6: the brand a WHITE-LABEL operator trades under     *
+ * ------------------------------------------------------------------ *
+ *
+ * ALL FOUR ROUTES REFUSE A SUBSIDIARY, and that refusal is the feature
+ * rather than a guard around it. `wlCompare` on the Super canvas is what
+ * settles who owns a kit — `{ k:'Brand kit', a:'Axal, fixed', w:'Theirs ·
+ * name, mark, colours, domain' }` — so a subsidiary licence HAS a brand and
+ * it is Axal's, fixed, and not a row in this table. Storing one would make
+ * the ledger able to say a subsidiary trades under a mark of its own, which
+ * is a claim the product does not want to be able to make.
+ *
+ * HQ WRITES; HQ DOES NOT APPROVE. H26's own prose: "HQ will never approve
+ * this. They will." What HQ is doing here is CAPTURE — a licence is issued
+ * before any administrator is named on it (D134), so at issue time there is
+ * nobody else to type it. The branch-side editor S1d and `dmSub` draw is
+ * filed, not built: it needs the kit pushed to the branch first, and the
+ * mark's bytes crossing from HQ's R2 to the branch's is a transport decision
+ * rather than a store one.
+ */
+
+/** Every write here is the same refusal for a subsidiary; said once. */
+function refuseUnlessWhiteLabel(licence: LicenceRow) {
+  if (licence.kind === 'white_label') return null;
+  return {
+    error: 'A brand kit belongs to a white-label licence. An Axal subsidiary trades under Axal’s '
+      + 'brand, which is fixed and is not stored per licence.',
+    code: 'not_white_label',
+  };
+}
+
+/** The kit row for a licence, or the unreadable state, never one as the other. */
+async function kitFor(
+  env: Env, licenceId: number,
+): Promise<{ ok: true; row: LicenceBrandKitRow | null } | { ok: false }> {
+  try {
+    const row = await env.DB.prepare(
+`SELECT id, licence_id, mark_r2_key, mark_mime, mark_bytes, primary_hex, accent_hex,
+              updated_by_user_id, created_at, updated_at
+         FROM licence_brand_kits WHERE licence_id = ?`,
+    ).bind(licenceId).first<LicenceBrandKitRow>();
+    return { ok: true, row: row || null };
+  } catch (e) {
+    console.warn('[licences] licence_brand_kits unreadable', (e as Error).message);
+    return { ok: false };
+  }
+}
+
+// PUT /:uid/brand — the colours.
+//
+// BOTH ARE REQUIRED TOGETHER, which is the same condition `activationBlockers`
+// checks. A kit holding one colour would satisfy "a kit exists" while a shell
+// built from it still has to reach for a second colour, and the only second
+// colour available is Axal's.
+r.put('/:uid/brand', async (c) => {
+  try {
+    const admin = await requireSuperAdminWriteBar(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const refusal = refuseUnlessWhiteLabel(licence);
+    if (refusal) return c.json(refusal, 409);
+
+    const body = await c.req.json().catch(() => ({} as any));
+    // REFUSED, NEVER COERCED. `cleanHex` returns null for anything that is not
+    // a hex colour, and a null here is a 400 rather than a default — a brand
+    // colour quietly replaced by a fallback is a wrong claim about somebody's
+    // brand, which is worse than a missing one.
+    const primary = cleanHex(body?.primary_hex);
+    const accent = cleanHex(body?.accent_hex);
+    if (!primary || !accent) {
+      return c.json({
+        error: 'Both a primary and an accent colour are required, each as a hex value such as '
+          + '#0f766e. A white-label shell with only one colour of its own reaches for Axal’s '
+          + 'for the other.',
+        code: 'invalid_colours',
+      }, 400);
+    }
+
+    const existing = await kitFor(c.env, licence.id);
+    if (!existing.ok) return c.json({ error: KIT_UNREADABLE, code: 'brand_kit_unreadable' }, 503);
+
+    if (existing.row) {
+      await c.env.DB.prepare(
+        `UPDATE licence_brand_kits
+            SET primary_hex = ?, accent_hex = ?, updated_by_user_id = ?,
+                updated_at = datetime('now')
+          WHERE id = ?`,
+      ).bind(primary, accent, admin.id, existing.row.id).run();
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO licence_brand_kits (licence_id, primary_hex, accent_hex, updated_by_user_id)
+         VALUES (?,?,?,?)`,
+      ).bind(licence.id, primary, accent, admin.id).run();
+    }
+
+    // Through `logAdminAction` (D159), and NOT `licence_events`: that table's
+    // CHECK admits ten values and widening it cost migration 266 a full
+    // rebuild to add one. No `target_user_id` — the subject is a licence, and
+    // a licence may have several administrators.
+    await logAdminAction(c.env, admin.id, admin.email, 'licence_brand_kit_set', {
+      licence_uid: licence.uid,
+      licence_ref: licence.licence_ref,
+      primary_hex: primary,
+      accent_hex: accent,
+    });
+
+    const after = await kitFor(c.env, licence.id);
+    return c.json({
+      ok: true,
+      brand_kit: after.ok && after.row ? brandKitPayload(licence.uid, after.row) : null,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /:uid/brand/mark — the logo, multipart.
+//
+// THE PARSING AND SANITISING HALF IS `readUploadedMark` FROM routes/brand.ts,
+// reused rather than re-implemented: the MIME allowlist, the 512 KB cap and
+// the SVG sanitisation are one set of rules and two upload paths that decided
+// them separately would drift. What is NOT shared is the half that must
+// differ — that route is `requireAuth` and keys by the uploader; this one is
+// on the super-admin write bar and keys by the LICENCE, so a mark can never
+// land in a namespace belonging to whichever operator happened to upload it.
+r.post('/:uid/brand/mark', async (c) => {
+  try {
+    const admin = await requireSuperAdminWriteBar(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const refusal = refuseUnlessWhiteLabel(licence);
+    if (refusal) return c.json(refusal, 409);
+
+    const ctype = (c.req.header('content-type') || '').toLowerCase();
+    if (!ctype.includes('multipart/form-data')) {
+      return c.json({ error: 'expected_multipart', code: 'expected_multipart' }, 400);
+    }
+    const read = await readUploadedMark(await c.req.formData());
+    if (!read.ok) return c.json({ error: read.error }, read.status);
+
+    const files = c.env.FILES;
+    // STATED, NOT SWALLOWED. Without the binding there is nowhere to put the
+    // bytes, and storing a data URI in a TEXT column instead would put a
+    // 512 KB blob on every licence payload the console fetches.
+    if (!files) {
+      return c.json({
+        error: 'No object store is bound on this deployment, so a mark cannot be uploaded. The '
+          + 'colours can still be set.',
+        code: 'r2_unavailable',
+      }, 503);
+    }
+
+    const existing = await kitFor(c.env, licence.id);
+    if (!existing.ok) return c.json({ error: KIT_UNREADABLE, code: 'brand_kit_unreadable' }, 503);
+
+    const key = `licence-marks/${licence.uid}/${crypto.randomUUID()}.${markExtension(read.mime)}`;
+    try {
+      await files.put(key, read.bytes, {
+        httpMetadata: { contentType: read.mime },
+        customMetadata: { licenceUid: licence.uid, uploadedAt: new Date().toISOString() },
+      });
+    } catch {
+      return c.json({ error: 'upload failed', code: 'upload_failed' }, 500);
+    }
+
+    if (existing.row) {
+      await c.env.DB.prepare(
+        `UPDATE licence_brand_kits
+            SET mark_r2_key = ?, mark_mime = ?, mark_bytes = ?, updated_by_user_id = ?,
+                updated_at = datetime('now')
+          WHERE id = ?`,
+      ).bind(key, read.mime, read.bytes.length, admin.id, existing.row.id).run();
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO licence_brand_kits
+           (licence_id, mark_r2_key, mark_mime, mark_bytes, updated_by_user_id)
+         VALUES (?,?,?,?,?)`,
+      ).bind(licence.id, key, read.mime, read.bytes.length, admin.id).run();
+    }
+
+    // The superseded object is removed AFTER the row points at the new one, so
+    // a failure here costs an orphan in the bucket rather than a kit whose
+    // mark_r2_key names an object that no longer exists.
+    if (existing.row?.mark_r2_key && existing.row.mark_r2_key !== key) {
+      try { await files.delete(existing.row.mark_r2_key); } catch { /* orphan, not a failure */ }
+    }
+
+    await logAdminAction(c.env, admin.id, admin.email, 'licence_brand_mark_set', {
+      licence_uid: licence.uid,
+      licence_ref: licence.licence_ref,
+      mime: read.mime,
+      bytes: read.bytes.length,
+    });
+
+    const after = await kitFor(c.env, licence.id);
+    return c.json({
+      ok: true,
+      brand_kit: after.ok && after.row ? brandKitPayload(licence.uid, after.row) : null,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// DELETE /:uid/brand/mark — remove the logo, keep the colours.
+r.delete('/:uid/brand/mark', async (c) => {
+  try {
+    const admin = await requireSuperAdminWriteBar(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const refusal = refuseUnlessWhiteLabel(licence);
+    if (refusal) return c.json(refusal, 409);
+
+    const existing = await kitFor(c.env, licence.id);
+    if (!existing.ok) return c.json({ error: KIT_UNREADABLE, code: 'brand_kit_unreadable' }, 503);
+    if (!existing.row?.mark_r2_key) {
+      return c.json({ error: 'This licence has no mark to remove.', code: 'no_mark' }, 404);
+    }
+
+    await c.env.DB.prepare(
+      `UPDATE licence_brand_kits
+          SET mark_r2_key = NULL, mark_mime = NULL, mark_bytes = NULL,
+              updated_by_user_id = ?, updated_at = datetime('now')
+        WHERE id = ?`,
+    ).bind(admin.id, existing.row.id).run();
+    // Row first, bytes second, for the same reason as above.
+    try { await c.env.FILES?.delete(existing.row.mark_r2_key); } catch { /* orphan */ }
+
+    await logAdminAction(c.env, admin.id, admin.email, 'licence_brand_mark_removed', {
+      licence_uid: licence.uid,
+      licence_ref: licence.licence_ref,
+      mark_bytes: existing.row.mark_bytes,
+    });
+
+    const after = await kitFor(c.env, licence.id);
+    return c.json({
+      ok: true,
+      brand_kit: after.ok && after.row ? brandKitPayload(licence.uid, after.row) : null,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// GET /:uid/brand/mark — the bytes, behind the gate.
+//
+// A PLAIN GATED STREAM, NOT A SIGNED TOKEN, and the difference is measured
+// rather than stylistic. `mintDownloadToken` is ONE-TIME — its `jti` is
+// pre-registered in KV and deleted on consume — and hard-clamped to five
+// minutes, which is right for a document and wrong for an `<img src>` on a
+// page that re-renders: the second render would 404. This is the shape
+// `articles.ts:292` already uses for exactly that reason, and three more
+// routes after it.
+//
+// `requireSuperAdmin`, NOT the write bar: drawing a preview is a read, and
+// putting a step-up in front of an `<img>` would make the preview blank for an
+// operator who is perfectly entitled to see it. A same-origin `<img>` cannot
+// send a Bearer header, so this authenticates on the cookie — which is what
+// `getCurrentUser` reads first anyway.
+r.get('/:uid/brand/mark', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const existing = await kitFor(c.env, licence.id);
+    if (!existing.ok) return c.json({ error: KIT_UNREADABLE, code: 'brand_kit_unreadable' }, 503);
+    if (!existing.row?.mark_r2_key) return c.json({ error: 'not_found' }, 404);
+    if (!c.env.FILES) return c.json({ error: 'r2_unavailable' }, 503);
+    const obj = await c.env.FILES.get(existing.row.mark_r2_key);
+    if (!obj) return c.json({ error: 'not_found' }, 404);
+    return new Response(obj.body, {
+      headers: {
+        'content-type': existing.row.mark_mime || 'application/octet-stream',
+        // Never cached: a mark is replaceable, the URL does not change when it
+        // is replaced, and a stale logo behind a brand is worse than a refetch.
+        'cache-control': 'private, no-store',
+      },
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/* ------------------------------------------------------------------ *
+ * H3 step 5 — the contract, instantiated from a master template        *
+ * ------------------------------------------------------------------ */
+
+const COUNTERSIGN_NOT_RECORDED =
+  'Ordered signers and HQ countersignature are not recorded yet — Session 13 holds '
+  + 'ordered-signer envelopes; this send uses one recipient through createAndSendEnvelope.';
+
+function contractStatusFromEnvelope(envelopeStatus: string): 'draft' | 'sent' | 'signed' | 'void' {
+  if (envelopeStatus === 'completed') return 'signed';
+  if (envelopeStatus === 'void') return 'void';
+  if (envelopeStatus === 'sent' || envelopeStatus === 'partially_signed') return 'sent';
+  return 'draft';
+}
+
+function mergeFieldsForEnvelope(
+  licence: LicenceRow,
+  territories: string[],
+  seats: Array<{ seat_type: string; seats_licensed: number }>,
+): Record<string, string> {
+  const raw = mergeValues(licence, territories, seats);
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (v !== null && v !== undefined) out[k] = String(v);
+  }
+  return out;
+}
+
+/** D451 — status on read follows the envelope row when one exists (D110 deferred leg). */
+async function enrichContractFromEnvelope(env: Env, row: Record<string, unknown>) {
+  const countersignature = { recorded: false as const, reason: COUNTERSIGN_NOT_RECORDED };
+  const envelopeUid = row.envelope_uid ? String(row.envelope_uid) : null;
+  if (!envelopeUid) {
+    return { ...row, countersignature };
+  }
+  try {
+    const e = await env.DB.prepare(
+      `SELECT status, completed_at FROM esign_envelopes WHERE envelope_uuid = ?`,
+    ).bind(envelopeUid).first<{ status: string; completed_at: string | null }>();
+    if (!e) {
+      return {
+        ...row,
+        countersignature,
+        envelope_unreadable: true,
+        envelope_reason: 'The envelope row could not be read for this contract.',
+      };
+    }
+    const status = contractStatusFromEnvelope(String(e.status));
+    return {
+      ...row,
+      status,
+      signed_at: status === 'signed' ? (e.completed_at || row.signed_at || null) : row.signed_at,
+      countersignature,
+    };
+  } catch {
+    return {
+      ...row,
+      countersignature,
+      envelope_unreadable: true,
+      envelope_reason: 'The esign_envelopes table could not be read on this database.',
+    };
+  }
+}
+
+// GET /:uid/contract — what has been instantiated, and what could be.
+//
+// THE TEMPLATE LIST AND THE CONTRACT LIST COME BACK TOGETHER because the
+// screen's two states are "pick one" and "here is the one you picked", and a
+// second request to learn which of those it is would be a request whose
+// failure mode is a picker that renders empty for a licence that already has
+// a contract.
+r.get('/:uid/contract', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+
+    let contracts: any[] = [];
+    let store = true;
+    try {
+      const q = await c.env.DB.prepare(
+        `SELECT uid, template_slug, template_version, template_title, unfilled_fields,
+                status, envelope_uid, superseded_at, created_at, sent_at, signed_at
+           FROM licence_contracts WHERE licence_uid = ? ORDER BY created_at DESC, id DESC`,
+      ).bind(licence.uid).all<any>();
+      contracts = await Promise.all((q.results || []).map(async (row) => enrichContractFromEnvelope(
+        c.env,
+        {
+          ...row,
+          unfilled_fields: JSON.parse(String(row.unfilled_fields || '[]')),
+        },
+      )));
+    } catch { store = false; }
+
+    await ensureLegalTemplatesSchema(c.env);
+    const templates = await listTemplates(c.env);
+
+    return c.json({
+      licence_uid: licence.uid,
+      contracts,
+      contracts_available: store,
+      ...(store ? {} : {
+        contracts_reason:
+          'The licence_contracts table could not be read on this database (migration 259).',
+      }),
+      // What the master library actually holds. Offered as-is rather than
+      // filtered to a "licence agreement" category: `legal_templates` has four
+      // categories and none of them is that, so a filter would show an empty
+      // picker over a library that is not empty.
+      templates: templates.map((t) => ({
+        slug: t.slug, title: t.title, category: t.category, version: t.version,
+      })),
+      ...(templates.length ? {} : {
+        templates_reason:
+          'HQ has authored no master templates yet, so there is nothing to instantiate. '
+          + 'The library lives on Contracts.',
+      }),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /:uid/contract — instantiate the named template at its current version.
+//
+// THE VERSION IS READ, NOT PASSED. A caller naming a version could instantiate
+// an archived one, and the rule the library runs on is that an archived
+// version stays binding on contracts that ALREADY carry it — not that it can
+// be newly issued. The current version is the only one HQ is offering today.
+r.post('/:uid/contract', async (c) => {
+  try {
+    const admin = await requireSuperAdmin(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+
+    const b = await c.req.json().catch(() => ({} as any));
+    const slug = str(b?.template_slug, 120);
+    if (!slug) return c.json({ error: 'template_slug is required' }, 400);
+
+    await ensureLegalTemplatesSchema(c.env);
+    const tpl = await getTemplate(c.env, slug);
+    if (!tpl) return c.json({ error: 'template_not_found', template_slug: slug }, 404);
+
+    const [terr, seats] = await Promise.all([
+      c.env.DB.prepare(
+        'SELECT country_code FROM licence_territories WHERE licence_id = ? ORDER BY country_code',
+      ).bind(licence.id).all<{ country_code: string }>(),
+      c.env.DB.prepare(
+        'SELECT seat_type, seats_licensed FROM licence_seats WHERE licence_id = ? ORDER BY seat_type',
+      ).bind(licence.id).all<{ seat_type: string; seats_licensed: number }>(),
+    ]);
+
+    const { body, unfilled } = renderContract(
+      tpl.body_md,
+      mergeValues(licence, (terr.results || []).map((t) => t.country_code), seats.results || []),
+    );
+
+    // The prior contract is SUPERSEDED, never deleted or edited — the same
+    // rule licence_events runs on, and for the same reason: a contract
+    // dispute is exactly the case where the overwritten copy was the one that
+    // mattered.
+    const now = nowIso();
+    await c.env.DB.prepare(
+      'UPDATE licence_contracts SET superseded_at = ?, updated_at = ? WHERE licence_uid = ? AND superseded_at IS NULL',
+    ).bind(now, now, licence.uid).run();
+
+    const uid = newUid();
+    await c.env.DB.prepare(
+      `INSERT INTO licence_contracts
+         (uid, licence_uid, template_slug, template_version, template_title, body_md,
+          unfilled_fields, status, created_by_user_id, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?, 'draft', ?,?,?)`,
+    ).bind(
+      uid, licence.uid, tpl.slug, tpl.version, tpl.title, body,
+      JSON.stringify(unfilled), admin.id, now, now,
+    ).run();
+
+    await logEvent(c.env, licence.id, 'contract_instantiated', admin.id, {
+      contract_uid: uid, template_slug: tpl.slug, template_version: tpl.version,
+      unfilled_fields: unfilled,
+    });
+    // D272 — the copy carries the latest contract's template_version, so a
+    // new contract changes what the branch holds.
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+
+    return c.json({
+      uid,
+      template_slug: tpl.slug,
+      template_version: tpl.version,
+      template_title: tpl.title,
+      status: 'draft',
+      unfilled_fields: unfilled,
+      body_md: body,
+      // Said here because the screen's next control is Activate, and the rule
+      // is the canvas's own.
+      note: 'Instantiated unsigned. A pending signature does not block activation; a territory conflict does.',
+      pushed,
+    }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /:uid/contract/:contractUid/send — leave draft through the shared envelope helper (D451).
+//
+// D110 deliberately left `envelope_uid` unwired; the owner's wave-8 direction
+// reverses that for the licence agreement without touching esign.ts (Session 13).
+r.post('/:uid/contract/:contractUid/send', async (c) => {
+  try {
+    const admin = await requireSuperAdminWriteBar(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+
+    const contractUid = c.req.param('contractUid');
+    const row = await c.env.DB.prepare(
+      `SELECT id, uid, template_slug, status, envelope_uid, superseded_at
+         FROM licence_contracts
+        WHERE uid = ? AND licence_uid = ?`,
+    ).bind(contractUid, licence.uid).first<{
+      id: number; uid: string; template_slug: string; status: string;
+      envelope_uid: string | null; superseded_at: string | null;
+    }>();
+    if (!row || row.superseded_at) {
+      return c.json({ error: 'contract_not_found', message: 'No current contract with that id exists for this licence.' }, 404);
+    }
+    if (row.envelope_uid) {
+      return c.json({
+        error: 'already_sent',
+        message: 'This contract already has an envelope. Its status is derived from that envelope on read.',
+      }, 409);
+    }
+    if (row.status !== 'draft') {
+      return c.json({ error: 'not_draft', message: 'Only a draft contract can be sent for the first time.' }, 409);
+    }
+
+    const recipient = await c.env.DB.prepare(
+      `SELECT u.id, u.email, u.name
+         FROM licence_admins la
+         JOIN users u ON u.id = la.user_id
+        WHERE la.licence_id = ? AND u.is_active = 1
+        ORDER BY CASE la.admin_role WHEN 'principal' THEN 0 ELSE 1 END, la.id
+        LIMIT 1`,
+    ).bind(licence.id).first<{ id: number; email: string; name: string | null }>();
+    if (!recipient?.email) {
+      return c.json({
+        error: 'no_signer',
+        message: 'No active licence administrator has an account to receive the envelope. Grant an admin on this licence first.',
+      }, 409);
+    }
+
+    const [terr, seats] = await Promise.all([
+      c.env.DB.prepare(
+        'SELECT country_code FROM licence_territories WHERE licence_id = ? ORDER BY country_code',
+      ).bind(licence.id).all<{ country_code: string }>(),
+      c.env.DB.prepare(
+        'SELECT seat_type, seats_licensed FROM licence_seats WHERE licence_id = ? ORDER BY seat_type',
+      ).bind(licence.id).all<{ seat_type: string; seats_licensed: number }>(),
+    ]);
+
+    const sent = await createAndSendEnvelope(c.env, {
+      adminUserId: admin.id,
+      adminName: admin.name || admin.email,
+      recipientUserId: recipient.id,
+      recipientEmail: recipient.email,
+      recipientName: recipient.name || licence.signatory_name || recipient.email,
+      documentType: row.template_slug,
+      dealId: row.id,
+      appUrl: c.env.APP_URL || 'https://axal.vc',
+      mergeFields: mergeFieldsForEnvelope(
+        licence,
+        (terr.results || []).map((t) => t.country_code),
+        seats.results || [],
+      ),
+      refuseUnfilled: false,
+    });
+    if (!sent) {
+      return c.json({ error: 'envelope_send_failed', message: 'The envelope could not be created or sent.' }, 502);
+    }
+
+    const now = nowIso();
+    await c.env.DB.prepare(
+      `UPDATE licence_contracts
+          SET status = 'sent', envelope_uid = ?, sent_at = ?, updated_at = ?
+        WHERE id = ?`,
+    ).bind(sent.envelope_uuid, now, now, row.id).run();
+
+    await logEvent(c.env, licence.id, 'contract_sent', admin.id, {
+      contract_uid: row.uid,
+      envelope_uuid: sent.envelope_uuid,
+      recipient_user_id: recipient.id,
+    });
+
+    return c.json({
+      contract_uid: row.uid,
+      envelope_uuid: sent.envelope_uuid,
+      envelope_id: sent.envelope_id,
+      signing_url: sent.signing_url,
+      email_sent: sent.email_sent,
+      already_pending: sent.already_pending ?? false,
+      status: 'sent',
+      countersignature: { recorded: false, reason: COUNTERSIGN_NOT_RECORDED },
+    });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -572,11 +2087,34 @@ r.get('/:uid', async (c) => {
       `SELECT event, detail_json, note, created_at FROM licence_events
         WHERE licence_id = ? ORDER BY created_at DESC, id DESC LIMIT 200`,
     ).bind(licence.id).all<any>();
+    // D197 — THE PLATFORM HOST, on the payload the strip already fetches.
+    // H31's strip puts it beside the custom host because the pair is the whole
+    // point: members are on the platform host the deploy issued, and a custom
+    // host that is merely `verified` has not taken over from it. Reading it
+    // here rather than in the strip keeps `api.deployments()` to the one call
+    // `DeployStep` already makes — two reads of one registry on one screen is
+    // how two figures on one page come to disagree.
+    //
+    // Its own try/catch: a database without migration 258 has no registry, and
+    // the strip renders that as unknown rather than as no deployment.
+    let deployment: { hostname: string; status: string } | null = null;
+    let deploymentReadable = true;
+    try {
+      deployment = await c.env.DB.prepare(
+        'SELECT hostname, status FROM licence_deployments WHERE licence_uid = ?',
+      ).bind(licence.uid).first<{ hostname: string; status: string }>();
+    } catch (e) {
+      console.warn('[licences] licence_deployments unreadable', (e as Error).message);
+      deploymentReadable = false;
+    }
+
     return c.json({
       ...full,
       events: events.results || [],
       blockers: await activationBlockers(c.env, licence),
       holds_territory: HOLDS_TERRITORY.includes(licence.status),
+      deployment,
+      deployment_available: deploymentReadable,
     });
   } catch (e) { return mapError(c, e); }
 });

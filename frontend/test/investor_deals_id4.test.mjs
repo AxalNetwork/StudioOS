@@ -6,14 +6,14 @@
  * documents · Check deal room", "Wire confirmation · Not recorded here" — which
  * said the same thing on every deal because nothing was read to produce them.
  *
- * THE INSTRUMENT IS DELIBERATELY NOT THE ARTBOARD'S, and that is the one thing
- * here most likely to be "fixed" by someone who has not checked. ID4 draws a
- * Closing checklist (Item / State / Owner / Note) and NO STORE HOLDS ONE. The
- * two tables that look like candidates — `dd_checklist_items` and
- * `diligence_checklists` — belong to DILIGENCE, and joining them here would
- * relabel diligence work as closing work on a document a fund hands to counsel.
- * So the assertions below pin the absence in both directions: the page must not
- * read either table, and it must say why in its limits block.
+ * THE CHECKLIST HAS ITS OWN STORE NOW (D462, migration 335), and the one thing
+ * here most likely to be "fixed" by someone who has not checked is WHICH store
+ * it reads. The two tables that look like candidates —
+ * `dd_checklist_items` and `diligence_checklists` — belong to DILIGENCE, and
+ * joining them here would relabel diligence work as closing work on a document
+ * a fund hands to counsel. So the assertions below pin the boundary in both
+ * directions: the page must not read either table, and it must say why in its
+ * limits block — while drawing the checklist from `deal_closing_checklist_items`.
  *
  * THE OPS ROW IS TESTED AS A CLAIM. `Apply template` said "no closing templates
  * are stored" and `legal_templates` seeds the SAFE, stock-purchase and
@@ -21,8 +21,9 @@
  * matching the corrected sentence, because a sentence can be rewritten without
  * the fact changing — which is the failure this whole series is about.
  *
- * NO NEW ENDPOINT IS ALSO AN ASSERTION. Everything this zone needs was already
- * served and already scoped, so a new route or a second scoped query would be a
+ * EVERY READ IS SCOPED AT ITS OWN ROUTE. The zone composes five reads — the
+ * deals, the paper, the open conditions, the transfers, the per-deal checklist
+ * — each scoped at its route, so a second copy of any predicate would be a
  * regression against ID3's finding rather than a feature.
  */
 import test from 'node:test';
@@ -80,12 +81,13 @@ function id4() {
   return CANVAS.slice(a, b);
 }
 
-test('the closing checklist is NOT drawn, and the diligence tables are not borrowed', () => {
-  // The artboard asks for it; nothing stores it.
+test('the closing checklist is drawn from its own store, and the diligence tables are not borrowed', () => {
+  // The artboard asks for it and migration 335 stores it, so it is drawn —
+  // from `deal_closing_checklist_items`, the closing stage's own rows.
   assert.match(id4(), /instTitle:'Closing checklist'/, 'the artboard changed its instrument');
-  assert.ok(!/title="Closing checklist"/.test(Z), 'the zone draws a checklist it has no store for');
+  assert.match(Z, /data-testid="closing-checklists"/, 'the zone no longer draws the checklist');
 
-  // The two tables that exist are diligence, and neither may be read here.
+  // The two tables that predate it are diligence, and neither may be read here.
   assert.match(BASELINE, /CREATE TABLE dd_checklist_items/, 'the diligence store is gone — re-check this guard');
   assert.match(BASELINE, /CREATE TABLE diligence_checklists/);
   const body = fetching();
@@ -93,21 +95,24 @@ test('the closing checklist is NOT drawn, and the diligence tables are not borro
     assert.ok(!body.includes(table), `the zone reads ${table}, which is a DILIGENCE store`);
     assert.ok(Z.includes(table), `the page stopped naming ${table} as the store it is not showing`);
   }
-  // And the reason is on the page, not only in a comment — a reader looking at
-  // the screen has to be able to tell why the table the design promised is not
-  // there.
+  // And the distinction is on the page, not only in a comment — a reader
+  // looking at the screen has to be able to tell which store the checklist is
+  // and why the diligence ones are not borrowed.
   const shown = limits();
-  assert.match(shown, /No closing checklist is stored/);
   assert.match(shown, /belong to DILIGENCE|belongs to DILIGENCE/i,
     'the rendered limits block no longer says why the diligence checklists are not shown');
   for (const table of ['dd_checklist_items', 'diligence_checklists']) {
     assert.ok(shown.includes(table), `the limits block stopped naming ${table}`);
   }
+  // The default item set is the owner's call, and the page names that as the
+  // missing decision rather than seeding a list nobody signed off. The source
+  // wraps the sentence, so the match is whitespace-tolerant.
+  assert.match(shown, /default item set is\s+the owner/i, 'the missing owner decision is no longer named on screen');
 });
 
-test('templates ARE stored, so the ops row says the narrower true thing', () => {
+test('the closing ops are live over the stores migration 335 built', () => {
   // THE SEED, not the sentence. Three of these are the closing paper the
-  // artboard names, and the old reason said none of them existed.
+  // artboard names, and an apply that names one must name a seeded row.
   for (const slug of ['safe', 'spa', 'subscription']) {
     assert.match(SEED, new RegExp(`\\('${slug}',`), `legal_templates no longer seeds ${slug}`);
   }
@@ -117,20 +122,21 @@ test('templates ARE stored, so the ops row says the narrower true thing', () => 
   const at = ACTIONS.indexOf("'deals/closing': [");
   assert.ok(at >= 0, 'the closing ops row is gone');
   const rowsrc = ACTIONS.slice(at, ACTIONS.indexOf('],', at));
-  const reasons = [...rowsrc.matchAll(/unbuilt: '([^']*)'/g)].map((m) => m[1]);
-  assert.equal(reasons.length, 3, 'the closing ops row changed shape');
-  for (const reason of reasons) {
-    assert.doesNotMatch(reason, /no closing templates are stored/, 'the false reason is back');
-    // Same rule `profile_zone_actions` holds file-wide: an unbuilt reason is
-    // prose nothing verifies, so a path named in one goes stale in silence.
-    assert.doesNotMatch(reason, /(^|\s)\/[a-z]/, `an unbuilt reason carries an unchecked path: "${reason}"`);
+  // All three are page-supplied handlers now (D462): the checklist store is
+  // what the templates were waiting on, the packet indexes the executed paper,
+  // and deal_transfers records the wire out.
+  for (const [label, handler] of [['Apply template', 'applyTemplate'], ['Export packet', 'exportPacket'], ['Record wire', 'recordWire']]) {
+    assert.match(
+      rowsrc,
+      new RegExp(`\\{ label: '${label}', kind: 'handler', handler: '${handler}' \\}`),
+      `${label} is not the page-performed op D462 made it`,
+    );
   }
-  assert.match(rowsrc, /what is missing is a closing checklist for one to be applied to/);
-  // And the wire reason says WHICH DIRECTION is missing, because the store that
-  // looks like a counter-example is real and points the other way.
-  assert.match(BASELINE, /CREATE TABLE "capital_calls"[\s\S]{0,400}paid_date/,
-    'capital_calls lost paid_date — the wire reason cites it');
-  assert.match(rowsrc, /LP paying into the fund, which is the other direction/);
+  // The wire's gate is the conditions store: an open condition refuses the
+  // recording with a 409 whose sentence the form prints.
+  const DEALS = read('cloudflare-worker/src/routes/deals.ts');
+  assert.match(DEALS, /open_conditions_block_transfer/, 'the transfer write lost its conditions gate');
+  assert.match(ZONE, /cause\?\.message/, 'the form stopped printing the route’s refusal');
 });
 
 test('executed means completed, and a ratio is never mistaken for it', () => {
@@ -151,23 +157,38 @@ test('executed means completed, and a ratio is never mistaken for it', () => {
   assert.doesNotMatch(Z, /\|\|\s*0\b(?!\s*[;,)])/, 'an absent figure falls back to 0');
 });
 
-test('the zone adds no endpoint, because both reads were already served and scoped', () => {
+test('every read the zone makes is a scoped one', () => {
   // ID3's finding was that a second copy of a scoped query is how a tenancy
-  // hole reopens. ID4's answer is to add neither a route nor a query.
+  // hole reopens. ID4 composes three reads, each scoped at its own route: the
+  // deals (this fund's), the paper (the envelope scope) and — since D461 —
+  // the open conditions (the decision scope, in ic.ts where that predicate
+  // lives).
   assert.match(Z, /api\.listDeals\(undefined, 'mine'\)/);
   assert.match(Z, /api\.esignList\(\)/);
+  assert.match(Z, /api\.icConditions\('open'\)/);
   // The endpoint behind `esignList` puts the scope in FIRST and unconditionally.
   assert.match(ESIGN, /const scope = esignEnvelopeScope\(user\);\s*\n\s*const where: string\[\] = \[scope\.sql\];/,
     'esign.get(/) stopped opening its WHERE clause with the scope');
-  // And the zone touches no store directly — the two calls above are the whole
-  // data layer, so a third would be a new dependency this zone does not need.
+  // And the conditions read rides the decision scope rather than a second
+  // copy of it — the same rule this zone's own design was written under.
+  const IC = read('cloudflare-worker/src/routes/ic.ts');
+  const condAt = IC.indexOf("r.get('/conditions'");
+  assert.ok(condAt >= 0, 'the conditions list route is gone');
+  assert.match(IC.slice(condAt, condAt + 1400), /icDecisionScope\(user\)/,
+    'the conditions list stopped riding the decision scope');
+  // And the zone touches no store directly — these calls are the whole data
+  // layer: the deals, the paper, the open conditions, the transfers, and the
+  // per-deal checklist (D462).
   const calls = [...new Set([...Z.matchAll(/api\.([A-Za-z]+)\(/g)].map((m) => m[1]))].sort();
-  assert.deepEqual(calls, ['esignList', 'listDeals'],
-    'the zone gained an API call, so it is no longer composing two existing reads');
+  assert.deepEqual(calls, [
+    'dealClosingChecklist', 'dealClosingChecklistAddItem', 'dealClosingChecklistApply',
+    'dealClosingChecklistSetItem', 'dealTransferRecord', 'dealsTransfers',
+    'esignList', 'icConditions', 'listDeals',
+  ], 'the zone gained an API call beyond the scoped reads');
   for (const table of ['esign_envelopes', 'legal_templates']) {
     assert.ok(!fetching().includes(table), `the zone reads ${table} directly, which is the worker's job`);
   }
-  // A new /deals or /ic route for this zone would be the regression.
+  // A new /deals route for this zone would be the regression.
   const DEALS = read('cloudflare-worker/src/routes/deals.ts');
   assert.ok(!DEALS.includes("deals.get('/closing'"), 'a closing endpoint was added that nothing needed');
 });
@@ -188,30 +209,97 @@ test('only deals the shared stage map calls closing are on this page', () => {
 test('none of the artboard’s fixture rows or figures reaches the page', () => {
   const board = id4();
   // The artboard's own compressed claims, none of which any store supports.
-  for (const phrase of ['IP chain of title', 'term sheet and SAFE', '2 of 2', 'Funds moved']) {
+  for (const phrase of ['IP chain of title', 'term sheet and SAFE', '2 of 2']) {
     assert.ok(!ZONE.includes(phrase), `the zone ships the artboard’s sample text "${phrase}"`);
   }
   assert.match(board, /label:'Funds moved'/, 'the artboard changed its fourth tile');
-  // The strip counts four recorded things instead.
-  for (const label of ['At closing', 'Executed', 'Signatures', 'Awaiting']) {
+  // The strip counts five recorded things — `Funds moved` is real now
+  // (migration 335), summed over the recorded transfers rather than copied
+  // from the artboard's `$0`.
+  for (const label of ['At closing', 'Executed', 'Signatures', 'Awaiting', 'Funds moved']) {
     assert.ok(Z.includes(`label="${label}"`), `the strip lost its ${label} tile`);
   }
+  assert.match(Z, /dealMoneyExact\(movedCents \/ 100\)/, 'Funds moved must sum the recorded transfers');
   const fixtures = [...CANVAS.matchAll(/\{ it:'([^']+)'/g)].map((m) => m[1]);
   for (const item of fixtures) {
     assert.ok(!ZONE.includes(item), `the zone ships the artboard’s sample checklist item ${item}`);
   }
 });
 
-test('no row is drawn as blocking, because the condition it would come from has no store', () => {
+/** One tile's own element, bounded at its closing `/>`. */
+function tile(label) {
+  const at = Z.indexOf(`label="${label}"`);
+  assert.ok(at > 0, `the ${label} tile is gone`);
+  const end = Z.indexOf('/>', at);
+  assert.ok(end > at, `the ${label} tile is not a self-closing element any more`);
+  return Z.slice(at, end);
+}
+
+test('one failed read is never counted as a zero — this strip is a join', () => {
+  // THE FAILURE THIS PINS. `rows` is the envelopes filtered against the closing
+  // deals, so it needs BOTH `listDeals` and `esignList`, and it collapses to
+  // `[]` when either is missing. A tile gated on one flag therefore printed a
+  // number it could not know: with the deal record unreadable, "Executed" read
+  // "0 of 0" and "Awaiting" read "0", each under a sentence explaining what the
+  // figure meant. `bothFailed` never caught it, because that only fires when
+  // BOTH reads fail — the noisy case. One failed read was the quiet one.
+  //
+  // This zone's own docblock already says "a record that is readable and holds
+  // no deal at this stage is a different fact from a record that could not be
+  // read". These assertions are that sentence, applied to the strip.
+  assert.match(Z, /const joinedReady = dealsReady && envReady;/,
+    'the joined-readiness flag is gone, or is retyped per tile rather than derived once');
+
+  // Three of the four figures cross both reads.
+  for (const label of ['Executed', 'Signatures', 'Awaiting']) {
+    const t = tile(label);
+    assert.match(t, /value=\{joinedReady\b/, `${label} counts from a single read`);
+    assert.match(t, /note=\{joinedReady\b/, `${label} explains a figure it may not have`);
+  }
+
+  // "At closing" is the half-exception, and the autofix that prompted this
+  // missed it: its VALUE counts deals, so `dealsReady` is right there — but its
+  // NOTE counts documents, which needs the envelopes too.
+  const atClosing = tile('At closing');
+  assert.match(atClosing, /value=\{dealsReady \? String\(closing\.length\) : null\}/,
+    'the closing count stopped standing on the deal read alone');
+  assert.match(atClosing, /note=\{joinedReady\b/,
+    'the document count still renders under a single read');
+
+  // And the tone follows the same gate — an amber "Awaiting" over a figure
+  // that is not there would be an alarm about nothing.
+  assert.match(tile('Awaiting'), /tone=\{joinedReady && awaiting\.length/,
+    'the awaiting tone is raised from a figure that may not exist');
+});
+
+test('an unreadable tile names WHICH read is missing, not just that one is', () => {
+  // "unreadable" on its own sends a reader to refresh the wrong thing. Both
+  // single-failure branches are distinct sentences and both name their source.
+  assert.match(Z, /const missingRead = dealsReady/, 'the per-source reason is gone');
+  assert.match(Z, /the signature archive could not be read, so nothing can be counted/,
+    'a missing signature archive no longer says so');
+  assert.match(Z, /the deal record could not be read, so there is nothing to count envelopes against/,
+    'a missing deal record no longer says so');
+  // The bare word is not a reason, and was what two of these tiles used to say.
+  for (const label of ['Signatures', 'Awaiting']) {
+    assert.doesNotMatch(tile(label), /:\s*'unreadable'/,
+      `the ${label} tile still falls back to the bare word "unreadable"`);
+  }
+});
+
+test('a blocking row is an open Commit condition, read from the store the hand-off runs on', () => {
   // The artboard's note makes this explicit: the blocking item "arrived from
-  // the Commit vote". ID3 established that no condition is stored, so ID4
-  // inherits the gap rather than inventing a local one.
+  // the Commit vote". D461 built that hand-off — `ic_conditions` (migration
+  // 334) — so the chip is live and the rows are the commit room's, never
+  // typed locally.
   assert.match(id4(), /arrived from the Commit vote/, 'the artboard changed its premise');
   const at = FILTERS.indexOf("'deals/closing': [");
   assert.ok(at >= 0, 'the closing filter row is gone');
   const rowsrc = FILTERS.slice(at, FILTERS.indexOf('],', at));
-  assert.match(rowsrc, /canvas: 'Blocking', unbuilt:/, 'Blocking is offered as a live chip');
-  assert.match(rowsrc, /canvas: 'Wires', unbuilt:/, 'Wires is offered as a live chip');
+  assert.match(rowsrc, /canvas: 'Blocking', key: 'blocking'/, 'Blocking is not the live chip the store now serves');
+  // `Wires` went live with D462 (migration 335's deal_transfers) — the
+  // transfer out to a company is recorded now.
+  assert.match(rowsrc, /canvas: 'Wires', key: 'wires'/, 'Wires is not the live chip the transfer store serves');
   for (const canvas of ['This close', 'Documents']) {
     assert.match(rowsrc, new RegExp(`canvas: '${canvas}', key:`), `${canvas} narrows nothing`);
   }
@@ -223,7 +311,11 @@ test('no row is drawn as blocking, because the condition it would come from has 
     [...rowsrc.matchAll(/canvas: '([^']+)'/g)].map((m) => m[1]),
     'the closing filter row drifted from the artboard',
   );
-  assert.match(ZONE, /Nothing here can be blocking/);
+  // The page reads the open conditions and narrows them to deals at closing.
+  assert.match(ZONE, /api\.icConditions\('open'\)/, 'the zone never reads the conditions store');
+  assert.match(ZONE, /cond\.deal_id != null && ids\.has\(cond\.deal_id\)/,
+    'the blocking rows must narrow to the deals at closing');
+  assert.match(ZONE, /Blocking is real, and lives in the commit room/);
 });
 
 test('the AI band is allow-listed and forbidden from inventing the condition', () => {

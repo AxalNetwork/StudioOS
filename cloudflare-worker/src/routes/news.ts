@@ -358,7 +358,8 @@ news.post('/:id/submit', async (c) => {
   // Weekly rate limit: 3/week/author.
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const cnt: any = await c.env.DB.prepare(
-    `SELECT COUNT(*) AS c FROM article_submission_log WHERE author_id = ? AND submitted_at >= ?`,
+    `SELECT COUNT(*) AS c FROM article_submission_log
+      WHERE author_id = ? AND datetime(submitted_at) >= datetime(?)`,
   ).bind(user.id, weekAgo).first();
   if ((cnt?.c ?? 0) >= SUBMISSIONS_PER_WEEK) {
     return c.json({ error: 'rate_limited', per_week: SUBMISSIONS_PER_WEEK }, 429);

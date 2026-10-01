@@ -155,24 +155,59 @@ test('a hung request rejects as a timeout rather than spinning', async () => {
 });
 
 test('the timeout error cannot be mistaken for the three things it resembles', () => {
-  const e = timeoutError('/advisors/me', DEFAULT_TIMEOUT_MS);
+  // Both a read and a write build the same shape — only the last sentence
+  // (pinned separately below) tells them apart.
+  for (const method of [undefined, 'GET', 'POST']) {
+    const e = timeoutError('/advisors/me', DEFAULT_TIMEOUT_MS, method);
 
-  // 1. LoginPage and SettingsPage both read `name === 'AbortError'` to mean
-  //    "the user dismissed the passkey prompt". A timeout is not that.
-  assert.notEqual(e.name, 'AbortError');
+    // 1. LoginPage and SettingsPage both read `name === 'AbortError'` to mean
+    //    "the user dismissed the passkey prompt". A timeout is not that.
+    assert.notEqual(e.name, 'AbortError');
 
-  // 2. RouteErrorBoundary and main.jsx reload the whole page on a message
-  //    matching this. A timeout must never trigger a reload.
-  assert.doesNotMatch(e.message, /Failed to fetch dynamically imported module/i);
+    // 2. RouteErrorBoundary and main.jsx reload the whole page on a message
+    //    matching this. A timeout must never trigger a reload.
+    assert.doesNotMatch(e.message, /Failed to fetch dynamically imported module/i);
 
-  // 3. Pages render `e?.message || 'Failed to load'` verbatim, so the message
-  //    is prose for a human — never `signal is aborted without reason`.
-  assert.doesNotMatch(e.message, /abort/i);
-  assert.match(e.message, /did not respond/);
+    // 3. Pages render `e?.message || 'Failed to load'` verbatim, so the message
+    //    is prose for a human — never `signal is aborted without reason`.
+    assert.doesNotMatch(e.message, /abort/i);
+    assert.match(e.message, /did not respond/);
 
-  // No HTTP status, because there was no HTTP response. Consumers branching on
-  // `e.status` fall through to their generic branch, which is the truth.
-  assert.equal(e.status, undefined);
+    // No HTTP status, because there was no HTTP response. Consumers branching on
+    // `e.status` fall through to their generic branch, which is the truth.
+    assert.equal(e.status, undefined);
+  }
+});
+
+test('D233 — "Nothing was changed" is true only for a read; a write says the outcome is unknown', () => {
+  // A GET/HEAD that times out changed nothing — there was nothing to change.
+  // A write (POST/PUT/PATCH/DELETE) may have committed and simply answered
+  // late; claiming "nothing changed" there is a guess, not a fact, and
+  // invites the retry that duplicates the write.
+  for (const method of [undefined, 'GET', 'get', 'HEAD', 'head']) {
+    const e = timeoutError('/advisors/me', DEFAULT_TIMEOUT_MS, method);
+    assert.match(e.message, /Nothing was changed\.$/, `method ${method} must keep the read wording`);
+  }
+  for (const method of ['POST', 'post', 'PUT', 'PATCH', 'DELETE']) {
+    const e = timeoutError('/advisors/me', DEFAULT_TIMEOUT_MS, method);
+    assert.doesNotMatch(e.message, /Nothing was changed/, `method ${method} must not claim nothing changed`);
+    assert.match(e.message, /not known|is not known/i, `method ${method} must say the outcome is unknown`);
+    assert.match(e.message, /reload/i, `method ${method} must say to reload before trying again`);
+  }
+});
+
+test('a hung WRITE rejects with the unknown-outcome wording, not "nothing was changed"', async () => {
+  await withFetch(hangingFetch, async () => {
+    await assert.rejects(
+      () => request('/tickets', { method: 'POST', timeoutMs: 60, body: '{}' }),
+      (e) => {
+        assert.equal(e.code, 'timeout');
+        assert.doesNotMatch(e.message, /Nothing was changed/);
+        assert.match(e.message, /reload/i);
+        return true;
+      },
+    );
+  });
 });
 
 test('a caller cancelling is not reported as a timeout', () => {

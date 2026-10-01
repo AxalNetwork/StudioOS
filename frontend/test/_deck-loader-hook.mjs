@@ -52,6 +52,24 @@ export async function resolve(specifier, context, nextResolve) {
 }
 
 export async function load(url, context, nextLoad) {
+  // A STYLESHEET IMPORT BECOMES AN EMPTY MODULE, which is what Vite does for the
+  // real build and what this hook could not do at all.
+  //
+  // Every zone page in `frontend/src/pages` opens with `import './thing.css'`, so
+  // until this existed NONE of them could be imported by a test — node threw
+  // `ERR_UNKNOWN_FILE_EXTENSION` before the first assertion ran. The workaround
+  // was to read a page as TEXT and regex out the thing under test, which proves
+  // the source contains a string rather than that the module exports a working
+  // value. `FounderBuildCadence`'s four filter predicates are functions; asserting
+  // what they actually keep needs the module, not its bytes.
+  //
+  // An empty module is the honest stub: CSS contributes no bindings, so nothing a
+  // test can observe is being faked. `?inline`/`?raw` query forms are NOT handled
+  // — no test needs them yet, and a stub that silently returned '' for `?raw`
+  // would be a lie rather than a gap.
+  if (url.startsWith('file://') && /\.css$/.test(new URL(url).pathname)) {
+    return { format: 'module', source: 'export default {};', shortCircuit: true };
+  }
   if (url.startsWith('file://') && TRANSFORM_EXTS.test(new URL(url).pathname)) {
     const filename = fileURLToPath(url);
     const source = readFileSync(filename, 'utf8');

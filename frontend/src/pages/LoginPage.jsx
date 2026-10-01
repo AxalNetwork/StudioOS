@@ -41,6 +41,10 @@ const MAGIC_ERROR_COPY = {
   invalid: 'That sign-in link is invalid. Request a new one below.',
   expired: 'That sign-in link has expired or was already used. Request a new one below.',
   rate: 'Too many attempts. Please wait a minute and try again.',
+  // Not the person's fault, so it must not read like it is: `limiter` is what
+  // /magic/verify returns when the rate-limit store could not be consulted at
+  // all. Telling them to wait would be advice that never comes true.
+  limiter: 'We could not check the request limit, so the link was refused. This is a problem on our side — please try the link again in a moment.',
   inactive: 'Your Axal VC account is inactive. Contact support.',
   error: 'Something went wrong completing your sign-in. Please try again.',
 };
@@ -64,7 +68,6 @@ export default function LoginPage() {
   const [turnstileToken, setTurnstileToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [googleAvailable, setGoogleAvailable] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
   // BLOCK-AUTH-02 — passkey state.
   const [passkeyBusy, setPasskeyBusy] = useState(false);
@@ -99,20 +102,25 @@ export default function LoginPage() {
     track('login_view');
   }, []);
 
-  // Discover whether the worker has Google OAuth configured; hide the
-  // button otherwise so we don't show users a control that returns 503.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        await api.googleStartUrl({ action: 'signin' });
-        if (!cancelled) setGoogleAvailable(true);
-      } catch {
-        if (!cancelled) setGoogleAvailable(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+  // NO PRE-FLIGHT PROBE, and that is the fix rather than an omission. This page
+  // used to call /api/auth/google/start on mount and render the button only if
+  // that call succeeded. Four unrelated things made it fail, and each one alone
+  // removed the user's primary sign-in method with no way to retry:
+  //   1. that endpoint is deliberately NOT in RATE_LIMIT_EXEMPT (D74), so it is
+  //      subject to the ip bucket AND the PLATFORM-WIDE `global` 1000/min one —
+  //      exhaust it and the button vanishes for every visitor at once;
+  //   2. the probe carried a 6s client deadline, which a slow mobile connection
+  //      trips — the button went missing exactly where the page was slowest;
+  //   3. /start is not a read. It mints an OAuth nonce, does a KV write under a
+  //      2s deadline and sets a cookie — on every page load, to draw a button;
+  //   4. it blocked the page on a round-trip at mount.
+  // Measured 2026-09-21: Google was configured and working (22 of 49 accounts
+  // linked, newest 2026-09-17) while the card claimed it was unavailable.
+  // A capability is not predicted here any more — continueWithGoogle() calls
+  // /start for real and surfaces the server's own answer, including
+  // GOOGLE_ERROR_COPY.not_configured for a genuine 503. The absence is still
+  // stated; it is stated at the moment of the attempt, by the server, rather
+  // than guessed on mount by a request that fails for four other reasons.
 
   // One-shot toast for any error the callback bounced us back with.
   useEffect(() => {
@@ -344,6 +352,30 @@ export default function LoginPage() {
     } finally { setMagicBusy(false); }
   };
 
+  // THE SENTENCE IS DERIVED FROM THE CONTROLS, so it cannot outlive them. It
+  // used to be a hard-coded "Google, passkey, and authenticator codes are also
+  // available" over three conditionally-rendered buttons, which meant the page
+  // promised Google whenever the probe failed and promised a passkey on every
+  // browser without WebAuthn. Anything named here is rendered below; anything
+  // rendered below is named here.
+  const alsoList = [
+    'Google',
+    ...(passkeySupported ? ['passkey'] : []),
+    'authenticator codes',
+  ];
+  // The list always ends with 'authenticator codes', which is plural, so "are"
+  // is never wrong — no branch needed, and none left to rot. The serial comma
+  // belongs to three items and not to two ("passkey, and authenticator codes"
+  // is what a naive join produced), and the list opens a sentence, so its first
+  // letter is the sentence's.
+  const joined = alsoList.length > 2
+    ? `${alsoList.slice(0, -1).join(', ')}, and ${alsoList[alsoList.length - 1]}`
+    : alsoList.join(' and ');
+  const alsoAvailable = joined.charAt(0).toUpperCase() + joined.slice(1);
+  // The collapsed toggle is the same promise in miniature: it named a passkey on
+  // every browser, including the ones that cannot offer one.
+  const altFactorsLabel = passkeySupported ? 'Passkey or authenticator code' : 'Authenticator code';
+
   return (
     <AuthShell showApplyCard applyLabel="Apply to Axal VC →" backgroundSrc="/auth/login-background.webp">
       <AuthCard>
@@ -351,7 +383,8 @@ export default function LoginPage() {
           Sign in
         </h1>
         <p className="mt-2 text-[13.5px] leading-relaxed text-[#6b6577]">
-          Passwordless by default — we email you a one-time link. Google, passkey, and authenticator codes are also available.
+          Passwordless by default — we email you a one-time link.{' '}
+          {`${alsoAvailable} are also available.`}
         </p>
 
         {error && (
@@ -412,37 +445,38 @@ export default function LoginPage() {
             </button>
           )}
 
-          {googleAvailable && (
-            <>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-px" style={{ background: authV2.hair }} />
-                <span className="font-mono text-[10px] uppercase tracking-widest text-[#6b6577]">or</span>
-                <div className="flex-1 h-px" style={{ background: authV2.hair }} />
-              </div>
-              <button
-                type="button"
-                onClick={continueWithGoogle}
-                disabled={googleBusy}
-                className={authV2.btnSecondary}
-                style={{ borderColor: authV2.hair, background: '#fff', color: authV2.ink }}
-              >
-                <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
-                  <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
-                  <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.6 8.3 6.3 14.7z" />
-                  <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.4-4.5 2.4-7.2 2.4-5.2 0-9.6-3.3-11.2-8l-6.6 5.1C9.6 39.6 16.2 44 24 44z" />
-                  <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.6l6.2 5.2c-.4.4 6.7-4.9 6.7-14.8 0-1.3-.1-2.4-.4-3.5z" />
-                </svg>
-                {googleBusy ? 'Redirecting…' : 'Continue with Google'}
-              </button>
-            </>
-          )}
+          {/* ALWAYS RENDERED — never behind a capability probe. See the note on
+              the removed pre-flight above: a button that might fail is strictly
+              better than one that is missing, because a missing one leaves the
+              person no path and nothing to retry. */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px" style={{ background: authV2.hair }} />
+            <span className="font-mono text-[10px] uppercase tracking-widest text-[#6b6577]">or</span>
+            <div className="flex-1 h-px" style={{ background: authV2.hair }} />
+          </div>
+          <button
+            type="button"
+            onClick={continueWithGoogle}
+            disabled={googleBusy}
+            className={authV2.btnSecondary}
+            data-testid="login-google"
+            style={{ borderColor: authV2.hair, background: '#fff', color: authV2.ink }}
+          >
+            <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
+              <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
+              <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.6 8.3 6.3 14.7z" />
+              <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.4-4.5 2.4-7.2 2.4-5.2 0-9.6-3.3-11.2-8l-6.6 5.1C9.6 39.6 16.2 44 24 44z" />
+              <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.6l6.2 5.2c-.4.4 6.7-4.9 6.7-14.8 0-1.3-.1-2.4-.4-3.5z" />
+            </svg>
+            {googleBusy ? 'Redirecting…' : 'Continue with Google'}
+          </button>
 
           <button
             type="button"
             onClick={() => setShowAltFactors((v) => !v)}
             className="w-full text-[13px] font-semibold text-[#6b6577] flex items-center justify-center gap-1 py-1"
           >
-            {showAltFactors ? <>Hide other sign-in options <ChevronUp size={14} /></> : <>Passkey or authenticator code <ChevronDown size={14} /></>}
+            {showAltFactors ? <>Hide other sign-in options <ChevronUp size={14} /></> : <>{altFactorsLabel} <ChevronDown size={14} /></>}
           </button>
 
           {showAltFactors && (

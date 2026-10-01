@@ -11,8 +11,16 @@
  *
  * These tests pin the repair at the source level:
  *   1. the fixture module is gone and nothing imports a replacement;
- *   2. every tab talks to the real API;
+ *   2. every job those tabs did is wired to the real API where it lives now;
  *   3. the fictional firm's strings cannot quietly return.
+ *
+ * D395 RETIRED THE FIVE TABS THEMSELVES. `/partner/operations/*` redirects to
+ * the canvas-built pages that took each job, and the files are deleted. The
+ * three properties above did not retire with them, so they are pinned on the
+ * successors: the firm profile card, the service catalogue, the delivery
+ * board's lifecycle, the proposals zone, Health's founder reviews and
+ * Analytics. The fixture-firm scan now covers the whole partner tree, which is
+ * wider than the five files it used to read.
  *
  * If a future change needs demo content, it must be served by the worker
  * behind an explicit flag, never compiled into the page.
@@ -23,10 +31,22 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 
-const OPS = resolve(process.cwd(), 'frontend/src/pages/partner/operations');
-const pages = () => readdirSync(OPS).filter((f) => f.endsWith('.jsx'));
-const src = (f) => readFileSync(join(OPS, f), 'utf8');
+const PARTNER = resolve(process.cwd(), 'frontend/src/pages/partner');
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
+
+/** Every .jsx/.js file under pages/partner, walked with typed directory entries. */
+function partnerFiles() {
+  const out = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, entry.name);
+      if (entry.isDirectory()) walk(p);
+      else if (/\.jsx?$/.test(entry.name)) out.push(p);
+    }
+  };
+  walk(PARTNER);
+  return out;
+}
 
 test('the fixture module is deleted', () => {
   assert.ok(
@@ -35,38 +55,55 @@ test('the fixture module is deleted', () => {
   );
 });
 
-test('no operations page imports from a data/ fixture directory', () => {
-  for (const f of pages()) {
+test('no partner page imports from a data/ fixture directory', () => {
+  for (const f of partnerFiles()) {
     assert.ok(
-      !/from\s+['"][^'"]*\/data\//.test(src(f)),
+      !/from\s+['"][^'"]*\/data\//.test(readFileSync(f, 'utf8')),
       `${f} imports from a data/ fixture directory`,
     );
   }
 });
 
-test('every tab is wired to the real API', () => {
+test('every job the five tabs did is wired to the real API where it lives now', () => {
+  // [successor file, api calls it must make], one row per retired tab's job.
   const required = {
-    'OverviewPage.jsx': ['partnerPortal.getProfile', 'partnerPortal.myDeal', 'quotesAnalytics'],
-    'CapabilitiesPage.jsx': ['listServiceOfferings', 'createServiceOffering', 'updateServiceOffering'],
-    'PortfolioPage.jsx': ['listEngagements', 'listEngagementReviews'],
-    'EngagementsPage.jsx': ['listNeeds', 'myQuotes', 'submitQuote', 'listEngagements', 'invoiceEngagement'],
-    'PerformancePage.jsx': ['quotesAnalytics', 'listEngagementReviews'],
+    // Overview — the firm profile, the intro switch, the agreement (D390).
+    'frontend/src/pages/partner/PartnerFirmProfileCard.jsx':
+      ['partnerPortal.getProfile', 'partnerPortal.updateProfile', 'partnerPortal.setAcceptingIntros', 'partnerPortal.myDeal'],
+    // Capabilities — the firm's own catalogue, mounted on /offers/catalog.
+    'frontend/src/pages/ServiceCatalogPage.jsx':
+      ['listServiceOfferings', 'createServiceOffering', 'updateServiceOffering', 'deleteServiceOffering'],
+    // Engagements — withdraw on Proposals; the lifecycle and ledger on Board (D395).
+    'frontend/src/pages/partner/pipeline/ProposalsZone.jsx': ['listPartnerProposals', 'withdrawQuote'],
+    'frontend/src/pages/partner/delivery/EngagementLifecycle.jsx': [],
+    // Performance — the same analytics read.
+    'frontend/src/pages/partner/pipeline/AnalyticsZone.jsx': ['quotesAnalytics'],
   };
   for (const [file, methods] of Object.entries(required)) {
-    const s = src(file);
-    assert.ok(s.includes("from '../../../lib/api'"), `${file} does not import the api client`);
+    const s = read(file);
+    assert.ok(/from '(\.\.\/)+lib\/api'/.test(s), `${file} does not import the api client`);
     for (const m of methods) {
       assert.ok(s.includes(`api.${m}(`), `${file} no longer calls api.${m}()`);
     }
   }
+  // The lifecycle calls go through an injectable client (so a test can drive
+  // them), defaulting to the api client — the same four methods the old page used.
+  const life = codeOnly(read('frontend/src/pages/partner/delivery/EngagementLifecycle.jsx'));
+  for (const m of ['startEngagement', 'deliverEngagement', 'invoiceEngagement', 'cancelEngagement']) {
+    assert.ok(life.includes(`client.${m}(`), `the board lifecycle no longer calls ${m}`);
+  }
+  assert.match(life, /client = api\b/, 'the lifecycle client no longer defaults to the api client');
+  // Portfolio and Performance — the founder reviews, on Health (D390).
+  assert.ok(read('frontend/src/pages/partner/delivery/FounderReviews.jsx').includes('listEngagementReviews('),
+    'Health no longer reads the founder reviews');
 });
 
 test('the fictional firm cannot quietly return', () => {
-  // Names distinctive to the deleted fixture. A hit in any operations page
-  // means mock content is being shown to real partners again.
+  // Names distinctive to the deleted fixture. A hit anywhere in the partner
+  // tree means mock content is being shown to real partners again.
   const banned = ['BrightPath', 'Northwind Labs', 'Lumen Analytics', 'Ceres Bio', 'Vertex Mobility'];
-  for (const f of pages()) {
-    const s = src(f);
+  for (const f of partnerFiles()) {
+    const s = readFileSync(f, 'utf8');
     for (const b of banned) {
       assert.ok(!s.includes(b), `${f} contains fixture-firm string "${b}"`);
     }
@@ -119,13 +156,11 @@ test('the partner stat strips read fields the worker actually emits', () => {
   //
   // Comment-stripped: the fixes name the wrong fields on purpose to explain
   // themselves, and a raw scan would read that prose as the defect.
-  const eng = codeOnly(read('frontend/src/pages/partner/operations/EngagementsPage.jsx'));
+  // The engagements half of this test (`agreed_price`, the active-value sum
+  // and the decided-quotes win rate) read `EngagementsPage`, which D395
+  // retired. Its win-rate rule (decided is accepted plus rejected, never every
+  // quote) is the proposals read's now, pinned by pipeline_proposals_lifecycle.
   const perks = codeOnly(read('frontend/src/pages/PerksPage.jsx'));
-
-  assert.doesNotMatch(eng, /agreed_price/,
-    'engagements emit `price`, not `agreed_price` — nothing in the product defines that field');
-  assert.match(eng, /active\.reduce\(\(a, e\) => a \+ \(Number\(e\.price\) \|\| 0\), 0\)/,
-    'the active-value total must sum the column that exists');
 
   assert.doesNotMatch(perks, /claims_count/,
     'routes/perks.ts aliases it `claim_count`, singular');
@@ -134,17 +169,16 @@ test('the partner stat strips read fields the worker actually emits', () => {
   // artboard's strip is `Live · Expiring · Expired · Grants revoked`, and the
   // fourth of those is the one that sums redemptions — of expired perks that
   // named what they granted. Same alias, same defect if it is ever mistyped.
-  assert.match(perks, /revoking\.reduce\(\(a, p\) => a \+ \(Number\(p\.claim_count\) \|\| 0\), 0\)/,
+  // D413 — REDEEMERS ARE `redeemed_count` NOW. The tile summed `claim_count`
+  // under the word "redeemers" while nothing wrote `redeemed`; routes/perks.ts
+  // serves both aliases on GET /partner, and each figure reads its own.
+  assert.match(perks, /revoking\.reduce\(\(a, p\) => a \+ Number\(p\.redeemed_count\), 0\)/,
     'the redeemers-affected total must read the alias the route emits');
-  assert.match(perks, /const used = Number\(p\.claim_count\) \|\| 0;/,
-    'the lifecycle row must read the alias the route emits');
-
-  // A win rate divides by decisions, not by submissions, and the sentence under
-  // it must count the same set the percentage does.
-  assert.match(eng, /const decidedQuotes = acceptedQuotes \+ rejectedQuotes;/,
-    'the denominator must be accepted + rejected');
-  assert.doesNotMatch(eng, /acceptedQuotes \/ myQuotes/,
-    'dividing by every quote counts pending proposals as losses');
-  assert.match(eng, /\$\{acceptedQuotes\} of \$\{decidedQuotes\} decided/,
-    'the note must count the same set as the percentage');
+  assert.match(perks, /const claimed = Number\(p\.claim_count\);/,
+    'the lifecycle row must read the claim alias the route emits');
+  assert.match(perks, /const used = Number\(p\.redeemed_count\);/,
+    'the lifecycle row must read the redeemed alias the route emits');
+  const partnerRoute = read('cloudflare-worker/src/routes/perks.ts');
+  assert.equal((partnerRoute.match(/AND x\.status = 'redeemed'\) AS redeemed_count/g) || []).length, 2,
+    'GET /partner must emit `redeemed_count` on both its queries');
 });

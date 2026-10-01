@@ -1,6 +1,5 @@
 <!DOCTYPE html>
-<html>
-<head>
+<html><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="./support.js"></script>
@@ -95,6 +94,16 @@
             <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ copyIcon }}"></span>
             {{ copyLabel }}
           </div>
+        </div>
+
+        <div class="rf-lbl" style="font-size:9.5px;margin:16px 0 7px">Share it</div>
+        <div style="display:flex;gap:7px;flex-wrap:wrap">
+          <sc-for list="{{ shareQuick }}" as="q" hint-placeholder-count="7">
+            <div class="rf-btn" onClick="{{ q.go }}" title="{{ q.title }}" style="display:flex;align-items:center;gap:7px;padding:7px 11px;border-radius:9px;border:1px solid #ececf1;background:#fff">
+              <span style="width:15px;height:15px;display:flex;color:{{ q.iconBg }}" dangerouslySetInnerHTML="{{ q.icon }}"></span>
+              <span style="font-size:11.5px;font-weight:600;color:#3f3f46">{{ q.label }}</span>
+            </div>
+          </sc-for>
         </div>
 
         <div class="rf-lbl" style="font-size:9.5px;margin:16px 0 7px">Referral code</div>
@@ -282,7 +291,7 @@
               </div>
               <label class="rf-btn" style="padding:7px 13px;border-radius:8px;border:1px solid #ececf1;background:#fff;font-size:11.5px;font-weight:700;color:#3f3f46">
                 Choose file
-                <input type="file" accept=".csv,text/csv" onChange="{{ onImportFile }}" style="display:none"></input>
+                <input type="file" accept=".csv,text/csv" onChange="{{ onImportFile }}" style="display:none">
               </label>
             </div>
             <div style="display:flex;align-items:center;gap:6px;margin-top:10px;flex-wrap:wrap">
@@ -401,7 +410,7 @@
   <!-- SHARE MODAL -->
   <sc-if value="{{ shareOpen }}">
     <div onClick="{{ closeShare }}" style="position:fixed;inset:0;z-index:900;background:rgba(20,17,24,.42);display:flex;align-items:center;justify-content:center;padding:24px">
-      <div onClick="{{ stop }}" style="width:100%;max-width:440px;background:#fff;border-radius:16px;padding:26px 28px;box-shadow:0 20px 60px rgba(20,17,24,.25)">
+      <div onClick="{{ stop }}" style="width:100%;max-width:520px;max-height:88vh;box-sizing:border-box;overflow:auto;background:#fff;border-radius:16px;padding:26px 28px;box-shadow:0 20px 60px rgba(20,17,24,.25)">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
           <div>
             <div style="font-size:16px;font-weight:800;letter-spacing:-.02em">Share Refer &amp; Earn</div>
@@ -409,20 +418,61 @@
           </div>
           <div class="rf-btn" onClick="{{ closeShare }}" style="width:26px;height:26px;border-radius:8px;border:1px solid #ececf1;display:flex;align-items:center;justify-content:center;font-size:13px;color:#71717a;flex:none">×</div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-top:18px">
-          <sc-for list="{{ sharePlatforms }}" as="sp" hint-placeholder-count="4">
+        <div class="rf-lbl" style="font-size:9.5px;margin:18px 0 8px">Opens the platform's composer</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{ shareLink }}" as="sp" hint-placeholder-count="5">
             <div class="rf-btn" onClick="{{ sp.go }}" style="display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid #ececf1;border-radius:11px">
               <div style="width:30px;height:30px;border-radius:9px;background:{{ sp.iconBg }};color:#fff;display:flex;align-items:center;justify-content:center;flex:none;padding:6px;box-sizing:border-box" dangerouslySetInnerHTML="{{ sp.icon }}"></div>
               <div style="min-width:0;flex:1">
                 <div style="font-size:13px;font-weight:700">{{ sp.label }}</div>
                 <div style="font-size:11px;color:#8b8798;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ sp.preview }}</div>
               </div>
+              <span style="font-size:12px;color:#c9c6d2;flex:none">↗</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="rf-lbl" style="font-size:9.5px;margin:20px 0 4px">Post and story formats</div>
+        <div style="font-size:11px;color:#8b8798;line-height:1.6;margin-bottom:9px">Facebook and Instagram have no web hand-off for posts or stories, so these give you the asset and the caption to paste into the app. Drop your own video into a slot and it travels with the caption.</div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <sc-for list="{{ shareMedia }}" as="m" hint-placeholder-count="3">
+            <div style="border:1px solid #ececf1;border-radius:12px;padding:12px 13px">
+              <div style="display:flex;align-items:center;gap:11px">
+                <div style="width:30px;height:30px;border-radius:9px;background:{{ m.iconBg }};color:#fff;display:flex;align-items:center;justify-content:center;flex:none;padding:6px;box-sizing:border-box" dangerouslySetInnerHTML="{{ m.icon }}"></div>
+                <div style="min-width:0;flex:1">
+                  <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+                    <span style="font-size:13px;font-weight:700">{{ m.label }}</span>
+                    <span class="rf-mono" style="font-size:9.5px;font-weight:700;color:#6d28d9;background:#f4f0fe;border:1px solid #e6e0f7;border-radius:4px;padding:2px 6px">{{ m.ratio }}</span>
+                  </div>
+                  <div style="font-size:11px;color:#8b8798;margin-top:2px">{{ m.note }}</div>
+                </div>
+              </div>
+              <!-- flex-start, not stretch: a stretched cross-size is a definite height and
+                   overrides the slot's aspect-ratio, so the frame would contradict its badge. -->
+              <div style="display:flex;gap:11px;margin-top:11px;align-items:flex-start">
+                <!-- Icon only: any text in here sets a min-content height that beats
+                     aspect-ratio (min-height is auto on a flex item), so the frame would stop
+                     matching its badge. The hint lives in the column beside it. -->
+                <div style="width:{{ m.slotW }};flex:none;min-height:0;aspect-ratio:{{ m.aspect }};border:1px dashed #d8d4e2;border-radius:9px;background:#faf9fc;display:flex;align-items:center;justify-content:center;box-sizing:border-box">
+                  <span style="width:18px;height:18px;color:#c2bece;display:flex" dangerouslySetInnerHTML="{{ playIcon }}"></span>
+                </div>
+                <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:space-between;gap:8px">
+                  <div>
+                    <div style="font-size:10.5px;font-weight:700;color:#6d28d9">{{ m.slotHint }}</div>
+                    <div style="font-size:11px;color:#4a4553;line-height:1.55;margin-top:5px">{{ m.caption }}</div>
+                  </div>
+                  <div style="display:flex;gap:7px;flex-wrap:wrap">
+                    <div class="rf-btn" onClick="{{ m.copy }}" style="padding:7px 11px;border-radius:8px;background:#6d28d9;color:#fff;font-size:11.5px;font-weight:700">Copy caption</div>
+                    <div class="rf-btn" onClick="{{ m.download }}" style="padding:7px 11px;border-radius:8px;border:1px solid #ececf1;font-size:11.5px;font-weight:700;color:#3f3f46">{{ m.dlLabel }}</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </sc-for>
         </div>
         <div style="display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid #f4f3f7">
-          <input value="{{ shareUrl }}" readOnly="{{ true }}" style="flex:1;padding:9px 11px;border-radius:9px;border:1px solid #ececf1;background:#faf9fc;font-size:12px;color:#4a4553"></input>
-          <div class="rf-btn" onClick="{{ copyShareLink }}" style="padding:9px 14px;border-radius:9px;border:1px solid #ececf1;font-size:12px;font-weight:700;color:#3f3f46;flex:none">{{ copyLabel }}</div>
+          <input value="{{ shareUrl }}" readOnly="{{ true }}" style="flex:1;padding:9px 11px;border-radius:9px;border:1px solid #ececf1;background:#faf9fc;font-size:12px;color:#4a4553">
+          <div class="rf-btn" onClick="{{ copyShareLink }}" style="padding:9px 14px;border-radius:9px;border:1px solid #ececf1;font-size:12px;font-weight:700;color:#3f3f46;flex:none">{{ shareCopyLabel }}</div>
         </div>
       </div>
     </div>
@@ -434,7 +484,7 @@
       <div onClick="{{ stop }}" style="width:100%;max-width:460px;background:#fff;border-radius:16px;padding:28px 30px;box-shadow:0 20px 60px rgba(20,17,24,.25)">
         <div style="font-size:16px;font-weight:800;letter-spacing:-.02em">Apply for the referral partner program</div>
         <div style="font-size:12.5px;color:#4a4553;line-height:1.62;margin-top:8px">Invite-only. We review recurring referrers individually and follow up directly with terms if there's a fit.</div>
-        <input value="{{ partnerNote }}" onChange="{{ setPartnerNote }}" placeholder="What kinds of introductions do you expect to make?" style="{{ inputStyle }};width:100%;box-sizing:border-box;margin-top:16px"></input>
+        <input value="{{ partnerNote }}" onChange="{{ setPartnerNote }}" placeholder="What kinds of introductions do you expect to make?" style="{{ inputStyle }};width:100%;box-sizing:border-box;margin-top:16px">
         <div class="rf-btn" onClick="{{ submitPartner }}" style="margin-top:14px;padding:11px 0;border-radius:9px;background:#6d28d9;color:#fff;font-size:13px;font-weight:700;text-align:center">Request review</div>
       </div>
     </div>
@@ -442,7 +492,7 @@
 
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1240}}">
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:1240}}">
 class Component extends DCLogic {
   state = { persona:'active', statusFilter:'All', submitOpen:false, submitted:false, formCat:'startup', warm:'',
     detailKey:null, partnerOpen:false, partnerNote:'', faqOpen:0,
@@ -462,6 +512,9 @@ class Component extends DCLogic {
 
   ic(p, sw){ return { __html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.9)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
   setF(k){ return (e) => this.setState(s => ({ f: Object.assign({}, s.f, { [k]: e.target.value }) })); }
+
+  // One toast path for every share action, so a copy and a download acknowledge the same way.
+  toast(m){ this.setState({ toast:m }); clearTimeout(this._tt); this._tt = setTimeout(() => this.setState({ toast:'' }), 2600); }
 
   renderVals() {
     const st = this.state;
@@ -585,11 +638,47 @@ class Component extends DCLogic {
     const msgLinkedin = 'Referring the right person is worth more than a hundred cold applications.\n\nAxal VC\u2019s Refer & Earn program rewards founders, advisors, and operators who bring high-quality people into the network \u2014 real rewards for a real fit, every submission reviewed individually.\n\nIf you know a founder who should be building inside a structured 28-day formation program, an advisor with real operating depth, or a strategic introduction worth making \u2014 this is where it goes: ' + shareUrl;
     const msgX = 'Know a founder who should be building inside Axal VC\u2019s Spin-Out Lab? Refer them. Reviewed individually, rewarded on real outcomes \u2014 not a referral-spam program. ' + shareUrl;
     const msgWhatsapp = 'Hey \u2014 Axal VC has a referral program where you get rewarded for introducing strong founders, advisors, or partners into their network. Thought of you for this: ' + shareUrl;
+    const msgFacebook = 'Axal VC runs a referral program that actually reviews who you send. Refer a founder, advisor, or service partner into the network and you earn when they reach a real milestone \u2014 acceptance, onboarding, or close. Not paid per signup, which is why the bar stays high.\n\n' + shareUrl;
+    const msgInstagram = 'Know someone building something serious? Axal VC\u2019s Refer & Earn rewards real introductions \u2014 founders, advisors, partners. Reviewed one by one. Link in bio.';
+    const msgStory = 'Refer a founder to Axal VC. Reviewed individually, rewarded on outcomes. Code: ';
     const msgTelegram = 'Axal VC\u2019s Refer & Earn: refer founders, advisors, or strategic intros into their network and earn when there\u2019s a real fit. Reviewed individually, not a numbers game. ' + shareUrl;
+
+    // The story caption carries the code, because a story has no link for most accounts —
+    // a viewer types the code or nothing reaches the referrer.
+    const igIcon = this.ic('<rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="3.6"/><circle cx="17.2" cy="6.8" r="1.1" fill="currentColor" stroke="none"/>');
+    const copyText = (t) => { if (typeof navigator !== 'undefined' && navigator.clipboard) navigator.clipboard.writeText(t).catch(() => {}); };
+    const openWin = (u) => { if (typeof window !== 'undefined') window.open(u, '_blank'); };
 
     // ---- referral link, code, QR ----
     const REF_CODE = 'WD4RP4';
     const REF_LINK = 'https://axal.vc/register?ref=' + REF_CODE;
+    const storyCaption = msgStory + REF_CODE;
+    // The rail row is the same seven destinations as the modal, one tap shallower. The three
+    // that need an asset open the modal rather than firing, because there is nothing to fire.
+    const openShareModal = () => this.setState({ shareOpen:true, shareCopied:false });
+    const shareQuick = [
+      { k:'wa', label:'WhatsApp', iconBg:'#25D366', title:'Send to one person on WhatsApp',
+        icon: this.ic('<path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2z"/><path d="M8.5 8.5c0 3.5 3.5 7 7 7"/>'),
+        go: () => openWin('https://wa.me/?text=' + encodeURIComponent(msgWhatsapp)) },
+      { k:'tg', label:'Telegram', iconBg:'#26A5E4', title:'Send on Telegram',
+        icon: this.ic('<path d="M21.9 4.3 18.8 19a1.1 1.1 0 0 1-1.7.7l-4.5-3.3-2.2 2.1.3-4.3 8.2-7.4-12.6 6.4L3 12c-.9-.3-.9-.9.2-1.3l17.2-6.6c.8-.3 1.6.2 1.5 1.2z"/>'),
+        go: () => openWin('https://t.me/share/url?url=' + encodeURIComponent(shareUrl) + '&text=' + encodeURIComponent(msgTelegram)) },
+      { k:'li', label:'LinkedIn', iconBg:'#0A66C2', title:'Post on LinkedIn',
+        icon: this.ic('<path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM2 21h6V9H2v12zM11 21h6v-6.5c0-1.6.6-2.6 2-2.6s2 1 2 2.6V21h6v-7.4c0-3.9-2.1-5.7-4.9-5.7-2.2 0-3.4 1.2-4.1 2.2V9h-7v12z"/>'),
+        go: () => openWin('https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(REF_LINK)) },
+      { k:'fb', label:'Facebook', iconBg:'#1877F2', title:'Post on Facebook',
+        icon: this.ic('<path d="M14 9V6.8c0-1 .3-1.6 1.7-1.6H18V2h-3c-3 0-4.3 1.6-4.3 4.4V9H8v3.4h2.7V22H14v-9.6h3l.5-3.4H14z"/>'),
+        go: () => { copyText(msgFacebook); openWin('https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(REF_LINK));
+          this.toast('Caption copied — paste it into the Facebook composer'); } },
+      { k:'fbs', label:'FB Stories', iconBg:'#1877F2', title:'Needs a 9:16 video — opens the share panel',
+        icon: this.ic('<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M4 7v10M20 7v10"/>'),
+        go: openShareModal },
+      { k:'ig', label:'Instagram', iconBg:'#C13584', title:'Needs a 1:1 card — opens the share panel',
+        icon: igIcon, go: openShareModal },
+      { k:'igs', label:'IG Stories', iconBg:'#C13584', title:'Needs a 9:16 video — opens the share panel',
+        icon: this.ic('<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><circle cx="12" cy="12" r="2.6"/>'),
+        go: openShareModal }
+    ];
     // Deterministic pseudo-QR: seeded from the code so the pattern is stable, with
     // the three finder squares placed correctly. Representational, not scannable.
     const QN = 21;
@@ -673,12 +762,22 @@ class Component extends DCLogic {
       // ---- share (platform-tuned copy — each written for how that platform actually gets read) ----
       shareOpen: st.shareOpen, openShare: () => this.setState({ shareOpen:true, shareCopied:false }),
       closeShare: () => this.setState({ shareOpen:false }),
-      shareUrl, shareCopied: st.shareCopied, copyLabel: st.shareCopied ? 'Copied' : 'Copy link',
+      // Distinct key: the rail's own copyLabel is declared later in this literal and would
+      // otherwise win, leaving this button reading the rail's state and claiming the share URL
+      // was copied when the referral link was.
+      shareUrl, shareCopied: st.shareCopied, shareCopyLabel: st.shareCopied ? 'Copied' : 'Copy link',
       copyShareLink: () => {
         if (typeof navigator !== 'undefined' && navigator.clipboard) navigator.clipboard.writeText(shareUrl).catch(() => {});
         this.setState({ shareCopied:true });
       },
-      sharePlatforms: [
+      // Two groups, because the platforms genuinely differ in what they permit from a web page.
+      // LinkedIn, WhatsApp, Telegram, Facebook and X expose a share composer a link can open.
+      // Instagram exposes none, and neither Facebook nor Instagram accepts a story from the
+      // web at all — so those are handed over as an asset plus a caption rather than as a
+      // button that would silently fail. Saying so is better than a dead tap.
+      playIcon: this.ic('<path d="M5 3.5v17l14-8.5-14-8.5z"/>'),
+      shareQuick,
+      shareLink: [
         { k:'linkedin', label:'LinkedIn', preview: msgLinkedin, iconBg:'#0A66C2',
           icon: this.ic('<path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM2 21h6V9H2v12zM11 21h6v-6.5c0-1.6.6-2.6 2-2.6s2 1 2 2.6V21h6v-7.4c0-3.9-2.1-5.7-4.9-5.7-2.2 0-3.4 1.2-4.1 2.2V9h-7v12z"/>'),
           go: () => { if (typeof window !== 'undefined') window.open('https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(shareUrl), '_blank'); } },
@@ -688,9 +787,41 @@ class Component extends DCLogic {
         { k:'whatsapp', label:'WhatsApp', preview: msgWhatsapp, iconBg:'#25D366',
           icon: this.ic('<path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2zm5.8 14.2c-.25.7-1.4 1.3-2 1.4-.5.1-1.1.2-3.6-.8-3-1.2-4.9-4.2-5-4.4-.15-.2-1.2-1.6-1.2-3s.75-2.15 1-2.4c.25-.3.55-.35.75-.35h.5c.2 0 .45 0 .65.5.25.6.85 2.1.9 2.25.05.15.1.3 0 .5-.35.7-.7.9-1 1.3-.15.15-.3.35-.15.65.2.35.85 1.4 1.85 2.25 1.3 1.15 2.35 1.5 2.7 1.65.3.15.5.1.7-.1.2-.25.85-1 1.1-1.3.25-.3.45-.25.75-.15.3.1 1.85.9 2.15 1.05.3.15.5.25.6.35.1.2.1.85-.15 1.55z"/>'),
           go: () => { if (typeof window !== 'undefined') window.open('https://wa.me/?text=' + encodeURIComponent(msgWhatsapp), '_blank'); } },
+        { k:'facebook', label:'Facebook post', preview: msgFacebook, iconBg:'#1877F2',
+          icon: this.ic('<path d="M14 9V6.8c0-1 .3-1.6 1.7-1.6H18V2h-3c-3 0-4.3 1.6-4.3 4.4V9H8v3.4h2.7V22H14v-9.6h3l.5-3.4H14z"/>'),
+          // Facebook's sharer takes only a URL; the caption is copied so it can be pasted in.
+          go: () => {
+            if (typeof navigator !== 'undefined' && navigator.clipboard) navigator.clipboard.writeText(msgFacebook).catch(() => {});
+            if (typeof window !== 'undefined') window.open('https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(shareUrl), '_blank');
+            this.toast('Caption copied — paste it into the Facebook composer');
+          } },
         { k:'telegram', label:'Telegram', preview: msgTelegram, iconBg:'#26A5E4',
           icon: this.ic('<path d="M21.9 4.3 18.8 19a1.1 1.1 0 0 1-1.7.7l-4.5-3.3-2.2 2.1a.9.9 0 0 1-.7.3l.3-4.3 8.2-7.4c.3-.3-.1-.5-.5-.2L7.3 13.4 3 12c-.9-.3-.9-.9.2-1.3l17.2-6.6c.8-.3 1.6.2 1.5 1.2z"/>'),
           go: () => { if (typeof window !== 'undefined') window.open('https://t.me/share/url?url=' + encodeURIComponent(shareUrl) + '&text=' + encodeURIComponent(msgTelegram), '_blank'); } },
+      ],
+
+      shareMedia: [
+        { k:'ig-post', label:'Instagram post', ratio:'1:1', iconBg:'#C13584', aspect:'1 / 1', slotW:'80px',
+          note:'Square card. Instagram has no web share, so the caption is copied.',
+          slotHint:'Drop your 1:1 video or image here',
+          caption: msgInstagram, dlLabel:'Download card',
+          icon: igIcon,
+          copy: () => { copyText(msgInstagram); this.toast('Instagram caption copied'); },
+          download: () => this.toast('1:1 card downloaded — open Instagram and paste the caption') },
+        { k:'ig-story', label:'Instagram Stories', ratio:'9:16', iconBg:'#C13584', aspect:'9 / 16', slotW:'54px',
+          note:'Vertical video with the code as a sticker. Tappable link if the account allows it.',
+          slotHint:'Drop your 9:16 video here',
+          caption: storyCaption, dlLabel:'Download 9:16',
+          icon: igIcon,
+          copy: () => { copyText(storyCaption); this.toast('Story caption and code copied'); },
+          download: () => this.toast('9:16 asset downloaded — add it as a story and attach your link') },
+        { k:'fb-story', label:'Facebook Stories', ratio:'9:16', iconBg:'#1877F2', aspect:'9 / 16', slotW:'54px',
+          note:'Same vertical video, Facebook\u2019s story frame. Posted from the app.',
+          slotHint:'Drop your 9:16 video here',
+          caption: storyCaption, dlLabel:'Download 9:16',
+          icon: this.ic('<path d="M14 9V6.8c0-1 .3-1.6 1.7-1.6H18V2h-3c-3 0-4.3 1.6-4.3 4.4V9H8v3.4h2.7V22H14v-9.6h3l.5-3.4H14z"/>'),
+          copy: () => { copyText(storyCaption); this.toast('Story caption and code copied'); },
+          download: () => this.toast('9:16 asset downloaded — add it as a story in the Facebook app') }
       ],
 
       // ---- CSV import (per referral category, so bulk-imported contacts route through the same fit review as a manual submission) ----
@@ -751,5 +882,4 @@ class Component extends DCLogic {
   }
 }
 </script>
-</body>
-</html>
+</body></html>

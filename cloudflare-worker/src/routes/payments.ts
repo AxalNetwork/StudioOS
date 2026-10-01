@@ -15,6 +15,7 @@ import {
 } from '../services/promos';
 import { captureAndResolveAttribution, readRefCookie } from '../services/referralAttribution';
 import { automaticTaxParams, stripeTaxEnabled } from '../util/stripeTax';
+import { refuse } from '../util/refusal';
 
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 //
@@ -177,7 +178,7 @@ payments.post('/intent', async (c) => {
           price_id: price.id,
         });
       } catch (e) {
-        return c.json({ error: 'intent_failed', detail: (e as Error).message }, 502);
+        return refuse(c, 502, { code: 'intent_failed', message: 'The payment could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
       }
     }
 
@@ -291,7 +292,7 @@ async function createPaymentIntent(
       currency: args.currency,
     });
   } catch (e) {
-    return c.json({ error: 'intent_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'intent_failed', message: 'The payment could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
   }
 }
 
@@ -354,7 +355,7 @@ payments.post('/setup-intent', async (c) => {
       customer,
     });
   } catch (e) {
-    return c.json({ error: 'setup_intent_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'setup_intent_failed', message: 'A card could not be set up. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
   }
 });
 
@@ -387,7 +388,7 @@ payments.get('/methods', async (c) => {
     }));
     return c.json({ methods });
   } catch (e) {
-    return c.json({ error: 'methods_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'methods_failed', message: 'Your saved cards could not be read. Try again in a moment.', raw: e, audience: 'member' });
   }
 });
 
@@ -411,7 +412,7 @@ payments.delete('/methods/:id', async (c) => {
     await stripeCall(c.env, `/payment_methods/${id}/detach`, {});
     return c.json({ detached: true, id });
   } catch (e) {
-    return c.json({ error: 'detach_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'detach_failed', message: 'That card could not be removed. Try again in a moment.', raw: e, audience: 'member' });
   }
 });
 

@@ -10,13 +10,7 @@ import AxalCheckout from '../../components/AxalCheckout';
 import { eventsPublic } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { loadTurnstile } from '../../lib/turnstile';
-
-function formatMoney(cents, currency) {
-  const amt = (Number(cents) || 0) / 100;
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: (currency || 'usd').toUpperCase() }).format(amt);
-  } catch { return `$${amt.toFixed(2)}`; }
-}
+import { formatEventPrice as formatMoney } from '../../lib/money';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
@@ -187,10 +181,10 @@ export default function PublicEventDetailPage() {
       }
       setStatus({ state: 'sent', error: '', result: res });
     } catch (err) {
-      const raw = err?.message || '';
-      const msg = raw === 'turnstile_failed'
+      // D258 — the refusal's code is `err.code`; `err.message` is its sentence.
+      const msg = err?.code === 'turnstile_failed'
         ? 'Verification failed — please complete the challenge again.'
-        : (raw || 'Something went wrong. Please try again.');
+        : (err?.message || 'Something went wrong. Please try again.');
       setStatus({ state: 'error', error: msg, result: null });
       if (TURNSTILE_SITE_KEY && turnstileWidgetId.current !== null) {
         try { window.turnstile.reset(turnstileWidgetId.current); } catch {}

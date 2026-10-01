@@ -11,6 +11,7 @@ import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import ReactMarkdown from 'react-markdown';
 import { wordsAndMinutes, slugify } from '../lib/articleMarkdown';
+import { appOrigin } from '../lib/branchHost';
 
 // Task #1 — Article author dashboard, scoped to the /articles surface
 // (role-aware list, dynamic sector taxonomy from `/api/articles/sectors`,
@@ -32,9 +33,11 @@ function statusBadge(s) {
   return <span className={`text-xs px-2 py-0.5 rounded-full ${map[s] || map.draft}`}>{s.replace('_', ' ')}</span>;
 }
 
-const PUBLIC_ARTICLE_BASE = 'https://axal.vc/articles';
+// D106 — a function, not a module const: the value is read per render from
+// the host actually serving the page, so a branch links into itself.
+const publicArticleBase = () => `${appOrigin()}/articles`;
 function publicArticleUrl(slug) {
-  return `${PUBLIC_ARTICLE_BASE}/${slug}`;
+  return `${publicArticleBase()}/${slug}`;
 }
 
 const STATUS_LABEL = {

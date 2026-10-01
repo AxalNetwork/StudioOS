@@ -16,9 +16,15 @@
  * was already correct — so the two surfaces could state different track
  * records on the same day, and the brief's was the one that got printed.
  *
- * Both now read one hook and one cohort resolver. These tests pin that the
- * literals cannot come back, and that the em-dash fallback (never a zero) is
- * what a failed fetch prints.
+ * Both read ONE source for the figures — `useSpinoutStats`, still, and the
+ * brief's track-record block survived its D141 rebuild for exactly that reason.
+ * The DATES parted company in D141: the brief now reads them from
+ * `GET /api/spinout-lab/brief` while the hero still computes them with
+ * `openCohortCopy`, and what keeps those two honest is no longer a shared call
+ * but `spinout_brief_d141.test.mjs` asserting the worker's and the SPA's cohort
+ * arithmetic equal on their output. These tests pin that the literals cannot
+ * come back, that the brief computes no second cohort of its own, and that the
+ * em-dash fallback (never a zero) is what a failed fetch prints.
  *
  * Run with:  node --test frontend/test/spinout_brief_live_data.test.mjs
  */
@@ -90,15 +96,52 @@ test('the brief reads the shared stats hook', () => {
   assert.match(BRIEF, /const \{ companies, raised \} = useSpinoutStats\(\)/);
 });
 
-test('the brief resolves its cohort at render time', () => {
-  assert.match(BRIEF, /const cohort = openCohortCopy\(\)/);
-  assert.match(BRIEF, /Apply to Cohort \$\{cohort\.cohortNum\}/);
-  assert.match(BRIEF, /Applications close \$\{cohort\.deadlineLabel\}/);
+/**
+ * ─── D141 RE-AIMED THESE TWO, AND THE RULE THEY GUARD IS UNCHANGED ──────────
+ *
+ * They used to assert the brief called `openCohortCopy()` and interpolated
+ * `cohort.cohortNum` / `cohort.deadlineLabel`. The rebuilt brief reads its
+ * cohort from `GET /api/spinout-lab/brief` instead — the platform answering,
+ * which is the whole point of that route — so asserting the old CALL would now
+ * pin a mechanism the page correctly no longer has.
+ *
+ * The rule survives and is enforced harder than before. "The brief and the hero
+ * cannot quote different dates for the same cohort" used to rest on them
+ * sharing one function; it now rests on `spinout_brief_d141.test.mjs` comparing
+ * `resolveOpenCohort` (the hero's) against `resolveApplicationTarget` (the
+ * route's) over 48 probes — two implementations in two languages, asserted
+ * equal on their OUTPUT rather than on their spelling. That is a stronger
+ * assertion, not a weaker one, and it is what makes reading the route safe.
+ *
+ * What stays here is the property that belongs to this page: it must not
+ * compute the cohort a SECOND time, and an absent one must not become a wrong
+ * date.
+ */
+test('the brief takes its cohort from the platform, and computes none of its own', () => {
+  assert.match(BRIEF_CODE, /spinoutLab\.brief\(\)/,
+    'the brief must read the route that answers the six live values');
+  assert.match(BRIEF_CODE, /brief\?\.cohort\?\.name/,
+    'the cohort name must come off the payload');
+  // A literal scan, not a regex built from this array. `new RegExp` over data
+  // is the shape CodeQL and Semgrep have flagged three times in this repo, and
+  // `includes` is the stronger assertion here anyway — it cannot be widened by
+  // a metacharacter in a name.
+  for (const own of ['openCohortCopy(', 'resolveOpenCohort(', 'cohortNumFor(']) {
+    assert.ok(!BRIEF_CODE.includes(own),
+      `the brief computes the cohort itself with ${own}) as well as reading it — two sources for one date is what this file exists to prevent`);
+  }
 });
 
-test('an unresolvable cohort degrades to generic copy, not a wrong date', () => {
-  assert.match(BRIEF, /Apply to the next cohort/);
-  assert.match(BRIEF, /Applications are now open · 8 spots/);
+test('an unresolvable cohort degrades to a stated reason, not a wrong date', () => {
+  // The route reports `applications_open: false` between a close and the next
+  // month's opening, and a failed read reports nothing at all. Those are two
+  // different facts and the brief says which — but neither may become a date.
+  assert.match(BRIEF_CODE, /No cohort is open for applications/,
+    'a closed window must say so rather than naming the wrong cohort');
+  assert.match(BRIEF_CODE, /The platform did not answer/,
+    'a failed read must say so rather than printing a stale value');
+  assert.match(BRIEF_CODE, /<Unrecorded reason=\{reason\}>/,
+    'the live fields must render the shared honest-absence component, never a bare fallback');
 });
 
 // ---------------------------------------------------------------------------
@@ -128,26 +171,36 @@ test('companiesLabel returns an em-dash for null and is singular-correct', () =>
 // The two surfaces share one source, so they cannot disagree.
 // ---------------------------------------------------------------------------
 
-test('the hero panel and the brief use the same hook and label helper', () => {
+test('the track record has one source, and the brief reads it', () => {
+  // `HeroStatsPanel` was the other reader. It had not rendered since the D38
+  // intro replaced the hero it sat in, and D380 deleted it rather than keep a
+  // second, invisible copy of the figures; the brief is the one surface that
+  // prints them.
   assert.match(LIB, /export function useSpinoutStats/);
   assert.match(LIB, /export function companiesLabel/);
   assert.match(LIB, /export function openCohortCopy/);
-  // And the page must not have grown its own copy on the way past.
+  // The page must not have grown its own copy on the way past.
   assert.doesNotMatch(PAGE, /function useSpinoutStats/);
   assert.doesNotMatch(PAGE, /function companiesLabel/);
   assert.doesNotMatch(PAGE, /function openCohortCopy/);
-  // The hero must consume them rather than keeping its own inlined copy.
-  assert.match(PAGE, /const \{ companies, raised \} = useSpinoutStats\(\)/);
+  assert.doesNotMatch(PAGE, /function HeroStatsPanel/, 'the dead hero stats panel came back');
+  // The brief consumes the shared hook and label rather than inlining either.
+  assert.match(BRIEF_CODE, /const \{ companies, raised \} = useSpinoutStats\(\)/);
+  assert.match(BRIEF_CODE, /companiesLabel\(companies\)/);
   assert.doesNotMatch(
-    PAGE,
-    /companies === 1 \? 'company' : 'companies'\s*\}`\s*\}\s*<\/div>/,
-    'the hero re-inlined the pluralisation instead of using companiesLabel',
+    BRIEF_CODE,
+    /companies === 1 \? 'company' : 'companies'/,
+    'the brief re-inlined the pluralisation instead of using companiesLabel',
   );
 });
 
-test('the apply CTA resolves its deadline through the shared helper', () => {
-  assert.match(PAGE, /const cohort = useMemo\(\(\) => openCohortCopy\(\), \[\]\)/);
+test('the apply CTA resolves its cohort and deadline from the cohort record', () => {
+  // D385: the name and deadline come from /brief through useCohortRecord, the
+  // record the landing and the brief read, not the client calendar's number.
+  assert.match(PAGE, /const read = useCohortRecord\(\);/);
+  assert.match(PAGE, /Apply to the \$\{cohort\.name\} cohort\./);
   assert.match(PAGE, /Applications close \$\{cohort\.deadlineLabel\}/);
+  assert.doesNotMatch(PAGE, /Apply to Cohort \$\{/, 'the CTA went back to the client calendar number');
 });
 
 test('the cohort deadline is formatted in Delaware time', () => {

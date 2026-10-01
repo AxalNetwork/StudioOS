@@ -12,9 +12,9 @@
  *
  *   FACTS ARE DERIVED — the id, the rate, and which models exist at all come
  *   from `GET /api/ai/pricing`, which reads the router's own tables.
- *   COPY IS TYPED — the display name, the sentence and the recommendation are
- *   editorial judgements with nothing to derive them from, and they live in
- *   `ui/railModels.js` and nowhere else.
+ *   COPY IS TYPED — the display name and the sentence are editorial, with
+ *   nothing to derive them from, and they live in `ui/railModels.js` and
+ *   nowhere else. Which model is the DEFAULT is a fact, and derived (D400).
  *
  * Crossing that line in either direction is a real, shipped failure mode here:
  * the rail quoted `0.50 / 0.50` for a model Cloudflare bills at `0.293 / 2.253`
@@ -104,22 +104,31 @@ test('every model the router offers has copy, or renders on its bare id', () => 
   assert.match(hook, /why: c\.why \|\| ''/, 'a model with no copy would render undefined');
 });
 
-test('a recommendation names a model that task actually offers', () => {
-  const alts = alternatesByTask();
-  const src = read(COPY);
-  const block = src.slice(src.indexOf('RECOMMENDED_BY_TASK'));
-  const perTask = [...block.matchAll(/^\s{2}([a-z_]+):\s*\[([^\]]*)\]/gm)];
-  assert.ok(perTask.length >= 1, 'no task declares a recommendation');
-  for (const [, task, list] of perTask) {
-    const offered = alts.get(task);
-    assert.ok(offered, `RECOMMENDED_BY_TASK names task "${task}", which is not a ROUTE entry`);
-    for (const raw of list.split(',').map((x) => x.trim()).filter(Boolean)) {
-      const id = raw.replace(/^'|'$/g, '');
-      assert.ok(offered.includes(id),
-        `${task} recommends ${id}, which is not in its alternates — the rail would badge `
-        + 'a model it cannot offer, and the badge would sit on nothing');
-    }
-  }
+test('the Default badge is derived from the router, never typed (D400)', () => {
+  // It was RECOMMENDED, from a typed `RECOMMENDED_BY_TASK` map whose one entry
+  // named `ROUTE.workspace_explain.model` — the router's own primary. So the
+  // badge was a hand-typed copy of a router fact. Now `modelsForTask` sets
+  // `isDefault` from `route.model` in the same `/api/ai/pricing` response the
+  // menu is built from, and the copy table holds no per-task map at all.
+  const copy = codeOnly(read(COPY));
+  assert.doesNotMatch(copy, /_BY_TASK\b/,
+    'railModels.js is deciding which model a task defaults to; that is the router\'s fact');
+  const hook = codeOnly(read('frontend/src/hooks/useAiSpend.js'));
+  assert.match(hook, /isDefault: id === route\.model/,
+    'the default flag is no longer derived from the route\'s own model');
+});
+
+test('modelsForTask marks the router\'s primary as Default, and only it', async () => {
+  const { modelsForTask } = await import('../src/hooks/useAiSpend.js');
+  const pricing = {
+    prices: { 'a/big': { in: 1, out: 2 }, 'a/small': { in: 0.1, out: 0.2 }, 'a/tiny': { in: 0.01, out: 0.02 } },
+    // The primary is deliberately NOT first in alternates, so a flag that
+    // meant "first entry" instead of "the route's model" fails here.
+    routes: { t: { model: 'a/small', alternates: ['a/big', 'a/small', 'a/tiny'] } },
+  };
+  const menu = modelsForTask(pricing, 't', { copy: {} });
+  assert.deepEqual(menu.map((m) => [m.id, m.isDefault]),
+    [['a/big', false], ['a/small', true], ['a/tiny', false]]);
 });
 
 test('the rail types no rate and no model name', () => {
@@ -157,9 +166,9 @@ test('the menu is built from the router, not from the copy table', () => {
     'an unpriced model must be dropped from the menu, never rendered at zero');
 });
 
-test('the fuller treatment is what a recommendation buys, gated on the flag', () => {
+test('the fuller treatment is what the default entry gets, gated on the flag', () => {
   // The canvas gates the id, the tags and the full rate line on the same
-  // `recommended` flag (design/incoming/AIRail.dc.html, three <sc-if> blocks),
+  // flag as its badge (design/incoming/AIRail.dc.html, three <sc-if> blocks),
   // so the badge is a label on a difference rather than the difference itself.
   // The render check proves a non-recommended entry shows none of the three;
   // this proves the source still asks.
@@ -168,36 +177,28 @@ test('the fuller treatment is what a recommendation buys, gated on the flag', ()
   // that ungated the id line pass, because the badge's own gate kept the
   // total above the threshold.
   for (const [what, re] of [
-    ['the @cf id line', /\{m\.recommended && <span className="fwr-model-id">/],
-    ['the tags row', /\{m\.recommended && m\.tags\.length > 0 && \(/],
-    ['the full rate line', /\{m\.recommended && \(\s*\n\s*<span className="fwr-model-rate">/],
+    ['the @cf id line', /\{m\.isDefault && <span className="fwr-model-id">/],
+    ['the tags row', /\{m\.isDefault && m\.tags\.length > 0 && \(/],
+    ['the full rate line', /\{m\.isDefault && \(\s*\n\s*<span className="fwr-model-rate">/],
   ]) {
-    assert.match(src, re, `${what} is not gated on m.recommended`);
+    assert.match(src, re, `${what} is not gated on m.isDefault`);
   }
-  assert.match(src, /\{!m\.recommended && \(/,
-    'a non-recommended entry must still carry its inline rate');
+  assert.match(src, /\{!m\.isDefault && \(/,
+    'a non-default entry must still carry its inline rate');
 });
 
-test('the badge is a bare token, and the rail says nothing else about recommending', () => {
-  // `scripts/check-regulated-wording.mjs` scans this file and bans
-  // `recommend*` — a lexicon aimed at the product sounding like it gives
-  // financial advice. A bare RECOMMENDED passes that scan and SHOULD: the
-  // script only treats a literal containing a space as prose, on its own
-  // stated rule that "a literal that looks like an identifier is not prose".
-  //
-  // So no exemption was added, and this keeps it that way: the moment the word
-  // appears inside a sentence, it is prose, the scanner is right to flag it,
-  // and this fails first with the reason.
+test('the badge says Default, and the rail never says "recommend" (D400)', () => {
+  // The voice rule forbids "recommendation" about what the assistant
+  // produces. The old bare RECOMMENDED passed the regulated-wording scanner
+  // only because the scanner treats a one-word literal as an identifier, and
+  // the badge marked the router's default all along. Every form of the word is
+  // now out of the rendered rail, including identifiers — an identifier is
+  // where the next badge would be read from.
   const src = codeOnly(read(RAIL));
-  // The badge, the boolean field, and the imported constant are all
-  // identifiers or a bare token. What must not appear is an inflected form —
-  // "recommends", "recommended for", "recommendation" — which is prose.
-  const ALLOWED = new Set(['RECOMMENDED', 'recommended', 'RECOMMENDED_BY_TASK']);
-  const hits = [...src.matchAll(/\brecommend\w*\b/gi)].map((m) => m[0]);
-  assert.deepEqual([...new Set(hits)].filter((h) => !ALLOWED.has(h)), [],
-    'a form of "recommend" beyond the bare badge, the boolean field and the imported constant');
-  assert.match(src, />RECOMMENDED</,
-    'the badge is no longer a bare token; if it grew a sentence it belongs to the lexicon');
+  assert.deepEqual([...new Set([...src.matchAll(/\brecommend\w*\b/gi)].map((m) => m[0]))], [],
+    'a form of "recommend" is back in the rail');
+  assert.match(src, /\{m\.isDefault && <i className="fwr-badge">DEFAULT<\/i>\}/,
+    'the default entry no longer carries its badge');
 });
 
 test('the chosen model reaches the worker', () => {
@@ -212,9 +213,16 @@ test('the chosen model reaches the worker', () => {
   const api = codeOnly(read('frontend/src/lib/api.js'));
   const method = api.slice(api.indexOf('aiWorkspaceExplain:'), api.indexOf('aiWorkspaceExplain:') + 400);
   assert.ok(method.length > 100, 'aiWorkspaceExplain was not found in api.js');
-  assert.match(method, /\(\{ workspace, zone, coverage, model \}\)/,
+  // RE-AIMED IN D154, AND THE RE-AIM IS THE POINT. This pinned the parameter
+  // list as an EXACT TUPLE — `({ workspace, zone, coverage, model })` — so
+  // adding a fifth field failed it while changing nothing about the model. The
+  // property it exists for is narrower and survives: the method must ACCEPT a
+  // model and must FORWARD it, and dropping either end is the silent break its
+  // header describes (the rail shows the 3b selected, the 70b runs, and every
+  // figure on screen is wrong by eight times).
+  assert.match(method, /aiWorkspaceExplain: \(\{[^}]*\bmodel\b[^}]*\}\) =>/,
     'the api method no longer accepts a model');
-  assert.match(method, /JSON\.stringify\(\{ workspace, zone, coverage, model \}\)/,
+  assert.match(method, /JSON\.stringify\(\{[^}]*\bmodel\b[^}]*\}\)/,
     'the api method accepts a model and drops it before the request');
 });
 

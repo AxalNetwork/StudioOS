@@ -15,6 +15,7 @@
 import type { Env } from '../types';
 import { encryptString, decryptString } from './cryptoBox';
 import { maskClientId } from './cloudflareSecrets';
+import { bindingKey } from '../util/schemaBootstrap';
 
 export type ManagedProviderKey =
   | 'slack'
@@ -27,7 +28,8 @@ export type ManagedProviderKey =
   | 'carta'
   | 'crunchbase'
   | 'affinity'
-  | 'telegram';
+  | 'telegram'
+  | 'gcip';
 
 export const MANAGED_PROVIDERS: ManagedProviderKey[] = [
   'slack',
@@ -41,6 +43,7 @@ export const MANAGED_PROVIDERS: ManagedProviderKey[] = [
   'crunchbase',
   'affinity',
   'telegram',
+  'gcip',
 ];
 
 export interface ProviderEnvVarPair {
@@ -71,6 +74,10 @@ export const PROVIDER_ENV_VARS: Record<ManagedProviderKey, { id: string; secret:
   crunchbase: { id: 'CRUNCHBASE_USER_KEY_ID',  secret: 'CRUNCHBASE_API_KEY' },
   affinity:   { id: 'AFFINITY_TEAM_DOMAIN',    secret: 'AFFINITY_API_KEY' },
   telegram:   { id: 'TELEGRAM_BOT_USERNAME',   secret: 'TELEGRAM_BOT_TOKEN' },
+  // SMS backup 2FA — Identity Platform web API key. Client ID slot is
+  // the GCP project id (used by the disable-flow admin API). Secret is
+  // the Firebase/Identity Platform Web API key that sends SMS codes.
+  gcip:       { id: 'GCIP_PROJECT_ID',         secret: 'GCIP_API_KEY' },
 };
 
 interface CacheEntry {
@@ -80,9 +87,9 @@ interface CacheEntry {
 const CACHE_TTL_MS = 60_000;
 const cache = new Map<ManagedProviderKey, CacheEntry>();
 
-let schemaEnsured = false;
+const SCHEMA_ENSURED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
-  if (schemaEnsured) return;
+  if (SCHEMA_ENSURED.get(bindingKey(env))) return;
   try {
     await env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS provider_oauth_keys (
@@ -95,7 +102,7 @@ async function ensureSchema(env: Env): Promise<void> {
          updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
        )`,
     ).run();
-    schemaEnsured = true;
+    SCHEMA_ENSURED.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[providerOauthKeys] ensureSchema failed', e);
   }
@@ -151,7 +158,7 @@ export async function loadOauthCreds(
       console.warn(`[providerOauthKeys] decrypt failed for ${providerKey} — treating as unconfigured`);
     }
   } catch (e) {
-    console.warn(`[providerOauthKeys] DB read failed for ${providerKey}`, e);
+    console.warn('[providerOauthKeys] DB read failed', providerKey, e);
   }
 
   cache.set(providerKey, { value: null, exp: now + CACHE_TTL_MS });
@@ -296,22 +303,74 @@ export interface ProviderKeyStatus {
   client_id_preview: string | null;
   updated_at: string | null;
   updated_by_user_id: number | null;
-  active_integrations: number;
+  /**
+   * Active user integrations for the provider, or `null` when the
+   * `integrations` table could not be read (D227). It was `?? 0`, and the
+   * console's Remove confirmation quotes this number as how many users the
+   * removal will disconnect — an unread count must not promise "none".
+   */
+  active_integrations: number | null;
 }
 
-export async function listProviderKeyStatus(env: Env): Promise<ProviderKeyStatus[]> {
+/**
+ * Whether a managed key is held as a Worker secret — the place that wins over
+ * any database row (`loadOauthCreds`). D227: the rotate route asks this before
+ * falling back to the database, because rotating the row under a key that a
+ * Worker secret overrides would report success and change nothing in use.
+ */
+export function keyHeldAsWorkerSecret(env: Env, providerKey: ManagedProviderKey): boolean {
+  return envCreds(env, providerKey) !== null;
+}
+
+/**
+ * The Integration keys console's list. It creates the table first, as it
+ * always has, and since D227 it carries D213's `db_readable` and each key's
+ * `state` (`keyStateOf`), so the console can say "unknown" rather than read a
+ * failed table as "unconfigured" and offer to configure over it.
+ */
+export async function listProviderKeyStatus(
+  env: Env,
+): Promise<{ db_readable: boolean; items: Array<ProviderKeyStatus & { state: ProviderKeyState }> }> {
   await ensureSchema(env);
+  const status = await readProviderKeyStatus(env);
+  return {
+    db_readable: status.db_readable,
+    items: status.items.map((item) => ({ ...item, state: keyStateOf(item, status.db_readable) })),
+  };
+}
+
+/**
+ * D213 — the same list, read without writing and without hiding a failed read.
+ *
+ * TWO DIFFERENCES FROM THE CONSOLE'S LIST, AND THEY ARE THE POINT.
+ *   1. No `ensureSchema`. That is a `CREATE TABLE`, a write, and HQ's Platform
+ *      summary only reads; a database without the table answers
+ *      `db_readable: false`, which is true, rather than being altered by
+ *      someone looking at it (D204's rule for GETs).
+ *   2. A failed read of `provider_oauth_keys` is REPORTED, not swallowed.
+ *      `db_readable` is what lets a reader tell a measured absence from an
+ *      unread table (`keyStateOf`). Since D227 the console's list carries it
+ *      too, so the console no longer reads a failed table as unconfigured.
+ */
+export async function readProviderKeyStatus(
+  env: Env,
+): Promise<{ db_readable: boolean; items: ProviderKeyStatus[] }> {
   let dbRows: Array<{ provider_key: string; client_id: string; updated_at: string; updated_by_user_id: number | null }> = [];
+  let dbReadable = true;
   try {
     const r: any = await env.DB.prepare(
       `SELECT provider_key, client_id, updated_at, updated_by_user_id FROM provider_oauth_keys`,
     ).all();
     dbRows = (r?.results || []) as typeof dbRows;
   } catch (e) {
+    dbReadable = false;
     console.warn('[providerOauthKeys] list failed', e);
   }
-  // Per-provider integration counts (best-effort — table may not exist yet).
+  // Per-provider integration counts. A failed read leaves every count null
+  // (D227): unknown, not zero, because Remove quotes it as the users it will
+  // disconnect. A table that answered with no row for a provider is a real 0.
   const counts = new Map<string, number>();
+  let countsReadable = true;
   try {
     const r: any = await env.DB.prepare(
       `SELECT provider_key, COUNT(*) AS n FROM integrations WHERE status = 'active' GROUP BY provider_key`,
@@ -319,9 +378,9 @@ export async function listProviderKeyStatus(env: Env): Promise<ProviderKeyStatus
     for (const row of (r?.results || []) as Array<{ provider_key: string; n: number }>) {
       counts.set(String(row.provider_key), Number(row.n));
     }
-  } catch { /* table may not exist */ }
+  } catch { countsReadable = false; }
   const dbMap = new Map(dbRows.map(r => [r.provider_key, r] as const));
-  return MANAGED_PROVIDERS.map((pk) => {
+  const items = MANAGED_PROVIDERS.map((pk): ProviderKeyStatus => {
     const env_ = envCreds(env, pk);
     const db = dbMap.get(pk);
     let source: 'env' | 'db' | 'unconfigured' = 'unconfigured';
@@ -340,9 +399,88 @@ export async function listProviderKeyStatus(env: Env): Promise<ProviderKeyStatus
       client_id_preview: preview,
       updated_at: db?.updated_at ?? null,
       updated_by_user_id: db?.updated_by_user_id ?? null,
-      active_integrations: counts.get(pk) ?? 0,
+      // Absent from an answered GROUP BY means no active row: a measured zero.
+      active_integrations: !countsReadable ? null : counts.has(pk) ? counts.get(pk)! : 0,
     };
   });
+  return { db_readable: dbReadable, items };
+}
+
+/**
+ * Where a managed key lives, or that nobody can tell.
+ *
+ *   env         set as a Worker secret — it wins over any row (`loadOauthCreds`)
+ *   db          held encrypted in `provider_oauth_keys`
+ *   unset       neither, and the table answered, so this is a measured absence
+ *   unreadable  no Worker secret, and the table did not answer: it may hold a
+ *               key or not, and saying "unset" would be a claim nothing measured
+ */
+export type ProviderKeyState = 'env' | 'db' | 'unset' | 'unreadable';
+
+export function keyStateOf(item: Pick<ProviderKeyStatus, 'source'>, dbReadable: boolean): ProviderKeyState {
+  if (item.source === 'env') return 'env';
+  if (item.source === 'db') return 'db';
+  return dbReadable ? 'unset' : 'unreadable';
+}
+
+/**
+ * The audit actions `routes/admin_integration_keys.ts` writes when a key is
+ * saved or rotated from the console, and the one it writes when a key is
+ * removed. A test reads that file and holds these equal to what it writes, so a
+ * renamed action cannot silently empty the "last set" read.
+ */
+export const KEY_SET_AUDIT_ACTIONS = ['integration_key_cf_secret_push', 'integration_key_cf_secret_rotate'] as const;
+export const KEY_REMOVE_AUDIT_ACTION = 'integration_key_cf_secret_delete';
+
+/**
+ * When each key was last saved or rotated from the console, from the audit
+ * log, successful writes only.
+ *
+ * A FAILED WRITE IS NOT A SET. The console audits refusals too (`outcome:
+ * 'failed'`), and reading those would date a key to the moment Cloudflare
+ * refused it.
+ *
+ * A REMOVAL AFTER THE LAST SAVE CANCELS THE DATE. The console's Remove deletes
+ * the Worker secret; if a key is present today and the console's latest act on
+ * it was a removal, it was set again some other way (at deploy), and the save
+ * before the removal is not when the key in place was set. That provider gets
+ * no date rather than a wrong one. A key set at deploy, or before the console
+ * audited its saves, has no row at all, and likewise gets no date.
+ *
+ * Rides `idx_admin_audit_action_ts (action, exported_at DESC)`. `datetime()`
+ * puts every stamp in one format before MAX compares them.
+ */
+export async function readProviderKeyLastSet(
+  env: Env,
+): Promise<{ available: true; byProvider: Map<string, string> } | { available: false }> {
+  try {
+    const res = await env.DB.prepare(
+      `SELECT json_extract(filters_json, '$.provider') AS provider, action, MAX(datetime(exported_at)) AS at
+         FROM admin_audit_log
+        WHERE action IN (?, ?, ?)
+          AND json_extract(filters_json, '$.outcome') = 'ok'
+        GROUP BY json_extract(filters_json, '$.provider'), action`,
+    ).bind(...KEY_SET_AUDIT_ACTIONS, KEY_REMOVE_AUDIT_ACTION)
+      .all<{ provider: string | null; action: string; at: string | null }>();
+    const set = new Map<string, string>();
+    const removed = new Map<string, string>();
+    for (const row of res.results || []) {
+      if (!row.provider || !row.at) continue;
+      const provider = String(row.provider);
+      const at = String(row.at);
+      const into = row.action === KEY_REMOVE_AUDIT_ACTION ? removed : set;
+      const prior = into.get(provider);
+      if (!prior || at > prior) into.set(provider, at);
+    }
+    const byProvider = new Map<string, string>();
+    for (const [provider, at] of set) {
+      const gone = removed.get(provider);
+      if (!gone || at > gone) byProvider.set(provider, at);
+    }
+    return { available: true, byProvider };
+  } catch {
+    return { available: false };
+  }
 }
 
 /** Test hook — clears the in-isolate cache. Not exported via the route layer. */

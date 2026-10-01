@@ -2,9 +2,10 @@
  * Task #4 — Admin X (Twitter) accounts + posts + aggregator endpoints.
  *
  * Mounted at /api/admin/x BEFORE the generic /api/admin catch-all in
- * index.ts (same precedence pattern as admin_telegram). Sits inside the
- * existing requireCfAccess() perimeter; role gating is per-route via
- * requireAdmin.
+ * index.ts (same precedence pattern as admin_telegram). Role gating is
+ * per-route via requireSuperAdmin (D216, #337: the platform's own X account
+ * is HQ's), and that is the whole gate — nothing at the edge sits in front of
+ * /api/admin (Task #33, index.ts).
  *
  * Endpoint summary:
  *   Accounts
@@ -33,7 +34,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin } from '../auth';
+import { requireSuperAdmin } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { clampLimit, parseOffset } from '../util/pagination';
 import { ensureXSchema, X_MAX_TWEET_LEN, X_MAX_MEDIA_PER_TWEET, X_DEFAULT_DAILY_CAP } from '../services/xSchema';
@@ -41,6 +42,7 @@ import { encryptString, decryptString } from '../services/cryptoBox';
 import {
   XError,
   XConfigMissing,
+  xClientConfigured,
   generatePkcePair,
   buildAuthorizeUrl,
   exchangeCodeForToken,
@@ -53,6 +55,8 @@ import {
 } from '../services/xClient';
 import { lintForSend } from '../services/telegramRedactCheck';
 import { previewXAll, previewXAudience, runXAggregator, X_AUDIENCES, type XAudience } from '../services/xAggregator';
+import { refuse } from '../util/refusal';
+import { refusalBody } from '../util/refusal';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -91,16 +95,39 @@ function xErrorPayload(e: unknown): { body: Record<string, unknown>; status: 400
       e.code === 'x_breaker_open' ? 503 :
       e.code === 'x_unauthorized' || e.code === 'x_forbidden' || e.code === 'x_duplicate_content' ? 400 :
       502;
+    // D278 — X's own text is an admin's to read, clipped, on `upstream`;
+    // `message` is our sentence for the code.
     return {
-      body: {
-        error: e.code, code: e.code, message: e.message,
-        ...(e.retryAfter ? { retry_after: e.retryAfter } : {}),
-      },
+      body: refusalBody({
+        code: e.code,
+        message: X_SENTENCES[e.code] || X_SENTENCES.x_upstream,
+        raw: e,
+        audience: 'admin',
+        extra: { code: e.code, ...(e.retryAfter ? { retry_after: e.retryAfter } : {}) },
+      }),
       status,
     };
   }
-  return { body: { error: 'x_unknown', code: 'x_unknown', message: (e as Error).message || String(e) }, status: 502 };
+  return {
+    body: refusalBody({ code: 'x_unknown', message: 'The call to X failed. Try again in a moment.', raw: e, audience: 'admin', extra: { code: 'x_unknown' } }),
+    status: 502,
+  };
 }
+
+/** D278 — the sentence an admin reads for each X failure code. */
+const X_SENTENCES: Record<string, string> = {
+  rate_limited: 'X is rate-limiting this account. Wait and try again.',
+  x_breaker_open: 'Calls to X are paused after repeated failures. Try again in a few minutes.',
+  x_unauthorized: 'X rejected the stored credentials. Reconnect the X account.',
+  x_forbidden: 'X refused this action for the connected account.',
+  x_duplicate_content: 'X refused this post because it duplicates a recent one.',
+  x_media_error: 'X did not accept the media. Check the file and try again.',
+  x_network: 'X could not be reached. Try again in a moment.',
+  x_oauth_exchange_failed: 'Connecting the X account did not complete. Start the connection again.',
+  x_oauth_refresh_failed: 'The X session could not be renewed. Reconnect the X account.',
+  x_api_error: 'X returned an error. Try again in a moment.',
+  x_upstream: 'X returned an error. Try again in a moment.',
+};
 
 // Audit ------------------------------------------------------------------
 
@@ -240,7 +267,7 @@ function dailyCap(env: Env): number {
 // ----------------------------- ACCOUNTS -----------------------------
 
 r.get('/accounts', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const rows = await c.env.DB.prepare(
     `SELECT id, handle, display_name, x_user_id, scopes, expires_at,
@@ -255,12 +282,12 @@ r.get('/accounts', async (c) => {
   return c.json({
     accounts,
     daily_cap: dailyCap(c.env),
-    config_ok: !!(c.env.X_CLIENT_ID && c.env.X_CLIENT_SECRET),
+    config_ok: xClientConfigured(c.env),
   });
 });
 
 r.post('/accounts', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const body: any = await c.req.json().catch(() => ({}));
   const handle = String(body.handle || '').replace(/^@/, '').trim();
@@ -280,7 +307,7 @@ r.post('/accounts', async (c) => {
 });
 
 r.put('/accounts/:id', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id)) return c.json({ error: 'invalid_id' }, 400);
@@ -297,7 +324,7 @@ r.put('/accounts/:id', async (c) => {
 });
 
 r.delete('/accounts/:id', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const id = Number(c.req.param('id'));
   const sent = await c.env.DB.prepare(
@@ -313,7 +340,7 @@ r.delete('/accounts/:id', async (c) => {
 });
 
 r.post('/accounts/:id/test', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const id = Number(c.req.param('id'));
   const acct: any = await loadAccount(c.env, id);
@@ -354,9 +381,9 @@ function xRedirectUri(env: Env): string {
 // implemented `/oauth/*` paths AND the spec-mandated `/auth/*` aliases on
 // the same code. Doc says `/api/admin/x/auth/start` + `/auth/callback`.
 const oauthStart = async (c: any) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
-  if (!c.env.X_CLIENT_ID || !c.env.X_CLIENT_SECRET) {
+  if (!xClientConfigured(c.env)) {
     return c.json({ error: 'x_config_missing', message: 'X_CLIENT_ID / X_CLIENT_SECRET not set.' }, 503);
   }
   const accountId = Number(c.req.query('account_id'));
@@ -396,10 +423,10 @@ const oauthCallback = async (c: any) => {
   // flow. Without this check, an attacker who tricked an admin into clicking a
   // crafted `/oauth/callback?code=…&state=…` URL (where `state` was minted from
   // the attacker's own /oauth/start) could bind the attacker's X account to
-  // ours. requireAdmin throws on no-auth / non-admin, which we map to a
+  // ours. requireSuperAdmin throws on no-auth / non-admin / un-elevated admin, which we map to a
   // user-facing redirect rather than letting the global 401 page swallow it.
   let admin: { id: number } | null = null;
-  try { admin = await requireAdmin(c); } catch { return land('x_oauth_error=admin_required'); }
+  try { admin = await requireSuperAdmin(c); } catch { return land('x_oauth_error=admin_required'); }
   let bound: { verifier?: string; account_id?: number; admin_id?: number } | null = null;
   try {
     const raw = await c.env.TOKENS.get(`xstate:${state}`);
@@ -445,7 +472,7 @@ r.get('/oauth/callback', oauthCallback);
 // ----------------------------- POSTS -----------------------------
 
 r.get('/posts', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const status = c.req.query('status');
   const accountId = c.req.query('account_id');
@@ -489,7 +516,7 @@ r.get('/posts', async (c) => {
 });
 
 r.post('/posts', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const body: any = await c.req.json().catch(() => ({}));
   const accountId = Number(body.account_id);
@@ -530,7 +557,7 @@ r.post('/posts', async (c) => {
 });
 
 r.put('/posts/:id', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
@@ -549,7 +576,9 @@ r.put('/posts/:id', async (c) => {
   if ('scheduled_for' in body) {
     const v = body.scheduled_for ? String(body.scheduled_for) : null;
     if (v && Number.isNaN(Date.parse(v))) return c.json({ error: 'invalid_scheduled_for' }, 400);
-    sets.push('scheduled_for = ?'); args.push(v);
+    // D250 — ONE STORED FORMAT: ISO 8601 UTC with a Z, whatever string
+    // Date.parse accepted. It used to be stored verbatim.
+    sets.push('scheduled_for = ?'); args.push(v ? new Date(Date.parse(v)).toISOString() : null);
   }
   if (sets.length === 0) return c.json({ error: 'no_fields' }, 400);
   sets.push("updated_at = datetime('now')");
@@ -561,7 +590,7 @@ r.put('/posts/:id', async (c) => {
 });
 
 r.delete('/posts/:id', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
@@ -579,7 +608,7 @@ r.delete('/posts/:id', async (c) => {
 });
 
 r.post('/posts/:id/media', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   if (!c.env.FILES) return c.json({ error: 'r2_unavailable' }, 503);
   const id = Number(c.req.param('id'));
@@ -647,7 +676,7 @@ r.post('/posts/:id/media', async (c) => {
 });
 
 r.post('/posts/:id/alt-text', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   if (!c.env.AI) return c.json({ error: 'ai_unavailable' }, 503);
   const id = Number(c.req.param('id'));
@@ -672,7 +701,7 @@ r.post('/posts/:id/alt-text', async (c) => {
     });
     caption = String(out?.description || out?.response || '').trim().slice(0, 1000);
   } catch (e) {
-    return c.json({ error: 'ai_failed', message: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'ai_failed', message: 'The draft could not be generated. Try again in a moment.', raw: e, audience: 'admin' });
   }
   if (!caption) return c.json({ error: 'ai_empty' }, 502);
 
@@ -687,7 +716,7 @@ r.post('/posts/:id/alt-text', async (c) => {
 });
 
 r.post('/posts/:id/lint', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
@@ -699,7 +728,7 @@ r.post('/posts/:id/lint', async (c) => {
 });
 
 r.post('/posts/:id/approve', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
@@ -715,7 +744,7 @@ r.post('/posts/:id/approve', async (c) => {
 });
 
 r.post('/posts/:id/schedule', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
@@ -725,61 +754,130 @@ r.post('/posts/:id/schedule', async (c) => {
   const at = Date.parse(String(body.scheduled_for || ''));
   if (!Number.isFinite(at)) return c.json({ error: 'invalid_scheduled_for' }, 400);
   if (at < Date.now() - 60_000) return c.json({ error: 'scheduled_in_past' }, 400);
+  // D250 — `scheduled_by` names who the scheduled send is recorded as
+  // (migration 290): the admin who scheduled it, not whoever drafted it.
   await c.env.DB.prepare(
-    `UPDATE x_posts SET status = 'scheduled', scheduled_for = ?, updated_at = datetime('now') WHERE id = ?`,
-  ).bind(new Date(at).toISOString(), id).run();
+    `UPDATE x_posts SET status = 'scheduled', scheduled_for = ?, scheduled_by = ?, send_error = NULL,
+            updated_at = datetime('now') WHERE id = ?`,
+  ).bind(new Date(at).toISOString(), admin.id, id).run();
   const schedHash = await sha256Hex(String(post.body || ''));
   await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_scheduled', postId: id, accountId: post.account_id, bodyHash: schedHash, extra: { scheduled_for: new Date(at).toISOString() } });
   return c.json({ ok: true });
 });
 
 r.post('/posts/:id/send', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
-  const id = Number(c.req.param('id'));
-  const post: any = await loadPost(c.env, id);
-  if (!post) return c.json({ error: 'not_found' }, 404);
-  if (post.status === 'sent') return c.json({ error: 'already_sent' }, 409);
-  if (post.status === 'sending') return c.json({ error: 'send_in_progress' }, 409);
+  const reqBody: any = await c.req.json().catch(() => ({}));
+  const overrideReason = reqBody.override_reason ? String(reqBody.override_reason).trim() : null;
+  const out = await sendXPost(c.env, Number(c.req.param('id')), {
+    actor: { id: admin.id, email: admin.email }, mode: 'click', overrideReason,
+  });
+  return c.json(out.body, out.status as any);
+});
+
+/**
+ * D250 — THE ONE X SEND, for the console's click and the scheduled sweep
+ * alike, extracted from the `/send` handler the way `sendTelegramPost` is.
+ * The two modes differ in the claim (the clock claims only a due, still-
+ * 'scheduled' head), in what a refusal does (the clock records it as
+ * 'failed' with its reason, since nobody is there to answer and a row left
+ * 'scheduled' would be refused every minute) and in the PII override (a
+ * click only).
+ *
+ * THE ACCOUNT'S `enabled` FLAG IS CHECKED HERE, AND IT NEVER WAS. D216 gave
+ * Telegram's send the channel check; X's send posted through a disabled
+ * account. It is refused before the claim, for a click and the clock alike.
+ */
+export type SendMode = 'click' | 'clock';
+export interface SendOpts {
+  actor: { id: number; email: string };
+  mode: SendMode;
+  overrideReason?: string | null;
+  /** The clock's minute (`YYYY-MM-DD HH:MM:SS`). Required for mode 'clock'. */
+  dueBy?: string;
+}
+export async function sendXPost(
+  env: Env, id: number, opts: SendOpts,
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const { actor, mode } = opts;
+  const overrideReason = opts.overrideReason ?? null;
+  const post: any = await loadPost(env, id);
+  if (!post) return { status: 404, body: { error: 'not_found' } };
+  if (post.status === 'sent') return { status: 409, body: { error: 'already_sent' } };
+  if (post.status === 'sending') return { status: 409, body: { error: 'send_in_progress' } };
   if (post.thread_continuation_of) {
-    return c.json({ error: 'cannot_send_thread_child_directly', head_id: post.thread_continuation_of }, 400);
+    return { status: 400, body: { error: 'cannot_send_thread_child_directly', head_id: post.thread_continuation_of } };
   }
 
-  // Compare-and-set: atomically transition the head row draft|approved|scheduled|failed -> sending.
+  // A refusal the clock records on the head (and its reserved children); the
+  // click just answers.
+  const refuse = async (status: number, body: Record<string, unknown>) => {
+    if (mode === 'clock') {
+      const reason = String(body.message || body.error).slice(0, 500);
+      try {
+        await env.DB.prepare(
+          `UPDATE x_posts SET status = 'failed', send_error = ?, updated_at = datetime('now')
+            WHERE (id = ? OR thread_continuation_of = ?) AND status IN ('scheduled', 'sending')`,
+        ).bind(reason, id, id).run();
+      } catch {}
+      await writeAudit(env, {
+        adminId: actor.id, adminEmail: actor.email, action: 'x_scheduled_send_refused',
+        postId: id, accountId: post.account_id, extra: { code: body.error, reason },
+      });
+    }
+    return { status, body };
+  };
+
+  const acct: any = await loadAccount(env, post.account_id);
+  if (!acct) return refuse(404, { error: 'account_not_found', message: 'The X account this post belongs to no longer exists.' });
+  if (!Number(acct.enabled)) {
+    return refuse(409, {
+      error: 'account_disabled',
+      message: 'This X account is disabled, so nothing is posted through it. Enable the account first.',
+    });
+  }
+
+  // Compare-and-set: atomically transition the head row to 'sending'.
   // We CAS BEFORE the cap check so the head's own reservation is visible to
-  // any concurrent /send racing the same account (see reservedTodayWithInflight).
-  const claim = await c.env.DB.prepare(
-    `UPDATE x_posts SET status = 'sending', updated_at = datetime('now')
-       WHERE id = ? AND status IN ('draft', 'approved', 'scheduled', 'failed')`,
-  ).bind(id).run();
+  // any concurrent send racing the same account (see reservedTodayWithInflight).
+  const claim = mode === 'clock'
+    ? await env.DB.prepare(
+      `UPDATE x_posts SET status = 'sending', updated_at = datetime('now')
+         WHERE id = ? AND status = 'scheduled'
+           AND datetime(scheduled_for) <= datetime(?)`,
+    ).bind(id, opts.dueBy ?? '').run()
+    : await env.DB.prepare(
+      `UPDATE x_posts SET status = 'sending', updated_at = datetime('now')
+         WHERE id = ? AND status IN ('draft', 'approved', 'scheduled', 'failed')`,
+    ).bind(id).run();
   if (!claim.meta || (claim.meta as { changes?: number }).changes !== 1) {
-    return c.json({ error: 'already_sending_or_sent' }, 409);
+    return { status: 409, body: { error: 'already_sending_or_sent' } };
   }
 
   // Reserve every thread child to 'sending' as well so the cap check sees
   // the full thread's reservation footprint atomically. Children that have
   // already been sent stay 'sent' and are skipped at send time.
-  await c.env.DB.prepare(
+  await env.DB.prepare(
     `UPDATE x_posts SET status = 'sending', updated_at = datetime('now')
        WHERE thread_continuation_of = ?
          AND status IN ('draft', 'approved', 'scheduled', 'failed')`,
   ).bind(id).run();
 
-  const reqBody: any = await c.req.json().catch(() => ({}));
-  const overrideReason = reqBody.override_reason ? String(reqBody.override_reason).trim() : null;
-
   // Release helper — flips the head AND any children we reserved back to a
   // recoverable state. Idempotent: only touches rows we left in 'sending'.
+  // The clock always records 'failed', with the reason.
   const releaseClaim = async (next: 'draft' | 'failed' = 'draft', errMsg?: string) => {
+    const to = mode === 'clock' ? 'failed' : next;
     try {
-      await c.env.DB.prepare(
+      await env.DB.prepare(
         `UPDATE x_posts SET status = ?, send_error = ?, updated_at = datetime('now')
            WHERE id = ? AND status = 'sending'`,
-      ).bind(next, errMsg ? errMsg.slice(0, 500) : null, id).run();
-      await c.env.DB.prepare(
+      ).bind(to, errMsg ? errMsg.slice(0, 500) : null, id).run();
+      await env.DB.prepare(
         `UPDATE x_posts SET status = ?, send_error = ?, updated_at = datetime('now')
            WHERE thread_continuation_of = ? AND status = 'sending'`,
-      ).bind(next, errMsg ? errMsg.slice(0, 500) : null, id).run();
+      ).bind(to, errMsg ? errMsg.slice(0, 500) : null, id).run();
     } catch {}
   };
 
@@ -787,48 +885,64 @@ r.post('/posts/:id/send', async (c) => {
   // count sent-today + every in-flight 'sending' row for this account. Two
   // concurrent sends racing the same account both reach this point, but each
   // sees the other's reservations, so only the first one can fit under cap.
-  const used = await reservedTodayWithInflight(c.env, post.account_id);
-  const cap = dailyCap(c.env);
+  const used = await reservedTodayWithInflight(env, post.account_id);
+  const cap = dailyCap(env);
   if (used > cap) {
-    await releaseClaim('draft');
-    return c.json({ error: 'daily_cap_reached', used, cap }, 429);
+    await releaseClaim('draft', mode === 'clock'
+      ? `daily_cap_reached: the account had used ${used} of its ${cap} posts today. Reschedule it, or send it by hand tomorrow.`
+      : undefined);
+    if (mode === 'clock') {
+      await writeAudit(env, {
+        adminId: actor.id, adminEmail: actor.email, action: 'x_scheduled_send_refused',
+        postId: id, accountId: post.account_id, extra: { code: 'daily_cap_reached', used, cap },
+      });
+    }
+    return { status: 429, body: { error: 'daily_cap_reached', used, cap } };
   }
 
   // PII linter — concatenate head + every child of the thread so a leak
   // hidden in tweet 3 still blocks the whole thread.
-  const children: any = await c.env.DB.prepare(
+  const children: any = await env.DB.prepare(
     `SELECT id, body FROM x_posts WHERE thread_continuation_of = ? ORDER BY thread_position ASC`,
   ).bind(id).all();
   const fullText = [post.body, ...((children.results || []) as any[]).map((r) => r.body)].join('\n');
-  const lint = await lintForSend(c.env, fullText, 'public');
+  const lint = await lintForSend(env, fullText, 'public');
   if (!lint.ok) {
-    if (!overrideReason || overrideReason.length < 8) {
-      await releaseClaim('draft');
-      return c.json({
-        error: 'pii_linter_blocked', code: 'pii_linter_blocked',
-        message: 'PII linter blocked the send. Provide override_reason (≥8 chars) to proceed.',
-        findings: lint.findings,
-      }, 422);
+    if (mode === 'clock' || !overrideReason || overrideReason.length < 8) {
+      const message = mode === 'clock'
+        ? 'The PII linter blocked this scheduled post. A scheduled send cannot carry an override; open it and send it by hand with a reason.'
+        : 'PII linter blocked the send. Provide override_reason (≥8 chars) to proceed.';
+      await releaseClaim('draft', mode === 'clock' ? `pii_linter_blocked: ${message}` : undefined);
+      if (mode === 'clock') {
+        await writeAudit(env, {
+          adminId: actor.id, adminEmail: actor.email, action: 'x_scheduled_send_refused',
+          postId: id, accountId: post.account_id,
+          extra: { code: 'pii_linter_blocked', kinds: lint.findings.map((f) => f.kind) },
+        });
+      }
+      return {
+        status: 422,
+        body: { error: 'pii_linter_blocked', code: 'pii_linter_blocked', message, findings: lint.findings },
+      };
     }
-    await c.env.DB.prepare(
+    await env.DB.prepare(
       `UPDATE x_posts SET override_reason = ?, override_findings = ?, updated_at = datetime('now') WHERE id = ?`,
     ).bind(overrideReason.slice(0, 1000), JSON.stringify(lint.findings), id).run();
-    await writeAudit(c.env, {
-      adminId: admin.id, adminEmail: admin.email, action: 'x_pii_override',
+    await writeAudit(env, {
+      adminId: actor.id, adminEmail: actor.email, action: 'x_pii_override',
       postId: id, accountId: post.account_id,
       extra: { reason: overrideReason.slice(0, 200), kinds: lint.findings.map((f) => f.kind) },
     });
   }
 
-  // Resolve account + token.
-  const acct: any = await loadAccount(c.env, post.account_id);
+  // Resolve the token.
   let accessToken: string;
   try {
-    accessToken = await getFreshAccessToken(c.env, acct);
+    accessToken = await getFreshAccessToken(env, acct);
   } catch (e) {
     const { body, status } = xErrorPayload(e);
     await releaseClaim('failed', String((body as any).message || (body as any).code).slice(0, 500));
-    return c.json(body, status);
+    return { status, body: body as Record<string, unknown> };
   }
 
   // Helper to send one post row (head OR child) with its own media.
@@ -836,7 +950,7 @@ r.post('/posts/:id/send', async (c) => {
     const keys = safeJson<string[]>(row.media_r2_keys, []);
     const mediaIds: string[] = [];
     for (const k of keys.slice(0, X_MAX_MEDIA_PER_TWEET)) {
-      const o = await c.env.FILES?.get(k);
+      const o = await env.FILES?.get(k);
       if (!o) throw new XError('media_missing', `R2 object missing: ${k}`);
       const buf = new Uint8Array(await o.arrayBuffer());
       const mimeGuess =
@@ -855,70 +969,70 @@ r.post('/posts/:id/send', async (c) => {
     // Send head, then walk thread children sequentially.
     const headOut = await sendOne(post);
     const bodyHash = await sha256Hex(fullText);
-    await c.env.DB.prepare(
+    await env.DB.prepare(
       `UPDATE x_posts SET status = 'sent', sent_at = datetime('now'),
                           tweet_id = ?, tweet_link = ?, body_hash = ?,
                           send_error = NULL, updated_at = datetime('now')
          WHERE id = ?`,
     ).bind(headOut.tweet_id, headOut.link, bodyHash, id).run();
-    await bumpSentToday(c.env, post.account_id, 1);
+    await bumpSentToday(env, post.account_id, 1);
 
     let parentId = headOut.tweet_id;
     const sentChildren: Array<{ id: number; tweet_id: string }> = [];
     for (const child of (children.results || []) as any[]) {
       // Re-load to get media keys.
-      const full: any = await c.env.DB.prepare(`SELECT * FROM x_posts WHERE id = ?`).bind(child.id).first();
+      const full: any = await env.DB.prepare(`SELECT * FROM x_posts WHERE id = ?`).bind(child.id).first();
       try {
         const out = await sendOne(full, parentId);
-        await c.env.DB.prepare(
+        await env.DB.prepare(
           `UPDATE x_posts SET status = 'sent', sent_at = datetime('now'),
                               tweet_id = ?, tweet_link = ?, in_reply_to_tweet_id = ?,
                               send_error = NULL, updated_at = datetime('now')
              WHERE id = ?`,
         ).bind(out.tweet_id, out.link, parentId, child.id).run();
         sentChildren.push({ id: child.id, tweet_id: out.tweet_id });
-        await bumpSentToday(c.env, post.account_id, 1);
+        await bumpSentToday(env, post.account_id, 1);
         parentId = out.tweet_id;
       } catch (e) {
         // Partial thread — head succeeded, this child + remaining children
         // are marked failed so the admin can re-send them (each is a
         // standalone row). Bubble the error up to the caller too.
-        await c.env.DB.prepare(
+        await env.DB.prepare(
           `UPDATE x_posts SET status = 'failed', send_error = ?, updated_at = datetime('now')
              WHERE id = ? AND status <> 'sent'`,
         ).bind(String((e as Error).message).slice(0, 500), child.id).run();
         const { body, status } = xErrorPayload(e);
-        await writeAudit(c.env, {
-          adminId: admin.id, adminEmail: admin.email, action: 'x_post_thread_partial',
+        await writeAudit(env, {
+          adminId: actor.id, adminEmail: actor.email, action: 'x_post_thread_partial',
           postId: id, accountId: post.account_id, bodyHash,
-          extra: { sent_children: sentChildren.length, failed_child_id: child.id, code: (body as any).code },
+          extra: { sent_children: sentChildren.length, failed_child_id: child.id, code: (body as any).code, via: mode },
         });
-        return c.json({
-          ok: false, partial: true,
-          head: headOut, sent_children: sentChildren, failed_child: { id: child.id, ...body },
-        }, status);
+        return {
+          status,
+          body: { ok: false, partial: true, head: headOut, sent_children: sentChildren, failed_child: { id: child.id, ...body } },
+        };
       }
     }
 
-    await writeAudit(c.env, {
-      adminId: admin.id, adminEmail: admin.email, action: 'x_post_sent',
+    await writeAudit(env, {
+      adminId: actor.id, adminEmail: actor.email, action: 'x_post_sent',
       postId: id, accountId: post.account_id, bodyHash,
-      extra: { tweet_id: headOut.tweet_id, link: headOut.link, thread_size: 1 + sentChildren.length, had_override: !!overrideReason },
+      extra: { tweet_id: headOut.tweet_id, link: headOut.link, thread_size: 1 + sentChildren.length, had_override: !!overrideReason, via: mode },
     });
-    return c.json({ ok: true, tweet_id: headOut.tweet_id, link: headOut.link, sent_children: sentChildren });
+    return { status: 200, body: { ok: true, tweet_id: headOut.tweet_id, link: headOut.link, sent_children: sentChildren } };
   } catch (e) {
     const { body, status } = xErrorPayload(e);
     await releaseClaim('failed', String((body as any).message || (body as any).code).slice(0, 500));
-    await writeAudit(c.env, {
-      adminId: admin.id, adminEmail: admin.email, action: 'x_post_send_failed',
-      postId: id, accountId: post.account_id, extra: { code: (body as any).code },
+    await writeAudit(env, {
+      adminId: actor.id, adminEmail: actor.email, action: 'x_post_send_failed',
+      postId: id, accountId: post.account_id, extra: { code: (body as any).code, via: mode },
     });
-    return c.json(body, status);
+    return { status, body: body as Record<string, unknown> };
   }
-});
+}
 
 r.post('/posts/:id/retract', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
@@ -949,7 +1063,7 @@ r.post('/posts/:id/retract', async (c) => {
 // ----------------------------- AGGREGATOR -----------------------------
 
 r.get('/aggregator/preview', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const periodDays = Math.min(90, Math.max(1, Number(c.req.query('period_days')) || 7));
   const kind = c.req.query('kind') as XAudience | undefined;
@@ -963,7 +1077,7 @@ r.get('/aggregator/preview', async (c) => {
 });
 
 r.post('/aggregator/run', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureXSchema(c.env);
   const body: any = await c.req.json().catch(() => ({}));
   const periodDays = Math.min(90, Math.max(1, Number(body.period_days) || 7));

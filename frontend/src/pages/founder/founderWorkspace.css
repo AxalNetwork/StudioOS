@@ -10,7 +10,7 @@
   --founder-seam-soft: #f0fdfa;
   --founder-seam-line: #99f6e4;
   color: var(--founder-ink);
-  font-family: Inter, var(--font-sans), system-ui, sans-serif;
+  font-family:var(--font-app);
 }
 
 .founder-workspace * { box-sizing: border-box; }

@@ -29,6 +29,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Check, Loader2, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import { titleCase } from '../../lib/absence';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
 const LBL = 'text-[10.5px] font-bold uppercase tracking-[0.11em] text-gray-400 dark:text-gray-500';
@@ -59,13 +60,12 @@ const STATUS_STYLE = {
 // is the one the API refuses without a reason.
 const ACTIONS = [
   { status: 'approved', label: 'Approve', cls: 'bg-emerald-600 hover:bg-emerald-700 text-white' },
-  { status: 'in_review', label: 'Mark in review', cls: 'bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50' },
+  { status: 'in_review', label: 'Mark in review', cls: 'bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700' },
   { status: 'needs_follow_up', label: 'Request follow-up', cls: 'bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-300' },
-  { status: 'declined', label: 'Decline', cls: 'bg-white dark:bg-gray-800 border border-red-300 dark:border-red-800 text-red-700 dark:text-red-400 hover:bg-red-50' },
+  { status: 'declined', label: 'Decline', cls: 'bg-white dark:bg-gray-800 border border-red-300 dark:border-red-800 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30' },
 ];
 
 const money = (n) => (n == null ? '—' : `$${Number(n).toLocaleString('en-US')}`);
-const titleCase = (s) => String(s || '').replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
 
 function StatusChip({ status, label }) {
   return (

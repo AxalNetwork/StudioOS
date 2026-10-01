@@ -79,7 +79,30 @@ export interface FitMeasures {
   // services/archetypeScoring.ts ARCHETYPE_TRAITS) the answer loads. Feeds the
   // nearest-centroid archetype classifier + the Archetype profiling module.
   archetype_trait?: string;
+  // Illustration sex for the pixel-art sprite (`m` / `f` / `both`). Select
+  // answer, not a 0–5 scale; write-router stores it on user_settings.
+  archetype_presentation?: boolean;
   red_flag?: { key: string; at_or_below: number };
+  // D357 (Profiling v2, PROFILING_V2.md §3) — a situational pick-one. The
+  // answer is an option key; the chosen option's `loadings` feed the traits.
+  archetype_choice?: true;
+}
+
+/** One option of a situational pick-one (PROFILING_V2.md §3.1). */
+export interface FitChoice {
+  /** Stable within the question; lower-case letters, digits, underscore. */
+  key: string;
+  /** What the person reads. */
+  label: string;
+  /** 0..5 per trait this option speaks to; at most two traits. */
+  loadings: Partial<Record<'builder' | 'visionary' | 'connector' | 'operator', number>>;
+}
+
+/** A question taken out of rotation. Its id is never reused; old answers keep counting as they age. */
+export interface FitRetirement {
+  at: string;
+  reason: string;
+  replaced_by?: string;
 }
 
 export interface Question {
@@ -119,6 +142,16 @@ export interface Question {
   // Task #19 — Best-Fit. Present only on `fit.*` questions; tags what the 0..5
   // answer measures so axalFit + the write-router can route + score it.
   measures?: FitMeasures;
+  // D357 — Profiling v2 item metadata (fit.* only). `reverse` scores a scale
+  // answer as 5 − value AT SCORING TIME; the ledger keeps what the person said.
+  // `choices` carries a pick-one's option keys and trait loadings (the chat
+  // sees them as a plain `select` over the labels). `reask_prompt` is the
+  // wording used when an aged answer is re-asked; `retired` takes the question
+  // out of delivery while its past answers keep counting.
+  reverse?: boolean;
+  choices?: FitChoice[];
+  reask_prompt?: string;
+  retired?: FitRetirement;
 }
 
 // Task #5 (CH) — per-persona size targets enforced by the drift CI
@@ -134,14 +167,18 @@ export const BANK_SIZE_TARGETS = {
   // (not enforced by scripts/check-advisor-bank-drift.mjs, which scans only the
   // 6 manifest banks). Each covers its full axalFit RUBRIC + the 5 Axal values,
   // PLUS (Task #45) enough Skills (≥5 radar axes), Work-values (≥4 dimensions),
-  // and Archetype-trait (4 traits) questions to reach per-module confidence.
+  // and Archetype-trait (12 shared + 4 role probes + illustration sex) questions
+  // to reach per-module confidence.
   // Adaptive selection means a user answers only the minimum, not all of these.
-  fitFounder: 32,
-  fitInvestor: 28,
-  fitPartner: 27,
-  fitAdvisor: 29,
-  fitCoach: 17, // coach rides in the advisor conversation; skills/values/archetype
-                // stay on the advisor bank so they're never asked twice.
+  fitFounder: 45,
+  fitInvestor: 41,
+  // D491 raised the partner bank. Session 12 raised the advisor and coach banks
+  // (pick-ones, reverse keys, every radar axis). Coach still rides in the
+  // advisor conversation after the advisor bank. fit_advisor_coach_bank_v2.test.ts
+  // holds the advisor and coach minimums.
+  fitPartner: 83,
+  fitAdvisor: 85,
+  fitCoach: 76,
   // Explorer Problem/Challenge Discovery — one 12-question track per persona
   // the user might become (founder/investor/advisor/partner), selected by
   // the `role_detect.primary` answer. Documentation-only (not enforced by
@@ -249,6 +286,12 @@ export function bankByName(name: BankName): Question[] {
  * existing-founder bank.
  */
 export function bankFor(persona: Persona, ctx?: { spinoutLabActive?: boolean }): Question[] {
+  // D357 — a retired fit question is never delivered again. It stays in BANKS
+  // so questionById / fitMeasuresIndex still score the answers it already has.
+  return deliveredBankFor(persona, ctx).filter((q) => !q.retired);
+}
+
+function deliveredBankFor(persona: Persona, ctx?: { spinoutLabActive?: boolean }): Question[] {
   switch (persona) {
     // Task #19 — append the persona's Best-Fit bank so the conversational
     // profiling questions are delivered inline (importance:'low' → trailing).
@@ -276,6 +319,11 @@ export interface FitMeasureEntry {
   question_id: string;
   persona: FitPersona;
   measures: FitMeasures;
+  // D357 — carried so scoring needs no second lookup. Absent on a plain scale.
+  reverse?: boolean;
+  choices?: FitChoice[];
+  /** A retired question's replacement: once it is answered, this one stops counting. */
+  replaced_by?: string;
 }
 
 export function fitMeasuresIndex(): FitMeasureEntry[] {
@@ -285,7 +333,11 @@ export function fitMeasuresIndex(): FitMeasureEntry[] {
       if (!q.measures) continue;
       const m = FIT_ID_RE.exec(q.id);
       if (!m) continue;
-      out.push({ question_id: q.id, persona: m[1] as FitPersona, measures: q.measures });
+      const entry: FitMeasureEntry = { question_id: q.id, persona: m[1] as FitPersona, measures: q.measures };
+      if (q.reverse) entry.reverse = true;
+      if (q.choices) entry.choices = q.choices;
+      if (q.retired?.replaced_by) entry.replaced_by = q.retired.replaced_by;
+      out.push(entry);
     }
   }
   return out;
@@ -333,9 +385,11 @@ export const PROFILING_SECTION_ORDER: ProfilingSectionKey[] = [
  * the identical five Axal values, so counting both would make an advisor answer
  * roughly double every other persona. Scoping the card to the primary bank keeps
  * the completion effort comparable without dropping any conversational coverage
- * or axalFit/bestFit signal. Task #45 keeps Skills/Work-values/Archetype trait
- * questions ONLY on the advisor bank (not coach) for the same "never asked twice"
- * reason, so the advisor completion card measures them exactly once.
+ * or axalFit/bestFit signal. The card measures Skills/Work-values/Archetype on
+ * the advisor bank only. Since Session 12 (Profiling v2) the coach bank carries
+ * its own archetype, skill and value items so a coach can be classified; they
+ * trail the advisor bank in the conversation and are reached only past the
+ * advisor floors, so nothing is asked twice on the way to "confident".
  *
  * Admin / unknown have no fit bank, so profiling is "not applicable".
  */
@@ -352,10 +406,11 @@ export function profilingBankFor(persona: Persona): Question[] {
 /**
  * Which profiling section a fit question belongs to. Single-bucket, priority
  * ordered so the section totals partition the bank exactly:
- *   archetype_trait → Archetype (feeds the nearest-centroid classifier)
- *   skill_axis      → Skills (feeds the 8-axis radar)
- *   value_dim       → Work values (feeds the 15-dimension values vector)
- *   otherwise       → Axal Fit & values (rubric_category + the 5 Axal values)
+ *   archetype_trait         → Archetype (feeds the nearest-centroid classifier)
+ *   archetype_presentation  → Archetype (illustration sex, not a trait axis)
+ *   skill_axis              → Skills (feeds the 8-axis radar)
+ *   value_dim               → Work values (feeds the 15-dimension values vector)
+ *   otherwise               → Axal Fit & values (rubric_category + the 5 Axal values)
  *
  * Archetype wins over skill/value so a question authored to classify the user's
  * archetype (even if it also nudges a radar axis) is counted where the operator
@@ -363,7 +418,7 @@ export function profilingBankFor(persona: Persona): Question[] {
  */
 export function profilingSectionForQuestion(q: Question): ProfilingSectionKey {
   const m = q.measures;
-  if (m?.archetype_trait) return 'archetype';
+  if (m?.archetype_trait || m?.archetype_choice || m?.archetype_presentation) return 'archetype';
   if (m?.skill_axis) return 'skills';
   if (m?.value_dim) return 'work_values';
   return 'axal_fit';

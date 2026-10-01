@@ -251,7 +251,7 @@ introductions.get('/propositions', async (c) => {
     await c.env.DB.prepare(
       `UPDATE intro_propositions SET status = 'expired'
         WHERE user_id = ? AND status = 'pending'
-          AND expires_at IS NOT NULL AND expires_at < datetime('now')`,
+          AND expires_at IS NOT NULL AND datetime(expires_at) < datetime('now')`,
     ).bind(user.id).run();
   } catch { /* best-effort */ }
 

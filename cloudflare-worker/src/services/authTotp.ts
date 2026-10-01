@@ -31,12 +31,13 @@
  */
 import type { Env } from '../types';
 import { encryptColumn, decryptColumn } from './columnCipher';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const BASE32_RE = /^[A-Z2-7]{16,64}$/;
 
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS auth_totp (
        user_id INTEGER PRIMARY KEY,
@@ -60,7 +61,7 @@ async function ensureSchema(env: Env): Promise<void> {
       }
     }
   }
-  migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 export interface TotpRow {
@@ -69,7 +70,17 @@ export interface TotpRow {
   source: 'auth_totp' | 'legacy';
 }
 
-/** Persist a freshly-minted TOTP secret + recovery codes to the new table. */
+/**
+ * Persist a freshly-minted TOTP secret + recovery codes to the new table.
+ *
+ * D430 — ONE BATCH, NO SWALLOWED MIRROR. `auth_totp.recovery_hashes` and
+ * `users.totp_recovery_codes` are two copies of one set, and login consumes
+ * from the `users` copy (auth.ts's tryConsumeRecoveryCode). Written as two
+ * statements with the second in a try/catch, the copies could drift and the
+ * caller never knew; a drift is exactly what let a regenerate-then-repair
+ * resurrect a discarded set. Both writes go in one D1 batch now, so either
+ * both land or the route fails and says so.
+ */
 export async function persistNewTotpEnrolment(
   env: Env,
   userId: number,
@@ -78,21 +89,39 @@ export async function persistNewTotpEnrolment(
 ): Promise<void> {
   await ensureSchema(env);
   const ct = await encryptColumn(env, 'auth_totp', 'secret', userId, secretBase32);
-  await env.DB.prepare(
-    `INSERT INTO auth_totp (user_id, secret_ct, recovery_hashes)
-     VALUES (?, ?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET
-       secret_ct = excluded.secret_ct,
-       recovery_hashes = excluded.recovery_hashes,
-       created_at = datetime('now')`
-  ).bind(userId, ct, JSON.stringify(recoveryHashes)).run();
-  // Mirror recovery hashes to the legacy column so existing read paths in
-  // settings.ts and the regenerate endpoint keep working unchanged.
-  try {
-    await env.DB.prepare(
-      `UPDATE users SET totp_recovery_codes = ? WHERE id = ?`
-    ).bind(JSON.stringify(recoveryHashes), userId).run();
-  } catch {}
+  const json = JSON.stringify(recoveryHashes);
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO auth_totp (user_id, secret_ct, recovery_hashes)
+       VALUES (?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         secret_ct = excluded.secret_ct,
+         recovery_hashes = excluded.recovery_hashes,
+         created_at = datetime('now')`
+    ).bind(userId, ct, json),
+    env.DB.prepare(`UPDATE users SET totp_recovery_codes = ? WHERE id = ?`).bind(json, userId),
+  ]);
+}
+
+/**
+ * D430 — replace the recovery set in both stores at once, without touching
+ * `last_used_at`. This is what a REGENERATE does; `updateRecoveryHashes`
+ * below is what a CONSUMPTION does, and stamps `last_used_at` because a code
+ * was used. Regenerate used to write `users.totp_recovery_codes` alone, which
+ * left `auth_totp.recovery_hashes` holding the discarded set for the next
+ * repair to read back. There is no third way to write a recovery set.
+ */
+export async function replaceRecoveryHashes(
+  env: Env,
+  userId: number,
+  hashes: string[],
+): Promise<void> {
+  await ensureSchema(env);
+  const json = JSON.stringify(hashes);
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE auth_totp SET recovery_hashes = ? WHERE user_id = ?`).bind(json, userId),
+    env.DB.prepare(`UPDATE users SET totp_recovery_codes = ? WHERE id = ?`).bind(json, userId),
+  ]);
 }
 
 /**
@@ -101,6 +130,21 @@ export async function persistNewTotpEnrolment(
  * pattern, lazily migrate it to `auth_totp` and clear the legacy column.
  * Returns null if the user has no TOTP secret of any kind.
  */
+/**
+ * D433 — when the authenticator now in use was paired. `auth_totp.created_at`
+ * is stamped by `persistNewTotpEnrolment` on every enrolment and re-pair, so
+ * it is the pairing date the Account page's factor row reads. Null when no
+ * authenticator row exists (a legacy `users.password_hash` secret has no date
+ * until `loadTotp` migrates it).
+ */
+export async function loadTotpPairedAt(env: Env, userId: number): Promise<string | null> {
+  await ensureSchema(env);
+  const row = await env.DB.prepare(
+    `SELECT created_at FROM auth_totp WHERE user_id = ?`
+  ).bind(userId).first<{ created_at: string | null }>();
+  return row?.created_at ?? null;
+}
+
 export async function loadTotp(
   env: Env,
   userId: number,

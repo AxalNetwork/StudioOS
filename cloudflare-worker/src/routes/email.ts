@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { sendReferralInviteEmail } from '../services/email';
+import { bindingKey } from '../util/schemaBootstrap';
 
 const email = new Hono<{ Bindings: Env }>();
 
@@ -15,9 +16,9 @@ const DAILY_REMINDER_LIMIT = 20;
 const REMINDER_COOLDOWN_HOURS = 24 * 7;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-let migrated = false;
+const MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env) {
-  if (migrated) return;
+  if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS referral_invites (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,7 +52,7 @@ async function ensureSchema(env: Env) {
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch {}
   }
-  migrated = true;
+  MIGRATED.set(bindingKey(env), true);
 }
 
 // Task #4 — Backfill `signed_up_user_id` for any sent-but-unjoined invite

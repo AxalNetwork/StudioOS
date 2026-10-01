@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env, User } from '../types';
-import { requireAuth, requireAdmin } from '../auth';
+import { requireAuth, requireAdmin, requireBranchNotSuspended } from '../auth';
 import { generateUniqueShortReferralCode } from '../services/referrals/codes';
 import {
   ensureReferralSubmissionsSchema,
@@ -284,6 +284,8 @@ refer.get('/admin/submissions', async (c) => {
 
 refer.patch('/admin/submissions/:uid', async (c) => {
   const admin = await requireAdmin(c);
+  // D107 — a suspended branch's queues are frozen: 423, after the admin gate.
+  await requireBranchNotSuspended(c);
   await ensureReferralSubmissionsSchema(c.env);
   const body = await c.req.json().catch(() => ({}) as Record<string, unknown>);
   try {

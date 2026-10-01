@@ -1,14 +1,12 @@
-import { MiddlewareHandler } from 'hono';
+import type { MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
 import { getCurrentUser } from '../auth';
-
-// Endpoints we don't want spamming activity_logs on every request.
-const SKIP_ACTIVITY_LOG_PATHS = [
-  '/api/health',
-  '/api/activity',                 // listing your own activity shouldn't write activity
-  '/api/monitoring/',              // monitoring polls would create infinite churn
-  '/api/dashboard/stats',
-];
+import { branchOf } from '../util/branch';
+// D210 — which requests write an activity_logs row is decided in ONE place,
+// because both Analytics pages count "active accounts" from it: a branch reads
+// its own activity_logs, and HQ reads Analytics Engine through the same rule
+// written as a WHERE clause. The skip list moved there; it is not restated here.
+import { activityLogged } from '../services/activeAccounts';
 
 // Endpoints completely excluded from system_metrics — prevents the monitoring
 // dashboard's polling from inflating the very metrics it displays.
@@ -16,10 +14,6 @@ const SKIP_METRICS_PATHS = [
   '/api/health',
   '/api/monitoring/',
 ];
-
-function shouldLog(path: string) {
-  return path.startsWith('/api/') && !SKIP_ACTIVITY_LOG_PATHS.some(p => path === p || path.startsWith(p));
-}
 
 function shouldMeter(path: string) {
   return path.startsWith('/api/') && !SKIP_METRICS_PATHS.some(p => path === p || path.startsWith(p));
@@ -76,7 +70,10 @@ export const observabilityMiddleware = (): MiddlewareHandler<{ Bindings: Env }> 
           // ts is implicit (AE timestamps every row). Best-effort — never
           // throw, never block the request.
           try {
-            const ae = (env as unknown as { ANALYTICS?: AnalyticsEngineDataset }).ANALYTICS;
+            // `Env.ANALYTICS` is declared (types.ts), so this reads the typed
+            // field directly. It used to go through an `as unknown as` cast
+            // that worked around a type which already existed.
+            const ae = env.ANALYTICS;
             if (ae && typeof ae.writeDataPoint === 'function') {
               // Resolve subscription tier opportunistically. We don't want
               // to add a D1 hop on every single request, so only fetch when
@@ -92,12 +89,34 @@ export const observabilityMiddleware = (): MiddlewareHandler<{ Bindings: Env }> 
                 } catch {}
               }
               ae.writeDataPoint({
-                // Indexes (cardinality-bounded; first one is the sampling key)
+                // Indexes (cardinality-bounded; first one is the sampling key).
+                //
+                // D161 — THE BRANCH GOES IN A BLOB, NOT HERE, AND THAT IS
+                // DELIBERATE. D105 justified sharing this dataset on the
+                // grounds it was "indexed by BRANCH_CODE"; it never was, and
+                // making it so now would change the SAMPLING KEY for every
+                // request on the platform, so samples either side of the change
+                // stop being comparable and route-level sampling fairness --
+                // the reason `path` is the key -- is lost. Worse, it could not
+                // be verified from here: `AnalyticsEngineDataPoint.indexes` is
+                // typed as an UNBOUNDED array, so a second index typechecks,
+                // and this block swallows failures with a console.warn below.
+                // A silent runtime rejection is the one failure mode a metrics
+                // write must not have. Do not "tidy" the branch into here.
                 indexes: [path.slice(0, 96)],
                 // Blobs (in slot order, must match SQL reads in
                 // analyticsReports.ts loadTechnicalFromAnalyticsEngine):
-                //   blob1 route, blob2 method, blob3 role, blob4 status, blob5 tier
-                blobs: [path, method, role, String(status), tier],
+                //   blob1 route, blob2 method, blob3 role, blob4 status,
+                //   blob5 tier, blob6 branch
+                //
+                // blob6 is `branchOf(env)` and NOT `env.BRANCH_CODE` raw:
+                // branchOf validates against BRANCH_CODE_RE and THROWS on a
+                // malformed value. That throw is caught below, so a misconfigured
+                // branch costs a dropped metric rather than a failed request --
+                // correct, because such a deployment already fails loudly at
+                // boot (assertBranchAppUrl) and on every authed path. Reading
+                // the var raw would instead write a garbage dimension verbatim.
+                blobs: [path, method, role, String(status), tier, branchOf(env) || 'hq'],
                 // Doubles: double1 latency_ms, double2 status, double3 user_id
                 doubles: [latency, status, userId ?? 0],
               });
@@ -109,7 +128,7 @@ export const observabilityMiddleware = (): MiddlewareHandler<{ Bindings: Env }> 
         }
 
         // ---- write activity_logs row with latency / status ----
-        if (shouldLog(path) && status !== 429) {
+        if (activityLogged(path, status)) {
           try {
             await env.DB.prepare(
               `INSERT INTO activity_logs (action, details, actor, user_id, endpoint, method, status_code, latency_ms)

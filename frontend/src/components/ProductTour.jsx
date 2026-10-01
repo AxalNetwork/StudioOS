@@ -3,7 +3,7 @@ import { X, ChevronRight, ChevronLeft } from 'lucide-react';
 import { api } from '../lib/api';
 
 /**
- * Task #6 (IF) — First-login 5-step product tour.
+ * Task #6 (IF) — First-login product tour.
  *
  * Renders a small skippable overlay coachmark anchored to specific
  * `data-tour="…"` selectors. Fires on mount if `/api/onboarding/checklist`
@@ -13,12 +13,15 @@ import { api } from '../lib/api';
  * Anchors used in the SPA:
  *   - data-tour="onboarding-checklist" — the dashboard panel
  *   - data-tour="sidebar-nav"          — primary sidebar
- *   - data-tour="search"               — semantic search input
- *   - data-tour="notifications"        — bell in header (best-effort)
  *   - data-tour="settings"             — settings link
  *
  * The anchor lookup falls back to a centred box when an anchor is missing
  * so missing markup never blocks the tour.
+ *
+ * D323 dropped the "search" and "notifications" steps. Their anchors lived
+ * only on the retired "Welcome back" page, so every Studio home already showed
+ * them as unanchored boxes; the command palette (Cmd+K) is named in the
+ * sidebar step instead.
  */
 const STEPS = [
   {
@@ -29,17 +32,7 @@ const STEPS = [
   {
     anchor: 'sidebar-nav',
     title: 'Navigate StudioOS',
-    body: 'Everything you need lives in the sidebar — projects, capital, integrations, compliance. Use the search at the top to jump anywhere.',
-  },
-  {
-    anchor: 'search',
-    title: 'Search anything',
-    body: "Type to find founders, deals, documents, advisors, or partners. Cmd+K from anywhere works too.",
-  },
-  {
-    anchor: 'notifications',
-    title: 'Stay in the loop',
-    body: 'Activity, scoring updates, and intros flow through the notification bell. You can tune which channels they hit in Settings → Notifications.',
+    body: 'Everything you need lives in the sidebar — projects, capital, integrations, compliance. Press Cmd+K from anywhere to jump to a page.',
   },
   {
     anchor: 'settings',

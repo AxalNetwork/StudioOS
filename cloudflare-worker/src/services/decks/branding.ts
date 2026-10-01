@@ -8,6 +8,7 @@
  */
 import type { Env, User } from '../../types';
 import { tierCovers } from '../../middleware/requireTier';
+import { bindingKey } from '../../util/schemaBootstrap';
 
 export type DeckBrand = {
   /** Render a footer? (false on Growth+ unless studio uploaded one). */
@@ -21,9 +22,9 @@ export type DeckBrand = {
 
 const AXAL_FOOTER = 'Built with Axal VC · axal.vc';
 
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 async function ensureWatermarkSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   try {
     await env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS deck_brand_watermarks (
@@ -33,7 +34,7 @@ async function ensureWatermarkSchema(env: Env): Promise<void> {
        )`,
     ).run();
   } catch (e: any) { console.error('deck_brand_watermarks:', e?.message); }
-  _schemaReady = true;
+  SCHEMA_READY.set(bindingKey(env), true);
 }
 
 export async function getDeckBrand(env: Env, user: User & { id: number }): Promise<DeckBrand> {

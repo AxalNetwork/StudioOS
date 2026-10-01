@@ -59,7 +59,13 @@ test('the grant is checked live — active, and not expired', () => {
   assert.ok(at > -1);
   const fn = routes.slice(at, at + 500);
   assert.match(fn, /status = 'active'/);
-  assert.match(fn, /expires_at IS NULL OR expires_at > datetime\('now'\)/);
+  // The COLUMN is normalised, not just the clock (D124). `expires_at` here is
+  // an unvalidated passthrough of the caller's JSON (`advisor_grants.ts:165`),
+  // so the stored format is whatever a client sends — and a JS ISO string
+  // compared as bare TEXT reads an expired grant as live until the UTC date
+  // rolls over, keeping a founder's brief open. Wrapping only the right-hand
+  // side does not fix it; the stored value has to be the one converted.
+  assert.match(fn, /expires_at IS NULL OR datetime\(expires_at\) > datetime\('now'\)/);
 });
 
 test('each scope gates its own field, not the whole request', () => {

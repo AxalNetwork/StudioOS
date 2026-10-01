@@ -36,6 +36,7 @@ import {
   type OrderLine,
   type PricedCart,
 } from '../services/orders';
+import { refuse } from '../util/refusal';
 
 const orders = new Hono<{ Bindings: Env }>();
 
@@ -202,7 +203,7 @@ orders.post('/intent', async (c) => {
       { idempotencyKey },
     );
   } catch (e) {
-    return c.json({ error: 'intent_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'intent_failed', message: 'The payment could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
   }
 
   await upsertPendingOrder(c.env, {
@@ -255,7 +256,7 @@ orders.post('/confirm', async (c) => {
       { method: 'GET' },
     );
   } catch (e) {
-    return c.json({ error: 'pi_lookup_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'pi_lookup_failed', message: 'The payment could not be looked up. Try again in a moment.', raw: e, audience: 'member' });
   }
 
   const meta = pi.metadata ?? {};
@@ -295,7 +296,7 @@ orders.get('/:order_ref/invoice', async (c) => {
   try {
     pdf = await renderOrderInvoicePdf(c.env, orderRef);
   } catch (e) {
-    return c.json({ error: 'invoice_render_failed', detail: (e as Error).message }, 502);
+    return refuse(c, 502, { code: 'invoice_render_failed', message: 'The invoice could not be produced. Try again in a moment.', raw: e, audience: 'member' });
   }
   return new Response(pdf, {
     status: 200,

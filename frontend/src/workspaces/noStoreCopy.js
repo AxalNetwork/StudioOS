@@ -36,7 +36,7 @@ export const ADVISOR_COPY = {
 /**
  * Network · Organizations, on a licence that renders no body for it.
  *
- * `ORG_BACKED` in `NetworkWorkspace` is `{founder, investor}` and this file
+ * `ORG_BACKED` above is `{founder, investor, partner}`, and this file
  * used to explain that set as a store: "a founder reads `contacts.organization`
  * and the investor workspace has its own section". There is no such column on
  * `contacts`, and the investor path ends at `metadata.organization_name`, which
@@ -49,23 +49,34 @@ export const ADVISOR_COPY = {
  * overview card shows, so the card, the board section and the rail say one
  * thing.
  */
+/**
+ * The licences whose Organizations zone has a store behind it.
+ *
+ * ONE DEFINITION, BECAUSE THERE WERE TWO AND THEY DRIFTED. `NetworkWorkspace`
+ * held `{founder, investor, partner}` and `boards/network.js` held
+ * `{founder, investor}`, while the board's own docblock claimed it was "the
+ * same set the zone body and the rail already consult". It was not, so the
+ * partner `/network` root printed `NETWORK_ORG_COPY` — "Organizations reads
+ * nothing on this licence" — over a zone that has grouped real rows since
+ * migration 224. A card telling a reader a working feature does not exist is
+ * worse than a missing button, and no test compared the two sets.
+ *
+ * PARTNER IS IN, ADVISOR IS OUT, and both are load-bearing. Migration 224 put
+ * an `organization` column on every book contact — text, with no organization
+ * record behind it, which is exactly what the `pn3` artboard is about — so a
+ * partner's zone groups real rows and says on its own face that the roll-up is
+ * not built. An advisor is 403'd from `/api/contacts` and has no book at all,
+ * so the gap card is the honest answer there (task #94).
+ *
+ * It lives beside the copy it decides between: whoever changes one should be
+ * looking at the other.
+ */
+export const ORG_BACKED = new Set(['founder', 'investor', 'partner']);
+
 export const NETWORK_ORG_COPY = {
   heading: 'Organizations reads nothing on this licence — no store links a relationship to an organisation here.',
   what: 'The companies, funds and firms behind the people you know, rolled up from the relationships you keep.',
   why: 'The roll-up needs a person-to-organisation edge and nothing stores one: a relationship is a pair of account ids with a type, and a referral records an organisation as free text with no link back to an account. On this licence there is not even a surface to attempt it from — an advisor cannot read the contact store at all, and an operator has no organizations tab. A count assembled from anything else would be counting something other than what the heading says.',
-};
-
-/**
- * Research · Client prep, until a founder can grant an advisor their record.
- *
- * Half of a client brief already exists — the topic and questions the client
- * wrote when they asked for the session. The other half is the client's own
- * project record, which is closed by rule rather than absent. Task #55.
- */
-export const RESEARCH_CLIENT_PREP_COPY = {
-  heading: 'The client brief is not built yet',
-  what: 'One client per brief: what they asked for, what the engagement record says, what changed on their side, and what is still open.',
-  why: 'Half of it exists: a session request already carries the topic and the questions the client wrote themselves when they asked for it. What is missing is the client\'s own record — and not for want of a join. A client\'s account carries their founder id and a project carries the same id, which is the very column the founder-data guard reads before it decides, so what stands in the way is an access decision, not an absent table. Which decision it is depends on who is reading; the note above says which applies to you. A brief assembled from one side only would be half a brief presented as a whole one.',
 };
 
 /**
@@ -82,8 +93,8 @@ export const RESEARCH_CLIENT_PREP_COPY = {
  *
  * THE DISTINCTION IS THE WHOLE POINT, because collapsing it is how this gets
  * said wrongly in both directions. Saying "no store behind this yet" over
- * `/research/markets` is false — the signals feed is real, gathered on a
- * schedule, and the largest store in the product. Saying nothing is false too:
+ * `/research/markets` is false — the zone holds real, dated comparable
+ * readings (it once held the signals feed). Saying nothing is false too:
  * every filter the artboard draws for that zone is a view of a saved analysis
  * that no table holds, so a reader comparing the design to the page finds four
  * missing controls and no reason given. Both sentences are wrong; this is the
@@ -95,12 +106,20 @@ export const RESEARCH_CLIENT_PREP_COPY = {
  * same coupling that put this whole file in one place.
  */
 export const RESEARCH_STORE_GAPS = {
+  // D392 — CORRECTED AND SCOPED. This said the page "reads instead ... the
+  // signals feed". It has not since `/research/markets` became `MarketZone`:
+  // comparable readings a person enters, dated and age-gated (migration 223),
+  // with the feed kept at `/signals`. The missing store it names is still
+  // missing and still what the founder and investor canvases narrow — so the
+  // entry stays for them. For partner and advisor, whose canvases draw exactly
+  // the readings `MarketZone` holds, it is not shown (`roles`).
   markets: {
+    roles: ['founder', 'investor'],
     eyebrow: 'Blocked on a store',
     blocks: 'a saved market analysis',
-    heading: 'Signals are stored. A saved market analysis is not.',
+    heading: 'Comparable readings are stored. A saved market analysis is not.',
     what: 'A deep-dive you ran and kept — its method, the date it was run, the documents it rests on, and whether it is current or retired.',
-    why: 'Nothing saves a market deep-dive, so there is no analysis to keep, retire, build or list the sources of. The artboard makes this plain: its instrument table is Analysis · Method · Run · State, and all four filters it draws are views of that object. What this page reads instead is the signals feed, gathered on a schedule — real, populated, and a different object from the one the design narrows.',
+    why: 'Nothing saves a market deep-dive, so there is no analysis to keep, retire, build or list the sources of. The artboard makes this plain: its instrument table is Analysis · Method · Run · State, and all four filters it draws are views of that object. What this page holds instead is comparable readings — ranges you entered, each with its run date and an age that decides whether it can still be used — a different object from the one the design narrows. The sector signals feed has its own page, Signals.',
   },
   companies: {
     eyebrow: 'Blocked on a store',

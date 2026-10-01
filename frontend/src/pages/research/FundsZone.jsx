@@ -1,9 +1,13 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { BrainCircuit } from 'lucide-react';
 import { Card, Pill } from '../../ui';
 import { api } from '../../lib/api';
+import { useAuth } from '../../hooks/useAuthSync';
+import { isSuperAdminUser } from '../../lib/shellRole';
 import {
   Field, NothingYet, SaveNote, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
-  buttonClass, inputClass,
+  buttonClass, ghostButtonClass, inputClass,
 } from '../advisor/expertise/kit';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 
@@ -33,14 +37,25 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
  * the project as `raise_target_usd`. With no target recorded there is no ask to
  * compare against, and the worker returns the count as null with its reason
  * rather than as 0 — which would say no fund writes cheques your size.
+ *
+ * GOOGLE SHEETS IS A COPY, NOT THE STORE, AND ONLY THE SUPER ADMIN MAY MAKE
+ * ONE. The Worker writes to a spreadsheet the Super Admin names and reads it
+ * back into POST/PATCH of that same owner's rows. Founders keep a shortlist
+ * on Axal; they do not get Connect / Pull / Push. Sheets never talks to D1,
+ * pull overwrites the sheet's data rows, and push never deletes a fund — a
+ * pass is a state, and a row that left the sheet is not a delete. The card
+ * lives in this body rather than as a fourth canvas op, because the
+ * zone-action row is three slots.
  */
 
 const STAGE_LABEL = { right: 'Right stage', wrong: 'Wrong stage' };
 const PATH_LABEL = { warm: 'Warm path', cold: 'No route in' };
 
 // The compact inline enum editor `CompetitorAnalysis` already uses for the same
-// job. Tailwind's own greys: `axal-ink-2` and its family are declared in no
-// `@theme` block and emit no CSS at all.
+// job. Tailwind's own greys, kept after the sweep: `axal-ink-2` and its family
+// were declared in no `@theme` block and emitted no CSS at all, and have since
+// been consolidated onto the declared neutrals. Both vocabularies are skinned
+// for dark mode now, so these greys stay rather than churn.
 const READ_SELECT =
   'rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-600 '
   + 'dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300';
@@ -57,11 +72,15 @@ function cheque(row) {
 }
 
 export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }) {
+  const { user } = useAuth() || {};
+  const canSyncSheets = isSuperAdminUser(user);
   const [state, setState] = useState({ loading: true, error: null, data: null });
   const [filter, setFilter] = useState('all');
   const [form, setForm] = useState({ name: '', thesis: '', note: '' });
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(null);
+  const [directory, setDirectory] = useState({ loading: true, error: null, items: [], generated_at: null });
+  const [directoryBusy, setDirectoryBusy] = useState(null);
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true }));
@@ -73,6 +92,29 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
     }
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // The catalog is a read-only build asset generated from the two public
+  // mapping exports in attached_assets. Loading it as a split chunk keeps the
+  // initial workspace bundle small, while the source remains reviewable in git.
+  useEffect(() => {
+    let alive = true;
+    import('../../data/fundDirectory.json')
+      .then((module) => {
+        if (!alive) return;
+        const payload = module.default || module;
+        setDirectory({
+          loading: false,
+          error: null,
+          items: Array.isArray(payload.items) ? payload.items : [],
+          generated_at: payload.generated_at || null,
+        });
+      })
+      .catch((error) => {
+        if (!alive) return;
+        setDirectory({ loading: false, error: error?.message || 'The fund directory did not load.', items: [], generated_at: null });
+      });
+    return () => { alive = false; };
+  }, []);
 
   // One PATCH per change, then a reload — the row the worker returns is the row
   // that is stored, and the counts in the strip above are computed there too.
@@ -102,6 +144,25 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
 
   const data = state.data;
   const items = data?.items || [];
+  const researchedNames = useMemo(
+    () => new Set(items.map((fund) => normalizeFundName(fund.name))),
+    [items],
+  );
+
+  const addDirectoryFund = async (fund) => {
+    if (!fund || researchedNames.has(normalizeFundName(fund.name)) || directoryBusy) return;
+    setDirectoryBusy(fund.id);
+    setSaved(null);
+    try {
+      await api.research.fundCreate({ name: fund.name, source_url: fund.website || null });
+      setSaved(`${fund.name} added to your research list.`);
+      await load();
+    } catch (e) {
+      setSaved(e?.detail || e?.message || 'That did not save.');
+    } finally {
+      setDirectoryBusy(null);
+    }
+  };
   // The canvas has no `All` of its own — its first slot reads `Best fit`, which
   // the table renders as the unfiltered view because no fit score is stored. So
   // the chip that is on is also the way back off it.
@@ -124,8 +185,8 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
         />
       )}
       <ZoneHeading
-        title="Fund research"
-        sub="Investor research and fit scores — every fund you have looked into, and why it is on or off the list."
+        title={<span className="flex flex-wrap items-center gap-3">Fund research <Link to="/research/gtm" className="inline-flex items-center gap-1 rounded-lg bg-violet-700 px-3 py-2 text-[11px] font-bold text-white"><BrainCircuit size={13} /> GTM intelligence</Link></span>}
+        sub="Thesis in their words, stage and path as separate facts — every fund you have looked into, and why it is on or off the list."
         right={data ? <Pill tone={data.warm_path_count ? 'ok' : 'neutral'}>{`${data.warm_path_count} with a route in`}</Pill> : null}
       />
 
@@ -209,7 +270,12 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
                   {visible.map((f) => (
                     <tr key={f.uid} className="border-b border-gray-100 align-top dark:border-gray-800">
                       <td className="py-3 pr-3">
-                        <span className="text-[13px] font-extrabold">{f.name}</span>
+                        <Link
+                          to={`/research/funds/${encodeURIComponent(f.uid)}`}
+                          className="text-[13px] font-extrabold text-axal-ink underline-offset-2 hover:underline"
+                        >
+                          {f.name}
+                        </Link>
                       </td>
                       {/* A range with one end missing renders as the end it has,
                           and no range at all renders as unrecorded — never as a
@@ -310,6 +376,15 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
         </Card>
       </ZoneBody>
 
+      <FundDirectoryCard
+        directory={directory}
+        researchedNames={researchedNames}
+        busy={directoryBusy}
+        onAdd={addDirectoryFund}
+      />
+
+      {canSyncSheets ? <SheetsSyncCard /> : null}
+
       <Card padding="lg">
         <h3 className="text-sm font-extrabold tracking-tight">Add a fund</h3>
         <form className="mt-3 grid gap-3 md:grid-cols-3" onSubmit={add}>
@@ -354,6 +429,323 @@ function Stat({ label, value, note }) {
         {absent ? <Unrecorded>Not recorded</Unrecorded> : value}
       </div>
       <div className="mt-1 text-[10px] leading-relaxed text-gray-600 dark:text-gray-300">{note}</div>
+    </Card>
+  );
+}
+
+const normalizeFundName = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+function FundDirectoryCard({ directory, researchedNames, busy, onAdd }) {
+  const navigate = useNavigate();
+  const [query, setQuery] = useState('');
+  const [stage, setStage] = useState('');
+  const [region, setRegion] = useState('');
+  const [sector, setSector] = useState('');
+
+  const items = directory.items || [];
+  const stages = useMemo(
+    () => [...new Set(items.flatMap((fund) => fund.stages || []))].sort(),
+    [items],
+  );
+  const regions = useMemo(
+    () => [...new Set(items.flatMap((fund) => fund.regions || []))].sort(),
+    [items],
+  );
+  const sectors = useMemo(
+    () => [...new Set(items.flatMap((fund) => fund.sectors || []))].sort(),
+    [items],
+  );
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return items.filter((fund) => {
+      const haystack = [fund.name, fund.hq, fund.type, ...(fund.sectors || []), ...(fund.stages || []), ...(fund.regions || [])]
+        .filter(Boolean).join(' ').toLowerCase();
+      if (needle && !haystack.includes(needle)) return false;
+      if (stage && !(fund.stages || []).includes(stage)) return false;
+      if (region && !(fund.regions || []).includes(region)) return false;
+      if (sector && !(fund.sectors || []).includes(sector)) return false;
+      return true;
+    });
+  }, [items, query, region, sector, stage]);
+
+  if (directory.loading) {
+    return <Card padding="lg"><h3 className="text-sm font-extrabold tracking-tight">Fund directory</h3><p className="mt-2 text-[12px] text-gray-600 dark:text-gray-300">Loading sourced fund data…</p></Card>;
+  }
+  if (directory.error) {
+    return <Card padding="lg"><h3 className="text-sm font-extrabold tracking-tight">Fund directory</h3><p className="mt-2 text-[12px] text-red-700 dark:text-red-300">{directory.error}</p></Card>;
+  }
+
+  return (
+    <Card padding="lg">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-extrabold tracking-tight">Fund directory</h3>
+          <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-gray-600 dark:text-gray-300">
+            Browse {items.length.toLocaleString()} real fund and investor records from Axal’s public mapping exports. The EuroTech sheet contributes {directory.eurotech_import?.unique_funds?.toLocaleString() || '1,076'} funds and {directory.eurotech_import?.observations?.toLocaleString() || '2,364'} reported size observations. Add a row to your private research list when you want to assess it.
+          </p>
+        </div>
+        <span className="text-[11px] text-gray-500 dark:text-gray-400">{filtered.length.toLocaleString()} matches</span>
+      </div>
+
+      <div className="mt-4 grid gap-2 md:grid-cols-4">
+        <input
+          className={inputClass}
+          aria-label="Search fund directory"
+          placeholder="Search funds, sectors, regions…"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <select className={READ_SELECT} aria-label="Fund directory stage" value={stage} onChange={(event) => setStage(event.target.value)}>
+          <option value="">All stages</option>
+          {stages.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select>
+        <select className={READ_SELECT} aria-label="Fund directory region" value={region} onChange={(event) => setRegion(event.target.value)}>
+          <option value="">All regions</option>
+          {regions.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select>
+        <select className={READ_SELECT} aria-label="Fund directory sector" value={sector} onChange={(event) => setSector(event.target.value)}>
+          <option value="">All sectors</option>
+          {sectors.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select>
+      </div>
+
+      {!filtered.length ? (
+        <p className="mt-4 text-[12px] text-gray-600 dark:text-gray-300">No sourced fund matches those filters.</p>
+      ) : (
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.slice(0, 48).map((fund) => {
+            const added = researchedNames.has(normalizeFundName(fund.name));
+            const ticket = [fund.min_ticket, fund.max_ticket].filter(Boolean).join('–');
+            return (
+              <article
+                key={fund.id}
+                role="link"
+                tabIndex={0}
+                className="cursor-pointer rounded-xl border border-gray-200 p-3 transition hover:border-violet-300 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-500 dark:border-gray-800"
+                onClick={() => navigate(`/research/funds/catalog/${encodeURIComponent(fund.id)}`)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    navigate(`/research/funds/catalog/${encodeURIComponent(fund.id)}`);
+                  }
+                }}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h4 className="truncate text-[13px] font-extrabold">{fund.name}</h4>
+                    <p className="mt-0.5 text-[11px] text-gray-600 dark:text-gray-300">
+                      {[fund.type, fund.hq].filter(Boolean).join(' · ') || 'Investor profile'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className={ghostButtonClass}
+                    disabled={added || !!busy}
+                    onClick={(event) => { event.stopPropagation(); onAdd(fund); }}
+                  >
+                    {added ? 'Added' : busy === fund.id ? 'Adding…' : 'Add'}
+                  </button>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
+                  <DirectoryFact label="Stages" value={(fund.stages || []).join(' · ')} />
+                  <DirectoryFact label="Regions" value={(fund.regions || []).join(' · ')} />
+                  <DirectoryFact label="Sectors" value={(fund.sectors || []).join(' · ')} />
+                  <DirectoryFact label="Ticket" value={ticket} />
+                  <DirectoryFact label="Fund size" value={fund.fund_size} />
+                  <DirectoryFact label="Latest fund" value={fund.fund_date} />
+                  <DirectoryFact label="Reported periods" value={fund.eurotech_report_count} />
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-2 text-[10px] dark:border-gray-800">
+                  <span className="text-gray-500 dark:text-gray-400">{fund.source_label}</span>
+                  {fund.website && <a className="font-semibold text-axal-ink underline-offset-2 hover:underline" href={fund.website} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>Website</a>}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+
+      {filtered.length > 48 && <p className="mt-3 text-[11px] text-gray-500 dark:text-gray-400">Showing the first 48 matches. Narrow the search to find a specific fund.</p>}
+      <p className="mt-4 text-[10px] leading-relaxed text-gray-500 dark:text-gray-400">
+        Source: attached public mapping exports, generated {directory.generated_at || 'unknown date'}. Records are not endorsements and fund terms change; verify the official website before relying on a stage, ticket, or fund-size field.
+      </p>
+    </Card>
+  );
+}
+
+function DirectoryFact({ label, value }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[9px] font-extrabold uppercase tracking-[.07em] text-gray-500 dark:text-gray-400">{label}</div>
+      <div className="mt-0.5 truncate text-gray-700 dark:text-gray-300">{value || 'Not recorded'}</div>
+    </div>
+  );
+}
+
+/**
+ * Connect / Pull / Push for Google Sheets. Super-admin only — the zone
+ * mounts this card behind `isSuperAdminUser`, and every worker route behind
+ * `requireSuperAdmin`. Lives in the zone body rather than as a fourth canvas
+ * op — the toolbar is three slots and adding one here would fail the
+ * profile_zone_actions canvas check.
+ *
+ * HONEST EMPTY. If the Worker has no Sheets OAuth client, this card says so
+ * instead of offering Connect. Pull needs a connected Google account AND a
+ * spreadsheet URL; Push never deletes a fund in Axal.
+ */
+function SheetsSyncCard() {
+  const [status, setStatus] = useState({ loading: true, error: null, data: null });
+  const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(null);
+  const [note, setNote] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      const data = await api.research.fundSheetStatus();
+      setStatus({ loading: false, error: null, data });
+      setUrl((current) => {
+        if (current) return current;
+        if (!data?.spreadsheet_id) return current;
+        const gid = data.sheet_gid == null ? '' : `#gid=${data.sheet_gid}`;
+        return `https://docs.google.com/spreadsheets/d/${data.spreadsheet_id}/edit${gid}`;
+      });
+    } catch (e) {
+      setStatus({
+        loading: false,
+        error: e?.detail || e?.message || 'Sheets status did not load.',
+        data: null,
+      });
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const flash = params.get('sheets');
+    if (!flash) return;
+    if (flash === 'connected') setNote({ ok: true, text: 'Google Sheets connected.' });
+    else {
+      const reason = params.get('reason') || 'callback_failed';
+      setNote({ ok: false, text: `Google Sheets did not connect (${reason}).` });
+    }
+    params.delete('sheets');
+    params.delete('reason');
+    const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}${window.location.hash || ''}`;
+    window.history.replaceState({}, '', next);
+    load();
+  }, [load]);
+
+  const data = status.data;
+  const run = async (key, fn, okText) => {
+    setBusy(key);
+    setNote(null);
+    try {
+      await fn();
+      setNote({ ok: true, text: okText });
+      await load();
+    } catch (e) {
+      const code = e?.data?.code;
+      if (code === 'oauth_config_missing') {
+        setNote({ ok: false, text: 'Google Sheets is not configured on this server yet.' });
+      } else {
+        setNote({ ok: false, text: e?.detail || e?.message || 'That did not work.' });
+      }
+    } finally { setBusy(null); }
+  };
+
+  const connect = () => run('connect', async () => {
+    const r = await api.research.fundSheetConnect();
+    const href = r?.redirect_url || r?.auth_url;
+    if (!href) throw new Error('Google did not return a consent URL.');
+    window.location.assign(href);
+  }, 'Opening Google…');
+
+  const saveLink = () => run('link', () => api.research.fundSheetLink(url), 'Spreadsheet saved.');
+  const pull = () => run('pull', () => api.research.fundSheetPull(), 'Wrote your funds onto the sheet.');
+  const push = () => run('push', () => api.research.fundSheetPush(), 'Updated Axal from the sheet. Nothing was deleted.');
+  const disconnect = () => run('disconnect', () => api.research.fundSheetDisconnect(), 'Google Sheets disconnected.');
+
+  return (
+    <Card padding="lg">
+      <h3 className="text-sm font-extrabold tracking-tight">Google Sheets</h3>
+      <p className="mt-1 text-[12px] leading-relaxed text-gray-600 dark:text-gray-300">
+        A copy of this list on a spreadsheet you name. Pull writes Axal onto the
+        sheet. Push creates or updates funds from the sheet — it never deletes one.
+        Cheque amounts on the sheet are US dollars; blank is not zero.
+      </p>
+
+      {status.loading ? (
+        <p className="mt-3 text-[12px] text-gray-600 dark:text-gray-300">Checking connection…</p>
+      ) : status.error ? (
+        <p className="mt-3 text-[12px] text-red-700 dark:text-red-300">{status.error}</p>
+      ) : data && data.configured === false ? (
+        <p className="mt-3 text-[12.5px] text-gray-600 dark:text-gray-300">
+          Google Sheets is not configured on this server yet. You can still add
+          funds here, or export a CSV from the toolbar.
+        </p>
+      ) : (
+        <div className="mt-3 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {data?.connected ? (
+              <>
+                <Pill tone="ok">{data.google_email ? `Connected as ${data.google_email}` : 'Connected'}</Pill>
+                <button type="button" className={ghostButtonClass} disabled={!!busy} onClick={disconnect}>
+                  {busy === 'disconnect' ? 'Disconnecting…' : 'Disconnect'}
+                </button>
+              </>
+            ) : (
+              <button type="button" className={buttonClass} disabled={!!busy} onClick={connect}>
+                {busy === 'connect' ? 'Opening Google…' : 'Connect Google Sheets'}
+              </button>
+            )}
+            {data?.last_pulled_at && (
+              <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                Last pull {data.last_pulled_at.slice(0, 10)}
+              </span>
+            )}
+            {data?.last_pushed_at && (
+              <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                Last push {data.last_pushed_at.slice(0, 10)}
+              </span>
+            )}
+          </div>
+          {data?.last_error && (
+            <p className="text-[12px] text-red-700 dark:text-red-300">{data.last_error}</p>
+          )}
+          <Field label="Spreadsheet URL" hint="The tab is the gid in the URL. Pull overwrites that tab's data rows.">
+            <input
+              className={inputClass}
+              value={url}
+              placeholder={data?.suggested_url || ''}
+              onChange={(e) => setUrl(e.target.value)}
+            />
+          </Field>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" className={ghostButtonClass} disabled={!!busy || !url.trim()} onClick={saveLink}>
+              {busy === 'link' ? 'Saving…' : 'Save spreadsheet'}
+            </button>
+            <button
+              type="button"
+              className={buttonClass}
+              disabled={!!busy || !data?.connected || !data?.spreadsheet_id}
+              onClick={pull}
+            >
+              {busy === 'pull' ? 'Writing…' : 'Pull from Axal'}
+            </button>
+            <button
+              type="button"
+              className={ghostButtonClass}
+              disabled={!!busy || !data?.connected || !data?.spreadsheet_id}
+              onClick={push}
+            >
+              {busy === 'push' ? 'Reading…' : 'Push to Axal'}
+            </button>
+          </div>
+        </div>
+      )}
+      <SaveNote note={note} />
     </Card>
   );
 }

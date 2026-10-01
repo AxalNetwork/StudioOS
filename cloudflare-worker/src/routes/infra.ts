@@ -4,19 +4,23 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAdmin, createJWT } from '../auth';
-import { Jobs, JobType } from '../models/jobs';
-import { enqueueJob } from '../services/queue';
+import { Jobs, type JobType } from '../models/jobs';
+import { cfQueueEnabled, enqueueJob } from '../services/queue';
 import { processQueueBatch } from '../services/queueWorker';
 import { getRealtimeStats } from '../services/realtime';
+import { doNamespace } from '../util/doNamespace';
+import { bindingKey } from '../util/schemaBootstrap';
+import { CRON_HISTORY_RETENTION_DAYS, latestRunPerTrigger, triggersFor } from '../util/cronHistory';
+import { nextCronRun } from '../util/cronSchedule';
 
 const infra = new Hono<{ Bindings: Env }>();
 
 // Defensive self-heal — the three tables /queue and /dlq read from were
 // created by migrations, but if any deploy lands on a D1 instance where
 // those migrations didn't run, every infra route 500s with "no such table".
-let infraMigrated = false;
+const INFRA_MIGRATED = new WeakMap<object, boolean>();
 async function ensureInfraSchema(env: Env) {
-  if (infraMigrated) return;
+  if (INFRA_MIGRATED.get(bindingKey(env))) return;
   // queue_jobs MUST match the canonical shape used by models/jobs.ts
   // (max_retries / updated_at / dead_at). A defensive CREATE TABLE IF NOT
   // EXISTS that omitted these would let the table win the race on a fresh
@@ -90,7 +94,7 @@ async function ensureInfraSchema(env: Env) {
       console.error('infra ensureSchema:', e?.message);
     }
   }
-  if (allOk) infraMigrated = true;
+  if (allOk) INFRA_MIGRATED.set(bindingKey(env), true);
 }
 
 // GET /api/infra/queue — admin queue dashboard.
@@ -116,7 +120,9 @@ infra.get('/queue', async (c) => {
 
   return c.json({
     ok: true,
-    transport_active: c.env.USE_CF_QUEUE === 'true' && !!c.env.JOB_QUEUE ? 'cf_queue' : 'd1',
+    // The transport enqueueJob actually uses, asked of the function that
+    // decides it rather than restated here (D202).
+    transport_active: cfQueueEnabled(c.env) ? 'cf_queue' : 'd1',
     use_cf_queue_flag: c.env.USE_CF_QUEUE === 'true',
     cf_queue_binding_present: !!c.env.JOB_QUEUE,
     cf_queue_1h: cfWindow.results || [],
@@ -320,57 +326,6 @@ infra.delete('/dlq/:id', async (c) => {
   return c.json({ ok: true, deleted: true });
 });
 
-// Canonical cron expressions declared in wrangler.toml [triggers].
-// Must be kept in sync with the deployed config. Each entry is used for
-// computing `next_run_at` in the cron-history endpoint.
-export const CRON_TRIGGERS: { name: string; expr: string }[] = [
-  { name: 'scheduled', expr: '* * * * *' },
-  { name: 'cleanup', expr: '0 3 * * *' },
-  { name: 'mi_refresh', expr: '0 */6 * * *' },
-  { name: 'mi_snapshot', expr: '0 4 * * *' },
-  { name: 'daily_digest', expr: '0 9 * * *' },
-  { name: 'weekly_digest', expr: '0 9 * * 1' },
-];
-
-/** Compute next run timestamp for a simple cron expression (no month-day or year). */
-function nextCronRun(expr: string, from: Date = new Date()): string | null {
-  const parts = expr.trim().split(/\s+/);
-  if (parts.length !== 5) return null;
-  const [mStr, hStr, dStr, moStr, wdStr] = parts;
-  const parseField = (s: string, min: number, max: number): number[] => {
-    if (s === '*') return [];
-    if (s.includes('/')) {
-      const [, step] = s.split('/');
-      const vals: number[] = [];
-      for (let v = min; v <= max; v += parseInt(step, 10)) vals.push(v);
-      return vals;
-    }
-    if (s.includes(',')) return s.split(',').map(v => parseInt(v, 10)).filter(Number.isFinite);
-    const n = parseInt(s, 10);
-    return Number.isFinite(n) ? [n] : [];
-  };
-  const minutes = parseField(mStr, 0, 59);
-  const hours = parseField(hStr, 0, 23);
-  const days = parseField(dStr, 1, 31);
-  const months = parseField(moStr, 1, 12);
-  const weekdays = parseField(wdStr, 0, 6);
-
-  const d = new Date(from.getTime());
-  d.setUTCSeconds(0, 0);
-  for (let safety = 0; safety < 366 * 24 * 60; safety++) {
-    d.setUTCMinutes(d.getUTCMinutes() + 1);
-    const okMin = minutes.length === 0 || minutes.includes(d.getUTCMinutes());
-    const okHour = hours.length === 0 || hours.includes(d.getUTCHours());
-    const okDay = days.length === 0 || days.includes(d.getUTCDate());
-    const okMonth = months.length === 0 || months.includes(d.getUTCMonth() + 1);
-    const okWD = weekdays.length === 0 || weekdays.includes(d.getUTCDay());
-    if (okMin && okHour && okDay && okMonth && okWD) {
-      return d.toISOString().replace('T', ' ').slice(0, 19);
-    }
-  }
-  return null;
-}
-
 // GET /api/infra/cron-history — list recent cron run history + trigger metadata.
 infra.get('/cron-history', async (c) => {
   await ensureInfraSchema(c.env);
@@ -391,20 +346,22 @@ infra.get('/cron-history', async (c) => {
     .bind(...(trigger ? [trigger, limit, offset] : [limit, offset]))
     .all();
 
-  // Compute last_run_at and next_run_at per trigger from the DB.
-  // The DB stores the raw cron expression as trigger_name (e.g. '* * * * *'),
-  // so we map by expr rather than display name.
-  const lastRuns = await c.env.DB.prepare(
-    `SELECT trigger_name, MAX(started_at) AS last_run_at FROM cron_run_history GROUP BY trigger_name`
-  ).all<{ trigger_name: string; last_run_at: string }>();
-
-  const lastRunMap: Record<string, string> = {};
-  for (const r of (lastRuns.results || [])) lastRunMap[r.trigger_name] = r.last_run_at;
-
-  const triggers = CRON_TRIGGERS.map(t => ({
+  // Last run and next run per DECLARED trigger. The store keys rows by the
+  // raw expression the scheduled handler received, so the map is by expr
+  // rather than display name. D201 — one indexed read per trigger through the
+  // helper HQ · Platform also reads, in place of a GROUP BY over the whole
+  // table; and the next run comes from the matcher that speaks Cloudflare's
+  // weekday numbering (1 = Sunday), which the copy that lived here did not.
+  //
+  // D238 — the triggers THIS deployment fires. A branch fires only its own
+  // two (BRANCH_CRONS); graded against HQ's six, four would read "never
+  // fired" for ever.
+  const declared = triggersFor(c.env);
+  const latest = await latestRunPerTrigger(c.env, declared.map((t) => t.expr));
+  const triggers = declared.map(t => ({
     name: t.name,
     expr: t.expr,
-    last_run_at: lastRunMap[t.expr] || null,
+    last_run_at: latest.get(t.expr)?.started_at || null,
     next_run_at: nextCronRun(t.expr) || null,
   }));
 
@@ -412,6 +369,11 @@ infra.get('/cron-history', async (c) => {
     ok: true,
     items: rows.results || [],
     total: Number(count?.c ?? 0),
+    // D237 — `total` counts what the table holds, and since the retention
+    // sweep that is the last RETENTION days plus each trigger's newest row,
+    // not every tick ever recorded. Sent beside it so no screen can present
+    // the figure as all-time.
+    retention_days: CRON_HISTORY_RETENTION_DAYS,
     limit,
     offset,
     triggers,
@@ -445,31 +407,6 @@ infra.get('/reembed-metrics', async (c) => {
   return c.json({ ok: true, hours, items: rows.results || [] });
 });
 
-// POST /api/infra/cron-log — internal endpoint for the cron handler to record runs.
-// Not a public admin surface; called from index.ts scheduled().
-// Task #7 (IE) — requireAdmin so perimeter-only users cannot write synthetic audit rows.
-infra.post('/cron-log', async (c) => {
-  await ensureInfraSchema(c.env);
-  await requireAdmin(c);
-  const body = await c.req.json<{ trigger_name: string; status: string; started_at?: string; finished_at?: string; summary?: string; error?: string }>();
-  if (!body?.trigger_name) return c.json({ error: 'trigger_name required' }, 400);
-
-  const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-  await c.env.DB.prepare(
-    `INSERT INTO cron_run_history (trigger_name, started_at, finished_at, status, summary, error)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  ).bind(
-    body.trigger_name,
-    body.started_at || now,
-    body.finished_at || now,
-    body.status || 'completed',
-    body.summary || null,
-    body.error || null,
-  ).run();
-
-  return c.json({ ok: true });
-});
-
 // GET /api/infra/ws-check — real authenticated WebSocket upgrade spot-check.
 // Probes both the DO internal upgrade path and the worker-facing route.
 // For the route probe, we mint a synthetic admin JWT and send upgrade headers.
@@ -496,8 +433,9 @@ infra.get('/ws-check', async (c) => {
   //     trusts the worker because the DO is only accessible via the binding).
   if (c.env.PIPELINE_ROOM) {
     try {
-      const id = c.env.PIPELINE_ROOM.idFromName('healthcheck');
-      const stub = c.env.PIPELINE_ROOM.get(id);
+      const rooms = doNamespace(c.env, c.env.PIPELINE_ROOM);
+      const id = rooms.idFromName('healthcheck');
+      const stub = rooms.get(id);
       // DO count (reachability)
       const count = await stub.fetch('https://do/count');
       const countOk = count.status === 200;
@@ -523,8 +461,9 @@ infra.get('/ws-check', async (c) => {
   // 2. OnboardingChat DO internal upgrade probe.
   if (c.env.ONBOARDING_CHAT) {
     try {
-      const id = c.env.ONBOARDING_CHAT.idFromName('healthcheck');
-      const stub = c.env.ONBOARDING_CHAT.get(id);
+      const chats = doNamespace(c.env, c.env.ONBOARDING_CHAT);
+      const id = chats.idFromName('healthcheck');
+      const stub = chats.get(id);
       const count = await stub.fetch('https://do/count');
       const countOk = count.status === 200;
       const upgrade = await stub.fetch('https://do/ws', {

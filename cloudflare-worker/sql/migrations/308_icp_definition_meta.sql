@@ -1,0 +1,38 @@
+-- 308_icp_definition_meta.sql — Spin-Out Lab Customer Discovery: the ICP
+-- definition (D353, wave 8, Session 7).
+--
+-- The Customer Discovery canvas draws an "ICP definition" module: a five-step
+-- wizard (who they are · what they struggle with · what they want · how they
+-- buy · positioning) with Not started / In progress / Confirmed states, a
+-- confirmed summary, and a version. Nothing stored it: the page could only
+-- derive a "working definition" from the interview log. This adds the same
+-- additive JSON-blob column as use_of_funds_meta (158), incorporation_meta
+-- (159) and cofounder_decision_meta (162):
+--
+--   projects.icp_definition_meta TEXT   -- JSON, canonicalised by the Worker:
+--     { status: 'draft'|'confirmed', step: 1..5,
+--       fields: { type, industry, size, persona, geo, pain1, pain2, pain3,
+--                 alternative, whyFail, outcome, trigger, metric, urgency,
+--                 budget, objection, valueProp, differentiator, tone },
+--       version: n, confirmed_at?, updated_at }
+--
+-- `normalizeIcpDefinitionMeta` (routes/projects.ts) is the only writer's
+-- gate: unknown keys are dropped, choice fields must be one of the canvas's
+-- options, text is trimmed and capped, and `version` / the timestamps are set
+-- by the Worker from the stored row — never taken from the request.
+--
+-- WHY `projects` AND NOT A SIDE TABLE: `users` is at D1's 100-column cap, but
+-- this is a per-PROJECT fact and `projects` has 68 columns on a fresh build
+-- (schema_baseline.sql + every migration above the cutoff, measured on main
+-- 80809092), so it follows 158/159/162.
+--
+-- STANDS ALONE: it depends on no other wave-8 migration. NON-IDEMPOTENT: D1's
+-- ALTER TABLE has no IF NOT EXISTS. Apply through the ledger-driven runner,
+-- which records the schema_migrations row and runs it exactly once:
+--
+--   npm run d1:migrate:remote
+--
+-- The worker self-heals cold isolates via ensureProjectIcpDefinitionColumn()
+-- (routes/projects.ts), a safety net for this declared column (D235).
+
+ALTER TABLE projects ADD COLUMN icp_definition_meta TEXT;

@@ -40,10 +40,7 @@ import type { Env } from '../../types';
 import { ensureDiscoveryValidationRatingColumns } from '../discoveryInterviewSchema';
 import { computePainThemes } from '../painGroups';
 import { ensureLandingPageBrandKitColumns } from '../landingPageSchema';
-import {
-  ensureNetworkProfilesSchema,
-  SKILL_CATALOG,
-} from '../networkProfilesSchema';
+import { NETWORK_KIND_DEFAULT, SKILL_CATALOG, displayNetworkKind } from '../networkProfilesSchema';
 import { computeRadar, type RadarResult } from '../radar';
 import { RADAR_AXES, ensureSkillsTaxonomySchema } from '../skillsTaxonomySchema';
 import { ensureSkillProfileSchema } from '../skillProfileSchema';
@@ -51,14 +48,32 @@ import { parseUseOfFundsValue } from '../../util/useOfFunds';
 import { simulate, type Inputs, type SimulateResult } from '../captable';
 import { ensureCapTableVariantColumn } from '../captableSchema';
 import { ensureCompetitorSchema } from '../competitorSchema';
+import { bindingKey } from '../../util/schemaBootstrap';
+import { deckMentorNames, deckProfiles } from './deckRoster';
 
 /**
  * Task #1 — Load admin-managed mentor/partner network profiles.
  *
- * Returns the active roster ordered by display_order so the Spin-Out
- * deck's Mentors & Network slide reflects the real Axal network instead
- * of synthesising rows from advisor_answers. Falls back to an empty
- * array on schema/DB errors so the deck still renders.
+ * Returns the active roster ordered by display_order so the deck's
+ * `mentor_network` section reflects the real Axal network instead of
+ * synthesising rows from advisor_answers. What a slide draws of it is the
+ * Team & Network advisor block (spinoutDeckData.ts), capped by the two
+ * constants in `deckRoster.ts`.
+ *
+ * D225 — a failed read used to fall back to an empty array, so an
+ * unreadable `network_profiles` table drew the same "no advisors" state as
+ * a genuinely empty roster, on a deck founders show investors. It now
+ * answers `{ rows, available, reason }` (the `supportQueues.ts`
+ * `{ available, reason }` shape) so the caller can say the roster could
+ * not be read instead of drawing it as empty. This is a READ path: it no
+ * longer bootstraps the table (`ensureNetworkProfilesSchema` runs only on
+ * the admin write routes, `admin_network_profiles.ts`), so "no such table"
+ * is read the same as any other unreadable store rather than silently
+ * created.
+ *
+ * `id` breaks the tie two rows with one display_order and one name would
+ * otherwise leave to the engine, so the order HQ's Content page marks is the
+ * order the deck reads (D214).
  *
  * Shape matches the `NetworkProfile[]` contract consumed by the deck
  * adapter (frontend/src/decks/templates/axal_spinout_demoday_app.tsx).
@@ -74,33 +89,50 @@ export type NetworkProfileRow = {
   kind: string;
 };
 
-export async function loadNetworkProfiles(env: Env): Promise<NetworkProfileRow[]> {
+export type NetworkProfilesResult = {
+  rows: NetworkProfileRow[];
+  available: boolean;
+  reason?: string;
+};
+
+/** Why the roster could not be read, in words a founder or admin can act on. */
+function networkProfilesUnreadableReason(err: unknown): string {
+  const msg = String((err as Error)?.message || err || '');
+  if (/no such table/i.test(msg)) {
+    return 'The network profiles table has not been created on this database yet.';
+  }
+  return 'The network profiles table could not be read.';
+}
+
+export async function loadNetworkProfiles(env: Env): Promise<NetworkProfilesResult> {
   try {
-    await ensureNetworkProfilesSchema(env);
     const rows = (await env.DB.prepare(
       `SELECT id, name, kind, role, company, bio, linkedin_url, photo_r2_key, skills_json
          FROM network_profiles
         WHERE is_active = 1
-        ORDER BY display_order ASC, name ASC`,
+        ORDER BY display_order ASC, name ASC, id ASC`,
     ).all<any>()).results || [];
-    return rows.map((r) => {
-      let skills: string[] = [];
-      try { const arr = JSON.parse(r.skills_json || '[]'); if (Array.isArray(arr)) skills = arr.map(String); }
-      catch { /* noop */ }
-      return {
-        name: String(r.name || ''),
-        role: String(r.role || ''),
-        bio: String(r.bio || ''),
-        company: String(r.company || ''),
-        skills,
-        photo_url: r.photo_r2_key ? `/api/public/network/${r.id}/photo` : null,
-        linkedin_url: r.linkedin_url || null,
-        kind: String(r.kind || 'mentor'),
-      };
-    });
+    return {
+      available: true,
+      rows: rows.map((r) => {
+        let skills: string[] = [];
+        try { const arr = JSON.parse(r.skills_json || '[]'); if (Array.isArray(arr)) skills = arr.map(String); }
+        catch { /* noop */ }
+        return {
+          name: String(r.name || ''),
+          role: String(r.role || ''),
+          bio: String(r.bio || ''),
+          company: String(r.company || ''),
+          skills,
+          photo_url: r.photo_r2_key ? `/api/public/network/${r.id}/photo` : null,
+          linkedin_url: r.linkedin_url || null,
+          kind: String(r.kind || NETWORK_KIND_DEFAULT),
+        };
+      }),
+    };
   } catch (err) {
     console.warn('[axalSpinoutDemoDay] loadNetworkProfiles failed', err);
-    return [];
+    return { rows: [], available: false, reason: networkProfilesUnreadableReason(err) };
   }
 }
 
@@ -142,15 +174,15 @@ const fmtMonths = (n: unknown): string => {
  * D1 has no `ADD COLUMN IF NOT EXISTS`, so wrap in try/catch and
  * swallow the "duplicate column name" error.
  */
-let _schemaReady = false;
+const SCHEMA_READY = new WeakMap<object, boolean>();
 export async function ensureSpinoutDeckSchema(env: Env): Promise<void> {
-  if (_schemaReady) return;
+  if (SCHEMA_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(`ALTER TABLE cap_table_holders ADD COLUMN kind TEXT`);
   } catch {
     /* already exists — fine */
   }
-  _schemaReady = true;
+  SCHEMA_READY.set(bindingKey(env), true);
 }
 
 // Mirrors services/spinoutLabCatalog.ts MILESTONES. Duplicated here so
@@ -1122,10 +1154,13 @@ export async function fillAxalSpinoutDemoDay(
 
   // ------ Task #1: mentor profiles + skill coverage + network --------
   // Real, admin-managed roster from network_profiles (loaded above).
-  // Falls back to an empty array if the table is empty so the slide
-  // renders its dashed-skeleton state rather than synthesised noise.
-  const networkRoster = await networkProfilesPromise;
-  const profiles = networkRoster.slice(0, 6).map((np) => ({
+  // D225 — `available`/`reason` distinguish a genuinely empty roster from
+  // one that could not be read; `networkRoster` itself is `[]` either way,
+  // so every reader below (skills, kind counts, mentor names) still works
+  // unchanged, and only the body copy below tells the two apart.
+  const { rows: networkRoster, available: networkAvailable, reason: networkReason } =
+    await networkProfilesPromise;
+  const profiles = deckProfiles(networkRoster).map((np) => ({
     name: np.name || DASH,
     role: np.role || '',
     bio: np.bio || '',
@@ -1133,7 +1168,9 @@ export async function fillAxalSpinoutDemoDay(
     skills: np.skills,
     photo_url: np.photo_url,
     linkedin_url: np.linkedin_url,
-    kind: np.kind,
+    // D229 — a legacy row stored before the role's rename still carries
+    // 'mentor'; the deck shows it as Advisor without rewriting the row.
+    kind: displayNetworkKind(np.kind),
   }));
   // Skill coverage spider: count of active profiles per axis, normalised
   // 0..1 against the busiest axis so the radar stays well-shaped.
@@ -1152,7 +1189,9 @@ export async function fillAxalSpinoutDemoDay(
   // decks don't regress to an empty bar chart.
   const kindCounts = new Map<string, number>();
   for (const np of networkRoster) {
-    const k = np.kind || 'mentor';
+    // D229 — grouped by what the kind reads as today (a legacy 'mentor' row
+    // counts as Advisor), not by the retired stored name.
+    const k = displayNetworkKind(np.kind);
     kindCounts.set(k, (kindCounts.get(k) || 0) + 1);
   }
   const networkBreakdown = kindCounts.size > 0
@@ -1357,15 +1396,18 @@ export async function fillAxalSpinoutDemoDay(
       eyebrow: '10 · Mentors & network',
       headline: 'Who is around the table.',
       // Task #1 — body now narrates the curated roster instead of
-      // echoing free-text advisor answers.
-      body: networkRoster.length > 0
-        ? `${networkRoster.length} mentors, partners, advisors, and investors in the Axal network.`
-        : DASH,
+      // echoing free-text advisor answers. D225 — an unreadable roster
+      // says so, with its reason, instead of drawing as an empty one.
+      body: !networkAvailable
+        ? `Network roster unreadable: ${networkReason}`
+        : networkRoster.length > 0
+          ? `${networkRoster.length} mentors, partners, advisors, and investors in the Axal network.`
+          : DASH,
       // mentors + network_signals are no longer derived from
       // advisor_answers via signalsFromText — that produced the
       // "Lead, Lead" fragment regression. They come from the
       // admin-managed roster directly.
-      mentors: networkRoster.map((p) => p.name).filter(Boolean).slice(0, 8),
+      mentors: deckMentorNames(networkRoster),
       network_signals: networkBreakdown.map((b) => `${b.category}: ${b.count}`),
       profiles,
       skill_coverage: skillCoverage,

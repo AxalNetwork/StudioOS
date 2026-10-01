@@ -72,6 +72,9 @@ function freshDb() {
   for (const t of ['users', 'super_admins', 'territory_licences', 'ai_usage_logs', 'promo_codes']) {
     db.exec(ddl(t));
   }
+  db.exec(readFileSync(
+    resolve(process.cwd(), 'cloudflare-worker/sql/migrations/260_subsidiary_statements.sql'), 'utf8',
+  ));
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)');
   u.run(SUPER, 'admin', 'The Holder', 'holder@example.test');
   u.run(PLAIN_ADMIN, 'admin', 'Plain Admin', 'admin@example.test');
@@ -181,7 +184,7 @@ test('token cost is real; token MARGIN is refused', async () => {
   assert.equal(t.margin_usd, undefined, 'a margin was derived from a price that does not exist');
 });
 
-test('the four figures with no source are absent, each with its own reason', async () => {
+test('the figures with no source are absent, each with its own reason', async () => {
   // Not one blanket "some data unavailable": a reader needs to know WHICH
   // fact is missing and why, or the page is just apologising.
   const db = freshDb();
@@ -191,18 +194,39 @@ test('the four figures with no source are absent, each with its own reason', asy
   assert.match(String(r.body.subscriptions_reason), /no amount|not totalled/i);
   assert.equal(r.body.subscriptions_cents, undefined, 'a subscriptions figure appeared');
 
-  assert.equal(r.body.statements_available, false);
-  assert.match(String(r.body.statements_reason), /statement store/i);
-  assert.equal(r.body.statements, undefined, 'a statements list appeared');
-
+  // A CEILING EXISTS NOW (D111) AND A DERIVED BUDGET STILL DOES NOT, which is
+  // the distinction this assertion holds. The reason may no longer say "no
+  // promotional budget" — it must still say why THIS endpoint cannot produce
+  // a spend figure, which is that a code names no subsidiary.
   assert.equal(r.body.promos.budget_available, false);
-  assert.match(String(r.body.promos.budget_reason), /no promotional budget/i);
+  assert.match(String(r.body.promos.budget_reason), /attributes none|names no subsidiary|branch reports/i);
   assert.equal(r.body.promos.budget_left_cents, undefined, 'a promo budget figure appeared');
 
-  // U1 — every per-subsidiary figure, the token P&L split included.
-  assert.equal(r.body.derived_metrics_available, false);
-  assert.match(String(r.body.derived_metrics_reason), /licence it belongs to/);
+  assert.equal(r.body.revenue_per_subsidiary_available, false);
+  assert.match(String(r.body.revenue_per_subsidiary_reason), /unmeasured|D266/);
+  assert.equal(r.body.token_pl_per_subsidiary_available, false);
+  assert.match(String(r.body.token_pl_per_subsidiary_reason), /licence it belongs to|U1/);
   assert.equal(r.body.token_pl_by_subsidiary, undefined, 'a per-subsidiary token split appeared');
+  assert.equal(r.body.usage_coverage?.available, true);
+  assert.ok(Array.isArray(r.body.usage_coverage?.by_licence));
+});
+
+test('statements are pointed at, never inlined — the summary stays a pure read', async () => {
+  // D111 gave statements a store, and the wrong way to spend it would have
+  // been to fold the ledger into this payload: the endpoint's whole contract
+  // is that it reads and stores nothing, and a slow or failed ledger query
+  // here would blank the four zones that read D1 perfectly well.
+  const db = freshDb();
+  const r = await call(db, SUPER);
+
+  assert.equal(r.body.statements_endpoint, '/api/admin/statements');
+  assert.equal(r.body.statements, undefined, 'the ledger was inlined into the summary');
+  assert.equal(r.body.statements_available, undefined,
+    'the summary still claims to answer for statements it does not read');
+  // And the retired refusal must not linger: a reason saying no store exists
+  // is now false, and a false reason is worse than none.
+  assert.equal(r.body.statements_reason, undefined, 'the retired "no statement store" refusal is still shipping');
+  assert.equal(r.body.promos.ceilings_endpoint, '/api/admin/promo-ceilings');
 });
 
 test('promotions report what promo_codes holds, not what the canvas wanted', async () => {
@@ -218,6 +242,29 @@ test('promotions report what promo_codes holds, not what the canvas wanted', asy
   const r = await call(db, SUPER);
   assert.equal(r.body.promos.active_codes, 1, 'an inactive code was counted as active');
   assert.equal(r.body.promos.redemptions, 7, 'redemptions include inactive codes');
+});
+
+test('an expired code, or one at its cap, is not counted as redeemable now (D213)', async () => {
+  // Checkout refuses both (promos.ts validatePromoForProduct), so a count
+  // labelled "redeemable now" that includes them is wrong in the direction
+  // that flatters the programme. One rule decides it: promoState.
+  const db = freshDb();
+  const ins = db.prepare(
+    `INSERT INTO promo_codes (id, code, code_normalized, coupon_id, times_redeemed, active, max_redemptions, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const past = new Date(Date.now() - 86_400_000).toISOString();
+  const future = new Date(Date.now() + 86_400_000).toISOString();
+  ins.run('p1', 'LIVE', 'live', 'c1', 2, 1, null, null);                     // redeemable
+  ins.run('p2', 'SOON', 'soon', 'c2', 1, 1, 5, future);                      // redeemable until tomorrow
+  ins.run('p3', 'GONE', 'gone', 'c3', 5, 1, null, past);                     // expired yesterday
+  ins.run('p4', 'OLD', 'old', 'c4', 4, 1, null, '2020-01-01 00:00:00');      // expired, SQL-format stamp
+  ins.run('p5', 'FULL', 'full', 'c5', 3, 1, 3, null);                        // exactly at its cap
+  ins.run('p6', 'OFF', 'off', 'c6', 9, 0, null, null);                       // switched off
+  const r = await call(db, SUPER);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.promos.active_codes, 2, 'an expired or exhausted code was counted as redeemable');
+  assert.equal(r.body.promos.redemptions, 3, 'redemptions include codes that are not redeemable');
 });
 
 test('an unreadable table says so and does not take the rest down', async () => {

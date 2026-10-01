@@ -13,6 +13,7 @@ import {
   PROGRAMS, PROGRAM_CATEGORIES, AUDIENCES, FORMATS,
 } from '../../data/network';
 import { EVENT_TYPE_FILTERS } from '../../lib/eventTypes';
+import { formatEventPrice } from '../../lib/money';
 
 const EVENT_TYPES = EVENT_TYPE_FILTERS;
 
@@ -474,7 +475,7 @@ export default function PublicEventsPage() {
                             </Link>
                             {!isPast && (ev.price_cents > 0 ? (
                               <span className="text-xs text-slate-500 dark:text-slate-400">
-                                ${(ev.price_cents / 100).toFixed(2)}
+                                {formatEventPrice(ev.price_cents, ev.currency)}
                               </span>
                             ) : (
                               <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Free</span>

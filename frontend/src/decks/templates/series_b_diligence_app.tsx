@@ -223,7 +223,7 @@ const safeUpper = (v: unknown, fallback = '—'): string => {
 
 const Editable: React.FC<{
   value?: string; path: string; editable?: boolean; onEdit?: (p: string, v: string) => void;
-  placeholder?: string; className?: string; style?: React.CSSProperties; as?: keyof JSX.IntrinsicElements;
+  placeholder?: string; className?: string; style?: React.CSSProperties; as?: keyof React.JSX.IntrinsicElements;
 }> = ({ value, path, editable, onEdit, placeholder, className, style, as = 'div' }) => {
   const Tag: any = as;
   return (

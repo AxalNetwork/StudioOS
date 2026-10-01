@@ -35,7 +35,11 @@ export default function PortfolioWorkspace({ activeRole }) {
 
   const tabs = [
     { to: '/portfolio/health', label: 'Health', icon: Heart, roles: ['admin', 'founder', 'partner', 'investor'] },
-    { to: '/portfolio/updates', label: 'Updates', icon: Inbox, roles: ['admin', 'founder', 'partner', 'investor'] },
+    // The tab's roles are the route's guard (App.jsx): a role listed here but
+    // refused there clicks into a redirect. The founder's composer is the
+    // Investor update card on /build/metrics (D463), so the tab no longer
+    // offers the founder a route their shell has no zone for.
+    { to: '/portfolio/updates', label: 'Updates', icon: Inbox, roles: ['admin', 'investor'] },
     { to: '/portfolio/positions', label: 'Cap Table', icon: PieChart, roles: ['admin', 'investor'] },
     { to: '/portfolio/performance', label: 'Performance', icon: TrendingUp, roles: ['admin', 'investor'] },
     { to: '/portfolio/growth', label: 'Growth', icon: Rocket, roles: ['admin', 'investor'] },

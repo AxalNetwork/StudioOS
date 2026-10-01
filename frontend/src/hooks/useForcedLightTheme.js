@@ -19,10 +19,12 @@ export default function useForcedLightTheme() {
     const hadDark = html.classList.contains('dark');
     const prevTheme = html.dataset.theme;
 
+    html.dataset.axalForcedTheme = 'light';
     html.classList.remove('dark');
     html.dataset.theme = 'light';
 
     return () => {
+      delete html.dataset.axalForcedTheme;
       if (hadDark) html.classList.add('dark');
       if (prevTheme !== undefined) html.dataset.theme = prevTheme;
       else delete html.dataset.theme;

@@ -1,5 +1,4 @@
 import { count, day, summary, top } from './format.js';
-import { RESEARCH_CLIENT_PREP_COPY } from '../noStoreCopy.js';
 
 /*
  * `/research` — Partner Operator Canvas P7 and Advisor Canvas V6.
@@ -30,14 +29,26 @@ export default function researchBoard(role, api) {
     },
     sections: [
       card('ask', 'Ask', 'Questions answered only from your own library, with the passage each answer used.'),
-      {
-        slug: 'client-prep',
-        anchor: 'rs-client',
-        title: 'Client prep',
-        span: 'full',
-        gap: RESEARCH_CLIENT_PREP_COPY,
-      },
-      card('markets', 'Markets', 'Signals from the sectors you work in, with the date each one was gathered.'),
+      // A CARD, NOT A GAP, BECAUSE THE ZONE IS LIVE. This rendered the shared
+      // client-prep no-store copy — eyebrow "No store behind this yet", heading
+      // "The client brief is not built yet" — on both `/research` roots, over a
+      // zone that is in `LIVE_ZONES`, renders a real body, and reads five API
+      // methods across migrations 218 and 222. A card telling a reader a working
+      // feature does not exist is worse than a missing button.
+      //
+      // NOTHING WAS LOST WITH THAT COPY. Its one good sentence — that what
+      // stands in the way is an access decision rather than an absent table — is
+      // already in the zone's own empty state, said PER ROLE and so more
+      // accurately than one board sentence could: a partner reads that nothing
+      // here requests a record, an advisor reads where the half they already hold
+      // lives. `advisor_bucket_overview.test.mjs` now asserts it there.
+      card('client-prep', 'Client prep',
+        'One client per brief, assembled from what they opened to you and what you already hold.'),
+      // D391 — the zone this card opens is `MarketZone`: comparable ranges the
+      // firm enters for its own service lines (migration 223), each with its run
+      // date and an age gate. It stopped being the signals feed when that zone
+      // was rebuilt, and this blurb still described the feed.
+      card('markets', 'Markets', 'Comparable ranges you entered for your own work, each with the date it was run and how old it is.'),
       ...(isPartner ? [] : [
         card('companies', 'Companies', 'The competitor and market analyses you have run yourself.'),
       ]),
@@ -57,9 +68,14 @@ export default function researchBoard(role, api) {
         rows: (d) => top(d?.items).map((x) => [
           x.title, x.kind, x.index_state, day(x.created_at),
         ]),
-        footnote: () =>
-          'Your own uploads. Nobody can send you a document — a founder sharing their own file '
-          + 'needs a grant type this product has for investors and for no one else.',
+        // D391 — "Nobody can send you a document" stopped being true for an
+        // advisor at migration 218: a founder can open their data room to a named
+        // advisor. Those files are read on Client prep under the founder's grant
+        // and never copied here, so the library sentence is about the library.
+        footnote: () => (isPartner
+          ? 'Only what you uploaded yourself. Ask answers from these documents and nothing else.'
+          : 'Only what you uploaded yourself. Files a founder opens to you under a grant are read '
+            + 'in Client prep and never copied here, so Ask cannot cite them.'),
       },
     ],
   };

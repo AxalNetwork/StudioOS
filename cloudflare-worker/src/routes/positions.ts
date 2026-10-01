@@ -10,7 +10,7 @@
  * admin/investor bypass the studio gate and are narrowed here via canViewLpData.
  */
 import { Hono } from 'hono';
-import type { Env, User } from '../types';
+import type { Env } from '../types';
 import { requireAuth, requireAdmin, canViewLpData } from '../auth';
 import { mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import {
@@ -48,16 +48,21 @@ const DIST_KINDS = new Set(['exit', 'secondary', 'dividend', 'recapitalization']
  * Latest mark per project (build queue #125). One grouped query rather
  * than per-project lookups — the old per-row pattern here was an N+1.
  */
-async function latestMarksByProject(env: Env, projectIds: number[] | null = null): Promise<Map<number, { fmv: number; as_of_date: string; basis: string }>> {
+async function latestMarksByProject(env: Env, projectIds: number[] | null = null, asOf: string | null = null): Promise<Map<number, { fmv: number; as_of_date: string; basis: string }>> {
   const scopeCsv = projectIds == null ? null : projectIds.join(',');
+  // `asOf` is the quarter-end read (D463): the latest mark AT OR BEFORE the
+  // date, so a quarter-end export never prices the book with a mark that did
+  // not exist yet. Absent, the behaviour is unchanged — the latest mark.
+  // Placeholders bind in text order: the subquery's two come first.
   const rows = await env.DB.prepare(
     `SELECT m.project_id, m.fmv, m.as_of_date, m.basis
        FROM portfolio_marks m
-       JOIN (SELECT project_id, MAX(as_of_date) AS d FROM portfolio_marks GROUP BY project_id) latest
+       JOIN (SELECT project_id, MAX(as_of_date) AS d FROM portfolio_marks
+             WHERE (? IS NULL OR as_of_date <= ?) GROUP BY project_id) latest
          ON latest.project_id = m.project_id AND latest.d = m.as_of_date
        WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(m.project_id AS TEXT) || ',') > 0)
        GROUP BY m.project_id`,
-  ).bind(scopeCsv, scopeCsv).all<any>().catch(() => ({ results: [] as any[] }));
+  ).bind(asOf, asOf, scopeCsv, scopeCsv).all<any>().catch(() => ({ results: [] as any[] }));
   const out = new Map<number, { fmv: number; as_of_date: string; basis: string }>();
   for (const row of (rows.results || [])) {
     out.set(Number(row.project_id), {
@@ -249,22 +254,28 @@ r.get('/analytics', async (c) => {
            FROM portfolio_distributions
           WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(project_id AS TEXT) || ',') > 0)`,
       ).bind(scopeCsv, scopeCsv).all<any>().catch(() => ({ results: [] as any[] })),
-      latestMarksByProject(c.env, projectIds),
+      latestMarksByProject(c.env, projectIds, c.req.query('as_of') ? today : null),
     ]);
 
+    // The quarter-end read (D463): with an explicit `as_of`, only flows ON OR
+    // BEFORE the date count — a quarter-end export must not include a wire
+    // that landed after it. Without one, every flow counts, as before.
+    const asOf = c.req.query('as_of') ? today : null;
     const flows: CashFlow[] = [];
     const investedByProject = new Map<number, number>();
     for (const p of (positions.results || [])) {
       const amount = Number(p.invested_amount) || 0;
       if (amount <= 0) continue;
       const pid = Number(p.project_id);
-      investedByProject.set(pid, (investedByProject.get(pid) || 0) + amount);
       const date = isoDate(p.position_date) || isoDate(p.created_at);
+      if (asOf && date && date > asOf) continue;
+      investedByProject.set(pid, (investedByProject.get(pid) || 0) + amount);
       if (date) flows.push({ date, amount, kind: 'contribution' });
     }
     for (const d of (distributions.results || [])) {
       const amount = Number(d.amount) || 0;
       const date = isoDate(d.distribution_date);
+      if (asOf && date && date > asOf) continue;
       if (amount > 0 && date) flows.push({ date, amount, kind: 'distribution' });
     }
 
@@ -281,6 +292,9 @@ r.get('/analytics', async (c) => {
     const metrics = computeFundMetrics(flows, nav, today);
     return c.json({
       ...metrics,
+      // The date the figures speak for, echoed so the page states it: with an
+      // explicit `as_of`, the flows and the marks are both cut at that date.
+      as_of: asOf,
       position_count: investedByProject.size,
       unmarked_position_count: unmarkedCount,
       // Coverage is the honesty dial on the whole payload: with a low

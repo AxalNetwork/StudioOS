@@ -378,7 +378,14 @@ const Deck_yc_seed_inner: React.FC<DeckProps> = ({ data, editable, onEdit }) => 
               style={{ fontSize: 15, color: SUBTLE, marginTop: 10, lineHeight: 1.5, flex: 1 }} />
             <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #F5F5F5' }}>
               <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 2, color: '#A3A3A3' }}>Impact</div>
-              <Editable value={p.metric} path={`problems.${i}.metric`} editable={editable} onEdit={onEdit}
+              {/* `metric` is the one optional field in the `problems` annotation
+                  above, and `DeckBase`'s shared `Editable` declares `value` as
+                  required — so this was the single call in the file reading a
+                  raw optional instead of going through `v(data, …)`, whose
+                  fallback is `''`. The body already coped (`{value || …}`), so
+                  the `?? ''` changes no pixel; it makes the call say what the
+                  component asks for (#201). */}
+              <Editable value={p.metric ?? ''} path={`problems.${i}.metric`} editable={editable} onEdit={onEdit}
                 style={{ fontSize: 24, fontWeight: 800, color: ORANGE, marginTop: 4 }} />
             </div>
           </div>

@@ -96,6 +96,21 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
    never rendered as a zero. */
 .fwr-absent { color: var(--fwr-faint); font-weight: 600; }
 
+/* H13 rule 1 — the scope the page read in, reported rather than offered. It
+   sits at the head of Coverage because it qualifies every line under it: the
+   same question has a different meaning per scope, which is what the rule is
+   about. Styled as a chip rather than a control, because it is not one. */
+.fwr-scope {
+  display: inline-block;
+  margin-top: 0;
+  padding: 2px 8px;
+  border: 1px solid var(--fwr-line);
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 .fwr-muted strong { margin-top: 10px; color: var(--fwr-muted); }
 .fwr-muted > div:first-of-type strong { margin-top: 8px; }
 
@@ -109,7 +124,7 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
 /* The model id under its short name — long, monospaced and deliberately quiet:
    it is there to be checked against the router's table, not read. */
 .fwr-model-id {
-  font-family: ui-monospace, Menlo, monospace;
+  font-family:var(--font-mono);
   font-size: 9.5px; word-break: break-all;
   color: var(--fwr-faint);
 }
@@ -171,6 +186,20 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
   background: var(--fwr-paper);
 }
 .fwr-model:hover { border-color: var(--fwr-accent); }
+/* The inherited view (D402): the workspace's model, shown and not offered.
+   No pointer and no hover, because there is nothing here to pick. */
+.fwr-model-readonly { cursor: default; margin-top: 8px; }
+.fwr-model-readonly:hover { border-color: var(--fwr-accent); }
+.fwr-inherited {
+  padding: 9px 11px; border: 1px dashed var(--fwr-line); border-radius: 9px;
+}
+.fwr-inherited p { margin-top: 6px; }
+.fwr-badge-inherited { display: inline-block; }
+.fwr-inherited-link {
+  display: inline-block; margin-top: 6px;
+  color: var(--fwr-accent); font-size: 11px; font-weight: 700; text-decoration: underline;
+}
+.fwr-inherited-link:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; border-radius: 3px; }
 .fwr-model[data-selected="true"] {
   border-color: var(--fwr-accent);
   background: var(--fwr-accent-soft);
@@ -191,7 +220,7 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
   color: var(--fwr-accent); background: var(--fwr-accent-soft);
   border: 1px solid var(--fwr-accent); border-radius: 3px; padding: 2px 5px;
 }
-/* The inline rate a NON-recommended entry carries instead of the fuller
+/* The inline rate a NON-default entry carries instead of the fuller
    treatment — in / out, on one line, in the corner the badge would occupy. */
 .fwr-model-inline {
   flex: none; font-style: normal; font-size: 10px;
@@ -222,6 +251,15 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
    number — it is the average across every model this caller has run the task
    on, which is what the spend endpoint can answer. */
 .fwr-estimate { font-variant-numeric: tabular-nums; }
+/* The lasting "Last run" receipt in the Usage block (D401). The label sits on
+   its own line and says whose run it is — the account's, not the page's. */
+.fwr-last-run { font-variant-numeric: tabular-nums; }
+/* This page this month (D404): the page's own share of the account's month. */
+.fwr-page-spend { font-variant-numeric: tabular-nums; }
+.fwr-last-run b {
+  display: block; color: var(--fwr-ink);
+  font-size: 9.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+}
 
 .fwr-run {
   font: inherit; font-size: 11px; font-weight: 800;
