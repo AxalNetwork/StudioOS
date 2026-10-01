@@ -273,9 +273,9 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Export chart', unbuilt: 'no chart is drawn here — each comparison is a row carrying the base it rests on' },
   ],
   'research/markets': [
-    { label: 'New deep-dive', unbuilt: 'signals are gathered on a schedule, not started here' },
+    { label: 'New deep-dive', unbuilt: 'a sector opens its own profile; nothing here starts a separate deep-dive' },
     { label: 'Export', kind: 'export' },
-    { label: 'Cite in a memo', unbuilt: 'nothing carries a signal into a memo' },
+    { label: 'Cite in a memo', unbuilt: 'nothing carries a sector into a memo' },
   ],
   // `Upload` IS THIS LICENCE'S WORD FOR THE SAME OP advisor and partner call
   // `Add document`, and it opens the same file picker. It was

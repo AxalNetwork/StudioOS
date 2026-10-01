@@ -124,7 +124,9 @@ const PROFILES = {
     // staleness `research/client-prep` carried on advisor and partner, found the
     // same way: by the filters half needing an action table for the same zone.
     // Reviewed elsewhere-claims, by label — see the assertion below.
-    elsewhere: ['New deep-dive', 'Brief me'],
+    // `New deep-dive` left when Markets became the sector directory: the
+    // reason no longer says a run happens on a schedule somewhere else.
+    elsewhere: ['Brief me'],
     excluded: [],
     embeddedGuards: 3,
     // Founder canvas routes are the live routes.
@@ -209,7 +211,8 @@ const PROFILES = {
     // artboard that specifies three ops each. The exclusion was hiding a
     // shipped gap rather than deferring one.
     // Reviewed elsewhere-claims, by label — see the assertion below.
-    elsewhere: ['Edit rubric', 'Merge duplicates', 'New deep-dive'],
+    // `New deep-dive` left when Markets became the sector directory.
+    elsewhere: ['Edit rubric', 'Merge duplicates'],
     excluded: [],
     embeddedGuards: 1,
     // `Pages · Investor Fund` names /fund/*; the router and shellConfig.js both
@@ -317,7 +320,8 @@ const PROFILES = {
     // from it — so the exclusion was hiding three specified ops that drew
     // nothing, exactly as the investor Research pair did.
     // Reviewed elsewhere-claims, by label — see the assertion below.
-    elsewhere: ['Attribution rules', 'Edit fit rules', 'Re-run stale'],
+    // `Re-run stale` left when Markets became the sector directory.
+    elsewhere: ['Attribution rules', 'Edit fit rules'],
     excluded: [],
     embeddedGuards: 0,
     // The nine partner bodies that take the "no firm attached" branch —
@@ -432,7 +436,8 @@ const PROFILES = {
     // zone the canvas specifies ops for now has them. What remains excluded is
     // the two whose whole page IS the gap statement.
     // Reviewed elsewhere-claims, by label — see the assertion below.
-    elsewhere: ['Ask for consent', 'Re-run stale'],
+    // `Re-run stale` left when Markets became the sector directory.
+    elsewhere: ['Ask for consent'],
     excluded: [
       'expertise/visibility', 'network/organizations',
     ],

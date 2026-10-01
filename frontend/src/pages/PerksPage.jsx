@@ -7,6 +7,7 @@ import {
 import { api } from '../lib/api';
 import { reportError } from '../lib/log';
 import { Card, Pill, SectionLabel, Unrecorded, Unreadable, WorkerRail } from '../ui';
+import './perksDesk.css';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
 import ZoneDraft from '../workspaces/ZoneDraft';
 import { Eyebrow, Instrument } from '../workspaces/canvasKit';
@@ -1598,8 +1599,9 @@ function PerksMarket({ user }) {
   ];
 
   return (
-    <div className="p-6 max-w-6xl mx-auto grid gap-6 lg:grid-cols-[minmax(0,1fr)_var(--fwr-track,286px)]">
-      <main className="min-w-0">
+    <main className="perks-desk" data-testid="perks-desk">
+      <section className="perks-canvas">
+      <div className="perks-main">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900 dark:text-white">
@@ -1673,13 +1675,13 @@ function PerksMarket({ user }) {
             onGoMine={() => { setOpen(null); setTab('mine'); }}
           />
         )}
-      </main>
+      </div>
       <WorkerRail
         workspace="Perks & Products"
         // A literal: the canvas draws this page in violet (#7c3aed), the
         // founder accent, for every role that reaches it.
         role="founder"
-        className="self-start lg:sticky lg:top-4"
+        className="perks-rail"
         stance="You browse and claim"
         note="Nothing here is claimed, rated or chosen for you. Every listing is a partner’s offer that an Axal reviewer approved, and your balance is the sum of your ledger lines."
         coverage={coverage}
@@ -1687,6 +1689,7 @@ function PerksMarket({ user }) {
           ['Expiry reminders', mine.absent.expiry_reminder],
         ].filter(([, why]) => why) : []}
       />
-    </div>
+      </section>
+    </main>
   );
 }

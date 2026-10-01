@@ -93,7 +93,9 @@ multidict==6.9.0
     #   aiohttp
     #   yarl
 oauthlib==4.0.0
-    # via requests-oauthlib
+    # via
+    #   repl-nix-workspace
+    #   requests-oauthlib
 propcache==0.5.4
     # via
     #   aiohttp
@@ -123,7 +125,7 @@ pydantic==2.13.5
     #   sqlmodel
 pydantic-core==2.46.5
     # via pydantic
-pyjwt==2.15.0
+pyjwt==2.15.1
     # via repl-nix-workspace
 pyotp==2.10.0
     # via repl-nix-workspace

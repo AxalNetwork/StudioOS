@@ -683,6 +683,11 @@ export const ONBOARDING_CANVAS_PATHS = [
 
 export const SHARED_FULL_BLEED = [
   '/referrals',
+  // `/perks` is one page for founder, investor, advisor, admin and exploring
+  // (a partner is sent to /offers/perk-deals). It draws its own canvas, the
+  // same way /raise does: the listings fill the column and the Worker rail is
+  // the canvas's right edge, not a card floating in the shell's padded column.
+  '/perks',
   // `/spinout-lab` — the Lab introduction opens with a full-bleed hero that has
   // to run from the sidebar's right border to the viewport edge, which the
   // shell's own `p-4 md:p-6` prevents. Role-agnostic for the same reason

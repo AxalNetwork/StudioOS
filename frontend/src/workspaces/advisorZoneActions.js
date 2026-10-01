@@ -219,13 +219,13 @@ export const ADVISOR_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   'research/markets': [
-    { label: 'Re-run stale', unbuilt: 'signals are gathered on a schedule; nothing re-runs one' },
-    { label: 'Add source', unbuilt: 'sources are not configurable' },
+    { label: 'Re-run stale', unbuilt: 'sector counts are a supplied baseline; nothing re-runs one from here' },
+    { label: 'Add source', unbuilt: 'each sector names its source; nothing here configures one' },
     { label: 'Export', kind: 'export' },
   ],
   'research/companies': [
-    { label: 'Add company', unbuilt: 'the analysis form below adds one' },
-    { label: 'Open in Ask', unbuilt: 'Ask answers from the library, and an analysis is not a library document' },
+    { label: 'Add company', unbuilt: 'the directory is a sourced baseline; nothing here adds a company' },
+    { label: 'Open in Ask', unbuilt: 'Ask answers from the library, and a directory row is not a library document' },
     { label: 'Export', kind: 'export' },
   ],
   // BOTH OPS ARE THE PAGE'S OWN NOW. `Add document` said "the add-document form

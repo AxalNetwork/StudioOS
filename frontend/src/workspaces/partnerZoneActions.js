@@ -290,8 +290,8 @@ export const PARTNER_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   'research/markets': [
-    { label: 'Re-run stale', unbuilt: 'signals are gathered on a schedule; nothing re-runs one' },
-    { label: 'Attach to proposal', unbuilt: 'nothing carries a signal onto a proposal' },
+    { label: 'Re-run stale', unbuilt: 'sector counts are a supplied baseline; nothing re-runs one from here' },
+    { label: 'Attach to proposal', unbuilt: 'nothing carries a sector onto a proposal' },
     { label: 'Export', kind: 'export' },
   ],
   // BOTH OPS ARE THE PAGE'S OWN NOW. `Add document` said "the add-document form

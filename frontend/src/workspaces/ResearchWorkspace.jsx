@@ -189,14 +189,32 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
       // words rather than leaving a reader to find it.
       return (
         <Suspense fallback={<Loading />}>
-          <MarketDirectoryZone />
+          <MarketDirectoryZone
+            role={role}
+            zoneActions={(rows) => zoneActionsFor(role, 'research/markets', { view: {
+              scope: null,
+              zone: 'markets',
+              header: ['Sector', 'Companies', 'Slug'],
+              rows,
+              cells: (x) => [x.name, x.company_count, x.slug],
+            } })}
+          />
         </Suspense>
       );
     }
     if (slug === 'companies') {
       return (
         <Suspense fallback={<Loading />}>
-          <CompanyDirectoryZone />
+          <CompanyDirectoryZone
+            role={role}
+            zoneActions={(rows) => zoneActionsFor(role, 'research/companies', { view: {
+              scope: null,
+              zone: 'companies',
+              header: ['Company', 'Country', 'Founded', 'Website', 'Source'],
+              rows,
+              cells: (x) => [x.name, x.country, x.founded_year, x.website, x.source_name],
+            } })}
+          />
         </Suspense>
       );
     }

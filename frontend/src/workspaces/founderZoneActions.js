@@ -312,13 +312,13 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Clear history', unbuilt: 'the history is stored now and nothing deletes from it — an answer is kept or not kept, and erasing a reader’s own questions is the one irreversible act this page declines to offer', hover: 'Nothing deletes from the history; an answer is kept or it is not.' },
   ],
   'research/markets': [
-    { label: 'New deep-dive', unbuilt: 'signals are gathered on a schedule, not started here' },
+    { label: 'New deep-dive', unbuilt: 'a sector opens its own profile; nothing here starts a separate deep-dive' },
     { label: 'Export', kind: 'export' },
-    { label: 'Cite in deck', unbuilt: 'nothing carries a signal into the deck builder' },
+    { label: 'Cite in deck', unbuilt: 'nothing carries a sector into the deck builder' },
   ],
   'research/companies': [
-    { label: 'Add company', unbuilt: 'the analysis form below adds one' },
-    { label: 'Compare', unbuilt: 'analyses are read one at a time; no comparison view is stored' },
+    { label: 'Add company', unbuilt: 'the directory is a sourced baseline; nothing here adds a company' },
+    { label: 'Compare', unbuilt: 'companies open one at a time; no comparison view is stored' },
     { label: 'Export', kind: 'export' },
   ],
   // THIS KEY WAS MISSING AND THE ROW DREW NOTHING. `profile_zone_actions`

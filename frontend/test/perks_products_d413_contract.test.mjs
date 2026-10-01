@@ -281,6 +281,14 @@ test('a partner on /perks is sent to /offers/perk-deals; the rest use the standa
   assert.match(app, /<Route path="\/offers\/perk-deals" element=\{guard\(\['admin', 'partner'\], <PartnerBucketRoutes \/>\)\} \/>/);
 });
 
+test('the standalone page fills the column, and the rail is the canvas’s right edge', () => {
+  const sidebar = raw('frontend/src/sidebarConfig.js');
+  assert.match(sidebar, /export const SHARED_FULL_BLEED = \[[\s\S]*?'\/perks'/);
+  assert.match(page, /className="perks-canvas"/);
+  assert.match(page, /className="perks-rail"/);
+  assert.ok(!page.includes('max-w-6xl'), 'the listings sit in a centred column beside a detached rail');
+});
+
 test('the page mounts one Worker rail, on /perks only, in the canvas’s violet', () => {
   assert.equal((page.match(/<WorkerRail\b/g) || []).length, 1);
   const guard = page.indexOf('if (embedded) {');

@@ -159,8 +159,8 @@ test('consent is a state that can be withdrawn, not a flag that can vanish', () 
   }
 });
 
-// The four numbers that are already doubled, each with the files that hold
-// them. D168 WIDENED THIS FROM A TWO-NUMBER CHECK, and the reason is the whole
+// The numbers that are already doubled, each with the files that hold them.
+// D168 WIDENED THIS FROM A TWO-NUMBER CHECK, and the reason is the whole
 // argument for a ledger over a list: the assertion below used to read
 // `for (const n of [208, 209])`, so it stated the rule correctly and enforced
 // it only against the two instances its author happened to be adding. A
@@ -179,6 +179,14 @@ const KNOWN_DUPLICATE_NUMBERS = {
   '011': ['011_sms_2fa.sql', '011_subscription_tiers.sql'],
   '068': ['068_news_articles.sql', '068_x_twitter.sql'],
   '118': ['118_captable_scenario_variants.sql', '118_project_product_demo.sql'],
+  // These three pairs are already on main. The research directory, market
+  // directory and fund reports landed on numbers the perk, fit-rule and
+  // capacity migrations already held. Renaming either file of a pair would
+  // edit an applied migration, which the immutability gate refuses, so the
+  // collisions are historical in the same way as the other recorded pairs.
+  '228': ['228_perk_lifecycle_and_grant.sql', '228_research_company_directory.sql'],
+  '229': ['229_fit_rule_signal.sql', '229_research_market_directory.sql'],
+  '230': ['230_partner_capacity.sql', '230_research_fund_reports.sql'],
   '259': ['259_hq_escalations.sql', '259_licence_contracts.sql'],
 };
 
@@ -190,7 +198,7 @@ test('the migration numbers are free and in order', () => {
       `two files numbered ${n} order by filename, which is not a decision anyone made`);
   }
 
-  // NO FIFTH DUPLICATE. Every number is used once, except the four above.
+  // Every number is used once, except the recorded collisions above.
   const byNumber = new Map();
   for (const f of files) {
     const k = f.slice(0, 3);
@@ -200,8 +208,8 @@ test('the migration numbers are free and in order', () => {
   for (const [k, group] of [...byNumber].sort()) {
     if (group.length === 1) continue;
     assert.deepEqual(group.sort(), KNOWN_DUPLICATE_NUMBERS[k],
-      `migration ${k} is used by ${group.length} files and is not one of the four `
-      + 'historical duplicates. Renumber the new one before merge — the runner '
+      `migration ${k} is used by ${group.length} files and is not one of the `
+      + 'recorded historical duplicates. Renumber the new one before merge — the runner '
       + 'orders same-numbered files by filename, which is not a decision anyone made.');
   }
   // …and the ledger itself stays true: an entry whose files are gone or were
