@@ -25,5 +25,8 @@
     "@types/qrcode": "^1.5.5",
     "typescript": "^7.0.2",
     "wrangler": "^4.135.0"
+  },
+  "overrides": {
+    "undici": "7.29.1"
   }
 }
