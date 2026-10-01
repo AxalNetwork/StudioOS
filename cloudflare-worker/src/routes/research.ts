@@ -3874,6 +3874,52 @@ research.post('/funds/sheet/push', async (c) => {
   }
 });
 
+research.patch('/funds/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const uid = c.req.param('uid');
+  const existing = await c.env.DB.prepare(
+    `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, user.id).first<FundRow>();
+  if (!existing) return c.json({ detail: 'Not found' }, 404);
+  const b = await c.req.json<any>().catch(() => ({}));
+  const has = (k: string) => Object.prototype.hasOwnProperty.call(b, k);
+  const next = {
+    name: has('name') ? (clampText(b.name, 200) || existing.name) : existing.name,
+    cheque_min_cents: has('cheque_min_cents') ? clampInt(b.cheque_min_cents) : existing.cheque_min_cents,
+    cheque_max_cents: has('cheque_max_cents') ? clampInt(b.cheque_max_cents) : existing.cheque_max_cents,
+    stage_fit: has('stage_fit') ? oneOf(b.stage_fit, FUND_STAGE_FIT) : existing.stage_fit,
+    path: has('path') ? oneOf(b.path, FUND_PATH) : existing.path,
+    status: has('status') ? (oneOf(b.status, FUND_STATUS) || existing.status) : existing.status,
+    pass_reason: has('pass_reason') ? clampText(b.pass_reason, 1000) : existing.pass_reason,
+    thesis: has('thesis') ? clampText(b.thesis, 2000) : existing.thesis,
+    note: has('note') ? clampText(b.note, 2000) : existing.note,
+    source_url: has('source_url') ? clampText(b.source_url, 500) : existing.source_url,
+  };
+  await c.env.DB.prepare(
+    `UPDATE research_funds
+        SET name = ?, cheque_min_cents = ?, cheque_max_cents = ?, stage_fit = ?, path = ?,
+            status = ?, pass_reason = ?, thesis = ?, note = ?, source_url = ?, updated_at = ?
+      WHERE uid = ? AND owner_user_id = ?`
+  ).bind(
+    next.name, next.cheque_min_cents, next.cheque_max_cents, next.stage_fit, next.path,
+    next.status, next.pass_reason, next.thesis, next.note, next.source_url, nowIso(),
+    uid, user.id,
+  ).run();
+  const row = await c.env.DB.prepare(
+    `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, user.id).first<FundRow>();
+  return c.json(fundDto(row as FundRow));
+});
+
+research.delete('/funds/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const res = await c.env.DB.prepare(
+    `DELETE FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(c.req.param('uid'), user.id).run();
+  if (!res.meta?.changes) return c.json({ detail: 'Not found' }, 404);
+  return c.json({ ok: true });
+});
+
 // Quarterly public reporting snapshots for a founder's fund dossier. A report
 // is not inferred from the fund directory: every metric remains nullable and
 // must carry a source URL when entered.
@@ -3953,58 +3999,14 @@ research.delete('/funds/:uid/reports/:reportUid', async (c) => {
   return c.json({ ok: true });
 });
 
-research.patch('/funds/:uid', async (c) => {
-  const user = await requireAuth(c);
-  const uid = c.req.param('uid');
-  const existing = await c.env.DB.prepare(
-    `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
-  ).bind(uid, user.id).first<FundRow>();
-  if (!existing) return c.json({ detail: 'Not found' }, 404);
-  const b = await c.req.json<any>().catch(() => ({}));
-  const has = (k: string) => Object.prototype.hasOwnProperty.call(b, k);
-  const next = {
-    name: has('name') ? (clampText(b.name, 200) || existing.name) : existing.name,
-    cheque_min_cents: has('cheque_min_cents') ? clampInt(b.cheque_min_cents) : existing.cheque_min_cents,
-    cheque_max_cents: has('cheque_max_cents') ? clampInt(b.cheque_max_cents) : existing.cheque_max_cents,
-    stage_fit: has('stage_fit') ? oneOf(b.stage_fit, FUND_STAGE_FIT) : existing.stage_fit,
-    path: has('path') ? oneOf(b.path, FUND_PATH) : existing.path,
-    status: has('status') ? (oneOf(b.status, FUND_STATUS) || existing.status) : existing.status,
-    pass_reason: has('pass_reason') ? clampText(b.pass_reason, 1000) : existing.pass_reason,
-    thesis: has('thesis') ? clampText(b.thesis, 2000) : existing.thesis,
-    note: has('note') ? clampText(b.note, 2000) : existing.note,
-    source_url: has('source_url') ? clampText(b.source_url, 500) : existing.source_url,
-  };
-  await c.env.DB.prepare(
-    `UPDATE research_funds
-        SET name = ?, cheque_min_cents = ?, cheque_max_cents = ?, stage_fit = ?, path = ?,
-            status = ?, pass_reason = ?, thesis = ?, note = ?, source_url = ?, updated_at = ?
-      WHERE uid = ? AND owner_user_id = ?`
-  ).bind(
-    next.name, next.cheque_min_cents, next.cheque_max_cents, next.stage_fit, next.path,
-    next.status, next.pass_reason, next.thesis, next.note, next.source_url, nowIso(),
-    uid, user.id,
-  ).run();
-  const row = await c.env.DB.prepare(
-    `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
-  ).bind(uid, user.id).first<FundRow>();
-  return c.json(fundDto(row as FundRow));
-});
-
-research.delete('/funds/:uid', async (c) => {
-  const user = await requireAuth(c);
-  const res = await c.env.DB.prepare(
-    `DELETE FROM research_funds WHERE uid = ? AND owner_user_id = ?`
-  ).bind(c.req.param('uid'), user.id).run();
-  if (!res.meta?.changes) return c.json({ detail: 'Not found' }, 404);
-  return c.json({ ok: true });
-});
 
 // Registered AFTER the sheet block. `research_stores_scoping.test.ts` slices
 // every sheet handler from `/funds/sheet/status` up to `patch('/funds/:uid'`
-// and requires each of them to be Super Admin. A GET placed above that line
-// would be counted as a sheet route and either fail the test or, if someone
-// "fixed" it by switching this read to requireSuperAdmin, hide a founder's
-// own dossier from them.
+// and requires each of them to be Super Admin. A founder route placed above
+// that line — the dossier GET, or the quarterly report routes — would be
+// counted as a sheet route and either fail the test or, if someone "fixed"
+// it by switching the read to requireSuperAdmin, hide a founder's own
+// dossier from them.
 research.get('/funds/:uid', async (c) => {
   const user = await requireAuth(c);
   const row = await c.env.DB.prepare(
