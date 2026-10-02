@@ -423,6 +423,7 @@ export default function SettingsPage() {
             <>
               <AuthSection data={data} flash={flash} reload={() => api.getSettings().then(setData)} />
               <PrivacyCoreCard flash={flash} />
+              <CohortAdvisorAccessCard flash={flash} />
               <InvestorSignalsContributionCard flash={flash} role={data?.role} />
               <InvestorMyThesisCard flash={flash} role={data?.role} />
               <InvestorThesisEditorCard flash={flash} role={data?.role} />
@@ -3823,6 +3824,77 @@ function DigestQuietHoursCard({ flash }) {
         </div>
       </Card>
     </>
+  );
+}
+
+// D492 (U6) — the advisors a Spin-Out Lab cohort assignment lets read you.
+// An assignment shows an advisor the cohort's founders: name, email and weekly
+// progress. Each founder is told when that starts and ends, and can hide
+// themselves from one advisor here. The card draws nothing for someone in no
+// assigned cohort — an empty list is not a setting worth showing.
+function accessDay(v) {
+  const iso = toUtcInstant(v);
+  const d = iso ? new Date(iso) : null;
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString() : String(v ?? '');
+}
+
+function CohortAdvisorAccessCard({ flash }) {
+  const [items, setItems] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.myCohortAdvisorAccess()
+      .then(r => { if (!cancelled) setItems(r?.items || []); })
+      .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load advisor access'); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const toggle = async (advisorUserId, visible) => {
+    setBusy(advisorUserId);
+    try {
+      const r = await api.setCohortAdvisorVisibility(advisorUserId, visible);
+      setItems(r?.items || []);
+      flash(visible ? 'This advisor can see you again' : 'Hidden from this advisor');
+    } catch (e) {
+      flash(e.message || 'Failed to save', 'error');
+    } finally { setBusy(null); }
+  };
+
+  if (err) return <Card title="Cohort advisors"><div className="text-sm text-red-600">{err}</div></Card>;
+  if (!items || items.length === 0) return null;
+
+  return (
+    <Card title="Cohort advisors"
+      description="Advisors assigned to your Spin-Out Lab cohort can see your name, email address and weekly progress. You can hide yourself from any one of them.">
+      <ul className="divide-y divide-gray-200 dark:divide-gray-700" data-testid="cohort-advisor-access">
+        {items.map((it) => {
+          const live = !it.ended_at && (it.can_see || it.hidden_at);
+          return (
+            <li key={`${it.advisor_user_id}-${it.cohort_cycle_id}-${it.assigned_at}`} className="py-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{it.advisor_name || <Unrecorded />}</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  {it.cohort_label} · assigned {accessDay(it.assigned_at)}
+                  {it.ended_at ? ` · access ended ${accessDay(it.ended_at)}` : ''}
+                </div>
+                <div className="text-xs mt-0.5 text-gray-600 dark:text-gray-300">
+                  {it.can_see ? 'Can see you' : it.hidden_at ? 'Hidden by you' : 'No longer has access'}
+                </div>
+              </div>
+              {live && (
+                <button type="button" disabled={busy === it.advisor_user_id}
+                  onClick={() => toggle(it.advisor_user_id, !it.can_see)}
+                  className="shrink-0 px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 disabled:opacity-50">
+                  {it.can_see ? 'Hide me' : 'Let them see me'}
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }
 

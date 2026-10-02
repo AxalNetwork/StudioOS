@@ -10,6 +10,7 @@ import BucketBoard from './BucketBoard';
 import { boardFor } from './boards';
 import { api } from '../lib/api';
 import { NETWORK_ORG_COPY, ORG_BACKED } from './noStoreCopy';
+import RelationshipRequests from '../components/RelationshipRequests';
 
 const FounderNetworkRelationships = lazy(() => import('../pages/founder/FounderNetworkRelationships'));
 const FounderNetworkIntroductions = lazy(() => import('../pages/founder/FounderNetworkIntroductions'));
@@ -327,6 +328,9 @@ export default function NetworkWorkspace({ role = 'founder' }) {
       // names the company instead of restating the rule.
       intro={isRoot ? 'Work your relationships — people, introductions, and the organizations behind them.' : (INTRO[slug] || INTRO.relationships)}
     >
+      {/* D493 — requests to record a relationship, either way, on every
+          licence's Relationships zone. Draws nothing when none are open. */}
+      {slug === 'relationships' && <RelationshipRequests />}
       {body}
     </WorkspaceShell>
   );

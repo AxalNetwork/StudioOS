@@ -1885,6 +1885,24 @@ export default {
             else console.warn(`[cron] usage report not sent ${detail}: ${r.reason}`);
           } catch (e) { console.error('[cron] usage report failed', e); }
         }
+        // D492 / D493 — the nightly consent sweeps at 05:05 UTC, per
+        // deployment (both act on this deployment's own rows). Both are
+        // idempotent ledgers: a founder is told once per advisor-cohort
+        // episode, a pre-368 relationship's subject once. The same sweeps also
+        // run on the reads that matter, so this is the backstop for people
+        // who open neither page.
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 5) {
+          try {
+            const { syncCohortAdvisorNotices } = await import('./services/cohortAdvisorAccess');
+            const r = await syncCohortAdvisorNotices(env, { limit: 2000 });
+            if (r.started || r.ended) console.info(`[cron] cohort advisor notices started=${r.started} ended=${r.ended}`);
+          } catch (e) { console.error('[cron] cohort advisor notices failed', e); }
+          try {
+            const { noticeLegacyRelationships } = await import('./routes/partnernet');
+            const r = await noticeLegacyRelationships(env, 500);
+            if (r.rows) console.info(`[cron] legacy relationship notices rows=${r.rows} notices=${r.notices}`);
+          } catch (e) { console.error('[cron] legacy relationship notices failed', e); }
+        }
         // The 04:50 UTC Refer & Earn payout auto-approval sweep was removed
         // with Stripe Connect in the referrals redesign. Referral rewards are
         // milestone labels reviewed by a human in the admin queue, so there is

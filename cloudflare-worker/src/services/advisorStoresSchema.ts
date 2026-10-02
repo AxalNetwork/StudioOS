@@ -135,6 +135,28 @@ const TABLES = [
      ON advisor_cohort_assignments(advisor_user_id, is_active)`,
   `CREATE INDEX IF NOT EXISTS idx_advisor_cohort_assignments_cycle
      ON advisor_cohort_assignments(cohort_cycle_id, is_active)`,
+  // 367 (D492, U6) — the founder's notice ledger and per-advisor opt-out.
+  `CREATE TABLE IF NOT EXISTS cohort_advisor_notices (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     assignment_id INTEGER NOT NULL REFERENCES advisor_cohort_assignments(id),
+     founder_user_id INTEGER NOT NULL REFERENCES users(id),
+     kind TEXT NOT NULL CHECK (kind IN ('started', 'ended')),
+     episode_at TEXT NOT NULL,
+     notified_at TEXT NOT NULL DEFAULT (datetime('now')),
+     UNIQUE (assignment_id, founder_user_id, kind, episode_at)
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_cohort_advisor_notices_founder
+     ON cohort_advisor_notices (founder_user_id, assignment_id)`,
+  `CREATE TABLE IF NOT EXISTS cohort_advisor_optouts (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     founder_user_id INTEGER NOT NULL REFERENCES users(id),
+     advisor_user_id INTEGER NOT NULL REFERENCES users(id),
+     opted_out_at TEXT NOT NULL DEFAULT (datetime('now')),
+     withdrawn_at TEXT,
+     UNIQUE (founder_user_id, advisor_user_id)
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_cohort_advisor_optouts_advisor
+     ON cohort_advisor_optouts (advisor_user_id, withdrawn_at)`,
 ];
 
 async function addMissingColumns(
