@@ -102,13 +102,24 @@ tickets.post('/sync', async (c) => {
     unsyncedCount = pending.length;
 
     let wantBackfill = false;
-    try { wantBackfill = !!(await c.req.json())?.backfill; } catch { /* no body: report only */ }
+    try { wantBackfill = (await c.req.json())?.backfill === true; } catch { /* no body: report only */ }
 
     if (wantBackfill && githubConfigured(c.env)) {
       // Bounded per call so one click cannot open an unbounded number of
       // issues; the count that comes back tells the caller whether to run
       // it again.
       for (const ticket of pending.slice(0, 25)) {
+        // Two admins may retry together. Claim the row before contacting
+        // GitHub; an interrupted request can be retried after five minutes.
+        // Fresh submissions take the same lease while their create runs.
+        const claimed = await sql`UPDATE tickets
+          SET github_sync_status = 'syncing', github_sync_attempted_at = datetime('now')
+          WHERE id = ${ticket.id} AND github_issue_number IS NULL
+            AND (github_sync_status IS NULL OR github_sync_status != 'syncing'
+              OR github_sync_attempted_at IS NULL
+              OR datetime(github_sync_attempted_at) < datetime('now', '-5 minutes'))
+          RETURNING id`;
+        if (!claimed.length) continue;
         const body = `${ticket.description || ''}\n\n---\n**Submitted by:** ${ticket.submitted_by || 'User'}\n**Priority:** ${ticket.priority}\n**Type:** ${ticket.type || 'task'}\n**Source:** StudioOS (backfilled)\n\n${syncMarker(ticket.id)}`;
         const gh = await createIssue(c.env, {
           title: ticket.title,
@@ -169,7 +180,7 @@ tickets.post('/', async (c) => {
   const sql = getSQL(c.env);
   await ensureTicketSyncSchema(c.env);
 
-  const [ticket] = await sql`INSERT INTO tickets (title, description, priority, type, submitted_by, user_id, project_id) VALUES (${data.title}, ${data.description}, ${data.priority}, ${data.type}, ${user.name || user.email}, ${user.id}, ${data.project_id}) RETURNING *`;
+  const [ticket] = await sql`INSERT INTO tickets (title, description, priority, type, submitted_by, user_id, project_id, github_sync_status, github_sync_attempted_at) VALUES (${data.title}, ${data.description}, ${data.priority}, ${data.type}, ${user.name || user.email}, ${user.id}, ${data.project_id}, 'syncing', datetime('now')) RETURNING *`;
 
   let githubIssue: any = null;
   let githubSyncError: string | null = null;
