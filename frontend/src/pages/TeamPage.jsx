@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
@@ -89,6 +90,36 @@ export default function TeamPage() {
                   {para}
                 </p>
               ))}
+            </div>
+          </section>
+
+          <section className="mb-16 grid gap-6 md:grid-cols-2" aria-label="Firm information">
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8">
+              <h2 className="text-xl font-bold">The firm</h2>
+              <p className="mt-4 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+                The platform is operated by Axal VC Management LLC, a Delaware company.
+                Axal VC Holdings LLC owns the brand and platform intellectual property.
+                Axal VC GP LLC is the general partner of Axal VC Fund I, LP.
+              </p>
+              <Link to="/privacy" className="mt-4 inline-block text-sm font-medium text-violet-700 dark:text-violet-300 hover:underline">
+                How the entities handle your information
+              </Link>
+            </div>
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8">
+              <h2 className="text-xl font-bold">Investment philosophy</h2>
+              <p className="mt-4 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+                Our thesis connects digital transformation, structured execution,
+                privacy and intellectual property, and stewardship of living systems.
+                Allocation weights for these themes are not recorded.
+              </p>
+              <h3 className="mt-6 font-semibold">Fund I terms</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+                Public Fund I terms are not recorded here. Contact the team for
+                the applicable offering documents.
+              </p>
+              <Link to="/contact" className="mt-4 inline-block text-sm font-medium text-violet-700 dark:text-violet-300 hover:underline">
+                Contact the team
+              </Link>
             </div>
           </section>
 

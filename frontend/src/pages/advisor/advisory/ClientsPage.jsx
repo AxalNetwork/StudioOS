@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Mail } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { useAuth } from '../../../hooks/useAuthSync';
+import PrivateClientNote from './PrivateClientNote';
 import {
   Avatar, Chip, Section, SlideOver, EmptyState, StatCard, SearchInput,
   StatusBadge, RowCard, formatDateTime, formatRelativeDay, clientsFromBookings,
@@ -14,6 +16,7 @@ import {
 // answer: an advisor's client list IS their booking history. clientsFromBookings
 // groups on founder_user_id so two people sharing a display name stay distinct.
 export default function ClientsPage() {
+  const { user } = useAuth();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [noProfile, setNoProfile] = useState(false);
@@ -136,10 +139,7 @@ export default function ClientsPage() {
               </div>
             </Section>
 
-            <p className="text-[11px] text-gray-400 dark:text-gray-500">
-              Private per-client notes are not stored yet — what you see here is
-              the booking record itself.
-            </p>
+            {user?.role === 'advisor' && <PrivateClientNote key={`${user.id}:${open.id}`} clientId={open.id} />}
           </div>
         )}
       </SlideOver>

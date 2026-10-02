@@ -967,6 +967,65 @@ async function requireMyAdvisor(c: Context<{ Bindings: Env }>, user: User): Prom
   return m;
 }
 
+// Private roster notes. The owner comes only from authentication; a client ID
+// is usable only if that person has booked this advisor. These are never added
+// to the shared booking DTO or the founder's client brief.
+async function requireRosterClient(c: Context<{ Bindings: Env }>) {
+  const user = await requireAuth(c);
+  if (String(user.role).toLowerCase() !== 'advisor') throw c.json({ detail: 'Advisor required' }, 403);
+  const advisor = await requireMyAdvisor(c, user);
+  if (advisor.user_id !== user.id) throw c.json({ detail: 'Your advisor profile is not attached to this account' }, 403);
+  const clientId = Number(c.req.param('clientId'));
+  if (!Number.isSafeInteger(clientId) || clientId <= 0) throw new Error('clientId must be a positive user ID');
+  const booking = await c.env.DB.prepare(
+    'SELECT id FROM advisor_bookings WHERE advisor_id = ? AND founder_user_id = ? LIMIT 1'
+  ).bind(advisor.id, clientId).first<{ id: number }>();
+  if (!booking) throw c.json({ detail: 'This client is not in your booking roster' }, 403);
+  return { ownerId: user.id, clientId };
+}
+
+type ClientNoteRow = { uid: string; body: string; updated_at: string };
+async function loadClientNote(env: Env, ownerId: number, clientId: number) {
+  return env.DB.prepare(
+    'SELECT uid, body, updated_at FROM advisor_client_notes WHERE advisor_user_id = ? AND client_user_id = ?'
+  ).bind(ownerId, clientId).first<ClientNoteRow>();
+}
+
+advisors.get('/me/client-notes/:clientId', async (c) => {
+  try {
+    const { ownerId, clientId } = await requireRosterClient(c);
+    return c.json({ client_user_id: clientId, note: await loadClientNote(c.env, ownerId, clientId) });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.put('/me/client-notes/:clientId', async (c) => {
+  try {
+    const { ownerId, clientId } = await requireRosterClient(c);
+    const input = await c.req.json().catch(() => null);
+    if (typeof input?.body !== 'string' || !input.body.trim() || input.body.length > 8000) {
+      return c.json({ detail: 'A note needs 1–8000 characters. Use DELETE to remove it.' }, 400);
+    }
+    const now = nowIso();
+    await c.env.DB.prepare(
+      `INSERT INTO advisor_client_notes (uid, advisor_user_id, client_user_id, body, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (advisor_user_id, client_user_id) DO UPDATE SET
+         body = excluded.body, updated_at = excluded.updated_at`
+    ).bind(newUid(), ownerId, clientId, input.body.trim(), now, now).run();
+    return c.json({ client_user_id: clientId, note: await loadClientNote(c.env, ownerId, clientId) });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.delete('/me/client-notes/:clientId', async (c) => {
+  try {
+    const { ownerId, clientId } = await requireRosterClient(c);
+    await c.env.DB.prepare(
+      'DELETE FROM advisor_client_notes WHERE advisor_user_id = ? AND client_user_id = ?'
+    ).bind(ownerId, clientId).run();
+    return c.json({ client_user_id: clientId, note: null });
+  } catch (e) { return mapError(c, e); }
+});
+
 // ---------------------------------------------------------------------------
 // 203 — Services. What an advisor offers, and what they charge for it.
 // ---------------------------------------------------------------------------

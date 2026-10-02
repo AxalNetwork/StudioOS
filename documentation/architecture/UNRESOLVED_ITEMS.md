@@ -7,7 +7,7 @@ structural damage across multiple workspaces?"* Everything that cleared that bar
 is below; everything that did not was decided and written down in
 `ASSUMPTIONS_LOG.md` instead.
 
-Eleven items. Each names the evidence, what is actually blocked, and what a wrong
+Eleven historical items. Each names the evidence, what is actually blocked, and what a wrong
 guess would cost — because "blocked" without a cost is just a to-do. U9 and
 U10 are operations questions rather than routing ones — who serves `axal.vc`
 is settled (`DECISIONS.md` D34). Both were resolved on 2026-09-03: U9 (the
@@ -17,9 +17,99 @@ the headers present on twenty-six shell routes across both hosts. They stay
 here because `CLAUDE.md` fact 4 points at them, and because how U10 was
 answered is the point: by a request to the edge, not a reading of the tree.
 
+## Current review — 2026-10-02
+
+Checked against the current source and decision records, rather than treating
+the original findings as a fresh backlog. The dated updates below supersede the
+historical evidence in each item. Read-only Cloudflare API inventory now verifies
+HQ's custom domains and the retired Pages project's absence. A fresh public smoke
+run also verifies live response headers. Authenticated branch isolation and open
+GitHub issues remain outside that evidence.
+
+| Item | Current status | Remaining work |
+| --- | --- | --- |
+| U1 | Branch isolation and read-only verification command implemented; no branch target found in registry or API inventory | A real branch declaration/deployment is still needed. D1 read access is denied by the current token. Public smoke checks and authenticated isolation remain separate evidence requirements. |
+| U2 | Implemented | The subsidiary has an Approvals destination and an eleven-lane board; do not build another. |
+| U3 | Implemented with recorded decisions | Model choices, meaningful mode controls, router-sourced rates/caps, and the document-type registry already exist. |
+| U4 | Retirement resolved; private client notes implemented locally | Migration 369 and the advisor-owned note editor require the normal migration/deployment flow to reach production. |
+| U5 | Firm information implemented; candidate offering document inspected and unsuitable for public reuse | The retrieved booklet contains placeholders, is marked confidential, and names a different fund/GP from the canonical entity map. Supply or approve a completed public summary, allocation weights and any response-time commitment. |
+| U6 | Implemented on current main under D492 | Existing and later cohort members receive notices; founders can hide themselves from individual advisors in Account → Security & Privacy. |
+| U7 | UI/API mismatch fixed | Advisors can open Market Intelligence from Research under the existing API entitlement. |
+| U8 | Implemented on current main under D493 | New records require acceptance; existing records remain accepted and their subjects receive a notice. Preserve the request workflow. |
+| U9 | Resolved in code and verified externally | The complete Cloudflare Pages inventory has no `studioos` project. |
+| U10 | Verified again by live measurement | Public smoke passes on both production hosts; this is independent of authenticated branch verification. |
+| U11 | Resolved | Keep the undeclared-token regression guard. |
+
+The unresolved policy choices are not permission to select commercial terms,
+publish a response-time promise, or infer consent from an existing database row.
+
+**Validation before integrating current main — 2026-10-02.** The repository's full
+`npm run test:drift` gate exits 0: 9,339 tests pass and three are skipped, with
+schema/API guards, a temporary frontend build, Worker/frontend type checks,
+lint and dark-mode checks passing. The focused advisor-store run passed
+46 tests, including private-note isolation and assignment history. U6/U8 were
+subsequently superseded by current main as recorded below; integration validation
+will be recorded separately.
+Migration 369 was applied only to the local emulator. Current main independently fixes the timestamp-dependent fund-registry
+privacy assertion; its fix is retained without another local change. Public live
+smoke evidence is recorded separately under U10. Source changes remain local
+and have not been deployed by this session.
+
 ---
 
 ## U1 — There is one `admin` sidebar, and the brief needs two
+
+**API VERIFICATION 2026-10-02 — Cloudflare is connected; no branch found.**
+The configured API token verifies as active. The configured account-ID value
+was initially invalid; the account-list API returned one account, whose actual ID was used
+only as a command-scoped override for read-only checks. The environment draft
+now suggests the correct ID and allows `axal.vc` and `app.axal.vc` for public
+smoke checks. Subsequent commands observe a valid account ID and public smoke
+requests succeed through the configured proxy. The runtime readiness metadata
+currently says `unknown`, so those successful requests are the evidence, not a
+claim that setup readiness is confirmed. No credential values are recorded here.
+
+The Workers inventory includes HQ `studioos`, PR previews and the tail consumer,
+but no other `studioos-<code>` branch candidate. The complete custom-domain
+inventory has exactly the two HQ domains for StudioOS, both attached to
+`studioos` in production. HQ's settings expose its D1/KV bindings and no branch
+service binding. These observations support the missing-target finding; they
+do not prove tenant isolation. The D1 database-list API returned HTTP 401,
+Cloudflare code 10000 (`Authentication error`), so database inventory is
+unverified and needs D1 read permission. `HQ_RPC_SECRET` and
+`BRANCH_SECRET_BUNDLE` remain unconfigured. No resource was provisioned, changed,
+deleted, migrated remotely or deployed during these checks.
+
+**VERIFICATION WORKFLOW 2026-10-02 — repeatable without provisioning.**
+`scripts/check-branch-live.mjs` validates real declarations, refuses storage
+shared with HQ or another branch, and invokes the existing public live-smoke
+runner only for declared live/provisioning hosts. `--plan` performs no network
+requests. The current example-only checkout returns exit 2 with a missing-target
+explanation, not a passing zero-target result. `infra/branches/README.md` now
+documents how to run it and what separate authenticated evidence is required.
+At that point there was no real branch or configured Cloudflare identity to
+verify. The API check above supersedes the credential finding; supplying a
+declaration is not itself proof of deployment.
+
+**EARLIER OPERATIONAL CHECK 2026-10-02 — no live target declared.**
+`infra/branches/` contains only `_example.json` and its README. The attached
+environment declares no credentials, and the runtime has no
+`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `HQ_RPC_SECRET` or
+`BRANCH_SECRET_BUNDLE` binding. Local branch-isolation checks run in the
+repository gate; they do not prove that a subsidiary exists in production.
+Live verification needs a real branch declaration and configured read access.
+Provisioning would be a separate external action, not an inferred setup step.
+
+**REVIEW 2026-10-01 — implementation and operations are separate.** The old
+title no longer describes the UI: `frontend/src/sidebarConfig.js` has a branch
+shell, and branch approvals, contracts, seats and support have their own routes.
+D130, D150 and D215 record work that supersedes the old blanket blocker below.
+The chosen tenancy boundary remains a Worker and D1 per branch (D.2), not a new
+`licence_id` filter on every HQ query. `infra/branches/README.md` documents the
+provisioning workflow. Repository code and local tests cannot prove a branch is
+provisioned or that its production credentials work. Do not call U1 fully
+closed without that operational evidence, and do not block existing branch
+pages on the historical HQ schema limitation.
 
 **STATUS 2026-09-03 — the sidebar half is done; the scoping half is still open.** #416 split the shells: `shellRoleFor(role, user, hqView)` in `frontend/src/lib/shellRole.js` picks the eight-row HQ sidebar for a `super_admins` holder and the subsidiary sidebar for every other admin, and View-as lets the holder preview the subsidiary shell without impersonating. Nothing below this line about scoping has changed: no row names its licence, so every per-subsidiary figure on `/hq` (#417) and `/admin/security` (#418) renders Not recorded with this item as the reason, and the tenant switcher on `/hq` narrows the loaded payload client-side and says so.
 
@@ -95,6 +185,15 @@ paragraph.
 
 ## U2 — "Subsidiary Admin › Approvals" is a destination that does not exist
 
+**RESOLVED IN CODE — reviewed 2026-10-01.** The branch sidebar links to
+`/branch/approvals`; `frontend/src/pages/branch/BranchApprovals.jsx` reads the
+board served by `cloudflare-worker/src/routes/branch_approvals.ts`. D130 built
+the board and D215 widened it to eleven lanes. Decisions stay with each lane's
+existing console, including the LP application console; the board is not a
+second writer. Covered by the `branch_approvals_d130` and
+`branch_approvals_s16_d215` Worker tests and their frontend counterparts.
+The evidence and dependency on U1 below describe the original state.
+
 **Evidence.** The brief routes GP Application Review to *Subsidiary Admin ›
 Approvals, never LP*. Grepping `sidebarConfig.js` for `Approvals` returns
 nothing: **no role has an Approvals group.** The surface itself is live at
@@ -118,6 +217,29 @@ it into both admin workspaces later, or moving a live admin route twice.
 
 ## U3 — The five canvas-vs-code collisions (task #199)
 
+**RESOLVED IN CODE — reviewed 2026-10-01.** These are no longer five unanswered
+decisions. The implemented contracts are:
+
+1. **Model choice:** D45 supersedes D13's removal. `aiRouter.ts` validates
+   requested models against each task's `alternates`, refuses unlisted models,
+   and offers no alternatives for safety or embedding. `railModels.js` derives
+   the menu from `/api/ai/pricing`.
+2. **Mode controls:** D17 permits a control only where behaviour branches.
+   `eadwynConfig.js` now declares real choice surfaces and desk-specific
+   behaviour (D424); other surfaces remain fixed. Do not add a toggle to every
+   page merely to match the old canvas.
+3. **Rates:** `/api/ai/pricing` exposes the router's own price table. The rail
+   consumes it; it does not maintain the canvas's separate dollar figures.
+4. **Contract taxonomy:** D454 implemented `/api/admin/contracts/doc-types`
+   and HQ's read-only registry over the existing four governance layers.
+5. **Caps:** `/api/ai/me/spend` returns the enforced caps through `aiSpend.ts`;
+   `eadwynConfig.js` reads `month.cap_usd`. This is the configured cap, not a new
+   fixed $40/month billing promise.
+
+Existing coverage includes `worker_rail_models`, `worker_rail_honesty_d400`,
+`founder_desk_rail_anatomy_d424`, `ai_spend_self`, `ai_router_prices`, and
+`admin_contracts_doc_types_d454`. The collision table below is historical.
+
 Recorded in full in `DECISIONS.md`; restated here because they gate three
 integration tasks and none can be settled by reading the repository.
 
@@ -134,6 +256,24 @@ integration tasks and none can be settled by reading the repository.
 ---
 
 ## U4 — RESOLVED 2026-09-02 — the `/office-hours` freeze is lifted, and the page is retired
+
+**IMPLEMENTATION 2026-10-02 — the remaining private-client-notes request.**
+Migration 369 and the fresh-database baseline now declare
+`advisor_client_notes`, one note per advisor-user/client-user pair. The new
+`GET`/`PUT`/`DELETE /api/advisors/me/client-notes/:clientId` routes take the owner
+only from authentication, require the current advisor role and an owned advisor
+profile, and admit only clients in that advisor's booking history. Empty or
+oversized writes are refused; deletion is explicit. Another advisor who has
+booked the same client has their own independent note. Neither founders nor
+admins can use these routes, and the shared booking DTO is unchanged.
+
+The existing Clients slide-over now loads, edits and deletes the private note.
+Switching clients resets the editor; load failures block writing, and save
+failures retain the draft. The note is not added to client briefs, public
+profiles, notifications or sent work products. Actual-route SQLite tests verify
+cross-advisor isolation, role changes, profile ownership, validation, deletion,
+and absence from founder booking responses. These are local source changes;
+the ordinary migration and deployment flow is still required for production.
 
 **What it was.** Two standing instructions pointed opposite ways. One: *"Keep
 `/studio`, `/office-hours` untouched."* The other: the Advisory Practice canvas
@@ -165,14 +305,31 @@ So it was retired rather than upgraded. The storefront half is `/expertise/*`
 redirects to `/practice/opportunities`; its one capability that lived nowhere
 else, the advisor's own review of a session, moved to Practice · Delivery.
 
-**Still not modeled, and named so it stays visible:** the client roster's
-private notes.
+**Historical gap, addressed by the implementation above:** the client roster's
+private notes were not modeled at retirement.
 
 **Unblocked:** #124.
 
 ---
 
 ## U6 — A cohort's founders never learn that an advisor can read them
+
+**IMPLEMENTED ON MAIN 2026-10-02 — D492 supersedes the earlier local notice work.**
+PRs #964 and #966 implement the owner's notify-and-opt-out decision. Migration
+367 declares the notice ledger and per-founder/advisor visibility choices.
+`cohortAdvisorAccess.ts` handles existing assignments, later entrants and ended
+access, with sweeps on relevant reads and a nightly job. The Settings page
+provides the founder's access list and hide/undo control; advisor cohort reads
+exclude hidden founders. This session's simpler local notices and duplicate
+access list were removed when reconciling with current main, so there is one
+implementation. The new private client notes remain separate from cohort access.
+
+**HISTORICAL REVIEW 2026-10-01 — still open at that time.** The assignment create/reactivate and end
+handlers in `cloudflare-worker/src/routes/advisors.ts` record the advisor,
+cohort, assigning admin and timestamps, but do not notify the affected founders
+or obtain their individual consent. Existing proof consents and client grants
+are different grants; their presence does not close this item. A decision must
+also cover existing assignments, later cohort entrants and ended access.
 
 > **UPDATE 2026-09-07 — the precedent this item wanted now ships.** U6's third
 > reading proposes that founders consent per advisor, and names
@@ -215,6 +372,52 @@ shipped without the question being asked, not because a surface is waiting.
 
 ## U5 — Fund I terms are facts only the firm holds
 
+**SOURCE CHECK 2026-10-02 — the candidate booklet does not settle this item.**
+Retrieved the repository's Git LFS object for
+`attached_assets/StudioOS_AI_Fund_I_Subscription_Booklet_LPA_1777726603311.docx`
+using existing Git authentication and verified its SHA-256 against the tracked
+LFS pointer:
+`7cee47a8236198e1be0cbd3882b895d33c83c4b30d05efa5f1b36107f01b76e0`.
+The document names **StudioOS AI Venture Fund I, LP** and **StudioOS AI GP, LLC**,
+where the canonical legal entity map names **Axal VC Fund I, LP** and
+**Axal VC GP LLC**. Its target-size and effective-date fields are unfilled, and
+it is marked **CONFIDENTIAL — NOT FOR DISTRIBUTION**. Repository presence and
+successful retrieval do not establish completed, approved public offering
+terms. No document contents or financial terms were added to the public page.
+
+To close the content gap, provide a completed public summary for the intended
+fund, with its source/effective date, confirmed allocation weights (or a
+decision to omit them), and any approved contact-response commitment. This is
+an input requirement; neither the confidential template nor the Spin-Out Fund
+model establishes which terms belong on the firm's public page.
+
+**IMPLEMENTATION 2026-10-02 — the existing firm narrative is retained.**
+`TeamPage.jsx`, served at `/about`, already contains a manifesto, investment
+thesis and the managing partner's account of the firm's mission. It now also
+identifies the operator, IP owner and general partner using the entity roles
+already recorded in `CLAUDE.md` and the privacy page. Its philosophy section
+summarises the existing manifesto, states that theme allocation weights are not
+recorded, and directs visitors to the team for applicable offering documents
+instead of copying another fund's terms onto this page. The existing public
+contact form is linked from there.
+
+`ContactPage.jsx` no longer promises a one-business-day reply. No replacement
+deadline is published: the old five-day brief and the former one-day page are
+not evidence of an approved or enforced SLA. Remaining work is to confirm the
+intended Fund I, approve its public terms and allocation weights, and specify
+any response-time commitment. The founder and partner application pages have
+separate review-time copy; this change does not establish a policy for them.
+
+**REVIEW 2026-10-01 — the claim that no fund terms exist is stale.**
+`frontend/src/lib/spinoutFundModel.js` already holds the Spin-Out Fund I model;
+`fundBriefViewModel.js` derives the brief from it and `fund_brief_model` tests
+that contract. That does not establish that the broader firm's requested Fund I
+is the same offering or that its terms may be republished on the public firm
+page. At the time of this review, `ContactPage.jsx` promised a reply within **one** business day,
+while this brief asks for **five**. The contact route submits to a GitHub team
+queue; that is not evidence of an enforced response SLA. Confirm the intended
+fund, approved narrative and response promise before adding more public claims.
+
 **Evidence.** The Axal VC Website canvas asks for the Firm narrative — mission,
 a weighted investment philosophy, and Fund I terms — plus a contact form
 promising a five-business-day reply. None of that exists anywhere in the
@@ -231,6 +434,20 @@ inventing them. The reply-time promise is a commitment, not a field —
 ---
 
 ## U7 — The worker grants advisors the full market lens; the UI does not let them in
+
+**IMPLEMENTATION 2026-10-02 — aligned with the existing API entitlement.**
+The `/market-intel` route now admits advisors and renders the page without a
+founder workspace wrapper. The advisor's Research overview links to it. The
+API tier predicate and its existing advisor bypass are unchanged: this fixes
+a UI restriction on access the server already grants, rather than creating a
+new API entitlement.
+
+**HISTORICAL REVIEW 2026-10-01 — reproducible at that time.**
+`util/marketIntelTier.ts` and `MarketIntelPage.jsx` both include advisors in the
+full-lens bypass, while the `/market-intel` route in `App.jsx` still guards
+`labRoles(['admin', 'partner', 'investor'])`. The disagreement is at the route
+boundary, not a missing page or missing tier implementation. Preserve the
+existing entitlement until its intended direction is confirmed.
 
 **Evidence.** `util/marketIntelTier.ts:20-23` lists the roles that bypass the
 tier gate on market intelligence:
@@ -259,6 +476,28 @@ touch `market_intel`.
 ---
 
 ## U8 — One person writes a relationship record about another, and nobody asks them
+
+**IMPLEMENTED ON MAIN 2026-10-02 — D493 supersedes the earlier local creation notice.**
+PRs #964 and #966 implement relationship requests and acceptance under migration
+368. Pending requests remain outside the shared books, scores and interactions
+until accepted. The counterpart may accept or decline; withdrawal and removal
+have explicit routes. Existing rows stay accepted under the recorded owner
+choice and receive a legacy notice. This session's immediate shared-record
+creation notice was removed, preserving that workflow and its regression tests.
+
+**HISTORICAL REVIEW 2026-10-01 — consent remained open; the schema warning was stale.**
+`partnernet.ts` still creates a relationship without the other party's response
+and lists it for either participant. D465 subsequently added interaction logs
+and reminders; those do not supply relationship consent. Before changing this
+contract, define visibility for existing rows, pending rows and their associated
+events and interactions, rather than backfilling acceptance that never occurred.
+
+The adjacent schema problem below is already addressed: `schema_baseline.sql`
+declares both `partner_relationships` and `relationship_events` and their
+indexes; `partnernet.ts` uses `MIGRATED`, a `WeakMap` keyed by `bindingKey(env)`,
+with `runSchemaBootstrap`. A runtime safety net over declared baseline tables
+is allowed by D235. There is no reason to add duplicate tables or restore the
+old module-global latch as part of this item.
 
 **Evidence.** `POST /api/partnernet/relationships` (`routes/partnernet.ts:236`)
 is `requireAuth` with a rate limit and no consent step. It verifies the other
@@ -294,6 +533,13 @@ them lazily at `routes/partnernet.ts:59-70`, guarded by a module-global
 ---
 
 ## U9 — The Cloudflare Pages mirror and its workflow: keep as a preview/rollback copy, or retire
+
+**VERIFIED EXTERNALLY 2026-10-02.** The read-only Cloudflare Pages project-list
+API succeeded for the same account holding the HQ Worker. Its response reports
+one page, two projects and two total projects, with no `studioos` project or
+`studioos-2p8.pages.dev` domain. The Worker-domain inventory independently maps
+both production hosts to `studioos`. The retired Pages project is absent at
+the time of this check; no deletion was needed or performed.
 
 **RESOLVED 2026-09-03 — retired** (`DECISIONS.md` D36). The owner chose
 Workers Static Assets as the only host. `.github/workflows/cloudflare-pages-deploy.yml`
@@ -346,6 +592,16 @@ way.
 ---
 
 ## U10 — Whether the Worker-served SPA HTML carries the security headers cannot be read from this repository
+
+**VERIFIED AGAIN 2026-10-02.** Ran the repository's public smoke command through
+the configured environment proxy:
+`node --use-env-proxy scripts/check-spa-live.mjs`. It exited 0 and reported
+57 SPA shell/security-header passes across `axal.vc` and `app.axal.vc`, 32
+referenced asset passes, and four API health/rate-limit-routing passes. It also
+checked the public subscription routing exception. This is direct evidence of
+HSTS, nosniff, DENY framing and the required referrer policy on those shell
+responses. It does not establish authenticated admin access, branch isolation,
+or deployment of the local implementation changes recorded elsewhere here.
 
 **RESOLVED 2026-09-03 — the headers ARE on the live SPA HTML, measured.**
 `frontend/public/_headers` (built to `docs/_headers`) is read natively by

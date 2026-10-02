@@ -365,7 +365,7 @@ export default function AdvisorGrantSection({ projectUid }) {
     <section className="rounded-2xl border border-gray-200 p-4 dark:border-gray-800">
       <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Advisors</h3>
       <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
-        An advisor cannot read your record unless you open it. Choose what they see — each
+        These project grants control what an advisor can read from your project. Choose what they see — each
         line is a separate decision, and you can revoke any of them at any time.
       </p>
 

@@ -6768,3 +6768,14 @@ CREATE VIEW partner_summary AS
         (SELECT COUNT(*) FROM partner_relationships WHERE partner_a_id = u.id OR partner_b_id = u.id) AS active_relationships,
         (SELECT COUNT(*) FROM referral_chains WHERE root_referrer_id = u.id) AS network_reach
       FROM users u;
+-- Private roster notes, migration 369. No public or client-side read surface.
+CREATE TABLE IF NOT EXISTS advisor_client_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  uid TEXT NOT NULL UNIQUE,
+  advisor_user_id INTEGER NOT NULL REFERENCES users(id),
+  client_user_id INTEGER NOT NULL REFERENCES users(id),
+  body TEXT NOT NULL CHECK (length(body) BETWEEN 1 AND 8000),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (advisor_user_id, client_user_id)
+);
