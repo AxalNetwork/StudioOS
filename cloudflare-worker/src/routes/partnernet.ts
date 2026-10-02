@@ -4,6 +4,7 @@ import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
 import { newUid } from './_t13t14t15_helpers';
+import { notify } from '../services/notify';
 
 const partnernet = new Hono<{ Bindings: Env }>();
 
@@ -14,6 +15,29 @@ const ACTION_TYPES = new Set([
   'relationship_create', 'profile_update', 'login', 'logout',
 ]);
 const REL_CREATE_RATE_LIMIT = 20;
+/**
+ * U8 (D493, migration 368) — a relationship row about another person is a
+ * request. Only 'accepted' counts anywhere: a book, a network score, the
+ * leaderboards, edits, events, interactions and reminders. The other states
+ * are the request's life: 'pending' (asked), 'declined' (the other person said
+ * no), 'withdrawn' (the author took it back), 'removed' (either side ended an
+ * accepted one). Rows that existed before 368 are 'accepted' by default — the
+ * owner chose to keep them and tell their subjects (`noticeLegacyRelationships`).
+ */
+export const REL_STATUSES = ['pending', 'accepted', 'declined', 'withdrawn', 'removed'] as const;
+const REL_REQUEST_COLUMNS = [
+  `ALTER TABLE partner_relationships ADD COLUMN status TEXT NOT NULL DEFAULT 'accepted'`,
+  `ALTER TABLE partner_relationships ADD COLUMN requested_by INTEGER`,
+  `ALTER TABLE partner_relationships ADD COLUMN requested_at TEXT`,
+  `ALTER TABLE partner_relationships ADD COLUMN responded_at TEXT`,
+  `ALTER TABLE partner_relationships ADD COLUMN legacy_noticed_at TEXT`,
+];
+const REL_TYPE_LABEL: Record<string, string> = {
+  co_investor: 'co-investor', advisor_founder: 'advisor and founder', operator_partner: 'operator and partner',
+  strategic_alliance: 'strategic alliance', advisor_mentee: 'advisor and mentee',
+};
+const REL_NOTICE_TYPE = 'relationship_request';
+const REL_LINK = '/network/relationships';
 const SCORE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min — keep recompute off the hot read path
 const scoreCache = new Map<number, number>(); // userId -> next-allowed-recompute-timestamp
 
@@ -182,11 +206,16 @@ async function ensureSchema(env: Env) {
       SELECT u.id, u.email, u.name, u.role, u.kyc_status,
         u.partner_since, u.total_earnings, u.network_score, u.verified_badges, u.last_active,
         (SELECT COALESCE(SUM(amount_cents), 0) FROM commissions WHERE user_id = u.id) AS lifetime_earnings_cents,
-        (SELECT COUNT(*) FROM partner_relationships WHERE partner_a_id = u.id OR partner_b_id = u.id) AS active_relationships,
+        (SELECT COUNT(*) FROM partner_relationships WHERE (partner_a_id = u.id OR partner_b_id = u.id) AND status = 'accepted') AS active_relationships,
         (SELECT COUNT(*) FROM referral_chains WHERE root_referrer_id = u.id) AS network_reach
       FROM users u`,
   ];
+  // The view reads `status` (368), so the request columns are added after the
+  // tables exist and BEFORE the view is (re)created: run the tables, then the
+  // columns, then the last two statements (DROP VIEW / CREATE VIEW) again.
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch (e: any) { console.error('partnernet schema:', e?.message); } }
+  try { await runSchemaBootstrap(env, REL_REQUEST_COLUMNS); } catch (e: any) { console.error('partnernet: request columns unavailable —', e?.message); }
+  for (const s of stmts.slice(-2)) { try { await env.DB.prepare(s).run(); } catch (e: any) { console.error('partnernet view:', e?.message); } }
   MIGRATED.set(bindingKey(env), true);
 }
 
@@ -249,8 +278,8 @@ async function recomputeNetworkScore(env: Env, userId: number, force = false): P
   try {
     const stats: any = await env.DB.prepare(`
       SELECT
-        (SELECT COUNT(*) FROM partner_relationships WHERE partner_a_id = ? OR partner_b_id = ?) as rel_count,
-        (SELECT COALESCE(AVG(strength_score), 0) FROM partner_relationships WHERE partner_a_id = ? OR partner_b_id = ?) as rel_avg,
+        (SELECT COUNT(*) FROM partner_relationships WHERE (partner_a_id = ? OR partner_b_id = ?) AND status = 'accepted') as rel_count,
+        (SELECT COALESCE(AVG(strength_score), 0) FROM partner_relationships WHERE (partner_a_id = ? OR partner_b_id = ?) AND status = 'accepted') as rel_avg,
         (SELECT COUNT(*) FROM referral_chains WHERE root_referrer_id = ?) as reach,
         (SELECT COUNT(*) FROM activity_logs WHERE user_id = ? AND created_at > datetime('now', '-30 days')) as activity_30d,
         (SELECT COALESCE(SUM(amount_cents), 0) FROM commissions WHERE user_id = ?) as earnings_cents
@@ -279,7 +308,10 @@ async function recomputeNetworkScore(env: Env, userId: number, force = false): P
 }
 
 async function checkRelRateLimit(env: Env, userId: number): Promise<boolean> {
-  const r: any = await env.DB.prepare(`SELECT COUNT(*) as n FROM partner_relationships WHERE (partner_a_id = ? OR partner_b_id = ?) AND created_at > datetime('now', '-1 hour')`).bind(userId, userId).first();
+  // Requests the caller SENT in the last hour. It used to count rows on either
+  // side, so other people's requests could rate-limit the person they named.
+  const since = new Date(Date.now() - 3600_000).toISOString();
+  const r: any = await env.DB.prepare(`SELECT COUNT(*) as n FROM partner_relationships WHERE requested_by = ? AND requested_at > ?`).bind(userId, since).first();
   return (r?.n || 0) < REL_CREATE_RATE_LIMIT;
 }
 
@@ -293,7 +325,7 @@ partnernet.get('/relationships', async (c) => {
     FROM partner_relationships pr
     LEFT JOIN users ua ON ua.id = pr.partner_a_id
     LEFT JOIN users ub ON ub.id = pr.partner_b_id
-    WHERE pr.partner_a_id = ${user.id} OR pr.partner_b_id = ${user.id}
+    WHERE (pr.partner_a_id = ${user.id} OR pr.partner_b_id = ${user.id}) AND pr.status = 'accepted'
     ORDER BY pr.strength_score DESC, pr.updated_at DESC
   `;
   await sql.end();
@@ -327,27 +359,174 @@ partnernet.post('/relationships', async (c) => {
   const [a, b] = pair(user.id, otherId);
   const initialStrength = Number(data?.strength_score);
   const strength = Number.isFinite(initialStrength) && initialStrength >= 0 && initialStrength <= 100 ? initialStrength : 50;
-  const metaIn = data?.metadata && typeof data.metadata === 'object' ? data.metadata : {};
+  const metaIn = data?.metadata && typeof data.metadata === 'object' ? { ...data.metadata } : {};
+  delete (metaIn as any).private_notes;
   metaIn.created_by = user.id;
   const metaStr = JSON.stringify(metaIn).slice(0, 4000);
+  const now = new Date().toISOString();
+
+  // U8 (D493): the row is a REQUEST. It stays the author's alone until the
+  // other person accepts; nothing about it reaches their book, network score or
+  // the leaderboards before then. One row per pair (uq_pr_pair): an earlier
+  // row that ended can be asked again — except that a decline stands against
+  // the person who was declined; only the decliner can reopen it.
+  const existing: any = await c.env.DB.prepare(
+    'SELECT id, status, requested_by FROM partner_relationships WHERE partner_a_id = ? AND partner_b_id = ?',
+  ).bind(a, b).first();
+  if (existing) {
+    if (existing.status === 'accepted') return c.json({ error: 'Relationship already exists between these partners' }, 409);
+    if (existing.status === 'pending') return c.json({ error: 'A request between you is already waiting for an answer' }, 409);
+    if (existing.status === 'declined' && existing.requested_by === user.id) {
+      return c.json({ error: 'This request was declined' }, 409);
+    }
+  }
 
   let rel: any;
   try {
-    rel = await c.env.DB.prepare(`INSERT INTO partner_relationships (partner_a_id, partner_b_id, relationship_type, strength_score, metadata) VALUES (?, ?, ?, ?, ?) RETURNING *`)
-      .bind(a, b, relType, strength, metaStr).first();
+    rel = existing
+      ? await c.env.DB.prepare(
+        `UPDATE partner_relationships
+            SET relationship_type = ?, strength_score = ?, metadata = ?, status = 'pending',
+                requested_by = ?, requested_at = ?, responded_at = NULL, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? RETURNING *`,
+      ).bind(relType, strength, metaStr, user.id, now, existing.id).first()
+      : await c.env.DB.prepare(
+        `INSERT INTO partner_relationships
+           (partner_a_id, partner_b_id, relationship_type, strength_score, metadata, status, requested_by, requested_at)
+         VALUES (?, ?, ?, ?, ?, 'pending', ?, ?) RETURNING *`,
+      ).bind(a, b, relType, strength, metaStr, user.id, now).first();
   } catch (e: any) {
     if (/UNIQUE/i.test(e?.message || '')) return c.json({ error: 'Relationship already exists between these partners' }, 409);
     return c.json({ error: 'Could not create relationship' }, 500);
   }
 
-  await c.env.DB.prepare(`INSERT INTO relationship_events (relationship_id, event_type, details) VALUES (?, 'created', ?)`)
-    .bind(rel.id, JSON.stringify({ created_by: user.id, type: relType })).run();
-
-  await logActivity(c.env, user.id, 'relationship_create', { entityType: 'relationship', entityId: rel.id, metadata: { other_id: otherId, type: relType } });
-  // Force recompute for both sides when relationships change
-  await Promise.all([recomputeNetworkScore(c.env, user.id, true), recomputeNetworkScore(c.env, otherId, true)]);
+  await c.env.DB.prepare(`INSERT INTO relationship_events (relationship_id, event_type, details) VALUES (?, 'requested', ?)`)
+    .bind(rel.id, JSON.stringify({ requested_by: user.id, type: relType })).run();
+  await logActivity(c.env, user.id, 'relationship_create', { entityType: 'relationship', entityId: rel.id, metadata: { other_id: otherId, type: relType, status: 'pending' } });
+  try {
+    const me: any = await c.env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(user.id).first();
+    const who = String(me?.name || '').trim() || 'Someone';
+    await notify(c.env, {
+      userId: otherId, type: REL_NOTICE_TYPE, category: 'network',
+      title: `${who} wants to record a relationship with you`,
+      body: `${who} asked to add you as ${REL_TYPE_LABEL[relType] || relType}. Nothing about it is shared with you or counts anywhere until you accept.`,
+      link: REL_LINK, payload: { kind: 'requested', relationship_id: rel.id },
+    });
+  } catch { /* the request stands; the requests list shows it */ }
 
   return c.json({ ...rel, metadata: safeJson(rel.metadata, {}) }, 201);
+});
+
+/**
+ * U8 — the caller's requests: the ones waiting for THEIR answer, and the ones
+ * they sent. An incoming request shows who asked and the type they named, and
+ * nothing the author wrote (no score, no metadata).
+ */
+partnernet.get('/relationships/requests', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const incoming = await c.env.DB.prepare(
+    `SELECT pr.id, pr.relationship_type, pr.requested_at, pr.requested_by, u.name AS requester_name, u.role AS requester_role
+       FROM partner_relationships pr
+       LEFT JOIN users u ON u.id = pr.requested_by
+      WHERE pr.status = 'pending' AND (pr.partner_a_id = ? OR pr.partner_b_id = ?) AND pr.requested_by <> ?
+      ORDER BY pr.requested_at DESC LIMIT 200`,
+  ).bind(user.id, user.id, user.id).all();
+  const outgoing = await c.env.DB.prepare(
+    `SELECT pr.id, pr.relationship_type, pr.status, pr.requested_at, pr.responded_at,
+            CASE WHEN pr.partner_a_id = ? THEN pr.partner_b_id ELSE pr.partner_a_id END AS other_id
+       FROM partner_relationships pr
+      WHERE pr.requested_by = ? AND pr.status IN ('pending', 'declined')
+      ORDER BY pr.requested_at DESC LIMIT 200`,
+  ).bind(user.id, user.id).all();
+  const others = new Map<number, any>();
+  for (const r of (outgoing.results || []) as any[]) {
+    if (!others.has(r.other_id)) {
+      others.set(r.other_id, await c.env.DB.prepare('SELECT id, name, role FROM users WHERE id = ?').bind(r.other_id).first());
+    }
+  }
+  return c.json({
+    incoming: ((incoming.results || []) as any[]).map((r) => ({
+      id: r.id, relationship_type: r.relationship_type, requested_at: r.requested_at,
+      requester: { id: r.requested_by, name: r.requester_name ?? null, role: r.requester_role ?? null },
+    })),
+    outgoing: ((outgoing.results || []) as any[]).map((r) => {
+      const o = others.get(r.other_id);
+      return {
+        id: r.id, relationship_type: r.relationship_type, status: r.status,
+        requested_at: r.requested_at, responded_at: r.responded_at,
+        other: { id: r.other_id, name: o?.name ?? null, role: o?.role ?? null },
+      };
+    }),
+  });
+});
+
+/** The person a request names accepts or declines it. Only they can. */
+partnernet.post('/relationships/:id/respond', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = parseInt(c.req.param('id'));
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const decision = data?.decision;
+  if (decision !== 'accept' && decision !== 'decline') return c.json({ error: 'decision must be accept or decline' }, 400);
+  const rel: any = await c.env.DB.prepare('SELECT * FROM partner_relationships WHERE id = ?').bind(id).first();
+  if (!rel || (rel.partner_a_id !== user.id && rel.partner_b_id !== user.id)) return c.json({ error: 'Not found' }, 404);
+  if (rel.status !== 'pending') return c.json({ error: 'This request is not waiting for an answer' }, 409);
+  if (rel.requested_by === user.id) return c.json({ error: 'Only the person the request names can answer it' }, 403);
+  const status = decision === 'accept' ? 'accepted' : 'declined';
+  const now = new Date().toISOString();
+  await c.env.DB.prepare('UPDATE partner_relationships SET status = ?, responded_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .bind(status, now, id).run();
+  await c.env.DB.prepare('INSERT INTO relationship_events (relationship_id, event_type, details) VALUES (?, ?, ?)')
+    .bind(id, status, JSON.stringify({ by: user.id })).run();
+  if (status === 'accepted') {
+    await Promise.all([recomputeNetworkScore(c.env, user.id, true), recomputeNetworkScore(c.env, rel.requested_by, true)]);
+    try {
+      const me: any = await c.env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(user.id).first();
+      const who = String(me?.name || '').trim() || 'They';
+      await notify(c.env, {
+        userId: rel.requested_by, type: REL_NOTICE_TYPE, category: 'network',
+        title: `${who} accepted your relationship request`, link: REL_LINK,
+        payload: { kind: 'accepted', relationship_id: id },
+      });
+    } catch { /* the acceptance stands */ }
+  }
+  // A decline is not announced: the author sees it on their own requests list.
+  return c.json({ ok: true, id, status });
+});
+
+/** The author takes back a request that has not been answered. */
+partnernet.post('/relationships/:id/withdraw', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = parseInt(c.req.param('id'));
+  const rel: any = await c.env.DB.prepare('SELECT * FROM partner_relationships WHERE id = ?').bind(id).first();
+  if (!rel || rel.requested_by !== user.id) return c.json({ error: 'Not found' }, 404);
+  if (rel.status !== 'pending') return c.json({ error: 'Only a request still waiting can be withdrawn' }, 409);
+  await c.env.DB.prepare(`UPDATE partner_relationships SET status = 'withdrawn', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(id).run();
+  await c.env.DB.prepare(`INSERT INTO relationship_events (relationship_id, event_type, details) VALUES (?, 'withdrawn', ?)`)
+    .bind(id, JSON.stringify({ by: user.id })).run();
+  return c.json({ ok: true, id, status: 'withdrawn' });
+});
+
+/**
+ * Either side ends an accepted relationship — including a pre-368 one its
+ * subject never asked for and does not recognise (the legacy notice links
+ * here). It leaves both books and both network scores.
+ */
+partnernet.post('/relationships/:id/remove', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = parseInt(c.req.param('id'));
+  const rel: any = await c.env.DB.prepare('SELECT * FROM partner_relationships WHERE id = ?').bind(id).first();
+  if (!rel || (rel.partner_a_id !== user.id && rel.partner_b_id !== user.id)) return c.json({ error: 'Not found' }, 404);
+  if (rel.status !== 'accepted') return c.json({ error: 'Only an accepted relationship can be removed' }, 409);
+  await c.env.DB.prepare(`UPDATE partner_relationships SET status = 'removed', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(id).run();
+  await c.env.DB.prepare(`INSERT INTO relationship_events (relationship_id, event_type, details) VALUES (?, 'removed', ?)`)
+    .bind(id, JSON.stringify({ by: user.id })).run();
+  await Promise.all([recomputeNetworkScore(c.env, rel.partner_a_id, true), recomputeNetworkScore(c.env, rel.partner_b_id, true)]);
+  return c.json({ ok: true, id, status: 'removed' });
 });
 
 partnernet.patch('/relationships/:id', async (c) => {
@@ -359,6 +538,8 @@ partnernet.patch('/relationships/:id', async (c) => {
   const rel: any = await c.env.DB.prepare(`SELECT * FROM partner_relationships WHERE id = ?`).bind(id).first();
   if (!rel) return c.json({ error: 'Not found' }, 404);
   if (user.role !== 'admin' && rel.partner_a_id !== user.id && rel.partner_b_id !== user.id) return c.json({ error: 'Forbidden' }, 403);
+  // U8: an unanswered (or ended) request is nobody's to edit.
+  if (rel.status !== 'accepted') return c.json({ error: 'Not an accepted relationship' }, 409);
 
   const updates: string[] = [];
   const values: any[] = [];
@@ -394,9 +575,12 @@ partnernet.get('/relationships/:id/events', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
   const id = parseInt(c.req.param('id'));
-  const rel: any = await c.env.DB.prepare(`SELECT partner_a_id, partner_b_id FROM partner_relationships WHERE id = ?`).bind(id).first();
+  const rel: any = await c.env.DB.prepare(`SELECT partner_a_id, partner_b_id, status FROM partner_relationships WHERE id = ?`).bind(id).first();
   if (!rel) return c.json({ error: 'Not found' }, 404);
   if (user.role !== 'admin' && rel.partner_a_id !== user.id && rel.partner_b_id !== user.id) return c.json({ error: 'Forbidden' }, 403);
+  // U8: before it is accepted the person named has agreed to nothing, so the
+  // history is not theirs to read either; the author sees it as a request.
+  if (rel.status !== 'accepted' && user.role !== 'admin') return c.json({ error: 'Not an accepted relationship' }, 409);
   const sql = getSQL(c.env);
   const events = await sql`SELECT * FROM relationship_events WHERE relationship_id = ${id} ORDER BY created_at DESC LIMIT 100`;
   await sql.end();
@@ -417,6 +601,8 @@ async function ownRelationship(c: any, id: number): Promise<any> {
   if (user.role !== 'admin' && rel.partner_a_id !== user.id && rel.partner_b_id !== user.id) {
     return { error: c.json({ error: 'Forbidden' }, 403) };
   }
+  // U8: interactions and reminders hang off an ACCEPTED relationship only.
+  if (rel.status !== 'accepted') return { error: c.json({ error: 'Not an accepted relationship' }, 409) };
   return { rel, user };
 }
 
@@ -494,7 +680,7 @@ partnernet.get('/reminders', async (c) => {
   const rows = includeDone
     ? await c.env.DB.prepare(
       `SELECT r.*, ua.name AS a_name, ub.name AS b_name FROM partner_reminders r
-        LEFT JOIN partner_relationships pr ON pr.id = r.relationship_id
+        JOIN partner_relationships pr ON pr.id = r.relationship_id AND pr.status = 'accepted'
         LEFT JOIN users ua ON ua.id = pr.partner_a_id
         LEFT JOIN users ub ON ub.id = pr.partner_b_id
        WHERE r.created_by = ?
@@ -502,7 +688,7 @@ partnernet.get('/reminders', async (c) => {
     ).bind(user.id).all()
     : await c.env.DB.prepare(
       `SELECT r.*, ua.name AS a_name, ub.name AS b_name FROM partner_reminders r
-        LEFT JOIN partner_relationships pr ON pr.id = r.relationship_id
+        JOIN partner_relationships pr ON pr.id = r.relationship_id AND pr.status = 'accepted'
         LEFT JOIN users ua ON ua.id = pr.partner_a_id
         LEFT JOIN users ub ON ub.id = pr.partner_b_id
        WHERE r.created_by = ? AND r.done = 0
@@ -892,5 +1078,52 @@ partnernet.get('/leaderboard/public', async (c) => {
     verified_badges: safeJson(r.verified_badges, [] as string[]),
   })));
 });
+
+/**
+ * U8 (D493) — the one-time notice for relationships that existed before 368.
+ * The owner chose to keep them as accepted and tell their subjects. The
+ * subject is the party who did not create the row (`metadata.created_by`); a
+ * row with no recorded creator names both parties. One notice per person per
+ * run, listing who, with the page where each can be removed. Bounded and
+ * idempotent: a row is stamped `legacy_noticed_at` once its notices are sent.
+ */
+export async function noticeLegacyRelationships(env: Env, limit = 200): Promise<{ rows: number; notices: number }> {
+  await ensureSchema(env);
+  const rows = (await env.DB.prepare(
+    `SELECT pr.id, pr.partner_a_id, pr.partner_b_id, pr.metadata, ua.name AS a_name, ub.name AS b_name
+       FROM partner_relationships pr
+       LEFT JOIN users ua ON ua.id = pr.partner_a_id
+       LEFT JOIN users ub ON ub.id = pr.partner_b_id
+      WHERE pr.status = 'accepted' AND pr.requested_by IS NULL AND pr.legacy_noticed_at IS NULL
+      ORDER BY pr.id LIMIT ?`,
+  ).bind(Math.max(1, Math.min(1000, limit))).all()).results as any[] || [];
+  const bySubject = new Map<number, string[]>();
+  for (const r of rows) {
+    const creator = Number(safeJson(r.metadata, {} as any).created_by) || null;
+    const subjects: Array<[number, string | null]> = creator === r.partner_a_id ? [[r.partner_b_id, r.a_name]]
+      : creator === r.partner_b_id ? [[r.partner_a_id, r.b_name]]
+      : [[r.partner_a_id, r.b_name], [r.partner_b_id, r.a_name]];
+    for (const [subject, otherName] of subjects) {
+      if (!bySubject.has(subject)) bySubject.set(subject, []);
+      bySubject.get(subject)!.push(String(otherName || '').trim() || 'a member');
+    }
+  }
+  let notices = 0;
+  for (const [subject, names] of bySubject) {
+    const shown = names.slice(0, 3).join(', ') + (names.length > 3 ? ` and ${names.length - 3} more` : '');
+    const id = await notify(env, {
+      userId: subject, type: REL_NOTICE_TYPE, category: 'network',
+      title: names.length === 1 ? 'A relationship record names you' : `${names.length} relationship records name you`,
+      body: `Before relationships needed your acceptance, these were recorded with you: ${shown}. They stay in your book. Remove any you do not recognise on the Relationships page.`,
+      link: REL_LINK, payload: { kind: 'legacy', count: names.length },
+    });
+    if (id != null) notices += 1;
+  }
+  const now = new Date().toISOString();
+  for (const r of rows) {
+    await env.DB.prepare('UPDATE partner_relationships SET legacy_noticed_at = ? WHERE id = ?').bind(now, r.id).run();
+  }
+  return { rows: rows.length, notices };
+}
 
 export default partnernet;

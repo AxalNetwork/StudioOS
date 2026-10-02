@@ -439,7 +439,11 @@ test('D375: a row is fund-level facts only — no LP and no GP name or email cro
     assert.deepEqual(Object.keys(x.flags).sort(),
       ['custodian_recorded', 'draft_not_issued', 'gp_fields_unset', 'lpa_on_file', 'no_gp_of_record']);
   }
-  const text = JSON.stringify(r);
+  // `as_of` is the read clock. An ISO stamp contains `:41` whenever the
+  // minute or the second is 41, which is not the fixture's gp_user_id.
+  const { as_of, ...facts } = r;
+  assert.match(as_of, /^\d{4}-\d{2}-\d{2}T/);
+  const text = JSON.stringify(facts);
   for (const leak of ['Lena', 'lena@lp.example', 'Leo', 'Lou', 'Guy Partner', 'Gail', 'Managing Member',
     'Custody Bank', 'Fundadmin', 'Audit & Co', '"41"', ':41', ':900']) {
     assert.ok(!text.includes(leak), `the registry carries ${leak}`);

@@ -159,6 +159,23 @@ export function rowsFromWranglerJson(text) {
   return rows;
 }
 
+/**
+ * The CREATE statement production holds for each object it has and the repo
+ * does not, so the red run IS the migration to paste — not a list of names
+ * someone must go back to production to look up (deploy runs 566-573: four
+ * tables created by hand, and nothing in the log said what they were).
+ *
+ * Schema only: `sqlite_master.sql` is the object's DDL, never a row of data.
+ * An object without DDL (D1 can report one) prints as such, not as blank.
+ */
+export function missingDdl(rows, missing) {
+  const byKey = new Map(rows.map((r) => [`${r.type}:${r.name}`, r.sql]));
+  return missing.map((key) => {
+    const sql = byKey.get(key);
+    return sql ? `${String(sql).trim().replace(/;?$/, ';')}` : `-- ${key}: production returned no DDL for it`;
+  });
+}
+
 // WHICH DATABASE THIS READS. Production by default, which is the only one the
 // deploy workflow cares about. A branch database has the same schema and the
 // same drift question, so the name and its config are overridable rather than
@@ -175,7 +192,7 @@ function liveObjects() {
       '--no-install', 'wrangler', 'd1', 'execute', D1_NAME,
       '--config', D1_CONFIG, '--remote', '--json',
       '--command',
-      "SELECT type, name FROM sqlite_master WHERE type IN ('table','index','trigger','view')",
+      "SELECT type, name, sql FROM sqlite_master WHERE type IN ('table','index','trigger','view')",
     ], { cwd: resolve(process.cwd(), 'cloudflare-worker'), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   } catch (error) {
     // The token is the usual cause and the stack trace buries it. A guard that
@@ -189,16 +206,14 @@ function liveObjects() {
     );
     process.exit(2);
   }
-  const rows = rowsFromWranglerJson(out);
-  return new Set(
-    rows.filter((r) => !ENGINE_OWNED.test(r.name)).map((r) => `${r.type}:${r.name}`),
-  );
+  const rows = rowsFromWranglerJson(out).filter((r) => !ENGINE_OWNED.test(r.name));
+  return { names: new Set(rows.map((r) => `${r.type}:${r.name}`)), rows };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const later = postCutoffMigrations().map((m) => m.sql);
   const baseline = baselineObjects(readFileSync(resolve(process.cwd(), BASELINE), 'utf8'), later);
-  const live = liveObjects();
+  const { names: live, rows: liveRows } = liveObjects();
   const { missing, extra, ok } = compareObjects(baseline, live);
 
   if (!ok) {
@@ -207,6 +222,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       console.error(`\n  On production, absent from ${BASELINE} (${missing.length}):`);
       for (const n of missing.slice(0, 40)) console.error(`    ${n}`);
       if (missing.length > 40) console.error(`    … and ${missing.length - 40} more`);
+      console.error('\n  Their DDL on production — the body of the migration that declares them,');
+      console.error('  if they are meant to exist (schema only, no rows):\n');
+      for (const ddl of missingDdl(liveRows, missing.slice(0, 40))) {
+        for (const line of ddl.split('\n')) console.error(`    ${line}`);
+      }
     }
     if (extra.length) {
       console.error(`\n  In ${BASELINE}, absent from production (${extra.length}):`);

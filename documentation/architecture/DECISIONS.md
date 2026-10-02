@@ -39661,3 +39661,130 @@ passes unchanged.
 `profiling_v2_personas_fixture.test.ts` (pick-one answers accepted);
 `advisor.profiling.test.ts` (the partner sizes above). 16 mutations, 16
 caught.
+
+## D492
+
+**A cohort's founders are told when an advisor can read them, and can hide
+themselves from one advisor.** U6 in `UNRESOLVED_ITEMS.md`. Migration 367.
+
+**What an assignment opens.** Migration 206 lets an admin assign an advisor to
+a Spin-Out Lab cohort. Each route below needs both the advisor role (re-read on
+every request) and an active `advisor_cohort_assignments` row:
+- `GET /advisors/me/cohort/:cycleId/founders`: names and email addresses;
+- `GET …/weeks`: names, week status and deliverable counts;
+- `GET …/guidance`: names of the founders who acknowledged guidance;
+- `POST …/guidance`, `PATCH /me/guidance/:uid`: the advisor's own posts;
+- `GET …/calendar`: Lab dates, and founder names only from the advisor's own
+  bookings.
+
+Founders were never told any of it.
+
+**The owner's decision (2026-10-02).** Notify and allow opt-out. Assignments
+that already exist keep their access, and their founders are told now.
+
+**What ships.**
+- **Notices.** Each founder in an assigned cohort gets an in-app notice naming
+  the advisor when access starts, and another when it ends. Both are category
+  `privacy` and link to Account → Security & Privacy. This covers:
+  - assignments already active at rollout;
+  - new assignments;
+  - founders who join an assigned cohort later.
+- **The ledger.** `cohort_advisor_notices` records each notice. Its key is
+  (assignment, founder, kind, episode), and a notice is sent only when its
+  ledger row is newly inserted. The episode is the assignment's
+  `assigned_at`. Re-assigning reactivates the same 206 row with a new
+  `assigned_at`, so the old episode is told it ended and the new one is told
+  it started.
+- **When notices go out.** `syncCohortAdvisorNotices` runs:
+  - on the admin assign and end routes;
+  - before each advisor read of founders, weeks or guidance;
+  - when the founder opens their own list;
+  - nightly at 05:05 UTC.
+
+  It sweeps rather than hooking the Lab's writes into `company_week_status`,
+  so the Lab keeps sole authority over its own tables.
+- **What is not notified.** A holder whose role is no longer advisor cannot
+  read through the row, so nobody is told it started. A role change is not
+  counted as an end.
+- **Opt-out.** `cohort_advisor_optouts` holds one row per (founder, advisor).
+  - Undoing a hide stamps `withdrawn_at` and keeps the row, so the record of
+    who could see whom survives.
+  - A hidden founder is left out of that advisor's founders, weeks and
+    guidance reads, and gets no start notice while hidden. Un-hiding sends the
+    notice that is then owed.
+  - Founder routes: `GET /advisors/me/cohort-access` and
+    `PUT /advisors/me/cohort-access/:advisorUserId {visible}`. Both act on the
+    caller only. The PUT returns 404 for an advisor with no assignment on the
+    caller's cohorts.
+  - The Settings page shows a "Cohort advisors" card with the switch, and
+    draws nothing for a founder in no assigned cohort.
+- **The calendar route is unchanged.** It shows founder names only from the
+  advisor's own bookings, which the founder made directly.
+
+**Tests.** `cohort_advisor_notice_d492.test.ts` (10). 19 mutations, 19
+caught.
+
+## D493
+
+**A relationship record about another person is a request they accept or
+decline.** U8 in `UNRESOLVED_ITEMS.md`. Migration 368.
+
+**What it was.** `POST /partnernet/relationships` let any signed-in user write
+a row about any other user. The row named a type, a strength score and shared
+metadata. It appeared at once in the other person's book with the author's
+email and name. Both network scores were recomputed, and those scores feed
+`partner_summary` and both leaderboards, including the public one with
+initials. After that, either party could edit the score, the type and the
+metadata, read the events, and log interactions that both could read.
+Reminders were the only private part, each visible to its creator alone.
+Nobody was asked.
+
+**The owner's decision (2026-10-02).** Request and accept. Existing rows are
+treated as accepted, and their subjects are told.
+
+**What ships.**
+- **`status`.** One of `pending`, `accepted`, `declined`, `withdrawn` or
+  `removed`. `requested_by`, `requested_at`, `responded_at` and
+  `legacy_noticed_at` are added beside it. Every pre-368 row keeps the default
+  `accepted`.
+- **What counts.** Only an accepted row:
+  - appears in a book (`GET /relationships`);
+  - counts towards a network score, `partner_summary` or a leaderboard;
+  - can be edited, or have its events read;
+  - accepts interactions or reminders, and only its reminders show on the
+    desk.
+- **POST creates a pending request.** The other person is told who asked and
+  the type, and sees nothing the author wrote. A request cannot carry a
+  `private_notes` field.
+  - One row per pair: a withdrawn, removed or declined row is reused.
+  - A decline stands against the person who was declined; only the decliner
+    can reopen it.
+- **Answering.** `POST /relationships/:id/respond {accept|decline}` belongs to
+  the named party alone.
+  - Accepting recomputes both scores and tells the requester.
+  - A decline is not announced; it shows on the requester's own list.
+- **Withdraw and remove.**
+  - `POST …/withdraw` is the author's, while the request is pending.
+  - `POST …/remove` is either party's, on an accepted row. It takes the row
+    out of both books and both scores.
+- **The requests list.** `GET /relationships/requests` returns incoming
+  requests (pending) and outgoing ones (pending or declined).
+- **Rate limit.** It counts requests the caller sent in the last hour. It
+  used to count rows on either side, so other people's requests could
+  throttle the person they named.
+- **Legacy notice.** `noticeLegacyRelationships` runs nightly at 05:05 UTC. It
+  tells each pre-368 row's subject once:
+  - the subject is the party who is not `metadata.created_by`, or both
+    parties when no creator is recorded;
+  - each notice names up to three people and links to the Relationships page.
+- **UI.** On every licence, the Relationships zone shows a "Relationship
+  requests" card with accept, decline and withdraw. A collapsed list of
+  accepted records offers Remove. The card draws nothing when there is
+  nothing to answer or manage.
+
+**Not changed.** The relationship tables and their schema cache (the
+`bindingKey` latch) were already fixed and are not recreated here.
+`api.createRelationship` still has no UI caller.
+
+**Tests.** `relationship_requests_d493.test.ts` (8). 19 mutations, 19
+caught.

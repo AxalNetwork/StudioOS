@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import {
   baselineObjects,
   compareObjects,
+  missingDdl,
   rowsFromWranglerJson,
 } from '../../scripts/check-baseline-drift.mjs';
 
@@ -109,4 +110,18 @@ test('wrangler output is parsed defensively, and an auth failure is not an empty
     /CLOUDFLARE_API_TOKEN/, 'an error object must throw, never yield zero rows');
   assert.throws(() => rowsFromWranglerJson('not json at all'), /did not return JSON/);
   assert.throws(() => rowsFromWranglerJson('{}'), /no result set/);
+});
+
+test('a red run prints the DDL of what production has and the repo lacks, so the fix can be pasted', () => {
+  const rows = [
+    { type: 'table', name: 'company_sources', sql: 'CREATE TABLE company_sources (id INTEGER PRIMARY KEY, url TEXT)' },
+    { type: 'index', name: 'idx_x', sql: null },
+    { type: 'table', name: 'declared', sql: 'CREATE TABLE declared (id INTEGER)' },
+  ];
+  assert.deepEqual(missingDdl(rows, ['table:company_sources', 'index:idx_x']), [
+    'CREATE TABLE company_sources (id INTEGER PRIMARY KEY, url TEXT);',
+    '-- index:idx_x: production returned no DDL for it',
+  ]);
+  // Only what is missing is printed, and type is part of the identity.
+  assert.deepEqual(missingDdl(rows, ['index:company_sources']), ['-- index:company_sources: production returned no DDL for it']);
 });
