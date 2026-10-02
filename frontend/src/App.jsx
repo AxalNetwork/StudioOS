@@ -2756,8 +2756,9 @@ function AppInner() {
       <Route path="/deals/commit" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/closing" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/:dealId" element={guard(['admin', 'partner', 'investor', 'founder'], investorWorkspace('deals', <DealRoomPage />))} />
-      <Route path="/market-intel" element={guard(labRoles(['admin', 'partner', 'investor']), effectiveRole === 'investor'
+      <Route path="/market-intel" element={guard(labRoles(['admin', 'partner', 'investor', 'advisor']), effectiveRole === 'investor'
         ? <InvestorResearchWorkspace />
+        : effectiveRole === 'advisor' ? <MarketIntelPage />
         : investorWorkspace('research', <FounderWorkspaceTabs set="research" user={user}><MarketIntelPage /></FounderWorkspaceTabs>))} />
       <Route path="/advisory" element={guard(['admin', 'founder'], <FounderWorkspaceTabs set="validate" user={user}><AdvisoryPage /></FounderWorkspaceTabs>)} />
       {/* Team (Grow › Talent). Founders reach the advisor directory,

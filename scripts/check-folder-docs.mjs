@@ -77,6 +77,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/partner',              'the partner licence’s pages and the kit every partner zone imports'],
   ['frontend/src/pages/investor',             'investor workspace landing pages, mirroring frontend/src/pages/founder'],
   ['frontend/src/pages/advisor/practice',      'one file per Practice artboard, plus the pure module each keeps its derivations in'],
+  ['frontend/src/pages/advisor/advisory',      'the retained Clients and Contracts tabs, including private client notes'],
   ['frontend/src/templates/components',       'landing-page section blocks'],
   ['cloudflare-worker/src/middleware',        'the gates every request passes'],
   ['cloudflare-worker/src/util',              'small shared helpers'],

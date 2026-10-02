@@ -2771,6 +2771,12 @@ export const api = {
   createRelationship: (data) => request('/partnernet/relationships', { method: 'POST', body: JSON.stringify(data) }),
   updateRelationship: (id, data) => request(`/partnernet/relationships/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   relationshipEvents: (id) => request(`/partnernet/relationships/${id}/events`),
+  // D493 — a relationship about someone else is a request they answer. A
+  // pending row is in neither book and counts towards no score until accepted.
+  relationshipRequests: () => request('/partnernet/relationships/requests'),
+  respondRelationship: (id, decision) => request(`/partnernet/relationships/${id}/respond`, { method: 'POST', body: JSON.stringify({ decision }) }),
+  withdrawRelationship: (id) => request(`/partnernet/relationships/${id}/withdraw`, { method: 'POST' }),
+  removeRelationship: (id) => request(`/partnernet/relationships/${id}/remove`, { method: 'POST' }),
   activityLogs: (limit = 50, offset = 0, action = '') => request(`/partnernet/activity/logs?limit=${limit}&offset=${offset}${action ? `&action_type=${action}` : ''}`),
   logActivity: (data) => request('/partnernet/activity/log', { method: 'POST', body: JSON.stringify(data) }),
   partnerLeaderboard: () => request('/partnernet/leaderboard').catch(() => request('/partnernet/leaderboard/public')),
@@ -4006,6 +4012,11 @@ export const api = {
   cancelAdvisorSlot: (slotId) => request(`/advisors/me/slots/${slotId}`, { method: 'DELETE' }),
   bookAdvisorSlot: (slotId, data) =>
     request(`/advisors/slots/${slotId}/book`, { method: 'POST', body: JSON.stringify(data) }),
+  advisorClientNote: (clientId) => request(`/advisors/me/client-notes/${encodeURIComponent(clientId)}`),
+  saveAdvisorClientNote: (clientId, body) => request(`/advisors/me/client-notes/${encodeURIComponent(clientId)}`, {
+    method: 'PUT', body: JSON.stringify({ body }),
+  }),
+  deleteAdvisorClientNote: (clientId) => request(`/advisors/me/client-notes/${encodeURIComponent(clientId)}`, { method: 'DELETE' }),
   listMyAdvisorBookings: (status) =>
     request(`/advisors/me/bookings${status ? `?status=${status}` : ''}`),
   listMyMenteeBookings: (status) =>
@@ -4406,6 +4417,10 @@ export const api = {
   listMyAdvisorCohorts: () => request('/advisors/me/cohort'),
   listMyAdvisorCohortFounders: (cycleId) => request(`/advisors/me/cohort/${cycleId}/founders`),
   listMyAdvisorCohortWeeks: (cycleId) => request(`/advisors/me/cohort/${cycleId}/weeks`),
+  // D492 — the founder's side: which advisors can see them through a Lab
+  // cohort, and the per-advisor switch that hides them from one.
+  myCohortAdvisorAccess: () => request('/advisors/me/cohort-access'),
+  setCohortAdvisorVisibility: (advisorUserId, visible) => request(`/advisors/me/cohort-access/${advisorUserId}`, { method: 'PUT', body: JSON.stringify({ visible: !!visible }) }),
 
   // Cohorts · Guidance and · Calendar, and Expertise · Thinking (PR C).
   //

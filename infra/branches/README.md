@@ -59,3 +59,25 @@ renders the branch's whole Worker config and refuses anything undeployable —
 a route that is HQ's own host, a database id that is HQ's, a missing Durable
 Object migration tag. That check runs in `npm run test:guards`, so a bad entry
 fails the build rather than a deploy.
+
+## Read-only verification
+
+From the repository root, run `node scripts/check-branch-live.mjs --plan` to
+validate declarations and list public smoke destinations without network calls.
+It exits 2 if this registry has no real live/provisioning branch, rather than
+reporting an empty check as passed. It also refuses shared D1/KV resources.
+
+Once the listed hostnames are permitted by the environment's network settings,
+run `node scripts/check-branch-live.mjs <code>` for one declared branch, or omit
+the code to check all live/provisioning branches. It runs the configuration guard
+and the existing `scripts/check-spa-live.mjs` against each declared hostname,
+preserving the runner's failure status. It does not create resources, migrate,
+deploy, change registry status, or mark a branch verified in production.
+
+Passing public shell, asset and API-routing checks is only one part of U1.
+Authenticated isolation also needs accounts belonging to two actual branches:
+sign into each independently and confirm that each sees only its own records,
+that the other branch's session is rejected, and that HQ's authorised branch
+reporting works. Keep tokens and personal data out of evidence logs. Record the
+declaration revision, deployed version, checks performed and outcomes; do not
+infer isolation from a public health response or the example fixture.

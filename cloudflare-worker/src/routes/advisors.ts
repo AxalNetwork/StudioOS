@@ -34,6 +34,7 @@ import {
 // answer to that question.
 import { ensurePaymentsCustomer } from './payments';
 import { ensureCohortGuidanceSchema } from '../services/cohortGuidanceSchema';
+import { founderAdvisorAccess, optedOutFounderIds, setFounderVisibility, syncCohortAdvisorNotices } from '../services/cohortAdvisorAccess';
 import {
   guidanceCounts, oldestOpenHours, collisions, withinDays,
   type GuidanceRow, type CalendarItem,
@@ -966,6 +967,65 @@ async function requireMyAdvisor(c: Context<{ Bindings: Env }>, user: User): Prom
   if (!m) throw new Error('No advisor profile attached to your account');
   return m;
 }
+
+// Private roster notes. The owner comes only from authentication; a client ID
+// is usable only if that person has booked this advisor. These are never added
+// to the shared booking DTO or the founder's client brief.
+async function requireRosterClient(c: Context<{ Bindings: Env }>) {
+  const user = await requireAuth(c);
+  if (String(user.role).toLowerCase() !== 'advisor') throw c.json({ detail: 'Advisor required' }, 403);
+  const advisor = await requireMyAdvisor(c, user);
+  if (advisor.user_id !== user.id) throw c.json({ detail: 'Your advisor profile is not attached to this account' }, 403);
+  const clientId = Number(c.req.param('clientId'));
+  if (!Number.isSafeInteger(clientId) || clientId <= 0) throw new Error('clientId must be a positive user ID');
+  const booking = await c.env.DB.prepare(
+    'SELECT id FROM advisor_bookings WHERE advisor_id = ? AND founder_user_id = ? LIMIT 1'
+  ).bind(advisor.id, clientId).first<{ id: number }>();
+  if (!booking) throw c.json({ detail: 'This client is not in your booking roster' }, 403);
+  return { ownerId: user.id, clientId };
+}
+
+type ClientNoteRow = { uid: string; body: string; updated_at: string };
+async function loadClientNote(env: Env, ownerId: number, clientId: number) {
+  return env.DB.prepare(
+    'SELECT uid, body, updated_at FROM advisor_client_notes WHERE advisor_user_id = ? AND client_user_id = ?'
+  ).bind(ownerId, clientId).first<ClientNoteRow>();
+}
+
+advisors.get('/me/client-notes/:clientId', async (c) => {
+  try {
+    const { ownerId, clientId } = await requireRosterClient(c);
+    return c.json({ client_user_id: clientId, note: await loadClientNote(c.env, ownerId, clientId) });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.put('/me/client-notes/:clientId', async (c) => {
+  try {
+    const { ownerId, clientId } = await requireRosterClient(c);
+    const input = await c.req.json().catch(() => null);
+    if (typeof input?.body !== 'string' || !input.body.trim() || input.body.length > 8000) {
+      return c.json({ detail: 'A note needs 1–8000 characters. Use DELETE to remove it.' }, 400);
+    }
+    const now = nowIso();
+    await c.env.DB.prepare(
+      `INSERT INTO advisor_client_notes (uid, advisor_user_id, client_user_id, body, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (advisor_user_id, client_user_id) DO UPDATE SET
+         body = excluded.body, updated_at = excluded.updated_at`
+    ).bind(newUid(), ownerId, clientId, input.body.trim(), now, now).run();
+    return c.json({ client_user_id: clientId, note: await loadClientNote(c.env, ownerId, clientId) });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.delete('/me/client-notes/:clientId', async (c) => {
+  try {
+    const { ownerId, clientId } = await requireRosterClient(c);
+    await c.env.DB.prepare(
+      'DELETE FROM advisor_client_notes WHERE advisor_user_id = ? AND client_user_id = ?'
+    ).bind(ownerId, clientId).run();
+    return c.json({ client_user_id: clientId, note: null });
+  } catch (e) { return mapError(c, e); }
+});
 
 // ---------------------------------------------------------------------------
 // 203 — Services. What an advisor offers, and what they charge for it.
@@ -2127,12 +2187,62 @@ export function mayHoldCohortAssignment(u: { role: string } | null | undefined):
   return !!u && role(u) === 'advisor';
 }
 
+/**
+ * U6 (D492) — before an advisor reads a batch, every founder in it who is owed
+ * a notice gets one, so a founder is told no later than the first read. Best
+ * effort: a failed notice must not take the advisor's page down, and the
+ * nightly sweep sends it again.
+ */
+async function noticeThenOptOuts(env: Env, advisorUserId: number, cycleId: number): Promise<Set<number>> {
+  try { await syncCohortAdvisorNotices(env, { cycleId }); } catch (e) {
+    console.error('[advisors] cohort notice sweep failed:', (e as Error).message);
+  }
+  return optedOutFounderIds(env, advisorUserId);
+}
+
 type CohortAssignmentRow = {
   id: number; uid: string; advisor_user_id: number; cohort_cycle_id: number;
   assigned_by_admin_id: number | null; assigned_at: string;
   unassigned_at: string | null; note: string | null; is_active: number;
   created_at: string; updated_at: string;
 };
+
+/**
+ * U6 (D492) — the founder's side: which advisors can see them through a Lab
+ * cohort, and the switch to hide from one. Scoped on the signed-in user only;
+ * there is no user parameter. Opening the list also sends any notice still
+ * owed to this founder, so the list and the inbox agree.
+ */
+advisors.get('/me/cohort-access', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    await ensureAdvisorStoresSchema(c.env);
+    try { await syncCohortAdvisorNotices(c.env, { founderUserId: user.id }); } catch (e) {
+      console.error('[advisors] founder notice sweep failed:', (e as Error).message);
+    }
+    return c.json({ items: await founderAdvisorAccess(c.env, user.id) });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.put('/me/cohort-access/:advisorUserId', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    await ensureAdvisorStoresSchema(c.env);
+    const advisorUserId = Number(c.req.param('advisorUserId'));
+    if (!Number.isInteger(advisorUserId) || advisorUserId <= 0) {
+      return c.json({ detail: 'advisorUserId must be a user id' }, 400);
+    }
+    const b = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    if (typeof b.visible !== 'boolean') return c.json({ detail: 'visible must be true or false' }, 400);
+    const ok = await setFounderVisibility(c.env, user.id, advisorUserId, b.visible);
+    if (!ok) return c.json({ detail: 'That advisor has no access to a cohort you are in' }, 404);
+    // Undoing a hide may make a start notice owed (one is never sent while hidden).
+    if (b.visible) {
+      try { await syncCohortAdvisorNotices(c.env, { founderUserId: user.id }); } catch { /* nightly retries */ }
+    }
+    return c.json({ items: await founderAdvisorAccess(c.env, user.id) });
+  } catch (e) { return mapError(c, e); }
+});
 
 advisors.get('/me/cohort', async (c) => {
   try {
@@ -2213,6 +2323,8 @@ advisors.get('/me/cohort/:cycleId/founders', async (c) => {
     if (!assignment) {
       return c.json({ detail: 'You are not assigned to this cohort' }, 403);
     }
+    // U6: a founder who hid themselves from this advisor is not listed.
+    const hidden = await noticeThenOptOuts(c.env, user.id, cycleId);
     const rows = await c.env.DB.prepare(
       `SELECT DISTINCT w.user_id AS user_id, u.name AS name, u.email AS email
          FROM company_week_status w
@@ -2226,7 +2338,7 @@ advisors.get('/me/cohort/:cycleId/founders', async (c) => {
       // Seam-marked: this is the founder's own record, shown to an advisor an
       // admin put in front of it. It is not the practice's data.
       source: 'spinout_lab',
-      items: (rows.results || []).map((r) => ({
+      items: (rows.results || []).filter((r) => !hidden.has(Number(r.user_id))).map((r) => ({
         user_id: r.user_id, name: r.name ?? null, email: r.email ?? null,
       })),
     });
@@ -2274,6 +2386,8 @@ advisors.get('/me/cohort/:cycleId/weeks', async (c) => {
     if (!assignment) {
       return c.json({ detail: 'You are not assigned to this cohort' }, 403);
     }
+    // U6: a founder who hid themselves from this advisor is not listed.
+    const hidden = await noticeThenOptOuts(c.env, user.id, cycleId);
 
     // Lab tables. A missing one answers `available: false` rather than
     // throwing — the precedent `/spinout-lab/fund-metrics` sets — because an
@@ -2309,6 +2423,7 @@ advisors.get('/me/cohort/:cycleId/weeks', async (c) => {
 
       const byFounder = new Map<number, any>();
       for (const r of statuses.results || []) {
+        if (hidden.has(Number(r.user_id))) continue;
         if (!byFounder.has(r.user_id)) {
           byFounder.set(r.user_id, { user_id: r.user_id, name: r.name ?? null, weeks: {} });
         }
@@ -2403,6 +2518,8 @@ advisors.get('/me/cohort/:cycleId/guidance', async (c) => {
     const cycleId = Number(c.req.param('cycleId'));
     const refused = await requireOwnCohort(c, user as User, cycleId);
     if (refused) return refused;
+    // U6: who acted is a founder's name; a founder hidden from this advisor is left out.
+    const hidden = await noticeThenOptOuts(c.env, user.id, cycleId);
 
     const rows = await c.env.DB.prepare(
       `SELECT id, uid, asked_by_user_id, body, answer, answered_at,
@@ -2431,6 +2548,7 @@ advisors.get('/me/cohort/:cycleId/guidance', async (c) => {
     }>();
     const ackBy = new Map<number, Array<{ user_id: number; name: string | null; acted_at: string }>>();
     for (const a of acks.results || []) {
+      if (hidden.has(Number(a.founder_user_id))) continue;
       if (!ackBy.has(a.guidance_id)) ackBy.set(a.guidance_id, []);
       ackBy.get(a.guidance_id)!.push({ user_id: a.founder_user_id, name: a.name, acted_at: a.acted_at });
     }
@@ -2817,7 +2935,12 @@ advisors.post('/admin/cohort-assignments', async (c) => {
     const fresh = await c.env.DB.prepare(
       'SELECT * FROM advisor_cohort_assignments WHERE advisor_user_id = ? AND cohort_cycle_id = ?'
     ).bind(advisorUserId, cycleId).first<CohortAssignmentRow>();
-    return c.json({ ...fresh!, is_active: !!fresh!.is_active });
+    // U6 (D492): every founder in the cohort is told, now.
+    let notified = 0;
+    try { notified = (await syncCohortAdvisorNotices(c.env, { assignmentId: fresh!.id })).started; } catch (e) {
+      console.error('[advisors] cohort start notices failed:', (e as Error).message);
+    }
+    return c.json({ ...fresh!, is_active: !!fresh!.is_active, founders_notified: notified });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -2838,7 +2961,12 @@ advisors.delete('/admin/cohort-assignments/:id', async (c) => {
     await c.env.DB.prepare(
       'UPDATE advisor_cohort_assignments SET is_active = 0, unassigned_at = ?, updated_at = ? WHERE id = ?'
     ).bind(now, now, row.id).run();
-    return c.json({ ok: true, id: row.id, is_active: false, unassigned_at: now });
+    // U6 (D492): every founder who was told it started is told it ended.
+    let notified = 0;
+    try { notified = (await syncCohortAdvisorNotices(c.env, { assignmentId: row.id })).ended; } catch (e) {
+      console.error('[advisors] cohort end notices failed:', (e as Error).message);
+    }
+    return c.json({ ok: true, id: row.id, is_active: false, unassigned_at: now, founders_notified: notified });
   } catch (e) { return mapError(c, e); }
 });
 

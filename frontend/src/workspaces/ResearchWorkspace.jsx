@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { WorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
 import BucketOverview, { unbuiltFrom } from './BucketOverview';
@@ -155,14 +155,20 @@ function ResearchOverview({ role }) {
   const bucket = bucketForPath(role, '/research');
   if (!bucket) return null;
   const board = boardFor(role, '/research', api);
-  if (board) return <BucketBoard bucket={bucket} role={role} board={board} />;
+  if (board) return <>
+    {role === 'advisor' && <Link to="/market-intel" className="mb-4 inline-block text-sm font-medium text-violet-700 hover:underline dark:text-violet-300">Open Market Intelligence</Link>}
+    <BucketBoard bucket={bucket} role={role} board={board} />
+  </>;
   return (
+    <>
+    {role === 'advisor' && <Link to="/market-intel" className="mb-4 inline-block text-sm font-medium text-violet-700 hover:underline dark:text-violet-300">Open Market Intelligence</Link>}
     <BucketOverview
       bucket={bucket}
       role={role}
       descriptions={ZONE_BLURB}
       unbuilt={unbuiltFrom(ZONE_COPY)}
     />
+    </>
   );
 }
 
