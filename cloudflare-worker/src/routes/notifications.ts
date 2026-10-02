@@ -261,6 +261,149 @@ notifications.put('/prefs', async (c) => {
   }
 });
 
+// ─── D335 — Web Push (Task #57's frontend half, `frontend/src/lib/pwa.js`) ──
+//   GET  /api/notifications/push/vapid-key     the server's public key
+//   POST /api/notifications/push/subscribe     upsert this browser's subscription
+//   POST /api/notifications/push/unsubscribe   {endpoint} — drop one subscription
+//   GET  /api/notifications/push/subscriptions list this user's subscriptions
+//   POST /api/notifications/push/test          send a test push to all of them
+//
+// All five were already called by `pwa.js`'s `enablePush`/`disablePush`/
+// `sendPushTest` (Task #57) with no worker route behind them at all — listed
+// in `scripts/api-drift-baseline.json` as known debt. This pays it down.
+const PUSH_MIGRATED = new WeakMap<object, boolean>();
+async function ensurePushTable(env: Env): Promise<boolean> {
+  if (PUSH_MIGRATED.get(bindingKey(env))) return true;
+  try {
+    await env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS push_subscriptions (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         user_id INTEGER NOT NULL,
+         endpoint TEXT NOT NULL UNIQUE,
+         p256dh TEXT NOT NULL,
+         auth TEXT NOT NULL,
+         expiration_time INTEGER,
+         user_agent TEXT,
+         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+         last_sent_at TIMESTAMP,
+         last_error TEXT
+       )`,
+    ).run();
+    await env.DB.prepare(
+      `CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id)`,
+    ).run();
+    PUSH_MIGRATED.set(bindingKey(env), true);
+    return true;
+  } catch (e) {
+    console.error('[notifications/push] table bootstrap failed', e);
+    return false;
+  }
+}
+
+notifications.get('/push/vapid-key', async (c) => {
+  const user = await requireAuth(c);
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+  return c.json({ public_key: (c.env as any).VAPID_PUBLIC_KEY || null });
+});
+
+notifications.post('/push/subscribe', async (c) => {
+  const user = await requireAuth(c);
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+  if (!(await ensurePushTable(c.env))) {
+    return refuse(c, 503, { code: 'push_unavailable', message: 'Push notifications could not be set up right now. Try again in a moment.' });
+  }
+  const body: any = await c.req.json().catch(() => ({}));
+  const endpoint = typeof body?.endpoint === 'string' ? body.endpoint.trim() : '';
+  const p256dh = typeof body?.keys?.p256dh === 'string' ? body.keys.p256dh : '';
+  const auth = typeof body?.keys?.auth === 'string' ? body.keys.auth : '';
+  if (!endpoint || !p256dh || !auth) {
+    return c.json({ error: 'endpoint and keys.p256dh/keys.auth are required' }, 422);
+  }
+  const expirationTime = Number.isFinite(body?.expirationTime) ? Math.trunc(body.expirationTime) : null;
+  const userAgent = typeof body?.user_agent === 'string' ? body.user_agent.slice(0, 500) : null;
+  try {
+    // One row per endpoint — a re-subscribe from the same browser (rotated
+    // keys, renewed expiration) replaces the row rather than duplicating it,
+    // and re-homes it to whichever account is signed in now.
+    await c.env.DB.prepare(
+      `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, expiration_time, user_agent)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(endpoint) DO UPDATE SET
+         user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth,
+         expiration_time = excluded.expiration_time, user_agent = excluded.user_agent,
+         last_error = NULL`,
+    ).bind(user.id, endpoint, p256dh, auth, expirationTime, userAgent).run();
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return refuse(c, 500, { code: 'subscribe_failed', message: 'Your subscription could not be saved. Try again in a moment.', raw: e });
+  }
+});
+
+notifications.post('/push/unsubscribe', async (c) => {
+  const user = await requireAuth(c);
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+  if (!(await ensurePushTable(c.env))) return c.json({ ok: true });
+  const body: any = await c.req.json().catch(() => ({}));
+  const endpoint = typeof body?.endpoint === 'string' ? body.endpoint.trim() : '';
+  if (!endpoint) return c.json({ error: 'endpoint is required' }, 422);
+  await c.env.DB.prepare(
+    `DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?`,
+  ).bind(endpoint, user.id).run();
+  return c.json({ ok: true });
+});
+
+notifications.get('/push/subscriptions', async (c) => {
+  const user = await requireAuth(c);
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+  if (!(await ensurePushTable(c.env))) {
+    return refuse(c, 503, { code: 'push_unavailable', message: 'Your push subscriptions could not be read right now. Try again in a moment.' });
+  }
+  const r: any = await c.env.DB.prepare(
+    `SELECT id, user_agent, created_at, last_sent_at, last_error
+       FROM push_subscriptions WHERE user_id = ? ORDER BY created_at DESC`,
+  ).bind(user.id).all();
+  return c.json({ subscriptions: r?.results || [] });
+});
+
+notifications.post('/push/test', async (c) => {
+  const user = await requireAuth(c);
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+  if (!(c.env as any).VAPID_PUBLIC_KEY || !(c.env as any).VAPID_PRIVATE_KEY) {
+    return refuse(c, 503, { code: 'push_not_configured', message: 'Push notifications are not configured on this server yet.' });
+  }
+  if (!(await ensurePushTable(c.env))) {
+    return refuse(c, 503, { code: 'push_unavailable', message: 'Your push subscriptions could not be read right now. Try again in a moment.' });
+  }
+  const r: any = await c.env.DB.prepare(
+    `SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?`,
+  ).bind(user.id).all();
+  const subs = (r?.results || []) as Array<{ id: number; endpoint: string; p256dh: string; auth: string }>;
+  if (!subs.length) return c.json({ sent: 0, failed: 0, reason: 'no_subscriptions' });
+  const { sendWebPush } = await import('../services/webpush');
+  let sent = 0, failed = 0;
+  for (const s of subs) {
+    const result = await sendWebPush(c.env, s, {
+      title: 'Axal StudioOS',
+      body: 'Push notifications are working.',
+      url: '/inbox',
+    });
+    if (result.ok) {
+      sent += 1;
+      await c.env.DB.prepare(`UPDATE push_subscriptions SET last_sent_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = ?`).bind(s.id).run();
+    } else {
+      failed += 1;
+      if (result.gone) {
+        // RFC 8030 §7.2 — the push service says this subscription no longer
+        // exists on the browser's side. Delete rather than keep retrying it.
+        await c.env.DB.prepare(`DELETE FROM push_subscriptions WHERE id = ?`).bind(s.id).run();
+      } else {
+        await c.env.DB.prepare(`UPDATE push_subscriptions SET last_error = ? WHERE id = ?`).bind(result.error.slice(0, 300), s.id).run();
+      }
+    }
+  }
+  return c.json({ sent, failed });
+});
+
 // ─── Task #2 (IB) spec endpoints ────────────────────────────────────────────
 //   POST   /api/notifications/:id/read     mark a single row read
 //   POST   /api/notifications/read-all     mark every unread row read

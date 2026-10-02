@@ -2709,6 +2709,14 @@ function AppInner() {
       {/* Every role, `exploring` included: an application decision is a
           notification, and the person waiting on one holds no other role. */}
       <Route path="/inbox" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <InboxPage />)} />
+      {/* D336 — `/notifications` has never been this page's address (D144
+          put the panel at `/inbox`), but the bell's own settings link reads
+          `/account/notifications` and the Settings tab is `#notifications`;
+          either one typed as a bare path, or an old bookmark from before
+          `/inbox` existed, should still land somewhere real rather than the
+          404 page. */}
+      <Route path="/notifications" element={<Navigate to="/inbox" replace />} />
+      <Route path="/notifications/*" element={<Navigate to="/inbox" replace />} />
       <Route path="/help/tickets" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
       <Route path="/help/tickets/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
       <Route path="/help/admin/*" element={<AdminDocsPathGuard />} />

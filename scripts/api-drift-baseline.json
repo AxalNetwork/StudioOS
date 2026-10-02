@@ -9,16 +9,11 @@
     "GET /api/capital/funds",
     "GET /api/capital/lp-portal",
     "GET /api/dashboard/stats",
-    "GET /api/notifications/push/subscriptions",
-    "GET /api/notifications/push/vapid-key",
     "GET /api/pipeline/votes/leaderboard",
     "POST /api/calendar/me/calcom",
     "POST /api/email/send-deal",
     "POST /api/legal/incorporate",
-    "POST /api/legal/spinout/:p",
-    "POST /api/notifications/push/subscribe",
-    "POST /api/notifications/push/test",
-    "POST /api/notifications/push/unsubscribe"
+    "POST /api/legal/spinout/:p"
   ],
   "missing_method": [],
   "error_envelope": []

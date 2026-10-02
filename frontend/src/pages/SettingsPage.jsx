@@ -15,6 +15,7 @@ import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/brow
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
 import { verdictFor, outstandingCounts, scoreLine } from '../lib/trustCenter';
 import { Unreadable, Unrecorded } from '../ui';
+import { NOTIFICATION_EVENTS, PARTNER_NOTIFICATION_EVENTS } from '../lib/notificationTypes';
 // Task #6 (IF) — Onboarding tab (checklist + tour re-run + reset).
 import OnboardingSettingsTab from '../components/OnboardingSettingsTab';
 // Task #4 — Axal-branded embedded checkout (Stripe Elements, no redirect).
@@ -128,25 +129,10 @@ const JURISDICTIONS = [
   { code: 'VG', name: 'British Virgin Islands' },
 ];
 
-const NOTIFICATION_EVENTS = [
-  { key: 'deal_assigned', label: 'New deal assigned to me' },
-  { key: 'pipeline_status_change', label: 'Pipeline status changes' },
-  { key: 'capital_call_issued', label: 'Capital call issued' },
-  { key: 'capital_call_paid', label: 'Capital call marked paid' },
-  { key: 'agreement_ready_to_sign', label: 'Agreement ready to sign' },
-  { key: 'kyc_status_change', label: 'KYC status updates' },
-  { key: 'mentions_and_comments', label: 'Mentions & comments' },
-  { key: 'ticket_update', label: 'Ticket updates' },
-  { key: 'deal_stage_change', label: 'Deal stage changes' },
-  { key: 'score_generated', label: 'New score generated for your startup' },
-  { key: 'contract_signed', label: 'Contract fully signed' },
-  { key: 'advisor_session_booked', label: 'Advisor session booked' },
-  { key: 'dd_report_ready', label: 'Due-diligence report ready' },
-  { key: 'vote_threshold_reached', label: 'Pipeline vote threshold reached' },
-  { key: 'followed_entity_news', label: 'News from people & startups I follow' },
-  { key: 'weekly_digest', label: 'Weekly digest' },
-  { key: 'product_announcements', label: 'Product announcements' },
-];
+// D336 — `NOTIFICATION_EVENTS` and `PARTNER_NOTIFICATION_EVENTS` moved to
+// `../lib/notificationTypes` so the bell and `/inbox` (`NotificationList.jsx`)
+// can label a notification's `type` the same way this matrix does, instead
+// of rendering the raw backend key.
 
 // Channel keys are the canonical names used by services/notify.{py,ts}.
 // `inapp` is kept as an alias-only column for legacy `notification_prefs`
@@ -157,16 +143,6 @@ const NOTIFICATION_CHANNELS = [
   { key: 'slack', label: 'Slack' },
   // SMS column reserved — wired in the table as disabled until Twilio is provisioned.
   { key: 'sms', label: 'SMS', disabled: true, hint: 'Coming soon' },
-];
-
-// Partner-only events — surfaced as a sub-section so partners can wire deal-flow
-// and mandate-relevant alerts independently of the core event grid.
-const PARTNER_NOTIFICATION_EVENTS = [
-  { key: 'partner_high_score_deal', label: 'New deal scores above your threshold' },
-  { key: 'partner_pipeline_activity', label: 'Founder activity on watched deals' },
-  { key: 'partner_capital_call_due', label: 'Capital call due in 7 days' },
-  { key: 'partner_match_recommendation', label: 'New partner match' },
-  { key: 'partner_kyc_block', label: 'A founder you backed is blocked on KYC' },
 ];
 
 // Wave 2 — notification presets.
