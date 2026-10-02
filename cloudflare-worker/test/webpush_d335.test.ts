@@ -28,16 +28,27 @@ function bytesToB64url(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-// A fixed, test-only VAPID key pair (ECDSA P-256) — NOT used anywhere real.
-const VAPID_PUBLIC_KEY = 'BOycy4dGHw69lbfzmhH4Fr2Z24cbFs8anx3R1LDzT_0wAayFO8pUH0Chs2dL0PNW0rzVH0Qm3UsmJsM96mSNTwE';
-const VAPID_PRIVATE_KEY = 'jivZ-O4GluX7-2-pey8R2dXVnXnyk_8c4AxXzisivlI';
+// A fresh, test-only VAPID key pair (ECDSA P-256), generated at run time
+// rather than hardcoded — a hardcoded base64 scalar is indistinguishable
+// from a real secret to a pattern-based scanner (gitleaks' generic-api-key
+// rule flagged exactly that, correctly treating a 32-byte base64url literal
+// named VAPID_PRIVATE_KEY as a plausible leak). Generating it per run means
+// there is no secret-shaped string in source at all.
+async function generateTestVapidKeys(): Promise<{ publicKey: string; privateKey: string }> {
+  const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']) as CryptoKeyPair;
+  const publicRaw = new Uint8Array(await crypto.subtle.exportKey('raw', pair.publicKey) as ArrayBuffer);
+  const jwk = await crypto.subtle.exportKey('jwk', pair.privateKey) as JsonWebKey;
+  return { publicKey: bytesToB64url(publicRaw), privateKey: jwk.d! };
+}
 
-function env(): any {
-  return { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT: 'mailto:test@axal.example' };
+async function env(): Promise<any> {
+  const { publicKey, privateKey } = await generateTestVapidKeys();
+  return { VAPID_PUBLIC_KEY: publicKey, VAPID_PRIVATE_KEY: privateKey, VAPID_SUBJECT: 'mailto:test@axal.example' };
 }
 
 test('signVapidJwt produces a three-part JWT whose signature verifies against the public key', async () => {
-  const result = await signVapidJwt(env(), 'https://push.example.com');
+  const testEnv = await env();
+  const result = await signVapidJwt(testEnv, 'https://push.example.com');
   assert.ok(result, 'signVapidJwt returned null with both VAPID env vars set');
   const parts = result!.jwt.split('.');
   assert.equal(parts.length, 3, 'a JWT has exactly three dot-separated parts');
@@ -50,7 +61,7 @@ test('signVapidJwt produces a three-part JWT whose signature verifies against th
   assert.ok(claims.exp > Math.floor(Date.now() / 1000), 'exp must be in the future');
 
   const pubKey = await crypto.subtle.importKey(
-    'raw', b64urlToBytes(VAPID_PUBLIC_KEY), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify'],
+    'raw', b64urlToBytes(testEnv.VAPID_PUBLIC_KEY), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify'],
   );
   const signingInput = new TextEncoder().encode(`${parts[0]}.${parts[1]}`);
   const sig = b64urlToBytes(parts[2]);
@@ -83,7 +94,7 @@ test('sendWebPush produces a decryptable RFC 8188 aes128gcm record', async () =>
 
   try {
     const result = await sendWebPush(
-      env(),
+      await env(),
       { endpoint: 'https://push.example.com/abc', p256dh: bytesToB64url(subscriberPublicRaw), auth: bytesToB64url(authSecret) },
       { title: 'Test', body: 'hello from D335' },
     );
@@ -142,7 +153,7 @@ test('sendWebPush marks a 410 response as gone', async () => {
   (globalThis as any).fetch = async () => new Response(null, { status: 410 });
   try {
     const result = await sendWebPush(
-      env(),
+      await env(),
       { endpoint: 'https://push.example.com/dead', p256dh: bytesToB64url(subscriberPublicRaw), auth: bytesToB64url(crypto.getRandomValues(new Uint8Array(16))) },
       { title: 'x' },
     );
