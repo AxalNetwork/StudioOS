@@ -87,7 +87,7 @@ const NOT_MONEY = new Map([
   ['total_score', 'a score'],
   ['revenue_model', 'prose describing a model'],
   ['revenue_notes', 'prose'],
-  ['revenue_growth', 'a growth rate — company_financials (migration 367) stores a ratio, not an amount'],
+  ['revenue_growth', 'a growth rate — company_financials (migration 370) stores a ratio, not an amount'],
   ['price_band', 'a band label, not an amount'],
   ['ticket_band', 'a band label'],
   ['budget_band', 'a band label'],

@@ -1,4 +1,4 @@
--- 367 — declare the four company research tables production already holds.
+-- 370 — declare the four company research tables production already holds.
 --
 -- They were created on production by hand between 2026-09-30 14:57 and 23:34
 -- UTC, with no migration, so every deploy from run 566 onward went red on
