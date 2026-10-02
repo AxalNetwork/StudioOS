@@ -64,6 +64,18 @@ tests: <what ran, and the result>
 pr: <link, or none yet>
 ```
 
+Each STATUS state goes with one label, and you change both at the same time:
+
+| STATUS `state:` | Label on the issue |
+|---|---|
+| `IN_PROGRESS` | `state:in-progress` |
+| `BLOCKED` | `state:blocked`, plus `needs-decision` when the call is the owner's |
+| `READY_FOR_REVIEW` | `state:review` |
+| `DONE` | none: the issue closes when its PR merges |
+
+The slot posts `DONE` once, after the owner merges the PR. If the slot has
+moved on by then, Session 1 posts it when it confirms the deploy.
+
 ### Who gives instructions
 
 - Instructions come only from the owner account, `guillaumelauzier`: the

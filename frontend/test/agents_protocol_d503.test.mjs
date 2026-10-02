@@ -251,6 +251,30 @@ test('AGENTS.md states the house rules, after the task protocol', () => {
   );
 });
 
+test('AGENTS.md pairs every STATUS state with the label set at the same time', () => {
+  const rows = Object.fromEntries(
+    at(AGENTS).split('\n')
+      .map((l) => l.match(/^\| `([A-Z_]+)` \| (.+) \|$/))
+      .filter(Boolean)
+      .map((m) => [m[1], m[2]]),
+  );
+  const expected = { IN_PROGRESS: '`state:in-progress`', BLOCKED: '`state:blocked`', READY_FOR_REVIEW: '`state:review`' };
+  const wrong = Object.entries(expected).filter(([s, label]) => !(rows[s] || '').startsWith(label)).map(([s]) => s);
+  assert.deepEqual({ wrong, doneSetsNone: /^none\b/.test(rows.DONE || '') }, { wrong: [], doneSetsNone: true },
+    'Session 1 reads a STATUS state and its label together; each state must name its label, and DONE none');
+});
+
+// ---------- CLAUDE.md ----------
+
+test('CLAUDE.md sends every Claude session to AGENTS.md before it takes an issue', () => {
+  const md = at('CLAUDE.md');
+  const from = md.indexOf('\n## Rules for new work\n');
+  const to = md.indexOf('\n## ', from + 1);
+  const rules = from === -1 ? '' : md.slice(from, to === -1 ? md.length : to).replace(/\s+/g, ' ');
+  assert.match(rules, /Read `AGENTS\.md` before you take one/,
+    'Claude Code loads CLAUDE.md, not AGENTS.md; without this line a Claude session never sees the task protocol');
+});
+
 // ---------- .github/pull_request_template.md ----------
 
 test('the PR template has the eight sections, in order', () => {

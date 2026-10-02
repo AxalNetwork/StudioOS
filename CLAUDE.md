@@ -110,6 +110,9 @@ never existed. Start at the README of whatever folder you land in.
   files, applied via `wrangler d1 execute studioos-db --file=...`. Mirror the
   same change in `backend/app/models/migrations.py` only if you need dev
   parity for a feature you're actively iterating on.
+- **Work is handed out as GitHub issues.** Read `AGENTS.md` before you take
+  one. It covers slots, the `state:*` labels, STATUS comments, and who gives
+  instructions.
 
 ## Why this doc exists
 

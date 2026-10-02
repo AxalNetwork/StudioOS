@@ -39862,6 +39862,18 @@ in one format, with no person relaying them.
   - It holds `contents: read` and `issues: write`, and no `${{ }}` sits inside
     its `run:`.
 
+**Two additions after review.**
+- Claude Code loads `CLAUDE.md`, not `AGENTS.md`. So "Rules for new work" in
+  `CLAUDE.md` now points every Claude session to `AGENTS.md` before it takes
+  an issue.
+- `AGENTS.md` pairs each STATUS state with the label set at the same time:
+  `IN_PROGRESS` with `state:in-progress`, `BLOCKED` with `state:blocked`, and
+  `READY_FOR_REVIEW` with `state:review`. `DONE` takes no label, because the
+  issue closes when its PR merges. The slot posts `DONE` once, after the owner
+  merges; Session 1 posts it if the slot has moved on.
+
+Two tests pin these additions. With them the file has 13 tests.
+
 **What it deliberately does not do.**
 - **No orchestration service yet.** Nothing assigns, polls, merges or moves a
   label on its own. Agents read issues and labels, and Session 1 and the owner
