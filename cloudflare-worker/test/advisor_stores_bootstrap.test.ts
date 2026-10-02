@@ -80,6 +80,8 @@ const T13 = `
 const MIGRATIONS = [
   '201_advisors_table_in_ledger', '202_advisor_profile_fields', '203_advisor_services',
   '204_advisor_proof', '205_advisor_booking_amounts', '206_advisor_cohort_assignments',
+  // D492 (U6): the founder notice ledger and opt-outs ride the same bootstrap.
+  '367_cohort_advisor_founder_notice',
 ];
 
 function fresh() {
