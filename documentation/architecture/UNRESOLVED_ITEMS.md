@@ -43,17 +43,15 @@ GitHub issues remain outside that evidence.
 The unresolved policy choices are not permission to select commercial terms,
 publish a response-time promise, or infer consent from an existing database row.
 
-**Validation before integrating current main — 2026-10-02.** The repository's full
-`npm run test:drift` gate exits 0: 9,339 tests pass and three are skipped, with
-schema/API guards, a temporary frontend build, Worker/frontend type checks,
-lint and dark-mode checks passing. The focused advisor-store run passed
-46 tests, including private-note isolation and assignment history. U6/U8 were
-subsequently superseded by current main as recorded below; integration validation
-will be recorded separately.
-Migration 369 was applied only to the local emulator. Current main independently fixes the timestamp-dependent fund-registry
-privacy assertion; its fix is retained without another local change. Public live
-smoke evidence is recorded separately under U10. Source changes remain local
-and have not been deployed by this session.
+**Validation of the integrated follow-up — 2026-10-02.** After integrating
+current main (`fa370069bb`) and preserving its D492/D493 implementations,
+`npm run test:drift` exits 0: 9,352 tests pass and three are skipped. Schema/API
+guards, a temporary frontend build, Worker/frontend type checks, lint and
+dark-mode checks all pass. Migration 369 was applied only to the local emulator,
+alongside current main's migrations 367/368. Current main's independent fix for
+the timestamp-dependent fund-registry privacy assertion is retained. Public
+live smoke evidence is recorded separately under U10. The follow-up is prepared
+on a task branch and has not been deployed by this session.
 
 ---
 
