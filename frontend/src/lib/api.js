@@ -4572,10 +4572,6 @@ export const api = {
   pushOneToExternal: (kind, sourceId) =>
     request(`/calendar/push/${kind}/${sourceId}`, { method: 'POST' }),
 
-  // Per-user Cal.com key (advisor-only)
-  attachMyCalcomKey: (data) =>
-    request('/calendar/me/calcom', { method: 'POST', body: JSON.stringify(data) }),
-
   // ---------- Co-founder matching (Task #38) ----------
   cofounderMe: () => request('/cofounder/me'),
   cofounderUpsertMe: (data) =>

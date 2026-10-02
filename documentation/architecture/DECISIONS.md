@@ -39788,3 +39788,44 @@ treated as accepted, and their subjects are told.
 
 **Tests.** `relationship_requests_d493.test.ts` (8). 19 mutations, 19
 caught.
+
+## D494
+
+**The canvas ledger's non-canvas half, item 7 of the Wave-8 brief —
+`api.attachMyCalcomKey` deleted; the ROUTE_MAP/store-gap edits were not made.**
+
+**`api.attachMyCalcomKey` is deleted.** It called `POST /calendar/me/calcom`,
+a path with no worker route at all (`scripts/api-drift-baseline.json`
+carried it as known drift) and no caller anywhere in `frontend/src` besides
+its own definition in `api.js`. `cloudflare-worker/src` has no "calcom"
+string anywhere — no route, no service, no stored concept of a Cal.com
+integration — so this was dead on both ends, not a broken feature with a
+caller waiting on it. Removed from `api.js`; the baseline entry for it is
+gone (the ledger shrinks by one).
+
+**The brief's other two asks for this item — specific ROUTE_MAP.md row
+edits at line markers `:81`, `:83`, `:96`, `:130`, and new store-gap
+recording for Events/Wellbeing/Help — were not made.** Those line markers
+don't resolve to anything identifiable in the current
+`documentation/architecture/ROUTE_MAP.md`: the file has been edited
+extensively since whenever the brief's line numbers were taken (it carries
+dated UPDATE/CORRECTION blocks through 2026-09-27 and beyond), so numbers
+written against an earlier revision point at different content now. Reading
+the Events, Founder Wellbeing and Help Center rows as they stand today, each
+already carries exactly the kind of store-gap recording the brief asked
+for — Events names the missing `recording_url`/`replay_url` column and the
+absent `requestIntro`/roster endpoints; Founder Wellbeing says "grep confirms
+none of these strings exist live" for its four unbuilt pieces; Help Center
+spells out, by name, the two missing stores ("Popular this week" needs view
+counts, "Did this answer it?" needs a feedback store) and the per-article
+`surface` route gap. Editing rows that already state the gap, against line
+numbers that no longer mean anything, risked overwriting a correct, dated
+audit with a guess. Measuring first and reporting rather than guess-editing
+is the standing rule this followed; a future task with the brief's original
+line numbers resolved against the revision they were taken from should
+redo this specifically, rather than this entry's guess standing in for it.
+
+**Tests.** No new assertion needed — confirming the one real finding
+(`attachMyCalcomKey`'s dead ends) was a grep, not a behavior to pin; the
+full `npm run test:drift`, both typechecks and `check-api-drift` all stay
+green with the baseline entry gone.
