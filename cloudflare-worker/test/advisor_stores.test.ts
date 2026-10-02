@@ -146,6 +146,7 @@ function freshDb() {
   // rather than the route being wrong — the tests below assert 205's
   // behaviour and still do.
   db.exec(migration('241_advisor_money_model'));
+  db.exec(migration('369_advisor_client_notes'));
 
   const u = db.prepare('INSERT INTO users (id, role, advisor_id, name, email) VALUES (?,?,?,?,?)');
   u.run(ADVISOR_USER, 'advisor', 1, 'Ada', 'ada@example.com');
@@ -221,6 +222,65 @@ const grace = { user: OTHER_ADVISOR_USER, role: 'advisor' };
 const fran = { user: FOUNDER_USER, role: 'founder' };
 const root = { user: ADMIN_USER, role: 'admin' };
 const otto = { user: OUTSIDER_USER, role: 'founder' };
+
+test('private roster notes stay with their advisor, separate from shared bookings', async () => {
+  const db = freshDb();
+  const e = env(db);
+  try {
+    db.exec(`INSERT INTO advisor_bookings (uid, slot_id, advisor_id, founder_user_id, topic, notes)
+      VALUES ('client-ada', 1, 1, ${FOUNDER_USER}, 'Public topic', 'Client message'),
+             ('client-grace', 2, 2, ${FOUNDER_USER}, 'Another topic', 'Another client message')`);
+    const path = `/me/client-notes/${FOUNDER_USER}`;
+    assert.equal((await call(e, 'GET', path, ada)).body.note, null);
+    const first = await call(e, 'PUT', path, ada, { body: 'Ada private note', advisor_user_id: OTHER_ADVISOR_USER });
+    assert.equal(first.status, 200);
+    assert.equal(first.body.note.body, 'Ada private note');
+    assert.equal((await call(e, 'GET', path, grace)).body.note, null, 'another booked advisor does not inherit the note');
+    await call(e, 'PUT', path, grace, { body: 'Grace private note' });
+    const edited = await call(e, 'PUT', path, ada, { body: 'Ada edited note' });
+    assert.equal(edited.body.note.uid, first.body.note.uid, 'editing keeps one note');
+    assert.equal((await call(e, 'GET', path, grace)).body.note.body, 'Grace private note');
+    await call(e, 'DELETE', path, grace);
+    assert.equal((await call(e, 'GET', path, ada)).body.note.body, 'Ada edited note');
+    for (const who of [fran, root, otto]) {
+      for (const method of ['GET', 'PUT', 'DELETE']) {
+        assert.equal((await call(e, method, path, who, method === 'PUT' ? { body: 'Forbidden edit' } : undefined)).status, 403);
+      }
+    }
+    assert.equal((await advisors.request(path, {}, e as any)).status, 401);
+    const clientBookings = await call(e, 'GET', '/bookings/me', fran);
+    assert.equal(clientBookings.status, 200);
+    assert.ok(!JSON.stringify(clientBookings.body).includes('Ada edited note'));
+    assert.equal(db.prepare('SELECT notes FROM advisor_bookings WHERE uid = ?').get('client-ada')?.notes, 'Client message');
+    assert.equal((await call(e, 'DELETE', path, ada)).body.note, null);
+    assert.equal((await call(e, 'GET', path, ada)).body.note, null);
+  } finally { db.close(); }
+});
+
+test('private notes require a roster client, valid text and an owned advisor profile', async () => {
+  const db = freshDb();
+  const e = env(db);
+  try {
+    db.exec(`INSERT INTO advisor_bookings (uid, slot_id, advisor_id, founder_user_id)
+      VALUES ('client-validation', 1, 1, ${FOUNDER_USER})`);
+    const path = `/me/client-notes/${FOUNDER_USER}`;
+    await call(e, 'PUT', path, ada, { body: 'Keep this note' });
+    for (const payload of [{}, { body: '' }, { body: '   ' }, { body: 7 }, { body: 'x'.repeat(8001) }]) {
+      assert.equal((await call(e, 'PUT', path, ada, payload)).status, 400);
+    }
+    assert.equal((await call(e, 'GET', path, ada)).body.note.body, 'Keep this note');
+    for (const method of ['GET', 'PUT', 'DELETE']) {
+      assert.equal((await call(e, method, `/me/client-notes/${OUTSIDER_USER}`, ada, method === 'PUT' ? { body: 'Wrong client' } : undefined)).status, 403);
+    }
+    for (const id of ['abc', '0', '-1', '1.5', '9007199254740992']) {
+      assert.equal((await call(e, 'GET', `/me/client-notes/${id}`, ada)).status, 400);
+    }
+    db.prepare('UPDATE users SET advisor_id = 1 WHERE id = ?').run(OTHER_ADVISOR_USER);
+    assert.equal((await call(e, 'GET', path, grace)).status, 403, 'a mismatched profile pointer cannot borrow another roster');
+    db.prepare('UPDATE users SET role = ? WHERE id = ?').run('partner', ADVISOR_USER);
+    assert.equal((await call(e, 'GET', path, ada)).status, 403, 'current role is checked, not the old token role');
+  } finally { db.close(); }
+});
 
 // ---------------------------------------------------------------------------
 // 202 — profile fields

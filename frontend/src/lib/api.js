@@ -4012,6 +4012,11 @@ export const api = {
   cancelAdvisorSlot: (slotId) => request(`/advisors/me/slots/${slotId}`, { method: 'DELETE' }),
   bookAdvisorSlot: (slotId, data) =>
     request(`/advisors/slots/${slotId}/book`, { method: 'POST', body: JSON.stringify(data) }),
+  advisorClientNote: (clientId) => request(`/advisors/me/client-notes/${encodeURIComponent(clientId)}`),
+  saveAdvisorClientNote: (clientId, body) => request(`/advisors/me/client-notes/${encodeURIComponent(clientId)}`, {
+    method: 'PUT', body: JSON.stringify({ body }),
+  }),
+  deleteAdvisorClientNote: (clientId) => request(`/advisors/me/client-notes/${encodeURIComponent(clientId)}`, { method: 'DELETE' }),
   listMyAdvisorBookings: (status) =>
     request(`/advisors/me/bookings${status ? `?status=${status}` : ''}`),
   listMyMenteeBookings: (status) =>

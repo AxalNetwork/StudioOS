@@ -104,7 +104,7 @@ export default function ContactPage() {
             <Mail className="w-7 h-7 text-violet-600" /> Contact us
           </h1>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-            Send us a message — it lands directly in our team queue. We usually reply within one business day.
+            Send us a message — it lands directly in our team queue.
             For account-specific issues, please pick <em>Support request</em>.
           </p>
         </div>
