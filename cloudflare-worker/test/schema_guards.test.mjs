@@ -555,6 +555,7 @@ test('a money word is not the same as an amount of money', () => {
     'principal_key',        // a security principal
     'revenue_range',        // a band label
     'revenue_notes',        // prose
+    'revenue_growth',       // a growth rate (company_financials, migration 367)
   ]) {
     assert.ok(!isMoney(no), `${no} should not read as money`);
   }
