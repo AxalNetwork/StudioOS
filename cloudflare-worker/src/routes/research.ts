@@ -3030,6 +3030,88 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'build/retro': {
+    // The cadence card's band (D510). A3: "Friday retro gets a draft summary
+    // from the board's own history — accept it or write your own." The
+    // integrated Build canvas's fixture reads "three cards moved, one carried
+    // a third time, one commitment missed with no note", and names decisions.
+    //
+    // THE BOARD KEEPS NO HISTORY OF ITS MOVES. A card is one `mvp_tasks` row:
+    // its status NOW, when it was created, when it was last touched. Nothing
+    // records a move, so "carried a third time" and "moved three times" have
+    // no row behind them, and neither does when a card was finished. So the
+    // week here is the cards last touched in the past seven days, each with
+    // where it stands now, plus the open cards past their due date. The
+    // instruction forbids the counts nothing records, and the material says
+    // why in its own words, so the gap reaches the model as a fact rather
+    // than as silence. Decisions live in the founder's ritual notes, not on
+    // the board, so this surface states none.
+    //
+    // AN EMPTY BOARD IS NOTHING TO DRAFT; A QUIET WEEK IS NOT. A board with
+    // cards and no card touched this week is a retro that says so, and the
+    // material carries that sentence. Only a board with no card at all
+    // returns [] for the route to answer as `nothing_to_draft`.
+    instruction: [
+      'Summarise this week on the board below for the founder\'s Friday retro.',
+      'Say which cards were touched this week and where each stands now, and name every open card that is past its due date.',
+      'The board records each card\'s current status and when it was last touched, and no history of its moves: never say how many times a card moved, slipped or carried over, and never say when a card was finished, only that it is done now.',
+      'Never name an owner, give a cause or state a decision: none is recorded here. Add nothing the material below does not support.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      // Every statement is keyed on `deal_id = pid`, the project the ownership
+      // check resolved — `mvp_tasks.deal_id` is a `projects.id` (see
+      // `founder_board.ts`).
+      const byStatus = await c.env.DB.prepare(
+        `SELECT status, COUNT(*) AS n FROM mvp_tasks WHERE deal_id = ? GROUP BY status ORDER BY status`
+      ).bind(pid).all<{ status: string; n: number }>();
+      const counts = byStatus.results || [];
+      const total = counts.reduce((sum, r) => sum + Number(r.n), 0);
+      if (!total) return [];
+      const today = new Date().toISOString().slice(0, 10);
+      const lines: string[] = [
+        `The week read: the seven days to ${today}.`,
+        `The board holds ${total} card${total === 1 ? '' : 's'}: `
+          + counts.map((r) => `${r.n} ${String(r.status).replace('_', ' ')}`).join(', ') + '.',
+        'NO MOVE HISTORY IS STORED: a card records only its current status and when it was last touched, so how often it moved, slipped or carried over, and when it was finished, are not known.',
+      ];
+      const touched = await c.env.DB.prepare(
+        `SELECT title, status, due_date, created_at, updated_at,
+                CASE WHEN datetime(created_at) >= datetime('now', '-7 days') THEN 1 ELSE 0 END AS added
+           FROM mvp_tasks
+          WHERE deal_id = ? AND datetime(updated_at) >= datetime('now', '-7 days')
+          ORDER BY datetime(updated_at) DESC, id DESC LIMIT 40`
+      ).bind(pid).all<{
+        title: string; status: string; due_date: string | null;
+        created_at: string | null; updated_at: string | null; added: number;
+      }>();
+      const week = touched.results || [];
+      if (!week.length) lines.push(`No card was touched in the seven days to ${today}.`);
+      for (const t of week) {
+        lines.push(`Touched this week: ${t.title} — now ${String(t.status).replace('_', ' ')}; `
+          + `${Number(t.added) ? 'added this week' : `added ${t.created_at ? String(t.created_at).slice(0, 10) : 'on a date not recorded'}`}; `
+          + `last touched ${t.updated_at ? String(t.updated_at).slice(0, 10) : 'not recorded'}; `
+          + `${t.due_date ? `due ${String(t.due_date).slice(0, 10)}` : 'no due date recorded'}`);
+      }
+      // Past due is read off the due date alone, so it holds whether or not
+      // the card was touched this week. The closed statuses are the ones
+      // `founder_board.ts` keeps out of a WIP count; anything else is open.
+      const late = await c.env.DB.prepare(
+        `SELECT title, status, due_date, updated_at FROM mvp_tasks
+          WHERE deal_id = ? AND due_date IS NOT NULL AND date(due_date) < date('now')
+            AND lower(status) NOT IN ('done','cancelled','archived')
+          ORDER BY date(due_date), id LIMIT 20`
+      ).bind(pid).all<{ title: string; status: string; due_date: string; updated_at: string | null }>();
+      for (const t of (late.results || [])) {
+        lines.push(`Past due and still open: ${t.title} — ${String(t.status).replace('_', ' ')}; `
+          + `was due ${String(t.due_date).slice(0, 10)}; `
+          + `last touched ${t.updated_at ? String(t.updated_at).slice(0, 10) : 'not recorded'}`);
+      }
+      return lines;
+    },
+  },
+
   'raise/capital': {
     // A4's band: "At $1.5M on a $12M post with a 12% pool top-up, you and Amara
     // go from 89.5% to 66.1% combined. The pool top-up costs you more dilution
@@ -3377,6 +3459,14 @@ research.post('/drafts', async (c) => {
   const spec = DRAFT_SURFACES[surface];
   if (!spec) return c.json({ detail: 'unknown_surface' }, 400);
   const scope = String(body?.scope_key || '');
+  // THE PAGE THE BAND SITS ON, recorded as the run's `surface` (D404, D510).
+  // It is the app path, not the draft key above: `ai_usage_logs.surface` is
+  // what the rail groups "This page this month" on, and `build/retro` is not
+  // a page anyone stands on. Without it every zone-draft run landed in the
+  // month's unattributed group. The router re-validates it with
+  // `normaliseSurface`, so a value that is not a plain app path is recorded
+  // as NULL ("not recorded"), never trimmed into one; capped as `ai.ts` caps it.
+  const page = typeof body?.page === 'string' ? body.page.slice(0, 200) : undefined;
 
   const material = await spec.gather(c, user.id, scope);
   // NOTHING TO READ IS NOT AN ERROR AND MUST NOT REACH THE MODEL. A brief over
@@ -3392,6 +3482,7 @@ research.post('/drafts', async (c) => {
       userId: user.id,
       text: `${spec.instruction}\n\n${material.join('\n\n')}`,
       maxTokens: 500,
+      surface: page,
     });
   } catch (e) {
     console.error('[research] draft failed:', (e as Error).message);
