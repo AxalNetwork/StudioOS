@@ -15,9 +15,12 @@
  *  - Critical categories (`security`, `billing`, `contract_sign_request`)
  *    bypass both quiet hours and digest buffering.
  *  - Non-critical email is dropped into `notification_outbox` when the
- *    user is inside their quiet window OR has digest set to daily/weekly.
- *  - When digest=off and we're in quiet hours, the email is logged as
- *    `suppressed_quiet_hours` in `activity_logs` and skipped.
+ *    user has digest set to daily/weekly, regardless of quiet hours — the
+ *    digest cron is what paces it either way.
+ *  - D333: quiet hours with digest=off no longer drops the email. It used
+ *    to (logged as `suppressed_quiet_hours`); quiet hours only ever
+ *    promised to suppress the real-time push, not kill mail with nothing
+ *    buffering it.
  *  - Slack is intentionally NOT digestable for this slice (spec).
  *  - `flushPendingDigests(env)` is what the cron calls to assemble each
  *    user's pending outbox into a single email at 09:00 user-tz.
@@ -26,6 +29,7 @@ import type { Env } from '../types';
 import { stripTrailingSlashes } from '../util/url';
 import { getUserSettings, isInQuietHours } from './userSettings';
 import { bindingKey } from '../util/schemaBootstrap';
+import { renderWeeklyDigest } from './email/canvasTransactional';
 
 export type NotifyChannel = 'in_app' | 'email' | 'slack';
 export type NotifyCategory =
@@ -222,24 +226,14 @@ async function postSlackBlocks(webhook: string, payload: Record<string, unknown>
 /** Returns true on confirmed dispatch, false otherwise. Callers that
  *  participate in the digest flush MUST honour the boolean — marking an
  *  outbox row flushed on a swallowed error is silent data loss. */
-async function sendEmail(env: Env, to: string, subject: string, body: string): Promise<boolean> {
+async function sendEmail(env: Env, to: string, subject: string, body: string, html?: string): Promise<boolean> {
   try {
     const { sendNotificationEmail } = await import('./email');
-    await sendNotificationEmail(env, to, subject, body);
+    await sendNotificationEmail(env, to, subject, body, html ? { html } : undefined);
     return true;
   } catch (e) {
     console.warn('[notify] email failed', e);
     return false;
-  }
-}
-
-async function recordActivity(env: Env, userId: number, action: string, details: Record<string, unknown>): Promise<void> {
-  try {
-    await env.DB.prepare(
-      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
-    ).bind(action, JSON.stringify(details), null, userId).run();
-  } catch (e) {
-    console.warn('[notify] activity_logs insert failed', e);
   }
 }
 
@@ -355,16 +349,22 @@ export async function notify(env: Env, args: NotifyArgs): Promise<number | null>
     if (resolved.includes('email')) {
       if (isCritical) {
         await dispatchEmail(env, args);
-      } else if (quiet) {
-        if (digest === 'off') {
-          await recordActivity(env, args.userId, 'suppressed_quiet_hours', {
-            type: args.type, category: args.category ?? null,
-          });
-        } else {
-          await enqueueOutbox(env, args, 'quiet_hours');
-        }
       } else if (digest === 'daily' || digest === 'weekly') {
+        // D333: digest buffering applies whether or not the user is
+        // currently inside quiet hours — the digest cron is what paces
+        // delivery either way, so quiet hours doesn't need a second check
+        // here. The one it used to do (below) was the actual defect.
         await enqueueOutbox(env, args, 'digest');
+      } else if (quiet) {
+        // D333: quiet hours used to silently drop this email outright when
+        // the user's digest was off — `recordActivity('suppressed_quiet_hours')`
+        // and nothing else, so an opted-out-of-digests user lost the email
+        // entirely rather than just having it wait. Quiet hours has always
+        // only promised to suppress the real-time push (see T20 above); it
+        // was never meant to suppress email when there is no digest to
+        // catch it. So with digest off, email still goes out now instead
+        // of vanishing.
+        await dispatchEmail(env, args);
       } else {
         await dispatchEmail(env, args);
       }
@@ -604,8 +604,30 @@ export async function flushPendingDigests(env: Env, now: Date = new Date()): Pro
       console.warn('[notify] digest skipped — no email for user', u.user_id);
       continue;
     }
+    // D333: the digest email now renders through the Emails canvas's M4
+    // (`renderWeeklyDigest`) instead of the plain-text bullet list this used
+    // to build by hand — the canvas chrome, not a second copy of it, is the
+    // source of truth for what this email looks like. `renderDigestEmail`
+    // still backs the plain-text part + the Slack digest below, which the
+    // canvas doesn't cover.
     const { subject, body } = renderDigestEmail(rows, cadence);
-    const ok = await sendEmail(env, userEmail, subject, body);
+    const appUrl = (env as { APP_URL?: string }).APP_URL || 'https://axal.vc';
+    const root = stripTrailingSlashes(appUrl);
+    const html = renderWeeklyDigest({
+      to: userEmail,
+      weekLabel: cadence === 'weekly'
+        ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long' }).format(now)
+        : new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long' }).format(now),
+      cards: rows.slice(0, 3).map((r) => ({
+        kicker: (r.category || r.type || 'update').toUpperCase(),
+        title: r.title,
+        body: r.body ? r.body.replace(/\s+/g, ' ').slice(0, 180) : '',
+        link: r.link ? (r.link.startsWith('http') ? r.link : `${root}${r.link.startsWith('/') ? '' : '/'}${r.link}`) : undefined,
+      })),
+      dashboardUrl: `${root}/inbox`,
+      unsubscribeUrl: `${root}/account/notifications`,
+    }).html;
+    const ok = await sendEmail(env, userEmail, subject, body, html);
     if (!ok) {
       console.warn('[notify] digest email failed; leaving outbox rows pending for retry', { user_id: u.user_id });
       continue;

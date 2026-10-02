@@ -39788,3 +39788,74 @@ treated as accepted, and their subjects are told.
 
 **Tests.** `relationship_requests_d493.test.ts` (8). 19 mutations, 19
 caught.
+
+## D494
+
+**Outbound mail starts following the Emails canvas and the notify rules — the
+quiet-hours bug and the dead template, item 5 of the Wave-8 brief.** Scoped
+down from the full brief: the parts that needed new data (a canvas-faithful
+`capital_call_issued` and `spinout_admitted` send, which need company name,
+call percentages and a programme checklist no current call site has) are
+deferred rather than filled with invented figures. What ships is real and
+measured, not a partial-credit stand-in for the rest.
+
+**The quiet-hours bug.** `notify()`'s email branch, for a non-critical
+category, used to read: in quiet hours AND digest off → log
+`suppressed_quiet_hours` to `activity_logs` and send nothing at all. Quiet
+hours has only ever promised to suppress the real-time push (T20's own
+comment says so); turning off the digest was never supposed to turn this
+into a second, silent unsubscribe. A user who was in their quiet window with
+no digest configured lost the email outright — not delayed, not buffered,
+gone. Fixed: digest-off no longer special-cases quiet hours for email; it
+dispatches immediately either way, the same as "not quiet." Digest
+daily/weekly still buffers regardless of quiet hours, unchanged.
+`recordActivity` (only caller was the suppression branch) is deleted along
+with it rather than left orphaned.
+
+**The weekly digest now renders through the canvas.** `flushPendingDigests`
+built its own plain-text bullet list by hand; it now also builds an HTML part
+via `canvasTransactional.ts`'s `renderWeeklyDigest` (M4), passing the first
+three outbox rows as `DigestCard`s. The plain-text render stays — it's still
+what backs the multipart fallback and the separate Slack Block Kit digest, and
+duplicating canvas-card logic into Slack's Block Kit shape isn't this task.
+
+**`referral_payout_paid` deleted.** Confirmed dead: defined only in
+`templates/email/registry.ts`, zero call sites anywhere under
+`cloudflare-worker/src`, and `referral_submissions.test.ts` already pins that
+the feature it backed (`referralPayouts.ts`) "was removed … and must not
+return." Removing it needed no migration — nothing durable referenced the
+template key.
+
+**The notifications matrix stops promising what the backend won't do.**
+`capital_call_issued` and `agreement_ready_to_sign` carry money/signature
+consequences `notify.ts`'s `CRITICAL_CATEGORIES` (`billing`,
+`contract_sign_request`) already never let quiet hours or a digest delay —
+and the capital-call canvas copy itself says "Capital notices cannot be
+turned off." The settings grid disagreed: a user could toggle email off for
+either row and nothing would happen, because the backend sent it regardless.
+`NOTIFICATION_EVENTS` entries for those two now carry `lockedChannels:
+['email']`; the table renders that cell checked and disabled, `setEvent`
+refuses a write to a locked channel as defense in depth, and applying any
+preset (including "Mute all") re-locks it afterward rather than trusting the
+preset to leave it alone. `capital_call_paid` is deliberately left
+user-toggleable — only the issuance notice is backend-forced.
+
+**Deferred, not done.** `canvasTransactional.ts`'s `renderCapitalCall` and
+`renderSpinoutDecision` (M3, M5) still have no production call site. Wiring
+them for real needs: for capital calls, the called-to-date and unfunded
+percentages per LP (a query `issueFundCall` doesn't currently run) and an
+actual email send at all — today `issueFundCall` writes only an
+`activity_logs` row, never an email; for spinout admission, the applicant's
+company name, a programme checklist and an accept-by deadline, none of which
+the three `send(..., 'spinout_admitted', …)` call sites in `routes/admin.ts`
+and `routes/admin_cohort.ts` currently carry. Filling those vars with
+placeholder values to make the renderers "wired" would ship a canvas email
+that's wrong rather than one that's merely unbuilt. Left for a follow-up task
+that can plumb the real data through.
+
+**Tests.** `notify_quiet_hours_digest_off_d333.test.ts` (3; the suppression
+row disappears, a daily-digest buffer still works, critical still bypasses
+quiet hours) — mutation-tested by reverting the branch to its old shape: 2 of
+3 escaped and were caught. `settings_notification_locks_d333.test.mjs` (4;
+the two locked entries exist and `capital_call_paid` doesn't, the render
+cell's lock logic, `setEvent`'s refusal, and preset re-locking).
