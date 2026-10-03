@@ -39789,7 +39789,7 @@ treated as accepted, and their subjects are told.
 **Tests.** `relationship_requests_d493.test.ts` (8). 19 mutations, 19
 caught.
 
-## D494
+## D495
 
 **Outbound mail starts following the Emails canvas and the notify rules — the
 quiet-hours bug and the dead template, item 5 of the Wave-8 brief.** Scoped
