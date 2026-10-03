@@ -39961,6 +39961,48 @@ treated as accepted, and their subjects are told.
 **Tests.** `relationship_requests_d493.test.ts` (8). 19 mutations, 19
 caught.
 
+## D509
+
+**Task #990: two Studio leftovers. A route with no caller, and a missing count
+shown as 0.**
+
+**What was true on main (f701a32f5).**
+- `routes/dashboard.ts:302`, `POST /dashboard/refresh-scores`, lost its only
+  caller when D323 removed `api.refreshDashboardScores`. Nothing in
+  `frontend/src` called it, and `ROUTE_MAP.md` had no row for it.
+- `ProfileFitSection.jsx:602` rendered the best-fit type count badge as
+  `Number(t.count) || 0`. A type whose count the read did not carry therefore
+  read "0", a claim that nobody fits, about a number nobody measured.
+
+**What changed.**
+- **The route is deleted, not kept.**
+  - Since D323 the dashboard cache has expired only on its own TTLs, because
+    nothing called this route. Deleting it changes no behaviour.
+  - `kvDelete` drops out of `dashboard.ts`'s imports with it.
+  - `dashboard_company_scope.test.ts`'s refresh test read the handler's
+    source. It is replaced by a test that the route is gone and that no
+    client method for it has reappeared.
+  - There was no `ROUTE_MAP` row to remove.
+- **The badge is drawn only for a measured count.** The new
+  `fitCount(raw)` returns the count, or null when it is absent:
+  - only a number or a numeric string counts, by type and not by value, the
+    `bpsPercent` rule;
+  - a measured 0 still shows;
+  - an absent count draws no badge.
+
+**Tests.**
+- `frontend/test/fit_count_d509.test.mjs` (3). `MatchSummaryCard` fetches its
+  own data, so these pin `fitCount` and the badge's own markup.
+- The re-aimed `dashboard_company_scope.test.ts` test.
+
+**Mutations: 4 run, 4 caught.**
+- The route put back.
+- The badge drawn without the check.
+- An absent count read as 0.
+- The old `Number(t.count) || 0` restored.
+
+No migration.
+
 ## D520
 
 **The four `company_*` research tables production holds are declared in the

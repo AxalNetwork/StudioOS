@@ -3,7 +3,7 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
-import { kvGetJSON, kvPutJSON, kvDelete, createL1 } from '../kv';
+import { kvGetJSON, kvPutJSON, createL1 } from '../kv';
 import { clampDays } from '../util/pagination';
 import { maskFounderForInvestor } from '../services/trust';
 
@@ -297,31 +297,6 @@ dashboard.get('/', async (c) => {
     if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(writeP); else void writeP;
   }
   return c.json(payload);
-});
-
-dashboard.post('/refresh-scores', async (c) => {
-  const user = await requireAuth(c);
-  // Invalidate both cache tiers for this user, under EVERY company.
-  //
-  // Once the key carries the company there is no longer one entry to delete.
-  // Clearing only the caller's current company would leave a stale dashboard
-  // waiting behind the switcher, which is the same bug as not invalidating at
-  // all — just harder to notice, because it appears one click later.
-  const prefix = `${user.id}:`;
-  for (const k of [...l1.map.keys()]) if (k.startsWith(prefix)) l1.map.delete(k);
-
-  if (c.env.TOKENS) {
-    // KV has no prefix delete here, so the companies are read back. `null` is
-    // always included: it is the key a caller who never touched the switcher
-    // has been writing under.
-    const links = await c.env.DB.prepare(
-      'SELECT company_id FROM user_company_links WHERE user_id = ?',
-    ).bind(user.id).all<{ company_id: number }>().catch(() => ({ results: [] }));
-    const companies: Array<number | null> = [null,
-      ...((links.results || []).map((r) => Number(r.company_id)))];
-    await Promise.all(companies.map((cid) => kvDelete(c.env.TOKENS, kvKey(user.id, cid))));
-  }
-  return c.json({ ok: true, message: 'Cache cleared. Next fetch will re-aggregate.' });
 });
 
 // Task #81 — Investor deal lifecycle.
