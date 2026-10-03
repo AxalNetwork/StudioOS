@@ -133,6 +133,34 @@ export type PushSendResult =
   | { ok: true }
   | { ok: false; gone: boolean; status: number; error: string };
 
+const PUSH_SEND_TIMEOUT_MS = 5000;
+
+/**
+ * `sendWebPush` racing a fixed timeout — pulled out so every caller that
+ * fans a notification out to several stored subscriptions shares the same
+ * bound, rather than each reimplementing (or, the first time, omitting) it.
+ * `notify()`'s real dispatch and `/push/test`'s manual one both loop over
+ * up to 20 subscriptions (the `/push/subscribe` cap); a Codex review caught
+ * `notify()` doing this sequentially with no timeout, and a follow-up
+ * review caught `/push/test` repeating the same shape independently. One
+ * slow or non-responding push service must bound ONE send, not the whole
+ * loop, and the loop itself must run concurrently rather than one at a
+ * time — see `sendToAllSubscriptions` below for the concurrent fan-out this
+ * backs.
+ */
+export async function sendWebPushBounded(
+  env: Env,
+  sub: PushSubscriptionRow,
+  payload: Record<string, unknown>,
+): Promise<PushSendResult> {
+  return Promise.race([
+    sendWebPush(env, sub, payload),
+    new Promise<PushSendResult>((resolve) => setTimeout(
+      () => resolve({ ok: false, gone: false, status: 0, error: 'timeout' }), PUSH_SEND_TIMEOUT_MS,
+    )),
+  ]);
+}
+
 /** RFC 8291 §3 — aes128gcm payload encryption + the push service POST. */
 export async function sendWebPush(
   env: Env,

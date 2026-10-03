@@ -32291,6 +32291,70 @@ moving the call to after the token removal, each broke one of the three
 source-level tests (caught). All reverted and reverified clean
 (sha256-matched against the pre-mutation files).
 
+**A fourth Codex review round, three more findings, all real:**
+
+- **(P2) The 20-subscription cap was a TOCTOU race.** `/push/subscribe`'s
+  cap read `SELECT COUNT(*)` and the following `INSERT` as two separate D1
+  statements — concurrent requests from the same account could each read
+  the count before any of them committed its insert, so every one of them
+  observed "under the cap" and all of them landed, however many arrived at
+  once. Folded into one atomic statement:
+  `INSERT INTO push_subscriptions (...) SELECT ... WHERE (SELECT COUNT(*) ...) < 20 ON CONFLICT(endpoint) DO UPDATE ...`.
+  The `WHERE` only produces a row to insert when the cap still holds at the
+  instant the statement runs, and there is no separate round trip in
+  between for another request to land in. `meta.changes === 0` is how the
+  route now tells a capped request from an accepted one (1 either way: a
+  fresh insert or an `ON CONFLICT` update).
+- **(P2) `clearSession()`'s fix for the earlier push-revoke finding was
+  itself a stall.** It awaited `disablePush()` behind a 3s race before ANY
+  of the synchronous local teardown — `setUser(null)` and the token/user
+  wipe included. A stalled service worker, subscription lookup or
+  unsubscribe request held up all of it for up to 3s, and a tab closed
+  during that stall kept both the local token and the server cookie alive:
+  still signed in on the next visit. Fixed by never awaiting `disablePush()`
+  at all — fire-and-forget with its own `.catch()`. The remaining
+  complication: `disablePush()`'s own internal `await`s
+  (`navigator.serviceWorker.ready`, `getSubscription()`) mean it reaches
+  `api.pushUnsubscribe` well after `clearSession`'s synchronous code has
+  already cleared `localStorage`, so the token it needs would already be
+  gone. `disablePush` now takes an optional `authToken` override,
+  `api.pushUnsubscribe` takes an `opts.headers` override to carry it, and
+  `clearSession` captures the token into a local variable before clearing
+  it and passes that through explicitly — the revoke no longer depends on
+  `localStorage` still holding anything by the time it actually runs.
+- **(P2) `/push/test` repeated `notify()`'s original mistake independently.**
+  The sequential, unbounded loop over subscriptions that `notify()`'s fan-out
+  fix addressed was never ported to this route, even though `togglePush()`
+  awaits `/push/test` immediately after enabling push — the same
+  cumulative-latency problem, now able to leave the notification toggle
+  busy until the frontend's own 30s request deadline. The timeout-raced
+  send extracted as `sendWebPushBounded` (`webpush.ts`) is shared by both
+  call sites rather than duplicated a second time: `/push/test`'s loop is
+  now a `Promise.all` over bounded sends, same as `notify()`'s.
+
+**Tests (fourth review round).** `push_security_fixes_d334.test.ts` grew
+two cases: 25 concurrent `/push/subscribe` requests for 25 distinct
+endpoints resolve to exactly 20 accepted and 5 capped, with the table
+holding exactly 20 rows afterward (this is what actually exercises the
+race the sequential 21-requests-in-a-row test above it cannot: real
+concurrency, not one request fully finishing before the next starts); and
+`/push/test` sending to 3 responsive + 1 permanently-hung subscription
+completes in under 6s with `sent: 3, failed: 1`, proving both the
+concurrency and the timeout on this route specifically.
+`clear_session_push_revoke_d334.test.mjs` (grew to 5): the token is
+captured and handed to `disablePush()` as `authToken` before the token is
+cleared; `disablePush()` is called WITHOUT `await` and with its own
+`.catch()`; `disablePush()` accepts and forwards `authToken` as an
+Authorization header; `api.pushUnsubscribe` accepts and forwards an
+`opts.headers` override. All mutation-tested: reverting the atomic
+INSERT back to separate SELECT+INSERT broke the concurrency test;
+re-adding `await` before `disablePush()` broke the no-await test;
+dropping `authToken` from `disablePush`'s signature, and dropping `opts`
+from `pushUnsubscribe`, each broke their own test; reverting `/push/test`
+to a sequential unbounded loop turned its test into an actual hang. All
+six caught, reverted, reverified clean (sha256-matched against the
+pre-mutation files).
+
 
 ## D350
 

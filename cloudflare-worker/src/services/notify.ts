@@ -23,7 +23,6 @@
  *    user's pending outbox into a single email at 09:00 user-tz.
  */
 import type { Env } from '../types';
-import type { PushSendResult } from './webpush';
 import { stripTrailingSlashes } from '../util/url';
 import { getUserSettings, isInQuietHours } from './userSettings';
 import { bindingKey } from '../util/schemaBootstrap';
@@ -374,24 +373,19 @@ export async function notify(env: Env, args: NotifyArgs): Promise<number | null>
             // ExecutionContext through notify() to truly background this
             // past the response would touch every one of its call sites —
             // out of scope for this fix — so instead each send races a
-            // fixed timeout and all rows run concurrently rather than
+            // fixed timeout (`sendWebPushBounded`, shared with /push/test's
+            // own fan-out) and all rows run concurrently rather than
             // one-at-a-time: the wait is bounded by the timeout, not by
             // (timeout × subscription count).
-            const { sendWebPush } = await import('./webpush');
-            const PUSH_SEND_TIMEOUT_MS = 5000;
+            const { sendWebPushBounded } = await import('./webpush');
             await Promise.all(rows.map(async (row) => {
               try {
-                const result = await Promise.race([
-                  sendWebPush(env, row, {
-                    title: args.title,
-                    body: args.body ?? '',
-                    link: args.link ?? '/inbox',
-                    type: args.type,
-                  }),
-                  new Promise<PushSendResult>((resolve) => setTimeout(
-                    () => resolve({ ok: false, gone: false, status: 0, error: 'timeout' }), PUSH_SEND_TIMEOUT_MS,
-                  )),
-                ]);
+                const result = await sendWebPushBounded(env, row, {
+                  title: args.title,
+                  body: args.body ?? '',
+                  link: args.link ?? '/inbox',
+                  type: args.type,
+                });
                 if (!result.ok && result.gone) {
                   await env.DB.prepare(`DELETE FROM push_subscriptions WHERE id = ?`).bind(row.id).run();
                 }

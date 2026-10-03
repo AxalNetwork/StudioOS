@@ -4798,8 +4798,14 @@ export const api = {
   pushVapidKey: () => request('/notifications/push/vapid-key'),
   pushSubscribe: (sub) =>
     request('/notifications/push/subscribe', { method: 'POST', body: JSON.stringify(sub) }),
-  pushUnsubscribe: (data) =>
-    request('/notifications/push/unsubscribe', { method: 'POST', body: JSON.stringify(data) }),
+  // Codex review (D334, P2): sign-out captures the token before clearing it
+  // and passes it through here explicitly, because by the time the caller
+  // (`disablePush`) reaches this call, `request()`'s own `localStorage`
+  // read would already see it removed. `headers` merges in after
+  // `getAuthHeaders()` in `request()`, so an explicit Authorization here
+  // overrides that lookup rather than racing it.
+  pushUnsubscribe: (data, opts = {}) =>
+    request('/notifications/push/unsubscribe', { method: 'POST', body: JSON.stringify(data), headers: opts.headers }),
   pushSubscriptions: () => request('/notifications/push/subscriptions'),
   pushTest: () => request('/notifications/push/test', { method: 'POST' }),
 

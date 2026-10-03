@@ -1902,19 +1902,23 @@ function AppInner() {
     // notifications on this device after sign-out — `getPushState()` only
     // checks whether the browser has any subscription at all, and the next
     // account to sign in on the same device sees push already "on" and never
-    // calls `enablePush()` to re-home it to its own `user_id`. Must run
-    // before the token is cleared below: `disablePush()`'s unsubscribe call
-    // is authenticated the same way every other API call is, off the token
-    // this function is about to remove. Time-boxed and never fatal, same
-    // reasoning as the server-side logout race below — a dead network must
-    // not hang sign-out, and a push row surviving one extra send cycle is
-    // far better than sign-out itself hanging.
-    try {
-      await Promise.race([
-        disablePush(),
-        new Promise((resolve) => setTimeout(resolve, 3000)),
-      ]);
-    } catch (e) { /* disablePush must never block sign-out */ }
+    // calls `enablePush()` to re-home it to its own `user_id`.
+    //
+    // A FOLLOW-UP REVIEW CAUGHT THE FIRST FIX HERE TOO: it awaited
+    // `disablePush()` (behind a 3s race) before any of the synchronous local
+    // teardown below — `setUser(null)` and the token/user wipe included. A
+    // stalled service worker, subscription lookup or unsubscribe request
+    // held up ALL of it for up to 3s, and a tab closed during that stall
+    // kept both the local token and the server cookie alive: still signed
+    // in on the next visit. So this no longer awaits `disablePush()` at
+    // all — the token is captured now (it's about to be removed below) and
+    // handed to `disablePush` explicitly, so the revocation can finish
+    // fully in the background without the local teardown waiting on it or
+    // on the token still being in `localStorage` by the time its own
+    // `await`s resolve.
+    const tokenForPushRevoke = localStorage.getItem('token');
+    disablePush({ authToken: tokenForPushRevoke }).catch(() => { /* best-effort, never blocks sign-out */ });
+
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('realUser');

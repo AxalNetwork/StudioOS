@@ -11,11 +11,20 @@
  * contract notices included, indefinitely.
  *
  * `disablePush()` (`lib/pwa.js`) both unsubscribes the browser's push
- * manager AND calls `api.pushUnsubscribe`, which deletes the row. The fix
- * is calling it from `clearSession()` — BEFORE `localStorage.removeItem('token')`,
- * since `pushUnsubscribe`'s request is authenticated off that same token
- * every other API call uses; call it after and the request goes out with no
- * Authorization header and silently no-ops.
+ * manager AND calls `api.pushUnsubscribe`, which deletes the row.
+ *
+ * A FOLLOW-UP REVIEW CAUGHT THE FIRST FIX HERE TOO: it awaited
+ * `disablePush()` (behind a 3s race) before any of `clearSession`'s
+ * synchronous local teardown — `setUser(null)` and the token/user wipe
+ * included. A stalled service worker, subscription lookup or unsubscribe
+ * request held up ALL of it for up to 3s, and a tab closed during that
+ * stall kept both the local token and the server cookie alive. The actual
+ * fix: `disablePush()` is called fire-and-forget (never awaited at all),
+ * with the token captured into a local variable and passed through
+ * explicitly as `authToken` — `disablePush`'s own internal `await`s
+ * (`navigator.serviceWorker.ready`, `getSubscription()`) mean it would
+ * otherwise reach `api.pushUnsubscribe` well after `localStorage` has
+ * already been cleared by the synchronous code that no longer waits for it.
  *
  * Source-level, like the codebase's other App.jsx assertions: `clearSession`
  * is a large hook-bound closure inside a component, not an isolated,
@@ -28,6 +37,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const APP = readFileSync(resolve(process.cwd(), 'frontend/src/App.jsx'), 'utf8');
+const PWA = readFileSync(resolve(process.cwd(), 'frontend/src/lib/pwa.js'), 'utf8');
+const API = readFileSync(resolve(process.cwd(), 'frontend/src/lib/api.js'), 'utf8');
 
 test('App.jsx imports disablePush from lib/pwa', () => {
   assert.match(
@@ -37,27 +48,65 @@ test('App.jsx imports disablePush from lib/pwa', () => {
   );
 });
 
-test('clearSession calls disablePush before clearing the auth token', () => {
+function clearSessionBody() {
   const start = APP.indexOf('const clearSession = useCallback(async () => {');
   assert.ok(start > 0, 'clearSession not found');
+  return start;
+}
+
+test('clearSession captures the token and calls disablePush with it, before clearing the token', () => {
+  const start = clearSessionBody();
+  const tokenCapture = APP.indexOf('localStorage.getItem(\'token\')', start);
+  assert.ok(tokenCapture > start, 'clearSession never captures the token for disablePush — pushUnsubscribe needs it after the token is gone');
   const tokenRemoval = APP.indexOf("localStorage.removeItem('token')", start);
   assert.ok(tokenRemoval > start, "clearSession no longer removes the token — this test's ordering check is stale");
-  // The literal `disablePush()` (no trailing comma) also appears inside this
-  // function's own explanatory comment above the real call — matching the
-  // actual call expression `disablePush(),` skips that false hit.
-  const disablePushCall = APP.indexOf('disablePush(),', start);
+  const disablePushCall = APP.indexOf('disablePush({', start);
   assert.ok(disablePushCall > start, 'clearSession never calls disablePush()');
   assert.ok(
-    disablePushCall < tokenRemoval,
-    'disablePush() must run before the token is cleared — pushUnsubscribe is authenticated off that same token',
+    tokenCapture < disablePushCall && disablePushCall < tokenRemoval,
+    'the token must be captured, then handed to disablePush(), before it is cleared from localStorage',
   );
+  const nearCall = APP.slice(disablePushCall, disablePushCall + 120);
+  assert.match(nearCall, /authToken:\s*tokenForPushRevoke/, 'disablePush() must receive the captured token explicitly');
 });
 
-test('the disablePush call is time-boxed and cannot throw out of clearSession', () => {
-  const start = APP.indexOf('const clearSession = useCallback(async () => {');
-  const disablePushCall = APP.indexOf('disablePush(),', start);
-  const tryBefore = APP.lastIndexOf('try {', disablePushCall);
-  assert.ok(tryBefore > start, 'disablePush() is not inside a try block');
-  const nearby = APP.slice(tryBefore, disablePushCall + 50);
-  assert.match(nearby, /Promise\.race/, 'disablePush() must race a timeout, like the server-side logout call below it does');
+test('clearSession does NOT await disablePush — the local teardown must not wait on it', () => {
+  const start = clearSessionBody();
+  const disablePushCall = APP.indexOf('disablePush({', start);
+  const line = APP.slice(Math.max(start, disablePushCall - 20), disablePushCall);
+  assert.ok(
+    !/await\s*$/.test(line.trimEnd()),
+    'disablePush() must be fire-and-forget — awaiting it here is exactly the stall a follow-up review caught',
+  );
+  // A fire-and-forget promise still needs a rejection handler, or a failed
+  // revoke becomes an unhandled rejection instead of the silent best-effort
+  // this is supposed to be.
+  const nextStatement = APP.slice(disablePushCall, disablePushCall + 150);
+  assert.match(nextStatement, /\.catch\(/, 'the un-awaited disablePush() call must still catch its own rejection');
+});
+
+test('disablePush accepts an explicit authToken and passes it through to pushUnsubscribe', () => {
+  assert.match(
+    PWA,
+    /export async function disablePush\(\{\s*authToken\s*\}\s*=\s*\{\}\)/,
+    'disablePush no longer takes an authToken override — a sign-out-time caller has nowhere to pass the captured token',
+  );
+  const fnStart = PWA.indexOf('export async function disablePush(');
+  const fnBody = PWA.slice(fnStart, fnStart + 800);
+  assert.match(fnBody, /Authorization:\s*`Bearer \$\{authToken\}`/, 'disablePush must forward authToken as an explicit Authorization header');
+});
+
+test('api.pushUnsubscribe accepts an options object and merges its headers in', () => {
+  const start = API.indexOf('pushUnsubscribe:');
+  assert.ok(start > 0, 'pushUnsubscribe not found in api.js');
+  assert.match(
+    API.slice(start, start + 60),
+    /pushUnsubscribe:\s*\(data,\s*opts\s*=\s*\{\}\)/,
+    'pushUnsubscribe must accept an opts parameter, or a captured token has no way through to the request',
+  );
+  assert.match(
+    API.slice(start, start + 220),
+    /headers:\s*opts\.headers/,
+    'pushUnsubscribe must forward opts.headers into the request',
+  );
 });

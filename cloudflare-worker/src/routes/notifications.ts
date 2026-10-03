@@ -335,25 +335,31 @@ notifications.post('/push/subscribe', async (c) => {
   try {
     // A cap on live subscriptions per account — not infinite fan-out from
     // one signed-in user repeatedly subscribing new (or spoofed) endpoints.
-    // Counted before the insert so a re-subscribe of an existing endpoint
-    // (the ON CONFLICT path below) never trips it.
-    const existing: any = await c.env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM push_subscriptions WHERE user_id = ? AND endpoint <> ?`,
-    ).bind(user.id, endpoint).first();
-    if (Number(existing?.n || 0) >= 20) {
-      return c.json({ error: 'too many push subscriptions for this account' }, 429);
-    }
-    // One row per endpoint — a re-subscribe from the same browser (rotated
-    // keys, renewed expiration) replaces the row rather than duplicating it,
-    // and re-homes it to whichever account is signed in now.
-    await c.env.DB.prepare(
+    //
+    // Codex review: a separate `SELECT COUNT(*)` followed by a separate
+    // `INSERT` is a TOCTOU race — N concurrent subscribe requests from the
+    // same account can each read the count before any of them commits its
+    // insert, so all N observe "under 20" and all N land, however large N
+    // is. Folded into ONE statement: the `INSERT ... SELECT ... WHERE`
+    // only produces a row to insert when the count (of OTHER endpoints,
+    // same as before, so a re-subscribe of this exact endpoint never trips
+    // it) is still under the cap at the instant this statement runs —
+    // there is no separate round trip in between for another request to
+    // land in. `changes` comes back 0 when the WHERE blocked it (and 1
+    // either for a fresh insert or an ON CONFLICT update), which is how the
+    // route tells a capped request from an accepted one.
+    const result: any = await c.env.DB.prepare(
       `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, expiration_time, user_agent)
-       VALUES (?, ?, ?, ?, ?, ?)
+       SELECT ?, ?, ?, ?, ?, ?
+       WHERE (SELECT COUNT(*) FROM push_subscriptions WHERE user_id = ? AND endpoint <> ?) < 20
        ON CONFLICT(endpoint) DO UPDATE SET
          user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth,
          expiration_time = excluded.expiration_time, user_agent = excluded.user_agent,
          last_error = NULL`,
-    ).bind(user.id, endpoint, p256dh, auth, expirationTime, userAgent).run();
+    ).bind(user.id, endpoint, p256dh, auth, expirationTime, userAgent, user.id, endpoint).run();
+    if (Number(result?.meta?.changes || 0) === 0) {
+      return c.json({ error: 'too many push subscriptions for this account' }, 429);
+    }
     return c.json({ ok: true });
   } catch (e: any) {
     return refuse(c, 500, { code: 'subscribe_failed', message: 'Your subscription could not be saved. Try again in a moment.', raw: e });
@@ -400,10 +406,18 @@ notifications.post('/push/test', async (c) => {
   ).bind(user.id).all();
   const subs = (r?.results || []) as Array<{ id: number; endpoint: string; p256dh: string; auth: string }>;
   if (!subs.length) return c.json({ sent: 0, failed: 0, reason: 'no_subscriptions' });
-  const { sendWebPush } = await import('../services/webpush');
+  // Codex review: this looped sequentially with no timeout, the same shape
+  // (and the same escape) as notify()'s real dispatch — `togglePush()`
+  // awaits this route immediately after enabling push, with up to 20
+  // subscriptions possible, so one slow or hung push service left the
+  // notification toggle busy until the frontend's own 30s deadline, unable
+  // to even reach the remaining subscriptions in the meantime.
+  // `sendWebPushBounded` is the same timeout-raced send notify() now uses;
+  // all subscriptions here run concurrently rather than one at a time.
+  const { sendWebPushBounded } = await import('../services/webpush');
   let sent = 0, failed = 0;
-  for (const s of subs) {
-    const result = await sendWebPush(c.env, s, {
+  await Promise.all(subs.map(async (s) => {
+    const result = await sendWebPushBounded(c.env, s, {
       title: 'Axal StudioOS',
       body: 'Push notifications are working.',
       link: '/inbox',
@@ -421,7 +435,7 @@ notifications.post('/push/test', async (c) => {
         await c.env.DB.prepare(`UPDATE push_subscriptions SET last_error = ? WHERE id = ?`).bind(result.error.slice(0, 300), s.id).run();
       }
     }
-  }
+  }));
   return c.json({ sent, failed });
 });
 

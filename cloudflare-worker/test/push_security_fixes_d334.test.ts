@@ -162,6 +162,35 @@ test('POST /push/subscribe caps live subscriptions per account', async () => {
   assert.equal(res21.status, 429, 'the 21st distinct subscription should have been capped');
 });
 
+test('the subscription cap holds under concurrent requests (TOCTOU)', async () => {
+  // Codex review: a separate SELECT COUNT(*) followed by a separate INSERT
+  // is a classic check-then-act race — enough concurrent requests can each
+  // read the count before any of them commits its insert, so every one of
+  // them observes "under the cap" and all of them land. 25 concurrent
+  // requests for 25 distinct endpoints, fired together rather than
+  // one-at-a-time, is what actually exercises the interleaving the
+  // sequential version of this test (above) cannot: each request handler
+  // has real `await` points between its count check and its insert, and
+  // Node's event loop can run another request's own count check in that
+  // gap. The fix folds both into one atomic SQL statement, which has no
+  // such gap regardless of how many requests are in flight.
+  const db = routeFixture();
+  const token = await tokenFor(ME);
+  const env: any = { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) };
+  const results = await Promise.all(
+    Array.from({ length: 25 }, (_, i) => app.request('/notifications/push/subscribe', {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ endpoint: `https://fcm.googleapis.com/fcm/send/race-${i}`, keys: { p256dh: 'p', auth: 'a' } }),
+    }, env)),
+  );
+  const accepted = results.filter((r) => r.status === 200).length;
+  const capped = results.filter((r) => r.status === 429).length;
+  assert.equal(accepted, 20, `expected exactly 20 of 25 concurrent subscriptions to be accepted, got ${accepted}`);
+  assert.equal(capped, 5, `expected exactly 5 of 25 concurrent subscriptions to be capped, got ${capped}`);
+  const row: any = db.prepare(`SELECT COUNT(*) AS n FROM push_subscriptions WHERE user_id = ?`).get(ME);
+  assert.equal(Number(row?.n ?? 0), 20, 'the table must hold exactly 20 rows, whatever the race allowed through in-flight');
+});
+
 // ---------------------------------------------------------------------------
 // 4. notify() actually fans out to a subscribed device, not just /push/test
 // ---------------------------------------------------------------------------
@@ -279,4 +308,53 @@ test('notify() does not hang forever on a push service that never responds', asy
   const elapsed = Date.now() - startedAt;
   assert.ok(elapsed < 6000, `notify() took ${elapsed}ms — a hung push send must be bounded by its own timeout (5s), not left open`);
   assert.equal(okPushed, true, 'the other, responsive subscription must still receive its push despite the hung one');
+}, { timeout: 8000 });
+
+// ---------------------------------------------------------------------------
+// 6. /push/test shares notify()'s concurrency + timeout fix
+// ---------------------------------------------------------------------------
+
+test('POST /push/test sends to multiple subscriptions concurrently and is bounded by a timeout', async (t) => {
+  // Codex review: /push/test repeated notify()'s original mistake (a
+  // sequential, unbounded loop) independently — `togglePush()` awaits this
+  // route right after enabling push, so the same cumulative-latency and
+  // "no timeout at all" problem applied here too, not just to notify()'s
+  // real dispatch.
+  const db = routeFixture();
+  const token = await tokenFor(ME);
+  const bootstrapEnv: any = { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) };
+  // `push_subscriptions` is created lazily by `ensurePushTable`, which only
+  // the route handlers call — this fixture inserts rows directly below, so
+  // it needs one real request first to create the table.
+  await app.request('/notifications/push/subscriptions', { method: 'GET', headers: { Authorization: `Bearer ${token}` } }, bootstrapEnv);
+  for (let i = 0; i < 3; i++) {
+    const keys = await subscriberKeys();
+    db.prepare(`INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?)`)
+      .run(ME, `https://fcm.googleapis.com/fcm/send/test-${i}`, keys.p256dh, keys.auth);
+  }
+  const hungKeys = await subscriberKeys();
+  db.prepare(`INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?)`)
+    .run(ME, 'https://fcm.googleapis.com/fcm/send/test-hung', hungKeys.p256dh, hungKeys.auth);
+
+  const DELAY_MS = 150;
+  const originalFetch = globalThis.fetch;
+  t.after(() => { (globalThis as any).fetch = originalFetch; });
+  (globalThis as any).fetch = async (url: string) => {
+    if (String(url).endsWith('/test-hung')) return new Promise(() => { /* never resolves */ });
+    await new Promise((resolve) => setTimeout(resolve, DELAY_MS));
+    return new Response(null, { status: 201 });
+  };
+
+  const env: any = { JWT_SECRET, ...(await vapidEnv({ ENVIRONMENT: 'development', DB: d1Over(db) })) };
+  const startedAt = Date.now();
+  const res = await app.request('/notifications/push/test', { method: 'POST', headers: { Authorization: `Bearer ${token}` } }, env);
+  const elapsed = Date.now() - startedAt;
+  const body: any = await res.json();
+  assert.equal(res.status, 200);
+  assert.equal(body.sent, 3, 'the 3 responsive subscriptions must all report sent, run concurrently');
+  assert.equal(body.failed, 1, 'the hung subscription must report failed once its timeout fires');
+  assert.ok(
+    elapsed < 6000,
+    `/push/test took ${elapsed}ms across 4 subscriptions (one hung) — concurrency + a 5s timeout bounds this well under 6s, a sequential unbounded loop would not`,
+  );
 }, { timeout: 8000 });
