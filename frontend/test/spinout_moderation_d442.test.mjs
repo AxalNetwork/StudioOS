@@ -40,11 +40,12 @@ test('a failed read is unreadable and an empty read says the list was read', () 
   assert.doesNotMatch(PAGE, /\|\| 0|\?\? 0/);
 });
 
-test('the board door is literal, and the HQ-held row is still Session 5', () => {
+test('the board door is literal, and the HQ-held row links the console too (D506)', () => {
   assert.match(BOARD, /to="\/admin\/spinout-moderation"/);
   assert.match(BOARD, /moderation: \{ to: '\/admin\/spinout-moderation'/);
-  assert.match(HELD, /No console exists anywhere yet/);
-  assert.doesNotMatch(HELD, /to="\/admin\/spinout-moderation"/);
+  // D506 inverted the two lines below: HeldApprovals lane 4 is the HQ door.
+  assert.doesNotMatch(HELD, /No console exists anywhere yet/);
+  assert.match(HELD, /to="\/admin\/spinout-moderation"/);
 });
 
 test('the page offers every reason the route accepts', () => {

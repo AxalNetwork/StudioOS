@@ -114,6 +114,23 @@ const BODY_PLAIN = 'mt-2 whitespace-pre-wrap text-[12px] leading-relaxed text-gr
  */
 export const DRAFT_TASK = 'workspace_explain';
 
+/**
+ * The app path this band sits on, read when the run is pressed (D510).
+ *
+ * The worker records it as the run's `surface`, which is what lets the rail
+ * count a band's runs under "This page this month" (D404); without it every
+ * zone-draft run landed in the month's unattributed group. It is read in the
+ * click, not in render, and from the window rather than the router: inside
+ * the app the two are the same path, and several tests mount a band with no
+ * router around it. Normalised the way the router stores a surface, as the
+ * rail's is, so the two lookups match.
+ */
+export function bandPage() {
+  if (typeof window === 'undefined') return undefined;
+  const path = String(window.location?.pathname || '');
+  return path.replace(/\/+$/, '') || (path === '/' ? '/' : undefined);
+}
+
 export default function ZoneDraft({
   surface,
   scopeKey = '',
@@ -159,7 +176,7 @@ export default function ZoneDraft({
   const doRun = async () => {
     setBusy('run'); setNote('');
     try {
-      const r = await api.research.zoneDraftRun(surface, scopeKey);
+      const r = await api.research.zoneDraftRun(surface, scopeKey, bandPage());
       setItem(r?.item || null);
       setEditing(null);
     } catch (e) {

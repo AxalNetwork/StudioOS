@@ -12,7 +12,6 @@
     "GET /api/notifications/push/subscriptions",
     "GET /api/notifications/push/vapid-key",
     "GET /api/pipeline/votes/leaderboard",
-    "POST /api/calendar/me/calcom",
     "POST /api/email/send-deal",
     "POST /api/legal/incorporate",
     "POST /api/legal/spinout/:p",

@@ -3619,7 +3619,6 @@ It is not a render prop. The page passes handlers *in* and gets a bound row
 back, which is the same split D53 records for filters: the table owns which ops
 the canvas promised, the page owns the state only it can hold.
 
-
 ## D68 — "Not recorded" belongs to the reader's data, never to the product's gaps
 
 **2026-09-09.** Task #122, `/research/ask` — but the rule settles a tension that
@@ -15768,7 +15767,6 @@ and CLAUDE.md §4 notes the deploy workflow rebuilds `docs/` at deploy time, so
 the committed build is not proof about the shipped one. The cause is still open;
 what this guard changes is that **if it ever is a 404, it fails before the
 deploy instead of after it.**
-
 
 ## D177
 
@@ -32238,6 +32236,46 @@ non-trivial fixes mutation-tested: reverting `forceEmail` back to
 fail, then were restored and reverified clean (sha256-matched against the
 pre-mutation file).
 
+## D337
+
+**The canvas ledger's non-canvas half, item 7 of the Wave-8 brief —
+`api.attachMyCalcomKey` deleted; the ROUTE_MAP/store-gap edits were not made.**
+
+**`api.attachMyCalcomKey` is deleted.** It called `POST /calendar/me/calcom`,
+a path with no worker route at all (`scripts/api-drift-baseline.json`
+carried it as known drift) and no caller anywhere in `frontend/src` besides
+its own definition in `api.js`. `cloudflare-worker/src` has no "calcom"
+string anywhere — no route, no service, no stored concept of a Cal.com
+integration — so this was dead on both ends, not a broken feature with a
+caller waiting on it. Removed from `api.js`; the baseline entry for it is
+gone (the ledger shrinks by one).
+
+**The brief's other two asks for this item — specific ROUTE_MAP.md row
+edits at line markers `:81`, `:83`, `:96`, `:130`, and new store-gap
+recording for Events/Wellbeing/Help — were not made.** Those line markers
+don't resolve to anything identifiable in the current
+`documentation/architecture/ROUTE_MAP.md`: the file has been edited
+extensively since whenever the brief's line numbers were taken (it carries
+dated UPDATE/CORRECTION blocks through 2026-09-27 and beyond), so numbers
+written against an earlier revision point at different content now. Reading
+the Events, Founder Wellbeing and Help Center rows as they stand today, each
+already carries exactly the kind of store-gap recording the brief asked
+for — Events names the missing `recording_url`/`replay_url` column and the
+absent `requestIntro`/roster endpoints; Founder Wellbeing says "grep confirms
+none of these strings exist live" for its four unbuilt pieces; Help Center
+spells out, by name, the two missing stores ("Popular this week" needs view
+counts, "Did this answer it?" needs a feedback store) and the per-article
+`surface` route gap. Editing rows that already state the gap, against line
+numbers that no longer mean anything, risked overwriting a correct, dated
+audit with a guess. Measuring first and reporting rather than guess-editing
+is the standing rule this followed; a future task with the brief's original
+line numbers resolved against the revision they were taken from should
+redo this specifically, rather than this entry's guess standing in for it.
+
+**Tests.** No new assertion needed — confirming the one real finding
+(`attachMyCalcomKey`'s dead ends) was a grep, not a behavior to pin; the
+full `npm run test:drift`, both typechecks and `check-api-drift` all stay
+green with the baseline entry gone.
 
 ## D350
 
@@ -32321,6 +32359,7 @@ track is stored).
   typechecks, `lint:undef` and every guard green, including
   `check-decision-ids`, `check-folder-docs`, `check-api-drift` and
   `check-docs-fresh --strict` after the root `npm run build`.
+
 ## D351
 
 **Lab Customer Discovery binds the evidence stores that already existed, and
@@ -37904,14 +37943,15 @@ Session 12's and was already gone (D400).
 - The Friday retro draft on the Build cadence card needs a `DRAFT_SURFACES`
   entry in `routes/research.ts`, which is not this session's file. The card
   already says no retro draft surface exists. Routed to the owner through
-  the relay.
+  the relay. Built by D510.
 - The collapsed spine's status dot and vertical spend live in `WorkerRail.jsx`
   and `workerRail.css` (Session 12).
 - A band's cost per page. D404 (migration 319) records a run's `surface`,
   and the rail's read-back sends one; `POST /api/research/drafts` sends none,
   so every zone-draft run lands in the month's unattributed group. The band
   estimate therefore stays per task. Passing the page to `runAI` from that
-  route is a `research.ts` change, routed to its owner.
+  route is a `research.ts` change, routed to its owner. D510 passes it; the
+  band's estimate is still per task.
 - The amber strike-through with a second confirm: no fill overwrites a value
   yet (`eadwynConfig`'s market note says why), so there is nothing to confirm.
 
@@ -39261,6 +39301,7 @@ and the guard now matches the braced form too.
   literal restored, the counterpart role reverted.
 - Both typechecks, `check-decision-ids`, `check-folder-docs` and
   `check-api-drift` exit 0. Root `npm run build`, then `check-docs-fresh
+
 ## D461
 
 **Commit governance: IC conditions are a store, a recused vote leaves the
@@ -39395,6 +39436,7 @@ artboard's "Funds moved", real now: the sum over the recorded transfers.
   list, a second checklist applied, a default item seeded, the cents
   conversion dropped, the operator gate dropped, the packet indexing
   unexecuted paper.
+
 ## D463
 
 **The founder's investor update on /build/metrics, and the deal-flow page with
@@ -39524,6 +39566,7 @@ and the row is Session 4's to add.
   date, the flows not cut, the mark form unwired, the runway rule reading the
   health snapshot, the chase op back to unbuilt, the export dropping the
   date.
+
 ## D465
 
 **The investor Network book's interaction log and reminders.** Wave 8,
@@ -40168,6 +40211,312 @@ open; at 1280×900 the banner's computed bottom is 16px.
 
 `frontend/src` moved, so `docs/` is rebuilt.
 
+## D505
+
+**The partner sidebar stops naming the retired `/partner/operations/*`
+routes: each `match` points at the successor, the full-bleed list drops the
+six retired entries, and the comments say what D395 made true.** Issue #986,
+slot S05 (relayed by Session 11 from D395). No migration, no route, no
+`api.js` change.
+
+**What was true on main (`f701a32f5`).** D395 turned the six
+`/partner/operations/*` addresses into `<Navigate replace>` redirects. The
+partner block of `sidebarConfig.js` still named them in three places: the
+`match` arrays of Pipeline (`…/engagements`), Delivery (`…/overview`,
+`…/portfolio`, `…/performance`) and Offers (`…/capabilities`); the block's
+comments ("Delivery → the /partner/operations subtree, tabbed by
+PartnerOperationsWorkspace since Wave 1a"; "`/partner/operations/engagements`
+can sit under Pipeline while its siblings sit under Delivery"; the legacy
+destinations list); and six entries in `PARTNER_FULL_BLEED`. None of it was
+a live bug — a bookmark to a retired address redirects and the successor
+lights its own row — but a `match` entry for a path that never renders is
+dead code wearing a route's name, and `partner_shell.test.mjs` pinned the
+dead entries as if they were live.
+
+**What changed.**
+- **`match`** names the successor D395 chose for each retired address that
+  a row owns: Pipeline gains `/pipeline/proposals` and `/pipeline/analytics`
+  (engagements and performance); Delivery gains `/delivery/health`
+  (portfolio); Offers gains `/offers/catalog` (capabilities). All four sit
+  under their row's own root and were already lit by the subtree rule; they
+  are listed so the mapping reads from the row. **The bare root's and
+  overview's successor, `/company-settings`, goes in no row's `match`.** The
+  issue's mapping put it under Delivery; the probe showed that lights two
+  rows on Firm Settings, because `/company-settings` is already the
+  sidebar's pinned footer row for every role (the shipped decision the
+  investor block records). A `match` entry there would be the collision the
+  partner block's own comment warns against, so the retired entries are
+  simply removed and the comment says why.
+- **`PARTNER_FULL_BLEED`** drops the six retired entries. Each successor
+  that owns a full-bleed body is in `workspaceRoutes('partner')` already;
+  `/company-settings` is a centred page by design and stays out.
+- **The comments** describe the rows as they are: Delivery is the
+  `/delivery/*` zones; the legacy destinations that still render are
+  `/needs`, `/services`, `/perks`, `/signals` and `/partner/insights`; the
+  six retired addresses redirect (D395) and are named nowhere in the sidebar.
+- **`partner_shell.test.mjs`** pins the successor mapping instead of the
+  retired entries, and adds that no `/partner/operations` string survives in
+  the partner block or the full-bleed list.
+
+**Guard.** `frontend/test/partner_sidebar_d505.test.mjs`, 4 tests:
+no partner row's `match` or `PARTNER_FULL_BLEED` names a retired address;
+each successor sits in the row the issue assigns; every successor is a
+mounted route and every retired address is a `<Navigate replace>` to it
+(read from `App.jsx`); the full-bleed list still covers every partner
+workspace route with no duplicates; the comments no longer call Delivery the
+operations subtree. `partner_shell` (re-aimed), `partner_bucket_overview`,
+`partner_operations_retired_d395`, `workspace_shell_routes`,
+`workspace_frame_contract`: green.
+
+**Mutations: 8 run, 8 caught** — each a non-zero exit with a `not ok` line,
+anchors unique, bytes proven changed, sources restored from a sha256-checked
+snapshot: a retired address back in Pipeline's `match`; the footer's page added to Delivery's `match` (two rows lit); the portfolio successor dropped from Delivery; the capabilities successor sent to the wrong row; a `match` entry for a path no route mounts; a retired address back in the full-bleed list; the centred page made full-bleed; the two-rows reason dropped from the Delivery comment; the old Delivery comment back; a retired address in `App.jsx` no longer redirecting to its successor.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA
+fallback, a partner at 1280×900. Each retired address lands on its successor
+and the successor's row is lit: `…/capabilities` → `/offers/catalog`
+(Offers), `…/portfolio` → `/delivery/health` (Delivery), `…/engagements` →
+`/pipeline/proposals` (Pipeline), `…/performance` → `/pipeline/analytics`
+(Pipeline); the bare root and `…/overview` land on `/company-settings`, where
+the pinned footer's Company Settings row is lit and no bucket row is. With the
+issue's original mapping (`/company-settings` in Delivery's `match`) the same
+page lit Delivery as well, which is what moved the entry out. **Found, not
+fixed here (`PartnerFirmProfileCard.jsx` is D390's, not this issue's):** a
+`200` from `/partner-portal/profile` without a `partner` key is stored as a
+ready state with `data: undefined` and the card throws on
+`p.specialization`, taking the whole page to the route error boundary
+instead of drawing Unreadable.
+
+`frontend/src` moved, so `docs/` is rebuilt.
+
+## D506
+
+**HQ gets a door to the Spin-Out moderation console: lane 4 of Admin ·
+Approvals on HQ-held accounts links `/admin/spinout-moderation`, and the
+three pins that held the lane to "No console" are inverted.** Issue #987,
+slot S05, coordinated with slot S06 (D442). No migration, no route, no
+`api.js` change.
+
+**What was true on main (`f701a32f5`).** D442 (Session 6) built
+`SpinoutModerationPage` at `/admin/spinout-moderation` and linked it from the
+branch Approvals board, and recorded that the HQ door was Session 5's:
+`HeldApprovals.jsx` row 4 still said "No console" / "No console exists
+anywhere yet", its header comment still said no page in the SPA called
+`adminSpinoutModeration`, and three tests pinned the gap —
+`held_admin_shell_d286` (lane 4 has no console; Approvals draws 14 doors),
+`spinout_moderation_d442` (HeldApprovals does not link the console) and
+`admin_route_reachability` (the HQ-held walk does not reach the console; it
+is the one route only the branch shell reaches). An HQ admin could reach
+held moderation cases only by typing the URL.
+
+**What changed.**
+- **Lane 4 links its console.** `HeldApprovals.jsx` row 4 draws a literal
+  `<Link to="/admin/spinout-moderation">`, "Links to its console", like the
+  other fourteen; the `unavailable` entry for Spinout moderation goes, and the
+  header comment says the console exists (D442) and where. Literal, not
+  mapped, so the admin-route walk can see it. The route is `guard(['admin'])`
+  with no `hqOnly`, so the row is reachable from both HQ-held shells, as the
+  other lanes are.
+- **The pins are inverted, never loosened.** `held_admin_shell_d286` holds
+  lane 4 to `/admin/spinout-moderation` and Approvals to 15 doors;
+  `spinout_moderation_d442`'s "the HQ-held row is still Session 5" becomes
+  "the HQ-held row links the console too"; `admin_route_reachability`'s
+  "does not reach" becomes "reaches", and the set of routes only the branch
+  shell reaches is empty. `admin_route_reachability.test.mjs` is not in the
+  issue's file list; it is edited only because its assertion would fail
+  once the door exists, and the test's own comment named this door as the
+  change it was waiting for.
+- No known-gap entry for the HQ door was found in S06's moderation work
+  (`spinout_moderation*.test.mjs`, `SpinoutModerationPage.jsx`), so none is
+  removed.
+- **The Approvals row stays lit inside the console.** Codex's review of
+  #1042 caught what the first draft missed: `SidebarNav` treats a row's
+  `match` list as the complete statement of what it owns, and the Approvals
+  row's list in `sidebarConfig.js` did not name `/admin/spinout-moderation`,
+  so a plain admin who followed lane 4 landed on a page where no row was
+  lit. The console is now on that list. `sidebarConfig.js` is outside the
+  issue's file list; it is the one-entry change the door needs and is noted
+  on #987.
+
+**Guard.** `frontend/test/held_approvals_moderation_door_d506.test.mjs`,
+5 tests: lane 4's cell is a literal Link to the console and the state
+cell says it links; the console is a registered `guard(['admin'])` route
+without `hqOnly`; the page's `unavailable` list no longer names Spinout
+moderation and the header comment no longer claims no console exists; the
+Approvals landing draws fifteen literal doors, none under `/branch/`; the
+branch board's door is unchanged; the Approvals row's `match` list names
+the console, once. `held_admin_shell_d286`,
+`spinout_moderation_d442`, `admin_route_reachability` (each re-aimed),
+`admin_placement_h35`: green.
+
+**Mutations: 9 run, 9 caught** (non-zero exit and a `not ok` line each;
+anchors unique; bytes proven changed; sources restored from a sha256-checked
+snapshot) — lane 4 back to "No console"; the door pointed at the Lab page
+instead of the console; the door drawn as a mapped link; the door drawn
+twice; the rail's `unavailable` list saying no console exists again; the
+header comment back to "LINKS NOWHERE"; the console route wrapped in
+`hqOnly`; the console route unmounted from `App.jsx`; the console dropped
+from the Approvals row's `match` list.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA
+fallback, a plain admin at 1280×900 opening `/admin/held/approvals`. Lane 4
+reads "Spinout moderation · /admin/spinout-moderation · Links to its
+console"; the lanes table draws exactly one anchor to the console; nothing
+on the page says "No console exists anywhere yet"; clicking the lane's link
+lands on `/admin/spinout-moderation` with the console's own "Spinout
+moderation" heading drawn and no page error. Second pass, after the
+`match` entry: for the plain admin the Approvals row is the one lit row on
+the landing and stays the one lit row on the console; before the entry no
+row was lit there. For the Super Admin no row is lit on either page, which
+is the HQ shell as it already was: its group carries no `/admin/held/*` row
+and the H35 map does not place the console, so that shell has nothing to
+light and this change does not touch it.
+
+`frontend/src` moved, so `docs/` is rebuilt.
+
+## D507
+
+**The four HQ Team sentences that said a branch account is not told now say
+what D441 made true: the branch tells the person when HQ authorises a
+support session.** Issue #988, slot S05. No migration, no route, no `api.js`
+change. `frontend/src` moved, so `docs/` is rebuilt.
+
+**What was true on main (`f701a32f5`).** D259 gave HQ a Support control on a
+branch account and said, truthfully then, that the person is not told:
+`openSupportSession` imported no notify function. D441 (#864) made that RPC
+call `notify()` after the authorisation is recorded: type
+`hq_branch_support_session`, category `security` so quiet hours do not hold
+it, in the app and by email, naming who authorised it, the reason, and that
+the session lasts 30 minutes once it is opened. D441 updated the Team rail on
+`AccountsPage.jsx` and left four sentences, all Session 5's, saying the
+opposite: the HQ-only card in `HqTeamActions.jsx` ("is not told yet"), the
+Support form in `HqTeamTable.jsx` ("The person is not told: the branch
+records the session, and no notice reaches them yet"), that table's footer
+("the person is not told yet") and its D259 header comment.
+`hq_team_h20.test.mjs` pinned the card's sentence verbatim and
+`hq_support_session_d259.test.mjs` pinned the form's.
+
+**What is said now.** Each sentence describes the notice as the branch
+sends it, and none says the person *was* told. The branch sends them a
+security notice when the session is authorised, in the app and by email,
+with the operator's name, their reason and the 30 minutes; the branch
+reports whether that notice was stored, and HQ's route does not pass it on,
+so the card and the form say they cannot tell whether the person was told.
+That is the exact state of the facts: `openSupportSession` still authorises
+the session when the inbox refuses the notice and returns
+`target_notified: false` (`branch_invitation_d441.test.ts` covers it), and
+HQ's own route (`routes/admin_support_sessions.ts`) answers `{ branch,
+target, expires_at, open_url }` without that field, so the HQ operator has
+no delivery fact to read. A first draft of this entry led the form with
+"The person is told:"; Codex's review of #1043 pointed out that this
+asserted delivery in the one case the branch knows it failed, and the
+wording was made attempt-neutral before merge. The card's header comment
+records the narrowing (D259), the widening (this entry) and why the note
+stops short of "told"; the table's header comment says where the delivery
+fact is dropped.
+
+**Found, not fixed.** HQ's support-session route drops the branch's
+`target_notified`. Passing it through would let the form say whether the
+notice was stored, the way the HQ-held impersonation route (D248) already
+reports it. That route is the worker's, not this issue's file; the D507 pin
+fails the day it changes so the "not reported here" sentence is re-aimed
+with it.
+
+**Pins re-aimed, never loosened.** `hq_team_h20.test.mjs` holds the card to
+the new sentence, holds the rendered card and the whole of `HqTeamTable.jsx`
+free of "not told" and "no notice reaches", holds the form, the footer and
+the header comment to their new sentences, holds the card, the form and the
+footer free of "is told" / "The person is told" so no draft can assert
+delivery again, and reads the branch route so the sentences cannot outlive
+it: `tellBranchOfSupportSession` is called in
+`openSupportSession` after the `hq_support_authorised` audit row and before
+`target_notified` is returned, sends `['in_app', 'email']` as `security`,
+names `${SUPPORT_SESSION_MINUTES} minutes`, and `SUPPORT_SESSION_MINUTES`
+is 30; and that HQ's route still omits `target_notified`.
+`hq_support_session_d259.test.mjs` is not in the issue's file list; its
+D259 test pinned "The person is not told:" verbatim and fails once the
+sentence changes, so that one assertion is inverted and the test renamed.
+
+**Mutations: 16 run, 16 caught** (non-zero exit and a `not ok` line each;
+anchors unique; bytes proven changed; sources restored from a sha256-checked
+snapshot) — the card back to "is not told yet"; the card saying in-app only;
+the card asserting "is told when you authorise" (the first draft); the form
+back to "The person is not told:"; the form led with "The person is told:"
+(the first draft); the form claiming the notice reached their inbox; the
+footer back to "is not told yet"; the footer asserting the person is told;
+the header comment back to "The person is not told —"; the branch route
+sending no notice; the notice sent before the authorisation is recorded;
+the notice filed under `account` instead of `security`; the notice in-app
+only; the notice no longer naming the 30 minutes; `target_notified` no
+longer returned by the branch; HQ's route passing `target_notified`
+through.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA fallback, the Super Admin at 1280×900 opening `/admin/accounts` with one stubbed branch (`fr`) that answers a search with one active founder. The HQ-only card carries the new branch sentence and the Team table's footer carries its new sentence; no visible text says "not told". Typing in the Team search draws the branch hit with its Support toggle; opening the form shows "The branch records the authorisation and sends the person a security notice … The branch reports whether that notice was stored; HQ’s route does not pass it on, so this form cannot say whether the person was told."; no visible text says "not told", "no notice reaches" or "The person is told", and the card does not say "is told". No page error.
+
+## D508
+
+**Lab copy stops selling "idea to incorporated" and an unbacked company
+count — issue #989, slot S04.** D380 §4 retired the single-track
+"idea → incorporated" positioning from the Lab's own share card and
+certificate verifier; three places outside that sweep still carried the
+same claim or an invented number.
+
+**What was wrong.**
+- `templates/email/registry.ts`'s `spinout_admitted` email (both the text
+  and the HTML highlight box) framed the whole programme as one linear arc
+  ending in incorporation — exactly the framing `LabIntro.jsx`'s own
+  repositioning note (D385) explains is wrong: incorporation is one of
+  nineteen working tools, and the arc framing quietly excludes a founder who
+  arrives with an entity already.
+- `SpinoutDemoDayPage.jsx`'s "What Is the Spin-Out Lab" subhead made the
+  same claim in different words.
+- `FounderHomePage.jsx`'s testimonial section read "From the 38 companies
+  that have completed the Spin-Out Lab" — a literal nobody measured, backed
+  by nothing.
+
+**Fixed.** The email and demo-day subhead now describe the programme as its
+working tools (customer discovery, MVP scope, venture-readiness scoring,
+Delaware C-Corp formation if needed) rather than a single arc ending in
+incorporation — the same correction `LabIntro.jsx` already made, applied
+here. `FounderHomePage.jsx` now reads `GET /spinout-lab/stats`'s real
+`companies` figure (distinct founders who completed the
+`incorporation_completed` milestone; already public, built for exactly this
+kind of marketing-page read) and renders no number at all — never a
+placeholder, never the old stale one — when the read fails or the real
+count is zero. A guard (`spinout_lab_copy_d508.test.mjs`) pins all three;
+mutation-tested by reverting each fix in turn: all three escaped and were
+caught.
+
+**Found, not fixed — filed rather than widened into this issue.**
+`FounderHomePage.jsx`'s `METRICS` array carries its own `{ value: 38, label:
+'Spin-Out Completed' }` figure, rendered in the hero's `MetricsStrip` — the
+same unbacked "38" this issue's testimonial line also had, in a different
+component on the same page. This issue's ownership line named three
+specific lines; the `METRICS` entry is a fourth, same-root-cause instance
+this pass found but did not touch, since fixing it needs the same real-count
+wiring under a different component and a decision on whether the hero strip
+should read a live figure at all (several of `MetricsStrip`'s other entries
+— Deals Scored, Venture Partners — are equally unbacked, and that choice is
+not this issue's to make alone). Left for a follow-up that can look at the
+whole strip rather than one more line of it.
+
+**A Codex review on the PR caught a grammar bug in the fix itself** (not
+optional-labeled, so verified and fixed): the testimonial sub pluralized
+"companies" unconditionally, so a real count of exactly 1 would have
+rendered "From the 1 companies that have completed the Spin-Out Lab." Fixed
+by replacing the inline ternary with `graduateTestimonialSub(companies)`,
+which also reuses `lib/spinoutLab.js`'s existing `useSpinoutStats` hook
+instead of a second copy of the same `/spinout-lab/stats` fetch this file
+had rolled by hand (the review didn't ask for that part, but the file
+already had the real hook sitting next to `companiesLabel`, the singular-
+correct noun helper the review pointed at — using it was the smaller diff
+than keeping a parallel one).
+
+**Tests.** `spinout_lab_copy_d508.test.mjs` (now 5, one new: zero/one/many
+grammar, evaluating the actual function's source rather than re-deriving
+its logic in the test). Root `npm run build` and `npm run test:drift` both
+exit 0.
+
 ## D509
 
 **Task #990: two Studio leftovers. A route with no caller, and a missing count
@@ -40207,6 +40556,192 @@ shown as 0.**
 - The badge drawn without the check.
 - An absent count read as 0.
 - The old `Number(t.count) || 0` restored.
+
+No migration.
+
+## D510
+
+**The Build desk's cadence card offers a Friday retro summary drafted from the
+board, and every zone-draft run records the page it was asked from.** GitHub
+issue 991 (slot S02), relayed from Session 14's D424. No migration, no new
+route and no new `api.js` method.
+
+**What was missing.** D424 left both in its "still not built" list:
+- The cadence card said "no retro draft surface exists yet, so none is
+  drawn". A3 promises "Friday retro gets a draft summary from the board's
+  own history", and `DRAFT_SURFACES` had no entry for it.
+- `POST /api/research/drafts` called `runAI` with no `surface`, so every
+  zone-draft run landed in the month's unattributed group. The rail's "This
+  page this month" (D404) could not count a band's runs.
+
+**The retro surface, `build/retro`.**
+- It scopes like every founder surface: `founderProject` resolves the
+  project the caller owns, or returns `[]`. All three statements are keyed
+  on `mvp_tasks.deal_id`, which is a `projects.id`.
+- **The board keeps no history of its moves.** A card is one row: its status
+  now, when it was created, and when it was last touched. So the material is:
+  - the board's count by status;
+  - the cards last touched in the past seven days, each with where it stands
+    now, when it was added and its due date;
+  - every open card past its due date, touched or not. "Open" excludes
+    `done`, `cancelled` and `archived`, the statuses `founder_board.ts`
+    keeps out of a WIP count.
+- **What the record cannot say is said in the material.** A line reads "NO
+  MOVE HISTORY IS STORED". The instruction forbids:
+  - how many times a card moved, slipped or carried over, and when a card
+    was finished. The integrated Build canvas's fixture ("one carried a
+    third time") counts exactly these.
+  - an owner, a cause or a decision. Decisions live in ritual notes, which
+    this surface does not read.
+- **An empty board is nothing to draft; a quiet week is not.** A board with
+  cards and nothing touched this week sends "No card was touched in the
+  seven days to …". Only a board with no card returns `[]`, which the route
+  answers as `nothing_to_draft` (409).
+- The window compares `datetime(updated_at)`, the D124/D125 rule.
+- **A cut list says it is cut.** Both lists are capped, at 40 touched and 20
+  past due, to bound the prompt. Each read counts its whole match in the same
+  statement (`COUNT(*) OVER ()`, taken before `LIMIT`). Past the cap, the
+  material says how many were left out ("3 more open cards are past their
+  due date and not listed here"), and the instruction says to report it.
+  Raised in review on PR 1033: the first version told the model to "name
+  every open card that is past its due date" over a list capped at 20.
+
+**The cadence card.**
+- The band is mounted under the card, gated like the desk's other three bands
+  (`fillsOn && projectId`), in violet.
+  - Label: "Proposal · retro summary", the integrated Build canvas's own
+    `aiLabel`.
+  - Footnote: "The board keeps no history of its moves, so the summary never
+    says how often a card moved."
+- It sits outside `Cadence`, because it reads the board, not the ritual
+  store. A failed ritual read does not hide it.
+- The sentence denying the surface is gone.
+- The Build desk's switch sentence (`eadwynConfig.js`) names the new band:
+  "summarises the week on the board for a Friday retro".
+  `validate_fills_the_blanks` requires every mounted band to be named there.
+  This is the one file outside the issue's list, and it changed for that
+  reason alone.
+
+**Attribution.**
+- **The page, not the draft key.** The issue says "pass the surface through".
+  `runAI`'s `surface` is D404's column: the app path the run was asked from,
+  re-validated by `normaliseSurface`. The draft key (`build/retro`) has no
+  leading slash, so passing it would record NULL, which is the gap itself.
+  A path built from it (`/build/retro`) is no page anyone stands on, so the
+  rail's lookup would never match it. So the band sends the page.
+- **`ZoneDraft.jsx`:** `bandPage()` reads `window.location.pathname` when the
+  run is pressed, never on load. Inside the app (one `BrowserRouter`, no
+  basename) that is the router's path, and bands also mount in tests with no
+  router. It normalises the trailing slash as the rail does, and sends nothing
+  when there is no path.
+- **`api.js`:** `zoneDraftRun(surface, scopeKey, page)` sends `page` only when
+  there is one.
+- **The route** reads `body.page`, capped at 200 characters as `ai.ts`
+  caps it, and passes it as `surface`. A value that is not a plain app path is
+  recorded as NULL ("not recorded"), never trimmed into one. This applies to
+  every surface, partner and founder alike: it is one route.
+- **Not changed:**
+  - Rows before D510 stay NULL.
+  - The band's pre-run estimate (`RunEstimate`) is still per task. A per-page
+    estimate would read `by_surface`, which is a different file and was not
+    asked for.
+
+**Tests.**
+- `founder_draft_surfaces.test.ts`:
+  - `build/retro` joins the founder `SURFACES` loop, so it runs the
+    cross-account, junk-scope, lone-project, two-project and deleted-project
+    cases.
+  - Seven new tests:
+    - the material: what is touched, what is past due, finished and
+      not-yet-due cards left out, and another founder's late card kept out;
+    - a capped list says how many it left out, in the singular and the plural,
+      and a list within the cap claims no cut;
+    - an ISO-written timestamp an hour outside the week stays outside;
+    - a quiet week versus an empty board;
+    - every founder surface's run records `/build` on its usage row;
+    - no page, the draft key, a URL, a query, a hash or a number records
+      NULL, and a trailing slash is one page;
+    - a refused draft records no run.
+- New `frontend/test/build_retro_d510.test.mjs` (4):
+  - `bandPage`'s normalisation;
+  - the body `zoneDraftRun` sends, through the real `request()`;
+  - the run, and only the run, sending the page;
+  - the band's own words.
+- **Re-aimed, not loosened:**
+  - `founder_build_overview_a3` pinned exactly three bands and the
+    sentence denying the retro. It now pins A3's three bands in A3's order,
+    plus the retro band, labelled from the integrated canvas, in the cadence
+    card and outside `Cadence`. It also pins all four gated and violet, and
+    the denial gone now that the surface exists.
+  - `validate_fills_the_blanks` gains the band in its closed set.
+- **Mutations: 28 run, 28 caught**, each with a non-zero exit and a `not ok`
+  line, restored from a sha256-checked snapshot:
+  - **scoping:** the scope key trusted over the ownership check, and each of
+    the three statements unscoped;
+  - **the material:** no seven-day window, a bare timestamp compare, a
+    finished card called late, the no-history line dropped, the instruction's
+    ban dropped, a quiet week sent as nothing, an empty board drafted over;
+  - **attribution:** the route dropping the page, recording the draft key,
+    or recording a path made from it; the band sending no page; the api
+    method dropping it; the trailing slash kept; an empty path sent as `''`;
+    the load reading the page;
+  - **the card:** the band ungated, in the Partner palette, the denial kept,
+    and the switch sentence not naming it;
+  - **the cuts:** either cut left unsaid, the count taken after the limit,
+    the instruction still claiming every card, and the plural swapped.
+
+  The bare-compare mutation escaped the first pass, which had 22 mutations,
+  because the fixture writes SQL-format times. The ISO test was added for it
+  and catches it, except in the first hour after UTC midnight, when both
+  sides fall on different dates and a bare compare happens to agree.
+
+## D512
+
+**Task #995: Admin Studio's home drops its four legacy reads.**
+
+**What was true on main (f701a32f5).** `AdminStudioHome.jsx` still called
+`api.branchHome`, `api.myLicence`, `api.branchTemplates` and
+`api.branchInsights`. It passed their results as four props to
+`StudioNeedsDecisionView` and `AdminStudioOverview`, beside the studio glance
+each of those already loads. D443 asked for the reads to go. Dropping them
+was unsafe until D447 (#893) made both components render from the glance
+alone.
+
+**What changed.**
+- The page makes no read of its own. The `useEffect`, the four `useState`s,
+  the `api` and `reportError` imports and the `UNAVAILABLE` import are gone.
+- It passes each section `user`, and `glance` when a caller hands one in. In
+  production `glance` is undefined, so each component loads the glance
+  itself. A render test is the only caller that supplies it.
+- The four legacy props are no longer passed. Both components keep accepting
+  them for their own tests, which this task does not own.
+
+**Pins re-aimed, never loosened.**
+- `studio_glance_d443.test.mjs`'s "the home page is not the caller" test now
+  asserts it outright: none of the four calls, and none of the four props.
+- `studio_strips_d246.test.mjs` required the home page to import
+  `UNAVAILABLE`. A page with no read needs no sentinel, so it now asserts the
+  page holds none and calls no `api`. The single-definition count still
+  holds, and `StudioPosture` still takes the shared sentinel.
+
+**Tests.** `frontend/test/studio_home_glance_d512.test.mjs` (3).
+- The page cannot be imported in a test, because `StudioInterview` pulls in
+  a JSON manifest the loader does not load. So one test pins, in the page's
+  source, that `user` and `glance` are the only props it passes.
+- Two render the strip and the cards with exactly those props: once for a
+  suspended branch admin and once for an HQ admin. Neither may stall on
+  "Reading…". The branch render shows the glance's seat figure, freeze line
+  and share rate. The HQ render shows U1's reason and no seat count.
+
+**Mutations: 6 run, 6 caught.**
+- A read put back.
+- A legacy prop passed again.
+- The glance pass-through dropped.
+- The strip ignoring the glance.
+- Both sections ignoring it, which fails both render tests.
+- The sentinel imported again.
+
+**Next.** Slot S06 can retire `/branch`.
 
 No migration.
 
@@ -40253,3 +40788,75 @@ four statements.
 **What it does not do.** It wires no feature to the tables and converts no
 money column. The ledger grows by twelve, which is the honest record of
 production rather than a new choice of dialect.
+
+## D525
+
+**The HQ support bar's "Raise a concern" arrives at Branch · Approvals with
+the form filled: kind `other`, subject naming the session, the HQ actor and
+the reason.** Issue #1031, slot S05, relayed from slot S06's D445 wiring
+(#1028). No migration, no route, no `api.js` change. `frontend/src` moved,
+so `docs/` is rebuilt.
+
+**What was true on main (`f701a32f5`).** D445 made `/branch/approvals` read
+`?kind=` and `?subject=` through `prefillFromSearch` and gave every Settings
+door both. `HqSupportSessionBar.jsx` (D142) linked a bare
+`/branch/approvals`, so a branch admin raising a concern from inside an HQ
+session started with an empty form and had to retype what the bar above it
+had just said. D445 named the prefill this bar would use: `?kind=other`.
+
+**What changed.** The bar builds its link with `approvalsHref`, the one
+helper the Settings doors use, so the encoding and the 300-character cut are
+the page's own. The kind is `other`: a concern about an HQ session is none of
+`moderation`, `content` or `seat_increase`. The subject is
+`concernSubject(session)`: "HQ support session", then " by <actor>" when the
+redeem response carried an actor name, then ": <reason>" when it carried a
+reason. A missing field is left out, never invented, the rule the bar
+already applies to its own fields. Nothing else about the bar moves: it still
+persists nothing, has no close button, and draws nothing without a live
+session.
+
+**From the Approvals page itself, the link reloads the document.** Codex's
+review of #1044 caught what the first draft missed: this bar is global
+chrome, so it is still drawn on `/branch/approvals`, and from there the link
+changes only the query string. React Router keeps the same `BranchApprovals`
+instance, which copies `?kind=` and `?subject=` into state once, in its
+`useState` initialisers, so a client-side navigation left a half-typed form
+exactly as it was; the probe reproduced it. From that one page, and only
+that page, the `Link` carries `reloadDocument`, which is the one way this
+file can force a fresh form state without editing `BranchApprovals.jsx`
+(slot S06's file). The proper fix is the page re-reading its query when it
+changes; it is relayed on #1031, and the guard pins that `BranchApprovals`
+still reads the prefill in exactly those two initialisers, so the day it
+re-reads, the pin fails and the reload is the line to drop.
+
+**Two sentences elsewhere are now stale and are not edited here.**
+`frontend/src/lib/escalationPrefill.js` (its header comment) and
+`frontend/src/lib/README.md` (the `escalationPrefill.js` row) both say the
+bar links with no query. Both are outside this issue's file list; flagged on
+#1031 for the owner to assign.
+
+**Guard.** `frontend/test/hq_support_bar_prefill_d525.test.mjs`, 4 tests,
+rendered under a fake store and parsed back through the page's own
+`prefillFromSearch`: actor and reason both present give kind `other` and
+subject "HQ support session by T. Okafor: ticket #4192", equal to
+`approvalsHref` of the same; each of the three thinner sessions still gives
+kind `other` and the subject with only what was carried; a 400-character
+reason is cut at 300 and an ampersand in the actor name survives the round
+trip; the source imports `approvalsHref`, builds the Link from it and the
+session, spells no query by hand, still writes no `localStorage`, still has
+no close button, and draws nothing without a live session. The first and
+fourth fail on main's bar. `branch_shell_s7_s13` (the bar's D142 pins):
+green.
+
+**Mutations: 13 run, 13 caught** (non-zero exit and a `not ok` line each;
+anchors unique; bytes proven changed; sources restored from a sha256-checked
+snapshot) — the link back to a bare `/branch/approvals`; the kind sent as
+`moderation`; no kind sent; the subject dropped; the query spelled by hand
+instead of through `approvalsHref`; the actor name dropped from the subject;
+the reason dropped from the subject; a missing actor invented as "someone at
+HQ"; the bar persisting the subject to `localStorage`; no reload from the
+Approvals page; the document reloaded from every page; the Approvals check
+comparing against the wrong page; the helper no longer cutting the subject
+at 300.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA fallback, a branch admin (`branch.code` `fr` off `/me`) at 1280×900 with a stored session (actor T. Okafor, reason "ticket #4192", ten minutes left) opening `/branch`. The bar draws above the admin chrome and its "Raise a concern" href is `/branch/approvals?kind=other&subject=HQ+support+session+by+T.+Okafor%3A+ticket+%234192`; clicking it lands on that URL with the raise form drawn, the subject field reading "HQ support session by T. Okafor: ticket #4192" and the `other` kind checked. No page error. Second pass, after Codex's finding: the same admin already on `/branch/approvals` with "something I typed by hand" in the subject presses the bar's link; before the fix the URL changed and the field still read the typed text, after it the document reloads once onto the prefilled URL and the field reads the session's subject with `other` checked, the bar still drawn. The first scenario, from `/branch`, is unchanged: one client-side navigation, no reload.
