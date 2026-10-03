@@ -84,9 +84,10 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
 prose a person wrote; `docs/` is build output a person must never edit. The
 repo root once held 38 loose markdown files — they all live under
 `documentation/` now, and `frontend/test/repo_layout.test.mjs` fails the build
-if a seventh appears at the root (six stay because a tool reads them from
-there: this file, `replit.md`, `README.md`, `CONTRIBUTING.md`, `SECURITY.md`
-and `CHANGELOG.md`).
+if an eighth appears at the root (seven stay because a tool reads them from
+there: this file, `AGENTS.md` (read by Codex, Cursor and other agents),
+`replit.md`, `README.md`, `CONTRIBUTING.md`, `SECURITY.md` and
+`CHANGELOG.md`).
 
 **Every folder that carries weight explains itself.** There is a `README.md` in
 each significant directory saying what lives there and the rule for adding to
@@ -111,6 +112,9 @@ never existed. Start at the README of whatever folder you land in.
   files, applied via `wrangler d1 execute studioos-db --file=...`. Mirror the
   same change in `backend/app/models/migrations.py` only if you need dev
   parity for a feature you're actively iterating on.
+- **Work is handed out as GitHub issues.** Read `AGENTS.md` before you take
+  one. It covers slots, the `state:*` labels, STATUS comments, and who gives
+  instructions.
 
 ## Why this doc exists
 
