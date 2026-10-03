@@ -4995,8 +4995,12 @@ export const api = {
     // page about one record never shows a draft written about another.
     zoneDrafts: (surface, scopeKey) => request(`/research/drafts?surface=${encodeURIComponent(surface)}${
       scopeKey !== undefined ? `&scope_key=${encodeURIComponent(scopeKey)}` : ''}`),
-    zoneDraftRun: (surface, scopeKey) => request('/research/drafts', {
-      method: 'POST', body: JSON.stringify({ surface, ...(scopeKey ? { scope_key: scopeKey } : {}) }),
+    // `page` is the app path the band sits on (D510). The worker records it as
+    // the run's `surface`, as the rail's read-back does (D404), so a band's
+    // runs count towards "This page this month"; it is a path, never content.
+    zoneDraftRun: (surface, scopeKey, page) => request('/research/drafts', {
+      method: 'POST',
+      body: JSON.stringify({ surface, ...(scopeKey ? { scope_key: scopeKey } : {}), ...(page ? { page } : {}) }),
     }),
     // Accept, having optionally edited first — one write, because editing then
     // accepting is the same act with a different body.

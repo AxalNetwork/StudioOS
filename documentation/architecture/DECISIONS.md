@@ -37904,14 +37904,15 @@ Session 12's and was already gone (D400).
 - The Friday retro draft on the Build cadence card needs a `DRAFT_SURFACES`
   entry in `routes/research.ts`, which is not this session's file. The card
   already says no retro draft surface exists. Routed to the owner through
-  the relay.
+  the relay. Built by D510.
 - The collapsed spine's status dot and vertical spend live in `WorkerRail.jsx`
   and `workerRail.css` (Session 12).
 - A band's cost per page. D404 (migration 319) records a run's `surface`,
   and the rail's read-back sends one; `POST /api/research/drafts` sends none,
   so every zone-draft run lands in the month's unattributed group. The band
   estimate therefore stays per task. Passing the page to `runAI` from that
-  route is a `research.ts` change, routed to its owner.
+  route is a `research.ts` change, routed to its owner. D510 passes it; the
+  band's estimate is still per task.
 - The amber strike-through with a second confirm: no fill overwrites a value
   yet (`eadwynConfig`'s market note says why), so there is nothing to confirm.
 
@@ -40000,6 +40001,142 @@ shown as 0.**
 - The badge drawn without the check.
 - An absent count read as 0.
 - The old `Number(t.count) || 0` restored.
+
+## D510
+
+**The Build desk's cadence card offers a Friday retro summary drafted from the
+board, and every zone-draft run records the page it was asked from.** GitHub
+issue 991 (slot S02), relayed from Session 14's D424. No migration, no new
+route and no new `api.js` method.
+
+**What was missing.** D424 left both in its "still not built" list:
+- The cadence card said "no retro draft surface exists yet, so none is
+  drawn". A3 promises "Friday retro gets a draft summary from the board's
+  own history", and `DRAFT_SURFACES` had no entry for it.
+- `POST /api/research/drafts` called `runAI` with no `surface`, so every
+  zone-draft run landed in the month's unattributed group. The rail's "This
+  page this month" (D404) could not count a band's runs.
+
+**The retro surface, `build/retro`.**
+- It scopes like every founder surface: `founderProject` resolves the
+  project the caller owns, or returns `[]`. All three statements are keyed
+  on `mvp_tasks.deal_id`, which is a `projects.id`.
+- **The board keeps no history of its moves.** A card is one row: its status
+  now, when it was created, and when it was last touched. So the material is:
+  - the board's count by status;
+  - the cards last touched in the past seven days, each with where it stands
+    now, when it was added and its due date;
+  - every open card past its due date, touched or not. "Open" excludes
+    `done`, `cancelled` and `archived`, the statuses `founder_board.ts`
+    keeps out of a WIP count.
+- **What the record cannot say is said in the material.** A line reads "NO
+  MOVE HISTORY IS STORED". The instruction forbids:
+  - how many times a card moved, slipped or carried over, and when a card
+    was finished. The integrated Build canvas's fixture ("one carried a
+    third time") counts exactly these.
+  - an owner, a cause or a decision. Decisions live in ritual notes, which
+    this surface does not read.
+- **An empty board is nothing to draft; a quiet week is not.** A board with
+  cards and nothing touched this week sends "No card was touched in the
+  seven days to …". Only a board with no card returns `[]`, which the route
+  answers as `nothing_to_draft` (409).
+- The window compares `datetime(updated_at)`, the D124/D125 rule.
+- **A cut list says it is cut.** Both lists are capped, at 40 touched and 20
+  past due, to bound the prompt. Each read counts its whole match in the same
+  statement (`COUNT(*) OVER ()`, taken before `LIMIT`). Past the cap, the
+  material says how many were left out ("3 more open cards are past their
+  due date and not listed here"), and the instruction says to report it.
+  Raised in review on PR 1033: the first version told the model to "name
+  every open card that is past its due date" over a list capped at 20.
+
+**The cadence card.**
+- The band is mounted under the card, gated like the desk's other three bands
+  (`fillsOn && projectId`), in violet.
+  - Label: "Proposal · retro summary", the integrated Build canvas's own
+    `aiLabel`.
+  - Footnote: "The board keeps no history of its moves, so the summary never
+    says how often a card moved."
+- It sits outside `Cadence`, because it reads the board, not the ritual
+  store. A failed ritual read does not hide it.
+- The sentence denying the surface is gone.
+- The Build desk's switch sentence (`eadwynConfig.js`) names the new band:
+  "summarises the week on the board for a Friday retro".
+  `validate_fills_the_blanks` requires every mounted band to be named there.
+  This is the one file outside the issue's list, and it changed for that
+  reason alone.
+
+**Attribution.**
+- **The page, not the draft key.** The issue says "pass the surface through".
+  `runAI`'s `surface` is D404's column: the app path the run was asked from,
+  re-validated by `normaliseSurface`. The draft key (`build/retro`) has no
+  leading slash, so passing it would record NULL, which is the gap itself.
+  A path built from it (`/build/retro`) is no page anyone stands on, so the
+  rail's lookup would never match it. So the band sends the page.
+- **`ZoneDraft.jsx`:** `bandPage()` reads `window.location.pathname` when the
+  run is pressed, never on load. Inside the app (one `BrowserRouter`, no
+  basename) that is the router's path, and bands also mount in tests with no
+  router. It normalises the trailing slash as the rail does, and sends nothing
+  when there is no path.
+- **`api.js`:** `zoneDraftRun(surface, scopeKey, page)` sends `page` only when
+  there is one.
+- **The route** reads `body.page`, capped at 200 characters as `ai.ts`
+  caps it, and passes it as `surface`. A value that is not a plain app path is
+  recorded as NULL ("not recorded"), never trimmed into one. This applies to
+  every surface, partner and founder alike: it is one route.
+- **Not changed:**
+  - Rows before D510 stay NULL.
+  - The band's pre-run estimate (`RunEstimate`) is still per task. A per-page
+    estimate would read `by_surface`, which is a different file and was not
+    asked for.
+
+**Tests.**
+- `founder_draft_surfaces.test.ts`:
+  - `build/retro` joins the founder `SURFACES` loop, so it runs the
+    cross-account, junk-scope, lone-project, two-project and deleted-project
+    cases.
+  - Seven new tests:
+    - the material: what is touched, what is past due, finished and
+      not-yet-due cards left out, and another founder's late card kept out;
+    - a capped list says how many it left out, in the singular and the plural,
+      and a list within the cap claims no cut;
+    - an ISO-written timestamp an hour outside the week stays outside;
+    - a quiet week versus an empty board;
+    - every founder surface's run records `/build` on its usage row;
+    - no page, the draft key, a URL, a query, a hash or a number records
+      NULL, and a trailing slash is one page;
+    - a refused draft records no run.
+- New `frontend/test/build_retro_d510.test.mjs` (4):
+  - `bandPage`'s normalisation;
+  - the body `zoneDraftRun` sends, through the real `request()`;
+  - the run, and only the run, sending the page;
+  - the band's own words.
+- **Re-aimed, not loosened:**
+  - `founder_build_overview_a3` pinned exactly three bands and the
+    sentence denying the retro. It now pins A3's three bands in A3's order,
+    plus the retro band, labelled from the integrated canvas, in the cadence
+    card and outside `Cadence`. It also pins all four gated and violet, and
+    the denial gone now that the surface exists.
+  - `validate_fills_the_blanks` gains the band in its closed set.
+- **Mutations: 28 run, 28 caught**, each with a non-zero exit and a `not ok`
+  line, restored from a sha256-checked snapshot:
+  - **scoping:** the scope key trusted over the ownership check, and each of
+    the three statements unscoped;
+  - **the material:** no seven-day window, a bare timestamp compare, a
+    finished card called late, the no-history line dropped, the instruction's
+    ban dropped, a quiet week sent as nothing, an empty board drafted over;
+  - **attribution:** the route dropping the page, recording the draft key,
+    or recording a path made from it; the band sending no page; the api
+    method dropping it; the trailing slash kept; an empty path sent as `''`;
+    the load reading the page;
+  - **the card:** the band ungated, in the Partner palette, the denial kept,
+    and the switch sentence not naming it;
+  - **the cuts:** either cut left unsaid, the count taken after the limit,
+    the instruction still claiming every card, and the plural swapped.
+
+  The bare-compare mutation escaped the first pass, which had 22 mutations,
+  because the fixture writes SQL-format times. The ISO test was added for it
+  and catches it, except in the first hour after UTC midnight, when both
+  sides fall on different dates and a bare compare happens to agree.
 
 ## D512
 
