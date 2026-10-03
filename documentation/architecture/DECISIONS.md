@@ -32185,6 +32185,59 @@ body Gmail would have received — a weekly digest's HTML contains "WEEK OF",
 a daily digest's doesn't — mutation-tested by reverting the cadence guard:
 the daily case failed, confirming the escape.
 
+**A second Codex review round on the same PR, three more findings, all
+real:**
+
+- **(P1) The forced-email override widened past the two locked types.**
+  `isCritical` (`!args.category || CRITICAL_CATEGORIES.has(args.category)`)
+  is also true for every uncategorised legacy caller —
+  `routes/capital.ts`'s `capital_call_paid` and `routes/tickets.ts`'s
+  `ticket_update` both call `notify()` with no `category` — and the
+  previous fix used that same flag to force `email` back into `resolved`.
+  Those two types' Settings rows are deliberately left user-toggleable
+  (`capital_call_paid` was explicitly called out as NOT locked, right above
+  in this entry), so their opt-outs silently stopped working the moment
+  the lock-enforcement fix landed. `isCritical` now only governs
+  quiet-hours/digest timing as Task #14 originally specified; a new
+  `forceEmail = LOCKED_EMAIL_TYPES.has(args.type)` (the same two types the
+  Settings UI renders locked) is what `resolveChannels` actually checks for
+  the email override.
+- **(P2) A quiet-hours-buffered row could ship mid-window.** Task #14's
+  09:00-local send slot is a fixed clock check, not "the quiet window that
+  buffered this row has ended" — for a window like 22:00–10:00, 09:00 is
+  still inside it. `flushPendingDigests` released every pending row at that
+  slot regardless of `reason`, so the D333 quiet-hours fix's "paused, not
+  lost" promise still broke the pause half. It now re-checks
+  `isInQuietHours` for the user at flush time and, when still inside the
+  window, filters `reason: 'quiet_hours'` rows out of that tick's batch
+  (leaving them pending for the next tick once the window closes);
+  `reason: 'digest'` rows are unaffected — they were always meant to go out
+  at the cadence slot on their own.
+- **(P2) The weekly "WEEK OF" date ignored the recipient's own timezone.**
+  The cadence check (`isDigestSendTime`) already formats in `u.tz`, but the
+  `weekLabel` passed to `renderWeeklyDigest` used
+  `new Intl.DateTimeFormat('en-GB', {...}).format(now)` with no `timeZone`,
+  so it fell back to the runtime's default. For a user far enough ahead of
+  UTC (anything past UTC+9, since the 09:00 slot then maps to a UTC instant
+  on the previous calendar day), the label could show yesterday's date.
+  Fixed by passing `timeZone: u.tz` to that formatter, matching the cadence
+  check it has to agree with.
+
+**Tests (second review round).** `notify_codex_round2_d333.test.ts` (new,
+5): an uncategorised type (`capital_call_paid`) still honours a stored
+`email: false` opt-out while a genuinely locked type
+(`capital_call_issued`) still overrides one; a quiet-hours row is held back
+while its window (22:00–10:00 UTC) is still open at the 09:00 flush slot,
+and ships once a different window (02:00–05:00) has already closed; the
+weekly digest sent to a `Pacific/Kiritimati` (UTC+14) recipient at the
+instant that is their local Monday 09:00 — Sunday 19:00 in UTC — shows "5
+OCTOBER" in the rendered HTML, not the UTC-dated "4 OCTOBER". All four
+non-trivial fixes mutation-tested: reverting `forceEmail` back to
+`isCritical`, deleting the re-check-before-flush block, and dropping
+`timeZone: u.tz` from the formatter each made exactly the case built for it
+fail, then were restored and reverified clean (sha256-matched against the
+pre-mutation file).
+
 
 ## D350
 

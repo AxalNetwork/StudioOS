@@ -57,6 +57,16 @@ export const CRITICAL_CATEGORIES: ReadonlySet<string> = new Set([
   'contract_sign_request',
 ]);
 
+/** Event types whose email column SettingsPage.jsx renders locked
+ *  (checked, disabled) — the only ones `resolveChannels` may force email
+ *  back on over a stored opt-out. Distinct from CRITICAL_CATEGORIES, which
+ *  also covers uncategorised legacy callers for quiet-hours/digest timing
+ *  but was never meant to override those callers' own opt-outs. */
+const LOCKED_EMAIL_TYPES: ReadonlySet<string> = new Set([
+  'capital_call_issued',
+  'agreement_ready_to_sign',
+]);
+
 export interface NotifyArgs {
   userId: number;
   type: string;
@@ -147,19 +157,19 @@ async function loadPrefs(env: Env, userId: number): Promise<Record<string, any>>
 }
 
 function resolveChannels(
-  prefs: Record<string, any>, type: string, requested: NotifyChannel[], isCritical: boolean,
+  prefs: Record<string, any>, type: string, requested: NotifyChannel[], forceEmail: boolean,
 ): NotifyChannel[] {
   // Honor per-event, per-channel opt-outs from /account/notifications.
   // All three channels (in_app/email/slack) are user-toggleable and
   // default-on; an explicit `false` in prefs[type][ch] suppresses that
-  // channel for that event type — EXCEPT email on a critical category,
+  // channel for that event type — EXCEPT email on a locked event type,
   // which SettingsPage.jsx already renders locked (checked, disabled) and
   // which this function must actually honour, not just the UI. A `false`
   // saved before the lock existed (or written around it) no longer wins.
   const ev = (prefs && typeof prefs === 'object' ? (prefs[type] || {}) : {}) as Record<string, any>;
   const out: NotifyChannel[] = [];
   for (const ch of requested) {
-    if (ch === 'email' && isCritical) { out.push(ch); continue; }
+    if (ch === 'email' && forceEmail) { out.push(ch); continue; }
     const enabled = ev[ch];
     if (enabled === undefined || enabled === true) out.push(ch);
   }
@@ -291,7 +301,15 @@ export async function notify(env: Env, args: NotifyArgs): Promise<number | null>
     // even over a stored opt-out — `in_app`/`slack` stay opt-outable, since
     // the lock in Settings is on the email column only.
     const isCritical = !args.category || CRITICAL_CATEGORIES.has(args.category);
-    const resolved = resolveChannels(prefs, args.type, channels, isCritical);
+    // P1 (Codex, D333): `isCritical` also covers every uncategorised legacy
+    // caller (capital.ts's capital_call_paid, tickets.ts's ticket_update) —
+    // that's correct for quiet-hours/digest bypass timing (Task #14's
+    // original "uncategorised behaves as before" rule), but forcing email
+    // back over a stored opt-out must stay scoped to the two event types
+    // SettingsPage.jsx actually renders locked. Otherwise an uncategorised
+    // caller's opt-out silently stops working the moment this ran.
+    const forceEmail = LOCKED_EMAIL_TYPES.has(args.type);
+    const resolved = resolveChannels(prefs, args.type, channels, forceEmail);
     if (resolved.length === 0) return null;
 
     // T20 — Quiet hours: if the user is currently inside their configured
@@ -571,12 +589,17 @@ export async function flushPendingDigests(env: Env, now: Date = new Date()): Pro
 
   // Pull users with pending rows, joined to their settings. Cap at
   // 500/tick — anything beyond that should batch over multiple ticks.
-  let users: Array<{ user_id: number; tz: string; digest: 'daily' | 'weekly' }> = [];
+  let users: Array<{
+    user_id: number; tz: string; digest: 'daily' | 'weekly';
+    quiet_hours_start: string | null; quiet_hours_end: string | null;
+  }> = [];
   try {
     const res: any = await env.DB.prepare(
       `SELECT o.user_id AS user_id,
               COALESCE(s.quiet_hours_tz, s.timezone, 'UTC') AS tz,
-              COALESCE(s.digest_frequency, 'off') AS digest
+              COALESCE(s.digest_frequency, 'off') AS digest,
+              s.quiet_hours_start AS quiet_hours_start,
+              s.quiet_hours_end AS quiet_hours_end
          FROM notification_outbox o
          LEFT JOIN user_settings s ON s.user_id = o.user_id
         WHERE o.flushed_at IS NULL
@@ -587,6 +610,8 @@ export async function flushPendingDigests(env: Env, now: Date = new Date()): Pro
       user_id: Number(r.user_id),
       tz: String(r.tz || 'UTC'),
       digest: (r.digest === 'daily' || r.digest === 'weekly') ? r.digest : 'daily',
+      quiet_hours_start: r.quiet_hours_start ?? null,
+      quiet_hours_end: r.quiet_hours_end ?? null,
     }));
   } catch (e) {
     console.warn('[notify] flushPendingDigests scan failed', e);
@@ -611,6 +636,18 @@ export async function flushPendingDigests(env: Env, now: Date = new Date()): Pro
       ).bind(u.user_id).all();
       rows = (r?.results || []) as OutboxRow[];
     } catch (e) { console.warn('[notify] outbox load failed', e); continue; }
+
+    // P2 (Codex, D333): a fixed 09:00-local send slot isn't the same thing
+    // as "the quiet window that buffered this row has ended" — a window
+    // like 22:00–10:00 is still active at 09:00. `reason: 'digest'` rows
+    // were always meant to go out at the cadence slot regardless; only
+    // `reason: 'quiet_hours'` rows are the ones the window itself must
+    // clear first, so re-check it right here instead of trusting the fixed
+    // time this loop already matched on.
+    if (u.quiet_hours_start && u.quiet_hours_end &&
+        isInQuietHours({ quiet_hours_start: u.quiet_hours_start, quiet_hours_end: u.quiet_hours_end, quiet_hours_tz: u.tz }, now)) {
+      rows = rows.filter((r) => r.reason !== 'quiet_hours');
+    }
     if (rows.length === 0) continue;
 
     const digestId = crypto.randomUUID();
@@ -648,7 +685,11 @@ export async function flushPendingDigests(env: Env, now: Date = new Date()): Pro
     const root = stripTrailingSlashes(appUrl);
     const html = cadence === 'weekly' ? renderWeeklyDigest({
       to: userEmail,
-      weekLabel: new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long' }).format(now),
+      // P2 (Codex, D333): must format in the recipient's own tz, or a user
+      // east of UTC whose local Monday 09:00 is still Sunday UTC sees
+      // yesterday's date in the "WEEK OF" label — the cadence check above
+      // already uses u.tz; this formatter has to match it.
+      weekLabel: new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', timeZone: u.tz }).format(now),
       cards: rows.slice(0, 3).map((r) => ({
         kicker: (r.category || r.type || 'update').toUpperCase(),
         title: r.title,

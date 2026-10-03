@@ -32,7 +32,8 @@ function fixture(digest: 'daily' | 'weekly') {
     CREATE TABLE user_settings (
       user_id INTEGER PRIMARY KEY,
       digest_frequency TEXT DEFAULT 'weekly',
-      quiet_hours_tz TEXT, timezone TEXT
+      quiet_hours_tz TEXT, timezone TEXT,
+      quiet_hours_start TEXT, quiet_hours_end TEXT
     );
     CREATE TABLE notification_outbox (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
