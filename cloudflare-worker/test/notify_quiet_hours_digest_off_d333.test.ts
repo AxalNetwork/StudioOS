@@ -33,6 +33,14 @@ import { DatabaseSync } from 'node:sqlite';
 import { notify } from '../src/services/notify.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 
+/** CodeQL (Incomplete URL substring sanitization): `url.includes(host)` also
+ *  matches `https://evil.example/oauth2.googleapis.com` or
+ *  `https://oauth2.googleapis.com.evil.example/`. Parsing and comparing the
+ *  actual hostname is the fix. */
+function isHost(url: string, host: string): boolean {
+  try { return new URL(url).hostname === host; } catch { return false; }
+}
+
 const ME = 7;
 
 function fixture() {
@@ -135,7 +143,7 @@ test('a critical category\'s email is not stopped by a stored email:false opt-ou
   const originalFetch = globalThis.fetch;
   t.after(() => { (globalThis as any).fetch = originalFetch; });
   (globalThis as any).fetch = async (url: string, init: any) => {
-    if (String(url).includes('oauth2.googleapis.com')) { fetchedOAuth = true; }
+    if (isHost(String(url), 'oauth2.googleapis.com')) { fetchedOAuth = true; }
     return new Response(JSON.stringify({ error: 'test_stub_no_real_send' }), { status: 400 });
   };
   await notify(envWithGmail(db), {
@@ -159,7 +167,7 @@ test('a non-critical, non-locked type still honours a stored email:false opt-out
   const originalFetch = globalThis.fetch;
   t.after(() => { (globalThis as any).fetch = originalFetch; });
   (globalThis as any).fetch = async (url: string) => {
-    if (String(url).includes('oauth2.googleapis.com')) { fetchedOAuth = true; }
+    if (isHost(String(url), 'oauth2.googleapis.com')) { fetchedOAuth = true; }
     return new Response(JSON.stringify({ error: 'test_stub_no_real_send' }), { status: 400 });
   };
   await notify(envWithGmail(db), {

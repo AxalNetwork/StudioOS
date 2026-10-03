@@ -69,6 +69,13 @@ function decodeHtmlPart(outerMime: string): string {
   return Buffer.from(htmlPartMatch[1].replace(/\s+/g, ''), 'base64').toString('utf8');
 }
 
+/** CodeQL (Incomplete URL substring sanitization): `url.includes(host)` also
+ *  matches `https://evil.example/gmail.googleapis.com` or a subdomain built
+ *  to contain it. Parsing and comparing the actual hostname is the fix. */
+function isHost(url: string, host: string): boolean {
+  try { return new URL(url).hostname === host; } catch { return false; }
+}
+
 /** Intercepts both the OAuth token exchange and the Gmail send call, and
  *  decodes the raw MIME body so the test can inspect what actually shipped. */
 function interceptGmailSend(): { getSentHtml: () => string | null; restore: () => void } {
@@ -76,10 +83,10 @@ function interceptGmailSend(): { getSentHtml: () => string | null; restore: () =
   let sentMime: string | null = null;
   (globalThis as any).fetch = async (url: string, init: any) => {
     const u = String(url);
-    if (u.includes('oauth2.googleapis.com')) {
+    if (isHost(u, 'oauth2.googleapis.com')) {
       return new Response(JSON.stringify({ access_token: 'fake' }), { status: 200 });
     }
-    if (u.includes('gmail.googleapis.com')) {
+    if (isHost(u, 'gmail.googleapis.com')) {
       const payload = JSON.parse(init.body);
       const b64 = String(payload.raw).replace(/-/g, '+').replace(/_/g, '/');
       sentMime = Buffer.from(b64, 'base64').toString('utf8');
