@@ -39789,7 +39789,7 @@ treated as accepted, and their subjects are told.
 **Tests.** `relationship_requests_d493.test.ts` (8). 19 mutations, 19
 caught.
 
-## D494
+## D496
 
 **The notifications panel and push routes, item 6 of the Wave-8 brief —
 `/api/notifications/push/*`, migration 302, and a shared type-map.**
