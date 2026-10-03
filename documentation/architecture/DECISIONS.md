@@ -32157,6 +32157,52 @@ row-renders-its-type check) were re-aimed at the moved arrays/new label
 output rather than weakened — both now check exactly what they checked
 before, against where that content actually lives now.
 
+**Three more fixes from a Codex review on the PR, all real, none
+optional-labeled — verified and fixed:**
+
+- **An authenticated client could persist an arbitrary URL as `endpoint`,
+  and `/push/test` did a server-side `fetch()` to it on demand — an open
+  outbound-POST primitive.** `isAllowedPushEndpoint` (`webpush.ts`) is the
+  one gate every write to `push_subscriptions` goes through: HTTPS only,
+  no literal IP host (v4 or bracketed v6), no `localhost`/loopback/
+  link-local/`.internal`/`.local` hostname, length-bounded. It can't catch
+  a hostname that resolves to a private address only at fetch time — no
+  synchronous DNS check is available here — so this is defense in depth
+  alongside Workers' own sandboxed egress, not a complete guarantee.
+  `/push/subscribe` also caps live subscriptions at 20 per account, so one
+  signed-in user can't fan out unboundedly even through allowed hosts.
+- **`sendWebPush` parsed the endpoint with `new URL()` before its own `try`
+  block**, so a malformed stored endpoint threw uncaught instead of
+  returning the `{ok:false, ...}` shape every other failure in the
+  function does. Moved inside, with its own `invalid_endpoint` reason —
+  defense in depth again, since a validated-at-write-time endpoint
+  shouldn't reach this malformed, but a future second writer or a
+  pre-validation row shouldn't get a different failure mode here.
+- **`notify()` never called `sendWebPush` at all.** D334/D335 built the
+  five `/push/*` routes and the RFC 8291 sender, but the actual
+  notification dispatcher still only wrote the inbox row and broadcast
+  over the realtime DO channel — "enabling push produces the setup test"
+  (`/push/test`) "while every subsequent real notification is lost as soon
+  as the browser has no active WebSocket," as the review put it. Now fans
+  out to every row in `push_subscriptions` for the notified user alongside
+  the realtime broadcast (same quiet-hours skip, same best-effort swallow
+  — this repo's standing rule that a downed channel must never break the
+  underlying business action), deleting a subscription outright on a
+  404/410 the same way `/push/test` already does. Not a new channel in
+  `notification_prefs`: a device either has push subscriptions or it
+  doesn't, and the in-app row this block already gates on is the signal a
+  push mirrors.
+
+**Tests (these three fixes).** `push_security_fixes_d334.test.ts` (new, 6):
+`isAllowedPushEndpoint` accepts an ordinary push-service URL and rejects
+non-https/malformed/private-range/loopback/cloud-metadata hosts;
+`sendWebPush` returns a failure shape rather than throwing on a malformed
+endpoint; the route refuses a disallowed endpoint and enforces the
+20-subscription cap; `notify()` is shown to actually reach a subscribed
+device — intercepting the real `fetch()` to the stored endpoint, not
+trusting an internal call was made. All six mutation-tested by reverting
+each fix in turn: every one failed, confirming the escape.
+
 
 ## D350
 

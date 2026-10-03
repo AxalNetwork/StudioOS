@@ -347,6 +347,37 @@ export async function notify(env: Env, args: NotifyArgs): Promise<number | null>
             },
           });
         } catch (e) { console.warn('[notify] realtime push failed', e); }
+
+        // D334/D335 built the /push/* routes and the RFC 8291 sender but
+        // never called either from here — a Codex review on that PR caught
+        // that "enabling push produces the setup test" (/push/test) "while
+        // every subsequent real notification is lost as soon as the
+        // browser has no active WebSocket." Fanned out alongside the
+        // realtime broadcast above (same quiet-hours skip, same
+        // best-effort swallow) rather than as its own channel in
+        // `notification_prefs` — a device either has push subscriptions or
+        // it doesn't, and the in-app row this block already gates on is
+        // the signal a push notification mirrors.
+        try {
+          const subs: any = await env.DB.prepare(
+            `SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?`,
+          ).bind(args.userId).all();
+          const rows = (subs?.results || []) as Array<{ id: number; endpoint: string; p256dh: string; auth: string }>;
+          if (rows.length) {
+            const { sendWebPush } = await import('./webpush');
+            for (const row of rows) {
+              const result = await sendWebPush(env, row, {
+                title: args.title,
+                body: args.body ?? '',
+                link: args.link ?? '/inbox',
+                type: args.type,
+              });
+              if (!result.ok && result.gone) {
+                await env.DB.prepare(`DELETE FROM push_subscriptions WHERE id = ?`).bind(row.id).run();
+              }
+            }
+          }
+        } catch (e) { console.warn('[notify] web push fan-out failed', e); }
       }
     }
 

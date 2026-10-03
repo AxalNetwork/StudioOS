@@ -16,6 +16,40 @@
  */
 import type { Env } from '../types';
 
+/**
+ * Codex review on D334: `/push/subscribe` accepted any non-empty string as
+ * `endpoint`, and `/push/test` then did a server-side `fetch()` to it — an
+ * authenticated client could persist an arbitrary URL and get this Worker
+ * to make outbound POST requests to it on demand, including to a loopback
+ * or private-range address if DNS or an IP literal pointed there. This is
+ * the one gate both the subscribe route and `sendWebPush` now share: HTTPS
+ * only, no literal IP host (v4 or bracketed v6), no `localhost` / loopback
+ * / link-local / `.internal`/`.local` hostname, reasonable length. It
+ * cannot catch a hostname that resolves to a private address only at
+ * fetch time — no synchronous DNS check is available here — so this is
+ * defense in depth, not a complete guarantee; Workers' own sandboxed
+ * egress is the other layer.
+ */
+export function isAllowedPushEndpoint(raw: string): boolean {
+  if (typeof raw !== 'string' || raw.length === 0 || raw.length > 2000) return false;
+  let url: URL;
+  try { url = new URL(raw); } catch { return false; }
+  if (url.protocol !== 'https:') return false;
+  const host = url.hostname.toLowerCase();
+  if (host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal')) return false;
+  // IPv6 literals arrive bracketed, e.g. "[::1]" -> hostname "::1".
+  const v6 = host.startsWith('[') ? host.slice(1, -1) : host;
+  if (v6 === '::1' || v6 === '::') return false;
+  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const [a, b] = v4.slice(1).map(Number);
+    if (a === 127 || a === 10 || a === 0 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function b64urlToBytes(b64url: string): Uint8Array {
   const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
   const pad = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
@@ -94,7 +128,18 @@ export async function sendWebPush(
   sub: PushSubscriptionRow,
   payload: Record<string, unknown>,
 ): Promise<PushSendResult> {
-  const endpointUrl = new URL(sub.endpoint);
+  // Review-caught: this used to run before the try block, so a malformed
+  // endpoint threw uncaught instead of returning the error shape every
+  // other failure in this function does. Subscriptions are validated with
+  // `isAllowedPushEndpoint` at write time (`/push/subscribe`), but a stored
+  // row predating that check, or a future second writer, shouldn't get a
+  // different failure mode here.
+  let endpointUrl: URL;
+  try {
+    endpointUrl = new URL(sub.endpoint);
+  } catch {
+    return { ok: false, gone: false, status: 0, error: 'invalid_endpoint' };
+  }
   const audience = `${endpointUrl.protocol}//${endpointUrl.host}`;
   const vapid = await signVapidJwt(env, audience);
   if (!vapid) return { ok: false, gone: false, status: 0, error: 'vapid_not_configured' };

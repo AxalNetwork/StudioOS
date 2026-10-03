@@ -319,9 +319,30 @@ notifications.post('/push/subscribe', async (c) => {
   if (!endpoint || !p256dh || !auth) {
     return c.json({ error: 'endpoint and keys.p256dh/keys.auth are required' }, 422);
   }
+  // Review-caught: an authenticated client could persist ANY string as
+  // `endpoint`, which `/push/test` then server-side `fetch()`es — an open
+  // outbound-POST primitive. Rejected here, at the one place a row is ever
+  // written, rather than re-checked at every send site.
+  const { isAllowedPushEndpoint } = await import('../services/webpush');
+  if (!isAllowedPushEndpoint(endpoint)) {
+    return c.json({ error: 'endpoint must be an https:// URL on a public host' }, 422);
+  }
+  if (p256dh.length > 200 || auth.length > 200) {
+    return c.json({ error: 'keys.p256dh/keys.auth too long' }, 422);
+  }
   const expirationTime = Number.isFinite(body?.expirationTime) ? Math.trunc(body.expirationTime) : null;
   const userAgent = typeof body?.user_agent === 'string' ? body.user_agent.slice(0, 500) : null;
   try {
+    // A cap on live subscriptions per account — not infinite fan-out from
+    // one signed-in user repeatedly subscribing new (or spoofed) endpoints.
+    // Counted before the insert so a re-subscribe of an existing endpoint
+    // (the ON CONFLICT path below) never trips it.
+    const existing: any = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM push_subscriptions WHERE user_id = ? AND endpoint <> ?`,
+    ).bind(user.id, endpoint).first();
+    if (Number(existing?.n || 0) >= 20) {
+      return c.json({ error: 'too many push subscriptions for this account' }, 429);
+    }
     // One row per endpoint — a re-subscribe from the same browser (rotated
     // keys, renewed expiration) replaces the row rather than duplicating it,
     // and re-homes it to whichever account is signed in now.
@@ -385,7 +406,7 @@ notifications.post('/push/test', async (c) => {
     const result = await sendWebPush(c.env, s, {
       title: 'Axal StudioOS',
       body: 'Push notifications are working.',
-      url: '/inbox',
+      link: '/inbox',
     });
     if (result.ok) {
       sent += 1;
