@@ -7,17 +7,18 @@
  * `activity_logs` and send nothing; digest on → buffer to the outbox);
  * otherwise → send now. A user who was in quiet hours AND had never turned
  * digests on simply never got the email — not now, not buffered, not ever.
- * Quiet hours only ever promised to suppress the real-time push (see T20 in
- * notify.ts); it was never meant to be a second, silent unsubscribe for
- * mail with no digest to catch it.
  *
- * The fix drops the quiet+digest-off special case entirely: with digest
- * off, quiet hours now behaves like "not quiet" for the email channel —
- * the email dispatches immediately either way. This test pins that by
- * checking the one durable side effect the old code had: the
- * `suppressed_quiet_hours` activity_logs row. The fixed code never writes
- * one; the old code always did when digest was off and the user was inside
- * their quiet window.
+ * THE FIRST FIX HERE DISPATCHED IMMEDIATELY INSTEAD, AND A CODEX REVIEW ON
+ * THE PR CAUGHT WHY THAT WAS ALSO WRONG: `SettingsPage.jsx`'s Quiet Hours
+ * card promises "Push and non-critical email are paused during this
+ * window" — sending right away during the window breaks that promise just
+ * as much as dropping the email did, only louder (an overnight email the
+ * user explicitly asked to not get until morning). The actual fix buffers
+ * it the same way a digest-on quiet-hours email already does
+ * (`enqueueOutbox(..., 'quiet_hours')`), which the existing digest cadence
+ * flush drains at the user's next local slot (daily by default when
+ * digest is 'off') — paused and later delivered, never vanished, which is
+ * the promise the UI actually makes.
  *
  * Real SQLite, per the project's standing D1-test convention — the
  * behaviour under test is the branch notify() takes, not a stubbed shape.
@@ -62,6 +63,14 @@ function env(db: InstanceType<typeof DatabaseSync>): any {
   return { ENVIRONMENT: 'development', DB: d1Over(db) };
 }
 
+/** Fake Gmail creds so `sendNotificationEmail` doesn't early-return on
+ *  `!env.GMAIL_CLIENT_ID` before ever attempting a send — the observable
+ *  signal for "did notify() actually try to dispatch an email" is whether
+ *  the OAuth token-exchange fetch to oauth2.googleapis.com fires. */
+function envWithGmail(db: InstanceType<typeof DatabaseSync>): any {
+  return { ...env(db), GMAIL_CLIENT_ID: 'x', GMAIL_CLIENT_SECRET: 'x', GMAIL_REFRESH_TOKEN: 'x' };
+}
+
 async function suppressedRows(db: InstanceType<typeof DatabaseSync>): Promise<number> {
   const row: any = db.prepare(
     `SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'suppressed_quiet_hours' AND user_id = ?`,
@@ -69,13 +78,24 @@ async function suppressedRows(db: InstanceType<typeof DatabaseSync>): Promise<nu
   return Number(row?.n ?? 0);
 }
 
-test('quiet hours + digest off: the email is not logged as suppressed', async () => {
+async function outboxRows(db: InstanceType<typeof DatabaseSync>, reason: string): Promise<number> {
+  const row: any = db.prepare(
+    `SELECT COUNT(*) AS n FROM notification_outbox WHERE user_id = ? AND reason = ?`,
+  ).get(ME, reason);
+  return Number(row?.n ?? 0);
+}
+
+test('quiet hours + digest off: the email is buffered, not suppressed and not sent immediately', async () => {
   const db = fixture();
   await notify(env(db), {
     userId: ME, type: 'score_generated', title: 'New score', category: 'scoring',
     channels: ['email'],
   });
   assert.equal(await suppressedRows(db), 0, 'notify() still suppressed the email outright with digest off');
+  assert.equal(
+    await outboxRows(db, 'quiet_hours'), 1,
+    'the email was neither buffered nor dropped — it must have been sent immediately, contradicting the Quiet Hours pause promise',
+  );
 });
 
 test('quiet hours + digest daily: still buffers to the outbox, not a regression', async () => {
@@ -85,10 +105,7 @@ test('quiet hours + digest daily: still buffers to the outbox, not a regression'
     userId: ME, type: 'score_generated', title: 'New score', category: 'scoring',
     channels: ['email'],
   });
-  const row: any = db.prepare(
-    `SELECT COUNT(*) AS n FROM notification_outbox WHERE user_id = ? AND reason = 'digest'`,
-  ).get(ME);
-  assert.equal(Number(row?.n ?? 0), 1, 'a daily-digest user in quiet hours should still buffer the email');
+  assert.equal(await outboxRows(db, 'digest'), 1, 'a daily-digest user in quiet hours should still buffer the email');
   assert.equal(await suppressedRows(db), 0);
 });
 
@@ -101,4 +118,53 @@ test('critical category always sends now, quiet hours or not', async () => {
   const outbox: any = db.prepare(`SELECT COUNT(*) AS n FROM notification_outbox WHERE user_id = ?`).get(ME);
   assert.equal(Number(outbox?.n ?? 0), 0, 'a critical category must never be buffered');
   assert.equal(await suppressedRows(db), 0);
+});
+
+test('a critical category\'s email is not stopped by a stored email:false opt-out', async (t) => {
+  // Codex review on this PR: SettingsPage.jsx now renders capital_call_issued's
+  // email column checked and disabled (D333's lock), but a user who saved
+  // `email: false` before that lock existed had their email silently kept
+  // off — resolveChannels dropped 'email' before isCritical ever got a say,
+  // so the "cannot be turned off" promise was UI-only. The observable proof
+  // that notify() actually tries to send (not just that no DB row says it
+  // didn't) is whether it reaches Gmail's OAuth token exchange at all.
+  const db = fixture();
+  db.prepare(`UPDATE users SET notification_prefs = ? WHERE id = ?`)
+    .run(JSON.stringify({ capital_call_issued: { email: false } }), ME);
+  let fetchedOAuth = false;
+  const originalFetch = globalThis.fetch;
+  t.after(() => { (globalThis as any).fetch = originalFetch; });
+  (globalThis as any).fetch = async (url: string, init: any) => {
+    if (String(url).includes('oauth2.googleapis.com')) { fetchedOAuth = true; }
+    return new Response(JSON.stringify({ error: 'test_stub_no_real_send' }), { status: 400 });
+  };
+  await notify(envWithGmail(db), {
+    userId: ME, type: 'capital_call_issued', title: 'Capital call issued', category: 'billing',
+    channels: ['email'],
+  });
+  assert.equal(fetchedOAuth, true, 'notify() never attempted to send the email at all — the stored opt-out silently won');
+  const outbox: any = db.prepare(`SELECT COUNT(*) AS n FROM notification_outbox WHERE user_id = ?`).get(ME);
+  assert.equal(Number(outbox?.n ?? 0), 0, 'a critical category must never be buffered, stored opt-out or not');
+  assert.equal(await suppressedRows(db), 0);
+});
+
+test('a non-critical, non-locked type still honours a stored email:false opt-out', async (t) => {
+  // The fix must not over-widen: resolveChannels only forces email back for
+  // a CRITICAL category, never for an ordinary opt-outable one.
+  const db = fixture();
+  db.prepare(`UPDATE user_settings SET quiet_hours_start = NULL, quiet_hours_end = NULL WHERE user_id = ?`).run(ME);
+  db.prepare(`UPDATE users SET notification_prefs = ? WHERE id = ?`)
+    .run(JSON.stringify({ score_generated: { email: false } }), ME);
+  let fetchedOAuth = false;
+  const originalFetch = globalThis.fetch;
+  t.after(() => { (globalThis as any).fetch = originalFetch; });
+  (globalThis as any).fetch = async (url: string) => {
+    if (String(url).includes('oauth2.googleapis.com')) { fetchedOAuth = true; }
+    return new Response(JSON.stringify({ error: 'test_stub_no_real_send' }), { status: 400 });
+  };
+  await notify(envWithGmail(db), {
+    userId: ME, type: 'score_generated', title: 'New score', category: 'scoring',
+    channels: ['email'],
+  });
+  assert.equal(fetchedOAuth, false, 'email was opted out for a non-critical type, yet notify() tried to send it anyway');
 });

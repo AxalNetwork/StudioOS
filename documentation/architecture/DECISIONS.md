@@ -32131,12 +32131,59 @@ placeholder values to make the renderers "wired" would ship a canvas email
 that's wrong rather than one that's merely unbuilt. Left for a follow-up task
 that can plumb the real data through.
 
-**Tests.** `notify_quiet_hours_digest_off_d333.test.ts` (3; the suppression
-row disappears, a daily-digest buffer still works, critical still bypasses
-quiet hours) — mutation-tested by reverting the branch to its old shape: 2 of
-3 escaped and were caught. `settings_notification_locks_d333.test.mjs` (4;
-the two locked entries exist and `capital_call_paid` doesn't, the render
+**Tests.** `notify_quiet_hours_digest_off_d333.test.ts` (originally 3; the
+suppression row disappears, a daily-digest buffer still works, critical still
+bypasses quiet hours) — mutation-tested by reverting the branch to its old
+shape: 2 of 3 escaped and were caught. `settings_notification_locks_d333.test.mjs`
+(4; the two locked entries exist and `capital_call_paid` doesn't, the render
 cell's lock logic, `setEvent`'s refusal, and preset re-locking).
+
+**Three fixes from a Codex review on the PR, each real — none of the three
+severities Codex gave this PR were optional-labeled, so each was verified and
+fixed rather than deferred:**
+
+- **Quiet hours + digest-off no longer sends immediately.** The first fix
+  above dispatched right away, which directly contradicted
+  `SettingsPage.jsx`'s own Quiet Hours card: "Push and non-critical email are
+  paused during this window." Sending during the window broke that promise
+  louder than the original bug did (an unwanted overnight email rather than a
+  lost one). Now buffers the same way a digest-on quiet-hours email already
+  does (`enqueueOutbox(..., 'quiet_hours')`), which the existing digest
+  cadence flush drains at the user's next local slot — paused and later
+  delivered, never lost, which is what the card actually promises.
+- **A locked email channel is now enforced in `notify()`, not just rendered
+  locked in Settings.** `resolveChannels` ran before the critical-category
+  check and silently dropped `email` from `resolved` for any user who had
+  previously saved `email: false` for `capital_call_issued` or
+  `agreement_ready_to_sign` — before this PR's lock existed, nothing stopped
+  that save. The UI rendered the toggle checked-and-disabled; the backend
+  still skipped the whole email branch for that stored preference, so the
+  "cannot be turned off" promise was UI-only for anyone who had already
+  opted out. `resolveChannels` now takes `isCritical` and keeps `email` in
+  `resolved` for a critical category regardless of a stored opt-out —
+  `in_app`/`slack` stay opt-outable, matching that the Settings lock is on
+  the email column only.
+- **The weekly canvas HTML no longer ships inside a daily digest.**
+  `flushPendingDigests` used `renderWeeklyDigest` unconditionally; its
+  template hardcodes "WEEK OF" and "Three things from your week", so a
+  daily-cadence user's HTML body described a week while the subject and
+  plain-text alternative correctly said daily. `canvasTransactional.ts` has
+  no daily variant — the design canvas only specifies a weekly one — so a
+  daily digest now keeps its plain-text-only rendering instead of guessing
+  at daily-specific copy nobody designed; only `cadence === 'weekly'` gets
+  the canvas HTML.
+
+**Tests (review fixes).** `notify_quiet_hours_digest_off_d333.test.ts` grew
+two more cases: a critical category's email reaches Gmail's OAuth token
+exchange even with a stored `email: false` (the observable proof that
+`notify()` tried to send, not just that no DB row says it didn't), and a
+non-critical type still honours a stored opt-out so the fix didn't
+over-widen. Both mutation-tested: reverting the `resolveChannels` fix made
+the first fail, confirming the escape. `flush_pending_digests_cadence_d333.test.ts`
+(new, 2) intercepts the actual Gmail send call and decodes the real MIME
+body Gmail would have received — a weekly digest's HTML contains "WEEK OF",
+a daily digest's doesn't — mutation-tested by reverting the cadence guard:
+the daily case failed, confirming the escape.
 
 
 ## D350

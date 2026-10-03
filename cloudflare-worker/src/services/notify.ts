@@ -17,10 +17,11 @@
  *  - Non-critical email is dropped into `notification_outbox` when the
  *    user has digest set to daily/weekly, regardless of quiet hours — the
  *    digest cron is what paces it either way.
- *  - D333: quiet hours with digest=off no longer drops the email. It used
- *    to (logged as `suppressed_quiet_hours`); quiet hours only ever
- *    promised to suppress the real-time push, not kill mail with nothing
- *    buffering it.
+ *  - D333: quiet hours with digest=off no longer drops the email outright
+ *    (it used to, logged as `suppressed_quiet_hours`). It buffers the same
+ *    as a digest-on quiet-hours email, which `flushPendingDigests` drains
+ *    at the next daily/weekly slot — paused, as `SettingsPage.jsx`'s Quiet
+ *    Hours card promises, not lost.
  *  - Slack is intentionally NOT digestable for this slice (spec).
  *  - `flushPendingDigests(env)` is what the cron calls to assemble each
  *    user's pending outbox into a single email at 09:00 user-tz.
@@ -145,14 +146,20 @@ async function loadPrefs(env: Env, userId: number): Promise<Record<string, any>>
   }
 }
 
-function resolveChannels(prefs: Record<string, any>, type: string, requested: NotifyChannel[]): NotifyChannel[] {
+function resolveChannels(
+  prefs: Record<string, any>, type: string, requested: NotifyChannel[], isCritical: boolean,
+): NotifyChannel[] {
   // Honor per-event, per-channel opt-outs from /account/notifications.
   // All three channels (in_app/email/slack) are user-toggleable and
   // default-on; an explicit `false` in prefs[type][ch] suppresses that
-  // channel for that event type.
+  // channel for that event type — EXCEPT email on a critical category,
+  // which SettingsPage.jsx already renders locked (checked, disabled) and
+  // which this function must actually honour, not just the UI. A `false`
+  // saved before the lock existed (or written around it) no longer wins.
   const ev = (prefs && typeof prefs === 'object' ? (prefs[type] || {}) : {}) as Record<string, any>;
   const out: NotifyChannel[] = [];
   for (const ch of requested) {
+    if (ch === 'email' && isCritical) { out.push(ch); continue; }
     const enabled = ev[ch];
     if (enabled === undefined || enabled === true) out.push(ch);
   }
@@ -268,13 +275,24 @@ export async function notify(env: Env, args: NotifyArgs): Promise<number | null>
     if (!(await ensureInbox(env))) return null;
     const channels: NotifyChannel[] = (args.channels && args.channels.length > 0) ? args.channels : ['in_app'];
     const prefs = await loadPrefs(env, args.userId);
-    const resolved = resolveChannels(prefs, args.type, channels);
-    if (resolved.length === 0) return null;
 
     // Task #14 — categorisation drives quiet-hours + digest routing.
     // Uncategorised calls are treated as critical so we never silently
     // suppress a notification a caller didn't opt into the new pipeline.
+    // Computed before `resolveChannels` now — a Codex review on D333 found
+    // that a critical category's email was still being filtered out by a
+    // stored `prefs[type].email === false` from before SettingsPage.jsx
+    // locked `capital_call_issued`/`agreement_ready_to_sign`'s email column:
+    // the UI rendered the toggle checked-and-disabled, but a user who had
+    // already saved `false` kept missing the "cannot be turned off" email
+    // regardless, because `resolveChannels` ran first and dropped the
+    // whole branch before `isCritical` ever got a say. `resolveChannels`
+    // now takes `isCritical` and puts `email` back for a critical category
+    // even over a stored opt-out — `in_app`/`slack` stay opt-outable, since
+    // the lock in Settings is on the email column only.
     const isCritical = !args.category || CRITICAL_CATEGORIES.has(args.category);
+    const resolved = resolveChannels(prefs, args.type, channels, isCritical);
+    if (resolved.length === 0) return null;
 
     // T20 — Quiet hours: if the user is currently inside their configured
     // quiet window, suppress real-time push (DO broadcast) and email/slack
@@ -359,12 +377,20 @@ export async function notify(env: Env, args: NotifyArgs): Promise<number | null>
         // D333: quiet hours used to silently drop this email outright when
         // the user's digest was off — `recordActivity('suppressed_quiet_hours')`
         // and nothing else, so an opted-out-of-digests user lost the email
-        // entirely rather than just having it wait. Quiet hours has always
-        // only promised to suppress the real-time push (see T20 above); it
-        // was never meant to suppress email when there is no digest to
-        // catch it. So with digest off, email still goes out now instead
-        // of vanishing.
-        await dispatchEmail(env, args);
+        // entirely rather than just having it wait. Codex review caught
+        // the first fix here: sending it immediately contradicted
+        // SettingsPage.jsx's own "Push and non-critical email are paused
+        // during this window" — correct, this card is the UI's promise
+        // about this exact behaviour, and quiet hours is supposed to pause
+        // it, not skip pausing because a different setting is off. So
+        // instead it buffers the same way a digest-on quiet-hours email
+        // does (`enqueueOutbox(..., 'quiet_hours')`), which the existing
+        // digest cadence flush (`flushPendingDigests`, defaulting to daily
+        // when digest is 'off') already drains at the user's next 09:00
+        // local slot. Paused and later delivered, never vanished — which
+        // is the actual promise, not "delivered the instant quiet hours
+        // technically allow a digest-less user through."
+        await enqueueOutbox(env, args, 'quiet_hours');
       } else {
         await dispatchEmail(env, args);
       }
@@ -604,20 +630,25 @@ export async function flushPendingDigests(env: Env, now: Date = new Date()): Pro
       console.warn('[notify] digest skipped — no email for user', u.user_id);
       continue;
     }
-    // D333: the digest email now renders through the Emails canvas's M4
+    // D333: the WEEKLY digest email renders through the Emails canvas's M4
     // (`renderWeeklyDigest`) instead of the plain-text bullet list this used
-    // to build by hand — the canvas chrome, not a second copy of it, is the
-    // source of truth for what this email looks like. `renderDigestEmail`
-    // still backs the plain-text part + the Slack digest below, which the
-    // canvas doesn't cover.
+    // to build by hand. Codex review on this PR caught that the first cut
+    // used it unconditionally: the canvas template hardcodes "WEEK OF" and
+    // "Three things from your week", so a daily-cadence user got an HTML
+    // body describing a week while the subject and plain-text alternative
+    // correctly said "daily". `canvasTransactional.ts` has no daily
+    // variant (the design canvas only specifies a weekly one), so a daily
+    // digest keeps its plain-text-only rendering (`sendEmail`'s default
+    // inline wrapper) rather than this guessing at daily-specific canvas
+    // copy nobody designed. `renderDigestEmail` still backs the plain-text
+    // part for both cadences + the Slack digest below, neither of which
+    // the canvas covers.
     const { subject, body } = renderDigestEmail(rows, cadence);
     const appUrl = (env as { APP_URL?: string }).APP_URL || 'https://axal.vc';
     const root = stripTrailingSlashes(appUrl);
-    const html = renderWeeklyDigest({
+    const html = cadence === 'weekly' ? renderWeeklyDigest({
       to: userEmail,
-      weekLabel: cadence === 'weekly'
-        ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long' }).format(now)
-        : new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long' }).format(now),
+      weekLabel: new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long' }).format(now),
       cards: rows.slice(0, 3).map((r) => ({
         kicker: (r.category || r.type || 'update').toUpperCase(),
         title: r.title,
@@ -626,7 +657,7 @@ export async function flushPendingDigests(env: Env, now: Date = new Date()): Pro
       })),
       dashboardUrl: `${root}/inbox`,
       unsubscribeUrl: `${root}/account/notifications`,
-    }).html;
+    }).html : undefined;
     const ok = await sendEmail(env, userEmail, subject, body, html);
     if (!ok) {
       console.warn('[notify] digest email failed; leaving outbox rows pending for retry', { user_id: u.user_id });
