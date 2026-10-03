@@ -202,13 +202,26 @@ export async function enablePush() {
   return { ok: true, endpoint: json.endpoint };
 }
 
-export async function disablePush() {
+/**
+ * `authToken`, optional: callers that are themselves about to clear the
+ * stored token (sign-out) must capture it first and pass it through here,
+ * since by the time this function's own `await`s resolve and it finally
+ * calls `api.pushUnsubscribe`, `localStorage` would already be empty —
+ * `request()` reads the token at call time, not when `disablePush()` was
+ * invoked. See `App.jsx`'s `clearSession`.
+ */
+export async function disablePush({ authToken } = {}) {
   if (!isPushSupported()) return { ok: true };
   const reg = await navigator.serviceWorker.ready.catch(() => null);
   if (!reg) return { ok: true };
   const sub = await reg.pushManager.getSubscription();
   if (sub) {
-    try { await api.pushUnsubscribe({ endpoint: sub.endpoint }); } catch {}
+    try {
+      await api.pushUnsubscribe(
+        { endpoint: sub.endpoint },
+        authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {},
+      );
+    } catch {}
     try { await sub.unsubscribe(); } catch {}
   }
   return { ok: true };
