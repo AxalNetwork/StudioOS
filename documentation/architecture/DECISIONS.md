@@ -40081,6 +40081,85 @@ instead of drawing Unreadable.
 
 `frontend/src` moved, so `docs/` is rebuilt.
 
+## D507
+
+**The four HQ Team sentences that said a branch account is not told now say
+what D441 made true: the branch tells the person when HQ authorises a
+support session.** Issue #988, slot S05. No migration, no route, no `api.js`
+change. `frontend/src` moved, so `docs/` is rebuilt.
+
+**What was true on main (`f701a32f5`).** D259 gave HQ a Support control on a
+branch account and said, truthfully then, that the person is not told:
+`openSupportSession` imported no notify function. D441 (#864) made that RPC
+call `notify()` after the authorisation is recorded: type
+`hq_branch_support_session`, category `security` so quiet hours do not hold
+it, in the app and by email, naming who authorised it, the reason, and that
+the session lasts 30 minutes once it is opened. D441 updated the Team rail on
+`AccountsPage.jsx` and left four sentences, all Session 5's, saying the
+opposite: the HQ-only card in `HqTeamActions.jsx` ("is not told yet"), the
+Support form in `HqTeamTable.jsx` ("The person is not told: the branch
+records the session, and no notice reaches them yet"), that table's footer
+("the person is not told yet") and its D259 header comment.
+`hq_team_h20.test.mjs` pinned the card's sentence verbatim and
+`hq_support_session_d259.test.mjs` pinned the form's.
+
+**What is said now.** Each sentence describes the notice as the branch
+sends it, and none says the person *was* told. The branch sends them a
+security notice when the session is authorised, in the app and by email,
+with the operator's name, their reason and the 30 minutes; the branch
+reports whether that notice was stored, and HQ's route does not pass it on,
+so the card and the form say they cannot tell whether the person was told.
+That is the exact state of the facts: `openSupportSession` still authorises
+the session when the inbox refuses the notice and returns
+`target_notified: false` (`branch_invitation_d441.test.ts` covers it), and
+HQ's own route (`routes/admin_support_sessions.ts`) answers `{ branch,
+target, expires_at, open_url }` without that field, so the HQ operator has
+no delivery fact to read. A first draft of this entry led the form with
+"The person is told:"; Codex's review of #1043 pointed out that this
+asserted delivery in the one case the branch knows it failed, and the
+wording was made attempt-neutral before merge. The card's header comment
+records the narrowing (D259), the widening (this entry) and why the note
+stops short of "told"; the table's header comment says where the delivery
+fact is dropped.
+
+**Found, not fixed.** HQ's support-session route drops the branch's
+`target_notified`. Passing it through would let the form say whether the
+notice was stored, the way the HQ-held impersonation route (D248) already
+reports it. That route is the worker's, not this issue's file; the D507 pin
+fails the day it changes so the "not reported here" sentence is re-aimed
+with it.
+
+**Pins re-aimed, never loosened.** `hq_team_h20.test.mjs` holds the card to
+the new sentence, holds the rendered card and the whole of `HqTeamTable.jsx`
+free of "not told" and "no notice reaches", holds the form, the footer and
+the header comment to their new sentences, holds the card, the form and the
+footer free of "is told" / "The person is told" so no draft can assert
+delivery again, and reads the branch route so the sentences cannot outlive
+it: `tellBranchOfSupportSession` is called in
+`openSupportSession` after the `hq_support_authorised` audit row and before
+`target_notified` is returned, sends `['in_app', 'email']` as `security`,
+names `${SUPPORT_SESSION_MINUTES} minutes`, and `SUPPORT_SESSION_MINUTES`
+is 30; and that HQ's route still omits `target_notified`.
+`hq_support_session_d259.test.mjs` is not in the issue's file list; its
+D259 test pinned "The person is not told:" verbatim and fails once the
+sentence changes, so that one assertion is inverted and the test renamed.
+
+**Mutations: 16 run, 16 caught** (non-zero exit and a `not ok` line each;
+anchors unique; bytes proven changed; sources restored from a sha256-checked
+snapshot) — the card back to "is not told yet"; the card saying in-app only;
+the card asserting "is told when you authorise" (the first draft); the form
+back to "The person is not told:"; the form led with "The person is told:"
+(the first draft); the form claiming the notice reached their inbox; the
+footer back to "is not told yet"; the footer asserting the person is told;
+the header comment back to "The person is not told —"; the branch route
+sending no notice; the notice sent before the authorisation is recorded;
+the notice filed under `account` instead of `security`; the notice in-app
+only; the notice no longer naming the 30 minutes; `target_notified` no
+longer returned by the branch; HQ's route passing `target_notified`
+through.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA fallback, the Super Admin at 1280×900 opening `/admin/accounts` with one stubbed branch (`fr`) that answers a search with one active founder. The HQ-only card carries the new branch sentence and the Team table's footer carries its new sentence; no visible text says "not told". Typing in the Team search draws the branch hit with its Support toggle; opening the form shows "The branch records the authorisation and sends the person a security notice … The branch reports whether that notice was stored; HQ’s route does not pass it on, so this form cannot say whether the person was told."; no visible text says "not told", "no notice reaches" or "The person is told", and the card does not say "is told". No page error.
+
 ## D508
 
 **Lab copy stops selling "idea to incorporated" and an unbacked company
