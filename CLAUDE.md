@@ -113,6 +113,11 @@ never existed. Start at the README of whatever folder you land in.
 - **Work is handed out as GitHub issues.** Read `AGENTS.md` before you take
   one. It covers slots, the `state:*` labels, STATUS comments, and who gives
   instructions.
+- **A new decision is its own file.** From D526 on, each decision is
+  `documentation/architecture/decisions/D<n>.md`, with the number its issue
+  gives. `DECISIONS.md` keeps D1 to D525 and takes no new entries.
+  `node scripts/check-decision-ids.mjs` reads both places and fails on a
+  number used twice.
 
 ## Why this doc exists
 
@@ -126,8 +131,9 @@ If a doc disagrees with this file, **this file wins** — fix the doc.
 
 Everything else worth reading is indexed in
 [documentation/README.md](documentation/README.md): the architecture set
-(`CODEBASE_MAP`, `ROUTE_MAP`, `DECISIONS`, `GOTCHAS`) under
-`documentation/architecture/`; dated snapshots under `documentation/audits/`,
-which are true as of their date and are **not** maintained afterwards — never
+(`CODEBASE_MAP`, `ROUTE_MAP`, `DECISIONS` with the per-decision files in
+`decisions/` from D526 on, `GOTCHAS`) under `documentation/architecture/`;
+dated snapshots under `documentation/audits/`, which are true as of their
+date and are **not** maintained afterwards — never
 treat an audit finding as a live bug without re-checking the code; runbooks
 under `documentation/operations/`; positioning under `documentation/product/`.
