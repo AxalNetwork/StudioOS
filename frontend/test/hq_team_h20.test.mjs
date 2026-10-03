@@ -166,8 +166,12 @@ test('the canvas notes that describe a platform that does not exist do not reach
   // send a security notice when HQ authorises a session, and the card says so.
   // The D507 test below reads that notice so the sentence cannot outlive it.
   assert.match(plain, /On an HQ-held account the person is told when it opens, in the app and by email, with your name and your reason; there is no banner on their side\./);
-  assert.match(plain, /An account on a branch, opened with Support in the Team table’s branch search, is told when you authorise the session: the branch sends a security notice, in the app and by email, with your name, your reason and that the session lasts 30 minutes once it is opened\./);
+  // The card describes the notice and does not say the person WAS told: the
+  // branch's `target_notified` is false when the inbox refused the notice, and
+  // HQ's route drops the field, so the card has no delivery fact to assert.
+  assert.match(plain, /An account on a branch, opened with Support in the Team table’s branch search: the branch sends them a security notice when you authorise the session, in the app and by email, with your name, your reason and that the session lasts 30 minutes once it is opened\. The branch reports whether that notice was stored; HQ’s route does not pass it on, so this card cannot say whether they were told\./);
   assert.doesNotMatch(plain, /not told/, 'the card still says some account is not told');
+  assert.doesNotMatch(plain, /branch search, is told/, 'the card asserts a branch account was told, which HQ cannot know');
   assert.match(plain, /The successor and the former holder are both notified, in the app and by email\./);
   assert.match(plain, /It does not place them in a cohort on Programs\./);
   assert.match(plain, /Neither is checked against the licence’s seats — no grant on the platform is\./);
@@ -257,11 +261,17 @@ test('D507: a branch account is told at authorisation, and the card and the tabl
   assert.ok(!TABLE_RAW.includes('not told'), 'the Team table (source or comment) still says the person is not told');
   assert.ok(!TABLE_RAW.includes('no notice reaches'), 'the Team table still says no notice reaches the person');
   const table = TABLE.replace(/\s+/g, ' ');
-  assert.match(table, /The person is told: the branch records the authorisation and sends them a security notice, in the app and by email, with your name, your reason and that the session lasts 30 minutes once it is opened\. Whether that notice reached their inbox is not reported here\./,
-    'the Support form does not say what the branch sends');
-  assert.match(table, /the person is told by a security notice the branch sends when the session is authorised\./,
-    'the table footer does not say the person is told');
-  assert.match(TABLE_RAW, /The person is told \(D441,\s*\* said here since D507\)/, 'the header comment does not say the person is told');
+  // Attempt-neutral: the form describes the notice and what is and is not
+  // reported, and never asserts the person was told — `target_notified` is
+  // false when the branch's inbox refused the notice, and HQ's route drops it.
+  assert.match(table, /The branch records the authorisation and sends the person a security notice, in the app and by email, with your name, your reason and that the session lasts 30 minutes once it is opened\. The branch reports whether that notice was stored; HQ&rsquo;s route does not pass it on, so this form cannot say whether the person was told\./,
+    'the Support form does not say what the branch sends and what is not reported');
+  assert.doesNotMatch(table, /The person is told/, 'the Support form asserts the person was told, which HQ cannot know');
+  assert.match(table, /the branch sends the person a security notice when the session is authorised, and whether it was stored is not reported here\./,
+    'the table footer does not describe the notice');
+  assert.doesNotMatch(table, /the person is told/, 'the table footer asserts the person was told');
+  assert.match(TABLE_RAW, /The branch tells the\s*\* person \(D441, said here since D507\)/, 'the header comment does not say the branch tells the person');
+  assert.match(TABLE_RAW, /never says the person was\s*\* told\./, 'the header comment no longer records that the form claims no delivery');
 
   // The branch route: the notice is sent after the authorisation is recorded,
   // as a security notice in the app and by email, naming the 30 minutes, and

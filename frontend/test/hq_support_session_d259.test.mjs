@@ -108,7 +108,7 @@ test('D259: the operator is told what the person is told, and each refusal is sh
   // D507 — re-aimed, not loosened. "The person is not told:" was true until
   // D441 made the branch send a security notice at authorisation; the form now
   // says so, and hq_team_h20.test.mjs reads the notice the sentence rests on.
-  assert.ok(TEAM_RAW.includes('The person is told:'), 'the form does not say the branch account is told');
+  assert.ok(TEAM_RAW.includes('sends the person a security notice'), 'the form does not say the branch sends the person a notice');
   assert.ok(!TEAM_RAW.includes('The person is not told'), 'the form still says the branch account is not told');
   assert.match(rendered, /setSupportErr\(supportRefusal\(ex\)\)/);
   // D262 moved the body into `branchRefusal`, which Unbind shares; the

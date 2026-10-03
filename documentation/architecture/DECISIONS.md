@@ -39811,16 +39811,23 @@ records the session, and no notice reaches them yet"), that table's footer
 `hq_team_h20.test.mjs` pinned the card's sentence verbatim and
 `hq_support_session_d259.test.mjs` pinned the form's.
 
-**What is said now.** Each sentence states the notice as the branch sends
-it, no more: the person is told when the session is authorised, by a
-security notice in the app and by email, with the operator's name, their
-reason and the 30 minutes. The form adds that whether the notice reached
-their inbox is not reported here, because that is so: the branch reports
-`target_notified` in its offer and HQ's own route
-(`routes/admin_support_sessions.ts`) answers `{ branch, target, expires_at,
-open_url }` without it. The form cannot claim delivery it was not told
-about. The card's header comment records the narrowing (D259) and the
-widening (this entry); the table's header comment says where the delivery
+**What is said now.** Each sentence describes the notice as the branch
+sends it, and none says the person *was* told. The branch sends them a
+security notice when the session is authorised, in the app and by email,
+with the operator's name, their reason and the 30 minutes; the branch
+reports whether that notice was stored, and HQ's route does not pass it on,
+so the card and the form say they cannot tell whether the person was told.
+That is the exact state of the facts: `openSupportSession` still authorises
+the session when the inbox refuses the notice and returns
+`target_notified: false` (`branch_invitation_d441.test.ts` covers it), and
+HQ's own route (`routes/admin_support_sessions.ts`) answers `{ branch,
+target, expires_at, open_url }` without that field, so the HQ operator has
+no delivery fact to read. A first draft of this entry led the form with
+"The person is told:"; Codex's review of #1043 pointed out that this
+asserted delivery in the one case the branch knows it failed, and the
+wording was made attempt-neutral before merge. The card's header comment
+records the narrowing (D259), the widening (this entry) and why the note
+stops short of "told"; the table's header comment says where the delivery
 fact is dropped.
 
 **Found, not fixed.** HQ's support-session route drops the branch's
@@ -39833,8 +39840,10 @@ with it.
 **Pins re-aimed, never loosened.** `hq_team_h20.test.mjs` holds the card to
 the new sentence, holds the rendered card and the whole of `HqTeamTable.jsx`
 free of "not told" and "no notice reaches", holds the form, the footer and
-the header comment to their new sentences, and reads the branch route so
-the sentences cannot outlive it: `tellBranchOfSupportSession` is called in
+the header comment to their new sentences, holds the card, the form and the
+footer free of "is told" / "The person is told" so no draft can assert
+delivery again, and reads the branch route so the sentences cannot outlive
+it: `tellBranchOfSupportSession` is called in
 `openSupportSession` after the `hq_support_authorised` audit row and before
 `target_notified` is returned, sends `['in_app', 'email']` as `security`,
 names `${SUPPORT_SESSION_MINUTES} minutes`, and `SUPPORT_SESSION_MINUTES`
@@ -39843,15 +39852,18 @@ is 30; and that HQ's route still omits `target_notified`.
 D259 test pinned "The person is not told:" verbatim and fails once the
 sentence changes, so that one assertion is inverted and the test renamed.
 
-**Mutations: 13 run, 13 caught** (non-zero exit and a `not ok` line each;
+**Mutations: 16 run, 16 caught** (non-zero exit and a `not ok` line each;
 anchors unique; bytes proven changed; sources restored from a sha256-checked
 snapshot) — the card back to "is not told yet"; the card saying in-app only;
-the form back to "The person is not told:"; the form claiming the notice
-reached their inbox; the footer back to "is not told yet"; the header
-comment back to "The person is not told —"; the branch route sending no
-notice; the notice sent before the authorisation is recorded; the notice
-filed under `account` instead of `security`; the notice in-app only; the
-notice no longer naming the 30 minutes; `target_notified` no longer
-returned by the branch; HQ's route passing `target_notified` through.
+the card asserting "is told when you authorise" (the first draft); the form
+back to "The person is not told:"; the form led with "The person is told:"
+(the first draft); the form claiming the notice reached their inbox; the
+footer back to "is not told yet"; the footer asserting the person is told;
+the header comment back to "The person is not told —"; the branch route
+sending no notice; the notice sent before the authorisation is recorded;
+the notice filed under `account` instead of `security`; the notice in-app
+only; the notice no longer naming the 30 minutes; `target_notified` no
+longer returned by the branch; HQ's route passing `target_notified`
+through.
 
-**Browser probe, recorded and not a gate:** `docs/` served with the SPA fallback, the Super Admin at 1280×900 opening `/admin/accounts` with one stubbed branch (`fr`) that answers a search with one active founder. The HQ-only card carries the new branch sentence and the Team table's footer carries its new sentence; no visible text says "not told". Typing in the Team search draws the branch hit with its Support toggle; opening the form shows "The person is told: the branch records the authorisation and sends them a security notice … Whether that notice reached their inbox is not reported here." and no visible text says "not told" or "no notice reaches". No page error.
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA fallback, the Super Admin at 1280×900 opening `/admin/accounts` with one stubbed branch (`fr`) that answers a search with one active founder. The HQ-only card carries the new branch sentence and the Team table's footer carries its new sentence; no visible text says "not told". Typing in the Team search draws the branch hit with its Support toggle; opening the form shows "The branch records the authorisation and sends the person a security notice … The branch reports whether that notice was stored; HQ’s route does not pass it on, so this form cannot say whether the person was told."; no visible text says "not told", "no notice reaches" or "The person is told", and the card does not say "is told". No page error.
