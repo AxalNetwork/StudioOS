@@ -43,6 +43,10 @@ const PAGE = read('frontend/src/pages/SettingsPage.jsx');
 const CODE = codeOnly(PAGE);
 const API = codeOnly(read('frontend/src/lib/api.js'));
 const APP = codeOnly(read('frontend/src/App.jsx'));
+// D336 — the notification label arrays this file's voice rule (§5) checks
+// moved out of SettingsPage.jsx into lib/notificationTypes.js, so the bell
+// and /inbox can label a notification the same way the matrix does.
+const NOTIFICATION_TYPES = read('frontend/src/lib/notificationTypes.js');
 const SIDEBAR = codeOnly(read('frontend/src/sidebarConfig.js'));
 const WORKER = codeOnly(read('cloudflare-worker/src/routes/settings.ts'));
 
@@ -200,12 +204,12 @@ test('no notification label calls anything a recommendation, advice, or an AI\'s
   // "Advisor" on its own is a ROLE on this platform (advisor sessions, the
   // advisor NDA), so the rule is the voice rule about the machine: nothing it
   // produces is a recommendation or advice, and it is not named "AI".
-  const labels = [...PAGE.matchAll(/\{ key: '[a-z_]+', label: '([^']+)' \}/g)].map((m) => m[1]);
+  const labels = [...NOTIFICATION_TYPES.matchAll(/\{ key: '[a-z_]+', label: '([^']+)'(?:, lockedChannels: \[[^\]]*\])? \}/g)].map((m) => m[1]);
   assert.ok(labels.length >= 15, `only ${labels.length} labels found`);
   for (const l of labels) {
     assert.doesNotMatch(l, /recommend|advice|fiduciary|\bAI\b/i, `"${l}"`);
   }
-  assert.match(PAGE, /\{ key: 'partner_match_recommendation', label: 'New partner match' \}/);
+  assert.match(NOTIFICATION_TYPES, /\{ key: 'partner_match_recommendation', label: 'New partner match' \}/);
 });
 
 // ---------------------------------------------------------------------------

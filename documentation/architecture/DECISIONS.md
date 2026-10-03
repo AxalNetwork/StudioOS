@@ -3619,7 +3619,6 @@ It is not a render prop. The page passes handlers *in* and gets a bound row
 back, which is the same split D53 records for filters: the table owns which ops
 the canvas promised, the page owns the state only it can hold.
 
-
 ## D68 — "Not recorded" belongs to the reader's data, never to the product's gaps
 
 **2026-09-09.** Task #122, `/research/ask` — but the rule settles a tension that
@@ -15768,7 +15767,6 @@ and CLAUDE.md §4 notes the deploy workflow rebuilds `docs/` at deploy time, so
 the committed build is not proof about the shipped one. The cause is still open;
 what this guard changes is that **if it ever is a 404, it fails before the
 deploy instead of after it.**
-
 
 ## D177
 
@@ -32067,6 +32065,507 @@ silently dropped from the sweep.
   `check-api-drift` exit 0. Root `npm run build`, then
   `node scripts/check-docs-fresh.mjs --strict`, exits 0.
 
+## D333
+
+**Outbound mail starts following the Emails canvas and the notify rules — the
+quiet-hours bug and the dead template, item 5 of the Wave-8 brief.** Scoped
+down from the full brief: the parts that needed new data (a canvas-faithful
+`capital_call_issued` and `spinout_admitted` send, which need company name,
+call percentages and a programme checklist no current call site has) are
+deferred rather than filled with invented figures. What ships is real and
+measured, not a partial-credit stand-in for the rest.
+
+**The quiet-hours bug.** `notify()`'s email branch, for a non-critical
+category, used to read: in quiet hours AND digest off → log
+`suppressed_quiet_hours` to `activity_logs` and send nothing at all. Quiet
+hours has only ever promised to suppress the real-time push (T20's own
+comment says so); turning off the digest was never supposed to turn this
+into a second, silent unsubscribe. A user who was in their quiet window with
+no digest configured lost the email outright — not delayed, not buffered,
+gone. Fixed: digest-off no longer special-cases quiet hours for email; it
+dispatches immediately either way, the same as "not quiet." Digest
+daily/weekly still buffers regardless of quiet hours, unchanged.
+`recordActivity` (only caller was the suppression branch) is deleted along
+with it rather than left orphaned.
+
+**The weekly digest now renders through the canvas.** `flushPendingDigests`
+built its own plain-text bullet list by hand; it now also builds an HTML part
+via `canvasTransactional.ts`'s `renderWeeklyDigest` (M4), passing the first
+three outbox rows as `DigestCard`s. The plain-text render stays — it's still
+what backs the multipart fallback and the separate Slack Block Kit digest, and
+duplicating canvas-card logic into Slack's Block Kit shape isn't this task.
+
+**`referral_payout_paid` deleted.** Confirmed dead: defined only in
+`templates/email/registry.ts`, zero call sites anywhere under
+`cloudflare-worker/src`, and `referral_submissions.test.ts` already pins that
+the feature it backed (`referralPayouts.ts`) "was removed … and must not
+return." Removing it needed no migration — nothing durable referenced the
+template key.
+
+**The notifications matrix stops promising what the backend won't do.**
+`capital_call_issued` and `agreement_ready_to_sign` carry money/signature
+consequences `notify.ts`'s `CRITICAL_CATEGORIES` (`billing`,
+`contract_sign_request`) already never let quiet hours or a digest delay —
+and the capital-call canvas copy itself says "Capital notices cannot be
+turned off." The settings grid disagreed: a user could toggle email off for
+either row and nothing would happen, because the backend sent it regardless.
+`NOTIFICATION_EVENTS` entries for those two now carry `lockedChannels:
+['email']`; the table renders that cell checked and disabled, `setEvent`
+refuses a write to a locked channel as defense in depth, and applying any
+preset (including "Mute all") re-locks it afterward rather than trusting the
+preset to leave it alone. `capital_call_paid` is deliberately left
+user-toggleable — only the issuance notice is backend-forced.
+
+**Deferred, not done.** `canvasTransactional.ts`'s `renderCapitalCall` and
+`renderSpinoutDecision` (M3, M5) still have no production call site. Wiring
+them for real needs: for capital calls, the called-to-date and unfunded
+percentages per LP (a query `issueFundCall` doesn't currently run) and an
+actual email send at all — today `issueFundCall` writes only an
+`activity_logs` row, never an email; for spinout admission, the applicant's
+company name, a programme checklist and an accept-by deadline, none of which
+the three `send(..., 'spinout_admitted', …)` call sites in `routes/admin.ts`
+and `routes/admin_cohort.ts` currently carry. Filling those vars with
+placeholder values to make the renderers "wired" would ship a canvas email
+that's wrong rather than one that's merely unbuilt. Left for a follow-up task
+that can plumb the real data through.
+
+**Tests.** `notify_quiet_hours_digest_off_d333.test.ts` (originally 3; the
+suppression row disappears, a daily-digest buffer still works, critical still
+bypasses quiet hours) — mutation-tested by reverting the branch to its old
+shape: 2 of 3 escaped and were caught. `settings_notification_locks_d333.test.mjs`
+(4; the two locked entries exist and `capital_call_paid` doesn't, the render
+cell's lock logic, `setEvent`'s refusal, and preset re-locking).
+
+**Three fixes from a Codex review on the PR, each real — none of the three
+severities Codex gave this PR were optional-labeled, so each was verified and
+fixed rather than deferred:**
+
+- **Quiet hours + digest-off no longer sends immediately.** The first fix
+  above dispatched right away, which directly contradicted
+  `SettingsPage.jsx`'s own Quiet Hours card: "Push and non-critical email are
+  paused during this window." Sending during the window broke that promise
+  louder than the original bug did (an unwanted overnight email rather than a
+  lost one). Now buffers the same way a digest-on quiet-hours email already
+  does (`enqueueOutbox(..., 'quiet_hours')`), which the existing digest
+  cadence flush drains at the user's next local slot — paused and later
+  delivered, never lost, which is what the card actually promises.
+- **A locked email channel is now enforced in `notify()`, not just rendered
+  locked in Settings.** `resolveChannels` ran before the critical-category
+  check and silently dropped `email` from `resolved` for any user who had
+  previously saved `email: false` for `capital_call_issued` or
+  `agreement_ready_to_sign` — before this PR's lock existed, nothing stopped
+  that save. The UI rendered the toggle checked-and-disabled; the backend
+  still skipped the whole email branch for that stored preference, so the
+  "cannot be turned off" promise was UI-only for anyone who had already
+  opted out. `resolveChannels` now takes `isCritical` and keeps `email` in
+  `resolved` for a critical category regardless of a stored opt-out —
+  `in_app`/`slack` stay opt-outable, matching that the Settings lock is on
+  the email column only.
+- **The weekly canvas HTML no longer ships inside a daily digest.**
+  `flushPendingDigests` used `renderWeeklyDigest` unconditionally; its
+  template hardcodes "WEEK OF" and "Three things from your week", so a
+  daily-cadence user's HTML body described a week while the subject and
+  plain-text alternative correctly said daily. `canvasTransactional.ts` has
+  no daily variant — the design canvas only specifies a weekly one — so a
+  daily digest now keeps its plain-text-only rendering instead of guessing
+  at daily-specific copy nobody designed; only `cadence === 'weekly'` gets
+  the canvas HTML.
+
+**Tests (review fixes).** `notify_quiet_hours_digest_off_d333.test.ts` grew
+two more cases: a critical category's email reaches Gmail's OAuth token
+exchange even with a stored `email: false` (the observable proof that
+`notify()` tried to send, not just that no DB row says it didn't), and a
+non-critical type still honours a stored opt-out so the fix didn't
+over-widen. Both mutation-tested: reverting the `resolveChannels` fix made
+the first fail, confirming the escape. `flush_pending_digests_cadence_d333.test.ts`
+(new, 2) intercepts the actual Gmail send call and decodes the real MIME
+body Gmail would have received — a weekly digest's HTML contains "WEEK OF",
+a daily digest's doesn't — mutation-tested by reverting the cadence guard:
+the daily case failed, confirming the escape.
+
+**A second Codex review round on the same PR, three more findings, all
+real:**
+
+- **(P1) The forced-email override widened past the two locked types.**
+  `isCritical` (`!args.category || CRITICAL_CATEGORIES.has(args.category)`)
+  is also true for every uncategorised legacy caller —
+  `routes/capital.ts`'s `capital_call_paid` and `routes/tickets.ts`'s
+  `ticket_update` both call `notify()` with no `category` — and the
+  previous fix used that same flag to force `email` back into `resolved`.
+  Those two types' Settings rows are deliberately left user-toggleable
+  (`capital_call_paid` was explicitly called out as NOT locked, right above
+  in this entry), so their opt-outs silently stopped working the moment
+  the lock-enforcement fix landed. `isCritical` now only governs
+  quiet-hours/digest timing as Task #14 originally specified; a new
+  `forceEmail = LOCKED_EMAIL_TYPES.has(args.type)` (the same two types the
+  Settings UI renders locked) is what `resolveChannels` actually checks for
+  the email override.
+- **(P2) A quiet-hours-buffered row could ship mid-window.** Task #14's
+  09:00-local send slot is a fixed clock check, not "the quiet window that
+  buffered this row has ended" — for a window like 22:00–10:00, 09:00 is
+  still inside it. `flushPendingDigests` released every pending row at that
+  slot regardless of `reason`, so the D333 quiet-hours fix's "paused, not
+  lost" promise still broke the pause half. It now re-checks
+  `isInQuietHours` for the user at flush time and, when still inside the
+  window, filters `reason: 'quiet_hours'` rows out of that tick's batch
+  (leaving them pending for the next tick once the window closes);
+  `reason: 'digest'` rows are unaffected — they were always meant to go out
+  at the cadence slot on their own.
+- **(P2) The weekly "WEEK OF" date ignored the recipient's own timezone.**
+  The cadence check (`isDigestSendTime`) already formats in `u.tz`, but the
+  `weekLabel` passed to `renderWeeklyDigest` used
+  `new Intl.DateTimeFormat('en-GB', {...}).format(now)` with no `timeZone`,
+  so it fell back to the runtime's default. For a user far enough ahead of
+  UTC (anything past UTC+9, since the 09:00 slot then maps to a UTC instant
+  on the previous calendar day), the label could show yesterday's date.
+  Fixed by passing `timeZone: u.tz` to that formatter, matching the cadence
+  check it has to agree with.
+
+**Tests (second review round).** `notify_codex_round2_d333.test.ts` (new,
+5): an uncategorised type (`capital_call_paid`) still honours a stored
+`email: false` opt-out while a genuinely locked type
+(`capital_call_issued`) still overrides one; a quiet-hours row is held back
+while its window (22:00–10:00 UTC) is still open at the 09:00 flush slot,
+and ships once a different window (02:00–05:00) has already closed; the
+weekly digest sent to a `Pacific/Kiritimati` (UTC+14) recipient at the
+instant that is their local Monday 09:00 — Sunday 19:00 in UTC — shows "5
+OCTOBER" in the rendered HTML, not the UTC-dated "4 OCTOBER". All four
+non-trivial fixes mutation-tested: reverting `forceEmail` back to
+`isCritical`, deleting the re-check-before-flush block, and dropping
+`timeZone: u.tz` from the formatter each made exactly the case built for it
+fail, then were restored and reverified clean (sha256-matched against the
+pre-mutation file).
+
+## D334
+
+**The notifications panel and push routes, item 6 of the Wave-8 brief —
+`/api/notifications/push/*`, migration 302, and a shared type-map.**
+
+**The five push routes paid off known debt, not a new feature.**
+`frontend/src/lib/pwa.js`'s `enablePush`/`disablePush`/`sendPushTest` (Task
+#57) and `NotificationBell.jsx`'s "Enable push" toggle have called
+`api.pushVapidKey()`, `pushSubscribe()`, `pushUnsubscribe()`,
+`pushSubscriptions()` and `pushTest()` all along — `scripts/api-drift-baseline.json`
+carried all five as known drift (`GET/POST /api/notifications/push/*`). The
+worker had no route at all behind any of them; the frontend half of this
+feature was already finished and had never once worked end to end. This adds:
+- `cloudflare-worker/sql/migrations/302_push_subscriptions.sql` — one row per
+  browser subscription, keyed on its endpoint URL (unique by construction).
+- `services/webpush.ts` — RFC 8291 payload encryption and RFC 8292 VAPID JWT
+  signing, built on `crypto.subtle` rather than the npm `web-push` package
+  (which shells out to Node's `crypto` module; Workers has none). ECDH P-256
+  key agreement, HKDF-derived content-encryption key and nonce, AES-128-GCM
+  over the RFC 8188 record, VAPID ES256 JWT — all hand-rolled against the
+  RFCs rather than copied from an existing implementation, because none of
+  this repo's dependencies ship a Workers-compatible one.
+- The five routes in `routes/notifications.ts`, all requiring auth and
+  scoped to the caller's own subscriptions. `/push/test` deletes a
+  subscription outright on a 404/410 from the push service (RFC 8030
+  §7.2 — the subscription is gone on the browser's side) rather than
+  retrying it forever.
+- `scripts/api-drift-baseline.json` updated — the debt ledger shrank by
+  five entries, which is the only direction it's supposed to move.
+- `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` added to `types.ts`
+  as optional secrets; unset in dev/preview, `/push/vapid-key` answers
+  `{ public_key: null }` rather than defaulting to a shared key a payload
+  would be encrypted to and never decrypt.
+
+**The notification type → label map moved to one file.** Before this, only
+`SettingsPage.jsx`'s `NOTIFICATION_EVENTS`/`PARTNER_NOTIFICATION_EVENTS`
+paired a backend `type` key with a readable label; the bell and `/inbox`
+(`NotificationList.jsx`) rendered the raw key — "score_generated" in the UI,
+not "New score generated for your startup". Both arrays now live in
+`frontend/src/lib/notificationTypes.js`; `SettingsPage.jsx` imports them
+instead of declaring its own copy, and `NotificationList.jsx`'s row uses the
+new `labelForType()`, which falls back to a titleised version of an unknown
+key rather than rendering blank — a new `notify()` call site's events are
+legible immediately, mapped label or not.
+
+**A safety-net `/notifications` → `/inbox` redirect.** `/inbox` has been
+the panel's only address since D144; nothing in this codebase links to a
+bare `/notifications`. Added anyway, because the bell's own settings link
+reads `/account/notifications` and the Settings tab is `#notifications` —
+close enough to type by habit or bookmark from before `/inbox` existed — and
+landing on the 404 page instead of the panel costs nothing to prevent.
+
+**What this is not.** `NotificationBell.jsx` and `InboxPage.jsx` needed no
+changes — both were already correct (push UI, unreadable-vs-empty handling
+from D144/D332). This is the backend half of a feature the frontend had
+already finished, plus the one labeling gap between the two existing
+renderers.
+
+**One `.gitleaksignore` entry.** `webpush_d335.test.ts`'s first version
+hardcoded a test-only VAPID private key as a base64 literal — indistinguishable
+from a real secret to gitleaks' `generic-api-key` rule, which correctly
+flagged it (commit `9080925048`). That key pair was generated solely for the
+test (locally, once, never used anywhere else) and never matched any real
+VAPID key, so there was nothing to rotate. The test now generates its key
+pair at run time via `crypto.subtle` instead, so no later commit carries the
+literal — but gitleaks diffs the whole PR commit range, so the superseded
+commit's diff still trips the scan regardless of the fix landing on top.
+`.gitleaksignore` at the repo root carries exactly this finding's fingerprint
+(`9080925048929ef222056a0e469c32d8207f86dc:cloudflare-worker/test/webpush_d335.test.ts:generic-api-key:33`),
+not a whole-commit entry in `.gitleaks.toml` — that commit also adds
+`webpush.ts`, `notifications.ts`, `types.ts` and migration 302, and a
+whole-commit allowlist would hide a real finding in any of those too.
+Verified against the gitleaks version CI runs (8.21.2): the PR's commit
+range scans clean with the file in place, and a one-character change to the
+fingerprint's line number brings the finding back — the entry only lets
+through the one thing it names.
+
+**Tests.** `webpush_d335.test.ts` (4) — the VAPID JWT's signature verifies
+against its own public key, and `sendWebPush`'s wire output is round-tripped
+through a real decrypt back to the original JSON payload, so a spec
+regression here would fail a real cryptographic check, not a mocked one.
+`notifications_push_routes_d335.test.ts` (7) — auth, validation, per-user
+scoping on subscribe/unsubscribe/list, upsert-not-duplicate on re-subscribe,
+and `/push/test` refusing (not silently no-op'ing) when VAPID isn't
+configured. `notification_types_d336.test.mjs` (6). Three pre-existing tests
+(`account_d433.test.mjs`'s voice-rule check, `inbox_page_d144.test.mjs`'s
+row-renders-its-type check) were re-aimed at the moved arrays/new label
+output rather than weakened — both now check exactly what they checked
+before, against where that content actually lives now.
+
+**Three more fixes from a Codex review on the PR, all real, none
+optional-labeled — verified and fixed:**
+
+- **An authenticated client could persist an arbitrary URL as `endpoint`,
+  and `/push/test` did a server-side `fetch()` to it on demand — an open
+  outbound-POST primitive.** `isAllowedPushEndpoint` (`webpush.ts`) is the
+  one gate every write to `push_subscriptions` goes through: HTTPS only,
+  no literal IP host (v4 or bracketed v6), no `localhost`/loopback/
+  link-local/`.internal`/`.local` hostname, length-bounded. It can't catch
+  a hostname that resolves to a private address only at fetch time — no
+  synchronous DNS check is available here — so this is defense in depth
+  alongside Workers' own sandboxed egress, not a complete guarantee.
+  `/push/subscribe` also caps live subscriptions at 20 per account, so one
+  signed-in user can't fan out unboundedly even through allowed hosts.
+- **`sendWebPush` parsed the endpoint with `new URL()` before its own `try`
+  block**, so a malformed stored endpoint threw uncaught instead of
+  returning the `{ok:false, ...}` shape every other failure in the
+  function does. Moved inside, with its own `invalid_endpoint` reason —
+  defense in depth again, since a validated-at-write-time endpoint
+  shouldn't reach this malformed, but a future second writer or a
+  pre-validation row shouldn't get a different failure mode here.
+- **`notify()` never called `sendWebPush` at all.** D334/D335 built the
+  five `/push/*` routes and the RFC 8291 sender, but the actual
+  notification dispatcher still only wrote the inbox row and broadcast
+  over the realtime DO channel — "enabling push produces the setup test"
+  (`/push/test`) "while every subsequent real notification is lost as soon
+  as the browser has no active WebSocket," as the review put it. Now fans
+  out to every row in `push_subscriptions` for the notified user alongside
+  the realtime broadcast (same quiet-hours skip, same best-effort swallow
+  — this repo's standing rule that a downed channel must never break the
+  underlying business action), deleting a subscription outright on a
+  404/410 the same way `/push/test` already does. Not a new channel in
+  `notification_prefs`: a device either has push subscriptions or it
+  doesn't, and the in-app row this block already gates on is the signal a
+  push mirrors.
+
+**Tests (these three fixes).** `push_security_fixes_d334.test.ts` (new, 6):
+`isAllowedPushEndpoint` accepts an ordinary push-service URL and rejects
+non-https/malformed/private-range/loopback/cloud-metadata hosts;
+`sendWebPush` returns a failure shape rather than throwing on a malformed
+endpoint; the route refuses a disallowed endpoint and enforces the
+20-subscription cap; `notify()` is shown to actually reach a subscribed
+device — intercepting the real `fetch()` to the stored endpoint, not
+trusting an internal call was made. All six mutation-tested by reverting
+each fix in turn: every one failed, confirming the escape.
+
+**A second review ran the blocklist against real attack shapes and it
+failed, so `isAllowedPushEndpoint` is now an allowlist.** The blocklist
+above (reject literal IPs in private ranges, loopback, link-local,
+`.internal`/`.local`) let through: `[fd00::1]` (private IPv6, ULA —
+no rule covered it at all), `[fe80::1]` (link-local IPv6 — the literal
+check only named `::1`/`::`), `[::ffff:127.0.0.1]` (loopback written as
+an IPv4-mapped IPv6 literal, invisible to a regex that only matches plain
+dotted-quad IPv4), `100.64.0.1` (carrier-grade NAT, RFC 6598 — outside
+every named range), and plainly `https://example.com/anything` (no
+browser push service at all, and nothing about "not a known-bad range"
+stops an ordinary public host). A blocklist has to anticipate every shape
+a private or non-push address can take; an allowlist only has to name the
+real vendors, so it replaces the blocklist outright:
+`fcm.googleapis.com`/`android.googleapis.com` (exact host) and
+`.push.services.mozilla.com`/`.notify.windows.com`/`.push.apple.com`
+(suffix match, each stored with its leading dot so neither a prefix
+collision like `push.services.mozilla.com.attacker.example` nor a
+missing-dot collision like `notpush.services.mozilla.com` passes). HTTPS
+and the length cap are unchanged. If a real browser's push endpoint is
+ever outside this list, that shows up as a failed subscribe rather than
+a silent SSRF hole, and the host gets added.
+
+**Tests (allowlist).** `push_security_fixes_d334.test.ts` grew three cases:
+every host from the second review's attack list is rejected; all four
+vendor hosts (including the two suffix-matched ones not in the original
+single-URL test) are accepted; and the suffix-anchor is itself pinned
+(a prefix-collision host and a missing-dot host both rejected, a genuine
+subdomain still accepted) — this last one is the case that would have
+silently passed if the suffixes had been stored without their leading
+dot. The pre-existing 20-subscription-cap test moved its fixture URLs from
+a non-push `push.example` host (now correctly rejected) to distinct
+`fcm.googleapis.com` paths, same for `notifications_push_routes_d335.test.ts`'s
+subscribe/unsubscribe fixtures. Mutation-tested twice: stripping the
+leading dot from the suffix list let the prefix/missing-dot collisions
+back in (caught); short-circuiting the function to `return true`
+unconditionally broke 3 of the file's cases (caught). Both restored and
+reverified clean (sha256-matched against the pre-mutation file).
+
+**A third Codex review round, two more findings, both real:**
+
+- **(P1) A device kept a former account's push subscription after
+  sign-out.** `clearSession()` never called `disablePush()`. `getPushState()`
+  only checks whether the browser's service worker has ANY subscription at
+  all, so the next account to sign in on the same device saw push as
+  already "on" and never called `enablePush()` to re-home the endpoint to
+  its own `user_id` — the server-side `push_subscriptions` row kept the
+  FORMER account's id, and `notify()`'s push fan-out sends to whatever row
+  matches the endpoint, not whoever is currently signed in. A signed-out
+  device kept receiving that account's notifications — capital-call and
+  contract notices included — indefinitely. Fixed by calling `disablePush()`
+  from `clearSession()`, and specifically BEFORE `localStorage.removeItem('token')`:
+  `pushUnsubscribe`'s request is authenticated off that same token every
+  other API call uses, so calling it after would ship with no Authorization
+  header and silently no-op. Time-boxed (3s) and wrapped in try/catch, same
+  reasoning as the server-side logout call beside it — a dead network must
+  not hang sign-out.
+- **(P2) The push fan-out ran sequentially with no timeout, inside
+  `notify()`'s synchronous path.** `notify()` is itself awaited by the
+  business request handler that triggered it. With up to 20 subscriptions
+  per account (the `/push/subscribe` cap) sent one at a time and no timeout
+  on any single send, one slow or non-responding push provider made that
+  handler's latency cumulative, unbounded in the worst case. Threading a
+  Worker `ExecutionContext` through `notify()` to truly background this
+  past the response would touch every call site of a function already
+  called from dozens of routes — out of scope for this fix. Instead: all
+  subscriptions for a user now send concurrently (`Promise.all` over the
+  rows) and each individual send races a 5-second timeout, so total wait is
+  bounded by the timeout rather than by (timeout × subscription count).
+
+**Tests (third review round).** `push_security_fixes_d334.test.ts` grew two
+cases: three subscriptions each held 150ms by a mocked `fetch` complete in
+under 300ms (proving concurrency — sequential would take ~450ms), and a
+subscription whose `fetch` never resolves at all still lets `notify()`
+return in under 6s while a second, responsive subscription on the same
+call still receives its push (proving the timeout bounds the hang without
+blocking the rest of the fan-out). `clear_session_push_revoke_d334.test.mjs`
+(new, 3) pins the source-level shape `clearSession()` must have: the
+`disablePush` import exists, the call happens before the token is removed,
+and it's wrapped in a timeout-raced `try` — source-level because
+`clearSession` is a hook-bound closure inside `App.jsx`, not an isolated
+importable unit, matching this codebase's existing pattern for that file.
+All mutation-tested: reverting the `Promise.all`+timeout back to a bare
+sequential loop broke the concurrency test and turned the hung-send test
+into an actual hang (caught); dropping the `disablePush` import, and
+moving the call to after the token removal, each broke one of the three
+source-level tests (caught). All reverted and reverified clean
+(sha256-matched against the pre-mutation files).
+
+**A fourth Codex review round, three more findings, all real:**
+
+- **(P2) The 20-subscription cap was a TOCTOU race.** `/push/subscribe`'s
+  cap read `SELECT COUNT(*)` and the following `INSERT` as two separate D1
+  statements — concurrent requests from the same account could each read
+  the count before any of them committed its insert, so every one of them
+  observed "under the cap" and all of them landed, however many arrived at
+  once. Folded into one atomic statement:
+  `INSERT INTO push_subscriptions (...) SELECT ... WHERE (SELECT COUNT(*) ...) < 20 ON CONFLICT(endpoint) DO UPDATE ...`.
+  The `WHERE` only produces a row to insert when the cap still holds at the
+  instant the statement runs, and there is no separate round trip in
+  between for another request to land in. `meta.changes === 0` is how the
+  route now tells a capped request from an accepted one (1 either way: a
+  fresh insert or an `ON CONFLICT` update).
+- **(P2) `clearSession()`'s fix for the earlier push-revoke finding was
+  itself a stall.** It awaited `disablePush()` behind a 3s race before ANY
+  of the synchronous local teardown — `setUser(null)` and the token/user
+  wipe included. A stalled service worker, subscription lookup or
+  unsubscribe request held up all of it for up to 3s, and a tab closed
+  during that stall kept both the local token and the server cookie alive:
+  still signed in on the next visit. Fixed by never awaiting `disablePush()`
+  at all — fire-and-forget with its own `.catch()`. The remaining
+  complication: `disablePush()`'s own internal `await`s
+  (`navigator.serviceWorker.ready`, `getSubscription()`) mean it reaches
+  `api.pushUnsubscribe` well after `clearSession`'s synchronous code has
+  already cleared `localStorage`, so the token it needs would already be
+  gone. `disablePush` now takes an optional `authToken` override,
+  `api.pushUnsubscribe` takes an `opts.headers` override to carry it, and
+  `clearSession` captures the token into a local variable before clearing
+  it and passes that through explicitly — the revoke no longer depends on
+  `localStorage` still holding anything by the time it actually runs.
+- **(P2) `/push/test` repeated `notify()`'s original mistake independently.**
+  The sequential, unbounded loop over subscriptions that `notify()`'s fan-out
+  fix addressed was never ported to this route, even though `togglePush()`
+  awaits `/push/test` immediately after enabling push — the same
+  cumulative-latency problem, now able to leave the notification toggle
+  busy until the frontend's own 30s request deadline. The timeout-raced
+  send extracted as `sendWebPushBounded` (`webpush.ts`) is shared by both
+  call sites rather than duplicated a second time: `/push/test`'s loop is
+  now a `Promise.all` over bounded sends, same as `notify()`'s.
+
+**Tests (fourth review round).** `push_security_fixes_d334.test.ts` grew
+two cases: 25 concurrent `/push/subscribe` requests for 25 distinct
+endpoints resolve to exactly 20 accepted and 5 capped, with the table
+holding exactly 20 rows afterward (this is what actually exercises the
+race the sequential 21-requests-in-a-row test above it cannot: real
+concurrency, not one request fully finishing before the next starts); and
+`/push/test` sending to 3 responsive + 1 permanently-hung subscription
+completes in under 6s with `sent: 3, failed: 1`, proving both the
+concurrency and the timeout on this route specifically.
+`clear_session_push_revoke_d334.test.mjs` (grew to 5): the token is
+captured and handed to `disablePush()` as `authToken` before the token is
+cleared; `disablePush()` is called WITHOUT `await` and with its own
+`.catch()`; `disablePush()` accepts and forwards `authToken` as an
+Authorization header; `api.pushUnsubscribe` accepts and forwards an
+`opts.headers` override. All mutation-tested: reverting the atomic
+INSERT back to separate SELECT+INSERT broke the concurrency test;
+re-adding `await` before `disablePush()` broke the no-await test;
+dropping `authToken` from `disablePush`'s signature, and dropping `opts`
+from `pushUnsubscribe`, each broke their own test; reverting `/push/test`
+to a sequential unbounded loop turned its test into an actual hang. All
+six caught, reverted, reverified clean (sha256-matched against the
+pre-mutation files).
+
+
+## D337
+
+**The canvas ledger's non-canvas half, item 7 of the Wave-8 brief —
+`api.attachMyCalcomKey` deleted; the ROUTE_MAP/store-gap edits were not made.**
+
+**`api.attachMyCalcomKey` is deleted.** It called `POST /calendar/me/calcom`,
+a path with no worker route at all (`scripts/api-drift-baseline.json`
+carried it as known drift) and no caller anywhere in `frontend/src` besides
+its own definition in `api.js`. `cloudflare-worker/src` has no "calcom"
+string anywhere — no route, no service, no stored concept of a Cal.com
+integration — so this was dead on both ends, not a broken feature with a
+caller waiting on it. Removed from `api.js`; the baseline entry for it is
+gone (the ledger shrinks by one).
+
+**The brief's other two asks for this item — specific ROUTE_MAP.md row
+edits at line markers `:81`, `:83`, `:96`, `:130`, and new store-gap
+recording for Events/Wellbeing/Help — were not made.** Those line markers
+don't resolve to anything identifiable in the current
+`documentation/architecture/ROUTE_MAP.md`: the file has been edited
+extensively since whenever the brief's line numbers were taken (it carries
+dated UPDATE/CORRECTION blocks through 2026-09-27 and beyond), so numbers
+written against an earlier revision point at different content now. Reading
+the Events, Founder Wellbeing and Help Center rows as they stand today, each
+already carries exactly the kind of store-gap recording the brief asked
+for — Events names the missing `recording_url`/`replay_url` column and the
+absent `requestIntro`/roster endpoints; Founder Wellbeing says "grep confirms
+none of these strings exist live" for its four unbuilt pieces; Help Center
+spells out, by name, the two missing stores ("Popular this week" needs view
+counts, "Did this answer it?" needs a feedback store) and the per-article
+`surface` route gap. Editing rows that already state the gap, against line
+numbers that no longer mean anything, risked overwriting a correct, dated
+audit with a guess. Measuring first and reporting rather than guess-editing
+is the standing rule this followed; a future task with the brief's original
+line numbers resolved against the revision they were taken from should
+redo this specifically, rather than this entry's guess standing in for it.
+
+**Tests.** No new assertion needed — confirming the one real finding
+(`attachMyCalcomKey`'s dead ends) was a grep, not a behavior to pin; the
+full `npm run test:drift`, both typechecks and `check-api-drift` all stay
+green with the baseline entry gone.
+
 ## D350
 
 **Lab Profiling reads Eadwyn's question ledger for the four elements it had
@@ -32149,6 +32648,7 @@ track is stored).
   typechecks, `lint:undef` and every guard green, including
   `check-decision-ids`, `check-folder-docs`, `check-api-drift` and
   `check-docs-fresh --strict` after the root `npm run build`.
+
 ## D351
 
 **Lab Customer Discovery binds the evidence stores that already existed, and
@@ -37732,14 +38232,15 @@ Session 12's and was already gone (D400).
 - The Friday retro draft on the Build cadence card needs a `DRAFT_SURFACES`
   entry in `routes/research.ts`, which is not this session's file. The card
   already says no retro draft surface exists. Routed to the owner through
-  the relay.
+  the relay. Built by D510.
 - The collapsed spine's status dot and vertical spend live in `WorkerRail.jsx`
   and `workerRail.css` (Session 12).
 - A band's cost per page. D404 (migration 319) records a run's `surface`,
   and the rail's read-back sends one; `POST /api/research/drafts` sends none,
   so every zone-draft run lands in the month's unattributed group. The band
   estimate therefore stays per task. Passing the page to `runAI` from that
-  route is a `research.ts` change, routed to its owner.
+  route is a `research.ts` change, routed to its owner. D510 passes it; the
+  band's estimate is still per task.
 - The amber strike-through with a second confirm: no fill overwrites a value
   yet (`eadwynConfig`'s market note says why), so there is nothing to confirm.
 
@@ -39089,6 +39590,7 @@ and the guard now matches the braced form too.
   literal restored, the counterpart role reverted.
 - Both typechecks, `check-decision-ids`, `check-folder-docs` and
   `check-api-drift` exit 0. Root `npm run build`, then `check-docs-fresh
+
 ## D461
 
 **Commit governance: IC conditions are a store, a recused vote leaves the
@@ -39223,6 +39725,7 @@ artboard's "Funds moved", real now: the sum over the recorded transfers.
   list, a second checklist applied, a default item seeded, the cents
   conversion dropped, the operator gate dropped, the packet indexing
   unexecuted paper.
+
 ## D463
 
 **The founder's investor update on /build/metrics, and the deal-flow page with
@@ -39352,6 +39855,7 @@ and the row is Session 4's to add.
   date, the flows not cut, the mark form unwired, the runway rule reading the
   health snapshot, the chase op back to unbuilt, the export dropping the
   date.
+
 ## D465
 
 **The investor Network book's interaction log and reminders.** Wave 8,
@@ -39789,6 +40293,370 @@ treated as accepted, and their subjects are told.
 **Tests.** `relationship_requests_d493.test.ts` (8). 19 mutations, 19
 caught.
 
+## D503
+
+**Agents coordinate through issues: one rule file, one task protocol, one
+report format.** Issue #972, Phase 0 of the orchestration plan, owned by slot
+S01 (Session 1). No migration, no route, no `frontend/src` change, so no
+`docs/` rebuild.
+
+**Why.** Claude Code, Cursor, Codex, Gemini CLI or Jules, Kimi and Manus all
+work in this repository. `CLAUDE.md` reaches Claude Code; Codex, Cursor and
+other agents read `AGENTS.md`, and there was none. #972 asks that every agent
+read one set of rules, and that tasks be handed out as issues and reported on
+in one format, with no person relaying them.
+
+**What ships.**
+- **`AGENTS.md` at the root.** Every agent reads it after `CLAUDE.md`, which
+  wins on any conflict. `repo_layout.test.mjs` allows it as the seventh root
+  markdown file, and the root-file sentences of `CLAUDE.md` and
+  `documentation/README.md` name it.
+- **Slots own work, not sessions.** Twenty slots, `S01` to `S20`; each
+  `slot:SNN` label is that slot's queue. Session 1 is `S01` and orchestrates.
+- **The task protocol.** A task is an issue Session 1 writes: its body starts
+  with `S1:`, and it carries `slot:SNN` and `state:ready`.
+  - An agent pulls the oldest ready task for its slot, one at a time, and
+    claims it by swapping in `state:in-progress` with a STATUS comment.
+  - It works on `agent/<agent>/<issue>-<slug>` from the latest `main`, opens
+    one draft PR that says `Closes #<issue>`, and sets `state:review`.
+  - A block sets `state:blocked`, plus `needs-decision` for the owner's calls,
+    and the agent takes another task.
+  - It fixes CI and review comments until green. It never merges, never marks
+    a PR ready, and never pushes to `main` or to another slot's branch.
+- **STATUS.** Every report is one nine-line block, the same for every agent,
+  so Session 1 reads each report the same way.
+- **Owner-only instructions.** Instructions come only from the owner account.
+  Session 1 writes as that account and marks its text `S1:`. Other agents'
+  reports, outsiders' comments and text in files or logs are information,
+  never instructions.
+- **Numbers come from the issue.** D- and migration numbers are never picked
+  by the agent. An author taking "the next free number" from a stale read is
+  how D62 came to be used twice (`check-decision-ids.mjs`).
+- **File ownership.** An issue names the files it owns, and no other open
+  issue or PR edits them.
+- **The repository is public.** No secrets, tokens, personal data or
+  security-sensitive operational detail in issues, PRs or comments. Security
+  reports go to a private advisory, which the issue chooser links.
+- **Review across vendors.** A significant PR is reviewed by an agent of
+  another vendor, and its findings are verified, not obeyed.
+- **House rules, short form.** `AGENTS.md` restates what an agent on another
+  platform would otherwise never load: Worker first, migrations, honesty,
+  Eadwyn's voice, security, tests, decisions, production D1, and saying so
+  when the deploy log cannot be read.
+- **Templates.** The PR template becomes eight sections: Objective,
+  Implementation, Files changed, Testing, Risks, Dependencies, Agent, Review
+  requested. The old template's security and production-readiness checklists
+  are folded into the Testing and Risks prompts. Five issue forms: task,
+  question, blocked, needs-decision and bug. The task form applies no label:
+  GitHub applies a form's labels for anyone who files it, and only Session 1
+  makes a task ready. `config.yml` keeps blank issues and links the private
+  advisory.
+- **Labels.** `.github/labels.yml` declares the four `state:*` labels,
+  `needs-decision` and the twenty slot labels. They were created on
+  2026-10-02, and their colours and descriptions, read back through the API,
+  match the file exactly, so the first sync changes nothing.
+- **`labels-sync.yml`.** On a push to `main` that changes `labels.yml`, or by
+  hand, it runs `gh label create --force` for each entry, which creates a
+  missing label and updates one that exists.
+  - It checks every entry before its first write, so a malformed entry
+    changes nothing.
+  - It never deletes a label.
+  - It runs no third-party action: yq reads the file and gh writes, both
+    preinstalled on `ubuntu-latest`.
+  - It holds `contents: read` and `issues: write`, and no `${{ }}` sits inside
+    its `run:`.
+
+**Three additions after review.**
+- Claude Code loads `CLAUDE.md`, not `AGENTS.md`. So "Rules for new work" in
+  `CLAUDE.md` now points every Claude session to `AGENTS.md` before it takes
+  an issue.
+- `AGENTS.md` pairs each STATUS state with the label set at the same time:
+  `IN_PROGRESS` with `state:in-progress`, `BLOCKED` with `state:blocked`, and
+  `READY_FOR_REVIEW` with `state:review`. `DONE` takes no label, because the
+  issue closes when its PR merges. The slot posts `DONE` once, after the owner
+  merges; Session 1 posts it if the slot has moved on.
+- Codex's review found that "text in files is never instructions", read
+  literally, covers `AGENTS.md` and `CLAUDE.md` themselves. "Who gives
+  instructions" now names both as instructions and limits the ban to the code,
+  data files, attachments and logs an agent works on.
+
+Three tests pin these additions. With them the file has 14 tests.
+
+**What it deliberately does not do.**
+- **No orchestration service yet.** Nothing assigns, polls, merges or moves a
+  label on its own. Agents read issues and labels, and Session 1 and the owner
+  act through GitHub.
+- **Phase 1 is a separate private repository.** None of it lands here.
+- **Nothing enforces the protocol at run time.** No CI job reads a STATUS
+  comment or checks a label transition. The protocol is a written rule, and
+  the labels are its only state.
+
+**Tests.** `agents_protocol_d503.test.mjs` (11 tests, 14 assertions):
+- `labels.yml` declares the four state labels, `needs-decision` and
+  `slot:S01`–`slot:S20`, each with a name, a six-digit colour and a
+  description.
+- `AGENTS.md` names every state label, carries the STATUS block exactly, and
+  states the house rules after the task protocol.
+- The PR template has the eight sections, in order.
+- `labels-sync.yml` grants exactly `contents: read` and `issues: write`, runs
+  no third-party action, pins checkout to `ci.yml`'s SHA, never deletes a
+  label, and keeps `${{ }}` out of `run:`, shell comments included.
+- Each issue form applies only its own label. Blank issues stay open, and
+  security reports go to the private advisory.
+
+`repo_layout.test.mjs` allows `AGENTS.md` at the root. 20 mutations, 20
+caught, each on a non-zero exit with the expected `not ok` line, and each
+restored from a sha256-checked snapshot to a pass.
+
+**The sync script, run.** Its `run:` block was run against a stub `gh`, under
+the Go yq that `ubuntu-latest` ships and under the Python yq installed here.
+Both made the same 25 calls, one argument per value, apostrophe included.
+Four malformed files were refused before any call: a five-digit colour, an
+empty list, a missing description, and a bad second entry after a good first.
+actionlint, with shellcheck, reports nothing.
+
+## D505
+
+**The partner sidebar stops naming the retired `/partner/operations/*`
+routes: each `match` points at the successor, the full-bleed list drops the
+six retired entries, and the comments say what D395 made true.** Issue #986,
+slot S05 (relayed by Session 11 from D395). No migration, no route, no
+`api.js` change.
+
+**What was true on main (`f701a32f5`).** D395 turned the six
+`/partner/operations/*` addresses into `<Navigate replace>` redirects. The
+partner block of `sidebarConfig.js` still named them in three places: the
+`match` arrays of Pipeline (`…/engagements`), Delivery (`…/overview`,
+`…/portfolio`, `…/performance`) and Offers (`…/capabilities`); the block's
+comments ("Delivery → the /partner/operations subtree, tabbed by
+PartnerOperationsWorkspace since Wave 1a"; "`/partner/operations/engagements`
+can sit under Pipeline while its siblings sit under Delivery"; the legacy
+destinations list); and six entries in `PARTNER_FULL_BLEED`. None of it was
+a live bug — a bookmark to a retired address redirects and the successor
+lights its own row — but a `match` entry for a path that never renders is
+dead code wearing a route's name, and `partner_shell.test.mjs` pinned the
+dead entries as if they were live.
+
+**What changed.**
+- **`match`** names the successor D395 chose for each retired address that
+  a row owns: Pipeline gains `/pipeline/proposals` and `/pipeline/analytics`
+  (engagements and performance); Delivery gains `/delivery/health`
+  (portfolio); Offers gains `/offers/catalog` (capabilities). All four sit
+  under their row's own root and were already lit by the subtree rule; they
+  are listed so the mapping reads from the row. **The bare root's and
+  overview's successor, `/company-settings`, goes in no row's `match`.** The
+  issue's mapping put it under Delivery; the probe showed that lights two
+  rows on Firm Settings, because `/company-settings` is already the
+  sidebar's pinned footer row for every role (the shipped decision the
+  investor block records). A `match` entry there would be the collision the
+  partner block's own comment warns against, so the retired entries are
+  simply removed and the comment says why.
+- **`PARTNER_FULL_BLEED`** drops the six retired entries. Each successor
+  that owns a full-bleed body is in `workspaceRoutes('partner')` already;
+  `/company-settings` is a centred page by design and stays out.
+- **The comments** describe the rows as they are: Delivery is the
+  `/delivery/*` zones; the legacy destinations that still render are
+  `/needs`, `/services`, `/perks`, `/signals` and `/partner/insights`; the
+  six retired addresses redirect (D395) and are named nowhere in the sidebar.
+- **`partner_shell.test.mjs`** pins the successor mapping instead of the
+  retired entries, and adds that no `/partner/operations` string survives in
+  the partner block or the full-bleed list.
+
+**Guard.** `frontend/test/partner_sidebar_d505.test.mjs`, 4 tests:
+no partner row's `match` or `PARTNER_FULL_BLEED` names a retired address;
+each successor sits in the row the issue assigns; every successor is a
+mounted route and every retired address is a `<Navigate replace>` to it
+(read from `App.jsx`); the full-bleed list still covers every partner
+workspace route with no duplicates; the comments no longer call Delivery the
+operations subtree. `partner_shell` (re-aimed), `partner_bucket_overview`,
+`partner_operations_retired_d395`, `workspace_shell_routes`,
+`workspace_frame_contract`: green.
+
+**Mutations: 8 run, 8 caught** — each a non-zero exit with a `not ok` line,
+anchors unique, bytes proven changed, sources restored from a sha256-checked
+snapshot: a retired address back in Pipeline's `match`; the footer's page added to Delivery's `match` (two rows lit); the portfolio successor dropped from Delivery; the capabilities successor sent to the wrong row; a `match` entry for a path no route mounts; a retired address back in the full-bleed list; the centred page made full-bleed; the two-rows reason dropped from the Delivery comment; the old Delivery comment back; a retired address in `App.jsx` no longer redirecting to its successor.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA
+fallback, a partner at 1280×900. Each retired address lands on its successor
+and the successor's row is lit: `…/capabilities` → `/offers/catalog`
+(Offers), `…/portfolio` → `/delivery/health` (Delivery), `…/engagements` →
+`/pipeline/proposals` (Pipeline), `…/performance` → `/pipeline/analytics`
+(Pipeline); the bare root and `…/overview` land on `/company-settings`, where
+the pinned footer's Company Settings row is lit and no bucket row is. With the
+issue's original mapping (`/company-settings` in Delivery's `match`) the same
+page lit Delivery as well, which is what moved the entry out. **Found, not
+fixed here (`PartnerFirmProfileCard.jsx` is D390's, not this issue's):** a
+`200` from `/partner-portal/profile` without a `partner` key is stored as a
+ready state with `data: undefined` and the card throws on
+`p.specialization`, taking the whole page to the route error boundary
+instead of drawing Unreadable.
+
+`frontend/src` moved, so `docs/` is rebuilt.
+
+## D506
+
+**HQ gets a door to the Spin-Out moderation console: lane 4 of Admin ·
+Approvals on HQ-held accounts links `/admin/spinout-moderation`, and the
+three pins that held the lane to "No console" are inverted.** Issue #987,
+slot S05, coordinated with slot S06 (D442). No migration, no route, no
+`api.js` change.
+
+**What was true on main (`f701a32f5`).** D442 (Session 6) built
+`SpinoutModerationPage` at `/admin/spinout-moderation` and linked it from the
+branch Approvals board, and recorded that the HQ door was Session 5's:
+`HeldApprovals.jsx` row 4 still said "No console" / "No console exists
+anywhere yet", its header comment still said no page in the SPA called
+`adminSpinoutModeration`, and three tests pinned the gap —
+`held_admin_shell_d286` (lane 4 has no console; Approvals draws 14 doors),
+`spinout_moderation_d442` (HeldApprovals does not link the console) and
+`admin_route_reachability` (the HQ-held walk does not reach the console; it
+is the one route only the branch shell reaches). An HQ admin could reach
+held moderation cases only by typing the URL.
+
+**What changed.**
+- **Lane 4 links its console.** `HeldApprovals.jsx` row 4 draws a literal
+  `<Link to="/admin/spinout-moderation">`, "Links to its console", like the
+  other fourteen; the `unavailable` entry for Spinout moderation goes, and the
+  header comment says the console exists (D442) and where. Literal, not
+  mapped, so the admin-route walk can see it. The route is `guard(['admin'])`
+  with no `hqOnly`, so the row is reachable from both HQ-held shells, as the
+  other lanes are.
+- **The pins are inverted, never loosened.** `held_admin_shell_d286` holds
+  lane 4 to `/admin/spinout-moderation` and Approvals to 15 doors;
+  `spinout_moderation_d442`'s "the HQ-held row is still Session 5" becomes
+  "the HQ-held row links the console too"; `admin_route_reachability`'s
+  "does not reach" becomes "reaches", and the set of routes only the branch
+  shell reaches is empty. `admin_route_reachability.test.mjs` is not in the
+  issue's file list; it is edited only because its assertion would fail
+  once the door exists, and the test's own comment named this door as the
+  change it was waiting for.
+- No known-gap entry for the HQ door was found in S06's moderation work
+  (`spinout_moderation*.test.mjs`, `SpinoutModerationPage.jsx`), so none is
+  removed.
+- **The Approvals row stays lit inside the console.** Codex's review of
+  #1042 caught what the first draft missed: `SidebarNav` treats a row's
+  `match` list as the complete statement of what it owns, and the Approvals
+  row's list in `sidebarConfig.js` did not name `/admin/spinout-moderation`,
+  so a plain admin who followed lane 4 landed on a page where no row was
+  lit. The console is now on that list. `sidebarConfig.js` is outside the
+  issue's file list; it is the one-entry change the door needs and is noted
+  on #987.
+
+**Guard.** `frontend/test/held_approvals_moderation_door_d506.test.mjs`,
+5 tests: lane 4's cell is a literal Link to the console and the state
+cell says it links; the console is a registered `guard(['admin'])` route
+without `hqOnly`; the page's `unavailable` list no longer names Spinout
+moderation and the header comment no longer claims no console exists; the
+Approvals landing draws fifteen literal doors, none under `/branch/`; the
+branch board's door is unchanged; the Approvals row's `match` list names
+the console, once. `held_admin_shell_d286`,
+`spinout_moderation_d442`, `admin_route_reachability` (each re-aimed),
+`admin_placement_h35`: green.
+
+**Mutations: 9 run, 9 caught** (non-zero exit and a `not ok` line each;
+anchors unique; bytes proven changed; sources restored from a sha256-checked
+snapshot) — lane 4 back to "No console"; the door pointed at the Lab page
+instead of the console; the door drawn as a mapped link; the door drawn
+twice; the rail's `unavailable` list saying no console exists again; the
+header comment back to "LINKS NOWHERE"; the console route wrapped in
+`hqOnly`; the console route unmounted from `App.jsx`; the console dropped
+from the Approvals row's `match` list.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA
+fallback, a plain admin at 1280×900 opening `/admin/held/approvals`. Lane 4
+reads "Spinout moderation · /admin/spinout-moderation · Links to its
+console"; the lanes table draws exactly one anchor to the console; nothing
+on the page says "No console exists anywhere yet"; clicking the lane's link
+lands on `/admin/spinout-moderation` with the console's own "Spinout
+moderation" heading drawn and no page error. Second pass, after the
+`match` entry: for the plain admin the Approvals row is the one lit row on
+the landing and stays the one lit row on the console; before the entry no
+row was lit there. For the Super Admin no row is lit on either page, which
+is the HQ shell as it already was: its group carries no `/admin/held/*` row
+and the H35 map does not place the console, so that shell has nothing to
+light and this change does not touch it.
+
+`frontend/src` moved, so `docs/` is rebuilt.
+
+## D507
+
+**The four HQ Team sentences that said a branch account is not told now say
+what D441 made true: the branch tells the person when HQ authorises a
+support session.** Issue #988, slot S05. No migration, no route, no `api.js`
+change. `frontend/src` moved, so `docs/` is rebuilt.
+
+**What was true on main (`f701a32f5`).** D259 gave HQ a Support control on a
+branch account and said, truthfully then, that the person is not told:
+`openSupportSession` imported no notify function. D441 (#864) made that RPC
+call `notify()` after the authorisation is recorded: type
+`hq_branch_support_session`, category `security` so quiet hours do not hold
+it, in the app and by email, naming who authorised it, the reason, and that
+the session lasts 30 minutes once it is opened. D441 updated the Team rail on
+`AccountsPage.jsx` and left four sentences, all Session 5's, saying the
+opposite: the HQ-only card in `HqTeamActions.jsx` ("is not told yet"), the
+Support form in `HqTeamTable.jsx` ("The person is not told: the branch
+records the session, and no notice reaches them yet"), that table's footer
+("the person is not told yet") and its D259 header comment.
+`hq_team_h20.test.mjs` pinned the card's sentence verbatim and
+`hq_support_session_d259.test.mjs` pinned the form's.
+
+**What is said now.** Each sentence describes the notice as the branch
+sends it, and none says the person *was* told. The branch sends them a
+security notice when the session is authorised, in the app and by email,
+with the operator's name, their reason and the 30 minutes; the branch
+reports whether that notice was stored, and HQ's route does not pass it on,
+so the card and the form say they cannot tell whether the person was told.
+That is the exact state of the facts: `openSupportSession` still authorises
+the session when the inbox refuses the notice and returns
+`target_notified: false` (`branch_invitation_d441.test.ts` covers it), and
+HQ's own route (`routes/admin_support_sessions.ts`) answers `{ branch,
+target, expires_at, open_url }` without that field, so the HQ operator has
+no delivery fact to read. A first draft of this entry led the form with
+"The person is told:"; Codex's review of #1043 pointed out that this
+asserted delivery in the one case the branch knows it failed, and the
+wording was made attempt-neutral before merge. The card's header comment
+records the narrowing (D259), the widening (this entry) and why the note
+stops short of "told"; the table's header comment says where the delivery
+fact is dropped.
+
+**Found, not fixed.** HQ's support-session route drops the branch's
+`target_notified`. Passing it through would let the form say whether the
+notice was stored, the way the HQ-held impersonation route (D248) already
+reports it. That route is the worker's, not this issue's file; the D507 pin
+fails the day it changes so the "not reported here" sentence is re-aimed
+with it.
+
+**Pins re-aimed, never loosened.** `hq_team_h20.test.mjs` holds the card to
+the new sentence, holds the rendered card and the whole of `HqTeamTable.jsx`
+free of "not told" and "no notice reaches", holds the form, the footer and
+the header comment to their new sentences, holds the card, the form and the
+footer free of "is told" / "The person is told" so no draft can assert
+delivery again, and reads the branch route so the sentences cannot outlive
+it: `tellBranchOfSupportSession` is called in
+`openSupportSession` after the `hq_support_authorised` audit row and before
+`target_notified` is returned, sends `['in_app', 'email']` as `security`,
+names `${SUPPORT_SESSION_MINUTES} minutes`, and `SUPPORT_SESSION_MINUTES`
+is 30; and that HQ's route still omits `target_notified`.
+`hq_support_session_d259.test.mjs` is not in the issue's file list; its
+D259 test pinned "The person is not told:" verbatim and fails once the
+sentence changes, so that one assertion is inverted and the test renamed.
+
+**Mutations: 16 run, 16 caught** (non-zero exit and a `not ok` line each;
+anchors unique; bytes proven changed; sources restored from a sha256-checked
+snapshot) — the card back to "is not told yet"; the card saying in-app only;
+the card asserting "is told when you authorise" (the first draft); the form
+back to "The person is not told:"; the form led with "The person is told:"
+(the first draft); the form claiming the notice reached their inbox; the
+footer back to "is not told yet"; the footer asserting the person is told;
+the header comment back to "The person is not told —"; the branch route
+sending no notice; the notice sent before the authorisation is recorded;
+the notice filed under `account` instead of `security`; the notice in-app
+only; the notice no longer naming the 30 minutes; `target_notified` no
+longer returned by the branch; HQ's route passing `target_notified`
+through.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA fallback, the Super Admin at 1280×900 opening `/admin/accounts` with one stubbed branch (`fr`) that answers a search with one active founder. The HQ-only card carries the new branch sentence and the Team table's footer carries its new sentence; no visible text says "not told". Typing in the Team search draws the branch hit with its Support toggle; opening the form shows "The branch records the authorisation and sends the person a security notice … The branch reports whether that notice was stored; HQ’s route does not pass it on, so this form cannot say whether the person was told."; no visible text says "not told", "no notice reaches" or "The person is told", and the card does not say "is told". No page error.
+
 ## D508
 
 **Lab copy stops selling "idea to incorporated" and an unbacked company
@@ -39852,3 +40720,347 @@ than keeping a parallel one).
 grammar, evaluating the actual function's source rather than re-deriving
 its logic in the test). Root `npm run build` and `npm run test:drift` both
 exit 0.
+
+## D509
+
+**Task #990: two Studio leftovers. A route with no caller, and a missing count
+shown as 0.**
+
+**What was true on main (f701a32f5).**
+- `routes/dashboard.ts:302`, `POST /dashboard/refresh-scores`, lost its only
+  caller when D323 removed `api.refreshDashboardScores`. Nothing in
+  `frontend/src` called it, and `ROUTE_MAP.md` had no row for it.
+- `ProfileFitSection.jsx:602` rendered the best-fit type count badge as
+  `Number(t.count) || 0`. A type whose count the read did not carry therefore
+  read "0", a claim that nobody fits, about a number nobody measured.
+
+**What changed.**
+- **The route is deleted, not kept.**
+  - Since D323 the dashboard cache has expired only on its own TTLs, because
+    nothing called this route. Deleting it changes no behaviour.
+  - `kvDelete` drops out of `dashboard.ts`'s imports with it.
+  - `dashboard_company_scope.test.ts`'s refresh test read the handler's
+    source. It is replaced by a test that the route is gone and that no
+    client method for it has reappeared.
+  - There was no `ROUTE_MAP` row to remove.
+- **The badge is drawn only for a measured count.** The new
+  `fitCount(raw)` returns the count, or null when it is absent:
+  - only a number or a numeric string counts, by type and not by value, the
+    `bpsPercent` rule;
+  - a measured 0 still shows;
+  - an absent count draws no badge.
+
+**Tests.**
+- `frontend/test/fit_count_d509.test.mjs` (3). `MatchSummaryCard` fetches its
+  own data, so these pin `fitCount` and the badge's own markup.
+- The re-aimed `dashboard_company_scope.test.ts` test.
+
+**Mutations: 4 run, 4 caught.**
+- The route put back.
+- The badge drawn without the check.
+- An absent count read as 0.
+- The old `Number(t.count) || 0` restored.
+
+No migration.
+
+## D510
+
+**The Build desk's cadence card offers a Friday retro summary drafted from the
+board, and every zone-draft run records the page it was asked from.** GitHub
+issue 991 (slot S02), relayed from Session 14's D424. No migration, no new
+route and no new `api.js` method.
+
+**What was missing.** D424 left both in its "still not built" list:
+- The cadence card said "no retro draft surface exists yet, so none is
+  drawn". A3 promises "Friday retro gets a draft summary from the board's
+  own history", and `DRAFT_SURFACES` had no entry for it.
+- `POST /api/research/drafts` called `runAI` with no `surface`, so every
+  zone-draft run landed in the month's unattributed group. The rail's "This
+  page this month" (D404) could not count a band's runs.
+
+**The retro surface, `build/retro`.**
+- It scopes like every founder surface: `founderProject` resolves the
+  project the caller owns, or returns `[]`. All three statements are keyed
+  on `mvp_tasks.deal_id`, which is a `projects.id`.
+- **The board keeps no history of its moves.** A card is one row: its status
+  now, when it was created, and when it was last touched. So the material is:
+  - the board's count by status;
+  - the cards last touched in the past seven days, each with where it stands
+    now, when it was added and its due date;
+  - every open card past its due date, touched or not. "Open" excludes
+    `done`, `cancelled` and `archived`, the statuses `founder_board.ts`
+    keeps out of a WIP count.
+- **What the record cannot say is said in the material.** A line reads "NO
+  MOVE HISTORY IS STORED". The instruction forbids:
+  - how many times a card moved, slipped or carried over, and when a card
+    was finished. The integrated Build canvas's fixture ("one carried a
+    third time") counts exactly these.
+  - an owner, a cause or a decision. Decisions live in ritual notes, which
+    this surface does not read.
+- **An empty board is nothing to draft; a quiet week is not.** A board with
+  cards and nothing touched this week sends "No card was touched in the
+  seven days to …". Only a board with no card returns `[]`, which the route
+  answers as `nothing_to_draft` (409).
+- The window compares `datetime(updated_at)`, the D124/D125 rule.
+- **A cut list says it is cut.** Both lists are capped, at 40 touched and 20
+  past due, to bound the prompt. Each read counts its whole match in the same
+  statement (`COUNT(*) OVER ()`, taken before `LIMIT`). Past the cap, the
+  material says how many were left out ("3 more open cards are past their
+  due date and not listed here"), and the instruction says to report it.
+  Raised in review on PR 1033: the first version told the model to "name
+  every open card that is past its due date" over a list capped at 20.
+
+**The cadence card.**
+- The band is mounted under the card, gated like the desk's other three bands
+  (`fillsOn && projectId`), in violet.
+  - Label: "Proposal · retro summary", the integrated Build canvas's own
+    `aiLabel`.
+  - Footnote: "The board keeps no history of its moves, so the summary never
+    says how often a card moved."
+- It sits outside `Cadence`, because it reads the board, not the ritual
+  store. A failed ritual read does not hide it.
+- The sentence denying the surface is gone.
+- The Build desk's switch sentence (`eadwynConfig.js`) names the new band:
+  "summarises the week on the board for a Friday retro".
+  `validate_fills_the_blanks` requires every mounted band to be named there.
+  This is the one file outside the issue's list, and it changed for that
+  reason alone.
+
+**Attribution.**
+- **The page, not the draft key.** The issue says "pass the surface through".
+  `runAI`'s `surface` is D404's column: the app path the run was asked from,
+  re-validated by `normaliseSurface`. The draft key (`build/retro`) has no
+  leading slash, so passing it would record NULL, which is the gap itself.
+  A path built from it (`/build/retro`) is no page anyone stands on, so the
+  rail's lookup would never match it. So the band sends the page.
+- **`ZoneDraft.jsx`:** `bandPage()` reads `window.location.pathname` when the
+  run is pressed, never on load. Inside the app (one `BrowserRouter`, no
+  basename) that is the router's path, and bands also mount in tests with no
+  router. It normalises the trailing slash as the rail does, and sends nothing
+  when there is no path.
+- **`api.js`:** `zoneDraftRun(surface, scopeKey, page)` sends `page` only when
+  there is one.
+- **The route** reads `body.page`, capped at 200 characters as `ai.ts`
+  caps it, and passes it as `surface`. A value that is not a plain app path is
+  recorded as NULL ("not recorded"), never trimmed into one. This applies to
+  every surface, partner and founder alike: it is one route.
+- **Not changed:**
+  - Rows before D510 stay NULL.
+  - The band's pre-run estimate (`RunEstimate`) is still per task. A per-page
+    estimate would read `by_surface`, which is a different file and was not
+    asked for.
+
+**Tests.**
+- `founder_draft_surfaces.test.ts`:
+  - `build/retro` joins the founder `SURFACES` loop, so it runs the
+    cross-account, junk-scope, lone-project, two-project and deleted-project
+    cases.
+  - Seven new tests:
+    - the material: what is touched, what is past due, finished and
+      not-yet-due cards left out, and another founder's late card kept out;
+    - a capped list says how many it left out, in the singular and the plural,
+      and a list within the cap claims no cut;
+    - an ISO-written timestamp an hour outside the week stays outside;
+    - a quiet week versus an empty board;
+    - every founder surface's run records `/build` on its usage row;
+    - no page, the draft key, a URL, a query, a hash or a number records
+      NULL, and a trailing slash is one page;
+    - a refused draft records no run.
+- New `frontend/test/build_retro_d510.test.mjs` (4):
+  - `bandPage`'s normalisation;
+  - the body `zoneDraftRun` sends, through the real `request()`;
+  - the run, and only the run, sending the page;
+  - the band's own words.
+- **Re-aimed, not loosened:**
+  - `founder_build_overview_a3` pinned exactly three bands and the
+    sentence denying the retro. It now pins A3's three bands in A3's order,
+    plus the retro band, labelled from the integrated canvas, in the cadence
+    card and outside `Cadence`. It also pins all four gated and violet, and
+    the denial gone now that the surface exists.
+  - `validate_fills_the_blanks` gains the band in its closed set.
+- **Mutations: 28 run, 28 caught**, each with a non-zero exit and a `not ok`
+  line, restored from a sha256-checked snapshot:
+  - **scoping:** the scope key trusted over the ownership check, and each of
+    the three statements unscoped;
+  - **the material:** no seven-day window, a bare timestamp compare, a
+    finished card called late, the no-history line dropped, the instruction's
+    ban dropped, a quiet week sent as nothing, an empty board drafted over;
+  - **attribution:** the route dropping the page, recording the draft key,
+    or recording a path made from it; the band sending no page; the api
+    method dropping it; the trailing slash kept; an empty path sent as `''`;
+    the load reading the page;
+  - **the card:** the band ungated, in the Partner palette, the denial kept,
+    and the switch sentence not naming it;
+  - **the cuts:** either cut left unsaid, the count taken after the limit,
+    the instruction still claiming every card, and the plural swapped.
+
+  The bare-compare mutation escaped the first pass, which had 22 mutations,
+  because the fixture writes SQL-format times. The ISO test was added for it
+  and catches it, except in the first hour after UTC midnight, when both
+  sides fall on different dates and a bare compare happens to agree.
+
+## D512
+
+**Task #995: Admin Studio's home drops its four legacy reads.**
+
+**What was true on main (f701a32f5).** `AdminStudioHome.jsx` still called
+`api.branchHome`, `api.myLicence`, `api.branchTemplates` and
+`api.branchInsights`. It passed their results as four props to
+`StudioNeedsDecisionView` and `AdminStudioOverview`, beside the studio glance
+each of those already loads. D443 asked for the reads to go. Dropping them
+was unsafe until D447 (#893) made both components render from the glance
+alone.
+
+**What changed.**
+- The page makes no read of its own. The `useEffect`, the four `useState`s,
+  the `api` and `reportError` imports and the `UNAVAILABLE` import are gone.
+- It passes each section `user`, and `glance` when a caller hands one in. In
+  production `glance` is undefined, so each component loads the glance
+  itself. A render test is the only caller that supplies it.
+- The four legacy props are no longer passed. Both components keep accepting
+  them for their own tests, which this task does not own.
+
+**Pins re-aimed, never loosened.**
+- `studio_glance_d443.test.mjs`'s "the home page is not the caller" test now
+  asserts it outright: none of the four calls, and none of the four props.
+- `studio_strips_d246.test.mjs` required the home page to import
+  `UNAVAILABLE`. A page with no read needs no sentinel, so it now asserts the
+  page holds none and calls no `api`. The single-definition count still
+  holds, and `StudioPosture` still takes the shared sentinel.
+
+**Tests.** `frontend/test/studio_home_glance_d512.test.mjs` (3).
+- The page cannot be imported in a test, because `StudioInterview` pulls in
+  a JSON manifest the loader does not load. So one test pins, in the page's
+  source, that `user` and `glance` are the only props it passes.
+- Two render the strip and the cards with exactly those props: once for a
+  suspended branch admin and once for an HQ admin. Neither may stall on
+  "Reading…". The branch render shows the glance's seat figure, freeze line
+  and share rate. The HQ render shows U1's reason and no seat count.
+
+**Mutations: 6 run, 6 caught.**
+- A read put back.
+- A legacy prop passed again.
+- The glance pass-through dropped.
+- The strip ignoring the glance.
+- Both sections ignoring it, which fails both render tests.
+- The sentinel imported again.
+
+**Next.** Slot S06 can retire `/branch`.
+
+No migration.
+
+## D520
+
+**The four `company_*` research tables production holds are declared in the
+repo, as production built them.** Migration 370. PRs #965 and #971.
+
+**What it was.** Deploys 566 to 574 went red on "repo can still rebuild
+production's schema". Production held four tables that no repo file had ever
+declared: `company_employment_history`, `company_financials`,
+`company_funding_rounds` and `company_sources`. They were created by hand
+between 2026-09-30 14:57 and 23:34 UTC; no migration workflow ran in that
+window and no code reads them. The Worker deployed each time. What broke is
+that a database built from the repo would come up without them.
+
+**How the DDL was found.** The drift check named the tables and nothing else.
+#965 made a red run print production's `sqlite_master.sql` for every object
+the repo lacks — schema only, never a row — and deploy run 574 printed the
+four statements.
+
+**The owner's decisions (2026-10-02).**
+- Keep the tables and declare them, rather than drop them on production.
+- Record their twelve money columns as legacy REAL dollars rather than
+  rebuild the tables in integer cents.
+
+**What ships.**
+- `370_company_research_tables.sql` is production's DDL verbatim with
+  `IF NOT EXISTS`: a no-op on production, the same tables on a fresh build.
+  It was drafted as 367; #967 took 367 to 369 first.
+- `scripts/money-cents-baseline.json` gains `company_financials.arr`,
+  `burn_rate`, `cash`, `debt`, `ebitda`, `gross_profit`, `mrr`,
+  `net_income` and `revenue`, and `company_funding_rounds.amount`,
+  `pre_money_valuation` and `post_money_valuation`. Each entry says it was
+  created out-of-band and is to be converted with `<col>_cents`.
+- The money classifier learns `gross_profit`, `ebitda`, `net_income`, `cash`
+  and `debt`, which it did not recognise, so the forward-looking rule now
+  covers them too (a review found them outside both the ledger and the
+  guard).
+- `company_financials.revenue_growth` and `ebitda_margin` are rates, not
+  amounts, so they join `NOT_MONEY` in `check-money-cents.mjs`, pinned in
+  `schema_guards.test.mjs`.
+
+**What it does not do.** It wires no feature to the tables and converts no
+money column. The ledger grows by twelve, which is the honest record of
+production rather than a new choice of dialect.
+
+## D525
+
+**The HQ support bar's "Raise a concern" arrives at Branch · Approvals with
+the form filled: kind `other`, subject naming the session, the HQ actor and
+the reason.** Issue #1031, slot S05, relayed from slot S06's D445 wiring
+(#1028). No migration, no route, no `api.js` change. `frontend/src` moved,
+so `docs/` is rebuilt.
+
+**What was true on main (`f701a32f5`).** D445 made `/branch/approvals` read
+`?kind=` and `?subject=` through `prefillFromSearch` and gave every Settings
+door both. `HqSupportSessionBar.jsx` (D142) linked a bare
+`/branch/approvals`, so a branch admin raising a concern from inside an HQ
+session started with an empty form and had to retype what the bar above it
+had just said. D445 named the prefill this bar would use: `?kind=other`.
+
+**What changed.** The bar builds its link with `approvalsHref`, the one
+helper the Settings doors use, so the encoding and the 300-character cut are
+the page's own. The kind is `other`: a concern about an HQ session is none of
+`moderation`, `content` or `seat_increase`. The subject is
+`concernSubject(session)`: "HQ support session", then " by <actor>" when the
+redeem response carried an actor name, then ": <reason>" when it carried a
+reason. A missing field is left out, never invented, the rule the bar
+already applies to its own fields. Nothing else about the bar moves: it still
+persists nothing, has no close button, and draws nothing without a live
+session.
+
+**From the Approvals page itself, the link reloads the document.** Codex's
+review of #1044 caught what the first draft missed: this bar is global
+chrome, so it is still drawn on `/branch/approvals`, and from there the link
+changes only the query string. React Router keeps the same `BranchApprovals`
+instance, which copies `?kind=` and `?subject=` into state once, in its
+`useState` initialisers, so a client-side navigation left a half-typed form
+exactly as it was; the probe reproduced it. From that one page, and only
+that page, the `Link` carries `reloadDocument`, which is the one way this
+file can force a fresh form state without editing `BranchApprovals.jsx`
+(slot S06's file). The proper fix is the page re-reading its query when it
+changes; it is relayed on #1031, and the guard pins that `BranchApprovals`
+still reads the prefill in exactly those two initialisers, so the day it
+re-reads, the pin fails and the reload is the line to drop.
+
+**Two sentences elsewhere are now stale and are not edited here.**
+`frontend/src/lib/escalationPrefill.js` (its header comment) and
+`frontend/src/lib/README.md` (the `escalationPrefill.js` row) both say the
+bar links with no query. Both are outside this issue's file list; flagged on
+#1031 for the owner to assign.
+
+**Guard.** `frontend/test/hq_support_bar_prefill_d525.test.mjs`, 4 tests,
+rendered under a fake store and parsed back through the page's own
+`prefillFromSearch`: actor and reason both present give kind `other` and
+subject "HQ support session by T. Okafor: ticket #4192", equal to
+`approvalsHref` of the same; each of the three thinner sessions still gives
+kind `other` and the subject with only what was carried; a 400-character
+reason is cut at 300 and an ampersand in the actor name survives the round
+trip; the source imports `approvalsHref`, builds the Link from it and the
+session, spells no query by hand, still writes no `localStorage`, still has
+no close button, and draws nothing without a live session. The first and
+fourth fail on main's bar. `branch_shell_s7_s13` (the bar's D142 pins):
+green.
+
+**Mutations: 13 run, 13 caught** (non-zero exit and a `not ok` line each;
+anchors unique; bytes proven changed; sources restored from a sha256-checked
+snapshot) — the link back to a bare `/branch/approvals`; the kind sent as
+`moderation`; no kind sent; the subject dropped; the query spelled by hand
+instead of through `approvalsHref`; the actor name dropped from the subject;
+the reason dropped from the subject; a missing actor invented as "someone at
+HQ"; the bar persisting the subject to `localStorage`; no reload from the
+Approvals page; the document reloaded from every page; the Approvals check
+comparing against the wrong page; the helper no longer cutting the subject
+at 300.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA fallback, a branch admin (`branch.code` `fr` off `/me`) at 1280×900 with a stored session (actor T. Okafor, reason "ticket #4192", ten minutes left) opening `/branch`. The bar draws above the admin chrome and its "Raise a concern" href is `/branch/approvals?kind=other&subject=HQ+support+session+by+T.+Okafor%3A+ticket+%234192`; clicking it lands on that URL with the raise form drawn, the subject field reading "HQ support session by T. Okafor: ticket #4192" and the `other` kind checked. No page error. Second pass, after Codex's finding: the same admin already on `/branch/approvals` with "something I typed by hand" in the subject presses the bar's link; before the fix the URL changed and the field still read the typed text, after it the document reloads once onto the prefilled URL and the field reads the session's subject with `other` checked, the bar still drawn. The first scenario, from `/branch`, is unchanged: one client-side navigation, no reload.

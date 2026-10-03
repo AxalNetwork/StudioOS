@@ -12,10 +12,12 @@
  * the four documents a newcomer needs were indistinguishable from a year of
  * dated snapshots nobody maintains.
  *
- * Six files stay at the root, each because a tool or a platform convention
- * looks for it there and nowhere else. Adding a seventh fails this test — if
- * that seventh genuinely belongs at the root, add it to ROOT_MD with the
+ * Seven files stay at the root, each because a tool or a platform convention
+ * looks for it there and nowhere else. Adding an eighth fails this test — if
+ * that eighth genuinely belongs at the root, add it to ROOT_MD with the
  * reason, which is the point: the exception has to be argued once, in writing.
+ * `AGENTS.md` was the seventh (D503): Codex, Cursor and other agents read it
+ * from the root, as Claude Code reads `CLAUDE.md`.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -27,6 +29,7 @@ const root = resolve(process.cwd());
 // Each entry names the tool or convention that requires the root location.
 const ROOT_MD = new Map([
   ['CLAUDE.md', 'read by Claude Code from the repo root'],
+  ['AGENTS.md', 'read by Codex, Cursor and other agents from the repo root'],
   ['replit.md', 'read by Replit from the repo root'],
   ['README.md', 'GitHub renders it as the repo front page'],
   ['CONTRIBUTING.md', 'GitHub community-health file'],
@@ -34,14 +37,14 @@ const ROOT_MD = new Map([
   ['CHANGELOG.md', 'conventional root location'],
 ]);
 
-test('only the six tool-required markdown files sit at the repo root', () => {
+test('only the seven tool-required markdown files sit at the repo root', () => {
   const found = readdirSync(root).filter((f) => f.toLowerCase().endsWith('.md'));
   const unexpected = found.filter((f) => !ROOT_MD.has(f));
   assert.deepEqual(
     unexpected, [],
     `move these under documentation/, or add them to ROOT_MD with the tool that requires the root: ${unexpected.join(', ')}`,
   );
-  // And the six must still be there — a "cleanup" that swept README.md into a
+  // And the seven must still be there — a "cleanup" that swept README.md into a
   // folder would break the repo's front page.
   for (const [f, why] of ROOT_MD) {
     assert.ok(existsSync(join(root, f)), `${f} must stay at the root — ${why}`);

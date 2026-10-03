@@ -161,16 +161,14 @@ test('the cache key carries the company, so a switch is not served a stale paylo
   assert.deepEqual(second, [2, 3], 'a cached payload from the other company must not be served');
 });
 
-test('refreshing clears every company variant, not just the current one', () => {
-  // Once the key carries the company there is no longer one entry to delete.
-  // Clearing only the caller's current company leaves a stale dashboard behind
-  // the switcher — the same bug as not invalidating, one click later.
+test('D509 — the orphaned POST /refresh-scores route is gone', () => {
+  // D323 removed `api.refreshDashboardScores`, its only caller, so the route
+  // answered nobody. It is deleted rather than kept: the cache tiers expire
+  // on their own TTLs, which is all that has run since D323.
   const src = readFileSync(
     resolve(process.cwd(), 'cloudflare-worker/src/routes/dashboard.ts'), 'utf8');
-  const handler = src.slice(src.indexOf("dashboard.post('/refresh-scores'"));
-  assert.match(handler, /k\.startsWith\(prefix\)/, 'L1 must be cleared by prefix');
-  assert.match(handler, /FROM user_company_links WHERE user_id = \?/,
-    'and KV for every company the user belongs to');
-  assert.doesNotMatch(handler.slice(0, 900), /kvKey\(user\.id\)/,
-    'the single-key delete is gone');
+  assert.doesNotMatch(src, /dashboard\.(post|get|put|patch|delete|all)\(\s*['"]\/refresh-scores['"]/,
+    'POST /refresh-scores came back with no caller');
+  const api = readFileSync(resolve(process.cwd(), 'frontend/src/lib/api.js'), 'utf8');
+  assert.doesNotMatch(api, /refresh-scores/, 'a client method for the deleted route reappeared');
 });

@@ -351,14 +351,12 @@ export const TEMPLATES: Record<string, EmailTemplate> = {
     text: `Hi {{name}},\n\n{{referrer_name}} invited you to join Axal. Sign up here — they'll be credited automatically: {{signup_url}}`,
     html: `<p>Hi {{name}},</p><p><strong>{{referrer_name}}</strong> invited you to join Axal.</p><p><a href="{{{signup_url}}}" style="display:inline-block;background:#111;color:#fff;padding:11px 18px;border-radius:8px;text-decoration:none;font-weight:600;">Accept &amp; sign up</a></p>`,
   }),
-  // vars: name, amount, currency, payout_id, paid_at
-  referral_payout_paid: t({
-    key: 'referral_payout_paid', category: 'billing', severity: 'info',
-    replyTo: 'billing@axal.vc', alwaysSend: true,
-    subject: 'Referral payout sent — {{amount}} {{currency}}',
-    text: `Hi {{name}},\n\nA referral payout of {{amount}} {{currency}} was sent to your connected Stripe account on {{paid_at}}. Reference: {{payout_id}}`,
-    html: `<p>Hi {{name}},</p><p>A referral payout of <strong>{{amount}} {{currency}}</strong> was sent to your connected Stripe account on {{paid_at}}.</p><p style="font-family:ui-monospace,monospace;font-size:12px;color:#6b7280;">Reference: {{payout_id}}</p>`,
-  }),
+  // D333: `referral_payout_paid` removed. It dated from the referral-payouts
+  // backend, which `referralPayouts.ts` has already been deleted
+  // (`test/referral_submissions.test.ts` pins that it "must not return");
+  // nothing has called `send(..., 'referral_payout_paid', ...)` since, and
+  // confirming that was this task's job, not inventing a new call site to
+  // justify keeping it.
   // vars: name, advisor_name, start_time, join_url
   advisor_session_booked: t({
     key: 'advisor_session_booked', category: 'advisor', severity: 'info',
