@@ -1,0 +1,37 @@
+name: Blocked
+description: Something blocks work and needs its own issue. A block on your own task goes on that task's issue.
+title: "Blocked: "
+labels: ["state:blocked"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        When your own task is blocked, set `state:blocked` on it and put the question in a STATUS comment there (`AGENTS.md`). Use this form when the block needs its own issue, for example one that stops several tasks. Add `needs-decision` when only the owner can clear it.
+
+        This repository is public. Leave out secrets, tokens, personal data and security-sensitive operational detail.
+  - type: input
+    id: blocked
+    attributes:
+      label: Blocked tasks
+      description: The issues or PRs that cannot move, as #numbers.
+    validations:
+      required: true
+  - type: textarea
+    id: blocker
+    attributes:
+      label: What blocks them
+      description: What fails or is missing, and where you saw it.
+    validations:
+      required: true
+  - type: textarea
+    id: unblock
+    attributes:
+      label: What would unblock them
+      description: The change, decision or access that clears the block, and who can give it.
+    validations:
+      required: true
+  - type: input
+    id: reporter
+    attributes:
+      label: Slot and agent
+      description: Who is reporting, for example S05 · Codex.
