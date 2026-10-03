@@ -6,6 +6,10 @@
  *      server-side `fetch()` to it: an authenticated client could persist
  *      an arbitrary URL and get this Worker to make outbound POSTs to it
  *      on demand. Validated at the one place a row is ever written.
+ *      A follow-up review ran the first (blocklist) fix against real
+ *      attack shapes and found several still got through — see the
+ *      allowlist test below. It is now an allowlist of the four browser
+ *      push vendors' hostnames instead.
  *   2. `sendWebPush` parsed `sub.endpoint` with `new URL()` BEFORE its own
  *      try block, so a malformed stored endpoint threw uncaught instead of
  *      returning the same `{ok:false, ...}` shape every other failure in
@@ -50,6 +54,43 @@ test('isAllowedPushEndpoint rejects non-https, malformed, and private/loopback h
   assert.equal(isAllowedPushEndpoint('https://[::1]/x'), false, 'IPv6 loopback');
   assert.equal(isAllowedPushEndpoint('https://foo.internal/x'), false, '.internal');
   assert.equal(isAllowedPushEndpoint('https://' + 'a'.repeat(2001)), false, 'too long');
+});
+
+// A second Codex review ran the blocklist fix above against real attack
+// shapes and found every one of these still got through: private/link-local
+// IPv6 the literal check never covered, loopback written as an IPv4-mapped
+// IPv6 literal (which the v4 regex can't see), carrier-grade NAT (RFC 6598,
+// outside the blocked ranges), and plainly any public host that isn't a push
+// service at all. The fix is an allowlist of the real push vendors' hosts
+// instead of trying to keep enumerating what to block.
+test('isAllowedPushEndpoint rejects every host from the follow-up review\'s attack list', () => {
+  assert.equal(isAllowedPushEndpoint('https://[fd00::1]/'), false, 'private IPv6 (ULA)');
+  assert.equal(isAllowedPushEndpoint('https://[fe80::1]/'), false, 'link-local IPv6');
+  assert.equal(isAllowedPushEndpoint('https://[::ffff:127.0.0.1]/'), false, 'loopback as IPv4-mapped IPv6');
+  assert.equal(isAllowedPushEndpoint('https://100.64.0.1/'), false, 'carrier-grade NAT (RFC 6598)');
+  assert.equal(isAllowedPushEndpoint('https://example.com/anything'), false, 'public host, not a push service');
+});
+
+test('isAllowedPushEndpoint still allows a real fcm.googleapis.com endpoint', () => {
+  assert.equal(isAllowedPushEndpoint('https://fcm.googleapis.com/fcm/send/abc123'), true);
+});
+
+test('isAllowedPushEndpoint allows the other three browser push vendors', () => {
+  assert.equal(isAllowedPushEndpoint('https://android.googleapis.com/gcm/send/abc'), true);
+  assert.equal(isAllowedPushEndpoint('https://updates.push.services.mozilla.com/wpush/v2/abc'), true);
+  assert.equal(isAllowedPushEndpoint('https://abc123.notify.windows.com/w/abc'), true);
+  assert.equal(isAllowedPushEndpoint('https://web.push.apple.com/abc'), true);
+});
+
+test('isAllowedPushEndpoint does not allow a host that merely contains an allowed suffix', () => {
+  // A suffix check without a leading-dot anchor would let
+  // "push.services.mozilla.com.attacker.example" (the allowed string as a
+  // PREFIX of an attacker-controlled host) or "notpush.services.mozilla.com"
+  // (the allowed string missing its leading dot) through. The suffixes are
+  // all stored with a leading dot precisely so `endsWith` requires it.
+  assert.equal(isAllowedPushEndpoint('https://push.services.mozilla.com.attacker.example/x'), false);
+  assert.equal(isAllowedPushEndpoint('https://notpush.services.mozilla.com/x'), false);
+  assert.equal(isAllowedPushEndpoint('https://real.push.services.mozilla.com/x'), true, 'a genuine subdomain still works');
 });
 
 // ---------------------------------------------------------------------------
@@ -104,16 +145,19 @@ test('POST /push/subscribe caps live subscriptions per account', async () => {
   const db = routeFixture();
   const token = await tokenFor(ME);
   const env: any = { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) };
+  // The allowlist added for the follow-up SSRF review only looks at the
+  // host, so distinct paths on a real push vendor's host are still 20
+  // distinct endpoints for this cap.
   for (let i = 0; i < 20; i++) {
     const res = await app.request('/notifications/push/subscribe', {
       method: 'POST', headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ endpoint: `https://push.example/${i}`, keys: { p256dh: 'p', auth: 'a' } }),
+      body: JSON.stringify({ endpoint: `https://fcm.googleapis.com/fcm/send/${i}`, keys: { p256dh: 'p', auth: 'a' } }),
     }, env);
     assert.equal(res.status, 200, `subscription ${i} should have been accepted`);
   }
   const res21 = await app.request('/notifications/push/subscribe', {
     method: 'POST', headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ endpoint: 'https://push.example/one-too-many', keys: { p256dh: 'p', auth: 'a' } }),
+    body: JSON.stringify({ endpoint: 'https://fcm.googleapis.com/fcm/send/one-too-many', keys: { p256dh: 'p', auth: 'a' } }),
   }, env);
   assert.equal(res21.status, 429, 'the 21st distinct subscription should have been capped');
 });

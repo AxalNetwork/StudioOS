@@ -20,34 +20,45 @@ import type { Env } from '../types';
  * Codex review on D334: `/push/subscribe` accepted any non-empty string as
  * `endpoint`, and `/push/test` then did a server-side `fetch()` to it — an
  * authenticated client could persist an arbitrary URL and get this Worker
- * to make outbound POST requests to it on demand, including to a loopback
- * or private-range address if DNS or an IP literal pointed there. This is
- * the one gate both the subscribe route and `sendWebPush` now share: HTTPS
- * only, no literal IP host (v4 or bracketed v6), no `localhost` / loopback
- * / link-local / `.internal`/`.local` hostname, reasonable length. It
- * cannot catch a hostname that resolves to a private address only at
- * fetch time — no synchronous DNS check is available here — so this is
- * defense in depth, not a complete guarantee; Workers' own sandboxed
- * egress is the other layer.
+ * to make outbound POST requests to it on demand. A first fix blocklisted
+ * loopback/private-range/link-local/`.internal`/`.local` hosts, but a
+ * second review ran it against real attack shapes and found every one of
+ * these still got through: `[fd00::1]` (private IPv6), `[fe80::1]`
+ * (link-local IPv6 — the literal check only covered `::1`/`::`),
+ * `[::ffff:127.0.0.1]` (loopback written as an IPv4-mapped IPv6 literal,
+ * which the v4 regex never sees), `100.64.0.1` (carrier-grade NAT, RFC
+ * 6598 — outside the blocked ranges entirely), and plainly
+ * `https://example.com/anything` (no browser push service, blocked by
+ * nothing a blocklist checks for). A blocklist has to anticipate every
+ * address shape that resolves private; an allowlist only has to name the
+ * four real push vendors. Matched on the parsed hostname, lowercased:
+ *  - `fcm.googleapis.com` / `android.googleapis.com` (Chrome, Chromium);
+ *  - `*.push.services.mozilla.com` (Firefox);
+ *  - `*.notify.windows.com` (Edge / Windows);
+ *  - `*.push.apple.com` (Safari).
+ * HTTPS-only and the length cap stay — an allowlisted host still gets
+ * those cheap rejections first. If a real browser ever uses an endpoint
+ * host outside this list, that surfaces as a failed subscribe (not a
+ * silent SSRF hole) and the host gets added here.
  */
+const PUSH_ENDPOINT_HOSTS: ReadonlySet<string> = new Set([
+  'fcm.googleapis.com',
+  'android.googleapis.com',
+]);
+const PUSH_ENDPOINT_SUFFIXES: readonly string[] = [
+  '.push.services.mozilla.com',
+  '.notify.windows.com',
+  '.push.apple.com',
+];
+
 export function isAllowedPushEndpoint(raw: string): boolean {
   if (typeof raw !== 'string' || raw.length === 0 || raw.length > 2000) return false;
   let url: URL;
   try { url = new URL(raw); } catch { return false; }
   if (url.protocol !== 'https:') return false;
   const host = url.hostname.toLowerCase();
-  if (host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal')) return false;
-  // IPv6 literals arrive bracketed, e.g. "[::1]" -> hostname "::1".
-  const v6 = host.startsWith('[') ? host.slice(1, -1) : host;
-  if (v6 === '::1' || v6 === '::') return false;
-  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (v4) {
-    const [a, b] = v4.slice(1).map(Number);
-    if (a === 127 || a === 10 || a === 0 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254)) {
-      return false;
-    }
-  }
-  return true;
+  if (PUSH_ENDPOINT_HOSTS.has(host)) return true;
+  return PUSH_ENDPOINT_SUFFIXES.some((suffix) => host.endsWith(suffix));
 }
 
 function b64urlToBytes(b64url: string): Uint8Array {

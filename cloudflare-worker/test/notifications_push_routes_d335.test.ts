@@ -64,7 +64,7 @@ test('POST /push/subscribe rejects a body missing keys', async () => {
   const token = await tokenFor(ME);
   const res = await app.request('/notifications/push/subscribe', {
     method: 'POST', headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ endpoint: 'https://push.example/x' }),
+    body: JSON.stringify({ endpoint: 'https://fcm.googleapis.com/fcm/send/x' }),
   }, env(db));
   assert.equal(res.status, 422);
 });
@@ -73,7 +73,7 @@ test('POST /push/subscribe then GET /push/subscriptions round-trips, scoped to t
   const db = fixture();
   const tokenMe = await tokenFor(ME);
   const tokenOther = await tokenFor(OTHER);
-  const sub = { endpoint: 'https://push.example/me', keys: { p256dh: 'p1', auth: 'a1' }, user_agent: 'test-agent' };
+  const sub = { endpoint: 'https://fcm.googleapis.com/fcm/send/me', keys: { p256dh: 'p1', auth: 'a1' }, user_agent: 'test-agent' };
   const subRes = await app.request('/notifications/push/subscribe', {
     method: 'POST', headers: { Authorization: `Bearer ${tokenMe}`, 'content-type': 'application/json' },
     body: JSON.stringify(sub),
@@ -94,15 +94,15 @@ test('POST /push/subscribe then GET /push/subscriptions round-trips, scoped to t
 test('re-subscribing the same endpoint updates the row instead of duplicating it', async () => {
   const db = fixture();
   const token = await tokenFor(ME);
-  const first = { endpoint: 'https://push.example/dup', keys: { p256dh: 'p1', auth: 'a1' } };
-  const second = { endpoint: 'https://push.example/dup', keys: { p256dh: 'p2', auth: 'a2' } };
+  const first = { endpoint: 'https://fcm.googleapis.com/fcm/send/dup', keys: { p256dh: 'p1', auth: 'a1' } };
+  const second = { endpoint: 'https://fcm.googleapis.com/fcm/send/dup', keys: { p256dh: 'p2', auth: 'a2' } };
   await app.request('/notifications/push/subscribe', {
     method: 'POST', headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(first),
   }, env(db));
   await app.request('/notifications/push/subscribe', {
     method: 'POST', headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(second),
   }, env(db));
-  const row: any = db.prepare(`SELECT COUNT(*) AS n, MAX(p256dh) AS p256dh FROM push_subscriptions WHERE endpoint = ?`).get('https://push.example/dup');
+  const row: any = db.prepare(`SELECT COUNT(*) AS n, MAX(p256dh) AS p256dh FROM push_subscriptions WHERE endpoint = ?`).get('https://fcm.googleapis.com/fcm/send/dup');
   assert.equal(Number(row.n), 1, 're-subscribing the same endpoint created a second row');
   assert.equal(row.p256dh, 'p2', 'the row was not updated to the new keys');
 });
@@ -113,22 +113,22 @@ test('POST /push/unsubscribe only deletes the caller\'s own row', async () => {
   const tokenOther = await tokenFor(OTHER);
   await app.request('/notifications/push/subscribe', {
     method: 'POST', headers: { Authorization: `Bearer ${tokenMe}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ endpoint: 'https://push.example/mine', keys: { p256dh: 'p', auth: 'a' } }),
+    body: JSON.stringify({ endpoint: 'https://fcm.googleapis.com/fcm/send/mine', keys: { p256dh: 'p', auth: 'a' } }),
   }, env(db));
 
   // The other user tries to unsubscribe MY endpoint — must be a no-op.
   await app.request('/notifications/push/unsubscribe', {
     method: 'POST', headers: { Authorization: `Bearer ${tokenOther}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ endpoint: 'https://push.example/mine' }),
+    body: JSON.stringify({ endpoint: 'https://fcm.googleapis.com/fcm/send/mine' }),
   }, env(db));
-  const stillThere: any = db.prepare(`SELECT COUNT(*) AS n FROM push_subscriptions WHERE endpoint = ?`).get('https://push.example/mine');
+  const stillThere: any = db.prepare(`SELECT COUNT(*) AS n FROM push_subscriptions WHERE endpoint = ?`).get('https://fcm.googleapis.com/fcm/send/mine');
   assert.equal(Number(stillThere.n), 1, "another user's unsubscribe call deleted my subscription");
 
   await app.request('/notifications/push/unsubscribe', {
     method: 'POST', headers: { Authorization: `Bearer ${tokenMe}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ endpoint: 'https://push.example/mine' }),
+    body: JSON.stringify({ endpoint: 'https://fcm.googleapis.com/fcm/send/mine' }),
   }, env(db));
-  const gone: any = db.prepare(`SELECT COUNT(*) AS n FROM push_subscriptions WHERE endpoint = ?`).get('https://push.example/mine');
+  const gone: any = db.prepare(`SELECT COUNT(*) AS n FROM push_subscriptions WHERE endpoint = ?`).get('https://fcm.googleapis.com/fcm/send/mine');
   assert.equal(Number(gone.n), 0);
 });
 

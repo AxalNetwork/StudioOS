@@ -32203,6 +32203,44 @@ device — intercepting the real `fetch()` to the stored endpoint, not
 trusting an internal call was made. All six mutation-tested by reverting
 each fix in turn: every one failed, confirming the escape.
 
+**A second review ran the blocklist against real attack shapes and it
+failed, so `isAllowedPushEndpoint` is now an allowlist.** The blocklist
+above (reject literal IPs in private ranges, loopback, link-local,
+`.internal`/`.local`) let through: `[fd00::1]` (private IPv6, ULA —
+no rule covered it at all), `[fe80::1]` (link-local IPv6 — the literal
+check only named `::1`/`::`), `[::ffff:127.0.0.1]` (loopback written as
+an IPv4-mapped IPv6 literal, invisible to a regex that only matches plain
+dotted-quad IPv4), `100.64.0.1` (carrier-grade NAT, RFC 6598 — outside
+every named range), and plainly `https://example.com/anything` (no
+browser push service at all, and nothing about "not a known-bad range"
+stops an ordinary public host). A blocklist has to anticipate every shape
+a private or non-push address can take; an allowlist only has to name the
+real vendors, so it replaces the blocklist outright:
+`fcm.googleapis.com`/`android.googleapis.com` (exact host) and
+`.push.services.mozilla.com`/`.notify.windows.com`/`.push.apple.com`
+(suffix match, each stored with its leading dot so neither a prefix
+collision like `push.services.mozilla.com.attacker.example` nor a
+missing-dot collision like `notpush.services.mozilla.com` passes). HTTPS
+and the length cap are unchanged. If a real browser's push endpoint is
+ever outside this list, that shows up as a failed subscribe rather than
+a silent SSRF hole, and the host gets added.
+
+**Tests (allowlist).** `push_security_fixes_d334.test.ts` grew three cases:
+every host from the second review's attack list is rejected; all four
+vendor hosts (including the two suffix-matched ones not in the original
+single-URL test) are accepted; and the suffix-anchor is itself pinned
+(a prefix-collision host and a missing-dot host both rejected, a genuine
+subdomain still accepted) — this last one is the case that would have
+silently passed if the suffixes had been stored without their leading
+dot. The pre-existing 20-subscription-cap test moved its fixture URLs from
+a non-push `push.example` host (now correctly rejected) to distinct
+`fcm.googleapis.com` paths, same for `notifications_push_routes_d335.test.ts`'s
+subscribe/unsubscribe fixtures. Mutation-tested twice: stripping the
+leading dot from the suffix list let the prefix/missing-dot collisions
+back in (caught); short-circuiting the function to `return true`
+unconditionally broke 3 of the file's cases (caught). Both restored and
+reverified clean (sha256-matched against the pre-mutation file).
+
 
 ## D350
 
