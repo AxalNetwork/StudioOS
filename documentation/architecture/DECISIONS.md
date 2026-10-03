@@ -32236,6 +32236,295 @@ non-trivial fixes mutation-tested: reverting `forceEmail` back to
 fail, then were restored and reverified clean (sha256-matched against the
 pre-mutation file).
 
+## D334
+
+**The notifications panel and push routes, item 6 of the Wave-8 brief —
+`/api/notifications/push/*`, migration 302, and a shared type-map.**
+
+**The five push routes paid off known debt, not a new feature.**
+`frontend/src/lib/pwa.js`'s `enablePush`/`disablePush`/`sendPushTest` (Task
+#57) and `NotificationBell.jsx`'s "Enable push" toggle have called
+`api.pushVapidKey()`, `pushSubscribe()`, `pushUnsubscribe()`,
+`pushSubscriptions()` and `pushTest()` all along — `scripts/api-drift-baseline.json`
+carried all five as known drift (`GET/POST /api/notifications/push/*`). The
+worker had no route at all behind any of them; the frontend half of this
+feature was already finished and had never once worked end to end. This adds:
+- `cloudflare-worker/sql/migrations/302_push_subscriptions.sql` — one row per
+  browser subscription, keyed on its endpoint URL (unique by construction).
+- `services/webpush.ts` — RFC 8291 payload encryption and RFC 8292 VAPID JWT
+  signing, built on `crypto.subtle` rather than the npm `web-push` package
+  (which shells out to Node's `crypto` module; Workers has none). ECDH P-256
+  key agreement, HKDF-derived content-encryption key and nonce, AES-128-GCM
+  over the RFC 8188 record, VAPID ES256 JWT — all hand-rolled against the
+  RFCs rather than copied from an existing implementation, because none of
+  this repo's dependencies ship a Workers-compatible one.
+- The five routes in `routes/notifications.ts`, all requiring auth and
+  scoped to the caller's own subscriptions. `/push/test` deletes a
+  subscription outright on a 404/410 from the push service (RFC 8030
+  §7.2 — the subscription is gone on the browser's side) rather than
+  retrying it forever.
+- `scripts/api-drift-baseline.json` updated — the debt ledger shrank by
+  five entries, which is the only direction it's supposed to move.
+- `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` added to `types.ts`
+  as optional secrets; unset in dev/preview, `/push/vapid-key` answers
+  `{ public_key: null }` rather than defaulting to a shared key a payload
+  would be encrypted to and never decrypt.
+
+**The notification type → label map moved to one file.** Before this, only
+`SettingsPage.jsx`'s `NOTIFICATION_EVENTS`/`PARTNER_NOTIFICATION_EVENTS`
+paired a backend `type` key with a readable label; the bell and `/inbox`
+(`NotificationList.jsx`) rendered the raw key — "score_generated" in the UI,
+not "New score generated for your startup". Both arrays now live in
+`frontend/src/lib/notificationTypes.js`; `SettingsPage.jsx` imports them
+instead of declaring its own copy, and `NotificationList.jsx`'s row uses the
+new `labelForType()`, which falls back to a titleised version of an unknown
+key rather than rendering blank — a new `notify()` call site's events are
+legible immediately, mapped label or not.
+
+**A safety-net `/notifications` → `/inbox` redirect.** `/inbox` has been
+the panel's only address since D144; nothing in this codebase links to a
+bare `/notifications`. Added anyway, because the bell's own settings link
+reads `/account/notifications` and the Settings tab is `#notifications` —
+close enough to type by habit or bookmark from before `/inbox` existed — and
+landing on the 404 page instead of the panel costs nothing to prevent.
+
+**What this is not.** `NotificationBell.jsx` and `InboxPage.jsx` needed no
+changes — both were already correct (push UI, unreadable-vs-empty handling
+from D144/D332). This is the backend half of a feature the frontend had
+already finished, plus the one labeling gap between the two existing
+renderers.
+
+**One `.gitleaksignore` entry.** `webpush_d335.test.ts`'s first version
+hardcoded a test-only VAPID private key as a base64 literal — indistinguishable
+from a real secret to gitleaks' `generic-api-key` rule, which correctly
+flagged it (commit `9080925048`). That key pair was generated solely for the
+test (locally, once, never used anywhere else) and never matched any real
+VAPID key, so there was nothing to rotate. The test now generates its key
+pair at run time via `crypto.subtle` instead, so no later commit carries the
+literal — but gitleaks diffs the whole PR commit range, so the superseded
+commit's diff still trips the scan regardless of the fix landing on top.
+`.gitleaksignore` at the repo root carries exactly this finding's fingerprint
+(`9080925048929ef222056a0e469c32d8207f86dc:cloudflare-worker/test/webpush_d335.test.ts:generic-api-key:33`),
+not a whole-commit entry in `.gitleaks.toml` — that commit also adds
+`webpush.ts`, `notifications.ts`, `types.ts` and migration 302, and a
+whole-commit allowlist would hide a real finding in any of those too.
+Verified against the gitleaks version CI runs (8.21.2): the PR's commit
+range scans clean with the file in place, and a one-character change to the
+fingerprint's line number brings the finding back — the entry only lets
+through the one thing it names.
+
+**Tests.** `webpush_d335.test.ts` (4) — the VAPID JWT's signature verifies
+against its own public key, and `sendWebPush`'s wire output is round-tripped
+through a real decrypt back to the original JSON payload, so a spec
+regression here would fail a real cryptographic check, not a mocked one.
+`notifications_push_routes_d335.test.ts` (7) — auth, validation, per-user
+scoping on subscribe/unsubscribe/list, upsert-not-duplicate on re-subscribe,
+and `/push/test` refusing (not silently no-op'ing) when VAPID isn't
+configured. `notification_types_d336.test.mjs` (6). Three pre-existing tests
+(`account_d433.test.mjs`'s voice-rule check, `inbox_page_d144.test.mjs`'s
+row-renders-its-type check) were re-aimed at the moved arrays/new label
+output rather than weakened — both now check exactly what they checked
+before, against where that content actually lives now.
+
+**Three more fixes from a Codex review on the PR, all real, none
+optional-labeled — verified and fixed:**
+
+- **An authenticated client could persist an arbitrary URL as `endpoint`,
+  and `/push/test` did a server-side `fetch()` to it on demand — an open
+  outbound-POST primitive.** `isAllowedPushEndpoint` (`webpush.ts`) is the
+  one gate every write to `push_subscriptions` goes through: HTTPS only,
+  no literal IP host (v4 or bracketed v6), no `localhost`/loopback/
+  link-local/`.internal`/`.local` hostname, length-bounded. It can't catch
+  a hostname that resolves to a private address only at fetch time — no
+  synchronous DNS check is available here — so this is defense in depth
+  alongside Workers' own sandboxed egress, not a complete guarantee.
+  `/push/subscribe` also caps live subscriptions at 20 per account, so one
+  signed-in user can't fan out unboundedly even through allowed hosts.
+- **`sendWebPush` parsed the endpoint with `new URL()` before its own `try`
+  block**, so a malformed stored endpoint threw uncaught instead of
+  returning the `{ok:false, ...}` shape every other failure in the
+  function does. Moved inside, with its own `invalid_endpoint` reason —
+  defense in depth again, since a validated-at-write-time endpoint
+  shouldn't reach this malformed, but a future second writer or a
+  pre-validation row shouldn't get a different failure mode here.
+- **`notify()` never called `sendWebPush` at all.** D334/D335 built the
+  five `/push/*` routes and the RFC 8291 sender, but the actual
+  notification dispatcher still only wrote the inbox row and broadcast
+  over the realtime DO channel — "enabling push produces the setup test"
+  (`/push/test`) "while every subsequent real notification is lost as soon
+  as the browser has no active WebSocket," as the review put it. Now fans
+  out to every row in `push_subscriptions` for the notified user alongside
+  the realtime broadcast (same quiet-hours skip, same best-effort swallow
+  — this repo's standing rule that a downed channel must never break the
+  underlying business action), deleting a subscription outright on a
+  404/410 the same way `/push/test` already does. Not a new channel in
+  `notification_prefs`: a device either has push subscriptions or it
+  doesn't, and the in-app row this block already gates on is the signal a
+  push mirrors.
+
+**Tests (these three fixes).** `push_security_fixes_d334.test.ts` (new, 6):
+`isAllowedPushEndpoint` accepts an ordinary push-service URL and rejects
+non-https/malformed/private-range/loopback/cloud-metadata hosts;
+`sendWebPush` returns a failure shape rather than throwing on a malformed
+endpoint; the route refuses a disallowed endpoint and enforces the
+20-subscription cap; `notify()` is shown to actually reach a subscribed
+device — intercepting the real `fetch()` to the stored endpoint, not
+trusting an internal call was made. All six mutation-tested by reverting
+each fix in turn: every one failed, confirming the escape.
+
+**A second review ran the blocklist against real attack shapes and it
+failed, so `isAllowedPushEndpoint` is now an allowlist.** The blocklist
+above (reject literal IPs in private ranges, loopback, link-local,
+`.internal`/`.local`) let through: `[fd00::1]` (private IPv6, ULA —
+no rule covered it at all), `[fe80::1]` (link-local IPv6 — the literal
+check only named `::1`/`::`), `[::ffff:127.0.0.1]` (loopback written as
+an IPv4-mapped IPv6 literal, invisible to a regex that only matches plain
+dotted-quad IPv4), `100.64.0.1` (carrier-grade NAT, RFC 6598 — outside
+every named range), and plainly `https://example.com/anything` (no
+browser push service at all, and nothing about "not a known-bad range"
+stops an ordinary public host). A blocklist has to anticipate every shape
+a private or non-push address can take; an allowlist only has to name the
+real vendors, so it replaces the blocklist outright:
+`fcm.googleapis.com`/`android.googleapis.com` (exact host) and
+`.push.services.mozilla.com`/`.notify.windows.com`/`.push.apple.com`
+(suffix match, each stored with its leading dot so neither a prefix
+collision like `push.services.mozilla.com.attacker.example` nor a
+missing-dot collision like `notpush.services.mozilla.com` passes). HTTPS
+and the length cap are unchanged. If a real browser's push endpoint is
+ever outside this list, that shows up as a failed subscribe rather than
+a silent SSRF hole, and the host gets added.
+
+**Tests (allowlist).** `push_security_fixes_d334.test.ts` grew three cases:
+every host from the second review's attack list is rejected; all four
+vendor hosts (including the two suffix-matched ones not in the original
+single-URL test) are accepted; and the suffix-anchor is itself pinned
+(a prefix-collision host and a missing-dot host both rejected, a genuine
+subdomain still accepted) — this last one is the case that would have
+silently passed if the suffixes had been stored without their leading
+dot. The pre-existing 20-subscription-cap test moved its fixture URLs from
+a non-push `push.example` host (now correctly rejected) to distinct
+`fcm.googleapis.com` paths, same for `notifications_push_routes_d335.test.ts`'s
+subscribe/unsubscribe fixtures. Mutation-tested twice: stripping the
+leading dot from the suffix list let the prefix/missing-dot collisions
+back in (caught); short-circuiting the function to `return true`
+unconditionally broke 3 of the file's cases (caught). Both restored and
+reverified clean (sha256-matched against the pre-mutation file).
+
+**A third Codex review round, two more findings, both real:**
+
+- **(P1) A device kept a former account's push subscription after
+  sign-out.** `clearSession()` never called `disablePush()`. `getPushState()`
+  only checks whether the browser's service worker has ANY subscription at
+  all, so the next account to sign in on the same device saw push as
+  already "on" and never called `enablePush()` to re-home the endpoint to
+  its own `user_id` — the server-side `push_subscriptions` row kept the
+  FORMER account's id, and `notify()`'s push fan-out sends to whatever row
+  matches the endpoint, not whoever is currently signed in. A signed-out
+  device kept receiving that account's notifications — capital-call and
+  contract notices included — indefinitely. Fixed by calling `disablePush()`
+  from `clearSession()`, and specifically BEFORE `localStorage.removeItem('token')`:
+  `pushUnsubscribe`'s request is authenticated off that same token every
+  other API call uses, so calling it after would ship with no Authorization
+  header and silently no-op. Time-boxed (3s) and wrapped in try/catch, same
+  reasoning as the server-side logout call beside it — a dead network must
+  not hang sign-out.
+- **(P2) The push fan-out ran sequentially with no timeout, inside
+  `notify()`'s synchronous path.** `notify()` is itself awaited by the
+  business request handler that triggered it. With up to 20 subscriptions
+  per account (the `/push/subscribe` cap) sent one at a time and no timeout
+  on any single send, one slow or non-responding push provider made that
+  handler's latency cumulative, unbounded in the worst case. Threading a
+  Worker `ExecutionContext` through `notify()` to truly background this
+  past the response would touch every call site of a function already
+  called from dozens of routes — out of scope for this fix. Instead: all
+  subscriptions for a user now send concurrently (`Promise.all` over the
+  rows) and each individual send races a 5-second timeout, so total wait is
+  bounded by the timeout rather than by (timeout × subscription count).
+
+**Tests (third review round).** `push_security_fixes_d334.test.ts` grew two
+cases: three subscriptions each held 150ms by a mocked `fetch` complete in
+under 300ms (proving concurrency — sequential would take ~450ms), and a
+subscription whose `fetch` never resolves at all still lets `notify()`
+return in under 6s while a second, responsive subscription on the same
+call still receives its push (proving the timeout bounds the hang without
+blocking the rest of the fan-out). `clear_session_push_revoke_d334.test.mjs`
+(new, 3) pins the source-level shape `clearSession()` must have: the
+`disablePush` import exists, the call happens before the token is removed,
+and it's wrapped in a timeout-raced `try` — source-level because
+`clearSession` is a hook-bound closure inside `App.jsx`, not an isolated
+importable unit, matching this codebase's existing pattern for that file.
+All mutation-tested: reverting the `Promise.all`+timeout back to a bare
+sequential loop broke the concurrency test and turned the hung-send test
+into an actual hang (caught); dropping the `disablePush` import, and
+moving the call to after the token removal, each broke one of the three
+source-level tests (caught). All reverted and reverified clean
+(sha256-matched against the pre-mutation files).
+
+**A fourth Codex review round, three more findings, all real:**
+
+- **(P2) The 20-subscription cap was a TOCTOU race.** `/push/subscribe`'s
+  cap read `SELECT COUNT(*)` and the following `INSERT` as two separate D1
+  statements — concurrent requests from the same account could each read
+  the count before any of them committed its insert, so every one of them
+  observed "under the cap" and all of them landed, however many arrived at
+  once. Folded into one atomic statement:
+  `INSERT INTO push_subscriptions (...) SELECT ... WHERE (SELECT COUNT(*) ...) < 20 ON CONFLICT(endpoint) DO UPDATE ...`.
+  The `WHERE` only produces a row to insert when the cap still holds at the
+  instant the statement runs, and there is no separate round trip in
+  between for another request to land in. `meta.changes === 0` is how the
+  route now tells a capped request from an accepted one (1 either way: a
+  fresh insert or an `ON CONFLICT` update).
+- **(P2) `clearSession()`'s fix for the earlier push-revoke finding was
+  itself a stall.** It awaited `disablePush()` behind a 3s race before ANY
+  of the synchronous local teardown — `setUser(null)` and the token/user
+  wipe included. A stalled service worker, subscription lookup or
+  unsubscribe request held up all of it for up to 3s, and a tab closed
+  during that stall kept both the local token and the server cookie alive:
+  still signed in on the next visit. Fixed by never awaiting `disablePush()`
+  at all — fire-and-forget with its own `.catch()`. The remaining
+  complication: `disablePush()`'s own internal `await`s
+  (`navigator.serviceWorker.ready`, `getSubscription()`) mean it reaches
+  `api.pushUnsubscribe` well after `clearSession`'s synchronous code has
+  already cleared `localStorage`, so the token it needs would already be
+  gone. `disablePush` now takes an optional `authToken` override,
+  `api.pushUnsubscribe` takes an `opts.headers` override to carry it, and
+  `clearSession` captures the token into a local variable before clearing
+  it and passes that through explicitly — the revoke no longer depends on
+  `localStorage` still holding anything by the time it actually runs.
+- **(P2) `/push/test` repeated `notify()`'s original mistake independently.**
+  The sequential, unbounded loop over subscriptions that `notify()`'s fan-out
+  fix addressed was never ported to this route, even though `togglePush()`
+  awaits `/push/test` immediately after enabling push — the same
+  cumulative-latency problem, now able to leave the notification toggle
+  busy until the frontend's own 30s request deadline. The timeout-raced
+  send extracted as `sendWebPushBounded` (`webpush.ts`) is shared by both
+  call sites rather than duplicated a second time: `/push/test`'s loop is
+  now a `Promise.all` over bounded sends, same as `notify()`'s.
+
+**Tests (fourth review round).** `push_security_fixes_d334.test.ts` grew
+two cases: 25 concurrent `/push/subscribe` requests for 25 distinct
+endpoints resolve to exactly 20 accepted and 5 capped, with the table
+holding exactly 20 rows afterward (this is what actually exercises the
+race the sequential 21-requests-in-a-row test above it cannot: real
+concurrency, not one request fully finishing before the next starts); and
+`/push/test` sending to 3 responsive + 1 permanently-hung subscription
+completes in under 6s with `sent: 3, failed: 1`, proving both the
+concurrency and the timeout on this route specifically.
+`clear_session_push_revoke_d334.test.mjs` (grew to 5): the token is
+captured and handed to `disablePush()` as `authToken` before the token is
+cleared; `disablePush()` is called WITHOUT `await` and with its own
+`.catch()`; `disablePush()` accepts and forwards `authToken` as an
+Authorization header; `api.pushUnsubscribe` accepts and forwards an
+`opts.headers` override. All mutation-tested: reverting the atomic
+INSERT back to separate SELECT+INSERT broke the concurrency test;
+re-adding `await` before `disablePush()` broke the no-await test;
+dropping `authToken` from `disablePush`'s signature, and dropping `opts`
+from `pushUnsubscribe`, each broke their own test; reverting `/push/test`
+to a sequential unbounded loop turned its test into an actual hang. All
+six caught, reverted, reverified clean (sha256-matched against the
+pre-mutation files).
+
+
 ## D337
 
 **The canvas ledger's non-canvas half, item 7 of the Wave-8 brief —
