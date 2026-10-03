@@ -34,6 +34,10 @@ import BranchSuspendedBar from './components/BranchSuspendedBar';
 import HqSupportSessionBar from './components/HqSupportSessionBar';
 import HqViewingAsBar from './components/HqViewingAsBar';
 import BranchNotDeployedBar from './components/BranchNotDeployedBar';
+// D504 — the phone's tab bar (D425), mounted by the shell beside the drawer's
+// backdrop. It takes the shell role AS RESOLVED, never the sidebar's
+// `|| 'founder'` default: a viewer with no role gets no bar.
+import MobileTabBar from './components/MobileTabBar';
 import ImpersonationBar from './components/ImpersonationBar';
 import useBranchDeployment from './hooks/useBranchDeployment';
 import WorkspacesLauncher from './components/WorkspacesLauncher';
@@ -1017,7 +1021,15 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     <ActiveCompanyContext.Provider value={{ company: activeCompany, setCompany: setActiveCompany, companies: companyList, setCompanies: setCompanyList }}>
     <ViewModeContext.Provider value={viewModeContextValue}>
     <ViewAsBranchContext.Provider value={viewAsBranchContextValue}>
-      <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
+      {/* D504 — `viewport-fit=cover` is live (D425), so the installed app draws
+          under a phone's status bar. The shell's root reserves the top inset,
+          not the header: on an admin's phone `PortalSwitcher` and the support,
+          impersonation and branch-status strips render BEFORE the header, so
+          an inset on the header alone left the first interactive bar under the
+          status bar (Codex on #1039). Here, whichever bar is first sits below
+          it, and every bar keeps its own height. `env(…, 0px)` is 0 on every
+          screen without an inset. */}
+      <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         {/* D142 / S13 — ABOVE `PortalSwitcher`, and the order is the point.
             `isImpersonating` is `!!realUser`, which an HQ support session never
             sets (the operator is a row in HQ's database this deployment cannot
@@ -1216,10 +1228,22 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           {sidebarOpen && (
             <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
           )}
+          {/* D504 — the phone's tab bar (D425): four tabs and More below 1024px,
+              built from the sidebar's own rows. The role is the shell's as
+              resolved, without the sidebar's `|| 'founder'` fallback, so a
+              viewer with no role gets no bar. The bar renders nothing for a
+              licence whose plan is not built yet (`mobilePlan` returns null). */}
+          <MobileTabBar role={shellRole} />
 
           {/* A COLUMN, so the footer stays at the bottom on short pages while
-              still following long page content inside the scroll container. */}
+              still following long page content inside the scroll container.
+              `data-app-scroll` is where the phone tab bar's clearance goes
+              (mobileTabBar.css, D504): the footer is the last thing in this
+              container, so padding the content block above it (`[data-app-main]`,
+              as D425 did) left the footer's Terms and Privacy row under the bar
+              at the end of the scroll. */}
           <main
+            data-app-scroll
             {...(onboardingCanvas ? { 'data-onboarding-canvas': '' } : {})}
             className={`flex flex-1 flex-col overflow-y-auto ${onboardingCanvas ? '' : 'bg-gray-50 dark:bg-gray-950'}`}
           >

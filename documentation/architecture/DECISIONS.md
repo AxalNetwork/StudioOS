@@ -40415,6 +40415,150 @@ Four malformed files were refused before any call: a five-digit colour, an
 empty list, a missing description, and a bad second entry after a good first.
 actionlint, with shellcheck, reports nothing.
 
+## D504
+
+**The phone's tab bar is mounted by the shell, the shell clears the status
+bar, and the `FOUNDER_FULL_BLEED` comment stops calling three redirects
+pages.** Issue #985, slot S05. No migration, no route, no `api.js` change.
+
+**What was true on main (`f701a32f5`).** D425 shipped `MobileTabBar`, its
+plan (`lib/mobileTabs.js`) and its tests, and left the mount to the shell
+because `App.jsx`'s mobile chrome is Session 5's. Nothing mounted it: phones
+had a tested bar and no bottom navigation. `index.html` already asked for
+`viewport-fit=cover` (D425), so the installed app drew under a phone's status
+bar with a header that did not pad for it. The comment over
+`FOUNDER_FULL_BLEED` still said bare `/build/discovery`, `/execution` and
+`/signals` "keep rendering the same desk"; since D422 each is a
+`<Navigate replace>` for a founder.
+
+**What changed.**
+- **The mount** (`App.jsx`): one import, one element — `<MobileTabBar
+  role={shellRole} />` right after the drawer's backdrop, inside the same flex
+  container as the aside, so the drawer (z-50) still covers it. The role is
+  the shell's as resolved by `shellRoleFor`, without the sidebar's
+  `|| 'founder'` fallback: the sidebar defaults because a nav with no rows is
+  a broken screen; the bar must not, because a viewer with no role would get
+  a founder's tabs. The bar renders nothing for a licence whose plan is not
+  built (`mobilePlan` returns null), which D425 already pins.
+- **The shell's root** (`<div className="flex flex-col h-screen …">`) pads
+  by `env(safe-area-inset-top, 0px)`, once, and the header keeps its fixed
+  56px (`h-14`). The first draft padded the header and made its height a
+  minimum; the third pass below says why that moved.
+- **The tab bar's clearance** is on the scroll container, `<main
+  data-app-scroll>`, not on the content block inside it (third pass, below).
+- **The comment** over `FOUNDER_FULL_BLEED` (`sidebarConfig.js`) says what
+  D422 made true: the three bare routes redirect to `/validate`, `/build` and
+  `/research`, render a page only with `?mode=workspace` (the editors D422
+  kept), and `/build/team?mode=workspace` is the Team workspace (D435). They
+  stay listed because the editor each still mounts keeps the desk's width.
+
+**Guard.** `frontend/test/mobile_tab_bar_mount_d504.test.mjs`, 6 tests (the
+fourth is the footer's and the sixth the cookie banner's, both below): the
+bar is imported and mounted once, right after the backdrop, with the resolved
+role and no founder default while the sidebar keeps its own; the real
+component renders for a founder with `lg:hidden` and renders nothing for an
+undefined or null role; the shell root reserves the top inset once, every
+strip and the header render inside it, the header is a fixed 56px with no
+inset of its own, and the viewport asks for cover; the comment describes the
+redirects and `App.jsx` really does redirect each of the three for a founder.
+`founder_shell`, `apex_route_coverage`: green unchanged;
+`mobile_tab_bar_d425` re-aimed at the scroll container (below).
+
+**Mutations: 9 run, 9 caught** against the first draft — each a non-zero
+exit with a `not ok` line, anchors unique, bytes proven changed, sources
+restored from a sha256-checked snapshot: the bar not mounted; mounted twice;
+the role defaulted to founder; mounted away from the drawer; the header's top
+inset dropped; the header back to a fixed 56px; the bar drawn for a viewer
+with no role; the bar drawn at every width; the stale comment back. The two
+header mutations tested the pin the third pass replaced; their cover is the
+12-run list below.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA
+fallback, `/studio` as a founder. At 390×844 the bar is drawn once at the
+bottom (57px tall, "Studio Build Raise Grow More"), `data-mobile-tabbar="on"`
+is set and the page's main column pads 56px; More opens the sheet with
+"Spin-Out Lab · Validate · Network · Research · Messages · Trust · Company
+Settings". At 1280×900 the same element is `display: none`. As an investor at
+phone width no bar is drawn and the root attribute is absent. (That pass
+read the first draft's header inset; the third pass below reads the root's.)
+
+**The cookie banner clears the bar** (S1 on #985, which added
+`CookieConsent.jsx` to this task's files after the first probe found the
+banner over the bar: a fixed z-50 card at `bottom-4`, above the bar's z-30,
+so until it was answered the first tap on a tab landed on the banner). The
+card's bottom is now `calc(var(--mobile-tabbar-h, 0px) + 16px)`, the
+variable D425 left for exactly this: set on `<html>` only while a bar is
+drawn and only below 1024px, so the card is 16px above the bar on a phone and
+16px off the bottom, as before, everywhere else. The `0px` fallback is
+load-bearing: `var(--x)` with no fallback is an invalid value, which would
+drop the rule and pin the card to the very bottom off a phone. The guard's
+fifth test pins the inline offset and its fallback, the absence of a
+Tailwind `bottom-*` class that would fight it, the card still `fixed z-50`,
+the variable still carrying the bar's height, and the rendered undecided
+banner carrying the offset. Mutations, both ways: 6 run, 6 caught — the
+banner back to `bottom-4` with no offset (the code before this); the offset
+without its fallback; the offset and `bottom-4` both kept; the offset
+reduced to the bar height alone; the card no longer fixed; the variable no
+longer carrying the bar's height. Probe, second pass: at 390×844 as a
+founder with no cookie decision the banner's bottom edge sits above the
+bar's top edge and a tap on the Build tab navigates with the banner still
+open; at 1280×900 the banner's computed bottom is 16px.
+
+**Third pass: the inset moves to the shell's root, the header's height is
+fixed again, and the clearance moves to the scroll container** (three Codex
+findings on #1039, each verified from the code before it was changed).
+- *The first bar under the status bar.* The first draft put the inset on the
+  header. On an admin's phone `PortalSwitcher` renders before the header, and
+  the support, impersonation and branch-status strips before that, so the
+  first interactive bar sat under the status bar and the inset opened a gap
+  between the strips and the header. The inset is now on the shell's root
+  column, once: whichever bar is first sits below it. The inset strip shows
+  the root's `bg-gray-50`, not the first bar's colour, because the root
+  cannot know which bar is first.
+- *The header's minimum.* `min-h-14` with the inset as padding is border-box:
+  a 20px inset left a 36px row. Moot once the inset is on the root; the header
+  is back to the `h-14` it had before this decision.
+- *The footer under the bar.* D425 padded `[data-app-main]`, the content
+  block, so as not to touch the shell's markup; the footer renders after that
+  block inside `<main>`, so at the end of the scroll its Terms and Privacy row
+  sat under the bar. `<main>` is now marked `data-app-scroll` and
+  `mobileTabBar.css` pads that instead; the footer is the last thing in the
+  scroll container, so it ends above the bar, and the content block no longer
+  carries a second clearance under the footer. Two D425 files joined the task
+  for this: `mobileTabBar.css` (the selector and its comment) and
+  `mobile_tab_bar_d425.test.mjs` (its pin re-aimed at the scroll container,
+  and one line that the content block is no longer padded). No open issue or
+  PR owned either.
+The guard's third test pins the root's inset, that it is reserved exactly
+once (a second one, on the header say, is a gap of two insets), that the
+strips and the header render inside the root, and the header's fixed
+`h-14` with neither `min-h-14` nor an inset; its fourth test pins
+`data-app-scroll` on the one `<main>` with `overflow-y-auto`, the footer
+after `[data-app-main]` inside it, the CSS rule on the scroll container and
+no rule left on the content block. **Mutations, both ways: 12 run, 12
+caught** (same discipline): the inset dropped from the root; the inset back
+on the header alone (the first draft); the inset on root and header both;
+the header back to `min-h-14` with the inset (the first draft's row);
+`min-h-14` with no inset; a strip rendered before the root; the scroll
+container unmarked; the mark moved onto the content block; the footer moved
+out of the scroll container; the CSS rule back on the content block (D425's);
+the rule removed; both rules at once. Probe, third pass, recorded and not a
+gate: at 390×844 as a founder the root's inline `padding-top` is the inset
+expression (0 in a headless browser), the header is 56px at the top, `<main>`
+computes `padding-bottom: 56px` and `[data-app-main]` its own 16px, and the
+footer's bottom edge is at 788px against the bar's top at 787px: the 1px is
+the bar's hairline border, which D425's `--mobile-tabbar-h` (`56px` plus the
+bottom inset) does not count, and the footer's links sit 16px above its edge.
+As an admin previewing the founder shell the first bar is `PortalSwitcher`,
+at the top of the root, and the header 56px below it at 168px. With a
+stand-in inset of 20px set on the root by the probe (headless Chromium
+reports none), the first bar starts at 20px in both sessions and the header
+is still 56px. At 1280×900 `<main>` pads 0 and the footer ends at the
+viewport's bottom. The 1px border short-count in D425's variable is relayed
+to S1, not changed here.
+
+`frontend/src` moved, so `docs/` is rebuilt.
+
 ## D505
 
 **The partner sidebar stops naming the retired `/partner/operations/*`

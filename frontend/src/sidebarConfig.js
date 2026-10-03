@@ -610,10 +610,13 @@ function workspaceRoutes(role) {
  */
 export const FOUNDER_FULL_BLEED = [
   ...workspaceRoutes('founder'),
-  // The legacy paths the overviews were rescued onto. Still live, still linked
-  // from inside pages, so they keep rendering the same desk at the same width.
-  // These are the only hand-typed entries left, because they are exactly the
-  // routes the shell config does NOT claim.
+  // The legacy paths. Since D422, bare `/build/discovery`, `/execution` and
+  // `/signals` are `<Navigate replace>` redirects for a founder — to
+  // `/validate`, `/build` and `/research` — and render a page only with
+  // `?mode=workspace` (the editors D422 kept); `/build/team?mode=workspace` is
+  // the Team workspace (D435). They stay listed so the editor each still
+  // mounts keeps the desk's width. These are the only hand-typed entries
+  // left, because they are exactly the routes the shell config does NOT claim.
   '/build/discovery', '/execution', '/build/team', '/signals',
 ];
 
