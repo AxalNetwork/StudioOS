@@ -97,6 +97,8 @@ const DESKS = {
     file: 'frontend/src/pages/founder/FounderBuildDesk.jsx',
     bands: [
       [/monday plan/i, 'build/this-week'],
+      // D510 — the cadence card's band, between the week and the roadmap.
+      [/friday retro/i, 'build/retro'],
       [/roadmap ordering/i, 'build/roadmap'],
       [/annotates the metric/i, 'build/kpi'],
     ],
