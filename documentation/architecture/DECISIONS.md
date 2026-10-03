@@ -26811,7 +26811,7 @@ dispatch a workflow: `actions: write` is not granted.
   - `hq_security_h23.test.mjs` renders all four states, and a new test holds
     the rail row to the zone's sentence.
 
-**Mutations: 10 run, 10 caught** (plus 1 for the D253 residue):
+**Mutations: 8 run, 8 caught** (plus 1 for the D253 residue):
 - the marker written only on success;
 - `--remote` dropped from the marker put;
 - a throw read as `never_run`;
@@ -32066,6 +32066,178 @@ silently dropped from the sweep.
   `check-decision-ids` (D1 through D421, in file order) and
   `check-api-drift` exit 0. Root `npm run build`, then
   `node scripts/check-docs-fresh.mjs --strict`, exits 0.
+
+## D333
+
+**Outbound mail starts following the Emails canvas and the notify rules — the
+quiet-hours bug and the dead template, item 5 of the Wave-8 brief.** Scoped
+down from the full brief: the parts that needed new data (a canvas-faithful
+`capital_call_issued` and `spinout_admitted` send, which need company name,
+call percentages and a programme checklist no current call site has) are
+deferred rather than filled with invented figures. What ships is real and
+measured, not a partial-credit stand-in for the rest.
+
+**The quiet-hours bug.** `notify()`'s email branch, for a non-critical
+category, used to read: in quiet hours AND digest off → log
+`suppressed_quiet_hours` to `activity_logs` and send nothing at all. Quiet
+hours has only ever promised to suppress the real-time push (T20's own
+comment says so); turning off the digest was never supposed to turn this
+into a second, silent unsubscribe. A user who was in their quiet window with
+no digest configured lost the email outright — not delayed, not buffered,
+gone. Fixed: digest-off no longer special-cases quiet hours for email; it
+dispatches immediately either way, the same as "not quiet." Digest
+daily/weekly still buffers regardless of quiet hours, unchanged.
+`recordActivity` (only caller was the suppression branch) is deleted along
+with it rather than left orphaned.
+
+**The weekly digest now renders through the canvas.** `flushPendingDigests`
+built its own plain-text bullet list by hand; it now also builds an HTML part
+via `canvasTransactional.ts`'s `renderWeeklyDigest` (M4), passing the first
+three outbox rows as `DigestCard`s. The plain-text render stays — it's still
+what backs the multipart fallback and the separate Slack Block Kit digest, and
+duplicating canvas-card logic into Slack's Block Kit shape isn't this task.
+
+**`referral_payout_paid` deleted.** Confirmed dead: defined only in
+`templates/email/registry.ts`, zero call sites anywhere under
+`cloudflare-worker/src`, and `referral_submissions.test.ts` already pins that
+the feature it backed (`referralPayouts.ts`) "was removed … and must not
+return." Removing it needed no migration — nothing durable referenced the
+template key.
+
+**The notifications matrix stops promising what the backend won't do.**
+`capital_call_issued` and `agreement_ready_to_sign` carry money/signature
+consequences `notify.ts`'s `CRITICAL_CATEGORIES` (`billing`,
+`contract_sign_request`) already never let quiet hours or a digest delay —
+and the capital-call canvas copy itself says "Capital notices cannot be
+turned off." The settings grid disagreed: a user could toggle email off for
+either row and nothing would happen, because the backend sent it regardless.
+`NOTIFICATION_EVENTS` entries for those two now carry `lockedChannels:
+['email']`; the table renders that cell checked and disabled, `setEvent`
+refuses a write to a locked channel as defense in depth, and applying any
+preset (including "Mute all") re-locks it afterward rather than trusting the
+preset to leave it alone. `capital_call_paid` is deliberately left
+user-toggleable — only the issuance notice is backend-forced.
+
+**Deferred, not done.** `canvasTransactional.ts`'s `renderCapitalCall` and
+`renderSpinoutDecision` (M3, M5) still have no production call site. Wiring
+them for real needs: for capital calls, the called-to-date and unfunded
+percentages per LP (a query `issueFundCall` doesn't currently run) and an
+actual email send at all — today `issueFundCall` writes only an
+`activity_logs` row, never an email; for spinout admission, the applicant's
+company name, a programme checklist and an accept-by deadline, none of which
+the three `send(..., 'spinout_admitted', …)` call sites in `routes/admin.ts`
+and `routes/admin_cohort.ts` currently carry. Filling those vars with
+placeholder values to make the renderers "wired" would ship a canvas email
+that's wrong rather than one that's merely unbuilt. Left for a follow-up task
+that can plumb the real data through.
+
+**Tests.** `notify_quiet_hours_digest_off_d333.test.ts` (originally 3; the
+suppression row disappears, a daily-digest buffer still works, critical still
+bypasses quiet hours) — mutation-tested by reverting the branch to its old
+shape: 2 of 3 escaped and were caught. `settings_notification_locks_d333.test.mjs`
+(4; the two locked entries exist and `capital_call_paid` doesn't, the render
+cell's lock logic, `setEvent`'s refusal, and preset re-locking).
+
+**Three fixes from a Codex review on the PR, each real — none of the three
+severities Codex gave this PR were optional-labeled, so each was verified and
+fixed rather than deferred:**
+
+- **Quiet hours + digest-off no longer sends immediately.** The first fix
+  above dispatched right away, which directly contradicted
+  `SettingsPage.jsx`'s own Quiet Hours card: "Push and non-critical email are
+  paused during this window." Sending during the window broke that promise
+  louder than the original bug did (an unwanted overnight email rather than a
+  lost one). Now buffers the same way a digest-on quiet-hours email already
+  does (`enqueueOutbox(..., 'quiet_hours')`), which the existing digest
+  cadence flush drains at the user's next local slot — paused and later
+  delivered, never lost, which is what the card actually promises.
+- **A locked email channel is now enforced in `notify()`, not just rendered
+  locked in Settings.** `resolveChannels` ran before the critical-category
+  check and silently dropped `email` from `resolved` for any user who had
+  previously saved `email: false` for `capital_call_issued` or
+  `agreement_ready_to_sign` — before this PR's lock existed, nothing stopped
+  that save. The UI rendered the toggle checked-and-disabled; the backend
+  still skipped the whole email branch for that stored preference, so the
+  "cannot be turned off" promise was UI-only for anyone who had already
+  opted out. `resolveChannels` now takes `isCritical` and keeps `email` in
+  `resolved` for a critical category regardless of a stored opt-out —
+  `in_app`/`slack` stay opt-outable, matching that the Settings lock is on
+  the email column only.
+- **The weekly canvas HTML no longer ships inside a daily digest.**
+  `flushPendingDigests` used `renderWeeklyDigest` unconditionally; its
+  template hardcodes "WEEK OF" and "Three things from your week", so a
+  daily-cadence user's HTML body described a week while the subject and
+  plain-text alternative correctly said daily. `canvasTransactional.ts` has
+  no daily variant — the design canvas only specifies a weekly one — so a
+  daily digest now keeps its plain-text-only rendering instead of guessing
+  at daily-specific copy nobody designed; only `cadence === 'weekly'` gets
+  the canvas HTML.
+
+**Tests (review fixes).** `notify_quiet_hours_digest_off_d333.test.ts` grew
+two more cases: a critical category's email reaches Gmail's OAuth token
+exchange even with a stored `email: false` (the observable proof that
+`notify()` tried to send, not just that no DB row says it didn't), and a
+non-critical type still honours a stored opt-out so the fix didn't
+over-widen. Both mutation-tested: reverting the `resolveChannels` fix made
+the first fail, confirming the escape. `flush_pending_digests_cadence_d333.test.ts`
+(new, 2) intercepts the actual Gmail send call and decodes the real MIME
+body Gmail would have received — a weekly digest's HTML contains "WEEK OF",
+a daily digest's doesn't — mutation-tested by reverting the cadence guard:
+the daily case failed, confirming the escape.
+
+**A second Codex review round on the same PR, three more findings, all
+real:**
+
+- **(P1) The forced-email override widened past the two locked types.**
+  `isCritical` (`!args.category || CRITICAL_CATEGORIES.has(args.category)`)
+  is also true for every uncategorised legacy caller —
+  `routes/capital.ts`'s `capital_call_paid` and `routes/tickets.ts`'s
+  `ticket_update` both call `notify()` with no `category` — and the
+  previous fix used that same flag to force `email` back into `resolved`.
+  Those two types' Settings rows are deliberately left user-toggleable
+  (`capital_call_paid` was explicitly called out as NOT locked, right above
+  in this entry), so their opt-outs silently stopped working the moment
+  the lock-enforcement fix landed. `isCritical` now only governs
+  quiet-hours/digest timing as Task #14 originally specified; a new
+  `forceEmail = LOCKED_EMAIL_TYPES.has(args.type)` (the same two types the
+  Settings UI renders locked) is what `resolveChannels` actually checks for
+  the email override.
+- **(P2) A quiet-hours-buffered row could ship mid-window.** Task #14's
+  09:00-local send slot is a fixed clock check, not "the quiet window that
+  buffered this row has ended" — for a window like 22:00–10:00, 09:00 is
+  still inside it. `flushPendingDigests` released every pending row at that
+  slot regardless of `reason`, so the D333 quiet-hours fix's "paused, not
+  lost" promise still broke the pause half. It now re-checks
+  `isInQuietHours` for the user at flush time and, when still inside the
+  window, filters `reason: 'quiet_hours'` rows out of that tick's batch
+  (leaving them pending for the next tick once the window closes);
+  `reason: 'digest'` rows are unaffected — they were always meant to go out
+  at the cadence slot on their own.
+- **(P2) The weekly "WEEK OF" date ignored the recipient's own timezone.**
+  The cadence check (`isDigestSendTime`) already formats in `u.tz`, but the
+  `weekLabel` passed to `renderWeeklyDigest` used
+  `new Intl.DateTimeFormat('en-GB', {...}).format(now)` with no `timeZone`,
+  so it fell back to the runtime's default. For a user far enough ahead of
+  UTC (anything past UTC+9, since the 09:00 slot then maps to a UTC instant
+  on the previous calendar day), the label could show yesterday's date.
+  Fixed by passing `timeZone: u.tz` to that formatter, matching the cadence
+  check it has to agree with.
+
+**Tests (second review round).** `notify_codex_round2_d333.test.ts` (new,
+5): an uncategorised type (`capital_call_paid`) still honours a stored
+`email: false` opt-out while a genuinely locked type
+(`capital_call_issued`) still overrides one; a quiet-hours row is held back
+while its window (22:00–10:00 UTC) is still open at the 09:00 flush slot,
+and ships once a different window (02:00–05:00) has already closed; the
+weekly digest sent to a `Pacific/Kiritimati` (UTC+14) recipient at the
+instant that is their local Monday 09:00 — Sunday 19:00 in UTC — shows "5
+OCTOBER" in the rendered HTML, not the UTC-dated "4 OCTOBER". All four
+non-trivial fixes mutation-tested: reverting `forceEmail` back to
+`isCritical`, deleting the re-check-before-flush block, and dropping
+`timeZone: u.tz` from the formatter each made exactly the case built for it
+fail, then were restored and reverified clean (sha256-matched against the
+pre-mutation file).
+
 
 ## D350
 
@@ -39866,3 +40038,47 @@ ready state with `data: undefined` and the card throws on
 instead of drawing Unreadable.
 
 `frontend/src` moved, so `docs/` is rebuilt.
+
+## D520
+
+**The four `company_*` research tables production holds are declared in the
+repo, as production built them.** Migration 370. PRs #965 and #971.
+
+**What it was.** Deploys 566 to 574 went red on "repo can still rebuild
+production's schema". Production held four tables that no repo file had ever
+declared: `company_employment_history`, `company_financials`,
+`company_funding_rounds` and `company_sources`. They were created by hand
+between 2026-09-30 14:57 and 23:34 UTC; no migration workflow ran in that
+window and no code reads them. The Worker deployed each time. What broke is
+that a database built from the repo would come up without them.
+
+**How the DDL was found.** The drift check named the tables and nothing else.
+#965 made a red run print production's `sqlite_master.sql` for every object
+the repo lacks — schema only, never a row — and deploy run 574 printed the
+four statements.
+
+**The owner's decisions (2026-10-02).**
+- Keep the tables and declare them, rather than drop them on production.
+- Record their twelve money columns as legacy REAL dollars rather than
+  rebuild the tables in integer cents.
+
+**What ships.**
+- `370_company_research_tables.sql` is production's DDL verbatim with
+  `IF NOT EXISTS`: a no-op on production, the same tables on a fresh build.
+  It was drafted as 367; #967 took 367 to 369 first.
+- `scripts/money-cents-baseline.json` gains `company_financials.arr`,
+  `burn_rate`, `cash`, `debt`, `ebitda`, `gross_profit`, `mrr`,
+  `net_income` and `revenue`, and `company_funding_rounds.amount`,
+  `pre_money_valuation` and `post_money_valuation`. Each entry says it was
+  created out-of-band and is to be converted with `<col>_cents`.
+- The money classifier learns `gross_profit`, `ebitda`, `net_income`, `cash`
+  and `debt`, which it did not recognise, so the forward-looking rule now
+  covers them too (a review found them outside both the ledger and the
+  guard).
+- `company_financials.revenue_growth` and `ebitda_margin` are rates, not
+  amounts, so they join `NOT_MONEY` in `check-money-cents.mjs`, pinned in
+  `schema_guards.test.mjs`.
+
+**What it does not do.** It wires no feature to the tables and converts no
+money column. The ledger grows by twelve, which is the honest record of
+production rather than a new choice of dialect.
