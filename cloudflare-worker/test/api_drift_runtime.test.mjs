@@ -23,7 +23,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -32,7 +32,13 @@ const REPO_ROOT = resolve(__dirname, '..', '..');
 const API_FILE = resolve(REPO_ROOT, 'frontend', 'src', 'lib', 'api.js');
 
 function derivedPaths() {
-  const src = readFileSync(API_FILE, 'utf8');
+  // D527 — api.js plus every domain module under lib/api/.
+  const modulesDir = resolve(REPO_ROOT, 'frontend', 'src', 'lib', 'api');
+  const files = [API_FILE];
+  if (existsSync(modulesDir)) {
+    for (const f of readdirSync(modulesDir).sort()) if (f.endsWith('.js')) files.push(resolve(modulesDir, f));
+  }
+  const src = files.map((f) => readFileSync(f, 'utf8')).join('\n');
   const out = new Set();
   for (const m of src.matchAll(/['"`](\/api\/[^'"`?\s${]+)/g)) {
     const p = m[1].replace(/\/+$/, '');

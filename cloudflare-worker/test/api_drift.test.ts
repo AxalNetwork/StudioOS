@@ -14,13 +14,26 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '../..');
 const API_FILE = resolve(ROOT, 'frontend/src/lib/api.js');
+const API_MODULES_DIR = resolve(ROOT, 'frontend/src/lib/api');
+
+// D527 — api.js plus every domain module under lib/api/, so a call cannot
+// escape this check by living in a module.
+function clientSource(): string {
+  const files = [API_FILE];
+  if (existsSync(API_MODULES_DIR)) {
+    for (const f of readdirSync(API_MODULES_DIR).sort()) {
+      if (f.endsWith('.js')) files.push(resolve(API_MODULES_DIR, f));
+    }
+  }
+  return files.map((f) => readFileSync(f, 'utf8')).join('\n');
+}
 const WORKER_FILE = resolve(ROOT, 'cloudflare-worker/src/index.ts');
 
 export function extractClientPaths(src: string): string[] {
@@ -54,7 +67,7 @@ export function isCovered(path: string, mounts: string[]): boolean {
 }
 
 test('every SPA /api path has a mounted worker route', () => {
-  const apiSrc = readFileSync(API_FILE, 'utf8');
+  const apiSrc = clientSource();
   const workerSrc = readFileSync(WORKER_FILE, 'utf8');
   const clientPaths = extractClientPaths(apiSrc);
   const workerMounts = extractWorkerMounts(workerSrc);

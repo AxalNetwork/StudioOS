@@ -19,11 +19,12 @@ can be read to find out what a rule actually is.
 | `assetsIgnore.mjs` | What `docs/.assetsignore` withholds from the Worker's asset upload, and why each file stays private: the retention ledger, the build stamp, and a stray Pages entry script — never `_headers`, which wrangler reads to set the security headers. One literal file per line, refused otherwise. Owned by `../build-frontend.mjs` (D271). |
 | `accessComments.mjs` | Which comments in the Worker may say "Cloudflare Access": a small lexer that tells a comment from a string, a template literal or a regex, and the rule that every mention must be quoted by an entry in `../access-comment-allowlist.json`. Owned by `../check-access-comments.mjs`. |
 | `migrationImmutability.mjs` | Which changes may land under `cloudflare-worker/sql/migrations/`: an addition, and nothing that alters a file already on the base. It parses `git diff --name-status -z`, refuses a status letter it does not know, and resolves the base — a pull request's base branch, or on a push to main the commit main pointed at before it — refusing any branch name or commit id git could read as something else. Owned by `../migration-immutability-gate.mjs` (D269). |
+| `apiModules.mjs` | Which files hold the SPA's client calls — `frontend/src/lib/api.js` and every module under `frontend/src/lib/api/` — whether `api.js`'s re-export block names exactly those modules in alphabetical order, and whether each `request()` call has a Worker route (D527). Owned by `../check-api-drift.mjs`. |
 
 ## Tests
 
-`npm run test:retention` runs every `*.test.mjs` in this folder. Ten of the
-eleven modules are covered here; `migrationPlan.mjs` is the exception, and
+`npm run test:retention` runs every `*.test.mjs` in this folder. Eleven of the
+twelve modules are covered here; `migrationPlan.mjs` is the exception, and
 deliberately so — its behaviour is pinned against a real SQLite database by
 `cloudflare-worker/test/migrate_d1_plan.test.ts` and
 `cloudflare-worker/test/migrations_fresh_build.test.ts`, which run the actual

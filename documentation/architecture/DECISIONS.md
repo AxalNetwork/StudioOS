@@ -40004,3 +40004,43 @@ four statements.
 **What it does not do.** It wires no feature to the tables and converts no
 money column. The ledger grows by twelve, which is the honest record of
 production rather than a new choice of dialect.
+
+## D527 — A new API domain gets its own module under `lib/api/`
+
+**Status:** Accepted, 2026-10-03. Issue #1055. No migration.
+
+**Why.** On `main` from 2 August to 3 October 2026 (624 commits),
+`frontend/src/lib/api.js` changed in 113 commits, because every new client
+method landed at the bottom of that one file and unrelated features collided
+there. 147 tests and scripts read `api.js` by path, so moving existing code
+is out of scope; new code goes in new files instead.
+
+**What ships.**
+- `frontend/src/lib/api/`, with a README. A new API domain is one file there,
+  `lib/api/<domain>.js`, exporting its client object the way `api.js` does
+  and calling the Worker through `request` from `api.js`.
+- A re-export block in `api.js`, under the imports and away from the end of
+  the file where other PRs append: one `export * from './api/<domain>.js';`
+  line per module between `// api-modules:begin` and `// api-modules:end`, in
+  alphabetical order. It is empty today; no method moved.
+- `scripts/lib/apiModules.mjs` holds the rules: which files carry client
+  calls (`api.js` and every `.js` under `lib/api/`), whether the block names
+  exactly the modules on disk in order, and the call extraction and route
+  matching, lifted out of `check-api-drift.mjs` unchanged.
+- `scripts/check-api-drift.mjs` reads `api.js` and every module, so a module
+  method must match a mounted Worker route exactly as an `api.js` method
+  must, and it fails when the re-export block disagrees with the folder. On
+  today's tree it reports the same 1663 calls against 1969 routes as before.
+- The Worker's drift tests (`api_drift.test.mjs`, its `.ts` twin and
+  `api_drift_runtime.test.mjs`) read the modules too.
+- The "Do not add a `/api/*` method" rule in `CLAUDE.md` and
+  `frontend/src/lib/README.md` now covers the modules.
+
+**Tests.** `scripts/lib/apiModules.test.mjs`: a module method with no Worker
+route fails, one whose verb the Worker does not answer fails, one with a route
+passes, a module missing from the re-export block is reported (with the line
+to add), and the block rejects a ghost, a duplicate, a malformed line and the
+wrong order. Each was mutation-checked both ways.
+
+**Not done.** `AGENTS.md` is not on `main` yet (#972), so its copy of the rule
+is left for that change.
