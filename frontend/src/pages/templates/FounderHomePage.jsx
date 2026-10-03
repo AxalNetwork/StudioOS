@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Rocket, Brain, Users, FileText, BarChart2,
   Clock, Handshake,
@@ -6,6 +6,8 @@ import {
 import PublicNav from '../../components/PublicNav';
 import PublicFooter from '../../components/PublicFooter';
 import useForcedLightTheme from '../../hooks/useForcedLightTheme';
+import { spinoutLab } from '../../lib/api';
+import { reportError } from '../../lib/log';
 import Hero from '../../templates/components/Hero';
 import MetricsStrip from '../../templates/components/MetricsStrip';
 import FeatureGrid from '../../templates/components/FeatureGrid';
@@ -175,8 +177,32 @@ const FAQS = [
   },
 ];
 
+// D508 — "From the 38 companies that have completed the Spin-Out Lab" named
+// a count nothing backed. `GET /spinout-lab/stats` is the real one (distinct
+// founders who completed the incorporation_completed milestone), already
+// public for this exact marketing-page use (see its own route comment). A
+// fetch failure or a genuine zero both read as no number at all, never a
+// placeholder or a stale one — this is marketing copy, not a dashboard, so
+// there is no retry affordance to offer, only a sentence that stays true.
+function useSpinoutGraduateCount() {
+  const [companies, setCompanies] = useState(null); // null until a real count loads
+  useEffect(() => {
+    let alive = true;
+    spinoutLab.stats()
+      .then((r) => {
+        if (!alive) return;
+        const n = Number(r?.companies);
+        if (Number.isFinite(n) && n > 0) setCompanies(n);
+      })
+      .catch((e) => { reportError('founder-home:spinout-stats', e); });
+    return () => { alive = false; };
+  }, []);
+  return companies;
+}
+
 export default function FounderHomePage() {
   useForcedLightTheme();
+  const graduateCount = useSpinoutGraduateCount();
 
   return (
     <div className="min-h-screen bg-white text-gray-900">
@@ -256,7 +282,9 @@ export default function FounderHomePage() {
       <TestimonialBlock
         eyebrow="Founder Stories"
         headline="What founders say."
-        sub="From the 38 companies that have completed the Spin-Out Lab."
+        sub={graduateCount
+          ? `From the ${graduateCount} companies that have completed the Spin-Out Lab.`
+          : 'From founders who have completed the Spin-Out Lab.'}
         testimonials={TESTIMONIALS}
         bg="bg-gray-50"
       />
