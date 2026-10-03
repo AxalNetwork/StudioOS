@@ -6,24 +6,26 @@ import HeldZone from './HeldZone';
 /**
  * Admin · Approvals on HQ-held accounts — S22's sixteen lanes (D286).
  *
- * SIXTEEN LITERAL ROWS, NOT A MAP. `admin_route_reachability.test.mjs` walks
- * navigation syntax — a literal `to="/…"` in a routed page's own file — and
- * a `.map` over a data array is not a door it can see. Five of the routes
- * below (LP applications, Referrals, Best-Fit, Due diligence, Partner
- * invitations) have this page as their only door once the legacy admin rows
- * are gone, so the rows are written out. The guard
- * (`held_admin_shell_d286.test.mjs`) reads them back and holds them to S22.
+ * SIXTEEN LANES, FIFTEEN LITERAL ROWS WITH A DOOR, NOT A MAP.
+ * `admin_route_reachability.test.mjs` walks navigation syntax — a literal
+ * `to="/…"` in a routed page's own file — and a `.map` over a data array is
+ * not a door it can see. Six of the routes below (LP applications, Referrals,
+ * Best-Fit, Due diligence, Partner invitations, Spinout moderation on HQ)
+ * have this page as their only door once the legacy admin rows are gone, so
+ * the rows are written out. The guard (`held_admin_shell_d286.test.mjs`)
+ * reads them back and holds them to S22.
  *
  * THIS PAGE READS NOTHING. The branch board (`BranchApprovals`, D130) unions
  * eleven queues from one branch database; HQ's own queues are decided in
  * their consoles, and each row here links to that console. S22's "State
  * here" column is drawn verbatim: two lanes have no link, and each says why.
  *
- * SPINOUT MODERATION LINKS NOWHERE, and that is S22's finding, not a gap
- * this page leaves: the worker mounts the route and `approvalSources.ts`
- * carries the lane, but no page in the SPA calls `adminSpinoutModeration`.
- * "No console exists anywhere yet" is true of the SPA. Giving the lane a
- * link here would be a door onto nothing.
+ * SPINOUT MODERATION LINKS ITS CONSOLE (D506). S22 drew the lane with no
+ * console because none existed in the SPA; D442 built the console at
+ * `/admin/spinout-moderation` and linked it from the branch Approvals board,
+ * which left HQ-held accounts reaching held cases only by typing the URL.
+ * Lane 4 is now that door. The route is `guard(['admin'])` with no `hqOnly`,
+ * so both HQ-held shells open it, as they do every other lane here.
  */
 const KIND = 'text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-muted';
 const LANE = 'text-[12.5px] font-semibold text-axal-ink';
@@ -39,7 +41,6 @@ export default function HeldApprovals() {
       coverageNote="Counts live in each lane's console; this page draws the lanes and links to them."
       unavailable={[
         ['A unioned board', 'The branch board (D130) reads one branch database; HQ-held queues are decided in their own consoles.'],
-        ['Spinout moderation', 'No console exists anywhere yet: the worker route is mounted and nothing in the SPA calls it.'],
         ['Content to HQ', 'Not applicable to HQ-held accounts: there is no branch to raise content from.'],
       ]}
     >
@@ -62,7 +63,7 @@ export default function HeldApprovals() {
             <tr data-lane="1"><td className={`px-3 py-2 ${STATE}`}>1</td><td className={`px-3 py-2 ${KIND}`}>Core</td><td className={`px-3 py-2 ${LANE}`}>LP applications</td><td className="px-3 py-2 text-[12px]"><Link to="/admin/lp-applications" className={CONSOLE}>/admin/lp-applications</Link></td><td className={`px-3 py-2 ${STATE}`}>Links to its console</td></tr>
             <tr data-lane="2"><td className={`px-3 py-2 ${STATE}`}>2</td><td className={`px-3 py-2 ${KIND}`}>Core</td><td className={`px-3 py-2 ${LANE}`}>Referrals</td><td className="px-3 py-2 text-[12px]"><Link to="/admin/refer-earn" className={CONSOLE}>/admin/refer-earn</Link></td><td className={`px-3 py-2 ${STATE}`}>Links to its console</td></tr>
             <tr data-lane="3"><td className={`px-3 py-2 ${STATE}`}>3</td><td className={`px-3 py-2 ${KIND}`}>Core</td><td className={`px-3 py-2 ${LANE}`}>Cohort applications</td><td className="px-3 py-2 text-[12px]"><Link to="/admin/spinout-lab" className={CONSOLE}>/admin/spinout-lab</Link></td><td className={`px-3 py-2 ${STATE}`}>Links to its console</td></tr>
-            <tr data-lane="4"><td className={`px-3 py-2 ${STATE}`}>4</td><td className={`px-3 py-2 ${KIND}`}>Core</td><td className={`px-3 py-2 ${LANE}`}>Spinout moderation</td><td className={`px-3 py-2 ${STATE}`}>No console</td><td className={`px-3 py-2 ${STATE}`}>No console exists anywhere yet</td></tr>
+            <tr data-lane="4"><td className={`px-3 py-2 ${STATE}`}>4</td><td className={`px-3 py-2 ${KIND}`}>Core</td><td className={`px-3 py-2 ${LANE}`}>Spinout moderation</td><td className="px-3 py-2 text-[12px]"><Link to="/admin/spinout-moderation" className={CONSOLE}>/admin/spinout-moderation</Link></td><td className={`px-3 py-2 ${STATE}`}>Links to its console</td></tr>
             <tr data-lane="5"><td className={`px-3 py-2 ${STATE}`}>5</td><td className={`px-3 py-2 ${KIND}`}>Core</td><td className={`px-3 py-2 ${LANE}`}>Content to HQ</td><td className={`px-3 py-2 ${STATE}`}>None</td><td className={`px-3 py-2 ${STATE}`}>Not applicable to HQ-held accounts</td></tr>
             <tr data-lane="6"><td className={`px-3 py-2 ${STATE}`}>6</td><td className={`px-3 py-2 ${KIND}`}>Absorbed</td><td className={`px-3 py-2 ${LANE}`}>KYC</td><td className="px-3 py-2 text-[12px]"><Link to="/admin?tab=kyc" className={CONSOLE}>/admin?tab=kyc</Link></td><td className={`px-3 py-2 ${STATE}`}>Links to its console</td></tr>
             <tr data-lane="7"><td className={`px-3 py-2 ${STATE}`}>7</td><td className={`px-3 py-2 ${KIND}`}>Absorbed</td><td className={`px-3 py-2 ${LANE}`}>Partner profiles</td><td className="px-3 py-2 text-[12px]"><Link to="/admin?tab=profiles" className={CONSOLE}>/admin?tab=profiles</Link></td><td className={`px-3 py-2 ${STATE}`}>Links to its console</td></tr>
