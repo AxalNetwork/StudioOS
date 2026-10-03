@@ -40162,6 +40162,48 @@ through.
 
 **Browser probe, recorded and not a gate:** `docs/` served with the SPA fallback, the Super Admin at 1280×900 opening `/admin/accounts` with one stubbed branch (`fr`) that answers a search with one active founder. The HQ-only card carries the new branch sentence and the Team table's footer carries its new sentence; no visible text says "not told". Typing in the Team search draws the branch hit with its Support toggle; opening the form shows "The branch records the authorisation and sends the person a security notice … The branch reports whether that notice was stored; HQ’s route does not pass it on, so this form cannot say whether the person was told."; no visible text says "not told", "no notice reaches" or "The person is told", and the card does not say "is told". No page error.
 
+## D509
+
+**Task #990: two Studio leftovers. A route with no caller, and a missing count
+shown as 0.**
+
+**What was true on main (f701a32f5).**
+- `routes/dashboard.ts:302`, `POST /dashboard/refresh-scores`, lost its only
+  caller when D323 removed `api.refreshDashboardScores`. Nothing in
+  `frontend/src` called it, and `ROUTE_MAP.md` had no row for it.
+- `ProfileFitSection.jsx:602` rendered the best-fit type count badge as
+  `Number(t.count) || 0`. A type whose count the read did not carry therefore
+  read "0", a claim that nobody fits, about a number nobody measured.
+
+**What changed.**
+- **The route is deleted, not kept.**
+  - Since D323 the dashboard cache has expired only on its own TTLs, because
+    nothing called this route. Deleting it changes no behaviour.
+  - `kvDelete` drops out of `dashboard.ts`'s imports with it.
+  - `dashboard_company_scope.test.ts`'s refresh test read the handler's
+    source. It is replaced by a test that the route is gone and that no
+    client method for it has reappeared.
+  - There was no `ROUTE_MAP` row to remove.
+- **The badge is drawn only for a measured count.** The new
+  `fitCount(raw)` returns the count, or null when it is absent:
+  - only a number or a numeric string counts, by type and not by value, the
+    `bpsPercent` rule;
+  - a measured 0 still shows;
+  - an absent count draws no badge.
+
+**Tests.**
+- `frontend/test/fit_count_d509.test.mjs` (3). `MatchSummaryCard` fetches its
+  own data, so these pin `fitCount` and the badge's own markup.
+- The re-aimed `dashboard_company_scope.test.ts` test.
+
+**Mutations: 4 run, 4 caught.**
+- The route put back.
+- The badge drawn without the check.
+- An absent count read as 0.
+- The old `Number(t.count) || 0` restored.
+
+No migration.
+
 ## D520
 
 **The four `company_*` research tables production holds are declared in the
