@@ -40822,19 +40822,25 @@ an existing route is a change to the tests that pin it.
   is `App.jsx` followed by every module, each introduced by a comment line
   naming its file (prose to `codeOnly`, so it never reads as code);
   `routeModuleFiles`, `routeModuleExport` and `missingRouteModules(root)`
-  (a module that `App.jsx` does not both import and compose). `root` is a
-  parameter so a fixture tree can be read the same way.
-- **The switched tests.** Ten tests that ask whole-app route questions now
+  (a module that `App.jsx` does not both import and compose);
+  `lazyImports(root)` (every `const X = lazy(() => import('…'))` across
+  `App.jsx` and the modules, with its source file and its page, a module's
+  `../pages/…` resolved one level down) and `conflictingLazyImports(root)`
+  (a name two sources declare for different pages; second pass, below).
+  `root` is a parameter so a fixture tree can be read the same way.
+- **The switched tests.** Eleven tests that ask whole-app route questions now
   read the helper instead of `App.jsx` alone: `admin_route_reachability`,
   `route_role_zone_contract`, `route_namespace_policy`,
   `workspace_shell_routes`, `admin_placement_h35`, `super_admin_shell`,
-  `founder_shell`, `investor_shell`, `advisor_shell`, `partner_shell`. Each
+  `founder_shell`, `investor_shell`, `advisor_shell`, `partner_shell`, and
+  `spa_live_routes` (second pass). Each
   is one import and one read; `admin_route_reachability`'s lazy-import table
-  also resolves a module's `../pages/…` specifier, since a module sits one
-  level below `App.jsx`. The remaining readers of `App.jsx` ask about a
+  is built from `lazyImports`, so a module's page resolves like `App.jsx`'s.
+  The remaining readers of `App.jsx` ask about a
   specific route that lives there and are untouched.
 
-**Guard.** `frontend/test/routes_modules_d528.test.mjs`, 5 tests: the two
+**Guard.** `frontend/test/routes_modules_d528.test.mjs`, 6 tests (the sixth
+is the second pass's, below): the two
 blocks exist, the composition block sits inside the Routes element and above
 the catch-all, `routeTools` is absent with no module and carries every gate
 once one exists (the fixture, which has modules, declares it), and the
@@ -40847,7 +40853,7 @@ wired module and one unwired) the route declared in the wired module is read
 by the same `<Route`-split and `routeBlock` readers the whole-app tests use,
 exactly like the fixture's own `App.jsx` route, and reading `App.jsx` alone
 would not see it; the unwired module is reported with which half is missing;
-and each of the ten switched tests imports the helper and no longer reads
+and each of the eleven switched tests imports the helper and no longer reads
 `App.jsx` by itself.
 
 **Mutations: 18 run, 18 caught** (non-zero exit and a `not ok` line each;
@@ -40868,5 +40874,42 @@ the first run, both closed by a stronger pin: a half-removed block sliced
 to the end of the file and read as present (both markers are now required,
 in order), and the fixture had no imported-but-not-composed module (it now
 has one, reported on its own).
+
+**Second pass: the live-route guard reads the modules, and one lazy name
+means one page** (two Codex findings on #1062, each verified from the code
+before it was changed).
+- *`spa_live_routes` read `App.jsx` alone.* It checks every path
+  `scripts/check-spa-live.mjs` smokes against the declared routes, minus the
+  catch-all, so a module route added to the smoke list would have been
+  reported as falling through to `*`. It is the eleventh switched test.
+- *A flat lazy-import table keyed by bare name.* `admin_route_reachability`
+  maps a route's component name to the file whose links it walks, across
+  `App.jsx` and the modules as one table; two sources declaring
+  `SettingsPage` for different pages would overwrite each other's entry and
+  the walk would scan the wrong file: a door the route does not have, or an
+  orphan hidden by one it does. The table is now built from the helper's
+  `lazyImports`, the helper's `conflictingLazyImports` reports a name two
+  sources declare for different pages (the same name for the same page is
+  a duplicate chunk, not a conflict, and is not reported), the first test in
+  `admin_route_reachability` fails on one with both files named, and the
+  folder's README says the rule: a lazy component name means one page across
+  `App.jsx` and every module. A second fixture tree,
+  `frontend/test/fixtures/routes_lazy_conflict/` (an `App.jsx` and one module
+  that both declare `SettingsPage` for different pages and `HomePage` for the
+  same one), pins the helper: its rows, with a module's `../pages/…` resolved
+  one level down; the one conflict reported with both declarations and the
+  same-page pair not; the real tree with no conflict and a table of at least
+  two hundred names.
+**Mutations, second pass: 9 run, 9 caught**, each additionally required to
+fail on the assertion meant to catch it (same discipline otherwise): the
+live-route guard reading `App.jsx` alone again; the helper reading `App.jsx`
+alone; a module's `../pages/…` no longer resolved one level down;
+`conflictingLazyImports` never reporting; a same-page duplicate reported as a
+conflict; the fixture module's `SettingsPage` pointed at `App.jsx`'s page;
+the fixture `App.jsx` no longer declaring it; `App.jsx` on the real tree
+declaring `AdminPage` twice for different pages; the README's rule dropped.
+One escape on the first run was the mutation's fault, not the guard's: a
+rewrite of the specifier normalisation that computed the same path; it was
+replaced by one that does not.
 
 **Browser probe, recorded and not a gate:** nothing user-visible changes, so the probe is a boot check on the rebuilt bundle: `docs/` served with the SPA fallback, a plain admin and the Super Admin at 1280×900 open `/admin/held/approvals`, follow lane 4 to `/admin/spinout-moderation`, and land with no page error and the same lit rows as before the change.

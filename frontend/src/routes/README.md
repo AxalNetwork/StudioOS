@@ -75,4 +75,10 @@ of alphabetical order.
   read `App.jsx` by path.
 - A module declares routes and nothing else: no page bodies, no data, no
   context providers. Pages live under `frontend/src/pages/`.
+- A lazy component name means one page across `App.jsx` and every module:
+  `admin_route_reachability` maps a route's component name to the file whose
+  links it walks, in one table, so `const SettingsPage = lazy(…)` in a module
+  must not name a different page than `App.jsx`'s `SettingsPage`. The guard
+  fails on a collision and names both files; pick a name that says which
+  page it is (`AdminSettingsPage`).
 - The catch-all `*` route stays last in `App.jsx`; the block sits above it.

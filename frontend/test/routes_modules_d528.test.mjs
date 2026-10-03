@@ -27,10 +27,12 @@ import { codeOnly } from './_codeOnly.mjs';
 import { routeBlock } from './_routes.mjs';
 import {
   APP_PATH, ROUTES_DIR, readRoutesSource, routeModuleFiles, routeModuleExport, missingRouteModules,
+  lazyImports, conflictingLazyImports,
 } from './_routesSource.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const FIXTURE = resolve(process.cwd(), 'frontend/test/fixtures/routes_modules');
+const CONFLICT = resolve(process.cwd(), 'frontend/test/fixtures/routes_lazy_conflict');
 const APP = read(APP_PATH);
 
 /** The `path="…"` of every `<Route>` in a source, the way the whole-app tests read them. */
@@ -144,6 +146,9 @@ test('the whole-app route tests read the helper, not App.jsx alone', () => {
   const SWITCHED = [
     'admin_route_reachability', 'route_role_zone_contract', 'route_namespace_policy', 'workspace_shell_routes',
     'admin_placement_h35', 'super_admin_shell', 'founder_shell', 'investor_shell', 'advisor_shell', 'partner_shell',
+    // The live smoke's list is checked against the declared routes; a module
+    // route it smokes would otherwise read as the catch-all's (Codex on #1062).
+    'spa_live_routes',
   ];
   for (const t of SWITCHED) {
     const src = codeOnly(read(`frontend/test/${t}.test.mjs`));
@@ -151,4 +156,36 @@ test('the whole-app route tests read the helper, not App.jsx alone', () => {
     assert.match(src, /readRoutesSource\(/, `${t} does not read the route table through the helper`);
     assert.doesNotMatch(src, /App\.jsx'\)/, `${t} still reads App.jsx by itself`);
   }
+});
+
+test('one lazy component name means one page across App.jsx and the modules, and a collision is reported with both files', () => {
+  // `admin_route_reachability` maps a route's component name to the file
+  // whose doors it scans, in one table across App.jsx and the modules. Two
+  // sources declaring the same name for different pages would overwrite each
+  // other in that table and scan the wrong file: a false door, or a hidden
+  // orphan (Codex on #1062). So one name is one page, and the helper says
+  // where both declarations are when it is not.
+  const rows = lazyImports(CONFLICT);
+  assert.deepEqual(rows.map((r) => `${r.name} ${r.source} ${r.target}`), [
+    'HomePage frontend/src/App.jsx frontend/src/pages/HomePage',
+    'SettingsPage frontend/src/App.jsx frontend/src/pages/SettingsPage',
+    'HomePage frontend/src/routes/omega.jsx frontend/src/pages/HomePage',
+    'SettingsPage frontend/src/routes/omega.jsx frontend/src/pages/admin/SettingsPage',
+  ], 'a module\'s ../pages/… and App.jsx\'s ./pages/… do not resolve to the same tree');
+  // The same name for the SAME page is a duplicate chunk, not a conflict;
+  // the same name for a different page is.
+  assert.deepEqual(conflictingLazyImports(CONFLICT), [{
+    name: 'SettingsPage',
+    declared: [
+      { source: 'frontend/src/App.jsx', target: 'frontend/src/pages/SettingsPage' },
+      { source: 'frontend/src/routes/omega.jsx', target: 'frontend/src/pages/admin/SettingsPage' },
+    ],
+  }]);
+  // The real tree: every lazy name is one page. App.jsx alone declares
+  // hundreds, so the check has teeth even before the first module exists.
+  assert.ok(lazyImports().length >= 200, 'the real tree\'s lazy table parsed to almost nothing');
+  assert.deepEqual(conflictingLazyImports(), [], 'a lazy component name is declared for two different pages');
+  // And the folder tells a module author so, before the guard has to.
+  assert.match(read(`${ROUTES_DIR}/README.md`), /A lazy component name means one page across `App\.jsx` and every module/,
+    'the README does not say that a lazy name means one page');
 });

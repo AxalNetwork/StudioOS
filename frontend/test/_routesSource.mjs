@@ -51,6 +51,49 @@ export function readRoutesSource(root = process.cwd()) {
   return parts.join('');
 }
 
+/**
+ * Every `const X = lazy(() => import('…'))` across `App.jsx` and the modules,
+ * as `{ name, source, target }`: `source` is the file the line is in and
+ * `target` the imported page, repo-relative and extension-less. A module's
+ * `../pages/…` and `App.jsx`'s `./pages/…` both name a file under
+ * `frontend/src`; a module sits one level down.
+ */
+export function lazyImports(root = process.cwd()) {
+  const rows = [];
+  for (const source of [APP_PATH, ...routeModuleFiles(root)]) {
+    const src = readFileSync(resolve(root, source), 'utf8');
+    for (const m of src.matchAll(/const (\w+) = lazy\(\(\) => import\('(\.\.?\/[^']+)'\)\)/g)) {
+      const spec = m[2];
+      const target = spec.startsWith('../') ? `frontend/src/${spec.slice(3)}` : `frontend/src/${spec.slice(2)}`;
+      rows.push({ name: m[1], source, target });
+    }
+  }
+  return rows;
+}
+
+/**
+ * Lazy component names that two sources declare for DIFFERENT pages. The
+ * whole-app readers key a route's page by its component name across
+ * `App.jsx` and the modules as one table (`admin_route_reachability` maps a
+ * name to the file whose doors it scans), so one name must mean one page;
+ * a second declaration of the same name for the same page is a duplicate
+ * chunk, not a wrong answer, and is not reported here. Empty when the table
+ * is sound.
+ */
+export function conflictingLazyImports(root = process.cwd()) {
+  const byName = new Map();
+  for (const row of lazyImports(root)) {
+    if (!byName.has(row.name)) byName.set(row.name, []);
+    byName.get(row.name).push(row);
+  }
+  const out = [];
+  for (const [name, rows] of byName) {
+    const targets = new Set(rows.map((r) => r.target));
+    if (targets.size > 1) out.push({ name, declared: rows.map(({ source, target }) => ({ source, target })) });
+  }
+  return out;
+}
+
 /** The export a module's file name implies: `admin-labs.jsx` → `adminLabsRoutes`. */
 export function routeModuleExport(file) {
   const stem = basename(file, '.jsx');

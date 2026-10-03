@@ -34,4 +34,6 @@ number on screen traces back to a column.
   `readRoutesSource()` from `_routesSource.mjs`, never `App.jsx` alone: since
   D528 a new area's routes live in `frontend/src/routes/` and the helper is
   `App.jsx` plus every module. `fixtures/` holds the small trees such helpers
-  are exercised against (`fixtures/routes_modules/`), never real pages.
+  are exercised against (`fixtures/routes_modules/`, a wired and an unwired
+  module; `fixtures/routes_lazy_conflict/`, two sources declaring one lazy
+  name for different pages), never real pages.

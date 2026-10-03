@@ -52,7 +52,7 @@ import { fileURLToPath } from 'node:url';
 
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { codeOnly } from './_codeOnly.mjs';
-import { readRoutesSource } from './_routesSource.mjs';
+import { readRoutesSource, lazyImports, conflictingLazyImports } from './_routesSource.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -114,12 +114,15 @@ const resolveFile = (rel) => {
 };
 
 const FILE_OF = new Map();
-// `./pages/X` from App.jsx and `../pages/X` from a route module both name a
-// file under frontend/src (D528): a module sits one level down.
-const underSrc = (spec) => (spec.startsWith('../') ? `frontend/src/${spec.slice(3)}` : `frontend/src/${spec.slice(2)}`);
-for (const m of APP.matchAll(/const (\w+) = lazy\(\(\) => import\('(\.\.?\/[^']+)'\)\)/g)) {
-  const f = resolveFile(underSrc(m[2]));
-  if (f) FILE_OF.set(m[1], f);
+// One table across App.jsx and the route modules (D528), keyed by the bare
+// component name — which is sound only while one name means one page. The
+// helper reports a name two sources declare for different pages, and the
+// first test below fails on one, so a module cannot make this table scan
+// the wrong file (Codex on #1062).
+const LAZY_CONFLICTS = conflictingLazyImports(root);
+for (const { name, target } of lazyImports(root)) {
+  const f = resolveFile(target);
+  if (f) FILE_OF.set(name, f);
 }
 for (const m of APP.matchAll(/^import (\w+) from '\.\/([^']+)'/gm)) {
   if (FILE_OF.has(m[1])) continue;
@@ -369,6 +372,17 @@ const REDIRECTS = ADMIN.filter((r) => r.redirect).map((r) => r.path);
 /* ------------------------------------------------------------------ *
  * Tests
  * ------------------------------------------------------------------ */
+
+test('one lazy component name means one page across App.jsx and the route modules, so FILE_OF scans the right file', () => {
+  // The table above is flat on purpose: every reader of a route's component
+  // keys by the bare name. A module declaring `SettingsPage` for a page other
+  // than App.jsx's would overwrite the entry and this file would walk the
+  // wrong page's links — a door it does not have, or an orphan hidden by one
+  // it does. The helper reports such a pair with both files.
+  assert.deepEqual(LAZY_CONFLICTS, [],
+    `a lazy component name is declared for two different pages; rename one:\n  ${JSON.stringify(LAZY_CONFLICTS)}`);
+  assert.ok(FILE_OF.size >= 200, `the lazy-import table parsed to ${FILE_OF.size} entries`);
+});
 
 test('the route parser finds every /admin route in App.jsx', () => {
   // A route this parser misses is a route the guard silently has no opinion
