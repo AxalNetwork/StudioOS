@@ -75,6 +75,26 @@ test('D526: a file whose name and heading differ is refused; a matching one is n
   assert.deepEqual(decisionFileProblems([{ name: 'D527.md', md: '## D527 — a\n\n```md\n## D528 — quoted\n```\n' }]), []);
 });
 
+test('D526: a file\'s first line is `## D<n> — <title>`, and nothing else passes for it', () => {
+  // The README and AGENTS.md both state this shape; the checker holds files to it.
+  for (const md of [
+    'Some prose first.\n\n## D527 — a\n',   // prose before the heading
+    '### D527 — a\n',                         // the wrong level
+    '# D527 — a\n',
+    '## D527\n\nbody\n',                      // no title
+    '## D527 —\n',
+    '## D527 - a\n',                          // a hyphen, not the em dash
+    '\n## D527 — a\n',                        // a blank first line
+  ]) {
+    const p = decisionFileProblems([{ name: 'D527.md', md }]);
+    assert.equal(p.length, 1, `${JSON.stringify(md)} gave ${JSON.stringify(p)}`);
+    assert.match(p[0], /D527\.md does not start with `## D527 — <title>`/, JSON.stringify(md));
+  }
+  assert.deepEqual(decisionFileProblems([{ name: 'D527.md', md: '## D527 — a\n' }]), []);
+  assert.deepEqual(decisionFileProblems([{ name: 'D527.md', md: '## D527 — a\r\n\r\nbody\r\n' }]), [],
+    'a file saved with CRLF line endings was refused');
+});
+
 test('D526: a heading above D525 in DECISIONS.md is refused; D525 itself is not', () => {
   const above = decisionIdProblems(`${OLD}\n## D526 — written in the old place\n`);
   assert.equal(above.length, 1, JSON.stringify(above));
@@ -88,7 +108,9 @@ test('D526: the folder holds only new numbers, named D<n>.md', () => {
   for (const bad of ['README.md', 'd526.md', 'D0526.md', 'D526-retro.md', 'D526.MD', 'D.md']) {
     assert.equal(fileDecisionId(bad), null, `${bad} was read as a decision file name`);
   }
-  assert.match(decisionFileProblems([{ name: 'D526-retro.md', md: '## D526 — a\n' }])[0], /is not named D<n>\.md/);
+  for (const bad of ['D526-retro.md', 'd526.md', 'D526.MD']) {
+    assert.match(decisionFileProblems([{ name: bad, md: '## D526 — a\n' }])[0], /is not named D<n>\.md/, bad);
+  }
   // D1–D525 live in DECISIONS.md, even where it has a gap at that number.
   assert.match(decisionFileProblems([file(511)])[0], /D1-D525 live in DECISIONS\.md/);
   assert.deepEqual(decisionFileProblems([file(526)]), []);
@@ -142,6 +164,33 @@ test('D526: readDecision refuses a number found in both places, rather than pick
   try {
     assert.throws(() => readDecision(527, root), /D527 is in .*DECISIONS\.md and in .*D527\.md/);
     assert.match(readDecision(524, root), /^## D524 — a/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('D526: the disk scan returns every entry but the README, so a misnamed file is refused, not skipped', () => {
+  const root = fixtureRoot(OLD, [
+    file(526),
+    { name: 'd527.md', md: '## D527 — lower-case name\n' },
+    { name: 'D528.MD', md: '## D528 — upper-case extension\n' },
+    { name: 'README.md', md: '# the folder\n' },
+    { name: '.DS_Store', md: 'not a decision' },
+  ]);
+  mkdirSync(join(root, DIR, 'drafts'));
+  try {
+    const files = readDecisionFiles(root);
+    assert.deepEqual(files.map((f) => f.name), ['D526.md', 'D528.MD', 'd527.md', 'drafts/']);
+    assert.equal(files[0].md, '## D526 — title\n\nbody\n');
+    const problems = decisionFileProblems(files);
+    for (const name of ['d527.md', 'D528.MD', 'drafts/']) {
+      assert.ok(problems.some((p) => p.startsWith(`${name} is not named D<n>.md`)), `${name} was not refused: ${JSON.stringify(problems)}`);
+    }
+    assert.equal(problems.length, 3, JSON.stringify(problems));
+    // And the run fails on it: before the fix the scan skipped both names and exited 0.
+    const script = resolve(process.cwd(), 'scripts/check-decision-ids.mjs');
+    const r = spawnSync(process.execPath, [script], { cwd: root, encoding: 'utf8' });
+    assert.notEqual(r.status, 0, 'a misnamed decision file did not fail the run');
+    assert.match(r.stderr, /d527\.md is not named D<n>\.md/);
+    assert.match(r.stderr, /D528\.MD is not named D<n>\.md/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

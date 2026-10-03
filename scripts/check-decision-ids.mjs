@@ -47,8 +47,9 @@
  *
  * Alongside those, the same boundary from the other side: a file numbered at
  * or below D525 (that range lives in `DECISIONS.md`), a file that is not named
- * `D<n>.md`, a file with no heading, and a file holding more than one
- * decision.
+ * `D<n>.md` (every file in the folder but its README is read, so a misnamed
+ * one is refused rather than skipped), a file with no heading or whose first
+ * line is not `## D<n> — <title>`, and a file holding more than one decision.
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
@@ -121,9 +122,17 @@ export function fileDecisionId(name) {
 }
 
 /**
+ * The first line of a decision file: `## D<n> — <title>`, at exactly that
+ * level, with the em dash and a title. The folder README and AGENTS.md both
+ * state this shape, so a reader can find an entry by its first line.
+ */
+const FIRST_LINE = /^## D([1-9]\d*) — \S/;
+
+/**
  * The problems in the per-decision files, as readable lines.
  *
- * `files` is `[{ name, md }]` for every `D*.md` in the folder. Exported for the
+ * `files` is `[{ name, md }]` for every entry in the folder except its
+ * README, so a misnamed file is reported instead of skipped. Exported for the
  * same reason as `decisionIdProblems`: the test feeds it folders that are
  * wrong on purpose.
  */
@@ -144,6 +153,11 @@ export function decisionFileProblems(files) {
     const heads = decisionIds(md);
     if (!heads.length) {
       problems.push(`${name} has no \`## D${n}\` heading. The heading is how a reader finds the entry.`);
+    } else if (!FIRST_LINE.test(md.split(/\r?\n/, 1)[0])) {
+      problems.push(
+        `${name} does not start with \`## D${n} — <title>\`. The first line is the heading,`
+        + ' at level 2, with an em dash and a title, as the folder README says.',
+      );
     } else if (heads[0] !== n) {
       problems.push(
         `${name} is headed D${heads[0]}. A file's name and its heading are the same number,`
@@ -177,14 +191,26 @@ export function allDecisionProblems(md, files) {
   return problems;
 }
 
-/** The per-decision files on disk, as `[{ name, md }]`; none when the folder does not exist. */
+/**
+ * Everything in the decisions folder but its README, as `[{ name, md }]`;
+ * none when the folder does not exist.
+ *
+ * NOTHING IS PRE-FILTERED BY NAME. A `d527.md` or `D527.MD` left out here would
+ * never reach the name check, so the run would pass with a decision nobody can
+ * find by number, and a later `D527.md` could take the same number. Every entry
+ * is returned and `decisionFileProblems` refuses the misnamed ones. Dotfiles
+ * (an editor's or the OS's own) are skipped. A subfolder is returned with a
+ * trailing `/` and no text, so it is refused by name as well.
+ */
 export function readDecisionFiles(root = process.cwd()) {
   const dir = resolve(root, DIR);
   if (!existsSync(dir)) return [];
-  return readdirSync(dir)
-    .filter((name) => name.startsWith('D') && name.endsWith('.md'))
-    .sort()
-    .map((name) => ({ name, md: readFileSync(join(dir, name), 'utf8') }));
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.name !== 'README.md' && !e.name.startsWith('.'))
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+    .map((e) => (e.isFile()
+      ? { name: e.name, md: readFileSync(join(dir, e.name), 'utf8') }
+      : { name: `${e.name}/`, md: '' }));
 }
 
 // Guarded so the functions can be imported by a test without the scan running.

@@ -22,12 +22,13 @@ PR touches. `D526.md` records the change.
 
 ## The rules, and what checks them
 
-`node scripts/check-decision-ids.mjs` reads `DECISIONS.md` and every `D*.md`
-here, and runs under `npm run test:drift`. It fails when:
+`node scripts/check-decision-ids.mjs` reads `DECISIONS.md` and every file
+here but this README, and runs under `npm run test:drift`. It fails when:
 
 - a number appears twice across the two places, or twice in either;
 - a file's name and its heading are different numbers, or a file has no
   heading or holds more than one decision;
+- a file's first line is not `## D<n> — <title>`;
 - `DECISIONS.md` gains a heading above D525;
 - a file here is numbered at or below D525, or is not named `D<n>.md`.
 
