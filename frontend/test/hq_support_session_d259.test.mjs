@@ -103,9 +103,13 @@ test('D259: the page opens the URL the route built, and never builds one', () =>
   assert.ok(!/support\/session/.test(TEAM), 'HqTeamTable spells the redeem path — it builds a URL the route did not');
 });
 
-test('D259: the operator is told the person is not told, and each refusal is shown in words', () => {
+test('D259: the operator is told what the person is told, and each refusal is shown in words', () => {
   const rendered = moveHit();
-  assert.ok(TEAM_RAW.includes('The person is not told:'), 'the form does not say the branch account is not told');
+  // D507 — re-aimed, not loosened. "The person is not told:" was true until
+  // D441 made the branch send a security notice at authorisation; the form now
+  // says so, and hq_team_h20.test.mjs reads the notice the sentence rests on.
+  assert.ok(TEAM_RAW.includes('The person is told:'), 'the form does not say the branch account is told');
+  assert.ok(!TEAM_RAW.includes('The person is not told'), 'the form still says the branch account is not told');
   assert.match(rendered, /setSupportErr\(supportRefusal\(ex\)\)/);
   // D262 moved the body into `branchRefusal`, which Unbind shares; the
   // property is unchanged: the sentence first, the machine code only after.

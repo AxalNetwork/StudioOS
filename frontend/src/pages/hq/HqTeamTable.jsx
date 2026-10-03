@@ -51,9 +51,13 @@ import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
  *    that can only refuse is the lie D134 named.
  * The route answers `open_url`, a one-time code on the BRANCH's host, and that
  * URL is opened exactly as given: this page never builds one, because the
- * hostname convention and the code are the server's. The person is not told —
- * the branch writes its own record, and no notice reaches them yet — and the
- * form says so before anyone presses Begin.
+ * hostname convention and the code are the server's. The person is told (D441,
+ * said here since D507): the branch writes its own record and sends them a
+ * security notice, in the app and by email, naming who authorised it, the
+ * reason, and that the session lasts 30 minutes once it is opened; the form
+ * says so before anyone presses Begin. Whether that notice reached them is a
+ * fact the branch reports (`target_notified`) and HQ's own route drops before
+ * answering, so the form does not claim delivery.
  */
 
 const RUNG = {
@@ -222,8 +226,10 @@ export function MoveHit({ hit, from, destinations, onMoved, viewAs }) {
         >
           <p className="text-[11px] leading-relaxed text-axal-muted">
             Opens a support session on {hit.name || hit.email}&rsquo;s account on {from}, in a new tab on that
-            branch&rsquo;s own site. It needs your authenticator and a fresh step-up. The person is not told:
-            the branch records the session, and no notice reaches them yet.
+            branch&rsquo;s own site. It needs your authenticator and a fresh step-up. The person is told:
+            the branch records the authorisation and sends them a security notice, in the app and by email,
+            with your name, your reason and that the session lasts 30 minutes once it is opened. Whether
+            that notice reached their inbox is not reported here.
           </p>
           <label className="text-[11px] text-axal-muted">
             Reason (at least 10 characters). It is recorded here and on the branch.
@@ -787,7 +793,8 @@ export default function HqTeamTable({ reloadKey = 0, onLoaded }) {
         going — records stay put. Move appears on a branch hit only when another branch code exists.
         It needs a step-up and TOTP; a refusal names the reason. HQ-held rows have no source branch,
         so they are not movable from this table. Support opens a session on an active branch account,
-        on that branch&rsquo;s own site, with the same step-up and a reason; the person is not told yet.
+        on that branch&rsquo;s own site, with the same step-up and a reason; the person is told by a security
+        notice the branch sends when the session is authorised.
         An administrator&rsquo;s hit shows Unbind instead of Move: an administrator is unbound, not moved,
         and Unbind removes the role and deactivates the account on that branch, with the same step-up and a reason.
       </p>
