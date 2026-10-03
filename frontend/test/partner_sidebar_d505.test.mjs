@@ -31,9 +31,11 @@ const APP = codeOnly(read('frontend/src/App.jsx'));
 const partnerRows = () => SIDEBAR_GROUPS.partner.flatMap((g) => g.items);
 
 // D395's own mapping, retired address → successor, and the row that owns each.
+// `/company-settings` is owned by the sidebar's pinned footer, not a row, so
+// its owner here is null: listing it in a row's `match` lights two rows.
 const SUCCESSOR = {
-  '/partner/operations': ['/company-settings', 'Delivery'],
-  '/partner/operations/overview': ['/company-settings', 'Delivery'],
+  '/partner/operations': ['/company-settings', null],
+  '/partner/operations/overview': ['/company-settings', null],
   '/partner/operations/capabilities': ['/offers/catalog', 'Offers'],
   '/partner/operations/portfolio': ['/delivery/health', 'Delivery'],
   '/partner/operations/engagements': ['/pipeline/proposals', 'Pipeline'],
@@ -56,9 +58,16 @@ test('no partner row and no full-bleed entry names a retired address', () => {
 test('each successor sits in the row D395 assigned, and each retired address redirects to it in App.jsx', () => {
   const byLabel = Object.fromEntries(partnerRows().map((r) => [r.label, r]));
   for (const [retired, [successor, label]] of Object.entries(SUCCESSOR)) {
-    const row = byLabel[label];
-    assert.ok(row, `no partner row labelled ${label}`);
-    assert.ok((row.match || []).includes(successor), `${label} does not match ${successor} (for ${retired})`);
+    if (label === null) {
+      for (const row of partnerRows()) {
+        assert.ok(!(row.match || []).includes(successor) && row.to !== successor,
+          `${row.label} claims ${successor}, which the pinned footer already lights — two rows for one page`);
+      }
+    } else {
+      const row = byLabel[label];
+      assert.ok(row, `no partner row labelled ${label}`);
+      assert.ok((row.match || []).includes(successor), `${label} does not match ${successor} (for ${retired})`);
+    }
     assert.match(APP, new RegExp(`<Route path="${retired.replace(/\//g, '\\/')}" element=\\{<Navigate to="${successor.replace(/\//g, '\\/')}" replace \\/>\\} \\/>`),
       `${retired} is not a redirect to ${successor}`);
     assert.match(APP, new RegExp(`<Route path="${successor.replace(/\//g, '\\/')}"`), `${successor} is not a mounted route`);
@@ -89,6 +98,7 @@ test('the comments say what D395 made true', () => {
   assert.doesNotMatch(block, /engagements` can sit under Pipeline while/, 'the collision example named a retired address');
   assert.match(block, /Delivery → the \/delivery\/\* zones \(board, health\); the retired\s*\/\/\s*\/partner\/operations tabs redirect into them \(D395\)/);
   assert.match(block, /named\s*\/\/\s*nowhere in this file/);
+  assert.match(block, /two\s*\/\/\s*rows for one page/, 'the Delivery comment says why Firm Settings is not in its match');
   const bleed = SIDEBAR.slice(SIDEBAR.indexOf('export const PARTNER_FULL_BLEED'), SIDEBAR.indexOf("'/needs', '/services', '/perks', '/partner/insights',"));
   assert.match(bleed, /left this list with D505/);
 });

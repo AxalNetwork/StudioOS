@@ -26811,7 +26811,7 @@ dispatch a workflow: `actions: write` is not granted.
   - `hq_security_h23.test.mjs` renders all four states, and a new test holds
     the rail row to the zone's sentence.
 
-**Mutations: 8 run, 8 caught** (plus 1 for the D253 residue):
+**Mutations: 10 run, 10 caught** (plus 1 for the D253 residue):
 - the marker written only on success;
 - `--remote` dropped from the marker put;
 - a throw read as `never_run`;
@@ -39812,17 +39812,19 @@ dead code wearing a route's name, and `partner_shell.test.mjs` pinned the
 dead entries as if they were live.
 
 **What changed.**
-- **`match`** names the successor D395 chose for each retired address:
-  Pipeline gains `/pipeline/proposals` and `/pipeline/analytics`
-  (engagements and performance); Delivery gains `/company-settings` (the
-  bare root and overview, whose job moved to the firm profile card on Firm
-  Settings) and `/delivery/health` (portfolio); Offers gains
-  `/offers/catalog` (capabilities). The four under a row's own root were
-  already lit by the subtree rule; they are listed so the mapping reads from
-  the row. `/company-settings` is the one successor outside its row's
-  subtree: a partner on Firm Settings now lights Delivery, which is the
-  issue's mapping and one entry to remove if the owner would rather no row
-  light there.
+- **`match`** names the successor D395 chose for each retired address that
+  a row owns: Pipeline gains `/pipeline/proposals` and `/pipeline/analytics`
+  (engagements and performance); Delivery gains `/delivery/health`
+  (portfolio); Offers gains `/offers/catalog` (capabilities). All four sit
+  under their row's own root and were already lit by the subtree rule; they
+  are listed so the mapping reads from the row. **The bare root's and
+  overview's successor, `/company-settings`, goes in no row's `match`.** The
+  issue's mapping put it under Delivery; the probe showed that lights two
+  rows on Firm Settings, because `/company-settings` is already the
+  sidebar's pinned footer row for every role (the shipped decision the
+  investor block records). A `match` entry there would be the collision the
+  partner block's own comment warns against, so the retired entries are
+  simply removed and the comment says why.
 - **`PARTNER_FULL_BLEED`** drops the six retired entries. Each successor
   that owns a full-bleed body is in `workspaceRoutes('partner')` already;
   `/company-settings` is a centred page by design and stays out.
@@ -39846,6 +39848,21 @@ operations subtree. `partner_shell` (re-aimed), `partner_bucket_overview`,
 
 **Mutations: 8 run, 8 caught** — each a non-zero exit with a `not ok` line,
 anchors unique, bytes proven changed, sources restored from a sha256-checked
-snapshot: a retired address back in Pipeline's `match`; the overview successor dropped from Delivery; the capabilities successor sent to the wrong row; a `match` entry for a path no route mounts; a retired address back in the full-bleed list; the centred page made full-bleed; the old Delivery comment back; a retired address in `App.jsx` no longer redirecting to its successor.
+snapshot: a retired address back in Pipeline's `match`; the footer's page added to Delivery's `match` (two rows lit); the portfolio successor dropped from Delivery; the capabilities successor sent to the wrong row; a `match` entry for a path no route mounts; a retired address back in the full-bleed list; the centred page made full-bleed; the two-rows reason dropped from the Delivery comment; the old Delivery comment back; a retired address in `App.jsx` no longer redirecting to its successor.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA
+fallback, a partner at 1280×900. Each retired address lands on its successor
+and the successor's row is lit: `…/capabilities` → `/offers/catalog`
+(Offers), `…/portfolio` → `/delivery/health` (Delivery), `…/engagements` →
+`/pipeline/proposals` (Pipeline), `…/performance` → `/pipeline/analytics`
+(Pipeline); the bare root and `…/overview` land on `/company-settings`, where
+the pinned footer's Company Settings row is lit and no bucket row is. With the
+issue's original mapping (`/company-settings` in Delivery's `match`) the same
+page lit Delivery as well, which is what moved the entry out. **Found, not
+fixed here (`PartnerFirmProfileCard.jsx` is D390's, not this issue's):** a
+`200` from `/partner-portal/profile` without a `partner` key is stored as a
+ready state with `data: undefined` and the card throws on
+`p.specialization`, taking the whole page to the route error boundary
+instead of drawing Unreadable.
 
 `frontend/src` moved, so `docs/` is rebuilt.

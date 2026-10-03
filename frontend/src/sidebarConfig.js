@@ -432,11 +432,13 @@ export const SIDEBAR_GROUPS = {
       // D395 redirects it to (D505).
       { to: '/pipeline', icon: Target, label: 'Pipeline',
         match: ['/pipeline', '/needs', '/partner/insights', '/pipeline/proposals', '/pipeline/analytics'] },
-      // `/company-settings` is where the retired Overview's job went (the firm
-      // profile card, D390/D395); it is the one successor outside this row's
-      // own subtree, so Firm Settings lights Delivery for a partner.
+      // The retired Overview's job went to `/company-settings` (the firm
+      // profile card, D390/D395). That page is the sidebar's pinned footer for
+      // every role (see the investor block's note), so it is NOT listed here:
+      // a `match` entry would light Delivery beside the footer's own row, two
+      // rows for one page. The other successors sit under this row's root.
       { to: '/delivery', icon: Briefcase, label: 'Delivery',
-        match: ['/delivery', '/company-settings', '/delivery/health'] },
+        match: ['/delivery', '/delivery/health'] },
       { to: '/offers', icon: Package, label: 'Offers',
         match: ['/offers', '/services', '/perks', '/comarketing', '/partner/office-hours',
                 '/offers/catalog'] },

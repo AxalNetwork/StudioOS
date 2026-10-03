@@ -72,10 +72,11 @@ test('canonical Partner deep links are owned by the correct workspace', () => {
     // '/matches' left with the AI Matching Engine, which was deleted.
     // D505: the retired /partner/operations/* addresses (D395 redirects) are
     // replaced by their successors — engagements → /pipeline/proposals,
-    // performance → /pipeline/analytics, overview → /company-settings,
-    // portfolio → /delivery/health, capabilities → /offers/catalog.
+    // performance → /pipeline/analytics, portfolio → /delivery/health,
+    // capabilities → /offers/catalog. Overview's successor, /company-settings,
+    // is the pinned footer's own row and so sits in no row's `match`.
     Pipeline: ['/pipeline', '/needs', '/partner/insights', '/pipeline/proposals', '/pipeline/analytics'],
-    Delivery: ['/delivery', '/company-settings', '/delivery/health'],
+    Delivery: ['/delivery', '/delivery/health'],
     Offers: ['/offers', '/services', '/perks', '/comarketing', '/offers/catalog'],
     Network: ['/network', '/relationships', '/contacts'],
     Research: ['/research', '/signals', '/market-intel'],
