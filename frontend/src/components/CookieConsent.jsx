@@ -113,7 +113,14 @@ export default function CookieConsent() {
       role="dialog"
       aria-modal="false"
       aria-labelledby={titleId}
-      className="fixed z-50 bottom-4 left-4 right-4 sm:right-auto sm:max-w-sm
+      // D504 — above the phone's tab bar. `--mobile-tabbar-h` is the bar's full
+      // height, set on <html> only while a bar is drawn and only below 1024px
+      // (mobileTabBar.css, D425), so this is 16px off the bottom everywhere a
+      // bar is not drawn and 16px above the bar where one is. The fallback is
+      // load-bearing: `var(--x)` with no fallback is an invalid value, which
+      // would drop the rule and pin the card to the very bottom off a phone.
+      style={{ bottom: 'calc(var(--mobile-tabbar-h, 0px) + 16px)' }}
+      className="fixed z-50 left-4 right-4 sm:right-auto sm:max-w-sm
                  rounded-2xl border border-gray-200 bg-white p-4 shadow-2xl outline-none
                  dark:border-gray-700 dark:bg-gray-900 sm:p-5"
     >

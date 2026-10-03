@@ -15,6 +15,11 @@
  *     installed app draw under a phone's status bar, and the top inset is no
  *     longer 0, so the header pads by it.
  *
+ *   - The cookie banner over the bar (S1 on #985). Until it is answered the
+ *     banner is a fixed z-50 card; at `bottom-4` it covered the bar's z-30,
+ *     so the first tap on a tab landed on the banner. It now sits at the
+ *     bar's height plus 16px, through the variable D425 left for this.
+ *
  * The bar's own behaviour — mounts for a founder below 1024px, nothing for a
  * viewer with no role — is rendered here through the real component, so the
  * mount's contract and the component's agree.
@@ -81,4 +86,43 @@ test('the FOUNDER_FULL_BLEED comment describes the three legacy routes as the re
   assert.match(CODE, /path="\/signals" element=\{guard\(\[[^\]]*\], founderResearchLanding\s*\? <Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>/);
   const discovery = CODE.slice(CODE.indexOf('path="/build/discovery"'), CODE.indexOf('path="/build/discovery"') + 600);
   assert.match(discovery, /<Navigate to=\{`\/validate\$\{location\.search\}`\} replace \/>/);
+});
+
+test('the cookie banner sits above the bar on a phone (S1 on #985): its bottom is the bar\'s height plus 16px, and 16px where there is no bar', async () => {
+  // D425 left `--mobile-tabbar-h` for exactly this: set on <html> only while a
+  // bar is drawn and only below 1024px (mobileTabBar.css), so a fixed element
+  // at `calc(var(--mobile-tabbar-h, 0px) + 16px)` clears the bar on a phone and
+  // sits at the old `bottom-4` (16px) everywhere else. Without it the banner
+  // (z-50) covered the bar (z-30) until it was answered, so the first tap on a
+  // tab landed on the banner.
+  const CARD_BOTTOM = "calc(var(--mobile-tabbar-h, 0px) + 16px)";
+  const consent = read('frontend/src/components/CookieConsent.jsx');
+  const consentCode = codeOnly(consent);
+  const card = consentCode.slice(consentCode.indexOf('role="dialog"'), consentCode.indexOf('aria-label="Dismiss"'));
+  assert.ok(card.length > 0 && card.length < 900, 'the card element is one tag');
+  assert.match(card, new RegExp(`style=\\{\\{ bottom: '${CARD_BOTTOM.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}' \\}\\}`), 'the card does not offset by the bar\'s height');
+  assert.doesNotMatch(card, /\bbottom-\d/, 'a Tailwind bottom-* class would fight the inline offset');
+  assert.match(card, /fixed z-50/, 'the card is still the fixed z-50 element D425 measured the bar against');
+  // The fallback is what makes the offset harmless off a phone: with no bar
+  // the variable is unset, and `var(--x)` with no fallback is an invalid
+  // value, which would drop the rule and pin the card to bottom: 0.
+  assert.doesNotMatch(card, /var\(--mobile-tabbar-h\)/, 'no fallback: off a phone the card would lose its bottom entirely');
+  // The variable the offset reads is the one D425 defines, with the bar's full height.
+  const css = read('frontend/src/components/mobileTabBar.css');
+  assert.match(css, /:root\[data-mobile-tabbar="on"\] \{\s*--mobile-tabbar-h: calc\(56px \+ env\(safe-area-inset-bottom, 0px\)\);/);
+  // Rendered: the undecided banner carries the offset as an inline style.
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: (k) => store.delete(k),
+  };
+  try {
+    const { default: CookieConsent } = await import('../src/components/CookieConsent.jsx');
+    const html = renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(CookieConsent)));
+    assert.match(html, /aria-labelledby="cookie-consent-title"/, 'the undecided banner is drawn');
+    assert.match(html, /style="bottom:calc\(var\(--mobile-tabbar-h, 0px\) \+ 16px\)"/, 'the rendered card does not carry the offset');
+  } finally {
+    delete globalThis.localStorage;
+  }
 });

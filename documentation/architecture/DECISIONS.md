@@ -40117,8 +40117,8 @@ bar with a header that did not pad for it. The comment over
   kept), and `/build/team?mode=workspace` is the Team workspace (D435). They
   stay listed because the editor each still mounts keeps the desk's width.
 
-**Guard.** `frontend/test/mobile_tab_bar_mount_d504.test.mjs`, 4 tests: the
-bar is imported and mounted once, right after the backdrop, with the resolved
+**Guard.** `frontend/test/mobile_tab_bar_mount_d504.test.mjs`, 5 tests (the
+fifth is the cookie banner's, below): the bar is imported and mounted once, right after the backdrop, with the resolved
 role and no founder default while the sidebar keeps its own; the real
 component renders for a founder with `lg:hidden` and renders nothing for an
 undefined or null role; the header carries the top inset and a minimum, not
@@ -40142,10 +40142,29 @@ is set and the page's main column pads 56px; More opens the sheet with
 Settings". At 1280×900 the same element is `display: none`. As an investor at
 phone width no bar is drawn and the root attribute is absent. The header's
 inline `padding-top` is `env(safe-area-inset-top, 0px)` and resolves to 0 in
-a headless browser with no inset. **Found, not fixed here (CookieConsent.jsx
-is not this issue's file):** until the cookie banner is answered it sits
-over the bar on a phone (`fixed bottom-4`, z-50, above the bar's z-30), so
-the first tap on a tab lands on the banner.
+a headless browser with no inset.
+
+**The cookie banner clears the bar** (S1 on #985, which added
+`CookieConsent.jsx` to this task's files after the first probe found the
+banner over the bar: a fixed z-50 card at `bottom-4`, above the bar's z-30,
+so until it was answered the first tap on a tab landed on the banner). The
+card's bottom is now `calc(var(--mobile-tabbar-h, 0px) + 16px)`, the
+variable D425 left for exactly this: set on `<html>` only while a bar is
+drawn and only below 1024px, so the card is 16px above the bar on a phone and
+16px off the bottom, as before, everywhere else. The `0px` fallback is
+load-bearing: `var(--x)` with no fallback is an invalid value, which would
+drop the rule and pin the card to the very bottom off a phone. The guard's
+fifth test pins the inline offset and its fallback, the absence of a
+Tailwind `bottom-*` class that would fight it, the card still `fixed z-50`,
+the variable still carrying the bar's height, and the rendered undecided
+banner carrying the offset. Mutations, both ways: 6 run, 6 caught — the
+banner back to `bottom-4` with no offset (the code before this); the offset
+without its fallback; the offset and `bottom-4` both kept; the offset
+reduced to the bar height alone; the card no longer fixed; the variable no
+longer carrying the bar's height. Probe, second pass: at 390×844 as a
+founder with no cookie decision the banner's bottom edge sits above the
+bar's top edge and a tap on the Build tab navigates with the banner still
+open; at 1280×900 the banner's computed bottom is 16px.
 
 `frontend/src` moved, so `docs/` is rebuilt.
 
