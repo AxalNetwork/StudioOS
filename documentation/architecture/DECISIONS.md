@@ -39789,7 +39789,7 @@ treated as accepted, and their subjects are told.
 **Tests.** `relationship_requests_d493.test.ts` (8). 19 mutations, 19
 caught.
 
-## D494
+## D497
 
 **The canvas ledger's non-canvas half, item 7 of the Wave-8 brief —
 `api.attachMyCalcomKey` deleted; the ROUTE_MAP/store-gap edits were not made.**
