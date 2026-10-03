@@ -534,6 +534,39 @@ test('D510: build/retro reads the week off the board, and only what the board re
   assert.match(p, /Never name an owner, give a cause or state a decision/);
 });
 
+test('D510: a capped list says how many it left out, and never reads as complete', async () => {
+  // Raised in review on PR 1033: the past-due read stops at 20 while the
+  // instruction said "name every open card that is past its due date", so a
+  // board with more would have reached the model as a complete list. Each
+  // read now counts its whole match, and the material says what was cut.
+  const db = freshDb();
+  for (let i = 0; i < 21; i++) {
+    card(db, MY_PROJECT, `Overdue ${i}`, 'todo', { created: '-40 days', updated: '-12 days', due: `-${i + 2} days` });
+  }
+  const one = String((await draft(db, MINE, 'build/retro', String(MY_PROJECT))).prompt);
+  assert.equal((one.match(/Past due and still open:/g) || []).length, 20);
+  assert.match(one, /1 more open card is past its due date and not listed here: only the 20 longest overdue are\./);
+  // The cut is the least overdue: the longest overdue are the ones listed.
+  assert.match(one, /Past due and still open: Overdue 20 — /);
+  assert.doesNotMatch(one, /Past due and still open: Overdue 0 — /);
+
+  card(db, MY_PROJECT, 'Overdue 21', 'todo', { created: '-40 days', updated: '-12 days', due: '-23 days' });
+  card(db, MY_PROJECT, 'Overdue 22', 'todo', { created: '-40 days', updated: '-12 days', due: '-24 days' });
+  for (let i = 0; i < 44; i++) {
+    card(db, MY_PROJECT, `Busy ${i}`, 'in_progress', { created: '-30 days', updated: '-1 days' });
+  }
+  const many = String((await draft(db, MINE, 'build/retro', String(MY_PROJECT))).prompt);
+  assert.match(many, /3 more open cards are past their due date and not listed here: only the 20 longest overdue are\./);
+  // The fixture's own card and 44 more were touched this week: 45, 40 listed.
+  assert.equal((many.match(/Touched this week:/g) || []).length, 40);
+  assert.match(many, /5 more cards were touched this week and are not listed here: only the 40 most recently touched are\./);
+  assert.match(many, /Where the material says more cards are not listed, say how many, and never present a list as complete when it is not\./);
+
+  // Within the caps nothing claims a cut.
+  const few = String((await draft(freshDb(), MINE, 'build/retro', String(MY_PROJECT))).prompt);
+  assert.doesNotMatch(few, /not listed here/);
+});
+
 test('D510: a card touched an hour before the week, written as ISO, is outside it', async () => {
   // D124/D125: SQLite compares TEXT, and on one date an ISO string sorts above
   // a space-separated one ('T' beats ' '), so a bare `updated_at >=` would

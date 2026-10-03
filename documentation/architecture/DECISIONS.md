@@ -39829,6 +39829,13 @@ route and no new `api.js` method.
   seven days to …". Only a board with no card returns `[]`, which the route
   answers as `nothing_to_draft` (409).
 - The window compares `datetime(updated_at)`, the D124/D125 rule.
+- **A cut list says it is cut.** Both lists are capped, at 40 touched and 20
+  past due, to bound the prompt. Each read counts its whole match in the same
+  statement (`COUNT(*) OVER ()`, taken before `LIMIT`). Past the cap, the
+  material says how many were left out ("3 more open cards are past their
+  due date and not listed here"), and the instruction says to report it.
+  Raised in review on PR 1033: the first version told the model to "name
+  every open card that is past its due date" over a list capped at 20.
 
 **The cadence card.**
 - The band is mounted under the card, gated like the desk's other three bands
@@ -39875,9 +39882,11 @@ route and no new `api.js` method.
   - `build/retro` joins the founder `SURFACES` loop, so it runs the
     cross-account, junk-scope, lone-project, two-project and deleted-project
     cases.
-  - Six new tests:
+  - Seven new tests:
     - the material: what is touched, what is past due, finished and
       not-yet-due cards left out, and another founder's late card kept out;
+    - a capped list says how many it left out, in the singular and the plural,
+      and a list within the cap claims no cut;
     - an ISO-written timestamp an hour outside the week stays outside;
     - a quiet week versus an empty board;
     - every founder surface's run records `/build` on its usage row;
@@ -39896,7 +39905,7 @@ route and no new `api.js` method.
     card and outside `Cadence`. It also pins all four gated and violet, and
     the denial gone now that the surface exists.
   - `validate_fills_the_blanks` gains the band in its closed set.
-- **Mutations: 23 run, 23 caught**, each with a non-zero exit and a `not ok`
+- **Mutations: 28 run, 28 caught**, each with a non-zero exit and a `not ok`
   line, restored from a sha256-checked snapshot:
   - **scoping:** the scope key trusted over the ownership check, and each of
     the three statements unscoped;
@@ -39908,7 +39917,9 @@ route and no new `api.js` method.
     method dropping it; the trailing slash kept; an empty path sent as `''`;
     the load reading the page;
   - **the card:** the band ungated, in the Partner palette, the denial kept,
-    and the switch sentence not naming it.
+    and the switch sentence not naming it;
+  - **the cuts:** either cut left unsaid, the count taken after the limit,
+    the instruction still claiming every card, and the plural swapped.
 
   The bare-compare mutation escaped the first pass, which had 22 mutations,
   because the fixture writes SQL-format times. The ISO test was added for it

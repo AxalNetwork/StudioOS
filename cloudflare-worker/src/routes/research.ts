@@ -3047,13 +3047,20 @@ const DRAFT_SURFACES: Record<string, {
     // than as silence. Decisions live in the founder's ritual notes, not on
     // the board, so this surface states none.
     //
+    // A CUT LIST SAYS IT IS CUT. Both lists are capped (40 touched, 20 past
+    // due) to bound the prompt, and each statement counts its whole match in
+    // the same read (`COUNT(*) OVER ()` is taken before LIMIT), so a board
+    // past the cap sends "N more … are not listed" rather than a list the
+    // model would read as complete.
+    //
     // AN EMPTY BOARD IS NOTHING TO DRAFT; A QUIET WEEK IS NOT. A board with
     // cards and no card touched this week is a retro that says so, and the
     // material carries that sentence. Only a board with no card at all
     // returns [] for the route to answer as `nothing_to_draft`.
     instruction: [
       'Summarise this week on the board below for the founder\'s Friday retro.',
-      'Say which cards were touched this week and where each stands now, and name every open card that is past its due date.',
+      'Say which cards were touched this week and where each stands now, and name every open card listed as past its due date.',
+      'Where the material says more cards are not listed, say how many, and never present a list as complete when it is not.',
       'The board records each card\'s current status and when it was last touched, and no history of its moves: never say how many times a card moved, slipped or carried over, and never say when a card was finished, only that it is done now.',
       'Never name an owner, give a cause or state a decision: none is recorded here. Add nothing the material below does not support.',
     ].join(' '),
@@ -3078,13 +3085,14 @@ const DRAFT_SURFACES: Record<string, {
       ];
       const touched = await c.env.DB.prepare(
         `SELECT title, status, due_date, created_at, updated_at,
-                CASE WHEN datetime(created_at) >= datetime('now', '-7 days') THEN 1 ELSE 0 END AS added
+                CASE WHEN datetime(created_at) >= datetime('now', '-7 days') THEN 1 ELSE 0 END AS added,
+                COUNT(*) OVER () AS matched
            FROM mvp_tasks
           WHERE deal_id = ? AND datetime(updated_at) >= datetime('now', '-7 days')
           ORDER BY datetime(updated_at) DESC, id DESC LIMIT 40`
       ).bind(pid).all<{
         title: string; status: string; due_date: string | null;
-        created_at: string | null; updated_at: string | null; added: number;
+        created_at: string | null; updated_at: string | null; added: number; matched: number;
       }>();
       const week = touched.results || [];
       if (!week.length) lines.push(`No card was touched in the seven days to ${today}.`);
@@ -3094,19 +3102,28 @@ const DRAFT_SURFACES: Record<string, {
           + `last touched ${t.updated_at ? String(t.updated_at).slice(0, 10) : 'not recorded'}; `
           + `${t.due_date ? `due ${String(t.due_date).slice(0, 10)}` : 'no due date recorded'}`);
       }
+      const weekMore = week.length ? Number(week[0].matched) - week.length : 0;
+      if (weekMore > 0) {
+        lines.push(`${weekMore} more card${weekMore === 1 ? ' was' : 's were'} touched this week and ${weekMore === 1 ? 'is' : 'are'} not listed here: only the ${week.length} most recently touched are.`);
+      }
       // Past due is read off the due date alone, so it holds whether or not
       // the card was touched this week. The closed statuses are the ones
       // `founder_board.ts` keeps out of a WIP count; anything else is open.
       const late = await c.env.DB.prepare(
-        `SELECT title, status, due_date, updated_at FROM mvp_tasks
+        `SELECT title, status, due_date, updated_at, COUNT(*) OVER () AS matched FROM mvp_tasks
           WHERE deal_id = ? AND due_date IS NOT NULL AND date(due_date) < date('now')
             AND lower(status) NOT IN ('done','cancelled','archived')
           ORDER BY date(due_date), id LIMIT 20`
-      ).bind(pid).all<{ title: string; status: string; due_date: string; updated_at: string | null }>();
-      for (const t of (late.results || [])) {
+      ).bind(pid).all<{ title: string; status: string; due_date: string; updated_at: string | null; matched: number }>();
+      const overdue = late.results || [];
+      for (const t of overdue) {
         lines.push(`Past due and still open: ${t.title} — ${String(t.status).replace('_', ' ')}; `
           + `was due ${String(t.due_date).slice(0, 10)}; `
           + `last touched ${t.updated_at ? String(t.updated_at).slice(0, 10) : 'not recorded'}`);
+      }
+      const lateMore = overdue.length ? Number(overdue[0].matched) - overdue.length : 0;
+      if (lateMore > 0) {
+        lines.push(`${lateMore} more open card${lateMore === 1 ? ' is' : 's are'} past ${lateMore === 1 ? 'its' : 'their'} due date and not listed here: only the ${overdue.length} longest overdue are.`);
       }
       return lines;
     },
