@@ -39838,3 +39838,47 @@ alone.
 **Next.** Slot S06 can retire `/branch`.
 
 No migration.
+
+## D520
+
+**The four `company_*` research tables production holds are declared in the
+repo, as production built them.** Migration 370. PRs #965 and #971.
+
+**What it was.** Deploys 566 to 574 went red on "repo can still rebuild
+production's schema". Production held four tables that no repo file had ever
+declared: `company_employment_history`, `company_financials`,
+`company_funding_rounds` and `company_sources`. They were created by hand
+between 2026-09-30 14:57 and 23:34 UTC; no migration workflow ran in that
+window and no code reads them. The Worker deployed each time. What broke is
+that a database built from the repo would come up without them.
+
+**How the DDL was found.** The drift check named the tables and nothing else.
+#965 made a red run print production's `sqlite_master.sql` for every object
+the repo lacks — schema only, never a row — and deploy run 574 printed the
+four statements.
+
+**The owner's decisions (2026-10-02).**
+- Keep the tables and declare them, rather than drop them on production.
+- Record their twelve money columns as legacy REAL dollars rather than
+  rebuild the tables in integer cents.
+
+**What ships.**
+- `370_company_research_tables.sql` is production's DDL verbatim with
+  `IF NOT EXISTS`: a no-op on production, the same tables on a fresh build.
+  It was drafted as 367; #967 took 367 to 369 first.
+- `scripts/money-cents-baseline.json` gains `company_financials.arr`,
+  `burn_rate`, `cash`, `debt`, `ebitda`, `gross_profit`, `mrr`,
+  `net_income` and `revenue`, and `company_funding_rounds.amount`,
+  `pre_money_valuation` and `post_money_valuation`. Each entry says it was
+  created out-of-band and is to be converted with `<col>_cents`.
+- The money classifier learns `gross_profit`, `ebitda`, `net_income`, `cash`
+  and `debt`, which it did not recognise, so the forward-looking rule now
+  covers them too (a review found them outside both the ledger and the
+  guard).
+- `company_financials.revenue_growth` and `ebitda_margin` are rates, not
+  amounts, so they join `NOT_MONEY` in `check-money-cents.mjs`, pinned in
+  `schema_guards.test.mjs`.
+
+**What it does not do.** It wires no feature to the tables and converts no
+money column. The ledger grows by twelve, which is the honest record of
+production rather than a new choice of dialect.
