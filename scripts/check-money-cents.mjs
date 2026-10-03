@@ -49,7 +49,7 @@ function walk(dir, exts) {
 }
 
 /** Column names that denote an amount of currency. */
-const MONEY = /(^|_)(amount|price|cost|revenue|mrr|arr|burn|payout|commission|earnings|spend|budget|salary|proceeds|principal|valuation|commitment|contributed|called|distributed|nav|balance|market_cap|hourly_rate)(_|$)|_usd$|_cents$|_dollars$/i;
+const MONEY = /(^|_)(amount|price|cost|revenue|mrr|arr|burn|payout|commission|earnings|spend|budget|salary|proceeds|principal|valuation|commitment|contributed|called|distributed|nav|balance|market_cap|hourly_rate|gross_profit|ebitda|net_income|cash|debt)(_|$)|_usd$|_cents$|_dollars$/i;
 
 /**
  * Suffixes that turn a money word into something else entirely. `distributed_at`
@@ -88,6 +88,7 @@ const NOT_MONEY = new Map([
   ['revenue_model', 'prose describing a model'],
   ['revenue_notes', 'prose'],
   ['revenue_growth', 'a growth rate — company_financials (migration 370) stores a ratio, not an amount'],
+  ['ebitda_margin', 'a margin — a ratio beside the ebitda amount in company_financials (migration 370)'],
   ['price_band', 'a band label, not an amount'],
   ['ticket_band', 'a band label'],
   ['budget_band', 'a band label'],

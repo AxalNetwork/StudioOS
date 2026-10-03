@@ -39809,7 +39809,7 @@ four statements.
 
 **The owner's decisions (2026-10-02).**
 - Keep the tables and declare them, rather than drop them on production.
-- Record their seven money columns as legacy REAL dollars rather than
+- Record their twelve money columns as legacy REAL dollars rather than
   rebuild the tables in integer cents.
 
 **What ships.**
@@ -39817,13 +39817,18 @@ four statements.
   `IF NOT EXISTS`: a no-op on production, the same tables on a fresh build.
   It was drafted as 367; #967 took 367 to 369 first.
 - `scripts/money-cents-baseline.json` gains `company_financials.arr`,
-  `burn_rate`, `mrr` and `revenue`, and `company_funding_rounds.amount`,
+  `burn_rate`, `cash`, `debt`, `ebitda`, `gross_profit`, `mrr`,
+  `net_income` and `revenue`, and `company_funding_rounds.amount`,
   `pre_money_valuation` and `post_money_valuation`. Each entry says it was
   created out-of-band and is to be converted with `<col>_cents`.
-- `company_financials.revenue_growth` is a growth rate, not an amount, so it
-  joins `NOT_MONEY` in `check-money-cents.mjs`, pinned in
+- The money classifier learns `gross_profit`, `ebitda`, `net_income`, `cash`
+  and `debt`, which it did not recognise, so the forward-looking rule now
+  covers them too (a review found them outside both the ledger and the
+  guard).
+- `company_financials.revenue_growth` and `ebitda_margin` are rates, not
+  amounts, so they join `NOT_MONEY` in `check-money-cents.mjs`, pinned in
   `schema_guards.test.mjs`.
 
 **What it does not do.** It wires no feature to the tables and converts no
-money column. The ledger grows by seven, which is the honest record of
+money column. The ledger grows by twelve, which is the honest record of
 production rather than a new choice of dialect.
