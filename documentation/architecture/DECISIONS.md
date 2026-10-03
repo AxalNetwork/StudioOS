@@ -3619,7 +3619,6 @@ It is not a render prop. The page passes handlers *in* and gets a bound row
 back, which is the same split D53 records for filters: the table owns which ops
 the canvas promised, the page owns the state only it can hold.
 
-
 ## D68 — "Not recorded" belongs to the reader's data, never to the product's gaps
 
 **2026-09-09.** Task #122, `/research/ask` — but the rule settles a tension that
@@ -15768,7 +15767,6 @@ and CLAUDE.md §4 notes the deploy workflow rebuilds `docs/` at deploy time, so
 the committed build is not proof about the shipped one. The cause is still open;
 what this guard changes is that **if it ever is a 404, it fails before the
 deploy instead of after it.**
-
 
 ## D177
 
@@ -32279,7 +32277,6 @@ redo this specifically, rather than this entry's guess standing in for it.
 full `npm run test:drift`, both typechecks and `check-api-drift` all stay
 green with the baseline entry gone.
 
-
 ## D350
 
 **Lab Profiling reads Eadwyn's question ledger for the four elements it had
@@ -32362,6 +32359,7 @@ track is stored).
   typechecks, `lint:undef` and every guard green, including
   `check-decision-ids`, `check-folder-docs`, `check-api-drift` and
   `check-docs-fresh --strict` after the root `npm run build`.
+
 ## D351
 
 **Lab Customer Discovery binds the evidence stores that already existed, and
@@ -39303,6 +39301,7 @@ and the guard now matches the braced form too.
   literal restored, the counterpart role reverted.
 - Both typechecks, `check-decision-ids`, `check-folder-docs` and
   `check-api-drift` exit 0. Root `npm run build`, then `check-docs-fresh
+
 ## D461
 
 **Commit governance: IC conditions are a store, a recused vote leaves the
@@ -39437,6 +39436,7 @@ artboard's "Funds moved", real now: the sum over the recorded transfers.
   list, a second checklist applied, a default item seeded, the cents
   conversion dropped, the operator gate dropped, the packet indexing
   unexecuted paper.
+
 ## D463
 
 **The founder's investor update on /build/metrics, and the deal-flow page with
@@ -39566,6 +39566,7 @@ and the row is Session 4's to add.
   date, the flows not cut, the mark form unwired, the runway rule reading the
   health snapshot, the chase op back to unbuilt, the export dropping the
   date.
+
 ## D465
 
 **The investor Network book's interaction log and reminders.** Wave 8,
