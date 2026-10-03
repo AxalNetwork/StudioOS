@@ -185,6 +185,14 @@ r.post('/branches/:code/support-session', async (c) => {
       branch: code,
       target: offer?.target ?? null,
       expires_at: offer?.expires_at ?? null,
+      // D530 — WHETHER THE BRANCH'S NOTICE WAS STORED, exactly as the branch
+      // reported it (D441): `true` when its security notice reached the
+      // person's inbox there, `false` when it could not be stored (the session
+      // is authorised all the same). Anything else is `null`, "not reported":
+      // a branch Worker built before D441 sends no such field. It is never
+      // defaulted to true, because "told" is a fact only the branch holds,
+      // and the HQ Team form says what this field says and no more.
+      target_notified: typeof offer?.target_notified === 'boolean' ? offer.target_notified : null,
       // THE LINK IS BUILT HERE because HQ is the side that has to open it and
       // the side that knows the hostname convention. The code rides in the URL
       // and the TOKEN NEVER DOES: the branch's /api/auth/support/redeem swaps

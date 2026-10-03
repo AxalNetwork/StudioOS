@@ -111,8 +111,12 @@ function coolOff(db: DB, userId: number) {
   ).run(userId);
 }
 
-/** The FR branch, as a stub binding that records every call. */
-function branchStub() {
+/**
+ * The FR branch, as a stub binding that records every call. `offer` adds to
+ * what `openSupportSession` answers; with none it answers the pre-D441 shape,
+ * which carries no `target_notified` at all (D530).
+ */
+function branchStub(offer: Record<string, unknown> = {}) {
   const calls: Array<{ method: string; args: unknown[] }> = [];
   const stub = {
     async openSupportSession(...args: unknown[]) {
@@ -121,6 +125,7 @@ function branchStub() {
         target: { id: BRANCH_ACCOUNT, name: 'Fleur Founder', email: 'fleur@fr.example', role: 'founder' },
         expires_at: '2026-09-24 12:05:00',
         redeem_path: '/support/session?code=one-time-test-code',
+        ...offer,
       };
     },
     async moveAccountOut(...args: unknown[]) { calls.push({ method: 'moveAccountOut', args }); return { ok: true }; },
@@ -253,3 +258,37 @@ test('D259: the audit row names the branch and its account, never an HQ user —
   assert.ok(mine.every((x) => !String(x.target || '').includes('Otto')),
     'Security named the HQ user who shares the branch account\'s id');
 });
+
+/* ------------------------------------------------------------------ *
+ * D530 — whether the person was told, as the branch reported it       *
+ * ------------------------------------------------------------------ */
+
+test('D530: the branch\'s target_notified reaches HQ\'s answer unchanged, true and false alike', async () => {
+  for (const told of [true, false]) {
+    const db = freshDb();
+    const fr = branchStub({ target_notified: told });
+    const r = await open(makeEnv(db, { BRANCH_FR: fr.stub }));
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body?.target_notified, told, `the branch reported ${told} and HQ answered ${r.body?.target_notified}`);
+    // The session is authorised either way: an unstored notice is reported,
+    // never turned into a refusal.
+    assert.equal(r.body?.open_url, 'https://fr.axal.vc/support/session?code=one-time-test-code');
+  }
+});
+
+test('D530: a branch that does not report it is answered as null, never as told', async () => {
+  // The pre-D441 shape: no field at all.
+  const db = freshDb();
+  const r = await open(makeEnv(db, { BRANCH_FR: branchStub().stub }));
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.ok('target_notified' in (r.body ?? {}), 'HQ\'s answer leaves the field out instead of saying it was not reported');
+  assert.equal(r.body?.target_notified, null);
+  // And anything that is not a boolean is not a report of one. A truthy
+  // string or number read as "told" would assert delivery nobody confirmed.
+  for (const junk of ['yes', 'true', 1, 0, null, {}]) {
+    const fr = branchStub({ target_notified: junk });
+    const res = await open(makeEnv(freshDb(), { BRANCH_FR: fr.stub }));
+    assert.equal(res.body?.target_notified, null, `${JSON.stringify(junk)} was passed on as ${JSON.stringify(res.body?.target_notified)}`);
+  }
+});
+
