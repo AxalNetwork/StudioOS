@@ -40003,6 +40003,70 @@ treated as accepted, and their subjects are told.
 **Tests.** `relationship_requests_d493.test.ts` (8). 19 mutations, 19
 caught.
 
+## D508
+
+**Lab copy stops selling "idea to incorporated" and an unbacked company
+count — issue #989, slot S04.** D380 §4 retired the single-track
+"idea → incorporated" positioning from the Lab's own share card and
+certificate verifier; three places outside that sweep still carried the
+same claim or an invented number.
+
+**What was wrong.**
+- `templates/email/registry.ts`'s `spinout_admitted` email (both the text
+  and the HTML highlight box) framed the whole programme as one linear arc
+  ending in incorporation — exactly the framing `LabIntro.jsx`'s own
+  repositioning note (D385) explains is wrong: incorporation is one of
+  nineteen working tools, and the arc framing quietly excludes a founder who
+  arrives with an entity already.
+- `SpinoutDemoDayPage.jsx`'s "What Is the Spin-Out Lab" subhead made the
+  same claim in different words.
+- `FounderHomePage.jsx`'s testimonial section read "From the 38 companies
+  that have completed the Spin-Out Lab" — a literal nobody measured, backed
+  by nothing.
+
+**Fixed.** The email and demo-day subhead now describe the programme as its
+working tools (customer discovery, MVP scope, venture-readiness scoring,
+Delaware C-Corp formation if needed) rather than a single arc ending in
+incorporation — the same correction `LabIntro.jsx` already made, applied
+here. `FounderHomePage.jsx` now reads `GET /spinout-lab/stats`'s real
+`companies` figure (distinct founders who completed the
+`incorporation_completed` milestone; already public, built for exactly this
+kind of marketing-page read) and renders no number at all — never a
+placeholder, never the old stale one — when the read fails or the real
+count is zero. A guard (`spinout_lab_copy_d508.test.mjs`) pins all three;
+mutation-tested by reverting each fix in turn: all three escaped and were
+caught.
+
+**Found, not fixed — filed rather than widened into this issue.**
+`FounderHomePage.jsx`'s `METRICS` array carries its own `{ value: 38, label:
+'Spin-Out Completed' }` figure, rendered in the hero's `MetricsStrip` — the
+same unbacked "38" this issue's testimonial line also had, in a different
+component on the same page. This issue's ownership line named three
+specific lines; the `METRICS` entry is a fourth, same-root-cause instance
+this pass found but did not touch, since fixing it needs the same real-count
+wiring under a different component and a decision on whether the hero strip
+should read a live figure at all (several of `MetricsStrip`'s other entries
+— Deals Scored, Venture Partners — are equally unbacked, and that choice is
+not this issue's to make alone). Left for a follow-up that can look at the
+whole strip rather than one more line of it.
+
+**A Codex review on the PR caught a grammar bug in the fix itself** (not
+optional-labeled, so verified and fixed): the testimonial sub pluralized
+"companies" unconditionally, so a real count of exactly 1 would have
+rendered "From the 1 companies that have completed the Spin-Out Lab." Fixed
+by replacing the inline ternary with `graduateTestimonialSub(companies)`,
+which also reuses `lib/spinoutLab.js`'s existing `useSpinoutStats` hook
+instead of a second copy of the same `/spinout-lab/stats` fetch this file
+had rolled by hand (the review didn't ask for that part, but the file
+already had the real hook sitting next to `companiesLabel`, the singular-
+correct noun helper the review pointed at — using it was the smaller diff
+than keeping a parallel one).
+
+**Tests.** `spinout_lab_copy_d508.test.mjs` (now 5, one new: zero/one/many
+grammar, evaluating the actual function's source rather than re-deriving
+its logic in the test). Root `npm run build` and `npm run test:drift` both
+exit 0.
+
 ## D509
 
 **Task #990: two Studio leftovers. A route with no caller, and a missing count
