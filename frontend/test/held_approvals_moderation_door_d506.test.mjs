@@ -13,6 +13,9 @@
  *     with no `hqOnly`, so both HQ-held shells reach it; a wrapper added
  *     later would make this row a door onto a refusal.
  *   - The page still saying no console exists, in its rail or its header.
+ *   - The Approvals row going dark inside the console. The row's `match`
+ *     list is the complete statement of what it owns; the console must be
+ *     on it (Codex's finding on #1042).
  *
  * Run with:
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/held_approvals_moderation_door_d506.test.mjs
@@ -22,6 +25,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const HELD_RAW = read('frontend/src/pages/admin/HeldApprovals.jsx');
@@ -71,4 +75,20 @@ test('Approvals draws fifteen literal doors, none under /branch/, and the two no
   const lane5 = HELD.match(/<tr data-lane="5">([\s\S]*?)<\/tr>/)[1];
   assert.match(lane5, /Not applicable to HQ-held accounts/);
   assert.doesNotMatch(HELD, /\.map\([^)]*<Link/, 'a mapped link is invisible to the reachability walk');
+});
+
+test('the Approvals row stays lit inside the console (Codex on #1042)', () => {
+  // SidebarNav treats a row's `match` as the COMPLETE statement of what it
+  // owns: with a `match` list present, nothing but the row's own `to` and
+  // the listed paths lights it. A door drawn on the landing with no `match`
+  // entry therefore opens a page where no row is lit, which is what the
+  // first draft of this door did.
+  const row = SIDEBAR_GROUPS.admin.flatMap((g) => g.items || []).find((r) => r.to === '/admin/held/approvals');
+  assert.ok(row && Array.isArray(row.match), 'the Approvals row has no match list');
+  assert.ok(row.match.includes(CONSOLE), `${CONSOLE} is not in the Approvals row's match list, so the row goes dark inside the console`);
+  assert.equal(row.match.filter((p) => p === CONSOLE).length, 1, 'listed once');
+  // The same holds for every `/admin/<console>` door the landing draws that
+  // is another row's console by the H35 map: none of lane 4's siblings is
+  // checked here because their placement is the map's (admin_placement_h35),
+  // and lane 4 is the one door that map does not carry.
 });
