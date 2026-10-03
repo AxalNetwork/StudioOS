@@ -40197,7 +40197,7 @@ is out of scope; new code goes in new files instead.
   today's tree it reports the same 1663 calls against 1969 routes as before.
 - The Worker's drift tests (`api_drift.test.mjs`, its `.ts` twin and
   `api_drift_runtime.test.mjs`) read the modules too.
-- The "Do not add a `/api/*` method" rule in `CLAUDE.md` and
+- The "Do not add a `/api/*` method" rule in `CLAUDE.md`, `AGENTS.md` and
   `frontend/src/lib/README.md` now covers the modules.
 
 **Tests.** `scripts/lib/apiModules.test.mjs`: a module method with no Worker
@@ -40206,5 +40206,3 @@ passes, a module missing from the re-export block is reported (with the line
 to add), and the block rejects a ghost, a duplicate, a malformed line and the
 wrong order. Each was mutation-checked both ways.
 
-**Not done.** `AGENTS.md` is not on `main` yet (#972), so its copy of the rule
-is left for that change.
