@@ -13,7 +13,8 @@ disagrees with the code, the document is the thing to fix.
 | `UNRESOLVED_ITEMS.md` | The routing decisions that cannot be made from the code, what each blocks, and what a wrong guess would cost. |
 | `ASSUMPTIONS_LOG.md` | Routing calls taken without an explicit instruction, what each was decided from, and what would make it wrong. |
 | `PROFILING_V2.md` | Profiling v2 (archetype, skills, values that evolve with use). Holds S9's skill-evidence tool map; S7 owns the rest of the spec. |
-| `DECISIONS.md` | Why is it built this way and not the obvious way? Numbered, D1…, each recording what was decided and what it cost. |
+| `DECISIONS.md` | Why is it built this way and not the obvious way? Numbered, D1…D525, each recording what was decided and what it cost. Takes no new entries. |
+| `decisions/` | The same record from D526 on: one file per decision, `D<n>.md`. Its README has the naming rule and what checks it. |
 | `GOTCHAS.md` | What will bite me? |
 | `PROFILING_V2.md` | The Profiling v2 spec (D356): trait model, question formats, skills evidence, values across roles, the evolution model and its parameters, and what Sessions 7–15 build. The source of truth for that programme; `cloudflare-worker/test/fixtures/profiling-v2-personas.json` is held to it. |
 | `PRODUCTION.md` | What production actually is, and how a deploy works. |
@@ -29,8 +30,9 @@ disagrees with the code, the document is the thing to fix.
 disagrees with it, that file wins.
 
 The two read most often are `ROUTE_MAP.md` (before building any surface) and
-`DECISIONS.md` (before undoing something that looks wrong — several entries
-exist precisely because the obvious fix was tried and was worse).
+`DECISIONS.md` with `decisions/` (before undoing something that looks wrong —
+several entries exist precisely because the obvious fix was tried and was
+worse).
 
 **`PROFILE_ROUTING.md` and `PAGE_INVENTORY.md` are build output.** They are
 emitted by `scripts/build-profile-routing.mjs` from `ROUTE_MAP.md` and

@@ -135,9 +135,11 @@ documents it indexes.
   `npm run build` whenever `frontend/src` changes, because `docs/` is
   committed. Mutation-check every new assertion both ways. No skipped or
   disabled tests.
-- **Decisions.** Each PR adds its D-entry to
-  `documentation/architecture/DECISIONS.md` in numeric position, with the
-  number from the issue, then runs `node scripts/check-decision-ids.mjs`.
+- **Decisions.** Each PR records its decision as its own file,
+  `documentation/architecture/decisions/D<n>.md`, headed `## D<n> — <title>`
+  with the number from the issue, then runs
+  `node scripts/check-decision-ids.mjs`. `DECISIONS.md` keeps D1 to D525 and
+  takes no new entries, so two PRs no longer collide in one file (D526).
 - **Production D1.** Read schema and aggregates only, never user content, and
   never write to it.
 - **After a merge** the owner checks the deploy. If you cannot read the deploy

@@ -31,11 +31,32 @@
  * D-numbers live at two heading levels: D1-D52 are `###` under "Part 1", D53
  * onwards are `##` under "Part 2". Matching only one level would have missed
  * this collision entirely, since both of its headings are `##`.
+ *
+ * TWO PLACES SINCE D526. `DECISIONS.md` changed in 130 of 624 commits between
+ * 2 August and 3 October 2026, and every PR inserted its entry "in numeric
+ * position", so two open PRs almost always collided there. From D526 on each
+ * decision is its own file, `decisions/D<n>.md`, and `DECISIONS.md` keeps
+ * D1-D525. The number is still one address across both places, so this check
+ * reads both, and it refuses the three ways the split can go wrong:
+ *
+ *   - the same number in both places (or twice in either);
+ *   - a file whose name and heading disagree, which makes the file name a
+ *     second, contradicting address (`D527.md` headed `## D528`);
+ *   - a heading above D525 in `DECISIONS.md`, which is the old habit
+ *     reopening the collision the split exists to end.
+ *
+ * Alongside those, the same boundary from the other side: a file numbered at
+ * or below D525 (that range lives in `DECISIONS.md`), a file that is not named
+ * `D<n>.md`, a file with no heading, and a file holding more than one
+ * decision.
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { resolve, join } from 'node:path';
 
 const FILE = 'documentation/architecture/DECISIONS.md';
+const DIR = 'documentation/architecture/decisions';
+/** The last number `DECISIONS.md` holds; D526 onwards are files in `DIR` (D526). */
+export const LAST_IN_DECISIONS_MD = 525;
 
 /**
  * Fenced code blocks are stripped first.
@@ -82,28 +103,114 @@ export function decisionIdProblems(md) {
         + ' The next writer finds the highest number by reading the end.',
       );
     }
+    if (id > LAST_IN_DECISIONS_MD) {
+      problems.push(
+        `D${id} is a heading in DECISIONS.md, which holds D1-D${LAST_IN_DECISIONS_MD} only.`
+        + ` From D${LAST_IN_DECISIONS_MD + 1} on each decision is its own file: ${DIR}/D${id}.md.`,
+      );
+    }
   });
 
   return problems;
 }
 
-// Guarded so the two functions can be imported by a test without the scan running.
+/** `D527.md` → 527; anything else (README.md, d527.md, D0527.md, D527-x.md) → null. */
+export function fileDecisionId(name) {
+  const m = /^D([1-9]\d*)\.md$/.exec(name);
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * The problems in the per-decision files, as readable lines.
+ *
+ * `files` is `[{ name, md }]` for every `D*.md` in the folder. Exported for the
+ * same reason as `decisionIdProblems`: the test feeds it folders that are
+ * wrong on purpose.
+ */
+export function decisionFileProblems(files) {
+  const problems = [];
+  for (const { name, md } of files) {
+    const n = fileDecisionId(name);
+    if (n == null) {
+      problems.push(`${name} is not named D<n>.md, so its number cannot be read from its name.`);
+      continue;
+    }
+    if (n <= LAST_IN_DECISIONS_MD) {
+      problems.push(
+        `${name} is numbered D${n}, but D1-D${LAST_IN_DECISIONS_MD} live in DECISIONS.md.`
+        + ` A new decision takes a number above D${LAST_IN_DECISIONS_MD}, from the issue.`,
+      );
+    }
+    const heads = decisionIds(md);
+    if (!heads.length) {
+      problems.push(`${name} has no \`## D${n}\` heading. The heading is how a reader finds the entry.`);
+    } else if (heads[0] !== n) {
+      problems.push(
+        `${name} is headed D${heads[0]}. A file's name and its heading are the same number,`
+        + ' or the entry has two addresses that disagree.',
+      );
+    }
+    if (heads.length > 1) {
+      problems.push(`${name} holds ${heads.length} decision headings; one file holds one decision.`);
+    }
+  }
+  return problems;
+}
+
+/**
+ * Everything wrong across both places: `DECISIONS.md`'s own rules, the files'
+ * rules, and any number that appears in both.
+ */
+export function allDecisionProblems(md, files) {
+  const problems = [...decisionIdProblems(md), ...decisionFileProblems(files)];
+  const inMd = new Set(decisionIds(md));
+  for (const { name, md: body } of files) {
+    for (const id of decisionIds(body)) {
+      if (inMd.has(id)) {
+        problems.push(
+          `D${id} is in DECISIONS.md and in ${DIR}/${name}.`
+          + ' A decision number is an address; two entries cannot share one.',
+        );
+      }
+    }
+  }
+  return problems;
+}
+
+/** The per-decision files on disk, as `[{ name, md }]`; none when the folder does not exist. */
+export function readDecisionFiles(root = process.cwd()) {
+  const dir = resolve(root, DIR);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((name) => name.startsWith('D') && name.endsWith('.md'))
+    .sort()
+    .map((name) => ({ name, md: readFileSync(join(dir, name), 'utf8') }));
+}
+
+// Guarded so the functions can be imported by a test without the scan running.
 if (import.meta.url === `file://${process.argv[1]}`) {
   const md = readFileSync(resolve(process.cwd(), FILE), 'utf8');
-  const problems = decisionIdProblems(md);
+  const files = readDecisionFiles();
+  const problems = allDecisionProblems(md, files);
 
   if (problems.length) {
     console.error('✖ check-decision-ids:');
     for (const p of problems) console.error(`  - ${p}`);
-    console.error(`\nIn ${FILE}. Give the new decision the next free number:`);
-    console.error('every earlier entry that cites a duplicate is now ambiguous,');
-    console.error('and citation by number is how this file is read.');
+    console.error(`\nIn ${FILE} and ${DIR}/. A new decision is its own file there,`);
+    console.error('named and headed with the number its issue gives: every earlier');
+    console.error('entry that cites a duplicate is now ambiguous, and citation by');
+    console.error('number is how these files are read.');
     process.exit(1);
   }
 
   const ids = decisionIds(md);
+  const fileIds = files.map((f) => fileDecisionId(f.name)).sort((a, b) => a - b);
   console.log(
-    `✓ check-decision-ids: ${ids.length} decisions, all distinct,`
-    + ` D${ids[0]} through D${ids[ids.length - 1]} in increasing order.`,
+    `✓ check-decision-ids: ${ids.length} decisions in DECISIONS.md, D${ids[0]} through D${ids[ids.length - 1]}`
+    + ' in increasing order, and '
+    + (fileIds.length
+      ? `${fileIds.length} in ${DIR}/, D${fileIds[0]} through D${fileIds[fileIds.length - 1]}`
+      : `none yet in ${DIR}/`)
+    + '; all distinct.',
   );
 }
