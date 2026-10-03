@@ -32241,6 +32241,56 @@ back in (caught); short-circuiting the function to `return true`
 unconditionally broke 3 of the file's cases (caught). Both restored and
 reverified clean (sha256-matched against the pre-mutation file).
 
+**A third Codex review round, two more findings, both real:**
+
+- **(P1) A device kept a former account's push subscription after
+  sign-out.** `clearSession()` never called `disablePush()`. `getPushState()`
+  only checks whether the browser's service worker has ANY subscription at
+  all, so the next account to sign in on the same device saw push as
+  already "on" and never called `enablePush()` to re-home the endpoint to
+  its own `user_id` — the server-side `push_subscriptions` row kept the
+  FORMER account's id, and `notify()`'s push fan-out sends to whatever row
+  matches the endpoint, not whoever is currently signed in. A signed-out
+  device kept receiving that account's notifications — capital-call and
+  contract notices included — indefinitely. Fixed by calling `disablePush()`
+  from `clearSession()`, and specifically BEFORE `localStorage.removeItem('token')`:
+  `pushUnsubscribe`'s request is authenticated off that same token every
+  other API call uses, so calling it after would ship with no Authorization
+  header and silently no-op. Time-boxed (3s) and wrapped in try/catch, same
+  reasoning as the server-side logout call beside it — a dead network must
+  not hang sign-out.
+- **(P2) The push fan-out ran sequentially with no timeout, inside
+  `notify()`'s synchronous path.** `notify()` is itself awaited by the
+  business request handler that triggered it. With up to 20 subscriptions
+  per account (the `/push/subscribe` cap) sent one at a time and no timeout
+  on any single send, one slow or non-responding push provider made that
+  handler's latency cumulative, unbounded in the worst case. Threading a
+  Worker `ExecutionContext` through `notify()` to truly background this
+  past the response would touch every call site of a function already
+  called from dozens of routes — out of scope for this fix. Instead: all
+  subscriptions for a user now send concurrently (`Promise.all` over the
+  rows) and each individual send races a 5-second timeout, so total wait is
+  bounded by the timeout rather than by (timeout × subscription count).
+
+**Tests (third review round).** `push_security_fixes_d334.test.ts` grew two
+cases: three subscriptions each held 150ms by a mocked `fetch` complete in
+under 300ms (proving concurrency — sequential would take ~450ms), and a
+subscription whose `fetch` never resolves at all still lets `notify()`
+return in under 6s while a second, responsive subscription on the same
+call still receives its push (proving the timeout bounds the hang without
+blocking the rest of the fan-out). `clear_session_push_revoke_d334.test.mjs`
+(new, 3) pins the source-level shape `clearSession()` must have: the
+`disablePush` import exists, the call happens before the token is removed,
+and it's wrapped in a timeout-raced `try` — source-level because
+`clearSession` is a hook-bound closure inside `App.jsx`, not an isolated
+importable unit, matching this codebase's existing pattern for that file.
+All mutation-tested: reverting the `Promise.all`+timeout back to a bare
+sequential loop broke the concurrency test and turned the hung-send test
+into an actual hang (caught); dropping the `disablePush` import, and
+moving the call to after the token removal, each broke one of the three
+source-level tests (caught). All reverted and reverified clean
+(sha256-matched against the pre-mutation files).
+
 
 ## D350
 

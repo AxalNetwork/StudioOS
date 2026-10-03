@@ -41,6 +41,7 @@ import HqSubNavStrip, { StripLink } from './components/HqSubNavStrip';
 import { ADMIN_SHELLS, MESSAGES_ROLES } from './lib/paletteIndex';
 import { stripFor } from './lib/hqStrips';
 import { clearSupportSession } from './lib/supportSession';
+import { disablePush } from './lib/pwa';
 import { readStoredReason, clearStoredReason } from './lib/impersonationBar';
 import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
@@ -1896,6 +1897,24 @@ function AppInner() {
   // The httpOnly auth cookie is untouched by clearing localStorage, so the
   // server-side revoke below still runs over the cookie.
   const clearSession = useCallback(async () => {
+    // Codex review on D334: this never revoked a push subscription, so an
+    // endpoint enabled under one account kept receiving THAT account's
+    // notifications on this device after sign-out — `getPushState()` only
+    // checks whether the browser has any subscription at all, and the next
+    // account to sign in on the same device sees push already "on" and never
+    // calls `enablePush()` to re-home it to its own `user_id`. Must run
+    // before the token is cleared below: `disablePush()`'s unsubscribe call
+    // is authenticated the same way every other API call is, off the token
+    // this function is about to remove. Time-boxed and never fatal, same
+    // reasoning as the server-side logout race below — a dead network must
+    // not hang sign-out, and a push row surviving one extra send cycle is
+    // far better than sign-out itself hanging.
+    try {
+      await Promise.race([
+        disablePush(),
+        new Promise((resolve) => setTimeout(resolve, 3000)),
+      ]);
+    } catch (e) { /* disablePush must never block sign-out */ }
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('realUser');

@@ -206,3 +206,77 @@ test('notify() sends a real web push to a subscribed device', async (t) => {
 
   assert.equal(pushedTo, 'https://push.example/device', 'notify() never reached the subscribed device at all');
 });
+
+// ---------------------------------------------------------------------------
+// 5. The push fan-out runs concurrently and is bounded by a timeout
+// ---------------------------------------------------------------------------
+
+async function subscriberKeys() {
+  const subKeyPair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']) as CryptoKeyPair;
+  const pub = new Uint8Array(await crypto.subtle.exportKey('raw', subKeyPair.publicKey) as ArrayBuffer);
+  const b64url = (b: Uint8Array) => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return { p256dh: b64url(pub), auth: b64url(crypto.getRandomValues(new Uint8Array(16))) };
+}
+
+async function vapidEnv(extra: Record<string, unknown> = {}) {
+  const vapidPair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign']) as CryptoKeyPair;
+  const vapidPub = new Uint8Array(await crypto.subtle.exportKey('raw', vapidPair.publicKey) as ArrayBuffer);
+  const vapidJwk = await crypto.subtle.exportKey('jwk', vapidPair.privateKey) as JsonWebKey;
+  return { VAPID_PUBLIC_KEY: Buffer.from(vapidPub).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''), VAPID_PRIVATE_KEY: vapidJwk.d, ...extra };
+}
+
+test('notify() sends to multiple subscriptions concurrently, not one at a time', async (t) => {
+  // Codex review (P2): the fan-out loop used to `await` each send in turn.
+  // Three subscriptions each held for 150ms would take ~450ms sequentially
+  // but should take ~150ms run concurrently — the gap between those two
+  // numbers is exactly what distinguishes the two implementations.
+  const db = notifyFixture();
+  for (let i = 0; i < 3; i++) {
+    const keys = await subscriberKeys();
+    db.prepare(`INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?)`)
+      .run(ME, `https://fcm.googleapis.com/fcm/send/${i}`, keys.p256dh, keys.auth);
+  }
+  const DELAY_MS = 150;
+  const originalFetch = globalThis.fetch;
+  t.after(() => { (globalThis as any).fetch = originalFetch; });
+  (globalThis as any).fetch = async () => {
+    await new Promise((resolve) => setTimeout(resolve, DELAY_MS));
+    return new Response(null, { status: 201 });
+  };
+  const env: any = await vapidEnv({ ENVIRONMENT: 'development', DB: d1Over(db) });
+  const startedAt = Date.now();
+  await notify(env, { userId: ME, type: 'score_generated', title: 'New score', category: 'scoring', channels: ['in_app'] });
+  const elapsed = Date.now() - startedAt;
+  assert.ok(
+    elapsed < DELAY_MS * 2,
+    `3 subscriptions at ${DELAY_MS}ms each took ${elapsed}ms — sequential would be ~${DELAY_MS * 3}ms, concurrent should be close to ${DELAY_MS}ms`,
+  );
+});
+
+test('notify() does not hang forever on a push service that never responds', async (t) => {
+  // One endpoint's fetch never resolves at all. The send must be bounded by
+  // the fan-out's own timeout, not left to hang notify() — and a request
+  // handler, not just this test, is what would otherwise be stuck waiting.
+  const db = notifyFixture();
+  const hungKeys = await subscriberKeys();
+  db.prepare(`INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?)`)
+    .run(ME, 'https://fcm.googleapis.com/fcm/send/hung', hungKeys.p256dh, hungKeys.auth);
+  const okKeys = await subscriberKeys();
+  db.prepare(`INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?)`)
+    .run(ME, 'https://fcm.googleapis.com/fcm/send/ok', okKeys.p256dh, okKeys.auth);
+
+  let okPushed = false;
+  const originalFetch = globalThis.fetch;
+  t.after(() => { (globalThis as any).fetch = originalFetch; });
+  (globalThis as any).fetch = async (url: string) => {
+    if (String(url).endsWith('/hung')) return new Promise(() => { /* never resolves */ });
+    if (String(url).endsWith('/ok')) { okPushed = true; return new Response(null, { status: 201 }); }
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  const env: any = await vapidEnv({ ENVIRONMENT: 'development', DB: d1Over(db) });
+  const startedAt = Date.now();
+  await notify(env, { userId: ME, type: 'score_generated', title: 'New score', category: 'scoring', channels: ['in_app'] });
+  const elapsed = Date.now() - startedAt;
+  assert.ok(elapsed < 6000, `notify() took ${elapsed}ms — a hung push send must be bounded by its own timeout (5s), not left open`);
+  assert.equal(okPushed, true, 'the other, responsive subscription must still receive its push despite the hung one');
+}, { timeout: 8000 });

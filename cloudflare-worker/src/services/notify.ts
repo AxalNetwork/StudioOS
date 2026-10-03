@@ -23,6 +23,7 @@
  *    user's pending outbox into a single email at 09:00 user-tz.
  */
 import type { Env } from '../types';
+import type { PushSendResult } from './webpush';
 import { stripTrailingSlashes } from '../util/url';
 import { getUserSettings, isInQuietHours } from './userSettings';
 import { bindingKey } from '../util/schemaBootstrap';
@@ -364,18 +365,38 @@ export async function notify(env: Env, args: NotifyArgs): Promise<number | null>
           ).bind(args.userId).all();
           const rows = (subs?.results || []) as Array<{ id: number; endpoint: string; p256dh: string; auth: string }>;
           if (rows.length) {
+            // Codex review: this looped sequentially with no timeout —
+            // notify() is itself awaited by the business request handler
+            // that triggered it, so one slow push service multiplied by
+            // up to 20 subscriptions (the /push/subscribe cap) made that
+            // handler's latency cumulative, with no bound at all if a
+            // provider simply never responds. Threading a Worker
+            // ExecutionContext through notify() to truly background this
+            // past the response would touch every one of its call sites —
+            // out of scope for this fix — so instead each send races a
+            // fixed timeout and all rows run concurrently rather than
+            // one-at-a-time: the wait is bounded by the timeout, not by
+            // (timeout × subscription count).
             const { sendWebPush } = await import('./webpush');
-            for (const row of rows) {
-              const result = await sendWebPush(env, row, {
-                title: args.title,
-                body: args.body ?? '',
-                link: args.link ?? '/inbox',
-                type: args.type,
-              });
-              if (!result.ok && result.gone) {
-                await env.DB.prepare(`DELETE FROM push_subscriptions WHERE id = ?`).bind(row.id).run();
-              }
-            }
+            const PUSH_SEND_TIMEOUT_MS = 5000;
+            await Promise.all(rows.map(async (row) => {
+              try {
+                const result = await Promise.race([
+                  sendWebPush(env, row, {
+                    title: args.title,
+                    body: args.body ?? '',
+                    link: args.link ?? '/inbox',
+                    type: args.type,
+                  }),
+                  new Promise<PushSendResult>((resolve) => setTimeout(
+                    () => resolve({ ok: false, gone: false, status: 0, error: 'timeout' }), PUSH_SEND_TIMEOUT_MS,
+                  )),
+                ]);
+                if (!result.ok && result.gone) {
+                  await env.DB.prepare(`DELETE FROM push_subscriptions WHERE id = ?`).bind(row.id).run();
+                }
+              } catch (e) { console.warn('[notify] web push send failed', e); }
+            }));
           }
         } catch (e) { console.warn('[notify] web push fan-out failed', e); }
       }
