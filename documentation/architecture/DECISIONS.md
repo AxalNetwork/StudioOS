@@ -32067,6 +32067,97 @@ silently dropped from the sweep.
   `check-api-drift` exit 0. Root `npm run build`, then
   `node scripts/check-docs-fresh.mjs --strict`, exits 0.
 
+## D334
+
+**The notifications panel and push routes, item 6 of the Wave-8 brief —
+`/api/notifications/push/*`, migration 302, and a shared type-map.**
+
+**The five push routes paid off known debt, not a new feature.**
+`frontend/src/lib/pwa.js`'s `enablePush`/`disablePush`/`sendPushTest` (Task
+#57) and `NotificationBell.jsx`'s "Enable push" toggle have called
+`api.pushVapidKey()`, `pushSubscribe()`, `pushUnsubscribe()`,
+`pushSubscriptions()` and `pushTest()` all along — `scripts/api-drift-baseline.json`
+carried all five as known drift (`GET/POST /api/notifications/push/*`). The
+worker had no route at all behind any of them; the frontend half of this
+feature was already finished and had never once worked end to end. This adds:
+- `cloudflare-worker/sql/migrations/302_push_subscriptions.sql` — one row per
+  browser subscription, keyed on its endpoint URL (unique by construction).
+- `services/webpush.ts` — RFC 8291 payload encryption and RFC 8292 VAPID JWT
+  signing, built on `crypto.subtle` rather than the npm `web-push` package
+  (which shells out to Node's `crypto` module; Workers has none). ECDH P-256
+  key agreement, HKDF-derived content-encryption key and nonce, AES-128-GCM
+  over the RFC 8188 record, VAPID ES256 JWT — all hand-rolled against the
+  RFCs rather than copied from an existing implementation, because none of
+  this repo's dependencies ship a Workers-compatible one.
+- The five routes in `routes/notifications.ts`, all requiring auth and
+  scoped to the caller's own subscriptions. `/push/test` deletes a
+  subscription outright on a 404/410 from the push service (RFC 8030
+  §7.2 — the subscription is gone on the browser's side) rather than
+  retrying it forever.
+- `scripts/api-drift-baseline.json` updated — the debt ledger shrank by
+  five entries, which is the only direction it's supposed to move.
+- `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` added to `types.ts`
+  as optional secrets; unset in dev/preview, `/push/vapid-key` answers
+  `{ public_key: null }` rather than defaulting to a shared key a payload
+  would be encrypted to and never decrypt.
+
+**The notification type → label map moved to one file.** Before this, only
+`SettingsPage.jsx`'s `NOTIFICATION_EVENTS`/`PARTNER_NOTIFICATION_EVENTS`
+paired a backend `type` key with a readable label; the bell and `/inbox`
+(`NotificationList.jsx`) rendered the raw key — "score_generated" in the UI,
+not "New score generated for your startup". Both arrays now live in
+`frontend/src/lib/notificationTypes.js`; `SettingsPage.jsx` imports them
+instead of declaring its own copy, and `NotificationList.jsx`'s row uses the
+new `labelForType()`, which falls back to a titleised version of an unknown
+key rather than rendering blank — a new `notify()` call site's events are
+legible immediately, mapped label or not.
+
+**A safety-net `/notifications` → `/inbox` redirect.** `/inbox` has been
+the panel's only address since D144; nothing in this codebase links to a
+bare `/notifications`. Added anyway, because the bell's own settings link
+reads `/account/notifications` and the Settings tab is `#notifications` —
+close enough to type by habit or bookmark from before `/inbox` existed — and
+landing on the 404 page instead of the panel costs nothing to prevent.
+
+**What this is not.** `NotificationBell.jsx` and `InboxPage.jsx` needed no
+changes — both were already correct (push UI, unreadable-vs-empty handling
+from D144/D332). This is the backend half of a feature the frontend had
+already finished, plus the one labeling gap between the two existing
+renderers.
+
+**One `.gitleaksignore` entry.** `webpush_d335.test.ts`'s first version
+hardcoded a test-only VAPID private key as a base64 literal — indistinguishable
+from a real secret to gitleaks' `generic-api-key` rule, which correctly
+flagged it (commit `9080925048`). That key pair was generated solely for the
+test (locally, once, never used anywhere else) and never matched any real
+VAPID key, so there was nothing to rotate. The test now generates its key
+pair at run time via `crypto.subtle` instead, so no later commit carries the
+literal — but gitleaks diffs the whole PR commit range, so the superseded
+commit's diff still trips the scan regardless of the fix landing on top.
+`.gitleaksignore` at the repo root carries exactly this finding's fingerprint
+(`9080925048929ef222056a0e469c32d8207f86dc:cloudflare-worker/test/webpush_d335.test.ts:generic-api-key:33`),
+not a whole-commit entry in `.gitleaks.toml` — that commit also adds
+`webpush.ts`, `notifications.ts`, `types.ts` and migration 302, and a
+whole-commit allowlist would hide a real finding in any of those too.
+Verified against the gitleaks version CI runs (8.21.2): the PR's commit
+range scans clean with the file in place, and a one-character change to the
+fingerprint's line number brings the finding back — the entry only lets
+through the one thing it names.
+
+**Tests.** `webpush_d335.test.ts` (4) — the VAPID JWT's signature verifies
+against its own public key, and `sendWebPush`'s wire output is round-tripped
+through a real decrypt back to the original JSON payload, so a spec
+regression here would fail a real cryptographic check, not a mocked one.
+`notifications_push_routes_d335.test.ts` (7) — auth, validation, per-user
+scoping on subscribe/unsubscribe/list, upsert-not-duplicate on re-subscribe,
+and `/push/test` refusing (not silently no-op'ing) when VAPID isn't
+configured. `notification_types_d336.test.mjs` (6). Three pre-existing tests
+(`account_d433.test.mjs`'s voice-rule check, `inbox_page_d144.test.mjs`'s
+row-renders-its-type check) were re-aimed at the moved arrays/new label
+output rather than weakened — both now check exactly what they checked
+before, against where that content actually lives now.
+
+
 ## D350
 
 **Lab Profiling reads Eadwyn's question ledger for the four elements it had
@@ -39789,73 +39880,3 @@ treated as accepted, and their subjects are told.
 **Tests.** `relationship_requests_d493.test.ts` (8). 19 mutations, 19
 caught.
 
-## D496
-
-**The notifications panel and push routes, item 6 of the Wave-8 brief —
-`/api/notifications/push/*`, migration 302, and a shared type-map.**
-
-**The five push routes paid off known debt, not a new feature.**
-`frontend/src/lib/pwa.js`'s `enablePush`/`disablePush`/`sendPushTest` (Task
-#57) and `NotificationBell.jsx`'s "Enable push" toggle have called
-`api.pushVapidKey()`, `pushSubscribe()`, `pushUnsubscribe()`,
-`pushSubscriptions()` and `pushTest()` all along — `scripts/api-drift-baseline.json`
-carried all five as known drift (`GET/POST /api/notifications/push/*`). The
-worker had no route at all behind any of them; the frontend half of this
-feature was already finished and had never once worked end to end. This adds:
-- `cloudflare-worker/sql/migrations/302_push_subscriptions.sql` — one row per
-  browser subscription, keyed on its endpoint URL (unique by construction).
-- `services/webpush.ts` — RFC 8291 payload encryption and RFC 8292 VAPID JWT
-  signing, built on `crypto.subtle` rather than the npm `web-push` package
-  (which shells out to Node's `crypto` module; Workers has none). ECDH P-256
-  key agreement, HKDF-derived content-encryption key and nonce, AES-128-GCM
-  over the RFC 8188 record, VAPID ES256 JWT — all hand-rolled against the
-  RFCs rather than copied from an existing implementation, because none of
-  this repo's dependencies ship a Workers-compatible one.
-- The five routes in `routes/notifications.ts`, all requiring auth and
-  scoped to the caller's own subscriptions. `/push/test` deletes a
-  subscription outright on a 404/410 from the push service (RFC 8030
-  §7.2 — the subscription is gone on the browser's side) rather than
-  retrying it forever.
-- `scripts/api-drift-baseline.json` updated — the debt ledger shrank by
-  five entries, which is the only direction it's supposed to move.
-- `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` added to `types.ts`
-  as optional secrets; unset in dev/preview, `/push/vapid-key` answers
-  `{ public_key: null }` rather than defaulting to a shared key a payload
-  would be encrypted to and never decrypt.
-
-**The notification type → label map moved to one file.** Before this, only
-`SettingsPage.jsx`'s `NOTIFICATION_EVENTS`/`PARTNER_NOTIFICATION_EVENTS`
-paired a backend `type` key with a readable label; the bell and `/inbox`
-(`NotificationList.jsx`) rendered the raw key — "score_generated" in the UI,
-not "New score generated for your startup". Both arrays now live in
-`frontend/src/lib/notificationTypes.js`; `SettingsPage.jsx` imports them
-instead of declaring its own copy, and `NotificationList.jsx`'s row uses the
-new `labelForType()`, which falls back to a titleised version of an unknown
-key rather than rendering blank — a new `notify()` call site's events are
-legible immediately, mapped label or not.
-
-**A safety-net `/notifications` → `/inbox` redirect.** `/inbox` has been
-the panel's only address since D144; nothing in this codebase links to a
-bare `/notifications`. Added anyway, because the bell's own settings link
-reads `/account/notifications` and the Settings tab is `#notifications` —
-close enough to type by habit or bookmark from before `/inbox` existed — and
-landing on the 404 page instead of the panel costs nothing to prevent.
-
-**What this is not.** `NotificationBell.jsx` and `InboxPage.jsx` needed no
-changes — both were already correct (push UI, unreadable-vs-empty handling
-from D144/D332). This is the backend half of a feature the frontend had
-already finished, plus the one labeling gap between the two existing
-renderers.
-
-**Tests.** `webpush_d335.test.ts` (4) — the VAPID JWT's signature verifies
-against its own public key, and `sendWebPush`'s wire output is round-tripped
-through a real decrypt back to the original JSON payload, so a spec
-regression here would fail a real cryptographic check, not a mocked one.
-`notifications_push_routes_d335.test.ts` (7) — auth, validation, per-user
-scoping on subscribe/unsubscribe/list, upsert-not-duplicate on re-subscribe,
-and `/push/test` refusing (not silently no-op'ing) when VAPID isn't
-configured. `notification_types_d336.test.mjs` (6). Three pre-existing tests
-(`account_d433.test.mjs`'s voice-rule check, `inbox_page_d144.test.mjs`'s
-row-renders-its-type check) were re-aimed at the moved arrays/new label
-output rather than weakened — both now check exactly what they checked
-before, against where that content actually lives now.
