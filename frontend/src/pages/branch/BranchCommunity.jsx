@@ -5,18 +5,21 @@ import { Card } from '../../ui';
 import BranchZone from './BranchZone';
 
 /**
- * Branch · Community — canvas S4's second half, and the index its four consoles
+ * Branch · Community — canvas S4's second half, and the index its consoles
  * never had.
  *
- * WHAT WAS ACTUALLY MISSING. All four consoles are real, working, and already
- * branch-reachable: `admin_events.ts`, `admin_jobs.ts`, `admin_circles.ts` and
- * `admin_network_profiles.ts` carry **zero** `requireHqAuthoring` calls between
- * them, so they answer on a branch exactly as they do at HQ — which is what
- * "entirely local" should mean and, measured, already does. Each has a live SPA
- * route. What did not exist is the page the sidebar's Community row points at,
- * so this is an index rather than four new screens.
+ * WHAT WAS ACTUALLY MISSING. The four canvas S4 consoles are real, working,
+ * and already branch-reachable: `admin_events.ts`, `admin_jobs.ts`,
+ * `admin_circles.ts` and `admin_network_profiles.ts` carry **zero**
+ * `requireHqAuthoring` calls between them, so they answer on a branch exactly
+ * as they do at HQ — which is what "entirely local" should mean and, measured,
+ * already does. Each has a live SPA route. What did not exist is the page the
+ * sidebar's Community row points at, so this is an index rather than new
+ * screens. D303 later added Wellbeing as a fifth card to the same index (the
+ * coordinator's decision placed it in Admin · Community), bringing the total
+ * to five.
  *
- * EACH CARD SAYS WHAT ITS CONSOLE ACTUALLY DOES, because three of the four are
+ * EACH CARD SAYS WHAT ITS CONSOLE ACTUALLY DOES, because four of the five are
  * narrower than their names suggest and a reader who assumes otherwise goes
  * looking for a control that is not there:
  *
@@ -26,7 +29,9 @@ import BranchZone from './BranchZone';
  *   Job board (5 routes)  moderation ONLY — list, detail, approve, reject,
  *                         unpublish. There is no admin create, edit or delete.
  *   Circles (8 routes)    full CRUD — the admin authors circles outright.
- *   Network profiles (6)  CRUD + photo + reorder.
+ *   Network profiles (6)  CRUD + photo + reorder, but not a member directory.
+ *   Wellbeing             expert directory only — curated resources have no
+ *                         console of their own yet.
  *
  * AND NETWORK PROFILES IS NOT A MEMBER DIRECTORY, which is the one a reader is
  * most likely to get wrong. Measured: the only public route over that table is
@@ -37,7 +42,7 @@ import BranchZone from './BranchZone';
  * slide by that name), so the card says that rather than letting the
  * name imply a directory that does not exist.
  *
- * NO FETCH HERE, DELIBERATELY. Four counts would each be a second read of a
+ * NO FETCH HERE, DELIBERATELY. Five counts would each be a second read of a
  * console's own list, and a count on this page disagreeing with the console one
  * click away is the tile-vs-table defect D128 was written to end. The cards
  * link; the consoles count.
@@ -120,13 +125,13 @@ export default function BranchCommunity({ user }) {
       // IS TRUE, AND IT SAYS WHY RATHER THAN BEING GIVEN COVERAGE TO FIX IT.
       // Three branch zones passed the rail nothing; two of them had loaded a
       // summary and were simply not telling it. This one genuinely has not,
-      // deliberately — see the header above: four counts here would each be a
+      // deliberately — see the header above: five counts here would each be a
       // second read of a console's own list, and a count disagreeing with the
       // console one click away is the tile-vs-table defect D128 ended.
       // Fabricating coverage so the rail's button lights up would reintroduce
       // that defect one layer higher, which is why the absence is explained
       // instead of filled.
-      coverageNote={'These four consoles read and write this deployment\'s own database. Nothing in them '
+      coverageNote={'These five consoles read and write this deployment\'s own database. Nothing in them '
         + 'is shared with another territory and nothing in them is pushed from HQ. This page holds no '
         + 'figures of its own to read back — each console counts its own rows, so a count here could '
         + 'disagree with the one a click away.'}
@@ -137,9 +142,9 @@ export default function BranchCommunity({ user }) {
         </div>
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink">Community</h1>
         <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
-          Events, the job board, circles and network profiles &mdash; entirely local. Each console
-          below runs against this territory&rsquo;s own database, and each says what it can do,
-          because three of the four are narrower than their names suggest.
+          Events, the job board, circles, network profiles and wellbeing &mdash; entirely local. Each
+          console below runs against this territory&rsquo;s own database, and each says what it can
+          do, because four of the five are narrower than their names suggest.
         </p>
       </header>
 

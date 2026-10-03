@@ -53,7 +53,8 @@ import { UserDetailModal } from '../src/pages/AdminPage.jsx';
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const CANVAS = raw('design/canvases/integrated/Admin · Super.dc.html');
 const PAGE = codeOnly(raw('frontend/src/pages/hq/AccountsPage.jsx'));
-const TABLE = codeOnly(raw('frontend/src/pages/hq/HqTeamTable.jsx'));
+const TABLE_RAW = raw('frontend/src/pages/hq/HqTeamTable.jsx');
+const TABLE = codeOnly(TABLE_RAW);
 const ACTIONS = codeOnly(raw('frontend/src/pages/hq/HqTeamActions.jsx'));
 const CONTROLS = codeOnly(raw('frontend/src/lib/accountControls.js'));
 const ADMIN = codeOnly(raw('frontend/src/pages/AdminPage.jsx'));
@@ -160,9 +161,17 @@ test('the canvas notes that describe a platform that does not exist do not reach
   // D248 — re-aimed. "The person is not told" was true until D248; the
   // banner half of the canvas's claim stays false and the card still says so.
   // D259 — narrowed, not loosened: the sentence is true of an HQ-held account,
-  // and the card now says so, and says a branch account is not told yet.
+  // and the card said so, and said a branch account was not told yet.
+  // D507 — widened again by the route, not by the card: D441 made the branch
+  // send a security notice when HQ authorises a session, and the card says so.
+  // The D507 test below reads that notice so the sentence cannot outlive it.
   assert.match(plain, /On an HQ-held account the person is told when it opens, in the app and by email, with your name and your reason; there is no banner on their side\./);
-  assert.match(plain, /An account on a branch, opened with Support in the Team table’s branch search, is not told yet\./);
+  // The card describes the notice and does not say the person WAS told: the
+  // branch's `target_notified` is false when the inbox refused the notice, and
+  // HQ's route drops the field, so the card has no delivery fact to assert.
+  assert.match(plain, /An account on a branch, opened with Support in the Team table’s branch search: the branch sends them a security notice when you authorise the session, in the app and by email, with your name, your reason and that the session lasts 30 minutes once it is opened\. The branch reports whether that notice was stored; HQ’s route does not pass it on, so this card cannot say whether they were told\./);
+  assert.doesNotMatch(plain, /not told/, 'the card still says some account is not told');
+  assert.doesNotMatch(plain, /branch search, is told/, 'the card asserts a branch account was told, which HQ cannot know');
   assert.match(plain, /The successor and the former holder are both notified, in the app and by email\./);
   assert.match(plain, /It does not place them in a cohort on Programs\./);
   assert.match(plain, /Neither is checked against the licence’s seats — no grant on the platform is\./);
@@ -239,6 +248,58 @@ test('D248: the target is told, Extend has a reason and a ceiling, and the card 
   assert.match(method, /window\.prompt\(/, 'Extend no longer asks for a reason when its caller has none');
   assert.match(method, /if \(!why\) return null;/, 'a cancelled prompt still sends the request');
   assert.match(method, /body: JSON\.stringify\(\{ reason: why \}\)/, 'the reason is not sent');
+});
+
+test('D507: a branch account is told at authorisation, and the card and the table say so only while the branch route does', () => {
+  // D259 said the branch account is not told, which was true: openSupportSession
+  // imported no notify function. D441 made the branch send a security notice
+  // when HQ authorises the session. The four sentences that still said "not
+  // told" (the card, the Support form, the table's footer and its header
+  // comment) now say what the notice is, and this reads the notice itself.
+  const plain = text(PLAIN);
+  assert.doesNotMatch(plain, /is not told/, 'the card still says a branch account is not told');
+  assert.ok(!TABLE_RAW.includes('not told'), 'the Team table (source or comment) still says the person is not told');
+  assert.ok(!TABLE_RAW.includes('no notice reaches'), 'the Team table still says no notice reaches the person');
+  const table = TABLE.replace(/\s+/g, ' ');
+  // Attempt-neutral: the form describes the notice and what is and is not
+  // reported, and never asserts the person was told — `target_notified` is
+  // false when the branch's inbox refused the notice, and HQ's route drops it.
+  assert.match(table, /The branch records the authorisation and sends the person a security notice, in the app and by email, with your name, your reason and that the session lasts 30 minutes once it is opened\. The branch reports whether that notice was stored; HQ&rsquo;s route does not pass it on, so this form cannot say whether the person was told\./,
+    'the Support form does not say what the branch sends and what is not reported');
+  assert.doesNotMatch(table, /The person is told/, 'the Support form asserts the person was told, which HQ cannot know');
+  assert.match(table, /the branch sends the person a security notice when the session is authorised, and whether it was stored is not reported here\./,
+    'the table footer does not describe the notice');
+  assert.doesNotMatch(table, /the person is told/, 'the table footer asserts the person was told');
+  assert.match(TABLE_RAW, /The branch tells the\s*\* person \(D441, said here since D507\)/, 'the header comment does not say the branch tells the person');
+  assert.match(TABLE_RAW, /never says the person was\s*\* told\./, 'the header comment no longer records that the form claims no delivery');
+
+  // The branch route: the notice is sent after the authorisation is recorded,
+  // as a security notice in the app and by email, naming the 30 minutes, and
+  // whether it was stored is reported rather than assumed.
+  const ops = codeOnly(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/rpc/branchOps.ts'), 'utf8'));
+  const between = (from, to) => {
+    const a = ops.indexOf(from);
+    assert.ok(a >= 0, `${from} is gone`);
+    const b = ops.indexOf(to, a + from.length);
+    return ops.slice(a, b > a ? b : ops.length);
+  };
+  const open = between('export async function openSupportSession(', '\nexport ');
+  const told = open.indexOf('const targetNotified = await tellBranchOfSupportSession(env, targetId, actor, reason, branch);');
+  assert.ok(told > 0, 'openSupportSession no longer tells the account');
+  assert.ok(open.indexOf("'hq_support_authorised'") < told, 'the account is told before the authorisation is recorded');
+  assert.ok(open.indexOf('target_notified: targetNotified,') > told, 'whether the notice was stored is no longer reported');
+  const tell = between('async function tellBranchOfSupportSession(', '\n}\n');
+  assert.match(tell, /type: 'hq_branch_support_session'/);
+  assert.match(tell, /channels: \['in_app', 'email'\]/, 'the notice is not sent in the app and by email');
+  assert.match(tell, /category: 'security'/, 'the notice is not a security notice, so quiet hours could hold it');
+  assert.match(tell, /for \$\{SUPPORT_SESSION_MINUTES\} minutes\./, 'the notice no longer names how long the session lasts');
+  assert.match(ops, /export const SUPPORT_SESSION_MINUTES = 30;/, 'the card and the form say 30 minutes; the branch enforces something else');
+
+  // HQ's own route answers without the branch's `target_notified`, which is why
+  // the form says delivery is not reported here. If the route starts passing
+  // it through, the form can say whether the notice reached them: re-aim both.
+  const hq = codeOnly(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_support_sessions.ts'), 'utf8'));
+  assert.ok(!hq.includes('target_notified'), 'HQ\'s route now passes target_notified through; the form\'s "not reported here" is stale');
 });
 
 test('D249: the role override takes demote\'s bar, tells the person, and the card says so only while the route does', () => {

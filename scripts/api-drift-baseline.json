@@ -10,7 +10,6 @@
     "GET /api/capital/lp-portal",
     "GET /api/dashboard/stats",
     "GET /api/pipeline/votes/leaderboard",
-    "POST /api/calendar/me/calcom",
     "POST /api/email/send-deal",
     "POST /api/legal/incorporate",
     "POST /api/legal/spinout/:p"

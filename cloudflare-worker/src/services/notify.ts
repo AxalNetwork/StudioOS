@@ -15,9 +15,13 @@
  *  - Critical categories (`security`, `billing`, `contract_sign_request`)
  *    bypass both quiet hours and digest buffering.
  *  - Non-critical email is dropped into `notification_outbox` when the
- *    user is inside their quiet window OR has digest set to daily/weekly.
- *  - When digest=off and we're in quiet hours, the email is logged as
- *    `suppressed_quiet_hours` in `activity_logs` and skipped.
+ *    user has digest set to daily/weekly, regardless of quiet hours — the
+ *    digest cron is what paces it either way.
+ *  - D333: quiet hours with digest=off no longer drops the email outright
+ *    (it used to, logged as `suppressed_quiet_hours`). It buffers the same
+ *    as a digest-on quiet-hours email, which `flushPendingDigests` drains
+ *    at the next daily/weekly slot — paused, as `SettingsPage.jsx`'s Quiet
+ *    Hours card promises, not lost.
  *  - Slack is intentionally NOT digestable for this slice (spec).
  *  - `flushPendingDigests(env)` is what the cron calls to assemble each
  *    user's pending outbox into a single email at 09:00 user-tz.
@@ -26,6 +30,7 @@ import type { Env } from '../types';
 import { stripTrailingSlashes } from '../util/url';
 import { getUserSettings, isInQuietHours } from './userSettings';
 import { bindingKey } from '../util/schemaBootstrap';
+import { renderWeeklyDigest } from './email/canvasTransactional';
 
 export type NotifyChannel = 'in_app' | 'email' | 'slack';
 export type NotifyCategory =
@@ -50,6 +55,16 @@ export const CRITICAL_CATEGORIES: ReadonlySet<string> = new Set([
   'security',
   'billing',
   'contract_sign_request',
+]);
+
+/** Event types whose email column SettingsPage.jsx renders locked
+ *  (checked, disabled) — the only ones `resolveChannels` may force email
+ *  back on over a stored opt-out. Distinct from CRITICAL_CATEGORIES, which
+ *  also covers uncategorised legacy callers for quiet-hours/digest timing
+ *  but was never meant to override those callers' own opt-outs. */
+const LOCKED_EMAIL_TYPES: ReadonlySet<string> = new Set([
+  'capital_call_issued',
+  'agreement_ready_to_sign',
 ]);
 
 export interface NotifyArgs {
@@ -141,14 +156,20 @@ async function loadPrefs(env: Env, userId: number): Promise<Record<string, any>>
   }
 }
 
-function resolveChannels(prefs: Record<string, any>, type: string, requested: NotifyChannel[]): NotifyChannel[] {
+function resolveChannels(
+  prefs: Record<string, any>, type: string, requested: NotifyChannel[], forceEmail: boolean,
+): NotifyChannel[] {
   // Honor per-event, per-channel opt-outs from /account/notifications.
   // All three channels (in_app/email/slack) are user-toggleable and
   // default-on; an explicit `false` in prefs[type][ch] suppresses that
-  // channel for that event type.
+  // channel for that event type — EXCEPT email on a locked event type,
+  // which SettingsPage.jsx already renders locked (checked, disabled) and
+  // which this function must actually honour, not just the UI. A `false`
+  // saved before the lock existed (or written around it) no longer wins.
   const ev = (prefs && typeof prefs === 'object' ? (prefs[type] || {}) : {}) as Record<string, any>;
   const out: NotifyChannel[] = [];
   for (const ch of requested) {
+    if (ch === 'email' && forceEmail) { out.push(ch); continue; }
     const enabled = ev[ch];
     if (enabled === undefined || enabled === true) out.push(ch);
   }
@@ -222,24 +243,14 @@ async function postSlackBlocks(webhook: string, payload: Record<string, unknown>
 /** Returns true on confirmed dispatch, false otherwise. Callers that
  *  participate in the digest flush MUST honour the boolean — marking an
  *  outbox row flushed on a swallowed error is silent data loss. */
-async function sendEmail(env: Env, to: string, subject: string, body: string): Promise<boolean> {
+async function sendEmail(env: Env, to: string, subject: string, body: string, html?: string): Promise<boolean> {
   try {
     const { sendNotificationEmail } = await import('./email');
-    await sendNotificationEmail(env, to, subject, body);
+    await sendNotificationEmail(env, to, subject, body, html ? { html } : undefined);
     return true;
   } catch (e) {
     console.warn('[notify] email failed', e);
     return false;
-  }
-}
-
-async function recordActivity(env: Env, userId: number, action: string, details: Record<string, unknown>): Promise<void> {
-  try {
-    await env.DB.prepare(
-      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
-    ).bind(action, JSON.stringify(details), null, userId).run();
-  } catch (e) {
-    console.warn('[notify] activity_logs insert failed', e);
   }
 }
 
@@ -274,13 +285,32 @@ export async function notify(env: Env, args: NotifyArgs): Promise<number | null>
     if (!(await ensureInbox(env))) return null;
     const channels: NotifyChannel[] = (args.channels && args.channels.length > 0) ? args.channels : ['in_app'];
     const prefs = await loadPrefs(env, args.userId);
-    const resolved = resolveChannels(prefs, args.type, channels);
-    if (resolved.length === 0) return null;
 
     // Task #14 — categorisation drives quiet-hours + digest routing.
     // Uncategorised calls are treated as critical so we never silently
     // suppress a notification a caller didn't opt into the new pipeline.
+    // Computed before `resolveChannels` now — a Codex review on D333 found
+    // that a critical category's email was still being filtered out by a
+    // stored `prefs[type].email === false` from before SettingsPage.jsx
+    // locked `capital_call_issued`/`agreement_ready_to_sign`'s email column:
+    // the UI rendered the toggle checked-and-disabled, but a user who had
+    // already saved `false` kept missing the "cannot be turned off" email
+    // regardless, because `resolveChannels` ran first and dropped the
+    // whole branch before `isCritical` ever got a say. `resolveChannels`
+    // now takes `isCritical` and puts `email` back for a critical category
+    // even over a stored opt-out — `in_app`/`slack` stay opt-outable, since
+    // the lock in Settings is on the email column only.
     const isCritical = !args.category || CRITICAL_CATEGORIES.has(args.category);
+    // P1 (Codex, D333): `isCritical` also covers every uncategorised legacy
+    // caller (capital.ts's capital_call_paid, tickets.ts's ticket_update) —
+    // that's correct for quiet-hours/digest bypass timing (Task #14's
+    // original "uncategorised behaves as before" rule), but forcing email
+    // back over a stored opt-out must stay scoped to the two event types
+    // SettingsPage.jsx actually renders locked. Otherwise an uncategorised
+    // caller's opt-out silently stops working the moment this ran.
+    const forceEmail = LOCKED_EMAIL_TYPES.has(args.type);
+    const resolved = resolveChannels(prefs, args.type, channels, forceEmail);
+    if (resolved.length === 0) return null;
 
     // T20 — Quiet hours: if the user is currently inside their configured
     // quiet window, suppress real-time push (DO broadcast) and email/slack
@@ -401,16 +431,30 @@ export async function notify(env: Env, args: NotifyArgs): Promise<number | null>
     if (resolved.includes('email')) {
       if (isCritical) {
         await dispatchEmail(env, args);
-      } else if (quiet) {
-        if (digest === 'off') {
-          await recordActivity(env, args.userId, 'suppressed_quiet_hours', {
-            type: args.type, category: args.category ?? null,
-          });
-        } else {
-          await enqueueOutbox(env, args, 'quiet_hours');
-        }
       } else if (digest === 'daily' || digest === 'weekly') {
+        // D333: digest buffering applies whether or not the user is
+        // currently inside quiet hours — the digest cron is what paces
+        // delivery either way, so quiet hours doesn't need a second check
+        // here. The one it used to do (below) was the actual defect.
         await enqueueOutbox(env, args, 'digest');
+      } else if (quiet) {
+        // D333: quiet hours used to silently drop this email outright when
+        // the user's digest was off — `recordActivity('suppressed_quiet_hours')`
+        // and nothing else, so an opted-out-of-digests user lost the email
+        // entirely rather than just having it wait. Codex review caught
+        // the first fix here: sending it immediately contradicted
+        // SettingsPage.jsx's own "Push and non-critical email are paused
+        // during this window" — correct, this card is the UI's promise
+        // about this exact behaviour, and quiet hours is supposed to pause
+        // it, not skip pausing because a different setting is off. So
+        // instead it buffers the same way a digest-on quiet-hours email
+        // does (`enqueueOutbox(..., 'quiet_hours')`), which the existing
+        // digest cadence flush (`flushPendingDigests`, defaulting to daily
+        // when digest is 'off') already drains at the user's next 09:00
+        // local slot. Paused and later delivered, never vanished — which
+        // is the actual promise, not "delivered the instant quiet hours
+        // technically allow a digest-less user through."
+        await enqueueOutbox(env, args, 'quiet_hours');
       } else {
         await dispatchEmail(env, args);
       }
@@ -591,12 +635,17 @@ export async function flushPendingDigests(env: Env, now: Date = new Date()): Pro
 
   // Pull users with pending rows, joined to their settings. Cap at
   // 500/tick — anything beyond that should batch over multiple ticks.
-  let users: Array<{ user_id: number; tz: string; digest: 'daily' | 'weekly' }> = [];
+  let users: Array<{
+    user_id: number; tz: string; digest: 'daily' | 'weekly';
+    quiet_hours_start: string | null; quiet_hours_end: string | null;
+  }> = [];
   try {
     const res: any = await env.DB.prepare(
       `SELECT o.user_id AS user_id,
               COALESCE(s.quiet_hours_tz, s.timezone, 'UTC') AS tz,
-              COALESCE(s.digest_frequency, 'off') AS digest
+              COALESCE(s.digest_frequency, 'off') AS digest,
+              s.quiet_hours_start AS quiet_hours_start,
+              s.quiet_hours_end AS quiet_hours_end
          FROM notification_outbox o
          LEFT JOIN user_settings s ON s.user_id = o.user_id
         WHERE o.flushed_at IS NULL
@@ -607,6 +656,8 @@ export async function flushPendingDigests(env: Env, now: Date = new Date()): Pro
       user_id: Number(r.user_id),
       tz: String(r.tz || 'UTC'),
       digest: (r.digest === 'daily' || r.digest === 'weekly') ? r.digest : 'daily',
+      quiet_hours_start: r.quiet_hours_start ?? null,
+      quiet_hours_end: r.quiet_hours_end ?? null,
     }));
   } catch (e) {
     console.warn('[notify] flushPendingDigests scan failed', e);
@@ -631,6 +682,18 @@ export async function flushPendingDigests(env: Env, now: Date = new Date()): Pro
       ).bind(u.user_id).all();
       rows = (r?.results || []) as OutboxRow[];
     } catch (e) { console.warn('[notify] outbox load failed', e); continue; }
+
+    // P2 (Codex, D333): a fixed 09:00-local send slot isn't the same thing
+    // as "the quiet window that buffered this row has ended" — a window
+    // like 22:00–10:00 is still active at 09:00. `reason: 'digest'` rows
+    // were always meant to go out at the cadence slot regardless; only
+    // `reason: 'quiet_hours'` rows are the ones the window itself must
+    // clear first, so re-check it right here instead of trusting the fixed
+    // time this loop already matched on.
+    if (u.quiet_hours_start && u.quiet_hours_end &&
+        isInQuietHours({ quiet_hours_start: u.quiet_hours_start, quiet_hours_end: u.quiet_hours_end, quiet_hours_tz: u.tz }, now)) {
+      rows = rows.filter((r) => r.reason !== 'quiet_hours');
+    }
     if (rows.length === 0) continue;
 
     const digestId = crypto.randomUUID();
@@ -650,8 +713,39 @@ export async function flushPendingDigests(env: Env, now: Date = new Date()): Pro
       console.warn('[notify] digest skipped — no email for user', u.user_id);
       continue;
     }
+    // D333: the WEEKLY digest email renders through the Emails canvas's M4
+    // (`renderWeeklyDigest`) instead of the plain-text bullet list this used
+    // to build by hand. Codex review on this PR caught that the first cut
+    // used it unconditionally: the canvas template hardcodes "WEEK OF" and
+    // "Three things from your week", so a daily-cadence user got an HTML
+    // body describing a week while the subject and plain-text alternative
+    // correctly said "daily". `canvasTransactional.ts` has no daily
+    // variant (the design canvas only specifies a weekly one), so a daily
+    // digest keeps its plain-text-only rendering (`sendEmail`'s default
+    // inline wrapper) rather than this guessing at daily-specific canvas
+    // copy nobody designed. `renderDigestEmail` still backs the plain-text
+    // part for both cadences + the Slack digest below, neither of which
+    // the canvas covers.
     const { subject, body } = renderDigestEmail(rows, cadence);
-    const ok = await sendEmail(env, userEmail, subject, body);
+    const appUrl = (env as { APP_URL?: string }).APP_URL || 'https://axal.vc';
+    const root = stripTrailingSlashes(appUrl);
+    const html = cadence === 'weekly' ? renderWeeklyDigest({
+      to: userEmail,
+      // P2 (Codex, D333): must format in the recipient's own tz, or a user
+      // east of UTC whose local Monday 09:00 is still Sunday UTC sees
+      // yesterday's date in the "WEEK OF" label — the cadence check above
+      // already uses u.tz; this formatter has to match it.
+      weekLabel: new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', timeZone: u.tz }).format(now),
+      cards: rows.slice(0, 3).map((r) => ({
+        kicker: (r.category || r.type || 'update').toUpperCase(),
+        title: r.title,
+        body: r.body ? r.body.replace(/\s+/g, ' ').slice(0, 180) : '',
+        link: r.link ? (r.link.startsWith('http') ? r.link : `${root}${r.link.startsWith('/') ? '' : '/'}${r.link}`) : undefined,
+      })),
+      dashboardUrl: `${root}/inbox`,
+      unsubscribeUrl: `${root}/account/notifications`,
+    }).html : undefined;
+    const ok = await sendEmail(env, userEmail, subject, body, html);
     if (!ok) {
       console.warn('[notify] digest email failed; leaving outbox rows pending for retry', { user_id: u.user_id });
       continue;

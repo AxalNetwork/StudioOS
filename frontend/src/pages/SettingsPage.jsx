@@ -129,10 +129,9 @@ const JURISDICTIONS = [
   { code: 'VG', name: 'British Virgin Islands' },
 ];
 
-// D336 — `NOTIFICATION_EVENTS` and `PARTNER_NOTIFICATION_EVENTS` moved to
-// `../lib/notificationTypes` so the bell and `/inbox` (`NotificationList.jsx`)
-// can label a notification's `type` the same way this matrix does, instead
-// of rendering the raw backend key.
+// D336 — `NOTIFICATION_EVENTS` and `PARTNER_NOTIFICATION_EVENTS` live in
+// `../lib/notificationTypes` so the bell and `/inbox` label a type the same
+// way this matrix does. D333's locked email channels are on those objects.
 
 // Channel keys are the canonical names used by services/notify.{py,ts}.
 // `inapp` is kept as an alias-only column for legacy `notification_prefs`
@@ -2921,7 +2920,16 @@ function NotificationsSection({ data, patch }) {
       : { ...c, disabled: true, hint: 'Connect Slack first' };
   }), [slackConnected]);
 
+  const lockedEvent = (eventKey) => {
+    const ev = NOTIFICATION_EVENTS.find((e) => e.key === eventKey)
+      || PARTNER_NOTIFICATION_EVENTS.find((e) => e.key === eventKey);
+    return ev?.lockedChannels || [];
+  };
+
   const setEvent = (eventKey, channel, value) => {
+    // Defense in depth: a locked channel ignores the write even if some
+    // other path (preset apply, a stale click) tries to flip it off.
+    if (lockedEvent(eventKey).includes(channel)) return;
     const cur = { ...(prefs[eventKey] || {}) };
     cur[channel] = value;
     // Keep `inapp`/`in_app` mirrored so the new bell subsystem and any
@@ -2962,12 +2970,15 @@ function NotificationsSection({ data, patch }) {
             <tr key={ev.key} className="border-b border-gray-100 dark:border-gray-800">
               <td className="px-2 py-2 text-gray-800 dark:text-gray-200">{ev.label}</td>
               {channels.map(c => {
-                const checked = !!prefs[ev.key]?.[c.key];
+                const locked = (ev.lockedChannels || []).includes(c.key);
+                const checked = locked || !!prefs[ev.key]?.[c.key];
+                const disabled = !!c.disabled || locked;
+                const title = locked ? 'Always sent — this notification cannot be turned off' : (c.disabled ? c.hint : undefined);
                 return (
                   <td key={c.key} className="text-center px-2 py-2">
-                    <input type="checkbox" checked={checked} disabled={!!c.disabled}
+                    <input type="checkbox" checked={checked} disabled={disabled}
                       onChange={e => setEvent(ev.key, c.key, e.target.checked)}
-                      title={c.disabled ? c.hint : undefined}
+                      title={title}
                       className="w-4 h-4 text-violet-600 border-gray-300 dark:border-gray-600 rounded focus:ring-violet-500 disabled:opacity-40 disabled:cursor-not-allowed" />
                   </td>
                 );
@@ -2988,7 +2999,11 @@ function NotificationsSection({ data, patch }) {
       ...(data.role === 'partner' ? PARTNER_NOTIFICATION_EVENTS.map((e) => e.key) : []),
     ];
     const next = { ...prefs };
-    for (const k of keys) next[k] = { ...(prefs[k] || {}), ...preset.apply(k) };
+    for (const k of keys) {
+      const applied = { ...(prefs[k] || {}), ...preset.apply(k) };
+      for (const lockedChannel of lockedEvent(k)) applied[lockedChannel] = true;
+      next[k] = applied;
+    }
     patch({ notification_prefs: next });
   };
 

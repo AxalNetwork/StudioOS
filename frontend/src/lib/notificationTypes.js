@@ -16,9 +16,13 @@
 export const NOTIFICATION_EVENTS = [
   { key: 'deal_assigned', label: 'New deal assigned to me' },
   { key: 'pipeline_status_change', label: 'Pipeline status changes' },
-  { key: 'capital_call_issued', label: 'Capital call issued' },
+  // D333 — these two carry money and signature consequences the backend
+  // (`notify.ts`'s CRITICAL_CATEGORIES: billing, contract_sign_request)
+  // already never lets quiet hours or a digest delay. The lock lives on the
+  // shared objects so Settings and the bell read one matrix.
+  { key: 'capital_call_issued', label: 'Capital call issued', lockedChannels: ['email'] },
   { key: 'capital_call_paid', label: 'Capital call marked paid' },
-  { key: 'agreement_ready_to_sign', label: 'Agreement ready to sign' },
+  { key: 'agreement_ready_to_sign', label: 'Agreement ready to sign', lockedChannels: ['email'] },
   { key: 'kyc_status_change', label: 'KYC status updates' },
   { key: 'mentions_and_comments', label: 'Mentions & comments' },
   { key: 'ticket_update', label: 'Ticket updates' },
