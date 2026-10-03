@@ -40775,3 +40775,89 @@ comparing against the wrong page; the helper no longer cutting the subject
 at 300.
 
 **Browser probe, recorded and not a gate:** `docs/` served with the SPA fallback, a branch admin (`branch.code` `fr` off `/me`) at 1280×900 with a stored session (actor T. Okafor, reason "ticket #4192", ten minutes left) opening `/branch`. The bar draws above the admin chrome and its "Raise a concern" href is `/branch/approvals?kind=other&subject=HQ+support+session+by+T.+Okafor%3A+ticket+%234192`; clicking it lands on that URL with the raise form drawn, the subject field reading "HQ support session by T. Okafor: ticket #4192" and the `other` kind checked. No page error. Second pass, after Codex's finding: the same admin already on `/branch/approvals` with "something I typed by hand" in the subject presses the bar's link; before the fix the URL changed and the field still read the typed text, after it the document reloads once onto the prefilled URL and the field reads the session's subject with `other` checked, the bar still drawn. The first scenario, from `/branch`, is unchanged: one client-side navigation, no reload.
+
+## D530
+
+**HQ's support-session route passes the branch's `target_notified` through,
+and the HQ Team Support form says what the branch reported once the session
+is authorised: Told, Not told, or Not recorded.** Issue #1059, slot S02,
+found by slot S05 on #1043 (D507). No migration, no new route, no `api.js`
+change. `frontend/src` moved, so `docs/` is rebuilt.
+
+**What was true on main (`b3b9752d5`).** The branch's `openSupportSession`
+(D441) records the authorisation, calls `notify()`, and returns
+`target_notified`: `true` when the security notice was stored in the
+person's inbox there, `false` when it could not be stored, in which case the
+session is authorised all the same (`branch_invitation_d441.test.ts`). HQ's
+route, `POST /api/admin/branches/:code/support-session` in
+`routes/admin_support_sessions.ts`, answered `{ branch, target, expires_at,
+open_url }` and dropped the field, so D507 had to word the card, the form and
+the footer as "cannot say whether the person was told", and recorded the drop
+as found, not fixed.
+
+**What the route answers now.** `target_notified` is the branch's value when
+it is a boolean and `null` otherwise. A missing field (a branch Worker built
+before D441) and a malformed one (`'yes'`, `1`, `{}`) both become `null`,
+"not reported". Nothing defaults it to `true`: whether the person was told is
+a fact only the branch holds, so HQ never supplies one of its own.
+
+**What the form says.** `supportNoticeOutcome` in `HqTeamTable.jsx` holds the
+three sentences and `SupportNoticeOutcome` draws them under the "Opened in a
+new tab" line, once the route has answered:
+- `true`: "Told: the branch reports that its security notice was stored in
+  their inbox there. Whether the email copy arrived is not reported." `true`
+  means `notify()` returned an inbox row; the email is dispatched separately
+  and its arrival is not reported, so the line claims nothing about it.
+- `false`: "Not told: the branch reports that its security notice could not
+  be stored, so it sent them nothing. The session is authorised all the
+  same." Drawn in the warning colour, because the operator is now in an
+  account whose holder has not been told.
+- anything else: "Not recorded: the branch did not report whether its
+  security notice was stored. A branch built before D441 does not report
+  it." The reason is part of the line, as the honesty rule asks.
+Only `true` reads as told. The state starts `undefined`, is set from
+`res?.target_notified` in the same success branch as the URL, and is drawn
+only once there is a URL, so no line appears before a session exists. D507's
+attempt-neutral wording stays on the card, the pre-submit paragraph and the
+footer: each still describes the notice as the branch sends it, and now says
+the Support form shows what the branch reported, instead of saying it cannot.
+
+**Pins re-aimed, never loosened.** D507 left a pin that failed the day HQ's
+route passed the field on, so its sentences would be re-aimed with it.
+`hq_team_h20.test.mjs` now holds the card, the form paragraph, the footer and
+both header comments to their new sentences and keeps each free of the old
+"does not pass it on" and "not reported here", and its route assertion reads
+the pass-through line instead of the field's absence. Its bans stand
+unchanged: "not told" anywhere in `HqTeamTable.jsx`, "is not told" on the
+card, and "is told" / "The person is told" on the card, the form and the
+footer. The ban on "not told" is a case-sensitive match on the lowercase
+phrase, written against the stale claim that a branch account is never told,
+so the outcome line's capitalised "Not told:" passes it. That line is drawn
+only when the branch reports exactly that, and "Told:" contains none of the
+banned phrases.
+
+**Guard.** `cloudflare-worker/test/branch_support_session_d259.test.ts`
+gains 2 tests through the bundled Worker with a stubbed branch: `true` and
+`false` reach HQ's answer unchanged; a branch that sends no field is answered
+with the key present and `null`, and `'yes'`, `'true'`, `1`, `0`, `null` and
+`{}` are each answered `null`. `frontend/test/hq_support_told_d530.test.mjs`,
+5 tests: the three sentences; nine non-boolean values each giving "Not
+recorded" with its reason and never "Told"; the line rendered for every
+value, with the warning colour only on "Not told"; and the form's wiring read
+as source (initial `undefined`, set from `res?.target_notified` beside
+`setSupportUrl`, written from nowhere else, drawn once and only behind
+`supportUrl`). The two worker tests fail on main's route.
+
+**Mutations: 22 run, 22 caught** (non-zero exit and a `not ok` line each;
+anchors unique; bytes proven changed; sources restored from a sha256-checked
+snapshot): the route passing the raw field; defaulting a missing field to
+`true`; dropping the field, as on main; coercing truthy values to `true`;
+reading a missing field as `false`; the helper reading any truthy value as
+told; the helper reading `0` as not told; the told and not-told states
+swapped; the not-recorded reason dropped; the told line claiming the email
+was delivered; "authorised all the same" dropped; every state drawn in the
+warning colour; `data-state` pinned to `told`; the form never storing the
+answer; the form storing `true` whatever the answer; the state starting as
+`true`; the line drawn before a session opens; the line drawn from the URL
+instead of the answer; and the card, the form paragraph, the footer and the
+header comment each put back to their D507 wording.
