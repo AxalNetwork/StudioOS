@@ -40386,6 +40386,8 @@ shown as 0.**
 - An absent count read as 0.
 - The old `Number(t.count) || 0` restored.
 
+No migration.
+
 ## D510
 
 **The Build desk's cadence card offers a Friday retro summary drafted from the
