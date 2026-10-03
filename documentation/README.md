@@ -64,14 +64,16 @@ first 1,000 daily users.
 
 ## Files deliberately left at the repo root
 
-Six, each because a tool or a convention expects to find it there:
+Seven, each because a tool or a convention expects to find it there:
 
 - `CLAUDE.md` — read by Claude Code from the root
+- `AGENTS.md` — read by Codex, Cursor and other agents from the root; the task
+  protocol every agent follows (D503)
 - `replit.md` — read by Replit from the root
 - `README.md`, `CONTRIBUTING.md`, `SECURITY.md` — GitHub surfaces these from the
   root (or `.github/`) and nowhere else
 - `CHANGELOG.md` — conventional root location
 
-`frontend/test/repo_layout.test.mjs` fails the build if a seventh appears, so
+`frontend/test/repo_layout.test.mjs` fails the build if an eighth appears, so
 the root cannot quietly refill with the 38 files this folder was created to
 hold.
