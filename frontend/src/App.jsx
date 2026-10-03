@@ -45,6 +45,7 @@ import HqSubNavStrip, { StripLink } from './components/HqSubNavStrip';
 import { ADMIN_SHELLS, MESSAGES_ROLES } from './lib/paletteIndex';
 import { stripFor } from './lib/hqStrips';
 import { clearSupportSession } from './lib/supportSession';
+import { disablePush } from './lib/pwa';
 import { readStoredReason, clearStoredReason } from './lib/impersonationBar';
 import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
@@ -1920,6 +1921,28 @@ function AppInner() {
   // The httpOnly auth cookie is untouched by clearing localStorage, so the
   // server-side revoke below still runs over the cookie.
   const clearSession = useCallback(async () => {
+    // Codex review on D334: this never revoked a push subscription, so an
+    // endpoint enabled under one account kept receiving THAT account's
+    // notifications on this device after sign-out — `getPushState()` only
+    // checks whether the browser has any subscription at all, and the next
+    // account to sign in on the same device sees push already "on" and never
+    // calls `enablePush()` to re-home it to its own `user_id`.
+    //
+    // A FOLLOW-UP REVIEW CAUGHT THE FIRST FIX HERE TOO: it awaited
+    // `disablePush()` (behind a 3s race) before any of the synchronous local
+    // teardown below — `setUser(null)` and the token/user wipe included. A
+    // stalled service worker, subscription lookup or unsubscribe request
+    // held up ALL of it for up to 3s, and a tab closed during that stall
+    // kept both the local token and the server cookie alive: still signed
+    // in on the next visit. So this no longer awaits `disablePush()` at
+    // all — the token is captured now (it's about to be removed below) and
+    // handed to `disablePush` explicitly, so the revocation can finish
+    // fully in the background without the local teardown waiting on it or
+    // on the token still being in `localStorage` by the time its own
+    // `await`s resolve.
+    const tokenForPushRevoke = localStorage.getItem('token');
+    disablePush({ authToken: tokenForPushRevoke }).catch(() => { /* best-effort, never blocks sign-out */ });
+
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('realUser');
@@ -2733,6 +2756,14 @@ function AppInner() {
       {/* Every role, `exploring` included: an application decision is a
           notification, and the person waiting on one holds no other role. */}
       <Route path="/inbox" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <InboxPage />)} />
+      {/* D336 — `/notifications` has never been this page's address (D144
+          put the panel at `/inbox`), but the bell's own settings link reads
+          `/account/notifications` and the Settings tab is `#notifications`;
+          either one typed as a bare path, or an old bookmark from before
+          `/inbox` existed, should still land somewhere real rather than the
+          404 page. */}
+      <Route path="/notifications" element={<Navigate to="/inbox" replace />} />
+      <Route path="/notifications/*" element={<Navigate to="/inbox" replace />} />
       <Route path="/help/tickets" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
       <Route path="/help/tickets/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
       <Route path="/help/admin/*" element={<AdminDocsPathGuard />} />

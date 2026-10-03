@@ -1,4 +1,5 @@
 import React from 'react';
+import { labelForType } from '../lib/notificationTypes';
 
 /**
  * The notification list — ONE rendering, read by the bell and by /inbox (D144).
@@ -67,7 +68,7 @@ export default function NotificationList({ items, loading, onItemClick, unreadab
               <div className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">{n.title}</div>
               {n.body && <div className="text-xs text-gray-600 mt-0.5 line-clamp-2 dark:text-gray-400">{n.body}</div>}
               <div className="text-[10px] text-gray-400 mt-1 uppercase tracking-wide dark:text-gray-500">
-                {n.type} · {timeAgo(n.created_at)} ago
+                {labelForType(n.type)} · {timeAgo(n.created_at)} ago
               </div>
             </div>
           </div>
