@@ -119,7 +119,8 @@ test('the five landings are guard([\'admin\']) without hqOnly, under a prefix no
 
 test('every console link on a landing is literal, registered, and never under /branch/', () => {
   // D358 — Programs gained a fifth door, Profiling trends.
-  const expectedDoors = { Accounts: 4, Approvals: 14, Programs: 5, Community: 5, Insights: 0 };
+  // D506 — Approvals gained its fifteenth door, Spinout moderation (D442's console).
+  const expectedDoors = { Accounts: 4, Approvals: 15, Programs: 5, Community: 5, Insights: 0 };
   for (const [label, file] of Object.entries(LANDINGS)) {
     const doors = doorsIn(CODE[file]);
     assert.equal(doors.length, expectedDoors[label], `${label} draws ${doors.length} literal links, expected ${expectedDoors[label]}`);
@@ -171,7 +172,8 @@ const S22_LANES = [
   [1, 'Core', 'LP applications', '/admin/lp-applications', 'Links to its console'],
   [2, 'Core', 'Referrals', '/admin/refer-earn', 'Links to its console'],
   [3, 'Core', 'Cohort applications', '/admin/spinout-lab', 'Links to its console'],
-  [4, 'Core', 'Spinout moderation', null, 'No console exists anywhere yet'],
+  // D506 — lane 4 links the console D442 built; HQ-held accounts reach held cases from here.
+  [4, 'Core', 'Spinout moderation', '/admin/spinout-moderation', 'Links to its console'],
   [5, 'Core', 'Content to HQ', null, 'Not applicable to HQ-held accounts'],
   [6, 'Absorbed', 'KYC', '/admin?tab=kyc', 'Links to its console'],
   [7, 'Absorbed', 'Partner profiles', '/admin?tab=profiles', 'Links to its console'],
@@ -201,16 +203,20 @@ function drawnLanes() {
   return out;
 }
 
-test('Approvals draws S22\'s sixteen lanes verbatim and in order; moderation and Content-to-HQ link nowhere', () => {
+test('Approvals draws S22\'s sixteen lanes verbatim and in order; moderation links its console (D506) and Content-to-HQ links nowhere', () => {
   assert.deepEqual(drawnLanes(), S22_LANES);
   const moderation = drawnLanes().find((l) => l[2] === 'Spinout moderation');
-  assert.equal(moderation[3], null, 'Spinout moderation was given a console — no page in the SPA calls adminSpinoutModeration');
+  assert.equal(moderation[3], '/admin/spinout-moderation', 'Spinout moderation lost its console — D442 built it and D506 made this lane its HQ door');
   // Held to the map: every route S22 links is a console the H35 map places on Admin · Approvals, or a tab S22 absorbs.
   const laned = new Set(ADMIN_PLACEMENT
     .filter((e) => [e, ...(e.also || [])].some((p) => p.tier === 'Admin' && p.row === 'Approvals'))
     .map((e) => e.route));
   for (const [, , lane, route] of S22_LANES) {
     if (!route || route === '/admin/spinout-lab') continue; // the Lab console is reached through its tab's placement
+    // D506 — the moderation console (D442) was built after the H35 map was drawn and is
+    // not a legacy row, so the map does not place it (admin_placement_h35 pins the map
+    // to H35's question); this lane and the branch board are its two doors.
+    if (route === '/admin/spinout-moderation') continue;
     assert.ok(laned.has(route), `${lane} links ${route}, which the H35 map does not place on Admin · Approvals`);
   }
 });
