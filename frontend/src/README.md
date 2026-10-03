@@ -14,6 +14,7 @@ Those two files together are the fastest way to answer "where does this URL go".
 | --- | --- |
 | `pages/` | One component per route. The biggest folder in the repo — read its README first. |
 | `workspaces/` | The four canvas shells. `shellConfig.js` is the IA — eight rows per role, each bucket a list of zones — and `WorkspaceShell`/`ZoneNav` render from it, so a row can never advertise a door the router does not open. Per-role route modules live in `founder/`, `investor/`, `advisor/`, `partner/`. |
+| `routes/` | Where a **new** area registers its routes (D528): one module per area, composed by `App.jsx` in one block, so two PRs adding pages stop colliding in `App.jsx`. Existing routes stay in `App.jsx`. Read its README before adding one. |
 | `components/` | Shared presentational pieces, grouped by the feature that owns them. |
 | `ui/` | The design-system primitives (`Card`, `Pill`, `Stat`, `SidebarNav`, `AssistRail`). New UI composes these rather than re-styling from scratch. |
 | `lib/` | Non-visual browser code: the API client, formatters, search. |

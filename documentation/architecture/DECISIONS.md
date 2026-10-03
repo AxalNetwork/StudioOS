@@ -40775,3 +40775,91 @@ comparing against the wrong page; the helper no longer cutting the subject
 at 300.
 
 **Browser probe, recorded and not a gate:** `docs/` served with the SPA fallback, a branch admin (`branch.code` `fr` off `/me`) at 1280×900 with a stored session (actor T. Okafor, reason "ticket #4192", ten minutes left) opening `/branch`. The bar draws above the admin chrome and its "Raise a concern" href is `/branch/approvals?kind=other&subject=HQ+support+session+by+T.+Okafor%3A+ticket+%234192`; clicking it lands on that URL with the raise form drawn, the subject field reading "HQ support session by T. Okafor: ticket #4192" and the `other` kind checked. No page error. Second pass, after Codex's finding: the same admin already on `/branch/approvals` with "something I typed by hand" in the subject presses the bar's link; before the fix the URL changed and the field still read the typed text, after it the document reloads once onto the prefilled URL and the field reads the session's subject with `other` checked, the bar still drawn. The first scenario, from `/branch`, is unchanged: one client-side navigation, no reload.
+
+## D528
+
+**A new area registers its routes in a module under `frontend/src/routes/`,
+`App.jsx` composes every module in one block, and the whole-app route tests
+read `App.jsx` and the modules as one source.** Issue #1056, slot S05. No
+migration, no route, no `api.js` change. `frontend/src` moved (`App.jsx`,
+the new folder), so `docs/` is rebuilt.
+
+**What was true on main (`b3b9752d5f`).** Measured from 2 August to 3
+October 2026 (624 commits): `DECISIONS.md` changed in 130, `api.js` in 113,
+`App.jsx` in 109 and the built `docs/` in 92, and those four files are where
+nearly every merge conflict happens. `App.jsx` holds all 409 routes, so any
+two PRs that add a page collide in it; 156 tests read it by path, so moving
+an existing route is a change to the tests that pin it.
+
+**What changed.**
+- **The folder.** `frontend/src/routes/README.md` says the rule: a new area's
+  routes live in `frontend/src/routes/<area>.jsx`, one module per area, with
+  a default export named after the file (admin-labs.jsx exports
+  adminLabsRoutes) that takes `routeTools` and returns a fragment of
+  `<Route>` elements. Lazy loading is the module's own `lazy(() =>
+  import('../pages/…'))`; the gates are the same `guard`, `hqOnly` and
+  `authOnly` handed over in `routeTools`, never copies; the `<Route>` line is
+  written in the same shape and at the same six-space indentation as in
+  `App.jsx`, which is what keeps every existing parser working on it. A route
+  for an area that already lives in `App.jsx` goes beside its siblings there;
+  no existing route moves (none moved in this PR).
+- **The block in `App.jsx`.** Two markers, `Route modules (D528)` and `end
+  route modules`: one above the imports (one `import <area>Routes from
+  './routes/<area>'` per module, alphabetical by file name) and one inside
+  the Routes element, above the catch-all `*`, with one
+  `{<area>Routes(routeTools)}` per module in the same order. `routeTools` is
+  built just before the render from the file's own closures (`guard`,
+  `hqOnly`, `authOnly`, `labRoles`, `effectiveRole`, `user`, `location`) and
+  carries one `eslint-disable-next-line no-unused-vars` until the first
+  module lands. The prose around the block never writes the Routes element's
+  opening tag: several tests slice `App.jsx` at that tag to find the chrome,
+  and the first draft of the comment moved their slice and reported
+  `/admin/team` as an orphan.
+- **The helper.** `frontend/test/_routesSource.mjs`: `readRoutesSource(root)`
+  is `App.jsx` followed by every module, each introduced by a comment line
+  naming its file (prose to `codeOnly`, so it never reads as code);
+  `routeModuleFiles`, `routeModuleExport` and `missingRouteModules(root)`
+  (a module that `App.jsx` does not both import and compose). `root` is a
+  parameter so a fixture tree can be read the same way.
+- **The switched tests.** Ten tests that ask whole-app route questions now
+  read the helper instead of `App.jsx` alone: `admin_route_reachability`,
+  `route_role_zone_contract`, `route_namespace_policy`,
+  `workspace_shell_routes`, `admin_placement_h35`, `super_admin_shell`,
+  `founder_shell`, `investor_shell`, `advisor_shell`, `partner_shell`. Each
+  is one import and one read; `admin_route_reachability`'s lazy-import table
+  also resolves a module's `../pages/…` specifier, since a module sits one
+  level below `App.jsx`. The remaining readers of `App.jsx` ask about a
+  specific route that lives there and are untouched.
+
+**Guard.** `frontend/test/routes_modules_d528.test.mjs`, 5 tests: the two
+blocks exist, the composition block sits inside the Routes element and above
+the catch-all, `routeTools` carries the gates, and the folder's README says
+how the tests will read a module and that existing routes never move; every
+module under the folder is imported and composed, in file-name order, once,
+and composed nowhere else; on the fixture tree
+(`frontend/test/fixtures/routes_modules/`, a two-route `App.jsx` with one
+wired module and one unwired) the route declared in the wired module is read
+by the same `<Route`-split and `routeBlock` readers the whole-app tests use,
+exactly like the fixture's own `App.jsx` route, and reading `App.jsx` alone
+would not see it; the unwired module is reported with which half is missing;
+and each of the ten switched tests imports the helper and no longer reads
+`App.jsx` by itself.
+
+**Mutations: 16 run, 16 caught** (non-zero exit and a `not ok` line each;
+anchors unique; bytes proven changed; sources restored from a sha256-checked
+snapshot) — the helper returning `App.jsx` alone; the module marker written
+as code instead of prose; `missingRouteModules` never reporting; an
+imported-but-not-composed module counted as wired; the export name no
+longer camel-casing hyphens; the composition block removed entirely; the
+composition block left half-removed; the import block left half-removed;
+the import block removed; the composition block moved below the catch-all;
+`routeTools` without the gates; the fixture's unwired module wired in; the
+fixture's imported-only module composed too; the fixture module's route
+written in a shape the readers cannot parse; the README's never-move rule
+dropped; a switched test reading `App.jsx` by itself again. Two escapes on
+the first run, both closed by a stronger pin: a half-removed block sliced
+to the end of the file and read as present (both markers are now required,
+in order), and the fixture had no imported-but-not-composed module (it now
+has one, reported on its own).
+
+**Browser probe, recorded and not a gate:** nothing user-visible changes, so the probe is a boot check on the rebuilt bundle: `docs/` served with the SPA fallback, a plain admin and the Super Admin at 1280×900 open `/admin/held/approvals`, follow lane 4 to `/admin/spinout-moderation`, and land with no page error and the same lit rows as before the change.

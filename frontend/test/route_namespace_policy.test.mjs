@@ -25,8 +25,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { matchRoutes } from 'react-router-dom';
+// D528 — App.jsx plus every module under frontend/src/routes/, so a route in a module is checked like one in App.jsx.
+import { readRoutesSource } from './_routesSource.mjs';
 
-const src = readFileSync(resolve(process.cwd(), 'frontend/src/App.jsx'), 'utf8');
+const src = readRoutesSource();
 
 /** Every route path, in registration order. */
 const ROUTES = [...src.matchAll(/<Route\s+path="([^"]+)"/g)].map((m) => m[1]);

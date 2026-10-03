@@ -28,10 +28,12 @@ import {
   ADMIN_PLACEMENT, UNPLACED, TIERS, FORMS, HQ_ROWS, ADMIN_ROWS, TOP_BAR,
   X_PARKED_REASON, placedOn, routePath,
 } from '../src/lib/adminPlacement.js';
+// D528 — App.jsx plus every module under frontend/src/routes/, so a route in a module is checked like one in App.jsx.
+import { readRoutesSource } from './_routesSource.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
-const APP = read('frontend/src/App.jsx');
+const APP = readRoutesSource();
 const ADMIN_PAGE = read('frontend/src/pages/AdminPage.jsx');
 const SIDEBAR_RAW = read('frontend/src/sidebarConfig.js');
 

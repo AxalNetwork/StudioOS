@@ -6,6 +6,8 @@ import { codeOnly } from './_codeOnly.mjs';
 import { INVESTOR_FULL_BLEED } from '../src/sidebarConfig.js';
 import { routeBlock } from './_routes.mjs';
 import { allZoneRoutes } from '../src/workspaces/shellConfig.js';
+// D528 — App.jsx plus every module under frontend/src/routes/, so a route in a module is checked like one in App.jsx.
+import { readRoutesSource } from './_routesSource.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const src = codeOnly(read('frontend/src/sidebarConfig.js'));
@@ -61,7 +63,7 @@ test('investor rows use the approved destinations', () => {
     '/trust',
   ]);
 
-  const app = read('frontend/src/App.jsx');
+  const app = readRoutesSource();
   const registered = new Set([...app.matchAll(/path="([^"]+)"/g)].map((m) => m[1]));
   for (const t of targets) {
     assert.ok(registered.has(t), `investor row points at ${t}, which has no route`);
@@ -147,7 +149,7 @@ const OVERVIEWS = {
   InvestorResearchWorkspace: '/research',
 };
 
-const app = read('frontend/src/App.jsx');
+const app = readRoutesSource();
 const investorDir = 'frontend/src/pages/investor';
 
 test('every investor row lands on its own workspace overview', () => {

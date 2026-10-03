@@ -29,3 +29,9 @@ number on screen traces back to a column.
   against a doc comment and passed over broken code.
 - When a test bans a word, check the file's own comments do not use it.
 - `_deck-loader.mjs` is the JSX/asset loader; every run needs `--import` on it.
+- A test that asks a whole-app route question (is this path registered, what
+  does its guard admit, does the admin walk reach it) reads
+  `readRoutesSource()` from `_routesSource.mjs`, never `App.jsx` alone: since
+  D528 a new area's routes live in `frontend/src/routes/` and the helper is
+  `App.jsx` plus every module. `fixtures/` holds the small trees such helpers
+  are exercised against (`fixtures/routes_modules/`), never real pages.

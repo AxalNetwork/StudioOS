@@ -52,10 +52,13 @@ import { fileURLToPath } from 'node:url';
 
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { codeOnly } from './_codeOnly.mjs';
+import { readRoutesSource } from './_routesSource.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
-const APP = read('frontend/src/App.jsx');
+// D528 — App.jsx plus every module under frontend/src/routes/, so an /admin
+// route declared in a module needs a door like any other.
+const APP = readRoutesSource(root);
 
 /* ------------------------------------------------------------------ *
  * The route table
@@ -111,8 +114,11 @@ const resolveFile = (rel) => {
 };
 
 const FILE_OF = new Map();
-for (const m of APP.matchAll(/const (\w+) = lazy\(\(\) => import\('\.\/([^']+)'\)\)/g)) {
-  const f = resolveFile(`frontend/src/${m[2]}`);
+// `./pages/X` from App.jsx and `../pages/X` from a route module both name a
+// file under frontend/src (D528): a module sits one level down.
+const underSrc = (spec) => (spec.startsWith('../') ? `frontend/src/${spec.slice(3)}` : `frontend/src/${spec.slice(2)}`);
+for (const m of APP.matchAll(/const (\w+) = lazy\(\(\) => import\('(\.\.?\/[^']+)'\)\)/g)) {
+  const f = resolveFile(underSrc(m[2]));
   if (f) FILE_OF.set(m[1], f);
 }
 for (const m of APP.matchAll(/^import (\w+) from '\.\/([^']+)'/gm)) {
