@@ -26809,7 +26809,7 @@ dispatch a workflow: `actions: write` is not granted.
   - `hq_security_h23.test.mjs` renders all four states, and a new test holds
     the rail row to the zone's sentence.
 
-**Mutations: 10 run, 10 caught** (plus 1 for the D253 residue):
+**Mutations: 8 run, 8 caught** (plus 1 for the D253 residue):
 - the marker written only on success;
 - `--remote` dropped from the marker put;
 - a throw read as `never_run`;
