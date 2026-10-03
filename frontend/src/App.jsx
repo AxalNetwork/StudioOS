@@ -2164,13 +2164,14 @@ function AppInner() {
   const founderExecutionEditor = effectiveRole === 'founder'
     && new URLSearchParams(location.search).get('mode') === 'workspace';
 
-  // D528 — what a route module gets from this file's closures, so a route
-  // declared in frontend/src/routes/<area>.jsx is gated by the same `guard`,
-  // `hqOnly` and `authOnly` as one written here, never by a copy of them.
-  // Read by every `{<area>Routes(routeTools)}` line in the block below; the
-  // lint exception goes the day the first module lands.
-  // eslint-disable-next-line no-unused-vars
-  const routeTools = { guard, hqOnly, authOnly, labRoles, effectiveRole, user, location };
+  // D528 — the first route module (frontend/src/routes/<area>.jsx) adds, right
+  // here, what every module gets from this file's closures, so a route in a
+  // module is gated by the same `guard`, `hqOnly` and `authOnly` as one
+  // written here, never by a copy of them:
+  //   const routeTools = { guard, hqOnly, authOnly, labRoles, effectiveRole, user, location };
+  // It is not declared until then: with no module to read it, it is a dead
+  // variable, and routes_modules_d528.test.mjs holds it absent without a
+  // module and present, in exactly that shape, with one.
 
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-500 dark:text-gray-400">Loading…</div>}>

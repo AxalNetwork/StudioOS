@@ -67,7 +67,17 @@ test('App.jsx carries the two blocks, one above the imports and one above the ca
   assert.ok(APP.indexOf('{/* ── end route modules') < APP.indexOf('<Route path="*"'), 'the composition block sits below the catch-all');
   assert.ok(APP.indexOf('<Routes>') < APP.indexOf('{/* ── Route modules (D528)'), 'the composition block is outside <Routes>');
   // `routeTools` is what a module is handed, built from this file's own gates.
-  assert.match(codeOnly(APP), /const routeTools = \{ guard, hqOnly, authOnly, labRoles, effectiveRole, user, location \};/);
+  // It exists exactly when a module does: declared with none to read it, it is
+  // a dead variable (CodeQL flagged the first draft); declared by the first
+  // module, it must carry every gate, so a module cannot be gated differently
+  // from a route written here.
+  const TOOLS = /const routeTools = \{ guard, hqOnly, authOnly, labRoles, effectiveRole, user, location \};/;
+  if (routeModuleFiles().length === 0) {
+    assert.doesNotMatch(codeOnly(APP), /const routeTools\b/, 'routeTools is declared with no module to read it');
+    assert.match(APP, /const routeTools = \{ guard, hqOnly, authOnly, labRoles, effectiveRole, user, location \};/, 'the reserved line no longer says what the first module adds');
+  } else {
+    assert.match(codeOnly(APP), TOOLS, 'a module exists but routeTools is missing or does not carry every gate');
+  }
   assert.ok(existsSync(resolve(process.cwd(), `${ROUTES_DIR}/README.md`)), 'frontend/src/routes/README.md is missing');
   assert.match(read(`${ROUTES_DIR}/README.md`), /readRoutesSource\(\)/, 'the README does not tell a module author how the tests will read it');
   assert.match(read(`${ROUTES_DIR}/README.md`), /Never move an existing route out of `App\.jsx`/);
@@ -94,6 +104,8 @@ test('every module under frontend/src/routes/ is imported and composed by App.js
 test('a route declared in a module is served: the readers the whole-app tests use see it exactly like an App.jsx route', () => {
   const src = readRoutesSource(FIXTURE);
   const paths = routePaths(src);
+  // The fixture has modules, so its App.jsx declares routeTools and hands it over.
+  assert.match(codeOnly(readFileSync(resolve(FIXTURE, APP_PATH), 'utf8')), /const routeTools = \{ guard, hqOnly, authOnly \};/, 'the fixture App.jsx no longer declares routeTools');
   assert.ok(paths.includes('/fixture-home'), 'the fixture App.jsx route is not read');
   assert.ok(paths.includes('/fixture-alpha'), 'the route declared in the wired module is invisible to the route reader');
   // The same line-window reader the shell tests use finds the module's guard.

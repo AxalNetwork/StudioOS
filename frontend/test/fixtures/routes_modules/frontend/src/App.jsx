@@ -6,6 +6,10 @@ import { Routes, Route } from 'react-router-dom';
 import alphaRoutes from './routes/alpha';
 import gammaRoutes from './routes/gamma';
 // ── end route modules ─────────────────────────────────────────────────────
+// gamma is imported and never composed ON PURPOSE: that is the case
+// missingRouteModules() must report. The export keeps the import from reading
+// as dead code to a static analyser; it composes nothing.
+export const importedOnly = [gammaRoutes];
 const HomePage = lazy(() => import('./pages/HomePage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 

@@ -50,10 +50,15 @@ Three things keep a module's route identical to one written in `App.jsx`:
 ## Wiring it in
 
 `App.jsx` has one block for route modules, marked `Route modules (D528)`: one
-import and one composition line per module, alphabetical by file name.
+import and one composition line per module, alphabetical by file name. The
+**first** module also adds `routeTools` itself, on the line the comment above
+`return (` reserves for it, because a declared-but-unread `routeTools` is a
+dead variable until a module exists:
 
 ```jsx
 import adminLabsRoutes from './routes/admin-labs';
+…
+  const routeTools = { guard, hqOnly, authOnly, labRoles, effectiveRole, user, location };
 …
       {adminLabsRoutes(routeTools)}
 ```

@@ -40808,10 +40808,13 @@ an existing route is a change to the tests that pin it.
   './routes/<area>'` per module, alphabetical by file name) and one inside
   the Routes element, above the catch-all `*`, with one
   `{<area>Routes(routeTools)}` per module in the same order. `routeTools` is
-  built just before the render from the file's own closures (`guard`,
-  `hqOnly`, `authOnly`, `labRoles`, `effectiveRole`, `user`, `location`) and
-  carries one `eslint-disable-next-line no-unused-vars` until the first
-  module lands. The prose around the block never writes the Routes element's
+  what the first module adds, on the line a comment reserves just before the
+  render, from the file's own closures (`guard`, `hqOnly`, `authOnly`,
+  `labRoles`, `effectiveRole`, `user`, `location`); declared with no module
+  to read it, it is a dead variable (CodeQL flagged the first draft, which
+  carried it behind a lint exception), so the guard holds it absent without a
+  module and present, in exactly that shape, with one. The fixture tree, which
+  has modules, declares it. The prose around the block never writes the Routes element's
   opening tag: several tests slice `App.jsx` at that tag to find the chrome,
   and the first draft of the comment moved their slice and reported
   `/admin/team` as an orphan.
@@ -40833,7 +40836,9 @@ an existing route is a change to the tests that pin it.
 
 **Guard.** `frontend/test/routes_modules_d528.test.mjs`, 5 tests: the two
 blocks exist, the composition block sits inside the Routes element and above
-the catch-all, `routeTools` carries the gates, and the folder's README says
+the catch-all, `routeTools` is absent with no module and carries every gate
+once one exists (the fixture, which has modules, declares it), and the
+folder's README says
 how the tests will read a module and that existing routes never move; every
 module under the folder is imported and composed, in file-name order, once,
 and composed nowhere else; on the fixture tree
@@ -40845,7 +40850,7 @@ would not see it; the unwired module is reported with which half is missing;
 and each of the ten switched tests imports the helper and no longer reads
 `App.jsx` by itself.
 
-**Mutations: 16 run, 16 caught** (non-zero exit and a `not ok` line each;
+**Mutations: 18 run, 18 caught** (non-zero exit and a `not ok` line each;
 anchors unique; bytes proven changed; sources restored from a sha256-checked
 snapshot) — the helper returning `App.jsx` alone; the module marker written
 as code instead of prose; `missingRouteModules` never reporting; an
@@ -40853,7 +40858,9 @@ imported-but-not-composed module counted as wired; the export name no
 longer camel-casing hyphens; the composition block removed entirely; the
 composition block left half-removed; the import block left half-removed;
 the import block removed; the composition block moved below the catch-all;
-`routeTools` without the gates; the fixture's unwired module wired in; the
+`routeTools` declared with no module to read it; the reserved line no longer
+saying what the first module adds; `routeTools` dropped from the fixture
+`App.jsx`, which has modules; the fixture's unwired module wired in; the
 fixture's imported-only module composed too; the fixture module's route
 written in a shape the readers cannot parse; the README's never-move rule
 dropped; a switched test reading `App.jsx` by itself again. Two escapes on
