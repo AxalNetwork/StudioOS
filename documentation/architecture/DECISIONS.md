@@ -40001,6 +40001,54 @@ shown as 0.**
 - An absent count read as 0.
 - The old `Number(t.count) || 0` restored.
 
+## D512
+
+**Task #995: Admin Studio's home drops its four legacy reads.**
+
+**What was true on main (f701a32f5).** `AdminStudioHome.jsx` still called
+`api.branchHome`, `api.myLicence`, `api.branchTemplates` and
+`api.branchInsights`. It passed their results as four props to
+`StudioNeedsDecisionView` and `AdminStudioOverview`, beside the studio glance
+each of those already loads. D443 asked for the reads to go. Dropping them
+was unsafe until D447 (#893) made both components render from the glance
+alone.
+
+**What changed.**
+- The page makes no read of its own. The `useEffect`, the four `useState`s,
+  the `api` and `reportError` imports and the `UNAVAILABLE` import are gone.
+- It passes each section `user`, and `glance` when a caller hands one in. In
+  production `glance` is undefined, so each component loads the glance
+  itself. A render test is the only caller that supplies it.
+- The four legacy props are no longer passed. Both components keep accepting
+  them for their own tests, which this task does not own.
+
+**Pins re-aimed, never loosened.**
+- `studio_glance_d443.test.mjs`'s "the home page is not the caller" test now
+  asserts it outright: none of the four calls, and none of the four props.
+- `studio_strips_d246.test.mjs` required the home page to import
+  `UNAVAILABLE`. A page with no read needs no sentinel, so it now asserts the
+  page holds none and calls no `api`. The single-definition count still
+  holds, and `StudioPosture` still takes the shared sentinel.
+
+**Tests.** `frontend/test/studio_home_glance_d512.test.mjs` (3).
+- The page cannot be imported in a test, because `StudioInterview` pulls in
+  a JSON manifest the loader does not load. So one test pins, in the page's
+  source, that `user` and `glance` are the only props it passes.
+- Two render the strip and the cards with exactly those props: once for a
+  suspended branch admin and once for an HQ admin. Neither may stall on
+  "Reading…". The branch render shows the glance's seat figure, freeze line
+  and share rate. The HQ render shows U1's reason and no seat count.
+
+**Mutations: 6 run, 6 caught.**
+- A read put back.
+- A legacy prop passed again.
+- The glance pass-through dropped.
+- The strip ignoring the glance.
+- Both sections ignoring it, which fails both render tests.
+- The sentinel imported again.
+
+**Next.** Slot S06 can retire `/branch`.
+
 No migration.
 
 ## D520
