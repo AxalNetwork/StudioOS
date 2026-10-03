@@ -381,11 +381,14 @@ export const SIDEBAR_GROUPS = {
   // Analytics) belong in the page, not the sidebar.
   //
   // NOTHING BECAME UNREACHABLE. All seventeen previous destinations still
-  // resolve; each is listed in the `match` of the row that now owns it, so a
-  // deep link or a bookmark still highlights the right row. `match` is
-  // exact-or-subtree (`SidebarNav.jsx`: `pathname === p || startsWith(p + '/')`),
-  // which is why `/partner/operations/engagements` can sit under Pipeline while
-  // its siblings sit under Delivery without the two colliding.
+  // resolve; each that still renders is listed in the `match` of the row that
+  // now owns it, so a deep link or a bookmark still highlights the right row.
+  // `match` is exact-or-subtree (`SidebarNav.jsx`: `pathname === p ||
+  // startsWith(p + '/')`), which is why `/pipeline/proposals` lights Pipeline
+  // while `/delivery/health` lights Delivery without the two colliding. The
+  // six `/partner/operations/*` addresses redirect (D395) and are named
+  // nowhere in this file: a `match` entry for a path that never renders is
+  // dead code wearing a route's name (D505).
   //
   // TWO DEPARTURES FROM THE CANVAS, both deliberate:
   //   Home → /studio, not a new /home. Per the product owner, and it keeps
@@ -404,8 +407,8 @@ export const SIDEBAR_GROUPS = {
   // `PartnerWorkspaceTabs` wraps the Pipeline and Offers pages at the route,
   // so every section is one click from its row:
   //   Pipeline → Leads · Matches · Demand · Retainers
-  //   Delivery → the /partner/operations subtree, tabbed by
-  //              PartnerOperationsWorkspace since Wave 1a
+  //   Delivery → the /delivery/* zones (board, health); the retired
+  //              /partner/operations tabs redirect into them (D395)
   //   Offers   → Catalog · Perk deals · Visibility · Proof · Office hours
   // The tabs are role-filtered against the same guards App.jsx applies, because
   // those routes do not share one: an investor on /services must not be shown
@@ -420,19 +423,23 @@ export const SIDEBAR_GROUPS = {
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
       // EVERY WORKSPACE ROW POINTS AT ITS BUCKET ROOT. Pipeline, Delivery,
       // Offers and Research used to point at legacy destinations — /needs,
-      // /partner/operations/overview, /services, /signals — so the canvas
-      // overview pages were unreachable from the sidebar and the rows lit up
-      // on pages outside their own buckets. The roots render the overviews
-      // (PartnerBucketRoutes); the legacy destinations stay in `match` so a
-      // deep link still lights the right row.
+      // the retired /partner/operations/overview, /services, /signals — so the
+      // canvas overview pages were unreachable from the sidebar and the rows
+      // lit up on pages outside their own buckets. The roots render the
+      // overviews (PartnerBucketRoutes); the legacy destinations that still
+      // render stay in `match` so a deep link still lights the right row, and
+      // each retired /partner/operations address is replaced by the successor
+      // D395 redirects it to (D505).
       { to: '/pipeline', icon: Target, label: 'Pipeline',
-        match: ['/pipeline', '/needs', '/partner/insights', '/partner/operations/engagements'] },
+        match: ['/pipeline', '/needs', '/partner/insights', '/pipeline/proposals', '/pipeline/analytics'] },
+      // `/company-settings` is where the retired Overview's job went (the firm
+      // profile card, D390/D395); it is the one successor outside this row's
+      // own subtree, so Firm Settings lights Delivery for a partner.
       { to: '/delivery', icon: Briefcase, label: 'Delivery',
-        match: ['/delivery', '/partner/operations/overview', '/partner/operations/portfolio',
-                '/partner/operations/performance'] },
+        match: ['/delivery', '/company-settings', '/delivery/health'] },
       { to: '/offers', icon: Package, label: 'Offers',
         match: ['/offers', '/services', '/perks', '/comarketing', '/partner/office-hours',
-                '/partner/operations/capabilities'] },
+                '/offers/catalog'] },
       { to: '/network', icon: Users, label: 'Network',
         match: ['/network', '/relationships', '/contacts'] },
       { to: '/research', icon: Radar, label: 'Research', match: ['/research', '/signals', '/market-intel'] },
@@ -646,9 +653,10 @@ export const ADVISOR_FULL_BLEED = [...workspaceRoutes('advisor')];
 export const PARTNER_FULL_BLEED = [
   ...workspaceRoutes('partner'),
   // Legacy mounts of the same bodies, kept at the same width so this change
-  // moves nothing that a partner already had.
-  '/partner/operations', '/partner/operations/overview', '/partner/operations/capabilities',
-  '/partner/operations/portfolio', '/partner/operations/engagements', '/partner/operations/performance',
+  // moves nothing that a partner already had. The six /partner/operations
+  // addresses left this list with D505: they redirect (D395), and each
+  // successor that owns a full-bleed body is already in workspaceRoutes above
+  // (`/company-settings` is a centred page by design and stays out).
   '/needs', '/services', '/perks', '/partner/insights',
 ];
 

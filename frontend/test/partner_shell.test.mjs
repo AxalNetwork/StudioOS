@@ -70,9 +70,13 @@ test('Home remains /studio and no Partner persona root was invented', () => {
 test('canonical Partner deep links are owned by the correct workspace', () => {
   const expectedMatches = {
     // '/matches' left with the AI Matching Engine, which was deleted.
-    Pipeline: ['/pipeline', '/needs', '/partner/insights', '/partner/operations/engagements'],
-    Delivery: ['/delivery', '/partner/operations/overview', '/partner/operations/portfolio', '/partner/operations/performance'],
-    Offers: ['/offers', '/services', '/perks', '/comarketing', '/partner/operations/capabilities'],
+    // D505: the retired /partner/operations/* addresses (D395 redirects) are
+    // replaced by their successors — engagements → /pipeline/proposals,
+    // performance → /pipeline/analytics, overview → /company-settings,
+    // portfolio → /delivery/health, capabilities → /offers/catalog.
+    Pipeline: ['/pipeline', '/needs', '/partner/insights', '/pipeline/proposals', '/pipeline/analytics'],
+    Delivery: ['/delivery', '/company-settings', '/delivery/health'],
+    Offers: ['/offers', '/services', '/perks', '/comarketing', '/offers/catalog'],
     Network: ['/network', '/relationships', '/contacts'],
     Research: ['/research', '/signals', '/market-intel'],
   };

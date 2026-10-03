@@ -39788,3 +39788,64 @@ treated as accepted, and their subjects are told.
 
 **Tests.** `relationship_requests_d493.test.ts` (8). 19 mutations, 19
 caught.
+
+## D505
+
+**The partner sidebar stops naming the retired `/partner/operations/*`
+routes: each `match` points at the successor, the full-bleed list drops the
+six retired entries, and the comments say what D395 made true.** Issue #986,
+slot S05 (relayed by Session 11 from D395). No migration, no route, no
+`api.js` change.
+
+**What was true on main (`f701a32f5`).** D395 turned the six
+`/partner/operations/*` addresses into `<Navigate replace>` redirects. The
+partner block of `sidebarConfig.js` still named them in three places: the
+`match` arrays of Pipeline (`…/engagements`), Delivery (`…/overview`,
+`…/portfolio`, `…/performance`) and Offers (`…/capabilities`); the block's
+comments ("Delivery → the /partner/operations subtree, tabbed by
+PartnerOperationsWorkspace since Wave 1a"; "`/partner/operations/engagements`
+can sit under Pipeline while its siblings sit under Delivery"; the legacy
+destinations list); and six entries in `PARTNER_FULL_BLEED`. None of it was
+a live bug — a bookmark to a retired address redirects and the successor
+lights its own row — but a `match` entry for a path that never renders is
+dead code wearing a route's name, and `partner_shell.test.mjs` pinned the
+dead entries as if they were live.
+
+**What changed.**
+- **`match`** names the successor D395 chose for each retired address:
+  Pipeline gains `/pipeline/proposals` and `/pipeline/analytics`
+  (engagements and performance); Delivery gains `/company-settings` (the
+  bare root and overview, whose job moved to the firm profile card on Firm
+  Settings) and `/delivery/health` (portfolio); Offers gains
+  `/offers/catalog` (capabilities). The four under a row's own root were
+  already lit by the subtree rule; they are listed so the mapping reads from
+  the row. `/company-settings` is the one successor outside its row's
+  subtree: a partner on Firm Settings now lights Delivery, which is the
+  issue's mapping and one entry to remove if the owner would rather no row
+  light there.
+- **`PARTNER_FULL_BLEED`** drops the six retired entries. Each successor
+  that owns a full-bleed body is in `workspaceRoutes('partner')` already;
+  `/company-settings` is a centred page by design and stays out.
+- **The comments** describe the rows as they are: Delivery is the
+  `/delivery/*` zones; the legacy destinations that still render are
+  `/needs`, `/services`, `/perks`, `/signals` and `/partner/insights`; the
+  six retired addresses redirect (D395) and are named nowhere in the sidebar.
+- **`partner_shell.test.mjs`** pins the successor mapping instead of the
+  retired entries, and adds that no `/partner/operations` string survives in
+  the partner block or the full-bleed list.
+
+**Guard.** `frontend/test/partner_sidebar_d505.test.mjs`, 4 tests:
+no partner row's `match` or `PARTNER_FULL_BLEED` names a retired address;
+each successor sits in the row the issue assigns; every successor is a
+mounted route and every retired address is a `<Navigate replace>` to it
+(read from `App.jsx`); the full-bleed list still covers every partner
+workspace route with no duplicates; the comments no longer call Delivery the
+operations subtree. `partner_shell` (re-aimed), `partner_bucket_overview`,
+`partner_operations_retired_d395`, `workspace_shell_routes`,
+`workspace_frame_contract`: green.
+
+**Mutations: 8 run, 8 caught** — each a non-zero exit with a `not ok` line,
+anchors unique, bytes proven changed, sources restored from a sha256-checked
+snapshot: a retired address back in Pipeline's `match`; the overview successor dropped from Delivery; the capabilities successor sent to the wrong row; a `match` entry for a path no route mounts; a retired address back in the full-bleed list; the centred page made full-bleed; the old Delivery comment back; a retired address in `App.jsx` no longer redirecting to its successor.
+
+`frontend/src` moved, so `docs/` is rebuilt.
