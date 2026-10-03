@@ -34,6 +34,10 @@ import BranchSuspendedBar from './components/BranchSuspendedBar';
 import HqSupportSessionBar from './components/HqSupportSessionBar';
 import HqViewingAsBar from './components/HqViewingAsBar';
 import BranchNotDeployedBar from './components/BranchNotDeployedBar';
+// D504 — the phone's tab bar (D425), mounted by the shell beside the drawer's
+// backdrop. It takes the shell role AS RESOLVED, never the sidebar's
+// `|| 'founder'` default: a viewer with no role gets no bar.
+import MobileTabBar from './components/MobileTabBar';
 import ImpersonationBar from './components/ImpersonationBar';
 import useBranchDeployment from './hooks/useBranchDeployment';
 import WorkspacesLauncher from './components/WorkspacesLauncher';
@@ -1066,8 +1070,13 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             everyone else, and nothing once the branch is live. */}
         <SafeMount name="BranchNotDeployedBar"><BranchNotDeployedBar strip={notDeployed} /></SafeMount>
 
+        {/* D504 — `viewport-fit=cover` is live (D425), so the installed app draws
+            under a phone's status bar; the header pads by the top inset so its
+            controls sit below it. `min-h-14` keeps the 56px row where there is
+            no inset (every desktop) and grows the box by the inset where there
+            is one. */}
         {/* ── Carta-style global top header ─────────────────────────────── */}
-        <header className="z-40 h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 shrink-0">
+        <header className="z-40 min-h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 shrink-0" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
           <div className="flex items-center gap-2.5">
             <button
               className="lg:hidden text-gray-500 dark:text-gray-400 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
@@ -1215,6 +1224,12 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           {sidebarOpen && (
             <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
           )}
+          {/* D504 — the phone's tab bar (D425): four tabs and More below 1024px,
+              built from the sidebar's own rows. The role is the shell's as
+              resolved, without the sidebar's `|| 'founder'` fallback, so a
+              viewer with no role gets no bar. The bar renders nothing for a
+              licence whose plan is not built yet (`mobilePlan` returns null). */}
+          <MobileTabBar role={shellRole} />
 
           {/* A COLUMN, so the footer stays at the bottom on short pages while
               still following long page content inside the scroll container. */}

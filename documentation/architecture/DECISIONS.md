@@ -39788,3 +39788,69 @@ treated as accepted, and their subjects are told.
 
 **Tests.** `relationship_requests_d493.test.ts` (8). 19 mutations, 19
 caught.
+
+## D504
+
+**The phone's tab bar is mounted by the shell, the header clears the status
+bar, and the `FOUNDER_FULL_BLEED` comment stops calling three redirects
+pages.** Issue #985, slot S05. No migration, no route, no `api.js` change.
+
+**What was true on main (`f701a32f5`).** D425 shipped `MobileTabBar`, its
+plan (`lib/mobileTabs.js`) and its tests, and left the mount to the shell
+because `App.jsx`'s mobile chrome is Session 5's. Nothing mounted it: phones
+had a tested bar and no bottom navigation. `index.html` already asked for
+`viewport-fit=cover` (D425), so the installed app drew under a phone's status
+bar with a header that did not pad for it. The comment over
+`FOUNDER_FULL_BLEED` still said bare `/build/discovery`, `/execution` and
+`/signals` "keep rendering the same desk"; since D422 each is a
+`<Navigate replace>` for a founder.
+
+**What changed.**
+- **The mount** (`App.jsx`): one import, one element — `<MobileTabBar
+  role={shellRole} />` right after the drawer's backdrop, inside the same flex
+  container as the aside, so the drawer (z-50) still covers it. The role is
+  the shell's as resolved by `shellRoleFor`, without the sidebar's
+  `|| 'founder'` fallback: the sidebar defaults because a nav with no rows is
+  a broken screen; the bar must not, because a viewer with no role would get
+  a founder's tabs. The bar renders nothing for a licence whose plan is not
+  built (`mobilePlan` returns null), which D425 already pins.
+- **The header** pads by `env(safe-area-inset-top, 0px)` and its 56px height
+  becomes a minimum (`min-h-14`), so the box grows by the inset where there
+  is one and is unchanged on every screen without one.
+- **The comment** over `FOUNDER_FULL_BLEED` (`sidebarConfig.js`) says what
+  D422 made true: the three bare routes redirect to `/validate`, `/build` and
+  `/research`, render a page only with `?mode=workspace` (the editors D422
+  kept), and `/build/team?mode=workspace` is the Team workspace (D435). They
+  stay listed because the editor each still mounts keeps the desk's width.
+
+**Guard.** `frontend/test/mobile_tab_bar_mount_d504.test.mjs`, 4 tests: the
+bar is imported and mounted once, right after the backdrop, with the resolved
+role and no founder default while the sidebar keeps its own; the real
+component renders for a founder with `lg:hidden` and renders nothing for an
+undefined or null role; the header carries the top inset and a minimum, not
+fixed, height, and the viewport asks for cover; the comment describes the
+redirects and `App.jsx` really does redirect each of the three for a founder.
+`mobile_tab_bar_d425`, `founder_shell`, `apex_route_coverage`: green
+unchanged.
+
+**Mutations: 9 run, 9 caught** — each a non-zero exit with a `not ok` line, anchors
+unique, bytes proven changed, sources restored from a sha256-checked snapshot:
+the bar not mounted; mounted twice; the role defaulted to founder; mounted
+away from the drawer; the header's top inset dropped; the header back to a
+fixed 56px; the bar drawn for a viewer with no role; the bar drawn at every
+width; the stale comment back.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA
+fallback, `/studio` as a founder. At 390×844 the bar is drawn once at the
+bottom (57px tall, "Studio Build Raise Grow More"), `data-mobile-tabbar="on"`
+is set and the page's main column pads 56px; More opens the sheet with
+"Spin-Out Lab · Validate · Network · Research · Messages · Trust · Company
+Settings". At 1280×900 the same element is `display: none`. As an investor at
+phone width no bar is drawn and the root attribute is absent. The header's
+inline `padding-top` is `env(safe-area-inset-top, 0px)` and resolves to 0 in
+a headless browser with no inset. **Found, not fixed here (CookieConsent.jsx
+is not this issue's file):** until the cookie banner is answered it sits
+over the bar on a phone (`fixed bottom-4`, z-50, above the bar's z-30), so
+the first tap on a tab lands on the banner.
+
+`frontend/src` moved, so `docs/` is rebuilt.
