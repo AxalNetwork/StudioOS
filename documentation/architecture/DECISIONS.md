@@ -41064,3 +41064,40 @@ comparing against the wrong page; the helper no longer cutting the subject
 at 300.
 
 **Browser probe, recorded and not a gate:** `docs/` served with the SPA fallback, a branch admin (`branch.code` `fr` off `/me`) at 1280×900 with a stored session (actor T. Okafor, reason "ticket #4192", ten minutes left) opening `/branch`. The bar draws above the admin chrome and its "Raise a concern" href is `/branch/approvals?kind=other&subject=HQ+support+session+by+T.+Okafor%3A+ticket+%234192`; clicking it lands on that URL with the raise form drawn, the subject field reading "HQ support session by T. Okafor: ticket #4192" and the `other` kind checked. No page error. Second pass, after Codex's finding: the same admin already on `/branch/approvals` with "something I typed by hand" in the subject presses the bar's link; before the fix the URL changed and the field still read the typed text, after it the document reloads once onto the prefilled URL and the field reads the session's subject with `other` checked, the bar still drawn. The first scenario, from `/branch`, is unchanged: one client-side navigation, no reload.
+
+## D527 — A new API domain gets its own module under `lib/api/`
+
+**Status:** Accepted, 2026-10-03. Issue #1055. No migration.
+
+**Why.** On `main` from 2 August to 3 October 2026 (624 commits),
+`frontend/src/lib/api.js` changed in 113 commits, because every new client
+method landed at the bottom of that one file and unrelated features collided
+there. 147 tests and scripts read `api.js` by path, so moving existing code
+is out of scope; new code goes in new files instead.
+
+**What ships.**
+- `frontend/src/lib/api/`, with a README. A new API domain is one file there,
+  `lib/api/<domain>.js`, exporting its client object the way `api.js` does
+  and calling the Worker through `request` from `api.js`.
+- A re-export block in `api.js`, under the imports and away from the end of
+  the file where other PRs append: one `export * from './api/<domain>.js';`
+  line per module between `// api-modules:begin` and `// api-modules:end`, in
+  alphabetical order. It is empty today; no method moved.
+- `scripts/lib/apiModules.mjs` holds the rules: which files carry client
+  calls (`api.js` and every `.js` under `lib/api/`), whether the block names
+  exactly the modules on disk in order, and the call extraction and route
+  matching, lifted out of `check-api-drift.mjs` unchanged.
+- `scripts/check-api-drift.mjs` reads `api.js` and every module, so a module
+  method must match a mounted Worker route exactly as an `api.js` method
+  must, and it fails when the re-export block disagrees with the folder. On
+  today's tree it reports the same 1663 calls against 1969 routes as before.
+- The Worker's drift tests (`api_drift.test.mjs`, its `.ts` twin and
+  `api_drift_runtime.test.mjs`) read the modules too.
+- The "Do not add a `/api/*` method" rule in `CLAUDE.md`, `AGENTS.md` and
+  `frontend/src/lib/README.md` now covers the modules.
+
+**Tests.** `scripts/lib/apiModules.test.mjs`: a module method with no Worker
+route fails, one whose verb the Worker does not answer fails, one with a route
+passes, a module missing from the re-export block is reported (with the line
+to add), and the block rejects a ghost, a duplicate, a malformed line and the
+wrong order. Each was mutation-checked both ways.
