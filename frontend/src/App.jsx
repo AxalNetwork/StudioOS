@@ -21,6 +21,17 @@ import SafeMount from './components/SafeMount';
 import AxalLogo from './components/AxalLogo';
 import CookieConsent from './components/CookieConsent';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
+// ── Route modules (D528) ──────────────────────────────────────────────────
+// A NEW area's routes live in frontend/src/routes/<area>.jsx, not here: this
+// file changed in 109 of the last 624 commits and any two PRs that add a page
+// collide in it. One import per module, alphabetical by file name, and one
+// composition line per module in the block of the same name inside the Routes
+// element below. The 409 routes already here stay here (156 tests read this
+// file by path, and several slice it at the Routes element's opening tag, so
+// that tag is not written in prose here). See frontend/src/routes/README.md;
+// routes_modules_d528.test.mjs fails the build for a module that is not wired in.
+// (no modules yet)
+// ── end route modules ─────────────────────────────────────────────────────
 import {
   Menu,
   Shield,
@@ -2176,6 +2187,15 @@ function AppInner() {
   const founderExecutionEditor = effectiveRole === 'founder'
     && new URLSearchParams(location.search).get('mode') === 'workspace';
 
+  // D528 — the first route module (frontend/src/routes/<area>.jsx) adds, right
+  // here, what every module gets from this file's closures, so a route in a
+  // module is gated by the same `guard`, `hqOnly` and `authOnly` as one
+  // written here, never by a copy of them:
+  //   const routeTools = { guard, hqOnly, authOnly, labRoles, effectiveRole, user, location };
+  // It is not declared until then: with no module to read it, it is a dead
+  // variable, and routes_modules_d528.test.mjs holds it absent without a
+  // module and present, in exactly that shape, with one.
+
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-500 dark:text-gray-400">Loading…</div>}>
 <RouteErrorBoundary>
@@ -3259,6 +3279,12 @@ function AppInner() {
       <Route path="/lp/investor" element={<InvestorDealflowHomePage />} />
       <Route path="/lp/partner" element={<PartnerPartnershipHomePage />} />
       <Route path="/lp/spinout-demo-day" element={<SpinoutDemoDayPage />} />
+      {/* ── Route modules (D528) ── one line per frontend/src/routes/<area>.jsx,
+          alphabetical, each `{<area>Routes(routeTools)}`; the imports sit in
+          the block of the same name at the top of this file. Above the
+          catch-all, so a module's routes are matched before it. */}
+      {/* (no modules yet) */}
+      {/* ── end route modules ── */}
       {/* Task #11 — Catch-all 404. Must stay LAST so it only matches when no
           other route (public, alias, or guarded) does. */}
       <Route path="*" element={<NotFoundPage />} />

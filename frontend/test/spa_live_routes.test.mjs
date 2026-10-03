@@ -27,10 +27,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { readRoutesSource } from './_routesSource.mjs';
 
 const ROOT = resolve(process.cwd());
 const SMOKE = readFileSync(join(ROOT, 'scripts', 'check-spa-live.mjs'), 'utf8');
-const APP = readFileSync(join(ROOT, 'frontend', 'src', 'App.jsx'), 'utf8');
+// D528 — App.jsx plus every module under frontend/src/routes/: a smoked path
+// that a module declares is a real route, not the catch-all's.
+const APP = readRoutesSource(ROOT);
 
 /**
  * The paths the smoke script checks.
@@ -54,7 +57,7 @@ function smokedPaths() {
 }
 
 /**
- * Route patterns declared in `App.jsx`, minus the catch-all.
+ * Route patterns declared in `App.jsx` and the route modules, minus the catch-all.
  *
  * `*` is dropped for the reason in the header. `/auth/recover/*` and
  * `/docs/admin/*` are kept: a prefixed wildcard still asserts its prefix, so
@@ -83,10 +86,10 @@ test('every smoked path resolves to a declared route, not the catch-all', () => 
   // A parse that silently returned nothing would make every assertion below
   // vacuous, which is the one way a guard like this fails without saying so.
   assert.ok(paths.length >= 10, `parsed ${paths.length} paths out of the smoke script`);
-  assert.ok(routes.length >= 100, `parsed ${routes.length} routes out of App.jsx`);
+  assert.ok(routes.length >= 100, `parsed ${routes.length} routes out of App.jsx and the route modules`);
   for (const p of paths) {
     assert.ok(routes.some((r) => matches(r, p)),
-      `check-spa-live.mjs checks ${p}, which no <Route> in App.jsx declares — `
+      `check-spa-live.mjs checks ${p}, which no <Route> in App.jsx or a route module declares — `
       + 'it would be answered by the catch-all and pass while testing nothing');
   }
 });

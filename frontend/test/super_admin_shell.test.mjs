@@ -26,10 +26,12 @@ import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { shellRoleFor, isSuperAdminUser, HQ_VIEW_KEY } from '../src/lib/shellRole.js';
 import { previewOptionsFor } from '../src/lib/previewShells.js';
 import { codeOnly } from './_codeOnly.mjs';
+// D528 — App.jsx plus every module under frontend/src/routes/, so a route in a module is checked like one in App.jsx.
+import { readRoutesSource } from './_routesSource.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
-const APP = read('frontend/src/App.jsx');
+const APP = readRoutesSource();
 const APP_CODE = codeOnly(APP);
 
 const rows = (SIDEBAR_GROUPS.super_admin || []).flatMap((g) => g.items || []);
