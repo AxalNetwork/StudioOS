@@ -1268,7 +1268,7 @@ export const api = {
   createTicket: (data) => request('/tickets', { method: 'POST', body: JSON.stringify(data) }),
   getTicket: (id) => request(`/tickets/${id}`),
   updateTicket: (id, data) => request(`/tickets/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  syncTickets: () => request('/tickets/sync', { method: 'POST' }),
+  syncTickets: (options = {}) => request('/tickets/sync', { method: 'POST', body: JSON.stringify(options) }),
   // Task #9 — GitHub-canonical ticket comments. (D232: the sync-mapping debug
   // method went — no screen called it; `GET /api/tickets/:id/mapping` stays.)
   commentTicket: (id, body) => request(`/tickets/${id}/comments`, { method: 'POST', body: JSON.stringify({ body }) }),

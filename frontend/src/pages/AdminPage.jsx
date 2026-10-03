@@ -5434,6 +5434,15 @@ export function GithubRepoReadOnly({ cfg }) {
   );
 }
 
+export function githubSyncBadge(cfg, result) {
+  if (result?.can_write === false) return { text: 'Issue creation failed', cls: 'bg-red-100 text-red-700' };
+  if (result?.can_write === true) return { text: 'Issue creation verified', cls: 'bg-emerald-100 text-emerald-700' };
+  if (cfg?.configured) return { text: 'Write access unverified', cls: 'bg-amber-100 text-amber-700' };
+  return cfg?.has_token
+    ? { text: 'Partially configured', cls: 'bg-amber-100 text-amber-700' }
+    : { text: 'Not configured', cls: 'bg-gray-100 text-gray-700' };
+}
+
 function GithubSyncPanel() {
   const [cfg, setCfg] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -5519,11 +5528,7 @@ function GithubSyncPanel() {
     </div>
   );
 
-  const statusBadge = cfg?.configured
-    ? { text: 'Connected config', cls: 'bg-emerald-100 text-emerald-700' }
-    : cfg?.has_token
-      ? { text: 'Partially configured', cls: 'bg-amber-100 text-amber-700' }
-      : { text: 'Not configured', cls: 'bg-gray-100 text-gray-700' };
+  const statusBadge = githubSyncBadge(cfg, testResult);
 
   return (
     <div data-density-target className="max-w-3xl">
@@ -5542,7 +5547,7 @@ function GithubSyncPanel() {
           <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${statusBadge.cls}`}>{statusBadge.text}</span>
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          When configured, filing a support ticket opens a GitHub issue in the target repo, and closing/updating that issue syncs the ticket status back automatically.
+          Filing a support ticket opens a GitHub issue when the token has Issues: Read and write on the target repo. The webhook syncs issue updates back to the ticket.
         </p>
 
         <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -5563,6 +5568,15 @@ function GithubSyncPanel() {
           <p className="text-[11px] text-gray-500 mb-3">Needs <strong>Issues: Read and write</strong> on the target repo. Stored encrypted; never shown again after saving.</p>
         </SecretWriteGate>
         <GithubRepoReadOnly cfg={cfg} />
+        {testResult?.can_write === false && testResult?.http_status === 403 && (
+          <p className="mb-3 text-sm text-red-700 dark:text-red-300" role="alert">
+            In GitHub Settings → Developer settings → Personal access tokens, edit the token used here.
+            Select {cfg?.repo_owner} as resource owner, include {cfg?.repo_name}, and set Repository permissions → Issues → Read and write.
+            Approve the change in the organization if required, then run Test issue creation again.
+            If replacing the token, a Super Admin must save the replacement here first.
+            Once the test passes, <a href="/help/tickets" className="underline">retry saved tickets</a> to create their missing issues.
+          </p>
+        )}
 
         <div className="flex gap-2 flex-wrap">
           {holdsSecretWrites && (
