@@ -97,6 +97,21 @@ test('D525: the link is built by approvalsHref, from the session, and nothing el
   assert.match(SRC, /to=\{approvalsHref\(\{ kind: 'other', subject: concernSubject\(session\) \}\)\}/, 'the Link is not built from the helper and the session');
   assert.ok(!SRC.includes("to=\"/branch/approvals\""), 'the bar still links a bare /branch/approvals');
   assert.ok(!/\?kind=/.test(SRC), 'the bar spells the query by hand instead of through the helper');
+  // Codex on #1044: from /branch/approvals itself a client-side navigation
+  // changes only the query, and BranchApprovals reads the prefill once, in its
+  // useState initialisers, so the form would not change. From that one page,
+  // and only that page, the link reloads the document.
+  assert.match(SRC, /const onApprovals = useLocation\(\)\.pathname === APPROVALS_PATH;/, 'the bar does not know when it is drawn on the Approvals page');
+  assert.match(SRC, /export const APPROVALS_PATH = '\/branch\/approvals';/);
+  assert.match(SRC, /<Link\s+to=\{approvalsHref\(\{ kind: 'other', subject: concernSubject\(session\) \}\)\}\s+reloadDocument=\{onApprovals\}/,
+    'from the Approvals page the link does not force a fresh form state');
+  assert.ok(!/reloadDocument(?!=\{onApprovals\})/.test(SRC), 'the link reloads the document from every page, not only from Approvals');
+  // BranchApprovals still reads the prefill only once; the day it re-reads
+  // its query, the reload above is the line to drop and this pin to re-aim.
+  const approvals = codeOnly(readFileSync(resolve(process.cwd(), 'frontend/src/pages/branch/BranchApprovals.jsx'), 'utf8'));
+  assert.match(approvals, /const \[kind, setKind\] = useState\(prefill\.kind \|\| 'other'\);/);
+  assert.match(approvals, /const \[subject, setSubject\] = useState\(prefill\.subject\);/);
+  assert.equal((approvals.match(/prefill\./g) || []).length, 2, 'BranchApprovals now reads the prefill elsewhere too — re-aim this pin and drop reloadDocument from the bar');
   // What D142 pinned stays: nothing persisted, no close button.
   assert.ok(!SRC.includes('localStorage'), 'the bar writes to localStorage');
   assert.ok(!/aria-label="Close"/.test(SRC), 'the bar grew a close button');
