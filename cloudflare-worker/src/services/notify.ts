@@ -377,6 +377,52 @@ export async function notify(env: Env, args: NotifyArgs): Promise<number | null>
             },
           });
         } catch (e) { console.warn('[notify] realtime push failed', e); }
+
+        // D334/D335 built the /push/* routes and the RFC 8291 sender but
+        // never called either from here — a Codex review on that PR caught
+        // that "enabling push produces the setup test" (/push/test) "while
+        // every subsequent real notification is lost as soon as the
+        // browser has no active WebSocket." Fanned out alongside the
+        // realtime broadcast above (same quiet-hours skip, same
+        // best-effort swallow) rather than as its own channel in
+        // `notification_prefs` — a device either has push subscriptions or
+        // it doesn't, and the in-app row this block already gates on is
+        // the signal a push notification mirrors.
+        try {
+          const subs: any = await env.DB.prepare(
+            `SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?`,
+          ).bind(args.userId).all();
+          const rows = (subs?.results || []) as Array<{ id: number; endpoint: string; p256dh: string; auth: string }>;
+          if (rows.length) {
+            // Codex review: this looped sequentially with no timeout —
+            // notify() is itself awaited by the business request handler
+            // that triggered it, so one slow push service multiplied by
+            // up to 20 subscriptions (the /push/subscribe cap) made that
+            // handler's latency cumulative, with no bound at all if a
+            // provider simply never responds. Threading a Worker
+            // ExecutionContext through notify() to truly background this
+            // past the response would touch every one of its call sites —
+            // out of scope for this fix — so instead each send races a
+            // fixed timeout (`sendWebPushBounded`, shared with /push/test's
+            // own fan-out) and all rows run concurrently rather than
+            // one-at-a-time: the wait is bounded by the timeout, not by
+            // (timeout × subscription count).
+            const { sendWebPushBounded } = await import('./webpush');
+            await Promise.all(rows.map(async (row) => {
+              try {
+                const result = await sendWebPushBounded(env, row, {
+                  title: args.title,
+                  body: args.body ?? '',
+                  link: args.link ?? '/inbox',
+                  type: args.type,
+                });
+                if (!result.ok && result.gone) {
+                  await env.DB.prepare(`DELETE FROM push_subscriptions WHERE id = ?`).bind(row.id).run();
+                }
+              } catch (e) { console.warn('[notify] web push send failed', e); }
+            }));
+          }
+        } catch (e) { console.warn('[notify] web push fan-out failed', e); }
       }
     }
 
