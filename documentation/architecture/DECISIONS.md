@@ -40703,3 +40703,75 @@ four statements.
 **What it does not do.** It wires no feature to the tables and converts no
 money column. The ledger grows by twelve, which is the honest record of
 production rather than a new choice of dialect.
+
+## D525
+
+**The HQ support bar's "Raise a concern" arrives at Branch · Approvals with
+the form filled: kind `other`, subject naming the session, the HQ actor and
+the reason.** Issue #1031, slot S05, relayed from slot S06's D445 wiring
+(#1028). No migration, no route, no `api.js` change. `frontend/src` moved,
+so `docs/` is rebuilt.
+
+**What was true on main (`f701a32f5`).** D445 made `/branch/approvals` read
+`?kind=` and `?subject=` through `prefillFromSearch` and gave every Settings
+door both. `HqSupportSessionBar.jsx` (D142) linked a bare
+`/branch/approvals`, so a branch admin raising a concern from inside an HQ
+session started with an empty form and had to retype what the bar above it
+had just said. D445 named the prefill this bar would use: `?kind=other`.
+
+**What changed.** The bar builds its link with `approvalsHref`, the one
+helper the Settings doors use, so the encoding and the 300-character cut are
+the page's own. The kind is `other`: a concern about an HQ session is none of
+`moderation`, `content` or `seat_increase`. The subject is
+`concernSubject(session)`: "HQ support session", then " by <actor>" when the
+redeem response carried an actor name, then ": <reason>" when it carried a
+reason. A missing field is left out, never invented, the rule the bar
+already applies to its own fields. Nothing else about the bar moves: it still
+persists nothing, has no close button, and draws nothing without a live
+session.
+
+**From the Approvals page itself, the link reloads the document.** Codex's
+review of #1044 caught what the first draft missed: this bar is global
+chrome, so it is still drawn on `/branch/approvals`, and from there the link
+changes only the query string. React Router keeps the same `BranchApprovals`
+instance, which copies `?kind=` and `?subject=` into state once, in its
+`useState` initialisers, so a client-side navigation left a half-typed form
+exactly as it was; the probe reproduced it. From that one page, and only
+that page, the `Link` carries `reloadDocument`, which is the one way this
+file can force a fresh form state without editing `BranchApprovals.jsx`
+(slot S06's file). The proper fix is the page re-reading its query when it
+changes; it is relayed on #1031, and the guard pins that `BranchApprovals`
+still reads the prefill in exactly those two initialisers, so the day it
+re-reads, the pin fails and the reload is the line to drop.
+
+**Two sentences elsewhere are now stale and are not edited here.**
+`frontend/src/lib/escalationPrefill.js` (its header comment) and
+`frontend/src/lib/README.md` (the `escalationPrefill.js` row) both say the
+bar links with no query. Both are outside this issue's file list; flagged on
+#1031 for the owner to assign.
+
+**Guard.** `frontend/test/hq_support_bar_prefill_d525.test.mjs`, 4 tests,
+rendered under a fake store and parsed back through the page's own
+`prefillFromSearch`: actor and reason both present give kind `other` and
+subject "HQ support session by T. Okafor: ticket #4192", equal to
+`approvalsHref` of the same; each of the three thinner sessions still gives
+kind `other` and the subject with only what was carried; a 400-character
+reason is cut at 300 and an ampersand in the actor name survives the round
+trip; the source imports `approvalsHref`, builds the Link from it and the
+session, spells no query by hand, still writes no `localStorage`, still has
+no close button, and draws nothing without a live session. The first and
+fourth fail on main's bar. `branch_shell_s7_s13` (the bar's D142 pins):
+green.
+
+**Mutations: 13 run, 13 caught** (non-zero exit and a `not ok` line each;
+anchors unique; bytes proven changed; sources restored from a sha256-checked
+snapshot) — the link back to a bare `/branch/approvals`; the kind sent as
+`moderation`; no kind sent; the subject dropped; the query spelled by hand
+instead of through `approvalsHref`; the actor name dropped from the subject;
+the reason dropped from the subject; a missing actor invented as "someone at
+HQ"; the bar persisting the subject to `localStorage`; no reload from the
+Approvals page; the document reloaded from every page; the Approvals check
+comparing against the wrong page; the helper no longer cutting the subject
+at 300.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA fallback, a branch admin (`branch.code` `fr` off `/me`) at 1280×900 with a stored session (actor T. Okafor, reason "ticket #4192", ten minutes left) opening `/branch`. The bar draws above the admin chrome and its "Raise a concern" href is `/branch/approvals?kind=other&subject=HQ+support+session+by+T.+Okafor%3A+ticket+%234192`; clicking it lands on that URL with the raise form drawn, the subject field reading "HQ support session by T. Okafor: ticket #4192" and the `other` kind checked. No page error. Second pass, after Codex's finding: the same admin already on `/branch/approvals` with "something I typed by hand" in the subject presses the bar's link; before the fix the URL changed and the field still read the typed text, after it the document reloads once onto the prefilled URL and the field reads the session's subject with `other` checked, the bar still drawn. The first scenario, from `/branch`, is unchanged: one client-side navigation, no reload.
