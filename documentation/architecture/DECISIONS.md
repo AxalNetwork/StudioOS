@@ -39836,5 +39836,19 @@ should read a live figure at all (several of `MetricsStrip`'s other entries
 not this issue's to make alone). Left for a follow-up that can look at the
 whole strip rather than one more line of it.
 
-**Tests.** `spinout_lab_copy_d508.test.mjs` (4). Root `npm run build` and
-`npm run test:drift` both exit 0.
+**A Codex review on the PR caught a grammar bug in the fix itself** (not
+optional-labeled, so verified and fixed): the testimonial sub pluralized
+"companies" unconditionally, so a real count of exactly 1 would have
+rendered "From the 1 companies that have completed the Spin-Out Lab." Fixed
+by replacing the inline ternary with `graduateTestimonialSub(companies)`,
+which also reuses `lib/spinoutLab.js`'s existing `useSpinoutStats` hook
+instead of a second copy of the same `/spinout-lab/stats` fetch this file
+had rolled by hand (the review didn't ask for that part, but the file
+already had the real hook sitting next to `companiesLabel`, the singular-
+correct noun helper the review pointed at — using it was the smaller diff
+than keeping a parallel one).
+
+**Tests.** `spinout_lab_copy_d508.test.mjs` (now 5, one new: zero/one/many
+grammar, evaluating the actual function's source rather than re-deriving
+its logic in the test). Root `npm run build` and `npm run test:drift` both
+exit 0.

@@ -48,11 +48,11 @@ test('SpinoutDemoDayPage no longer sells "idea to incorporated company"', () => 
   assert.doesNotMatch(DEMO_DAY, /idea to incorporated/i);
 });
 
-test('FounderHomePage reads the real graduate count, not a hardcoded one', () => {
+test('FounderHomePage reads the real graduate count via the shared hook, not a hardcoded one', () => {
   assert.doesNotMatch(FOUNDER_HOME, /\bthe 38 companies\b/i, 'the unbacked count literal is still here');
   assert.doesNotMatch(FOUNDER_HOME, /sub="From the \d+ companies/, 'a different hardcoded count replaced the old one');
-  assert.match(FOUNDER_HOME, /spinoutLab\.stats\(\)/, 'no longer reads the real stats endpoint');
-  assert.match(FOUNDER_HOME, /graduateCount\s*\?/, 'no fallback for a failed read or a genuine zero');
+  assert.match(FOUNDER_HOME, /useSpinoutStats/, 'should reuse lib/spinoutLab.js\'s hook rather than a second fetch');
+  assert.match(FOUNDER_HOME, /graduateTestimonialSub/, 'no fallback for a failed read, a genuine zero, or exactly one graduate');
 });
 
 test('no hardcoded Spin-Out Lab graduate count appears anywhere these three files render it', () => {
@@ -61,4 +61,22 @@ test('no hardcoded Spin-Out Lab graduate count appears anywhere these three file
   // "38 Spin-Outs Completed" figure, a separate, out-of-scope finding; this
   // guard is narrow to the testimonial sub this issue owns).
   assert.doesNotMatch(FOUNDER_HOME, /\b\d+\s+companies that have completed/i);
+});
+
+test('graduateTestimonialSub is grammatical for zero, one, and many graduates', () => {
+  // Codex review: the first fix pluralized "companies" unconditionally, so
+  // a real count of 1 rendered "From the 1 companies…". This extracts and
+  // evaluates the actual function's source (this directory's tests have no
+  // JSX-module harness to import the page directly) so a future edit that
+  // reintroduces the bug fails this test, not just a regex scan.
+  const start = FOUNDER_HOME.indexOf('function graduateTestimonialSub');
+  assert.ok(start > 0, 'graduateTestimonialSub not found — did it get renamed or inlined?');
+  const body = FOUNDER_HOME.slice(start, FOUNDER_HOME.indexOf('\n}', start) + 2);
+  // eslint-disable-next-line no-new-func
+  const graduateTestimonialSub = new Function(`${body}; return graduateTestimonialSub;`)();
+  assert.equal(graduateTestimonialSub(0), 'From founders who have completed the Spin-Out Lab.');
+  assert.equal(graduateTestimonialSub(null), 'From founders who have completed the Spin-Out Lab.');
+  assert.equal(graduateTestimonialSub(1), 'From the 1 company that has completed the Spin-Out Lab.');
+  assert.doesNotMatch(graduateTestimonialSub(1), /\b1 companies\b/, 'the exact bug Codex caught');
+  assert.equal(graduateTestimonialSub(5), 'From the 5 companies that have completed the Spin-Out Lab.');
 });
