@@ -8,6 +8,21 @@ import { archetypeIllustration, archetypeLicenceTitle, archetypeMeta, humanize }
 import { STUDIO_CHAT_ANCHOR } from '../advisor/interviewCompleteRow';
 import { Unreadable } from '../../ui';
 
+/**
+ * D509 — A BEST-FIT TYPE'S COUNT, OR NULL WHEN THE READ CARRIED NONE.
+ *
+ * The badge used to render `Number(t.count) || 0`, so a type whose count was
+ * absent read "0" — the claim that nobody fits, made about a number nobody
+ * measured. Only a number, or a numeric string, counts; anything else is
+ * absent and the badge is not drawn.
+ */
+export function fitCount(raw) {
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+  if (typeof raw !== 'string' || raw.trim() === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
 function CardShell({ title, badge, className = '', children, action, to, accent, testId, ariaLabel }) {
   const hit = Boolean(to);
   const cls = `pf-card p-[22px] bg-white dark:bg-gray-900 border border-[#ececf1] dark:border-gray-700 animate-[pfFade_0.4s_ease-out] ${hit ? 'pf-card-hit' : ''} ${className}`;
@@ -599,7 +614,9 @@ function MatchSummaryCard({ className }) {
                 <div key={t.type} className="rounded-[12px] border border-[#f0f0f3] dark:border-gray-800 bg-white dark:bg-gray-800/50 p-[15px]">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-[12.5px] font-bold text-[#27272a] dark:text-gray-200">{t.label}</span>
-                    <span className="text-[11px] font-bold text-[#6d28d9] dark:text-violet-300 bg-[#f5f3ff] dark:bg-violet-900/40 px-2 py-0.5 rounded-full border border-[#ede9fe] dark:border-violet-800">{Number(t.count) || 0}</span>
+                    {fitCount(t.count) !== null ? (
+                      <span className="text-[11px] font-bold text-[#6d28d9] dark:text-violet-300 bg-[#f5f3ff] dark:bg-violet-900/40 px-2 py-0.5 rounded-full border border-[#ede9fe] dark:border-violet-800">{fitCount(t.count)}</span>
+                    ) : null}
                   </div>
                   {data.unlocked ? (
                     list.length > 0 ? (
