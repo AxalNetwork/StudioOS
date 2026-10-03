@@ -1020,7 +1020,15 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     <ActiveCompanyContext.Provider value={{ company: activeCompany, setCompany: setActiveCompany, companies: companyList, setCompanies: setCompanyList }}>
     <ViewModeContext.Provider value={viewModeContextValue}>
     <ViewAsBranchContext.Provider value={viewAsBranchContextValue}>
-      <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
+      {/* D504 — `viewport-fit=cover` is live (D425), so the installed app draws
+          under a phone's status bar. The shell's root reserves the top inset,
+          not the header: on an admin's phone `PortalSwitcher` and the support,
+          impersonation and branch-status strips render BEFORE the header, so
+          an inset on the header alone left the first interactive bar under the
+          status bar (Codex on #1039). Here, whichever bar is first sits below
+          it, and every bar keeps its own height. `env(…, 0px)` is 0 on every
+          screen without an inset. */}
+      <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         {/* D142 / S13 — ABOVE `PortalSwitcher`, and the order is the point.
             `isImpersonating` is `!!realUser`, which an HQ support session never
             sets (the operator is a row in HQ's database this deployment cannot
@@ -1070,13 +1078,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             everyone else, and nothing once the branch is live. */}
         <SafeMount name="BranchNotDeployedBar"><BranchNotDeployedBar strip={notDeployed} /></SafeMount>
 
-        {/* D504 — `viewport-fit=cover` is live (D425), so the installed app draws
-            under a phone's status bar; the header pads by the top inset so its
-            controls sit below it. `min-h-14` keeps the 56px row where there is
-            no inset (every desktop) and grows the box by the inset where there
-            is one. */}
         {/* ── Carta-style global top header ─────────────────────────────── */}
-        <header className="z-40 min-h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 shrink-0" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+        <header className="z-40 h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 shrink-0">
           <div className="flex items-center gap-2.5">
             <button
               className="lg:hidden text-gray-500 dark:text-gray-400 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
@@ -1232,8 +1235,14 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <MobileTabBar role={shellRole} />
 
           {/* A COLUMN, so the footer stays at the bottom on short pages while
-              still following long page content inside the scroll container. */}
+              still following long page content inside the scroll container.
+              `data-app-scroll` is where the phone tab bar's clearance goes
+              (mobileTabBar.css, D504): the footer is the last thing in this
+              container, so padding the content block above it (`[data-app-main]`,
+              as D425 did) left the footer's Terms and Privacy row under the bar
+              at the end of the scroll. */}
           <main
+            data-app-scroll
             {...(onboardingCanvas ? { 'data-onboarding-canvas': '' } : {})}
             className={`flex flex-1 flex-col overflow-y-auto ${onboardingCanvas ? '' : 'bg-gray-50 dark:bg-gray-950'}`}
           >

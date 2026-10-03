@@ -11,9 +11,16 @@
  *     a nav with no rows is a broken screen; the bar must NOT, because a
  *     viewer with no role would then get a founder's tabs. The mount passes
  *     the resolved role as it is.
- *   - The header under the status bar. `viewport-fit=cover` (D425) makes the
- *     installed app draw under a phone's status bar, and the top inset is no
- *     longer 0, so the header pads by it.
+ *   - The first bar under the status bar. `viewport-fit=cover` (D425) makes
+ *     the installed app draw under a phone's status bar, and the top inset is
+ *     no longer 0, so the shell's root reserves it — the root, not the header,
+ *     because on an admin's phone PortalSwitcher and the strips render before
+ *     the header (Codex on #1039). The header keeps its fixed 56px.
+ *
+ *   - The footer under the bar (Codex on #1039). D425's clearance padded the
+ *     content block; the footer renders after it, so at the end of the scroll
+ *     its Terms and Privacy row sat under the bar. The clearance is on the
+ *     scroll container now.
  *
  *   - The cookie banner over the bar (S1 on #985). Until it is answered the
  *     banner is a fixed z-50 card; at `bottom-4` it covered the bar's z-30,
@@ -68,13 +75,50 @@ test('the bar mounts for a founder below 1024px and does not mount for a viewer 
   assert.equal(renderAs(null), '', 'a null role gets no bar');
 });
 
-test('the header pads by the top safe-area inset, and the viewport asks for cover', () => {
+test('the shell root reserves the top safe-area inset, the header keeps its fixed 56px, and the viewport asks for cover', () => {
+  const INSET = "paddingTop: 'env(safe-area-inset-top, 0px)'";
+  // The inset is on the shell's root, once. The root is the column every
+  // strip renders in, so whichever bar is first — PortalSwitcher on an
+  // admin's phone, a support or impersonation strip, the header — sits below
+  // the status bar. Codex on #1039 found the first draft's inset on the header
+  // alone, which left those earlier bars under the status bar.
+  const rootAt = CODE.indexOf('<div className="flex flex-col h-screen overflow-hidden');
+  assert.ok(rootAt > 0, 'the shell root is gone');
+  const root = CODE.slice(rootAt, CODE.indexOf('>', rootAt) + 1);
+  assert.ok(root.length < 300, 'the root tag is one element');
+  assert.match(root, new RegExp(`style=\\{\\{ ${INSET.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\}\\}`), 'the shell root does not reserve the top inset');
+  assert.equal(CODE.split(INSET).length - 1, 1, 'the inset is reserved exactly once: a second one (on the header, say) would open a gap of two insets');
+  for (const first of ['<SafeMount name="HqSupportSessionBar">', '<PortalSwitcher', '<SafeMount name="BranchNotDeployedBar">', '<header className="z-40']) {
+    assert.ok(CODE.indexOf(first) > rootAt, `${first} renders outside the root that carries the inset`);
+  }
+  // The header is back to a fixed 56px row with no inset of its own. A
+  // `min-h-14` with the inset as padding is border-box: a 20px inset left a
+  // 36px row (Codex on #1039). With the inset on the root the row is just 56px.
   const header = CODE.slice(CODE.indexOf('<header className="z-40'), CODE.indexOf('<div className="flex items-center gap-2.5">'));
   assert.ok(header.length > 0 && header.length < 600, 'the header tag is one element');
-  assert.match(header, /paddingTop: 'env\(safe-area-inset-top, 0px\)'/);
-  assert.match(header, /min-h-14/, 'the 56px row is a minimum, so the box grows by the inset instead of clipping it');
-  assert.doesNotMatch(header, /className="(?:[^"]*\s)?h-14[\s"]/, 'a fixed 56px height would clip the inset');
+  assert.match(header, /className="z-40 h-14 /, 'the header row is not a fixed 56px');
+  assert.doesNotMatch(header, /min-h-14|safe-area-inset-top/, 'the header carries the inset itself: its 56px minimum would absorb it');
   assert.match(read('frontend/index.html'), /viewport-fit=cover/);
+});
+
+test('the tab bar\'s clearance is on the scroll container, so the footer after the page content clears the bar too (Codex on #1039)', () => {
+  // D425 padded `[data-app-main]`, the content block, so as not to touch the
+  // shell. The footer renders AFTER that block inside <main>, so at the end
+  // of the scroll the footer's Terms and Privacy row sat under the bar. The
+  // clearance now pads <main> itself, marked `data-app-scroll`; the footer is
+  // the last thing in it, so it ends above the bar.
+  const mainAt = CODE.indexOf('<main');
+  const mainTag = CODE.slice(mainAt, CODE.indexOf('>', mainAt) + 1);
+  assert.match(mainTag, /^<main\s+data-app-scroll\s/, 'the scroll container is not marked for the clearance');
+  assert.match(mainTag, /overflow-y-auto/, 'the marked element is not the scroll container');
+  assert.equal((CODE.match(/data-app-scroll/g) || []).length, 1, 'the mark is on one element');
+  const mainEnd = CODE.indexOf('</main>', mainAt);
+  const content = CODE.indexOf('data-app-main', mainAt);
+  const footer = CODE.indexOf('<footer', mainAt);
+  assert.ok(content > mainAt && footer > content && footer < mainEnd, 'the footer is not after the page content inside the scroll container');
+  const css = read('frontend/src/components/mobileTabBar.css');
+  assert.match(css, /:root\[data-mobile-tabbar="on"\] \[data-app-scroll\] \{\s*padding-bottom: var\(--mobile-tabbar-h\);\s*\}/, 'the scroll container is not padded by the bar\'s height');
+  assert.doesNotMatch(css, /\[data-app-main\][^\n{]*\{/, 'the content block is still padded: the footer after it sits under the bar, or the page gets two clearances');
 });
 
 test('the FOUNDER_FULL_BLEED comment describes the three legacy routes as the redirects they are (D422)', () => {
