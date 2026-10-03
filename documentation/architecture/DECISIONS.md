@@ -40204,6 +40204,91 @@ instead of drawing Unreadable.
 
 `frontend/src` moved, so `docs/` is rebuilt.
 
+## D506
+
+**HQ gets a door to the Spin-Out moderation console: lane 4 of Admin ·
+Approvals on HQ-held accounts links `/admin/spinout-moderation`, and the
+three pins that held the lane to "No console" are inverted.** Issue #987,
+slot S05, coordinated with slot S06 (D442). No migration, no route, no
+`api.js` change.
+
+**What was true on main (`f701a32f5`).** D442 (Session 6) built
+`SpinoutModerationPage` at `/admin/spinout-moderation` and linked it from the
+branch Approvals board, and recorded that the HQ door was Session 5's:
+`HeldApprovals.jsx` row 4 still said "No console" / "No console exists
+anywhere yet", its header comment still said no page in the SPA called
+`adminSpinoutModeration`, and three tests pinned the gap —
+`held_admin_shell_d286` (lane 4 has no console; Approvals draws 14 doors),
+`spinout_moderation_d442` (HeldApprovals does not link the console) and
+`admin_route_reachability` (the HQ-held walk does not reach the console; it
+is the one route only the branch shell reaches). An HQ admin could reach
+held moderation cases only by typing the URL.
+
+**What changed.**
+- **Lane 4 links its console.** `HeldApprovals.jsx` row 4 draws a literal
+  `<Link to="/admin/spinout-moderation">`, "Links to its console", like the
+  other fourteen; the `unavailable` entry for Spinout moderation goes, and the
+  header comment says the console exists (D442) and where. Literal, not
+  mapped, so the admin-route walk can see it. The route is `guard(['admin'])`
+  with no `hqOnly`, so the row is reachable from both HQ-held shells, as the
+  other lanes are.
+- **The pins are inverted, never loosened.** `held_admin_shell_d286` holds
+  lane 4 to `/admin/spinout-moderation` and Approvals to 15 doors;
+  `spinout_moderation_d442`'s "the HQ-held row is still Session 5" becomes
+  "the HQ-held row links the console too"; `admin_route_reachability`'s
+  "does not reach" becomes "reaches", and the set of routes only the branch
+  shell reaches is empty. `admin_route_reachability.test.mjs` is not in the
+  issue's file list; it is edited only because its assertion would fail
+  once the door exists, and the test's own comment named this door as the
+  change it was waiting for.
+- No known-gap entry for the HQ door was found in S06's moderation work
+  (`spinout_moderation*.test.mjs`, `SpinoutModerationPage.jsx`), so none is
+  removed.
+- **The Approvals row stays lit inside the console.** Codex's review of
+  #1042 caught what the first draft missed: `SidebarNav` treats a row's
+  `match` list as the complete statement of what it owns, and the Approvals
+  row's list in `sidebarConfig.js` did not name `/admin/spinout-moderation`,
+  so a plain admin who followed lane 4 landed on a page where no row was
+  lit. The console is now on that list. `sidebarConfig.js` is outside the
+  issue's file list; it is the one-entry change the door needs and is noted
+  on #987.
+
+**Guard.** `frontend/test/held_approvals_moderation_door_d506.test.mjs`,
+5 tests: lane 4's cell is a literal Link to the console and the state
+cell says it links; the console is a registered `guard(['admin'])` route
+without `hqOnly`; the page's `unavailable` list no longer names Spinout
+moderation and the header comment no longer claims no console exists; the
+Approvals landing draws fifteen literal doors, none under `/branch/`; the
+branch board's door is unchanged; the Approvals row's `match` list names
+the console, once. `held_admin_shell_d286`,
+`spinout_moderation_d442`, `admin_route_reachability` (each re-aimed),
+`admin_placement_h35`: green.
+
+**Mutations: 9 run, 9 caught** (non-zero exit and a `not ok` line each;
+anchors unique; bytes proven changed; sources restored from a sha256-checked
+snapshot) — lane 4 back to "No console"; the door pointed at the Lab page
+instead of the console; the door drawn as a mapped link; the door drawn
+twice; the rail's `unavailable` list saying no console exists again; the
+header comment back to "LINKS NOWHERE"; the console route wrapped in
+`hqOnly`; the console route unmounted from `App.jsx`; the console dropped
+from the Approvals row's `match` list.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA
+fallback, a plain admin at 1280×900 opening `/admin/held/approvals`. Lane 4
+reads "Spinout moderation · /admin/spinout-moderation · Links to its
+console"; the lanes table draws exactly one anchor to the console; nothing
+on the page says "No console exists anywhere yet"; clicking the lane's link
+lands on `/admin/spinout-moderation` with the console's own "Spinout
+moderation" heading drawn and no page error. Second pass, after the
+`match` entry: for the plain admin the Approvals row is the one lit row on
+the landing and stays the one lit row on the console; before the entry no
+row was lit there. For the Super Admin no row is lit on either page, which
+is the HQ shell as it already was: its group carries no `/admin/held/*` row
+and the H35 map does not place the console, so that shell has nothing to
+light and this change does not touch it.
+
+`frontend/src` moved, so `docs/` is rebuilt.
+
 ## D507
 
 **The four HQ Team sentences that said a branch account is not told now say
