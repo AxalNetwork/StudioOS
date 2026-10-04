@@ -70,7 +70,7 @@ function freshDb() {
   const f = db.prepare(`INSERT INTO research_fund_directory (uid, name, hq, sector_focus, fund_size_cents, source_name, source_url, as_of)
                         VALUES (?, ?, ?, ?, ?, 'EuroTech', 'https://sheet.example', '2026-09-29')`);
   f.run('f1', 'Small Fin Fund', 'UK', 'Fintech · B2B', 1_000);
-  f.run('f2', 'Big Fin Fund', 'Bay Area, Israel', 'Insurtech · Fintech', 9_000);
+  f.run('f2', 'Big Fin Fund', 'Bay Area, Israel', 'Insurtech, Fintech', 9_000);
   f.run('f3', 'Generalist Fund', 'Germany', 'Generalist', 5_000);
   f.run('f4', 'Nowhere Fund', 'Global', 'Mobility', null);
 

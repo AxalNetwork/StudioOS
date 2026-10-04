@@ -27,7 +27,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import {
-  listCountries, listMarketSectors, loadOverrides, mapCompanyCountry, mapCompanySector,
+  focusTokens, listCountries, listMarketSectors, loadOverrides, mapCompanyCountry, mapCompanySector,
   mapFundFocus, mapFundHq, mapSignalTags, type Country, type Overrides,
 } from '../services/researchTaxonomy';
 
@@ -186,7 +186,7 @@ researchMarkets.get('/markets/:slug', async (c) => {
   const focused = fs.filter((f) => mapFundFocus(f.sector_focus, ov).targets.includes(slug)).sort(bySize);
   const tokens = new Map<string, number>();
   for (const f of focused) {
-    for (const t of String(f.sector_focus).split('·').map((x) => x.trim()).filter(Boolean)) {
+    for (const t of focusTokens(f.sector_focus)) {
       if (mapFundFocus(t, ov).targets.includes(slug)) bump(tokens, t);
     }
   }

@@ -839,7 +839,12 @@ export default function SpinoutLabCapitalPage() {
                       <td className="py-1.5 pr-3">{h.holder_name}</td>
                       <td className="py-1.5 pr-3 text-right tabular-nums">{h.prior_stake_pct == null ? '—' : `${Number(h.prior_stake_pct).toFixed(2)}%`}</td>
                       <td className="py-1.5 pr-3 text-right tabular-nums">
-                        {!(Number(proRata.data.round.target_amount) > 0) || h.entitlement == null ? '—' : fmtAmt(num(h.entitlement))}
+                        {/* D366: the Worker returns a null entitlement with its
+                            reason (no target, no prior stake); that reads "Not
+                            recorded", never "—" or $0. */}
+                        {!(Number(proRata.data.round.target_amount) > 0) || h.entitlement == null
+                          ? <span data-testid="pro-rata-entitlement-unrecorded">Not recorded<span className="block text-[10.5px] text-gray-400">{h.entitlement_not_recorded || 'The round has no target amount on record.'}</span></span>
+                          : fmtAmt(num(h.entitlement))}
                         {h.scaled ? ' (scaled)' : ''}
                       </td>
                       <td className="py-1.5 pr-3 text-right tabular-nums">{h.taking_amount == null ? '—' : fmtAmt(num(h.taking_amount))}</td>

@@ -146,7 +146,7 @@ export const COMPANY_SECTOR_RULES: Readonly<Record<string, string>> = {
   'cryptocurrency mining': 'web3-crypto',
 };
 
-/** One `sector_focus` token (the list is split on " · ") → markets. */
+/** One `sector_focus` token (the list is split by `focusTokens`) → markets. */
 export const FUND_FOCUS_RULES: Readonly<Record<string, readonly string[]>> = {
   'ai': ['ai'], 'ai/ml': ['ai'], 'ml': ['ai'], 'machine learning': ['ai'],
   'deep learning': ['ai'], 'enterprise ai': ['ai'], 'vertical ai': ['ai'], 'b2b ai': ['ai'],
@@ -279,6 +279,14 @@ export function mapCompanySector(raw: string | null | undefined, ov?: Overrides)
   return slug ? { raw: value, targets: [slug], method: 'rule', rule: 'COMPANY_SECTOR_RULES', unmatched: [] } : UNMAPPED(value);
 }
 
+/**
+ * A `sector_focus` list split into tokens. Migration 365 joined them with
+ * " · "; migration 378 rebuilt the directory with ", ". Both are read.
+ */
+export function focusTokens(value: string | null | undefined): string[] {
+  return String(value ?? '').split(/[·,]/).map((t) => t.trim()).filter(Boolean);
+}
+
 /** A fund's `sector_focus` list → every market its tokens name. */
 export function mapFundFocus(raw: string | null | undefined, ov?: Overrides): Mapping {
   const value = String(raw ?? '');
@@ -286,7 +294,7 @@ export function mapFundFocus(raw: string | null | undefined, ov?: Overrides): Ma
   if (manual) return manual;
   const targets = new Set<string>();
   const unmatched: string[] = [];
-  for (const piece of value.split('·').map((t) => t.trim()).filter(Boolean)) {
+  for (const piece of focusTokens(value)) {
     const key = normalizeLabel(piece);
     const hit = FUND_FOCUS_RULES[key];
     if (hit) hit.forEach((s) => targets.add(s));
