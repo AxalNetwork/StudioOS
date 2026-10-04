@@ -92,7 +92,7 @@ const HOUSE_RULES = [
   'activity_logs', // … through one of the two
   'npm run test:drift', // the suite, its exit code read from a redirected log
   'npm run build', // docs/ is committed
-  'node scripts/check-decision-ids.mjs', // the D-entry, in numeric position
+  'node scripts/check-decision-ids.mjs', // the decision's own file, checked (D526)
   'Production D1', // read schema and aggregates only
   'deploy log', // say so when you cannot read it
 ];
