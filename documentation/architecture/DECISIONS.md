@@ -39637,6 +39637,10 @@ is removed.
 
 **Tests.** `hq_revenue_statements_d453.test.mjs`.
 
+**Later: D514 holds the draw.** `StatementDrawEditor` is replaced by the hold
+sentence, and "Issue to subsidiary" is now "Mark as issued", offered on a
+complete draft only.
+
 ## D454
 
 **HQ · Contracts — first read of the code catalog (superseded in place by D480).**
@@ -39725,10 +39729,14 @@ expands before alpha gradients.
 **#868 review follow-ups: hold blocks statement draw, floors refuse paid-in-full, void is audited.** Wave 9,
 Session 16, item 3. No migration; no new `/api/*` method.
 
-**Draw hold.** `POST /api/admin/statements/draw` refuses when the licence is not
-`active`. Suspension freezes trading; a new claim must not be drawn against a
-held subsidiary. The draw editor lists only active licences that carry a revenue
-share.
+**Active-licence guard (corrected by D514: this is not the hold).** `POST
+/api/admin/statements/draw` refuses when the licence is not `active`.
+Suspension freezes trading; a new claim must not be drawn against a held
+subsidiary. The draw editor listed only active licences that carry a revenue
+share. This entry first called that refusal "the draw hold". The hold #868
+asked for is a different thing: whether a statement counts as revenue per
+subsidiary (brief item 7) is the owner's question, and D514 holds the draw
+itself until it is answered.
 
 **Paid-in-full on a floor.** An incomplete statement (`unreported_streams` or
 `estimated_streams` non-zero) refuses `status: paid` and refuses recording
@@ -41403,6 +41411,132 @@ No migration.
 **Relayed, not edited.** Slot S11 still says there is no interaction date in `RelationshipsZone.jsx`, `advisorZoneFilters.js`, and `advisor_network_zones.test.mjs`. Slot S14 still says strength, notes and reminders are not recorded in `founderZoneActions.js` and `FounderNetworkDesk.jsx`.
 
 **Tests.** `partnernet_book_d513.test.ts`, `network_book_d513.test.mjs`. The D465 calendar-reminder pin now expects the calendar day.
+
+## D514
+
+**HQ Revenue statements: the draw is held, a floor is never issued, the void
+advice is true, and every action is audited.** Issue #1016, slot S09 (moved
+from S16), wave 9 item 3, finishing #868's review. No migration.
+
+**The owner's question, recorded.** As built, a draw records a statement.
+Whether a statement counts as "revenue per subsidiary" under the brief's item
+7 is the owner's line, so **the draw is held**. The draw form
+(`StatementDrawEditor`) is gone from HQ · Revenue. In its place the page says
+"Drawing is held for the owner's decision on whether a statement counts as
+revenue per subsidiary (brief item 7)". The worker's active-licence refusal
+(D458) stays as a guard, but it is not this hold, and D458 is corrected in
+place to say so. D453 points here. The draw route itself is unchanged: it is
+Super Admin only and no screen calls it. The questions that travel with the
+draw when it is released are listed at the end.
+
+**A floor is not issued.** `PATCH /statements/:uid` now refuses `status:
+'issued'` while `unreported_streams > 0` or `estimated_streams > 0`, as it
+already refused `paid`. Issuing locks the period (`already_issued`), and every
+statement today is a floor, so one click used to send a floor out as the claim.
+The page offers "Mark as issued" (renamed from "Issue to subsidiary", which
+delivered nothing) on a complete draft only, and names why it is missing on a
+floor.
+
+**The void advice is true.** The draw route refuses every non-draft row, a void
+one included, and `(licence_uid, period)` is unique (migration 260), so a void
+period cannot be drawn again. Every refusal that told the operator to "void and
+draw again" now says so: `already_issued`, `over_payment`, `incomplete_statement`
+and the licence refusal. The shared sentence is `NO_REDRAW_AFTER_VOID`. A void
+row on the page offers nothing further and says the period cannot be drawn
+again. Re-drawing a void row (reset to draft, with paid and disputed cleared)
+is a worker change that ships with the draw. Until then, no sentence promises
+it.
+
+**MED, fixed.**
+- **The rail copy.** It said "It enters no payment and settles no statement",
+  which is false. It now says the paid and disputed totals are figures an HQ
+  operator types in, and that the one money movement is a refund.
+- **A payment surviving a re-draw.** A re-draw keeps paid and disputed (the
+  upsert leaves both alone), so a re-draw that would leave more paid and
+  disputed than owed is refused (`recorded_above_owed`), not clamped.
+- **"Record payment" replaces the total.** It is now labelled **"Set total
+  paid"**, with "Replaces the total received so far; it does not add a
+  receipt". This entry chooses the label over a receipts store: a store needs a
+  migration and the owner's word that receipts are wanted. If they are, it
+  takes 344 (S1's number for this issue).
+- **Canvas H10's who, when and balance.** Each row now draws its outstanding
+  balance, when the paid total was entered, and the reports' as-of date, or
+  "Not recorded". A dispute stores no who and no when, and the row says so.
+- **A draw over nothing measured.** It stores gross 0, so a per-currency line
+  that sums floors now says "this is a floor, not a total".
+
+**LOW, fixed.**
+- **Audit.** Every action a PATCH carries writes its own row through
+  `logAdminAction`. Each row has `uid`, `licence_uid`, `period`, `from_status`,
+  `currency` and `amounts`, plus the note for a void or a dispute. The old
+  `else if` chain wrote one row however many actions a request carried. D458's
+  names stay (`subsidiary_statement_void`, `_paid`, `_dispute`). New names:
+  `_issued`, `_draft`, `_payment_total` (a total paid set, partial or not) and
+  `_dispute_cleared`.
+- **Disputes.** Paid and disputed together never exceed owed (`over_owed`), so
+  paid is no longer accepted over a standing dispute and a dispute is no longer
+  unbounded. A dispute is cleared with 0, which needs no reason; the page
+  allows it and says so.
+- **Money parsing.** Paid and disputed amounts are whole minor units, 0 or more,
+  or refused (`bad_amount`): D228's rule, as the ceiling route applies it. The
+  clamp that turned anything unreadable into 0 is gone.
+- **Errors and labels.** An error on a row is `role="alert"`, and every control
+  on a row names the licence and period it acts on.
+
+**Not done here.**
+- **Statement errors on the page.** A row action still reloads the ledger, so
+  the row loses its "Saved." and the "Statements drawn" tile briefly reads as
+  unreadable.
+- **No retry.** `CeilingEditor`'s failed licence read offers no retry.
+- **Travels with the draw** when it is released:
+  - the ledger's `complete` ignores other-currency streams;
+  - the draw defaults to the quarter still in progress;
+  - a void row cannot be re-drawn.
+
+**Guards.**
+- `cloudflare-worker/test/hq_statements.test.ts`: six new tests, plus one
+  existing test whose fixture now reports every stream so its statement may be
+  issued. They cover:
+  - a floor (unreported, or estimated) refused `issued`, and a complete
+    statement accepted;
+  - no refusal promising a re-draw, and a void period refused a re-draw;
+  - a re-draw under a larger recorded payment refused;
+  - paid plus disputed capped, and a dispute cleared;
+  - bad amounts refused without touching the stored figure;
+  - one audit row per action, with its fields.
+- `frontend/test/hq_revenue_statements_d514.test.mjs`: nine tests, rendered
+  with react-dom/server and read as text, not as source regexes. They cover:
+  - issue offered only on a complete draft;
+  - a void row offering nothing;
+  - no rendered re-draw promise;
+  - the "Set total paid" label;
+  - clearing a dispute;
+  - the hold with no form;
+  - the row's facts;
+  - the floor caveat per currency;
+  - the rail copy.
+- `hq_revenue_statements_d453.test.mjs`: its draw-editor test is now the hold
+  test.
+
+**Mutations: 20 run, 19 caught** (one was a deliberate no-op control). Worker:
+- issuing a floor;
+- the old void advice;
+- a re-draw under a payment;
+- paid plus disputed over owed;
+- coerced money;
+- one audit row per request;
+- no `from_status`;
+- a cleared dispute keeping its note;
+- D458's over-payment, void-reason and floor-paid guards.
+
+Page:
+- issue offered on a floor;
+- a void row with actions;
+- 0 not clearing a dispute;
+- the old payment label;
+- the dispute's who and when, or the reports' date, unrendered;
+- the floor caveat;
+- the old rail copy.
 
 ## D519
 
