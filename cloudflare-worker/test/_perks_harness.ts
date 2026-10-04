@@ -1,7 +1,8 @@
 /**
  * The Perks Worker test harness, shared by the D412 and D413 suites.
  *
- * The schema is BUILT from the migrations that ship — 186, 198, 228 and 322,
+ * The schema is BUILT from the migrations that ship — 186, 198, 228, 322 and
+ * 381 (D540's reward rules and the ledger's `rule_key`),
  * read off disk — so a test that passes is a test of the tables production
  * has. The D1 shim runs a batch as one transaction, as D1 does, and a
  * `beforeBatch` hook lets a test land a competing write between a route's read
@@ -72,7 +73,7 @@ export function freshDb() {
     CREATE TABLE user_company_links (id INTEGER PRIMARY KEY AUTOINCREMENT, company_id INTEGER NOT NULL, user_id INTEGER NOT NULL, is_primary_admin INTEGER, created_at TEXT);
     CREATE TABLE activity_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, details TEXT, actor TEXT, user_id INTEGER, created_at TEXT DEFAULT (datetime('now')));
   `);
-  for (const m of ['186_perks.sql', '198_perk_company.sql', '228_perk_lifecycle_and_grant.sql', '322_perk_value_editorial_redemption_ratings.sql']) {
+  for (const m of ['186_perks.sql', '198_perk_company.sql', '228_perk_lifecycle_and_grant.sql', '322_perk_value_editorial_redemption_ratings.sql', '381_credit_reward_rules.sql']) {
     db.exec(MIG(m));
   }
   const u = db.prepare('INSERT INTO users (id, role, email, subscription_tier) VALUES (?,?,?,?)');
