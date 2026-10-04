@@ -40358,6 +40358,35 @@ treated as accepted, and their subjects are told.
 **Tests.** `relationship_requests_d493.test.ts` (8). 19 mutations, 19
 caught.
 
+## D500
+
+**A support ticket's persona stays its requester's standing now.** The owner's
+call on #973 (decision 345), answered A on 2026-10-04 at 09:53Z. It confirms
+D204's judgement call 1. There is no write-time stamp, no migration and no code
+change. Migration 346, held for option B, is released unused.
+
+**Checked on `main` (88299b07c).**
+- `personaOf()` in `services/supportQueues.ts` sorts a requester, first match
+  wins: no account, `not_on_record`; a closed account, `account_closed`; bound
+  in `licence_admins`, `admin_product`; `role = 'admin'` with no licence,
+  `hq_staff`; anyone else, `hq_held`.
+- Every persona is read over open tickets. The queues and `buildTenantMatrix`
+  both take `readOpenTickets`, which filters on the open statuses. Nothing asks
+  for the persona of a ticket that is no longer open.
+- The HQ Support page already says so (`HqSupportPage.jsx:765`): "A ticket is
+  sorted by its requester's standing now. Nothing stamps it when it is filed,
+  so an administrator demoted since has moved queue."
+
+**What it costs.** An open ticket can change lane while it is being worked, if
+its requester is demoted or detached (D134's window, D145's terminate), and
+nothing records the persona a ticket was filed under.
+
+**When to revisit.** When the first reader needs a persona for a ticket that is
+no longer open, for example persona-based reporting on closed tickets. The stamp
+is then added in the same change as that reader, from the same rules as
+`personaOf()`. Tickets filed before it stay unstamped rather than gain an
+invented history.
+
 ## D503
 
 **Agents coordinate through issues: one rule file, one task protocol, one
