@@ -41158,6 +41158,65 @@ alone.
 
 No migration.
 
+## D519
+
+**Profiling: the archetype module is confident only when every trait is
+answered (issue #1000, Session 7).** Spec §4 in `PROFILING_V2.md` says the
+archetype module is confident only once every trait has at least one answer,
+in addition to the floor of six. `profilingModules.ts` checked the floor
+alone. Adaptive gap-filling met the rule in queue order, and #956's test
+checked it only there. Any other order of answers could break it. The
+investor bank shows this: its archetype module opens with five builder
+items, so its first six questions in bank order touch two traits, and the
+old rule called that confident.
+
+**What changed** (`services/advisor/profilingModules.ts`):
+
+- The archetype spec carries `everyTrait: true`. `computeProfilingCompletion`
+  works out the traits the bank asks about and the ones still unanswered.
+  The module is confident when `answered ≥ required` and none are
+  unanswered.
+- **"Every trait" means every trait the bank asks about.** A trait a bank
+  never asks would be an unreachable target, which the module's honest
+  denominators exist to avoid. Every live bank (founder, investor, partner,
+  advisor) asks all four, and a test pins that.
+- The archetype module reports `uncovered_traits`, in bank order. The other
+  modules do not carry the field.
+- When the floor is met but a trait is still unanswered, `percent` holds at
+  99. The module's share of the overall figure also stays one short of its
+  floor. So neither the bar nor the overall figure reads 100 while
+  `confident` or `complete` is false.
+- Adaptive selection needed no change. A module short of a trait is no
+  longer confident, so the queue keeps it, and gap-filling puts the missing
+  traits first.
+
+**No engine bump.** Classification, trait scores and `ENGINE_VERSION`
+(`profiling-v2.1`) are unchanged. The rule changes only the completion flag
+and what the queue keeps, so §7.8's hysteresis is not bypassed and no
+displayed archetype moves. The persona and evolution suites
+(`profile_scoring_v2_d357`, `fit_advisor_coach_bank_v2`, the founder and
+partner bank tests) pass unchanged.
+
+**Tests** (`profilingModules.test.ts`). Six new tests, and all six fail on
+the previous module:
+
+- six investor answers on two traits are not confident, with
+  `['connector','operator']` listed and the bar at 99;
+- in every bank, the floor reached without three traits is not confident,
+  and one answer per missing trait makes it confident;
+- every trait answered below the floor is still not confident;
+- the overall figure cannot read 100 while a trait is unanswered;
+- the queue asks a missing trait first;
+- a trait the bank never asks does not gate the module.
+
+The existing "every module to its floor → complete" test answered the first
+six archetype questions in bank order, which encoded the old rule. It now
+answers one per trait first. Mutation-checked six ways, and each mutation
+fails at least one test: drop the trait gate, drop the floor, drop the 99
+cap, drop the overall cap, require all four canonical traits instead of
+those offered, and report `uncovered_traits` on every module. Dropping the
+trait gate fails four tests.
+
 ## D520
 
 **The four `company_*` research tables production holds are declared in the
