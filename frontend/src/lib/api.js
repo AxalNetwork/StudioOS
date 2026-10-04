@@ -9,6 +9,7 @@ import { storeReason } from './impersonationBar';
 // block does not name exactly the files in lib/api/.
 // api-modules:begin
 export * from './api/communityTasks.js';
+export * from './api/researchFunds.js';
 // api-modules:end
 
 const BASE = '/api';
