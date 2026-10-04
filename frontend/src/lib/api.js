@@ -3454,6 +3454,25 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ reason }),
     }),
+  // D481 — the Sessions zone's list and its three acts. Every write takes a
+  // typed reason (stored with the act) and the same bar as force re-auth; a
+  // bulk revoke is one request and one audit row per session.
+  hqSecuritySessions: () => request('/admin/security/sessions'),
+  hqRevokeSession: (sessionId, reason) =>
+    request(`/admin/security/sessions/${encodeURIComponent(sessionId)}/revoke`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+  hqRevokeSessions: (ids, reason) =>
+    request('/admin/security/sessions/revoke', {
+      method: 'POST',
+      body: JSON.stringify({ ids, reason }),
+    }),
+  hqEndImpersonation: (sessionId, reason) =>
+    request(`/admin/security/impersonations/${encodeURIComponent(sessionId)}/end`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
   // D168 — close a data-subject erasure request. `outcome` is 'fulfilled' or
   // 'denied' and the server admits no third value from HQ: a withdrawal is the
   // subject's own act, recorded when they cancel. `fulfilled` records that the

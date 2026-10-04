@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { ShieldCheck, AlertTriangle, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
@@ -51,7 +50,7 @@ import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
  * stay HQ-wide — the ledger is HQ's record of what happened at HQ's door and
  * what HQ did, which is not a branch's to show.
  */
-const UNAVAILABLE = Symbol('unavailable');
+export const UNAVAILABLE = Symbol('unavailable');
 
 const day = (v) => (v ? String(v).slice(0, 16).replace('T', ' ') : null);
 // A number, formatted — or null when there is no number. Never a default.
@@ -214,6 +213,7 @@ function AiSafety({ block }) {
           )}
         </div>
       )}
+      <TokenAnomalies block={block?.token_anomalies} />
       {(block?.not_counted || []).length > 0 && (
         <ul className="mt-3 space-y-1.5" data-testid="hq-ai-safety-not-counted">
           {block.not_counted.map((n) => (
@@ -223,6 +223,281 @@ function AiSafety({ block }) {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/**
+ * D481 — H23's "Token anomalies" tile, from `ai_usage_logs`.
+ *
+ * It was the last row of D152's not-counted list, and the one that was true:
+ * nothing computed a spike. The server computes it now and sends its own
+ * `how`, because the threshold is a judgement and the reader should see it
+ * beside the figure rather than infer it. Three states: absent (the overview
+ * is still loading or failed — the page says which, so this says nothing),
+ * UNREADABLE (the table could not be read: never a zero, and never "Not
+ * recorded", which would claim the platform keeps no such figure), and the
+ * figure with the accounts behind it.
+ */
+export function TokenAnomalies({ block }) {
+  if (!block) return null;
+  if (!block.available) {
+    return (
+      <div className="mt-3" data-testid="hq-token-anomalies-unreadable">
+        <Unreadable
+          what="Token consumption (ai_usage_logs)"
+          claim="No account was checked — this is not a claim that nothing spiked."
+        />
+      </div>
+    );
+  }
+  return (
+    <div className="mt-3" data-testid="hq-token-anomalies">
+      <Stat
+        label="Token anomalies"
+        value={num(block.count)}
+        note={`last ${block.window_hours} hours against each account's own ${block.baseline_days}-day average · ${num(block.accounts_checked)} account${block.accounts_checked === 1 ? '' : 's'} checked`}
+        tone={block.count ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-white'}
+      />
+      {block.rows.length > 0 && (
+        <ul className="mt-1.5 space-y-0.5" data-testid="hq-token-anomaly-rows">
+          {block.rows.map((a) => (
+            <li key={a.user_id} className="text-[11px] text-axal-faint tabular-nums">
+              <b className="text-axal-muted">{a.name || a.email || `user ${a.user_id}`}</b> — {num(a.tokens_24h)} tokens
+              in 24 hours, {a.ratio}× an average day of {num(a.daily_avg_baseline)}
+            </li>
+          ))}
+        </ul>
+      )}
+      {block.no_baseline > 0 && (
+        <p className="mt-1 text-[11px] text-axal-faint" data-testid="hq-token-anomalies-no-baseline">
+          {num(block.no_baseline)} account{block.no_baseline === 1 ? '' : 's'} crossed the floor with no usage in the
+          {' '}{block.baseline_days} days before, so there is no usual to compare with. Not counted as anomalies, and
+          not hidden: a dormant account waking up looks exactly like this.
+        </p>
+      )}
+      <p className="mt-1 text-[10.5px] leading-relaxed text-axal-faint">{block.how}</p>
+    </div>
+  );
+}
+
+/**
+ * D481 — a stated absence with its reason, for H23's tiles the platform does
+ * not record (Accreditation lapsed, Failover test). Read from the payload so
+ * the server and the page cannot disagree about what is missing.
+ */
+export function NotRecordedList({ items, testid }) {
+  if (!items?.length) return null;
+  return (
+    <ul className="mt-2 space-y-1.5" data-testid={testid}>
+      {items.map((n) => (
+        <li key={n.what} className="text-[11px] leading-relaxed text-axal-faint">
+          <b className="text-axal-muted">{n.what}</b> — <Unrecorded />. {n.reason}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * D481 — one open request's subject line. The kind is the row's own field
+ * (`kind`, set by the store that holds the row); the zone used to print the
+ * word "erasure" as a literal, true today only because the ledger holds
+ * nothing else.
+ */
+export function DsrSubject({ row }) {
+  return (
+    <span className="min-w-0 truncate">
+      <b>{row.name || row.email}</b>{' '}
+      <span className="text-axal-faint">
+        · {titleCase(row.role)} · {row.kind || <Unrecorded>kind not recorded</Unrecorded>}
+      </span>
+    </span>
+  );
+}
+
+/** D481 — the request kinds the ledger does not hold, each Not recorded with its reason. */
+export function DsrKindsNotRecorded({ kinds }) {
+  const missing = (kinds || []).filter((k) => !k.recorded).map((k) => ({ what: titleCase(k.kind), reason: k.reason }));
+  return <NotRecordedList items={missing} testid="hq-dsr-kinds-not-recorded" />;
+}
+
+/**
+ * D481 — which route each of the Sessions zone's acts goes to. Sign out
+ * account is D165's per-account route, reached from a row rather than
+ * duplicated; the other three are D481's.
+ */
+export async function runSessionAct(client, kind, arg, reason) {
+  if (kind === 'revoke') return client.hqRevokeSession(arg, reason);
+  if (kind === 'revoke_selected') return client.hqRevokeSessions(arg, reason);
+  if (kind === 'end') return client.hqEndImpersonation(arg, reason);
+  if (kind === 'sign_out') return client.hqForceReauthUser(arg, reason);
+  throw new Error(`Unknown session act: ${kind}`);
+}
+
+/** The write bar's refusal, in words the operator can act on. */
+export function writeBarMessage(err) {
+  const msg = String(err?.message || err || 'Request failed');
+  return msg === 'TOTP required'
+    ? 'This needs a session signed in with your authenticator app. Sign out and back in with a code, then try again.'
+    : msg;
+}
+
+const MIN_REASON = 8;
+const ACT_BUTTON = 'rounded-md border border-red-200 bg-white px-2 py-0.5 text-[10.5px] font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/30';
+
+/**
+ * D481 — the Sessions zone's list, and the acts it said it had.
+ *
+ * The subtitle read "Revoke is recorded" over a zone with no revoke. Now:
+ * live support sessions first (H23: "an impersonation is a session like any
+ * other, which is why it sits in this list"), then every active session with
+ * Revoke, Sign out account, and a checkbox for Revoke selected. The caller's
+ * own session reads Current and offers nothing — the server refuses it too.
+ *
+ * ONE REASON FOR EVERY ACT, typed once above the list and stored with each
+ * act. Every button is disabled until it is long enough, which is the same
+ * rule the server enforces and the same length.
+ *
+ * A FAILED READ IS UNREADABLE, never an empty list and never "Not recorded":
+ * "nobody is signed in" is the one answer a security desk must not give by
+ * accident. `list` is null while loading, UNAVAILABLE after a failed read.
+ */
+export function SessionsPanel({ list, onAct, onRetry }) {
+  const [reason, setReason] = useState('');
+  const [selected, setSelected] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
+
+  if (list === UNAVAILABLE) {
+    return (
+      <div data-testid="hq-sessions-unreadable">
+        <Unreadable what="The session list" claim="This is not a claim that nobody is signed in." onRetry={onRetry} />
+      </div>
+    );
+  }
+  if (!list) return <p className="text-[12px] text-axal-faint">Loading…</p>;
+
+  const ready = reason.trim().length >= MIN_REASON;
+  const act = async (kind, arg) => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await onAct(kind, arg, reason.trim());
+      setNotice(res?.message || 'Done.');
+      if (kind === 'revoke_selected') setSelected([]);
+    } catch (err) {
+      setError(writeBarMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const toggle = (id) => setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+  const imp = list.impersonations;
+
+  return (
+    <div className="mt-3" data-testid="hq-sessions">
+      <label className="block text-[11px] font-semibold text-axal-muted">
+        Reason · required for any act below, stored with it
+        <input
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="e.g. device reported stolen, ticket SEC-212"
+          className="mt-1 w-full rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] font-normal text-axal-ink dark:bg-gray-900"
+        />
+      </label>
+      {error && <p role="alert" className="mt-2 text-[12px] text-red-700 dark:text-red-300">{error}</p>}
+      {notice && <p role="status" className="mt-2 text-[12px] text-axal-muted">{notice}</p>}
+
+      {imp?.available === false ? (
+        <div className="mt-3" data-testid="hq-live-impersonations-unreadable">
+          <Unreadable what="The support-session list" claim="This is not a claim that no support session is live." />
+        </div>
+      ) : imp?.rows?.length > 0 && (
+        <ul className="mt-3 space-y-1.5" data-testid="hq-live-impersonations">
+          {imp.rows.map((i) => (
+            <li key={i.id} className="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50/40 px-3 py-2 text-[11.5px] dark:border-red-900 dark:bg-red-950/20" data-testid={`hq-live-impersonation-${i.id}`}>
+              <span className="min-w-0">
+                <b>{i.admin_name || i.admin_email || `user ${i.admin_user_id}`}</b> · impersonating{' '}
+                <b>{i.target_name || i.target_email || `user ${i.target_user_id}`}</b>
+                <span className="block font-mono text-[10px] text-axal-faint">
+                  started {day(i.started_at)}{i.context ? ` · ${i.context}` : ''}
+                </span>
+              </span>
+              <button type="button" disabled={busy || !ready} onClick={() => act('end', i.id)} className={ACT_BUTTON}>
+                End
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-axal-faint">
+        <span data-testid="hq-sessions-count">
+          {num(list.total)} active in {list.window_days} days, not revoked
+          {list.rows.length < list.total ? ` · newest ${num(list.rows.length)} shown` : ''}
+        </span>
+        <button
+          type="button"
+          disabled={busy || !ready || selected.length === 0}
+          onClick={() => act('revoke_selected', selected)}
+          className={ACT_BUTTON}
+          data-testid="hq-sessions-revoke-selected"
+        >
+          Revoke selected ({num(selected.length)})
+        </button>
+      </div>
+      {list.rows.length === 0 ? (
+        <p className="mt-2 text-[12px] text-axal-faint" data-testid="hq-sessions-empty">
+          No session was seen in this window. The table was read; it held no active row.
+        </p>
+      ) : (
+        <ul className="mt-2 space-y-1.5">
+          {list.rows.map((s) => (
+            <li key={s.id} className="flex items-start justify-between gap-3 rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[11.5px]" data-testid={`hq-session-${s.id}`}>
+              <span className="flex min-w-0 items-start gap-2">
+                {s.is_current ? null : (
+                  <input
+                    type="checkbox"
+                    aria-label={`Select session ${s.id}`}
+                    checked={selected.includes(s.id)}
+                    onChange={() => toggle(s.id)}
+                    className="mt-0.5"
+                  />
+                )}
+                <span className="min-w-0">
+                  <b>{s.name || s.email || `user ${s.user_id}`}</b>
+                  {s.role ? <span className="ml-1 text-axal-faint">· {titleCase(s.role)}</span> : null}
+                  <span className="block truncate font-mono text-[10px] text-axal-faint">
+                    {s.user_agent ? s.user_agent.slice(0, 70) : 'no device recorded'} · {s.ip || 'no address recorded'}
+                    {' '}· since {day(s.created_at) || 'unstamped'} · seen {day(s.last_seen_at) || 'unstamped'}
+                  </span>
+                </span>
+              </span>
+              {s.is_current ? (
+                <span className="shrink-0 rounded-md border border-axal-hairline px-2 py-0.5 text-[10.5px] font-bold text-axal-muted">Current</span>
+              ) : (
+                <span className="flex shrink-0 gap-1">
+                  <button type="button" disabled={busy || !ready} onClick={() => act('revoke', s.id)} className={ACT_BUTTON}>
+                    Revoke
+                  </button>
+                  <button type="button" disabled={busy || !ready} onClick={() => act('sign_out', s.user_id)} className={ACT_BUTTON}>
+                    Sign out account
+                  </button>
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+        Revoke ends one session; its token is refused from its next request. Sign out account ends every session that
+        account holds. Ending a support session closes its record and stops it being extended — its token carries no
+        session id, so it lapses at its own expiry, within {list.expiry_minutes} minutes. Each act is recorded with its
+        reason and the account it touched.
+      </p>
     </div>
   );
 }
@@ -552,6 +827,22 @@ export default function HqSecurityPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  // D481 — the Sessions zone's list, its own request: it is a page of rows the
+  // zone acts on, and an unreadable list must cost that zone alone.
+  const [sessionList, setSessionList] = useState(null);
+  const loadSessions = useCallback(() => {
+    setSessionList(null);
+    api.hqSecuritySessions().then(setSessionList, (e) => { reportError('hq-sessions', e); setSessionList(UNAVAILABLE); });
+  }, []);
+  useEffect(() => { loadSessions(); }, [loadSessions]);
+  const onSessionAct = useCallback(async (kind, arg, reason) => {
+    const res = await runSessionAct(api, kind, arg, reason);
+    // Both reads move: the list loses the row, and the overview's counts change.
+    loadSessions();
+    load();
+    return res;
+  }, [load, loadSessions]);
+
   // H23's ledger, its own request. The filter is applied SERVER-side because
   // the feed is a merged page of sixty rows across five stores: filtering
   // that page in the browser would show whichever few of the sixty matched
@@ -622,8 +913,8 @@ export default function HqSecurityPage() {
     <WorkerRail
       workspace="Security"
       role="super_admin"
-      stance="Read-only, except force re-auth"
-      note="The security ledger, the admin action log, sessions, KYC, deletion clocks, the sanctions runs and the backup heartbeat are read from their stores. The one action here signs everyone out and is recorded."
+      stance="Read-only, except sessions and force re-auth"
+      note="The security ledger, the admin action log, sessions, KYC, deletion clocks, the sanctions runs and the backup heartbeat are read from their stores. The acts here revoke sessions, sign accounts out and close data-subject requests, and each is recorded with its reason."
       coverage={ready ? [
         se?.available ? `${num(se.today)} security event${se.today === 1 ? '' : 's'} recorded today` : 'Security events: unreadable',
         `${num(data.audit?.total) ?? 'an unrecorded number of'} admin actions on record`,
@@ -832,43 +1123,34 @@ export default function HqSecurityPage() {
             )}
           </Zone>
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             <Zone title="Sanctions review" sub="from the store's own runs">
               <Sanctions block={ready ? data.sanctions : null} unreadable={data === UNAVAILABLE} />
             </Zone>
             <Zone title="Backup / DR drill" sub="two facts, each its own state">
               <BackupDr block={ready ? data.backup_dr : null} unreadable={data === UNAVAILABLE} />
-            </Zone>
-            <Zone title="Sessions and access" sub="Revoke is recorded">
-              <div className="grid grid-cols-2 gap-2">
-                <Stat label="Active sessions" value={sessions?.available ? num(sessions.active) : null} note={sessions?.available ? `seen in ${sessions.window_days} days, not revoked` : (sessions?.reason || 'unreadable')} />
-                <Stat label="Impersonations live" value={imp?.available ? num(imp.active) : null} note={imp?.available ? 'no ended_at yet' : (imp?.reason || 'unreadable')} tone={imp?.available && imp.active ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-white'} />
-                <Stat label="Admins with MFA" value={mfa ? `${num(mfa.admins_with_mfa)} of ${num(mfa.admins_total)}` : null} note={withoutMfa === null ? 'unreadable' : withoutMfa > 0 ? `${num(withoutMfa)} without` : 'every admin enrolled'} tone={withoutMfa ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
-                {/* D200 — this tile was `value={null}` under "no security_events".
-                    It reads the ledger now: refused sign-ins in the last 24
-                    hours, and its reason when the ledger could not be read. */}
-                <Stat label="Failed sign-ins" value={se?.available ? num(se.failed_signins_24h) : null} note={se?.available ? 'refused in 24 hours, from security_events' : (se?.reason || 'unreadable')} tone={se?.available && se.failed_signins_24h ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
-              </div>
-              {imp?.available && imp.recent.length > 0 && (
-                <ul className="mt-3 space-y-1.5" data-testid="hq-impersonations">
-                  {imp.recent.slice(0, 5).map((s) => (
-                    <li key={s.id} className={`rounded-lg border px-3 py-2 text-[11.5px] ${s.ended_at ? 'border-axal-hairline bg-axal-ground' : 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20'}`}>
-                      <b>{s.admin_name || s.admin_email}</b> as <b>{s.target_name || s.target_email}</b>
-                      <span className="ml-2 font-mono text-[10px] text-axal-faint">{day(s.started_at)}{s.ended_at ? ` → ${day(s.ended_at)}` : ' · live'}</span>
-                      {s.context && <span className="ml-2 text-axal-faint">· {s.context}</span>}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <ForceReauth onDone={load} />
-              <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
-                An impersonation is a session like any other, which is why it sits here. Per-device revocation stays
-                with each account under Settings; per-account sign-out for HQ-held admins is on{' '}
-                <Link to="/admin/accounts" className="underline">HQ · Team</Link>. The platform-wide action above bumps
-                every account&apos;s token floor.
-              </p>
+              {ready && <NotRecordedList items={data.backup_dr?.not_recorded} testid="hq-dr-not-recorded" />}
             </Zone>
           </div>
+
+          <Zone title="Sessions and access" sub="each act recorded with its reason">
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+              <Stat label="Active sessions" value={sessions?.available ? num(sessions.active) : null} note={sessions?.available ? `seen in ${sessions.window_days} days, not revoked` : (sessions?.reason || 'unreadable')} />
+              <Stat label="Impersonations live" value={imp?.available ? num(imp.active) : null} note={imp?.available ? 'no ended_at yet' : (imp?.reason || 'unreadable')} tone={imp?.available && imp.active ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-white'} />
+              <Stat label="Admins with MFA" value={mfa ? `${num(mfa.admins_with_mfa)} of ${num(mfa.admins_total)}` : null} note={withoutMfa === null ? 'unreadable' : withoutMfa > 0 ? `${num(withoutMfa)} without` : 'every admin enrolled'} tone={withoutMfa ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
+              {/* D200 — this tile was `value={null}` under "no security_events".
+                  It reads the ledger now: refused sign-ins in the last 24
+                  hours, and its reason when the ledger could not be read. */}
+              <Stat label="Failed sign-ins" value={se?.available ? num(se.failed_signins_24h) : null} note={se?.available ? 'refused in 24 hours, from security_events' : (se?.reason || 'unreadable')} tone={se?.available && se.failed_signins_24h ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
+            </div>
+            <SessionsPanel list={sessionList} onAct={onSessionAct} onRetry={loadSessions} />
+            <ForceReauth onDone={load} />
+            <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+              An impersonation is a session like any other, which is why it sits in this list. Each account can
+              also revoke its own devices under Settings. The platform-wide action above bumps every
+              account&apos;s token floor.
+            </p>
+          </Zone>
 
           <Zone title="Data subject requests" sub={`${ready ? data.dsr?.clock_days : 30}-day clock from receipt · by territory`} tone="border-amber-200 bg-amber-50/30 dark:border-amber-900 dark:bg-amber-950/20">
             {/* D200 — H23 draws the DSR clocks "by territory · runs against the
@@ -888,7 +1170,7 @@ export default function HqSecurityPage() {
                 {dsr.map((d) => (
                   <li key={d.id} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-[12px] dark:border-amber-900 dark:bg-gray-900">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="min-w-0 truncate"><b>{d.name || d.email}</b> <span className="text-axal-faint">· {titleCase(d.role)} · erasure</span></span>
+                      <DsrSubject row={d} />
                       <span className={`shrink-0 font-bold tabular-nums ${d.days_left === null ? 'text-axal-faint' : d.days_left < 0 ? 'text-red-700 dark:text-red-300' : d.days_left <= 14 ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink dark:text-white'}`}>
                         {d.days_left === null ? <Unrecorded>clock unknown</Unrecorded> : d.days_left < 0 ? `${num(-d.days_left)}d overdue` : `${num(d.days_left)}d left`}
                       </span>
@@ -915,6 +1197,10 @@ export default function HqSecurityPage() {
               </ul>
             )}
             {!ready && data !== UNAVAILABLE && <p className="text-[12px] text-axal-faint">Loading…</p>}
+            {/* D481 — the zone printed "erasure" as a literal on every row.
+                The kinds the ledger does NOT hold are named here, from the
+                payload, each Not recorded with its reason. */}
+            {ready && <DsrKindsNotRecorded kinds={data.dsr?.kinds} />}
             {ready && dsrBranches && (
               <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-dsr-branches">
                 {dsrBranchesSentence(dsrBranches)}
@@ -941,6 +1227,7 @@ export default function HqSecurityPage() {
                 KYC status is one trust fact; sanctions screening is another and has its own card above, because the
                 two are different stores that fail apart.
               </p>
+              {ready && <NotRecordedList items={data.kyc_not_recorded} testid="hq-kyc-not-recorded" />}
             </Zone>
           </div>
 
