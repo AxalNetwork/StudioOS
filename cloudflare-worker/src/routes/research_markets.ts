@@ -20,12 +20,15 @@
  * holds for that market today. The two are labelled apart because they are
  * not the same claim.
  *
- * The market index series and source mix are not here yet: they must read
- * live market-intelligence rows only, and that predicate arrives with #1078.
+ * The market index series and source mix read live market-intelligence rows
+ * only, through `services/market_intel/liveRows.ts` (D538, #1078). A stub row
+ * or an index computed before D538 never reaches a response.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { liveIndexSql, liveRowSql, NO_LIVE_SOURCE_REASON } from '../services/market_intel/liveRows';
+import { periodKey } from '../services/market_intel/scoring';
 import {
   focusTokens, listCountries, listMarketSectors, loadOverrides, mapCompanyCountry, mapCompanySector,
   mapFundFocus, mapFundHq, mapSignalTags, type Country, type Overrides,
@@ -102,6 +105,76 @@ const countList = (m: Map<string, number>, keyName: string) =>
     .sort((a, b) => (b.count as number) - (a.count as number) || String(a[keyName]).localeCompare(String(b[keyName])));
 
 // ---------------------------------------------------------------------------
+// The market index: monthly points per dimension, live rows only.
+// ---------------------------------------------------------------------------
+
+export const DIMENSIONS = ['demand', 'supply', 'capital', 'talent', 'research', 'sentiment'] as const;
+export const INDEX_MONTHS = 6;
+export const NO_SECTOR_REASON = 'This market has no market-intelligence sector yet';
+
+interface IndexRow { period_key: string; dimension: string; value: number; delta_pct: number | null; source_count: number }
+
+/** The month before `period` ('YYYY-MM'). */
+function previousPeriod(period: string): string {
+  const [y, m] = period.split('-').map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+}
+
+/**
+ * Index rows → one series per dimension. A point's `change` is the written
+ * `delta_pct` when there is one, otherwise the difference from the previous
+ * calendar month's value — never across a missing month. A dimension with no
+ * live point reads "Not recorded" with its reason, never a neutral 50.
+ */
+export function indexSeries(rows: IndexRow[], current: string, reason: string) {
+  const out: Record<string, unknown> = {};
+  for (const dim of DIMENSIONS) {
+    const pts = rows
+      .filter((r) => r.dimension === dim && r.source_count > 0 && Number.isFinite(r.value))
+      .sort((a, b) => a.period_key.localeCompare(b.period_key))
+      .slice(-INDEX_MONTHS);
+    if (pts.length === 0) { out[dim] = { status: 'not_recorded', reason, points: [] }; continue; }
+    const byPeriod = new Map(pts.map((p) => [p.period_key, p]));
+    out[dim] = {
+      status: 'recorded',
+      points: pts.map((p) => {
+        const prev = byPeriod.get(previousPeriod(p.period_key));
+        const change = p.delta_pct ?? (prev ? Math.round((p.value - prev.value) * 10) / 10 : null);
+        return {
+          period: p.period_key, value: p.value, change,
+          change_basis: p.delta_pct != null ? 'delta_pct' : (prev ? 'previous_month' : null),
+          sources: p.source_count, month_to_date: p.period_key === current,
+        };
+      }),
+    };
+  }
+  return out;
+}
+
+async function marketIndex(env: Env, sector: string | null) {
+  if (!sector) {
+    return { sector: null, reason: NO_SECTOR_REASON, series: indexSeries([], '', NO_SECTOR_REASON), source_mix: [] };
+  }
+  const [idx, mix] = await Promise.all([
+    env.DB.prepare(
+      `SELECT period_key, dimension, value, delta_pct, source_count
+         FROM market_intel_indexes
+        WHERE sector = ? AND geo = 'global' AND ${liveIndexSql()}
+        ORDER BY period_key`,
+    ).bind(sector).all<IndexRow>(),
+    env.DB.prepare(
+      `SELECT source_key, COUNT(*) AS rows, MAX(ts) AS latest
+         FROM market_intel_rows
+        WHERE sector = ? AND ${liveRowSql()}
+        GROUP BY source_key ORDER BY rows DESC, source_key`,
+    ).bind(sector).all<{ source_key: string; rows: number; latest: string }>(),
+  ]);
+  const series = indexSeries(idx.results || [], periodKey(), NO_LIVE_SOURCE_REASON);
+  const recorded = Object.values(series).some((d: any) => d.status === 'recorded');
+  return { sector, reason: recorded ? null : NO_LIVE_SOURCE_REASON, series, source_mix: mix.results || [] };
+}
+
+// ---------------------------------------------------------------------------
 // Markets
 // ---------------------------------------------------------------------------
 
@@ -175,6 +248,7 @@ researchMarkets.get('/markets/:slug', async (c) => {
     listCountries(c.env),
   ]);
   const countryName = new Map(countries.map((k) => [k.code, k]));
+  const index = await marketIndex(c.env, sector?.mi_sector ?? null);
 
   const inMarket = cos.filter((co) => mapCompanySector(co.sector, ov).targets.includes(slug)).sort(byName);
   const byCountry = new Map<string, number>();
@@ -195,6 +269,7 @@ researchMarkets.get('/markets/:slug', async (c) => {
   return c.json({
     item: { ...market, supplied_label: SUPPLIED_LABEL },
     sector: sector ? { mi_sector: sector.mi_sector, method: sector.method, note: sector.note } : { mi_sector: null, method: null, note: null },
+    index,
     company_count: inMarket.length,
     companies: inMarket.slice(0, LIST_CAP).map((co) => companyDto(co, ov)),
     companies_by_country: countList(byCountry, 'code').map((r) => ({

@@ -17,7 +17,8 @@ import { SignJWT } from 'jose';
 import { stripForeignKeys } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 
-import researchMarkets from '../src/routes/research_markets.ts';
+import researchMarkets, { indexSeries } from '../src/routes/research_markets.ts';
+import { periodKey } from '../src/services/market_intel/scoring.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -51,6 +52,9 @@ function freshDb() {
   db.exec(tableFrom('365', 'research_fund_directory'));
   db.exec(tableFrom('136', 'signals'));
   db.exec(migration('376'));
+  db.exec(tableFrom('037', 'market_intel_rows'));
+  db.exec(tableFrom('037', 'market_intel_indexes'));
+  db.exec(migration('379'));
 
   const m = db.prepare(`INSERT INTO research_market_directory (slug, name, company_count, source_name, source_boundary, as_of)
                         VALUES (?, ?, ?, 'Axal', 'supplied', '2026-09-30')`);
@@ -229,4 +233,72 @@ test('an unknown or malformed country code is 404', async () => {
   for (const p of ['/geographies/ZZ', '/geographies/GBR', `/geographies/${encodeURIComponent("G'")}`]) {
     assert.equal((await get(db, p)).status, 404, p);
   }
+});
+
+// --- the market index: live rows only --------------------------------------------
+
+function seedIndex(db: DatabaseSync) {
+  const i = db.prepare(`INSERT INTO market_intel_indexes (sector, geo, period_key, dimension, value, delta_pct, source_count, basis)
+                        VALUES ('Fintech / DeFi', 'global', ?, ?, ?, ?, ?, ?)`);
+  i.run('2026-07', 'demand', 40, null, 2, 'live');
+  i.run('2026-08', 'demand', 44.5, null, 2, 'live');
+  i.run('2026-10', 'demand', 50, null, 1, 'live');         // September missing: no change
+  i.run('2026-09', 'capital', 30, 7.5, 1, 'live');         // a written delta wins
+  i.run('2026-09', 'supply', 50, null, 0, 'live');          // no source: the neutral 50 is not a reading
+  i.run('2026-09', 'talent', 61, null, 3, null);            // pre-D538 stub index
+  const r = db.prepare(`INSERT INTO market_intel_rows (source_key, sector, metric_key, metric_value, ts, citation_url)
+                        VALUES (?, 'Fintech / DeFi', 'm', 0.5, ?, ?)`);
+  r.run('fred', '2026-10-01T00:00:00Z', 'https://fred.stlouisfed.org/series/X');
+  r.run('fred', '2026-10-02T00:00:00Z', 'https://fred.stlouisfed.org/series/Y');
+  r.run('arxiv', '2026-09-01T00:00:00Z', 'https://arxiv.org/abs/1');
+  r.run('reddit', '2026-10-03T00:00:00Z', 'https://axal.vc/market-intel/sources/reddit');  // stub
+  r.run('oecd', '2026-10-03T00:00:00Z', null);                                              // uncited
+}
+
+test('a market with live index rows gets monthly series; stubs and sourceless points never appear', async () => {
+  const db = freshDb();
+  seedIndex(db);
+  const r = await get(db, '/markets/fintech');
+  const ix = r.body.index;
+  assert.equal(ix.sector, 'Fintech / DeFi');
+  assert.equal(ix.reason, null);
+  assert.deepEqual(ix.series.demand.points.map((p: any) => [p.period, p.value, p.change, p.change_basis]), [
+    ['2026-07', 40, null, null],
+    ['2026-08', 44.5, 4.5, 'previous_month'],
+    ['2026-10', 50, null, null],
+  ]);
+  assert.deepEqual(ix.series.capital.points.map((p: any) => [p.change, p.change_basis]), [[7.5, 'delta_pct']]);
+  assert.equal(ix.series.supply.status, 'not_recorded', 'a 50 from no source is not a reading');
+  assert.equal(ix.series.talent.status, 'not_recorded', 'an index from before D538 is a stub');
+  assert.match(ix.series.talent.reason, /No live source/);
+  assert.deepEqual(ix.source_mix.map((m: any) => [m.source_key, m.rows]), [['fred', 2], ['arxiv', 1]]);
+});
+
+test('a market with no live data, or no sector, says Not recorded and why', async () => {
+  const db = freshDb();
+  const none = (await get(db, '/markets/fintech')).body.index;
+  assert.match(none.reason, /No live source/);
+  for (const d of ['demand', 'supply', 'capital', 'talent', 'research', 'sentiment']) {
+    assert.deepEqual([none.series[d].status, none.series[d].points], ['not_recorded', []], d);
+  }
+  assert.deepEqual(none.source_mix, []);
+  seedIndex(db);
+  const fashion = (await get(db, '/markets/fashion')).body.index;
+  assert.equal(fashion.sector, null);
+  assert.match(fashion.reason, /no market-intelligence sector/);
+  assert.equal(fashion.series.demand.status, 'not_recorded');
+});
+
+test('the series keeps the last six months and marks the current month as month to date', () => {
+  const now = periodKey();
+  const rows = ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07'].map((p, n) =>
+    ({ period_key: p, dimension: 'research', value: n, delta_pct: null, source_count: 1 }));
+  rows.push({ period_key: now, dimension: 'research', value: 9, delta_pct: null, source_count: 1 });
+  const s: any = indexSeries(rows, now, 'r');
+  assert.equal(s.research.points.length, 6);
+  assert.equal(s.research.points.at(-1).month_to_date, true);
+  assert.equal(s.research.points[0].month_to_date, false);
+  const jan: any = indexSeries([{ period_key: '2026-01', dimension: 'demand', value: 5, delta_pct: null, source_count: 1 },
+    { period_key: '2025-12', dimension: 'demand', value: 2, delta_pct: null, source_count: 1 }], now, 'r');
+  assert.equal(jan.demand.points[1].change, 3, 'January follows December of the year before');
 });
