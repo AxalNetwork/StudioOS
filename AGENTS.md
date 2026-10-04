@@ -180,3 +180,8 @@ documents it indexes.
   never write to it.
 - **After a merge** the owner checks the deploy. If you cannot read the deploy
   log, say so in your PR.
+
+
+## Example Usage
+
+Resolved parameter handling for issue #1106.
