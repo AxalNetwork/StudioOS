@@ -10,6 +10,15 @@ import './investorResearchWorkspace.css';
 const arrayOf = (value, keys = []) => Array.isArray(value) ? value : keys.reduce((found, key) => found.length ? found : (Array.isArray(value?.[key]) ? value[key] : []), []);
 const stamp = (value) => { if (!value) return 'Freshness not supplied'; const date = new Date(value); return Number.isNaN(date.getTime()) ? 'Freshness not supplied' : `Updated ${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`; };
 
+/**
+ * D538: the reason a market-intel read gives for a part it does not record —
+ * `{ recorded: false, reason }` under `key` — or null when it records it.
+ */
+export const notRecordedReason = (record, key) => {
+  const part = record?.[key];
+  return part && part.recorded === false && typeof part.reason === 'string' && part.reason.trim() ? part.reason : null;
+};
+
 function Skeleton() { return <div className="ir-skeleton" data-testid="research-loading-skeleton">{[0, 1, 2].map((row) => <i key={row} />)}</div>; }
 
 export default function InvestorResearchWorkspace() {
@@ -76,6 +85,13 @@ export default function InvestorResearchWorkspace() {
     || data?.benchmarks?.computed_at
     || null;
   const totalSources = sources.length;
+  // D538: the compass lists all twelve sectors whether or not any live source
+  // records them, so its length is not a count of anything. Count the sectors
+  // that carry a live composite. Rounds and benchmarks say when they are not
+  // recorded, and the ledger shows that instead of a zero.
+  const recordedSectors = compass.filter((sector) => typeof sector?.composite === 'number').length;
+  const roundsReason = notRecordedReason(data?.rounds, 'not_recorded');
+  const benchmarksReason = notRecordedReason(data?.benchmarks, 'not_recorded');
 
   return <main className="investor-research-workspace" data-testid="investor-research-workspace">
     <div className="ir-layout">
@@ -109,12 +125,12 @@ export default function InvestorResearchWorkspace() {
           <div><div className="ir-head"><h2>Source library — reuse before re-reading</h2><span>{stamp(lastUpdated)}</span></div><p>Availability is a research property, not a promise. Returned source records retain the service state supplied by the catalog.</p>
             {errors.sources ? <div className="ir-source-empty">Source catalog unavailable.</div> : data === null ? <Skeleton /> : sources.length === 0 ? <div className="ir-source-empty">No registered source records are available.</div> : <div className="ir-source-list" data-testid="list-research-sources">{sources.map((source) => <div className="ir-source-row" key={source.key || source.display_name}><strong>{source.display_name || source.key || 'Registered source'}</strong><span className="ir-source-flags"><i className={source.live ? 'live' : ''}>{source.live ? 'Live' : 'Not live'}</i><i className={source.paid ? 'paid' : ''}>{source.paid ? 'Paid' : 'Unpaid'}</i></span><small>{stamp(source.updated_at || source.computed_at)}</small></div>)}</div>}
           </div>
-          <div className="ir-ledger" data-testid="panel-research-freshness"><b>Availability ledger</b><div><span>Source records</span><strong>{data ? totalSources : 'Loading'}</strong></div><div><span>Market compass</span><strong>{errors.compass ? 'Unavailable' : data ? compass.length : 'Loading'}</strong></div><div><span>Private rounds</span><strong>{errors.rounds ? 'Unavailable' : data ? rounds.length : 'Loading'}</strong></div></div>
+          <div className="ir-ledger" data-testid="panel-research-freshness"><b>Availability ledger</b><div><span>Source records</span><strong>{data ? totalSources : 'Loading'}</strong></div><div><span>Market compass</span><strong data-testid="text-research-ledger-compass">{errors.compass ? 'Unavailable' : !data ? 'Loading' : recordedSectors ? `${recordedSectors} live sector${recordedSectors === 1 ? '' : 's'}` : 'Not recorded'}</strong></div><div><span>Private rounds</span><strong data-testid="text-research-ledger-rounds">{errors.rounds ? 'Unavailable' : !data ? 'Loading' : roundsReason ? 'Not recorded' : rounds.length}</strong></div>{!errors.compass && data && !recordedSectors ? <small data-testid="text-research-ledger-compass-reason">{compass.find((sector) => sector?.composite_reason)?.composite_reason || 'No live source yet for any sector'}</small> : null}{roundsReason ? <small data-testid="text-research-ledger-rounds-reason">{roundsReason}</small> : null}</div>
         </section>
 
         <div className="ir-lower">
-          <section className="ir-mini" id="research-benchmarks"><h2>Fund &amp; manager benchmarking</h2><p>Operating benchmark fields are displayed only when the benchmark contract returns them.</p><span data-testid="text-research-benchmark-status">{errors.benchmarks ? 'Benchmark service unavailable' : data?.benchmarks ? 'Benchmark record available for review' : 'Benchmark record not available'}</span></section>
-          <section className="ir-mini" id="research-markets"><h2>Market deep-dives</h2><p>Saved briefs and market records retain their source and freshness rather than becoming an inferred conviction score.</p><span data-testid="text-research-market-status">{errors.compass && errors.watchlist ? 'Market compass and saved list unavailable' : errors.compass ? `Market compass unavailable · ${watchlist.length} saved` : errors.watchlist ? `${compass.length} sector records · saved list unavailable` : data ? `${compass.length} sector records · ${watchlist.length} saved` : 'Loading sector records'}</span></section>
+          <section className="ir-mini" id="research-benchmarks"><h2>Fund &amp; manager benchmarking</h2><p>Operating benchmark fields are displayed only when the benchmark contract returns them.</p><span data-testid="text-research-benchmark-status">{errors.benchmarks ? 'Benchmark service unavailable' : benchmarksReason ? `Not recorded · ${benchmarksReason}` : data?.benchmarks ? 'Benchmark record available for review' : 'Benchmark record not available'}</span></section>
+          <section className="ir-mini" id="research-markets"><h2>Market deep-dives</h2><p>Saved briefs and market records retain their source and freshness rather than becoming an inferred conviction score.</p><span data-testid="text-research-market-status">{errors.compass && errors.watchlist ? 'Market compass and saved list unavailable' : errors.compass ? `Market compass unavailable · ${watchlist.length} saved` : errors.watchlist ? `${recordedSectors ? `${recordedSectors} live sector records` : 'Sector records not recorded'} · saved list unavailable` : data ? `${recordedSectors ? `${recordedSectors} live sector records` : 'Sector records not recorded'} · ${watchlist.length} saved` : 'Loading sector records'}</span></section>
           <section className="ir-mini" id="research-companies"><h2>Company profiles</h2><p>Comparable context comes from the existing project and private-round services; no company identity is inferred.</p><span data-testid="text-research-company-status">{errors.projects ? 'Project context unavailable' : data ? `${projects.length} project records` : 'Loading project context'}</span></section>
         </div>
       </section>

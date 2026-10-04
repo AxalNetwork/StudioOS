@@ -10,7 +10,8 @@ import type { TierUser } from '../middleware/requireTier';
 type MIUser = User & Partial<TierUser> & Partial<InvestorUser>;
 import { ensureMarketIntelSchema } from '../services/market_intel/schema';
 import { listSources, isLive } from '../services/market_intel/registry';
-import { SECTORS, recomputeIndexes } from '../services/market_intel/aggregator';
+import { SECTORS, recomputeIndexes, COMPASS_KV_KEY } from '../services/market_intel/aggregator';
+import { liveIndexSql, liveRowSql, NO_LIVE_SOURCE_REASON } from '../services/market_intel/liveRows';
 import { periodKey } from '../services/market_intel/scoring';
 import { readEdgeCache, writeEdgeCache, readKv, writeKv } from '../services/market_intel/cache';
 // Side-effect import — every connector calls registerSource() at module
@@ -34,91 +35,56 @@ marketIntel.use('*', async (c, next) => {
   await next();
 });
 
-const MARKET_PULSE = [
-  { sector: 'Agentic B2B', multiple: 22.4, sentiment: 'Aggressive', technographic_signal: 'High churn in legacy CRM; 40% migration to AI-first middleware.', hiring_surge: 'DevOps/SRE hiring up 18% in mid-market SaaS.', gap_opportunity: 'Unified API for autonomous agent billing.' },
-  { sector: 'Bio-Automation', multiple: 14.1, sentiment: 'Wait-and-See', technographic_signal: 'Early adoption of Lab-OS standards.', hiring_surge: 'Biology-specialized LLM researchers.', gap_opportunity: 'Compliance-as-a-service for decentralized clinical trials.' },
-  { sector: 'AI Infrastructure', multiple: 28.7, sentiment: 'Aggressive', technographic_signal: 'Enterprise GPU cluster adoption up 65% YoY.', hiring_surge: 'ML Ops engineers up 32% across Fortune 500.', gap_opportunity: 'Edge inference orchestration layer for real-time AI.' },
-  { sector: 'Fintech / DeFi', multiple: 16.3, sentiment: 'Cautious', technographic_signal: 'Banks migrating to API-first core banking.', hiring_surge: 'Compliance + crypto-native product managers.', gap_opportunity: 'Regulated stablecoin treasury management API.' },
-  { sector: 'Data / Analytics', multiple: 19.8, sentiment: 'Aggressive', technographic_signal: 'Data lakehouse adoption replacing legacy warehouses.', hiring_surge: 'Data engineers and analytics engineers up 25%.', gap_opportunity: 'Real-time data quality monitoring for AI pipelines.' },
-  { sector: 'Cybersecurity', multiple: 24.2, sentiment: 'Aggressive', technographic_signal: 'Zero-trust adoption accelerating in mid-market.', hiring_surge: 'AppSec and identity engineers up 40%.', gap_opportunity: 'AI-powered threat detection for API-first architectures.' },
-  { sector: 'Autonomous Robotics', multiple: 26.3, sentiment: 'Aggressive', technographic_signal: 'Vision-language models enabling 40%+ YoY increase in warehouse and last-mile automation pilots.', hiring_surge: 'Robotics software + perception engineers up 31%.', gap_opportunity: 'Unified agentic control layer for heterogeneous robot fleets.' },
-  { sector: 'Climate Intelligence', multiple: 17.9, sentiment: 'Aggressive', technographic_signal: 'Post-IRA extension surge in carbon accounting and Scope 3 automation platforms.', hiring_surge: 'Sustainability AI engineers up 37%.', gap_opportunity: 'Real-time MRV API for enterprise net-zero compliance.' },
-  { sector: 'Quantum Infrastructure', multiple: 12.4, sentiment: 'Wait-and-See', technographic_signal: 'Error-corrected logical qubits crossing 100+ threshold.', hiring_surge: 'Quantum algorithm researchers up 24%.', gap_opportunity: 'Cloud-accessible quantum optimization layer for supply-chain and portfolio risk modeling.' },
-];
+// ─────────────────────────────────────────────────────────────────────────
+// D538 (#1078) — no figure written into the code reaches a screen.
+//
+// Until D538 this file carried five constants of figures nobody recorded —
+// sector revenue multiples, sentiment and hiring claims (MARKET_PULSE),
+// sector P/E and IPO windows (MACRO_DATA), six named private rounds
+// (PRIVATE_ROUNDS), "high-conviction plays" (HIGH_CONVICTION) and fifteen
+// studio benchmarks (STUDIO_BENCHMARKS) — and seven endpoints served them as
+// readings. Each endpoint keeps its shape and its live parts (the headline
+// and quote feeds call real providers) and says what is not recorded, and
+// why. Never a zero, never an invented figure.
+// ─────────────────────────────────────────────────────────────────────────
 
-const MACRO_DATA = {
-  sectors: [
-    { name: 'AI / ML', avg_pe: 45.2, yoy_growth: 34.5, ipo_window: 'Open', trend: 'up' },
-    { name: 'SaaS', avg_pe: 32.1, yoy_growth: 18.2, ipo_window: 'Selective', trend: 'stable' },
-    { name: 'Fintech', avg_pe: 28.7, yoy_growth: 12.4, ipo_window: 'Cautious', trend: 'stable' },
-    { name: 'Blockchain', avg_pe: 38.5, yoy_growth: 28.1, ipo_window: 'Opening', trend: 'up' },
-    { name: 'Biotech', avg_pe: 22.3, yoy_growth: 8.6, ipo_window: 'Selective', trend: 'down' },
-    { name: 'Climate Tech', avg_pe: 30.4, yoy_growth: 22.3, ipo_window: 'Open', trend: 'up' },
-    { name: 'Cybersecurity', avg_pe: 41.8, yoy_growth: 25.6, ipo_window: 'Open', trend: 'up' },
-    { name: 'Semiconductors', avg_pe: 52.3, yoy_growth: 41.2, ipo_window: 'Open', trend: 'up' },
-    { name: 'Enterprise AI Software', avg_pe: 38.9, yoy_growth: 29.4, ipo_window: 'Selective', trend: 'up' },
-  ],
-  interest_rate_impact: 'Moderate — rates stabilized, favoring growth equity.',
-  exit_environment: 'Improving. Strategic M&A picking up in AI/Infrastructure.',
-  updated_at: '2026-03-27',
-};
+/** The shape every "not recorded" part of a market-intel response takes. */
+export interface NotRecorded { recorded: false; reason: string }
+export function notRecorded(reason: string): NotRecorded {
+  return { recorded: false, reason };
+}
 
-const PRIVATE_ROUNDS = [
-  { company: 'xAI',        sector: 'AI Infrastructure',     amount: '$6B',    valuation: '$45B', stage: 'Series C' },
-  { company: 'Anthropic',  sector: 'AI Infrastructure',     amount: '$3.5B',  valuation: '$61B', stage: 'Series E' },
-  { company: 'Anduril',    sector: 'Defense / Cybersecurity', amount: '$1.5B', valuation: '$14B', stage: 'Series E' },
-  { company: 'Scale AI',   sector: 'Data / Analytics',      amount: '$1B',    valuation: '$14B', stage: 'Series F' },
-  { company: 'Groq',       sector: 'AI Infrastructure',     amount: '$300M',  valuation: '$2.8B', stage: 'Series D' },
-  { company: 'Perplexity', sector: 'AI Search',             amount: '$250M',  valuation: '$3B',  stage: 'Series D' },
-];
-
-const HIGH_CONVICTION = [
-  { sector: 'Agentic B2B',          play_type: 'Replacement Play', multiple: 22.4, sentiment: 'Aggressive',
-    reasoning: 'High churn in legacy CRM; 40% migration to AI-first middleware.',
-    gap_opportunity: 'Unified API for autonomous agent billing.' },
-  { sector: 'AI Infrastructure',    play_type: 'Efficiency Play',  multiple: 28.7, sentiment: 'Aggressive',
-    reasoning: 'High 28.7x multiple + aggressive sentiment = launch at 1/10th cost via studio.',
-    gap_opportunity: 'Edge inference orchestration layer for real-time AI.' },
-  { sector: 'Data / Analytics',     play_type: 'Exit Play',        multiple: 19.8, sentiment: 'Aggressive',
-    reasoning: 'Sector multiples at 19.8x — favorable exit timing.',
-    gap_opportunity: 'Real-time data quality monitoring for AI pipelines.' },
-  { sector: 'Cybersecurity',        play_type: 'Efficiency Play',  multiple: 24.2, sentiment: 'Aggressive',
-    reasoning: 'High 24.2x multiple + aggressive sentiment = launch at 1/10th cost via studio.',
-    gap_opportunity: 'AI-powered threat detection for API-first architectures.' },
-  { sector: 'Autonomous Robotics',  play_type: 'Efficiency Play',  multiple: 26.3, sentiment: 'Aggressive',
-    reasoning: 'High 26.3x multiple + aggressive sentiment = launch at 1/10th cost via studio.',
-    gap_opportunity: 'Unified agentic control layer for heterogeneous robot fleets.' },
-  { sector: 'Climate Intelligence', play_type: 'Exit Play',        multiple: 17.9, sentiment: 'Aggressive',
-    reasoning: 'Post-IRA tailwinds + 17.9x multiples — favorable exit timing for MRV plays.',
-    gap_opportunity: 'Real-time MRV API for enterprise net-zero compliance.' },
-];
-
-const STUDIO_BENCHMARKS = {
-  avg_time_to_inc_days: 11, founder_match_rate: 88, api_reusability_score: 65,
-  current_dry_powder: '$4.5M', avg_time_to_first_check_days: 28, conversion_idea_to_funded: 23,
-  active_batch_size: 8, portfolio_companies: 12, decision_gate_pass_rate: 72,
-  avg_time_to_spinout_days: 68, avg_founder_equity_at_spinout: 68, followon_funding_rate: 75,
-  avg_valuation_first_round: '$9.2M', cost_per_spinout: '$185k', deployment_velocity: 35,
-};
+export const NOT_RECORDED_REASONS = {
+  sector_signals: 'No live source records sector multiples, sentiment or hiring signals yet',
+  sector_macro: 'No live source records sector P/E, growth or IPO windows yet',
+  private_rounds: 'No store of private funding rounds yet',
+  studio_benchmarks: 'Studio benchmarks are not computed from recorded data yet',
+  conviction_plays: 'Conviction plays need live sector data, and none is recorded yet',
+} as const;
 
 marketIntel.get('/market-pulse', async (c) => {
   const updated_at = new Date().toISOString();
   let headlines: any[] = [];
   let sources: string[] = [];
   let cached = false;
+  let headlines_unreadable: string | null = null;
   try {
     const h = await getMarketHeadlines(c.env);
     headlines = h.headlines;
     sources = h.sources;
     cached = h.cached;
-  } catch { /* fall through to seed-only */ }
+  } catch (e) {
+    headlines_unreadable = (e as Error)?.message || 'headline feeds unreadable';
+  }
   return c.json({
-    signals: MARKET_PULSE,
+    signals: [],
+    signals_not_recorded: notRecorded(NOT_RECORDED_REASONS.sector_signals),
     headlines,
     headlines_sources: sources,
     headlines_cached: cached,
+    headlines_unreadable,
     updated_at,
-    total_sectors: MARKET_PULSE.length,
+    total_sectors: null,
   });
 });
 
@@ -126,62 +92,59 @@ marketIntel.get('/macro', async (c) => {
   let live_quotes: any[] = [];
   let quotes_updated_at: string | null = null;
   let cached = false;
+  let quotes_unreadable: string | null = null;
   try {
     const q = await getLiveQuotes(c.env);
     live_quotes = q.quotes;
     quotes_updated_at = q.updated_at;
     cached = q.cached;
-  } catch { /* fall through to seed-only */ }
-  return c.json({ ...MACRO_DATA, live_quotes, quotes_updated_at, quotes_cached: cached });
-});
-marketIntel.get('/private-rounds', (c) => c.json({ rounds: PRIVATE_ROUNDS, total: PRIVATE_ROUNDS.length, updated_at: new Date().toISOString() }));
-marketIntel.get('/studio-benchmarks', (c) => c.json(STUDIO_BENCHMARKS));
-
-marketIntel.get('/competitive-intelligence', (c) => {
+  } catch (e) {
+    quotes_unreadable = (e as Error)?.message || 'quote feed unreadable';
+  }
   return c.json({
-    high_conviction_plays: HIGH_CONVICTION,
-    studio_benchmarks: STUDIO_BENCHMARKS,
-    market_pulse: MARKET_PULSE,
-    updated_at: new Date().toISOString(),
+    sectors: [],
+    sectors_not_recorded: notRecorded(NOT_RECORDED_REASONS.sector_macro),
+    interest_rate_impact: null,
+    exit_environment: null,
+    live_quotes,
+    quotes_updated_at,
+    quotes_cached: cached,
+    quotes_unreadable,
   });
 });
 
+marketIntel.get('/private-rounds', (c) => c.json({
+  rounds: [],
+  total: null,
+  not_recorded: notRecorded(NOT_RECORDED_REASONS.private_rounds),
+  updated_at: new Date().toISOString(),
+}));
+
+marketIntel.get('/studio-benchmarks', (c) => c.json({
+  not_recorded: notRecorded(NOT_RECORDED_REASONS.studio_benchmarks),
+}));
+
+marketIntel.get('/competitive-intelligence', (c) => c.json({
+  high_conviction_plays: [],
+  high_conviction_not_recorded: notRecorded(NOT_RECORDED_REASONS.conviction_plays),
+  studio_benchmarks: null,
+  studio_benchmarks_not_recorded: notRecorded(NOT_RECORDED_REASONS.studio_benchmarks),
+  market_pulse: [],
+  market_pulse_not_recorded: notRecorded(NOT_RECORDED_REASONS.sector_signals),
+  updated_at: new Date().toISOString(),
+}));
+
 // Task #6 (W-1) — Market Intelligence export. Free investors get a paywall;
-// Professional+ (and admin/partner/advisor bypass) can pull a CSV of the
-// current Market Pulse + private rounds. Founders see this surface but
-// behind the founder-tier gate (Studio); they never hit this gate because
-// the route is only mounted under investor auth in practice.
+// Professional+ (and admin/partner/advisor bypass) pass. Since D538 there is
+// nothing recorded to export: the CSV was the hardcoded market pulse, so the
+// route answers 409 `not_recorded` with the reason instead of a file of
+// invented rows.
 marketIntel.get('/export', async (c) => {
   const user = (await requireAuth(c)) as InvestorUser;
-  // Investors must hold Professional+. Other roles (admin/partner/advisor)
-  // bypass the gate inside ensureInvestorTier; founders aren't expected here.
   if (user.role === 'investor') {
     ensureInvestorTier(user, 'professional');
   }
-  const fmt = (c.req.query('format') || 'csv').toLowerCase();
-  const rows = MARKET_PULSE.map((s) => ({
-    sector: s.sector, multiple: s.multiple, sentiment: s.sentiment,
-    technographic_signal: s.technographic_signal,
-    hiring_surge: s.hiring_surge,
-    gap_opportunity: s.gap_opportunity,
-  }));
-  if (fmt === 'json') {
-    return c.json({ exported_at: new Date().toISOString(), rows });
-  }
-  // Tiny inline CSV writer — Market Intel ships a much richer export in AA-2.
-  const headers = Object.keys(rows[0] || { sector: '' });
-  const esc = (v: unknown) => {
-    const s = v == null ? '' : String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const lines = [headers.join(',')];
-  for (const r of rows) lines.push(headers.map((h) => esc((r as Record<string, unknown>)[h])).join(','));
-  return new Response(lines.join('\n'), {
-    headers: {
-      'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="market-intel-${new Date().toISOString().slice(0, 10)}.csv"`,
-    },
-  });
+  return c.json({ error: 'not_recorded', ...notRecorded(NOT_RECORDED_REASONS.sector_signals) }, 409);
 });
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -215,19 +178,31 @@ interface WatchlistRow {
   id: number; sector: string; geo: string; cadence: string; created_at: string;
 }
 
+/**
+ * The current period's index rows, LIVE ONLY (D538): an index row is read
+ * only when the aggregator computed it from live rows (`basis = 'live'`).
+ * The stub-derived rows written before D538 have no basis and never surface.
+ */
 async function readCurrentIndexes(env: Env, period: string): Promise<IndexRow[]> {
-  const rows = (await env.DB.prepare(
+  const read = async () => (await env.DB.prepare(
     `SELECT sector, geo, period_key, dimension, value, source_count, computed_at
-       FROM market_intel_indexes WHERE period_key = ? AND geo = 'global'`
+       FROM market_intel_indexes WHERE period_key = ? AND geo = 'global' AND ${liveIndexSql()}`
   ).bind(period).all<IndexRow>()).results || [];
+  const rows = await read();
   if (rows.length > 0) return rows;
   // Cold start path — first deploy after migration / before any cron run.
-  // Compute on demand so the first reader gets a populated response.
+  // Compute on demand so the first reader gets whatever live data exists.
   await recomputeIndexes(env);
-  return (await env.DB.prepare(
-    `SELECT sector, geo, period_key, dimension, value, source_count, computed_at
-       FROM market_intel_indexes WHERE period_key = ? AND geo = 'global'`
-  ).bind(period).all<IndexRow>()).results || [];
+  return read();
+}
+
+const DIMENSIONS = ['demand', 'supply', 'capital', 'talent', 'research', 'sentiment'] as const;
+
+/** A value or nothing: an index row's value, or null with the reason (D538). */
+function indexValue(r: IndexRow | undefined): { value: number | null; source_count: number; reason?: string } {
+  return r
+    ? { value: r.value, source_count: r.source_count }
+    : { value: null, source_count: 0, reason: NO_LIVE_SOURCE_REASON };
 }
 
 /** Sector Compass — public composite. Free callers see this everywhere. */
@@ -240,14 +215,14 @@ marketIntel.get('/sector-compass', async (c) => {
 
   // Layered read: edge miss → KV warm snapshot (24h) → DB → cold compute.
   let rows: IndexRow[] = [];
-  const warm = await readKv<{ period_key: string; rows: IndexRow[] }>(c.env, 'compass:global');
+  const warm = await readKv<{ period_key: string; rows: IndexRow[] }>(c.env, COMPASS_KV_KEY);
   if (warm && warm.period_key === period && Array.isArray(warm.rows) && warm.rows.length > 0) {
     rows = warm.rows;
   } else {
     rows = await readCurrentIndexes(c.env, period);
     if (rows.length > 0) {
       // Repopulate the warm snapshot so the next reader skips D1 entirely.
-      await writeKv(c.env, 'compass:global', { period_key: period, computed_at: rows[0].computed_at, rows });
+      await writeKv(c.env, COMPASS_KV_KEY, { period_key: period, computed_at: rows[0].computed_at, rows });
     }
   }
   const bySector: Record<string, Record<string, IndexRow>> = {};
@@ -259,30 +234,48 @@ marketIntel.get('/sector-compass', async (c) => {
   // ONLY (no per-dimension breakdown); Growth+/bypass callers get the
   // full dimensional lens. Cache keys already fold in `tierLabel` so
   // the two shapes never cross-pollute the edge cache.
+  //
+  // D538: a sector or dimension with no live index row is `null` with the
+  // reason — it used to be a neutral 50 that nothing recorded.
   const isFull = tierLabel === 'full';
   const sectors = SECTORS.map((sector) => {
     const dims = bySector[sector] || {};
-    const composite = dims.composite?.value ?? 50;
-    if (!isFull) return { sector, composite };
-    return {
+    const head = indexValue(dims.composite);
+    const base = {
       sector,
-      composite,
-      dimensions: (['demand', 'supply', 'capital', 'talent', 'research', 'sentiment'] as const).reduce((acc, d) => {
-        const r = dims[d];
-        acc[d] = r ? { value: r.value, source_count: r.source_count } : { value: 50, source_count: 0 };
+      composite: head.value,
+      ...(head.value == null ? { composite_reason: head.reason } : {}),
+    };
+    if (!isFull) return base;
+    return {
+      ...base,
+      dimensions: DIMENSIONS.reduce((acc, d) => {
+        acc[d] = indexValue(dims[d]);
         return acc;
-      }, {} as Record<string, { value: number; source_count: number }>),
+      }, {} as Record<string, ReturnType<typeof indexValue>>),
     };
   });
 
   const body = {
     period_key: period,
-    computed_at: rows[0]?.computed_at ?? new Date().toISOString(),
+    computed_at: rows[0]?.computed_at ?? null,
+    recorded_sectors: sectors.filter((x) => x.composite != null).length,
     sectors,
     lens: tierLabel,
   };
   return writeEdgeCache(c.req.raw, tierLabel, body);
 });
+
+/** Order recorded figures first (by `score`, descending), then the rest by name. */
+function recordedFirst<T extends { sector: string }>(rows: T[], score: (r: T) => number | null): T[] {
+  return rows.slice().sort((a, b) => {
+    const sa = score(a); const sb = score(b);
+    if (sa == null && sb == null) return a.sector.localeCompare(b.sector);
+    if (sa == null) return 1;
+    if (sb == null) return -1;
+    return sb - sa;
+  });
+}
 
 /** Founder lens — gap opportunities + sector picks. Growth-gated. */
 marketIntel.get('/founder-lens', async (c) => {
@@ -297,17 +290,22 @@ marketIntel.get('/founder-lens', async (c) => {
   }
   const period = periodKey();
   const rows = await readCurrentIndexes(c.env, period);
-  const picks: Array<{ sector: string; composite: number; demand: number; supply: number; opportunity_gap: number }> = [];
-  for (const sector of SECTORS) {
+  const picks = SECTORS.map((sector) => {
     const r = rows.filter((x) => x.sector === sector);
-    const composite = r.find((x) => x.dimension === 'composite')?.value ?? 50;
-    const supply = r.find((x) => x.dimension === 'supply')?.value ?? 50;
-    const demand = r.find((x) => x.dimension === 'demand')?.value ?? 50;
-    const opportunity = Math.round((demand - supply) * 10) / 10;
-    picks.push({ sector, composite, demand, supply, opportunity_gap: opportunity });
-  }
-  picks.sort((a, b) => b.opportunity_gap - a.opportunity_gap);
-  return c.json({ period_key: period, picks, computed_at: new Date().toISOString() });
+    const composite = r.find((x) => x.dimension === 'composite')?.value ?? null;
+    const supply = r.find((x) => x.dimension === 'supply')?.value ?? null;
+    const demand = r.find((x) => x.dimension === 'demand')?.value ?? null;
+    const opportunity_gap = demand != null && supply != null ? Math.round((demand - supply) * 10) / 10 : null;
+    return {
+      sector, composite, demand, supply, opportunity_gap,
+      ...(opportunity_gap == null ? { reason: NO_LIVE_SOURCE_REASON } : {}),
+    };
+  });
+  return c.json({
+    period_key: period,
+    picks: recordedFirst(picks, (p) => p.opportunity_gap),
+    computed_at: rows[0]?.computed_at ?? null,
+  });
 });
 
 /** Investor lens — capital + sentiment ordering. Investor Pro+/bypass only. */
@@ -326,12 +324,20 @@ marketIntel.get('/investor-lens', async (c) => {
   const rows = await readCurrentIndexes(c.env, period);
   const ranked = SECTORS.map((sector) => {
     const r = rows.filter((x) => x.sector === sector);
-    const capital = r.find((x) => x.dimension === 'capital')?.value ?? 50;
-    const sentiment = r.find((x) => x.dimension === 'sentiment')?.value ?? 50;
-    const composite = r.find((x) => x.dimension === 'composite')?.value ?? 50;
-    return { sector, capital, sentiment, composite, score: Math.round((capital * 0.6 + sentiment * 0.4) * 10) / 10 };
-  }).sort((a, b) => b.score - a.score);
-  return c.json({ period_key: period, ranked, computed_at: new Date().toISOString() });
+    const capital = r.find((x) => x.dimension === 'capital')?.value ?? null;
+    const sentiment = r.find((x) => x.dimension === 'sentiment')?.value ?? null;
+    const composite = r.find((x) => x.dimension === 'composite')?.value ?? null;
+    const score = capital != null && sentiment != null ? Math.round((capital * 0.6 + sentiment * 0.4) * 10) / 10 : null;
+    return {
+      sector, capital, sentiment, composite, score,
+      ...(score == null ? { reason: NO_LIVE_SOURCE_REASON } : {}),
+    };
+  });
+  return c.json({
+    period_key: period,
+    ranked: recordedFirst(ranked, (x) => x.score),
+    computed_at: rows[0]?.computed_at ?? null,
+  });
 });
 
 // Task #5 (AK) — Geography lens. Currently single 'global' band; per-geo
@@ -345,9 +351,14 @@ const geographyLensHandler = async (c: Context<{ Bindings: Env }>) => {
   }
   const period = periodKey();
   const rows = await readCurrentIndexes(c.env, period);
+  const composites = rows.filter((r) => r.dimension === 'composite').map((r) => ({ sector: r.sector, composite: r.value }));
   return c.json({
     period_key: period,
-    geos: [{ geo: 'global', sectors: rows.filter((r) => r.dimension === 'composite').map((r) => ({ sector: r.sector, composite: r.value })) }],
+    geos: [{
+      geo: 'global',
+      sectors: composites,
+      ...(composites.length === 0 ? { not_recorded: notRecorded(NO_LIVE_SOURCE_REASON) } : {}),
+    }],
   });
 };
 marketIntel.get('/geography', geographyLensHandler);
@@ -389,12 +400,12 @@ marketIntel.get('/citations', async (c) => {
   const rows = sector
     ? (await c.env.DB.prepare(
         `SELECT source_key, sector, metric_key, metric_value, ts, created_at AS ingested_at, citation_url
-           FROM market_intel_rows WHERE datetime(created_at) >= datetime(?) AND sector = ?
+           FROM market_intel_rows WHERE datetime(created_at) >= datetime(?) AND sector = ? AND ${liveRowSql()}
            ORDER BY datetime(ts) DESC LIMIT ?`
       ).bind(cutoff, sector, limit).all<CitationRow>()).results
     : (await c.env.DB.prepare(
         `SELECT source_key, sector, metric_key, metric_value, ts, created_at AS ingested_at, citation_url
-           FROM market_intel_rows WHERE datetime(created_at) >= datetime(?)
+           FROM market_intel_rows WHERE datetime(created_at) >= datetime(?) AND ${liveRowSql()}
            ORDER BY datetime(ts) DESC LIMIT ?`
       ).bind(cutoff, limit).all<CitationRow>()).results;
   return c.json({ rows: rows || [], since: cutoff });
@@ -1447,5 +1458,4 @@ function renderPersonasPdf(payload: PlatformPersonasPayload): Uint8Array {
   return enc.encode(body);
 }
 
-export { MARKET_PULSE, STUDIO_BENCHMARKS };
 export default marketIntel;

@@ -19,6 +19,18 @@ const prettyDate = (value) => {
 // anchors — and two of them, `#a7-companies` and `#a7-library`, named sections
 // that did not exist on the page, so they scrolled nowhere at all. Each now
 // opens the Research zone it names.
+/**
+ * D538: the reason a market-intel read gives for a part it does not record —
+ * `{ recorded: false, reason }` under `key` — or null when it records it.
+ * The market pulse and the private rounds were figures written into the
+ * Worker; they now say they are not recorded, and the card says why rather
+ * than counting zero records.
+ */
+export const notRecordedReason = (record, key) => {
+  const part = record?.[key];
+  return part && part.recorded === false && typeof part.reason === 'string' && part.reason.trim() ? part.reason : null;
+};
+
 const SECTIONS = [
   ['Ask', '/research/ask'],
   ['Markets', '/research/markets'],
@@ -155,6 +167,17 @@ export default function FounderResearchDesk() {
   const roundsLoaded = Object.hasOwn(records, 'rounds');
   const companiesLoaded = Object.hasOwn(records, 'companies');
   const signalsLoaded = Object.hasOwn(records, 'signals');
+  // D538: count only what a source records. A part that says it is not
+  // recorded is named with its reason, never counted as zero.
+  const pulseReason = notRecordedReason(records.pulse, 'signals_not_recorded');
+  const roundsReason = notRecordedReason(records.rounds, 'not_recorded');
+  const marketRecordCount = (pulseReason ? 0 : data.markets.length) + (roundsReason ? 0 : data.rounds.length);
+  const marketsMeta = !(pulseLoaded || roundsLoaded) ? sourceMeta('pulse', '')
+    : marketRecordCount > 0 ? `${marketRecordCount} stored market record${marketRecordCount === 1 ? '' : 's'}`
+      : 'Not recorded';
+  const marketsLine = marketRecordCount > 0
+    ? 'Market signals and private-round records available for deeper inspection.'
+    : [pulseReason, roundsReason].filter(Boolean).join('. ') || 'No market signal or private-round record is stored yet.';
 
   return <main className="a7-research" data-testid="founder-research-desk">
     <div className="a7-canvas">
@@ -172,9 +195,7 @@ export default function FounderResearchDesk() {
         <section className="a7-card a7-mint" id="a7-markets"><SectionHead title="Source freshness & cache" meta="Read-only source status" /><div className="a7-cache-grid"><div><strong>{cached === true ? 'Cached input available' : cached === false ? 'Freshness flag: not cached' : 'Cache state not recorded'}</strong><p>Only returned source flags are shown here. No research run, model, rate, token, or savings estimate is inferred.</p></div><div className="a7-cache-facts"><span>Last returned update <b>{freshness ? prettyDate(freshness) : 'Not recorded'}</b></span><span>Headline cache <b>{cached === true ? 'Yes' : cached === false ? 'No' : 'Not recorded'}</b></span></div></div></section>
         <section className="a7-card" id="a7-funds"><SectionHead title="Fund research" meta={sourceMeta('funds', `${data.funds?.researched_count ?? 0} researched`)} /><FundResearch funds={data.funds} failed={failedKeys.has('funds')} onRetry={() => setRetry((value) => value + 1)} /><Link className="a7-link" data-testid="link-open-research-funds" to={`/research/funds${query}`} state={state}>Open funds <ArrowUpRight size={13} /></Link></section>
         <div className="a7-bottom">
-          <section className="a7-card"><SectionHead title="Market deep-dives" meta={pulseLoaded || roundsLoaded
-            ? `${data.markets.length + data.rounds.length} stored market records`
-            : sourceMeta('pulse', '')} /><p>Market signals and private-round records available for deeper inspection.</p><Link className="a7-link" data-testid="link-open-research-markets" to={`/research/markets${query}`} state={state}>Open markets <ArrowUpRight size={13} /></Link></section>
+          <section className="a7-card"><SectionHead title="Market deep-dives" meta={marketsMeta} /><p data-testid="text-research-markets">{marketsLine}</p><Link className="a7-link" data-testid="link-open-research-markets" to={`/research/markets${query}`} state={state}>Open markets <ArrowUpRight size={13} /></Link></section>
           <section className="a7-card" id="a7-companies"><SectionHead title="Company profiles" meta={sourceMeta('companies', `${data.companies.length} returned`)} /><p>{data.companies.length ? 'Company records are available from the company directory.' : companiesLoaded ? 'No company records are available from the approved source.' : 'The company source is temporarily unavailable.'}</p><Link className="a7-link" to="/research/companies" state={state}>Open competitor analysis <ArrowUpRight size={13} /></Link></section>
           <section className="a7-card" id="a7-library"><SectionHead title="Document library" meta={sourceMeta('library', `${data.library.length} document${data.library.length === 1 ? '' : 's'}`)} /><p data-testid="text-research-library">{libraryLine(records.library, failedKeys.has('library'))}</p><Link className="a7-link" data-testid="link-open-research-library" to={`/research/library${query}`} state={state}>Open library <ArrowUpRight size={13} /></Link></section>
         </div>
