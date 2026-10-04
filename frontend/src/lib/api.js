@@ -2,6 +2,14 @@ import { reportError } from './log';
 import { csrfCookieNameFor } from './branchHost';
 import { storeReason } from './impersonationBar';
 
+// D527 — API domain modules. A new API domain goes in its own file,
+// lib/api/<domain>.js, and is re-exported here with ONE line, kept in
+// alphabetical order, so unrelated features stop colliding at the bottom of
+// this file. See lib/api/README.md. scripts/check-api-drift.mjs fails if this
+// block does not name exactly the files in lib/api/.
+// api-modules:begin
+// api-modules:end
+
 const BASE = '/api';
 
 /**

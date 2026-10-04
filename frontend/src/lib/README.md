@@ -51,14 +51,16 @@ The API client, formatters and helpers. Nothing here renders.
 | Folder | What lives there |
 | --- | --- |
 | `advisor/` | Advisor-side client logic. |
+| `api/` | One file per new API domain, each re-exported by `api.js` in one alphabetical block (D527). See its README. |
 | `brand/` | Brand template content model. |
 | `docs/` | Help Center search index. |
 | `spinout/` | Spin-Out Lab client logic. |
 
 ## The drift rule
 
-**Do not add an `/api/*` method to `api.js` without a matching worker route in
-`cloudflare-worker/src/index.ts`.** `npm run test:drift` walks every call site
+**Do not add an `/api/*` method to `api.js`, or to a module in `api/`, without a
+matching worker route in `cloudflare-worker/src/index.ts`.** A new API domain
+goes in its own `api/` module rather than at the bottom of `api.js` (D527). `npm run test:drift` walks every call site
 here, resolves it against the worker's real mount table, and fails the build on
 a mismatch. This is the guard that catches "the UI calls an endpoint nobody
 built" before it reaches production — which has happened, in both directions.
