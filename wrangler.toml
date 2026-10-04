@@ -395,7 +395,7 @@ crons = [
 # `MI_FLAG_<KEY>=live` (see registry.ts::isLive). Since D538 a source that is
 # off, out of quota or failing stores nothing in production and the run logs
 # why; its deterministic stub runs only where MI_STUB_ROWS = "on" (dev, tests).
-# LIVE (D538, set in [vars] and [env.production.vars]) — keyless, real fetchLive:
+# LIVE (D538, set in both var tables, top level and production) — keyless, real fetchLive:
 #   OPENALEX, CROSSREF, ARXIV (research); WORLD_BANK, OECD, EUROSTAT (macro).
 # NOT live, and why:
 #   NEWS_GDELT, PAPERSWITHCODE, STACK_EXCHANGE, PATENT_EPO — fetchLive is still a
