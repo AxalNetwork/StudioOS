@@ -41,6 +41,7 @@ import { searchSemantic, deleteChunkedEntity, researchNamespace } from '../servi
 import { run as runAI } from '../services/aiRouter';
 import { companyScope, esignEnvelopeScope } from '../services/tenancyScope';
 import { fundOverlapNote } from '../services/researchFundRead';
+import { DirectoryQueryError, getFund, listDirectory, parseDirectoryQuery } from '../services/researchFundDirectory';
 import { catalogPriceCents, proposalName, readingIsStale } from '../services/marketReadingRead';
 import { scopedDecisions } from './ic';
 import { investorProjectIds } from './_investorProjectScope';
@@ -3745,38 +3746,40 @@ research.get('/company-directory/:uid', async (c) => {
   return c.json({ item: row, source_boundary: 'Discovery metadata only; no funding, valuation, revenue, market-size, or diligence claims.' });
 });
 
-// Public EuroTech fund catalog. Spreadsheet observations are reported fund-size
+// Public fund catalog (D535). Spreadsheet observations are reported fund-size
 // snapshots only; they are not private-fund NAV, IRR, TVPI, or performance data.
+// Search, filters, sort and paging run on the server (services/researchFundDirectory.ts).
+const FUND_DIRECTORY_SOURCE = 'Public fund spreadsheets (EuroTech VC Funds; Deep Tech Investors Mapping)';
+const FUND_DIRECTORY_BOUNDARY = 'Reported fund-size snapshots and discovery metadata only; no NAV, IRR, TVPI, or performance is inferred.';
+
 research.get('/fund-directory', async (c) => {
   await requireAuth(c);
-  const q = String(c.req.query('q') || '').trim().slice(0, 120);
-  const hq = String(c.req.query('hq') || '').trim().slice(0, 120);
-  const rows = await c.env.DB.prepare(
-    `SELECT uid, name, website, linkedin, hq, fund_number, fund_size_cents,
-            fund_date, quarter, fund_year, sector_focus, notable_lps,
-            eif_flag, eifo_flag, source_name, source_url, as_of
-       FROM research_fund_directory
-      WHERE (? = '' OR name LIKE '%' || ? || '%' OR sector_focus LIKE '%' || ? || '%')
-        AND (? = '' OR hq = ?)
-      ORDER BY name COLLATE NOCASE LIMIT 2000`
-  ).bind(q, q, q, hq, hq).all();
-  return c.json({ items: rows.results || [], source: 'EuroTech VC Funds (public spreadsheet)', source_boundary: 'Reported fund-size snapshots and discovery metadata only; no NAV, IRR, TVPI, or performance is inferred.' });
+  let query;
+  try {
+    query = parseDirectoryQuery((k) => c.req.query(k));
+  } catch (e) {
+    if (e instanceof DirectoryQueryError) return c.json({ detail: e.message, field: e.field }, 400);
+    throw e;
+  }
+  try {
+    const page = await listDirectory(c.env, query);
+    return c.json({ ...page, source: FUND_DIRECTORY_SOURCE, source_boundary: FUND_DIRECTORY_BOUNDARY });
+  } catch {
+    // A failed read says so; it is never an empty directory.
+    return c.json({ detail: 'Unreadable', reason: 'The fund directory could not be read' }, 503);
+  }
 });
 
 research.get('/fund-directory/:uid', async (c) => {
   await requireAuth(c);
-  const item = await c.env.DB.prepare(
-    `SELECT uid, name, website, linkedin, hq, fund_number, fund_size_cents,
-            fund_date, quarter, fund_year, sector_focus, notable_lps,
-            eif_flag, eifo_flag, source_name, source_url, as_of
-       FROM research_fund_directory WHERE uid = ?`
-  ).bind(c.req.param('uid')).first();
-  if (!item) return c.json({ detail: 'Not found' }, 404);
-  const reports = await c.env.DB.prepare(
-    `SELECT period, report_date, fund_size_cents, source_url
-       FROM research_fund_directory_reports WHERE fund_uid = ? ORDER BY period ASC`
-  ).bind(c.req.param('uid')).all();
-  return c.json({ item, reports: reports.results || [], source_boundary: 'Reported fund-size snapshots and discovery metadata only; no NAV, IRR, TVPI, or performance is inferred.' });
+  let fund;
+  try {
+    fund = await getFund(c.env, c.req.param('uid'));
+  } catch {
+    return c.json({ detail: 'Unreadable', reason: 'The fund could not be read' }, 503);
+  }
+  if (!fund) return c.json({ detail: 'Not found' }, 404);
+  return c.json({ ...fund, source_boundary: FUND_DIRECTORY_BOUNDARY });
 });
 
 research.get('/market-directory', async (c) => {
