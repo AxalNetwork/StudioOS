@@ -12,7 +12,7 @@ import { ensureMarketIntelSchema } from '../services/market_intel/schema';
 import { listSources, isLive } from '../services/market_intel/registry';
 import { SECTORS, recomputeIndexes, COMPASS_KV_KEY } from '../services/market_intel/aggregator';
 import { liveIndexSql, liveRowSql, NO_LIVE_SOURCE_REASON } from '../services/market_intel/liveRows';
-import { periodKey } from '../services/market_intel/scoring';
+import { periodKey, WINDOW_DAYS } from '../services/market_intel/scoring';
 import { readEdgeCache, writeEdgeCache, readKv, writeKv } from '../services/market_intel/cache';
 // Side-effect import — every connector calls registerSource() at module
 // top-level so listSources() returns the full set after this barrel.
@@ -168,6 +168,8 @@ interface IndexRow {
   sector: string; geo: string; period_key: string;
   dimension: string; value: number; source_count: number;
   computed_at: string;
+  /** D538 — change against the previous month's live value; null when there is none. */
+  delta_pct?: number | null;
 }
 interface CitationRow {
   source_key: string; sector: string; metric_key: string;
@@ -185,7 +187,7 @@ interface WatchlistRow {
  */
 async function readCurrentIndexes(env: Env, period: string): Promise<IndexRow[]> {
   const read = async () => (await env.DB.prepare(
-    `SELECT sector, geo, period_key, dimension, value, source_count, computed_at
+    `SELECT sector, geo, period_key, dimension, value, delta_pct, source_count, computed_at
        FROM market_intel_indexes WHERE period_key = ? AND geo = 'global' AND ${liveIndexSql()}`
   ).bind(period).all<IndexRow>()).results || [];
   const rows = await read();
@@ -199,10 +201,62 @@ async function readCurrentIndexes(env: Env, period: string): Promise<IndexRow[]>
 const DIMENSIONS = ['demand', 'supply', 'capital', 'talent', 'research', 'sentiment'] as const;
 
 /** A value or nothing: an index row's value, or null with the reason (D538). */
-function indexValue(r: IndexRow | undefined): { value: number | null; source_count: number; reason?: string } {
+function indexValue(r: IndexRow | undefined): { value: number | null; source_count: number; delta_pct: number | null; reason?: string } {
   return r
-    ? { value: r.value, source_count: r.source_count }
-    : { value: null, source_count: 0, reason: NO_LIVE_SOURCE_REASON };
+    ? { value: r.value, source_count: r.source_count, delta_pct: r.delta_pct ?? null }
+    : { value: null, source_count: 0, delta_pct: null, reason: NO_LIVE_SOURCE_REASON };
+}
+
+/** What the composite read says about its own history (D538). */
+export const INDEX_HISTORY_NOTE =
+  'One index value per sector, dimension and month. The current month is month to date: each refresh overwrites it.';
+export const DELTA_NOTE =
+  "delta_pct compares a figure with the previous month's live value; it is null when there is none.";
+const DAY_MS = 86_400_000;
+
+/**
+ * D538 step 4 — how fresh the composite is: the first day of live data inside
+ * the scoring window, how many days of the window it covers, when the first
+ * full-window index is due, and how many monthly points the index has. Read
+ * failures say "Unreadable", never zero.
+ */
+export async function readCompassFreshness(env: Env, now = new Date()) {
+  const cutoff = new Date(now.getTime() - WINDOW_DAYS * DAY_MS).toISOString();
+  let live: Record<string, unknown>;
+  try {
+    const first = await env.DB.prepare(
+      `SELECT MIN(ts) AS first_ts FROM market_intel_rows WHERE ts >= ? AND ${liveRowSql()}`
+    ).bind(cutoff).first<{ first_ts: string | null }>();
+    const firstTs = first?.first_ts ?? null;
+    if (!firstTs) {
+      live = { live_since: null, live_since_reason: 'No live source has reported yet', window_days: WINDOW_DAYS, days_covered: 0, window_full: false, first_full_index_in_days: null };
+    } else {
+      const covered = Math.max(0, Math.floor((now.getTime() - new Date(firstTs).getTime()) / DAY_MS));
+      const full = covered >= WINDOW_DAYS - 1;
+      live = {
+        live_since: firstTs.slice(0, 10),
+        // Once live data spans the whole window, its first day inside the
+        // window is a lower bound: the data may go back further.
+        live_since_exact: !full,
+        window_days: WINDOW_DAYS,
+        days_covered: Math.min(covered, WINDOW_DAYS),
+        window_full: full,
+        first_full_index_in_days: full ? 0 : WINDOW_DAYS - covered,
+      };
+    }
+  } catch {
+    live = { live_since: null, live_since_reason: 'Unreadable', window_days: WINDOW_DAYS, days_covered: null, window_full: null, first_full_index_in_days: null };
+  }
+  let points: Record<string, unknown>;
+  try {
+    const n = await env.DB.prepare(
+      `SELECT COUNT(DISTINCT period_key) AS n FROM market_intel_indexes WHERE geo = 'global' AND ${liveIndexSql()}`
+    ).first<{ n: number }>();
+    points = { monthly_points: Number(n?.n ?? 0) };
+  } catch {
+    points = { monthly_points: null, monthly_points_reason: 'Unreadable' };
+  }
+  return { ...live, ...points };
 }
 
 /** Sector Compass — public composite. Free callers see this everywhere. */
@@ -244,6 +298,7 @@ marketIntel.get('/sector-compass', async (c) => {
     const base = {
       sector,
       composite: head.value,
+      composite_delta_pct: head.delta_pct,
       ...(head.value == null ? { composite_reason: head.reason } : {}),
     };
     if (!isFull) return base;
@@ -258,6 +313,12 @@ marketIntel.get('/sector-compass', async (c) => {
 
   const body = {
     period_key: period,
+    // D538 — the current month is always partial, and how much history and
+    // how much live data stand behind it are part of the answer.
+    period_status: 'month_to_date',
+    history_note: INDEX_HISTORY_NOTE,
+    delta_note: DELTA_NOTE,
+    freshness: await readCompassFreshness(c.env),
     computed_at: rows[0]?.computed_at ?? null,
     recorded_sectors: sectors.filter((x) => x.composite != null).length,
     sectors,
