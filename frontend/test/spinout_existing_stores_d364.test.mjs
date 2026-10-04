@@ -79,9 +79,9 @@ test('pro-rata: a tile from the round\'s list, and a card that never claims "no 
   assert.match(load, /setProRata\(\{ status: 'failed' \}\);/);
   const card = between(CAPITAL, 'data-testid="card-pro-rata"', 'Offers and decisions are recorded');
   assert.match(card, /proRata\.status === 'failed' \? \(\n\s*<div data-testid="pro-rata-unreadable">\n\s*<Unreadable/);
-  // The Worker computes entitlements against `target_amount || 0`: with no
-  // target every entitlement is 0, which the card must not print as a figure.
-  assert.match(card, /!\(Number\(proRata\.data\.round\.target_amount\) > 0\) \|\| h\.entitlement == null \? '—'/);
+  // With no target there is no entitlement. D366 made the Worker return it as
+  // null with its reason; the card prints "Not recorded", never a figure.
+  assert.match(card, /!\(Number\(proRata\.data\.round\.target_amount\) > 0\) \|\| h\.entitlement == null\n\s*\? <span data-testid="pro-rata-entitlement-unrecorded">Not recorded/);
   assert.match(card, /data-testid="pro-rata-no-target"/);
 });
 

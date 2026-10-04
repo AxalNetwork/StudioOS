@@ -2682,8 +2682,9 @@ progress.post('/metrics/:projectId/import-stripe', async (c) => {
     ok: true,
     imported: result.imported,
     source: 'stripe',
-    mrr: result.mrr ?? 0,
-    customers: result.customers ?? 0,
+    // D366: a figure the sync did not return is null, never a $0 / 0 customers.
+    mrr: Number.isFinite(result.mrr) ? result.mrr : null,
+    customers: Number.isFinite(result.customers) ? result.customers : null,
   });
 });
 

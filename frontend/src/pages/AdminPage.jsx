@@ -2422,7 +2422,9 @@ export function LegalPanel() {
   const [stats, setStats] = useState(null);
   const [items, setItems] = useState([]);
   const [pairwise, setPairwise] = useState([]);
+  const [pairwiseUnreadable, setPairwiseUnreadable] = useState(false);
   const [partnerDeals, setPartnerDeals] = useState([]);
+  const [partnerDealsUnreadable, setPartnerDealsUnreadable] = useState(false);
   const [partnerDealsNote, setPartnerDealsNote] = useState('');
   const [loading, setLoading] = useState(true);
   const [sub, setSub] = useState('all'); // all | pending | signed | voided | pairwise | partner | templates | forms | incorporation
@@ -2449,15 +2451,31 @@ export function LegalPanel() {
         api.adminContractStats().catch(() => null),
         isListSub ? api.adminListContracts({ status: statusFilter, doc_type: docType, provider: providerFilter, party_role: partyRole, q, limit: 200 }) : Promise.resolve({ items: [] }),
         Promise.resolve(null),
-        sub === 'pairwise' ? api.adminListPairwiseNdas({ status: pwStatus, intermediary: pwIntermediary }).catch(() => ({ items: [] })) : Promise.resolve(null),
-        sub === 'partner' ? api.adminListPartnerDeals({ deal_type: pdDealType }).catch(() => ({ items: [], note: 'Failed to load.' })) : Promise.resolve(null),
+        sub === 'pairwise' ? api.adminListPairwiseNdas({ status: pwStatus, intermediary: pwIntermediary }) : Promise.resolve(null),
+        sub === 'partner' ? api.adminListPartnerDeals({ deal_type: pdDealType }) : Promise.resolve(null),
       ]);
       setStats(s);
       setItems(list?.items || []);
-      if (pw) setPairwise(pw.items || []);
-      if (pd) { setPartnerDeals(pd.items || []); setPartnerDealsNote(pd.note || ''); }
+      setPairwiseUnreadable(false);
+      setPartnerDealsUnreadable(false);
+      if (sub === 'pairwise') {
+        setPairwise(pw?.items || []);
+      }
+      if (sub === 'partner') {
+        setPartnerDeals(pd?.items || []);
+        setPartnerDealsNote(pd?.note || '');
+      }
     } catch (e) {
       reportError('AdminPage:loadContracts', e);
+      if (sub === 'pairwise') {
+        setPairwise([]);
+        setPairwiseUnreadable(true);
+      }
+      if (sub === 'partner') {
+        setPartnerDeals([]);
+        setPartnerDealsUnreadable(true);
+        setPartnerDealsNote('');
+      }
     } finally { setLoading(false); }
   };
 
@@ -2563,11 +2581,19 @@ export function LegalPanel() {
       ) : sub === 'templates' ? (
         <AdminTemplates onOpenUsage={(docType, fallback) => setOpenTplUsage({ docType, fallback })} />
       ) : sub === 'pairwise' ? (
-        <PairwiseNdasTable rows={pairwise} statusFilter={pwStatus} onStatusFilter={setPwStatus}
-          intermediaryFilter={pwIntermediary} onIntermediaryFilter={setPwIntermediary}
-          onOpen={(uid) => uid && setOpenContract({ uid })} />
+        pairwiseUnreadable ? (
+          <Unreadable what="Pairwise NDAs" claim="This is not a claim that no pairwise NDAs exist." onRetry={reload} />
+        ) : (
+          <PairwiseNdasTable rows={pairwise} statusFilter={pwStatus} onStatusFilter={setPwStatus}
+            intermediaryFilter={pwIntermediary} onIntermediaryFilter={setPwIntermediary}
+            onOpen={(uid) => uid && setOpenContract({ uid })} />
+        )
       ) : sub === 'partner' ? (
-        <PartnerDealsTable rows={partnerDeals} note={partnerDealsNote} dealTypeFilter={pdDealType} onDealTypeFilter={setPdDealType} />
+        partnerDealsUnreadable ? (
+          <Unreadable what="Partner deals" claim="This is not a claim that no partner deals exist." onRetry={reload} />
+        ) : (
+          <PartnerDealsTable rows={partnerDeals} note={partnerDealsNote} dealTypeFilter={pdDealType} onDealTypeFilter={setPdDealType} />
+        )
       ) : sub === 'forms' ? (
         <AdminForms />
       ) : sub === 'incorporation' ? (

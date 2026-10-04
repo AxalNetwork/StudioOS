@@ -158,7 +158,7 @@ it, where in their nav, and how do they get there.*
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | Admin · Super | `/hq` · `/admin/licences` · `/admin/accounts` · `/admin/contracts` · `/admin/funds` · `/admin` · `/admin/*` | HQ | Full page | Sidebar → HQ → Home | UPGRADE | High |
-| Contracts · Super | `/admin/contracts` | HQ | Full page | Sidebar → HQ → Contracts | UPGRADE | High |
+| Contracts · Super | `/admin/contracts` · `/admin/contracts/registry` | HQ | Full page | Sidebar → HQ → Contracts | UPGRADE | High |
 | Founder Journey Map | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Fund Administration | `/funds/performance` · `/funds/lp-workspace` · `/spinout-lab/investor-workspace` · `/lp-reports` · `/portfolio/waterfall` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Funds · Fabric | `/admin/fabric` · `/funds` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
