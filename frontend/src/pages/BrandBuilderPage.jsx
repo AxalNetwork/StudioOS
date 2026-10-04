@@ -971,7 +971,7 @@ export default function BrandBuilderPage() {
             </div>
           )}
           <div className="text-xs text-gray-500 mt-2 dark:text-gray-400">
-            {landing.views_count || 0} pageviews · {signups.length} signup{signups.length === 1 ? '' : 's'}
+            {landing.views_count == null ? 'Pageviews not recorded' : `${landing.views_count} pageviews`} · {signups.length} signup{signups.length === 1 ? '' : 's'}
           </div>
         </section>
       )}
