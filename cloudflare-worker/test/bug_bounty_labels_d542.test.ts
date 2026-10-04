@@ -17,7 +17,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 
 import github from '../src/routes/github.ts';
 import {
@@ -25,7 +25,9 @@ import {
 } from '../src/services/bugBounties.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 
-const SECRET = 'unit-test-webhook-secret';
+// Generated per run: a webhook secret written into source is one Semgrep
+// rightly flags, even in a test.
+const SECRET = randomBytes(32).toString('hex');
 const S1 = 'guillaumelauzier';
 const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const WRANGLER = readFileSync(resolve(process.cwd(), 'wrangler.toml'), 'utf8');
