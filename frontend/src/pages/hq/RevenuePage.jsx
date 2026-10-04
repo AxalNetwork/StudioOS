@@ -359,15 +359,25 @@ export function statementAllowsPaidInFull(statement) {
   return true;
 }
 
+/**
+ * D514 — 0 clears a dispute (and needs no reason); anything above 0 must say
+ * why. The worker refuses paid and disputed together above owed.
+ */
 export function statementDisputePayload({ amountText, note }) {
   const text = String(amountText ?? '').trim();
-  if (text === '') return { error: 'Enter the disputed amount.' };
+  if (text === '') return { error: 'Enter the disputed amount, or 0 to clear the dispute.' };
   const n = Number(text);
-  if (!Number.isFinite(n) || n <= 0) return { error: 'The disputed amount must be greater than zero.' };
+  if (!Number.isFinite(n) || n < 0) return { error: 'The disputed amount must be a figure of 0 or more.' };
   const disputed_cents = Math.round(n * 100);
+  if (disputed_cents === 0) return { body: { disputed_cents: 0 } };
   const dispute_note = String(note ?? '').trim();
   if (!dispute_note) return { error: 'A dispute must say why — a subsidiary will ask HQ to justify it.' };
   return { body: { disputed_cents, dispute_note } };
+}
+
+/** D514 — "Mark as issued" is offered on a complete draft only; the worker refuses a floor. */
+export function statementAllowsIssue(statement) {
+  return !!statement && statement.status === 'draft' && statementAllowsPaidInFull(statement);
 }
 
 /** Licences that carry a revenue share and are active can be drawn. */
@@ -379,82 +389,45 @@ export function licencesDrawableForStatements(licences) {
 }
 
 /**
- * D453 — draw a statement from what the branch reported (H10). Re-draw replaces
- * a draft only; issued statements refuse on the server.
+ * D514 — DRAWING IS HELD. As built, a draw records a statement, and whether a
+ * statement counts as "revenue per subsidiary" (brief item 7) is the owner's
+ * call, so the draw form is gone until the owner decides. The active-licence
+ * refusal in the worker (D458) stays as a guard; it is not this hold. The
+ * paid and disputed entry on statements already drawn stays.
  */
-export function StatementDrawEditor({ licences, currentPeriod, onDraw }) {
-  const [f, setF] = useState({ licenceUid: '', period: currentPeriod || '' });
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null);
-  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
-  const list = licences && licences !== UNAVAILABLE ? licencesDrawableForStatements(licences) : null;
-  const period = f.period || currentPeriod || '';
+export const STATEMENT_DRAW_HELD =
+  "Drawing is held for the owner's decision on whether a statement counts as revenue per subsidiary (brief item 7).";
 
-  const submit = async (e) => {
-    e.preventDefault();
-    if (busy) return;
-    const p = statementDrawPayload({ licenceUid: f.licenceUid, period });
-    if (p.error) { setMsg({ err: true, text: p.error }); return; }
-    setBusy(true); setMsg(null);
-    try {
-      const r = await onDraw(p.licenceUid, p.period);
-      const label = r?.brand_name || r?.licence_ref || p.licenceUid;
-      setMsg({
-        err: false,
-        text: r?.complete
-          ? `Statement drawn for ${label} · ${p.period}.`
-          : `Draft drawn for ${label} · ${p.period} — ${r?.note || 'some streams could not be reported, so the owed figure is a floor.'}`,
-      });
-    } catch (err) {
-      setMsg({ err: true, text: err?.data?.message || err?.message || 'The statement was not drawn.' });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const input = 'w-full rounded-lg border border-axal-hairline bg-axal-ground px-2.5 py-1.5 text-[12.5px]';
+export function StatementDrawHeld() {
   return (
-    <div className="mb-3 border-b border-axal-hairline pb-3" data-testid="hq-revenue-statement-draw">
+    <div className="mb-3 border-b border-axal-hairline pb-3" data-testid="hq-revenue-statement-draw-held">
       <div className="text-[11px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Draw a statement</div>
-      <p className="mt-1 text-[11.5px] leading-relaxed text-axal-muted">
-        Gross comes from what the branch reported for the period; owed is computed from the licence&apos;s revenue share at draw time.
-        Re-drawing replaces a draft only — once issued, void it before drawing again. Only active licences can be drawn; a suspended holder is billed only after reactivation.
-      </p>
-      {licences === UNAVAILABLE && (
-        <div className="mt-2">
-          <Unreadable what="The licence list" claim="No statement can be drawn until licences are read." />
-        </div>
-      )}
-      {licences === null && <p className="mt-2 text-[11.5px] text-axal-faint">Loading licences…</p>}
-      {list && list.length === 0 && (
-        <p className="mt-2 text-[12px] text-axal-muted" data-testid="hq-revenue-statement-no-drawable">
-          No licence records a revenue share yet — set step 4 of the issue flow before drawing.
-        </p>
-      )}
-      {list && list.length > 0 && (
-        <form onSubmit={submit} className="mt-2 grid gap-2 sm:grid-cols-3">
-          <select className={`${input} sm:col-span-2`} value={f.licenceUid} onChange={(e) => set('licenceUid', e.target.value)} aria-label="Licence">
-            <option value="">Licence…</option>
-            {list.map((l) => (
-              <option key={l.uid} value={l.uid}>
-                {l.brand_name || l.licence_ref || l.uid}
-                {l.status && l.status !== 'active' ? ` · ${l.status}` : ''}
-              </option>
-            ))}
-          </select>
-          <input className={input} value={period} onChange={(e) => set('period', e.target.value)} placeholder="YYYY-Qn" aria-label="Period" />
-          <div className="sm:col-span-3 flex flex-wrap items-center gap-3">
-            <button type="submit" disabled={busy} className="rounded-lg bg-axal-violet px-3 py-1.5 text-[12px] font-bold text-white hover:bg-violet-800 disabled:opacity-50 dark:hover:bg-violet-700">
-              {busy ? 'Drawing…' : 'Draw draft'}
-            </button>
-          </div>
-          {msg && (
-            <p role="status" className={`sm:col-span-3 text-[11.5px] ${msg.err ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300'}`}>
-              {msg.text}
-            </p>
-          )}
-        </form>
-      )}
+      <p className="mt-1 text-[11.5px] leading-relaxed text-axal-muted">{STATEMENT_DRAW_HELD}</p>
+    </div>
+  );
+}
+
+/** D514 — how many statements in `currency` are floors (drawn over unreported or estimated streams). */
+export function floorsInCurrency(items, currency) {
+  return (Array.isArray(items) ? items : [])
+    .filter((s) => (s.currency || 'EUR') === currency && s.status !== 'void' && !statementAllowsPaidInFull(s)).length;
+}
+
+/**
+ * D514 — the facts the payload carried and the row never drew (canvas H10):
+ * the balance outstanding, when the payment was entered, and how fresh the
+ * reports were. A dispute stores no who or when, and the row says so rather
+ * than leaving the reader to assume one.
+ */
+export function StatementFacts({ statement: s }) {
+  if (!s) return null;
+  const when = (v) => (v ? String(v).slice(0, 10) : null);
+  return (
+    <div className="mt-0.5 text-[10.5px] tabular-nums text-axal-faint" data-testid={`hq-statement-facts-${s.uid}`}>
+      {Number.isFinite(Number(s.outstanding_cents)) ? `outstanding ${money(s.outstanding_cents, s.currency)}` : 'outstanding not recorded'}
+      {' · '}{s.paid_at ? `paid total entered ${when(s.paid_at)}` : 'no payment entered'}
+      {' · '}{s.reports_as_of ? `reports as of ${when(s.reports_as_of)}` : 'reports as of: Not recorded'}
+      {s.disputed_cents > 0 && ' · who entered the dispute, and when, is not recorded'}
     </div>
   );
 }
@@ -469,7 +442,9 @@ export function StatementActions({ statement, onUpdate }) {
   const [dispute, setDispute] = useState({ amount: '', note: '' });
   const [voidNote, setVoidNote] = useState('');
   const canPayInFull = statementAllowsPaidInFull(statement);
+  const canIssue = statementAllowsIssue(statement);
   if (!statement?.uid) return null;
+  const rowLabel = `${statement.brand_name || statement.licence_ref || statement.licence_uid || statement.uid} ${statement.period || ''}`.trim();
 
   const patch = async (body) => {
     if (busy) return;
@@ -512,15 +487,29 @@ export function StatementActions({ statement, onUpdate }) {
   const isDraft = statement.status === 'draft';
   const isVoid = statement.status === 'void';
 
+  // D514 — A VOID ROW OFFERS NOTHING FURTHER, and says so: a period holds one
+  // statement, and a void one cannot be drawn again.
+  if (isVoid) {
+    return (
+      <p className="mt-2 border-t border-axal-hairline/60 pt-2 text-[10.5px] text-axal-faint" data-testid={`hq-statement-void-${statement.uid}`}>
+        Void. Nothing further can be entered, and this period cannot be drawn again.
+      </p>
+    );
+  }
+
   return (
     <div className="mt-2 border-t border-axal-hairline/60 pt-2" data-testid={`hq-statement-actions-${statement.uid}`}>
       <div className="flex flex-wrap gap-2">
-        {isDraft && (
+        {isDraft && (canIssue ? (
           <button type="button" disabled={busy} className={`${btn} bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200`}
-            onClick={() => patch({ status: 'issued' })}>
-            Issue to subsidiary
+            onClick={() => patch({ status: 'issued' })} aria-label={`Mark ${rowLabel} as issued`}>
+            Mark as issued
           </button>
-        )}
+        ) : (
+          <span className="text-[10.5px] text-amber-800 dark:text-amber-200" data-testid="hq-statement-no-issue">
+            Mark as issued is unavailable while the owed figure is a floor.
+          </span>
+        ))}
         {!isVoid && (
           <>
             {statement.status === 'paid' ? null : (
@@ -541,28 +530,31 @@ export function StatementActions({ statement, onUpdate }) {
       {!isVoid && (
         <form onSubmit={submitVoid} className="mt-2 space-y-1">
           <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Void statement</div>
-          <input className={input} required minLength={10} placeholder="Why this claim is withdrawn — required" value={voidNote} onChange={(e) => setVoidNote(e.target.value)} aria-label="Void reason" />
+          <p className="text-[10px] text-axal-faint">A void period cannot be drawn again.</p>
+          <input className={input} required minLength={10} placeholder="Why this claim is withdrawn — required" value={voidNote} onChange={(e) => setVoidNote(e.target.value)} aria-label={`Void reason for ${rowLabel}`} />
           <button type="submit" disabled={busy} className={`${btn} border-red-300 text-red-800 dark:border-red-500/40 dark:text-red-300`}>Void</button>
         </form>
       )}
       {!isVoid && (
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           <form onSubmit={submitPaid} className="space-y-1">
-            <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Record payment</div>
-            <input className={input} type="number" step="0.01" min="0" placeholder="Amount received" value={paid.amount} onChange={(e) => setPaid((x) => ({ ...x, amount: e.target.value }))} aria-label="Paid amount" />
-            <input className={input} placeholder="Reference or note" value={paid.note} onChange={(e) => setPaid((x) => ({ ...x, note: e.target.value }))} aria-label="Paid note" />
-            <button type="submit" disabled={busy} className={`${btn} bg-emerald-700 text-white hover:bg-emerald-800 dark:hover:bg-emerald-600`}>Save payment</button>
+            <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Set total paid</div>
+            <p className="text-[10px] text-axal-faint">Replaces the total received so far; it does not add a receipt.</p>
+            <input className={input} type="number" step="0.01" min="0" placeholder="Total received to date" value={paid.amount} onChange={(e) => setPaid((x) => ({ ...x, amount: e.target.value }))} aria-label={`Total paid for ${rowLabel}`} />
+            <input className={input} placeholder="Reference or note" value={paid.note} onChange={(e) => setPaid((x) => ({ ...x, note: e.target.value }))} aria-label={`Payment note for ${rowLabel}`} />
+            <button type="submit" disabled={busy} className={`${btn} bg-emerald-700 text-white hover:bg-emerald-800 dark:hover:bg-emerald-600`}>Save total paid</button>
           </form>
           <form onSubmit={submitDispute} className="space-y-1">
             <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Record dispute</div>
-            <input className={input} type="number" step="0.01" min="0" placeholder="Disputed amount" value={dispute.amount} onChange={(e) => setDispute((x) => ({ ...x, amount: e.target.value }))} aria-label="Disputed amount" />
-            <input className={input} required placeholder="Why — required" value={dispute.note} onChange={(e) => setDispute((x) => ({ ...x, note: e.target.value }))} aria-label="Dispute reason" />
+            <p className="text-[10px] text-axal-faint">0 clears the dispute.</p>
+            <input className={input} type="number" step="0.01" min="0" placeholder="Disputed amount" value={dispute.amount} onChange={(e) => setDispute((x) => ({ ...x, amount: e.target.value }))} aria-label={`Disputed amount for ${rowLabel}`} />
+            <input className={input} placeholder="Why — required above 0" value={dispute.note} onChange={(e) => setDispute((x) => ({ ...x, note: e.target.value }))} aria-label={`Dispute reason for ${rowLabel}`} />
             <button type="submit" disabled={busy} className={`${btn} border-red-300 text-red-800 dark:border-red-500/40 dark:text-red-300`}>Save dispute</button>
           </form>
         </div>
       )}
       {msg && (
-        <p role="status" className={`mt-1 text-[11px] ${msg.err ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300'}`}>{msg.text}</p>
+        <p role={msg.err ? 'alert' : 'status'} className={`mt-1 text-[11px] ${msg.err ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300'}`}>{msg.text}</p>
       )}
     </div>
   );
@@ -727,11 +719,6 @@ export default function RevenuePage() {
     loadCeilings();
     return r;
   }, [loadCeilings]);
-  const drawStatement = useCallback(async (licenceUid, period) => {
-    const r = await api.statementDraw(licenceUid, period);
-    loadStatements();
-    return r;
-  }, [loadStatements]);
   const updateStatement = useCallback(async (uid, body) => {
     const r = await api.statementUpdate(uid, body);
     loadStatements();
@@ -775,7 +762,7 @@ export default function RevenuePage() {
       workspace="Revenue"
       role="super_admin"
       stance="Read-only summary"
-      note="This rail summarises licence fees, AI cost, branch statements, promo ceilings, refunds and open disputes. It enters no payment and settles no statement; the page's one money action is a refund, which HQ's super admin issues after a step-up with a written reason."
+      note="This rail summarises licence fees, AI cost, branch statements, promo ceilings, refunds and open disputes. It moves no money: the paid and disputed totals on a branch statement are figures an HQ operator types in, and the page's one money movement is a refund, which HQ's super admin issues after a step-up with a written reason."
       coverage={coverage}
       coverageNote={coverage.length ? undefined
         : (data === UNAVAILABLE ? 'The revenue summary could not be read, so there is nothing to read back — this is not a claim that no revenue was booked.'
@@ -950,11 +937,7 @@ export default function RevenuePage() {
             </Zone>
 
             <Zone title="Statements and Stripe" sub="what is owed, and what is stuck">
-              <StatementDrawEditor
-                licences={licences}
-                currentPeriod={ledger?.current_period || (statements && statements !== UNAVAILABLE ? statements.current_period : '')}
-                onDraw={drawStatement}
-              />
+              <StatementDrawHeld />
               {ledger && ledger.items.length > 0 && (
                 <div className="space-y-2" data-testid="hq-revenue-statements">
                   {ledger.items.map((s) => (
@@ -998,6 +981,7 @@ export default function RevenuePage() {
                               : 'Drawn over an estimated stream — not an invoiced figure.'}
                           </div>
                         )}
+                        <StatementFacts statement={s} />
                       </div>
                       <span className={STATEMENT_PILL[s.status] || STATEMENT_PILL.draft}>{s.status}</span>
                       </div>
@@ -1009,21 +993,34 @@ export default function RevenuePage() {
               {ledger && ledger.items.length === 0 && (
                 <p className="text-[12.5px] leading-relaxed text-axal-muted" data-testid="hq-revenue-statements-empty">
                   No statement has been drawn for {ledger.current_period}. The store exists and is empty,
-                  which is not the same as a figure nobody can produce — use Draw draft above once a licence
-                  carries a revenue share. Every stream a branch reports today still arrives unmeasured until
+                  which is not the same as a figure nobody can produce. Drawing is held for the owner&apos;s
+                  decision (above). Every stream a branch reports today still arrives unmeasured until
                   gross exists locally.
                 </p>
               )}
               {ledger && Object.keys(ledger.totals_by_currency).length > 0 && (
                 <div className="mt-3 space-y-1" data-testid="hq-revenue-owed">
-                  {Object.entries(ledger.totals_by_currency).map(([cur, t]) => (
-                    <div key={cur} className="flex items-baseline justify-between text-[11.5px]">
-                      <span className="text-axal-faint">Owed in {cur}</span>
-                      <span className="font-bold tabular-nums">
-                        {money(t.owed, cur)} · {money(t.paid, cur)} paid
-                      </span>
-                    </div>
-                  ))}
+                  {Object.entries(ledger.totals_by_currency).map(([cur, t]) => {
+                    const floors = floorsInCurrency(ledger.items, cur);
+                    return (
+                      <div key={cur} className="text-[11.5px]">
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-axal-faint">Owed in {cur}</span>
+                          <span className="font-bold tabular-nums">
+                            {money(t.owed, cur)} · {money(t.paid, cur)} paid
+                          </span>
+                        </div>
+                        {/* D514 — a statement drawn over nothing measured
+                            stores gross 0, so a line summing floors is a
+                            floor too, and says so. */}
+                        {floors > 0 && (
+                          <p className="text-[10.5px] text-amber-700 dark:text-amber-300" data-testid={`hq-revenue-owed-floor-${cur}`}>
+                            Includes {floors} {floors === 1 ? 'statement' : 'statements'} drawn over unreported or estimated streams, so this is a floor, not a total.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
                   {/* Same rule as the stream table above: per currency, never
                       one figure. */}
                   <p className="text-[10.5px] text-axal-faint">One line per currency — statements are not summed across them.</p>
