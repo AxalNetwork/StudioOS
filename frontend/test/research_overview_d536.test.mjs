@@ -46,7 +46,9 @@ test('the fund card never prints a count it was not given', () => {
 
 test('the Company profiles card says it counts platform companies, not the research directory', () => {
   const card = DESK.slice(DESK.indexOf('id="a7-companies"'), DESK.indexOf('</section>', DESK.indexOf('id="a7-companies"')));
-  assert.match(card, /platform \$\{data\.companies\.length === 1 \? 'company' : 'companies'\} returned/);
-  assert.match(card, /not the research directory/);
+  // The count stays `N returned` (research_zone_states pins it, zero included);
+  // the card's text names what it counts.
+  assert.match(card, /These are the companies on the platform, not the research directory/);
+  assert.match(card, /No company on the platform is visible to you yet; the research directory is under Companies/);
   assert.doesNotMatch(card, /available from the company directory/, 'member companies were called the directory');
 });
